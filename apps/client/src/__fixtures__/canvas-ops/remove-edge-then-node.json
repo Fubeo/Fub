@@ -1,0 +1,91 @@
+{
+  "about": "Un arco tolto da solo e poi una scheda con il suo ultimo arco, in due operazioni: l'inversa rimette la scheda e i due archi nel loro ordine.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 200,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "b"
+      },
+      {
+        "id": "c",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "c"
+      }
+    ],
+    "edges": [
+      {
+        "id": "ab",
+        "fromNode": "a",
+        "toNode": "b"
+      },
+      {
+        "id": "ac",
+        "fromNode": "a",
+        "toNode": "c"
+      },
+      {
+        "id": "cb",
+        "fromNode": "c",
+        "toNode": "b"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "remove",
+      "ids": [
+        "ac"
+      ]
+    },
+    {
+      "op": "remove",
+      "ids": [
+        "b"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "a"
+        },
+        {
+          "id": "c",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "c"
+        }
+      ],
+      "edges": []
+    }
+  }
+}

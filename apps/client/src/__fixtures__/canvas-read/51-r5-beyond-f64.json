@@ -1,0 +1,9 @@
+{
+  "name": "r5-beyond-f64",
+  "description": "R5: 1e400 in un campo sconosciuto non sta in un f64",
+  "source": "{\"nodes\":[],\"meta\":[1e400]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

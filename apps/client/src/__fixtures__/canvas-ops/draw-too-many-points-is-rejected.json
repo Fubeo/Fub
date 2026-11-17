@@ -1,0 +1,46 @@
+{
+  "about": "Una riga lunga 40 004 unità fa 10 002 campioni: più dei 10 000 di un tratto, TooMany prima di scriverli.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "shape": {
+        "kind": "line",
+        "x1": 0,
+        "y1": 0,
+        "x2": 40004,
+        "y2": 0
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "TooMany",
+      "index": 0
+    }
+  }
+}

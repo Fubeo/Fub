@@ -1,0 +1,10 @@
+{
+  "name": "edge-to-missing-node",
+  "description": "Un arco verso una scheda che non c'è: stale",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-edge","before":null,"after":{"id":"e","fromNode":"a","toNode":"zz"}}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "stale"
+  }
+}

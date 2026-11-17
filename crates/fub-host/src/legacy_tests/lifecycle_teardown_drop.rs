@@ -52,13 +52,17 @@ impl Probe {
     fn drop_resource(&self, resource: Resource) {
         let workspace = self.workspace.lock().unwrap().as_ref().unwrap().clone();
         let registry = self.registry.lock().unwrap().as_ref().unwrap().clone();
-        let (workspace_read, owner_declared) = workspace
-            .try_read()
-            .map(|ws| (true, ws.trust_of(OWNER).is_some()))
-            .unwrap_or((false, false));
+        // Una fotografia sola non basta: i `fub-job-*` dell'host restano vivi
+        // durante il teardown e prendono il workspace per un istante (#98,
+        // #70). Una custodia trattenuta da questo thread, dentro il
+        // distruttore, non si libera mai, e la prova cade alla scadenza.
+        let (workspace_read, owner_declared) =
+            super::try_read_within(&workspace, super::FREE_WITHIN)
+                .map(|ws| (true, ws.trust_of(OWNER).is_some()))
+                .unwrap_or((false, false));
         let workspace_write = workspace.write().is_ok();
-        let registry_read = registry.try_read().is_some();
-        let registry_write = registry.try_write().is_some();
+        let registry_read = super::try_read_within(&registry, super::FREE_WITHIN).is_some();
+        let registry_write = super::try_write_within(&registry, super::FREE_WITHIN).is_some();
         self.entered
             .send(Entered {
                 resource,
@@ -360,7 +364,9 @@ fn exercise(path: Path, panic_at: Option<Resource>) {
             .recv_timeout(WATCHDOG)
             .expect("every destructor runs despite earlier panics");
         let other_workspace = workspace.clone();
-        let reader = std::thread::spawn(move || other_workspace.try_read().is_some());
+        let reader = std::thread::spawn(move || {
+            super::try_read_within(&other_workspace, super::FREE_WITHIN).is_some()
+        });
         readers_progressed &= reader.join().expect("independent reader completes");
         release
             .send(())

@@ -23,6 +23,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 import { listItem } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
+import { withLineBreaks } from "../../line-breaks";
 import { isStrictlyInsideCode } from "./parser";
 import {
   COMMENT_PAIR,
@@ -33,7 +34,7 @@ import {
 } from "./cursor-elements";
 import { pairElementsAt } from "./empty-pair";
 import { addProperty, canMoveProperty, moveProperty } from "./properties";
-import { colorsAt, CONTENT_COLORS, setContentColor } from "./color";
+import { colorApplies, colorsAt, CONTENT_COLORS, setContentColor } from "./color";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -321,20 +322,20 @@ function wrapCallout(state: EditorState, dispatch: (tr: Transaction) => void, ty
   const first = lines[0]!;
   const last = lines[lines.length - 1]!;
   if (lines.length === 1 && first.text.trim() === "") {
-    const insert = `> [!${kind}]${state.lineBreak}> `;
+    const insert = `> [!${kind}]\n> `;
     dispatch(state.update({
-      changes: { from: first.from, to: first.to, insert },
+      changes: { from: first.from, to: first.to, insert: withLineBreaks(state, insert) },
       selection: EditorSelection.cursor(first.from + insert.length),
       scrollIntoView: true,
       userEvent: "input",
     }));
     return true;
   }
-  const body = state.doc.sliceString(first.from, last.to).split(state.lineBreak)
+  const body = state.doc.sliceString(first.from, last.to).split("\n")
     .map((text) => (text.trim() === "" ? ">" : `> ${text}`));
-  const insert = [`> [!${kind}]`, ...body].join(state.lineBreak);
+  const insert = [`> [!${kind}]`, ...body].join("\n");
   dispatch(state.update({
-    changes: { from: first.from, to: last.to, insert },
+    changes: { from: first.from, to: last.to, insert: withLineBreaks(state, insert) },
     // Il tipo, `note`, fra `> [!` e `]`: lo si riscrive per scegliere un altro.
     selection: type === null
       ? EditorSelection.range(first.from + 4, first.from + 8)
@@ -356,7 +357,7 @@ const insertColumns: StateCommand = (target) => columnsOf(2)(target);
 function columnsOf(count: number): StateCommand {
   return ({ state, dispatch }) => {
   if (state.readOnly) return false;
-  const nl = state.lineBreak;
+  const nl = "\n";
   const lines = selectedLines(state);
   const first = lines[0]!;
   const last = lines[lines.length - 1]!;
@@ -373,7 +374,7 @@ function columnsOf(count: number): StateCommand {
   const text = [`> [!columns]`, blocks.map(column).join(`${nl}>${nl}`)].join(nl);
   const cursor = first.from + `> [!columns]${nl}> > [!column]${nl}> > `.length + (blocks[0]![0]?.length ?? 0);
   dispatch(state.update({
-    changes: { from: first.from, to: last.to, insert: text },
+    changes: { from: first.from, to: last.to, insert: withLineBreaks(state, text) },
     selection: EditorSelection.cursor(cursor),
     scrollIntoView: true,
     userEvent: "input",
@@ -388,14 +389,14 @@ function columnsOf(count: number): StateCommand {
 /// Markdown, che senza si leggerebbe come HTML.
 const insertDetails: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
-  const nl = state.lineBreak;
+  const nl = "\n";
   const lines = selectedLines(state);
   const first = lines[0]!;
   const last = lines[lines.length - 1]!;
   const open = `<details>${nl}<summary>`;
   if (lines.length === 1 && first.text.trim() === "") {
     dispatch(state.update({
-      changes: { from: first.from, to: first.to, insert: `${open}</summary>${nl}${nl}${nl}${nl}</details>` },
+      changes: { from: first.from, to: first.to, insert: withLineBreaks(state, `${open}</summary>${nl}${nl}${nl}${nl}</details>`) },
       selection: EditorSelection.cursor(first.from + open.length),
       scrollIntoView: true,
       userEvent: "input",
@@ -404,7 +405,7 @@ const insertDetails: StateCommand = ({ state, dispatch }) => {
   }
   const body = state.doc.sliceString(first.from, last.to);
   dispatch(state.update({
-    changes: { from: first.from, to: last.to, insert: `${open}</summary>${nl}${nl}${body}${nl}${nl}</details>` },
+    changes: { from: first.from, to: last.to, insert: withLineBreaks(state, `${open}</summary>${nl}${nl}${body}${nl}${nl}</details>`) },
     selection: EditorSelection.cursor(first.from + open.length),
     scrollIntoView: true,
     userEvent: "input",
@@ -518,10 +519,10 @@ function toggleFence(
     const found = find(state);
     if (found) {
       const specs: ChangeSpec[] = [];
-      const breakLength = state.lineBreak.length;
-      specs.push({ from: found.open.from, to: Math.min(found.open.to + breakLength, state.doc.length) });
+      // Un a capo vale una posizione, qualunque sia il separatore.
+      specs.push({ from: found.open.from, to: Math.min(found.open.to + 1, state.doc.length) });
       if (found.close) {
-        specs.push({ from: Math.max(0, found.close.from - breakLength), to: found.close.to });
+        specs.push({ from: Math.max(0, found.close.from - 1), to: found.close.to });
       }
       return dispatchChanges(state, dispatch, specs);
     }
@@ -530,10 +531,10 @@ function toggleFence(
     const last = lines[lines.length - 1]!;
     const content = state.doc.sliceString(first.from, last.to);
     const mark = fence(content);
-    const nl = state.lineBreak;
+    const nl = "\n";
     if (lines.length === 1 && content.trim() === "") {
       dispatch(state.update({
-        changes: { from: first.from, to: first.to, insert: `${mark}${nl}${nl}${mark}` },
+        changes: { from: first.from, to: first.to, insert: withLineBreaks(state, `${mark}${nl}${nl}${mark}`) },
         selection: EditorSelection.cursor(first.from + mark.length + nl.length),
         scrollIntoView: true,
         userEvent: "input",
@@ -541,8 +542,8 @@ function toggleFence(
       return true;
     }
     const changes = state.changes([
-      { from: first.from, insert: `${mark}${nl}` },
-      { from: last.to, insert: `${nl}${mark}` },
+      { from: first.from, insert: withLineBreaks(state, `${mark}${nl}`) },
+      { from: last.to, insert: withLineBreaks(state, `${nl}${mark}`) },
     ]);
     // La selezione resta sul contenuto: dentro l'apertura, prima della chiusura.
     const map = (pos: number) => changes.mapPos(pos, pos >= last.to ? -1 : 1);
@@ -577,10 +578,10 @@ function codeBlockIn(language: string): StateCommand {
     if (state.readOnly) return false;
     const here = state.doc.lineAt(state.selection.main.head);
     if (state.selection.main.empty && here.text.trim() === "" && !enclosingCodeFence(state)) {
-      const nl = state.lineBreak;
+      const nl = "\n";
       const open = "```" + language;
       dispatch(state.update({
-        changes: { from: here.from, to: here.to, insert: `${open}${nl}${nl}` + "```" },
+        changes: { from: here.from, to: here.to, insert: withLineBreaks(state, `${open}${nl}${nl}` + "```") },
         selection: EditorSelection.cursor(here.from + open.length + nl.length),
         scrollIntoView: true,
         userEvent: "input",
@@ -623,7 +624,9 @@ function insertBlock(
 ): boolean {
   if (state.readOnly) return false;
   const here = state.doc.lineAt(state.selection.main.to);
-  const nl = state.lineBreak;
+  // Il testo si compone con "\n": `start` e ciò che ne ricava `select` sono
+  // posizioni del documento.
+  const nl = "\n";
   const blank = here.text.trim() === "";
   const previous = here.number > 1 ? state.doc.line(here.number - 1) : null;
   const next = here.number < state.doc.lines ? state.doc.line(here.number + 1) : null;
@@ -635,7 +638,7 @@ function insertBlock(
   const start = from + before.length;
   const { anchor, head } = select(start);
   dispatch(state.update({
-    changes: { from, to: here.to, insert: `${before}${lines.join(nl)}${after}` },
+    changes: { from, to: here.to, insert: withLineBreaks(state, `${before}${lines.join(nl)}${after}`) },
     selection: EditorSelection.single(anchor, head ?? anchor),
     scrollIntoView: true,
     userEvent: "input",
@@ -644,12 +647,12 @@ function insertBlock(
 }
 
 const insertRule: StateCommand = ({ state, dispatch }) =>
-  insertBlock(state, dispatch, ["---"], (start) => ({ anchor: start + 3 + state.lineBreak.length }));
+  insertBlock(state, dispatch, ["---"], (start) => ({ anchor: start + "---\n".length }));
 
 /// L'indice dei titoli (K4, H9): un recinto ```toc``` vuoto, che la resa
 /// riempie; il cursore va sotto, dove l'indice si legge già reso.
 const insertToc: StateCommand = ({ state, dispatch }) =>
-  insertBlock(state, dispatch, ["```toc", "```"], (start) => ({ anchor: start + "```toc```".length + 2 * state.lineBreak.length }));
+  insertBlock(state, dispatch, ["```toc", "```"], (start) => ({ anchor: start + "```toc\n```\n".length }));
 
 /// Il segnalibro web (K8, H9): un paragrafo che comincia con `https://`, col
 /// cursore in fondo per scriverci o incollarci l'indirizzo.
@@ -687,7 +690,7 @@ const insertTable: StateCommand = ({ state, dispatch }) => {
       `| ${Array.from({ length: width }, (_, i) => row[i] ?? "").join(" | ")} |`;
     const table = [line(cells[0]!), `| ${Array(width).fill("---").join(" | ")} |`, ...cells.slice(1).map(line)];
     dispatch(state.update({
-      changes: { from: range.from, to: range.to, insert: table.join(state.lineBreak) },
+      changes: { from: range.from, to: range.to, insert: withLineBreaks(state, table.join("\n")) },
       scrollIntoView: true,
       userEvent: "input",
     }));
@@ -730,9 +733,9 @@ const toggleLink: StateCommand = ({ state, dispatch }) => {
   if (link) {
     const marks = link.getChildren("LinkMark");
     if (marks.length < 2) return false;
-    const label = state.sliceDoc(marks[0]!.to, marks[1]!.from);
+    const label = state.doc.sliceString(marks[0]!.to, marks[1]!.from);
     dispatch(state.update({
-      changes: { from: link.from, to: link.to, insert: label },
+      changes: { from: link.from, to: link.to, insert: withLineBreaks(state, label) },
       selection: EditorSelection.range(link.from, link.from + label.length),
       scrollIntoView: true,
       userEvent: "input",
@@ -750,12 +753,12 @@ function wrapLink(prefix: string): StateCommand {
       const word = state.wordAt(from);
       if (word) ({ from, to } = word);
     }
-    const text = state.sliceDoc(from, to);
+    const text = state.doc.sliceString(from, to);
     const url = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|mailto:)\S+$/i.test(text.trim());
     const insert = url ? `${prefix}[](${linkDestination(text.trim())})` : `${prefix}[${escapeLinkLabel(text)}]()`;
     const cursor = url ? from + prefix.length + 1 : from + insert.length - 1;
     dispatch(state.update({
-      changes: { from, to, insert },
+      changes: { from, to, insert: withLineBreaks(state, insert) },
       selection: EditorSelection.cursor(text === "" ? from + prefix.length + 1 : cursor),
       scrollIntoView: true,
       userEvent: "input",
@@ -772,13 +775,13 @@ const insertImage = wrapLink("!");
 const insertDiagram: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
   const line = state.doc.lineAt(state.selection.main.head);
-  const nl = state.lineBreak;
+  const nl = "\n";
   const blank = line.text.trim() === "";
   const before = blank ? "" : nl;
   const open = "```mermaid";
   const at = blank ? line.from : line.to;
   dispatch(state.update({
-    changes: { from: at, to: blank ? line.to : at, insert: `${before}${open}${nl}${nl}\`\`\`` },
+    changes: { from: at, to: blank ? line.to : at, insert: withLineBreaks(state, `${before}${open}${nl}${nl}\`\`\``) },
     selection: EditorSelection.cursor(at + before.length + open.length + nl.length),
     scrollIntoView: true,
     userEvent: "input",
@@ -818,16 +821,16 @@ function diagramOf(id: string): StateCommand | null {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     const line = state.doc.lineAt(state.selection.main.head);
-    const nl = state.lineBreak;
+    const nl = "\n";
     const blank = line.text.trim() === "";
     const before = blank ? "" : nl;
     const indent = /^[\s>]*/.exec(line.text)![0];
-    const body = templateText(template, t("slash.locale").slice(0, 2), indent).split("\n").join(nl);
+    const body = templateText(template, t("slash.locale").slice(0, 2), indent);
     const open = "```mermaid";
     const at = blank ? line.from : line.to;
     const insert = `${before}${open}${nl}${body}${nl}\`\`\``;
     dispatch(state.update({
-      changes: { from: at, to: blank ? line.to : at, insert },
+      changes: { from: at, to: blank ? line.to : at, insert: withLineBreaks(state, insert) },
       selection: EditorSelection.cursor(at + insert.length - 3 - nl.length),
       scrollIntoView: true,
       userEvent: "input",
@@ -868,12 +871,13 @@ const insertFootnote: StateCommand = ({ state, dispatch }) => {
   let n = 1;
   while (used.has(String(n))) n += 1;
   const reference = `[^${n}]`;
-  const nl = state.lineBreak;
+  // `text` va a capo con "\n", come le posizioni del documento.
+  const nl = "\n";
   const tail = text.endsWith(`${nl}${nl}`) || text === "" ? "" : text.endsWith(nl) ? nl : `${nl}${nl}`;
   const definition = `${tail}${reference}: `;
   const at = state.selection.main.to;
   dispatch(state.update({
-    changes: [{ from: at, insert: reference }, { from: state.doc.length, insert: definition }],
+    changes: [{ from: at, insert: reference }, { from: state.doc.length, insert: withLineBreaks(state, definition) }],
     selection: EditorSelection.cursor(state.doc.length + reference.length + definition.length),
     scrollIntoView: true,
     userEvent: "input",
@@ -1098,11 +1102,10 @@ function colorActions(): [string, MarkdownAction][] {
   const entries: [string, MarkdownAction][] = [];
   for (const [kind, prefix] of [["text", "markdown.color"], ["fill", "markdown.background"]] as const) {
     for (const color of [null, ...CONTENT_COLORS]) {
-      const run = setContentColor(kind, color);
       entries.push([`${prefix}.${color ?? "default"}`, {
-        run,
+        run: setContentColor(kind, color),
         active: (state) => colorsAt(state)[kind] === color,
-        applicable: wouldRun(run),
+        applicable: colorApplies(kind, color),
         prose: true,
       }]);
     }

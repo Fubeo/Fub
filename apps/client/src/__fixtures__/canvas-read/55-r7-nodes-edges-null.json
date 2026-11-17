@@ -1,0 +1,10 @@
+{
+  "name": "r7-nodes-edges-null",
+  "description": "R7: nodes ed edges null sono liste vuote",
+  "source": "{\"nodes\":null,\"edges\":null}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": []
+  }
+}

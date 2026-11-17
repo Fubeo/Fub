@@ -1,49 +1,147 @@
-import { searchForWorkspaceRoot } from "vite";
+import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { canvasWasm } from "./build/canvas-wasm.mjs";
+import { minifySkin } from "./build/skin-minify.mjs";
 
 const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
 
-/// Il CSS senza i commenti; un `/*` dentro una stringa resta. Le regole sono
-/// le stesse: il sanitizer e il browser i commenti li saltano comunque.
-function withoutComments(css: string): string {
-  let out = "";
-  let i = 0;
-  while (i < css.length) {
-    const c = css[i]!;
-    if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < css.length && css[j] !== c) j += css[j] === "\\" ? 2 : 1;
-      out += css.slice(i, j + 1);
-      i = j + 1;
-    } else if (c === "/" && css[i + 1] === "*") {
-      const end = css.indexOf("*/", i + 2);
-      i = end === -1 ? css.length : end + 2;
-    } else {
-      out += c;
-      i++;
+/// Il file del build con i chunk che ogni pagina carica all'avvio: sta in
+/// `dist/`, accanto a ciò che descrive, e non nel repository.
+const STARTUP_FILE = "startup-chunks.json";
+
+/// Il file del build con i chunk di ogni pezzo di `NOT_AT_STARTUP`, all'avvio
+/// o no, con i moduli che li portano: il banco WebView (C1) controlla che
+/// nessuno arrivi nella WebView vera, all'avvio o aprendo una nota.
+const SWITCHABLE_FILE = "switchable-chunks.json";
+
+/// Ciò che un componente spento non deve portare nella WebView, e che quindi
+/// non si carica all'avvio di nessuna pagina: il lettore PDF, la lavagna, i
+/// disegni, i documenti e i fogli arrivano soltanto con un `import()` quando il loro componente è
+/// acceso e si apre un loro file (piano K2, D-1).
+const NOT_AT_STARTUP: readonly { readonly what: string; readonly chunk?: RegExp; readonly module?: RegExp }[] = [
+  { what: "pdfjs", module: /\/node_modules\/pdfjs-dist\// },
+  { what: "editors/canvas", module: /\/src\/editors\/canvas\// },
+  // La porta per scrivere nelle schede della lavagna: serve solo a lei, e
+  // `document-controller.ts` la carica con un `import()` al primo uso.
+  { what: "state/card-editors", module: /\/src\/state\/card-editors\.ts$/ },
+  { what: "drawing-*", chunk: /^drawing-/ },
+  { what: "editors/spatial", module: /\/src\/editors\/spatial\// },
+  { what: "editors/rich", module: /\/src\/editors\/rich\// },
+  { what: "editors/grid", module: /\/src\/editors\/grid\// },
+];
+
+/// I chunk che la resa delle note (`markdown-render`) e il renderer delle
+/// viste (`ui-views`) possono importare: i runtime e le grammatiche sotto di
+/// loro, i chunk condivisi che Rollup nomina dal primo modulo (`icons`,
+/// `strings`, `menu`) e loro due.
+const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
+  "editor-runtime",
+  "markdown-grammar",
+  "text-engine",
+  "icons",
+  "strings",
+  "menu",
+  "markdown-render",
+  "html-entities",
+  "ui-views",
+]);
+
+/// Un id di modulo detto a partire dal client: `src/...` o `node_modules/...`.
+function shortId(id: string): string {
+  const clean = id.replace(/\?.*$/, "");
+  const at = clean.search(/\/(src|node_modules)\//);
+  return at >= 0 ? clean.slice(at + 1) : clean;
+}
+
+/// Scrive l'insieme dei chunk di ogni pagina che si carica all'avvio (gli
+/// import statici a partire dalla pagina, non gli `import()`), e si ferma se
+/// dentro c'è qualcosa di `NOT_AT_STARTUP`: nomina il chunk, la catena dalla
+/// pagina e il primo modulo fuori dal pezzo vietato che lo importa.
+function reportStartup(context: Rollup.PluginContext, bundle: Rollup.OutputBundle): void {
+  const startup: Record<string, { file: string; chunks: { file: string; name: string; bytes: number }[] }> = {};
+  const problems: string[] = [];
+  for (const entry of Object.values(bundle)) {
+    if (entry.type !== "chunk" || !entry.isEntry) continue;
+    // In ampiezza, così la catena che si stampa è la più corta.
+    const via = new Map<string, string | null>([[entry.fileName, null]]);
+    const queue = [entry.fileName];
+    for (let i = 0; i < queue.length; i++) {
+      const chunk = bundle[queue[i]!];
+      if (chunk?.type !== "chunk") continue;
+      for (const next of chunk.imports) {
+        if (via.has(next) || bundle[next]?.type !== "chunk") continue;
+        via.set(next, queue[i]!);
+        queue.push(next);
+      }
+    }
+    const chunks = queue.map((file) => bundle[file]).filter((chunk): chunk is Rollup.OutputChunk => chunk?.type === "chunk");
+    startup[entry.name] = {
+      file: entry.fileName,
+      chunks: chunks.map((chunk) => ({ file: chunk.fileName, name: chunk.name, bytes: Buffer.byteLength(chunk.code, "utf8") })),
+    };
+    for (const chunk of chunks) {
+      for (const rule of NOT_AT_STARTUP) {
+        const modules = Object.keys(chunk.modules).filter((id) => rule.module?.test(id));
+        if (!rule.chunk?.test(chunk.name) && modules.length === 0) continue;
+        const chain: string[] = [];
+        for (let file: string | null | undefined = chunk.fileName; file; file = via.get(file)) chain.unshift(file);
+        // Chi lo tira dentro: un modulo che importa staticamente un modulo
+        // del pezzo vietato senza esserne parte.
+        let culprit = "";
+        for (const id of modules.length ? modules : Object.keys(chunk.modules)) {
+          const importer = context.getModuleInfo(id)?.importers.find((other) => !rule.module?.test(other));
+          if (importer) {
+            culprit = `, importato da ${shortId(importer)} (${shortId(id)})`;
+            break;
+          }
+        }
+        problems.push(`${entry.name}: il chunk ${chunk.fileName} si carica all'avvio e contiene ${rule.what}${culprit}; catena: ${chain.join(" → ")}`);
+      }
     }
   }
-  return out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
+  context.emitFile({ type: "asset", fileName: STARTUP_FILE, source: `${JSON.stringify(startup, null, 2)}\n` });
+  // Per ogni pezzo, i chunk che lo contengono e i moduli suoi che ci stanno:
+  // il banco li nomina quando uno arriva nella WebView.
+  const switchable: Record<string, Record<string, string[]>> = {};
+  for (const rule of NOT_AT_STARTUP) {
+    const files: Record<string, string[]> = {};
+    for (const chunk of Object.values(bundle)) {
+      if (chunk.type !== "chunk") continue;
+      const modules = Object.keys(chunk.modules).filter((id) => rule.module?.test(id)).map(shortId).sort();
+      if (rule.chunk?.test(chunk.name) || modules.length) files[chunk.fileName] = modules;
+    }
+    switchable[rule.what] = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
+  }
+  context.emitFile({ type: "asset", fileName: SWITCHABLE_FILE, source: `${JSON.stringify(switchable, null, 2)}\n` });
+  if (problems.length) {
+    context.error(`un componente che si può spegnere arriva all'avvio:\n${problems.join("\n")}`);
+  }
 }
 
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
 export default defineConfig({
   clearScreen: false,
-  plugins: [{
+  plugins: [
+    // Il nucleo della lavagna in WebAssembly, compilato da cargo a ogni build
+    // (`build/canvas-wasm.mjs`): serve Rust col bersaglio
+    // wasm32-unknown-unknown.
+    canvasWasm(),
+    {
     // La pelle composta arriva come testo (`?raw`), e Vite non minimizza il
-    // testo: un terzo erano commenti, che documentano i pezzi ma nel bundle
-    // pesano come regole. Nella build si tolgono; in sviluppo e al banco la
-    // pelle resta quella scritta.
-    name: "skin-without-comments",
+    // testo: commenti e rientri, che documentano i pezzi, nel bundle pesavano
+    // come regole. Nella build si tolgono con gli spazi che non contano
+    // (`build/skin-minify.mjs`, con le regole identiche provate dal suo test);
+    // in sviluppo e al banco la pelle resta quella scritta.
+    name: "skin-minify",
     apply: "build",
     transform(code, id) {
       if (!/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return null;
       const match = /^export default (".*");?\s*$/s.exec(code);
       if (!match) this.error(`${id}: il testo della pelle non ha più la forma di \`?raw\``);
-      return { code: `export default ${JSON.stringify(withoutComments(JSON.parse(match[1]!) as string))};`, map: null };
+      return { code: `export default ${JSON.stringify(minifySkin(JSON.parse(match[1]!) as string))};`, map: null };
     },
   }, {
     name: "bundle-size-budgets",
@@ -62,6 +160,7 @@ export default defineConfig({
         for (const chunk of Object.values(bundle)) {
           if (chunk.type === "chunk" && chunk.isEntry) visit(chunk.fileName);
         }
+        reportStartup(this, bundle);
         // Vero se dal chunk `from` si arriva, per import statici, a un chunk
         // che si chiama `name`.
         const reaches = (from: string, name: string): boolean => {
@@ -95,6 +194,21 @@ export default defineConfig({
           if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
             this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
           }
+          // La resa delle note e il renderer delle viste stanno sotto il
+          // ponte dei documenti e importano soltanto i chunk sotto di loro.
+          // Un chunk nuovo fra i loro import vuol dire un modulo che importano
+          // e che la loro regola in `manualChunks` non nomina: Rollup lo ha
+          // estratto a parte (all'avvio, un file in più) o lo ha lasciato nel
+          // ponte (un ciclo). Va aggiunto alla regola. Se invece un chunk
+          // condiviso ha soltanto cambiato nome, va cambiato qui.
+          if (chunk.name === "markdown-render" || chunk.name === "ui-views") {
+            const strays = chunk.imports
+              .map((file) => bundle[file])
+              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !UNDER_THE_RENDER.has(next.name));
+            if (strays.length) {
+              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...UNDER_THE_RENDER].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
+            }
+          }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
           const bytes = Buffer.byteLength(chunk.code, "utf8");
           if (bytes > limit) {
@@ -121,6 +235,9 @@ export default defineConfig({
           ? [
               fileURLToPath(new URL("../../crates/fub-scene/tests/corpus", import.meta.url)),
               fileURLToPath(new URL("../clipper/icons", import.meta.url)),
+              // Le forme del logo (D26): `src/ui/marcuzzo.test.ts` tiene le
+              // copie del client uguali ai file.
+              fileURLToPath(new URL("../../assets/logo", import.meta.url)),
             ]
           : []),
       ],
@@ -167,6 +284,16 @@ export default defineConfig({
           // pittura delle celle e i suoi oggetti. Cambia col foglio, non con
           // la shell; la barra multifunzione e le finestre restano differite.
           if (/\/src\/editors\/grid\/[^/]+\.ts$/.test(id)) return "grid-editor";
+          // La Tabella: tasti, selezione, comandi, appunti, cornice e moto
+          // delle tabelle, comuni alle note, ai documenti e ai fogli. Cambia
+          // coi gesti delle tabelle, non con l'editor che la monta, e da sola
+          // non pesa sul chunk dei documenti.
+          if (/\/src\/tabella\//.test(id)) return "tabella";
+          // Il pannello delle impostazioni, con la pagina dei componenti, le
+          // informazioni e la rinomina del vault: cambia con le impostazioni,
+          // non con l'editor o la ricerca, e da solo non pesa sul chunk che
+          // questi condividono.
+          if (/\/src\/panels\/(settings[^/]*|components-page|about|vault-rename)\.ts$/.test(id)) return "settings-panel";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache
@@ -213,7 +340,7 @@ export default defineConfig({
           // intelligenti e la griglia; le librerie di simboli, i nodi di
           // Bézier, dove va la barra della selezione e l'ordine cambiato.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|look\/[a-z-]+|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|clipboard\/[a-z-]+|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi loro campi e coi colori
@@ -260,6 +387,48 @@ export default defineConfig({
           // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
           // condiviso più grosso e ne consuma il margine a ogni frase nuova.
           if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
+          // Il motore del testo con i suoi pezzi, il tema che legge, gli
+          // appunti delle tabelle e il diario della griglia: li usano la
+          // shell e la finestra del documento fin dall'avvio. Senza un nome
+          // suo, da quando i fogli arrivano soltanto con un `import()`,
+          // Rollup li fondeva nel chunk del ponte dei documenti, oltre la
+          // soglia.
+          if (
+            /\/src\/editors\/text\/(engine|theme|phrases|history-footprints|smart-lists|properties-display|live-reveal|paste-html|indent-guides|soft-cursor)\.ts$/.test(id) ||
+            /\/src\/theme\/(theme|loader|options|snippets|diagram-style|content-look)\.ts$/.test(id) ||
+            /\/src\/(rules\/offsets|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
+          ) {
+            return "text-engine";
+          }
+          // La tabella delle entità nominate di HTML, che `link-syntax` usa
+          // per sciogliere `&nome;` senza DOM: dati generati da una copia
+          // della specifica, che cambiano soltanto quando la si riscarica.
+          // Da sola resta in cache quando cambia la resa.
+          if (/\/src\/editors\/text\/profiles\/markdown\/html-entities\.generated\.ts$/.test(id)) return "html-entities";
+          // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
+          // righe, con la grammatica che legge (note a piè di pagina, link,
+          // ripiegabili, indice, testate dei callout, commenti CriticMarkup),
+          // la sintassi del vault,
+          // il sanificatore dell'HTML e le stringhe del profilo. La usano la
+          // Live, la stampa, la copia in HTML e le anteprime; cambia con la
+          // resa, non con i gesti dell'editor, e da sola non pesa sul chunk
+          // del ponte dei documenti.
+          // L'elenco è chiuso verso il basso: ogni modulo che questi importano
+          // e che starebbe nel ponte sta qui. Uno lasciato fuori, con
+          // `onlyExplicitManualChunks`, finirebbe in un chunk estratto a parte
+          // o farebbe un ciclo fra questo chunk e il ponte: il plugin
+          // `bundle-size-budgets` ferma la build in tutti e due i casi
+          // (`UNDER_THE_RENDER`).
+          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
+            return "markdown-render";
+          }
+          // Il renderer delle viste dichiarative (`UiNode`) con il suo
+          // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
+          // importa: la specie di un file, i tipi dei trascinamenti, i tasti
+          // delle linguette, le icone delle pagine. Lo montano la shell, i
+          // pannelli e la resa delle note; cambia col protocollo delle viste,
+          // non con l'editor. Chiuso verso il basso come la resa.
+          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
@@ -283,5 +452,17 @@ export default defineConfig({
     // senza questa riga i presidi che guardano del testo passerebbero o
     // fallirebbero a seconda del locale della macchina che li lancia.
     setupFiles: ["./src/test-setup.ts"],
+    // Il nucleo della lavagna si compila prima delle prove, non dentro il
+    // tempo massimo della prima che lo importa: il perché sta nel file.
+    globalSetup: ["./build/canvas-wasm.global-setup.mjs"],
+    // happy-dom non carica i fogli di stile esterni e, per ogni `<link
+    // rel="stylesheet">` che una prova monta (le pagine `index.html`,
+    // `document.html`, `mobile.html`), scrive su stderr un errore con tutta la
+    // pila: circa 170 per corsa, quasi 280 KB di testo che coprono i messaggi
+    // veri. Il caricamento resta spento; il foglio mancante conta come caricato
+    // (evento `load`), e nessun codice dell'app ascolta quell'evento sui `<link>`.
+    environmentOptions: {
+      happyDOM: { settings: { handleDisabledFileLoadingAsSuccess: true } },
+    },
   },
 });

@@ -1,0 +1,11 @@
+{
+  "about": "fit content dà l'altezza: con anche height la lista si contraddice, ed è rifiutata.",
+  "before": {
+    "nodes": [{ "id": "f", "type": "file", "x": 0, "y": 0, "width": 100, "height": 100, "file": "schemi/foto.png" }]
+  },
+  "ops": [{ "op": "resize", "id": "f", "fit": "content", "height": 300, "content_size": [1600, 1200] }],
+  "expect": {
+    "outcome": "rejected",
+    "error": { "kind": "Invalid", "index": 0 }
+  }
+}

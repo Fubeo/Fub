@@ -1,0 +1,9 @@
+{
+  "name": "not-blank-bom-after-space",
+  "description": "R1: un BOM dopo uno spazio non è vuoto, e non è JSON",
+  "source": " \ufeff",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

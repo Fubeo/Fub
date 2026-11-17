@@ -1,0 +1,9 @@
+{
+  "name": "r3-known-key-twice-escaped",
+  "description": "R3: nodes scritto una volta con un escape e una volta no è una chiave nota doppia",
+  "source": "{\"node\\u0073\":[],\"nodes\":[]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

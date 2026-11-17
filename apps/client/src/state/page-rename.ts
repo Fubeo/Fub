@@ -9,7 +9,7 @@
 // `folder.rename` per una cartella, che si porta dietro ogni voce e i link.
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import { isFolderPage, nameFault, normalizedName, pageName, type NameFault } from "../rules/mirrored";
+import { FOLDER_PAGE_STEM, isFolderPage, nameFault, normalizedName, pageName, type NameFault } from "../rules/mirrored";
 import { parentOf } from "../rules/organizer";
 import { flushPendingSave, renameKeepingBuffer } from "./document-session";
 import { notify } from "../ui/notify";
@@ -50,6 +50,20 @@ export function pageRenameTarget(doc: string, name: string): PageRename {
     return { kind: "folder", from: folder, to: normalizedName(up ? `${up}/${name}` : name) };
   }
   return { kind: "file", from: doc, to: renamedPath(doc, name) };
+}
+
+/// Il nome che la pagina `doc` prende rinominata col titolo `name`: l'ultimo
+/// pezzo del percorso nuovo (`Archivio/Nuova` → `Nuova`), e per la pagina di
+/// una cartella il nome della cartella.
+export function renamedPageName(doc: string, name: string): string {
+  return pageName(renamedPagePath(doc, name));
+}
+
+/// Il documento che la pagina `doc` diventa rinominata col titolo `name`: il
+/// file nuovo, o per la pagina di una cartella la pagina della cartella nuova.
+export function renamedPagePath(doc: string, name: string): string {
+  const target = pageRenameTarget(doc, name.trim());
+  return target.kind === "folder" ? `${target.to}/${FOLDER_PAGE_STEM}.md` : target.to;
 }
 
 /// Rinomina la pagina `doc` col titolo `name`. Torna `null` se è andata (o se

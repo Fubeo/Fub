@@ -77,6 +77,10 @@ export interface SurfaceMenuItem {
   readonly checked?: boolean;
   /// Un sottomenu.
   readonly items?: readonly SurfaceMenuEntry[];
+  /// Un sottomenu preparato quando si apre, per voci che si chiedono
+  /// all'host in quel momento («Apri con un'altra app»): il menu mostra
+  /// l'attesa. Vale quando `items` non c'è.
+  readonly load?: () => Promise<readonly SurfaceMenuEntry[]>;
   readonly run?: () => void;
   /// Un comando della palette da eseguire dopo `run`, o al suo posto: «Modifica
   /// qui» porta il cursore e poi chiede alla shell di cambiare modalità.
@@ -92,6 +96,9 @@ export interface SurfaceMenuItem {
   readonly find?: { readonly where: "vault" | "tags"; readonly query: string };
   /// Una scelta fra più (`radio`) invece di una spunta.
   readonly radio?: boolean;
+  /// I colori del pallino prima del nome, come `MenuItem.swatches`: la voce è
+  /// un colore da scegliere (il colore di una scheda della lavagna).
+  readonly swatches?: readonly string[];
 }
 
 /// Una voce, l'id di una voce, o `MENU_RULE`.

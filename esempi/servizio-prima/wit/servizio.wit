@@ -1,0 +1,23 @@
+// L'interfaccia esportata com'era «prima»: due colori, due forme, due
+// funzioni. Il test la fa crescere dal lato dell'host, una cosa alla volta
+// (#289); se la si cambia qui, il test non prova più niente.
+package esempio:servizio@0.1.0;
+
+interface servizio {
+    enum colore {
+        rosso,
+        verde,
+    }
+
+    variant forma {
+        punto,
+        cerchio(u32),
+    }
+
+    eco-colore: func(colore: colore) -> colore;
+    descrivi: func(forma: forma) -> string;
+}
+
+world servizio-prima {
+    export servizio;
+}

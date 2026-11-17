@@ -1,0 +1,10 @@
+{
+  "name": "escapes-kept-in-unchanged-fields",
+  "description": "Escape scritti in un altro modo (\\u00e9, \\u00E8, \\/) in campi che non cambiano: la scheda link si sposta e cambia solo il byte di \"y\"; url e il testo dell'altra scheda restano con i loro escape",
+  "before": "{\"nodes\":[{\"id\":\"l\",\"type\":\"link\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"url\":\"https:\\/\\/caf\\u00e9.example\\/\"},{\"id\":\"t\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"caff\\u00e9 \\/ t\\u00E8\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"l","type":"link","x":0,"y":0,"width":100,"height":50,"url":"https://café.example/"},"after":{"id":"l","type":"link","x":0,"y":30,"width":100,"height":50,"url":"https://café.example/"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"l\",\"type\":\"link\",\"x\":0,\"y\":30,\"width\":100,\"height\":50,\"url\":\"https:\\/\\/caf\\u00e9.example\\/\"},{\"id\":\"t\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"caff\\u00e9 \\/ t\\u00E8\"}],\"edges\":[]}"
+  }
+}

@@ -298,10 +298,12 @@ fn a_qualified_module_is_qualified_throughout_and_with_reason() {
 ///
 /// Senza questo, `every_public_type_is_visible_from_the_root` potrebbe essere
 /// verde perché non guarda niente — e un presidio che non aggancia è
-/// indistinguibile da uno soddisfatto. I due tipi nominati qui stanno uno in un
-/// sottomodulo su file (`rules::ids::Owner`) e uno in un file piano
-/// (`traits::JobId`): se il camminatore si fermasse alla radice di `src/`, o
-/// smettesse di scendere nelle cartelle, questo test lo direbbe per nome.
+/// indistinguibile da uno soddisfatto. I tipi nominati qui stanno in un
+/// sottomodulo su file (`rules::ids::Owner`), in un modulo diviso in file
+/// privati (`traits::job::JobId`, riesportato da `traits`) e in file piani
+/// (`model::DocId`, `edit::Revision`): se il camminatore si fermasse alla
+/// radice di `src/`, o smettesse di scendere nelle cartelle, questo test lo
+/// direbbe per nome.
 #[test]
 fn the_walker_descends() {
     let types = declared_types();
@@ -312,7 +314,8 @@ fn the_walker_descends() {
         );
     };
     look_for("rules::ids", "Owner");
-    look_for("traits", "JobId");
+    look_for("traits::job", "JobId");
+    look_for("edit", "Revision");
     look_for("model", "DocId");
 
     // E il conto complessivo non è ridicolo: un estrattore che tornasse tre

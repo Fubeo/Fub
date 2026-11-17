@@ -41,6 +41,24 @@ export interface SurfaceMode {
    * the theme's paper (`adattato`). Every mode declares it.
    */
   readonly looks: readonly Look[];
+  /**
+   * The figure of the mode in the mode menu and on the pane's button: a name
+   * `icon()` of `ui/icons.ts` can draw. Without it, or when the set doesn't
+   * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
+   */
+  readonly icon?: string;
+  /**
+   * One line under the label in the mode menu that says what the mode is
+   * for. Without it the menu shows the label alone.
+   */
+  readonly description?: () => string;
+  /**
+   * Ids this mode answers to besides its own: modes the surface no longer
+   * declares because they merged into this one (the Markdown `blocks`, now
+   * inside Scrittura). A saved pane or a command that names one gets this
+   * mode; the menu never lists them.
+   */
+  readonly formerIds?: readonly string[];
 }
 
 export interface SurfaceMountContext {
@@ -51,6 +69,34 @@ export interface SurfaceMountContext {
   readonly revision?: string;
   /** Detail of a rejected document, displayed only by the inert error surface. */
   readonly errorReason?: string;
+  /**
+   * The mount was born from a user gesture that opened the document (a click
+   * or Enter on a tree row, a search result, a link in a note). Absent means
+   * `false`: a remount, a restored tab or a tab that only takes focus never
+   * carries it.
+   */
+  readonly gesture?: boolean;
+  /**
+   * The page the opening asks for, 1-based: a link to `x.pdf#page=3` in a
+   * note. Only a paged viewer reads it; beyond the last page it shows the
+   * last one. Like `gesture`, only the mount the opening gives birth to (or
+   * brings back on its tab) carries it.
+   */
+  readonly page?: number;
+  /**
+   * The surface is mounted inside a board card (N6 T42): it keeps only what
+   * writes the document's content (a sheet's values and formulas) and leaves
+   * out its own bars, tabs, dialogs and structure commands. Absent means
+   * `false`: a pane always mounts the whole editor.
+   */
+  readonly compact?: boolean;
+  /**
+   * Escape belongs to the host, which leaves the surface with it (a board
+   * card, compact or not): the surface keeps Escape only to close what it has
+   * open (a menu, a selection of blocks) and gives it no meaning of its own.
+   * Absent means `false`: in a pane Escape is the surface's.
+   */
+  readonly escapeLeaves?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -126,6 +172,20 @@ export interface SurfaceBuffer {
   setDoc(text: string): void;
   syncDoc(update: DocumentUpdate | string): void;
   getDoc(): string;
+  /**
+   * The whole document with the text this surface still holds back (a board
+   * card being typed, before its pause) inside; `null` when nothing is held
+   * back. It reaches the recovery drafts, never the file.
+   */
+  pendingText?(): string | null;
+  /** Records the held-back text now, as the end of its pause would. */
+  commitPending?(): void;
+  /**
+   * Calls `listener` each time the held-back text changes, with whether some
+   * is left. The call does no other work: the session asks `pendingText` only
+   * when it writes a draft. The returned disposer stops the calls.
+   */
+  watchPending?(listener: (pending: boolean) => void): () => void;
 }
 
 /**
@@ -165,6 +225,114 @@ export type SurfaceAnchor =
 export interface SurfacePoint {
   readonly x: number;
   readonly y: number;
+}
+
+/** A rectangle on screen, in client coordinates. */
+export interface SurfaceRect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * A place outside the document's column where something carried out of it (a
+ * block in hand) can be dropped, as the shell offers it: the editor says what
+ * the drop does there, the shell only where the place is and what it is called.
+ *
+ * - `place`: a row of a declared view that names a place of a document (a
+ *   heading of the Structure): its span, in UTF-8 bytes of the source the view
+ *   was drawn from, and the row's words.
+ */
+export interface SurfaceDropOffer {
+  readonly kind: "place";
+  /** The document the place belongs to, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  readonly span: Span;
+  readonly title: string;
+  /** The visible part of the row, measured when the offers were asked for. */
+  readonly rect: SurfaceRect;
+  /** The pointer, with something in hand, is over the place (or leaves it): the shell shows it. */
+  hover(on: boolean): void;
+}
+
+/**
+ * A document in a vault: the same path in two vaults is two documents.
+ * `vault` is the vault root the view or the surface was mounted in
+ * (`undefined`: the one open when no root is known, as `vaultArg` reads it).
+ */
+export interface SurfaceDropDocument {
+  readonly documentId: string;
+  readonly vault: string | undefined;
+}
+
+/** Who offers drop places: the shell, for the views it draws. */
+export interface SurfaceDropOffers {
+  /**
+   * The places of `document` that can be seen now, measured now. Asked when
+   * something leaves the column and again when the shell says they changed
+   * (`dropOffersChanged`) or the window scrolls; never per frame.
+   */
+  offers(document: SurfaceDropDocument): readonly SurfaceDropOffer[];
+}
+
+const dropOfferSources = new Set<SurfaceDropOffers>();
+const dropOfferWatchers = new Set<() => void>();
+
+/**
+ * Registers a source of drop places outside the document's column: the shell
+ * calls it, the editor asks `dropOffers`, and neither imports the other's DOM.
+ * The returned disposer takes the source back.
+ */
+export function offerDropTargets(source: SurfaceDropOffers): () => void {
+  dropOfferSources.add(source);
+  dropOffersChanged();
+  return () => {
+    dropOfferSources.delete(source);
+    dropOffersChanged();
+  };
+}
+
+/**
+ * The drop places every source offers for `document` now: same document and
+ * same vault. A source that throws offers nothing: a gesture never breaks for
+ * a place it can't reach.
+ */
+export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  const out: SurfaceDropOffer[] = [];
+  for (const source of [...dropOfferSources]) {
+    try {
+      for (const offer of source.offers(document)) {
+        if (offer.document.documentId === document.documentId && offer.document.vault === document.vault) out.push(offer);
+      }
+    } catch {
+      // Una sorgente guasta non toglie le altre.
+    }
+  }
+  return out;
+}
+
+/**
+ * The shell redrew rows that offer places (or took them away): whoever holds
+ * offers from before measures them again. Watchers run synchronously; one
+ * that throws doesn't stop the others.
+ */
+export function dropOffersChanged(): void {
+  for (const watcher of [...dropOfferWatchers]) {
+    try {
+      watcher();
+    } catch {
+      // Un osservatore guasto non toglie gli altri.
+    }
+  }
+}
+
+/** Listens for `dropOffersChanged`, while something is out of the column; the disposer stops it. */
+export function watchDropOffers(watcher: () => void): () => void {
+  dropOfferWatchers.add(watcher);
+  return () => {
+    dropOfferWatchers.delete(watcher);
+  };
 }
 
 /**
@@ -237,8 +405,53 @@ export interface SurfaceStatus {
   subscribe(listener: () => void): () => void;
 }
 
-/** How far the document can be written, as the chip by its path says it. */
-export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly";
+/**
+ * The cell a grid surface has active, as data: its A1 name and what it holds
+ * as written (the formula, or the value as typed). A host that does not show
+ * the surface's own formula bar (a board card, N6 T42) shows these instead.
+ */
+export interface SurfaceActiveCell {
+  readonly name: string;
+  readonly formula: string;
+}
+
+export interface SurfaceActiveCellSource {
+  /** The active cell now; `null` before a workbook is shown. */
+  read(): SurfaceActiveCell | null;
+  /** Called when the active cell or what it holds may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * The cells a surface has selected, as it shows them: the status band sums
+ * them in the shell, with no IPC (E24). A Markdown table, a Base and a sheet
+ * card give the same port, so the same selection gives the same number.
+ */
+export interface SurfaceCellSelection {
+  /** The BCP 47 tag the shown numbers are written in: `it`, `en-US`. */
+  readonly locale: string;
+  /**
+   * Each selected cell once, header rows excluded: a number the format already
+   * types as one, or the text the cell shows. Read once per selection change,
+   * never per keystroke.
+   */
+  values(): Iterable<string | number>;
+}
+
+export interface SurfaceCellSelectionSource {
+  /** The selection now; `null` with no cells or a single cell selected. */
+  read(): SurfaceCellSelection | null;
+  /** Called when the selection or the selected values may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * How far the document can be written, as the chip by its path says it.
+ * `reduced` and `stopped` say that it is written with fewer means than usual:
+ * a drawing without its engine, switched off (or not in this build) or
+ * stopped by an error, draws with the simple tools.
+ */
+export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly" | "reduced" | "stopped";
 
 /** A gesture the standing offers: going to a place, finding, recording. */
 export interface SurfaceStandingAction {
@@ -353,6 +566,12 @@ export interface EditorSurface {
    */
   zone?(step: 1 | -1): boolean;
   /**
+   * The surface keeps a history of its own places: a board's view jumps (T56).
+   * Back and Forward ask the focused surface first, and the pane's own history
+   * only when it answers `false` (nothing to go back to, or no history here).
+   */
+  readonly jumps?: { back(): boolean; forward(): boolean };
+  /**
    * The surface draws its own bar of commands (the document ribbon): the
    * shell's format bar then stays out of the way, while the selection
    * bubble and the `fub.editor.action` commands keep working.
@@ -364,6 +583,10 @@ export interface EditorSurface {
   readonly panels?: SurfacePanels;
   /** The document's entries in the status band. */
   readonly status?: SurfaceStatus;
+  /** The active cell of a grid, for a host that hides the formula bar. */
+  readonly activeCell?: SurfaceActiveCellSource;
+  /** The cells selected in a table or a Base, for the sum in the status band. */
+  readonly cellSelection?: SurfaceCellSelectionSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
   /**
@@ -371,6 +594,12 @@ export interface EditorSurface {
    * cannot get there, so that the shell says it instead of doing nothing.
    */
   reveal?(location: SurfaceLocation): boolean;
+  /**
+   * Goes to page `page` (1-based) of a paged document already shown: a link
+   * to `x.pdf#page=3` followed while its tab is the active one. A surface
+   * without pages leaves it out.
+   */
+  showPage?(page: number): void;
   selections?(): EditorSelections | undefined;
   /**
    * A surface without text ranges says what it has selected here instead of
@@ -438,7 +667,25 @@ export interface EditorSurface {
    * a sheet); without it the shell narrows the formatting bar.
    */
   miniBar?(): SurfaceMiniBar | null;
+  /**
+   * The commands this surface adds to the command palette while its pane has
+   * the focus (a sheet's catalog commands). Read each time the palette opens;
+   * an entry with `unavailable` is shown with that reason and not run.
+   */
+  paletteCommands?(): readonly SurfacePaletteCommand[];
   destroy(): void;
+}
+
+/** A command a surface offers to the command palette. */
+export interface SurfacePaletteCommand {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  /** The group the palette shows beside the title («Foglio»). */
+  readonly group: string;
+  /** Why it cannot run now, or `null` when it can. */
+  readonly unavailable: string | null;
+  run(): void;
 }
 
 /**
@@ -467,13 +714,24 @@ export interface SurfaceFactory {
   mount(profile: string, context: SurfaceMountContext): EditorSurface;
 }
 
+/**
+ * A factory whose code arrives with an `import()`: the editor of a component
+ * that may be switched off. The registry knows its family, profiles and
+ * formats from the registration alone, and asks for the code only when a
+ * document needs it (`load`); `mount` stays synchronous and refuses a factory
+ * that has not arrived.
+ */
+export interface LazySurfaceFactory {
+  load(): Promise<SurfaceFactory>;
+}
+
 export interface SurfaceRegistration {
   readonly owner: string;
   readonly family: SurfaceFamily;
   readonly defaultProfile: string;
   /** Every profile a binding or explicit override may select for this family. */
   readonly profiles?: readonly string[];
-  readonly factory: SurfaceFactory;
+  readonly factory: SurfaceFactory | LazySurfaceFactory;
   readonly formats?: Readonly<Record<string, string>>;
   readonly sources?: Readonly<Partial<Record<SourceKind, string>>>;
   /**
@@ -502,14 +760,22 @@ export interface ResolvedSurface {
   readonly owner: string;
   readonly family: SurfaceFamily;
   readonly profile: string;
-  readonly factory: SurfaceFactory;
 }
 
+/**
+ * One registration. A family may hold several, all of the same owner and
+ * with profiles that do not overlap: the parts of an editor that different
+ * components switch on (the board and the drawings in `canvas`, the PDF
+ * profile of the viewer), each registered and unregistered on its own.
+ */
 interface RegistrationRecord extends SurfaceRegistration {
   readonly profileSet: ReadonlySet<string>;
   readonly formats: Readonly<Record<string, string>>;
   readonly sources: Readonly<Partial<Record<SourceKind, string>>>;
   readonly sourceViews: Readonly<Record<string, SurfaceOverride>>;
+  /** The factory once its code has arrived; the factory itself when it is not lazy. */
+  loaded: SurfaceFactory | null;
+  loading: Promise<SurfaceFactory> | null;
 }
 
 interface Binding {
@@ -540,9 +806,14 @@ function required(label: string, value: string): string {
   return normalized;
 }
 
+function isLazy(factory: SurfaceFactory | LazySurfaceFactory): factory is LazySurfaceFactory {
+  return typeof (factory as Partial<LazySurfaceFactory>).load === "function";
+}
+
 /** Owns family bindings and every instance mounted through those bindings. */
 export class DocumentSurfaceRegistry {
-  readonly #families = new Map<SurfaceFamily, RegistrationRecord>();
+  /** The parts of each family, in registration order: the first one's default profile is the family's. */
+  readonly #families = new Map<SurfaceFamily, RegistrationRecord[]>();
   readonly #formats = new Map<string, Binding>();
   readonly #sources = new Map<SourceKind, Binding>();
   readonly #mounted = new Set<MountedSurface>();
@@ -592,9 +863,15 @@ export class DocumentSurfaceRegistry {
       }
     }
 
-    const occupiedFamily = this.#families.get(family);
-    if (occupiedFamily) {
+    const parts = this.#families.get(family) ?? [];
+    const occupiedFamily = parts[0];
+    if (occupiedFamily && occupiedFamily.owner !== owner) {
       throw new SurfaceRegistrationConflict(`family:${family}`, occupiedFamily.owner, owner);
+    }
+    for (const profile of profiles) {
+      if (parts.some((part) => part.profileSet.has(profile))) {
+        throw new SurfaceRegistrationConflict(`profile:${family}/${profile}`, owner, owner);
+      }
     }
     for (const format of Object.keys(formats)) {
       const occupied = this.#formats.get(format);
@@ -619,8 +896,10 @@ export class DocumentSurfaceRegistry {
       sources,
       selectSourceProfile: registration.selectSourceProfile,
       sourceViews,
+      loaded: isLazy(registration.factory) ? null : registration.factory,
+      loading: null,
     };
-    this.#families.set(family, record);
+    this.#families.set(family, [...parts, record]);
     for (const [format, profile] of Object.entries(formats)) {
       this.#formats.set(format, { registration: record, profile });
     }
@@ -637,22 +916,71 @@ export class DocumentSurfaceRegistry {
   }
 
   resolve(request: SurfaceRequest): ResolvedSurface | null {
+    const binding = this.#binding(request);
+    return binding ? this.#resolved(binding.registration, binding.profile) : null;
+  }
+
+  /**
+   * Brings in the code of the surface `request` resolves to, when it comes
+   * with an `import()`: after it, `mount` of the same request does not wait.
+   * A surface already here, or no surface at all, resolves at once; a failed
+   * import rejects, and the next call tries again.
+   */
+  async load(request: SurfaceRequest): Promise<void> {
+    const binding = this.#binding(request);
+    if (!binding) return;
+    const record = binding.registration;
+    if (record.loaded) return;
+    const factory = record.factory;
+    if (!isLazy(factory)) return;
+    record.loading ??= factory.load().then(
+      (loaded) => {
+        record.loaded = loaded;
+        return loaded;
+      },
+      (error: unknown) => {
+        record.loading = null;
+        throw error;
+      },
+    );
+    await record.loading;
+  }
+
+  /**
+   * Whether `mount` of `request` can run now, without `load` first: its
+   * surface is already here, or there is no surface (and `mount` throws).
+   */
+  isLoaded(request: SurfaceRequest): boolean {
+    const binding = this.#binding(request);
+    return !binding || !!binding.registration.loaded;
+  }
+
+  /** The registration and profile `request` resolves to now. */
+  #binding(request: SurfaceRequest): Binding | null {
     if (request.override) {
-      const overridden = this.#families.get(request.override.family);
-      if (overridden) {
-        const profile = request.override.profile ?? overridden.defaultProfile;
-        if (overridden.profileSet.has(profile)) return this.#resolved(overridden, profile);
+      const parts = this.#families.get(request.override.family);
+      if (parts?.length) {
+        const profile = request.override.profile ?? parts[0]!.defaultProfile;
+        const part = this.#part(request.override.family, profile);
+        if (part) return { registration: part, profile };
       }
     }
     if (request.formatId) {
       const exact = this.#formats.get(request.formatId);
-      if (exact) return this.#resolved(exact.registration, exact.profile);
+      if (exact) return exact;
     }
     const source = this.#sources.get(request.sourceKind);
     const profile = source ? this.#sourceProfile(source, request) : null;
-    if (source && profile !== null) return this.#resolved(source.registration, profile);
-    const error = this.#families.get("error");
-    return error ? this.#resolved(error, error.defaultProfile) : null;
+    if (source && profile !== null) {
+      return { registration: this.#part(source.registration.family, profile)!, profile };
+    }
+    const error = this.#families.get("error")?.[0];
+    return error ? { registration: error, profile: error.defaultProfile } : null;
+  }
+
+  /** The part of `family` that registered `profile`. */
+  #part(family: SurfaceFamily, profile: string): RegistrationRecord | undefined {
+    return this.#families.get(family)?.find((part) => part.profileSet.has(profile));
   }
 
   /**
@@ -663,14 +991,12 @@ export class DocumentSurfaceRegistry {
    * without one, so a tab already showing it can still name the way back.
    */
   sourceView(request: SurfaceRequest): SourceView | null {
-    const natural = this.resolve({ ...request, override: undefined });
-    const registration = natural ? this.#families.get(natural.family) : undefined;
-    const view = natural && registration ? registration.sourceViews[natural.profile] : undefined;
+    const natural = this.#binding({ ...request, override: undefined });
+    const view = natural ? natural.registration.sourceViews[natural.profile] : undefined;
     if (!view) return null;
-    const target = this.#families.get(view.family);
-    const profile = view.profile ?? target?.defaultProfile;
-    if (!target || profile === undefined || !target.profileSet.has(profile)) return null;
-    return { family: target.family, profile };
+    const profile = view.profile ?? this.#families.get(view.family)?.[0]?.defaultProfile;
+    if (profile === undefined || !this.#part(view.family, profile)) return null;
+    return { family: view.family, profile };
   }
 
   /**
@@ -699,27 +1025,34 @@ export class DocumentSurfaceRegistry {
     return profile !== null && profile !== text.profile;
   }
 
+  /**
+   * The profile the source binding selects, among every profile its family
+   * registers now: the owner of a binding may choose a profile another part
+   * of its family brought.
+   */
   #sourceProfile(source: Binding, request: SurfaceRequest): string | null {
     const selected = source.registration.selectSourceProfile;
     const profile = selected ? selected(request, source.profile) : source.profile;
-    if (profile !== null && !source.registration.profileSet.has(profile)) {
+    if (profile !== null && !this.#part(source.registration.family, profile)) {
       throw new Error(`surface owner ${source.registration.owner} selected unregistered profile ${profile}`);
     }
     return profile;
   }
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {
-    const resolved = this.resolve(request);
-    if (!resolved) {
+    const binding = this.#binding(request);
+    if (!binding) {
       throw new Error(
         `no surface for format ${request.formatId ?? "unknown"} and source ${request.sourceKind}`,
       );
     }
-    const registration = this.#families.get(resolved.family);
-    if (!registration || registration.owner !== resolved.owner) {
-      throw new Error(`surface family ${resolved.family} was unregistered before mount`);
+    const resolved = this.#resolved(binding.registration, binding.profile);
+    const registration = binding.registration;
+    const factory = registration.loaded;
+    if (!factory) {
+      throw new Error(`surface ${resolved.owner} for ${resolved.family}/${resolved.profile} is not loaded`);
     }
-    const surface = resolved.factory.mount(resolved.profile, context);
+    const surface = factory.mount(resolved.profile, context);
     if (surface.family !== resolved.family || surface.profile !== resolved.profile) {
       surface.destroy();
       throw new Error(
@@ -739,6 +1072,11 @@ export class DocumentSurfaceRegistry {
       surface.destroy();
       throw new Error(`surface ${surface.surfaceId} declares no modes`);
     }
+    // The family may have been unregistered while the factory ran.
+    if (!this.#families.get(registration.family)?.includes(registration)) {
+      surface.destroy();
+      throw new Error(`surface family ${resolved.family} was unregistered before mount`);
+    }
     const mounted: MountedSurface = { registration, surface, active: true };
     this.#mounted.add(mounted);
     return this.#ownedSurface(mounted);
@@ -749,7 +1087,6 @@ export class DocumentSurfaceRegistry {
       owner: registration.owner,
       family: registration.family,
       profile,
-      factory: registration.factory,
     };
   }
 
@@ -769,9 +1106,9 @@ export class DocumentSurfaceRegistry {
   }
 
   #unregister(registration: RegistrationRecord): void {
-    if (this.#families.get(registration.family) === registration) {
-      this.#families.delete(registration.family);
-    }
+    const parts = this.#families.get(registration.family)?.filter((part) => part !== registration) ?? [];
+    if (parts.length) this.#families.set(registration.family, parts);
+    else this.#families.delete(registration.family);
     for (const format of Object.keys(registration.formats)) {
       if (this.#formats.get(format)?.registration === registration) this.#formats.delete(format);
     }
@@ -797,4 +1134,8 @@ export class DocumentSurfaceRegistry {
 export interface SurfaceCallbacks {
   onChange(paneId: string, change: EditorChange): void;
   onSelectionChange(paneId: string): void;
+  /// Una superficie montata che scopre dopo, da sola, di non poter tenere il
+  /// testo (una lavagna rotta che arriva mentre il nucleo si carica): il
+  /// riquadro passa alla superficie d'errore, come quando `setDoc` lancia.
+  onFail?(paneId: string, error: unknown): void;
 }

@@ -1,0 +1,24 @@
+{
+  "about": "Il seme 0 dà e220a8397b1dcdaf (una scheda) e poi 6e789e6aa1b965f4 (un arco): tutti e due presi, si salta al terzo.",
+  "before": {
+    "nodes": [
+      { "id": "e220a8397b1dcdaf", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "n2", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+    ],
+    "edges": [{ "id": "6e789e6aa1b965f4", "fromNode": "e220a8397b1dcdaf", "toNode": "n2" }]
+  },
+  "seed": 0,
+  "ops": [{ "op": "add_card", "node": { "type": "group", "x": -50, "y": -50, "width": 400, "height": 200, "label": "Gruppo" } }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "e220a8397b1dcdaf", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+        { "id": "n2", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" },
+        { "id": "06c45d188009454f", "type": "group", "x": -50, "y": -50, "width": 400, "height": 200, "label": "Gruppo" }
+      ],
+      "edges": [{ "id": "6e789e6aa1b965f4", "fromNode": "e220a8397b1dcdaf", "toNode": "n2" }]
+    },
+    "created": ["06c45d188009454f"]
+  }
+}

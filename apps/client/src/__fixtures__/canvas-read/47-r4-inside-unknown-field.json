@@ -1,0 +1,9 @@
+{
+  "name": "r4-inside-unknown-field",
+  "description": "R4: un surrogato spaiato dentro un campo sconosciuto",
+  "source": "{\"meta\":[\"\\udfff\"],\"nodes\":[]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

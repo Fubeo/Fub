@@ -59,7 +59,10 @@ use serde::{Deserialize, Serialize};
 /// ricopia.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Organization {
-    /// path → emoji mostrata accanto al nome.
+    /// path → icona mostrata accanto al nome: un'emoji, o `fub:<nome>` per una
+    /// figura monocroma della shell (`book`, `calendar`…). Resta una stringa:
+    /// un `fub:` che la shell non conosce non si disegna, e una versione di
+    /// prima mostra il testo.
     #[serde(default)]
     pub icons: BTreeMap<String, String>,
     /// Note appuntate in cima alla sidebar, nell'ordine scelto.

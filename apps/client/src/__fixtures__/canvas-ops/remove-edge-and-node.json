@@ -1,0 +1,18 @@
+{
+  "about": "Una lista di togli può mescolare schede e archi; un arco nominato e anche toccato da una scheda tolta va via una volta sola.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+    ],
+    "edges": [
+      { "id": "ab", "fromNode": "a", "toNode": "b" },
+      { "id": "ba", "fromNode": "b", "toNode": "a" }
+    ]
+  },
+  "ops": [{ "op": "remove", "ids": ["ab", "a"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [{ "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }] }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "reason-order",
+  "description": "Con più campi non validi la ragione è il primo nell'ordine tool, anchor, color, brush, ink.",
+  "source": "{\n  \"nodes\": [],\n  \"edges\": [],\n  \"fub:ink\": { \"v\": 1, \"strokes\": [\n    { \"id\": \"s-1\", \"tool\": \"marker\", \"brush\": \"pf2\", \"color\": \"red\", \"anchor\": { \"kind\": \"card\", \"width\": 10, \"height\": 10 }, \"ink\": \"\" },\n    { \"id\": \"s-2\", \"tool\": \"pen\", \"brush\": \"pf2\", \"color\": \"red\", \"anchor\": { \"kind\": \"card\", \"width\": 10, \"height\": 10 }, \"ink\": \"\" },\n    { \"id\": \"s-3\", \"tool\": \"pen\", \"brush\": \"pf2\", \"color\": \"red\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"\" },\n    { \"id\": \"s-4\", \"tool\": \"pen\", \"brush\": \"pf2\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"\" }\n  ] }\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": "board",
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": false,
+            "reason": "tool"
+          },
+          {
+            "id": "s-2",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-3",
+            "drawn": false,
+            "reason": "color"
+          },
+          {
+            "id": "s-4",
+            "drawn": false,
+            "reason": "brush"
+          }
+        ]
+      }
+    ]
+  }
+}

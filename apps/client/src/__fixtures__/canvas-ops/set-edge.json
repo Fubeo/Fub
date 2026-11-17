@@ -1,0 +1,23 @@
+{
+  "about": "set vale anche per un arco: l'etichetta cambia, la freccia si toglie, l'estremo si sposta su un'altra scheda.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" },
+      { "id": "c", "type": "text", "x": 400, "y": 0, "width": 100, "height": 60, "text": "c" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b", "toEnd": "arrow", "label": "usa" }]
+  },
+  "ops": [{ "op": "set", "id": "e1", "fields": { "label": "dipende", "toEnd": null, "toNode": "c" } }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+        { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" },
+        { "id": "c", "type": "text", "x": 400, "y": 0, "width": 100, "height": 60, "text": "c" }
+      ],
+      "edges": [{ "id": "e1", "fromNode": "a", "toNode": "c", "label": "dipende" }]
+    }
+  }
+}

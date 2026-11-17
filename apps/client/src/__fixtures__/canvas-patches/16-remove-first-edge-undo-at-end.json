@@ -1,0 +1,11 @@
+{
+  "name": "remove-first-edge-undo-at-end",
+  "description": "T6: l'arco rimesso dall'annulla va in fondo, come in TypeScript",
+  "before": "{\n  \"nodes\": [{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\n  \"edges\": [\n    {\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\"},\n    {\"id\":\"e2\",\"fromNode\":\"b\",\"toNode\":\"a\",\"toEnd\":\"arrow\"}\n  ]\n}\n",
+  "patches": [{"kind":"remove-edge","before":{"id":"e1","fromNode":"a","toNode":"b"},"after":null}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\n  \"nodes\": [{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\n  \"edges\": [\n    {\"id\":\"e2\",\"fromNode\":\"b\",\"toNode\":\"a\",\"toEnd\":\"arrow\"}\n  ]\n}\n",
+    "undo": "{\n  \"nodes\": [{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\n  \"edges\": [\n    {\"id\":\"e2\",\"fromNode\":\"b\",\"toNode\":\"a\",\"toEnd\":\"arrow\"},{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\"}\n  ]\n}\n"
+  }
+}

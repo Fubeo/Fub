@@ -37,15 +37,25 @@ const sources = import.meta.glob("../**/*.{ts,tsx,js,mjs,html,css}", {
 describe("il costrutto delle icone", () => {
   it("tutte le icone rispettano griglia e tratto dichiarati", () => {
     const names = iconNames();
-    // Il set conta quarantadue icone (§31.4, misurabile con questo test): la
+    // Il set conta cinquantuno icone (§31.4, misurabile con questo test): la
     // ventottesima è la puntina delle tab appuntate, tre sono quelle che le
     // view di sincronizzazione e pubblicazione dichiarano, la casa è quella
     // della striscia degli spazi, quattro (informazioni, componente,
-    // tastiera, schermo) sono delle schede delle impostazioni, e quattro
-    // dicono il formato di un documento (Word, OpenDocument, foglio, disegno);
-    // le forbici e i due fogli sono Taglia e Copia nella riga degli appunti
-    // dei menu.
-    expect(names).toHaveLength(42);
+    // tastiera, schermo) sono delle schede delle impostazioni, e cinque
+    // dicono il formato di un documento (Word, OpenDocument, foglio, disegno,
+    // foto); le forbici e i due fogli sono Taglia e Copia nella riga degli
+    // appunti dei menu. Le ultime otto sono di Scrittoio 2: le quattro
+    // figure delle modalità (penna, blocchi, codice, occhio) e le quattro del
+    // cassetto (scrivi, ordina, orologio, freccia in su); poi «…» della
+    // testata del foglio, e le undici figure che una cartella o una nota
+    // sceglie (libro, calendario, bandiera, idea, in arrivo, archivio,
+    // immagine, cuore, lavoro, persone, musica); poi la casella spuntata dei
+    // compiti, la figura della vista Compiti; infine i tre segni dei formati
+    // di «Copia come» (Markdown, HTML, testo senza formattazione); poi le
+    // dieci figure del tipo di una proprietà della testata (testo, numero,
+    // selezione, stato, data, casella, persone, indirizzo, etichette,
+    // elenco).
+    expect(names).toHaveLength(77);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {
@@ -86,6 +96,9 @@ describe("il costrutto delle icone", () => {
       // Il disegno nuovo e l'inchiostro di un documento di Word sono SVG del
       // documento (ADR 0226), non icone della shell.
       .filter(([path]) => !path.endsWith("/editors/rich/drawing.ts") && !path.endsWith("/editors/rich/ink-shape.ts"))
+      // Marcuzzo è il logo, non un'icona: la copia byte per byte di
+      // `assets/logo/marcuzzo.svg`, tenuta uguale da `marcuzzo.test.ts`.
+      .filter(([path]) => path !== "./marcuzzo.ts" && !path.endsWith("/ui/marcuzzo.ts"))
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);

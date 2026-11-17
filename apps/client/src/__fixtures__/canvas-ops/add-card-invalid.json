@@ -1,0 +1,9 @@
+{
+  "about": "Una scheda che il modello non accetta (larga zero) è Invalid, e non esce nessuna toppa, nemmeno quella dell'operazione prima.",
+  "before": {},
+  "ops": [
+    { "op": "add_card", "node": { "id": "ok", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "ok" } },
+    { "op": "add_card", "node": { "id": "no", "type": "text", "x": 0, "y": 0, "width": 0, "height": 60, "text": "no" } }
+  ],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 1 } }
+}

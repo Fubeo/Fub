@@ -91,7 +91,7 @@ impl Code {
     pub fn message(self) -> &'static str {
         match self {
             Code::S001 => "il disegno non ha un titolo: manca la descrizione accessibile",
-            Code::S002 => "il documento contiene contenuto che FubDraw conserva ma non modifica",
+            Code::S002 => "il documento contiene contenuto che Fub conserva ma non modifica",
             Code::S003 => "id duplicato: il documento si apre in sola lettura",
             Code::S004 => "inchiostro o pennello non validi: il tratto non si ridisegna",
             Code::S005 => "contenuto attivo conservato ma mai eseguito",

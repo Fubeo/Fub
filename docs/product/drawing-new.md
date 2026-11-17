@@ -1,7 +1,7 @@
 # Disegni, modelli e suggerimenti
 
-> **Per chi:** chi apre FubDraw per la prima volta, e chi comincia spesso
-> disegni dello stesso tipo: una lezione, una diapositiva, uno schema.
+> **Per chi:** chi apre l'editor dei disegni per la prima volta, e chi
+> comincia spesso disegni dello stesso tipo: una lezione, una diapositiva, uno schema.
 > **Risultato:** sapere da dove nasce un disegno nuovo, quali modelli offre
 > Fub e come se ne aggiungono altri nel vault, e che cosa sono i suggerimenti
 > brevi che l'editor mostra sotto il foglio.

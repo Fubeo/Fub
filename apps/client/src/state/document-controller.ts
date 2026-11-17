@@ -28,7 +28,10 @@
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import { createDocumentSurfaceRegistry } from "../editors/core/bootstrap";
+import { createDocumentSurfaceRegistry, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
+import type { CanvasNotesPort } from "../editors/canvas/engine";
+import { UI_CRAFT, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
+import { components, componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
@@ -44,24 +47,24 @@ import {
   type SurfaceRequest,
   type SurfaceScrollLink,
 } from "../editors/core/registry";
-import { modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
+import { modeById, modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
 import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
-import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
-import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
+import { pdfIdWithoutFragment, pdfPageFromFragment } from "../editors/media/pdf-view";
+import { formatBytes, mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
-import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
 import { mountSlidePresentation } from "../ui/slides";
-import { mountMarkdown, mountRenderedDocument } from "../editors/text/profiles/markdown/mount";
+import { mountMarkdown, mountRenderedDocument, type MarkdownMountOptions } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
@@ -71,20 +74,28 @@ import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
+import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
+import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
-import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
+import { WITHOUT_PAGE, documentOutline, existingDocuments, matchingDocuments, notesByName, renderEmbed, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
+import { theseDocuments, type DocumentSource, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
-import { emit, on, state } from "./store";
+import { emit, on, readState, state, writeState } from "./store";
+import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
+import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
+import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import type { DraftInfo, Origin } from "../host/contract";
+import type { CardEditorHub, CardNotices } from "./card-editors";
+import { lazyCardEditorHub } from "./card-writes";
+import { createFormatBar, type GroupId } from "../panels/format-bar";
+import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
   flushPendingSave,
@@ -134,12 +145,13 @@ import {
   type LayoutNode,
   type Tab,
 } from "./layout";
-import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { createNote, folderOfNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { lendHeld, lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
-import { registerShellCommand } from "../ui/commands";
-import { registerLiveCommands } from "../editors/spatial/live/commands";
-import { VECTOR_PROFILE } from "../editors/spatial/modes";
+import { registerShellCommand, showComponent, type CommandEntry } from "../ui/commands";
+import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
+import { trashWithConfirm } from "../panels/trash";
 import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
@@ -151,7 +163,10 @@ import type * as SlashPanelModule from "../panels/slash/panel";
 import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
-import { errorText } from "../host/errors";
+import { errorText, isErrorKind } from "../host/errors";
+import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews } from "./craft-previews";
+import { openWithEntry } from "../panels/open-with";
+import { showContextMenu } from "../ui/menu";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
@@ -181,6 +196,9 @@ export interface DocumentDeps {
   /// Esegue un comando come la tastiera e la palette: per i pulsanti della
   /// barra di formattazione che non sono azioni dell'editor.
   runCommand(id: string): void;
+  /// Apre le impostazioni sul gruppo della riga `key`: la scheda di un file
+  /// Craft ci rimanda per il consenso e il peso massimo.
+  openSettings?(key: string): void;
 }
 
 /// I tre elementi di un riquadro che il controller tiene. Glieli dà la vista
@@ -237,6 +255,12 @@ export interface PaneView {
   drawToolbar(pane: Pane): void;
   /// Il banner del conflitto per il documento attivo del riquadro, o niente.
   drawConflict(pane: Pane, doc: string | null): void;
+  /// Lo stesso banner dentro una scheda della lavagna che scrive nel
+  /// documento (N6 T41): in `box`, o `box` vuoto e nascosto.
+  drawCardConflict(box: HTMLElement, doc: string): void;
+  /// Gli avvisi del documento dentro una scheda della lavagna che ci scrive
+  /// (N6 T96), quelli di un riquadro, in `box`; `drawn` dopo ogni disegno.
+  drawCardNotices(box: HTMLElement, doc: () => string, drawn: () => void): CardNotices;
   /// Lo stato del salvataggio del documento col fuoco. Senza un posto dove
   /// scriverlo non fa niente.
   drawSave(): void;
@@ -247,6 +271,30 @@ export interface PaneView {
   focusedTab(): { pane: string; index: number } | null;
   /// Dove si monta il registratore del riquadro.
   recorderHost(pane: Pane): HTMLElement;
+  /// Il riquadro «solo come file» di un file il cui componente è spento (K2):
+  /// disegna `file` dentro `host`, che sta già nel riquadro. Arriva di nuovo a
+  /// ogni cambio (la dimensione letta, «Accendi …» in corso, un rifiuto).
+  drawFileOnly(pane: Pane, host: HTMLElement, file: FileOnly): void;
+  /// Il foglio del riquadro, sopra la cui destra si apre la sbirciata (T20).
+  peekHost(pane: Pane): HTMLElement;
+}
+
+/// Ciò che il riquadro «solo come file» mostra e i suoi due gesti.
+export interface FileOnly {
+  readonly doc: string;
+  /// Il nome del file, con l'estensione.
+  readonly name: string;
+  /// La dimensione già scritta per chi legge, o `null` finché non si sa.
+  readonly size: string | null;
+  /// Il nome del componente spento, già nella lingua del vault; `null` se la
+  /// mappa non ne nomina uno da accendere.
+  readonly component: string | null;
+  /// «Accendi …» è in corso.
+  readonly busy: boolean;
+  /// Un rifiuto o un errore dell'ultimo «Accendi …», da leggere nel riquadro.
+  readonly problem: string | null;
+  switchOn(): void;
+  openOutside(): void;
 }
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
@@ -282,7 +330,56 @@ export interface Pane {
   /// sorgente» apre, e ciò contro cui si controlla una scelta già fatta.
   /// Null senza documento, prima della lettura, o se non ce n'è una.
   sourceView: SourceView | null;
+  /// Il documento mostrato si è montato dai byte (un'immagine, un PDF, un
+  /// RAW), e non dal suo testo. Quando l'elenco dei comandi cambia, un
+  /// riquadro il cui documento ha cambiato legame coi byte si rimonta.
+  bytes: boolean;
+  /// Le superfici delle schede di testo aperte ma non attive, dalla meno
+  /// recente: nascoste, non smontate (`parkSurface`). Tornare su una di quelle
+  /// la rimostra invece di ricostruire l'editor.
+  parked: ParkedSurface[];
 }
+
+/// La superficie di una scheda di testo che il riquadro tiene da parte mentre
+/// ne mostra un'altra.
+///
+/// Ricostruire l'editor a ogni cambio di scheda costava il montaggio di un
+/// `EditorView` nuovo, il testo rimesso da capo e, per una nota lunga, il
+/// parser rifatto per tutto il documento: la parte più grande del cambio
+/// scheda. Una superficie tenuta da parte è **staccata dalla sessione**
+/// (`detachSurface`, che prima registra ciò che teneva in sospeso) e sta
+/// dentro un contenitore suo, nascosto, che non si sposta mai:
+/// nascosto e non tolto dal documento perché è così che il motore del browser
+/// conserva lo scorrimento. Al ritorno si riattacca alla sessione e, se il
+/// testo nel frattempo è cambiato (un altro riquadro, il disco), lo riceve
+/// con `syncDoc`, come ogni aggiornamento venuto da fuori: cursore, scorrimento
+/// e cronologia locale restano quelli della scheda.
+///
+/// Ogni superficie ha il suo contenitore perché la superficie scrive sul suo
+/// genitore (la modalità, le interruzioni di riga) e ci ascolta eventi (copia,
+/// tasti): due superfici nello stesso genitore si pesterebbero. Il contenitore
+/// a riposo non porta la classe `pane-editor`, così chi cerca «la superficie
+/// del riquadro» (i fogli, il CSS, le prove) trova soltanto quella attiva.
+interface ParkedSurface {
+  readonly tab: Extract<Tab, { k: "doc" }>;
+  readonly surface: EditorSurface;
+  readonly host: HTMLElement;
+  readonly sourceView: SourceView | null;
+  /// Il tema che la superficie ha ricevuto per ultimo: al ritorno si rimette
+  /// soltanto se nel frattempo è cambiato.
+  theme: Theme | null;
+  /// Il documento si è salvato mentre era da parte: una lettura resa va
+  /// ridisegnata al ritorno (`redrawReading`).
+  redraw: boolean;
+}
+
+/// Quante superfici di testo un riquadro tiene da parte. Una nota di 5.000
+/// righe con il suo albero sintattico pesa qualche MB: oltre questo numero la
+/// meno recente si smonta, e tornarci la ricostruisce come prima.
+const MAX_PARKED = 4;
+
+/// La classe del contenitore di una superficie a riposo (vedi `ParkedSurface`).
+const PARKED_HOST = "pane-editor-riposo";
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
 export function describeTab(tab: Tab): { label: string; dirty: boolean; kind: "doc" | "view" } {
@@ -308,10 +405,21 @@ let view: PaneView = {
   drawViewSurface: unmounted,
   drawToolbar: unmounted,
   drawConflict: unmounted,
+  drawCardConflict: (box) => {
+    box.replaceChildren();
+    box.hidden = true;
+  },
+  drawCardNotices: (box) => {
+    box.replaceChildren();
+    box.hidden = true;
+    return { redraw: () => {}, dispose: () => {} };
+  },
   drawSave: () => {},
   focusTab: unmounted,
   focusedTab: () => null,
   recorderHost: unmounted,
+  drawFileOnly: unmounted,
+  peekHost: unmounted,
 };
 let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
@@ -337,16 +445,58 @@ export function paneOf(id: string): Pane | undefined {
 }
 
 // --- montaggio --------------------------------------------------------------
-async function createCanvasNote(text: string): Promise<string> {
+/// Le note della lavagna (T70): «Estrai in una nota» e «Copia il testo qui».
+/// Si crea con `note.create` e si legge come le altre note; gli errori
+/// arrivano alla tela come frasi.
+const canvasNotes: CanvasNotesPort = {
+  freeName: canvasFreeName,
+  create: async (folder, name, text) => {
+    try {
+      return await createCanvasNote(folder, name, text);
+    } catch (error) {
+      throw new Error(errorText(error));
+    }
+  },
+  read: async (path) => {
+    try {
+      return documentSessions.text(path) ?? (await api.readDocument(path)).text;
+    } catch (error) {
+      throw new Error(errorText(error));
+    }
+  },
+};
+
+async function createCanvasNote(folder: string, name: string, text: string): Promise<string> {
   // Creazione, lettura e scrittura sono un gesto solo: stanno tutte nel vault
   // in cui il gesto è partito, anche se `createNote` aspetta e ne viene aperto
-  // un altro (FUB-001).
+  // un altro (FUB-001). La cartella `""` è la radice: `createNote` non ci
+  // mette quella delle note nuove.
   const vault = openVaultRoot();
-  const doc = await createNote();
+  const doc = await createNote(name, folder);
   if (!doc) throw new Error("note.create did not return a created document");
+  if (text === "") return doc;
   const source = await api.readDocument(doc, vault);
   await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision }, vault);
   return doc;
+}
+
+/// Il nome da proporre per una nota `name` in `folder` (T70): `name`, o il
+/// primo `name 1`, `name 2`… che nessun documento della cartella usa (senza
+/// guardare l'estensione né le maiuscole). Solo una proposta, come quella del
+/// kernel per «Senza titolo»: se il nome si occupa prima di crearla,
+/// `note.create` lo rifiuta invece di sovrascrivere.
+export async function canvasFreeName(folder: string, name: string): Promise<string> {
+  const entries = await vaultEntries(WITHOUT_PAGE, "document", { path: folder, descendants: false });
+  const taken = new Set(entries.items.map((entry) => {
+    const base = entry.id.slice(entry.id.lastIndexOf("/") + 1);
+    const dot = base.lastIndexOf(".");
+    return (dot > 0 ? base.slice(0, dot) : base).toLocaleLowerCase();
+  }));
+  if (!taken.has(name.toLocaleLowerCase())) return name;
+  for (let n = 1; ; n += 1) {
+    const candidate = `${name} ${n}`;
+    if (!taken.has(candidate.toLocaleLowerCase())) return candidate;
+  }
 }
 
 /// Quanti file del vault propone la scelta di una card file: gli altri si
@@ -354,15 +504,26 @@ async function createCanvasNote(text: string): Promise<string> {
 const CANVAS_FILE_CHOICES = 500;
 
 /// Il file a cui punta una nuova card file del canvas: uno che c'è, scelto
-/// dall'utente, non un segnaposto.
-async function pickCanvasFile(): Promise<string | null> {
-  const page = await vaultEntries({ offset: 0, limit: CANVAS_FILE_CHOICES });
+/// dall'utente, non un segnaposto. Con `name` (il file di una scheda che non
+/// c'è più, «Ritrova…») gli omonimi vanno per primi, e si chiede tutto il
+/// vault: un omonimo oltre il tetto della lista non si troverebbe.
+async function pickCanvasFile(name?: string): Promise<string | null> {
+  const page = await vaultEntries(name === undefined ? { offset: 0, limit: CANVAS_FILE_CHOICES } : WITHOUT_PAGE);
+  const entries = name === undefined ? page.items : namesakesFirst(page.items, name).slice(0, CANVAS_FILE_CHOICES);
   return pickFromList<string>({
     title: t("canvas.pick_file"),
     placeholder: t("canvas.pick_file_filter"),
-    items: page.items.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
-    more: Math.max(0, page.total - page.offset - page.items.length),
+    items: entries.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
+    more: Math.max(0, page.total - entries.length),
   });
+}
+
+/// Le voci che hanno lo stesso nome (senza cartelle, senza distinguere le
+/// maiuscole) in testa, nell'ordine che avevano; il resto dopo, com'era.
+function namesakesFirst<T extends { readonly id: string }>(entries: readonly T[], name: string): T[] {
+  const wanted = name.toLocaleLowerCase();
+  const same = (entry: T): boolean => (entry.id.split("/").pop() ?? entry.id).toLocaleLowerCase() === wanted;
+  return [...entries.filter(same), ...entries.filter((entry) => !same(entry))];
 }
 
 /// Il documento a cui porta un collegamento del disegno `from`: uno che c'è,
@@ -392,6 +553,297 @@ const mediaTransport: ResourceTransport = {
   read_chunk: api.resourceReadChunk,
   close: api.resourceClose,
 };
+
+/// La montatura sicura del Markdown dentro una lavagna, la stessa per le
+/// schede di testo e per le schede di nota: i link si aprono col gesto e si
+/// risolvono da `documentId`.
+function canvasMarkdownMount(documentId: string): MarkdownMountOptions {
+  return {
+    documentId,
+    openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
+    openFigure,
+    openPath: async (path, from) => {
+      const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
+      if (!target) throw new Error(t("preview.target_missing"));
+      await openDocument(target.doc, { gesture: true });
+      if (target.at) await reveal(target.doc, { span: target.at.span });
+    },
+    searchTag: (tag) => deps.searchTag(tag),
+  };
+}
+
+/// Gli eventi del kernel che cambiano ciò che una scheda mostra del suo file:
+/// i `document_*` per un file che un formato serve (una nota, un foglio), gli
+/// `entry_*` per gli altri (un'immagine, un PDF).
+function watchCardFile(path: string, changed: () => void): () => void {
+  const mine = (id: string): void => {
+    if (id === path) changed();
+  };
+  const moved = (from: string, to: string): void => {
+    if (from === path || to === path) changed();
+  };
+  const stops = [
+    onEvent("document_changed", (e) => mine(e.id)),
+    onEvent("entry_changed", (e) => mine(e.id)),
+    onEvent("document_removed", (e) => mine(e.id)),
+    onEvent("entry_removed", (e) => mine(e.id)),
+    onEvent("document_renamed", (e) => moved(e.from, e.to)),
+    onEvent("entry_renamed", (e) => moved(e.from, e.to)),
+  ];
+  return () => {
+    for (const stop of stops) stop();
+  };
+}
+
+/// La sbirciata della finestra (E11, T20): una sola, sopra il riquadro col
+/// fuoco, con l'editor della nota montato dalla porta delle schede. Nasce al
+/// primo uso.
+let notePeek: NotePeek | null = null;
+function notePeekPort(): NotePeek {
+  notePeek ??= createNotePeek({
+    // Dalla nota che contiene il link (una sbirciata dentro una sbirciata,
+    // una scheda della lavagna), non dal riquadro col fuoco.
+    resolve: async ({ link, from }) => {
+      const found = await resolvedReference(
+        link.kind === "wiki"
+          ? { kind: "wiki", value: { page: link.page, heading: link.heading, block: link.block } }
+          : { kind: "path", value: link.path },
+        from ?? activeDoc() ?? undefined,
+      );
+      if (!found) return { kind: "missing" };
+      return isNoteDoc(found.doc) ? { kind: "note", doc: found.doc } : { kind: "other", doc: found.doc };
+    },
+    editors: cardEditors,
+    host: () => {
+      const pane = panes.get(layout.focus);
+      return pane ? view.peekHost(pane) : null;
+    },
+    // Il riquadro prende la nota col cursore dove stava nella sbirciata.
+    openHere: async (doc, at) => {
+      await openDocument(doc, { gesture: true });
+      if (at) await reveal(doc, { span: at });
+    },
+    openBeside: async (doc, at) => {
+      await openDocumentBeside(doc, "row");
+      if (at) await reveal(doc, { span: at });
+    },
+    // Un PDF, un foglio: la sbirciata è per le note, il resto si apre a lato.
+    openOther: async (doc, target) => {
+      const page = linkedPdfPage(doc, target.link.kind === "wiki" ? target.link.heading : null);
+      await openDocumentBeside(doc, "row", page === null ? {} : { page });
+    },
+    // Il bersaglio com'è scritto, come `openWikilink`; la cartella delle note
+    // nuove (`files.new-note-folder` con `./`) è quella della nota del link.
+    create: async (page, from) => createNote(page, from ? await folderOfNote(from) : undefined),
+    onMoved: (listener) => onEvent("document_renamed", (event) => listener(event.from, event.to)),
+    // La barra di formato e il contesto seguono chi ha la scrittura.
+    ownerChanged: () => {
+      const pane = panes.get(layout.focus);
+      if (pane) view.drawToolbar(pane);
+      scheduleContext();
+    },
+    failed: (message) => notify(message, "guasto"),
+  });
+  return notePeek;
+}
+
+/// La superficie della sbirciata sopra il riquadro `paneId` se ha lei la
+/// scrittura (il fuoco ci è entrato e non è tornato al testo del riquadro), o
+/// `null`. La barra di formato, il menu del testo e i comandi del documento
+/// agiscono su di lei.
+export function peekSurfaceIn(paneId: string): EditorSurface | null {
+  const pane = panes.get(paneId);
+  if (!pane || !notePeek?.isIn(view.peekHost(pane))) return null;
+  return notePeek.surface();
+}
+
+/// La superficie su cui agiscono i comandi dell'editor del riquadro col fuoco,
+/// col documento che mostra: la sbirciata se ha lei la scrittura, se no il
+/// riquadro.
+function commandTarget(): { doc: string; surface: EditorSurface } | null {
+  const peek = peekSurfaceIn(layout.focus);
+  const peekDoc = peek ? notePeek?.shown()?.doc : null;
+  if (peek && peekDoc) return { doc: peekDoc, surface: peek };
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc" || !r.surface) return null;
+  return { doc: r.shown.doc, surface: r.surface };
+}
+
+/// Il clic che apre un link: `editor.link-click`, letto all'avvio e a ogni
+/// cambio. Finché non è letto vale quello di serie.
+let linkClick: LinkClick = "apri";
+function watchLinkClick(lifetime: Lifetime): void {
+  let asked = 0;
+  const read = (): void => {
+    const mine = ++asked;
+    void settings().then((entries) => {
+      if (mine !== asked || lifetime.closed) return;
+      linkClick = linkClickOf(entries.find((entry) => entry.spec.key === LINK_CLICK_KEY)?.value);
+    }, () => {});
+  };
+  read();
+  lifetime.add(onEvent("setting_changed", (event) => {
+    if (event.key === LINK_CLICK_KEY) read();
+  }));
+  lifetime.add(onEvent("vault_opened", read));
+  lifetime.add(() => {
+    asked++;
+    linkClick = "apri";
+  });
+}
+
+/// Alt col clic, Alt-Invio o «Sbircia» su un link a una nota: la sbirciata.
+export function peekLink(target: PeekTarget): Promise<void> {
+  return notePeekPort().open(target);
+}
+
+/// Alt-Invio su una nota trovata con Ctrl O: la sbirciata del documento, già
+/// risolto (il nome del vault è il suo percorso).
+export function peekDocument(doc: string): Promise<void> {
+  return peekLink({ link: { kind: "path", path: `/${doc}` }, from: null });
+}
+
+/// La sbirciata, per chi la chiude o la guarda (i banchi, i comandi).
+export function notePeekState(): ReturnType<NotePeek["shown"]> {
+  return notePeek?.shown() ?? null;
+}
+
+/// I gruppi della barra di formato di una scheda (T41): tutti tranne la
+/// cronologia, perché sulla lavagna Annulla e Ripeti stanno in cima e,
+/// mentre si scrive, valgono per il testo.
+const CARD_TOOLBAR_GROUPS: readonly GroupId[] = ["block", "inline", "links", "lists", "blocks", "table", "other"];
+
+/// La barra di formato di una scheda che scrive: la stessa dei riquadri, per
+/// la superficie della scheda, ridisegnata quando cambiano i comandi.
+function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
+  const bar = createFormatBar({
+    surface: () => surface,
+    writing: () => true,
+    focusPane: () => {},
+    runCommand: (id) => deps.runCommand(id),
+    only: CARD_TOOLBAR_GROUPS,
+  });
+  bar.update(state.commandSpecs);
+  life.add(on("commands", () => bar.update(state.commandSpecs)));
+  life.add(() => bar.destroy());
+  return bar.element;
+}
+
+/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
+/// stesso registro delle superfici dei riquadri di questa finestra, e la
+/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso, e il suo modulo
+/// arriva allora con un `import()`: serve solo a una lavagna, che arriva anche
+/// lei così, e non pesa sull'avvio di nessuna finestra (`lazyCardEditorHub`).
+const cardEditors: CardEditorHub = lazyCardEditorHub(async () => {
+  const { createCardEditorPort } = await import("./card-editors");
+  return () => createCardEditorPort({
+    sessions: documentSessions,
+    surfaces: () => surfaceRegistry ?? null,
+    held: heldReadOnly,
+    heldWhy,
+    shownInPane: isOpen,
+    theme: () => theme,
+    forms: syntaxForms,
+    toolbar: cardToolbar,
+    conflict: (box, path) => view.drawCardConflict(box, path),
+    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
+    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
+    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
+    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+  });
+}, {
+  sessions: () => documentSessions,
+  shownInPane: isOpen,
+  unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+});
+
+/// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
+/// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le
+/// chiamate di `gridHost`: le passa la registrazione della lavagna.
+const canvasCards: CanvasCardPorts = {
+  editors: cardEditors,
+  note: {
+    show: async (path, heading, host, life) => {
+      const content = await renderEmbed(path, heading, null);
+      if (life.closed) return;
+      // Chiusa la vita, la resa resta, ferma: la scheda ferma la mostra.
+      life.add(mountMarkdown(host, content.html, { ...canvasMarkdownMount(path), keepOnTeardown: true }));
+    },
+  },
+  sheet: {
+    // La sessione aperta del documento, se c'è (A-9): la scheda mostra ciò
+    // che il foglio mostra, anche non salvato. Sennò il giornale vuoto sui
+    // byte del disco.
+    source: async (path) => {
+      const vault = openVaultRoot();
+      let read: DocumentSource;
+      try {
+        read = await api.readDocument(path, ...vaultArg(vault));
+      } catch (error) {
+        if (isErrorKind(error, "not_found")) return null;
+        throw error;
+      }
+      const session = openVaultRoot() === vault ? documentSessions.inspect(path) : undefined;
+      if (session?.lifecycle === "open" && session.base.kind === "descends_from") {
+        return { journal: session.text, base: session.base.value, format: read.format_id };
+      }
+      return { journal: "", base: read.revision, format: read.format_id };
+    },
+  },
+  web: {
+    view: linkCardView,
+    request: requestLinkCard,
+    watch: (changed) => on("link-cards", changed),
+    // Il consenso, la barra e gli errori sono del visore della finestra.
+    open: async (url) => {
+      await openWebPage(url);
+    },
+  },
+  craft: {
+    served: craftServed,
+    // La riga spenta che serve il file: l'id per «Accendi…» e il nome per la
+    // ragione, come nel riquadro «solo come file».
+    offComponent: () => {
+      const row = components()?.offRowFor(UI_CRAFT);
+      return row ? { id: row.id, name: row.nome } : null;
+    },
+    // «Accendi…» apre la riga nella pagina Componenti (K5 T24); senza
+    // impostazioni montate dà falso.
+    showComponent,
+    // Il componente acceso o spento cambia i comandi che il kernel elenca.
+    onServed: (changed) => on("commands", changed),
+    preview: (path) => previewOf(path, "large"),
+    watchPreviews: watchCraftPreviews,
+    render: (path) => renderPreview(path, "large"),
+    openWith: (path, anchor) => void openCardWith(path, anchor),
+  },
+  open: (path, subpath) => {
+    const page = linkedPdfPage(path, subpath?.replace(/^#/, ""));
+    void openDocument(path, page === null ? { gesture: true } : { gesture: true, page }).catch((error: unknown) => {
+      notify(errorText(error), "guasto");
+    });
+  },
+  watch: watchCardFile,
+};
+
+/// «Apri con…» da una scheda della lavagna (T18): il menu delle app di N7
+/// sotto il pulsante, come il sottomenu dell'albero. Senza app Craft
+/// installate non c'è niente da scegliere, e il file va all'app del sistema.
+async function openCardWith(path: string, anchor: HTMLElement): Promise<void> {
+  const entry = openWithEntry(path, { system: () => void handToSystem(path, true) });
+  const items = entry.items;
+  if (items === undefined) {
+    entry.run?.();
+    return;
+  }
+  try {
+    const choices = typeof items === "function" ? await items() : items;
+    if (!anchor.isConnected) return;
+    showContextMenu(anchor, choices, { label: entry.label });
+  } catch (error) {
+    notify(errorText(error), "guasto");
+  }
+}
 
 /// Un'immagine del vault che un disegno mostra per nome. Gli SVG non si
 /// propongono: nel vault sono disegni, e a un disegno si porta un
@@ -445,8 +897,14 @@ async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   return {
     folder,
     fromDocument: doc,
-    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
+    write: (id, bytes, options) => api.resourceWrite(id, bytes, null, vault, options),
   };
+}
+
+/// Le cartelle che `files.excluded-folders` tiene fuori dal vault: indice e albero.
+async function excludedFolders(): Promise<readonly string[]> {
+  const value = (await settings()).find((entry) => entry.spec.key === "files.excluded-folders")?.value;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 /// Un'immagine remota di `doc` scaricata fra i suoi allegati, dopo il «sì»
@@ -534,21 +992,39 @@ async function vaultHeadings(text: string): Promise<{ doc: string; text: string;
   return outlines.flat();
 }
 
-/// La superficie del riquadro col fuoco che sa dire il punto sotto il cursore,
-/// col documento che mostra.
+/// La superficie del riquadro col fuoco (o della sua sbirciata) che sa dire
+/// il punto sotto il cursore, col documento che mostra.
 function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor | null } | null {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc" || !r.surface?.anchorHere) return null;
-  const surface = r.surface;
-  return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+  const target = commandTarget();
+  if (!target?.surface.anchorHere) return null;
+  const surface = target.surface;
+  return { doc: target.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+}
+
+/// I comandi che la superficie del riquadro col fuoco aggiunge alla palette
+/// (i comandi del foglio), come voci della palette: nessuna se il riquadro
+/// non mostra un documento o la superficie non ne ha.
+export function focusedSurfaceCommands(): CommandEntry[] {
+  const surface = commandTarget()?.surface;
+  if (!surface?.paletteCommands) return [];
+  return surface.paletteCommands().map((command): CommandEntry => ({
+    id: command.id,
+    title: command.title,
+    description: command.description,
+    layer: "surface",
+    binding: null,
+    declared: null,
+    spec: null,
+    run: () => command.run(),
+    group: command.group,
+    unavailable: command.unavailable,
+  }));
 }
 
 /// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
 /// superficie del riquadro col fuoco, se ne ha una nella modalità attuale.
 export function findInFocusedSurface(): boolean {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc") return false;
-  return r.surface?.find?.() ?? false;
+  return commandTarget()?.surface.find?.() ?? false;
 }
 
 /// F6 dentro il riquadro col fuoco: la superficie passa alla sua zona seguente
@@ -643,8 +1119,7 @@ async function noteReference(from: string, doc: string, preference: LinkPreferen
 /// Gli allegati depositati entrano nel documento come rimandi: come si
 /// scrivono lo decide la superficie, nella sintassi del suo formato.
 function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): void {
-  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface?.insertReferences ||
-      closeDraining || documentSessions.isDeletionPending(doc)) return;
+  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface?.insertReferences || heldReadOnly(doc)) return;
   const references = links.map((link): SurfaceReference => ({ kind: "attachment", link }));
   if (!r.surface.insertReferences(references)) {
     throw new Error(t("errors.document.no_editor"));
@@ -665,12 +1140,12 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
     if (!life.closed) notify(t("document.attachment_failed", { reason: errorText(error) }), "guasto");
   };
   const accept = (files: readonly File[]) => {
-    if (life.closed || r.surface !== surface || closeDraining || documentSessions.isDeletionPending(doc)) {
+    if (life.closed || r.surface !== surface || heldReadOnly(doc)) {
       fail(new Error("The document is read-only or no longer open"));
       return;
     }
     void attachmentDeposit(doc).then((target) => {
-      if (!life.closed && r.surface === surface && !closeDraining && !documentSessions.isDeletionPending(doc)) {
+      if (!life.closed && r.surface === surface && !heldReadOnly(doc)) {
         return depositFiles(files, target, insert);
       }
     }).catch(fail);
@@ -779,17 +1254,49 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   lifetime.add(() => {
     recentRound = null;
   });
+  // Il contesto in attesa muore con la shell: un timer rimasto pubblicherebbe
+  // dopo lo smontaggio, verso un host che non c'è più.
+  lifetime.add(() => {
+    window.clearTimeout(contextTimer);
+    contextTimer = undefined;
+  });
+  // Gli editor dentro le schede muoiono con la shell, come i riquadri; la
+  // sbirciata, che ne usa uno, prima di loro.
+  lifetime.add(() => cardEditors.destroyAll());
+  // La finestra che se ne va non fa domande: la bozza di un salvataggio
+  // fallito resta, come per le schede (`destroyAll`).
+  lifetime.add(() => {
+    notePeek?.dismiss({ quiet: true });
+    notePeek = null;
+  });
+  mountNoteCards(lifetime);
+  watchLinkClick(lifetime);
   surfaceRegistry = createDocumentSurfaceRegistry({
-    onChange: written,
-    onSelectionChange: (paneId) => {
-      if (layout.focus === paneId) scheduleContext();
+    // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
+    onChange: (paneId, change) => {
+      if (!cardEditors.written(paneId, change)) written(paneId, change);
     },
-    onOpenWikilink: (page, heading, block) =>
-      openWikilink(page, heading ?? undefined, block ?? undefined),
-    onOpenWikilinkBeside: async (page, heading, block) => {
-      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
+    onSelectionChange: (paneId) => {
+      if (layout.focus === paneId || peekSurfaceIn(layout.focus)?.surfaceId === paneId) scheduleContext();
+    },
+    onFail: (paneId, error) => {
+      if (cardEditors.failed(paneId, error)) return;
+      const r = panes.get(paneId);
+      if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
+    },
+    // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
+    // Il nome si risolve dalla nota che contiene il link (una sbirciata, una
+    // scheda della lavagna), non dal riquadro col fuoco.
+    onOpenWikilink: (page, heading, block, from) =>
+      openWikilink(page, heading ?? undefined, block ?? undefined, from, { gesture: true }),
+    onPeekLink: (link, from) =>
+      peekLink({ link, from }).catch((error: unknown) => notify(errorText(error), "guasto")),
+    linkClick: () => linkClick,
+    onOpenWikilinkBeside: async (page, heading, block, from) => {
+      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
-      await openDocumentBeside(target.doc, "row");
+      const pdfPage = linkedPdfPage(target.doc, heading);
+      await openDocumentBeside(target.doc, "row", pdfPage === null ? {} : { page: pdfPage });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
     onShowFile: async (file, from, where) => {
@@ -802,14 +1309,42 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       else emit("reveal-path", id);
     },
     onOpenDocument: (doc) => openDocument(doc),
+    onOpenFigure: openFigure,
     onOpenPath: async (path, from) => {
       const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
-      await openDocument(target.doc);
+      await openDocument(target.doc, { gesture: true });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
+    // Il menu di una scheda della lavagna (T17) e «Apri a lato per questo»
+    // (T45): accanto, allo stesso punto.
+    onOpenPathBeside: openPathBeside,
+    // Un link di una scheda della lavagna (N6 T57) porta al file del vault che
+    // risolve, come un link di una nota: `null` se non c'è (un link rotto). Chi
+    // sceglie se la scheda è già sulla lavagna lo decide la tela.
+    resolveCardLink: async (link, from) => {
+      const target = await resolvedReference(
+        link.kind === "wiki"
+          ? { kind: "wiki", value: { page: link.page, heading: link.heading, block: link.block } }
+          : { kind: "path", value: link.path },
+        from ?? activeDoc() ?? undefined,
+      );
+      return target?.doc ?? null;
+    },
+    // «Sposta anche il file nel cestino»: lo stesso gesto dell'albero
+    // (`note.trash`, la domanda del cestino di sistema, l'avviso con
+    // «Annulla»). Se dopo il file c'è ancora, è rimasto: una domanda a cui si
+    // è detto di no, o un gesto già in corso.
+    onTrashPath: async (path) => {
+      try {
+        await trashWithConfirm(path);
+      } catch (error) {
+        throw new Error(errorText(error));
+      }
+      return !(await existingDocuments([path])).has(path);
+    },
     onImportRemoteImage: importRemoteImage,
-    onCreateCanvasNote: createCanvasNote,
+    canvasNotes,
     onPickCanvasFile: pickCanvasFile,
     onPickDrawingLink: pickDrawingLink,
     drawingImages: {
@@ -831,17 +1366,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       pick: () => pickDrawingImage(),
     },
     drawingFonts,
-    renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
-      documentId,
-      openWikilink: (page, heading, block) => openWikilink(page, heading, block),
-      openPath: async (path, from) => {
-        const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
-        if (!target) throw new Error(t("preview.target_missing"));
-        await openDocument(target.doc);
-        if (target.at) await reveal(target.doc, { span: target.at.span });
-      },
-      searchTag: (tag) => deps.searchTag(tag),
-    }),
+    withDrawings: loadLiveCommands,
+    renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) =>
+      mountMarkdown(host, renderMarkdown(text, forms).html, canvasMarkdownMount(documentId)),
+    canvasCards,
     canvasMedia: {
       openExternal: async () => { throw new Error(t("errors.document.no_external")); },
       // Il consenso, la barra e gli errori sono del visore della finestra.
@@ -849,16 +1377,23 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     canvasAttachments: {
       expandFiles: droppedFiles,
-      deposit: async (files, documentId) => {
-        const deposit = await attachmentDeposit(documentId);
-        const paths: string[] = [];
-        for (const file of files) {
-          if (file.size > 64 * 1024 * 1024) throw new Error(t("errors.attachment.too_large", { name: file.name }));
-          const saved = await depositAttachment(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
-          paths.push(saved.receipt.id);
-        }
-        return paths;
-      },
+      // Dall'albero: solo gli id che il vault conferma (G1).
+      resolvePaths: (data) => resolveCanvasPaths(data, {
+        existingDocuments,
+        folderEntries: async (folder) => new Set((await vaultEntries(WITHOUT_PAGE, undefined, { path: folder, descendants: false })).items.map((entry) => entry.id)),
+      }),
+      // Dal computer: una copia sola per file, e lo stesso file si riusa (G2).
+      // Il vault che ha già quei byte lo dice l'host (`reuse`), non il client.
+      // La cartella la sceglie `canvas.drop_folder`, letta a ogni trascinamento.
+      deposit: (files, documentId, cards) => depositCanvasFiles(files, documentId, {
+        deposit: attachmentDeposit,
+        dropFolder: async () => preferencesOf(await settings(LAVAGNA_BUNDLE)),
+        excludedFolders,
+        notify,
+        readState,
+        writeState,
+        revealSetting,
+      }, cards),
     },
     onSearchTag: (tag) => deps.searchTag(tag),
     onRenamePage: renamePage,
@@ -878,9 +1413,20 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     linkCards: {
       view: linkCardView,
       request: requestLinkCard,
-      watch: (changed) => on("link-cards", changed),
+      // Il wikilink da solo in un paragrafo è la scheda della nota (T20).
+      note: noteCardView,
+      holdNote: holdNoteCard,
+      watch: (changed) => {
+        const web = on("link-cards", changed);
+        const notes = watchNoteCards(changed);
+        return () => {
+          web();
+          notes();
+        };
+      },
     },
     runShellCommand: (id) => deps.runCommand(id),
+    ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
     requestMode: (paneId, mode) => {
       if (layout.focus !== paneId) focusPane(paneId);
       void setMode(mode);
@@ -959,9 +1505,13 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       const base = documentSessions.inspect(doc)?.base;
       return base?.kind === "descends_from" ? base.value : null;
     },
+    documentWrites: { flush: flushPendingSave, expect: (doc) => documentSessions.expectWrite(doc) },
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,
+      // «Apri con un'altra app» sull'immagine o sul PDF mostrato, come
+      // nell'albero: l'app del sistema, e con un'app Craft il sottomenu.
+      openExternal: (id) => handToSystem(id, true),
       copyText: writeClipboardText,
       // Il comando del kernel, come dalla palette: crea le annotazioni accanto
       // al PDF, o apre quelle che ci sono.
@@ -980,19 +1530,34 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
   });
   view.attach();
+  // I componenti accesi (K2): la mappa del vault, e il registro, i riquadri
+  // e i comandi dei disegni che la seguono.
+  heldEditors.clear();
+  mountComponents(lifetime);
+  lifetime.add(onComponents((next) => {
+    void enqueueDraw(async () => {
+      await componentsChanged(next);
+      await render();
+    }).catch((error: unknown) => {
+      notify(t("panes.redraw_failed", { reason: errorText(error) }), "guasto");
+    });
+  }));
   sessionEventsStop?.();
   paintedSessions.clear();
+  deniedSaves.clear();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
   lifetime.add(() => {
     closeDraining = false;
     stopSessionEvents();
     paintedSessions.clear();
+    deniedSaves.clear();
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
     for (const r of panes.values()) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       view.releaseFrame(r);
     }
   });
@@ -1014,6 +1579,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       });
     }),
   );
+  mountDocumentLends(lifetime);
+  lifetime.add(on("commands", commandsChanged));
   for (const event of ["index_updated", "batch_ended"] as const) {
     lifetime.add(onEvent(event, () => {
       for (const r of panes.values()) {
@@ -1066,11 +1633,16 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   const renamed = (from: string, to: string): void => {
     const outcome = documentSessions.rename(from, to);
     if (outcome.kind !== "collision") {
+      // Le schede che scrivono nella nota tengono la sessione col nome nuovo
+      // (anche se la rinomina l'ha già fatta la sessione, `already-renamed`).
+      cardEditors.renamed();
       moveSheetNotices(from, to);
       renameInDocumentCaches(from, to);
+      // Il prestito segue il file col nome nuovo, come le schede qui sotto.
+      renameLend(from, to);
       // The layout still names the old path until `rename` below runs. Keep
       // those editors read-only across that tiny migration window.
-      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to));
+      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lendHeld(to));
       rename(from, to);
     }
   };
@@ -1215,8 +1787,9 @@ function registerCommands(): void {
     available: () => offersContext(focusedModes(), "source"),
     run: () => void setContextMode("source"),
   });
-  // I Blocchi (N13) sono una modalità della nota con il ruolo della Live: il
-  // comando la nomina per id, e c'è soltanto dove la superficie la dichiara.
+  // I Blocchi (N13) sono dentro Scrittura: la nota dichiara `blocks` fra gli
+  // id di prima della sua Scrittura (`formerIds`), e il comando, che lo
+  // nomina, porta lì e c'è soltanto dove una superficie lo dichiara.
   registerShellCommand({
     id: "shell.mode.blocks",
     title: "commands.mode.blocks",
@@ -1391,14 +1964,33 @@ function registerCommands(): void {
     layer: "document",
     run: () => void resolveDiscardingMine(activeDoc()),
   });
-  // La sessione live di un disegno (ADR 0205): i comandi pesano poco, la
-  // sessione arriva quando si avvia.
-  registerLiveCommands({
-    focusedDoc: () => activeDoc(),
-    focusedDrawing: () => {
-      const pane = panes.get(layout.focus);
-      return pane?.surface?.profile === VECTOR_PROFILE && pane.shown?.k === "doc" ? pane.shown.doc : null;
-    },
+  liveCommands = null;
+}
+
+/// La sessione live di un disegno (ADR 0205): i comandi pesano poco, la
+/// sessione arriva quando si avvia. Sono dei disegni (`editors/spatial`), e
+/// arrivano con un `import()` insieme al loro codice, la prima volta che un
+/// disegno si apre: prima non servono, perché «Avvia» vuole un disegno a
+/// fuoco e gli altri due una sessione, che nasce solo da lì.
+let liveCommands: Promise<void> | null = null;
+
+const LIVE_TARGETS: LiveCommandTargets = {
+  focusedDoc: () => activeDoc(),
+  focusedDrawing: () => {
+    const pane = panes.get(layout.focus);
+    return pane?.surface?.profile === VECTOR_PROFILE && pane.shown?.k === "doc" ? pane.shown.doc : null;
+  },
+};
+
+function loadLiveCommands(): Promise<void> {
+  if (liveCommands) return liveCommands;
+  const mine = import("../editors/spatial/live/commands").then(({ registerLiveCommands }) => {
+    if (liveCommands === mine) registerLiveCommands(LIVE_TARGETS);
+  });
+  liveCommands = mine;
+  return mine.catch((error: unknown) => {
+    if (liveCommands === mine) liveCommands = null;
+    console.error(error);
   });
 }
 
@@ -1543,11 +2135,16 @@ export function closeUnpinnedTabs(): void {
 }
 
 /// Cronologia avanti/indietro del riquadro col fuoco (shell.pane.back/forward).
+/// Prima chiede alla superficie del riquadro, che può avere una storia sua (i
+/// salti della vista di una lavagna, T56); solo se lei dice `false` vale la
+/// cronologia del riquadro.
 export function paneBack(): void {
+  if (panes.get(layout.focus)?.surface?.jumps?.back()) return;
   if (goBack(layout.focus)) void synchronize();
 }
 
 export function paneForward(): void {
+  if (panes.get(layout.focus)?.surface?.jumps?.forward()) return;
   if (goForward(layout.focus)) void synchronize();
 }
 
@@ -1639,7 +2236,8 @@ export async function releaseTab(paneId: string, tab: Tab | null): Promise<void>
 /// Un documento che nessun riquadro mostra più viene rilasciato dalla sessione:
 /// il flush, la bozza e la chiusura sono una sola decisione del suo owner.
 async function dismissIfUnwatched(doc: string, paneId: string = layout.focus): Promise<void> {
-  if (panesWithDoc(doc).length > 0) return;
+  // Anche una scheda della lavagna che ci scrive dentro la tiene aperta.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   const outcome = await documentSessions.release(doc);
   if (outcome.kind === "unsaved") await keepOrDiscardUnsaved(doc, paneId);
 }
@@ -1654,8 +2252,9 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
     cancelLabel: t("document.close_unsaved.keep"),
     danger: true,
   }).catch(() => false);
-  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro.
-  if (panesWithDoc(doc).length > 0) return;
+  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro, o
+  // una scheda della lavagna ci scrive, e scartarla le toglierebbe il testo.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   if (discard) {
     documentSessions.discardUnsaved(doc);
     return;
@@ -1677,6 +2276,8 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
 /// di saltare il secondo giro: chi aspetta deve aspettare il disegno che
 /// comprende la sua mutazione, non uno qualunque.
 const drawQueue = new Queue();
+/// Il giro di `synchronize` accodato e non ancora partito, se c'è.
+let waitingRender: Promise<void> | null = null;
 
 /// Le aperture, in fila (difetto 0033).
 ///
@@ -1698,8 +2299,31 @@ const openQueue = new Queue();
 /// È l'unico punto che disegna, ed è il motivo per cui tutto il resto di questo
 /// file può limitarsi a mutare il layout e non pensarci più — la stessa forma
 /// con cui `ui/panel-host.ts` ha tolto ai pannelli il «quando ridisegnarsi».
+///
+/// Un giro accodato e **non ancora partito** comprende ogni mutazione arrivata
+/// prima che parta: chi chiede di sincronizzare in quel tempo aspetta quello,
+/// invece di accodarne un secondo identico. È il caso di ogni apertura: la
+/// mutazione del layout fa scattare il segnale, e `openDocument` chiede subito
+/// il proprio giro; due giri di fila rifacevano linguette, barra e
+/// scorrimento della striscia sopra l'editor appena montato, con un layout
+/// forzato in più a ogni cambio di nota. Un giro già partito non si fonde:
+/// potrebbe aver già letto lo stato che la mutazione nuova cambia.
 export function synchronize(): Promise<void> {
-  return drawQueue.enqueue(render);
+  if (waitingRender) return waitingRender;
+  const mine: Promise<void> = drawQueue.enqueue(() => {
+    if (waitingRender === mine) waitingRender = null;
+    return render();
+  });
+  waitingRender = mine;
+  return mine;
+}
+
+/// Accoda un lavoro di disegno che non è un giro di `synchronize`. Un giro che
+/// aspettava resta davanti a lui, quindi da qui in poi non comprende più ciò
+/// che arriva: chi sincronizza dopo ne accoda uno nuovo, dietro questo lavoro.
+function enqueueDraw<T>(job: () => Promise<T>): Promise<T> {
+  waitingRender = null;
+  return drawQueue.enqueue(job);
 }
 
 /// Smonta ogni riquadro e chiude ogni sessione prima di un vault nuovo.
@@ -1709,12 +2333,16 @@ export function synchronize(): Promise<void> {
 /// superficie e coda di salvataggio del vecchio. Chi chiama ha già svuotato
 /// la coda di salvataggio; ciò che resta sporco viene restituito.
 export function resetDocumentsForVault(): Promise<string[]> {
-  return drawQueue.enqueue(async () => {
+  return enqueueDraw(async () => {
     clearAllRemovedNotices();
+    // La sbirciata è del vault di prima: si chiude senza domande, chi chiama
+    // raccoglie ciò che resta sporco.
+    notePeek?.dismiss({ quiet: true });
     for (const [id, r] of panes) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       view.removePane(r);
     }
     panes.clear();
@@ -1725,6 +2353,9 @@ export function resetDocumentsForVault(): Promise<string[]> {
 }
 
 async function render(): Promise<void> {
+  // La mappa dei componenti si legge insieme al resto, non in coda: un file
+  // di un componente la aspetta (`show`), una nota no.
+  if (openVaultRoot() !== undefined) void componentsReady().catch((error: unknown) => console.error(error));
   buildStructure();
   const active = activeDoc();
   let failure: { error: unknown } | null = null;
@@ -1732,6 +2363,7 @@ async function render(): Promise<void> {
     const r = panes.get(id);
     const p = paneState(id);
     if (!r || !p) continue;
+    pruneParked(r, p.tabs);
     view.drawTabs(r, p.tabs, p.active);
     view.drawFocus(r, id === layout.focus);
     // Un riquadro che non riesce a mostrare la sua tab non ferma gli altri:
@@ -1779,6 +2411,9 @@ function buildStructure(): void {
       // abbonamento a una sessione che il riquadro non mostra più.
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
+      // La sbirciata sopra questo riquadro se ne va con lui.
+      if (notePeek?.isIn(r.root)) notePeek.dismiss();
       view.releaseFrame(r);
       view.removePane(r);
       panes.delete(id);
@@ -1809,6 +2444,8 @@ export function renderPane(id: string): Pane {
     loadGeneration: 0,
     disposeSurface: null,
     sourceView: null,
+    bytes: false,
+    parked: [],
   };
   panes.set(id, r);
   return r;
@@ -1879,11 +2516,19 @@ function redrawTabs(doc: string): void {
 /// ridipingeva tutte le tab e forzava un layout (`scrollIntoView`).
 const paintedSessions = new Map<string, string>();
 
+/// I documenti il cui salvataggio il sistema ha rifiutato perché il file non
+/// si può scrivere (`permission_denied`, PA T59), già detti all'utente. Il
+/// salvataggio automatico ci riprova a ogni pausa (così il file torna a
+/// salvarsi da solo appena ridiventa scrivibile), ma l'avviso non si ripete a
+/// ogni battuta: torna solo dopo un salvataggio riuscito o un «Riprova».
+const deniedSaves = new Set<string>();
+
 /// Registra l'aspetto della sessione; falso se è quello già disegnato.
 function sessionLookChanged(doc: string): boolean {
   const state = documentSessions.saveState(doc);
   if (state === null) {
     paintedSessions.delete(doc);
+    deniedSaves.delete(doc);
     return true;
   }
   const look = `${state}|${documentSessions.isDirty(doc)}|${documentSessions.isDeletionPending(doc)}`;
@@ -1916,6 +2561,21 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   if (event.kind === "save-failed") {
     if (event.outcome === "conflitto") {
       notify(t("document.save_conflict", { doc: event.id }), "guasto");
+    } else if (isErrorKind(event.error, "permission_denied")) {
+      // Il file è in sola lettura (PA T59), o l'host lo tiene tale per un
+      // suo motivo: la bozza resta sporca e nessun byte è perso, ma non è un
+      // guasto del disco.
+      const doc = event.id;
+      if (!deniedSaves.has(doc)) {
+        deniedSaves.add(doc);
+        notify(t("document.save_read_only", { doc }), "guasto", {
+          label: t("app.retry"),
+          run: () => {
+            deniedSaves.delete(doc);
+            return saveNow();
+          },
+        });
+      }
     } else {
       // La bozza resta sporca e il salvataggio automatico ci riprova alla
       // prossima battuta; «Riprova» serve a chi non vuole scrivere per salvare.
@@ -1933,6 +2593,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   redrawTabs(event.id);
   drawPaneConflict(event.id);
   if (event.kind === "saved") {
+    deniedSaves.delete(event.id);
     // Il testo è su disco: ciò che l'avviso diceva di non ancora deciso è
     // passato. La bozza ritrovata no: dice da dove viene il testo, e il
     // salvataggio automatico che la scrive non lo cambia.
@@ -1952,10 +2613,33 @@ function drawPaneConflict(doc: string): void {
   }
 }
 
+/// Le schede di `doc` sono in sola lettura per una cancellazione in sospeso
+/// (`readOnly`, che chi chiama legge dalla sessione col nome giusto), per la
+/// chiusura in corso o perché il documento è in prestito a un'app Craft, o
+/// sta per esserlo (`lendHeld`: la prenotazione conta già).
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
-    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining);
+    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lendHeld(doc));
   }
+  cardEditors.refreshReadOnly();
+}
+
+/// Perché una scheda di `doc` non accetta modifiche: la chiusura in corso,
+/// una cancellazione in sospeso, o il prestito a un'app Craft (T17), anche
+/// soltanto prenotato.
+function heldReadOnly(doc: string): boolean {
+  return closeDraining || documentSessions.isDeletionPending(doc) || lendHeld(doc);
+}
+
+/// Perché `doc` è fermo (`heldReadOnly`), con le parole delle righe di un
+/// riquadro; `null` se non lo è. Lo dice una scheda della lavagna che non
+/// entra in scrittura (N6 T96).
+function heldWhy(doc: string): string | null {
+  if (documentSessions.isDeletionPending(doc)) return t("notice.read_only", { doc: docTitle(doc) });
+  const app = lentTo(doc);
+  if (app !== null) return t("lend.notice", { app });
+  if (closeDraining || lendHeld(doc)) return t("canvas.card.readonly_why", { name: docTitle(doc) });
+  return null;
 }
 
 /** Ferma gli input locali prima del drain delle finestre e del salvataggio. */
@@ -1963,8 +2647,9 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
   closeDraining = frozen;
   for (const [paneId, pane] of panes) {
     const doc = activeDoc(paneId);
-    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc));
+    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lendHeld(doc));
   }
+  cardEditors.refreshReadOnly();
 }
 
 /// Come si chiama una tab.
@@ -2013,14 +2698,23 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
   // Sessione e superficie hanno ownership separate, ma terminano nello stesso
-  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza.
-  if (changed) {
+  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza. Una
+  // superficie di testo di una scheda che resta aperta va invece da parte
+  // (`parkSurface`), staccata allo stesso modo.
+  if (changed && !parkSurface(r)) {
     detachSurface(r);
     destroySurface(r);
+  }
+  if (changed) {
     r.sourceView = null;
+    r.bytes = false;
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
+  // La linguetta è già della scheda nuova (`render` l'ha disegnata prima di
+  // chiamare qui): la testata la segue subito, senza aspettare che l'editor
+  // si carichi. Il ridisegno dopo `show` aggiunge ciò che dipende da lui.
+  if (changed) view.drawToolbar(r);
 
   if (tab?.k === "view") {
     await mountViewInPane(tab.view, r.id, r.viewEl, tab.params ?? null);
@@ -2030,21 +2724,60 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (!tab) {
     return;
   }
+  const gesture = takeGesture(r.id, tab.doc);
+  const page = takeOpeningPage(r.id, tab.doc);
+  // La scheda era già aperta: la sua superficie torna com'era. Un'apertura con
+  // un gesto o una pagina chiede invece il montaggio che nasce da lei, e la
+  // superficie da parte si smonta.
+  const parked = takeParked(r, tab);
+  if (parked && (gesture || page !== null)) destroyParked(parked);
+  else if (parked && unparkSurface(r, tab, parked)) return;
+
+  // Un file di un componente (una lavagna, un PDF, un documento di Word)
+  // aspetta di sapere se il componente è acceso, invece di indovinare. Spento,
+  // il file si mostra «solo come file»: i file non si toccano.
+  const needs = uisForFile(tab.doc);
+  if (needs.length) {
+    const current = await componentsReady();
+    if (generation !== r.loadGeneration || r.shown !== tab) return;
+    const off = current ? needs.find((ui) => !current.uiOn(ui)) : undefined;
+    if (current && off !== undefined) {
+      showFileOnly(r, tab.doc, current, off);
+      return;
+    }
+    applyComponentEditors(current);
+  }
 
   // Un file che nessun formato del vault gestisce e che il registro sa
   // mostrare dai byte (un'immagine, un PDF) non ha una sorgente UTF-8: la
   // superficie dei byte possiede soltanto il suo prestito della risorsa, e la
   // sessione di testo resta dei documenti di testo. Un formato del vault per
   // la stessa estensione passa invece dal descrittore, come ogni documento.
-  if (!handledByVault(tab.doc) && surfaceRegistry.showsBytes(tab.doc)) {
+  if (showsFromBytes(tab.doc)) {
+    r.bytes = true;
     // Dai byte non c'è un testo da guardare come sorgente: una scelta rimasta
     // sulla scheda (uno stato scritto a mano, un file cambiato di natura) si
     // scarta, e il visualizzatore si monta come sempre.
     tab = forgetOverride(r, tab);
-    const surface = surfaceRegistry.mount(
-      { formatId: null, sourceKind: "bytes", documentId: tab.doc },
-      { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
-    );
+    const bytes = { formatId: null, sourceKind: "bytes", documentId: tab.doc } as const;
+    if (!surfaceRegistry.isLoaded(bytes)) {
+      try {
+        await surfaceRegistry.load(bytes);
+      } catch (error) {
+        if (generation !== r.loadGeneration || r.shown !== tab) return;
+        showSurfaceError(r, tab.doc, error);
+        forgetFailedRead(r);
+        return;
+      }
+      if (generation !== r.loadGeneration || r.shown !== tab) return;
+    }
+    const surface = surfaceRegistry.mount(bytes, {
+      paneId: r.id,
+      documentId: tab.doc,
+      parent: r.editorEl,
+      ...(gesture ? { gesture } : {}),
+      ...(page !== null ? { page } : {}),
+    });
     r.surface = surface;
     surface.setMode("view");
     markMode(r, "view");
@@ -2067,10 +2800,6 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     return;
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
-  // Durante le due attese un altro riquadro può aver cambiato la sessione, e
-  // la sottoscrizione non riporta ciò che è passato prima di lei: il testo da
-  // montare si prende adesso, senza attese fino a `attachSurface`.
-  const text = documentSessions.text(tab.doc) ?? source.text;
 
   const request = { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc };
   // La vista sorgente si conosce da qui, e resta anche se la superficie poi
@@ -2084,17 +2813,36 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (tab.override && !resolvesToSourceView(request, tab.override, r.sourceView)) {
     tab = forgetOverride(r, tab);
   }
+  const chosen = { ...request, ...(tab.override ? { override: tab.override } : {}) };
+  // Il codice di un editor di un componente arriva adesso, la prima volta.
+  if (!surfaceRegistry.isLoaded(chosen)) {
+    try {
+      await surfaceRegistry.load(chosen);
+    } catch (error) {
+      if (generation !== r.loadGeneration || r.shown !== tab) return;
+      showSurfaceError(r, tab.doc, error);
+      forgetFailedRead(r);
+      return;
+    }
+    if (generation !== r.loadGeneration || r.shown !== tab) return;
+  }
+  // Durante le attese un altro riquadro può aver cambiato la sessione, e
+  // la sottoscrizione non riporta ciò che è passato prima di lei: il testo da
+  // montare si prende adesso, senza attese fino a `attachSurface`.
+  const text = documentSessions.text(tab.doc) ?? source.text;
 
   let surface: EditorSurface;
   try {
     surface = surfaceRegistry.mount(
-      { ...request, ...(tab.override ? { override: tab.override } : {}) },
+      chosen,
       {
         paneId: r.id,
         documentId: tab.doc,
         parent: r.editorEl,
         formatId: source.formatId,
         revision: source.revision,
+        ...(gesture ? { gesture } : {}),
+        ...(page !== null ? { page } : {}),
       },
     );
   } catch (error) {
@@ -2120,7 +2868,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     showSurfaceError(r, tab.doc, error);
     return;
   }
-  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(tab.doc));
+  surface.setReadOnly?.(heldReadOnly(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
@@ -2160,6 +2908,41 @@ function forgetOverride(r: Pane, tab: Extract<Tab, { k: "doc" }>): Extract<Tab, 
   return next;
 }
 
+/// Il documento si monta dai byte: nessun formato del vault lo gestisce, e il
+/// registro sa mostrarlo così. Per un RAW la risposta dipende dall'elenco dei
+/// comandi (`craft.preview`), che può cambiare con il riquadro già montato.
+function showsFromBytes(doc: string): boolean {
+  return !handledByVault(doc) && surfaceRegistry.showsBytes(doc);
+}
+
+/// L'elenco dei comandi è cambiato (arrivato dopo l'apertura del vault, o un
+/// componente acceso o spento): un riquadro il cui documento ha cambiato
+/// legame coi byte si rimonta, senza gesto; gli altri non si toccano, e una
+/// scheda di testo tiene buffer e cursore. Anche un riquadro rimasto senza
+/// tab mostrata (una lettura fallita) riprova.
+function commandsChanged(): void {
+  let stale = false;
+  for (const id of layoutPanes()) {
+    const r = panes.get(id);
+    const tab = activeTab(id);
+    if (!r || tab?.k !== "doc") continue;
+    if (r.shown === null) {
+      stale = true;
+      continue;
+    }
+    if (r.shown.k !== "doc" || r.bytes === showsFromBytes(r.shown.doc)) continue;
+    detachSurface(r);
+    destroySurface(r);
+    r.shown = null;
+    stale = true;
+  }
+  if (stale) {
+    void synchronize().catch((e) => {
+      notify(t("panes.redraw_failed", { reason: errorText(e) }), "guasto");
+    });
+  }
+}
+
 /// Un formato del vault gestisce il file: lo dicono le estensioni dei
 /// provider registrati nel backend, non la tabella dei media della shell.
 function handledByVault(doc: string): boolean {
@@ -2172,14 +2955,18 @@ function handledByVault(doc: string): boolean {
 /// superficie registrata sa mostrarlo: dai suoi byte (un'immagine, un PDF) o
 /// come testo con un profilo suo (un SVG). L'esploratore chiede qui, invece di
 /// ripetere la classificazione della shell.
+///
+/// Un file di un componente si apre sempre: col componente spento nel
+/// riquadro «solo come file».
 export function canShowFile(id: string): boolean {
-  return surfaceRegistry?.opensWithoutFormat(id) ?? false;
+  return uisForFile(id).length > 0 || (surfaceRegistry?.opensWithoutFormat(id) ?? false);
 }
 
 /// Il file si mostra dai byte e non ha un testo da condividere: una finestra
 /// staccata, che monta soltanto un `TextEngine`, non ha niente da scrivere.
 export function showsFileBytes(id: string): boolean {
-  return surfaceRegistry?.showsBytes(id) ?? false;
+  // Un PDF col lettore spento resta un file di byte.
+  return mediaKindOfId(pdfIdWithoutFragment(id)) === "pdf" || (surfaceRegistry?.showsBytes(id) ?? false);
 }
 
 /// Il profilo di testo con cui il registro mostrerebbe questo documento, o
@@ -2190,6 +2977,193 @@ export function textProfileFor(id: string, source: DocumentSurfaceDescriptor): s
   return resolved?.family === "text" ? resolved.profile : null;
 }
 
+/// La famiglia del riquadro «solo come file». Non viene dal registro: non è
+/// un editor, è il posto di uno che è spento.
+export const FILE_ONLY_FAMILY = "file-only";
+
+const FILE_ONLY_MODES = [
+  { id: "file", label: () => t("file_only.mode"), presentation: "surface", contextMode: "reading", looks: ["tema"] },
+] as const;
+
+/// I pezzi di interfaccia che restano registrati anche col componente spento:
+/// quelli di un editor aperto il cui salvataggio non è riuscito, che resta a
+/// mostrare l'errore della sessione finché le modifiche non sono al sicuro.
+const heldEditors = new Set<string>();
+
+/// Il registro segue la mappa: i pezzi accesi si registrano, gli altri si
+/// tolgono, tranne quelli tenuti.
+function applyComponentEditors(current: Components | null): void {
+  if (!surfaceRegistry) return;
+  const on = (ui: string) => !current || current.uiOn(ui) || heldEditors.has(ui);
+  setComponentEditors(surfaceRegistry, on, current?.uis ?? []);
+}
+
+/// I pezzi spenti di cui il file ha bisogno per il suo editor.
+function offFor(doc: string, current: Components): string[] {
+  return uisForFile(doc).filter((ui) => !current.uiOn(ui));
+}
+
+/// Il documento che il riquadro mostra in un editor, non nel posto vuoto di
+/// uno; `null` altrimenti.
+function editorDoc(r: Pane): string | null {
+  return r.shown?.k === "doc" && r.surface && r.surface.family !== FILE_ONLY_FAMILY ? r.shown.doc : null;
+}
+
+/// Ciò che è acceso è cambiato. Un riquadro «solo come file» il cui
+/// componente è tornato si rimonta nel suo editor; un editor il cui
+/// componente si è spento prima salva ciò che la sessione ha in sospeso, poi
+/// passa a «solo come file». Se il salvataggio non riesce l'editor resta, con
+/// l'errore della sessione: niente si perde. Vale per ogni strada della
+/// scelta, anche la riga di comando, dove non c'è nessuno a cui chiedere.
+/// Gira nella coda dei disegni, e chi la accoda ridisegna dopo.
+async function componentsChanged(next: Components): Promise<void> {
+  if (next.root !== openVaultRoot()) return;
+  // Le forme sintattiche di una nota vengono dai componenti montati, e una
+  // superficie le legge al montaggio: quelle da parte si rimontano al ritorno.
+  for (const r of panes.values()) dropParked(r);
+  const leaving = [...panes.values()].filter((r) => {
+    const doc = editorDoc(r);
+    return doc !== null && offFor(doc, next).length > 0;
+  });
+  for (const r of leaving) {
+    for (const ui of offFor(editorDoc(r)!, next)) heldEditors.add(ui);
+  }
+  applyComponentEditors(next);
+  for (const r of panes.values()) {
+    if (r.shown?.k !== "doc" || r.surface?.family !== FILE_ONLY_FAMILY) continue;
+    if (offFor(r.shown.doc, next).length === 0 || r.surface.profile !== offFor(r.shown.doc, next)[0]) {
+      detachSurface(r);
+      destroySurface(r);
+      r.shown = null;
+    }
+  }
+  const flushed = new Map<string, Promise<boolean>>();
+  for (const r of leaving) {
+    const doc = editorDoc(r);
+    if (doc === null) continue;
+    const surface = r.surface;
+    let saving = flushed.get(doc);
+    if (!saving) {
+      saving = documentSessions.flush(doc).catch((error: unknown) => {
+        console.error(error);
+        return true;
+      });
+      flushed.set(doc, saving);
+    }
+    const dirty = await saving;
+    if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc) continue;
+    if (dirty) continue;
+    detachSurface(r);
+    destroySurface(r);
+    r.shown = null;
+  }
+  // Tenuti restano soltanto i pezzi degli editor che non hanno salvato.
+  heldEditors.clear();
+  for (const r of panes.values()) {
+    const doc = editorDoc(r);
+    if (doc !== null) for (const ui of offFor(doc, next)) heldEditors.add(ui);
+  }
+  applyComponentEditors(next);
+}
+
+/// Monta nel riquadro il posto «solo come file» di `doc`: nome, dimensione,
+/// «Accendi …» col nome della riga spenta che servirebbe, e «Apri con un'altra
+/// app». Il profilo della pseudo-superficie è il pezzo spento: cambia quale,
+/// e il riquadro si ridisegna.
+function showFileOnly(r: Pane, doc: string, current: Components, ui: string): void {
+  const host = document.createElement("div");
+  host.className = "document-surface document-surface-file-only";
+  host.tabIndex = 0;
+  r.editorEl.replaceChildren(host);
+  const row: ComponentRow | null = current.offRowFor(ui);
+  const vault = openVaultRoot();
+  let active = true;
+  let size: string | null = null;
+  let busy = false;
+  let problem: string | null = null;
+  const draw = (): void => {
+    if (!active) return;
+    view.drawFileOnly(r, host, {
+      doc,
+      name: doc.split("/").pop() ?? doc,
+      size,
+      component: row?.nome || null,
+      busy,
+      problem,
+      switchOn: () => void switchOn(),
+      openOutside: () => void handToSystem(pdfIdWithoutFragment(doc), true),
+    });
+  };
+  const switchOn = async (): Promise<void> => {
+    if (!row || busy) return;
+    busy = true;
+    problem = null;
+    draw();
+    try {
+      const answer = await api.componentsApply({ azione: "accendi", id: row.id }, true, ...vaultArg(vault));
+      if (answer.risposta === "rifiuto") problem = refusalText(answer, row.nome);
+      // Acceso: lo dice la mappa, che si rilegge con gli eventi della scelta,
+      // e il riquadro torna al suo editor da `componentsChanged`.
+      else await refreshComponents();
+    } catch (error) {
+      problem = t("file_only.failed", { name: row.nome, reason: errorText(error) });
+    }
+    busy = false;
+    draw();
+  };
+  const stopLanguage = onLanguage(draw);
+  const surface: EditorSurface = {
+    family: FILE_ONLY_FAMILY,
+    profile: ui,
+    surfaceId: r.id,
+    modes: FILE_ONLY_MODES,
+    setMode(mode) {
+      host.dataset.mode = mode;
+    },
+    focus() {
+      host.focus();
+    },
+    setTheme(next) {
+      host.dataset.theme = next;
+    },
+    destroy() {
+      if (!active) return;
+      active = false;
+      stopLanguage();
+      host.remove();
+    },
+  };
+  r.surface = surface;
+  surface.setMode("file");
+  markMode(r, "file");
+  if (theme) surface.setTheme?.(theme);
+  draw();
+  void fileSize(pdfIdWithoutFragment(doc), vault).then((bytes) => {
+    if (bytes === null) return;
+    size = formatBytes(bytes);
+    draw();
+  });
+}
+
+/// La dimensione del file, dall'apertura della sua risorsa: `null` se l'host
+/// non la dice.
+async function fileSize(id: string, vault: string | undefined): Promise<number | null> {
+  try {
+    const resource = await api.resourceOpen(id, vault ?? null);
+    void Promise.resolve(api.resourceClose(resource.handle)).catch(() => {});
+    return resource.len;
+  } catch {
+    return null;
+  }
+}
+
+/// Perché «Accendi …» non si è fatto, detto a chi legge.
+function refusalText(refusal: ComponentRefusal, name: string): string {
+  return refusal.rifiuto === "sconosciuto"
+    ? t("file_only.refused_unknown", { name })
+    : t("file_only.refused", { name });
+}
+
 async function followRemote(target: NavigateTarget, from: string): Promise<void> {
   try {
     if (target.kind === "tag") {
@@ -2197,15 +3171,23 @@ async function followRemote(target: NavigateTarget, from: string): Promise<void>
       return;
     }
     if (target.kind === "wikilink") {
-      await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from);
+      // Il clic su un link nella finestra staccata è un gesto come qui.
+      await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from, { gesture: true });
+      return;
+    }
+    if (target.kind === "figure") {
+      await openFigure(target.doc);
       return;
     }
     const resolved = await resolvedReference({ kind: "path", value: target.path }, from);
     if (!resolved) throw new Error(t("preview.target_missing"));
-    await openDocument(resolved.doc);
+    await openDocument(resolved.doc, { gesture: true });
     if (resolved.at) await reveal(resolved.doc, { span: resolved.at.span });
   } catch (error) {
-    const page = target.kind === "wikilink" ? target.page : target.kind === "path" ? target.path : target.tag;
+    const page = target.kind === "wikilink" ? target.page
+      : target.kind === "path" ? target.path
+      : target.kind === "figure" ? target.doc
+      : target.tag;
     notify(t("preview.open_failed", { page, reason: errorText(error) }), "guasto");
   }
 }
@@ -2270,19 +3252,45 @@ function failSurface(r: Pane, doc: string, error: unknown): void {
 function attachSurface(r: Pane, doc: string): void {
   const surface = r.surface;
   if (!surface) return;
+  const buffer = surface.buffer;
   r.disposeSurface = documentSessions.attachSurface(doc, {
     id: surface.surfaceId,
     sync: (update) => applySurfaceUpdate(r, doc, update),
+    // Il testo che la superficie tiene ancora (una scheda prima della pausa):
+    // la sessione lo mette in bozza e lo fa registrare prima di leggere il buffer.
+    pendingText: buffer?.pendingText ? () => buffer.pendingText?.() ?? null : undefined,
+    commitPending: buffer?.commitPending ? () => buffer.commitPending?.() : undefined,
+    watchPending: buffer?.watchPending ? (listener) => buffer.watchPending!(listener) : undefined,
   });
-  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(doc));
+  surface.setReadOnly?.(heldReadOnly(doc));
 }
 
+/// Prima di staccarsi la superficie registra il testo che tiene ancora: va alla
+/// sessione del documento che il riquadro mostra, finché è attaccata. La
+/// registrazione nella `destroy` della superficie resta soltanto una rete.
 function detachSurface(r: Pane): void {
+  if (r.disposeSurface) {
+    try {
+      r.surface?.buffer?.commitPending?.();
+    } catch (error) {
+      console.error(error);
+    }
+  }
   r.disposeSurface?.();
   r.disposeSurface = null;
 }
 
 function destroySurface(r: Pane): void {
+  releaseSurfaceExtras(r);
+  r.surface?.destroy();
+  r.surface = null;
+  r.editorEl.replaceChildren();
+}
+
+/// Ciò che il riquadro appende alla superficie che mostra — le classi della
+/// nota, il rilascio dei file, il registratore, le slide, la stampa — se ne va
+/// con lei, smontata o messa da parte.
+function releaseSurfaceExtras(r: Pane): void {
   r.noteClassGeneration++;
   applyNoteCssClasses(r.root, null);
   r.disposeAttachments?.();
@@ -2293,9 +3301,121 @@ function destroySurface(r: Pane): void {
   r.disposeSlides = null;
   r.disposePrint?.();
   r.disposePrint = null;
-  r.surface?.destroy();
+}
+
+// --- le superfici da parte (`ParkedSurface`) --------------------------------
+
+/// Mette da parte la superficie del riquadro, se è una superficie di testo
+/// montata di una scheda che resta aperta; `false` altrimenti, e chi chiama la
+/// smonta come prima. Va chiamata con `r.shown` ancora sulla scheda che si
+/// lascia.
+function parkSurface(r: Pane): boolean {
+  const surface = r.surface;
+  const tab = r.shown;
+  if (!surface || tab?.k !== "doc" || !r.disposeSurface || r.bytes) return false;
+  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
+  // Un file di un componente segue l'acceso e lo spento dei componenti, che
+  // smontano e rimontano da sé: resta fuori.
+  if (uisForFile(tab.doc).length > 0) return false;
+  // Una scheda chiusa o portata altrove non torna: la sua superficie si smonta.
+  const stays = paneState(r.id)?.tabs.some((each) => sameParked(each, tab)) ?? false;
+  if (!stays) return false;
+  // Staccata e nascosta: non riceve più il testo né input. La sola lettura
+  // non si cambia qui: commutarla costa un ridisegno dell'editor a ogni
+  // cambio, e al ritorno `attachSurface` la rimette comunque al valore giusto.
+  detachSurface(r);
+  releaseSurfaceExtras(r);
+  const host = r.editorEl;
+  host.classList.replace("pane-editor", PARKED_HOST);
+  host.hidden = true;
+  const next = document.createElement("div");
+  next.className = "pane-editor";
+  r.viewEl.before(next);
+  r.editorEl = next;
   r.surface = null;
-  r.editorEl.replaceChildren();
+  r.parked.push({ tab, surface, host, sourceView: r.sourceView, theme, redraw: false });
+  while (r.parked.length > MAX_PARKED) destroyParked(r.parked.shift()!);
+  return true;
+}
+
+/// Rimostra la superficie messa da parte per `tab` nel riquadro, che in quel
+/// momento non ne mostra nessuna. `false` se non si è potuto: la superficie da
+/// parte è già smontata, e chi chiama monta la scheda da capo.
+function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSurface): boolean {
+  const { surface } = entry;
+  const buffer = surface.buffer;
+  const text = documentSessions.text(tab.doc);
+  if (!buffer || text === undefined) {
+    destroyParked(entry);
+    return false;
+  }
+  // Il contenitore vuoto lasciato dalla scheda di prima se ne va; quello della
+  // superficie torna visibile dov'era, senza spostarsi.
+  r.editorEl.remove();
+  entry.host.classList.replace(PARKED_HOST, "pane-editor");
+  entry.host.hidden = false;
+  r.editorEl = entry.host;
+  r.surface = surface;
+  r.sourceView = entry.sourceView;
+  try {
+    if (theme && theme !== entry.theme) surface.setTheme?.(theme);
+    const mode = selectedMode(r);
+    if (!mode) throw new Error(`surface ${surface.surfaceId} declares no modes`);
+    surface.setMode(mode.id);
+    markMode(r, mode.id);
+    // Il testo cambiato mentre era da parte arriva come ogni aggiornamento
+    // venuto da fuori: non entra nella cronologia locale.
+    if (buffer.getDoc() !== text || (entry.redraw && mode.presentation === "rendered")) buffer.syncDoc(text);
+  } catch (error) {
+    console.error(error);
+    destroySurface(r);
+    return false;
+  }
+  attachSurface(r, tab.doc);
+  refreshNoteClasses(r, tab.doc);
+  mountDocumentAttachments(r, tab.doc);
+  return true;
+}
+
+/// La stessa scheda di una superficie da parte: lo stesso documento con la
+/// stessa scelta di superficie, come `show` decide se rimontare.
+function sameParked(tab: Tab, parked: Extract<Tab, { k: "doc" }>): boolean {
+  return tab.k === "doc" && tab.doc === parked.doc && sameOverride(tabOverride(tab), tabOverride(parked));
+}
+
+/// Toglie dal riquadro la superficie da parte per `tab`, se c'è, e la dà a chi
+/// chiama.
+function takeParked(r: Pane, tab: Tab): ParkedSurface | null {
+  const at = r.parked.findIndex((entry) => sameParked(tab, entry.tab));
+  return at < 0 ? null : r.parked.splice(at, 1)[0]!;
+}
+
+/// Smonta le superfici da parte di schede che il riquadro non ha più (chiuse,
+/// rinominate, con un'altra superficie scelta).
+function pruneParked(r: Pane, tabs: readonly Tab[]): void {
+  if (r.parked.length === 0) return;
+  const keep: ParkedSurface[] = [];
+  for (const entry of r.parked) {
+    if (tabs.some((tab) => sameParked(tab, entry.tab))) keep.push(entry);
+    else destroyParked(entry);
+  }
+  r.parked = keep;
+}
+
+/// Smonta tutte le superfici da parte del riquadro.
+function dropParked(r: Pane): void {
+  const all = r.parked;
+  r.parked = [];
+  for (const entry of all) destroyParked(entry);
+}
+
+function destroyParked(entry: ParkedSurface): void {
+  try {
+    entry.surface.destroy();
+  } catch (error) {
+    console.error(error);
+  }
+  entry.host.remove();
 }
 
 /// Applica alla superficie di questo riquadro il dato che la sessione ha
@@ -2331,6 +3451,10 @@ async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
 /// La sessione possiede il testo; questa notifica aggiorna soltanto la resa
 /// delle superfici già aperte, senza ricreare buffer o cronologia.
 function redrawReading(doc: string): void {
+  // Una superficie da parte si ridisegna quando torna, se mostra la lettura.
+  for (const r of panes.values()) {
+    for (const entry of r.parked) if (entry.tab.doc === doc) entry.redraw = true;
+  }
   for (const id of panesWithDoc(doc)) {
     const r = panes.get(id);
     if (!r || selectedMode(r)?.presentation !== "rendered" || activeDoc(id) !== doc) {
@@ -2343,14 +3467,15 @@ function redrawReading(doc: string): void {
   }
 }
 /// Il modo effettivo è quello che il riquadro ricorda per la famiglia della
-/// superficie, quando la superficie lo dichiara; altrimenti la sua predefinita,
-/// o la prima che supporta. Il fallback non riscrive il layout: tornando a
-/// quella famiglia, il riquadro ritrova la sua modalità.
+/// superficie, quando la superficie lo dichiara (anche come id di prima: un
+/// riquadro salvato nei Blocchi si apre in Scrittura); altrimenti la sua
+/// predefinita, o la prima che supporta. Il fallback non riscrive il layout:
+/// tornando a quella famiglia, il riquadro ritrova la sua modalità.
 export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
   if (!r?.surface) return undefined;
   const { family, modes, defaultMode } = r.surface;
   const requested = paneState(r.id)?.modes[family];
-  return modes.find((mode) => mode.id === requested)
+  return modeById(modes, requested)
     ?? modes.find((mode) => mode.id === defaultMode)
     ?? modes[0];
 }
@@ -2399,13 +3524,6 @@ export function focusedContextMode(): PaneMode | undefined {
   return selectedMode(r)?.contextMode;
 }
 
-/// L'id della modalità del riquadro col fuoco, dove ce n'è più d'una.
-export function focusedModeId(): string | undefined {
-  const r = panes.get(layout.focus);
-  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
-  return selectedMode(r)?.id;
-}
-
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
 function focusedModes(): readonly SurfaceMode[] {
   return panes.get(layout.focus)?.surface?.modes ?? [];
@@ -2416,14 +3534,12 @@ function focusedModes(): readonly SurfaceMode[] {
 /// scorciatoia. La barra non passa di qui: agisce sul proprio riquadro.
 /// L'azione c'è nella superficie del riquadro col fuoco, e si può eseguire.
 export function editorActionReady(action: string): boolean {
-  const r = panes.get(layout.focus);
-  const actions = r?.shown?.k === "doc" ? r.surface?.editorActions : undefined;
+  const actions = commandTarget()?.surface.editorActions;
   return !!actions?.has(action) && actions.editable();
 }
 
 export function runEditorAction(action: string, params: Readonly<Record<string, unknown>> = {}): "done" | "nothing" | "unavailable" {
-  const r = panes.get(layout.focus);
-  const surface = r?.shown?.k === "doc" ? r.surface : null;
+  const surface = commandTarget()?.surface;
   const actions = surface?.editorActions;
   if (!actions || !editorActionReady(action)) return "unavailable";
   if (!actions.run(action, params)) return "nothing";
@@ -2585,7 +3701,93 @@ async function refreshLimitedMode(): Promise<void> {
 // --- aprire e chiudere ------------------------------------------------------
 
 /// Apre un documento nel riquadro col fuoco.
-export async function openDocument(id: string): Promise<void> {
+/// Come si apre un documento. `gesture`: l'apertura nasce da un gesto di chi
+/// usa Fub (un clic o Invio su una riga dell'albero, un risultato della
+/// ricerca, il passaggio veloce, un link o una figura in una nota). Lo vede
+/// soltanto il montaggio che l'apertura fa nascere (`SurfaceMountContext`).
+export interface OpenOptions {
+  readonly gesture?: boolean;
+  /// La pagina che l'apertura chiede, da 1: un link a `x.pdf#page=3`. La
+  /// prende la superficie che l'apertura monta (`SurfaceMountContext.page`)
+  /// o, se il documento è già la scheda attiva, `EditorSurface.showPage`.
+  readonly page?: number;
+  /// Un'apertura che la shell decide da sola, senza un gesto (la prima nota
+  /// di un vault senza schede, la nota d'avvio): il valore di
+  /// [`openingsSoFar`] quando l'ha decisa. Se intanto è stata chiesta
+  /// un'altra apertura, la decisione è vecchia: questa non parte, e non tocca
+  /// schede, riquadro, contesto né fuoco.
+  readonly unlessOpenedSince?: number;
+}
+
+/// Quante aperture sono state chieste finora, in tutto.
+let openingsAsked = 0;
+
+/// Il segno da passare come `unlessOpenedSince`: si prende quando si decide
+/// di aprire, prima delle attese che precedono la chiamata.
+export function openingsSoFar(): number {
+  return openingsAsked;
+}
+
+/// La pagina chiesta dall'apertura in corso per il documento del riquadro:
+/// `show` la prende al montaggio (una scheda nuova o una che torna attiva),
+/// `openDocument` la toglie quando ha finito. Come `gestureBirths`, vive
+/// quanto quell'apertura.
+const openingPages = new Map<string, { readonly doc: string; readonly page: number }>();
+
+/// La pagina per la scheda di `doc` montata adesso nel riquadro `pane`, presa
+/// una volta sola.
+function takeOpeningPage(pane: string, doc: string): number | null {
+  const wanted = openingPages.get(pane);
+  if (wanted?.doc !== doc) return null;
+  openingPages.delete(pane);
+  return wanted.page;
+}
+
+/// Il documento che l'apertura in corso con un gesto farà nascere in un
+/// riquadro: `show` lo prende al montaggio, `openDocument` lo toglie quando
+/// ha finito. Vive quanto quell'apertura, mai come «l'ultimo gesto».
+const gestureBirths = new Map<string, string>();
+
+/// Il gesto per la scheda di `doc` che nasce adesso nel riquadro `pane`, preso
+/// una volta sola: un rimontaggio dopo non lo trova.
+function takeGesture(pane: string, doc: string): boolean {
+  if (gestureBirths.get(pane) !== doc) return false;
+  gestureBirths.delete(pane);
+  return true;
+}
+
+/// Alla fine di un'apertura il fuoco va all'editor solo se nessuno l'ha
+/// portato altrove intanto. Un'apertura lunga (un documento da impaginare)
+/// finisce quando chi usa Fub è già passato oltre: se nel frattempo ha aperto
+/// il lanciatore, un dialogo o un campo, quello che scrive e il suo Invio
+/// restano lì e non finiscono nel documento. Il fuoco è ancora dell'apertura
+/// se sta dov'era al gesto (`asked`), se non sta da nessuna parte, o se sta in
+/// un riquadro (l'editor di prima, che l'apertura sostituisce).
+///
+/// Non lo è più se sta già dentro il documento aperto, nel riquadro col fuoco
+/// (#395): la superficie si monta prima che l'apertura finisca, e chi usa Fub
+/// può esserci entrato (il Tab dalla lavagna vuota al suo primo pulsante, un
+/// clic su una scheda). Riportarlo all'editor glielo toglierebbe di mano.
+/// `editorEl` tiene la superficie del solo documento mostrato: quella di prima
+/// si toglie (`detachSurface`) prima che la nuova si monti.
+function focusStillOpening(asked: Element | null, doc: string): boolean {
+  const now = document.activeElement;
+  if (now === null || now === document.body || now === document.documentElement) return true;
+  const target = panes.get(layout.focus);
+  if (target?.shown?.k === "doc" && target.shown.doc === doc && target.editorEl.contains(now)) return false;
+  if (now === asked) return true;
+  for (const r of panes.values()) if (r.root.contains(now)) return true;
+  return false;
+}
+
+export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
+  // Un'apertura decisa prima di un'altra chiesta intanto è superata: quella
+  // più nuova vince anche se arriva in fila prima (la regola delle gare in
+  // `docs/architecture/runtime-events-and-jobs.md`).
+  if (options.unlessOpenedSince !== undefined && options.unlessOpenedSince !== openingsAsked) return;
+  openingsAsked++;
+  // Dove sta il fuoco al gesto: alla fine si guarda se è ancora lì.
+  const asked = document.activeElement;
   // Reserve the target before entering the shared flush queue. Otherwise the
   // last-tab release can close the owner while this opening is still waiting
   // for that same queue.
@@ -2597,18 +3799,39 @@ export async function openDocument(id: string): Promise<void> {
       // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
       // azioni di view.
       await documentSessions.flushPendingSave();
-      openIn(layout.focus, id);
-      await synchronize();
+      const pane = layout.focus;
+      // Il gesto va soltanto alla scheda che questa apertura fa nascere: un
+      // documento che è già una scheda del riquadro prende il fuoco, e basta.
+      const born = options.gesture === true
+        && !(layout.panes[pane]?.tabs ?? []).some((tab) => tab.k === "doc" && tab.doc === id);
+      if (born) gestureBirths.set(pane, id);
+      const page = options.page !== undefined && Number.isSafeInteger(options.page) && options.page >= 1 ? options.page : null;
+      if (page !== null) openingPages.set(pane, { doc: id, page });
+      openIn(pane, id);
+      // Un PDF o un documento nato da un gesto, col consenso acceso: l'app ne
+      // fa l'anteprima in sottofondo, per la nota e il passaggio (T31).
+      if (born) void renderOnOpen(id);
+      try {
+        await synchronize();
+      } finally {
+        if (born && gestureBirths.get(pane) === id) gestureBirths.delete(pane);
+      }
+      // La scheda era già quella attiva e non si è rimontata: la pagina va
+      // alla superficie che c'è, se è ancora questo documento a mostrarla.
+      if (page !== null && takeOpeningPage(pane, id) !== null) {
+        const r = panes.get(pane);
+        if (r?.shown?.k === "doc" && r.shown.doc === id) r.surface?.showPage?.(page);
+      }
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered") focusEditor();
+      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered" && focusStillOpening(asked, id)) focusEditor();
     });
   } finally {
     releaseIntent();
     // A failed or superseded opening must not leave the owner retained solely
     // by its reservation. A tab already present still counts as a watcher.
-    if (!isOpen(id)) await documentSessions.release(id);
+    if (!isOpen(id) && !cardEditors.holds(id)) await documentSessions.release(id);
   }
 }
 
@@ -2631,12 +3854,83 @@ export async function openFromView(id: string): Promise<void> {
   await openDocument(id);
 }
 
+/// Come si apre un documento accanto.
+export interface BesideOptions extends OpenOptions {
+  /// Se il riquadro vicino (quello che `split` metterebbe accanto: il
+  /// fratello dopo, nella stessa fila) mostra già il documento, si va lì
+  /// invece di dividere, e la pagina chiesta arriva alla superficie che c'è.
+  /// Assente: si divide sempre, come per un `fub://open`.
+  readonly reuse?: boolean;
+}
+
 /// Apre un documento in un riquadro nuovo accanto a quello col fuoco, a
-/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`.
-export async function openDocumentBeside(id: string, dir: "row" | "col"): Promise<void> {
-  const other = split(layout.focus, dir);
+/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`. Con
+/// `reuse` torna al vicino che lo mostra già.
+export async function openDocumentBeside(id: string, dir: "row" | "col", options: BesideOptions = {}): Promise<void> {
+  const { reuse, ...open } = options;
+  const near = reuse === true ? neighbourShowing(layout.focus, dir, id) : null;
+  const other = near ?? split(layout.focus, dir);
   if (other) focusPane(other);
-  await openDocument(id);
+  await openDocument(id, open);
+}
+
+/// Il riquadro accanto a `pane` nella direzione `dir` (a destra per `row`,
+/// sotto per `col`: dove `split` mette il riquadro nuovo), se la sua scheda
+/// attiva è `doc`; `null` se non c'è o mostra altro.
+///
+/// Vale anche in una disposizione annidata (T102): fra le divisioni in quella
+/// direzione che contengono `pane`, la più interna che ha qualcosa dopo il
+/// ramo di `pane` dà il ramo accanto, e di quel ramo contano i riquadri che
+/// toccano il lato verso `pane` (il primo di ogni divisione nella stessa
+/// direzione, tutti in quella dell'altra). Con riga [colonna [A, B], C] il
+/// riquadro accanto ad A e a B è C; con riga [A, colonna [C, D]] accanto ad A
+/// sono C e D, e vince il primo che mostra `doc`.
+function neighbourShowing(pane: string, dir: "row" | "col", doc: string): string | null {
+  const contains = (node: LayoutNode): boolean =>
+    node.k === "leaf" ? node.pane === pane : node.children.some(contains);
+  // Il ramo dopo quello di `pane` nella divisione più interna in `dir`.
+  let beside: LayoutNode | null = null;
+  let node: LayoutNode = layout.tree;
+  while (node.k !== "leaf") {
+    const at = node.children.findIndex(contains);
+    if (at < 0) return null;
+    if (node.dir === dir && at + 1 < node.children.length) beside = node.children[at + 1]!;
+    node = node.children[at]!;
+  }
+  if (beside === null) return null;
+  // I riquadri del ramo accanto che toccano il lato verso `pane`, in ordine.
+  const edge = (branch: LayoutNode): string[] => {
+    if (branch.k === "leaf") return [branch.pane];
+    if (branch.dir === dir) return edge(branch.children[0]!);
+    return branch.children.flatMap(edge);
+  };
+  return edge(beside).find((near) => activeDoc(near) === doc) ?? null;
+}
+
+/// Il frammento di un percorso dopo il `#` (`page=3`, `Titolo`, `B3`), o
+/// `null` se non ce n'è uno.
+function pathFragment(path: string): string | null {
+  const at = path.indexOf("#");
+  const fragment = at < 0 ? "" : path.slice(at + 1).trim();
+  return fragment === "" ? null : fragment;
+}
+
+/// «Apri a lato» di un percorso del vault (il menu di una scheda della
+/// lavagna, T17; «Apri a lato per questo», T45): accanto, o nel riquadro
+/// vicino che lo mostra già, allo stesso punto. `#page=N` di un PDF arriva
+/// alla pagina; un punto che la risoluzione porta (`at`) si rivela; un altro
+/// frammento che non arriva da nessuna parte (una cella, `#B3`: la griglia
+/// non sa ancora riceverla) apre il file in cima, e lo dice.
+export async function openPathBeside(path: string, from?: string): Promise<void> {
+  const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
+  if (!target) throw new Error(t("preview.target_missing"));
+  const fragment = pathFragment(path);
+  const page = fragment === null ? null : linkedPdfPage(target.doc, fragment);
+  await openDocumentBeside(target.doc, "row", { reuse: true, ...(page === null ? {} : { page }) });
+  if (target.at) await reveal(target.doc, { span: target.at.span });
+  else if (fragment !== null && page === null && activeDoc() === target.doc) {
+    notify(t("document.reveal_unavailable", { doc: docTitle(target.doc) }), "info");
+  }
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa
@@ -2659,6 +3953,28 @@ export function closeDocument(id: string | null = state.currentDoc): void {
 /// Il documento è aperto in **qualche** riquadro?
 export function isOpen(id: string): boolean {
   return panesWithDoc(id).length > 0;
+}
+
+/// Il prestito (T17) visto dalle schede. Una scheda aperta che mostra il
+/// documento si può prestare; un'immagine o un PDF che il visore mostra dai
+/// byte no: Fub non li scrive, e non c'è niente da tenere fermo. Le schede di
+/// un documento prestato sono in sola lettura (`heldReadOnly`), la riga
+/// «Aperto in {app}» la disegna `panels/document.ts`, e il prestito finisce
+/// quando si chiude l'ultima scheda del documento, comunque si chiuda.
+function mountDocumentLends(lifetime: Lifetime): void {
+  mountLends(lifetime);
+  lifetime.add(provideLendGate({
+    lendable: (doc) => isOpen(doc) && (handledByVault(doc) || !surfaceRegistry.showsBytes(doc)),
+    flush: flushPendingSave,
+  }));
+  lifetime.add(onLendChanged((doc) => {
+    setReadOnlyForDocument(doc, documentSessions.isDeletionPending(doc));
+    redrawTabs(doc);
+    drawPaneConflict(doc);
+  }));
+  lifetime.add(on("layout", () => {
+    for (const doc of lentDocuments()) if (!isOpen(doc)) unlend(doc);
+  }));
 }
 
 /// Risolve un wikilink e lo apre; se non risolve, crea la nota che manca col
@@ -2685,13 +4001,15 @@ export async function openWikilink(
   heading?: string,
   block?: string,
   from?: string,
+  options: OpenOptions = {},
 ): Promise<void> {
   const target = await resolvedReference(
     { kind: "wiki", value: { page, heading: heading ?? null, block: block ?? null } },
     from ?? activeDoc() ?? undefined,
   );
   if (target) {
-    await openDocument(target.doc);
+    const page = linkedPdfPage(target.doc, heading);
+    await openDocument(target.doc, page === null ? options : { ...options, page });
     // Il punto può non esserci — un heading rinominato, un `^abc` cancellato —
     // e allora resta la nota aperta in cima: è il degrado dichiarato di
     // `ResolvedRef.at`, non un caso da nascondere.
@@ -2704,6 +4022,25 @@ export async function openWikilink(
   if (!page) return;
   const created = await createNote(page);
   if (created) await openDocument(created);
+}
+
+/// La pagina che un link a un PDF nomina dopo il `#`: `[[x.pdf#page=3]]` e
+/// `![[x.pdf#page=3]]` arrivano con `heading` = `page=3`. Un numero che non è
+/// un intero positivo (`page=0`, `page=abc`, `page=`) non nomina niente, e il
+/// PDF si apre alla prima pagina; un altro documento non ha pagine.
+export function linkedPdfPage(doc: string, heading: string | null | undefined): number | null {
+  if (!heading || mediaKindOfId(pdfIdWithoutFragment(doc)) !== "pdf") return null;
+  return pdfPageFromFragment(`#${heading.trim()}`);
+}
+
+/// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
+/// documento col gesto, come un link a un percorso. A differenza di
+/// `openWikilink` non crea mai niente: se il file non c'è più (rinominato o
+/// tolto fuori da Fub) è un errore, e chi ha cliccato lo dice con un avviso.
+export async function openFigure(doc: string): Promise<void> {
+  const target = await resolvedReference({ kind: "wiki", value: { page: doc, heading: null, block: null } }, doc);
+  if (!target) throw new Error(t("preview.target_missing"));
+  await openDocument(target.doc, { gesture: true });
 }
 
 // --- salvataggio ------------------------------------------------------------
@@ -2723,7 +4060,10 @@ export async function openWikilink(
 /// resta sua e annullabile. Soltanto se le due modifiche si toccano vince il
 /// testo autorevole, senza coprire la battuta arrivata altrove.
 function written(paneId: string, change: EditorChange): void {
-  const doc = activeDoc(paneId);
+  // Il documento che il riquadro mostra: durante un cambio di tab la scheda
+  // attiva è già l'altra, e il testo registrato allo stacco è di questo.
+  const shown = panes.get(paneId)?.shown;
+  const doc = shown?.k === "doc" ? shown.doc : activeDoc(paneId);
   if (!doc) return;
   const outcome = documentSessions.acceptSurfaceChange(doc, paneId, change);
   if (outcome.kind !== "realigned") return;
@@ -2754,7 +4094,9 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
     drawPaneConflict(id);
   } else if (outcome.kind === "untracked") {
     return;
-  } else if (outcome.kind === "reloaded" && outcome.changed) {
+  } else if (outcome.kind === "reloaded" && outcome.changed && !outcome.quiet) {
+    // `quiet`: la scrittura di un gesto della barra di una Base, annunciata
+    // con `expectWrite`. Il file nuovo è quello che la persona ha chiesto.
     addSheetNotice(id, "reloaded");
     drawPaneConflict(id);
   }
@@ -2767,18 +4109,6 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
 async function reloadDocument(id: string): Promise<void> {
   await documentSessions.reloadIfClean(id);
   redrawReading(id);
-}
-
-/// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
-/// che riscrive il file sotto al buffer).
-export async function reloadCurrent(): Promise<void> {
-  const doc = state.currentDoc;
-  if (!doc) return;
-  const outcome = await documentSessions.forceReload(doc);
-  if (outcome.kind === "unavailable") notify(t("document.reload_failed", { doc }), "guasto");
-  redrawReading(doc);
-  view.drawSave();
-  redrawTabs(doc);
 }
 
 // --- contesto di sessione (decisione 0007) ----------------------------------
@@ -2802,6 +4132,14 @@ export async function reloadCurrent(): Promise<void> {
 /// invece è sempre quello vero — ed è ciò che serve a contare le parole
 /// selezionate o a mandarle a un comando.
 function paneContext(): ViewContext {
+  // La sbirciata che ha la scrittura è il documento dei comandi: le sue
+  // selezioni, la sua nota.
+  const peek = peekSurfaceIn(layout.focus);
+  const peekDoc = peek ? notePeek?.shown()?.doc ?? null : null;
+  if (peek && peekDoc) {
+    const dirty = documentSessions.isDirty(peekDoc);
+    return { pane: layout.focus, doc: peekDoc, selections: selectionSetOf(peek, dirty), mode: "live_preview" };
+  }
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const mode = selectedMode(r);
@@ -2883,10 +4221,7 @@ async function toggleReading(): Promise<void> {
 async function setContextMode(context: PaneMode): Promise<void> {
   const r = panes.get(layout.focus);
   if (!r?.surface) return;
-  // Dai Blocchi «Passa a Live» porta alla Live: hanno lo stesso ruolo, ma i
-  // Blocchi hanno un comando loro e la Live sarebbe altrimenti irraggiungibile.
-  const current = selectedMode(r)?.id;
-  const target = modeForContext(r.surface.modes.filter((mode) => mode.id !== "blocks" || current !== "blocks"), current === "blocks" ? undefined : current, context);
+  const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
   if (target) await setMode(target.id);
 }
 
@@ -3053,7 +4388,7 @@ async function saveNow(): Promise<void> {
 
 export async function setMode(next: string): Promise<void> {
   const r = panes.get(layout.focus);
-  const mode = r?.surface?.modes.find((candidate) => candidate.id === next);
+  const mode = r?.surface ? modeById(r.surface.modes, next) : undefined;
   if (!r?.surface || !mode) return;
   const doc = activeDoc();
   // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer
@@ -3116,4 +4451,5 @@ export function setEditorTheme(t: Theme): void {
   // U26: solo `setTheme` sulla superficie viva, mai `setDoc`/rimonto:
   // selezione, scroll e history restano dove sono.
   for (const r of panes.values()) r.surface?.setTheme?.(t);
+  cardEditors.setTheme(t);
 }

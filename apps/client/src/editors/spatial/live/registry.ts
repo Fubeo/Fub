@@ -46,17 +46,27 @@ function changed(): void {
   for (const listener of [...listeners]) listener();
 }
 
-/// Offre il foglio di un editor montato sul documento `doc`. Il ritorno lo
-/// ritira.
-export function offerStage(doc: string, stage: LiveStage): () => void {
-  // Il riquadro può restare montato mentre il file cambia nome: il foglio
-  // segue il documento, come la sessione.
+/// Il riquadro può restare montato mentre il file cambia nome: il foglio segue
+/// il documento, come la sessione. L'iscrizione dura quanto la shell.
+///
+/// Sta in una funzione sua, e non dentro `offerStage`, per una ragione di
+/// memoria: V8 dà a tutte le closure nate in una chiamata lo stesso contesto.
+/// Se nascessero lì, la cache iscritta per sempre terrebbe vivo il contesto
+/// della prima `offerStage` e con lui il suo `stage` — il primo editor del
+/// disegno aperto, con tutto il suo DOM, anche dopo la chiusura.
+function followRenames(): void {
   renames ??= registerDocumentCache({
     invalidate: () => {},
     rename: (from, to) => {
       for (const [offered, shown] of stages) if (shown === from) stages.set(offered, to);
     },
   });
+}
+
+/// Offre il foglio di un editor montato sul documento `doc`. Il ritorno lo
+/// ritira.
+export function offerStage(doc: string, stage: LiveStage): () => void {
+  followRenames();
   stages.set(stage, doc);
   changed();
   return () => {

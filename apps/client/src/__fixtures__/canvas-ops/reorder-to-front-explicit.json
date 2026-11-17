@@ -1,0 +1,19 @@
+{
+  "about": "reorder con to: front è lo stesso di non dare to: a va in cima, sopra d.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+    { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+    { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" }
+  ] },
+  "ops": [{ "op": "reorder", "ids": ["a"], "to": "front" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+      { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+      { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" },
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }
+    ] }
+  }
+}

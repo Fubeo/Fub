@@ -11,8 +11,14 @@ vi.mock("./notify", () => ({
     return notify;
   },
 }));
+// Le icone delle pagine si fingono: la cache vera chiede all'indice.
+const pageIcons = vi.hoisted(() => Object.assign(new Map<string, string>(), { revision: 0 }));
+vi.mock("../state/page-icons", () => ({
+  pageIcon: (doc: string) => pageIcons.get(doc) ?? null,
+  pageIconsRevision: () => pageIcons.revision,
+}));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
-import { pair, activeFields, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
+import { pair, activeFields, LIST_PAGE, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 import { registerIcon } from "./icons";
 
@@ -1323,5 +1329,307 @@ describe("un nodo che nomina una nota si trascina (decisione 0157)", () => {
     el.dispatchEvent(late);
     expect(late.defaultPrevented).toBe(true);
     expect(offers).toBe(1);
+  });
+});
+
+describe("le righe di un elenco e di un albero non hanno stile in linea (S2 T9)", () => {
+  // Altezza, allineamento ed ellissi li scrive `structure.css`: uno stile in
+  // linea vincerebbe sulla pelle, che non potrebbe più cambiarli.
+  const tree = (label: string): UiNode =>
+    ({
+      node: "stack",
+      dir: "column",
+      gap: 0,
+      children: [
+        { node: "list", items: [{ node: "list_item", title: "Voce", subtitle: "sotto", action: null, selected: false }] },
+        {
+          node: "tree",
+          roots: [{ node: "tree_item", label, action: null, selected: false, expanded: true, children: [] }],
+        },
+      ],
+    }) as unknown as UiNode;
+
+  const rows = (host: HTMLElement) => [
+    ...host.querySelectorAll<HTMLElement>(".ui-list-item, .ui-tree-label, .ui-tree-label > span"),
+  ];
+
+  it("né quando nascono né quando si riusano", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, tree("Titolo"), async () => {});
+    expect(rows(host)).toHaveLength(3);
+    expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    const label = host.querySelector(".ui-tree-label")!;
+    mountTree(host, tree("Titolo nuovo"), async () => {});
+    // La riga dell'albero è la stessa, con il testo nuovo e ancora senza stile.
+    expect(host.querySelector(".ui-tree-label")).toBe(label);
+    expect(label.textContent).toBe("Titolo nuovo");
+    expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    unmountTree(host);
+    host.remove();
+  });
+});
+
+describe("una voce che nomina una nota ne porta l'icona (S2 T13)", () => {
+  const item = (title: string, doc?: string): UiNode =>
+    ({
+      node: "list_item",
+      title,
+      subtitle: null,
+      action: null,
+      selected: false,
+      ...(doc ? { drag: { kind: "document", doc } } : {}),
+    }) as unknown as UiNode;
+
+  afterEach(() => pageIcons.clear());
+
+  it("in testa: la sua, la figura del formato, o nessuna senza `drag`", () => {
+    pageIcons.set("Diario/Oggi.md", "🌞");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(
+      host,
+      {
+        node: "list",
+        items: [
+          item("Oggi", "Diario/Oggi.md"),
+          item("Conti", "Dati/Conti.xlsx"),
+          item("Benvenuto", "Benvenuto.md"),
+          item("e altri 2"),
+        ],
+      } as unknown as UiNode,
+      async () => {},
+    );
+    const [own, sheet, note, more] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    const icon = (el: HTMLElement) => el.querySelector<HTMLElement>(":scope > .ui-list-item-icon");
+    // L'icona è il primo figlio, decorazione: il nome lo dice il titolo.
+    expect(own!.firstElementChild).toBe(icon(own!));
+    expect(icon(own!)!.textContent).toBe("🌞");
+    expect(icon(own!)!.getAttribute("aria-hidden")).toBe("true");
+    expect(icon(sheet!)!.querySelector("svg")).not.toBeNull();
+    expect(icon(note!)!.querySelector("svg")).not.toBeNull();
+    expect(icon(more!)).toBeNull();
+    // Il contratto non cambia: titolo e trascinamento restano quelli di prima.
+    expect(own!.querySelector(".ui-list-item-title")!.textContent).toBe("Oggi");
+    expect(own!.draggable).toBe(true);
+    unmountTree(host);
+    host.remove();
+  });
+});
+
+describe("un sottoalbero uguale non si tocca", () => {
+  const item = (title: string, doc: string): UiNode =>
+    ({
+      node: "list_item",
+      key: doc,
+      title,
+      subtitle: "Riga 1: un contesto",
+      action: { action: "open", payload: { doc } },
+      selected: false,
+      drag: { kind: "document", doc },
+    }) as unknown as UiNode;
+  const view = (titles: string[]): UiNode =>
+    ({
+      node: "stack",
+      dir: "column",
+      gap: 4,
+      children: [
+        { node: "heading", level: 3, content: "In uscita" },
+        { node: "list", items: titles.map((title, i) => item(title, `Nota ${i}.md`)) },
+        { node: "web_view", url: "about:blank", height: 40 },
+      ],
+    }) as unknown as UiNode;
+
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+    pageIcons.clear();
+  });
+
+  /// Le mutazioni che un secondo montaggio fa nel DOM, dopo il primo.
+  function mutationsOf(first: UiNode, second: UiNode): MutationRecord[] {
+    mountTree(host, first, async () => {});
+    const observer = new MutationObserver(() => {});
+    observer.observe(host, { subtree: true, childList: true, attributes: true, characterData: true });
+    mountTree(host, second, async () => {});
+    const records = observer.takeRecords();
+    observer.disconnect();
+    return records;
+  }
+
+  it("lo stesso albero rimandato non cambia niente: nessuna mutazione", () => {
+    const titles = ["Uno", "Due", "Tre"];
+    // Una copia, non lo stesso oggetto: dal kernel arriva sempre un JSON nuovo.
+    expect(mutationsOf(view(titles), JSON.parse(JSON.stringify(view(titles))) as UiNode)).toEqual([]);
+  });
+
+  it("il frame di un web_view uguale non si ricarica", () => {
+    mountTree(host, view(["Uno"]), async () => {});
+    const frame = host.querySelector("iframe");
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector("iframe")).toBe(frame);
+  });
+
+  it("si rifà solo la voce cambiata, le sorelle restano loro", () => {
+    mountTree(host, view(["Uno", "Due", "Tre"]), async () => {});
+    const heading = host.querySelector(".ui-heading");
+    const [one, , three] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    mountTree(host, view(["Uno", "Due bis", "Tre"]), async () => {});
+    const after = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    expect(host.querySelector(".ui-heading")).toBe(heading);
+    expect(after[0]).toBe(one);
+    expect(after[2]).toBe(three);
+    expect(after[1]!.querySelector(".ui-list-item-title")!.textContent).toBe("Due bis");
+  });
+
+  it("l'azione di una voce saltata è quella dell'ultimo montaggio", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    mountTree(host, view(["Uno"]), first);
+    mountTree(host, view(["Uno"]), second);
+    host.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await Promise.resolve();
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("un'icona di pagina cambiata rifà la voce anche se il nodo è lo stesso", () => {
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector(".ui-list-item-icon svg")).not.toBeNull();
+    pageIcons.set("Nota 0.md", "🌞");
+    pageIcons.revision += 1;
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector(".ui-list-item-icon")!.textContent).toBe("🌞");
+  });
+
+  it("una figura registrata dopo il disegno compare al giro dopo", () => {
+    const tree = { node: "icon", name: "cometa-di-prova" } as unknown as UiNode;
+    mountTree(host, tree, async () => {});
+    expect(host.querySelector(".ui-icon svg")).toBeNull();
+    const retire = registerIcon("cometa-di-prova", ["M3 3h18v18H3z"]);
+    try {
+      mountTree(host, tree, async () => {});
+      expect(host.querySelector(".ui-icon svg")).not.toBeNull();
+    } finally {
+      retire();
+    }
+  });
+
+  it("un campo uguale riprende il valore del provider, come prima del salto", () => {
+    const field = {
+      node: "stack",
+      dir: "column",
+      gap: 0,
+      children: [{ node: "text_input", field: "q", label: "Cerca", value: "dal provider", placeholder: null, action: null }],
+    } as unknown as UiNode;
+    mountTree(host, field, async () => {});
+    const input = host.querySelector("input")!;
+    input.value = "scritto e lasciato";
+    mountTree(host, JSON.parse(JSON.stringify(field)) as UiNode, async () => {});
+    expect(host.querySelector("input")).toBe(input);
+    expect(input.value).toBe("dal provider");
+  });
+});
+
+describe("il frame di un web_view", () => {
+  it("carica soltanto un indirizzo https; ogni altro schema lascia il frame vuoto", () => {
+    const frameFor = (url: string): HTMLIFrameElement => {
+      const host = document.createElement("div");
+      mountTree(host, { node: "web_view", url, height: 80 } as UiNode, vi.fn());
+      const frame = host.querySelector("iframe")!;
+      unmountTree(host);
+      return frame;
+    };
+    expect(frameFor("https://esempio.it/").getAttribute("src")).toBe("https://esempio.it/");
+    for (const url of ["javascript:alert(1)", "data:text/html,<script>x</script>", "about:blank", "http://esempio.it/", "fub-asset://localhost/a.html"]) {
+      expect(frameFor(url).hasAttribute("src")).toBe(false);
+    }
+  });
+});
+
+describe("un elenco lungo mostra una pagina di voci", () => {
+  const item = (i: number): UiNode =>
+    ({
+      node: "list_item",
+      key: `Nota ${i}.md#${i}`,
+      title: `Nota ${i}`,
+      subtitle: `Riga ${i}: un contesto`,
+      action: { action: "open", payload: { i } },
+      selected: false,
+    }) as unknown as UiNode;
+  const list = (count: number, from = 0): UiNode =>
+    ({ node: "list", items: Array.from({ length: count }, (_, i) => item(from + i)) }) as unknown as UiNode;
+
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+  });
+
+  const voices = () => host.querySelectorAll(".ui-list > .ui-list-item");
+  const more = () => host.querySelector<HTMLElement>(".ui-list > .ui-list-more");
+
+  it("oltre la soglia le voci restano nel nodo e una riga in coda offre le altre", () => {
+    // È la regola che toglie i 33.000 elementi dei collegamenti in uscita di
+    // una nota lunga: senza, ogni voce sta nel DOM anche a cassetto chiuso.
+    mountTree(host, list(LIST_PAGE * 2 + 50), async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE);
+    const row = more();
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("role")).toBe("listitem");
+    expect(row!.parentElement!.lastElementChild).toBe(row);
+    expect(row!.querySelector("button")!.textContent).toContain(String(LIST_PAGE * 2 + 50));
+  });
+
+  it("sotto la soglia l'elenco è intero e non ha la riga", () => {
+    mountTree(host, list(LIST_PAGE), async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE);
+    expect(more()).toBeNull();
+  });
+
+  it("«mostra altre» aggiunge una pagina e, finite le voci, passa il fuoco alla prima nuova", () => {
+    mountTree(host, list(LIST_PAGE * 2 + 50), async () => {});
+    const button = more()!.querySelector("button")!;
+    button.focus();
+    button.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    // Il bottone non si sposta: resta lui, in coda, col fuoco.
+    expect(more()!.querySelector("button")).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.textContent).toContain("50");
+    button.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2 + 50);
+    expect(more()).toBeNull();
+    expect(document.activeElement).toBe(voices()[LIST_PAGE * 2]);
+  });
+
+  it("un ridisegno della view tiene le voci già chieste e non sposta la riga", () => {
+    mountTree(host, list(LIST_PAGE * 3), async () => {});
+    const row = more()!;
+    row.querySelector("button")!.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    // Un salvataggio ridisegna la view con una voce in più in testa.
+    mountTree(host, { node: "list", items: [item(-1), ...(list(LIST_PAGE * 3) as { items: UiNode[] }).items] } as unknown as UiNode, async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    expect(voices()[0]!.textContent).toContain("Nota -1");
+    expect(more()).toBe(row);
+    expect(row.parentElement!.lastElementChild).toBe(row);
+  });
+
+  it("un elenco che si accorcia sotto la soglia perde la riga", () => {
+    mountTree(host, list(LIST_PAGE + 10), async () => {});
+    expect(more()).not.toBeNull();
+    mountTree(host, list(5), async () => {});
+    expect(voices()).toHaveLength(5);
+    expect(more()).toBeNull();
   });
 });

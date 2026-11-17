@@ -42,9 +42,10 @@ interface json {
 /// La risposta comune ai quattro tipi che il §3.5 nomina insieme — uno, tre o
 /// cinque booleani dove la domanda che arriva ha una coda aperta: le ~50
 /// sintassi del 5.2, i bersagli di rendering del 6.3, i permessi del 20.3.
-/// Quello che scade col freeze non è la LARGHEZZA di quei tipi (un campo in
-/// fondo a un record è additivo) ma la loro FORMA: sostituire N booleani con una
-/// mappa è la sola cosa che dopo non si fa più.
+/// Col freeze scade anche la LARGHEZZA di quei tipi: da 0.2.0 un record che
+/// attraversa il confine non prende campi nuovi, nemmeno in fondo (ADR 0235).
+/// Una mappa invece accoglie una voce nuova senza cambiare tipo, ed è per
+/// questo che sostituire N booleani con una mappa andava fatto prima.
 ///
 /// Chiave: `ns:nome`. Il namespace è di chi definisce la voce — `fub` per il
 /// core, l'id del plugin per gli altri — così due estensioni che vogliono
@@ -1248,7 +1249,9 @@ interface events {
     /// deve rispondere sì o no confrontando due liste corte. Ciò che è APERTO —
     /// quali chiavi, quali tag — sta in `doc-changes` e si legge, non si filtra.
     /// Non c'è `tasks` perché un task non è un campo di `document-model`:
-    /// il giorno che lo sarà, questo enum cresce IN CODA.
+    /// il giorno che lo sarà, arriverà con un'interfaccia nuova, perché da
+    /// 0.2.0 un enum che attraversa il confine non prende casi nuovi, nemmeno
+    /// in coda (ADR 0238).
     enum doc-change {
         body,
         frontmatter,
@@ -1389,7 +1392,7 @@ interface events {
     /// `gate` è la porta del panico da cui il kernel stava chiamando codice di
     /// un provider quando qualcosa è andato storto (§17.3, 0161); assente per
     /// i guasti che non passano da una porta (un flush fallito, il watcher che
-    /// smette). È in fondo al record come ogni campo nuovo.
+    /// smette). È in fondo al record: la posizione è ABI.
     record event-trouble {
         severity: severity,
         subject: option<doc-id>,
@@ -1606,7 +1609,8 @@ interface command {
         /// il codice deve poterli vedere.
         choice(list<choice>),
         /// Più numeri: la forma con cui si chiede un'operazione su *queste*
-        /// posizioni (§23.4). In fondo all'enum come ogni variante nuova.
+        /// posizioni (§23.4). In fondo: il discriminante di ciò che c'era non
+        /// si muove.
         numbers,
     }
     /// Una scelta: il valore che viaggia e l'etichetta che si legge.
@@ -1652,8 +1656,9 @@ interface command {
     /// «dove» non è una proprietà del comando ma del fuoco di chi lo premerebbe.
     /// A runtime lo decide chi ha il fuoco — dentro l'editor vince l'editor,
     /// fuori vince la shell — e i tasti nudi restano ignorati dal registro
-    /// (0009). Aggiungere un ambito è una mossa additiva, e si farà quando un
-    /// secondo consumatore lo chiederà (0156).
+    /// (0009). Un ambito si aggiungerà quando un secondo consumatore lo
+    /// chiederà (0156), con un'interfaccia nuova: da 0.2.0 un record che
+    /// attraversa il confine non prende campi nuovi (ADR 0235).
     ///
     /// `surfaces` dice dove si offre **oltre** alla palette, che li elenca
     /// tutti: vuoto è la norma. Lo dichiara il comando, e un plugin compare nel
@@ -2327,22 +2332,24 @@ interface index {
         folders(index-query-folders),
         /// In CODA e non accanto a `vault-health`, che pure è la sua vicina di
         /// senso: l'ordine dei casi è il discriminante dell'ABI, quindi una
-        /// variante in mezzo rinumera tutte quelle dopo. Additiva vuol dire in
-        /// fondo.
+        /// variante in mezzo rinumera tutte quelle dopo. Da 0.2.0 nemmeno in
+        /// fondo: un caso nuovo in un variant che attraversa il confine non
+        /// lascia istanziare i plugin già compilati, e arriva con
+        /// un'interfaccia nuova (ADR 0238).
         drafts(index-query-drafts),
         /// RENDI QUESTO DOCUMENTO (§16.6): l'anteprima intera, come la vede la
         /// shell. Prima della 0163 la resa era un comando IPC bespoke
         /// (`render-preview`) che solo la shell sapeva chiamare, e un
         /// `view-provider` che voleva mostrare un documento reso non aveva una
         /// porta (difetto 0130). Passa da qui perché è UNA RISPOSTA CON DEI
-        /// DATI, e quelle passano dal canale dati (decisione 0019). In coda
-        /// come ogni variante nuova.
+        /// DATI, e quelle passano dal canale dati (decisione 0019). In coda,
+        /// per la ragione di `drafts`.
         render-preview(doc-id),
         /// RENDI QUESTO RITAGLIO (§16.6): la sezione o il blocco che una
         /// transclusione nomina, dentro il documento che lo ospita. Come
         /// `render-preview`, è la metà che mancava al canale dati: prima della
         /// 0163 la transclusione passava da un comando IPC bespoke
-        /// (`render-embed`). In coda come ogni variante nuova.
+        /// (`render-embed`). In coda, per la ragione di `drafts`.
         render-embed(index-query-render-embed),
         /// Le forme sintattiche effettive del documento, incluse quelle
         /// registrate a runtime.
@@ -3636,7 +3643,8 @@ interface view {
     /// attacca, e a dipingere è la shell — che tiene i piani in un posto solo e
     /// dà il tasto all'ultima superficie aperta fra quelle che intrappolano il
     /// fuoco. Volere un piano diverso è volere una **superficie** diversa, e
-    /// quella si chiede aggiungendo un caso in fondo a questo elenco.
+    /// quella si chiede con un'interfaccia nuova: da 0.2.0 questo elenco non
+    /// prende casi nuovi, nemmeno in fondo (ADR 0238).
     enum view-surface {
         left-sidebar,
         right-sidebar,
@@ -4477,14 +4485,18 @@ interface plugin {
         group: option<string>,
     }
 
-    /// Di che tipo è un componente (K1). Un caso nuovo va in coda.
+    /// Di che tipo è un componente (K1). Da 0.2.0 non prende casi nuovi,
+    /// nemmeno in coda: un tipo nuovo arriva con un'interfaccia nuova
+    /// (ADR 0238).
     enum component-kind {
         mode,
         engine,
         service,
         data,
     }
-    /// Come arriva un componente (K1, ADR 0233). Un caso nuovo va in coda.
+    /// Come arriva un componente (K1, ADR 0233). Da 0.2.0 non prende casi
+    /// nuovi, nemmeno in coda: un modo nuovo arriva con un'interfaccia nuova
+    /// (ADR 0238).
     variant delivery {
         /// Dentro il binario che gira.
         included,

@@ -1,0 +1,162 @@
+{
+  "about": "Il cammino taglia il primo e il terzo tratto e lascia il secondo: i pezzi di ognuno stanno dove stava lui, e l'ordine dei tratti resta.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "text": "a",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 100,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 320,
+                "height": 100
+              },
+              "ink": "1 s100 cxypt 0,2000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+            },
+            {
+              "id": "s2",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 320,
+                "height": 100
+              },
+              "ink": "1 s100 cxypt 20000,4000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+            },
+            {
+              "id": "s3",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 320,
+                "height": 100
+              },
+              "ink": "1 s100 cxypt 0,6000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "erase_along",
+      "on": "a",
+      "points": [
+        [
+          50,
+          0
+        ],
+        [
+          50,
+          80
+        ]
+      ],
+      "size": 4
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 100,
+          "text": "a",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "e220a8397b1dcdaf",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 100
+                },
+                "ink": "1 s100 cxypt 0,2000,128,0 2000,0,0,8 2000,0,0,8 650,0,0,3"
+              },
+              {
+                "id": "6e789e6aa1b965f4",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 100
+                },
+                "ink": "1 s100 cxypt 5350,2000,128,0 650,0,0,3 2000,0,0,8 2000,0,0,8"
+              },
+              {
+                "id": "s2",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 100
+                },
+                "ink": "1 s100 cxypt 20000,4000,128,0 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8 2000,0,0,8"
+              },
+              {
+                "id": "06c45d188009454f",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 100
+                },
+                "ink": "1 s100 cxypt 0,6000,128,0 2000,0,0,8 2000,0,0,8 650,0,0,3"
+              },
+              {
+                "id": "f88bb8a8724c81ec",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 320,
+                  "height": 100
+                },
+                "ink": "1 s100 cxypt 5350,6000,128,0 650,0,0,3 2000,0,0,8 2000,0,0,8"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec"
+    ]
+  }
+}

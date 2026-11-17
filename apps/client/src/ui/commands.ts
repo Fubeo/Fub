@@ -42,11 +42,13 @@
 // prima di ogni vault. Da qui in poi la tabella degli accordi arriva generata
 // (`shell-keys.generated.ts`) e questo modulo non distingue più i due registri
 // se non per chi esegue.
-import { IMPORT_ACCEPT, sourceOf } from "../editors/spatial/import/sources";
+import { IMPORT_ACCEPT, sourceOf } from "../editors/core/drawing-sources";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
+import { components } from "../state/components";
+import { UI_SPATIAL } from "../editors/core/component-surfaces";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
 import { SHELL_KEYS, type ShellCommandId } from "./shell-keys.generated";
@@ -112,6 +114,11 @@ export interface CommandEntry {
   spec: CommandSpec | null;
   /// Cosa fare per eseguirlo di qua. `null` per un comando del kernel.
   run: (() => void | Promise<void>) | null;
+  /// Il gruppo che la palette scrive accanto al titolo: i comandi che una
+  /// superficie aggiunge (i fogli, «Foglio»).
+  group?: string;
+  /// Perché adesso non si può dare: la palette lo mostra e non lo esegue.
+  unavailable?: string | null;
 }
 
 /// I comandi di shell dichiarati finora. Una mappa e non un array perché
@@ -239,8 +246,22 @@ export const NEW_DRAWING = "drawing.create";
 /// comando: con la feature `draw` spenta un `.svg` non è nemmeno un disegno, e
 /// una voce che non può riuscire è peggio di una voce che manca. Si legge a ogni
 /// apertura di un menu e a ogni cambio dell'elenco (`on("commands")`).
+///
+/// E i disegni sono accesi (K2): spento il loro componente, le porte spariscono
+/// anche se il comando è ancora nell'elenco, e tornano quando si riaccende
+/// (`onComponents`). Finché la mappa non è arrivata valgono i comandi.
 export function canCreateDrawing(): boolean {
-  return hasKernelCommand(NEW_DRAWING);
+  return hasKernelCommand(NEW_DRAWING) && (components()?.uiOn(UI_SPATIAL) ?? true);
+}
+
+/// Che cosa si crea adesso dai menu «Nuovo», nel loro ordine: la nota c'è
+/// sempre (il testo è del nucleo), il disegno alle condizioni delle sue porte.
+/// L'esploratore e il riquadro della pagina «Componenti» leggono da qui, così
+/// il riquadro dice le voci che il menu mostra davvero.
+export type NewKind = "note" | "drawing";
+
+export function newKinds(): NewKind[] {
+  return canCreateDrawing() ? ["note", "drawing"] : ["note"];
 }
 
 /// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la
@@ -316,6 +337,36 @@ export function pickDrawingImport(folder = ""): boolean {
   return true;
 }
 
+// # La porta della riga di un componente
+//
+// Una superficie che dice «questo si fa con un componente spento» porta
+// l'utente sulla riga del componente nella pagina «Componenti», col fuoco sul
+// suo interruttore: «Accendi…» del disegno. Non accende niente: accende
+// l'utente. Chi apre la riga sono le impostazioni, che registrano la porta
+// quando si montano e la tolgono quando si smontano.
+
+/// Chi apre la riga di un componente.
+export type ComponentRowOpener = (id: string) => void;
+
+let componentRowOpener: ComponentRowOpener | null = null;
+
+/// Registra chi apre la riga di un componente; restituisce chi la toglie.
+/// Vince l'ultima registrazione.
+export function registerComponentRow(open: ComponentRowOpener): () => void {
+  componentRowOpener = open;
+  return () => {
+    if (componentRowOpener === open) componentRowOpener = null;
+  };
+}
+
+/// Apre la pagina «Componenti» sulla riga `id`; falso se nessuno sa aprirla.
+/// Un `id` che la mappa non ha apre la pagina e basta.
+export function showComponent(id: string): boolean {
+  if (componentRowOpener === null) return false;
+  componentRowOpener(id);
+  return true;
+}
+
 /// Gli accordi riconfigurati, letti dalle impostazioni.
 ///
 /// La mappa è chiave d'impostazione → valore, e non id di comando → accordo:
@@ -365,15 +416,37 @@ export function commandOfKeybindingKey(key: string): string | null {
   return name === "" ? null : `${ns}:${name}`;
 }
 
+/// Le letture partite, per sapere quale è l'ultima: una lettura vecchia che
+/// risponde tardi non rimette gli accordi di prima sopra quelli nuovi.
+let overrideReads = 0;
+
+/// Chi vuole sapere quando la mappa degli accordi è stata riletta (la riga dei
+/// suggerimenti, che scrive i tasti della persona).
+const overrideListeners = new Set<() => void>();
+
+/// Avvisa dopo ogni lettura degli accordi che è arrivata in tempo, cioè quando
+/// `allCommands()` dice già i tasti nuovi. Restituisce il disabbonamento.
+export function onKeyOverridesLoaded(listener: () => void): () => void {
+  overrideListeners.add(listener);
+  return () => {
+    overrideListeners.delete(listener);
+  };
+}
+
 export async function loadKeyOverrides(): Promise<void> {
+  const read = ++overrideReads;
+  let next: Map<string, string>;
   try {
-    overrides = chordMap(await settings());
+    next = chordMap(await settings());
   } catch {
     // Un vault che non sa dire come è configurato non è un motivo per lasciare
     // la tastiera muta: restano gli accordi dichiarati, che sono quelli con cui
     // la shell è nata.
-    overrides = new Map();
+    next = new Map();
   }
+  if (read !== overrideReads) return;
+  overrides = next;
+  for (const listener of [...overrideListeners]) listener();
 }
 
 /// Le righe di impostazione che sono accordi, come mappa. Pura, per il banco.

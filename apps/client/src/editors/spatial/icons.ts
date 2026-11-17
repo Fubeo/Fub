@@ -22,6 +22,8 @@ const STATE: Readonly<Record<string, readonly string[]>> = {
   "draw-ellipse": ["M3 12a9 6.5 0 1 0 18 0a9 6.5 0 1 0-18 0"],
   "draw-line": ["M5 19L19 5"],
   "draw-arrow": ["M5 19L19 5", "M10 5h9v9"],
+  // Una «T»: la barra coi due piedini, l'asta e la base.
+  "draw-text": ["M5 7.5V5h14v2.5", "M12 5v14", "M9.5 19h5"],
   "draw-highlighter": ["M13.5 3.5l7 7-7 7-7-7z", "M6.5 10.5L3 18l3 3 7.5-3.5", "M15 21h6"],
   // Un foglietto con l'angolo piegato, e due righe.
   "draw-note": ["M5 4h14v10l-5 6H5z", "M14 20v-6h5", "M8 8.5h8", "M8 11.5h4"],

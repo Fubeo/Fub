@@ -143,7 +143,7 @@ describe("combobox del quick switcher", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await settleSearch();
 
-    expect(fake.openDocument).toHaveBeenCalledWith("notes/Beta.md");
+    expect(fake.openDocument).toHaveBeenCalledWith("notes/Beta.md", { gesture: true });
     expect(fake.rememberSearch).toHaveBeenCalledWith("");
   });
 
@@ -159,7 +159,7 @@ describe("combobox del quick switcher", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
     await settleSearch();
     expect(fake.createNote).toHaveBeenCalledWith("Riunione");
-    expect(fake.openDocument).toHaveBeenCalledWith("Riunione.md");
+    expect(fake.openDocument).toHaveBeenCalledWith("Riunione.md", { gesture: true });
   });
 
   it("una nota trovata per un alias mostra l'alias e di chi è", async () => {
@@ -181,7 +181,7 @@ describe("combobox del quick switcher", () => {
     expect(second!.querySelector(".palette-desc")?.textContent).toBe("notes/Capodanno.md");
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await settleSearch();
-    expect(fake.openDocument).toHaveBeenCalledWith("persone/Mario Rossi.md");
+    expect(fake.openDocument).toHaveBeenCalledWith("persone/Mario Rossi.md", { gesture: true });
   });
 
   it("dispatches here, split and window from distinct keyboard modifiers", async () => {

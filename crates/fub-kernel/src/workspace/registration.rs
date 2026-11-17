@@ -804,7 +804,7 @@ impl Workspace {
         permit: &RegistrationPermit,
     ) -> std::result::Result<PreparedPluginDeactivation, RegistryError> {
         self.validate_registration_permit(permit)?;
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(&permit.owner) {
             return Err(RegistryError::Busy(permit.owner.clone()));
         }
         self.providers.plugins.begin_retirement(&permit.owner);

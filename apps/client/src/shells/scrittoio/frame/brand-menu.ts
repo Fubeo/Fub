@@ -5,11 +5,26 @@
 // striscia che copre l'ala sinistra, e le sue tendine restano quelle di sempre.
 // Lo stato vive in una classe sola, `open` su `#app-menu`, che anche
 // `ui/titlebar.ts` sa togliere: chi la cambia, il marchio lo viene a sapere.
+//
+// Sul telefono in piedi il marchio non si vede (`mobile/mobile.css`): le voci
+// del menu sono comandi, e la pillola apre il lanciatore che li esegue tutti.
+// Il bottone resta nel DOM, ma il fuoco non ci torna mai: ripiega sulla pillola.
 import type { Lifetime } from "../../../ui/lifetime";
 import { byId, follow } from "./dom";
 
 /** Lo spazio fra il marchio e la prima voce del menu. */
 const BRAND_GAP = 4;
+
+/** Il telefono in piedi, dove `mobile/mobile.css` toglie il marchio dalla barra. */
+export const BRAND_HIDDEN_QUERY = "(max-width: 599px)";
+
+/// Se un nodo si vede: un fuoco dato a un nodo nascosto finisce sul `body`.
+/// `checkVisibility` guarda anche gli antenati; dove manca resta il `display`.
+function shown(el: HTMLElement): boolean {
+  if (!el.isConnected) return false;
+  if (typeof el.checkVisibility === "function") return el.checkVisibility();
+  return getComputedStyle(el).display !== "none";
+}
 
 export function mountBrandMenu(lifetime: Lifetime): void {
   const brand = byId<HTMLButtonElement>("brand-menu");
@@ -18,6 +33,12 @@ export function mountBrandMenu(lifetime: Lifetime): void {
   const isOpen = (): boolean => menu.classList.contains("open");
   const close = (): void => {
     if (isOpen()) menu.classList.remove("open");
+  };
+  /// Dove il fuoco torna dal menu: il marchio, o la pillola dove lui non si vede.
+  const home = (): HTMLElement => {
+    if (shown(brand)) return brand;
+    const pill = byId("pill");
+    return pill && shown(pill) ? pill : brand;
   };
   // Dove il fuoco torna quando la striscia si richiude: dov'era prima che un
   // puntatore premesse il marchio. Da tastiera il fuoco era già sul marchio, e
@@ -29,7 +50,7 @@ export function mountBrandMenu(lifetime: Lifetime): void {
   const settleFocus = (): void => {
     const active = document.activeElement;
     if (active && active !== document.body && !menu.contains(active)) return;
-    const target = returnTo?.isConnected ? returnTo : brand;
+    const target = returnTo?.isConnected ? returnTo : home();
     returnTo = null;
     target.focus();
   };
@@ -72,10 +93,24 @@ export function mountBrandMenu(lifetime: Lifetime): void {
       event.preventDefault();
       event.stopPropagation();
       close();
-      brand.focus();
+      home().focus();
     },
     { capture: true },
   );
+  // Il telefono che si raddrizza col menu aperto: il marchio se ne va, e con
+  // lui la porta del menu. Il menu si chiude, e il fuoco va alla pillola, che
+  // apre le stesse voci; non resta su una voce nascosta né cade sul `body`.
+  if (typeof window.matchMedia === "function") {
+    const portrait = window.matchMedia(BRAND_HIDDEN_QUERY);
+    lifetime.listen(portrait, "change", () => {
+      if (!portrait.matches || !isOpen() || shown(brand)) return;
+      const active = document.activeElement;
+      const lost = !active || active === document.body || menu.contains(active) || brand.contains(active);
+      returnTo = null;
+      close();
+      if (lost) home().focus();
+    });
+  }
   // Un clic altrove richiude la striscia; uno dentro una sua tendina anche,
   // perché una voce scelta ha finito il lavoro del menu.
   lifetime.listen(document, "click", (event) => {

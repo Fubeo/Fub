@@ -1,0 +1,87 @@
+{
+  "about": "Togliere l'arco di mezzo: restano e1 ed e3 nel loro ordine; l'inversa rimette e2 fra i due (R11), non in fondo.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 200,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "b"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "a",
+        "toNode": "b"
+      },
+      {
+        "id": "e2",
+        "fromNode": "b",
+        "toNode": "a"
+      },
+      {
+        "id": "e3",
+        "fromNode": "a",
+        "toNode": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "remove",
+      "ids": [
+        "e2"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "a"
+        },
+        {
+          "id": "b",
+          "type": "text",
+          "x": 200,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "b"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "a",
+          "toNode": "b"
+        },
+        {
+          "id": "e3",
+          "fromNode": "a",
+          "toNode": "a"
+        }
+      ]
+    }
+  }
+}

@@ -19,6 +19,7 @@ import { nextTurn, normalTurn, panned, turnBy, turnTo, zoomAt } from "../../view
 import type { Unit } from "../hit";
 import { isLight, PALETTE, swatchOf } from "../palette";
 import { toolKeyText, toolSpec, type ToolId } from "../registry";
+import { rovingToolbar } from "../../../../kit/toolbar-keys";
 import { DRAW_SCALE_LIMITS, ZOOM_SETTLE_MS } from "./constants";
 import type { EditorContext } from "./context";
 import { sign, union } from "./helpers";
@@ -78,7 +79,7 @@ export interface InputContext {
 /// Monta la navigazione, il menu radiale e la tastiera.
 export function installInput(ctx: EditorContext): void {
   const {
-    life, has, measureText, style, history, toolbar, surface, suggestions, titleInput, arrangeBar, editable, grownPage,
+    life, has, measureText, style, history, header, surface, suggestions, titleInput, arrangeBar, editable, grownPage,
     newIds, announce, setCamera, stepNow, lengthSpoken, localPoint, viewCenter, announceTurn, selectedUnits, inOrder, showHandles, currentTitle,
     syncControls, commit, undo, redo, moveSelection, setColor, pickTool, cancelGesture, pen
   } = ctx;
@@ -416,8 +417,30 @@ export function installInput(ctx: EditorContext): void {
     });
     return { sync, current: () => current };
   };
-  const toolbarFocus = rove(toolbar);
-  ctx.toolbarFocus = toolbarFocus;
+  // La testa del disegno è una barra in una fila (`kit-bar`): un solo punto
+  // di Tab per tutta la testa, e le frecce del kit (`kit/toolbar-keys.ts`)
+  // dal menu a «Esporta», passando per la riga delle opzioni, il suo «…» e i
+  // comandi del foglio di un PDF. Il cursore della misura della penna è un
+  // aiuto per il puntatore (la misura si scrive nel campo accanto) e resta
+  // fuori dal giro, perché le frecce sono sue. Il puntatore non prende il
+  // fuoco, che resta al foglio con le scorciatoie.
+  const headKeys = rovingToolbar(
+    header,
+    {
+      controls: () =>
+        [...header.querySelectorAll<HTMLElement>("button, input, select")].filter(
+          (control) => !(control instanceof HTMLInputElement && control.type === "range"),
+        ),
+    },
+    life,
+  );
+  life.listen(header, "mousedown", (event) => {
+    if ((event.target as Element | null)?.closest("button")) event.preventDefault();
+  });
+  ctx.toolbarFocus = {
+    sync: (target) => void headKeys.refresh(target),
+    current: () => (headKeys.current instanceof HTMLButtonElement ? headKeys.current : null),
+  };
   const arrangeFocus = rove(arrangeBar);
   ctx.arrangeFocus = arrangeFocus;
 

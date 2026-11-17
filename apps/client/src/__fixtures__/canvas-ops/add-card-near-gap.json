@@ -1,0 +1,16 @@
+{
+  "about": "Con `gap` 16 la distanza da «a» cambia: x = 100 + 400 + 16 = 516.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "Vicina", "near": "a", "gap": 16 }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 100, "y": 100, "width": 400, "height": 160, "text": "Ciclo" },
+        { "id": "b", "type": "text", "x": 516, "y": 100, "width": 320, "height": 160, "text": "Vicina" }
+      ],
+      "edges": []
+    },
+    "created": ["b"]
+  }
+}

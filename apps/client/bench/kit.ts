@@ -22,9 +22,16 @@
 import "../src/theme/scrittoio/structure.css";
 import {
   attachHoverCard,
+  createGroupLabel,
   createList,
+  createOptionsBar,
+  createRow,
   createTabs,
+  createTile,
+  createToolRail,
   iconButton,
+  markLit,
+  markPressed,
   mountSplitter,
   openDialog,
   openPopover,
@@ -108,7 +115,9 @@ function twin(rules: CSSRuleList): void {
 const twinned = new WeakSet<CSSStyleSheet>();
 
 function twinSheets(): void {
-  for (const sheet of Array.from(document.styleSheets)) {
+  // I fogli dei file e quelli costruiti: il tema è un foglio costruito
+  // (`theme/loader.ts`, per la CSP), e non sta in `document.styleSheets`.
+  for (const sheet of [...Array.from(document.styleSheets), ...document.adoptedStyleSheets]) {
     if (twinned.has(sheet)) continue;
     twinned.add(sheet);
     try {
@@ -126,6 +135,24 @@ twinSheets();
 const remounted = new MutationObserver(twinSheets);
 remounted.observe(document.head, { childList: true, subtree: true, characterData: true });
 lifetime.add(() => remounted.disconnect());
+// Un foglio costruito si monta assegnando `adoptedStyleSheets`, e nessun
+// osservatore lo vede: qui, solo nel banco, l'assegnazione passa da un setter
+// che rifà i gemelli.
+const adopted = Object.getOwnPropertyDescriptor(Document.prototype, "adoptedStyleSheets");
+if (adopted?.get && adopted.set) {
+  const { get, set } = adopted;
+  Object.defineProperty(document, "adoptedStyleSheets", {
+    configurable: true,
+    get(this: Document) {
+      return get.call(this);
+    },
+    set(this: Document, sheets: CSSStyleSheet[]) {
+      set.call(this, sheets);
+      twinSheets();
+    },
+  });
+  lifetime.add(() => delete (document as { adoptedStyleSheets?: unknown }).adoptedStyleSheets);
+}
 
 function force<T extends HTMLElement>(node: T, ...states: Force[]): T {
   node.dataset.force = states.join(" ");
@@ -516,6 +543,104 @@ function head(grid: HTMLElement, last: string): void {
   section("Lista", "right", row);
 }
 
+// ── La lingua dei menu ───────────────────────────────────────────────────────
+
+// Riga, tessera ed etichetta (`kit/row.ts`, `kit/tile.ts`, `kit/group-label.ts`),
+// i pezzi comuni al menu, allo spazio comandi e al «/». Campioni fermi, come la
+// lista qui sopra: la riga accesa e la tessera premuta sono stati, non gesti.
+// Accesa, una riga ha il suo fondo e una tessera affiancata la sua linguetta,
+// perché qui nessuno fa scivolare una pastiglia.
+//
+// La sezione c'è solo con `?lingua` (la scena `kit-lingua`): il resto del
+// catalogo sta in una finestra senza scorrere, e le sue scene e il banco del
+// movimento, che fotografano la cima della pagina, restano quelle di prima.
+if (params.has("lingua")) {
+  const rows = el("div", "vassoio");
+  rows.setAttribute("role", "menu");
+  rows.setAttribute("aria-label", "Righe del menu");
+  rows.style.width = "316px";
+  const group = el("div");
+  group.setAttribute("role", "group");
+  group.append(createGroupLabel({ text: "Nota", labels: group }));
+  const lit = createRow({ label: "Fissa la linguetta", icon: "pin", keys: "Ctrl+Maiusc+P", role: "menuitem" });
+  markLit(lit.element, true);
+  const pressed = createRow({ label: "Copia il link", icon: "backlinks", role: "menuitem" });
+  markPressed(pressed.element, true);
+  group.append(
+    createRow({ label: "Apri in un nuovo foglio", icon: "notes", keys: "Ctrl+Invio", role: "menuitem" }).element,
+    lit.element,
+    pressed.element,
+    createRow({ label: "Cronologia", icon: "history", note: "Solo per le note salvate", disabled: true, role: "menuitem" }).element,
+    createRow({ label: "Un nome lunghissimo che non sta nella riga e si taglia coi puntini", holdIcon: true, role: "menuitem" }).element,
+    createRow({ label: "Sposta in", icon: "folder", more: true, role: "menuitem" }).element,
+  );
+  rows.append(group);
+  rows.inert = true;
+
+  const large = el("div", "vassoio");
+  large.setAttribute("role", "menu");
+  large.setAttribute("aria-label", "Righe dello spazio comandi");
+  large.style.width = "316px";
+  const found = createRow({ label: "Appunti di viaggio", icon: "notes", note: "Diario", size: "large", role: "menuitem" });
+  markLit(found.element, true);
+  large.append(
+    createGroupLabel({ text: "Note", sticky: true }),
+    found.element,
+    createRow({ label: "Nuova nota", icon: "compose", keys: "Ctrl+N", size: "large", role: "menuitem" }).element,
+  );
+  large.inert = true;
+
+  // La barra degli appunti, nuda: il fondo tenue e la linguetta sono del menu.
+  const bar = el("div");
+  bar.style.display = "grid";
+  bar.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
+  bar.style.width = "292px";
+  const cut = createTile({ label: "Taglia", icon: "cut" });
+  const copy = createTile({ label: "Copia", icon: "copy" });
+  markLit(copy, true);
+  const paste = createTile({ label: "Incolla", icon: "template" });
+  markPressed(paste, true);
+  bar.append(cut, copy, paste);
+  bar.inert = true;
+  // Una parte senza figura, premuta: la spunta compare lo stesso.
+  const bare = el("div");
+  bare.style.display = "grid";
+  bare.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+  bare.style.width = "196px";
+  const plain = createTile({ label: "Testo" });
+  markPressed(plain, true);
+  bare.append(createTile({ label: "HTML" }), plain);
+  bare.inert = true;
+
+  const stack = (label: string, options: Omit<Parameters<typeof createTile>[0], "shape" | "label"> = {}, dress?: (tile: HTMLButtonElement) => void): HTMLElement => {
+    const tile = createTile({ label, shape: "stack", ...options, lifetime });
+    dress?.(tile);
+    const holder = el("div");
+    holder.style.width = "52px";
+    holder.append(tile);
+    holder.inert = true;
+    return holder;
+  };
+  const tiles = el("div", "fila");
+  tiles.append(
+    cell("riposo", stack("Attività", { icon: "tasks" })),
+    cell("accesa", stack("Titolo", { glyph: "H1" }, (tile) => markLit(tile, true))),
+    cell("premuta", stack("Riquadro", { icon: "blocks" }, (tile) => markPressed(tile, true))),
+    cell("spenta", stack("Base", { icon: "collection", disabled: { reason: "Serve una nota salvata" } })),
+    cell("senza icona", stack("Scheda")),
+    cell("nome lungo", stack("Diagramma di flusso")),
+  );
+
+  const row = el("div", "fila");
+  row.append(
+    cell("righe: riposo, accesa, premuta, spenta col perché, nome lungo, sottomenu", rows),
+    cell("righe da 38 e l'etichetta che resta in cima", large),
+    cell("tessere affiancate: riposo, accesa, premuta", bar),
+    cell("senza figura: riposo, premuta", bare),
+  );
+  section("La lingua dei menu", "right", row, cell("tessere in pila", tiles));
+}
+
 // ── Schede ───────────────────────────────────────────────────────────────────
 
 /// Schede coi loro pannelli: una scelta, una spenta, e due tenute ferme al
@@ -621,6 +746,117 @@ function split(
     split("orizzontale · passaggio", "horizontal", (handle) => force(handle, "hover")),
   );
   section("Divisore", "left", row);
+}
+
+// ── Barra in una fila e colonna ──────────────────────────────────────────────
+
+/// Un pulsante della fila. Le classi le mette chi costruisce la barra: il kit
+/// non ha un costruttore della fila, ha la sua pelle.
+function barButton(icon: string, label: string, pressed?: boolean): HTMLButtonElement {
+  const button = el("button", "kit-bar-button");
+  button.type = "button";
+  button.setAttribute("aria-label", label);
+  if (pressed !== undefined) button.setAttribute("aria-pressed", String(pressed));
+  const glyph = iconEl(icon);
+  if (glyph) button.append(glyph);
+  return button;
+}
+
+function sheetOf(...content: Node[]): HTMLElement {
+  const group = el("div", "kit-bar-group");
+  group.append(...content);
+  return group;
+}
+
+function barField(label: string, value: string): HTMLInputElement {
+  const input = el("input", "kit-bar-field");
+  input.type = "text";
+  input.value = value;
+  input.size = 10;
+  input.setAttribute("aria-label", label);
+  return input;
+}
+
+/// Una fila di tre foglietti: il terzo sta nella fila del kit, che non ci sta
+/// tutta e manda il resto in «…».
+function bar(label: string, dress?: (bar: HTMLElement) => void): HTMLElement {
+  const node = el("div", "kit-bar");
+  node.setAttribute("role", "toolbar");
+  node.setAttribute("aria-label", label);
+  const spento = barButton("trash", "Elimina");
+  spento.disabled = true;
+  const options = createOptionsBar({ label: `${label}: altre`, moreLabel: "Altre opzioni", lifetime });
+  options.setItems([
+    { id: "copia", element: sheetOf(barButton("cut", "Taglia"), barButton("copy", "Copia")), priority: 1 },
+    { id: "etichetta", element: sheetOf(barButton("tag", "Etichetta"), barButton("search", "Cerca")) },
+    { id: "storia", element: sheetOf(barButton("history", "Cronologia"), barButton("stats", "Statistiche")) },
+  ]);
+  node.append(
+    sheetOf(barButton("pin", "Fissa", true), barButton("notes", "Nota", false), spento),
+    sheetOf(barField("Carattere", "Newsreader")),
+    options.element,
+  );
+  dress?.(node);
+  return node;
+}
+
+{
+  const bars = el("div", "cella");
+  const rest = bar("Fila a riposo");
+  const states = bar("Fila negli stati", (node) => {
+    // 0 è acceso, 2 è spento: passaggio sul secondo, pressione e fuoco sui
+    // primi due del terzo foglietto, e il campo col fuoco.
+    const buttons = node.querySelectorAll<HTMLButtonElement>(".kit-bar-button");
+    force(buttons[1]!, "hover");
+    force(buttons[3]!, "hover", "active");
+    force(buttons[4]!, "focus");
+    force(node.querySelector<HTMLInputElement>(".kit-bar-field")!, "focus");
+  });
+  // Larga quanto basta perché l'ultimo foglietto non ci stia e vada in «…».
+  const narrow = (node: HTMLElement): HTMLElement => {
+    const box = el("div", "fila-stretta");
+    box.append(node);
+    return box;
+  };
+  bars.append(
+    caption("riposo: acceso, spento, campo, «…»"),
+    narrow(rest),
+    caption("passaggio, premuto, fuoco"),
+    narrow(states),
+  );
+
+  const rail = createToolRail({
+    label: "Strumenti",
+    groups: [
+      {
+        id: "scelta",
+        slots: [
+          { id: "nota", tools: [{ id: "nota", label: "Nota", icon: "notes", keys: "N" }] },
+          {
+            id: "cerca",
+            tools: [
+              { id: "cerca", label: "Cerca", icon: "search", keys: "F" },
+              { id: "etichetta", label: "Etichetta", icon: "tag", keys: "T" },
+            ],
+          },
+        ],
+      },
+      { id: "altro", slots: [{ id: "grafo", tools: [{ id: "grafo", label: "Grafo", icon: "graph", keys: "G" }] }] },
+    ],
+    active: "nota",
+    text: { more: (tool) => `Altri strumenti di ${tool}` },
+    onSelect: (tool) => rail.setActive(tool),
+    lifetime,
+  });
+  const slots = rail.element.querySelectorAll<HTMLElement>(".kit-rail-slot");
+  force(slots[1]!, "hover");
+  force(slots[2]!, "focus");
+
+  const row = el("div", "fila");
+  const column = cell("colonna: scelto, passaggio, fuoco", rail.element);
+  column.classList.add("cella-in-piedi");
+  row.append(bars, column);
+  section("Barra in una fila e colonna", "left", row);
 }
 
 // Il contenitore scorre e i suoi campioni prendono il fuoco: non gli serve un

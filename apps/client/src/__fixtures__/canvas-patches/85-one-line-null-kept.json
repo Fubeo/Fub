@@ -1,0 +1,10 @@
+{
+  "name": "one-line-null-kept",
+  "description": "Un file di una riga, senza a capo finale: la scheda perde il campo sconosciuto xF e si ricompone; il null di color resta, va via solo \",\\\"xF\\\":1\" e il file resta su una riga",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\",\"color\":null,\"xF\":1}]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a","xF":1},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\",\"color\":null}]}"
+  }
+}

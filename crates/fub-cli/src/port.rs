@@ -343,6 +343,35 @@ impl HostPort {
         }
     }
 
+    /// La mappa dei componenti e il loro stato, dall'host che tiene il vault.
+    pub fn components(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<fub_host::componenti::Componenti, PluginError> {
+        match self.app(vault) {
+            None => self.local.components(vault),
+            Some((app, vault)) => app.call_as(Call::Components { vault }),
+        }
+    }
+
+    /// Applica una scelta sui componenti, o la prova senza `apply`.
+    pub fn apply_components(
+        &self,
+        vault: Option<&str>,
+        azione: fub_host::componenti::Azione,
+        apply: bool,
+    ) -> Result<Result<fub_host::componenti::Esito, fub_host::componenti::Rifiuto>, PluginError>
+    {
+        match self.app(vault) {
+            None => self.local.apply_components(vault, azione, apply),
+            Some((app, vault)) => app.call_as(Call::ApplyComponents {
+                vault,
+                azione,
+                apply,
+            }),
+        }
+    }
+
     pub fn set_setting_for_user(
         &self,
         vault: Option<&str>,
@@ -374,6 +403,42 @@ impl HostPort {
                     key: key.to_string(),
                 })
                 .map(|_| ()),
+        }
+    }
+
+    /// Le app Craft che aprono `doc`. Con l'app aperta risponde lei, che ha
+    /// avviato i programmi e sa quali sono «Già aperta»; l'host della CLI non
+    /// ne avvia mai una per conto suo fuori da [`open_with`](Self::open_with).
+    pub fn external_editors(
+        &self,
+        vault: Option<&str>,
+        doc: Option<&str>,
+    ) -> Result<Vec<fub_host::open_with::ExternalEditor>, PluginError> {
+        match self.app(vault) {
+            None => self.local.external_editors(vault, doc),
+            Some((app, vault)) => app.call_as(Call::ExternalEditors {
+                vault,
+                doc: doc.map(str::to_string),
+            }),
+        }
+    }
+
+    /// Apre `path` con l'app `editor`, dall'app se è aperta.
+    pub fn open_with(
+        &self,
+        vault: Option<&str>,
+        path: &str,
+        editor: &str,
+        page: Option<u32>,
+    ) -> Result<fub_host::open_with::OpenedWith, PluginError> {
+        match self.app(vault) {
+            None => self.local.open_with(vault, path, editor, page),
+            Some((app, vault)) => app.call_as(Call::OpenWith {
+                vault,
+                path: path.to_string(),
+                editor: editor.to_string(),
+                page,
+            }),
         }
     }
 

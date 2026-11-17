@@ -139,6 +139,71 @@ verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
 
+### Chi prende il turno per un comando
+
+Un comando di un provider (`Host::invoke_user_command` per l'utente,
+`JobHost::run_command` per un comando annidato o lanciato da un job) prende il
+turno **solo se scrive**:
+
+- un comando che si è dichiarato di sola lettura (`CommandScope::read_only()`,
+  cioè `!spec.scope.writes`) passa da
+  `Workspace::prepare_read_only_provider_command` e **non prende il turno**.
+  Il provider gira sotto `Guard` con la politica `ReadOnly`, come prima: una
+  sua scrittura è rifiutata. Mentre legge, chi salva salva e i suoi eventi
+  arrivano subito; due letture girano insieme;
+- un comando che scrive prende il turno per tutta la chiamata, anche quando
+  gira in `DryRun`: è l'anteprima di una scrittura e resta sul frame condiviso;
+- la manutenzione del kernel e i comandi dell'host trattati prima (le cartelle,
+  il cestino del sistema, i montaggi, la cattura) restano come sono.
+
+La lettura ha **un frame tutto suo** perché il frame condiviso vive nello stato
+del workspace fino alla fine del comando: attore scambiato, batch aperto,
+comando sulla pila, `in_provider_call` alzato. Senza il turno a isolarlo, gli
+eventi di una scrittura parallela finirebbero nel batch del comando e
+aspetterebbero la sua fine, e due letture si pesterebbero sulla pila. Il token
+di sola lettura (`PreparedReadOnlyCommand`) non tocca niente di tutto questo:
+porta con sé la catena dei comandi per rifiutare la ricorsione (`JobHost` la
+passa alle invocazioni annidate), e la sua fine (`finish_read_only_provider_command`,
+un prestito condiviso) non spinge undo, non chiude batch e non accoda eventi.
+Se il vault si chiude mentre il comando legge, la fine risponde `Cancelled` e
+l'esito non si applica. Un comando che si dichiara di sola lettura non lascia
+mai una voce nella pila dell'annullamento, anche se il suo esito ne porta una.
+
+### Chi aspetta chi allo smontaggio
+
+Una lettura senza turno si iscrive fra le **letture in volo** del workspace
+(`ReadsInFlight`) dal prepare finché il token vive: la guardia cade anche se il
+provider va in panico o la fine non viene chiamata. L'iscrizione porta il
+proprietario, la bandiera propria della lettura e quelle di chi la contiene
+(il job, le letture più fuori): l'host della lettura è fermo se è alzata una
+qualunque di queste.
+
+- Nel kernel, `deactivate_plugin`, `prepare_plugin_teardown` e
+  `prepare_plugin_deactivation` rispondono `Busy` se il proprietario ha
+  letture in volo, come con `in_provider_call` per il frame condiviso.
+- La chiusura del vault (`close_session_resources`), dopo `prepare_close` e la
+  consegna di `VaultClosed`, alza la bandiera di tutte le letture in volo e le
+  aspetta, prima di smontare qualunque provider. Le letture si fermano alla
+  prossima chiamata all'host e finiscono con `Cancelled`. Una lettura che sta
+  solo calcolando si aspetta fino alla sua uscita, come prima si aspettava il
+  turno del comando.
+- Lo smontaggio di un singolo plugin (`teardown::unmount` per la
+  disattivazione e lo spegnimento di un bundle, `unmount_guarded` per
+  `Host::unmount_bundle`) passa da `teardown::stop_reads`: sbarra le nuove
+  letture di quel proprietario (una nuova lettura riceve `Cancelled`), ferma e
+  aspetta quelle in volo, e tiene la sbarra fino al ritiro dei provider, così
+  nessuna lettura gira accanto al `deactivate`. Alza solo la bandiera
+  della lettura: il job che l'ha invocata riceve `Cancelled` da
+  `invoke_command`, come da un comando che fallisce, e non è annullato. Alla
+  chiusura invece si alzano anche le bandiere di chi la contiene.
+- Si aspetta senza il lucchetto del workspace: una lettura, per finire, ne
+  prende solo un prestito condiviso. Chi aspetta può tenere il turno, perché
+  una lettura che chiede il turno (un comando annidato in simulazione) lo
+  chiede cedendo e rinuncia appena vede la bandiera.
+- Le letture preparate quando la chiusura era già cominciata (un handler di
+  `VaultClosed` o un `deactivate` che invoca un comando) non si iscrivono:
+  la chiusura che le ha lanciate non aspetta sé stessa.
+
 ## Turno di scrittura e istanza
 
 I due lucchetti si prendono in ordine opposto da due parti. Un salvataggio tiene

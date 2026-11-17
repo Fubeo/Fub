@@ -1,0 +1,9 @@
+{
+  "name": "r4-escaped-unknown-key",
+  "description": "R4: un surrogato spaiato, con escape, in una chiave sconosciuta",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"\\ud83dk\":1}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "about": "Ridimensionare cambia larghezza e altezza; una misura enorme satura a 2^53−1.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "resize", "id": "a", "width": 320, "height": 18446744073709551615 }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 9007199254740991, "text": "a" }] }
+  }
+}

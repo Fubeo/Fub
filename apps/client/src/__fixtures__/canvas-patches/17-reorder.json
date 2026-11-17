@@ -1,0 +1,11 @@
+{
+  "name": "reorder",
+  "description": "Cambiare l'ordine delle schede tiene il testo di ognuna",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"},{\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"tre\"}],\"edges\":[]}",
+  "patches": [{"kind":"reorder","before":["a","b","c"],"after":["c","a","b"]}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"tre\"},{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"},{\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"tre\"}],\"edges\":[]}"
+  }
+}

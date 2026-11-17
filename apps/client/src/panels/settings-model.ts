@@ -45,13 +45,16 @@ export function controlFor(entry: SettingEntry): Control {
   switch (kind.kind) {
     case "toggle":
       return { kind: "switch" };
-    case "choice":
+    case "choice": {
       // Un valore fuori dalle scelte (un file scritto a mano, uno schema che è
       // cambiato) resta visibile solo in una tendina, come voce a sé: in un
       // segmentato nessun bottone risulterebbe acceso, cioè un valore falso.
-      return isShortChoice(kind.options) && kind.options.some((option) => option.value === String(entry.value))
-        ? { kind: "segmented", options: kind.options }
-        : { kind: "select", options: kind.options };
+      const options = visibleChoices(kind.options);
+      const shown = shownChoice(entry);
+      return isShortChoice(options) && options.some((option) => option.value === shown)
+        ? { kind: "segmented", options }
+        : { kind: "select", options };
+    }
     case "number": {
       const { min, max } = kind;
       if (
@@ -68,6 +71,39 @@ export function controlFor(entry: SettingEntry): Control {
     case "list":
       return { kind: "list" };
   }
+}
+
+/// Le scelte che il controllo mostra: una per etichetta, la prima dichiarata.
+///
+/// Due scelte con la stessa etichetta sono, per chi legge, la stessa scelta, e
+/// mostrarle tutte e due darebbe due voci identiche fra cui non si sa scegliere.
+/// È così che uno schema tiene valido un valore di prima senza offrirlo più:
+/// lo dichiara in fondo con l'etichetta della scelta in cui è confluito (in
+/// `editor.default-mode`, `blocks` porta l'etichetta di Scrittura,
+/// `live_preview`). Il kernel continua ad accettarlo, il file che lo porta non
+/// si riscrive, e il pannello non lo propone.
+export function visibleChoices(options: readonly UiOption[]): UiOption[] {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    const label = optionLabel(option);
+    if (seen.has(label)) return false;
+    seen.add(label);
+    return true;
+  });
+}
+
+/// Il valore che il controllo di una scelta mostra acceso: quello corrente, o,
+/// se è una scelta nascosta da [`visibleChoices`], la scelta visibile con la
+/// stessa etichetta. Un valore che non è fra le scelte resta com'è, e la
+/// tendina lo mostra come voce a sé.
+export function shownChoice(entry: SettingEntry): string {
+  const current = String(entry.value);
+  const kind = entry.spec.kind;
+  if (kind.kind !== "choice") return current;
+  const option = kind.options.find((candidate) => candidate.value === current);
+  if (!option) return current;
+  const label = optionLabel(option);
+  return kind.options.find((candidate) => optionLabel(candidate) === label)?.value ?? current;
 }
 
 /// Una scelta breve: da due a tre opzioni, ciascuna con un'etichetta corta.

@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
+import { themeIconsFileHolds } from "../rules/mirrored";
 import type {
   BacklinkRef,
   BundleInfo,
+  ComponentAction,
+  ComponentEffect,
+  ComponentGroup,
+  ComponentMissing,
+  ComponentOrphans,
+  ComponentOutcome,
+  ComponentProfile,
+  ComponentRefusal,
+  ComponentRow,
+  ComponentState,
+  ComponentWhy,
+  ComponentWrite,
+  ComponentsApplied,
+  ComponentsMap,
+  ThemeFont,
   ThemeInfo,
   ThemePayload,
   InstalledPluginInfo,
@@ -13,6 +29,26 @@ import type {
   DocPosition,
   DocumentMatch,
   DocumentSource,
+  DrawingChange,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingEdit,
+  DrawingFrame,
+  DrawingGesture,
+  DrawingLoss,
+  DrawingLossKind,
+  DrawingOpen,
+  DrawingOutcome,
+  DrawingPhase,
+  DrawingPointer,
+  DrawingPointerKind,
+  DrawingPreview,
+  DrawingRefusal,
+  DrawingSnap,
+  DrawingStyle,
+  DrawingSync,
+  DrawingSynced,
+  DrawingTool,
   EmbedContent,
   Failure,
   EventMask,
@@ -120,10 +156,11 @@ import type {
   LiveStopReport,
   LiveView,
   LiveWriterStatus,
+  ResourceWriteReceipt,
 } from "./contract";
 import type {
   ConfigFileKind, ConfigReport, ConfigStatus, DemoClosed, DemoOpened, DiagnosticSummary,
-  ExportConsent, RecoverAction, RecoverOutcome, SupportPreview,
+  ExportConsent, ExternalEditor, OpenedWith, OpenHow, RecoverAction, RecoverOutcome, SupportPreview,
 } from "./ipc";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fub-features/tests/ts_mirror.rs` (tipi del contratto) e
@@ -132,6 +169,7 @@ import type { EventKind } from "./enums.generated";
 import { asPluginError, errorText, isErrorKind } from "./errors";
 import samples from "../__fixtures__/mirror-samples.json";
 import appSamples from "../__fixtures__/mirror-samples-app.json";
+import { COMPONENT_SCENARIO } from "./fake";
 
 // L'altra metà del presidio dei mirror (la prima è `crates/fub-abi`… ehm,
 // `crates/fub-features/tests/ts_mirror.rs`): la fixture è generata dai tipi
@@ -730,6 +768,42 @@ const RECORD_KEYS: Record<string, string[]> = {
     tables: true,
     objects: true,
   }),
+  // Il disegno sul motore (K5): la shell costruisce gesti, sync e comandi, e
+  // un campo dimenticato di qua è un errore di serde a runtime.
+  DrawingOpen: keysOf<DrawingOpen>({ instance: true, revision: true, mapped: true, unmapped: true, losses: true }),
+  DrawingLoss: keysOf<DrawingLoss>({ element: true, kind: true, detail: true }),
+  DrawingSync: keysOf<DrawingSync>({ revision: true, change: true }),
+  DrawingEdit: keysOf<DrawingEdit>({ from: true, to: true, deleted: true, inserted: true }),
+  DrawingSynced: keysOf<DrawingSynced>({ revision: true }),
+  DrawingPointer: keysOf<DrawingPointer>({ kind: true, x: true, y: true, pressure: true, shift: true, alt: true, cmd: true }),
+  DrawingSnap: keysOf<DrawingSnap>({ grid: true, free: true }),
+  DrawingStyle: keysOf<DrawingStyle>({ stroke: true, width: true, fill: true }),
+  DrawingFrame: keysOf<DrawingFrame>({ matrix: true, bounds: true, geometry: true }),
+  DrawingGesture: keysOf<DrawingGesture>({
+    revision: true,
+    phase: true,
+    tool: true,
+    layer: true,
+    selection: true,
+    zoom: true,
+    snap: true,
+    style: true,
+    text: true,
+    frame: true,
+    events: true,
+  }),
+  DrawingPreview: keysOf<DrawingPreview>({ shape: true, matrix: true, marquee: true }),
+  DrawingOutcome: keysOf<DrawingOutcome>({
+    revision: true,
+    preview: true,
+    ops: true,
+    selection: true,
+    losses: true,
+    refused: true,
+    frame: true,
+  }),
+  DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true }),
+  DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true }),
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
   NeighborRef: keysOf<NeighborRef>({ doc: true, via: true, depth: true }),
@@ -933,6 +1007,8 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   }),
   ConfigReport: keysOf<ConfigReport>({ kind: true, path: true, status: true }),
   RecoverOutcome: keysOf<RecoverOutcome>({ backup: true, detail: true, restart_required: true }),
+  // La ricevuta di `resource_write` (`fub_host::resources`).
+  ResourceWriteReceipt: keysOf<ResourceWriteReceipt>({ id: true, revision: true, reused: true }),
   // La sessione live: le chiavi sono i nomi dei tipi di `fub_live::host`,
   // che di qua portano il prefisso `Live`.
   LiveStarted: keysOf<LiveStarted>({ session: true, pairing: true, addresses: true }),
@@ -951,6 +1027,34 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     accepted: true, refused: true, admitted: true, rejected: true, commits: true, answered: true,
   }),
   StopReport: keysOf<LiveStopReport>({ pending: true }),
+  // La pagina «Componenti» (A7): le chiavi sono i nomi dei tipi Rust
+  // (`fub_app_lib::Components*`, e quelli di `fub_host::componenti` col
+  // prefisso `Component`).
+  ComponentsMap: keysOf<ComponentsMap>({
+    gruppi: true, righe: true, stato: true, profilo: true, profili: true, mancanti: true,
+  }),
+  ComponentRow: keysOf<ComponentRow>({
+    id: true, nome: true, gruppo: true, bundle: true, acceso: true, perche: true,
+    richiesto_da: true, descrizione: true, tipo: true, ui: true, richiede: true, usa: true,
+  }),
+  ComponentGroup: keysOf<ComponentGroup>({ id: true, nome: true }),
+  ComponentProfile: keysOf<ComponentProfile>({
+    nome: true, etichetta: true, componenti: true, arriva_con: true, piu_avanti: true,
+  }),
+  ComponentState: keysOf<ComponentState>({ scelti: true, in_attesa: true }),
+  ComponentMissing: keysOf<ComponentMissing>({ chiave: true, id: true }),
+  ComponentEffect: keysOf<ComponentEffect>({
+    accesi_anche: true, spenti_anche: true, orfani: true, mancanti: true,
+  }),
+  ComponentWrite: keysOf<ComponentWrite>({ id: true, acceso: true, bundle: true }),
+  ComponentOutcome: keysOf<ComponentOutcome>({
+    azione: true, effetto: true, scritture: true, chiavi: true, stato: true, applicato: true, avvisi: true,
+  }),
+  // «Apri con» un'app Craft (`fub_host::open_with`).
+  ExternalEditor: keysOf<ExternalEditor>({
+    id: true, name: true, opens: true, installed: true, running: true,
+  }),
+  OpenedWith: keysOf<OpenedWith>({ editor: true, how: true }),
 };
 const APP_OPTIONAL_KEYS = {
   InstalledPluginInfo: {
@@ -1169,6 +1273,13 @@ function touchConfigStatus(status: ConfigStatus): void {
   }
 }
 
+function touchOpenHow(how: OpenHow): void {
+  switch (how) {
+    case "forwarded": case "in_running": case "new_process": return;
+    default: return assertNever(how);
+  }
+}
+
 function touchRecoverAction(action: RecoverAction): void {
   if (typeof action === "string") {
     switch (action) {
@@ -1216,6 +1327,20 @@ describe("mirror TS↔Rust", () => {
       "SettingEntry",
       "ExportReport",
       "PluginError",
+      "DrawingOpen",
+      "DrawingLoss",
+      "DrawingSync",
+      "DrawingEdit",
+      "DrawingSynced",
+      "DrawingPointer",
+      "DrawingSnap",
+      "DrawingStyle",
+      "DrawingFrame",
+      "DrawingGesture",
+      "DrawingPreview",
+      "DrawingOutcome",
+      "DrawingCommandInfo",
+      "DrawingCommandRequest",
     ]) {
       expect(fixture[type], `manca il type ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -1225,6 +1350,7 @@ describe("mirror TS↔Rust", () => {
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
     for (const type of [
+      "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
       "ConfigFileKind", "ConfigStatus", "RecoverAction",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
@@ -1434,6 +1560,119 @@ describe("mirror TS↔Rust", () => {
     }
   });
 
+  it("ogni forma del disegno prodotta da Rust è gestita dal mirror", () => {
+    const tool = (t: DrawingTool): string => {
+      switch (t) {
+        case "select":
+        case "rect":
+        case "ellipse":
+        case "line":
+        case "arrow":
+        case "text":
+          return t;
+        default:
+          return assertNever(t);
+      }
+    };
+    const phase = (p: DrawingPhase): string => {
+      switch (p) {
+        case "preview":
+        case "commit":
+        case "cancel":
+          return p;
+        default:
+          return assertNever(p);
+      }
+    };
+    const pointer = (k: DrawingPointerKind): string => {
+      switch (k) {
+        case "down":
+        case "drag":
+        case "up":
+        case "move":
+        case "double_click":
+          return k;
+        default:
+          return assertNever(k);
+      }
+    };
+    const loss = (k: DrawingLossKind): string => {
+      switch (k) {
+        case "unmapped":
+        case "approximated":
+        case "unsupported":
+          return k;
+        default:
+          return assertNever(k);
+      }
+    };
+    const refusal = (r: DrawingRefusal): string => {
+      switch (r) {
+        case "stale":
+        case "unmapped":
+        case "empty":
+        case "unsupported":
+        case "too_large":
+        case "closed":
+        case "not_ready":
+        case "locked":
+        case "hidden":
+          return r;
+        default:
+          return assertNever(r);
+      }
+    };
+    const change = (c: DrawingChange): string => {
+      switch (c.kind) {
+        case "edits":
+          expect(Object.keys(c.value).sort()).toEqual(["edits", "length_after", "length_before"]);
+          c.value.edits.forEach((e) => expect(Object.keys(e).sort()).toEqual(RECORD_KEYS.DrawingEdit));
+          return c.kind;
+        case "text":
+          expect(Object.keys(c.value)).toEqual(["text"]);
+          return c.kind;
+        default:
+          return assertNever(c);
+      }
+    };
+    const gestures = fixture["DrawingGesture"] as DrawingGesture[];
+    expect(new Set(gestures.map((g) => tool(g.tool)))).toEqual(new Set(["select", "rect", "ellipse", "line", "arrow", "text"]));
+    expect(new Set(gestures.map((g) => phase(g.phase)))).toEqual(new Set(["preview", "commit", "cancel"]));
+    const kinds = gestures.flatMap((g) => g.events.map((e) => pointer(e.kind)));
+    expect(new Set(kinds)).toEqual(new Set(["down", "drag", "up", "move", "double_click"]));
+    for (const g of gestures) {
+      expect(Object.keys(g.snap).sort()).toEqual(RECORD_KEYS.DrawingSnap);
+      if (g.style !== null) expect(Object.keys(g.style).sort()).toEqual(RECORD_KEYS.DrawingStyle);
+      for (const e of g.events) expect(Object.keys(e).sort()).toEqual(RECORD_KEYS.DrawingPointer);
+      if (g.frame !== null) expect(Object.keys(g.frame).sort()).toEqual(RECORD_KEYS.DrawingFrame);
+    }
+    expect(gestures.some((g) => g.frame !== null)).toBe(true);
+    const opened = fixture["DrawingOpen"] as DrawingOpen[];
+    expect(new Set(opened.flatMap((o) => o.losses.map((l) => loss(l.kind))))).toEqual(
+      new Set(["unmapped", "approximated", "unsupported"]),
+    );
+    const outcomes = fixture["DrawingOutcome"] as DrawingOutcome[];
+    expect(new Set(outcomes.flatMap((o) => (o.refused === null ? [] : [refusal(o.refused)])))).toEqual(
+      new Set(["stale", "unmapped", "empty", "unsupported", "too_large", "closed", "not_ready", "locked", "hidden"]),
+    );
+    const previews = outcomes.flatMap((o) => (o.preview === null ? [] : [o.preview]));
+    expect(previews.length).toBeGreaterThan(0);
+    for (const p of previews) {
+      expect(Object.keys(p).sort()).toEqual(RECORD_KEYS.DrawingPreview);
+      expect(p.matrix?.length).toBe(6);
+      expect(p.marquee?.length).toBe(4);
+    }
+    expect(outcomes.some((o) => typeof o.ops === "string")).toBe(true);
+    const frames = outcomes.flatMap((o) => (o.frame === null ? [] : [o.frame]));
+    expect(frames.length).toBeGreaterThan(0);
+    for (const f of frames) {
+      expect(Object.keys(f).sort()).toEqual(RECORD_KEYS.DrawingFrame);
+      expect([f.matrix.length, f.bounds.length, f.geometry.length]).toEqual([6, 4, 4]);
+    }
+    const syncs = fixture["DrawingSync"] as DrawingSync[];
+    expect(new Set(syncs.map((s) => change(s.change)))).toEqual(new Set(["edits", "text"]));
+  });
+
   it("i valori della griglia sui byte hanno ogni forma del tipo TS", () => {
     const touch = (value: GridValue): string => {
       switch (value.kind) {
@@ -1592,6 +1831,119 @@ describe("mirror TS↔Rust", () => {
     const vaults = appFixture.VaultEntry as KnownVault[];
     expect(vaults.some((v) => v.recipes_adopted !== undefined)).toBe(true);
     expect(vaults.some((v) => v.recipes_adopted === undefined)).toBe(true);
+  });
+
+  it("le unioni della pagina «Componenti» hanno un ramo TS per ogni variante Rust", () => {
+    type ActionOf<T extends ComponentAction["azione"]> = Extract<ComponentAction, { azione: T }>;
+    type RefusalOf<T extends ComponentRefusal["rifiuto"]> = Extract<ComponentRefusal, { rifiuto: T }>;
+    // Rust scrive l'azione con tutti i campi, anche quelli col default.
+    const actions: { [T in ComponentAction["azione"]]: string[] } = {
+      accendi: keysOf<ActionOf<"accendi">>({ azione: true, id: true }),
+      spegni: keysOf<Required<ActionOf<"spegni">>>({ azione: true, id: true, anche_questi: true, orfani: true }),
+      rispondi: keysOf<Required<ActionOf<"rispondi">>>({ azione: true, orfani: true, ids: true }),
+      profilo: keysOf<ActionOf<"profilo">>({ azione: true, nome: true }),
+    };
+    const refusals: { [T in ComponentRefusal["rifiuto"]]: string[] } = {
+      sconosciuto: keysOf<RefusalOf<"sconosciuto">>({ rifiuto: true, id: true }),
+      nucleo: keysOf<RefusalOf<"nucleo">>({ rifiuto: true, id: true }),
+      richiesto: keysOf<RefusalOf<"richiesto">>({ rifiuto: true, id: true, da: true }),
+      profilo_sconosciuto: keysOf<RefusalOf<"profilo_sconosciuto">>({ rifiuto: true, nome: true }),
+      profilo_piu_avanti: keysOf<RefusalOf<"profilo_piu_avanti">>({ rifiuto: true, nome: true, arriva_con: true }),
+    };
+    const sampleActions = appFixture.ComponentAction as ComponentAction[];
+    for (const action of sampleActions) expect(Object.keys(action).sort()).toEqual(actions[action.azione]);
+    expect(new Set(sampleActions.map((action) => action.azione))).toEqual(new Set(Object.keys(actions)));
+    const sampleRefusals = appFixture.ComponentRefusal as ComponentRefusal[];
+    for (const refusal of sampleRefusals) expect(Object.keys(refusal).sort()).toEqual(refusals[refusal.rifiuto]);
+    expect(new Set(sampleRefusals.map((refusal) => refusal.rifiuto))).toEqual(new Set(Object.keys(refusals)));
+
+    // La risposta di `components_apply`: il tag `risposta` più le chiavi del ramo.
+    const outcome = keysOf<ComponentOutcome>({
+      azione: true, effetto: true, scritture: true, chiavi: true, stato: true, applicato: true, avvisi: true,
+    });
+    const keysOfApplied = (applied: ComponentsApplied): string[] =>
+      applied.risposta === "esito"
+        ? [...outcome, "risposta"].sort()
+        : [...refusals[applied.rifiuto], "risposta"].sort();
+    const applied = appFixture.ComponentsApplied as ComponentsApplied[];
+    for (const sample of applied) expect(Object.keys(sample).sort()).toEqual(keysOfApplied(sample));
+    expect(new Set(applied.map((sample) => sample.risposta))).toEqual(new Set(["esito", "rifiuto"]));
+
+    const whys: ComponentWhy[] = ["Nucleo", "Scelto", { RichiestoDa: ["fub.lavagna", "fub.pdf"] }, "InAttesa", "Spento", "Sconosciuto"];
+    expect(appFixture.ComponentWhy).toEqual(whys);
+    const orphans: ComponentOrphans[] = ["chiedi", "togli", "tieni"];
+    expect(appFixture.ComponentOrphans).toEqual(orphans);
+
+    // Lo scenario dei fake è fatto degli stessi tipi: ogni mappa e ogni
+    // risposta registrata dall'host vero ha le chiavi del mirror.
+    expect(Object.keys(COMPONENT_SCENARIO).sort()).toEqual(["mappe", "partenze", "profilo", "scelte", "senza_vault"]);
+    for (const map of COMPONENT_SCENARIO.mappe) {
+      expect(Object.keys(map).sort()).toEqual(APP_RECORD_KEYS.ComponentsMap);
+      for (const group of map.gruppi) expect(Object.keys(group).sort()).toEqual(APP_RECORD_KEYS.ComponentGroup);
+      for (const row of map.righe) expect(Object.keys(row).sort()).toEqual(APP_RECORD_KEYS.ComponentRow);
+      for (const profile of map.profili) expect(Object.keys(profile).sort()).toEqual(APP_RECORD_KEYS.ComponentProfile);
+    }
+    const choiceKeys = keysOf<(typeof COMPONENT_SCENARIO.scelte)[number]>({
+      prima: true, azione: true, apply: true, risposta: true, dopo: true, eventi: true,
+    });
+    for (const choice of COMPONENT_SCENARIO.scelte) {
+      expect(Object.keys(choice).sort()).toEqual(choiceKeys);
+      expect(Object.keys(choice.azione).sort()).toEqual(actions[choice.azione.azione]);
+      expect(Object.keys(choice.risposta).sort()).toEqual(keysOfApplied(choice.risposta));
+      // Gli eventi sono quelli che la shell sa leggere: chiavi scritte e
+      // rimontaggio.
+      for (const event of choice.eventi) {
+        expect(["setting_changed", "vault_closed", "vault_opened"]).toContain(event.type);
+      }
+    }
+    for (const start of Object.values(COMPONENT_SCENARIO.partenze)) {
+      expect(COMPONENT_SCENARIO.mappe[start]).toBeDefined();
+    }
+  });
+
+  it("i caratteri del manifest di un tema hanno la forma del mirror", () => {
+    const manifests = [
+      ...(appFixture.ThemeInfo as ThemeInfo[]),
+      ...(appFixture.ThemePayload as ThemePayload[]),
+    ].map((sample) => sample.manifest);
+    const fonts = manifests.flatMap((manifest) => manifest.fonts ?? []);
+    expect(fonts.length, "il campione porta un carattere").toBeGreaterThan(0);
+    const keys = keysOf<ThemeFont>({ family: true, file: true, weight: true, style: true }).sort();
+    for (const font of fonts) {
+      expect(Object.keys(font).sort()).toEqual(keys);
+      expect(["normal", "italic"]).toContain(font.style);
+      expect(typeof font.weight).toBe("number");
+    }
+  });
+
+  it("il set di icone del manifest di un tema è il nome di un file, come nel mirror", () => {
+    const manifests = [
+      ...(appFixture.ThemeInfo as ThemeInfo[]),
+      ...(appFixture.ThemePayload as ThemePayload[]),
+    ].map((sample) => sample.manifest);
+    const sets = manifests.flatMap((manifest) => (manifest.icons === undefined ? [] : [manifest.icons]));
+    expect(sets.length, "il campione porta un set di icone").toBeGreaterThan(0);
+    for (const file of sets) {
+      expect(typeof file).toBe("string");
+      expect(themeIconsFileHolds(file), file).toBe(true);
+    }
+  });
+
+  it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {
+    const opened = appFixture.OpenedWith as OpenedWith[];
+    for (const { how } of opened) touchOpenHow(how);
+    expect(new Set(opened.map(({ how }) => how))).toEqual(
+      new Set<OpenHow>(["forwarded", "in_running", "new_process"]),
+    );
+    const editors = appFixture.ExternalEditor as ExternalEditor[];
+    for (const editor of editors) {
+      expect(typeof editor.installed).toBe("boolean");
+      expect(typeof editor.running).toBe("boolean");
+      for (const extension of editor.opens) expect(extension).toMatch(/^[a-z0-9]+$/);
+    }
+    expect(editors.map(({ installed, running }) => [installed, running])).toEqual(
+      expect.arrayContaining([[true, false], [false, false], [true, true]]),
+    );
   });
 
   it("il supporto serializzato conserva azioni, versioni future e campi sensibili tipizzati", () => {
@@ -1769,6 +2121,13 @@ describe("mirror TS↔Rust", () => {
     for (const e of fixture.KernelEvent as KernelEvent[]) {
       if (e.type === "job_done") expect(typeof e.id).toBe("string");
       if (e.type === "batch_ended") expect(typeof e.batch).toBe("string");
+    }
+    // Le revisioni del disegno sono `u64`: il campione Rust è oltre 2^53.
+    for (const type of ["DrawingOpen", "DrawingSync", "DrawingSynced", "DrawingGesture", "DrawingOutcome", "DrawingCommandRequest"]) {
+      for (const sample of fixture[type] as { revision: unknown }[]) {
+        expect(typeof sample.revision, `${type}.revision`).toBe("string");
+        expect(BigInt(sample.revision as string) > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true);
+      }
     }
   });
 });

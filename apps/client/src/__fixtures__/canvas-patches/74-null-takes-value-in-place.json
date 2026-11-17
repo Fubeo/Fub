@@ -1,0 +1,11 @@
+{
+  "name": "null-takes-value-in-place",
+  "description": "R7: un color null che prende un valore lo prende al posto del null: cambiano solo i quattro byte \"null\", che diventano \"\\\"3\\\"\"; il campo non va in fondo e il resto della scheda resta. L'annulla torna al modello di prima, dove color è assente: il campo va via del tutto, perché il modello non distingue un null da un campo che non c'è",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"color\":null,\"text\":\"uno\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","color":"3"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"color\":\"3\",\"text\":\"uno\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}"
+  }
+}

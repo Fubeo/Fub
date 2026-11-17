@@ -1,0 +1,10 @@
+{
+  "name": "null-kept-on-rewrite",
+  "description": "R7 cambiata da D-7 (c): un null su un campo noto vale assente e resta dov'è anche quando la scheda cambia; della scheda a cambiano solo i byte di x (0 → 10), il \"color\":null resta, la scheda b con \"label\":null non si tocca, e l'annulla ridà il testo di prima",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"color\":null,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"label\":null,\"text\":\"due\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":10,"y":0,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":10,\"y\":0,\"width\":100,\"height\":50,\"color\":null,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"label\":null,\"text\":\"due\"}],\"edges\":[]}"
+  }
+}

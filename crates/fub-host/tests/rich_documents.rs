@@ -782,3 +782,148 @@ fn un_paragrafo_chiuso_non_si_scrive_e_gli_altri_sì() {
     let reread = Projection::from_json(&text).unwrap();
     assert_eq!(texts(&reread), ["Chiuso", "Primo", "Secondo e cambiato"]);
 }
+
+// --- «Nuovo documento» (`document.create`) ---------------------------------
+
+fn create_document(
+    vault: &Vault,
+    args: serde_json::Value,
+    mode: fub_abi::command::InvokeMode,
+) -> Result<fub_abi::command::CommandOutcome, PluginError> {
+    vault
+        .host
+        .invoke_user_command(None, "document.create", args, mode)
+}
+
+fn navigated(outcome: &fub_abi::command::CommandOutcome) -> DocId {
+    match &outcome.effect {
+        fub_abi::command::CommandEffect::Navigate { doc } => doc.clone(),
+        other => panic!("un documento creato si apre, non {other:?}"),
+    }
+}
+
+#[test]
+fn un_documento_nuovo_nasce_vuoto_si_apre_e_si_salva() {
+    use fub_abi::command::{CommandEffect, InvokeMode};
+    use serde_json::json;
+
+    let vault = Vault::with_docx(&["Esiste."]);
+    let specs = vault.host.commands(None).unwrap();
+    let spec = specs
+        .iter()
+        .find(|spec| spec.id == "document.create")
+        .expect("il comando c'è con la feature `rich`");
+    assert_eq!(spec.title.as_literal(), Some("Nuovo documento"));
+    assert!(spec.params.iter().all(|param| !param.required));
+
+    // La prova a secco dice il nome e non scrive.
+    let plan = create_document(&vault, json!({}), InvokeMode::DryRun).unwrap();
+    let CommandEffect::Plan(plan) = &plan.effect else {
+        panic!("una prova a secco risponde con un piano: {:?}", plan.effect)
+    };
+    assert_eq!(plan.docs, [DocId::new("Documento senza titolo.docx")]);
+    assert!(!vault.root.join("Documento senza titolo.docx").exists());
+
+    let outcome = create_document(&vault, json!({}), InvokeMode::Apply).unwrap();
+    let doc = navigated(&outcome);
+    assert_eq!(doc, DocId::new("Documento senza titolo.docx"));
+    assert_eq!(
+        outcome.notify.as_ref().and_then(|text| text.as_literal()),
+        Some("Creato il documento «Documento senza titolo.docx»")
+    );
+
+    // Il codec lo apre, e la superficie lo può scrivere.
+    let bytes = std::fs::read(vault.root.join(doc.as_str())).unwrap();
+    let opened = fub_format_rich::open_unremembered(Codec::Docx, &bytes).unwrap();
+    assert_eq!(opened.readonly, None);
+    let (text, revision, format) = vault.host.read_document_with_format(None, &doc).unwrap();
+    assert_eq!(format.unwrap().descriptor.id, "docx");
+    assert_eq!(revision, Revision::of_bytes(&bytes));
+    let mut projection = Projection::from_json(&text).unwrap();
+    assert!(texts(&projection).iter().all(String::is_empty));
+
+    // Una modifica si salva sul file nato dal comando, e si rilegge.
+    projection.blocks = vec![paragraph("Prima riga.")];
+    let saved = vault
+        .host
+        .write_document(
+            None,
+            &doc,
+            &projection.to_json().unwrap(),
+            WriteBase::DescendsFrom(revision),
+        )
+        .unwrap();
+    let after = std::fs::read(vault.root.join(doc.as_str())).unwrap();
+    assert_eq!(saved, Revision::of_bytes(&after));
+    let reread = Projection::from_json(
+        &fub_format_rich::open_unremembered(Codec::Docx, &after)
+            .unwrap()
+            .projection,
+    )
+    .unwrap();
+    assert_eq!(texts(&reread), ["Prima riga."]);
+
+    // Il nome successivo è il primo libero; un nome dato va nella cartella.
+    let next = navigated(&create_document(&vault, json!({}), InvokeMode::Apply).unwrap());
+    assert_eq!(next, DocId::new("Documento senza titolo 1.docx"));
+    let placed = navigated(
+        &create_document(
+            &vault,
+            json!({ "name": "Relazione", "folder": "Scuola" }),
+            InvokeMode::Apply,
+        )
+        .unwrap(),
+    );
+    assert_eq!(placed, DocId::new("Scuola/Relazione.docx"));
+    assert!(vault.root.join("Scuola/Relazione.docx").is_file());
+}
+
+#[test]
+fn un_documento_nuovo_non_prende_il_posto_di_un_file() {
+    use fub_abi::command::InvokeMode;
+    use serde_json::json;
+
+    let vault = Vault::with_docx(&["Esiste."]);
+    let before = vault.on_disk();
+    for name in ["Lettera", "Lettera.docx"] {
+        for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+            let error = create_document(&vault, json!({ "name": name }), mode).unwrap_err();
+            assert!(matches!(error, PluginError::AlreadyExists(_)), "{error:?}");
+        }
+    }
+    assert_eq!(vault.on_disk(), before);
+    // Un `.odt` è un altro formato: «Nuovo documento» scrive soltanto Word.
+    let error =
+        create_document(&vault, json!({ "name": "Lettera.odt" }), InvokeMode::Apply).unwrap_err();
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+    assert!(!vault.root.join("Lettera.odt").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn un_documento_nuovo_in_una_cartella_in_sola_lettura_e_un_errore_tipato() {
+    use fub_abi::command::InvokeMode;
+    use std::os::unix::fs::PermissionsExt;
+
+    let vault = Vault::with_docx(&["Esiste."]);
+    let closed = vault.root.join("Chiusa");
+    std::fs::create_dir(&closed).unwrap();
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o555)).unwrap();
+    // Chi gira come root scrive anche lì: la prova non dice niente.
+    if std::fs::write(closed.join("sonda"), b"").is_ok() {
+        std::fs::remove_file(closed.join("sonda")).unwrap();
+        std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+    let result = create_document(
+        &vault,
+        serde_json::json!({ "name": "Bozza", "folder": "Chiusa" }),
+        InvokeMode::Apply,
+    );
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // Il kernel porta a `PermissionDenied` soltanto il file in sola lettura
+    // (PA T59); una cartella in cui non si crea resta la specie `Io` del
+    // contratto, e il comando la passa com'è, senza leggerne la prosa.
+    assert!(matches!(result, Err(PluginError::Io(_))), "{result:?}");
+    assert!(!closed.join("Bozza.docx").exists());
+}

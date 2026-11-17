@@ -6,75 +6,13 @@
 
 ## Grafo delle dipendenze
 
-```mermaid
-flowchart LR
-    ABI["fub-abi"]
-    KERNEL["fub-kernel"] --> ABI
-    SDK["fub-sdk"] --> ABI
-    TESTKIT["fub-testkit"] --> KERNEL
-    TESTKIT --> ABI
-    MARKDOWN["fub-format-markdown"] --> ABI
-    MARKDOWN --> SDK
-    CANVAS["fub-format-canvas"] --> ABI
-    CANVAS --> MARKDOWN
-    BASE["fub-format-base"] --> ABI
-    INK["fub-ink"]
-    SCENE["fub-scene"] --> INK
-    SVG["fub-format-svg"] --> ABI
-    SVG --> SCENE
-    IMPORTERS["fub-importers"] --> ABI
-    FEATURES["fub-features"] --> ABI
-    FEATURES -. "feature base" .-> BASE
-    FEATURES -. "feature draw" .-> SVG
-    HOST["fub-host"] --> KERNEL
-    HOST --> ABI
-    HOST --> FEATURES
-    HOST --> MARKDOWN
-    HOST --> CANVAS
-    HOST --> BASE
-    HOST -. "feature draw" .-> SVG
-    HOST --> IMPORTERS
-    WASM["fub-wasm-host"] --> ABI
-    WASM --> HOST
-    APP["fub-app"] --> HOST
-    APP --> WASM
-    APP --> LIVE["fub-live"]
-    CLI["fub-cli"] --> HOST
-    SERVICES["fub-services"] --> ABI
-    FRONTEND["frontend"] --> APP
-```
-
-La figura mostra il verso concettuale. I manifest sono la fonte esatta e i guard
-del repository verificano le eccezioni.
-
-Il codice copiato da WordCraft (`vendor/wordcraft/`) non dipende da Fub, e lo
-raggiungono soltanto due crate, ciascuno dietro la propria feature. La copia è
-l'upstream più le patch, in un workspace suo; la provenienza e i proprietari
-sono decisi nell'[ADR 0213](../decisions/0213-provenienza-dei-motori-esterni.md):
-
-```mermaid
-flowchart LR
-    HOST["fub-host"] -. "feature rich" .-> RICH["fub-format-rich"]
-    RICH --> ABI["fub-abi"]
-    RICH --> MARKDOWN["fub-format-markdown"]
-    RICH --> WDOCX["wordcraft-docx e formats"]
-    WDOCX --> WDOC["wordcraft-doc"]
-    HOST --> FEATURES["fub-features"]
-    FEATURES -. "feature proof" .-> PROOF["wordcraft-proof"]
-```
-
-Il codice copiato da GridCraft (`vendor/gridcraft/`) ha lo stesso statuto e un
-solo proprietario, `fub-format-xlsx`, che l'host accende con la feature
-`xlsx`; il ruolo del motore è deciso nell'[ADR
-0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md):
-
-```mermaid
-flowchart LR
-    HOST["fub-host"] -. "feature xlsx" .-> XLSX["fub-format-xlsx"]
-    XLSX --> ABI["fub-abi"]
-    XLSX --> GXLSX["gridcraft-xlsx"]
-    GXLSX --> GMODEL["gridcraft-model"]
-```
+Il grafo completo delle dipendenze del workspace Rust, confrontato con
+`cargo metadata` dal test `dependency_invariant`, è in
+[overview.md](overview.md#dipendenze-del-workspace-rust). I confini verso il
+codice copiato (`vendor/wordcraft/`, `vendor/gridcraft/`) sono decisi negli
+ADR [0213](../decisions/0213-provenienza-dei-motori-esterni.md) e
+[0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md) e riassunti
+in [map/repo.md](../map/repo.md#i-motori-di-terzi).
 
 ## Tabella dei componenti
 
@@ -87,14 +25,16 @@ flowchart LR
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
-| `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
-| `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
+| `fub-format-canvas` | JSON Canvas: riespone il modello del nucleo, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
+| `fub-canvas-core` | il nucleo della lavagna, puro: il modello di una `.canvas` con i campi ignoti conservati e la sua lettura; compila per `wasm32-unknown-unknown` ([formato](../reference/canvas-format.md)) | `fub-abi`, Markdown, qualunque altro crate del workspace, Tauri, Wasmtime, I/O |
+| `fub-format-base` | definizioni `.base`: modello YAML persistito, toppe mirate del testo, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
 | `fub-ink` | il nucleo dell'inchiostro, puro: campione del puntatore, ruoli (il palmo), curva della pressione, inclinazione, stabilizzatore e ciclo di vita del tratto, come riduttore di campioni in effetti; è la copia che fa fede del nucleo TypeScript di `apps/client/src/ink/` | DOM, Tauri, kernel, formati su disco, strumenti o interfaccia di un prodotto |
 | `apps/client/src/ink/` | la copia TypeScript del nucleo dell'inchiostro, per il percorso caldo, e l'adattatore del browser (`dom/`); il formato dei campioni e del pennello, la geometria dei campioni e gli strumenti: penna, evidenziatore e gomma, con il loro registro; vedi [Inchiostro e strumenti](ink-and-tools.md) | prodotti (FubDraw, shell, stato), formati su disco, Tauri, CodeMirror, globali del DOM nel nucleo |
 | `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md), e delle annotazioni PDF secondo il [loro formato](../reference/annotation-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
 | `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`): codec, provider a byte, proiezione modificabile senza perdite silenziose e copie esportate con la perdita misurata; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
 | `fub-format-xlsx` | cartelle di Excel: provider a byte, superficie `grid` della versione 2 sui byte con i valori del file senza ricalcolo all'apertura, i blocchi e gli avvisi di ciò che non mostra, l'innesto dei valori cambiati a livello di riga, la modalità a comandi sulla facciata di GridCraft e la riscrittura misurata con l'inventario del pacchetto | una riscrittura che perde qualcosa, ricalcolo di ciò che una modifica non raggiunge, host, storage, Tauri, superficie della shell |
+| `fub-format-craft` | i file delle app Craft (`.vectorcraft`, `.pcraft`, `.figcraft` e gli XMP di LightCraft): provider a byte con metadati, testo e file collegati, e il contratto `CraftPreview` dell'anteprima, secondo i [loro formati](../reference/craft-formats.md) | il motore delle app, ogni scrittura dei file, l'avvio delle app esterne, host, storage, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
@@ -113,6 +53,8 @@ flowchart LR
 - `fub-host` → Tauri;
 - `fub-scene` → qualunque crate del workspace tranne `fub-ink`;
 - `fub-ink` → qualunque crate del workspace, Tauri, Wasmtime o un prodotto;
+- `fub-canvas-core` → qualunque crate del workspace, Tauri, Wasmtime o una
+  dipendenza diversa da `serde`, `serde_json` e `thiserror`;
 - `fub-live` → `fub-abi`, `fub-kernel`, `fub-host` o Tauri;
 - qualunque crate diverso da `fub-wasm-host` → Wasmtime;
 - dipendenza normale → `fub-testkit`;
@@ -192,7 +134,7 @@ indipendenti.
 | desktop | `crates/fub-app/src/lib.rs` |
 | Markdown | `crates/fub-format-markdown/src/` |
 | foglio | `crates/fub-format-xlsx/src/`, `apps/client/src/editors/grid/` |
-| lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
+| lavagna e base | `crates/fub-canvas-core/src/`, `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
 | disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/`, `crates/fub-features/src/draw.rs`, `crates/fub-features/src/draw/` |
 | feature | `crates/fub-features/src/` |
 | codice di terzi vendorizzato | `vendor/` (provenienza in `UPSTREAM.md`) |
@@ -200,4 +142,5 @@ indipendenti.
 | seam frontend | `apps/client/src/host/` |
 | shell | `apps/client/src/main.ts`, `desktop-shell.ts`, `panels/`, `state/`, `ui/` |
 | finestra | `apps/client/src/shells/scrittoio/`, `kit/`, `moto/`, `theme/scrittoio/` |
+| telefono | `apps/client/mobile.html`, `apps/client/src/shells/mobile/`, `apps/client/src/shells/scrittoio/mobile/` ([la cornice del telefono](phone-frame.md)) |
 | test | `crates/*/tests/`, `apps/client/src/**/*.test.ts` |

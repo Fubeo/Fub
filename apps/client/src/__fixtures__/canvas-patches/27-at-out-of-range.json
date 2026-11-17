@@ -1,0 +1,10 @@
+{
+  "name": "at-out-of-range",
+  "description": "Una posizione oltre la fine delle schede: stale",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"b","type":"text","x":200,"y":0,"width":100,"height":50,"text":"due"},"at":5}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "stale"
+  }
+}

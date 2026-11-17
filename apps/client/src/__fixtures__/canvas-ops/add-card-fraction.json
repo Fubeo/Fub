@@ -1,0 +1,6 @@
+{
+  "about": "Una coordinata con una frazione vera (R2) in una scheda nuova è Invalid.",
+  "before": {},
+  "ops": [{ "op": "add_card", "node": { "type": "text", "x": 0.5, "y": 0, "width": 100, "height": 60, "text": "a" } }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

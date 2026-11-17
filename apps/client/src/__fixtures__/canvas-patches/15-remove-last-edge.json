@@ -1,0 +1,11 @@
+{
+  "name": "remove-last-edge",
+  "description": "Togliere l'unico arco lascia edges vuoto; l'annulla lo rimette",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\"}]}",
+  "patches": [{"kind":"remove-edge","before":{"id":"e1","fromNode":"a","toNode":"b"},"after":null}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\"}]}"
+  }
+}

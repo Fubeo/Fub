@@ -19,7 +19,7 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I tre diagrammi seguenti sono, insieme, la fotografia completa delle
+I cinque diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
 `[dev-dependencies]`. Un test confronta l'unione dei blocchi con
@@ -60,6 +60,7 @@ flowchart TD
     host --> abi
     host --> base
     host --> canvas
+    host --> componenti
     host --> features
     host --> importers
     host --> markdown
@@ -67,7 +68,6 @@ flowchart TD
     host --> svg
     host --> kernel
     cli --> abi
-    cli --> componenti
     cli --> host
     services --> abi
     base --> abi
@@ -86,7 +86,6 @@ flowchart TD
     markdown --> sdk
     svg --> abi
     svg --> scene
-    scene --> ink
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -160,7 +159,9 @@ vecchi: niente si ricalcola. Dal primo comando la sessione passa a
 `gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
 raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
 dopo averla misurata. Da `gridcraft-chart` l'adattatore prende anche il
-disegno in SVG dei grafici, che porta alla shell con le finestre. Il terzo blocco è il seguito dello stesso grafo, con
+disegno in SVG dei grafici, che porta alla shell con le finestre. Il motore dei fogli
+nasce alla prima apertura dietro un `Pigro` di `fub-motori`, che è anche il
+posto delle sue cache. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -172,6 +173,7 @@ flowchart LR
     abi["fub-abi"]
     markdown["fub-format-markdown"]
     sdk["fub-sdk"]
+    motori["fub-motori"]
     xlsx["fub-format-xlsx"]
     gcalc["gridcraft-calc"]
     gchart["gridcraft-chart"]
@@ -187,6 +189,7 @@ flowchart LR
     host --> xlsx
     xlsx --> abi
     xlsx --> markdown
+    xlsx --> motori
     xlsx -.-> sdk
     xlsx --> gcalc
     xlsx --> gchart
@@ -223,6 +226,50 @@ flowchart LR
     gxlsx --> gmodel
 ```
 
+Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
+Il quinto blocco è `fub-format-craft`, che legge in sola lettura i
+[file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
+contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
+`fub.craft` (feature `craft`). In fondo al blocco c'è il codec dei tratti,
+`fub-ink-codec`, fra i disegni e il nucleo dell'inchiostro.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: il nucleo della lavagna e i suoi clienti.
+
+    canvas["fub-format-canvas"]
+    canvascore["fub-canvas-core"]
+    canvasinkcodec["fub-ink-codec"]
+    canvaswasm["fub-canvas-wasm"]
+    features["fub-features"]
+
+    canvas --> canvascore
+    canvascore --> canvasinkcodec
+    canvaswasm --> canvascore
+    features --> canvascore
+    features -.-> canvas
+
+    %% E fub-format-craft.
+
+    abi["fub-abi"]
+    sdk["fub-sdk"]
+    host["fub-host"]
+    craft["fub-format-craft"]
+
+    host --> craft
+    craft --> abi
+    craft -.-> sdk
+
+    %% E il codec dei tratti, fra i disegni e il nucleo dell'inchiostro.
+
+    scene["fub-scene"]
+    ink["fub-ink"]
+
+    scene --> canvasinkcodec
+    canvasinkcodec --> ink
+```
+
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-app`, che adatta Tauri e IPC. `fub-host` compone provider e sessioni;
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
@@ -235,11 +282,37 @@ di eventi per sessione.
 niente, nemmeno da `fub-abi`, perché deve poterlo usare ogni prodotto che
 raccoglie inchiostro e, un domani, un componente `wasm32-wasip2`. Lo
 verificano `dependency_invariant.rs` e la compilazione per quel bersaglio nella
-CI. Le frecce in ingresso sono quella di `fub-scene`, che ne usa il campione
-del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
-dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
-deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
-nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+CI. Le frecce in ingresso sono quella di `fub-ink-codec`, che ne quantizza il
+campione del tratto, e quella di `fub-format-rich`, che ne scrive e legge
+l'InkML dell'inchiostro dei documenti; chi altro può dipenderne è un elenco
+chiuso, deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e
+allargato nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+`fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`, con
+le penne e la tavolozza copiate da quelle della GUI (`pens.rs`): sta
+fuori da `fub-scene` perché lo usa anche il nucleo della lavagna, che non deve
+portarsi dietro il lettore XML dei disegni, e dipende soltanto da `fub-ink`.
+
+`fub-canvas-core`, il nucleo della lavagna, ha una sola freccia verso un altro
+crate del workspace: `fub-ink-codec`, con cui legge e controlla l'inchiostro
+`fub:ink` delle schede, e che porta con sé soltanto `fub-ink`. Per il resto
+dipende da `serde`, `serde_json` e `thiserror`, e non vede `fub-abi` né il
+Markdown, perché lo carica anche la WebView come modulo
+`wasm32-unknown-unknown`. Ha il modello di una `.canvas`, la sua lettura e
+quella dei suoi livelli d'inchiostro; le sue frecce in ingresso sono quella di
+`fub-format-canvas`, che lo riespone con la stessa API, quella di
+`fub-features`, facoltativa dietro la feature `lavagna`, per i comandi
+`canvas.apply` e `canvas.create`, e quella di `fub-canvas-wasm`, la facciata
+che la WebView carica come `.wasm`. Chi altro può dipenderne è un elenco
+chiuso (`dependency_invariant.rs`), e il giro completo di `scripts/check.sh`
+lo compila per quel bersaglio. Le regole stanno nel [formato della
+lavagna](../reference/canvas-format.md).
+
+`fub-canvas-wasm` mette il nucleo dietro un'interfaccia C scritta a mano, senza
+librerie di collegamento: dipende solo dal nucleo, da `serde` e da
+`serde_json`, e nessun crate dipende da lui. Il manifesto resta `rlib`; il
+modulo si fa con `cargo rustc --crate-type cdylib`. Le funzioni e la memoria
+stanno in [Operazioni sulla
+lavagna](../reference/canvas-operations.md#webassembly).
 
 `fub-componenti`, il risolutore dei componenti, non ha frecce in uscita:
 dipende soltanto da `serde`, non vede `fub-abi`, e dice in un posto solo che
@@ -247,12 +320,44 @@ cosa è acceso, chi lo richiede e che cosa non serve più. Le frecce in
 ingresso sono due. Una viene da `fub-features`, che costruisce la mappa dei
 componenti di Fub (`src/componenti.rs`): una riga per componente, dietro la sua
 cargo feature, da cui `fub-host` prende anche `uses`, `kind`, `group` e `ui` dei
-manifest. L'altra viene da `fub-cli`, che per `fub-cli componenti` e gli
-strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
-`Errore`, `Effetto`), che `fub-host` non riesporta.
+manifest. L'altra viene da `fub-host`, che tiene lo stato dei componenti di
+ogni vault (`src/componenti.rs`: `plugins.disabled` più le chiavi
+`components.*`), lo risolve con il risolutore e riesporta i suoi tipi
+(`Stato`, `Perche`, `Errore`, `Effetto`): `fub-cli componenti`, gli strumenti
+`fub_components*` e l'app passano tutti dall'host.
+
+`fub-motori`, lo strato dei motori, non ha frecce verso altri crate di Fub:
+dipende soltanto da `rayon`, `thiserror`, `tracing` e, su Linux con la glibc,
+`libc`. Dà la costruzione dei motori alla prima richiesta, il loro gruppo di
+thread, il budget comune delle cache e il registro dove ogni adattatore iscrive
+il suo motore, e il catalogo che fa dei comandi di un motore i comandi di Fub.
+Non nomina nessun motore: un adattatore che lo usa dipende da lui, mai il
+contrario. Le regole stanno in [Lo strato dei motori](motori.md). Le frecce in
+ingresso: `fub-format-xlsx`, che iscrive il motore dei fogli e ne importa il
+catalogo dei comandi; `fub-format-rich`, che iscrive il motore dei documenti e
+ne tiene le prove a vuoto nel budget; `fub-features`, dietro la feature
+`proof`, che iscrive nel budget i dizionari del correttore letti dal disco; e
+`fub-host`, che alla chiusura dell'ultimo vault svuota quelle cache e
+restituisce la memoria al sistema.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: lo strato dei motori, senza frecce verso Fub, e
+    %% chi lo usa.
+
+    motori["fub-motori"]
+    rich["fub-format-rich"]
+    features["fub-features"]
+    host["fub-host"]
+
+    rich --> motori
+    features --> motori
+    host --> motori
+```
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
-`fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
+`fub-ink-codec`, di cui riespone i tipi: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
 deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
 `fub-format-svg`, il provider del [formato della
@@ -268,6 +373,10 @@ facoltativo, come `features --> base` per le basi. Con la stessa feature
 `fub-features` usa `fub-scene` per derivare dal disegno le tavole o la
 selezione da esportare, e per leggere le annotazioni dei PDF, da esportare nel
 PDF annotato e nel PDF redatto: anche `features --> scene` è facoltativo.
+
+L'ultimo pezzo del grafo, l'adattatore del motore del disegno `fub-disegno` con
+i crate di VectorCraft, sta nella pagina [Il disegno sul motore](disegno.md):
+il test legge i blocchi marcati di tutte e due le pagine come un grafo solo.
 
 ## Flusso di un comando
 

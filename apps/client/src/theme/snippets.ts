@@ -3,7 +3,7 @@ import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "../ui/lifetime";
 import { sanitizeUserCss } from "../ui/sanitize-css";
-import { mountUserSnippets, themeProfile } from "./loader";
+import { mountUserSnippets, themeProfile, unmount } from "./loader";
 
 export const CSS_SNIPPETS_KEY = "appearance.css-snippets";
 export const DEFAULT_CSS_SNIPPETS = '{"version":1,"snippets":[]}';
@@ -123,7 +123,7 @@ export function cancelCssSnippetsPreview(): void {
       id: "(stored)", enabled: false, trust: "local-user",
       error: reason instanceof Error ? reason.message : String(reason),
     }];
-    document.head.querySelector('style[data-fub="snippets"]')?.remove();
+    unmount("snippets");
   }
 }
 
@@ -170,7 +170,7 @@ export function mountCssSnippets(lifetime: Lifetime): void {
     epoch++;
     preview = null;
     statuses = [];
-    document.head.querySelector('style[data-fub="snippets"]')?.remove();
+    unmount("snippets");
   });
   void reread();
 }

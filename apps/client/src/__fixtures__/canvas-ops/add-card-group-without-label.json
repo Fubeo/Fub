@@ -1,0 +1,13 @@
+{
+  "about": "Un gruppo senza etichetta nasce con l'etichetta vuota, come la GUI: `type` da solo basta.",
+  "before": {},
+  "ops": [{ "op": "add_card", "id": "g", "type": "group" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [{ "id": "g", "type": "group", "x": 0, "y": 0, "width": 480, "height": 320, "label": "" }],
+      "edges": []
+    },
+    "created": ["g"]
+  }
+}

@@ -1006,30 +1006,46 @@ fn shadowed_xlink<'e, 'a>(
 /// Il contenuto attivo di un elemento (S005): il nome del motivo per ognuno.
 fn active_content(element: &Element<'_>) -> Vec<String> {
     let mut found = Vec::new();
-    if element.local == "script" && matches!(element.ns, NS_SVG | NS_XHTML) {
+    if is_script(element) {
         found.push("script".to_owned());
     }
-    // Un'animazione che porta `href` su `javascript:` vale l'`href` stesso.
-    let animates_href = element.ns == NS_SVG
-        && matches!(element.local, "set" | "animate")
-        && element
-            .value(NS_NONE, "attributeName")
-            .is_some_and(|name| matches!(trim(name), "href" | "xlink:href"));
     for attr in &element.attrs {
-        let handler = attr.ns == NS_NONE
-            && attr.local.len() > 2
-            && attr.local.as_bytes()[..2].eq_ignore_ascii_case(b"on");
-        let javascript = match (attr.ns, attr.local) {
-            (NS_NONE | NS_XLINK, "href") => is_javascript(&attr.value),
-            (NS_NONE, "to" | "from" | "by") if animates_href => is_javascript(&attr.value),
-            (NS_NONE, "values") if animates_href => attr.value.split(';').any(is_javascript),
-            _ => false,
-        };
-        if handler || javascript {
+        if is_active_attr(element, attr) {
             found.push(attr.name.to_owned());
         }
     }
     found
+}
+
+/// Vero se `element` è uno `script`, SVG o XHTML (S005). La stessa regola
+/// toglie gli script dall'SVG pulito per il web.
+pub(crate) fn is_script(element: &Element<'_>) -> bool {
+    element.local == "script" && matches!(element.ns, NS_SVG | NS_XHTML)
+}
+
+/// Vero se `attr` di `element` è contenuto attivo (S005): un gestore `on*`,
+/// un `href` su `javascript:`, o un'animazione che porta `href` su
+/// `javascript:`, che vale l'`href` stesso.
+pub(crate) fn is_active_attr(element: &Element<'_>, attr: &crate::xml::Attr<'_>) -> bool {
+    let handler = attr.ns == NS_NONE
+        && attr.local.len() > 2
+        && attr.local.as_bytes()[..2].eq_ignore_ascii_case(b"on");
+    if handler {
+        return true;
+    }
+    let animates_href = || {
+        element.ns == NS_SVG
+            && matches!(element.local, "set" | "animate")
+            && element
+                .value(NS_NONE, "attributeName")
+                .is_some_and(|name| matches!(trim(name), "href" | "xlink:href"))
+    };
+    match (attr.ns, attr.local) {
+        (NS_NONE | NS_XLINK, "href") => is_javascript(&attr.value),
+        (NS_NONE, "to" | "from" | "by") => animates_href() && is_javascript(&attr.value),
+        (NS_NONE, "values") => animates_href() && attr.value.split(';').any(is_javascript),
+        _ => false,
+    }
 }
 
 /// Legge l'indice del documento, con S001, S005, S006 e S016. `boards` sono

@@ -1,0 +1,12 @@
+{
+  "about": "Un id dato che c'è già, anche come arco, è DuplicateId: l'operazione non sovrascrive.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b" }]
+  },
+  "ops": [{ "op": "add_card", "node": { "id": "e1", "type": "text", "x": 0, "y": 100, "width": 100, "height": 60, "text": "c" } }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "e1" } }
+}

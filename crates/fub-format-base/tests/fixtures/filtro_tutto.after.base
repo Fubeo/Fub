@@ -1,0 +1,16 @@
+# Tutte le note, senza filtro.
+version: 1
+views:
+  - name: Tutte
+    type: list
+    filters:   # nessun filtro, per ora
+      or:
+      - condition:
+          property: tipo
+          op: is
+          value: idea
+      - condition:
+          property: tipo
+          op: is
+          value: nota
+    limit: 20

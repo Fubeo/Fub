@@ -1,0 +1,10 @@
+{
+  "name": "invalid-last-patch",
+  "description": "Una toppa valida e poi una che rende la lavagna non valida (larghezza 0): invalid, e la prima non resta",
+  "before": "{\"nodes\":[{\"id\":\"n1\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":120,\"text\":\"vedi [[Nota]] e #tag\"},{\"id\":\"n2\",\"type\":\"file\",\"x\":300,\"y\":0,\"width\":200,\"height\":120,\"file\":\"foto.png\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"n1\",\"toNode\":\"n2\",\"toEnd\":\"arrow\",\"label\":\"usa\"}],\"xFuture\":{\"nested\":[1,2]}}",
+  "patches": [{"kind":"upsert-edge","before":{"id":"e1","fromNode":"n1","toNode":"n2","toEnd":"arrow","label":"usa"},"after":{"id":"e1","fromNode":"n1","toNode":"n2","toEnd":"arrow","label":"nuova"}},{"kind":"upsert-node","before":{"id":"n1","type":"text","x":0,"y":0,"width":200,"height":120,"text":"vedi [[Nota]] e #tag"},"after":{"id":"n1","type":"text","x":0,"y":0,"width":0,"height":120,"text":"vedi [[Nota]] e #tag"}}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "invalid"
+  }
+}

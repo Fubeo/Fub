@@ -1,0 +1,9 @@
+{
+  "name": "not-blank-u0085",
+  "description": "R1: U+0085 non è vuoto, e non è JSON",
+  "source": "\u0085",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

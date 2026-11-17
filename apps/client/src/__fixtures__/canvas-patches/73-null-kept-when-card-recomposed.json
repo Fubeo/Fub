@@ -1,0 +1,11 @@
+{
+  "name": "null-kept-when-card-recomposed",
+  "description": "R7: un gruppo perde backgroundStyle e si ricompone; i null di color, label, background e subpath (che su un gruppo non vale) restano al loro posto e con i loro byte; vanno via solo \",\\\"backgroundStyle\\\":\\\"cover\\\"\". L'annulla rimette backgroundStyle come ogni campo che arriva, in fondo alla scheda, e i null restano",
+  "before": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":300,\"height\":200,\"color\":null,\"label\":null,\"background\":null,\"backgroundStyle\":\"cover\",\"subpath\":null}]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"g","type":"group","x":0,"y":0,"width":300,"height":200,"backgroundStyle":"cover"},"after":{"id":"g","type":"group","x":0,"y":0,"width":300,"height":200}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":300,\"height\":200,\"color\":null,\"label\":null,\"background\":null,\"subpath\":null}]}",
+    "undo": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":300,\"height\":200,\"color\":null,\"label\":null,\"background\":null,\"subpath\":null,\"backgroundStyle\":\"cover\"}]}"
+  }
+}

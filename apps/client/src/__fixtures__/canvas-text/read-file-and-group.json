@@ -1,0 +1,30 @@
+{
+  "name": "read-file-and-group",
+  "description": "Su una scheda di file, di link o su un gruppo il campo si conserva e si ignora.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"f1\", \"type\": \"file\", \"file\": \"Nota.md\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"size\": \"l\" } },\n    { \"id\": \"w1\", \"type\": \"link\", \"url\": \"https://example.org\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"align\": \"center\" } },\n    { \"id\": \"g1\", \"type\": \"group\", \"label\": \"gruppo\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"size\": \"xl\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "f1",
+        "state": "kept",
+        "reason": "node",
+        "size": "m",
+        "align": "start"
+      },
+      {
+        "node": "w1",
+        "state": "kept",
+        "reason": "node",
+        "size": "m",
+        "align": "start"
+      },
+      {
+        "node": "g1",
+        "state": "kept",
+        "reason": "node",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "edge-label-change",
+  "description": "L'etichetta di un arco cambia al suo posto, il campo sconosciuto resta",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\",\"label\":\"a\",\"fub:w\":2}]}",
+  "patches": [{"kind":"upsert-edge","before":{"id":"e1","fromNode":"a","toNode":"b","label":"a","fub:w":2},"after":{"id":"e1","fromNode":"a","toNode":"b","label":"b","fub:w":2}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\",\"label\":\"b\",\"fub:w\":2}]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\",\"label\":\"a\",\"fub:w\":2}]}"
+  }
+}

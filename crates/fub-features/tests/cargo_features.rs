@@ -12,7 +12,7 @@
 //! Le cargo feature non sono più solo i moduli dell'inventario: ogni riga di
 //! `fub_features::componenti` che sta dietro una feature lo dice
 //! (`cargo_feature`), e le feature dei componenti che non sono moduli di questo
-//! crate (`rich`, `xlsx`, i due motori, `http-client`) sono marcatori. Il
+//! crate (`rich`, `xlsx`, i due motori, `http-client`, `craft`) sono marcatori. Il
 //! confronto si fa fra le righe e `[features]`, nei due versi.
 //!
 //! # Il guardiano di `fub-host`
@@ -132,13 +132,22 @@ fn every_row_of_the_inventory_has_the_its_cargo_feature() {
 /// È l'unico elenco del genere, e il perché è obbligatorio: senza, una
 /// feature fuori dal default è una dimenticanza che non si distingue da una
 /// scelta.
-const OUT_OF_DEFAULT: &[(&str, bool, &str)] = &[(
-    "draw",
-    cfg!(feature = "draw"),
-    "l'export dei disegni va con il formato dei disegni, che in `fub-host` sta \
-     dietro la feature `draw`, fuori dal default fino a che FubDraw non entra \
-     nell'app",
-)];
+const OUT_OF_DEFAULT: &[(&str, bool, &str)] = &[
+    (
+        "draw",
+        cfg!(feature = "draw"),
+        "l'export dei disegni va con il formato dei disegni, che in `fub-host` sta \
+         dietro la feature `draw`, fuori dal default fino a che FubDraw non entra \
+         nell'app",
+    ),
+    (
+        "engine-drawing",
+        cfg!(feature = "engine-drawing"),
+        "la riga del Motore del disegno accende `draw`, e sta fuori per la stessa \
+         ragione: il motore lo porta `fub-host/engine-drawing`, nel default \
+         dell'host",
+    ),
+];
 
 /// Ogni cargo feature è accesa di default, tranne quelle dichiarate qui sopra.
 ///
@@ -184,7 +193,7 @@ const SENZA_FEATURE: &[(&str, &str)] = &[
     ),
     ("fub.markdown", "il nucleo: le note sono sempre compilate"),
     ("fub.importers", "l'importazione è sempre montata dall'host"),
-    ("fub.lavagna", "la lavagna è sempre compilata nel client"),
+    ("fub.pdf", "il visore dei PDF è sempre compilato nel client"),
     (
         "fub.penna",
         "l'inchiostro è una libreria dei formati, sempre compilata",
@@ -335,7 +344,9 @@ fn fub_host_inoltra_ogni_feature_componente() {
     feature = "xlsx",
     feature = "engine-documents",
     feature = "engine-sheets",
-    feature = "http-client"
+    feature = "http-client",
+    feature = "lavagna",
+    feature = "craft",
 ))]
 fn with_all_the_feature_the_two_lists_coincide() {
     // Una feature fuori dal default c'è nella mappa solo se questa build l'ha

@@ -1,29 +1,314 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
-import { t, onLanguage, type Key } from "../../i18n/strings";
-import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
-import { writeClipboardText } from "../../platform/clipboard";
-import { lineFeeds, tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { t, onLanguage, plural, type Key } from "../../i18n/strings";
+import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
+import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
+import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { idleSchedule } from "../../ink/dom/idle";
+import type { InkPointerType } from "../../ink/input/pointer";
+import { PenQuiet, type Schedule } from "../../ink/quiet";
+import type { InkSample } from "../../ink/sample";
+import { ERASER } from "../../ink/tools/eraser";
+import { EraseSweep, type Spot } from "../../ink/tools/sweep";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
+import { searchedName } from "../../rules/searched-name";
+import { focusableElements, focusZone } from "../../ui/a11y";
+import { mediaKindOfId } from "../media/media-types";
+import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
+import { parseTsv } from "../core/tsv";
+import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
+import { parsePageRanges } from "./page-ranges";
+import type { PdfPagesReader } from "./cards/pdf";
+import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
-  applyCanvasPatches,
-  commitCanvasPatches,
-  inverseCanvasPatches,
-  isCanvasOperation,
+  cardKindOf,
+  liveCardIds,
+  updateLiveCards,
+  type CardContext,
+  type CardEditorContext,
+  type CardCellBox,
+  type CardEditorPort,
+  type CardEditorState,
+  type CardKind,
+  type CardMode,
+  type CardPageBox,
+  type CardQuiet,
+  type CardRegistry,
+  type CardRenderer,
+  type CardSize,
+  type CardSnapshots,
+  type CardTextEditor,
+  type CardView,
+  type CardWriting,
+  type Rect,
+} from "./cards";
+import { textCardName } from "./card-name";
+import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
+import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
+import {
+  cutInk,
+  cutPath,
+  cutStrokePatches,
+  erasableInk,
+  InkEraseSource,
+  inkKey,
+  pieceRecords,
+  type CutPiece,
+  type ErasableInk,
+  type InkEraserMode,
+  type StrokeCut,
+} from "./ink-erase";
+import {
+  CANVAS_ALIGN,
+  CANVAS_LAYOUTS,
+  CANVAS_COLORS,
+  CANVAS_TIPS,
+  CANVAS_TOOL_KEYS,
+  buildCanvasCommands,
+  commandForKey,
+  commandHint,
+  isCommandSearchKey,
+  menuChord,
+  toolOfCommand,
+  type CanvasAlign,
+  type CanvasColorId,
+  type CanvasCommand,
+  type CanvasCommandArgs,
+  type CanvasCommandBehaviour,
+  type CanvasLayout,
+  type CanvasNudge,
+  type CanvasTip,
+  type CanvasToolId,
+} from "./chrome/commands";
+import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, saveFingerWrites, type CanvasRail } from "./chrome/rail";
+import { openCanvasRadial, rememberRecent } from "./chrome/radial";
+import type { Radial, RadialPointer } from "../spatial/tools/radial";
+import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
+import { checkProblemText, clipboardText, codeTextProblem, problemPhrase, readCodeList, summaryText, warningsText } from "./code-text";
+import { asCopies, asUpdates, codeClashes, placedAt, type CodeClashes } from "./code-paste";
+import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
+import { CanvasJumps } from "./jumps";
+import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
+import { createCanvasFindBar, type CanvasFindBar } from "./chrome/find-bar";
+import {
+  CANVAS_CLIPBOARD_TYPE,
+  CANVAS_PASTE_STEP,
+  cardsMarkdown,
+  clipboardJson,
+  copiedSelection,
+  joinedInkPatches,
+  pastedInkOps,
+  placedSelection,
+  readCanvasClipboard,
+  type CanvasClipboard,
+} from "./clipboard";
+import { createCanvasOptions, type CanvasChosenText, type CanvasOptions } from "./chrome/options";
+import { DEFAULT_TEXT_STYLE, isTextAlign, isTextSize, textStyle, withTextStyle, type TextStyle } from "./text-style";
+import { createCanvasWorkspace, isBareKey, type CanvasWorkspaceControl } from "./chrome/workspace";
+import {
+  createCanvasSelectionBar,
+  selectionBarWanted,
+  type CanvasSelectionBar,
+  type SelectionBarRestyle,
+  type SelectionBarStrokes,
+} from "./chrome/selection-bar";
+import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
+import { cardsTouched, edgesBetween, marqueeBox, marqueeMoved, sameIds, unionIds } from "./marquee";
+import { createOptionsBar, type OptionItem, type OptionsBar } from "../../kit/options-bar";
+import { rovingToolbar, type RovingToolbar } from "../../kit/toolbar-keys";
+import { watchWholeLines } from "./whole-lines";
+import {
+  canvasStatusItems,
+  dropFolderOf,
+  readAttachmentFolder,
+  statusSignature,
+  type CanvasStatusPort,
+} from "./chrome/status";
+import type { SurfaceStatusItem } from "../core/registry";
+import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups, type CardCitations } from "./card-head";
+import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
+import { saveStateKey } from "../../state/saving";
+import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
+import { inkFitMode, validAspect } from "./ink-fit";
+import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type InkLayerStroke } from "./ink-layer";
+import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
+import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
+import { cutInkStroke, fadeInkStroke, fadeInkStrokes, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
+// I colori delle schede e dei fili (T47).
+import {
+  JSON_CANVAS_COLORS,
+  NOTE_COLORS,
+  colorChoiceOf,
+  colorLook,
+  colorMenuLabel,
+  colorValueOf,
+  writeColor,
+  type CanvasColorChoice,
+} from "./colors";
+import { createColorPicker, openDialog, openPopover, textField, type PopoverHandle } from "../../kit";
+import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
+import { cardTarget } from "./sources";
+import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
+import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
+import { noteHeadingOf } from "./cards/note";
+import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
+import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
+import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
+import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
+import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
+import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
+import {
+  DEFAULT_INK_CHOICE,
+  dryStroke,
+  inkLook,
+  inkStrokeTool,
+  type InkPenChoice,
+  foreignInkLayer,
+  INK_KEY,
+  inkLayerStates,
+  strokeRecord,
+  toDry,
+  type DrawableStroke,
+  type InkLayerRef,
+  type InkLayerState,
+  type InkStrokeRecord,
+} from "./ink-record";
+import {
+  moveStrokesOp,
   newNodeId,
-  removeEdgePatch,
-  removeNodePatch,
-  upsertEdgePatch,
+  restyleStrokesOp,
+  sameLayer,
   upsertNodePatch,
   type CanvasOperation,
   type CanvasPatch,
+  type InkPatch,
 } from "./operation";
-import { parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
-import { canvasNodeAt } from "./source-edit";
-import { byteToCharIndex } from "../../rules/offsets";
+import { edgeEnd, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
+import {
+  EDGE_SIDES,
+  edgeAt,
+  edgePathData,
+  insideBox,
+  linkedCardPlacement,
+  nearestSides,
+  sidePoint,
+  type EdgePoint,
+  type EdgeSide,
+  type PlacedEdge,
+} from "./edges";
+import { CanvasViewRecorder, type CanvasView, type CanvasViewMemory, type CanvasViewSnapshot } from "./view-state";
+import { GUIDE_SCREEN_PX, snapGuides, type GuideRect, type GuideResult, type GuideSegment, type GuideSide } from "./guides";
+import {
+  CanvasCoreError,
+  canvasCoreReady,
+  changedModel,
+  openCoreNow,
+  type CanvasCheckReport,
+  type CanvasCommitted,
+  type CanvasCompiled,
+  type CanvasCore,
+  type CanvasCoreErrorCode,
+  type CanvasInkLayer,
+  type CanvasIntentOp,
+  type CanvasSourceEdit,
+} from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
+/** I bottoni di allineamento e di distribuzione: `align` coi sei lati, `distribute` con i due assi. */
+type CanvasArrange = CanvasAlign | "distribute-x" | "distribute-y";
+/** I pixel dello schermo fra i tratti scelti col Lazo e la loro cornice (T86). */
+const LASSO_FRAME_PAD = 6;
+/**
+ * I punti della griglia si vedono ogni tanti passi di `CANVAS_SNAP` (T95: ogni
+ * 32 unità): l'aggancio resta di 8, lo sfondo non si riempie di punti.
+ */
+export const CANVAS_GRID_DOT_STEPS = 4;
+/** Sotto questi pixel fra due punti, sullo schermo, la griglia non si disegna (T71): sotto il 50%. */
+export const CANVAS_GRID_MIN_PX = 16;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
+/** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
+export const CARD_PAUSE_MS = 250;
+/** Oltre questo numero di schede nuove, «Spargi le pagine» (T72) chiede conferma. */
+export const SPREAD_CONFIRM_ABOVE = 200;
+/** Quanto si aspetta dopo l'ultimo scatto della rotella prima di dire finito il gesto (A-7). */
+export const WHEEL_SETTLE_MS = 150;
+/** Una riga della rotella in pixel: un valore di partenza, come nella lavagna del grafo. */
+const WHEEL_LINE_PX = 16;
+
+/**
+ * Il delta della rotella in pixel, qualunque unità abbia scelto il browser:
+ * `deltaMode` 1 conta righe, 2 pagine, e la pagina è la misura della vista.
+ */
+function wheelPixels(delta: number, deltaMode: number, page: number): number {
+  if (deltaMode === 1) return delta * WHEEL_LINE_PX;
+  if (deltaMode === 2) return delta * page;
+  return delta;
+}
+
+/** I tasti che una scheda scelta e non attiva può prendere (`CardView.key`, T14). */
+const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "End"]);
+
+/**
+ * Le frecce che con Alt vanno alla scheda più vicina (T61, M1). Alt+← e Alt+→
+ * solo col fuoco su una scheda: altrove sono Indietro e Avanti dello
+ * Scrittoio (`CARD_ONLY_NEAREST_KEYS`, DECISIONS.md, T56 e T61).
+ */
+const NEAREST_CARD_KEYS: ReadonlyMap<string, CardDirection> = new Map([
+  ["ArrowUp", "up"],
+  ["ArrowDown", "down"],
+  ["ArrowLeft", "left"],
+  ["ArrowRight", "right"],
+]);
+
+/** Le frecce di `NEAREST_CARD_KEYS` che la lavagna senza una scheda a fuoco lascia alla shell. */
+const CARD_ONLY_NEAREST_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight"]);
+
+/**
+ * Quante schede nomina un passo del giro dei nomi (T61), fra un momento libero
+ * del thread e l'altro. Misurato in Vitest (Node, non la WebView) sul PC di
+ * sviluppo, con 2000 schede, 2000 fili e 50 gruppi: 7–9 ms per tutti i nomi
+ * più 2–4 ms per la lettura (`boardReading`, una volta per documento), cioè
+ * circa 1 ms ogni 250 nomi.
+ */
+const LABEL_BATCH = 250;
+
+/** Le specie in cui il doppio clic entra, come Invio (T14). */
+const DOUBLE_CLICK_ENTERS: ReadonlySet<CardKind> = new Set(["note", "document", "sheet"]);
+/** Che cosa mostra una scheda di file, per il gesto di Invio e del doppio clic (T93). */
+type FileShowing = "missing" | "loading" | "unreadable" | "shown";
+/** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
+const MAX_CARD_TEXT_BYTES = 1_048_576;
+/** Quanto si aspetta la misura di un'immagine portata dentro, prima di usare quella di serie. */
+export const MEASURE_IMAGE_TIMEOUT_MS = 3_000;
+/** Quante immagini si misurano insieme quando ne arrivano tante. */
+const MEASURE_IMAGE_PARALLEL = 4;
+/**
+ * Oltre questi file trascinati i riquadri tratteggiati non si calcolano: la
+ * cornice del gruppo li direbbe, ma una compilazione di migliaia di schede a
+ * ogni entrata non vale un'anteprima.
+ */
+const MAX_DROP_GHOSTS = 1000;
+/**
+ * I punti al più del cammino di un `erase_along`: `MAX_ERASE_POINTS` del
+ * nucleo (`crates/fub-canvas-core/src/ops/erase.rs`), quanti campioni ha un
+ * tratto. Un cammino più lungo va in più operazioni.
+ */
+const ERASE_ALONG_MAX_POINTS = 10_000;
+/**
+ * Il lavoro che la tela concede a un `erase_along`: metà di `MAX_ERASE_WORK`
+ * del nucleo (50 000 000 distanze), perché la stima della tela
+ * (`eraseAlongSegments`) non sa i segmenti che il nucleo trova vicini.
+ */
+const ERASE_ALONG_WORK = 25_000_000;
+/**
+ * Le schede al più di una `move` con `contents`, quelle date più quelle dei
+ * gruppi: `MAX_MOVED` del nucleo (`crates/fub-canvas-core/src/ops/adjust.rs`).
+ */
+const MOVE_CONTENTS_MAX = 1_000;
+const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
 
@@ -39,33 +324,484 @@ export interface CanvasMediaPort {
 }
 /** External bytes become cards only after deposit returns; no implicit file writes. */
 export interface CanvasAttachmentPort {
-  /** Receipts contain vault-relative paths after collision-safe, explicit deposit. */
-  readonly deposit: (files: readonly File[], documentId: string) => Promise<readonly string[]>;
+  /** Receipts contain vault-relative paths after collision-safe, explicit deposit.
+   *  `cards` sono le schede che questo gesto farà nascere coi percorsi tornati:
+   *  un gesto dopo (la notifica «Fanne una copia», T32b) le ripunta per id. */
+  readonly deposit: (files: readonly File[], documentId: string, cards: CanvasDepositCards) => Promise<readonly string[]>;
   /** Resolve only existing trusted vault paths/folders, never local filesystem bytes. */
   readonly resolvePaths?: (data: DataTransfer, documentId: string) => Promise<readonly string[]>;
   /** Enumerate direct files and OS folder entries once; every result passes through deposit. */
   readonly expandFiles?: (data: DataTransfer) => Promise<readonly File[]>;
 }
 
+/** Una scheda da ripuntare: mostrava `from`, mostrerà `to`. */
+export interface CanvasRepoint {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
+ * Le schede nate da un deposito dal computer (T32b). La lavagna le ricorda per
+ * id, non per percorso: una scheda tolta dopo non si tocca, una spostata si
+ * ripunta lo stesso, e una che mostra già un altro file resta com'è. Una
+ * scheda che il vault aveva già sulla lavagna, con lo stesso file, non è di
+ * questo gesto e non cambia.
+ */
+export interface CanvasDepositCards {
+  /** Falso dopo che la lavagna è stata chiusa o è diventata di sola lettura:
+   *  l'azione di una notifica rimasta a galla non fa più niente. */
+  readonly live: () => boolean;
+  /** Ripunta le schede del gesto in un commit solo (un Ctrl+Z torna ai file di
+   *  prima) e dice quante ne ha cambiate. */
+  readonly repoint: (changes: readonly CanvasRepoint[]) => number;
+}
+
+/**
+ * Dove la tela apre le sue lavagne: per difetto il nucleo condiviso della
+ * shell (`wasm/core.ts`). `openNow` apre subito, o dà `null` se il nucleo non
+ * è carico; `ready` lo carica.
+ */
+export interface CanvasCorePort {
+  readonly openNow: (text: string) => CanvasCore | null;
+  readonly ready: () => Promise<void>;
+}
+
+const SHARED_CORE: CanvasCorePort = { openNow: openCoreNow, ready: canvasCoreReady };
+
+/**
+ * Dove la lavagna ricorda l'interruttore «Scrivi col mouse»: `read` dà lo
+ * stato con cui una lavagna che si apre comincia (spento, salvo «Ricorda se
+ * scrivi col mouse» acceso); `save` ricorda una scelta fatta col pulsante.
+ * Per difetto lo stato di vista di questo computer (`preferences.ts`).
+ */
+export interface CanvasInkMouseMemory {
+  readonly read: () => Promise<boolean>;
+  readonly save: (on: boolean) => void;
+}
+
+const SHARED_INK_MOUSE: CanvasInkMouseMemory = { read: readInkMouse, save: saveInkMouse };
+
+/**
+ * Dove la lavagna ricorda la penna scelta nel menu (A19): `read` dà quella
+ * con cui una lavagna che si apre comincia, `save` ricorda una scelta fatta.
+ * Per difetto lo stato di vista `canvas.pen` di questo computer.
+ */
+export interface CanvasPenMemory {
+  readonly read: () => Promise<InkPenChoice>;
+  readonly save: (choice: InkPenChoice) => void;
+}
+
+const SHARED_PEN: CanvasPenMemory = { read: readPen, save: savePen };
+
+type CardField = "text" | "label" | "url" | "file";
+
+/** Il campo aperto su una scheda. */
+interface CardEditor {
+  readonly id: string;
+  readonly field: CardField;
+  /**
+   * Il campo semplice: c'è sempre, ed è dove si scrive finché l'editor delle
+   * note non lo sostituisce (la scheda di testo, T43), o se non si monta.
+   */
+  readonly input: HTMLInputElement | HTMLTextAreaElement;
+  /** Dove si scrive adesso: il campo semplice, o il contenitore dell'editor delle note. */
+  place: HTMLElement;
+  /** L'editor delle note in Live sopra il testo della scheda (T43), quando c'è. */
+  live: CardTextEditor | null;
+  readonly article: HTMLElement;
+  readonly lifetime: AbortController;
+  /** Una composizione dell'IME o un tasto morto in corso: la pausa aspetta la sua fine. */
+  composing: boolean;
+  /** Invio in una scheda di testo: l'a capo che arriva si registra subito. */
+  recordOnInput: boolean;
+  /**
+   * La scheda è nata adesso per essere scritta (lo strumento Testo,
+   * Ctrl+Invio): il passo d'annulla che l'ha messa. Lasciata vuota se ne va
+   * con lui (T44). `null` per una scheda che c'era già.
+   */
+  readonly born: CanvasStep | null;
+  /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
+  grown: { readonly width: number; readonly height: number } | null;
+}
+
+/** L'ultimo incolla scritto: il testo, il punto sulla griglia e quante volte di fila lì. */
+interface LastPaste {
+  readonly raw: string;
+  readonly x: number;
+  readonly y: number;
+  readonly count: number;
+}
+
+/**
+ * Una scelta della finestra di «Incolla codice» (LIC T25): la lista così come
+ * si scrive, il riassunto in parole (`""` se non cambia niente o non si può)
+ * e il controllo del nucleo che lo dice.
+ */
+interface PasteChoice {
+  readonly id: "paste" | "update" | "copies";
+  readonly ops: readonly unknown[];
+  readonly said: string;
+  readonly report: CanvasCheckReport;
+}
+
+/**
+ * Un passo d'annulla (o di ripeti). Due vie per farlo: se il testo è ancora
+ * quello che il passo ha lasciato (`version`), si rimette il tratto `removed`
+ * al posto di `inserted`, byte per byte, e il testo torna alla sua versione di
+ * prima (`restores`); se no si passano `patches` al nucleo, che le fonde con
+ * ciò che è cambiato da un'altra parte.
+ */
+interface CanvasStep {
+  /** Le toppe che fanno questo passo sul modello di adesso. */
+  readonly patches: CanvasPatch[];
+  /** Le toppe che disfano questo passo: valgono sul testo che il passo rimette. */
+  readonly back: CanvasPatch[];
+  /** Dove comincia il tratto, in unità UTF-16. */
+  readonly start: number;
+  /** Il tratto del testo di adesso che il passo toglie. */
+  readonly inserted: string;
+  /** Il tratto che il passo rimette al suo posto. */
+  readonly removed: string;
+  /** La versione del testo che il passo ha lasciato: se è ancora quella, la via è il tratto. */
+  readonly version: number;
+  /** La versione del testo che il passo rimette. */
+  readonly restores: number;
+}
+
+/**
+ * Un tratto spezzato al limite dei campioni (`split`) che continua nel pezzo
+ * dopo: il passo che tiene i pezzi già scritti e il testo di prima del primo
+ * pezzo. Il pezzo dopo si fonde in quel passo (A4).
+ */
+interface InkChain {
+  readonly step: CanvasStep;
+  readonly before: string;
+}
+
+/**
+ * Una passata della gomma: il tratto dell'adattatore che la fa, il registro
+ * di ciò che ha preso e i tratti disegnati che può prendere, fissati quando
+ * comincia. Con `"piece"` (T22) anche il cammino fatto, in coordinate della
+ * lavagna, e il taglio di adesso di ogni tratto toccato, per chiave.
+ */
+/**
+ * Il trascinamento delle schede in corso: le schede scelte (`ids`), ognuna
+ * col suo posto di partenza in `origin` insieme a ciò che i gruppi scelti
+ * portano, e lo spostamento di adesso (`dx`, `dy`, in unità intere della
+ * lavagna), lo stesso per tutte: al rilascio è una `move` (T24).
+ */
+interface CardDrag {
+  readonly pointerId: number;
+  startX: number;
+  startY: number;
+  readonly ids: readonly string[];
+  readonly origin: Map<string, { x: number; y: number }>;
+  moved: boolean;
+  dx: number;
+  dy: number;
+}
+
+/**
+ * I riquadri tratteggiati di un trascinamento di file (T24): quanti file,
+ * il punto agganciato in cui il nucleo li ha disposti, le schede e il gruppo
+ * oltre i dodici, in coordinate della lavagna.
+ */
+interface DropGhost {
+  readonly count: number;
+  readonly x: number;
+  readonly y: number;
+  readonly cards: readonly Rect[];
+  readonly group: Rect | null;
+}
+
+interface InkErase {
+  readonly id: number;
+  readonly sweep: EraseSweep<ErasableInk>;
+  readonly source: InkEraseSource;
+  readonly mode: InkEraserMode;
+  readonly path: Spot[];
+  readonly cuts: Map<string, InkErasing>;
+  /** Il raggio della gomma in unità della lavagna, allo zoom dell'ultimo passo: `erase_along` lo scrive. */
+  radius: number;
+}
+
+/** Un tratto che la gomma «Solo il pezzo» sta tagliando. */
+interface InkErasing {
+  readonly unit: ErasableInk;
+  readonly pieces: readonly CutPiece[];
+  /** Il contorno dei pezzi, per l'anteprima. */
+  readonly preview: string;
+}
+
+// --- a chi appartiene il tratto (T69) ---
+/**
+ * Il tratto della punta in corso e l'ancora che avrebbe se finisse adesso: il
+ * riquadro cresce coi punti che la vista vede (`pointermove`, dopo la scia),
+ * il bordo tratteggiato e il testo dell'etichetta cambiano solo quando cambia
+ * l'ancora.
+ */
+/**
+ * Lo spostamento col Lazo (T86): le schede scelte e i tratti scelti insieme,
+ * di `dx`, `dy` unità della lavagna. Le schede si muovono nel modello in mano
+ * come in `#drag`; i tratti si vedono spostati sullo strato del lazo, sopra
+ * gli originali attenuati, e al rilascio vanno nel file in un commit solo.
+ */
+interface StrokeDrag {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  /** Le schede che si spostano, con la posizione di partenza. */
+  readonly origin: Map<string, { x: number; y: number }>;
+  /** I tratti scelti, come erano alla partenza. */
+  readonly units: readonly ErasableInk[];
+  /** Dove sta la vista sullo schermo, letto alla partenza. */
+  readonly view: DOMRect;
+  moved: boolean;
+  dx: number;
+  dy: number;
+  /** L'ultimo punto del puntatore, per rifare la scheda quando cambia Alt. */
+  clientX: number;
+  clientY: number;
+  /** La scheda che prenderà i tratti, `null` se restano liberi; `undefined` prima del primo giro. */
+  holder: string | null | undefined;
+}
+
+/** Lo strato del lazo sullo stage (T86): i tratti scelti, la loro cornice, il giro in corso. */
+interface LassoLayer {
+  readonly svg: SVGSVGElement;
+  readonly chosen: SVGGElement;
+  readonly frame: SVGRectElement;
+  readonly path: SVGPathElement;
+}
+
+/** Lo strato del rettangolo sullo stage (N6 T20b): un solo riquadro, in coordinate della lavagna. */
+interface MarqueeLayer {
+  readonly svg: SVGSVGElement;
+  readonly box: SVGRectElement;
+}
+
+/**
+ * Un trascinamento nel vuoto con la Selezione (N6 T20b): il rettangolo tra il
+ * punto di partenza e quello di adesso, in coordinate della lavagna. `base` è la
+ * scelta com'era all'inizio, da cui Maiusc aggiunge e Esc torna.
+ */
+interface MarqueeGesture {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  readonly from: { x: number; y: number };
+  to: { x: number; y: number };
+  readonly additive: boolean;
+  /** Il puntatore è andato oltre la soglia: è un rettangolo, non un clic. */
+  moved: boolean;
+  readonly base: { readonly nodes: readonly string[]; readonly edges: readonly string[]; readonly strokes: ReadonlySet<string> };
+}
+
+/** I tratti di `units` per livello, nell'ordine in cui arrivano. */
+function strokesByLayer(units: readonly ErasableInk[]): { readonly layer: InkLayerRef; readonly ids: string[] }[] {
+  const groups = new Map<string, { readonly layer: InkLayerRef; readonly ids: string[] }>();
+  for (const unit of units) {
+    const key = unit.node === null ? "board" : `node\u0000${unit.node}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { layer: unit.layer, ids: [] };
+      groups.set(key, group);
+    }
+    group.ids.push(unit.id);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Le chiavi dei tratti scelti dopo le toppe `patches`: un tratto tolto da un
+ * livello e aggiunto a un altro (`move_strokes` con `to`) resta scelto dove è
+ * andato, col suo id nuovo se l'ha cambiato.
+ */
+function keysAfter(chosen: ReadonlySet<string>, patches: readonly CanvasPatch[]): Set<string> {
+  const keys = new Set(chosen);
+  let carried = 0;
+  for (const patch of patches) {
+    if (patch.kind !== "ink") continue;
+    if (patch.before && !patch.after && keys.delete(inkKey(patch.layer, patch.before.id))) carried += 1;
+    else if (!patch.before && patch.after && carried > 0) {
+      keys.add(inkKey(patch.layer, patch.after.id));
+      carried -= 1;
+    }
+  }
+  return keys;
+}
+
+/** Un seme per gli id nuovi del nucleo: 64 bit a caso. */
+function randomSeed(): bigint {
+  const word = new BigUint64Array(1);
+  crypto.getRandomValues(word);
+  return word[0]!;
+}
+
+interface InkTarget {
+  readonly pointerId: number;
+  readonly box: StrokeBox;
+  /** Lo spessore del tratto in unità della lavagna: il pennello che la scia usa. */
+  readonly size: number;
+  /** Dove sta la vista sullo schermo, letto all'inizio del tratto: nessuna lettura del layout mentre si scrive. */
+  readonly view: DOMRect;
+  readonly label: HTMLElement;
+  /** Il contenitore dei quattro lati del bordo, sullo stage. */
+  readonly frames: HTMLElement;
+  /** L'id della scheda mostrata, `null` se il tratto è libero; `undefined` prima del primo giro. */
+  holder: string | null | undefined;
+}
+
+/**
+ * L'etichetta e i lati del bordo, nati al primo tratto e tenuti per i tratti
+ * dopo (nascosti a penna su): un tratto che comincia non crea nodi e non
+ * chiede il layout. La misura dell'etichetta arriva da un `ResizeObserver`,
+ * dopo il layout che il browser fa comunque: mai una lettura forzata.
+ */
+interface InkMarks {
+  readonly label: HTMLElement;
+  /**
+   * Il bordo tratteggiato attorno alla scheda: quattro lati sottili in un
+   * contenitore sullo stage, non il contorno della scheda. Mostrarlo o
+   * toglierlo ridipinge solo i lati: il contorno ridipingerebbe tutta la
+   * scheda (una tabella di diecimila celle in S8) due volte per tratto. Il
+   * contenitore resta sullo stage: un tratto non vi aggiunge né toglie nodi.
+   */
+  readonly frames: HTMLElement;
+  /** La misura dell'etichetta e lo stacco dalla punta; zero finché non è misurata. */
+  width: number;
+  height: number;
+  gap: number;
+}
+
+/** I quattro lati del bordo tratteggiato della scheda sotto la penna. */
+const INK_FRAME_SIDES = ["top", "right", "bottom", "left"] as const;
+
+/** Il punto dove comincia il tratto che sta per nascere: l'ultimo appoggio, poi l'ultimo movimento visto. */
+interface InkPoint {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+}
+
+/** Il tasto che fa scrivere il mouse finché è giù (regola 1). */
+function isInkKey(event: KeyboardEvent): boolean {
+  return event.key.toLowerCase() === "d";
+}
+
+/** Un campo dove i tasti scrivono. */
+function isTextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable;
+}
+
+/** Gli stati dei livelli d'inchiostro, per il modello e i livelli del nucleo da cui vengono. */
+interface InkStates {
+  readonly doc: CanvasDocument;
+  readonly layers: readonly CanvasInkLayer[];
+  readonly states: readonly InkLayerState[];
+}
+
+/** Il testo del campo non ancora registrato: la scheda com'era, il campo, il testo. */
+interface PendingText {
+  card: CanvasNode;
+  readonly field: CardField;
+  text: string;
+  /** La misura a cui la scheda di testo è cresciuta col testo (T44): va nello stesso commit. */
+  size?: { readonly width: number; readonly height: number };
+}
+
+/**
+ * Una voce del menu del tasto destro dal comando `id` del catalogo: `args`
+ * dice su che cosa, `refocus` rimette il fuoco sulla tela dopo il gesto.
+ */
+/** Il ritaglio aperto su una scheda d'immagine (T78). */
+interface CropSession {
+  readonly node: string;
+  /** Il file della scheda quando si è aperto: se cambia, il ritaglio si chiude. */
+  readonly path: string;
+  editor: CropEditor | null;
+  /** L'altezza che la scheda mostra intanto; `null` finché l'immagine non ha misure. */
+  height: number | null;
+}
+
+type MenuEntryMaker = (id: string, args?: CanvasCommandArgs, refocus?: boolean, extra?: Partial<SurfaceMenuItem>) => SurfaceMenuItem;
+
+/**
+ * «Colore ›» col colore di adesso segnato (`undefined` quello di serie, `null`
+ * nessuno: colori diversi), le voci come scelte esclusive (T47).
+ */
+type ColorMenuMaker = (current: string | null | undefined, args?: CanvasCommandArgs) => SurfaceMenuItem;
+
+/**
+ * Dove porta un link scritto in una scheda (N6 T57): un wikilink
+ * `[[pagina#sezione^blocco]]`, o un percorso del vault che la montatura
+ * riconosce come file (`a.internal-path`).
+ */
+export type CardLinkRef =
+  | { readonly kind: "wiki"; readonly page: string; readonly heading: string | null; readonly block: string | null }
+  | { readonly kind: "path"; readonly path: string };
+
 export interface CanvasEngineOptions {
   readonly surfaceId: string;
+  /** Il nucleo che apre le lavagne; i test ne passano uno che conta le chiamate. */
+  readonly core?: CanvasCorePort;
   readonly formatId?: string | null;
   readonly revision?: string;
   readonly onChange: (change: CanvasChange) => void;
   readonly onSelectionChange: () => void;
   readonly onOpenWikilink?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath?: (path: string, from?: string) => void | Promise<void>;
-  readonly onCreateNote?: (initialText: string) => string | void | Promise<string | void>;
+  /** «Apri a lato» dal menu di una scheda di file: come `onOpenPath`, in un riquadro accanto. */
+  readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
+  /** «Apri a lato» di un wikilink di una scheda che non è sulla lavagna (T57), come quello di una nota. */
+  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /**
+   * Dove porta un link scritto in una scheda (T57): il file del vault a cui
+   * punta, o `null` se non c'è (un link rotto). `from` è la nota in cui il link
+   * è scritto, o la lavagna. La risolve la shell come per le note: la tela non
+   * conosce i nomi. Assente, i link delle schede si seguono come prima, dalla
+   * montatura.
+   */
+  readonly resolveCardLink?: (link: CardLinkRef, from?: string) => Promise<string | null>;
+  /**
+   * «Sposta anche il file nel cestino» (T17): il file `path` del vault nel
+   * cestino, con il gesto dell'albero. `true` se il file è nel cestino,
+   * `false` se è rimasto (una domanda a cui si è detto di no); un rifiuto
+   * dell'host arriva come errore. Mai la conseguenza di un tasto.
+   */
+  readonly onTrashPath?: (path: string) => Promise<boolean>;
+  /**
+   * Le note per «Estrai in una nota» e «Copia il testo qui» (T70): il nome
+   * libero da proporre, la nota che nasce col testo, il testo di una nota.
+   * Assente: i due comandi non ci sono.
+   */
+  readonly notes?: CanvasNotesPort;
   /**
    * Sceglie il file del vault a cui punta una nuova card file; `null` o niente
    * se l'utente rinuncia. Assente = niente bottone «aggiungi file»: una card
    * che punta a un file inventato è un rimando rotto scritto nel documento.
+   * Con `name` (il nome del file di una scheda che non c'è più, «Ritrova…») la
+   * scelta mette per prima una voce con quel nome.
    */
-  readonly onPickFile?: () => string | null | void | Promise<string | null | void>;
+  readonly onPickFile?: (name?: string) => string | null | void | Promise<string | null | void>;
   readonly documentId?: string;
   readonly media?: CanvasMediaPort;
   readonly attachments?: CanvasAttachmentPort;
   readonly theme?: Theme;
+  /**
+   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
+   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
+   */
+  readonly onPendingChange?: (pending: boolean) => void;
+  /**
+   * Una voce della banda di stato può essere cambiata: a fine gesto, mai a
+   * ogni fotogramma (`chrome/status.ts`). Chi ascolta la rilegge con
+   * `statusItems`.
+   */
+  readonly onStatusChange?: () => void;
+  /** Apre le Impostazioni su una voce (la cartella dei file trascinati, dalla banda). */
+  readonly onOpenSettings?: (key: string) => void;
   /**
    * Resa markdown reale di una card testo (stesso `renderMarkdown` della
    * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
@@ -79,6 +815,177 @@ export interface CanvasEngineOptions {
     host: HTMLElement,
     forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
+  /**
+   * «Il dito sposta le schede», letto quando il primo dito si posa: un cambio
+   * vale dal tocco dopo. I test lo passano; assente, la lavagna segue le
+   * Impostazioni di questo computer (`watchPreferences`).
+   */
+  readonly fingerMovesCard?: () => boolean;
+  /**
+   * Dove si ricorda «Scrivi col mouse»: letto una volta all'apertura, scritto
+   * a ogni clic sul pulsante. I test lo passano; assente, lo stato di vista
+   * di questo computer.
+   */
+  readonly inkMouseMemory?: CanvasInkMouseMemory;
+  /**
+   * Dove si ricorda la penna del menu: letta una volta all'apertura, scritta
+   * a ogni scelta. I test lo passano; assente, lo stato di vista di questo
+   * computer.
+   */
+  readonly penMemory?: CanvasPenMemory;
+  /**
+   * Dove si ricordano i comandi usati di recente in ogni lavagna, per la
+   * ricerca dei comandi (T48). I test lo passano; assente, lo stato di vista
+   * di questo computer.
+   */
+  readonly recentCommands?: RecentCommands;
+  /**
+   * Le schede di file e di link: chi le disegna per specie e le immagini
+   * ferme. Assente (un'altra finestra, le prove vecchie): il corpo di sempre,
+   * col percorso e il segnaposto.
+   */
+  readonly cards?: CanvasCards;
+  /**
+   * La misura in pixel dell'immagine `path` del vault, per la misura di
+   * nascita della sua scheda (T15); `null` se non si sa. Assente, o una
+   * risposta che non arriva in tempo: la misura di serie della specie.
+   */
+  readonly measureImage?: (path: string) => Promise<{ readonly width: number; readonly height: number } | null>;
+  /**
+   * Il Markdown dell'HTML degli appunti (una tabella copiata da un foglio o da
+   * una pagina), come lo incolla l'editor Markdown; `null` se non ce n'è.
+   * Assente: l'HTML non si legge, e le celle arrivano solo dal testo a
+   * tabulazioni.
+   */
+  readonly clipboardMarkdown?: (data: DataTransfer) => Promise<string | null>;
+  /**
+   * Dove si ricorda la vista della lavagna su questo computer (T36): la
+   * camera, la scelta e la pagina dei PDF, lette all'apertura e scritte con
+   * un ritardo. Assente, o senza `documentId`: si inquadra tutto a ogni
+   * apertura, come prima.
+   */
+  readonly viewMemory?: CanvasViewMemory;
+  /**
+   * Il sommario di una nota e la resa di una sua sezione, per il selettore
+   * delle sezioni (T74). Assente: niente selettore e niente «Parti…».
+   */
+  readonly parts?: PartsPickerPort;
+  /**
+   * Chi chiede all'indice del vault quali note della lavagna contengono una
+   * ricerca (T60); senza, la richiesta `documents` di `searchBoardNotes`. I
+   * test ne passano una che conta le chiamate.
+   */
+  readonly findNotes?: FindNotesPort;
+  /**
+   * Il seme degli id che il nucleo dà alle schede, ai fili e ai tratti nati
+   * da un'azione (`compile`, `docs/reference/canvas-code.md` § «Gli id
+   * nuovi»): uno nuovo per ogni azione. Di serie un numero a caso
+   * (`crypto.getRandomValues`); i test lo fissano, così l'azione della tela
+   * dà la stessa lavagna della sua forma in codice.
+   */
+  readonly seed?: () => bigint;
+  /**
+   * L'id di una scheda che un gesto fa nascere e che altre operazioni della
+   * stessa lista nominano (il rilascio di file, Collega nel vuoto, Ctrl+Invio
+   * in una scheda): di serie `newNodeId()`. Le prove lo fissano, come `seed`.
+   */
+  readonly newId?: () => string;
+}
+
+/**
+ * Le note che la lavagna crea e legge (T70). La shell le fa coi suoi gesti
+ * (`note.create`, la lettura di un documento); la tela non conosce il vault.
+ */
+export interface CanvasNotesPort {
+  /**
+   * Il nome da proporre per una nota `name` nella cartella `folder` (`""` è la
+   * radice): `name` se è libero, se no `name 1`, `name 2`… È solo una
+   * proposta: se nel frattempo il nome si occupa, lo dice `create`.
+   */
+  freeName(folder: string, name: string): Promise<string>;
+  /**
+   * Crea la nota `name` nella cartella `folder` col testo `text` e torna il
+   * suo percorso nel vault. Un nome già preso è un errore, mai una nota
+   * sovrascritta.
+   */
+  create(folder: string, name: string, text: string): Promise<string>;
+  /** Il testo della nota `path` com'è adesso (anche non ancora salvato). */
+  read(path: string): Promise<string>;
+}
+
+/**
+ * Le schede della tela: il registro dei renderer, la cache delle immagini ferme
+ * e l'ascolto dei file. Una scheda il cui file manca non ha una vista: `watch`
+ * avvisa quando il file torna, e la scheda si rimonta da sé (T16).
+ */
+export interface CanvasCards {
+  readonly registry: CardRegistry;
+  readonly snapshots: CardSnapshots;
+  /**
+   * La porta per scrivere dentro le schede (T40), che la tela passa alle
+   * viste (`CardContext.editors`); assente, le schede si leggono e basta.
+   */
+  readonly editors?: CardEditorPort;
+  /** Avvisa quando il file `path` cambia, sparisce o torna; restituisce come smettere. */
+  watch(path: string, changed: () => void): () => void;
+  /**
+   * Le pagine di un PDF per «Spargi le pagine» (T72). Assente (senza il lettore
+   * dei PDF): il comando è spento col perché.
+   */
+  readonly pdfPages?: PdfPagesReader;
+  /**
+   * Quante note citano il file di una scheda, per «↩ N» nella testata (T22):
+   * l'indice, con la domanda `backlinks`. Assente, la testata non lo dice.
+   */
+  readonly citations?: CardCitations;
+}
+
+/**
+ * Una scheda sulla scena, tenuta per id da una resa all'altra: l'elemento, il
+ * corpo e ciò che lo tiene vivo (il Markdown montato, la vista del renderer).
+ */
+interface CardEntry {
+  readonly id: string;
+  readonly article: HTMLElement;
+  readonly title: HTMLElement;
+  readonly connect: HTMLButtonElement;
+  /** La scheda com'è nel documento di adesso. */
+  node: CanvasNode;
+  type: CanvasNode["type"];
+  body: HTMLElement;
+  /** La chiave del corpo (`cardBodyKey`): se cambia, il corpo si rifà; `null`, da rifare. */
+  bodyKey: string | null;
+  /** Le quattro maniglie agli angoli (T66); `null` in sola lettura. */
+  resize: readonly HTMLElement[] | null;
+  /** Lo smontaggio del Markdown di una scheda di testo. */
+  teardown: (() => void) | null;
+  /**
+   * La vista del renderer e la sua vita; `null` col corpo di sempre. Col file
+   * mancante la vita tiene l'ascolto del file e i gesti, al posto della vista.
+   */
+  view: CardView | null;
+  viewLife: Lifetime | null;
+  /** La misura che la vista conosce: quella del montaggio o dell'ultimo `resize()`. */
+  viewSize: CardSize | null;
+  /** Il titolo grande da lontano (T54): sempre nel nodo, lo mostra il CSS. */
+  readonly far: HTMLElement;
+  /** Il `data-card-detail` che la scheda ha adesso (`applyCardDetails`); `null` da vicino. */
+  detail: CardDetail | null;
+  /** Il segno della ricerca che la scheda ha adesso (`applyFindMarks`, T60); `null` senza ricerca. */
+  find: FindMark;
+  /**
+   * Il file della scheda non c'è: la chiave della vista (`cardBodyKey`) con cui
+   * il renderer l'ha detto. `null` se il file c'è, o non si sa.
+   */
+  missingFor: string | null;
+  /** Il nome per il lettore di schermo scritto adesso su `article` (T61); `null` se non ancora. */
+  label: string | null;
+  /**
+   * La scheda e il giro della lingua con cui la testata ha scritto i suoi nomi (il
+   * titolo, quello da lontano, quello di →); `null` se non ancora. Uguali, la resa
+   * non li ricalcola.
+   */
+  titled: { readonly node: CanvasNode; readonly round: number } | null;
 }
 
 interface Viewport {
@@ -87,27 +994,524 @@ interface Viewport {
   zoom: number;
 }
 
+/** Un punto della scia di uno spostamento, in px del client, col suo tempo in ms (T53). */
+interface PanSample {
+  readonly t: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Dove sta il puntatore di un trascinamento, e i tasti tenuti: ciò che serve per rifare il passo (T53). */
+type PointerAt = Pick<PointerEvent, "pointerId" | "clientX" | "clientY" | "shiftKey" | "altKey">;
+
+/** Sotto il dito fanno come col mouse: i controlli sempre, le maniglie se la lavagna si cambia. */
+const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+/**
+ * Fino a questa larghezza della finestra, in px, la colonna degli strumenti
+ * sta sotto la lavagna; e così in un riquadro largo fino a `NARROW_PANE`,
+ * anche in una finestra larga (gli stessi valori del disegno).
+ */
+const NARROW_WIDTH = 700;
+const NARROW_PANE = 480;
+
+/**
+ * I nomi di «Apri a lato per questo» (T45), per il punto: accanto, o «qui»
+ * nella finestra stretta, dove si apre nello stesso riquadro.
+ */
+const BESIDE_HERE_NAMES = {
+  beside: {
+    cell: "canvas.open_beside.cell",
+    section: "canvas.open_beside.section",
+    page: "canvas.open_beside.page",
+    none: "canvas.open_beside_here",
+  },
+  here: {
+    cell: "canvas.open_here.cell",
+    section: "canvas.open_here.section",
+    page: "canvas.open_here.page",
+    none: "canvas.open_here_this",
+  },
+} as const satisfies Record<"beside" | "here", Record<"cell" | "section" | "page" | "none", Key>>;
+/** Il filo con cui nasce una scheda lasciata nel vuoto (T67): da `from`, dal lato `fromSide` se c'è. */
+interface CardLink {
+  readonly from: string;
+  readonly fromSide?: EdgeSide;
+}
+
+/**
+ * Il filo che si sta tirando (T67): da `from`, partito dal punto `fromSide`
+ * (senza: il lato lo sceglie `edges.ts` al rilascio), o l'estremità
+ * `endpoint` del filo `edgeId` che si riattacca. `back`: il filo di
+ * «Collega…», finito il quale la colonna torna alla Selezione. `moved` dice
+ * se il puntatore si è mosso: un clic fermo su un punto non fa una scheda.
+ */
+interface ConnectGesture {
+  readonly pointerId: number;
+  readonly from: string;
+  readonly fromSide?: EdgeSide;
+  readonly edgeId?: string;
+  readonly endpoint?: "from" | "to";
+  readonly back?: boolean;
+  readonly startX: number;
+  readonly startY: number;
+  moved: boolean;
+}
+
+const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-resize-frame], [data-reconnect], [data-connect], .canvas-port";
+
+/**
+ * I gesti del dito (T63). Il tocco lungo apre il menu radiale (o, sopra una
+ * scheda, il suo menu) dopo tanti ms con il dito fermo entro `TAP_SLOP_PX`.
+ */
+export const LONG_PRESS_MS = 500;
+/** Due dita che toccano e si alzano entro tanti ms dal primo appoggio annullano, tre ripetono. */
+export const FINGERS_TAP_MS = 250;
+/** Il secondo tocco di un doppio tocco: entro tanti ms dal primo rilascio, e tanti px dal primo. */
+export const DOUBLE_TAP_MS = 300;
+export const DOUBLE_TAP_PX = 24;
+/**
+ * Il menu contestuale che il sistema manda dietro al tasto laterale della
+ * penna o al tocco lungo non apre il menu della lavagna: per tanti ms dopo il
+ * rilascio si ferma (come `ECHO_MS` del menu radiale).
+ */
+const MENU_ECHO_MS = 500;
+
+/** I limiti dello zoom, dal 5% al 400% (T53): la rotella, i tasti, i pulsanti e il pizzico. */
+const ZOOM_LIMITS: ZoomLimits = { min: 0.05, max: 4 };
+
 function clampZoom(zoom: number): number {
-  return Math.min(4, Math.max(0.1, zoom));
+  return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
+}
+
+// --- muoversi (T53) ---------------------------------------------------------
+
+/** Il passo di + e −, lo stesso del disegno (`ZOOM_STEP` dei disegni, 1,25). */
+export const CANVAS_ZOOM_STEP = 1.25;
+
+/**
+ * «Mostra tutto» non ingrandisce oltre il 100%, e lascia attorno alle schede
+ * un margine di `FIT_MARGIN` unità della lavagna per lato, come prima.
+ */
+const FIT_LIMITS: ScaleLimits = { min: ZOOM_LIMITS.min, max: 1 };
+const FIT_MARGIN = 80;
+
+/** A meno di tanti px dal bordo della vista, un trascinamento la fa scorrere. */
+export const EDGE_SCROLL_ZONE = 40;
+
+/** La velocità dello scorrimento al bordo, in px dello schermo al ms, sul bordo e fuori. */
+export const EDGE_SCROLL_MAX = 1.2;
+
+/** L'inerzia parte solo da un dito che va almeno a tanto, in px al ms. */
+const INERTIA_MIN_SPEED = 0.05;
+
+/**
+ * Quanto resta il lampo di una scheda raggiunta da un link (T57): l'animazione
+ * del CSS dura un po' meno; col movimento ridotto l'anello resta fermo per tutto.
+ */
+const CARD_FLASH_MS = 1000;
+
+/** La velocità del dito si misura sugli ultimi ms del gesto. */
+const INERTIA_WINDOW_MS = 100;
+
+/** Il passo più lungo di un fotogramma, in ms: dopo una pausa del browser la vista non salta. */
+const MAX_FRAME_MS = 64;
+
+/** La camera della tela nella forma di `spatial/camera.ts`, e ritorno. */
+function toCamera(view: Viewport): Camera {
+  return { scale: view.zoom, tx: view.x, ty: view.y };
+}
+
+function fromCamera(camera: Camera): Viewport {
+  return { x: camera.tx, y: camera.ty, zoom: camera.scale };
+}
+
+/**
+ * La velocità dello scorrimento al bordo su un asse, in px al ms: `near` è la
+ * distanza dal bordo di inizio, `far` da quello di fine (negative fuori dalla
+ * vista). Positiva verso la fine, negativa verso l'inizio, zero fuori dalla
+ * fascia; più veloce più si è vicini, la massima sul bordo e oltre.
+ */
+export function edgeScrollSpeed(near: number, far: number): number {
+  const pull = (distance: number): number =>
+    distance >= EDGE_SCROLL_ZONE ? 0 : EDGE_SCROLL_MAX * Math.min(1, 1 - Math.max(0, distance) / EDGE_SCROLL_ZONE);
+  return pull(far) - pull(near);
+}
+
+/** Le due camere sono la stessa. */
+function sameViewport(a: Viewport, b: Viewport): boolean {
+  return a.x === b.x && a.y === b.y && a.zoom === b.zoom;
+}
+
+/**
+ * Il rettangolo di `node` e `view` si sovrappongono davvero: una scheda che
+ * tocca la vista solo sul bordo è fuori.
+ */
+function overlaps(node: Rect, view: Rect): boolean {
+  return node.x < view.x + view.width && node.x + node.width > view.x
+    && node.y < view.y + view.height && node.y + node.height > view.y;
+}
+
+/**
+ * Le schede libere, come le sceglie `layout` senza `ids` (`loose_cards` di
+ * `ops/layout.rs`): non gruppi, e non dentro un gruppo (tutto il rettangolo
+ * nel suo, bordi compresi).
+ */
+export function looseCards(nodes: readonly CanvasNode[]): CanvasNode[] {
+  const groups = nodes.filter((node) => node.type === "group");
+  const inside = (card: CanvasNode, group: CanvasNode): boolean =>
+    card.id !== group.id && card.x >= group.x && card.y >= group.y
+    && card.x + card.width <= group.x + group.width && card.y + card.height <= group.y + group.height;
+  return nodes.filter((node) => node.type !== "group" && !groups.some((group) => inside(node, group)));
 }
 
 function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
 }
 
-const PRESET_FILL: Record<string, string> = {
-  "1": "color-mix(in srgb, var(--danger) 18%, transparent)",
-  "2": "color-mix(in srgb, var(--warning) 22%, transparent)",
-  "3": "color-mix(in srgb, yellow 22%, transparent)",
-  "4": "color-mix(in srgb, var(--success) 18%, transparent)",
-  "5": "color-mix(in srgb, var(--info) 20%, transparent)",
-  "6": "color-mix(in srgb, var(--accent) 18%, transparent)",
-};
-const CANVAS_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+/** Spostando una scheda o una selezione, tutti e tre i punti di ogni asse si agganciano (T71). */
+const MOVE_SIDES: readonly GuideSide[] = ["start", "center", "end"];
 
-function nodeFill(color: string | undefined): string {
-  if (!color) return "var(--doc-bg)";
-  return PRESET_FILL[color] ?? color;
+// --- ridimensionare (T66) -------------------------------------------------------
+
+/** Un angolo di una scheda, o della cornice della scelta: dove sta una maniglia. */
+export type ResizeCorner = "nw" | "ne" | "sw" | "se";
+
+/**
+ * Le quattro maniglie, nell'ordine in cui stanno nel DOM: prima quella in
+ * basso a destra, la maniglia di sempre, che resta l'unica sotto
+ * `RESIZE_ONE_HANDLE_PX`.
+ */
+const RESIZE_CORNERS: readonly ResizeCorner[] = ["se", "sw", "ne", "nw"];
+
+/** Sotto questa misura sullo schermo, in px, una scheda ha solo la maniglia in basso a destra. */
+export const RESIZE_ONE_HANDLE_PX = 24;
+
+/**
+ * La metà della presa del dito, in px sullo schermo: un'area di 44 px
+ * centrata sull'angolo. Col mouse la presa è l'elemento della maniglia, 20
+ * px, misurata dalla pelle.
+ */
+export const RESIZE_FINGER_GRIP_PX = 22;
+
+/**
+ * La larghezza più grande che una scheda di testo prende da sé: col doppio
+ * clic su una maniglia (T66) e mentre ci si scrive (T44). Oltre, il testo va a
+ * capo e la scheda cresce in altezza.
+ */
+export const CANVAS_TEXT_FIT_MAX_WIDTH = 480;
+
+/** L'altezza di nascita di una scheda di testo, come la mette lo strumento Testo. */
+const TEXT_CARD_HEIGHT = 160;
+
+/** Lo spazio fra una scheda e quella che Ctrl+Invio (sotto) o Ctrl+Maiusc+Invio (a destra) le apre accanto (T44). */
+export const NEXT_CARD_GAP = 24;
+
+/** Quante volte la scheda di Ctrl+Invio scende cercando un posto libero, prima di cadere sopra un'altra (T44). */
+export const NEXT_CARD_TRIES = 20;
+
+/** Un rettangolo nella lavagna. */
+export interface ResizeBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Come si tira una maniglia. */
+export interface ResizeOptions {
+  /** Maiusc: le proporzioni di partenza restano. */
+  readonly keepRatio: boolean;
+  /** Alt: il centro resta fermo e la misura cambia dai due lati. */
+  readonly fromCenter: boolean;
+  /** L'aggancio delle misure a `CANVAS_SNAP` (A-23); con le proporzioni tenute non c'è. */
+  readonly snap: boolean;
+  /** Gli assi che una guida ha già messo (T71): su quelli la misura non si aggancia alla griglia. */
+  readonly guided?: { readonly x: boolean; readonly y: boolean };
+  readonly minWidth: number;
+  readonly minHeight: number;
+}
+
+/**
+ * Il rettangolo `start` tirato dalla maniglia `corner` di `(dx, dy)`, in
+ * unità della lavagna. Senza Alt sta fermo l'angolo opposto, con Alt il
+ * centro; con Maiusc vince il lato che cresce di più, e l'altro lo segue.
+ * Mai sotto il minimo, mai `NaN`.
+ */
+export function resizeBox(start: ResizeBox, corner: ResizeCorner, dx: number, dy: number, options: ResizeOptions): ResizeBox {
+  const east = corner === "ne" || corner === "se";
+  const south = corner === "sw" || corner === "se";
+  const reach = options.fromCenter ? 2 : 1;
+  let width = start.width + (east ? dx : -dx) * reach;
+  let height = start.height + (south ? dy : -dy) * reach;
+  if (options.keepRatio && start.width > 0 && start.height > 0) {
+    const scale = Math.max(
+      width / start.width,
+      height / start.height,
+      options.minWidth / start.width,
+      options.minHeight / start.height,
+    );
+    width = start.width * scale;
+    height = start.height * scale;
+  } else if (options.snap) {
+    if (!options.guided?.x) width = snap(width);
+    if (!options.guided?.y) height = snap(height);
+  }
+  width = Math.round(Math.max(options.minWidth, Number.isFinite(width) ? width : start.width));
+  height = Math.round(Math.max(options.minHeight, Number.isFinite(height) ? height : start.height));
+  const x = options.fromCenter
+    ? Math.round(start.x + (start.width - width) / 2)
+    : east ? start.x : start.x + start.width - width;
+  const y = options.fromCenter
+    ? Math.round(start.y + (start.height - height) / 2)
+    : south ? start.y : start.y + start.height - height;
+  return { x, y, width, height };
+}
+
+/** Il rettangolo che contiene tutte le schede `nodes`; `null` senza schede. */
+export function boxAround(nodes: readonly ResizeBox[]): ResizeBox | null {
+  if (nodes.length === 0) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const node of nodes) {
+    left = Math.min(left, node.x);
+    top = Math.min(top, node.y);
+    right = Math.max(right, node.x + node.width);
+    bottom = Math.max(bottom, node.y + node.height);
+  }
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/**
+ * La scheda `node` dentro la cornice `from` portata nella cornice `to`: la
+ * posizione e la misura scalano come la cornice (le maniglie della scelta).
+ */
+export function scaleInto(node: ResizeBox, from: ResizeBox, to: ResizeBox, min: number): ResizeBox {
+  const sx = from.width > 0 ? to.width / from.width : 1;
+  const sy = from.height > 0 ? to.height / from.height : 1;
+  return {
+    x: Math.round(to.x + (node.x - from.x) * sx),
+    y: Math.round(to.y + (node.y - from.y) * sy),
+    width: Math.max(min, Math.round(node.width * sx)),
+    height: Math.max(min, Math.round(node.height * sy)),
+  };
+}
+
+/** Il primo multiplo di `CANVAS_SNAP` che non taglia `value`. */
+function snapUp(value: number): number {
+  return Math.ceil(value / CANVAS_SNAP) * CANVAS_SNAP;
+}
+
+/** L'angolo scritto su una maniglia; senza, quello in basso a destra. */
+function cornerOf(value: string | undefined): ResizeCorner {
+  return value === "nw" || value === "ne" || value === "sw" ? value : "se";
+}
+
+/** Un lato del rettangolo `box` è sotto `RESIZE_ONE_HANDLE_PX` sullo schermo. */
+function tinyOnScreen(box: ResizeBox, zoom: number): boolean {
+  return box.width * zoom < RESIZE_ONE_HANDLE_PX || box.height * zoom < RESIZE_ONE_HANDLE_PX;
+}
+
+/**
+ * Una maniglia: l'area di presa all'angolo `corner`, che la pelle misura e
+ * disegna. `node` è la scheda che ridimensiona; `null` per la cornice della
+ * scelta, che ridimensiona tutte le schede scelte.
+ */
+function resizeHandle(corner: ResizeCorner, node: string | null): HTMLElement {
+  const handle = document.createElement("div");
+  handle.className = "canvas-resize";
+  handle.dataset.corner = corner;
+  if (node === null) handle.dataset.resizeFrame = "";
+  else handle.dataset.resize = node;
+  handle.setAttribute("aria-hidden", "true");
+  return handle;
+}
+
+/** Una scheda (o la cornice) troppo piccola sullo schermo tiene solo la maniglia in basso a destra: le altre la coprirebbero. */
+function markHandles(el: HTMLElement, box: ResizeBox, zoom: number): void {
+  if (tinyOnScreen(box, zoom)) el.dataset.handles = "one";
+  else delete el.dataset.handles;
+}
+
+/**
+ * La misura del testo di una scheda (`article`, col corpo `body`): la
+ * larghezza che il testo vuole senza andare a capo, fino a
+ * `CANVAS_TEXT_FIT_MAX_WIDTH`, e l'altezza che allora gli serve, la testata
+ * compresa; agganciate per eccesso a `CANVAS_SNAP`, così niente si taglia.
+ * Misura sullo stile della scheda e lo rimette com'era. `null` senza
+ * impaginazione.
+ */
+function measureText(article: HTMLElement, body: HTMLElement): { width: number; height: number } | null {
+  const { width, height } = article.style;
+  try {
+    article.style.width = "max-content";
+    // La larghezza usata, coi decimali: `offsetWidth` arrotonda, e un testo
+    // largo 320,3 px a 320 andrebbe a capo.
+    let measured = Math.max(article.offsetWidth, parseFloat(getComputedStyle(article).width) || 0);
+    if (measured > CANVAS_TEXT_FIT_MAX_WIDTH) {
+      article.style.width = `${CANVAS_TEXT_FIT_MAX_WIDTH}px`;
+      measured = CANVAS_TEXT_FIT_MAX_WIDTH;
+    } else {
+      article.style.width = `${measured}px`;
+    }
+    // La testata e i bordi: quello che non è il corpo. Poi il corpo a zero,
+    // perché scorra tutto e `scrollHeight` dica l'altezza del testo.
+    const chrome = Math.max(0, article.offsetHeight - body.offsetHeight);
+    article.style.height = `${chrome}px`;
+    const content = body.scrollHeight;
+    if (measured <= 0 || content <= 0) return null;
+    return { width: Math.min(CANVAS_TEXT_FIT_MAX_WIDTH, snapUp(measured)), height: snapUp(chrome + content) };
+  } finally {
+    article.style.width = width;
+    article.style.height = height;
+  }
+}
+
+/**
+ * La misura che vuole la scheda di testo `article` mentre ci si scrive in
+ * `place` (il campo semplice, o il contenitore dell'editor delle note, T44):
+ * la larghezza del testo senza andare a capo, fino a
+ * `CANVAS_TEXT_FIT_MAX_WIDTH` (se `keepWidth`, quella di adesso), e l'altezza
+ * che allora gli serve. Mai più piccola della misura di adesso; agganciata per
+ * eccesso a `CANVAS_SNAP` solo dove cresce. Misura sullo stile della scheda e
+ * lo rimette com'era. `null` senza impaginazione.
+ */
+function measureWriting(article: HTMLElement, place: HTMLElement, keepWidth: boolean): { width: number; height: number } | null {
+  const current = { width: article.offsetWidth, height: article.offsetHeight };
+  if (current.width <= 0 || current.height <= 0) return null;
+  const { width, height } = article.style;
+  try {
+    let wanted = current.width;
+    if (!keepWidth && current.width < CANVAS_TEXT_FIT_MAX_WIDTH) {
+      const natural = naturalWritingWidth(article, place);
+      if (natural > current.width) wanted = Math.min(CANVAS_TEXT_FIT_MAX_WIDTH, snapUp(natural));
+      article.style.width = `${wanted}px`;
+    }
+    // L'altezza alla larghezza nuova: quanto il testo esce da ciò che scorre.
+    const overflow = writingOverflow(place);
+    return { width: wanted, height: overflow > 0 ? snapUp(current.height + overflow) : current.height };
+  } finally {
+    article.style.width = width;
+    article.style.height = height;
+  }
+}
+
+/**
+ * La larghezza che la scheda vorrebbe perché il testo che si scrive in
+ * `place` stia senza andare a capo. Il campo semplice non ha una misura sua:
+ * lo si mette per un attimo su righe che non vanno a capo, e conta quanto
+ * esce. L'editor delle note sì: la scheda larga quanto il suo contenuto
+ * (`max-content`), come il doppio clic su una maniglia.
+ */
+function naturalWritingWidth(article: HTMLElement, place: HTMLElement): number {
+  if (place instanceof HTMLTextAreaElement || place instanceof HTMLInputElement) {
+    const wrap = place.style.whiteSpace;
+    place.style.whiteSpace = "pre";
+    try {
+      const out = place.scrollWidth - place.clientWidth;
+      // Un pixel in più: `scrollWidth` è arrotondato all'intero.
+      return out > 0 ? article.offsetWidth + out + 1 : 0;
+    } finally {
+      place.style.whiteSpace = wrap;
+    }
+  }
+  article.style.width = "max-content";
+  // Coi decimali: `offsetWidth` arrotonda, e un testo largo 320,3 px a 320 andrebbe a capo.
+  return Math.max(article.offsetWidth, parseFloat(getComputedStyle(article).width) || 0);
+}
+
+/**
+ * Quanto il testo che si scrive in `place` esce in basso da ciò che lo fa
+ * scorrere: il campo semplice stesso, o gli elementi dell'editor delle note
+ * dal contenuto modificabile fino al contenitore escluso (il contenitore
+ * tiene sotto l'editor anche ciò che non si vede, e non conta).
+ */
+function writingOverflow(place: HTMLElement): number {
+  const start = place.querySelector<HTMLElement>('[contenteditable="true"]') ?? place;
+  let overflow = start === place ? place.scrollHeight - place.clientHeight : 0;
+  for (let el: HTMLElement | null = start; el && el !== place; el = el.parentElement) {
+    overflow = Math.max(overflow, el.scrollHeight - el.clientHeight);
+  }
+  return overflow;
+}
+
+/**
+ * Il primo posto libero per una scheda `box` nuova: se cadrebbe sopra
+ * un'altra scheda (i gruppi no: ci stanno sotto), scende sotto di lei, a
+ * `NEXT_CARD_GAP`, al più `NEXT_CARD_TRIES` volte; poi resta dove doveva
+ * nascere, sopra l'altra (T44).
+ */
+function freeSpot(nodes: readonly CanvasNode[], box: ResizeBox): ResizeBox {
+  let y = box.y;
+  for (let tries = 0; tries < NEXT_CARD_TRIES; tries++) {
+    const at = { ...box, y };
+    const blocker = nodes.find((node) => node.type !== "group"
+      && node.x < at.x + at.width && at.x < node.x + node.width
+      && node.y < at.y + at.height && at.y < node.y + node.height);
+    if (!blocker) return at;
+    y = blocker.y + blocker.height + NEXT_CARD_GAP;
+  }
+  return box;
+}
+
+/** La misura del contenuto disegnato nel corpo: l'immagine, o la pagina del PDF. `null` se non c'è ancora. */
+function naturalSize(body: HTMLElement): { width: number; height: number } | null {
+  for (const picture of body.querySelectorAll<HTMLImageElement | HTMLCanvasElement>("img, canvas")) {
+    const width = picture instanceof HTMLImageElement ? picture.naturalWidth : picture.width;
+    const height = picture instanceof HTMLImageElement ? picture.naturalHeight : picture.height;
+    if (width > 0 && height > 0) return { width, height };
+  }
+  return null;
+}
+
+/**
+ * Il colore `color` sull'elemento `el` di una scheda o di un filo (T47): la
+ * chiave in `data-canvas-color` e, per un colore libero, il suo valore in
+ * `--canvas-color`, com'è nel file. L'aspetto lo dà la pelle; un valore che
+ * non è un colore non segna niente.
+ */
+function paintColor(el: HTMLElement | SVGElement, color: string | undefined): void {
+  const look = colorLook(color);
+  if (look) el.dataset.canvasColor = look.key;
+  else delete el.dataset.canvasColor;
+  if (look?.custom) el.style.setProperty("--canvas-color", look.custom);
+  else el.style.removeProperty("--canvas-color");
+}
+
+/**
+ * La misura e l'allineamento del testo di una scheda (T92, `fub:text`) su
+ * `el`, in `data-text-size` e `data-text-align`; quelli di serie non si
+ * segnano. L'aspetto lo dà la pelle.
+ */
+function paintTextStyle(el: HTMLElement, node: CanvasNode): void {
+  const style = node.type === "text" ? textStyle(node) : DEFAULT_TEXT_STYLE;
+  if (style.size === DEFAULT_TEXT_STYLE.size) delete el.dataset.textSize;
+  else if (el.dataset.textSize !== style.size) el.dataset.textSize = style.size;
+  if (style.align === DEFAULT_TEXT_STYLE.align) delete el.dataset.textAlign;
+  else if (el.dataset.textAlign !== style.align) el.dataset.textAlign = style.align;
+}
+
+/**
+ * La misura di un'immagine dalla porta, o `null` se non arriva entro
+ * `MEASURE_IMAGE_TIMEOUT_MS`, fallisce o non è una misura.
+ */
+async function measuredImage(
+  measure: NonNullable<CanvasEngineOptions["measureImage"]>,
+  path: string,
+): Promise<{ width: number; height: number } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), MEASURE_IMAGE_TIMEOUT_MS);
+  });
+  try {
+    const size = await Promise.race([measure(path).catch(() => null), late]);
+    return size && Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0
+      ? { width: size.width, height: size.height }
+      : null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Un path relativo alla radice del vault, senza risalite né caratteri di controllo. */
@@ -126,12 +1530,57 @@ function externalUrl(value: string): string | null {
   }
 }
 
+/**
+ * Quanti segmenti al più ha il cammino di un `erase_along` sui tratti `units`
+ * (i punti in coordinate della lavagna) con la gomma di raggio `radius`:
+ * sotto `MAX_ERASE_POINTS` del nucleo, e sotto metà del suo `MAX_ERASE_WORK`.
+ * Il lavoro del nucleo (`split_work` in `crates/fub-ink-codec/src/cut.rs`) è,
+ * per ogni segmento del cammino vicino a un tratto, uno più un passo per
+ * coppia di campioni più la lunghezza del tratto diviso metà della portata
+ * (raggio più metà dello spessore): la stima prende il raggio da solo, e
+ * conta ogni segmento vicino a ogni tratto. In unità della lavagna la scala
+ * della scheda si semplifica.
+ */
+export function eraseAlongSegments(units: readonly { readonly points: readonly number[] }[], radius: number): number {
+  let work = 0;
+  for (const { points } of units) {
+    let length = 0;
+    for (let i = 2; i + 1 < points.length; i += 2) {
+      length += Math.hypot(points[i]! - points[i - 2]!, points[i + 1]! - points[i - 1]!);
+    }
+    work += 1 + points.length / 2 + (2 * length) / radius;
+  }
+  const perSegment = Number.isFinite(work) && work > 0 ? work : 1;
+  return Math.max(1, Math.min(ERASE_ALONG_MAX_POINTS - 1, Math.floor(ERASE_ALONG_WORK / perSegment)));
+}
+
+/**
+ * Il cammino `path` in pezzi di fila di al più `segments` segmenti: l'ultimo
+ * punto di un pezzo è il primo del seguente, così nessun tratto fra due punti
+ * resta senza gomma. Un cammino corto è un pezzo solo.
+ */
+export function erasePathPieces(path: readonly Spot[], segments: number): Spot[][] {
+  const step = Math.max(1, Math.floor(segments));
+  if (path.length <= step + 1) return [path.slice()];
+  const pieces: Spot[][] = [];
+  for (let start = 0; start < path.length - 1; start += step) {
+    pieces.push(path.slice(start, Math.min(path.length, start + step + 1)));
+  }
+  return pieces;
+}
+
 export class CanvasEngine {
   readonly #root: HTMLElement;
   readonly #toolbar: HTMLElement;
+  /** La barra dei comandi sulla barra delle opzioni del kit: ciò che non ci sta va in «…» (#411). */
+  readonly #toolbarBar: OptionsBar;
+  readonly #toolbarKeys: RovingToolbar;
   readonly #viewport: HTMLElement;
   readonly #stage: HTMLElement;
+  /** I fili, primo figlio dello stage (T91, rotta 4): un gruppo gli sta sotto, le schede sopra. */
   readonly #edgeLayer: SVGSVGElement;
+  /** Le prese dei fili scelti, sopra lo stage (T91, rotta 5): il puntatore le prende prima dei punti. */
+  readonly #handleLayer: SVGSVGElement;
   readonly #options: CanvasEngineOptions;
   #forms: readonly SyntaxForm[] | undefined;
   readonly #stopLanguage: () => void;
@@ -142,26 +1591,563 @@ export class CanvasEngine {
   #selection: string[] = [];
   #edgeSelection: string[] = [];
   #camera: Viewport = { x: 0, y: 0, zoom: 1 };
-  #readOnly = false;
-  #undo: CanvasPatch[][] = [];
-  #redo: CanvasPatch[][] = [];
-  #markdownTeardowns = new Map<string, () => void>();
+  /** La sola lettura del pannello (`setReadOnly`): i suoi motivi sono del pannello. */
+  #panelReadOnly = false;
+  /**
+   * La sola lettura della tela: il nucleo apre il testo ma non lo sa
+   * riscrivere senza perdere qualcosa (una chiave doppia, R3). Si somma a
+   * quella del pannello e se ne va da sola quando il testo torna riscrivibile.
+   */
+  #unwritable = false;
+  #undo: CanvasStep[] = [];
+  #redo: CanvasStep[] = [];
+  /**
+   * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
+   * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
+   * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
+   * un tratto byte per byte ridanno al testo la versione che aveva. Una
+   * versione dice sempre un testo solo.
+   */
+  #version = 0;
+  #versions = 0;
+  /** Le schede sulla scena, per id: sopravvivono a una resa che non le riguarda. */
+  readonly #cards = new Map<string, CardEntry>();
+  /**
+   * Le viste montate, per id, come le legge `updateLiveCards`: la mappa è
+   * viva, perché il lavoro rimandato la legge quando gira. Ogni voce avvolge
+   * la vista del renderer e, se `setMode` riesce, scrive il modo sulla scheda.
+   */
+  readonly #views = new Map<string, CardView>();
+  /** Il modo che ogni vista montata ha davvero (il `current` di `updateLiveCards`). */
+  readonly #liveModes = new Map<string, CardMode>();
+  /**
+   * Le schede la cui vista è stata viva in questa seduta (T54): da lontano
+   * mostrano l'ultima immagine ferma (`still`) e non il titolo grande. Esce
+   * chi perde la vista (tolta, un file cambiato).
+   */
+  readonly #seenLive = new Set<string>();
+  /**
+   * La scheda attiva (T14): `enter()` ha detto sì, e il suo contenuto prende
+   * puntatore, tastiera e rotella finché non si esce. Una sola alla volta.
+   */
+  #activeId: string | null = null;
+  /**
+   * La scheda attiva che scrive nel suo file (T41): `edit()` ha detto sì.
+   * `data-card-editing` arriva quando la vista dice che l'editor c'è.
+   */
+  #writingId: string | null = null;
+  /**
+   * Il contesto di ciò che si scrive nella scheda `#writingId` (T42: la cella
+   * attiva di un foglio e la sua formula), e l'elemento della riga delle
+   * opzioni che lo mostra, aggiornato sul posto a ogni cambio.
+   */
+  #writingContext: CardEditorContext | null = null;
+  #formulaItem: { readonly cell: HTMLElement; readonly formula: HTMLElement } | null = null;
+  /** La scheda in cui si sta entrando: la scelta delle vive la accende con le altre. */
+  #enteringId: string | null = null;
+  /**
+   * La scheda sotto l'ultimo `pointerdown`, se era già la sola scelta: il
+   * `click` che segue ci entra. Un clic che la sceglie soltanto non entra.
+   */
+  #pressedSelected: string | null = null;
+  /** Il gesto della rotella finisce `WHEEL_SETTLE_MS` dopo l'ultimo scatto. */
+  #wheelTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /**
+   * Il silenzio della penna come lo vuole `updateLiveCards`. Il lavoro che
+   * gira quando la penna si alza non cambia modi a gesto in corso (lo rifà la
+   * fine del gesto) e non lascia uscire l'errore di una vista: va in console.
+   */
+  readonly #cardQuiet: CardQuiet = {
+    defer: (key, work) => this.#quiet.defer(key, () => {
+      if (this.#destroyed || this.#gestureActive()) return;
+      try {
+        work();
+      } catch (error) {
+        console.warn("canvas: una scheda non cambia modo", error);
+      }
+    }),
+  };
+  /**
+   * Crescono quando cambia ciò che i corpi di sempre leggono oltre alla
+   * scheda: la lingua (tutti) e le sintassi del Markdown (le schede di
+   * testo). Quei corpi si rifanno alla resa dopo; le viste dei renderer no.
+   */
+  #languageRound = 0;
+  #formsRound = 0;
   #destroyed = false;
   #intakeError = "";
-  #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
-  #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
-  #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number } | null = null;
-  #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to" } | null = null;
-  #finishEditing: ((save: boolean) => void) | null = null;
+  /** L'ultimo punto (dello schermo) in cui il puntatore è stato visto sulla vista; `null` se ne è uscito. */
+  #pointerSeen: { x: number; y: number } | null = null;
+  /** I rettangoli tratteggiati di un trascinamento in corso sopra la vista. */
+  #dropGhosts: HTMLElement | null = null;
+  /** I riquadri del trascinamento di file in corso, calcolati all'entrata (T24). */
+  #dropGhost: DropGhost | null = null;
+  /**
+   * Per quanti file sono stati calcolati i riquadri: con `#dropGhost` a `null`
+   * vuol dire «nessun riquadro» (troppi file, il nucleo li rifiuta), e non si
+   * ricompila a ogni movimento finché il numero resta quello.
+   */
+  #dropGhostCount: number | null = null;
+  /** La griglia (T71): i punti sotto le schede, nella vista; `null` prima del montaggio. */
+  #grid: HTMLElement | null = null;
+  /** Le guide del gesto in corso (T71): un solo elemento sopra le schede; `null` a gesto fermo. */
+  #guideLayer: HTMLElement | null = null;
+  /** `canvas.grid` e `canvas.snap` (impostazioni del vault), dal vivo. */
+  #gridSetting = DEFAULT_PREFERENCES.grid;
+  #snapSetting = DEFAULT_PREFERENCES.snap;
+  /** Ctrl+' per questa lavagna (T71): `null` segue `canvas.grid`; si ricorda con la vista. */
+  #gridOverride: boolean | null = null;
+  /** Il trascinamento delle schede in corso (`CardDrag`). */
+  #drag: CardDrag | null = null;
+  /**
+   * Il ridimensionamento in corso (T66): la maniglia `corner`, la cornice di
+   * partenza `box` (la scheda, o la cornice della scelta) e le schede che
+   * cambiano, ognuna col suo rettangolo di partenza.
+   */
+  #resize: {
+    pointerId: number;
+    corner: ResizeCorner;
+    startX: number;
+    startY: number;
+    box: ResizeBox;
+    origin: Map<string, ResizeBox>;
+    /** Il puntatore si è mosso di più di 3 px: non è un clic sulla maniglia. */
+    moved: boolean;
+  } | null = null;
+  /**
+   * Le schede dell'ultima maniglia presa e lasciata senza muoversi: il doppio
+   * clic che segue le adatta al contenuto. Serve perché, con la cattura del
+   * puntatore, il `dblclick` arriva alla vista e non alla maniglia.
+   */
+  #handleTap: readonly string[] | null = null;
+  /** La cornice della scelta con le sue maniglie, con due schede scelte o più (T66). */
+  #selectionFrame: HTMLElement | null = null;
+  /** Lo zoom con cui si sono contate le schede troppo piccole per quattro maniglie. */
+  #handlesZoom = 0;
+  /**
+   * Lo spostamento della lavagna in corso. `toggle` è la scheda sotto un
+   * Ctrl+clic (Cmd+clic): se il puntatore si alza senza essersi mosso, la
+   * scheda entra nella scelta o ne esce, come con Maiuscolo.
+   */
+  #pan: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    camX: number;
+    camY: number;
+    toggle?: string;
+    /** Gli ultimi punti del puntatore, col loro tempo: la velocità dell'inerzia del dito (T53). */
+    trail?: PanSample[];
+  } | null = null;
+  /** Il filo che si sta tirando (T67). */
+  #connect: ConnectGesture | null = null;
+  /** Il tratto del filo in corso, nello strato dei fili; e la scheda sotto il puntatore. */
+  #connectDraft: SVGPathElement | null = null;
+  #connectTarget: string | null = null;
+  /** Il filo sotto il puntatore, che si scurisce (T67). */
+  #edgeHover: string | null = null;
+  /**
+   * «Collega…» dal menu o C con una scheda scelta (T17): la scheda da cui
+   * parte il filo; il prossimo clic su un'altra scheda lo chiude e la
+   * colonna torna alla Selezione. Esc o un altro strumento rinunciano.
+   */
+  #connectFrom: string | null = null;
+  /**
+   * L'avviso di «Togli dalla lavagna» (T17), col suo «Annulla»: il testo e il
+   * passo d'annulla del togliere. Vale finché quel passo è l'ultimo: la
+   * modifica dopo lo spegne, così «Annulla» annulla sempre il togliere.
+   */
+  #removal: {
+    readonly text: string;
+    readonly step: CanvasStep | undefined;
+    readonly undo: boolean;
+    /** I tratti appena passati a una scheda col Lazo (T86): «Rendilo libero» li riporta sulla radice. */
+    readonly free?: { readonly layer: InkLayerRef; readonly ids: readonly string[] };
+  } | null = null;
+  /**
+   * I PDF che non si sono aperti con «Spargi le pagine» (T72), per percorso, con
+   * ciò che smette di guardarne il file: il comando resta spento finché il file
+   * cambia, sparisce o torna (`watch`), o la lavagna si chiude.
+   */
+  readonly #pdfBroken = new Map<string, () => void>();
+  /** Le dita giù che la lavagna segue, in coordinate del client. */
+  readonly #fingers = new Map<number, TouchPoint>();
+  /** Il dito che può ancora essere un tocco breve: dove e quando si è posato, e su che cosa. */
+  #tap: { pointerId: number; startX: number; startY: number; at: number; target: Element | null; shift: boolean } | null = null;
+  /** Il pizzico in corso: le due dita e la camera di quando il secondo si è posato. */
+  #pinch: { a: number; b: number; a0: TouchPoint; b0: TouchPoint; start: TouchCamera } | null = null;
+  /** «Il dito sposta le schede» dalle Impostazioni, quando non lo passano le opzioni. */
+  #fingerMovesCardSetting = false;
+  /** «Il dito scrive» (`canvas.finger_writes`, T64): dalle Impostazioni, o dall'interruttore della colonna. */
+  #fingerWritesSetting = currentPreferences().fingerWrites;
+  /**
+   * Ogni dito giù sulla vista, visto prima dello strato della penna: dove e
+   * quando si è posato, dov'è adesso, e se lo strato l'ha preso per scrivere
+   * (`swallowed`: il suo `pointerdown` non è arrivato alla lavagna).
+   */
+  readonly #touches = new Map<number, { readonly startX: number; readonly startY: number; readonly at: number; x: number; y: number; swallowed: boolean }>();
+  /** Le dita che scrivevano, prese dal dito appena posato (`#touchDown`): `#gestureDown` le conta nel tocco. */
+  #adopted: number[] = [];
+  /**
+   * I puntatori premuti sulla vista, per id: l'ultimo evento che la vista ha
+   * visto di ciascuno, e se il tasto era giù all'appoggio (`held`). Un gesto
+   * che perde il rilascio si chiude da qui, dove il puntatore era (T20a).
+   */
+  readonly #pressed = new Map<number, { last: PointerEvent; held: boolean }>();
+  // --- il menu radiale e i gesti (T63) ---
+  /** «Il tasto della penna» dalle Impostazioni (`canvas.pen_button`): vale dall'appoggio dopo. */
+  #penButtonSetting: PenButtonAction = DEFAULT_PREFERENCES.penButton;
+  /** Il menu radiale aperto da questa lavagna, se c'è. */
+  #radial: Radial | null = null;
+  /** Gli strumenti e i colori della penna usati in questa seduta, il più recente in testa. */
+  #recentTools: CanvasToolId[] = [];
+  #recentColors: string[] = [];
+  /** Il dito che può diventare un tocco lungo: dove si è posato, su che cosa, e il suo timer. */
+  #longPress: { readonly pointerId: number; readonly x: number; readonly y: number; readonly target: Element | null; readonly timer: ReturnType<typeof setTimeout> } | null = null;
+  /**
+   * Le dita di un tocco (T63): dove si è posata ciascuna, quante al massimo,
+   * da quando, su che cosa si è posata la prima, e se è ancora un tocco. Un
+   * dito che scorre, il tocco lungo, la penna o il palmo non lo sono più.
+   */
+  #fingerTap: { readonly down: Map<number, TouchPoint>; readonly first: TouchPoint; most: number; readonly start: number; spoiled: boolean; readonly target: Element | null } | null = null;
+  /** L'ultimo tocco breve di un dito nel vuoto: dove e quando si è alzato, per il doppio tocco. */
+  #lastTap: { readonly x: number; readonly y: number; readonly at: number } | null = null;
+  /** L'ultimo appoggio sulla vista era di un dito: il `dblclick` che ne nasce non è del mouse. */
+  #downByTouch = false;
+  /**
+   * Il puntatore che ha preso un gesto della lavagna, finché è giù: la penna
+   * col tasto laterale che non cancella, il dito del tocco lungo.
+   */
+  #menuHeld: number | null = null;
+  /** Fino a quando (`performance.now()`) il menu del sistema dietro a un gesto si ferma. */
+  #menuEchoUntil = -Infinity;
+  /** Il `contextmenu` che la lavagna manda da sé per il tocco lungo su una scheda. */
+  #ownMenu: Event | null = null;
+  /** La regione viva dei gesti, e il suo spazio alterno per ridire la stessa frase. */
+  #gestureSaid: HTMLElement | null = null;
+  #gestureEcho = false;
+  // --- tastiera e lettore di schermo (T61) ---
+  /** La lettura della lavagna (ordine, gruppi, fili) del documento `doc`: si rifà solo se il documento cambia. */
+  #reading: { readonly doc: CanvasDocument; readonly value: BoardReading } | null = null;
+  /** I nomi delle schede sono scritti per questo documento e questa lingua; `stale` dopo una scheda nuova. */
+  #labelled: { doc: CanvasDocument | null; round: number; stale: boolean } = { doc: null, round: -1, stale: true };
+  /** La scrittura dei nomi rimandata a quando il thread è libero, se ce n'è una in attesa. */
+  #labelsPending: (() => void) | null = null;
+  /** Il giro dei nomi a metà: le schede da nominare e fin dove è arrivato. */
+  #labelRun: { readonly doc: CanvasDocument; readonly round: number; readonly queue: readonly CardEntry[]; at: number } | null = null;
+  readonly #labelsSchedule: Schedule;
+  /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
+  #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
+  /** «Trascinare nel vuoto» dalle Impostazioni (N6 T20b): `select` di serie, il rettangolo. */
+  #dragEmptySetting: DragEmptyAction = DEFAULT_PREFERENCES.dragEmpty;
+  // --- il selettore delle sezioni (T74) ---
+  /** «Selettore delle parti» dalle Impostazioni (`canvas.parts_picker`): si apre da sé al rilascio. */
+  #partsPickerSetting = DEFAULT_PREFERENCES.partsPicker;
+  /** Il selettore aperto e la scheda a cui è attaccato. */
+  #partsPicker: { readonly handle: PartsPickerHandle; readonly node: string; readonly path: string } | null = null;
+  /** Cresce a ogni richiesta del sommario: una risposta vecchia non apre niente. */
+  #partsRound = 0;
+  /** Quante sezioni ha una nota, dall'ultimo sommario letto: spegne «Parti…» se meno di due. */
+  readonly #partsCounts = new Map<string, number>();
+  // --- il ritaglio di un'immagine (T78) ---
+  /**
+   * Il ritaglio aperto: la scheda, il suo file, la zona di quando si è aperto
+   * e l'altezza che la scheda mostra intanto (l'immagine intera, ruotata),
+   * `null` finché l'immagine non ha misure. Niente si scrive finché non si
+   * chiude con «Fatto» o «Togli il ritaglio».
+   */
+  #crop: CropSession | null = null;
+  // --- muoversi (T53) ---
+  /** Spazio tenuto sulla lavagna: il tasto principale sposta la vista, con qualsiasi strumento. */
+  #spaceHeld = false;
+  /**
+   * Il tocco di Spazio in corso (T76): quando è sceso il primo tasto
+   * (`timeStamp` dell'evento), dov'era il puntatore, e se si è già mosso o
+   * ha premuto. Lasciato entro `READER_TAP_MS`, intatto, apre il lettore.
+   */
+  #spaceTap: { readonly at: number; from: { x: number; y: number } | null; spoiled: boolean } | null = null;
+  // --- il lettore (T76) ---
+  /** Il lettore aperto, la scheda che legge e il suo file. */
+  #reader: { readonly handle: ReaderHandle; readonly node: string; readonly path: string } | null = null;
+  /**
+   * Il volo di un salto o l'inerzia del dito: lo stato che `stepCamera`
+   * insegue, e il tempo dell'ultimo fotogramma. `null` a vista ferma.
+   */
+  #motion: { state: MotionState; last: number | null } | null = null;
+  #motionFrame: number | undefined = undefined;
+  /**
+   * Lo scorrimento al bordo mentre si tira una scheda, una maniglia o un filo:
+   * l'ultimo punto del puntatore, i tasti tenuti e il tempo dell'ultimo
+   * fotogramma. `null` fuori dalla fascia del bordo.
+   */
+  #edgeScroll: { pointerId: number; clientX: number; clientY: number; shiftKey: boolean; altKey: boolean; last: number | null } | null = null;
+  #edgeFrame: number | undefined = undefined;
+  /** Il movimento ridotto, di sistema o dalle Impostazioni, letto dal vivo. */
+  #reducedMotion = reducedMotion();
+  readonly #port: CanvasCorePort;
+  /** La lavagna aperta nel nucleo; `null` prima di aprirla o dopo una trappola. */
+  #core: CanvasCore | null = null;
+  /** Il giro di riapertura dopo una trappola: uno più nuovo rende vecchi gli altri. */
+  #revival = 0;
+  /** Le trappole di fila senza un commit riuscito in mezzo. */
+  #traps = 0;
+  #editor: CardEditor | null = null;
+  /**
+   * Le schede ridimensionate a mano da quando la lavagna è aperta: scrivendoci
+   * non crescono più in larghezza, perché la misura l'ha scelta chi usa (T44).
+   * Il `.canvas` non lo dice: riaprendo la lavagna si ricomincia.
+   */
+  readonly #sizedByHand = new Set<string>();
+  /** La ricerca dei comandi aperta (Ctrl+/, T48): finché c'è, il campo di una scheda non si chiude perdendo il fuoco. */
+  #commandSearch: CommandSearchHandle | null = null;
+  /** Vero dall'apertura della ricerca alla sua chiusura, anche mentre si apre e prende il fuoco. */
+  #searching = false;
+  /** L'unico posto del testo di una scheda non ancora registrato. */
+  #pending: PendingText | null = null;
+  #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** La scheda che lampeggia dopo un link (T57): un solo lampo alla volta. */
+  #flashing: HTMLElement | null = null;
+  /** Il timer che spegne il lampo (T57): lo cancella `#endFlash`, e `destroy` lo chiude. */
+  #flashTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Chi possiede l'inchiostro: lo scheduler del silenzio della penna e lo strato. Si chiude in `destroy`. */
+  readonly #life: Lifetime = openLifetime();
+  /** Il selettore di «Altro…» aperto (T47); si chiude con la vita della lavagna. */
+  #colorPicker: PopoverHandle | null = null;
+  /** Il lavoro pesante (il ridisegno dopo una modifica da fuori) aspetta che la penna si alzi. */
+  readonly #quiet: PenQuiet;
+  /** Lo strato della penna; `null` in sola lettura, con la scena troppo grande o senza lavagna (A8). */
+  #inkLayer: InkLayer | null = null;
+  #inkLife: Lifetime | null = null;
+  readonly #inkPaths = new InkPathCache();
+  #inkStates: InkStates | null = null;
+  /** L'asciutto disegnato adesso: per scheda e sulla radice. */
+  #inkCards = new Map<string, readonly DryStroke[]>();
+  #inkBoard: readonly DryStroke[] = [];
+  #inkChain: InkChain | null = null;
+  /** La passata di gomma in corso; `null` se nessuna. */
+  #erase: InkErase | null = null;
+  /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
+  #inkKeyDown = false;
+  /**
+   * Il velo della croce (T20d): sopra le schede, porta lui il cursore del
+   * mouse che scrive. Mostrarlo cambia un elemento solo; `cursor` messo sul
+   * viewport si ereditava e ricalcolava lo stile di tutta la lavagna.
+   */
+  readonly #penVeil: HTMLElement;
+  /** Sopra la vista c'è un mouse, o una penna sospesa: il velo serve solo a loro. */
+  #veilPointer = false;
+  /** Ciò che c'è sotto il velo per un evento che l'ha preso, cercato una volta. */
+  readonly #underVeil = new WeakMap<Event, EventTarget>();
+  /**
+   * La scheda che ha il `:hover` vero, letta a ogni `pointerover` che non è del
+   * velo né della cattura di un tratto (T20f): è quella a cui il velo che
+   * compare o la cattura del tratto tolgono il passaggio.
+   */
+  #hoverCard: HTMLElement | null = null;
+  /**
+   * La scheda che tiene l'aspetto del passaggio (`data-hover-held`) mentre il
+   * velo o la cattura del tratto le tolgono `:hover`: perderlo all'inizio del
+   * tratto ridipingeva tutta la scheda, anche un foglio vivo (T20f).
+   */
+  #heldCard: HTMLElement | null = null;
+  // --- a chi appartiene il tratto (T69) ---
+  /** Un tratto della punta è appena cominciato: lo spessore e la vista, finché il primo movimento non apre l'etichetta. */
+  #inkStarting: { readonly size: number; readonly view: DOMRect } | null = null;
+  /** Il tratto in corso e l'ancora mostrata; `null` a penna su. */
+  #inkTarget: InkTarget | null = null;
+  /** L'ultimo punto della penna che la vista ha visto: da qui parte il riquadro. */
+  readonly #inkAt: InkPoint = { pointerId: -1, clientX: 0, clientY: 0 };
+  /** Alt tenuto: il tratto resta libero sulla lavagna. */
+  #altHeld = false;
+  // --- le forme dal tratto, Maiusc e il righello (T87) ---
+  /** Le guide dei tratti della punta aperti, per id del tratto. */
+  readonly #inkGuides = new Map<number, StrokeGuide>();
+  /** Il mezzo secondo della penna ferma: uno solo, perché il tratto della punta è uno. */
+  #shapeTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Maiusc tenuto: il tratto in corso resta dritto, la forma regolare. */
+  #shiftHeld = false;
+  /** Il righello sulla lavagna; nasce col corpo della lavagna. */
+  #inkRuler: CanvasRuler | null = null;
+  /** Per il lettore di schermo: l'ancora dell'ultimo tratto, detta all'alzata. */
+  #inkSaid: HTMLElement | null = null;
+  /** L'etichetta e il bordo, tenuti fra un tratto e l'altro. */
+  #inkMarks: InkMarks | null = null;
+  /** I tratti scelti col Lazo (T86), per chiave (`inkKey`). */
+  #strokeSelection: ReadonlySet<string> = new Set();
+  /** Il giro del Lazo in corso (T86), in coordinate della lavagna, e la scheda sotto l'appoggio. */
+  #lasso: { readonly pointerId: number; readonly points: LassoPoint[]; readonly additive: boolean; readonly pressed: string | null } | null = null;
+  /** Lo spostamento di ciò che il Lazo ha scelto (T86). */
+  #strokeDrag: StrokeDrag | null = null;
+  /** Lo strato del lazo sullo stage, creato la prima volta che serve. */
+  #lassoLayer: LassoLayer | null = null;
+  /** Il trascinamento nel vuoto con la Selezione, il rettangolo che sceglie (N6 T20b). */
+  #marquee: MarqueeGesture | null = null;
+  /** Lo strato del rettangolo sullo stage, creato la prima volta che serve. */
+  #marqueeLayer: MarqueeLayer | null = null;
+  /** Il fotogramma che aggiorna la scelta del rettangolo, in attesa. */
+  #marqueeFrame: number | undefined = undefined;
+  // --- copia e incolla (T68) ---
+  /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
+  #clipboardCommand: "copy" | "cut" | null = null;
+  /** L'ultimo incolla delle schede di Fub: lo stesso testo nello stesso punto si sfalsa di nuovo. */
+  #lastPaste: LastPaste | null = null;
+  /** L'ultimo Ctrl+D: le schede di partenza e le copie, nello stesso ordine; il prossimo ne ripete lo spostamento. */
+  #lastDuplicate: { readonly sources: readonly string[]; readonly copies: readonly string[] } | null = null;
+  /**
+   * Lo strumento della colonna (T49): che cosa fa il mouse sulla lavagna. Con
+   * Penna, Evidenziatore o Gomma il mouse scrive con la penna del menu, ed è
+   * lo stesso stato dell'interruttore «Scrivi col mouse» (`setInkMouse`).
+   */
+  #tool: CanvasToolId = "select";
+  /** La colonna degli strumenti, a sinistra della lavagna o sotto (stretta). */
+  readonly #rail: CanvasRail;
+  /** Lo spazio di lavoro (T65) e l'interfaccia nascosta con Ctrl+.. */
+  readonly #workspace: CanvasWorkspaceControl;
+  /**
+   * Il navigatore mostrato nello spazio Semplice, dove è chiuso di serie: vale
+   * finché la lavagna resta aperta in quello spazio, e non si ricorda nella
+   * vista, che tiene la scelta dello spazio Completo.
+   */
+  #simpleNavigator = false;
+  /** La lavagna vuota (T62): al centro, quando non c'è niente. */
+  readonly #empty: CanvasEmpty;
+  /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
+  #inkMouseTurns = 0;
+  /** Il pulsante «Scrivi col mouse»: lo stesso elemento in ogni barra. */
+  readonly #inkMouseButton: HTMLButtonElement;
+  /**
+   * La penna scelta nel menu (A19): strumento, penna, colore, spessore e che
+   * cosa cancella la gomma (`setInkEraser`, di serie il tratto intero, A20).
+   */
+  #penChoice: InkPenChoice = DEFAULT_INK_CHOICE;
+  /** Quante volte la penna è cambiata: quella ricordata arriva solo se nessuno l'ha scelta prima. */
+  #penTurns = 0;
+  /** Il menu della penna, nella riga delle opzioni: il suo pulsante è sempre lo stesso. */
+  readonly #penMenu: PenMenu;
+  /**
+   * La riga delle opzioni sopra la lavagna (T50): le opzioni dello strumento
+   * e delle schede scelte, o la barra di una scheda in scrittura.
+   */
+  readonly #canvasOptions: CanvasOptions;
+  /** La barra della selezione (T51), sopra le schede scelte, a fine gesto. */
+  readonly #selectionBar: CanvasSelectionBar;
+  /** La zona della vista con le barre che non scalano (la selezione, il ritaglio). */
+  readonly #area: HTMLElement;
+  /** Le punte dei fili che lo strumento Collega tira (T50); di serie alla fine. */
+  #tips: CanvasTip = "end";
+  /**
+   * La misura e l'allineamento delle prossime schede dello strumento Testo
+   * (T92): l'ultimo scelto nella riga, di serie medio e a sinistra.
+   */
+  #textNext: TextStyle = DEFAULT_TEXT_STYLE;
+  /** La vista ricordata su questo computer (T36); `null` senza memoria o senza lavagna. */
+  readonly #viewMemo: CanvasViewRecorder | null;
+  /** Cresce a ogni `setDoc`: la vista letta per un'apertura di prima non vale più. */
+  #viewRound = 0;
+  /**
+   * La camera e la scelta subito dopo l'apertura, finché la vista ricordata
+   * non arriva: la prende solo ciò che nessuno ha cambiato nel frattempo.
+   * `null` prima che la lavagna si mostri, e dopo che la vista è arrivata.
+   */
+  #openView: { readonly camera: Viewport; readonly selection: string; readonly navigatorHidden: boolean; readonly grid: boolean | null } | null = null;
+  /** La vista letta prima che il nucleo aprisse il testo: la prende `#revive`. */
+  #heldView: { readonly round: number; readonly view: CanvasView } | null = null;
+  /**
+   * La firma delle voci della banda che la shell ha: si avvisa solo se cambia.
+   * `#attachmentDeclared` è `files.attachment-folder` com'è scritto (`null`
+   * finché non arriva, o se non è un testo): la banda mostra la cartella del deposito.
+   */
+  #statusShown = "";
+  #attachmentDeclared: string | null = null;
+  /**
+   * Le gemelle (C14, T22): per ogni file che più schede mostrano, i loro id;
+   * rifatte a ogni resa. `#litTwins` sono quelle illuminate da «×N» (la
+   * scheda da cui si è acceso e il suo file), `null` se spente;
+   * `#twinsHover` il «×N» sotto il puntatore; `#twinsShown` la firma
+   * delle gemelle che la banda ha letto.
+   */
+  #twins: Map<string, readonly string[]> = new Map();
+  #litTwins: { readonly from: string; readonly path: string } | null = null;
+  #twinsHover: Element | null = null;
+  #twinsShown = "";
+  /** I conti «↩ N» dall'indice (T22); `null` senza la porta. */
+  readonly #citations: CitationCounts | null;
+  /** Il navigatore (T55), in basso a destra della vista. */
+  readonly #navigator: CanvasNavigator;
+  /** «Nascondi il navigatore» per questa lavagna (T55): si ricorda nella vista (T36). */
+  #navigatorHidden = false;
+  /** I salti della vista per Indietro e Avanti (T56): solo in memoria, per questa lavagna aperta. */
+  readonly #jumps = new CanvasJumps();
+  /** La barra «Cerca nella lavagna» (T60), in alto a destra della vista. */
+  readonly #findBar: CanvasFindBar;
+  /** Il segno della ricerca di ogni scheda (T60): lo legge anche la scheda che nasce dopo. */
+  #findMarkOf: (id: string) => FindMark = () => null;
+  /** `canvas.drop_folder` e il suo percorso (T34), dal vivo; `null` finché non arriva. */
+  #dropChoice: DropFolderChoice | null = null;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
+    this.#viewMemo = options.viewMemory && options.documentId
+      ? new CanvasViewRecorder(options.viewMemory, options.documentId, () => this.#viewSnapshot())
+      : null;
+    this.#quiet = new PenQuiet(idleSchedule(this.#life));
+    this.#labelsSchedule = idleSchedule(this.#life);
+    this.#life.add(() => this.#quiet.dispose());
+    if (!options.fingerMovesCard) {
+      this.#life.add(watchPreferences((preferences) => {
+        this.#fingerMovesCardSetting = preferences.fingerMovesCard;
+        // Il suggerimento di «Il dito scrive» dice se questa vale.
+        this.#rail.sync();
+      }));
+    }
+    // La rotella segue «La rotella del mouse» a ogni cambio: vale dallo scatto
+    // dopo. La colonna segue quella scelta nelle Impostazioni
+    // (`canvas.toolbar`), dal vivo; la lettura arriva dopo il costruttore.
+    this.#life.add(watchPreferences((preferences) => {
+      this.#wheelSetting = preferences.wheel;
+      // Il trascinamento nel vuoto (N6 T20b) vale dal gesto dopo; la riga dice il gesto di adesso.
+      this.#dragEmptySetting = preferences.dragEmpty;
+      this.#canvasOptions.sync();
+      this.#penButtonSetting = preferences.penButton;
+      this.#partsPickerSetting = preferences.partsPicker;
+      this.#gridSetting = preferences.grid;
+      this.#snapSetting = preferences.snap;
+      this.#fingerWritesSetting = preferences.fingerWrites;
+      this.#paintGrid();
+      this.#rail.setToolbar(preferences.toolbar);
+      this.#rail.sync();
+      // Lo spazio di lavoro (T65): `auto` sceglie col dispositivo.
+      (this.#workspace as CanvasWorkspaceControl | undefined)?.setMode(preferences.workspace);
+      this.#dropChoice = { dropFolder: preferences.dropFolder, dropFolderPath: preferences.dropFolderPath };
+      this.#statusSettle();
+    }));
+    this.#port = options.core ?? SHARED_CORE;
+    // La cartella dei file trascinati arriva da `files.attachment-folder`, letta
+    // una volta: la banda la mostra quando arriva. Una lettura che fallisce
+    // lascia la cartella di serie.
+    void readAttachmentFolder().then((declared) => {
+      this.#attachmentDeclared = declared;
+      this.#statusSettle();
+    }, () => undefined);
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
-    this.#toolbar = document.createElement("div");
-    this.#toolbar.className = "canvas-toolbar";
-    this.#toolbar.setAttribute("role", "toolbar");
-    this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
+    // La barra dei comandi è la barra delle opzioni del kit, come la riga
+    // sopra: una riga sola, e ciò che non ci sta va in «…» invece di scorrere
+    // di lato senza segno (#411). Le frecce passano fra i controlli che si
+    // vedono, «…» compreso.
+    this.#toolbarBar = createOptionsBar({
+      label: t("canvas.surface"),
+      moreLabel: t("canvas.toolbar.more"),
+      lifetime: this.#life,
+      onFit: () => this.#toolbarKeys?.refresh(),
+    });
+    this.#toolbar = this.#toolbarBar.element;
+    this.#toolbar.classList.add("canvas-toolbar");
+    const toolbarRow = this.#toolbar.querySelector<HTMLElement>(".kit-options-row")!;
+    const toolbarMore = this.#toolbar.querySelector<HTMLElement>(".kit-options-more")!;
+    this.#toolbarKeys = rovingToolbar(this.#toolbar, {
+      controls: () => [...toolbarRow.querySelectorAll<HTMLElement>("button, select, input"), toolbarMore],
+    }, this.#life);
     this.#viewport = document.createElement("div");
     this.#viewport.className = "canvas-viewport";
     this.#viewport.tabIndex = 0;
@@ -169,78 +2155,605 @@ export class CanvasEngine {
     this.#viewport.setAttribute("aria-label", t("canvas.surface"));
     this.#stage = document.createElement("div");
     this.#stage.className = "canvas-stage";
+    // I fili sono il primo figlio dello stage, nella stessa pila delle schede
+    // (T91, rotta 4): sotto le schede, ma sopra lo sfondo di un gruppo, che CSS
+    // mette sotto. Lo stage ha la camera; il filo non ne ha una sua.
     this.#edgeLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.#edgeLayer.classList.add("canvas-edges");
     this.#edgeLayer.setAttribute("aria-hidden", "true");
-    this.#viewport.append(this.#edgeLayer, this.#stage);
-    this.#root.append(this.#toolbar, this.#viewport);
+    this.#stage.append(this.#edgeLayer);
+    // Le prese dei fili scelti stanno sopra lo stage, così il puntatore le
+    // prende prima dei punti delle schede che le coprono (T91, rotta 5).
+    this.#handleLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.#handleLayer.classList.add("canvas-edge-handles");
+    this.#handleLayer.setAttribute("aria-hidden", "true");
+    // La griglia (T71) sta sotto lo stage: i suoi punti non passano sopra le schede.
+    this.#grid = document.createElement("div");
+    this.#grid.className = "canvas-grid";
+    this.#grid.setAttribute("aria-hidden", "true");
+    // Il velo della croce (T20d) sopra tutto ciò che il puntatore prende: si
+    // mostra con `data-idle` tolto, mai con `hidden`, che le regole `:has()`
+    // della shell leggono (vedi i riquadri dei bersagli, T20c).
+    this.#penVeil = document.createElement("div");
+    this.#penVeil.className = "canvas-pen-veil";
+    this.#penVeil.setAttribute("aria-hidden", "true");
+    this.#penVeil.setAttribute("data-idle", "");
+    this.#viewport.append(this.#grid, this.#stage, this.#handleLayer, this.#penVeil);
+    this.#paintGrid();
+    // Lo spazio di lavoro (T65): Semplice o Completo, e Ctrl+. che nasconde
+    // l'interfaccia. Gli attributi stanno sulla superficie; la colonna, la
+    // riga e il navigatore si rifanno qui.
+    this.#workspace = createCanvasWorkspace({
+      root: this.#root,
+      lifetime: this.#life,
+      mode: currentPreferences().workspace,
+      parts: () => [...this.#root.querySelectorAll<HTMLElement>(".canvas-header, .canvas-toolbar, .canvas-rail, .canvas-selection-bar, .canvas-navigator")],
+      focusBoard: () => this.#viewport.focus({ preventScroll: true }),
+      onWorkspace: (workspace) => {
+        // Si entra nel Semplice col navigatore chiuso.
+        if (workspace === "simple") this.#simpleNavigator = false;
+        this.#rail.setWorkspace(workspace);
+        this.#canvasOptions.sync();
+        this.#statusSettle();
+      },
+      onBare: (bare) => {
+        // I menu aperti dalla riga non restano senza la riga.
+        if (bare) this.#canvasOptions.closeMenus();
+        this.#statusSettle();
+      },
+    });
+    // Il corpo: la colonna degli strumenti (T49) e l'area della lavagna, come
+    // il corpo del disegno. Stretta, la colonna va sotto, in riga.
+    this.#rail = createCanvasRail({
+      tool: () => this.#tool,
+      pick: (tool) => {
+        this.#recordPending();
+        this.#pickTool(tool);
+      },
+      editable: () => !this.#readOnly && !this.#isSceneOversized(),
+      toolbar: currentPreferences().toolbar,
+      workspace: this.#workspace.workspace,
+      onFull: () => this.#workspace.chooseFull(),
+      fingerWrites: () => this.#fingerWritesSetting,
+      fingerMovesCard: () => this.#fingerMovesCard(),
+      onFingerWrites: (on) => this.#setFingerWrites(on),
+      ruler: () => (this.#inkRuler?.ruler ?? null) !== null,
+      onRuler: (on) => this.#inkRuler?.set(on),
+      lifetime: this.#life,
+    });
+    // La lavagna vuota (T62) è un fratello della vista, non un suo figlio: i
+    // suoi pulsanti non passano dal puntatore della vista.
+    this.#empty = createCanvasEmpty({
+      lifetime: this.#life,
+      write: () => this.#placeText(),
+      receive: (data) => this.#receive(data),
+      addFiles: options.attachments !== undefined && options.documentId !== undefined,
+    });
+    // Il navigatore (T55): un fratello della vista, come la lavagna vuota; un
+    // clic è un salto (`#jumpCamera`), un trascinamento sposta la vista.
+    this.#navigator = createCanvasNavigator({
+      lifetime: this.#life,
+      nodes: () => (this.#doc && !this.#isSceneOversized() ? this.#doc.nodes : null),
+      view: () => {
+        const rect = this.#viewport.getBoundingClientRect();
+        return { camera: { ...this.#camera }, width: rect.width || 800, height: rect.height || 600 };
+      },
+      enabled: () => !this.#workspace.bare && !this.#navigatorClosed(),
+      jump: (camera) => this.#jumpCamera(camera),
+      pan: (camera) => {
+        this.#stopMotion(false);
+        this.#camera = { x: camera.x, y: camera.y, zoom: clampZoom(camera.zoom) };
+        this.#applyCamera();
+      },
+      settled: () => {
+        this.#refreshLive();
+        this.#statusSettle();
+      },
+    });
+    // Cerca nella lavagna (T60): un fratello della vista, come il navigatore.
+    // Ogni risultato è un salto (`#jumpCamera`); il velo lo scrive la tela.
+    this.#findBar = createCanvasFindBar({
+      lifetime: this.#life,
+      index: () => (this.#doc ? boardFindIndex(this.#doc) : null),
+      ...(options.findNotes ? { notes: options.findNotes } : {}),
+      show: (matches, current) => this.#showFound(matches, current),
+      go: (target) => this.#jumpToFound(target),
+      closed: (hadFocus) => {
+        if (hadFocus && !this.#destroyed) this.#viewport.focus({ preventScroll: true });
+      },
+    });
+    const area = document.createElement("div");
+    this.#area = area;
+    area.className = "canvas-area";
+    area.append(this.#viewport, this.#empty.element, this.#findBar.element, this.#navigator.element);
+    // Il righello (T87): un fratello della vista, sopra di lei, così il suo
+    // corpo non passa dallo strato della penna.
+    this.#inkRuler = createCanvasRuler({
+      host: area,
+      camera: () => this.#camera,
+      viewCenter: () => {
+        const rect = this.#viewport.getBoundingClientRect();
+        const { x, y } = this.#screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return [x, y];
+      },
+      announce: (text) => this.#sayGesture(text),
+      onToggle: () => this.#rail.sync(),
+      lifetime: this.#life,
+    });
+    const body = document.createElement("div");
+    body.className = "canvas-body";
+    body.append(this.#rail.element, area);
+    this.#root.append(this.#toolbar, body);
+    this.#viewport.dataset.tool = this.#tool;
+    // I due comandi dell'inchiostro, in testa alla barra e gli stessi in ogni
+    // barra: il menu della penna (il rialzo aperto non si stacca quando la
+    // barra si rifà) e l'interruttore «Scrivi col mouse», che tiene il fuoco
+    // dopo il clic, così chi usa la tastiera sente lo stato nuovo.
+    // Il selettore di «Altro…» (T47) non resta aperto senza la lavagna.
+    this.#life.add(() => this.#colorPicker?.close());
+    this.#penMenu = createPenMenu({
+      lifetime: this.#life,
+      choice: () => this.#penChoice,
+      choose: (next, settled) => this.#choosePen(next, settled),
+      editable: () => !this.#readOnly && !this.#isSceneOversized(),
+      theme: () => ((this.#root.dataset.theme ?? options.theme) === "dark" ? "dark" : "light"),
+    });
+    // La testata, sopra la barra di N4 e la lavagna: la riga delle opzioni
+    // (T50), col menu della penna dentro.
+    this.#canvasOptions = createCanvasOptions({
+      lifetime: this.#life,
+      tool: () => this.#tool,
+      chosen: () => this.#selectedNodes().length,
+      color: () => this.#chosenColor(),
+      tips: () => this.#tips,
+      text: () => this.#chosenText(),
+      commands: () => this.commands(),
+      run: (id) => {
+        this.#recordPending();
+        const command = this.commands().find((one) => one.id === id);
+        if (command && command.disabled() === null) command.run();
+      },
+      penMenu: this.#penMenu,
+      swatches: () => this.#colorSwatches(),
+      activeCard: () => this.#besideHere() !== null,
+      simple: () => this.#workspace.workspace === "simple",
+      dragEmpty: () => this.#dragEmptySetting,
+    });
+    // La barra della selezione (T51): una sorella della vista, come il
+    // navigatore, così i suoi clic non passano dal puntatore della lavagna.
+    this.#selectionBar = createCanvasSelectionBar({
+      lifetime: this.#life,
+      commands: () => this.commands(),
+      run: (id, trigger) => {
+        this.#recordPending();
+        const command = this.commands().find((one) => one.id === id);
+        if (!command || command.disabled() !== null) return;
+        // I menu si aprono sotto il pulsante della barra.
+        if (id === "canvas.color_menu") this.#canvasOptions.openColorMenu(trigger);
+        else if (id === "canvas.align_menu") this.#canvasOptions.openAlignMenu(trigger);
+        else command.run();
+        this.#statusSettle();
+      },
+      color: () => this.#chosenColor(),
+      back: () => this.#viewport.focus({ preventScroll: true }),
+      restyle: (change) => this.#restyleChosen(change),
+    });
+    area.append(this.#selectionBar.element);
+    const header = document.createElement("div");
+    header.className = "canvas-header";
+    header.append(this.#canvasOptions.element);
+    this.#toolbar.before(header);
+    const inkMouse = document.createElement("button");
+    inkMouse.type = "button";
+    inkMouse.dataset.canvasAction = "ink-mouse";
+    this.#life.listen(inkMouse, "click", (event) => {
+      event.preventDefault();
+      this.#recordPending();
+      this.#toggleInkMouse();
+    });
+    this.#inkMouseButton = inkMouse;
     parent.replaceChildren(this.#root);
+    const citations = options.cards?.citations;
+    this.#citations = citations ? new CitationCounts(citations, () => this.#syncHeads()) : null;
+    this.#life.add(() => this.#citations?.dispose());
     this.#stopLanguage = onLanguage(() => {
+      // I corpi di sempre hanno parole: alla prossima resa si rifanno.
+      this.#languageRound++;
+      this.#syncHeads();
+      this.#scheduleLabels();
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
+      this.#toolbar.querySelector(".kit-options-more")?.setAttribute("aria-label", t("canvas.toolbar.more"));
       this.#drawToolbar();
+      this.#rail.relabel();
+      this.#empty.relabel();
+      this.#navigator.relabel();
+      this.#findBar.relabel();
+      this.#canvasOptions.sync();
+      this.#selectionBar.relabel();
+    });
+    // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
+    // clic su una casella); gli altri tasti lì sono della colonna.
+    this.#life.listen(this.#rail.element, "keydown", (event) => this.#railKeydown(event));
+    // Ctrl+. nasconde e riporta l'interfaccia (T65) da ogni punto della
+    // lavagna: la vista, la colonna, la riga, la barra, il navigatore. Dentro
+    // una scheda che scrive il tasto è prima dell'editor: arriva qui solo se
+    // l'editor non lo usa. Sulla vista il comando `canvas.bare` lo prende già.
+    this.#life.listen(this.#root, "keydown", (event) => {
+      if (event.defaultPrevented || !isBareKey(event)) return;
+      event.preventDefault();
+      this.#workspace.setBare(!this.#workspace.bare);
     });
     const signal = this.#abort.signal;
-    this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
-    this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
-    this.#viewport.addEventListener("pointerup", (event) => this.#pointerUp(event), { signal });
-    this.#viewport.addEventListener("pointercancel", () => this.#cancelGestures(), { signal });
+    // Le dita giù, prima dello strato della penna (T64): in cattura e prima di
+    // lui, che si monta dopo. Un dito che lo strato prende per scrivere non
+    // arriva qui sotto, e resta `swallowed`.
+    this.#viewport.addEventListener("pointerdown", (event) => {
+      // Ogni puntatore giù si ricorda, anche quello che lo strato della penna
+      // prende per sé: il suo rilascio perso lo chiude dal punto dov'era (T20a).
+      this.#pressed.set(event.pointerId, { last: event, held: event.buttons !== 0 });
+      if (event.pointerType !== "touch") return;
+      const { clientX: x, clientY: y } = event;
+      this.#touches.set(event.pointerId, { startX: x, startY: y, at: event.timeStamp, x, y, swallowed: true });
+    }, { capture: true, signal });
+    this.#viewport.addEventListener("pointermove", (event) => {
+      this.#pointerMoved(event);
+      const touch = event.pointerType === "touch" ? this.#touches.get(event.pointerId) : undefined;
+      if (touch) {
+        touch.x = event.clientX;
+        touch.y = event.clientY;
+      }
+    }, { capture: true, signal });
+    // Un gesto che comincia toglie la barra della selezione: torna a fine gesto.
+    this.#viewport.addEventListener("pointerdown", (event) => {
+      const touch = event.pointerType === "touch" ? this.#touches.get(event.pointerId) : undefined;
+      if (touch) touch.swallowed = false;
+      // Un tasto premuto con Spazio giù è uno spostamento, non un tocco (T76).
+      if (this.#spaceTap) this.#spaceTap.spoiled = true;
+      this.#selectionBar.hide();
+      this.#downByTouch = event.pointerType === "touch";
+      this.#pointerDown(event);
+      // I gesti del dito (T63) guardano ciò che il dito ha appena cominciato.
+      if (event.pointerType === "touch") this.#gestureDown(event);
+    }, { signal });
+    this.#viewport.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch") this.#gestureMove(event);
+      this.#pointerMove(event);
+    }, { signal });
+    // Il rilascio vero: la fine del gesto è quella di `#gestureEnd`, che passa
+    // anche dalle chiusure senza rilascio (T20a).
+    this.#viewport.addEventListener("pointerup", (event) => this.#gestureEnd(event, false), { signal });
+    // La cattura persa è un rilascio che non arriva più: il gesto si chiude come
+    // se il puntatore si fosse alzato, una volta sola (T20a). Un dito no: la
+    // cattura gliela tolgono lo strato della penna e il browser quando il dito
+    // passa a scrivere o a far da navigazione (T64), e il suo gesto lo chiudono
+    // il rilascio, il `pointercancel` o la finestra.
+    this.#viewport.addEventListener("lostpointercapture", (event) => {
+      if (event.pointerType !== "touch") this.#gestureLost(event);
+    }, { signal });
+    // La vista che cambia misura, o che torna in vista da un'altra linguetta
+    // (da zero alla sua misura), rifà la scelta delle schede vive. La vista
+    // cambia misura anche quando cambia quella della superficie: allora la
+    // colonna va sotto la lavagna, o torna di lato (`#syncNarrow`).
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => {
+        this.#syncNarrow();
+        this.#refreshLive();
+        // La lavagna può stare tutta nella vista nuova, o non più (T55).
+        this.#statusSettle();
+      });
+      observer.observe(this.#viewport);
+      this.#life.add(() => observer.disconnect());
+    }
+    this.#viewport.addEventListener("pointercancel", (event) => {
+      if (event.pointerType === "touch") this.#fingers.delete(event.pointerId);
+      this.#cancelGestures();
+      if (event.pointerType === "touch") this.#gestureUp(event, true);
+    }, { signal });
+    // Il tasto laterale lasciato, o un dito alzato fuori dalla vista (T63):
+    // sul documento, perché il rilascio può cadere sul menu radiale.
+    this.#life.listen(document, "pointerup", (event) => this.#pointerEnded(event), { capture: true });
+    this.#life.listen(document, "pointercancel", (event) => this.#pointerEnded(event), { capture: true });
+    // Il menu del sistema dietro al tasto laterale o al tocco lungo non apre
+    // quello della lavagna (T63); quello che la lavagna manda da sé sì.
+    this.#viewport.addEventListener("contextmenu", (event) => {
+      if (event === this.#ownMenu) return;
+      if (this.#longPress !== null || this.#menuHeld !== null || this.#radial !== null || performance.now() < this.#menuEchoUntil) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, { signal, capture: true });
+    this.#life.add(() => {
+      this.#cancelLongPress();
+      this.#radial?.close();
+    });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
-    this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
+    // La vista si muove solo con la camera: uno scorrimento del browser (un
+    // editor in una scheda che porta il cursore in vista, T43) si annulla.
+    this.#viewport.addEventListener("scroll", () => {
+      if (this.#viewport.scrollTop !== 0) this.#viewport.scrollTop = 0;
+      if (this.#viewport.scrollLeft !== 0) this.#viewport.scrollLeft = 0;
+    }, { signal });
+    this.#viewport.addEventListener("keydown", (event) => {
+      this.#keydown(event);
+      this.#statusSettle();
+    }, { signal });
+    // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
+    // mouse torna a selezionare.
+    this.#life.listen(window, "keyup", (event) => {
+      if (isInkKey(event)) this.#releaseInkKey();
+    });
+    this.#life.listen(window, "blur", () => this.#releaseInkKey());
+    this.#life.listen(document, "visibilitychange", () => this.#releaseInkKey());
+    // La finestra che perde il fuoco: i rilasci dei puntatori giù non
+    // arriveranno, e ogni gesto aperto si chiude come un rilascio (T20a).
+    this.#life.listen(window, "blur", () => this.#gesturesLost());
+    // Muoversi (T53). Spazio lasciato ovunque, o la finestra che perde il
+    // fuoco: il tasto principale torna allo strumento. Con la finestra che
+    // perde il fuoco l'inerzia e lo scorrimento al bordo si fermano, e un
+    // volo arriva dove andava.
+    // Spazio lasciato dopo un tocco breve, col puntatore fermo e una nota
+    // scelta: il lettore (T76). Lo spostamento non aspetta il tocco.
+    this.#life.listen(window, "keyup", (event) => {
+      if (event.key !== " ") return;
+      const tap = this.#spaceTap;
+      const tapped = tap !== null && !tap.spoiled && event.timeStamp - tap.at >= 0 && event.timeStamp - tap.at < READER_TAP_MS;
+      this.#releaseSpace();
+      if (tapped) this.#openReaderOnChoice();
+    });
+    this.#life.listen(window, "blur", () => this.#stillCamera());
+    this.#life.listen(document, "visibilitychange", () => {
+      if (document.hidden) this.#stillCamera();
+    });
+    this.#life.add(onReducedMotionChange((reduced) => {
+      this.#reducedMotion = reduced;
+      // Cambiato a lavagna aperta: un volo arriva subito, l'inerzia si ferma.
+      if (reduced) this.#stopMotion(true);
+    }));
+    this.#life.add(() => {
+      this.#stopMotion(false);
+      this.#stopEdgeScroll();
+    });
+    // Prima dello strato della penna, che ferma i suoi eventi: ogni
+    // appoggio, anche della penna, ferma la vista che scorre da sola.
+    this.#viewport.addEventListener("pointerdown", () => this.#stopMotion(false), { signal, capture: true });
     this.#viewport.addEventListener("dblclick", (event) => this.#dblclick(event), { signal });
+    // Prima del contenuto delle schede: fuori da una scheda attiva il clic
+    // sceglie, entra, o segue un link con Ctrl, e non arriva al contenuto.
+    this.#viewport.addEventListener("click", (event) => this.#cardClick(event), { signal, capture: true });
+    // Dove si incolla: l'ultimo punto visto sulla vista, finché il puntatore
+    // non ne esce.
+    this.#viewport.addEventListener("pointermove", (event) => {
+      this.#pointerSeen = { x: event.clientX, y: event.clientY };
+      this.#spaceTapMoved(event.clientX, event.clientY);
+    }, { signal });
+    // A chi appartiene il tratto (T69). L'appoggio si legge in cattura, prima
+    // dello strato della penna che lo ferma: è solo un punto. I movimenti si
+    // leggono dopo, quando la scia è già disegnata; Alt si legge ovunque.
+    this.#viewport.addEventListener("pointerdown", (event) => this.#inkSeen(event), { signal, capture: true });
+    this.#viewport.addEventListener("pointermove", (event) => this.#inkTargetMove(event), { signal });
+    // Il velo della croce (T20d): c'è col mouse e con la penna sospesa sopra
+    // la vista; un dito che si appoggia, o la penna che esce dal raggio, lo
+    // toglie. Il mouse che esce no: fuori dalla vista il velo non conta, e
+    // ogni volta che compare sotto il puntatore la scheda sotto perde il suo
+    // `:hover` e si ridipinge.
+    const veilOver = (event: PointerEvent): void => {
+      if (event.pointerType !== "touch") this.#setVeilPointer(true);
+    };
+    this.#viewport.addEventListener("pointerover", veilOver, { signal, capture: true });
+    this.#viewport.addEventListener("pointermove", veilOver, { signal, capture: true });
+    this.#viewport.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "touch") this.#setVeilPointer(false);
+    }, { signal, capture: true });
+    this.#viewport.addEventListener("pointerleave", (event) => {
+      if (event.pointerType === "pen") this.#setVeilPointer(false);
+    }, { signal });
+    // «×N» illumina le gemelle al passaggio e col fuoco (C14, T22); si
+    // spengono quando li perde tutti e due.
+    const twinsButton = (target: EventTarget | null): Element | null =>
+      target instanceof Element ? target.closest(".canvas-node-twins") : null;
+    this.#viewport.addEventListener("pointerover", (event) => {
+      const button = twinsButton(event.target);
+      if (!button) return;
+      this.#twinsHover = button;
+      this.#lightTwinsFrom(button);
+    }, { signal });
+    this.#viewport.addEventListener("pointerout", (event) => {
+      const button = twinsButton(event.target);
+      if (!button || (event.relatedTarget instanceof Node && button.contains(event.relatedTarget))) return;
+      if (this.#twinsHover === button) this.#twinsHover = null;
+      if (!button.contains(document.activeElement)) this.#lightTwins(null);
+    }, { signal });
+    this.#viewport.addEventListener("focusin", (event) => {
+      const button = twinsButton(event.target);
+      if (button) this.#lightTwinsFrom(button);
+    }, { signal });
+    this.#viewport.addEventListener("focusout", (event) => {
+      const button = twinsButton(event.target);
+      if (button && this.#twinsHover !== button) this.#lightTwins(null);
+    }, { signal });
+    // La scheda sotto il puntatore tiene l'aspetto del passaggio quando il
+    // velo o la cattura del tratto le tolgono `:hover` (T20f).
+    this.#viewport.addEventListener("pointerover", (event) => this.#pointerOver(event), { signal, capture: true });
+    this.#viewport.addEventListener("pointerleave", (event) => {
+      if (event.pointerType === "touch") return;
+      this.#hoverCard = null;
+      this.#holdHover(null);
+    }, { signal });
+    this.#life.listen(window, "keydown", (event) => {
+      if (event.key === "Alt") this.#setAltHeld(true);
+    });
+    this.#life.listen(window, "keyup", (event) => {
+      if (event.key === "Alt") this.#setAltHeld(false);
+    });
+    this.#life.listen(window, "blur", () => this.#setAltHeld(false));
+    // Maiusc (T87): il tratto dritto e la forma regolare, letti ovunque; un
+    // movimento della penna lo rilegge, se la finestra non l'ha saputo.
+    this.#life.listen(window, "keydown", (event) => {
+      if (event.key === "Shift") this.#setShiftHeld(true);
+    });
+    this.#life.listen(window, "keyup", (event) => {
+      if (event.key === "Shift") this.#setShiftHeld(false);
+    });
+    this.#life.listen(window, "blur", () => this.#setShiftHeld(false));
+    this.#viewport.addEventListener("pointermove", (event) => {
+      if (this.#inkGuides.size > 0 && event.shiftKey !== this.#shiftHeld) this.#setShiftHeld(event.shiftKey);
+    }, { signal });
+    this.#life.add(() => {
+      clearTimeout(this.#shapeTimer);
+      this.#inkGuides.clear();
+    });
+    this.#viewport.addEventListener("pointerleave", () => {
+      this.#pointerSeen = null;
+      // Il puntatore fuori dalla lavagna: nessun filo si scurisce (T67).
+      this.#setEdgeHover(null);
+    }, { signal });
     this.#viewport.addEventListener("dragover", (event) => {
       if (!this.#readOnly && !this.#isSceneOversized() && event.dataTransfer
-        && (this.#options.attachments || event.dataTransfer.types.includes("text/plain"))) event.preventDefault();
+        && (this.#options.attachments || event.dataTransfer.types.includes("text/plain"))) {
+        event.preventDefault();
+        this.#showDropGhosts(event);
+      }
+    }, { signal });
+    this.#viewport.addEventListener("dragleave", (event) => {
+      // Passare da un figlio all'altro della vista non è uscire.
+      const next = event.relatedTarget;
+      if (next instanceof Node && this.#viewport.contains(next)) return;
+      this.#hideDropGhosts();
     }, { signal });
     this.#viewport.addEventListener("drop", (event) => {
+      this.#hideDropGhosts();
       void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
     }, { signal });
     this.#viewport.addEventListener("paste", (event) => {
       void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
     }, { signal });
+    // Copia, taglia e incolla delle schede (T68). Il browser manda l'evento a
+    // chi ha il fuoco o alla selezione di testo, che può stare altrove (il
+    // corpo della pagina): si ascolta il documento e si guarda il fuoco.
+    this.#life.listen(document, "copy", (event) => this.#copyEvent(event, false));
+    this.#life.listen(document, "cut", (event) => this.#copyEvent(event, true));
+    this.#life.listen(document, "paste", (event) => this.#pasteFromOutside(event));
     this.#drawToolbar();
+    this.#restoreInkMouse(options.inkMouseMemory ?? SHARED_INK_MOUSE);
+    this.#restorePen(options.penMemory ?? SHARED_PEN);
   }
 
+  /**
+   * Apre il testo `source` nel nucleo, da capo: la storia dell'annulla
+   * ricomincia. Un testo che il nucleo non apre lancia, e la tela resta com'era.
+   */
   setDoc(source: string): void {
     if (this.#destroyed) return;
-    const document = parseCanvas(source);
+    // Il testo in sospeso è del documento di prima: si registra lì.
+    this.#closeField(true);
+    const document = this.#open(source);
+    // La vista di prima si scrive adesso, poi si legge quella ricordata
+    // (T36): arriva dopo, e prende ciò che nessuno ha toccato.
+    const remembered = this.#viewMemo?.begin();
+    const viewRound = ++this.#viewRound;
+    this.#openView = null;
+    this.#heldView = null;
+    if (remembered) void remembered.then((view) => this.#restoreView(viewRound, view));
+    // Un documento nuovo: la risposta di prima era dell'altro testo.
+    if (this.#unwritable) {
+      this.#unwritable = false;
+      this.#root.dataset.readOnly = String(this.#readOnly);
+    }
     this.#epoch++;
-    this.#finishEditing?.(true);
     this.#cancelGestures();
+    // Un documento nuovo: il menu radiale era dell'altro (T63).
+    this.#radial?.close();
+    this.#lastTap = null;
+    // Un documento nuovo: il tratto in corso era dell'altro.
+    this.#inkLayer?.cancel();
+    this.#inkChain = null;
     this.#source = source;
+    this.#version = ++this.#versions;
     this.#doc = document;
     this.#intakeError = "";
+    this.#removal = null;
+    this.#connectFrom = null;
+    // Un documento nuovo: si esce dalla scheda dell'altro.
+    this.#leaveCard(false, false);
     this.#selection = [];
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    this.#statusSettle();
+    this.#syncEmpty();
+    if (!document) {
+      void this.#revive();
+      return;
+    }
+    this.#checkWritable();
     this.#fitCamera(false);
     this.#render();
+    this.#markOpenView();
   }
 
+  /**
+   * Il testo cambiato da un'altra parte (un'altra superficie, un altro
+   * programma). Il campo aperto resta aperto, e il suo testo in sospeso si
+   * registra subito dopo, sulla scheda com'è nel testo nuovo.
+   */
   syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
     if (this.#destroyed) return;
-    this.#finishEditing?.(true);
-    this.#cancelGestures();
     const source = typeof update === "string" ? update : update.text;
-    const parsed = parseCanvas(source);
+    const document = this.#open(source);
+    this.#cancelGestures();
     this.#epoch++;
     this.#intakeError = "";
-    const operation = typeof update === "string" ? null : update.operation;
-    // Gli offset sono sul testo a `\n`, come li conta la sessione.
-    const verified = operation ? tryApplyOperation(lineFeeds(this.#source), operation) : null;
-    const patched = operation && isCanvasOperation(operation) && this.#doc
-      && verified?.kind === "applied" && verified.text === lineFeeds(source)
-      && applyCanvasPatches(this.#doc, operation.patches)
-      && JSON.stringify(this.#doc) === JSON.stringify(parsed);
+    // Lo stesso testo (l'eco di un commit di qui) lascia valida la via del tratto.
+    const changed = source !== this.#source;
+    if (changed) this.#version = ++this.#versions;
+    // Un testo cambiato altrove è una modifica dopo il togliere (T17).
+    if (changed) this.#removal = null;
     this.#source = source;
-    if (!patched) this.#doc = parsed;
+    if (!document) {
+      void this.#revive();
+      return;
+    }
+    this.#doc = document;
+    // Lo stesso testo si riscrive come prima: la domanda serve solo a un testo nuovo.
+    if (changed) this.#checkWritable();
     this.#pruneSelection();
-    this.#render();
+    // Modello e sorgente sono già quelli nuovi; il ridisegno, con una penna
+    // giù, aspetta che si alzi (A9). Il tratto in corso non si perde: la
+    // scheda si sceglie sul documento del momento in cui la penna si alza.
+    this.#quiet.defer("render", () => {
+      if (!this.#destroyed) this.#render();
+    });
+    // Fuori dalla consegna che ci ha portato il testo: la sessione la sta
+    // ancora facendo agli altri riquadri.
+    if (this.#pending) queueMicrotask(() => this.#deferPending());
   }
 
   getDoc(): string {
     return this.#source;
+  }
+
+  /**
+   * La scelta adesso, per l'ispettore (T59): le id delle schede e dei fili.
+   * Sono copie: chi le legge non cambia la scelta.
+   */
+  selection(): { readonly nodes: readonly string[]; readonly edges: readonly string[] } {
+    return { nodes: [...this.#selection], edges: [...this.#edgeSelection] };
+  }
+
+  /** Il modello della lavagna adesso, per l'ispettore (T59); `null` senza lavagna. */
+  doc(): CanvasDocument | null {
+    return this.#doc;
+  }
+
+  /**
+   * Un gesto dell'ispettore (T59): le toppe fanno un commit solo, col suo
+   * annulla, come un gesto della tela. Senza lavagna o in sola lettura non
+   * cambia niente, come gli altri gesti.
+   */
+  commitPatches(patches: readonly CanvasPatch[]): void {
+    if (patches.length === 0) return;
+    this.#commit(patches, "input");
   }
 
   focus(): void {
@@ -251,17 +2764,28 @@ export class CanvasEngine {
    * Brings into view the card whose source holds `byteOffset` (UTF-8 bytes,
    * the currency of the model's spans): selects it and frames it. `false`
    * when the offset is outside every card, or the scene is too large to draw.
+   *
+   * Con `"jump"` (l'ispettore, «Schede» e «Fonti», T99) la vista ci va come
+   * ogni salto (`#jumpCamera`): vola, e Indietro torna da dove si era. Con
+   * `"frame"` (la shell, l'apertura a un punto) la camera si mette lì e basta.
    */
-  revealSource(byteOffset: number): boolean {
-    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return false;
-    const index = canvasNodeAt(this.#source, byteToCharIndex(this.#source, byteOffset));
+  revealSource(byteOffset: number, how: "frame" | "jump" = "frame"): boolean {
+    if (this.#destroyed || !this.#doc || !this.#core || this.#isSceneOversized()) return false;
+    let index: number | null;
+    try {
+      index = this.#core.nodeAt(byteOffset);
+    } catch (error) {
+      if (lostCore(error)) this.#lose();
+      return false;
+    }
     const node = index === null ? undefined : this.#doc.nodes[index];
     if (!node) return false;
-    this.#finishEditing?.(true);
+    this.#closeField(false);
     this.#cancelGestures();
     this.#selection = [node.id];
     this.#edgeSelection = [];
-    this.#fitCamera(false, [node]);
+    if (how === "jump") this.#jumpCamera(this.#fitTarget([node]));
+    else this.#fitCamera(false, [node]);
     this.#render();
     this.#viewport.focus();
     this.#options.onSelectionChange();
@@ -269,15 +2793,64 @@ export class CanvasEngine {
   }
 
   setReadOnly(readOnly: boolean): void {
-    this.#finishEditing?.(true);
+    // In sola lettura il campo si chiude comunque: ciò che non si registra
+    // l'avviso l'ha già detto.
+    this.#closeField(readOnly);
     this.#cancelGestures();
-    this.#readOnly = readOnly;
-    this.#root.dataset.readOnly = String(readOnly);
+    this.#panelReadOnly = readOnly;
+    this.#root.dataset.readOnly = String(this.#readOnly);
     this.#render();
+    this.#statusSettle();
+  }
+
+  /** In sola lettura per il pannello o per la tela: nessun gesto cambia il testo. */
+  get #readOnly(): boolean {
+    return this.#panelReadOnly || this.#unwritable;
+  }
+
+  /**
+   * Chiede al nucleo se il testo di adesso si riscrive: un'anteprima senza
+   * toppe passa dallo stesso ritocco di ogni commit, e un testo che il
+   * ritocco rifiuta (una chiave doppia, anche annidata in un campo
+   * sconosciuto) risponde `rejected`. Allora la tela resta da guardare: il
+   * campo aperto si chiude come per la sola lettura del pannello, e l'avviso
+   * della barra dice perché. Un nucleo assente o morto non risponde: la
+   * risposta di prima resta finché `#revive` non riapre il testo.
+   */
+  #checkWritable(): void {
+    const core = this.#core;
+    if (!core) return;
+    let unwritable: boolean;
+    try {
+      core.preview([]);
+      unwritable = false;
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (!(error instanceof CanvasCoreError)) throw error;
+      unwritable = error.code === "rejected";
+    }
+    if (unwritable === this.#unwritable) return;
+    if (unwritable) {
+      this.#unwritable = true;
+      this.#closeField(true);
+      this.#cancelGestures();
+    } else {
+      this.#unwritable = false;
+    }
+    this.#root.dataset.readOnly = String(this.#readOnly);
+    // Subito, anche con una penna giù e il ridisegno rimandato: lo strato se
+    // ne va (il tratto in corso si annulla) o torna, e la barra dice perché.
+    this.#syncInkLayer();
+    this.#drawToolbar();
   }
 
   setTheme(theme: Theme): void {
     this.#root.dataset.theme = theme;
+    // I campioni che si leggono poco lo dicono per il tema di adesso (A23).
+    this.#penMenu.sync();
   }
 
   /**
@@ -287,40 +2860,73 @@ export class CanvasEngine {
    */
   setSyntaxForms(forms: readonly SyntaxForm[]): void {
     this.#forms = forms;
-    if (!this.#finishEditing) this.#render();
+    this.#formsRound++;
+    if (!this.#editor) this.#render();
   }
 
+  /**
+   * Annulla l'ultimo passo: il testo di prima byte per byte se nessuno l'ha
+   * cambiato nel frattempo, se no le toppe inverse che il nucleo ha dato al
+   * suo commit.
+   */
   undo(): boolean {
-    this.#finishEditing?.(true);
-    const patches = this.#undo.pop();
-    if (!patches || !this.#doc) return false;
-    const inverse = inverseCanvasPatches(patches);
-    if (!this.#commitLocal(inverse, "undo", false)) {
-      this.#undo.push(patches);
+    // Con una penna giù annulla e ripeti non fanno niente (A5).
+    if (this.#penDown) return false;
+    const editing = this.#editor !== null;
+    const born = this.#editor?.born ? this.#editor.id : null;
+    if (!this.#closeField(false)) return false;
+    if (editing) this.#render();
+    // La scheda nuova lasciata vuota se n'è andata chiudendo: era lei da annullare (T44).
+    if (born !== null && !this.#doc?.nodes.some((node) => node.id === born)) return true;
+    const step = this.#undo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "undo", (again) => this.#redo.push(again)) !== true) {
+      this.#undo.push(step);
       return false;
     }
-    this.#redo.push(patches);
     return true;
   }
 
+  /** Rifà il passo annullato, con le stesse due vie dell'annulla. */
   redo(): boolean {
-    this.#finishEditing?.(true);
-    const patches = this.#redo.pop();
-    if (!patches || !this.#doc) return false;
-    if (!this.#commitLocal(patches, "redo", false)) {
-      this.#redo.push(patches);
+    if (this.#penDown) return false;
+    const editing = this.#editor !== null;
+    if (!this.#closeField(false)) return false;
+    if (editing) this.#render();
+    const step = this.#redo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "redo", (again) => this.#pushUndo(again, false)) !== true) {
+      this.#redo.push(step);
       return false;
     }
-    this.#undo.push(patches);
     return true;
   }
 
   destroy(): void {
     if (this.#destroyed) return;
-    this.#finishEditing?.(true);
+    // Il testo in sospeso va nel documento che il riquadro mostrava.
+    this.#closeField(true);
+    // L'ultima vista si scrive adesso; dopo, nessuna scrittura parte più.
+    this.#viewMemo?.close();
     this.#destroyed = true;
-    for (const teardown of this.#markdownTeardowns.values()) teardown();
-    this.#markdownTeardowns.clear();
+    if (this.#marquee !== null) this.#stopMarquee();
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+    clearTimeout(this.#wheelTimer);
+    this.#wheelTimer = undefined;
+    this.#endFlash();
+    this.#revival++;
+    // Un tratto in corso si perde senza errori: lo strato lo annulla, e la
+    // vita chiude lo scheduler e ciò che il silenzio della penna teneva.
+    this.#syncInkLayer();
+    this.#life.close();
+    this.#hideGuides();
+    this.#dropCore();
+    // Ogni vista si distrugge qui, una volta: `#releaseBody` la dimentica.
+    this.#dropCards();
+    // I PDF guasti smettono di guardare i loro file (T72).
+    for (const stop of this.#pdfBroken.values()) stop();
+    this.#pdfBroken.clear();
     this.#stopLanguage();
     this.#abort.abort();
     this.#root.remove();
@@ -331,25 +2937,485 @@ export class CanvasEngine {
       || this.#doc.edges.length > MAX_INTERACTIVE_EDGES);
   }
 
-  #commitLocal(patches: readonly CanvasPatch[], origin: EditorChangeOrigin, recordHistory: boolean, render = true): boolean {
-    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized() || !patches.length) return false;
-    const beforeSource = this.#source;
-    const committed = commitCanvasPatches(this.#doc, beforeSource, patches);
-    if (!committed) return false;
-    this.#source = committed.source;
-    if (recordHistory) {
-      this.#undo.push([...patches]);
-      if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
-      this.#redo = [];
+  // --- il nucleo --------------------------------------------------------------
+
+  /**
+   * Il modello del testo `text` nel nucleo: `reset` della lavagna aperta, o
+   * una lavagna nuova. `null` se il nucleo non è carico o è morto (allora
+   * serve `#revive`); un testo che il nucleo rifiuta lancia.
+   */
+  #open(text: string): CanvasDocument | null {
+    if (this.#core) {
+      try {
+        return this.#core.reset(text);
+      } catch (error) {
+        if (!lostCore(error)) throw error;
+        this.#dropCore();
+      }
     }
+    let core: CanvasCore | null;
+    try {
+      core = this.#port.openNow(text);
+    } catch (error) {
+      if (lostCore(error)) return null;
+      throw error;
+    }
+    if (!core) return null;
+    this.#core = core;
+    return core.model();
+  }
+
+  /** Il modello del nucleo; `null` se non c'è o se è appena morto (allora si riapre). */
+  #coreModel(): CanvasDocument | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.model();
+    } catch (error) {
+      if (!lostCore(error)) throw error;
+      this.#lose();
+      return null;
+    }
+  }
+
+  #dropCore(): void {
+    const core = this.#core;
+    this.#core = null;
+    try {
+      core?.close();
+    } catch {
+      // Un'istanza morta ha già perso le sue lavagne.
+    }
+  }
+
+  /** Una trappola: la lavagna si riapre su un'istanza nuova, dal testo della sessione. */
+  #lose(): void {
+    this.#dropCore();
+    this.#traps += 1;
+    // Due di fila: lo si dice, e si riprova soltanto al prossimo testo.
+    if (this.#traps > 1) {
+      this.#coreUnavailable();
+      return;
+    }
+    void this.#revive();
+  }
+
+  async #revive(): Promise<void> {
+    const revival = ++this.#revival;
+    try {
+      await this.#port.ready();
+    } catch {
+      if (!this.#destroyed && revival === this.#revival) this.#coreUnavailable();
+      return;
+    }
+    if (this.#destroyed || revival !== this.#revival || this.#core) return;
+    let document: CanvasDocument | null;
+    try {
+      document = this.#open(this.#source);
+    } catch {
+      document = null;
+    }
+    if (!document) {
+      this.#coreUnavailable();
+      return;
+    }
+    const first = this.#doc === null;
+    this.#doc = document;
+    this.#checkWritable();
+    this.#pruneSelection();
+    if (first) this.#fitCamera(false);
+    this.#render();
+    if (first) {
+      this.#markOpenView();
+      const held = this.#heldView;
+      if (held) this.#restoreView(held.round, held.view);
+    }
+    if (this.#pending) this.#recordPending();
+  }
+
+  #coreUnavailable(): void {
+    this.#showNotice(t("canvas.core_unavailable"));
+  }
+
+  /**
+   * Passa le toppe al nucleo: tutte o nessuna. Il testo nuovo è il tratto che
+   * il nucleo ha cambiato; `record` riceve il passo che lo disfa (le toppe
+   * inverse dello stesso commit e il tratto di prima) prima che la sessione
+   * sappia della modifica (che può tornare qui con un `syncDoc`). Il codice
+   * del rifiuto, se il nucleo rifiuta.
+   */
+  #commitLocal(
+    patches: readonly CanvasPatch[],
+    origin: EditorChangeOrigin,
+    record: ((step: CanvasStep) => void) | null,
+    render = true,
+  ): true | CanvasCoreErrorCode {
+    // Mai una lista vuota: su un sorgente vuoto il nucleo riscriverebbe tutto.
+    if (!patches.length) return "request";
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const before = this.#source;
+    let committed: CanvasCommitted;
+    try {
+      committed = core.commit(patches);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      if (error instanceof CanvasCoreError) return error.code;
+      throw error;
+    }
+    this.#traps = 0;
+    const { edit } = committed;
+    const after = before.slice(0, edit.start) + edit.text + before.slice(edit.end);
+    const restores = this.#version;
+    this.#source = after;
+    this.#version = ++this.#versions;
+    // Un commit di soli tratti dice che cosa ha cambiato: il modello nuovo
+    // si fa da quello di prima, senza rileggere la lavagna intera (T20e).
+    const changed = committed.changed && this.#doc ? changedModel(this.#doc, committed.changed) : null;
+    this.#doc = changed ?? this.#coreModel() ?? this.#doc;
+    // Una modifica nuova: l'avviso di un togliere di prima se ne va (T17).
+    this.#dropRemoval();
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record?.({
+      patches: committed.inverse,
+      back: copyPatches(patches),
+      start: edit.start,
+      inserted: edit.text,
+      removed: before.slice(edit.start, edit.end),
+      version: this.#version,
+      restores,
+    });
     this.#pruneSelection();
     if (render) this.#render();
-    this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
+    this.#options.onChange({ text: after, operation, origin });
     return true;
   }
 
+  /**
+   * Fa un passo d'annulla o di ripeti. Se il testo è quello che il passo ha
+   * lasciato, rimette il suo tratto con un `reset` sul testo esatto (una
+   * lettura intera: va bene per un annulla, non per ogni gesto); se no passa
+   * le sue toppe al nucleo. `record` riceve il passo opposto.
+   */
+  #replay(step: CanvasStep, origin: "undo" | "redo", record: (step: CanvasStep) => void): true | CanvasCoreErrorCode {
+    const before = this.#source;
+    const end = step.start + step.inserted.length;
+    // Un passo fatto solo di tratti cambia solo l'inchiostro: si ridisegna lo
+    // strato, non le schede.
+    const inkOnly = step.patches.length > 0 && step.patches.every((patch) => patch.kind === "ink");
+    if (step.version !== this.#version || before.slice(step.start, end) !== step.inserted) {
+      const code = this.#commitLocal(step.patches, origin, record, !inkOnly);
+      if (code === true && inkOnly) this.#paintInk();
+      return code;
+    }
+    // Il testo esatto del passo torna anche su una scena troppo grande: un
+    // passo locale che l'ha portata oltre il limite (un «Incolla codice» di
+    // migliaia di schede) si annulla e si ripete, e la lavagna torna
+    // interattiva (LIC T25).
+    if (this.#destroyed || !this.#doc || this.#readOnly) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const after = before.slice(0, step.start) + step.removed + before.slice(end);
+    let document: CanvasDocument;
+    try {
+      document = core.reset(after);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      // Il nucleo non riapre il testo di prima (non dovrebbe mai): restano le toppe.
+      if (error instanceof CanvasCoreError) {
+        const code = this.#commitLocal(step.patches, origin, record, !inkOnly);
+        if (code === true && inkOnly) this.#paintInk();
+        return code;
+      }
+      throw error;
+    }
+    this.#traps = 0;
+    this.#source = after;
+    this.#version = step.restores;
+    this.#doc = document;
+    this.#dropRemoval();
+    const edit: CanvasSourceEdit = { start: step.start, end, text: step.removed };
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(step.patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record({
+      patches: step.back,
+      back: step.patches,
+      start: step.start,
+      inserted: step.removed,
+      removed: step.inserted,
+      version: step.restores,
+      restores: step.version,
+    });
+    this.#pruneSelection();
+    if (inkOnly) this.#paintInk();
+    else this.#render();
+    this.#options.onChange({ text: after, operation, origin });
+    return true;
+  }
+
+  /** Un gesto della tela: prima il testo in sospeso, poi le sue toppe, un passo d'annulla. */
   #commit(patches: readonly CanvasPatch[], origin: EditorChangeOrigin): boolean {
-    return this.#commitLocal(patches, origin, true);
+    this.#recordPending();
+    const done = this.#commitLocal(patches, origin, (step) => this.#pushUndo(step, true)) === true;
+    // Una scheda tolta, un filo nuovo, una scheda spostata: lo dice la regione
+    // viva della tela (T61).
+    const said = done && this.#doc ? changeAnnouncement(patches, this.#doc) : null;
+    if (said !== null) this.#sayGesture(said);
+    return done;
+  }
+
+  #pushUndo(step: CanvasStep, fresh: boolean): void {
+    this.#undo.push(step);
+    if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
+    if (fresh) this.#redo = [];
+  }
+
+  // --- il testo di una scheda ---------------------------------------------------
+
+  /**
+   * Registra il testo in sospeso: un commit, una modifica alla sessione, un
+   * passo d'annulla. `false` se resta da registrare (il nucleo l'ha rifiutato:
+   * il testo resta nel campo, e l'avviso dice perché).
+   */
+  #recordPending(): boolean {
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+    const pending = this.#pending;
+    if (!pending) return true;
+    if (!this.#doc || this.#readOnly || this.#destroyed) return false;
+    // La misura del testo com'è adesso: l'ultimo tasto può non averla ancora data (T44).
+    const editor = this.#editor;
+    if (editor && editor.id === pending.card.id && !editor.composing) this.#growWriting(editor);
+    let code = "rejected" as true | CanvasCoreErrorCode;
+    for (let attempt = 0; attempt < 2 && code !== true; attempt++) {
+      const doc: CanvasDocument = this.#doc;
+      // La scheda com'è adesso; se non c'è più, com'era, col testo del campo.
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      if (current) pending.card = current;
+      const next = withPending(pending.card, pending);
+      // Il campo scrive con le operazioni (T23): `set` dei campi cambiati, o
+      // la scheda intera se intanto è sparita.
+      const op = current ? setOp(current, next) : { op: "add_card", node: next };
+      const compiled = op ? this.#compileField(op) : { patches: [] };
+      if (typeof compiled === "string") {
+        code = compiled;
+        break;
+      }
+      if (compiled.patches.length === 0) {
+        this.#setPending(null);
+        return true;
+      }
+      code = this.#commitLocal(compiled.patches, "input", (step) => {
+        this.#setPending(null);
+        this.#pushUndo(step, true);
+      });
+      // Il testo è cambiato da un'altra parte: si riprova sulla scheda di adesso.
+      const fresh = code === "stale" ? this.#coreModel() : null;
+      if (!fresh) break;
+      this.#doc = fresh;
+    }
+    if (code === true) {
+      if (this.#intakeError) this.#showNotice("");
+      return true;
+    }
+    if (code === "invalid" || code === "limit") {
+      this.#showNotice(t(pending.field === "text" && utf8.encode(pending.text).length > MAX_CARD_TEXT_BYTES
+        ? "canvas.card_too_long" : "canvas.card_invalid"));
+    }
+    return false;
+  }
+
+  /**
+   * Compila l'operazione del campo di una scheda, senza registrare il testo
+   * in sospeso (è lui che si registra): le toppe, o il codice del rifiuto.
+   * Un'operazione che il nucleo non accetta vale come una scheda che il
+   * formato non accetta (`invalid`): l'avviso del campo lo dice.
+   */
+  #compileField(op: CanvasIntentOp): CanvasCompiled | CanvasCoreErrorCode {
+    const core = this.#core;
+    if (!core) return "trap";
+    if (this.#isSceneOversized()) return "rejected";
+    try {
+      return core.compile([op], this.#seed());
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      if (error instanceof CanvasCoreError) return error.code === "op" ? "invalid" : error.code;
+      throw error;
+    }
+  }
+
+  /** La `set` del testo `text` nella scheda di testo `id`, come la registra il suo campo. */
+  #textOps(id: string, text: string): CanvasIntentOp[] | null {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node) return null;
+    const op = setOp(node, { ...node, text });
+    return op ? [op] : null;
+  }
+
+  /**
+   * Chiude il campo aperto, dopo averne registrato il testo. Se il nucleo lo
+   * rifiuta il campo resta aperto col suo testo, a meno di `force` (la
+   * superficie si chiude, o diventa di sola lettura): allora quel testo si
+   * perde, e l'avviso l'ha già detto.
+   */
+  #closeField(force: boolean): boolean {
+    const recorded = this.#recordPending();
+    if (!recorded && !force) return false;
+    this.#setPending(null);
+    const editor = this.#editor;
+    if (!editor) return true;
+    this.#editor = null;
+    editor.lifetime.abort();
+    editor.input.disabled = true;
+    // L'editor delle note si smonta con la vita del campo; qui anche se la
+    // porta non l'avesse legato a quella vita.
+    editor.live?.destroy();
+    editor.live = null;
+    // La scheda nuova lasciata vuota se ne va (T44).
+    if (editor.born && recorded) this.#dropBlankBorn(editor.id, editor.born);
+    return true;
+  }
+
+  /**
+   * Esc, Invio, l'uscita dal campo: registra e chiude. Con `choose` (Esc) la
+   * scheda resta scelta: un secondo Esc toglie la scelta (T44).
+   */
+  #leaveField(focus: boolean, choose = false): void {
+    const id = this.#editor?.id;
+    if (!this.#closeField(false)) return;
+    if (choose && id !== undefined && this.#doc?.nodes.some((node) => node.id === id)
+      && (this.#selection.length !== 1 || this.#selection[0] !== id || this.#edgeSelection.length > 0)) {
+      this.#selection = [id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+    }
+    this.#render();
+    if (focus) this.#viewport.focus();
+  }
+
+  /**
+   * La scheda `id`, nata adesso col passo `born`, se è rimasta senza testo se
+   * ne va senza lasciare un passo d'annulla («Ho creato schede vuote per
+   * sbaglio», T44): si disfano la nascita e ciò che dopo ha toccato solo lei
+   * (il testo scritto e poi cancellato), e il testo torna ai byte di prima. Se
+   * nel frattempo un altro passo ha cambiato altro, la si toglie come
+   * «Togli dalla lavagna», col suo passo. Una scheda che c'era già non passa
+   * di qui: resta anche vuota.
+   */
+  #dropBlankBorn(id: string, born: CanvasStep): void {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node || node.type !== "text" || (node.text ?? "").trim() !== "") return;
+    const at = this.#undo.lastIndexOf(born);
+    const after = at < 0 ? [] : this.#undo.slice(at + 1);
+    if (at < 0 || !after.every((step) => step.back.every((patch) => patch.kind === "upsert-node" && patch.after.id === id))) {
+      this.#removeNodes([id], []);
+      return;
+    }
+    while (this.#undo.length > at) {
+      const step = this.#undo.pop()!;
+      if (this.#replay(step, "undo", () => {}) !== true) {
+        // Il nucleo non lo prende (sola lettura, una trappola): la scheda resta.
+        this.#undo.push(step);
+        return;
+      }
+    }
+  }
+
+  #setPending(next: PendingText | null): void {
+    const had = this.#pending !== null;
+    this.#pending = next;
+    // Ogni tasto conta: la sessione arma la bozza su ogni cambio, non solo sul primo.
+    if (next || had) this.#options.onPendingChange?.(next !== null);
+  }
+
+  /**
+   * Il testo intero del documento col testo in sospeso dentro, come lo
+   * scriverebbe il commit, senza cambiare la lavagna; `null` se non c'è testo
+   * in sospeso o il nucleo non lo prende (allora vale l'ultimo testo accettato,
+   * e lo si annota nel registro).
+   */
+  pendingText(): string | null {
+    const pending = this.#pending;
+    if (!pending || this.#destroyed || !this.#doc) return null;
+    const core = this.#core;
+    if (!core) return null;
+    let doc: CanvasDocument = this.#doc;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      const next = withPending(current ?? pending.card, pending);
+      const patch = upsertNodePatch(doc, next);
+      // Il campo dice ciò che la lavagna ha già.
+      if (!patch) return this.#source;
+      try {
+        return core.preview([patch]);
+      } catch (error) {
+        if (lostCore(error)) {
+          this.#lose();
+          return null;
+        }
+        if (!(error instanceof CanvasCoreError)) throw error;
+        const fresh = error.code === "stale" && attempt === 0 ? this.#coreModel() : null;
+        if (!fresh) {
+          console.warn(`canvas: il testo in sospeso non entra nella bozza (${error.code})`);
+          return null;
+        }
+        doc = fresh;
+      }
+    }
+    return null;
+  }
+
+  /** Registra adesso il testo in sospeso, come alla fine della pausa. */
+  commitPending(): void {
+    if (!this.#destroyed) this.#recordPending();
+  }
+
+  /** Se c'è testo di una scheda non ancora registrato. */
+  get hasPending(): boolean {
+    return this.#pending !== null;
+  }
+
+  #schedulePause(): void {
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = setTimeout(() => {
+      this.#pauseTimer = undefined;
+      this.#deferPending();
+    }, CARD_PAUSE_MS);
+  }
+
+  /**
+   * Registra il testo in sospeso adesso o, con una penna giù, quando si alza:
+   * il commit ridisegna le schede. Il tratto, quando finisce, lo registra da sé
+   * prima di scriversi.
+   */
+  #deferPending(): void {
+    if (this.#destroyed) return;
+    this.#quiet.defer("pending", () => {
+      if (!this.#destroyed) this.#recordPending();
+    });
+  }
+
+  #showNotice(text: string): void {
+    if (this.#destroyed || this.#intakeError === text) return;
+    this.#intakeError = text;
+    this.#drawToolbar();
   }
 
   #pruneSelection(): void {
@@ -381,12 +3447,1929 @@ export class CanvasEngine {
     return this.#selection.map((id) => byId.get(id)!).filter(Boolean);
   }
 
+  // --- l'inchiostro -------------------------------------------------------------
+
+  /** Una penna è giù: un tratto della punta o della gomma è in corso. */
+  get #penDown(): boolean {
+    return this.#quiet.active || (this.#inkLayer?.drawing ?? false);
+  }
+
+  /**
+   * Monta lo strato della penna quando la lavagna si può cambiare e smontarlo
+   * quando no (sola lettura del pannello o della tela, scena troppo grande,
+   * lavagna chiusa: A8). Smontarlo annulla il tratto in corso: la scia sparisce.
+   */
+  #syncInkLayer(): void {
+    const wanted = !this.#destroyed && this.#doc !== null && !this.#readOnly && !this.#isSceneOversized();
+    if (wanted === (this.#inkLayer !== null)) return;
+    if (!wanted) {
+      const life = this.#inkLife;
+      this.#inkGuides.clear();
+      clearTimeout(this.#shapeTimer);
+      this.#inkLayer = null;
+      this.#inkLife = null;
+      this.#inkChain = null;
+      life?.close();
+      this.#inkTargetClose();
+      this.#eraseDrop();
+      this.#applyInkMouse();
+      return;
+    }
+    const life = openLifetime();
+    this.#inkLife = life;
+    this.#inkLayer = mountInkLayer({
+      viewport: this.#viewport,
+      toWorld: (clientX, clientY) => this.#screenToWorld(clientX, clientY),
+      // La penna scelta (A11 prima di ogni scelta) allo zoom di quando il
+      // tratto comincia: una scelta a metà tratto vale dal tratto dopo.
+      look: (input) => {
+        const look = inkLook(this.#penChoice, this.#camera.zoom, input.pressure);
+        this.#inkTargetStarting(look.brush.size);
+        return look;
+      },
+      // Lo strumento Gomma: la punta e il mouse che scrive cancellano (A21).
+      tipErases: () => this.#penChoice.tool === "eraser",
+      // «Il dito scrive» (T64): letto a ogni appoggio.
+      fingerWrites: () => this.#fingerWritesSetting,
+      quiet: this.#quiet,
+      mouse: this.#inkMouseOn ? "ink" : "ignore",
+      // Il righello, Maiusc e la penna ferma (T87).
+      guide: (start) => this.#inkGuideStart(start),
+      onStroke: (stroke) => this.#inkStroke(stroke),
+      onCancel: (id) => {
+        this.#inkGuideDrop(id);
+        this.#inkTargetClose();
+        this.#eraseCancel(id);
+      },
+      onEraseStart: (id, pointerType) => this.#eraseStart(id, pointerType),
+      onErase: (id, points) => this.#eraseAlong(id, points),
+      onEraseEnd: (id) => this.#eraseEnd(id),
+      // Il tasto laterale (T63): la gomma, o ciò che dicono le Impostazioni.
+      barrelErases: () => this.#penButtonSetting === "eraser",
+      onBarrel: (event) => this.#barrelDown(event),
+    }, life);
+    this.#inkLayer.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    this.#applyInkMouse();
+  }
+
+  /** L'interruttore «Scrivi col mouse»: lo strumento della colonna è dell'inchiostro. */
+  get #inkMouse(): boolean {
+    return CANVAS_INK_TOOLS.has(this.#tool);
+  }
+
+  /** Il mouse scrive: D tenuto, o uno strumento dell'inchiostro nella colonna. */
+  get #inkMouseOn(): boolean {
+    return this.#inkMouse || this.#inkKeyDown;
+  }
+
+  /**
+   * Fa scrivere il mouse (`on`) o lo lascia alla lavagna, dal prossimo
+   * appoggio: l'interruttore «Scrivi col mouse». Acceso, la colonna passa
+   * allo strumento della penna del menu (Penna, Evidenziatore o Gomma);
+   * spento, dall'inchiostro torna alla Selezione. Un tratto già giù finisce
+   * com'è. D tenuto lo fa scrivere anche da spento.
+   */
+  setInkMouse(on: boolean): void {
+    if (this.#destroyed) return;
+    this.#inkMouseTurns += 1;
+    if (on) this.#setTool(this.#penChoice.tool);
+    else if (this.#inkMouse) this.#setTool("select");
+  }
+
+  /** Lo strumento scelto adesso nella colonna. */
+  get tool(): CanvasToolId {
+    return this.#tool;
+  }
+
+  /**
+   * Sceglie lo strumento (il comando `canvas.tool.<id>`, la colonna, il suo
+   * tasto). In sola lettura gli strumenti che scrivono non si scelgono. Penna,
+   * Evidenziatore e Gomma chiamano la penna del menu di N4 (la scelta si
+   * ricorda come una scelta del menu) e fanno scrivere il mouse.
+   */
+  #pickTool(tool: CanvasToolId): void {
+    if (this.#destroyed) return;
+    if (CANVAS_WRITING_TOOLS.has(tool) && (this.#readOnly || this.#isSceneOversized())) return;
+    // Uno strumento scelto: l'interruttore ricordato non arriva più a cambiarlo.
+    this.#inkMouseTurns += 1;
+    if (CANVAS_INK_TOOLS.has(tool) && this.#penChoice.tool !== tool) {
+      this.#choosePen({ ...this.#penChoice, tool: tool as InkPenChoice["tool"] }, true);
+    }
+    this.#setTool(tool);
+  }
+
+  /**
+   * «Collega…» (T17): il filo parte dalla scheda `id`, come dal pulsante →
+   * della sua testata; il prossimo clic su un'altra scheda lo chiude. La
+   * colonna mostra Collega finché il filo non c'è.
+   */
+  #beginConnectFrom(id: string): void {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    if (!this.#doc?.nodes.some((node) => node.id === id)) return;
+    this.#pickTool("connect");
+    this.#connectFrom = id;
+  }
+
+  /** Il pulsante «Mostra l'anteprima» della scheda di pagina web `id`, se c'è adesso. */
+  #webPreviewButton(id: string): HTMLButtonElement | null {
+    return this.#cards.get(id)?.article.querySelector<HTMLButtonElement>(".canvas-card-web-preview") ?? null;
+  }
+
+  /** Lo strumento di adesso, mostrato nella colonna, sull'interruttore e sul viewport. */
+  #setTool(tool: CanvasToolId): void {
+    // Uno strumento scelto rinuncia al filo cominciato da «Collega…».
+    this.#connectFrom = null;
+    // Lasciando il Lazo i tratti scelti non lo sono più: solo lui li sposta (T86).
+    if (tool !== "lasso" && this.#strokeSelection.size > 0) {
+      this.#strokeSelection = new Set();
+      this.#paintLasso();
+      this.#syncSelectionBar();
+    }
+    // Lo strumento di prima va fra i recenti del menu radiale (T63).
+    if (tool !== this.#tool) this.#recentTools = rememberRecent(this.#recentTools, tool, this.#tool);
+    this.#tool = tool;
+    this.#inkMouseButton.setAttribute("aria-pressed", String(this.#inkMouse));
+    this.#viewport.dataset.tool = tool;
+    this.#rail.sync();
+    this.#canvasOptions.sync();
+    this.#applyInkMouse();
+  }
+
+  /**
+   * L'interruttore con cui la lavagna si apre: lo stato ricordato (spento con
+   * «Ricorda se scrivi col mouse» spento), letto una volta sola, così un
+   * cambio dell'impostazione a lavagna aperta vale dalla prossima apertura.
+   * Arriva solo se nel frattempo nessuno ha toccato l'interruttore; una
+   * lettura che non riesce lo lascia spento.
+   */
+  #restoreInkMouse(memory: CanvasInkMouseMemory): void {
+    const turns = this.#inkMouseTurns;
+    void memory.read().then((on) => {
+      if (on && !this.#destroyed && turns === this.#inkMouseTurns) this.setInkMouse(true);
+    }, () => undefined);
+  }
+
+  /** Il clic sul pulsante: cambia l'interruttore e lo ricorda. */
+  #toggleInkMouse(): void {
+    this.setInkMouse(!this.#inkMouse);
+    (this.#options.inkMouseMemory ?? SHARED_INK_MOUSE).save(this.#inkMouse);
+  }
+
+  /** D lasciato, la finestra senza fuoco o nascosta: il mouse torna com'era. */
+  #releaseInkKey(): void {
+    if (!this.#inkKeyDown) return;
+    this.#inkKeyDown = false;
+    this.#applyInkMouse();
+  }
+
+  /**
+   * Dice allo strato che cosa fa il mouse, e lo mostra solo quando scrive
+   * davvero (lo strato c'è): `data-ink="pen"`, o `"eraser"` con lo strumento
+   * Gomma del menu, sul viewport; la croce (o la cella) la porta il velo
+   * (T20d), mostrato solo con un mouse o una penna sospesa sopra la vista.
+   * Ogni attributo si scrive solo se cambia.
+   */
+  #applyInkMouse(): void {
+    // Con Spazio tenuto il mouse sposta la vista (T53).
+    const on = this.#inkMouseOn && !this.#spaceHeld;
+    const layer = this.#inkLayer;
+    layer?.setMouse(on ? "ink" : "ignore");
+    const ink = on && layer ? (this.#penChoice.tool === "eraser" ? "eraser" : "pen") : null;
+    if (ink === null) {
+      if (this.#viewport.dataset.ink !== undefined) delete this.#viewport.dataset.ink;
+    } else if (this.#viewport.dataset.ink !== ink) {
+      this.#viewport.dataset.ink = ink;
+    }
+    const veil = this.#penVeil;
+    const shown = ink !== null && this.#veilPointer;
+    if (shown && veil.dataset.tool !== ink) veil.dataset.tool = ink;
+    if (shown === veil.hasAttribute("data-idle")) veil.toggleAttribute("data-idle", !shown);
+  }
+
+  /**
+   * Un mouse o una penna sospesa entra nella vista o ci si muove (`true`), la
+   * penna esce dal raggio o un dito si appoggia (`false`): il velo della croce c'è solo per i
+   * primi. Il dito non ha cursore, e sotto il velo non toccherebbe il
+   * contenuto delle schede.
+   */
+  #setVeilPointer(over: boolean): void {
+    if (this.#veilPointer === over) return;
+    this.#veilPointer = over;
+    this.#applyInkMouse();
+  }
+
+  /**
+   * Il puntatore passa su un altro elemento della vista (T20f). Sul velo della
+   * croce la scheda di prima tiene l'aspetto del passaggio: il velo gliel'ha
+   * tolto, ma il puntatore non se n'è andato. Durante un tratto il passaggio
+   * va alla vista per la cattura, e non conta. Altrove il passaggio è quello
+   * vero: la scheda sotto (o nessuna) e niente più da tenere, nello stesso
+   * fotogramma in cui `:hover` torna, così la scheda non cambia aspetto.
+   * Solo ai confini, mai a ogni movimento, e senza ricerche per punto.
+   */
+  #pointerOver(event: PointerEvent): void {
+    if (event.pointerType === "touch") return;
+    const target = event.target;
+    if (target === this.#penVeil) {
+      this.#holdHover(this.#hoverCard);
+      return;
+    }
+    if (this.#penDown) return;
+    this.#hoverCard = target instanceof Element && this.#stage.contains(target)
+      ? target.closest<HTMLElement>(".canvas-node")
+      : null;
+    this.#holdHover(null);
+  }
+
+  /** La scheda `card` tiene l'aspetto del passaggio (`data-hover-held`); `null` lo lascia. */
+  #holdHover(card: HTMLElement | null): void {
+    if (card === this.#heldCard) return;
+    this.#heldCard?.removeAttribute("data-hover-held");
+    this.#heldCard = card;
+    card?.setAttribute("data-hover-held", "");
+  }
+
+  /**
+   * L'elemento in cima nel punto `clientX`, `clientY` della finestra come se
+   * il velo della croce non ci fosse: le ricerche per punto della lavagna
+   * (il menu, il filo, il deposito) guardano le schede, non il velo.
+   */
+  #elementAt(clientX: number, clientY: number): Element | null {
+    const top = document.elementFromPoint?.(clientX, clientY) ?? null;
+    if (top !== this.#penVeil) return top;
+    const stack = document.elementsFromPoint?.(clientX, clientY) ?? [];
+    const at = stack.indexOf(this.#penVeil);
+    return at < 0 ? null : stack[at + 1] ?? null;
+  }
+
+  /**
+   * Il bersaglio di un evento del puntatore come se il velo della croce non
+   * ci fosse: ciò che c'è sotto il punto, cercato una volta per evento (la
+   * vista se sotto non c'è niente). Un evento che non ha preso il velo dà il
+   * suo bersaglio, senza ricerche.
+   */
+  #targetOf(event: MouseEvent): EventTarget | null {
+    if (event.target !== this.#penVeil) return event.target;
+    let under = this.#underVeil.get(event);
+    if (under === undefined) {
+      const found = this.#elementAt(event.clientX, event.clientY);
+      under = found !== null && this.#viewport.contains(found) ? found : this.#viewport;
+      this.#underVeil.set(event, under);
+    }
+    return under;
+  }
+
+  // --- il menu della penna (T21) -------------------------------------------
+
+  /**
+   * Una scelta del menu della penna: vale dal prossimo tratto o dalla
+   * prossima passata (quelli in corso finiscono come sono cominciati). Una
+   * scelta fatta (`settled`) si ricorda per le lavagne che si aprono dopo;
+   * quelle aperte tengono la loro.
+   */
+  #choosePen(next: InkPenChoice, settled: boolean): void {
+    if (this.#destroyed) return;
+    this.#penTurns += 1;
+    // Un colore nuovo va fra i recenti del menu radiale (T63), col colore di prima.
+    const before = this.#penColor;
+    const after = next.color[inkStrokeTool(next)];
+    if (after !== before) this.#recentColors = rememberRecent(this.#recentColors, after, before);
+    this.#penChoice = next;
+    this.#followPen();
+    this.#penMenu.sync();
+    if (settled) (this.#options.penMemory ?? SHARED_PEN).save(next);
+  }
+
+  /**
+   * La penna cambiata: se il mouse scrive con la colonna, la colonna passa
+   * allo strumento della penna (la Gomma del menu è la Gomma della colonna).
+   */
+  #followPen(): void {
+    if (this.#inkMouse && this.#tool !== this.#penChoice.tool) this.#setTool(this.#penChoice.tool);
+    else this.#applyInkMouse();
+  }
+
+  /**
+   * La penna con cui la lavagna si apre: quella ricordata, letta una volta.
+   * Arriva solo se nel frattempo nessuno ha scelto; una lettura che non
+   * riesce lascia quella di serie.
+   */
+  #restorePen(memory: CanvasPenMemory): void {
+    const turns = this.#penTurns;
+    void memory.read().then((choice) => {
+      if (this.#destroyed || turns !== this.#penTurns) return;
+      this.#penChoice = choice;
+      this.#followPen();
+      this.#penMenu.sync();
+    }, () => undefined);
+  }
+
+  // --- la gomma: «Il tratto intero» (A20) e «Solo il pezzo» (T22) -----------
+
+  /**
+   * Che cosa fa la gomma dalla prossima passata: toglie il tratto intero
+   * (`"stroke"`, di serie) o ne taglia solo il pezzo strofinato (`"piece"`).
+   * Una passata già cominciata finisce com'è.
+   */
+  setInkEraser(mode: InkEraserMode): void {
+    if (this.#destroyed || (mode !== "stroke" && mode !== "piece")) return;
+    if (mode === this.#penChoice.eraser) return;
+    this.#penTurns += 1;
+    this.#penChoice = { ...this.#penChoice, eraser: mode };
+    this.#penMenu.sync();
+  }
+
+  /**
+   * Comincia una passata del retro della penna o del tasto laterale: i tratti
+   * che può prendere sono quelli disegnati adesso, dove si vedono.
+   */
+  #eraseStart(id: number, pointerType: InkPointerType): void {
+    this.#eraseDrop();
+    this.#erase = {
+      id,
+      sweep: new EraseSweep(ERASER, pointerType),
+      source: new InkEraseSource(erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown, this.#cellsShown)),
+      mode: this.#penChoice.eraser,
+      path: [],
+      cuts: new Map(),
+      radius: 0,
+    };
+  }
+
+  /**
+   * Punti nuovi della passata: i tratti presi si attenuano, il resto no. Con
+   * `"piece"` si attenua solo il pezzo strofinato: i tratti vicini ai punti
+   * nuovi si ritagliano sul cammino fatto fin qui.
+   */
+  #eraseAlong(id: number, points: readonly InkSample[]): void {
+    const erase = this.#erase;
+    if (!erase || erase.id !== id || points.length === 0) return;
+    const zoom = this.#camera.zoom;
+    const before = erase.sweep.size;
+    if (erase.mode === "stroke") {
+      for (const point of points) erase.sweep.along(erase.source, [point.x, point.y], zoom);
+      const marked = erase.sweep.marked();
+      for (let i = before; i < marked.length; i++) this.#fadeInk(marked[i]!, true);
+      return;
+    }
+    const radius = erase.sweep.radius / zoom;
+    erase.radius = radius;
+    const last = erase.path[erase.path.length - 1];
+    let loX = last ? last[0] : Infinity;
+    let loY = last ? last[1] : Infinity;
+    let hiX = last ? last[0] : -Infinity;
+    let hiY = last ? last[1] : -Infinity;
+    for (const point of points) {
+      const spot: Spot = [point.x, point.y];
+      erase.path.push(spot);
+      erase.sweep.along(erase.source, spot, zoom);
+      loX = Math.min(loX, spot[0]);
+      loY = Math.min(loY, spot[1]);
+      hiX = Math.max(hiX, spot[0]);
+      hiY = Math.max(hiY, spot[1]);
+    }
+    loX -= radius;
+    loY -= radius;
+    hiX += radius;
+    hiY += radius;
+    const marked = erase.sweep.marked();
+    for (let i = 0; i < marked.length; i++) {
+      const unit = marked[i]!;
+      // Un tratto già preso cambia solo se i punti nuovi gli passano vicino.
+      if (i < before && (unit.maxX < loX || unit.minX > hiX || unit.maxY < loY || unit.minY > hiY)) continue;
+      const pieces = cutInk(unit, erase.path, radius);
+      if (pieces === null) {
+        if (erase.cuts.delete(unit.key)) this.#showCut(unit, null);
+        continue;
+      }
+      const preview = cutPath(pieces);
+      erase.cuts.set(unit.key, { unit, pieces, preview });
+      this.#showCut(unit, preview);
+    }
+  }
+
+  /**
+   * La passata è finita: i tratti presi si cancellano (o si tagliano) con un
+   * commit solo, un passo d'annulla, anche se stanno in più livelli. Niente
+   * preso, niente commit; un commit che non riesce rimette i tratti come
+   * erano.
+   */
+  #eraseEnd(id: number): void {
+    const erase = this.#erase;
+    if (!erase || erase.id !== id) return;
+    this.#erase = null;
+    if (erase.mode === "stroke" ? erase.sweep.size === 0 : erase.cuts.size === 0) return;
+    let done = false;
+    try {
+      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase), erase.path, erase.radius);
+    } finally {
+      if (!done) this.#restoreErase(erase);
+    }
+  }
+
+  /** La passata annullata (palmo, finestra nascosta, sola lettura): i tratti tornano normali. */
+  #eraseCancel(id: number): void {
+    if (this.#erase?.id === id) this.#eraseDrop();
+  }
+
+  #eraseDrop(): void {
+    const erase = this.#erase;
+    this.#erase = null;
+    if (erase) this.#restoreErase(erase);
+  }
+
+  /** Rimette come erano i tratti che la passata `erase` mostrava presi o tagliati. */
+  #restoreErase(erase: InkErase): void {
+    if (erase.mode === "stroke") for (const unit of erase.sweep.marked()) this.#fadeInk(unit, false);
+    else for (const { unit } of erase.cuts.values()) this.#showCut(unit, null);
+  }
+
+  /** I tagli della passata nell'ordine in cui la gomma ha preso i tratti. */
+  #cutsOf(erase: InkErase): InkErasing[] {
+    const cuts: InkErasing[] = [];
+    for (const unit of erase.sweep.marked()) {
+      const cut = erase.cuts.get(unit.key);
+      if (cut) cuts.push(cut);
+    }
+    return cuts;
+  }
+
+  /** L'elemento della scheda `node` sulla scena; `null` se non c'è. */
+  #inkOwner(node: string): HTMLElement | null {
+    return this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`);
+  }
+
+  /** Attenua o rimette il percorso disegnato di un tratto, senza ridisegnare. */
+  #fadeInk(unit: ErasableInk, faded: boolean): void {
+    if (unit.node === null) {
+      fadeInkStroke(this.#stage, "board", unit.id, faded);
+      return;
+    }
+    const element = this.#inkOwner(unit.node);
+    if (element) fadeInkStroke(element, "card", unit.id, faded);
+  }
+
+  /** Attenua o rimette i tratti `units`, una passata per livello: col Lazo possono essere migliaia (T86). */
+  #fadeUnits(units: readonly ErasableInk[], faded: boolean): void {
+    for (const { layer, ids } of strokesByLayer(units)) {
+      const owner = layer === "board" ? this.#stage : this.#inkOwner(layer.node);
+      if (owner) fadeInkStrokes(owner, layer === "board" ? "board" : "card", new Set(ids), faded);
+    }
+  }
+
+  /** Mostra il taglio `preview` di un tratto (o lo toglie con `null`), senza ridisegnare. */
+  #showCut(unit: ErasableInk, preview: string | null): void {
+    if (unit.node === null) {
+      cutInkStroke(this.#stage, "board", unit.id, preview);
+      return;
+    }
+    const element = this.#inkOwner(unit.node);
+    if (element) cutInkStroke(element, "card", unit.id, preview);
+  }
+
+  /** Il primo passo di un commit della gomma: il documento e i livelli di adesso, dopo il testo in sospeso. */
+  #inkEditStart(): { readonly doc: CanvasDocument; readonly layers: readonly CanvasInkLayer[] } | null {
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return null;
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    return layers ? { doc, layers } : null;
+  }
+
+  /**
+   * Un commit solo con le toppe della gomma, un passo d'annulla; ciò che il
+   * nucleo rifiuta lo dice l'avviso. `true` se è riuscito.
+   */
+  #commitInkEdit(patches: readonly InkPatch[]): boolean {
+    if (patches.length === 0) return false;
+    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return false;
+    }
+    this.#inkChain = null;
+    this.#paintInk();
+    if (this.#intakeError) this.#showNotice("");
+    return true;
+  }
+
+  /**
+   * Cancella i tratti `marked` dal documento di adesso: prima il testo in
+   * sospeso (un passo suo, come prima di ogni gesto), poi una toppa per
+   * tratto, livello per livello nell'ordine in cui la gomma li ha presi. Un
+   * tratto che nel frattempo non c'è più si lascia; un livello diventato
+   * estraneo non si tocca. `true` se il commit è riuscito.
+   */
+  #eraseCommit(marked: readonly ErasableInk[]): boolean {
+    const start = this.#inkEditStart();
+    if (!start) return false;
+    const { layers } = start;
+    const present = new Set<string>();
+    for (const state of this.#inkStateList()) {
+      for (const entry of state.strokes) present.add(inkKey(state.layer, entry.id));
+    }
+    const groups = new Map<string, { readonly layer: InkLayerRef; readonly ids: string[] }>();
+    for (const unit of marked) {
+      if (!present.has(unit.key)) continue;
+      const group = unit.node === null ? "board" : `node\u0000${unit.node}`;
+      let entry = groups.get(group);
+      if (!entry) {
+        entry = { layer: unit.layer, ids: [] };
+        groups.set(group, entry);
+      }
+      entry.ids.push(unit.id);
+    }
+    // Una `erase_strokes` per livello, nell'ordine in cui la gomma li ha presi (T24).
+    const ops: CanvasIntentOp[] = [];
+    for (const { layer, ids } of groups.values()) {
+      if (foreignInkLayer(layers, layer)) continue;
+      ops.push({ op: "erase_strokes", layer: layer === "board" ? "board" : { node: layer.node }, ids: [...ids] });
+    }
+    const patches = ops.length > 0 ? this.#compileOps(ops) : null;
+    return patches !== null && this.#commitInkEdit(inkPatches(patches));
+  }
+
+  /**
+   * Taglia i tratti di `cuts` nel documento di adesso: prima il testo in
+   * sospeso, poi, livello per livello, i pezzi al posto di ogni tratto e nel
+   * suo ordine (`cutStrokePatches`), in un commit solo. Un tratto che nel
+   * frattempo non c'è più, o è cambiato, si lascia; un livello diventato
+   * estraneo non si tocca. `true` se il commit è riuscito.
+   */
+  #cutCommit(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): boolean {
+    const start = this.#inkEditStart();
+    if (!start) return false;
+    const { doc, layers } = start;
+    const present = new Map<string, DrawableStroke>();
+    for (const state of this.#inkStateList()) {
+      for (const stroke of state.drawable) present.set(inkKey(state.layer, stroke.id), stroke);
+    }
+    const groups = new Map<string, { readonly layer: InkLayerRef; readonly cuts: StrokeCut[] }>();
+    for (const { unit, pieces } of cuts) {
+      const now = present.get(unit.key);
+      if (!now || now.inkText !== unit.stroke.inkText || now.brushText !== unit.stroke.brushText) continue;
+      const group = unit.node === null ? "board" : `node\u0000${unit.node}`;
+      let entry = groups.get(group);
+      if (!entry) {
+        entry = { layer: unit.layer, cuts: [] };
+        groups.set(group, entry);
+      }
+      entry.cuts.push({ id: unit.id, pieces: pieceRecords(now, pieces) });
+    }
+    const along = this.#eraseAlongOps(cuts, path, radius);
+    if (along !== null) {
+      const patches = along.length > 0 ? this.#compileOps(along) : null;
+      return patches !== null && this.#commitInkEdit(inkPatches(patches));
+    }
+    const patches: InkPatch[] = [];
+    for (const { layer, cuts: layerCuts } of groups.values()) {
+      const made = cutStrokePatches(doc, layers, layer, layerCuts);
+      if (made) patches.push(...made);
+    }
+    return this.#commitInkEdit(patches);
+  }
+
+  /**
+   * La gomma «Solo il pezzo» come `erase_along` (T24): un'operazione per
+   * posto toccato, col cammino fatto e la sua larghezza: nelle coordinate
+   * della lavagna per i tratti liberi (`on: "board"`), in quelle della scheda
+   * per i suoi (`on` col suo id, con la proporzione del contenuto che
+   * mostra), in punti della pagina mostrata per quelli di un PDF
+   * (`on: {card, page, page_size}`) e in pixel del foglio dall'angolo della
+   * cella per quelli di una cella (`on: {card, sheet, cell}`). `null` se la
+   * scheda non dice più dove mostra la pagina o la cella di un tratto tagliato
+   * (allora la tela scrive i pezzi che ha tagliato lei).
+   */
+  #eraseAlongOps(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc || path.length === 0 || !(radius > 0)) return null;
+    // Dove taglia ogni operazione: la radice, una scheda, una sua pagina o una
+    // sua cella, con l'angolo e la scala con cui la scheda la mostra (come
+    // `erasableInk`): il cammino ci torna con `(punto − angolo) / scala`.
+    const targets = new Map<string, { readonly on: unknown; readonly x: number; readonly y: number; readonly s: number; readonly aspect?: number }>();
+    for (const { unit } of cuts) {
+      const { page, cell } = unit.stroke;
+      if (unit.node === null) {
+        targets.set("board", { on: "board", x: 0, y: 0, s: 1 });
+        continue;
+      }
+      const node = doc.nodes.find((one) => one.id === unit.node);
+      if (!node) return null;
+      if (cell !== null) {
+        const box = this.#cellRectOf(node.id, cell.sheet, cell.cell);
+        if (!box || !(box.zoom > 0) || !Number.isFinite(box.rect.x) || !Number.isFinite(box.rect.y)) return null;
+        targets.set(`cell\u0000${node.id}\u0000${cell.sheet}\u0000${cell.cell}`, {
+          on: { card: node.id, sheet: cell.sheet, cell: cell.cell },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s: box.zoom,
+        });
+      } else if (page !== null) {
+        const box = this.#pageBoxOf(node.id);
+        if (!box || box.page !== page) return null;
+        // `pageFit`: il fattore minore, dall'angolo del rettangolo.
+        const s = Math.min(box.rect.width / box.size.width, box.rect.height / box.size.height);
+        if (!(s > 0) || !Number.isFinite(s)) return null;
+        targets.set(`page\u0000${node.id}\u0000${page}`, {
+          on: { card: node.id, page, page_size: [box.size.width, box.size.height] },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s,
+        });
+      } else if (!targets.has(`card\u0000${node.id}`)) {
+        const aspect = this.#layerAspect({ node: node.id });
+        targets.set(`card\u0000${node.id}`, {
+          on: node.id,
+          x: node.x,
+          y: node.y,
+          s: 1,
+          ...(validAspect(aspect) ? { aspect } : {}),
+        });
+      }
+    }
+    // Un cammino lungo va in pezzi di fila che si toccano in un estremo: ogni
+    // pezzo resta sotto i tetti del nucleo (punti e lavoro), e la lista
+    // resta una, cioè un passo d'annulla.
+    const pieces = erasePathPieces(path, eraseAlongSegments(cuts.map(({ unit }) => unit), radius));
+    const ops: CanvasIntentOp[] = [];
+    for (const target of targets.values()) {
+      for (const piece of pieces) {
+        ops.push({
+          op: "erase_along",
+          points: piece.map(([x, y]) => [(x - target.x) / target.s, (y - target.y) / target.s]),
+          size: (radius * 2) / target.s,
+          on: target.on,
+          ...(target.aspect === undefined ? {} : { aspect: target.aspect }),
+        });
+      }
+    }
+    return ops;
+  }
+
+  /**
+   * I livelli d'inchiostro del testo di adesso: lo stato lo dice il nucleo, una
+   * volta per testo (`inkLayers()` li tiene fino al prossimo `reset` o
+   * `commit`), e qui si decodificano una volta per modello.
+   */
+  #inkStateList(): readonly InkLayerState[] {
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!doc || !layers) return [];
+    const cached = this.#inkStates;
+    if (cached && cached.doc === doc && cached.layers === layers) return cached.states;
+    const states = inkLayerStates(doc, layers);
+    this.#inkStates = { doc, layers, states };
+    return states;
+  }
+
+  /** I livelli del nucleo per il testo di adesso; `null` senza nucleo o se è appena morto. */
+  #inkLayersNow(): readonly CanvasInkLayer[] | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.inkLayers();
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Ridisegna l'asciutto di tutte le schede sulla scena e della radice, senza
+   * rifare le schede: dopo `#render`, o dopo un annulla fatto solo di tratti.
+   */
+  #paintInk(): void {
+    if (!this.#doc || this.#isSceneOversized()) return;
+    const cards = new Map<string, readonly DryStroke[]>();
+    let board: DryStroke[] = [];
+    // Ciò che la gomma ha preso resta attenuato (o tagliato) anche se lo
+    // strato si ridisegna.
+    const erase = this.#erase;
+    const faded = erase?.mode === "stroke" ? new Set(erase.sweep.marked().map((unit) => unit.key)) : null;
+    const cuts = erase?.mode === "piece" ? erase.cuts : null;
+    for (const state of this.#inkStateList()) {
+      const drys: DryStroke[] = [];
+      for (const stroke of state.drawable) {
+        const dry = dryStroke(stroke, this.#inkPaths);
+        if (!dry) continue;
+        const key = inkKey(state.layer, stroke.id);
+        const cut = cuts?.get(key);
+        if (cut && cut.unit.stroke.inkText === stroke.inkText) drys.push({ ...dry, cut: cut.preview });
+        else drys.push(faded?.has(key) ? { ...dry, faded: true } : dry);
+      }
+      if (state.node) cards.set(state.node.id, drys);
+      else board = drys;
+    }
+    const nodes = new Map(this.#doc.nodes.map((node) => [node.id, node]));
+    for (const element of this.#stage.children) {
+      if (!(element instanceof HTMLElement) || !element.classList.contains("canvas-node")) continue;
+      const node = nodes.get(element.dataset.node ?? "");
+      if (node) this.#paintCardInk(element, node, cards.get(node.id) ?? []);
+    }
+    paintBoard(this.#stage, board);
+    this.#inkCards = cards;
+    this.#inkBoard = board;
+    // I tratti scelti col Lazo, sopra l'inchiostro libero (T86).
+    this.#paintLasso();
+    this.#inkPaths.sweep();
+  }
+
+  /**
+   * Un tratto della penna è finito: si scrive, e la sua scia va via nello
+   * stesso giro. La sua guida (T87) dice che cosa: sul bordo del righello,
+   * dritto con Maiusc, o com'era e poi la forma della penna ferma.
+   */
+  #inkStroke(stroke: InkLayerStroke): void {
+    const layer = this.#inkLayer;
+    const guide = this.#inkGuides.get(stroke.id) ?? null;
+    this.#inkGuideDrop(stroke.id);
+    // L'etichetta sparisce all'alzata; il tratto si attacca a ciò che diceva.
+    this.#inkTargetClose();
+    try {
+      const guided = guide?.finish(stroke.samples, stroke.split) ?? null;
+      this.#writeStroke(guided === null ? stroke : { ...stroke, samples: guided.samples }, guided?.shape ?? null);
+    } finally {
+      layer?.settle(stroke.id);
+    }
+  }
+
+  /**
+   * Scrive il tratto `stroke`: prima il testo in sospeso (un passo suo, A1),
+   * poi la scheda che lo tiene sul documento di adesso (A3, A9), il record,
+   * la toppa e un commit solo, senza ridisegnare le schede; l'asciutto del
+   * solo livello toccato si aggiunge qui. Un pezzo che continua un tratto
+   * spezzato si fonde nel passo del pezzo di prima (A4). Ciò che non si
+   * scrive lo dice l'avviso della barra.
+   */
+  #writeStroke(stroke: InkLayerStroke, shape: readonly InkSample[] | null = null): void {
+    const chain = stroke.continued ? this.#inkChain : null;
+    this.#inkChain = null;
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return;
+    // Come prima di ogni gesto: il testo e poi il tratto, due passi. Il campo
+    // resta aperto col suo testo.
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!layers) return;
+    const bounds = strokeBounds(stroke.samples, stroke.brush.size);
+    const holder = this.#inkHolder(doc.nodes, layers, bounds);
+    const ref: InkLayerRef = holder ? { node: holder.id } : "board";
+    if (foreignInkLayer(layers, ref)) {
+      this.#showNotice(t("canvas.ink.foreign"));
+      return;
+    }
+    // Sulla pagina di un PDF il tratto è della pagina se comincia lì (T19);
+    // sulla griglia di un foglio, della cella sotto il centro (T37, T38).
+    const page = holder ? pageAnchorAt(holder, this.#pageBoxOf(holder.id), stroke.samples[0]) : null;
+    const cell = holder && !page ? cellAnchorAt(holder, bounds, (point) => this.#cellAtOf(holder.id, point)) : null;
+    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now(), page ?? cell);
+    if (!made.ok) {
+      // Un tocco che non fa contorno non è niente da dire.
+      if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    // Il tratto entra con `add_strokes` (T24): la codifica dei punti è della
+    // tela (N4), il livello, l'ordine dei campi e l'id li dà il nucleo.
+    const { id: _id, ...fields } = made.record as unknown as Record<string, unknown>;
+    const compiled = this.#compileIntent([{ op: "add_strokes", layer: ref === "board" ? "board" : { node: ref.node }, strokes: [fields] }], "canvas.ink.refused");
+    const added = compiled?.patches.find((patch): patch is InkPatch => patch.kind === "ink" && patch.after !== null);
+    if (!compiled || !added?.after) return;
+    const record = added.after as unknown as InkStrokeRecord;
+    const before = this.#source;
+    const code = this.#commitLocal(compiled.patches, "input", (step) => this.#pushInkStep(step, chain), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const top = this.#undo[this.#undo.length - 1];
+    if (stroke.split && top) this.#inkChain = { step: top, before: chain?.before ?? before };
+    const dry = toDry(record, this.#inkPaths);
+    if (dry) this.#paintStroke(holder, dry);
+    if (this.#intakeError) this.#showNotice("");
+    // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
+    if (!stroke.split) this.#sayInkHolder(holder);
+    if (shape !== null) this.#writeShape(stroke, shape, record, ref, holder, page ?? cell);
+  }
+
+  /**
+   * La forma della penna ferma prende il posto del tratto `written`, appena
+   * scritto, in un passo d'annulla suo (T87): un tratto `fub:ink` con lo
+   * stesso id, la stessa penna, lo stesso colore, lo stesso spessore, la
+   * stessa ancora e lo stesso posto nel livello. Annullare riporta il tratto
+   * com'era. Una forma che non si scrive lascia il tratto e lo dice.
+   */
+  #writeShape(
+    stroke: InkLayerStroke,
+    shape: readonly InkSample[],
+    written: InkStrokeRecord,
+    ref: InkLayerRef,
+    holder: CanvasNode | null,
+    content: Parameters<typeof strokeRecord>[4],
+  ): void {
+    const start = this.#inkEditStart();
+    if (!start) return;
+    const look = { brush: stroke.brush, color: stroke.color, tool: stroke.tool };
+    const made = strokeRecord({ samples: shape, pressure: stroke.pressure, split: false }, holder, look, Date.now(), content);
+    if (!made.ok) {
+      if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const after: Record<string, unknown> = { ...made.record, id: written.id };
+    if (written.at === undefined) delete after.at;
+    else after.at = written.at;
+    // Il tratto appena scritto è l'ultimo del suo livello: toglierlo e
+    // rimettere la forma con lo stesso id la lascia al suo posto (T24).
+    const layer = ref === "board" ? "board" : { node: ref.node };
+    const patches = this.#compileOps([
+      { op: "erase_strokes", layer, ids: [written.id] },
+      { op: "add_strokes", layer, strokes: [after] },
+    ]);
+    if (patches) this.#commitInkEdit(inkPatches(patches));
+  }
+
+  /**
+   * Il tratto della punta `start` comincia: la sua guida (T87), col righello di
+   * adesso, lo zoom di adesso e Maiusc letto quando serve. Campioni nuovi che
+   * fanno uscire la punta dal punto fermo fanno ripartire il mezzo secondo;
+   * nessun riconoscimento a ogni campione.
+   */
+  #inkGuideStart(start: InkGuideStart): InkGuide {
+    const guide = new StrokeGuide({
+      pointer: start.pointerType,
+      tool: start.look.tool,
+      size: start.look.brush.size,
+      zoom: this.#camera.zoom,
+      ruler: this.#inkRuler?.ruler ?? null,
+      continued: start.continued,
+      shift: () => this.#shiftHeld,
+    });
+    this.#inkGuides.set(start.id, guide);
+    return {
+      add: (samples) => {
+        if (guide.add(samples)) this.#armShape(start.id);
+      },
+      trail: (samples, predicted) => guide.trail(samples, predicted),
+    };
+  }
+
+  /** Il mezzo secondo della penna ferma riparte per il tratto `id`. */
+  #armShape(id: number): void {
+    clearTimeout(this.#shapeTimer);
+    this.#shapeTimer = setTimeout(() => {
+      this.#shapeTimer = undefined;
+      const guide = this.#inkGuides.get(id);
+      if (this.#destroyed || !guide || !guide.hold()) return;
+      this.#inkLayer?.repaint();
+      const shape = guide.shapeNow();
+      if (shape) this.#sayGesture(t("canvas.ink.shape", { kind: t(`canvas.ink.shape.${shapeKind(shape)}`) }));
+    }, HOLD_MS);
+  }
+
+  /** Il tratto `id` è finito o annullato: la sua guida e il suo mezzo secondo se ne vanno. */
+  #inkGuideDrop(id: number): void {
+    if (!this.#inkGuides.delete(id)) return;
+    clearTimeout(this.#shapeTimer);
+    this.#shapeTimer = undefined;
+  }
+
+  /** Maiusc tenuto o lasciato: a penna giù la scia si raddrizza o torna com'era subito. */
+  #setShiftHeld(held: boolean): void {
+    if (held === this.#shiftHeld) return;
+    this.#shiftHeld = held;
+    if (this.#inkGuides.size > 0) this.#inkLayer?.repaint();
+  }
+
+  /**
+   * La pagina che la scheda `id` mostra e dove (T19): la chiede alla sua
+   * vista; `null` se la scheda non ha una vista o non mostra una pagina.
+   */
+  #pageBoxOf(id: string): CardPageBox | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.pageBox) return null;
+    try {
+      return view.pageBox();
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: la pagina non si vede.
+      console.warn(`canvas: la pagina della scheda ${id} non si misura`, error);
+      return null;
+    }
+  }
+
+  /** `#pageBoxOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
+  readonly #pagesShown = (id: string): CardPageBox | null => this.#pageBoxOf(id);
+
+  /**
+   * La cella sotto `point` (dall'angolo della scheda) nella scheda di foglio
+   * `id` (T38): la chiede alla sua vista; `null` se la scheda non ha una
+   * vista o lì non c'è una cella.
+   */
+  #cellAtOf(id: string, point: { readonly x: number; readonly y: number }): CardCellBox | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.cellAt) return null;
+    try {
+      return view.cellAt(point);
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: il tratto è della scheda.
+      console.warn(`canvas: la cella della scheda ${id} non si trova`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Dove la scheda di foglio `id` mostra la cella `cell` del foglio `sheet`
+   * (T38): lo chiede alla sua vista; `null` se non la mostra.
+   */
+  #cellRectOf(id: string, sheet: string, cell: string): CardCellBox | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.cellRect) return null;
+    try {
+      return view.cellRect(sheet, cell);
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: la cella non si vede.
+      console.warn(`canvas: la cella ${cell} della scheda ${id} non si misura`, error);
+      return null;
+    }
+  }
+
+  /** `#cellRectOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
+  readonly #cellsShown = (id: string, sheet: string, cell: string): CardCellBox | null => this.#cellRectOf(id, sheet, cell);
+
+  /**
+   * La proporzione del contenuto che la scheda `id` mostra (T39): la chiede
+   * alla sua vista; `null` se la scheda non ha una vista o non la sa.
+   */
+  #contentAspectOf(id: string): number | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.contentAspect) return null;
+    try {
+      const aspect = view.contentAspect();
+      return typeof aspect === "number" && Number.isFinite(aspect) && aspect > 0 ? aspect : null;
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: segue tutta la scheda.
+      console.warn(`canvas: il contenuto della scheda ${id} non si misura`, error);
+      return null;
+    }
+  }
+
+  /**
+   * La proporzione del contenuto della scheda che tiene il livello `layer`,
+   * per le operazioni che il nucleo compila (`move_strokes`,
+   * `restyle_strokes`, T98): la stessa della resa, così il tratto va dove lo
+   * porta il puntatore. `null` per la radice e per le schede che non scalano.
+   */
+  #layerAspect(layer: InkLayerRef): number | null {
+    if (layer === "board") return null;
+    const node = this.#doc?.nodes.find((one) => one.id === layer.node);
+    return node && inkFitMode(node) === "scale" ? this.#contentAspectOf(node.id) : null;
+  }
+
+  /** `#contentAspectOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
+  readonly #aspectsShown = (id: string): number | null => this.#contentAspectOf(id);
+
+  /**
+   * Disegna i tratti `drys` dentro l'elemento della scheda `node`: col modo
+   * della scheda, la pagina che mostra (T19), le celle che mostra (T38) e la
+   * proporzione del suo contenuto (T39), che chiede solo alle schede `scale`.
+   */
+  #paintCardInk(element: HTMLElement, node: CanvasNode, drys: readonly DryStroke[]): void {
+    const mode = inkFitMode(node);
+    const aspect = mode === "scale" && drys.length > 0 ? this.#contentAspectOf(node.id) : null;
+    const cells = drys.some((dry) => dry.cell !== undefined)
+      ? (sheet: string, cell: string) => this.#cellRectOf(node.id, sheet, cell)
+      : null;
+    paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect, cells);
+  }
+
+  /**
+   * La scheda `entry` mostra un'altra pagina, o nessuna (T19), il suo
+   * contenuto ha cambiato proporzione (T39) o le sue celle si sono spostate
+   * (T38): si ridisegna il suo solo inchiostro, coi tratti già calcolati,
+   * subito, nello stesso fotogramma della scheda.
+   */
+  #pageShown(entry: CardEntry): void {
+    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return;
+    const drys = this.#inkCards.get(entry.id);
+    if (!drys || drys.length === 0) return;
+    this.#paintCardInk(entry.article, entry.node, drys);
+  }
+
+  /** Aggiunge l'asciutto di un tratto appena scritto al solo livello che lo tiene. */
+  #paintStroke(holder: CanvasNode | null, dry: DryStroke): void {
+    if (!holder) {
+      this.#inkBoard = [...this.#inkBoard, dry];
+      paintBoard(this.#stage, this.#inkBoard);
+      return;
+    }
+    const drys = [...(this.#inkCards.get(holder.id) ?? []), dry];
+    this.#inkCards.set(holder.id, drys);
+    const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(holder.id)}"]`);
+    // Una scheda arrivata da fuori a penna giù non è ancora sulla scena: la
+    // disegna il ridisegno rimandato.
+    if (element) this.#paintCardInk(element, holder, drys);
+  }
+
+  /**
+   * Il passo d'annulla di un tratto: nuovo, o fuso col pezzo di prima dello
+   * stesso tratto se nel frattempo il testo non è cambiato.
+   */
+  #pushInkStep(step: CanvasStep, chain: InkChain | null): void {
+    const top = this.#undo[this.#undo.length - 1];
+    if (chain && top === chain.step && top.version === step.restores) {
+      this.#undo[this.#undo.length - 1] = mergeSteps(chain.before, top, step, this.#source);
+      this.#redo = [];
+      return;
+    }
+    this.#pushUndo(step, true);
+  }
+
+  // --- a chi appartiene il tratto (T69) -------------------------------------
+
+  /**
+   * La scheda a cui si attacca il tratto di riquadro `bounds`, o `null` se
+   * resta libero: la regola di N4 (`anchorAt`), che non sceglie le schede col
+   * livello d'inchiostro di un altro programma; con Alt tenuto, libero.
+   * L'etichetta e l'alzata la chiedono qui tutte e due.
+   */
+  #inkHolder(nodes: readonly CanvasNode[], layers: readonly CanvasInkLayer[], bounds: Bounds): CanvasNode | null {
+    if (this.#altHeld) return null;
+    return anchorAt(nodes, bounds, (node) => !foreignInkLayer(layers, { node: node.id }));
+  }
+
+  /** Un appoggio sulla vista: il punto da cui partirà il riquadro, se diventa un tratto. */
+  #inkSeen(event: PointerEvent): void {
+    const at = this.#inkAt;
+    at.pointerId = event.pointerId;
+    at.clientX = event.clientX;
+    at.clientY = event.clientY;
+  }
+
+  /**
+   * Comincia un tratto della punta (chiamato da `look`, una volta per tratto e
+   * per pezzo): si ricordano lo spessore e la vista, già misurata da chi ha
+   * appena portato l'appoggio nella lavagna. L'etichetta nasce al primo
+   * movimento: un tocco non la mostra.
+   */
+  #inkTargetStarting(size: number): void {
+    this.#inkTargetClose();
+    if (this.#destroyed) return;
+    this.#inkStarting = { size, view: this.#viewport.getBoundingClientRect() };
+    // La cattura porta il passaggio alla vista: la scheda sotto la punta tiene il suo aspetto (T20f).
+    this.#holdHover(this.#hoverCard);
+  }
+
+  /**
+   * Un movimento sulla vista, dopo lo strato della penna: la scia è già
+   * disegnata. A penna su non fa niente; a penna giù allarga il riquadro coi
+   * punti dell'evento e rifà l'ancora solo se il riquadro è cresciuto. Il
+   * browser manda un `pointermove` per fotogramma: al più un aggiornamento per
+   * fotogramma, senza `requestAnimationFrame` (DEC-26).
+   */
+  #inkTargetMove(event: PointerEvent): void {
+    if (!this.#inkTarget && !this.#inkStarting) return;
+    const target = this.#inkTarget ?? this.#inkTargetOpen(event.pointerId);
+    if (!target || event.pointerId !== target.pointerId) return;
+    // Alt preso o lasciato senza che la finestra lo sapesse (il fuoco altrove).
+    if (event.altKey !== this.#altHeld) {
+      this.#altHeld = event.altKey;
+      target.holder = undefined;
+    }
+    const { zoom, x, y } = this.#camera;
+    const { left, top } = target.view;
+    const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+    let grew = false;
+    for (const one of coalesced.length > 0 ? coalesced : [event]) {
+      if (target.box.add((one.clientX - left - x) / zoom, (one.clientY - top - y) / zoom)) grew = true;
+    }
+    this.#inkSeen(event);
+    this.#inkTargetShow(target, grew);
+  }
+
+  /** Apre l'etichetta del tratto appena cominciato, dal punto dell'appoggio. */
+  #inkTargetOpen(pointerId: number): InkTarget | null {
+    const starting = this.#inkStarting;
+    this.#inkStarting = null;
+    if (!starting || this.#destroyed || !this.#doc) return null;
+    const marks = this.#inkMarksNow();
+    marks.label.removeAttribute("data-idle");
+    const target: InkTarget = {
+      pointerId,
+      box: new StrokeBox(),
+      size: starting.size,
+      view: starting.view,
+      label: marks.label,
+      frames: marks.frames,
+      holder: undefined,
+    };
+    this.#inkTarget = target;
+    const at = this.#inkAt;
+    if (at.pointerId === pointerId) {
+      const { zoom, x, y } = this.#camera;
+      target.box.add((at.clientX - starting.view.left - x) / zoom, (at.clientY - starting.view.top - y) / zoom);
+    }
+    return target;
+  }
+
+  /**
+   * Mostra l'ancora del riquadro di adesso: il bordo tratteggiato passa alla
+   * scheda nuova e il testo cambia solo quando l'ancora cambia (`grew` dice se
+   * c'è da rifarla); l'etichetta segue la punta, accanto e mai sotto.
+   */
+  #inkTargetShow(target: InkTarget, grew: boolean): void {
+    // Un ridisegno della scena toglie ciò che non è una scheda: i lati si rimettono.
+    if (target.holder && !target.frames.isConnected) target.holder = undefined;
+    if (grew || target.holder === undefined) {
+      const doc = this.#doc;
+      const layers = this.#inkLayersNow();
+      const holder = doc && layers ? this.#inkHolder(doc.nodes, layers, target.box.bounds(target.size)) : null;
+      const id = holder?.id ?? null;
+      if (id !== target.holder) {
+        target.holder = id;
+        this.#placeInkFrame(target.frames, holder);
+        const text = inkHolderText(holder);
+        // Lo stesso testo del tratto prima non si riscrive: niente misura nuova.
+        if (target.label.textContent !== text) target.label.textContent = text;
+        target.label.toggleAttribute("data-free", holder === null);
+      }
+    }
+    this.#placeInkLabel(target);
+  }
+
+  /** L'etichetta accanto alla punta, con la misura che ha già: nessuna lettura del layout. */
+  #placeInkLabel(target: InkTarget): void {
+    this.#placeInkLabelAt(target.view, this.#inkAt.clientX, this.#inkAt.clientY);
+  }
+
+  /** L'etichetta accanto al punto `clientX`, `clientY` della vista `view`: per la penna e per il Lazo (T86). */
+  #placeInkLabelAt(view: DOMRect, clientX: number, clientY: number): void {
+    const marks = this.#inkMarks;
+    if (!marks) return;
+    const { left, top, width } = view;
+    const px = clientX - left;
+    const py = clientY - top;
+    // Sopra a destra della punta; a sinistra o sotto se lì non c'è posto.
+    marks.label.toggleAttribute("data-flip-x", px + marks.gap + marks.width > width);
+    marks.label.toggleAttribute("data-flip-y", py - marks.gap - marks.height < 0);
+    marks.label.style.setProperty("--canvas-ink-x", `${px}px`);
+    marks.label.style.setProperty("--canvas-ink-y", `${py}px`);
+  }
+
+  /**
+   * Mette il bordo tratteggiato attorno a `holder`, nelle coordinate della
+   * lavagna (lo stage lo porta con la camera), o lo toglie se il tratto è
+   * libero. Lo stacco e lo spessore sono in `structure.css`, il colore nella pelle.
+   *
+   * Il contenitore è uno strato composto suo (T20f): si scrive solo ciò che è
+   * cambiato, così un tratto che comincia sulla scheda del tratto prima cambia
+   * solo `data-idle`, cioè l'opacità dello strato, e non ridipinge niente.
+   */
+  #placeInkFrame(frames: HTMLElement, holder: CanvasNode | null): void {
+    if (!holder) {
+      frames.setAttribute("data-idle", "");
+      return;
+    }
+    if (frames.dataset.node !== holder.id) frames.dataset.node = holder.id;
+    // I lati ereditano la misura dal contenitore: quattro proprietà, non sedici.
+    setPixels(frames, "--canvas-frame-x", holder.x);
+    setPixels(frames, "--canvas-frame-y", holder.y);
+    setPixels(frames, "--canvas-frame-w", holder.width);
+    setPixels(frames, "--canvas-frame-h", holder.height);
+    if (!frames.isConnected) this.#stage.append(frames);
+    frames.removeAttribute("data-idle");
+  }
+
+  /** L'etichetta e i lati del bordo: creati la prima volta, poi gli stessi. */
+  #inkMarksNow(): InkMarks {
+    if (this.#inkMarks) return this.#inkMarks;
+    const label = document.createElement("div");
+    label.className = "canvas-ink-label";
+    // A penna su resta al suo posto, invisibile: mostrarla non rifà il layout.
+    label.setAttribute("data-idle", "");
+    // Il lettore di schermo la sente all'alzata, non a ogni cambio.
+    label.setAttribute("aria-hidden", "true");
+    this.#viewport.append(label);
+    const frames = document.createElement("div");
+    frames.className = "canvas-ink-frames";
+    // Come l'etichetta: si nasconde con `data-idle`, mai con `hidden`. Le
+    // regole `:has()` della shell leggono `[hidden]` dentro `#layout`,
+    // `#panes` e `.pane`: cambiarlo qui sotto farebbe ricalcolare lo stile di
+    // tutta la finestra all'inizio di ogni tratto (80–140 ms col foglio vivo).
+    frames.setAttribute("data-idle", "");
+    frames.setAttribute("aria-hidden", "true");
+    for (const side of INK_FRAME_SIDES) {
+      const edge = document.createElement("div");
+      edge.className = "canvas-ink-frame";
+      edge.dataset.side = side;
+      frames.append(edge);
+    }
+    this.#stage.append(frames);
+    const marks: InkMarks = {
+      label,
+      frames,
+      width: 0,
+      height: 0,
+      gap: 0,
+    };
+    this.#inkMarks = marks;
+    if (typeof ResizeObserver !== "undefined") {
+      // Il testo cambiato si misura dopo il layout del fotogramma, non quando cambia.
+      const observer = new ResizeObserver(() => {
+        marks.width = label.offsetWidth;
+        marks.height = label.offsetHeight;
+        if (marks.gap === 0) marks.gap = parseFloat(getComputedStyle(label).getPropertyValue("--canvas-ink-label-gap")) || 0;
+        if (this.#inkTarget) this.#placeInkLabel(this.#inkTarget);
+        const drag = this.#strokeDrag;
+        if (drag?.moved) this.#placeInkLabelAt(drag.view, drag.clientX, drag.clientY);
+      });
+      observer.observe(label);
+      this.#life.add(() => observer.disconnect());
+    }
+    return marks;
+  }
+
+  /** Il tratto è finito o non c'è più: via l'etichetta e il bordo. */
+  #inkTargetClose(): void {
+    this.#inkStarting = null;
+    const target = this.#inkTarget;
+    if (!target) return;
+    this.#inkTarget = null;
+    target.frames.setAttribute("data-idle", "");
+    target.label.setAttribute("data-idle", "");
+    // Sotto il velo il puntatore può aver lasciato la scheda tenuta senza un
+    // `pointerover`: se il tratto non era suo, a penna su la lascia (T20f).
+    const held = this.#heldCard;
+    if (held && held.dataset.node !== target.holder) this.#holdHover(null);
+  }
+
+  /** Alt tenuto o lasciato: a penna giù l'etichetta lo dice subito, anche se la punta è ferma. */
+  #setAltHeld(held: boolean): void {
+    if (held === this.#altHeld) return;
+    this.#altHeld = held;
+    const target = this.#inkTarget;
+    if (target) {
+      target.holder = undefined;
+      this.#inkTargetShow(target, false);
+    }
+    // Spostando i tratti col Lazo, Alt li lascia liberi anche a puntatore fermo (T86).
+    const drag = this.#strokeDrag;
+    if (drag?.moved && drag.units.length > 0) this.#showStrokeHolder(drag);
+  }
+
+  /**
+   * Dice al lettore di schermo a che cosa si è attaccato il tratto appena
+   * scritto, con le parole dell'etichetta; lo stesso testo di prima non si
+   * ripete, così una pagina di tratti sulla stessa scheda resta in silenzio.
+   */
+  #sayInkHolder(holder: CanvasNode | null): void {
+    if (this.#destroyed) return;
+    let said = this.#inkSaid;
+    if (!said) {
+      said = document.createElement("div");
+      said.className = "sr-only canvas-ink-said";
+      said.setAttribute("role", "status");
+      said.setAttribute("aria-live", "polite");
+      this.#root.append(said);
+      this.#inkSaid = said;
+    }
+    const text = inkHolderText(holder);
+    if (said.textContent !== text) said.textContent = text;
+  }
+
+  // --- il Lazo (T86) ------------------------------------------------------------
+
+  /**
+   * I tratti scelti col Lazo che ci sono ancora e si vedono, in coordinate
+   * della lavagna; non quelli delle schede scelte, che vanno con loro.
+   */
+  #chosenStrokes(): ErasableInk[] {
+    if (this.#strokeSelection.size === 0 || !this.#doc || this.#isSceneOversized()) return [];
+    const cards = new Set(this.#selection);
+    return erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown, this.#cellsShown)
+      .filter((unit) => this.#strokeSelection.has(unit.key) && (unit.node === null || !cards.has(unit.node)));
+  }
+
+  /** I tratti scelti come li mostra la barra della selezione: colore, spessore sullo schermo, sola lettura. */
+  #strokesShown(units: readonly ErasableInk[]): SelectionBarStrokes | null {
+    if (units.length === 0) return null;
+    const zoom = this.#camera.zoom;
+    const colors = new Set(units.map((unit) => unit.stroke.color.toLowerCase()));
+    // Lo spessore come si vede, al mezzo pixel: il passo del cursore.
+    const widths = new Set(units.map((unit) => Math.round(unit.stroke.brush.size * unit.fit.s * zoom * 2) / 2));
+    const [color] = colors;
+    const [width] = widths;
+    return {
+      count: units.length,
+      color: colors.size === 1 ? color! : null,
+      width: widths.size === 1 ? width! : null,
+      tool: units.every((unit) => unit.stroke.tool === "highlighter") ? "highlighter" : "pen",
+      off: this.#readOnly ? t("canvas.commands.why.read_only") : null,
+    };
+  }
+
+  /** Lo strato del lazo, creato la prima volta e poi lo stesso, in cima allo stage. */
+  #lassoLayerNow(): LassoLayer {
+    let layer = this.#lassoLayer;
+    if (!layer) {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "canvas-lasso");
+      svg.setAttribute("aria-hidden", "true");
+      const chosen = document.createElementNS(ns, "g");
+      chosen.setAttribute("class", "canvas-lasso-chosen");
+      const frame = document.createElementNS(ns, "rect");
+      frame.setAttribute("class", "canvas-lasso-frame");
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("class", "canvas-lasso-path");
+      svg.append(chosen, frame, path);
+      layer = { svg, chosen, frame, path };
+      this.#lassoLayer = layer;
+    }
+    if (this.#stage.lastElementChild !== layer.svg) this.#stage.append(layer.svg);
+    return layer;
+  }
+
+  /**
+   * Disegna lo strato del lazo: il giro in corso, i tratti scelti col loro
+   * contorno d'accento e la cornice tratteggiata attorno. Spostandosi, i
+   * tratti portano il loro colore sopra gli originali attenuati. Senza giro
+   * e senza tratti scelti lo strato esce dallo stage.
+   */
+  #paintLasso(): void {
+    if (this.#destroyed) return;
+    const lasso = this.#lasso;
+    const drag = this.#strokeDrag;
+    const units = drag ? drag.units : this.#chosenStrokes();
+    if (!lasso && units.length === 0) {
+      this.#lassoLayer?.svg.remove();
+      return;
+    }
+    const layer = this.#lassoLayerNow();
+    layer.path.setAttribute("d", lasso ? lassoPath(lasso.points) : "");
+    const moving = drag !== null && drag.moved;
+    const paths = layer.chosen.children;
+    let count = 0;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const unit of units) {
+      const dry = dryStroke(unit.stroke, this.#inkPaths);
+      if (!dry) continue;
+      let path = paths[count] as SVGPathElement | undefined;
+      if (!path) {
+        path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        layer.chosen.append(path);
+      }
+      count += 1;
+      path.setAttribute("d", dry.path);
+      path.setAttribute("transform", `matrix(${unit.fit.s} 0 0 ${unit.fit.s} ${unit.fit.x} ${unit.fit.y})`);
+      path.setAttribute("fill", moving ? dry.fill : "none");
+      if (moving && dry.opacity !== undefined) path.setAttribute("fill-opacity", String(dry.opacity));
+      else path.removeAttribute("fill-opacity");
+      minX = Math.min(minX, unit.minX);
+      minY = Math.min(minY, unit.minY);
+      maxX = Math.max(maxX, unit.maxX);
+      maxY = Math.max(maxY, unit.maxY);
+    }
+    while (paths.length > count) paths[paths.length - 1]!.remove();
+    if (count > 0) {
+      // Qualche pixel dello schermo attorno ai tratti, a ogni zoom.
+      const pad = LASSO_FRAME_PAD / this.#camera.zoom;
+      layer.frame.setAttribute("x", String(minX - pad));
+      layer.frame.setAttribute("y", String(minY - pad));
+      layer.frame.setAttribute("width", String(maxX - minX + 2 * pad));
+      layer.frame.setAttribute("height", String(maxY - minY + 2 * pad));
+      layer.frame.removeAttribute("display");
+    } else {
+      layer.frame.setAttribute("display", "none");
+    }
+    this.#shiftLasso(moving ? drag.dx : 0, moving ? drag.dy : 0);
+  }
+
+  /** Porta i tratti scelti e la loro cornice di `dx`, `dy`, senza ridisegnarli. */
+  #shiftLasso(dx: number, dy: number): void {
+    const layer = this.#lassoLayer;
+    if (!layer) return;
+    const shift = dx === 0 && dy === 0 ? null : `translate(${dx} ${dy})`;
+    for (const element of [layer.chosen, layer.frame]) {
+      if (shift === null) element.removeAttribute("transform");
+      else element.setAttribute("transform", shift);
+    }
+  }
+
+  /** Comincia un giro del Lazo dal punto dell'appoggio; con Maiusc aggiungerà alla scelta. */
+  #beginLasso(event: PointerEvent): void {
+    this.#lasso = {
+      pointerId: event.pointerId,
+      points: [this.#screenToWorld(event.clientX, event.clientY)],
+      additive: event.shiftKey,
+      pressed: this.#nodeAt(this.#targetOf(event)),
+    };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    this.#paintLasso();
+  }
+
+  /** Il giro cresce coi punti dell'evento che si allontanano dall'ultimo (un passo per pixel dello schermo). */
+  #moveLasso(event: PointerEvent): void {
+    const lasso = this.#lasso;
+    if (!lasso) return;
+    const rect = this.#viewport.getBoundingClientRect();
+    const { x, y, zoom } = this.#camera;
+    const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+    let grew = false;
+    for (const one of coalesced.length > 0 ? coalesced : [event]) {
+      const point = { x: (one.clientX - rect.left - x) / zoom, y: (one.clientY - rect.top - y) / zoom };
+      if (extendLasso(lasso.points, point, LASSO_MIN_STEP / zoom)) grew = true;
+    }
+    if (grew) this.#lassoLayer?.path.setAttribute("d", lassoPath(lasso.points));
+  }
+
+  /**
+   * Il giro chiuso sceglie le schede tutte dentro e i tratti coi punti tutti
+   * dentro (`lasso.ts`); i tratti delle schede scelte vanno con loro e non si
+   * scelgono a parte. Con Maiusc si aggiunge alla scelta. Un giro senza area è
+   * un clic: sceglie la scheda sotto, o toglie la scelta.
+   */
+  #endLasso(): void {
+    const lasso = this.#lasso;
+    this.#lasso = null;
+    const doc = this.#doc;
+    if (!lasso || !doc) {
+      this.#paintLasso();
+      return;
+    }
+    const loop = new Lasso(lasso.points);
+    if (!loop.closed) {
+      if (lasso.pressed !== null) this.#selectNode(lasso.pressed, lasso.additive);
+      else if (!lasso.additive) this.#clearSelection();
+      this.#paintLasso();
+      return;
+    }
+    const cards = doc.nodes.filter((node) => loop.containsBox(node)).map((node) => node.id);
+    const selection = lasso.additive ? [...this.#selection, ...cards.filter((id) => !this.#selection.includes(id))] : cards;
+    const held = new Set(selection);
+    const strokes: string[] = [];
+    for (const unit of erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown, this.#cellsShown)) {
+      if (unit.node !== null && held.has(unit.node)) continue;
+      // Un tratto di pagina (T19) o di cella (T38) il Lazo non lo prende: il
+      // nucleo non sa dove la pagina o la cella sta nella scheda, e non lo
+      // sposta né lo ridimensiona.
+      if (unit.stroke.page !== null || unit.stroke.cell !== null) continue;
+      // Il riquadro prima dei punti: i tratti lontani si lasciano subito.
+      if (unit.maxX < loop.minX || unit.minX > loop.maxX || unit.maxY < loop.minY || unit.minY > loop.maxY) continue;
+      if (loop.containsPoints(unit.points)) strokes.push(unit.key);
+    }
+    this.#selection = selection;
+    this.#edgeSelection = [];
+    this.#strokeSelection = new Set(lasso.additive ? [...this.#strokeSelection, ...strokes] : strokes);
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  /** L'appoggio cade dentro ciò che il Lazo ha scelto: la cornice dei tratti, o una scheda scelta. */
+  #insideChosen(event: PointerEvent): boolean {
+    const { x, y } = this.#screenToWorld(event.clientX, event.clientY);
+    for (const node of this.#selectedNodes()) {
+      if (x >= node.x && x <= node.x + node.width && y >= node.y && y <= node.y + node.height) return true;
+    }
+    const units = this.#chosenStrokes();
+    if (units.length === 0) return false;
+    const pad = LASSO_FRAME_PAD / this.#camera.zoom;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const unit of units) {
+      minX = Math.min(minX, unit.minX);
+      minY = Math.min(minY, unit.minY);
+      maxX = Math.max(maxX, unit.maxX);
+      maxY = Math.max(maxY, unit.maxY);
+    }
+    return x >= minX - pad && x <= maxX + pad && y >= minY - pad && y <= maxY + pad;
+  }
+
+  /** Comincia a spostare le schede scelte (coi gruppi, ciò che contengono) e i tratti scelti. */
+  #beginStrokeDrag(event: PointerEvent): void {
+    const doc = this.#doc;
+    if (!doc) return;
+    const origin = new Map<string, { x: number; y: number }>();
+    for (const id of this.#selection) {
+      const node = doc.nodes.find((n) => n.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y });
+    }
+    for (const group of doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
+      for (const child of doc.nodes) {
+        if (child.id !== group.id && child.x >= group.x && child.y >= group.y
+          && child.x + child.width <= group.x + group.width
+          && child.y + child.height <= group.y + group.height) {
+          origin.set(child.id, { x: child.x, y: child.y });
+        }
+      }
+    }
+    // I tratti delle schede che si spostano vanno con loro.
+    const units = this.#chosenStrokes().filter((unit) => unit.node === null || !origin.has(unit.node));
+    this.#strokeDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin,
+      units,
+      view: this.#viewport.getBoundingClientRect(),
+      moved: false,
+      dx: 0,
+      dy: 0,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      holder: undefined,
+    };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+  }
+
+  /**
+   * Le schede e i tratti scelti seguono il puntatore, in unità intere della
+   * lavagna. Sopra un'altra scheda i tratti la accendono come la penna
+   * (T69): bordo tratteggiato ed etichetta; Alt li lascia liberi.
+   */
+  #moveStrokeDrag(event: PointerEvent): void {
+    const drag = this.#strokeDrag;
+    const doc = this.#doc;
+    if (!drag || !doc) return;
+    drag.clientX = event.clientX;
+    drag.clientY = event.clientY;
+    if (!drag.moved && Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) <= 3) return;
+    const first = !drag.moved;
+    drag.moved = true;
+    const zoom = this.#camera.zoom;
+    drag.dx = Math.round((event.clientX - drag.startX) / zoom);
+    drag.dy = Math.round((event.clientY - drag.startY) / zoom);
+    if (drag.origin.size > 0) {
+      const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
+      for (const [id, start] of drag.origin) {
+        const node = byId.get(id);
+        if (!node) continue;
+        node.x = start.x + drag.dx;
+        node.y = start.y + drag.dy;
+      }
+      this.#renderLive();
+    }
+    if (first) {
+      this.#fadeUnits(drag.units, true);
+      this.#syncSelectionBar();
+      this.#paintLasso();
+    } else {
+      this.#shiftLasso(drag.dx, drag.dy);
+    }
+    if (event.altKey !== this.#altHeld) this.#altHeld = event.altKey;
+    if (drag.units.length > 0) this.#showStrokeHolder(drag);
+  }
+
+  /**
+   * La scheda che prenderebbe i tratti spostati adesso: la regola della penna
+   * (`anchorAt`) sul loro riquadro spostato, fra le schede che non si
+   * spostano con loro e non hanno il livello d'un altro programma; con Alt,
+   * nessuna.
+   */
+  #strokeHolder(drag: StrokeDrag): CanvasNode | null {
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (this.#altHeld || !doc || !layers || drag.units.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const unit of drag.units) {
+      minX = Math.min(minX, unit.minX);
+      minY = Math.min(minY, unit.minY);
+      maxX = Math.max(maxX, unit.maxX);
+      maxY = Math.max(maxY, unit.maxY);
+    }
+    const bounds = { x: minX + drag.dx, y: minY + drag.dy, width: maxX - minX, height: maxY - minY };
+    return anchorAt(doc.nodes, bounds, (node) => !drag.origin.has(node.id) && !foreignInkLayer(layers, { node: node.id }));
+  }
+
+  /** Mostra a chi andranno i tratti spostati: il bordo attorno alla scheda e l'etichetta accanto al puntatore. */
+  #showStrokeHolder(drag: StrokeDrag): void {
+    const holder = this.#strokeHolder(drag);
+    const marks = this.#inkMarksNow();
+    const id = holder?.id ?? null;
+    if (id !== drag.holder || !marks.frames.isConnected) {
+      drag.holder = id;
+      this.#placeInkFrame(marks.frames, holder);
+      const text = inkHolderText(holder);
+      if (marks.label.textContent !== text) marks.label.textContent = text;
+      marks.label.toggleAttribute("data-free", holder === null);
+    }
+    marks.label.removeAttribute("data-idle");
+    this.#placeInkLabelAt(drag.view, drag.clientX, drag.clientY);
+  }
+
+  /** Via il bordo e l'etichetta dello spostamento. */
+  #hideStrokeHolder(): void {
+    const marks = this.#inkMarks;
+    if (!marks || this.#inkTarget) return;
+    marks.frames.setAttribute("data-idle", "");
+    marks.label.setAttribute("data-idle", "");
+  }
+
+  /** Il rilascio: il modello in mano torna quello del nucleo, poi lo spostamento va nel file. */
+  #endStrokeDrag(): void {
+    const drag = this.#strokeDrag;
+    this.#strokeDrag = null;
+    if (!drag) return;
+    this.#hideStrokeHolder();
+    this.#fadeUnits(drag.units, false);
+    if (!drag.moved) {
+      this.#paintLasso();
+      return;
+    }
+    this.#doc = this.#coreModel() ?? this.#doc;
+    this.#moveChosen([...drag.origin.keys()], drag.units, drag.dx, drag.dy, drag.holder ?? null);
+  }
+
+  /**
+   * Sposta in un commit solo, un passo d'annulla, le schede `cards` e i
+   * tratti `units` di `dx`, `dy`: le schede con `move`, i tratti con
+   * `move_strokes` livello per livello. Se i tratti finiscono su un'altra
+   * scheda (`holder`) passano a lei, e l'avviso lo dice con «Annulla» e
+   * «Rendilo libero». Ciò che il nucleo rifiuta lo dice l'avviso, e la
+   * lavagna resta com'era.
+   */
+  #moveChosen(cards: readonly string[], units: readonly ErasableInk[], dx: number, dy: number, holder: string | null): void {
+    const to: InkLayerRef = holder === null ? "board" : { node: holder };
+    const ops: CanvasIntentOp[] = [];
+    if (cards.length > 0 && (dx !== 0 || dy !== 0)) ops.push({ op: "move", ids: [...cards], dx, dy });
+    const groups = strokesByLayer(units);
+    let passed = false;
+    for (const { layer, ids } of groups) {
+      const same = sameLayer(layer, to);
+      if (same && dx === 0 && dy === 0) continue;
+      if (!same) passed = true;
+      ops.push(moveStrokesOp(layer, ids, dx, dy, to, this.#layerAspect(layer)));
+    }
+    const patches = ops.length > 0 ? this.#compileOps(ops) : null;
+    if (!patches || patches.length === 0) {
+      this.#render();
+      return;
+    }
+    if (!this.#commitChosen(patches)) {
+      this.#render();
+      return;
+    }
+    const node = holder === null ? null : this.#doc?.nodes.find((one) => one.id === holder) ?? null;
+    if (passed && node) {
+      const ids = patches.flatMap((patch) => patch.kind === "ink" && !patch.before && patch.after && sameLayer(patch.layer, to) ? [patch.after.id] : []);
+      const name = cardMenuName(node);
+      this.#showRemoval(name ? t("canvas.ink.moved_to", { name }) : t("canvas.ink.moved_card"), true, { layer: to, ids });
+    }
+    this.#statusSettle();
+  }
+
+  /**
+   * Il commit delle toppe compilate dal Lazo, un passo d'annulla; i tratti
+   * scelti restano scelti dove sono andati. `false` se il nucleo l'ha
+   * rifiutato (l'avviso dice perché).
+   */
+  #commitChosen(patches: readonly CanvasPatch[]): boolean {
+    const inkOnly = patches.every((patch) => patch.kind === "ink");
+    const chosen = keysAfter(this.#strokeSelection, patches);
+    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), !inkOnly);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return false;
+    }
+    this.#inkChain = null;
+    this.#strokeSelection = chosen;
+    if (inkOnly) this.#paintInk();
+    else this.#paintLasso();
+    if (this.#intakeError) this.#showNotice("");
+    return true;
+  }
+
+  /** Le toppe delle operazioni d'intento `ops` sul modello di adesso; `null` se il nucleo le rifiuta (lo dice l'avviso). */
+  #compileOps(ops: readonly CanvasIntentOp[]): CanvasPatch[] | null {
+    return this.#compileIntent(ops, "canvas.ink.refused")?.patches ?? null;
+  }
+
+  /** Il seme degli id nuovi di un'azione: quello delle opzioni, o uno a caso. */
+  #seed(): bigint {
+    return this.#options.seed?.() ?? randomSeed();
+  }
+
+  /**
+   * Compila le operazioni d'intento `ops` sul modello di adesso, dopo aver
+   * registrato il testo in sospeso. `null` se la tela non scrive (sola
+   * lettura, troppo grande, il nucleo non ancora pronto) o se il nucleo le
+   * rifiuta: allora l'avviso `refused` lo dice (nessun avviso con `null`:
+   * lo dà chi chiama).
+   */
+  #compileIntent(ops: readonly CanvasIntentOp[], refused: Key | null, seed?: bigint): CanvasCompiled | null {
+    const core = this.#core;
+    if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
+    this.#recordPending();
+    try {
+      return core.compile(ops, seed ?? this.#seed());
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) {
+        if (refused !== null) this.#showNotice(t(refused));
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Un'azione del menu, della barra, di un campo o di un tasto (T23): le sue
+   * operazioni d'intento, compilate dal nucleo e scritte in un passo
+   * d'annulla, come le scrive `canvas.apply`. Torna gli id nati (schede, poi
+   * fili, come `created`), o `null` se non ha scritto niente: nessuna
+   * operazione, nessuna toppa, la tela che non scrive, o il nucleo che le
+   * rifiuta (lo dice l'avviso `refused`, o nessuno con `null`, quando lo dà
+   * chi chiama). Se il nucleo rifiuta la compilazione o il commit (un limite),
+   * i campi della barra tornano al valore del modello. `seed` è quello di un
+   * controllo già fatto («Incolla codice»), così gli id nati sono i suoi.
+   */
+  #writeOps(
+    ops: readonly CanvasIntentOp[] | null,
+    refused: Key | null = "canvas.change_refused",
+    seed?: bigint,
+  ): readonly string[] | null {
+    if (!ops || ops.length === 0) return null;
+    const compiled = this.#compileIntent(ops, refused, seed);
+    if (!compiled) {
+      if (!this.#destroyed) this.#drawToolbar();
+      return null;
+    }
+    if (compiled.patches.length === 0) return null;
+    if (!this.#commit(compiled.patches, "input")) {
+      if (!this.#destroyed) this.#drawToolbar();
+      return null;
+    }
+    return compiled.created;
+  }
+
+  /**
+   * «Rendilo libero» dell'avviso: i tratti appena passati a una scheda
+   * tornano liberi sulla lavagna, dove si vedono, in un passo d'annulla suo.
+   * Vale finché lo spostamento è l'ultimo passo.
+   */
+  #freeMovedInk(): void {
+    const removal = this.#removal;
+    const free = removal?.free;
+    if (!removal || !free || removal.step === undefined || this.#undo[this.#undo.length - 1] !== removal.step) {
+      this.#dropRemoval();
+      return;
+    }
+    const patches = this.#compileOps([moveStrokesOp(free.layer, free.ids, 0, 0, "board", this.#layerAspect(free.layer))]);
+    if (patches && patches.length > 0 && this.#commitChosen(patches)) this.#dropRemoval();
+    this.#statusSettle();
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * Cambia colore o spessore dei tratti scelti dalla barra della selezione,
+   * livello per livello in un commit solo: un annulla per gesto. Lo spessore
+   * arriva in pixel dello schermo e va nel file in unità della lavagna.
+   */
+  #restyleChosen(change: SelectionBarRestyle): void {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    const units = this.#chosenStrokes();
+    if (units.length === 0) return;
+    let style: { readonly color?: string; readonly size?: number };
+    if ("color" in change) style = { color: change.color };
+    else {
+      const size = Math.round((change.width / this.#camera.zoom) * 1000) / 1000;
+      if (!(size > 0)) return;
+      style = { size };
+    }
+    const ops = strokesByLayer(units).map(({ layer, ids }) =>
+      restyleStrokesOp(layer, ids, style, "size" in style ? this.#layerAspect(layer) : null),
+    );
+    const patches = this.#compileOps(ops);
+    if (patches && patches.length > 0) this.#commitChosen(patches);
+    this.#statusSettle();
+  }
+
+
   // --- camera ---------------------------------------------------------------
 
   #applyCamera(): void {
     // Camera transforms are immediate for both motion preferences.
     this.#stage.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
-    this.#edgeLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    // Il filo sta nello stage (T91): la sua camera è quella dello stage. Le prese no.
+    this.#handleLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    this.#inkRuler?.place();
+    this.#paintGrid();
+    // Le maniglie e i segni sopra le schede restano della stessa misura sullo
+    // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.
+    this.#stage.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
+    this.#markAllHandles();
+    // Il selettore delle sezioni resta attaccato alla sua scheda (T74).
+    this.#partsPicker?.handle.reposition();
+    // E la barra del ritaglio alla sua (T78).
+    this.#placeCropBar();
+    // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
+    this.#viewMemo?.changed();
+    // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
+    // banda lo legge a fine gesto, dentro un gesto `#statusSettle` tace.
+    this.#statusSettle();
+  }
+
+  // --- riaprire dove eri (T36) ------------------------------------------------
+
+  /** Ciò che si ricorda adesso: `null` se la lavagna non mostra un documento. */
+  #viewSnapshot(): CanvasViewSnapshot {
+    if (!this.#doc) return null;
+    const camera = { ...this.#camera };
+    const selection = [...this.#selection];
+    return {
+      camera,
+      selection,
+      ...(this.#navigatorHidden ? { navigatorHidden: true } : {}),
+      ...(this.#gridOverride !== null ? { grid: this.#gridOverride } : {}),
+    };
+  }
+
+  /** La lavagna si è appena mostrata: la vista ricordata, se arriva, parte da qui. */
+  #markOpenView(): void {
+    if (!this.#viewMemo) return;
+    this.#openView = {
+      camera: { ...this.#camera },
+      selection: this.#selection.join("\n"),
+      navigatorHidden: this.#navigatorHidden,
+      grid: this.#gridOverride,
+    };
+  }
+
+  /**
+   * La vista ricordata per l'apertura `round`: la camera, se nessuno l'ha
+   * mossa e se almeno una scheda cade nella vista ricordata (se no resta
+   * «inquadra tutto»); la scelta, se è ancora vuota, con le sole schede che ci
+   * sono; e le schede PDF già montate su un'altra pagina si rimontano sulla
+   * loro. Arrivata prima che il nucleo aprisse il testo, aspetta `#revive`.
+   */
+  #restoreView(round: number, view: CanvasView | null): void {
+    if (this.#destroyed || round !== this.#viewRound || view === null) return;
+    const doc = this.#doc;
+    const open = this.#openView;
+    if (!doc || !open) {
+      this.#heldView = { round, view };
+      return;
+    }
+    this.#heldView = null;
+    this.#openView = null;
+    let moved = false;
+    const camera = view.camera;
+    if (camera && sameViewport(this.#camera, open.camera)) {
+      const next: Viewport = { x: camera.x, y: camera.y, zoom: clampZoom(camera.zoom) };
+      const seen = this.#viewRectOf(next);
+      if (doc.nodes.some((node) => overlaps(node, seen))) {
+        this.#camera = next;
+        moved = true;
+      }
+    }
+    let selected = false;
+    if (view.selection.length > 0 && this.#selection.join("\n") === open.selection && this.#edgeSelection.length === 0) {
+      const present = new Set(doc.nodes.map((node) => node.id));
+      const selection = view.selection.filter((id) => present.has(id));
+      if (selection.length > 0) {
+        this.#selection = selection;
+        selected = true;
+      }
+    }
+    // «Nascondi il navigatore» (T55), se nessuno l'ha cambiato nel frattempo.
+    const hidden = view.navigatorHidden === true;
+    if (this.#navigatorHidden === open.navigatorHidden && hidden !== this.#navigatorHidden) {
+      this.#navigatorHidden = hidden;
+      this.#statusSettle();
+    }
+    // La griglia di Ctrl+' per questa lavagna (T71), se nessuno l'ha cambiata nel frattempo.
+    if (view.grid !== undefined && this.#gridOverride === open.grid && this.#gridOverride !== view.grid) {
+      this.#gridOverride = view.grid;
+      this.#paintGrid();
+    }
+    let remount = false;
+    for (const entry of this.#cards.values()) {
+      const page = this.#viewMemo?.page(entry.id) ?? null;
+      const shown = entry.view?.page?.();
+      if (page === null || shown === undefined || shown === page) continue;
+      // Una chiave che nessun corpo ha: la resa smonta la vista e la rimonta.
+      entry.bodyKey = null;
+      remount = true;
+    }
+    if (!moved && !selected && !remount) return;
+    this.#render();
+    if (selected) this.#options.onSelectionChange();
   }
 
   #screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -398,11 +5381,21 @@ export class CanvasEngine {
   }
 
   #fitCamera(announce = true, nodes = this.#doc?.nodes ?? []): void {
-    if (!nodes.length) {
-      this.#camera = { x: 24, y: 24, zoom: 1 };
-      if (announce) this.#applyCamera();
-      return;
+    this.#stopMotion(false);
+    this.#camera = this.#fitTarget(nodes);
+    if (announce) {
+      this.#applyCamera();
+      this.#refreshLive();
     }
+  }
+
+  /**
+   * La camera che mostra tutte le schede `nodes` (T53: con `fit` di
+   * `spatial/camera.ts`): al centro, con `FIT_MARGIN` per lato, mai oltre il
+   * 100%. Senza schede, il 100% con l'origine in alto a sinistra.
+   */
+  #fitTarget(nodes: readonly CanvasNode[]): Viewport {
+    if (!nodes.length) return { x: 24, y: 24, zoom: 1 };
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -413,35 +5406,560 @@ export class CanvasEngine {
       maxX = Math.max(maxX, node.x + node.width);
       maxY = Math.max(maxY, node.y + node.height);
     }
-    const width = Math.max(1, maxX - minX);
-    const height = Math.max(1, maxY - minY);
     const rect = this.#viewport.getBoundingClientRect();
-    const viewW = Math.max(1, rect.width || 800);
-    const viewH = Math.max(1, rect.height || 600);
-    const zoom = clampZoom(Math.min(viewW / (width + 160), viewH / (height + 160), 1));
-    this.#camera = {
-      zoom,
-      x: (viewW - width * zoom) / 2 - minX * zoom,
-      y: (viewH - height * zoom) / 2 - minY * zoom,
+    const view = { w: Math.max(1, rect.width || 800), h: Math.max(1, rect.height || 600) };
+    // Il margine sta nei bordi, in unità della lavagna: il centro non cambia.
+    const bounds = {
+      minX: minX - FIT_MARGIN,
+      minY: minY - FIT_MARGIN,
+      maxX: Math.max(minX + 1, maxX) + FIT_MARGIN,
+      maxY: Math.max(minY + 1, maxY) + FIT_MARGIN,
     };
-    if (announce) this.#applyCamera();
+    return fromCamera(fit(bounds, view, 0, 0, FIT_LIMITS));
   }
 
   #zoomAt(clientX: number, clientY: number, factor: number): void {
-    const before = this.#screenToWorld(clientX, clientY);
-    this.#camera.zoom = clampZoom(this.#camera.zoom * factor);
+    this.#stopMotion(false);
     const rect = this.#viewport.getBoundingClientRect();
-    this.#camera.x = clientX - rect.left - before.x * this.#camera.zoom;
-    this.#camera.y = clientY - rect.top - before.y * this.#camera.zoom;
+    const at = { x: clientX - rect.left, y: clientY - rect.top };
+    this.#camera = fromCamera(zoomAtPoint(toCamera(this.#camera), factor, at, ZOOM_LIMITS));
     this.#applyCamera();
+    // Dai pulsanti e dai tasti lo zoom è un gesto finito; dalla rotella il
+    // gesto è ancora in corso e `#refreshLive` aspetta che finisca.
+    this.#refreshLive();
+  }
+
+  // --- muoversi (T53) ---------------------------------------------------------
+
+  /**
+   * Il salto della camera a `target`: Maiusc+1, Maiusc+2, 0 e il clic nel
+   * navigatore (T55). È il solo posto da cui la vista salta: qui il salto entra
+   * nella storia di Indietro e Avanti (T56), se sposta la vista. Vola con
+   * `stepCamera`; col movimento ridotto arriva subito, senza volo.
+   */
+  #jumpCamera(target: Viewport): void {
+    const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
+    // Un salto che non sposta niente non entra nella storia.
+    if (!sameViewport(goal, this.#camera)) this.#jumps.record(this.#camera, goal);
+    this.#flyCamera(goal);
+  }
+
+  /**
+   * Porta la vista a `target` senza ricordarlo: è il volo di ogni salto, e
+   * anche di Indietro e Avanti (T56), che non scrivono una storia loro.
+   */
+  #flyCamera(target: Viewport): void {
+    this.#stopMotion(false);
+    const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
+    if (this.#reducedMotion || sameViewport(goal, this.#camera)) {
+      this.#camera = goal;
+      this.#applyCamera();
+      this.#refreshLive();
+      return;
+    }
+    const from = this.#camera;
+    this.#runMotion({
+      scale: from.zoom, tx: from.x, ty: from.y,
+      targetScale: goal.zoom, targetTx: goal.x, targetTy: goal.y,
+      vx: 0, vy: 0,
+    });
+  }
+
+  // --- cerca nella lavagna (T60) ---------------------------------------------
+
+  /**
+   * Apre la barra «Cerca nella lavagna» e le dà il fuoco: è `find()` della
+   * superficie, la strada di Ctrl+F dello Scrittoio. `false` senza documento:
+   * allora la shell cerca da sé.
+   */
+  find(): boolean {
+    if (this.#destroyed || !this.#doc) return false;
+    this.#findBar.open();
+    return true;
+  }
+
+  /**
+   * Il velo dei risultati `matches` (`null` lo toglie), con quello di adesso
+   * segnato: un giro sulle schede che scrive solo dove il segno cambia.
+   */
+  #showFound(matches: readonly FindTarget[] | null, current: number): void {
+    this.#findMarkOf = findMarks(matches, current);
+    applyFindMarks(this.#cards, this.#findMarkOf);
+  }
+
+  /**
+   * Il salto a un risultato (T60): le sue schede al centro della vista, con lo
+   * zoom di adesso, o più lontano se non ci stanno. È un salto come gli altri
+   * (`#jumpCamera`): Indietro torna da dove si era partiti; col movimento
+   * ridotto arriva senza volo.
+   */
+  #jumpToFound(target: FindTarget): void {
+    const ids = new Set(target.nodes);
+    const nodes = (this.#doc?.nodes ?? []).filter((node) => ids.has(node.id));
+    if (nodes.length === 0) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x + node.width);
+      maxY = Math.max(maxY, node.y + node.height);
+    }
+    const rect = this.#viewport.getBoundingClientRect();
+    const zoom = Math.min(this.#camera.zoom, this.#fitTarget(nodes).zoom);
+    this.#jumpCamera({
+      x: (rect.width || 800) / 2 - ((minX + maxX) / 2) * zoom,
+      y: (rect.height || 600) / 2 - ((minY + maxY) / 2) * zoom,
+      zoom,
+    });
+  }
+
+  // --- indietro e avanti (T56) ------------------------------------------------
+
+  /**
+   * Indietro (`EditorSurface.jumps`): torna al salto precedente, in volo. `false`
+   * se non ci sono salti a cui tornare: allora vale la cronologia del riquadro.
+   */
+  jumpBack(): boolean {
+    if (this.#destroyed || !this.#doc) return false;
+    const target = this.#jumps.back();
+    if (target === null) return false;
+    this.#flyCamera(target);
+    return true;
+  }
+
+  /** Avanti (`EditorSurface.jumps`): rifà il salto che Indietro ha lasciato. `false` se non c'è. */
+  jumpForward(): boolean {
+    if (this.#destroyed || !this.#doc) return false;
+    const target = this.#jumps.forward();
+    if (target === null) return false;
+    this.#flyCamera(target);
+    return true;
+  }
+
+  /**
+   * «Nascondi il navigatore» e «Mostra il navigatore» (T55): per questa
+   * lavagna, ricordato nella vista (T36). Il fuoco che stava sul navigatore
+   * torna alla lavagna.
+   */
+  #setNavigatorHidden(hidden: boolean): void {
+    if (this.#navigatorClosed() === hidden) return;
+    const focused = this.#navigator.element.contains(document.activeElement);
+    if (this.#workspace.workspace === "simple") {
+      // Nello spazio Semplice la scelta vale per questa apertura (T65).
+      this.#simpleNavigator = !hidden;
+      this.#statusSettle();
+      if (focused && this.#navigator.element.hidden) this.#viewport.focus();
+      return;
+    }
+    this.#navigatorHidden = hidden;
+    this.#viewMemo?.changed();
+    this.#statusSettle();
+    if (focused && this.#navigator.element.hidden) this.#viewport.focus();
+  }
+
+  /**
+   * Il navigatore è chiuso per scelta: nello spazio Semplice finché non lo si
+   * mostra (T65), nello Completo come dice la vista (T55).
+   */
+  #navigatorClosed(): boolean {
+    return this.#workspace.workspace === "simple" ? !this.#simpleNavigator : this.#navigatorHidden;
+  }
+
+  /**
+   * F6 dentro la lavagna (`EditorSurface.zone`): la vista, il navigatore se si
+   * vede (T55), la colonna degli strumenti e la riga delle opzioni (T61); dopo,
+   * la shell passa all'ispettore. `false` quando non resta una zona da quella
+   * parte. La vista e il navigatore prendono il fuoco loro; la colonna e la
+   * riga lo danno al controllo che il Tab raggiunge (`focusZone`).
+   */
+  zone(step: 1 | -1): boolean {
+    if (this.#destroyed) return false;
+    const own = new Set<HTMLElement>([this.#viewport, this.#navigator.element]);
+    // Senza interfaccia (T65) restano la vista e il navigatore, se si vede.
+    const chrome = this.#workspace.bare ? [] : [this.#rail.element, this.#canvasOptions.element];
+    const zones = [this.#viewport, this.#navigator.element, ...chrome]
+      .filter((zone) => zone.closest("[hidden]") === null);
+    const at = zones.findIndex((zone) => zone.contains(document.activeElement));
+    const target = zones[at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step];
+    if (target === undefined) return false;
+    if (own.has(target)) target.focus();
+    else focusZone(target);
+    return true;
+  }
+
+  // --- tastiera e lettore di schermo (T61) ------------------------------------
+
+  /** La lettura della lavagna di adesso (`boardReading`): si rifà solo se il documento è cambiato. */
+  #boardReading(): BoardReading | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    if (this.#reading?.doc !== doc) this.#reading = { doc, value: boardReading(doc) };
+    return this.#reading.value;
+  }
+
+  /** I nomi scritti sulle schede sono quelli del documento e della lingua di adesso. */
+  #labelsCurrent(): boolean {
+    const done = this.#labelled;
+    return !done.stale && done.doc === this.#doc && done.round === this.#languageRound;
+  }
+
+  /**
+   * I nomi delle schede vecchi (un documento nuovo, una scheda nuova, un'altra
+   * lingua): li riscrive quando il thread è libero, non durante la resa. La
+   * scheda che prende il fuoco prima non aspetta: il suo lo scrive subito.
+   */
+  #scheduleLabels(): void {
+    if (this.#labelsPending !== null || this.#destroyed || this.#labelsCurrent()) return;
+    this.#labelsPending = this.#labelsSchedule(() => this.#labelStep());
+  }
+
+  /**
+   * Un passo del giro dei nomi: `LABEL_BATCH` schede, poi il thread torna
+   * libero e il giro riprende dove era. Un documento nuovo, una lingua nuova o
+   * una scheda nata nel frattempo lo fanno ricominciare da capo.
+   */
+  #labelStep(): void {
+    this.#labelsPending = null;
+    const doc = this.#doc;
+    if (!doc || this.#destroyed || this.#isSceneOversized()) return;
+    let run = this.#labelRun;
+    if (!run || run.doc !== doc || run.round !== this.#languageRound || this.#labelled.stale) {
+      run = { doc, round: this.#languageRound, queue: [...this.#cards.values()], at: 0 };
+      this.#labelled = { doc: null, round: -1, stale: false };
+    }
+    const end = Math.min(run.queue.length, run.at + LABEL_BATCH);
+    for (; run.at < end; run.at++) {
+      const entry = run.queue[run.at]!;
+      if (this.#cards.get(entry.id) === entry) this.#labelCard(entry);
+    }
+    if (run.at < run.queue.length) {
+      this.#labelRun = run;
+      this.#labelsPending = this.#labelsSchedule(() => this.#labelStep());
+      return;
+    }
+    this.#labelRun = null;
+    this.#labelled = { doc, round: run.round, stale: false };
+  }
+
+  /** Il nome della scheda `entry` com'è adesso, scritto sul suo nodo se è cambiato. */
+  #labelCard(entry: CardEntry): void {
+    const doc = this.#doc;
+    const reading = this.#boardReading();
+    if (!doc || !reading) return;
+    const label = cardLabel(entry.node, doc, reading);
+    if (entry.label === label) return;
+    entry.label = label;
+    entry.article.setAttribute("aria-label", label);
+  }
+
+  /**
+   * Sceglie la scheda `node`, la porta in vista e le dà il fuoco: Tab e
+   * Alt+frecce. In vista vuol dire tutta dentro la vista; se no la vista vola
+   * fino a metterla al centro col zoom di adesso (col movimento ridotto arriva
+   * subito). Non è un salto di Indietro e Avanti: è un passo della tastiera,
+   * come uno spostamento a mano.
+   */
+  #focusCard(node: CanvasNode): void {
+    const entry = this.#cards.get(node.id);
+    if (!entry) return;
+    if (this.#selection.length !== 1 || this.#selection[0] !== node.id || this.#edgeSelection.length > 0) {
+      this.#selection = [node.id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+      this.#displaySelection();
+    }
+    const { view, zoom } = this.#viewRect();
+    const inside = node.x >= view.x && node.y >= view.y
+      && node.x + node.width <= view.x + view.width && node.y + node.height <= view.y + view.height;
+    if (!inside) {
+      const rect = this.#viewport.getBoundingClientRect();
+      this.#flyCamera({
+        x: (rect.width || 800) / 2 - (node.x + node.width / 2) * zoom,
+        y: (rect.height || 600) / 2 - (node.y + node.height / 2) * zoom,
+        zoom,
+      });
+    }
+    entry.article.focus({ preventScroll: true });
+  }
+
+  /**
+   * Tab e Maiusc+Tab col fuoco sulla lavagna o su una scheda: la scheda dopo
+   * o prima nell'ordine di lettura (T58). Dalla lavagna Tab va alla scheda
+   * scelta, o alla prima; Maiusc+Tab dalla lavagna esce come sempre. Prima
+   * della prima scheda si torna alla lavagna; dopo l'ultima il fuoco esce
+   * dalla vista, verso ciò che la segue. Una lavagna senza schede non prende
+   * il Tab: va ai pulsanti della lavagna vuota (T62). `true` se il tasto è suo.
+   */
+  #tabKey(event: KeyboardEvent): boolean {
+    if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (!this.#onCardOrBoard(event.target)) return false;
+    const reading = this.#boardReading();
+    if (!reading || reading.order.length === 0) return false;
+    const step = event.shiftKey ? -1 : 1;
+    const from = event.target === this.#viewport ? null : this.#nodeAt(event.target);
+    if (from === null && step < 0) return false;
+    const next = from === null ? this.#selectionFocus() ?? stepInOrder(reading, null, 1) : stepInOrder(reading, from, step);
+    if (next) {
+      event.preventDefault();
+      this.#focusCard(next);
+      return true;
+    }
+    if (step < 0) {
+      event.preventDefault();
+      this.#viewport.focus({ preventScroll: true });
+      return true;
+    }
+    const after = this.#afterViewport();
+    if (!after) return false;
+    event.preventDefault();
+    after.focus();
+    return true;
+  }
+
+  /** Il primo elemento che il Tab raggiunge dopo la vista e fuori da lei. */
+  #afterViewport(): HTMLElement | null {
+    const viewport = this.#viewport;
+    return focusableElements(document.body).find((el) => !viewport.contains(el)
+      && (viewport.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) ?? null;
+  }
+
+  /**
+   * Alt+frecce col fuoco sulla lavagna o su una scheda (M1): la scheda più
+   * vicina in quella direzione (`nearestCard`), da quella col fuoco o da
+   * quella scelta; senza, la prima nell'ordine di lettura. Se da quella parte
+   * non c'è niente lo dice la regione viva. Alt+← e Alt+→ solo col fuoco su
+   * una scheda: sulla lavagna senza una scheda a fuoco, e fuori, restano
+   * Indietro e Avanti dello Scrittoio (`shell.pane.back`/`forward`,
+   * DECISIONS.md, T56). Il tasto preso non arriva al registro della shell.
+   * `true` se il tasto è suo.
+   */
+  #nearestKey(event: KeyboardEvent): boolean {
+    if (!event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return false;
+    const direction = NEAREST_CARD_KEYS.get(event.key);
+    if (direction === undefined || !this.#onCardOrBoard(event.target)) return false;
+    if (CARD_ONLY_NEAREST_KEYS.has(event.key) && this.#nodeAt(event.target) === null) return false;
+    const reading = this.#boardReading();
+    if (!reading || reading.order.length === 0) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const fromId = this.#nodeAt(event.target) ?? (this.#selection.length === 1 ? this.#selection[0]! : null);
+    const from = fromId === null ? undefined : reading.byId.get(fromId);
+    const next = from ? nearestCard(from, reading, direction) : stepInOrder(reading, null, 1);
+    if (next) this.#focusCard(next);
+    else this.#sayGesture(t("canvas.a11y.none_that_way"));
+    return true;
+  }
+
+  /** «0»: il 100% sul centro della vista. */
+  #zoomToActual(): void {
+    const rect = this.#viewport.getBoundingClientRect();
+    const center = { x: (rect.width || 800) / 2, y: (rect.height || 600) / 2 };
+    this.#jumpCamera(fromCamera(zoomAtPoint(toCamera(this.#camera), 1 / this.#camera.zoom, center, ZOOM_LIMITS)));
+  }
+
+  /**
+   * L'inerzia dopo uno spostamento col dito: la vista va avanti alla
+   * velocità del gesto (px al ms) e rallenta con `stepCamera`. Col movimento
+   * ridotto niente.
+   */
+  #fling(vx: number, vy: number): void {
+    if (this.#reducedMotion || Math.hypot(vx, vy) < INERTIA_MIN_SPEED) return;
+    const at = this.#camera;
+    this.#runMotion({ scale: at.zoom, tx: at.x, ty: at.y, targetScale: at.zoom, targetTx: at.x, targetTy: at.y, vx, vy });
+  }
+
+  /** La velocità alla fine di uno spostamento, in px al ms, sugli ultimi `INERTIA_WINDOW_MS` della scia. */
+  #panSpeed(trail: readonly PanSample[], end: PanSample): { vx: number; vy: number } {
+    const first = trail.find((point) => end.t - point.t <= INERTIA_WINDOW_MS);
+    if (!first || end.t - first.t <= 0) return { vx: 0, vy: 0 };
+    return { vx: (end.x - first.x) / (end.t - first.t), vy: (end.y - first.y) / (end.t - first.t) };
+  }
+
+  #runMotion(state: MotionState): void {
+    this.#motion = { state, last: null };
+    if (this.#motionFrame === undefined) this.#motionFrame = requestAnimationFrame((now) => this.#motionStep(now));
+  }
+
+  #motionStep(now: number): void {
+    this.#motionFrame = undefined;
+    const motion = this.#motion;
+    if (!motion || this.#destroyed) return;
+    if (this.#reducedMotion) {
+      this.#stopMotion(true);
+      return;
+    }
+    const dt = motion.last === null ? 16 : Math.min(MAX_FRAME_MS, Math.max(0, now - motion.last));
+    motion.last = now;
+    const state = stepCamera(motion.state, dt);
+    motion.state = state;
+    const resting = Math.abs(state.scale - state.targetScale) < 0.001
+      && Math.abs(state.tx - state.targetTx) < 0.5
+      && Math.abs(state.ty - state.targetTy) < 0.5
+      && state.vx === 0 && state.vy === 0;
+    if (resting) {
+      this.#stopMotion(true);
+      return;
+    }
+    this.#camera = { x: state.tx, y: state.ty, zoom: state.scale };
+    this.#applyCamera();
+    this.#motionFrame = requestAnimationFrame((later) => this.#motionStep(later));
+  }
+
+  /**
+   * Ferma il volo o l'inerzia. Con `arrive` la vista va dove andava (il volo
+   * finisce sul suo bersaglio, l'inerzia dov'è) e le schede vive si rifanno.
+   */
+  #stopMotion(arrive: boolean): void {
+    if (this.#motionFrame !== undefined) cancelAnimationFrame(this.#motionFrame);
+    this.#motionFrame = undefined;
+    const motion = this.#motion;
+    if (!motion) return;
+    this.#motion = null;
+    if (!arrive || this.#destroyed) return;
+    const { targetScale, targetTx, targetTy } = motion.state;
+    this.#camera = { x: targetTx, y: targetTy, zoom: targetScale };
+    this.#applyCamera();
+    this.#refreshLive();
+  }
+
+  /** La finestra perde il fuoco: niente scorre più da solo, e Spazio non è più tenuto. */
+  #stillCamera(): void {
+    this.#releaseSpace();
+    this.#stopEdgeScroll();
+    this.#stopMotion(true);
+  }
+
+  /**
+   * Spazio giù sulla lavagna o su una scheda (non in un campo né dentro la
+   * scheda attiva): `true` se l'ha preso. Con una penna giù non vale (la
+   * penna ha la precedenza), ma la pagina non scorre.
+   */
+  #holdSpace(event: KeyboardEvent): boolean {
+    if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (isTextTarget(event.target) || !this.#onCardOrBoard(event.target)) return false;
+    event.preventDefault();
+    if (this.#spaceHeld || this.#penDown) return true;
+    this.#spaceHeld = true;
+    // Il tocco conta dal primo tasto giù, non dalla ripetizione del sistema.
+    this.#spaceTap = event.repeat ? null : { at: event.timeStamp, from: this.#pointerSeen, spoiled: false };
+    this.#viewport.toggleAttribute("data-space-pan", true);
+    // Il mouse che scrive torna alla lavagna finché Spazio è giù.
+    this.#applyInkMouse();
+    return true;
+  }
+
+  #releaseSpace(): void {
+    this.#spaceTap = null;
+    if (!this.#spaceHeld) return;
+    this.#spaceHeld = false;
+    this.#viewport.removeAttribute("data-space-pan");
+    if (!this.#destroyed) this.#applyInkMouse();
+  }
+
+  /**
+   * Un trascinamento (una scheda, una maniglia, un filo) si è mosso a
+   * `event`: vicino al bordo della vista la fa scorrere, fuori dalla fascia
+   * smette. Il primo fotogramma parte da qui.
+   */
+  #trackEdge(event: PointerEvent): void {
+    const speed = this.#edgeSpeed(event.clientX, event.clientY);
+    if (speed.x === 0 && speed.y === 0) {
+      this.#stopEdgeScroll();
+      return;
+    }
+    const last = this.#edgeScroll?.last ?? null;
+    this.#edgeScroll = {
+      pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
+      shiftKey: event.shiftKey, altKey: event.altKey, last,
+    };
+    if (this.#edgeFrame === undefined) this.#edgeFrame = requestAnimationFrame((now) => this.#edgeStep(now));
+  }
+
+  /** La velocità dello scorrimento al bordo nel punto, in px al ms, verso dove va la vista. */
+  #edgeSpeed(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.#viewport.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
+    return {
+      x: edgeScrollSpeed(clientX - rect.left, rect.right - clientX),
+      y: edgeScrollSpeed(clientY - rect.top, rect.bottom - clientY),
+    };
+  }
+
+  #edgeStep(now: number): void {
+    this.#edgeFrame = undefined;
+    const edge = this.#edgeScroll;
+    if (!edge || this.#destroyed) return;
+    const drag = this.#drag?.pointerId === edge.pointerId ? this.#drag : null;
+    const resize = this.#resize?.pointerId === edge.pointerId ? this.#resize : null;
+    const connect = this.#connect?.pointerId === edge.pointerId ? this.#connect : null;
+    if (!drag && !resize && !connect) {
+      this.#stopEdgeScroll();
+      return;
+    }
+    const dt = edge.last === null ? 16 : Math.min(MAX_FRAME_MS, Math.max(0, now - edge.last));
+    edge.last = now;
+    const speed = this.#edgeSpeed(edge.clientX, edge.clientY);
+    // La vista va verso il bordo: la lavagna scorre al contrario.
+    const dx = -speed.x * dt;
+    const dy = -speed.y * dt;
+    this.#camera = { ...this.#camera, x: this.#camera.x + dx, y: this.#camera.y + dy };
+    this.#applyCamera();
+    // Ciò che si tira resta sotto il puntatore fermo: il punto di partenza
+    // del gesto scorre con la lavagna.
+    if (drag) {
+      drag.startX += dx;
+      drag.startY += dy;
+      this.#moveDrag(edge);
+    } else if (resize) {
+      resize.startX += dx;
+      resize.startY += dy;
+      this.#moveResize(edge);
+    } else {
+      this.#moveConnect(edge.clientX, edge.clientY);
+    }
+    this.#edgeFrame = requestAnimationFrame((later) => this.#edgeStep(later));
+  }
+
+  #stopEdgeScroll(): void {
+    if (this.#edgeFrame !== undefined) cancelAnimationFrame(this.#edgeFrame);
+    this.#edgeFrame = undefined;
+    this.#edgeScroll = null;
   }
 
   // --- toolbar ----------------------------------------------------------------
 
   #drawToolbar(): void {
-    const bar = this.#toolbar;
-    bar.replaceChildren();
-    const mk = (action: string, label: string, run: () => void, disabled = false, mutates = true): HTMLButtonElement => {
+    // La barra di N4 si rifà da capo, salvo l'interruttore «Scrivi col
+    // mouse», che resta lo stesso elemento in testa: il fuoco non si perde.
+    // Ciò che è passato nella riga delle opzioni (T50: il menu della penna,
+    // davanti e dietro, allinea e distribuisci, la Vista) non c'è più; il
+    // resto aspetta i suoi task (la barra della selezione T51, i fili e il
+    // colore esatto T47 e T59, la lavagna vuota T62). I controlli nascono in
+    // `bar`, staccata, e passano alla barra del kit (`#toolbarBar`), che
+    // lascia al suo posto chi c'è già e manda in «…» ciò che non ci sta.
+    const bar = document.createElement("div");
+    const inkMouse = this.#inkMouseButton;
+    this.#penMenu.sync();
+    // La colonna e la riga delle opzioni: lo strumento, la scelta e la sola
+    // lettura di adesso.
+    this.#rail.sync();
+    this.#canvasOptions.sync();
+    // «Scrivi col mouse», in testa.
+    inkMouse.textContent = t("canvas.ink.mouse");
+    inkMouse.title = t("canvas.ink.mouse_hint");
+    inkMouse.setAttribute("aria-pressed", String(this.#inkMouse));
+    inkMouse.disabled = this.#readOnly || this.#isSceneOversized();
+    const mk = (
+      action: string,
+      label: string,
+      run: () => void,
+      disabled = false,
+      mutates = true,
+      focusViewport = true,
+    ): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.canvasAction = action;
@@ -449,8 +5967,9 @@ export class CanvasEngine {
       button.disabled = disabled || (mutates && (this.#readOnly || this.#isSceneOversized()));
       button.addEventListener("click", (e) => {
         e.preventDefault();
+        this.#recordPending();
         run();
-        this.#viewport.focus();
+        if (focusViewport) this.#viewport.focus();
       });
       bar.append(button);
       return button;
@@ -466,26 +5985,7 @@ export class CanvasEngine {
     const hasSelection = this.#selection.length > 0 || this.#edgeSelection.length > 0;
     mk("duplicate", t("canvas.duplicate"), () => this.#duplicateSelection(), !hasSelection);
     mk("delete", t("canvas.delete"), () => this.#deleteSelection(), !hasSelection);
-    mk("bring-front", t("canvas.bring_front"), () => this.#reorderSelection("front"), this.#selection.length === 0);
-    mk("send-back", t("canvas.send_back"), () => this.#reorderSelection("back"), this.#selection.length === 0);
-    mk("fit", t("canvas.fit"), () => {
-      this.#fitCamera();
-      this.#render();
-    }, false, false);
     mk("fit-selection", t("canvas.fit_selection"), () => this.#fitCamera(true, this.#selectedNodes()), this.#selection.length === 0, false);
-    const layoutLabels = {
-      left: t("canvas.align_left"),
-      center: t("canvas.align_center"),
-      right: t("canvas.align_right"),
-      top: t("canvas.align_top"),
-      middle: t("canvas.align_middle"),
-      bottom: t("canvas.align_bottom"),
-      "distribute-x": t("canvas.distribute_x"),
-      "distribute-y": t("canvas.distribute_y"),
-    } as const;
-    for (const axis of ["left", "center", "right", "top", "middle", "bottom", "distribute-x", "distribute-y"] as const) {
-      mk(axis, layoutLabels[axis], () => this.#layoutSelection(axis), this.#selection.length < (axis.startsWith("distribute") ? 3 : 2));
-    }
     if (!this.#isSceneOversized() && this.#doc?.edges.length && this.#doc.edges.length <= MAX_INTERACTIVE_EDGES) {
       const picker = document.createElement("select");
       picker.dataset.canvasField = "select-edge";
@@ -506,65 +6006,74 @@ export class CanvasEngine {
         this.#selection = [];
         this.#options.onSelectionChange();
         this.#displaySelection();
-        this.#toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]')?.focus();
+        // Il campo del nome, se si vede; se è finito in «…», il fuoco va lì.
+        const label = this.#toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]');
+        if (label && !label.closest("[hidden]")) label.focus();
+        else this.#toolbar.querySelector<HTMLElement>(".kit-options-more:not([hidden])")?.focus();
       });
       bar.append(picker);
     }
-    const colorEditor = (field: "node-color" | "edge-color", label: string, hexLabel: string, current: string | undefined, update: (value: string | undefined) => void): void => {
-      const select = document.createElement("select");
-      select.dataset.canvasField = field;
-      select.setAttribute("aria-label", label);
-      for (const value of ["", "1", "2", "3", "4", "5", "6", "custom"]) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value || t("canvas.default");
-        select.append(option);
-      }
-      select.value = current && !PRESET_FILL[current] ? "custom" : current ?? "";
-      const hex = document.createElement("input");
-      hex.type = "text";
-      hex.dataset.canvasField = `${field}-hex`;
-      hex.placeholder = "#rrggbb";
-      hex.setAttribute("aria-label", hexLabel);
-      hex.value = current?.startsWith("#") ? current : "";
-      hex.disabled = this.#readOnly;
-      hex.hidden = select.value !== "custom";
-      select.disabled = this.#readOnly;
-      select.addEventListener("change", () => {
-        hex.hidden = select.value !== "custom";
-        if (select.value !== "custom") update(select.value || undefined);
-      });
-      hex.addEventListener("change", () => {
-        if (CANVAS_COLOR.test(hex.value)) update(hex.value);
-        else hex.value = current?.startsWith("#") ? current : "";
-      });
-      bar.append(select, hex);
-    };
-    if (!this.#isSceneOversized() && this.#selection.length) colorEditor("node-color", t("canvas.node_color"), t("canvas.node_color_hex"), this.#selectedNodes()[0]?.color, (color) => {
-      const patches = this.#selectedNodes().map((node) => {
-        const next = { ...node };
-        if (color === undefined) delete next.color;
-        else next.color = color;
-        return upsertNodePatch(this.#doc!, next);
-      }).filter((patch): patch is NonNullable<typeof patch> => patch !== null);
-      this.#commit(patches, "input");
-    });
-    if (!this.#isSceneOversized() && this.#edgeSelection.length === 1) this.#drawEdgeInspector(bar, colorEditor);
-    mk("zoom-in", t("canvas.zoom_in"), () => {
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.2);
-    }, false, false);
-    mk("zoom-out", t("canvas.zoom_out"), () => {
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
-    }, false, false);
-    if (this.#intakeError) {
+    // Il colore delle schede e dei fili non sta più qui: è nel menu «Colore»
+    // del tasto destro e nel pozzo della riga delle opzioni (T47).
+    if (!this.#isSceneOversized() && this.#edgeSelection.length === 1) this.#drawEdgeInspector(bar);
+    // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
+    // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
+    // Una scena oltre il limite ha già il suo, nella tela.
+    const head: HTMLElement[] = [];
+    const notice = this.#intakeError
+      || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
+    if (notice) {
       const error = document.createElement("output");
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
-      error.textContent = this.#intakeError;
-      bar.append(error);
+      error.textContent = notice;
+      head.push(error);
     }
+    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto
+    // e dopo «Scrivi col mouse»: una notizia e non un guasto, con «Annulla»
+    // accanto.
+    const told: HTMLElement[] = [];
+    const removal = this.#removal;
+    if (removal) {
+      const said = document.createElement("output");
+      said.setAttribute("role", "status");
+      said.className = "canvas-removal";
+      said.textContent = removal.text;
+      told.push(said);
+      if (removal.undo && removal.step !== undefined) {
+        const undo = document.createElement("button");
+        undo.type = "button";
+        undo.dataset.canvasAction = "undo-removal";
+        undo.textContent = t("app.undo");
+        undo.title = t(removal.free ? "canvas.ink.moved_undo" : "canvas.card.removed_undo");
+        // Il pulsante si rifà con la barra: l'ascolto se ne va con lui.
+        undo.addEventListener("click", () => this.#undoRemoval());
+        told.push(undo);
+        // I tratti passati a una scheda col Lazo (T86): «Rendilo libero».
+        if (removal.free) {
+          const free = document.createElement("button");
+          free.type = "button";
+          free.dataset.canvasAction = "free-ink";
+          free.textContent = t("canvas.ink.make_free");
+          free.title = t("canvas.ink.make_free_hint");
+          free.addEventListener("click", () => this.#freeMovedInk());
+          told.push(free);
+        }
+      }
+    }
+    // Gli avvisi e i loro pulsanti restano nella riga più a lungo dei comandi
+    // (priorità 1): si leggono senza aprire «…».
+    const notices = new Set<HTMLElement>([...head, ...told]);
+    const controls: HTMLElement[] = [...head, inkMouse, ...told, ...(bar.children as HTMLCollectionOf<HTMLElement>)];
+    this.#toolbarBar.setItems(controls.map((element, index) => {
+      element.classList.add("canvas-toolbar-item");
+      return {
+        id: element.dataset.canvasAction ?? element.dataset.canvasField ?? `${element.className}-${index}`,
+        element,
+        priority: notices.has(element) ? 1 : 0,
+      };
+    }));
+    this.#toolbarKeys.refresh();
   }
 
   #showIntakeError(error: unknown): void {
@@ -573,50 +6082,69 @@ export class CanvasEngine {
     this.#drawToolbar();
   }
 
-  #layoutSelection(axis: "left" | "center" | "right" | "top" | "middle" | "bottom" | "distribute-x" | "distribute-y"): void {
-    const nodes = this.#selectedNodes();
-    if (this.#readOnly || !this.#doc || nodes.length < (axis.startsWith("distribute") ? 3 : 2)) return;
-    const horizontal = axis === "distribute-x";
-    const ordered = axis.startsWith("distribute")
-      ? [...nodes].sort((a, b) => (horizontal ? a.x + a.width / 2 - b.x - b.width / 2 : a.y + a.height / 2 - b.y - b.height / 2))
-      : nodes;
-    const minX = Math.min(...nodes.map((node) => node.x));
-    const maxX = Math.max(...nodes.map((node) => node.x + node.width));
-    const minY = Math.min(...nodes.map((node) => node.y));
-    const maxY = Math.max(...nodes.map((node) => node.y + node.height));
-    const first = ordered[0];
-    const last = ordered[ordered.length - 1];
-    const start = horizontal ? first.x + first.width / 2 : first.y + first.height / 2;
-    const end = horizontal ? last.x + last.width / 2 : last.y + last.height / 2;
-    const patches: CanvasPatch[] = [];
-    ordered.forEach((node, index) => {
-      const target = { ...node };
-      switch (axis) {
-        case "left": target.x = snap(minX); break;
-        case "center": target.x = snap((minX + maxX - node.width) / 2); break;
-        case "right": target.x = snap(maxX - node.width); break;
-        case "top": target.y = snap(minY); break;
-        case "middle": target.y = snap((minY + maxY - node.height) / 2); break;
-        case "bottom": target.y = snap(maxY - node.height); break;
-        case "distribute-x":
-          if (index && index < ordered.length - 1) target.x = snap(start + (end - start) * index / (ordered.length - 1) - node.width / 2);
-          break;
-        case "distribute-y":
-          if (index && index < ordered.length - 1) target.y = snap(start + (end - start) * index / (ordered.length - 1) - node.height / 2);
-          break;
-      }
-      const patch = upsertNodePatch(this.#doc!, target);
-      if (patch) patches.push(patch);
-    });
-    this.#commit(patches, "input");
+  #layoutSelection(axis: CanvasArrange): void {
+    if (this.#readOnly || !this.#doc) return;
+    this.#writeOps(this.#arrangeOps(axis));
   }
 
-  #drawEdgeInspector(bar: HTMLElement, colorEditor: (
-    field: "node-color" | "edge-color", label: string, hexLabel: string, current: string | undefined, update: (value: string | undefined) => void
-  ) => void): void {
+  /**
+   * `align` o `distribute` delle schede scelte: i lati e i passi li decide il
+   * nucleo (`layout::arrange`). `null` con meno di due schede (tre per
+   * distribuire), come i bottoni spenti.
+   */
+  #arrangeOps(axis: CanvasArrange): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (axis === "distribute-x" || axis === "distribute-y") {
+      return ids.length >= 3 ? [{ op: "distribute", ids, axis: axis === "distribute-x" ? "x" : "y" }] : null;
+    }
+    return ids.length >= 2 ? [{ op: "align", ids, to: axis }] : null;
+  }
+
+  /**
+   * «Disponi» (LIC T25): `layout` delle schede scelte, o, senza selezione,
+   * delle schede libere (il nucleo le sceglie se mancano gli `ids`). `null`
+   * con meno di due, come la voce spenta.
+   */
+  #layoutOps(kind: CanvasLayout): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (ids.length >= 2) return [{ op: "layout", ids, kind }];
+    if (ids.length === 0 && this.#doc && looseCards(this.#doc.nodes).length >= 2) return [{ op: "layout", kind }];
+    return null;
+  }
+
+  /**
+   * Perché «Disponi» è spento: una scheda sola scelta o, senza selezione,
+   * meno di due schede libere (quelle che il nucleo dispone: non gruppi, e
+   * non dentro un gruppo).
+   */
+  #layoutWhy(): string | null {
+    const chosen = this.#selectedNodes().length;
+    if (chosen === 1) return t("canvas.commands.why.two");
+    if (chosen >= 2) return null;
+    if (!this.#doc?.nodes.length) return t("canvas.commands.why.empty");
+    return looseCards(this.#doc.nodes).length >= 2 ? null : t("canvas.commands.why.two");
+  }
+
+  /** «Disponi»: scrive il `layout`; se le schede sono già disposte così lo dice, mai il silenzio. */
+  #arrangeLayout(kind: CanvasLayout): void {
+    if (this.#readOnly || this.#isSceneOversized()) return;
+    const ops = this.#layoutOps(kind);
+    if (!ops) return;
+    const compiled = this.#compileIntent(ops, "canvas.change_refused");
+    if (!compiled) return;
+    if (compiled.patches.length === 0) {
+      this.#showNotice(t("canvas.layout.nothing"));
+      return;
+    }
+    this.#commit(compiled.patches, "input");
+  }
+
+  #drawEdgeInspector(bar: HTMLElement): void {
     const id = this.#edgeSelection[0];
     const edge = this.#doc?.edges.find((entry) => entry.id === id);
     if (!edge) return;
+    // Un campo del filo scrive la sua `set` (T23); un valore che il nucleo
+    // rifiuta non scrive, e la barra torna al valore del modello.
     const change = (values: Partial<CanvasEdge>): void => {
       const current = this.#doc?.edges.find((entry) => entry.id === id);
       if (!current || !this.#doc) return;
@@ -624,8 +6152,8 @@ export class CanvasEngine {
       for (const [key, value] of Object.entries(values)) {
         if (value === undefined) delete next[key];
       }
-      const patch = upsertEdgePatch(this.#doc, next);
-      if (patch) this.#commit([patch], "input");
+      const op = setOp(current, next);
+      if (op) this.#writeOps([op]);
     };
     const label = document.createElement("input");
     label.type = "text";
@@ -673,7 +6201,6 @@ export class CanvasEngine {
       select.addEventListener("change", () => change({ [field]: select.value || undefined } as Partial<CanvasEdge>));
       bar.append(select);
     }
-    colorEditor("edge-color", t("canvas.edge_color"), t("canvas.edge_color_hex"), edge.color, (color) => change({ color }));
   }
 
   async #intake(event: DragEvent | ClipboardEvent): Promise<void> {
@@ -683,69 +6210,605 @@ export class CanvasEngine {
     const port = this.#options.attachments;
     const documentId = this.#options.documentId;
     if (!data || this.#readOnly || !this.#doc || this.#destroyed || this.#isSceneOversized()) return;
+    // Le schede di Fub negli appunti (T68) vincono sul loro Markdown; una
+    // forma rotta si incolla come testo.
+    const cards = drop ? "" : data.getData(CANVAS_CLIPBOARD_TYPE) || "";
+    if (cards && this.#pasteCards(event, cards)) return;
     if (!port && data.files.length) return;
-    const text = data.getData("text/plain");
+    const text = data.getData("text/plain") || cards;
     if (!port && !text) return;
     this.#intakeError = "";
     this.#drawToolbar();
     event.preventDefault();
     const before = this.#source;
     const epoch = this.#epoch;
+    const stale = (): boolean => this.#destroyed || this.#readOnly || this.#source !== before
+      || this.#epoch !== epoch || !this.#doc;
+    // Il punto e la scheda sotto si prendono subito: durante il deposito il
+    // puntatore si muove.
+    const point = this.#intakePoint(event, drop);
+    const existing = drop ? this.#nodeAt(this.#elementAt(event.clientX, event.clientY) ?? null) : null;
     const files = [...new Set(port?.expandFiles ? await port.expandFiles(data) : [...data.files])];
     if (files.length && (!port || !documentId)) return;
+    // Le schede che questo gesto fa nascere, per percorso: «Fanne una copia»
+    // le ripunta per id (T32b).
+    const born = new Map<string, string[]>();
+    const bear = (path: string, id: string): void => { born.set(path, [...(born.get(path) ?? []), id]); };
     // External bytes pass the explicit deposit. Internal folder paths resolve
     // only via the host port; never trust a raw DataTransfer path.
-    const paths = files.length ? await port!.deposit(files, documentId!)
-      : port?.resolvePaths && documentId ? await port.resolvePaths(data, documentId) : [];
-    if (this.#destroyed || this.#readOnly || this.#source !== before || this.#epoch !== epoch || !this.#doc) return;
-    const unique = [...new Set(paths)].filter(isVaultPath);
-    if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
-    const point = drop ? this.#screenToWorld(event.clientX, event.clientY)
-      : this.#screenToWorld(this.#viewport.getBoundingClientRect().left + this.#viewport.clientWidth / 2,
-        this.#viewport.getBoundingClientRect().top + this.#viewport.clientHeight / 2);
-    const existing = drop ? this.#nodeAt(document.elementFromPoint?.(event.clientX, event.clientY) ?? null) : null;
-    const file = this.#doc.nodes.find((node) => node.id === existing && node.type === "file");
-    const patches: CanvasPatch[] = [];
-    if (file && unique.length) {
-      const patch = upsertNodePatch(this.#doc, { ...file, file: unique.shift()!, subpath: undefined });
-      if (patch) patches.push(patch);
+    // Un deposito fermato a metà porta i percorsi già fatti: le loro schede
+    // nascono lo stesso, e l'errore si mostra dopo, in ogni uscita (T15b).
+    let paths: readonly string[] = [];
+    let failure: CanvasDepositError | null = null;
+    if (files.length) {
+      try {
+        paths = await port!.deposit(files, documentId!, this.#depositCards(born));
+      } catch (error) {
+        if (!(error instanceof CanvasDepositError)) throw error;
+        paths = error.paths;
+        failure = error;
+      }
+    } else if (port?.resolvePaths && documentId) {
+      paths = await port.resolvePaths(data, documentId);
     }
-    unique.forEach((path, index) => {
-      const node: CanvasNode = {
-        id: newNodeId("n"), type: "file", file: path,
-        x: snap(point.x + index * 32), y: snap(point.y + index * 32),
-        width: 320, height: 160,
-      };
-      const patch = upsertNodePatch(this.#doc!, node);
-      if (patch) patches.push(patch);
-    });
-    if (!paths.length && text) {
-      const url = externalUrl(text.trim());
-      const node: CanvasNode = {
-        id: newNodeId("n"), type: url ? "link" : "text",
-        x: snap(point.x), y: snap(point.y), width: 320, height: 160,
-        ...(url ? { url } : { text }),
-      };
-      const patch = upsertNodePatch(this.#doc, node);
-      if (patch) patches.push(patch);
+    try {
+      if (stale()) return;
+      const unique = [...new Set(paths)].filter(isVaultPath);
+      if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
+      const ops: CanvasIntentOp[] = [];
+      // Una nota sola rilasciata dal vault, senza Alt: dopo il commit si apre
+      // il selettore delle sezioni (T74). Un file depositato dal computer non
+      // è ancora nell'indice: lo si sceglie dopo, con «Parti…».
+      const single = drop && !files.length && unique.length === 1 && !(event as DragEvent).altKey ? unique[0]! : null;
+      const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
+      // Su una scheda di file il primo file ne prende il posto (A-8): una `set`.
+      if (file && unique.length) {
+        const path = unique.shift()!;
+        const op = setOp(file, { ...file, file: path, subpath: undefined });
+        if (op) ops.push(op);
+        bear(path, file.id);
+      }
+      if (unique.length) {
+        const items = await this.#bornItems(unique);
+        if (stale()) return;
+        ops.push(...this.#dropOps(items, point, bear));
+      }
+      // Gli appunti diventano testo solo se non c'era un file da depositare:
+      // un file rifiutato non si trasforma in una scheda di testo (T15b).
+      if (!paths.length && text && !failure) {
+        const table = await this.#pastedTable(data, text);
+        if (stale()) return;
+        const url = table === null ? externalUrl(text.trim()) : null;
+        // La forma breve di `add_card` (T9): la misura la dà il nucleo.
+        ops.push({ op: "add_card", ...(url ? { url } : { text: table ?? text }), x: snap(point.x), y: snap(point.y) });
+      }
+      // Una lista sola: un annulla toglie tutto ciò che è nato.
+      const committed = this.#writeOps(ops) !== null;
+      const card = single === null ? undefined : born.get(single)?.[0];
+      if (committed && card !== undefined && this.#partsPickerSetting) void this.#openParts(card, "drop");
+    } finally {
+      // Dopo le schede, e in ogni uscita: uscire presto non deve perdere l'errore.
+      if (failure) this.#showIntakeError(failure);
     }
-    this.#commit(patches, "input");
   }
 
-  async #convertTextToNote(node: CanvasNode): Promise<void> {
-    if (this.#readOnly || this.#destroyed || !this.#doc || node.type !== "text") return;
-    const create = this.#options.onCreateNote;
-    if (!create) return;
-    const source = this.#source;
+  /**
+   * La porta con cui un gesto dopo il deposito ripunta le schede che il
+   * deposito ha fatto nascere (`born`: percorso → id, riempita quando nascono).
+   * Ogni scheda si cerca per id e cambia solo se mostra ancora il file di
+   * prima: tolta, o già puntata altrove, resta com'è. Tutte in un commit solo.
+   */
+  #depositCards(born: ReadonlyMap<string, readonly string[]>): CanvasDepositCards {
+    const live = (): boolean => !this.#destroyed && !this.#readOnly && this.#doc !== null;
+    return {
+      live,
+      repoint: (changes) => {
+        if (!live()) return 0;
+        const doc = this.#doc!;
+        const ops: CanvasIntentOp[] = [];
+        const touched = new Set<string>();
+        for (const { from, to } of changes) {
+          if (!isVaultPath(to)) continue;
+          for (const id of born.get(from) ?? []) {
+            const node = doc.nodes.find((candidate) => candidate.id === id);
+            if (!node || touched.has(id) || node.type !== "file" || node.file !== from) continue;
+            ops.push({ op: "set", id, fields: { file: to } });
+            touched.add(id);
+          }
+        }
+        return ops.length > 0 && this.#writeOps(ops) !== null ? ops.length : 0;
+      },
+    };
+  }
+
+  /**
+   * Il punto della lavagna in cui nasce ciò che arriva: quello del rilascio;
+   * per un incolla, l'ultimo punto in cui il puntatore è stato visto sulla
+   * vista, sennò il centro della vista.
+   */
+  #intakePoint(event: DragEvent | ClipboardEvent | null, drop: boolean): { x: number; y: number } {
+    if (drop && event && "clientX" in event) return this.#screenToWorld(event.clientX, event.clientY);
+    if (this.#pointerSeen) return this.#screenToWorld(this.#pointerSeen.x, this.#pointerSeen.y);
+    const rect = this.#viewport.getBoundingClientRect();
+    return this.#screenToWorld(rect.left + this.#viewport.clientWidth / 2, rect.top + this.#viewport.clientHeight / 2);
+  }
+
+  /**
+   * I file lasciati cadere, ognuno con le dimensioni del suo contenuto quando
+   * si sanno: le immagini chiedono i loro pixel alla porta, poche alla volta;
+   * una misura che non c'è, fallisce o non arriva in tempo non si dà, e il
+   * nucleo prende la misura di serie della specie.
+   */
+  async #bornItems(paths: readonly string[]): Promise<DropFile[]> {
+    const items: DropFile[] = paths.map((path) => ({ path }));
+    const measure = this.#options.measureImage;
+    if (!measure) return items;
+    const images = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => cardKindOf({ id: "", type: "file", file: item.path, x: 0, y: 0, width: 0, height: 0 }) === "image");
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < images.length && !this.#destroyed) {
+        const { item, index } = images[next++]!;
+        const size = await measuredImage(measure, item.path);
+        if (size) items[index] = { ...item, contentSize: [size.width, size.height] };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(MEASURE_IMAGE_PARALLEL, images.length) }, worker));
+    return items;
+  }
+
+  /**
+   * Le operazioni dei file lasciati cadere in `at` (T24): la tela li ordina
+   * per nome (`sortedDrop`), poi un `add_card` per file, con il suo `id` e
+   * `content_size` quando la misura si sa; con più file la griglia del
+   * nucleo (`layout` `grid`) dal punto del rilascio, agganciato a 8, e oltre
+   * `DROP_GROUP_THRESHOLD` il gruppo che li tiene (`group`). Un file solo
+   * nasce già lì: la griglia di una scheda è il suo angolo agganciato.
+   * `bear` riceve ogni scheda che nasce, col suo percorso; `newId` dà gli id.
+   */
+  #dropOps(
+    items: readonly DropFile[],
+    at: { readonly x: number; readonly y: number },
+    bear: (path: string, id: string) => void,
+    newId: () => string = () => this.#newId(),
+  ): CanvasIntentOp[] {
+    const x = snap(at.x);
+    const y = snap(at.y);
+    const sorted = sortedDrop(items);
+    const ops: CanvasIntentOp[] = [];
+    const ids: string[] = [];
+    for (const item of sorted) {
+      const id = newId();
+      ids.push(id);
+      bear(item.path, id);
+      ops.push({
+        op: "add_card",
+        id,
+        file: item.path,
+        ...(item.contentSize ? { content_size: [...item.contentSize] } : {}),
+        ...(sorted.length === 1 ? { x, y } : {}),
+      });
+    }
+    if (sorted.length > 1) ops.push({ op: "layout", ids, kind: "grid", x, y });
+    if (sorted.length > DROP_GROUP_THRESHOLD) {
+      ops.push({ op: "group", ids, label: t("canvas.intake.group", { count: String(sorted.length) }) });
+    }
+    return ops;
+  }
+
+  /**
+   * Le celle copiate come tabella Markdown: l'HTML con una tabella, tramite
+   * la porta; sennò il testo a tabulazioni su più righe. `null` se non sono
+   * celle.
+   */
+  async #pastedTable(data: DataTransfer, text: string): Promise<string | null> {
+    const convert = this.#options.clipboardMarkdown;
+    if (convert && /<table[\s>]/i.test(data.getData("text/html") ?? "")) {
+      const markdown = await convert(data).catch(() => null);
+      if (markdown && markdown.trim()) return markdown;
+    }
+    if (!text.includes("\t")) return null;
+    const rows = parseTsv(text);
+    if (rows.length < 2) return null;
+    return markdownTable(rows) || null;
+  }
+
+  /**
+   * I rettangoli tratteggiati dove nasceranno le schede di un trascinamento
+   * di file o di voci dell'albero: uno per file, se si sa quanti sono, sennò
+   * uno (le voci dell'albero non si leggono prima del rilascio).
+   */
+  #showDropGhosts(event: DragEvent): void {
+    const data = event.dataTransfer;
+    if (!data || !this.#options.attachments) return;
+    const types = [...(data.types ?? [])];
+    // Senza tipi leggibili (WebKit durante il trascinamento) può essere un file.
+    const carries = types.length === 0 || types.includes("Files")
+      || types.includes(ENTRIES_DRAG_TYPE) || types.includes(NOTE_DRAG_TYPE);
+    if (!carries) {
+      this.#hideDropGhosts();
+      return;
+    }
+    const count = Math.max(1, [...(data.items ?? [])].filter((item) => item.kind === "file").length);
+    const pointer = this.#screenToWorld(event.clientX, event.clientY);
+    // I riquadri si calcolano una volta, all'entrata (o quando cambia il
+    // numero dei file): poi seguono il puntatore sulla griglia, senza
+    // chiamare il nucleo a ogni movimento.
+    if (this.#dropGhostCount !== count) {
+      this.#dropGhost = this.#dropGhostShape(count, pointer);
+      this.#dropGhostCount = count;
+    }
+    const ghost = this.#dropGhost;
+    if (!ghost) {
+      this.#dropGhosts?.remove();
+      this.#dropGhosts = null;
+      return;
+    }
+    const shiftX = snap(pointer.x) - ghost.x;
+    const shiftY = snap(pointer.y) - ghost.y;
+    let layer = this.#dropGhosts;
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "canvas-drop-ghosts";
+      layer.setAttribute("aria-hidden", "true");
+      this.#viewport.append(layer);
+      this.#dropGhosts = layer;
+    }
+    layer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    // Il filo e il numero restano della stessa misura sullo schermo (la pelle divide per lo zoom).
+    layer.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
+    // Oltre i dodici (prototipo T25), la cornice del gruppo che li terrà col
+    // numero in mezzo: mentre si trascina si sa quanti sono, non come si chiamano.
+    const rects = ghost.group ? [ghost.group] : ghost.cards;
+    const grouped = ghost.group !== null;
+    while (layer.children.length > rects.length) layer.lastElementChild!.remove();
+    rects.forEach((card, index) => {
+      let ghost = layer.children[index] as HTMLElement | undefined;
+      if (!ghost) {
+        ghost = document.createElement("div");
+        ghost.className = "canvas-drop-ghost";
+        layer.append(ghost);
+      }
+      ghost.classList.toggle("canvas-drop-ghost-group", grouped);
+      if (grouped) {
+        let name = ghost.firstElementChild as HTMLElement | null;
+        if (!name) {
+          name = document.createElement("span");
+          name.className = "canvas-drop-ghost-name";
+          ghost.append(name);
+        }
+        const text = t("canvas.intake.group", { count });
+        if (name.textContent !== text) name.textContent = text;
+      } else {
+        ghost.replaceChildren();
+      }
+      ghost.style.transform = `translate(${card.x + shiftX}px, ${card.y + shiftY}px)`;
+      ghost.style.width = `${card.width}px`;
+      ghost.style.height = `${card.height}px`;
+    });
+  }
+
+  /**
+   * I riquadri di `count` file che nascerebbero in `at`: le operazioni del
+   * rilascio (`#dropOps`, con nomi che tengono l'ordine dato e la misura di
+   * serie di un file) compilate dal nucleo senza scrivere niente, così la
+   * griglia e il gruppo sono quelli che il rilascio farà. `null` se il nucleo
+   * non c'è o le rifiuta (una lavagna piena): allora nessun riquadro.
+   */
+  #dropGhostShape(count: number, at: { readonly x: number; readonly y: number }): DropGhost | null {
+    const core = this.#core;
+    if (!core || this.#destroyed || count > MAX_DROP_GHOSTS) return null;
+    const items = Array.from({ length: count }, (_, index) => ({ path: String(index).padStart(8, "0") }));
+    // Gli id dei riquadri sono suoi: non consumano quelli di `newId`.
+    const ids: string[] = [];
+    const ops = this.#dropOps(items, at, (_path, id) => ids.push(id), () => `drop-ghost-${ids.length}`);
+    let compiled: CanvasCompiled;
+    try {
+      compiled = core.compile(ops, this.#seed());
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
+    const placed = new Map<string, Rect>();
+    for (const patch of compiled.patches) {
+      if (patch.kind === "upsert-node") {
+        const { x, y, width, height } = patch.after;
+        placed.set(patch.after.id, { x, y, width, height });
+      }
+    }
+    const cards = ids.flatMap((id) => placed.get(id) ?? []);
+    const groupId = count > DROP_GROUP_THRESHOLD ? compiled.created[compiled.created.length - 1] : undefined;
+    const group = groupId === undefined ? null : placed.get(groupId) ?? null;
+    return { count, x: snap(at.x), y: snap(at.y), cards, group };
+  }
+
+  #hideDropGhosts(): void {
+    this.#dropGhosts?.remove();
+    this.#dropGhosts = null;
+    this.#dropGhost = null;
+    this.#dropGhostCount = null;
+  }
+
+  // --- la griglia e le guide (T71) -------------------------------------------
+
+  /**
+   * I punti della griglia, ogni `CANVAS_GRID_DOT_STEPS` passi di `CANVAS_SNAP`
+   * (32 unità della lavagna, su incroci dell'aggancio), nella vista
+   * e sotto le schede. Il livello segue la camera con la sua posizione e il
+   * suo passo, senza variabili CSS (lo stage ne ha già). Il punto sta al
+   * centro della sua cella, così cade sulle intersezioni. Sotto
+   * `CANVAS_GRID_MIN_PX` sullo schermo non si disegna.
+   */
+  #paintGrid(): void {
+    const grid = this.#grid;
+    if (!grid) return;
+    const step = CANVAS_SNAP * CANVAS_GRID_DOT_STEPS * this.#camera.zoom;
+    grid.hidden = !(this.#gridOverride ?? this.#gridSetting) || step < CANVAS_GRID_MIN_PX;
+    if (grid.hidden) return;
+    grid.style.backgroundSize = `${step}px ${step}px`;
+    grid.style.backgroundPosition = `${this.#camera.x - step / 2}px ${this.#camera.y - step / 2}px`;
+  }
+
+  /** Ctrl+' (T71): mostra o nasconde la griglia di questa lavagna, e la ricorda con la vista. */
+  #toggleGrid(): void {
+    this.#gridOverride = !(this.#gridOverride ?? this.#gridSetting);
+    this.#paintGrid();
+    this.#viewMemo?.changed();
+  }
+
+  /**
+   * Le guide del gesto: un elemento solo sopra le schede, con un segno per
+   * segmento, nelle coordinate dello schermo. Si svuota a ogni passo; `[]`
+   * le toglie.
+   */
+  #showGuides(segments: readonly GuideSegment[]): void {
+    if (segments.length === 0) {
+      this.#hideGuides();
+      return;
+    }
+    let layer = this.#guideLayer;
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "canvas-guides";
+      layer.setAttribute("aria-hidden", "true");
+      this.#viewport.insertBefore(layer, this.#handleLayer);
+      this.#guideLayer = layer;
+    }
+    const { x, y, zoom } = this.#camera;
+    layer.replaceChildren(...segments.map((segment) => {
+      const line = document.createElement("div");
+      const vertical = segment.x1 === segment.x2;
+      line.className = "canvas-guide";
+      line.dataset.kind = segment.kind;
+      line.dataset.axis = vertical ? "v" : "h";
+      if (vertical) {
+        line.style.left = `${segment.x1 * zoom + x}px`;
+        line.style.top = `${Math.min(segment.y1, segment.y2) * zoom + y}px`;
+        line.style.height = `${Math.abs(segment.y2 - segment.y1) * zoom}px`;
+      } else {
+        line.style.left = `${Math.min(segment.x1, segment.x2) * zoom + x}px`;
+        line.style.top = `${segment.y1 * zoom + y}px`;
+        line.style.width = `${Math.abs(segment.x2 - segment.x1) * zoom}px`;
+      }
+      return line;
+    }));
+  }
+
+  #hideGuides(): void {
+    this.#guideLayer?.remove();
+    this.#guideLayer = null;
+  }
+
+  /**
+   * Le schede in vista che un gesto può agganciare: quelle che non si
+   * muovono (`moving`) e che stanno nella vista, così con 2000 schede si
+   * guarda solo quello che si vede.
+   */
+  #snapTargets(moving: ReadonlyMap<string, unknown>): GuideRect[] {
+    const doc = this.#doc;
+    if (!doc) return [];
+    const { view } = this.#viewRect();
+    const out: GuideRect[] = [];
+    for (const node of doc.nodes) {
+      if (!moving.has(node.id) && overlaps(node, view)) out.push(node);
+    }
+    return out;
+  }
+
+  // --- convertire (T70) ---------------------------------------------------------
+
+  /** La cartella della lavagna nel vault, `""` alla radice: lì nascono le note estratte. */
+  #boardFolder(): string {
+    const id = (this.#options.documentId ?? "").replace(/^\/+/, "");
+    const cut = id.lastIndexOf("/");
+    return cut < 0 ? "" : id.slice(0, cut);
+  }
+
+  /**
+   * «Estrai in una nota» (T70): chiede il nome (proposto dalla prima riga,
+   * libero nella cartella della lavagna), fa nascere la nota col testo e
+   * mette al posto della scheda di testo una scheda di file su di lei, con lo
+   * stesso id: posto, misura, colore, fili e inchiostro restano. Un commit, un
+   * annulla; la nota resta nel vault anche annullando, e la notifica lo dice.
+   */
+  async #extractNote(id: string): Promise<void> {
+    const notes = this.#options.notes;
+    if (!notes || this.#readOnly || this.#destroyed || !this.#doc) return;
+    // Il testo che si sta scrivendo nella scheda va nella nota.
+    if (!this.#closeField(false)) return;
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (node?.type !== "text") return;
+    const text = node.text ?? "";
+    const folder = this.#boardFolder();
+    const proposed = await notes.freeName(folder, proposedNoteName(text));
+    if (this.#destroyed || this.#readOnly) return;
+    const name = await this.#askNoteName(proposed, folder);
+    if (name === null || this.#destroyed || this.#readOnly) return;
+    // La scheda è cambiata mentre si sceglieva il nome: nessuna nota nasce.
+    const before = this.#doc?.nodes.find((one) => one.id === id);
+    if (before?.type !== "text" || (before.text ?? "") !== text) return;
+    const path = await notes.create(folder, name, text);
+    const opened = (): void => {
+      void Promise.resolve(this.#options.onOpenPath?.(`/${path.replace(/^\/+/, "")}`, this.#options.documentId))
+        .catch((error: unknown) => this.#showIntakeError(error));
+    };
+    const shown = noteDisplayName(path);
+    const open = { label: t("canvas.extract.open"), hint: t("canvas.extract.open_hint", { name: shown }), run: opened };
+    const current = this.#doc?.nodes.find((one) => one.id === id);
+    if (this.#destroyed || this.#readOnly || !this.#doc || current?.type !== "text" || (current.text ?? "") !== text) {
+      // La nota c'è, la scheda no (o è cambiata): la scheda resta com'è, e la notifica lo dice.
+      if (!this.#destroyed) notify(t("canvas.extract.stale", { name: shown }), "info", open);
+      return;
+    }
+    // La nota c'è: la scheda diventa sua con `convert` (id, posto, fili e
+    // inchiostro restano). Se il nucleo la rifiuta l'avviso è uno solo,
+    // `canvas.extract.stale`: dice che la nota c'è e la apre.
+    if (!this.#writeOps([{ op: "convert", id, file: path }], null)) {
+      notify(t("canvas.extract.stale", { name: shown }), "info", open);
+      return;
+    }
+    this.#statusSettle();
+    notify(t("canvas.extract.done", { name: shown }), "info", open);
+  }
+
+  /**
+   * Il nome della nota da estrarre (T70), con `proposed` già scritto: `null`
+   * se si rinuncia. Il nome che si conferma è pulito come quello di una nota
+   * nuova (`searchedName`); un nome fatto solo di caratteri vietati non chiude
+   * il dialogo.
+   */
+  #askNoteName(proposed: string, folder: string): Promise<string | null> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const field = textField({
+      label: t("canvas.extract.field"),
+      value: proposed,
+      lifetime: own,
+    });
+    const handle = openDialog<"extract" | "cancel">({
+      title: t("canvas.extract.title"),
+      description: folder === ""
+        ? t("canvas.extract.description_root")
+        : t("canvas.extract.description", { folder }),
+      body: field.element,
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: "cancel" },
+        { id: "extract", label: t("canvas.extract.action"), kind: "primary", value: "extract" },
+      ],
+      dismissValue: "cancel",
+      lifetime: own,
+      submit: "extract",
+      confirm: (value) => value === "cancel" || searchedName(field.value()) !== null,
+    });
+    return handle.result.then((value) => {
+      own.close();
+      return value === "extract" ? searchedName(field.value()) : null;
+    });
+  }
+
+  /**
+   * «Copia il testo qui» (T70): una scheda di testo col testo della nota (di
+   * un estratto, le sole sezioni mostrate: T99), accanto alla sua scheda, al
+   * primo posto libero; la nota non cambia. Larga
+   * come la scheda della nota, alta come lei ma non più della vista: una
+   * nota lunga scorre dentro la scheda. Un commit, un annulla.
+   */
+  async #copyNoteText(id: string): Promise<void> {
+    const notes = this.#options.notes;
+    if (!notes || this.#readOnly || this.#destroyed || !this.#doc) return;
+    const node = this.#doc.nodes.find((one) => one.id === id);
+    if (!node || cardKindOf(node) !== "note") return;
+    const path = cardTarget(node).path;
     const epoch = this.#epoch;
-    const path = await create(node.text ?? "");
-    const current = this.#doc?.nodes.find((entry) => entry.id === node.id);
-    if (!path || !current || this.#destroyed || this.#readOnly || source !== this.#source || this.#epoch !== epoch
-      || JSON.stringify(current) !== JSON.stringify(node)) return;
-    const next: CanvasNode = { ...current, type: "file", file: path };
-    delete next.text;
-    const patch = upsertNodePatch(this.#doc!, next);
-    if (patch) this.#commit([patch], "input");
+    // Di un estratto serve anche il sommario del provider (i titoli col loro
+    // byte), chiesto insieme al testo; senza, si copia la nota intera.
+    const parts = this.#options.parts;
+    const outline: Promise<readonly PartsHeading[] | null> = noteExcerptOf(node) && parts
+      ? parts.outline(path).catch(() => null)
+      : Promise.resolve(null);
+    const [whole, headings] = await Promise.all([notes.read(path), outline]);
+    if (this.#destroyed || this.#readOnly || !this.#doc || this.#epoch !== epoch) return;
+    const source = this.#doc.nodes.find((one) => one.id === id);
+    if (!source || cardKindOf(source) !== "note" || cardTarget(source).path !== path) return;
+    // Una scheda-estratto (T75) copia solo le sezioni che mostra (T99), nel
+    // suo ordine; una sezione sparita dalla nota non si copia. Se non ne resta
+    // nessuna non nasce niente, e la lavagna dice quali mancano. Se il
+    // sommario non arriva, o non combacia col testo, la nota intera.
+    let text = whole;
+    const excerpt = noteExcerptOf(source);
+    const shown = excerpt && headings ? noteSectionsText(whole, headings, excerpt.sections) : null;
+    if (excerpt && shown) {
+      if (shown.missing.length === excerpt.sections.length) {
+        const names = shown.missing.map((key) => sectionHeading(key) ?? key);
+        this.#showNotice(names.length === 1
+          ? t("canvas.excerpt.section_missing", { name: names[0]! })
+          : t("canvas.excerpt.sections_missing", { names: names.join(", ") }));
+        return;
+      }
+      text = shown.text;
+    }
+    if (utf8.encode(text).length > MAX_CARD_TEXT_BYTES) {
+      this.#showNotice(t("canvas.card_too_long"));
+      return;
+    }
+    const card = this.#writeOps(this.#copyNoteTextOps(source, text))?.[0];
+    if (card === undefined) return;
+    this.#selection = [card];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+    this.#statusSettle();
+  }
+
+  /**
+   * L'`add_card` di «Copia il testo qui»: il testo `text` accanto alla scheda
+   * della nota `source`, al primo posto libero di `freeSpot` (a
+   * `NEXT_CARD_GAP` e scendendo sotto una scheda che c'è già, come la scheda
+   * dopo, T44); larga come lei, alta come lei ma non più della vista. Il posto
+   * è scritto: `near` del nucleo lascia 48 a destra e scivola con la misura di
+   * nascita (rapporto di T23).
+   */
+  #copyNoteTextOps(source: CanvasNode, text: string): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const { view } = this.#viewRect();
+    const height = Math.max(TEXT_CARD_HEIGHT, Math.min(source.height, Math.floor(view.height)));
+    const spot = freeSpot(doc.nodes, { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height });
+    return [{ op: "add_card", text, ...spot }];
+  }
+
+  /**
+   * «Sostituisci il file…» (T70): il selettore dei file di sempre, e la
+   * scheda punta al file scelto. Tiene id, posto, misura, colore, fili e
+   * inchiostro; perde ciò che era del file di prima (la sezione o la pagina,
+   * le parti). Con un file di un'altra specie la scheda cambia specie;
+   * l'inchiostro (`fub:ink` della scheda) resta com'era e si disegna con la
+   * regola della specie nuova (`inkFitMode`). Un commit, un annulla.
+   */
+  async #replaceFile(id: string): Promise<void> {
+    const pick = this.#options.onPickFile;
+    if (!pick || this.#readOnly || this.#destroyed || !this.#doc) return;
+    const node = this.#doc.nodes.find((one) => one.id === id);
+    if (node?.type !== "file") return;
+    const chosen = await pick();
+    if (!isVaultPath(chosen) || this.#destroyed || this.#readOnly || !this.#doc) return;
+    const current = this.#doc.nodes.find((one) => one.id === id);
+    if (current?.type !== "file" || current.file === chosen) return;
+    if (this.#writeOps(this.#replaceFileOps(current, chosen))) this.#statusSettle();
+  }
+
+  /** La `set` che punta la scheda di file `node` a `file`, togliendo la sezione o la pagina e le parti di prima. */
+  #replaceFileOps(node: CanvasNode, file: string): CanvasIntentOp[] | null {
+    const next: CanvasNode = { ...node, file };
+    delete next.subpath;
+    delete next[PARTS_KEY];
+    const op = setOp(node, next);
+    return op ? [op] : null;
   }
 
   async #addFileNode(at?: { x: number; y: number }): Promise<void> {
@@ -760,87 +6823,2472 @@ export class CanvasEngine {
   }
 
   /** Una card nuova al centro della vista, o in `at` (coordinate del mondo);
-   *  una card file vuole il suo `file`. */
-  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): void {
-    if (!this.#doc || this.#readOnly || (type === "file" && !file)) return;
+   *  una card file vuole il suo `file`. Torna la card messa, o `null`. */
+  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }, link?: CardLink): CanvasNode | null {
+    if (!this.#doc || this.#readOnly || (type === "file" && !file)) return null;
+    if (!link) {
+      // Dal menu, dalla barra o dallo strumento Testo: la sua `add_card` (T23).
+      const id = this.#writeOps(this.#addOps(type, file, at))?.[0];
+      const node = id === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === id);
+      if (!node) return null;
+      this.#selection = [node.id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+      return node;
+    }
+    // Collegata (T67): la scheda nasce col filo dal gesto di Collega (T24).
     const rect = this.#viewport.getBoundingClientRect();
-    const center = at
+    const width = type === "group" ? 480 : 320;
+    const height = type === "group" ? 320 : type === "link" ? 120 : 160;
+    // Collegata (T67): il lato verso l'altro capo cade sotto il puntatore.
+    const source = link ? this.#doc.nodes.find((one) => one.id === link.from) : undefined;
+    const anchor = source && (link?.fromSide
+      ? sidePoint(source, link.fromSide)
+      : { x: source.x + source.width / 2, y: source.y + source.height / 2 });
+    const facing = anchor && at ? linkedCardPlacement(anchor, at, width, height) : null;
+    const center = facing
+      ? { x: facing.x + 160, y: facing.y + 80 }
+      : at
       ? { x: at.x + 160, y: at.y + 80 }
       : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
-    const node: CanvasNode = {
-      id: newNodeId("n"),
+    const born: CanvasNode = {
+      id: this.#newId(),
       type,
       x: snap(center.x - 160),
       y: snap(center.y - 80),
-      width: type === "group" ? 480 : 320,
-      height: type === "group" ? 320 : type === "link" ? 120 : 160,
+      width,
+      height,
       ...(type === "text" ? { text: "" } : {}),
       ...(type === "file" ? { file } : {}),
       ...(type === "link" ? { url: "https://" } : {}),
       ...(type === "group" ? { label: "" } : {}),
     };
-    const patch = upsertNodePatch(this.#doc, node);
-    if (patch && this.#commit([patch], "input")) {
-      this.#selection = [node.id];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
+    // Una scheda dello strumento Testo nasce con la misura e l'allineamento
+    // scelti nella sua riga (T92).
+    const node = (type === "text" && this.#tool === "text" ? withTextStyle(born, this.#textNext) : null) ?? born;
+    // La scheda con il suo `id`, poi il filo verso di lei, in una lista sola
+    // (T24): un passo d'annulla.
+    const ops: CanvasIntentOp[] = [{ op: "add_card", node: { ...node } }];
+    if (source && facing) {
+      const fromSide = link?.fromSide ?? nearestSides(node, source, facing.side).toSide;
+      const edge = this.#connectOps(source.id, node.id, { from: fromSide, to: facing.side }, node.id);
+      if (edge) ops.push(...edge);
+    }
+    const id = this.#writeOps(ops)?.[0];
+    const placed = id === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === id);
+    if (!placed) return null;
+    this.#selection = [placed.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    return placed;
+  }
+
+  /**
+   * L'id di una scheda che un gesto fa nascere e che le operazioni della
+   * stessa lista nominano (il filo verso di lei, la griglia del rilascio):
+   * quello di `newId` delle opzioni, o uno a caso (T24).
+   */
+  #newId(): string {
+    return this.#options.newId?.() ?? newNodeId("n");
+  }
+
+  /**
+   * La `add_card` di una scheda nuova dal menu, dalla barra o dallo strumento
+   * Testo: al centro della vista, o in `at` (coordinate del mondo), con la
+   * misura di sempre della GUI per il tipo (scritta, così non cambia con la
+   * specie del file). Una scheda dello strumento Testo nasce con la misura e
+   * l'allineamento scelti nella sua riga (T92): allora la forma intera, che
+   * porta `fub:text`. `null` senza una lavagna, o un file senza percorso.
+   */
+  #addOps(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): CanvasIntentOp[] | null {
+    if (!this.#doc || (type === "file" && !file)) return null;
+    const rect = this.#viewport.getBoundingClientRect();
+    const width = type === "group" ? 480 : 320;
+    const height = type === "group" ? 320 : type === "link" ? 120 : 160;
+    const center = at
+      ? { x: at.x + 160, y: at.y + 80 }
+      : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
+    const place = { x: snap(center.x - 160), y: snap(center.y - 80), width, height };
+    if (type === "text" && this.#tool === "text") {
+      const styled = withTextStyle({ id: "", type, ...place, text: "" }, this.#textNext);
+      if (styled) {
+        const { id: _id, ...node } = styled;
+        return [{ op: "add_card", node }];
+      }
+    }
+    switch (type) {
+      case "text": return [{ op: "add_card", text: "", ...place }];
+      case "file": return [{ op: "add_card", file, ...place }];
+      case "link": return [{ op: "add_card", url: "https://", ...place }];
+      case "group": return [{ op: "add_card", label: "", ...place }];
     }
   }
 
   #duplicateSelection(): void {
     if (!this.#doc || this.#readOnly) return;
     const nodes = this.#selectedNodes();
-    if (!nodes.length) return;
-    const idMap = new Map<string, string>();
-    for (const node of nodes) idMap.set(node.id, newNodeId("n"));
-    const patches: CanvasPatch[] = [];
-    for (const node of nodes) {
-      const copy: CanvasNode = JSON.parse(JSON.stringify(node)) as CanvasNode;
-      copy.id = idMap.get(node.id)!;
-      copy.x = snap(node.x + 32);
-      copy.y = snap(node.y + 32);
-      const patch = upsertNodePatch(this.#doc, copy);
-      if (patch) patches.push(patch);
+    const created = this.#writeOps(this.#duplicateOps());
+    if (!created) return;
+    // Le schede copiate vengono prima dei fili fra loro (`created`).
+    const copies = created.slice(0, nodes.length);
+    this.#lastDuplicate = { sources: nodes.map((node) => node.id), copies };
+    this.#selection = copies;
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+  }
+
+  /**
+   * `duplicate` delle schede scelte, con i fili fra loro (D1). Le copie
+   * dell'ultimo Ctrl+D ripetono il suo spostamento (T68); se no lo
+   * spostamento di serie del nucleo, 32 e 32 agganciato a 8.
+   */
+  #duplicateOps(): CanvasIntentOp[] | null {
+    const nodes = this.#selectedNodes();
+    if (nodes.length === 0) return null;
+    const ids = nodes.map((node) => node.id);
+    const repeat = this.#repeatedOffset(nodes);
+    return [repeat ? { op: "duplicate", ids, dx: repeat.x, dy: repeat.y } : { op: "duplicate", ids }];
+  }
+
+  // --- copia e incolla le schede (T68) --------------------------------------------
+
+  /**
+   * Lo spostamento che Ctrl+D ripete: le schede `nodes` sono proprio le copie
+   * dell'ultimo Ctrl+D e la prima scheda di partenza c'è ancora; si ripete la
+   * distanza di adesso fra le due, anche se la copia è stata spostata. `null`
+   * sennò, o se la copia sta sopra la sua scheda.
+   */
+  #repeatedOffset(nodes: readonly CanvasNode[]): { readonly x: number; readonly y: number } | null {
+    const last = this.#lastDuplicate;
+    if (!last || !this.#doc || last.copies.length !== nodes.length) return null;
+    const chosen = new Set(nodes.map((node) => node.id));
+    if (!last.copies.every((id) => chosen.has(id))) return null;
+    const copy = this.#doc.nodes.find((node) => node.id === last.copies[0]);
+    const source = this.#doc.nodes.find((node) => node.id === last.sources[0]);
+    if (!copy || !source) return null;
+    const x = copy.x - source.x;
+    const y = copy.y - source.y;
+    return x === 0 && y === 0 ? null : { x, y };
+  }
+
+  /**
+   * Gli appunti sono della lavagna: lo chiede il menu, oppure il fuoco è sulla
+   * vista o su una scheda, non in un campo né nel contenuto della scheda
+   * attiva, e dentro la lavagna non c'è un testo scelto (quello lo copia il
+   * browser, com'è).
+   */
+  #ownsClipboard(): boolean {
+    if (this.#clipboardCommand !== null) return true;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !this.#viewport.contains(active)) return false;
+    if (isTextTarget(active) || this.#insideActive(active, false)) return false;
+    const selection = document.getSelection();
+    return !(selection && !selection.isCollapsed && this.#viewport.contains(selection.anchorNode));
+  }
+
+  /**
+   * Ctrl+C e Ctrl+X, e «Copia» e «Taglia» del menu: le schede scelte e i
+   * tratti liberi scelti col Lazo negli appunti; tagliando, poi tolti.
+   */
+  #copyEvent(event: ClipboardEvent, cut: boolean): void {
+    if (event.defaultPrevented || !event.clipboardData || !this.#doc || this.#destroyed) return;
+    if (!this.#ownsClipboard()) return;
+    const cutting = cut || this.#clipboardCommand === "cut";
+    if (cutting && this.#readOnly) return;
+    const clipboard = copiedSelection(this.#doc, this.#selection, this.#chosenFreeStrokes());
+    if (!clipboard) return;
+    event.preventDefault();
+    event.clipboardData.setData(CANVAS_CLIPBOARD_TYPE, clipboardJson(clipboard));
+    event.clipboardData.setData("text/plain", cardsMarkdown(clipboard.nodes));
+    // Appunti nuovi: il prossimo incolla parte di nuovo sotto il puntatore.
+    this.#lastPaste = null;
+    if (cutting) this.#cutSelection(clipboard);
+  }
+
+  /** Gli id dei tratti liberi scelti col Lazo, quelli che vanno negli appunti (T94). */
+  #chosenFreeStrokes(): string[] {
+    return this.#chosenStrokes().filter((unit) => unit.node === null).map((unit) => unit.id);
+  }
+
+  /**
+   * Toglie ciò che `clipboard` ha appena copiato, in un commit solo: le
+   * schede come «Togli dalla lavagna» (i file restano, e l'avviso lo dice col
+   * suo «Annulla») e i tratti liberi dal livello della radice.
+   */
+  #cutSelection(clipboard: CanvasClipboard): void {
+    const ids = clipboard.nodes.map((node) => node.id);
+    const strokes = (clipboard[INK_KEY]?.strokes ?? []).map((stroke) => stroke.id);
+    if (this.#readOnly || !this.#removeCards(ids, [], strokes)) return;
+    this.#selection = this.#selection.filter((id) => !ids.includes(id));
+    this.#edgeSelection = [];
+    if (strokes.length > 0) {
+      const gone = new Set(strokes.map((id) => inkKey("board", id)));
+      this.#strokeSelection = new Set([...this.#strokeSelection].filter((key) => !gone.has(key)));
     }
-    if (patches.length && this.#commit(patches, "input")) {
-      this.#selection = [...idMap.values()];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  /**
+   * Un incolla che il browser manda fuori dalla vista (al corpo della pagina,
+   * o dove sta la selezione di testo) mentre il fuoco è sulla lavagna: passa
+   * da `#intake` come uno sulla vista. Quello sulla vista l'ha già preso lei.
+   */
+  #pasteFromOutside(event: ClipboardEvent): void {
+    if (event.defaultPrevented || (event.target instanceof Node && this.#viewport.contains(event.target))) return;
+    if (this.#clipboardCommand !== null || !this.#ownsClipboard()) return;
+    void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
+  }
+
+  /**
+   * Incolla le schede e i tratti liberi di Fub dal testo `raw` degli
+   * appunti, nel punto dell'incolla (T15): un commit, un annulla, le schede
+   * incollate scelte. Lo stesso testo incollato di nuovo nello stesso punto si
+   * sfalsa. Una versione futura non incolla niente e lo dice; un `fub:ink`
+   * rotto o fuori dai limiti non incolla niente e lo dice come una forma che
+   * il nucleo rifiuta. `false` se `raw` non è la forma di Fub: allora si
+   * incolla come testo.
+   */
+  #pasteCards(event: ClipboardEvent | DragEvent, raw: string): boolean {
+    const read = readCanvasClipboard(raw);
+    if (read.kind === "broken") return false;
+    event.preventDefault();
+    this.#recordPending();
+    if (read.kind === "future") {
+      this.#showNotice(t("canvas.clipboard.future"));
+      return true;
     }
+    if (read.kind === "refused") {
+      this.#showNotice(t("canvas.clipboard.refused"));
+      return true;
+    }
+    const spot = this.#pasteSpot(raw);
+    if (!this.#commitPasted(read.clipboard, spot.at)) {
+      this.#showNotice(t("canvas.clipboard.refused"));
+      return true;
+    }
+    this.#lastPaste = spot.last;
+    this.#showNotice("");
+    return true;
+  }
+
+  /**
+   * Dove cade un incolla (Ctrl+V, «Aggiungi come copie» di «Incolla codice»):
+   * l'angolo del blocco sul puntatore (o al centro della vista), sulla
+   * griglia; lo stesso testo incollato di nuovo nello stesso punto scende di
+   * `CANVAS_PASTE_STEP` ogni volta. `last` va in `#lastPaste` solo se
+   * l'incolla scrive.
+   */
+  #pasteSpot(raw: string): { readonly at: { x: number; y: number }; readonly last: LastPaste } {
+    const point = this.#intakePoint(null, false);
+    const x = snap(point.x);
+    const y = snap(point.y);
+    const last = this.#lastPaste;
+    const count = last && last.raw === raw && last.x === x && last.y === y ? last.count + 1 : 0;
+    const step = count * CANVAS_PASTE_STEP;
+    return { at: { x: x + step, y: y + step }, last: { raw, x, y, count } };
+  }
+
+  /**
+   * Le schede e i tratti liberi di `clipboard` con l'angolo del loro
+   * riquadro in `at`, in un commit solo, poi scelti (i tratti solo col Lazo,
+   * l'unico che li tiene scelti). Le schede e i fili entrano con `insert`
+   * (il frammento di N6 T68, con id nuovi dal nucleo), i tratti nel livello
+   * della radice con `add_strokes` e `move_strokes` (T24), tutto in una
+   * compilazione. `false` se il nucleo rifiuta qualcosa (un filo senza una
+   * delle sue schede, un tratto che non vale): allora non entra niente.
+   */
+  #commitPasted(clipboard: CanvasClipboard, at: { readonly x: number; readonly y: number }): boolean {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly) return false;
+    // Lo spostamento del blocco e gli id nuovi dei tratti: le schede si
+    // spostano quanto i tratti, così restano dove erano gli uni per gli altri.
+    const placed = placedSelection(clipboard, at, newNodeId);
+    const ops: CanvasIntentOp[] = [];
+    if (clipboard.nodes.length > 0) {
+      let left = Infinity;
+      let top = Infinity;
+      for (const node of clipboard.nodes) {
+        left = Math.min(left, node.x);
+        top = Math.min(top, node.y);
+      }
+      const fragment = { version: clipboard.version, nodes: clipboard.nodes, edges: clipboard.edges };
+      ops.push({ op: "insert", fragment: JSON.parse(JSON.stringify(fragment)) as Record<string, unknown>, x: left + placed.dx, y: top + placed.dy });
+    }
+    ops.push(...pastedInkOps(placed));
+    const compiled = this.#compileIntent(ops, null);
+    if (!compiled) return false;
+    const patches = joinedInkPatches(compiled.patches);
+    if (patches.length === 0 || !this.#commit(patches, "input")) return false;
+    this.#selection = compiled.created.slice(0, clipboard.nodes.length);
+    this.#edgeSelection = [];
+    this.#strokeSelection = this.#tool === "lasso"
+      ? new Set(placed.strokes.map((stroke) => inkKey("board", stroke.id)))
+      : new Set();
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+    return true;
+  }
+
+  /**
+   * «Copia», «Taglia» e «Incolla» del tasto destro. Copia e taglia mandano la
+   * copia del browser, la stessa di Ctrl+C; dove non parte, scrivono con gli
+   * appunti della shell (il tipo di Fub solo dove la shell lo accetta, come
+   * formato della pagina). Incolla legge gli appunti e passa da `#intake`
+   * come un Ctrl+V.
+   */
+  #clipboardMenu(op: SurfaceClipboardOp): void {
+    if (op === "paste") {
+      this.#pasteFromMenu();
+      return;
+    }
+    if (op !== "copy" && op !== "cut") return;
+    this.#clipboardCommand = op;
+    let sent = false;
+    try {
+      sent = typeof document.execCommand === "function" && document.execCommand("copy");
+    } catch {
+      sent = false;
+    } finally {
+      this.#clipboardCommand = null;
+    }
+    if (!sent) this.#writeCards(op === "cut");
+  }
+
+  /**
+   * Scrive le schede e i tratti liberi scelti con gli appunti della shell;
+   * con `cut` li toglie, solo dopo averli scritti. Dei soli tratti, dove la
+   * shell non accetta il tipo di Fub, non resterebbe niente negli appunti:
+   * l'avviso dice che la copia non è riuscita, e niente si toglie.
+   */
+  #writeCards(cut: boolean): void {
+    if (!this.#doc || (cut && this.#readOnly)) return;
+    const clipboard = copiedSelection(this.#doc, this.#selection, this.#chosenFreeStrokes());
+    if (!clipboard) return;
+    const markdown = cardsMarkdown(clipboard.nodes);
+    const web = `web ${CANVAS_CLIPBOARD_TYPE}`;
+    const typed = clipboardSupports(web);
+    if (!typed && clipboard.nodes.length === 0) {
+      this.#showNotice(t("editor_menu.copy_failed"));
+      return;
+    }
+    const write = typed
+      ? writeClipboardData({
+          "text/plain": new Blob([markdown], { type: "text/plain" }),
+          [web]: new Blob([clipboardJson(clipboard)], { type: CANVAS_CLIPBOARD_TYPE }),
+        })
+      : writeClipboardText(markdown);
+    const source = this.#source;
+    this.#lastPaste = null;
+    void write.then(
+      () => {
+        if (cut && !this.#destroyed && this.#source === source) this.#cutSelection(clipboard);
+      },
+      () => {
+        if (!this.#destroyed) this.#showNotice(t("editor_menu.copy_failed"));
+      },
+    );
+  }
+
+  /** «Incolla» del menu: gli appunti letti come li legge la lavagna vuota (`transferOf`, schede di Fub comprese). */
+  #pasteFromMenu(): void {
+    if (this.#readOnly || this.#destroyed) return;
+    readClipboard().then(async (entries) => {
+      const data = await transferOf(entries);
+      if (this.#destroyed) return;
+      if (data === null) this.#showNotice(t("canvas.blank.paste_none"));
+      else this.#receive(data);
+    }).catch(() => {
+      if (!this.#destroyed) this.#showNotice(t("editor_menu.paste_failed"));
+    });
   }
 
   #deleteSelection(): void {
     if (!this.#doc || this.#readOnly) return;
-    const patches: CanvasPatch[] = [];
-    const selected = new Set(this.#selection);
-    const edges = new Set(this.#edgeSelection);
-    for (const edge of this.#doc.edges) {
-      if (selected.has(edge.fromNode) || selected.has(edge.toNode)) edges.add(edge.id);
-    }
-    for (const id of edges) {
-      const patch = removeEdgePatch(this.#doc, id);
-      if (patch) patches.push(patch);
-    }
-    for (const id of selected) {
-      const patch = removeNodePatch(this.#doc, id);
-      if (patch) patches.push(patch);
-    }
-    if (patches.length && this.#commit(patches, "input")) {
+    if (this.#removeCards(this.#selection, this.#edgeSelection)) {
       this.#selection = [];
       this.#edgeSelection = [];
       this.#options.onSelectionChange();
     }
   }
 
-  #reorderSelection(where: "front" | "back"): void {
-    if (!this.#doc || this.#readOnly || !this.#selection.length) return;
-    const ids = this.#doc.nodes.map((n) => n.id);
-    const selected = new Set(this.#selection);
-    const rest = ids.filter((id) => !selected.has(id));
-    const after = where === "front" ? [...rest, ...this.#selection] : [...this.#selection, ...rest];
-    if (JSON.stringify(ids) === JSON.stringify(after)) return;
-    this.#commit([{ kind: "reorder", before: ids, after }], "input");
+  /**
+   * «Togli dalla lavagna» (Canc, Backspace, il menu, la scheda mancante):
+   * toglie le schede `nodes` e le linee `edges`, mai i file, e lo dice con
+   * «Annulla». «I file restano» solo se fra le tolte c'è una scheda di file;
+   * togliere solo dei fili, o dei tratti liberi `strokes` (il taglia del
+   * Lazo), non dice niente.
+   */
+  #removeCards(nodes: readonly string[], edges: readonly string[], strokes: readonly string[] = []): boolean {
+    if (!this.#doc) return false;
+    const gone = this.#doc.nodes.filter((node) => nodes.includes(node.id));
+    if (!this.#removeNodes(nodes, edges, strokes)) return false;
+    if (gone.length > 0) {
+      const files = gone.some((node) => node.type === "file");
+      const many = gone.length > 1;
+      const key = files
+        ? (many ? "canvas.card.removed_many" : "canvas.card.removed")
+        : (many ? "canvas.card.removed_plain_many" : "canvas.card.removed_plain");
+      this.#showRemoval(t(key, { n: String(gone.length) }), true);
+    }
+    return true;
   }
+
+  /**
+   * L'avviso di un togliere appena fatto, legato al suo passo d'annulla; con
+   * `undo` porta «Annulla». Va nel posto degli avvisi della tela.
+   */
+  #showRemoval(text: string, undo: boolean, free?: { readonly layer: InkLayerRef; readonly ids: readonly string[] }): void {
+    if (this.#destroyed) return;
+    this.#removal = free
+      ? { text, step: this.#undo[this.#undo.length - 1], undo, free }
+      : { text, step: this.#undo[this.#undo.length - 1], undo };
+    this.#drawToolbar();
+  }
+
+  /** La modifica dopo il togliere: il suo avviso se ne va. */
+  #dropRemoval(): void {
+    if (this.#removal === null) return;
+    this.#removal = null;
+    this.#drawToolbar();
+  }
+
+  /**
+   * «Annulla» dell'avviso: ciò che fa Ctrl+Z, finché il togliere è l'ultimo
+   * passo; dopo, l'avviso non c'è già più.
+   */
+  #undoRemoval(): void {
+    const removal = this.#removal;
+    if (removal === null || removal.step === undefined || this.#undo[this.#undo.length - 1] !== removal.step) {
+      this.#dropRemoval();
+      return;
+    }
+    this.undo();
+    this.#dropRemoval();
+    this.#statusSettle();
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * «Sposta anche il file nel cestino» (T17): i file delle schede scelte nel
+   * cestino, uno alla volta, con la porta dell'host (il gesto dell'albero);
+   * poi via dalla lavagna ogni scheda di un file che ci è andato, anche quelle
+   * non scelte (la stessa nota in due schede), e le schede scelte senza file.
+   * Un file che l'host rifiuta lascia le sue schede, e l'errore dell'host si
+   * legge nel posto degli avvisi. Mai da un tasto: il comando non ne ha.
+   */
+  async #trashSelectedFiles(): Promise<void> {
+    const trash = this.#options.onTrashPath;
+    if (!trash || !this.#doc || this.#readOnly) return;
+    const chosen = this.#selectedNodes();
+    const paths = [...new Set(chosen.filter((node) => node.type === "file").map((node) => cardTarget(node).path))]
+      .filter(isVaultPath);
+    if (!paths.length) return;
+    const plain = chosen.filter((node) => node.type !== "file").map((node) => node.id);
+    const document = this.#source;
+    const trashed: string[] = [];
+    let failure: unknown = null;
+    for (const path of paths) {
+      try {
+        if (await trash(path)) trashed.push(path);
+      } catch (error) {
+        failure = error;
+        break;
+      }
+      if (this.#destroyed) return;
+    }
+    if (this.#destroyed) return;
+    if (failure !== null) this.#showIntakeError(failure);
+    if (!trashed.length || !this.#doc || this.#readOnly) return;
+    // Le schede dei file andati, come sono adesso: il documento può essere
+    // cambiato durante l'attesa. Le schede senza file si tolgono solo se il
+    // documento è quello di quando il gesto è partito.
+    const gone = new Set(trashed);
+    const cards = this.#doc.nodes.filter((node) => node.type === "file" && gone.has(cardTarget(node).path)).map((node) => node.id);
+    const ids = [...cards, ...(this.#source === document ? plain : [])];
+    if (!this.#removeNodes(ids, [])) return;
+    this.#pruneSelection();
+    this.#options.onSelectionChange();
+    const key = trashed.length > 1
+      ? "canvas.card.trashed_files"
+      : ids.length > 1 ? "canvas.card.trashed_many" : "canvas.card.trashed";
+    this.#showRemoval(t(key, { n: String(ids.length), name: fileName(trashed[0]!), files: String(trashed.length) }), false);
+  }
+
+  /**
+   * «Spargi le pagine…» (T72): una scheda per pagina del PDF scelto, in riga
+   * accanto alla sua, a capo ogni 10 e in gruppo oltre 12. Chiede le pagine (di
+   * serie tutte), chiede conferma oltre `SPREAD_CONFIRM_ABOVE`, misura ogni
+   * pagina come nasce un PDF (T29) e scrive tutto con `spread_pages` (T23), in
+   * un passo solo: un annulla le toglie. Il file non si cambia.
+   */
+  async #spreadPages(): Promise<void> {
+    const pages = this.#options.cards?.pdfPages;
+    const chosen = this.#selectedNodes();
+    const one = chosen.length === 1 ? chosen[0]! : null;
+    if (!pages || !this.#doc || this.#readOnly || one?.type !== "file" || cardKindOf(one) !== "pdf") return;
+    const path = cardTarget(one).path;
+    if (!isVaultPath(path)) return;
+    const id = one.id;
+    const epoch = this.#epoch;
+    // Dopo ogni attesa: la lavagna è ancora quella, e la scheda c'è ancora.
+    const alive = (): boolean => !this.#destroyed && !this.#readOnly && this.#epoch === epoch
+      && this.#doc !== null && this.#doc.nodes.some((node) => node.id === id);
+    const count = await pages.count(path);
+    if (!alive()) return;
+    if (count === null) {
+      this.#markBroken(path);
+      this.#showIntakeError(t("canvas.card.unreadable", { name: fileName(path) }));
+      return;
+    }
+    this.#forgetBroken(path);
+    const wanted = await this.#askPages(fileName(path), count);
+    if (wanted === null || !alive()) return;
+    if (wanted.length > SPREAD_CONFIRM_ABOVE && !(await this.#confirmSpread(wanted.length))) return;
+    if (!alive()) return;
+    const measured = await pages.sizes(path, wanted);
+    if (!alive()) return;
+    this.#writeOps(this.#spreadOps(id, wanted, count, measured));
+  }
+
+  /**
+   * La forma in codice di «Spargi le pagine» (T23): `page_sizes` va per numero
+   * di pagina, e una pagina non misurata ha `[0, 0]`, che il nucleo fa nascere
+   * come la GUI senza misura. L'etichetta del gruppo è quella della lingua.
+   */
+  #spreadOps(
+    id: string,
+    wanted: readonly number[],
+    count: number,
+    measured: readonly ({ readonly width: number; readonly height: number } | null | undefined)[] = [],
+  ): CanvasIntentOp[] {
+    const last = Math.max(0, ...wanted);
+    const sizes: number[][] = Array.from({ length: last }, () => [0, 0]);
+    wanted.forEach((page, index) => {
+      const size = measured[index];
+      if (size) sizes[page - 1] = [size.width, size.height];
+    });
+    return [{
+      op: "spread_pages", id, pages: [...wanted], page_count: count,
+      ...(measured.some(Boolean) ? { page_sizes: sizes } : {}),
+      label: t("canvas.spread.group", { count: String(wanted.length) }),
+    }];
+  }
+
+  /**
+   * Chiede quali pagine «Spargi le pagine» deve fare (T72): `null` se si rinuncia.
+   * Il campo parte da tutte le pagine e dice a ogni tasto che cosa nascerà; un
+   * pezzo che non si legge non chiude il dialogo, e il dialogo dice quale.
+   */
+  #askPages(name: string, count: number): Promise<readonly number[] | null> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const note = document.createElement("p");
+    note.className = "kit-dialog-description";
+    const field = textField({
+      label: t("canvas.spread.field"),
+      value: count > 1 ? `1-${count}` : "1",
+      placeholder: t("canvas.spread.placeholder"),
+      lifetime: own,
+      onInput: () => say(),
+    });
+    const say = (): void => {
+      const ranges = parsePageRanges(field.value(), count);
+      note.textContent = ranges.ok
+        ? (ranges.cut
+          ? t("canvas.spread.cut", { pages: String(count), n: String(ranges.pages.length) })
+          : t("canvas.spread.count", { n: String(ranges.pages.length) }))
+        : ranges.bad === null
+          ? t("canvas.spread.none", { pages: String(count) })
+          : t("canvas.spread.bad", { text: ranges.bad });
+    };
+    const body = document.createElement("div");
+    body.append(field.element, note);
+    say();
+    const handle = openDialog<"spread" | "cancel">({
+      title: t("canvas.spread.title"),
+      description: t("canvas.spread.description", { name, pages: String(count) }),
+      body,
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: "cancel" },
+        { id: "spread", label: t("canvas.spread.action"), kind: "primary", value: "spread" },
+      ],
+      dismissValue: "cancel",
+      lifetime: own,
+      submit: "spread",
+      confirm: (value) => value === "cancel" || parsePageRanges(field.value(), count).ok,
+    });
+    return handle.result.then((value) => {
+      own.close();
+      if (value !== "spread") return null;
+      const ranges = parsePageRanges(field.value(), count);
+      return ranges.ok ? ranges.pages : null;
+    });
+  }
+
+  /** La conferma prima di far nascere più di `SPREAD_CONFIRM_ABOVE` schede (T72); «Annulla» di serie. */
+  #confirmSpread(count: number): Promise<boolean> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const handle = openDialog<boolean>({
+      title: t("canvas.spread.confirm.title", { n: String(count) }),
+      description: t("canvas.spread.confirm.description", { n: String(count) }),
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: false, autofocus: true },
+        { id: "spread", label: t("canvas.spread.action"), kind: "primary", value: true },
+      ],
+      dismissValue: false,
+      lifetime: own,
+    });
+    return handle.result.then((yes) => {
+      own.close();
+      return yes;
+    });
+  }
+
+  /**
+   * Che cosa copia «Copia come codice»: senza niente di scelto la lavagna
+   * intera (`null`); se no le schede scelte (con gli archi fra loro e il loro
+   * inchiostro) e i tratti liberi scelti col Lazo. Un arco o un tratto di
+   * scheda scelti senza le loro schede non si copiano da soli: allora
+   * `"partial"`, e la voce è spenta col perché.
+   */
+  #codeSelection(): { readonly cards: readonly string[]; readonly free: readonly string[] } | null | "partial" {
+    const cards = this.#selectedNodes().map((node) => node.id);
+    const strokes = this.#chosenStrokes();
+    if (cards.length === 0 && this.#edgeSelection.length === 0 && strokes.length === 0) return null;
+    const chosen = new Set(cards);
+    const edges = this.#doc?.edges ?? [];
+    const lonely = this.#edgeSelection.some((id) => {
+      const edge = edges.find((one) => one.id === id);
+      return !edge || !chosen.has(edge.fromNode) || !chosen.has(edge.toNode);
+    });
+    if (lonely || strokes.some((unit) => unit.node !== null)) return "partial";
+    return { cards, free: strokes.map((unit) => unit.id) };
+  }
+
+  /** Perché «Copia come codice» è spento: la lavagna vuota, o una scelta che non si copia. */
+  #copyCodeWhy(): string | null {
+    if (!this.#doc || isEmptyBoard(this.#doc)) return t("canvas.commands.why.empty");
+    return this.#codeSelection() === "partial" ? t("canvas.copy_code.why") : null;
+  }
+
+  /**
+   * «Copia come codice» (LIC T25): ciò che è scelto, o la lavagna intera
+   * senza selezione, come la lista di operazioni che lo rifà, negli appunti
+   * come testo. Le schede le scrive il nucleo (`canvas_describe`); i tratti
+   * liberi scelti seguono in una `add_strokes` della radice, com'è nel file
+   * (la stessa forma di `describe`). Non scrive la lavagna.
+   */
+  #copyCode(): void {
+    const core = this.#core;
+    const doc = this.#doc;
+    if (this.#destroyed || !core || !doc || this.#copyCodeWhy() !== null) return;
+    this.#recordPending();
+    const chosen = this.#codeSelection();
+    if (chosen === "partial") return;
+    let text: string;
+    try {
+      if (chosen === null) text = core.describe();
+      else {
+        const ops = chosen.cards.length > 0 ? JSON.parse(core.describe(chosen.cards)) as unknown[] : [];
+        const free = copiedSelection(doc, [], chosen.free)?.[INK_KEY]?.strokes ?? [];
+        if (free.length > 0) ops.push({ op: "add_strokes", layer: "board", strokes: free });
+        text = JSON.stringify(ops, null, 2);
+      }
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#showNotice(t("editor_menu.copy_failed"));
+        return;
+      }
+      throw error;
+    }
+    writeClipboardText(text).catch(() => {
+      if (!this.#destroyed) this.#showNotice(t("editor_menu.copy_failed"));
+    });
+  }
+
+  /** Un avviso di «Incolla codice» senza finestra: il fuoco torna alla tela, dove si era. */
+  #pasteNotice(text: string): void {
+    this.#showNotice(text);
+    if (!this.#destroyed) this.#viewport.focus({ preventScroll: true });
+  }
+
+  /** Il controllo del nucleo, o `null` se il nucleo è morto (allora la tela si riapre) o rifiuta la chiamata. */
+  #checkCode(ops: readonly unknown[], seed: bigint): CanvasCheckReport | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.check(ops, seed);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#pasteNotice(t("canvas.change_refused"));
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * «Incolla codice» (LIC T25): legge il testo degli appunti una volta come
+   * lista (`readCodeList`), e dà lo stesso valore al controllo del nucleo
+   * (`canvas_check`) e poi alla scrittura, con lo stesso seme: gli id nati
+   * sono quelli del riassunto. Se la lista nomina schede, archi o tratti che
+   * la lavagna ha già, la finestra offre «Aggiorna le schede» e «Aggiungi
+   * come copie» (`code-paste.ts`); se no «Incolla». Un passo d'annulla in
+   * ogni caso. Un problema, appunti vuoti o una lista che non cambia niente
+   * li dice l'avviso, senza finestra; Esc o «Annulla» non scrivono.
+   */
+  async #pasteCode(): Promise<void> {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    // L'avviso di un incolla di prima non resta dietro la finestra di questo.
+    if (this.#intakeError) this.#showNotice("");
+    let text: string;
+    try {
+      text = await clipboardText();
+    } catch {
+      if (!this.#destroyed) this.#pasteNotice(t("editor_menu.paste_failed"));
+      return;
+    }
+    if (this.#destroyed || this.#readOnly || !this.#core || !this.#doc || this.#isSceneOversized()) return;
+    const read = readCodeList(text);
+    if (!read.ok) {
+      this.#pasteNotice(codeTextProblem(read.problem));
+      return;
+    }
+    this.#recordPending();
+    const doc = this.#doc;
+    const clashes = codeClashes(doc, read.ops);
+    if (!clashes.ok) {
+      const { index, id, kind } = clashes.kind;
+      this.#pasteNotice(t("canvas.paste_code.kind", {
+        n: String(index + 1), id, kind: t(`canvas.paste_code.kind.${kind}` as Key),
+      }));
+      return;
+    }
+    const seed = this.#seed();
+    const source = this.#source;
+    // Le copie cadono come un Ctrl+V: il punto si prende ora, dov'era il puntatore.
+    const spot = this.#pasteSpot(text);
+    const choices: PasteChoice[] = [];
+    if (!clashes.clashes) {
+      const report = this.#checkCode(read.ops, seed);
+      if (!report) return;
+      if (!report.ok || !report.summary) {
+        this.#pasteNotice(checkProblemText(report.problems[0]));
+        return;
+      }
+      const said = summaryText(report.summary);
+      if (said === "") {
+        this.#pasteNotice(t("canvas.paste_code.nothing"));
+        return;
+      }
+      choices.push({ id: "paste", ops: read.ops, said, report });
+    } else {
+      const update = asUpdates(doc, read.ops);
+      const copies = asCopies(doc, read.ops, seed, placedAt(spot.at));
+      for (const [id, ops, updated] of [["update", update.ops, update.updated], ["copies", copies, new Set<string>()]] as const) {
+        const report = this.#checkCode(ops, seed);
+        if (!report) return;
+        const said = report.ok && report.summary ? summaryText(report.summary, updated) : "";
+        choices.push({ id, ops, said, report });
+      }
+      if (choices.every((choice) => choice.said === "")) {
+        const refused = choices.find((choice) => !choice.report.ok);
+        this.#pasteNotice(refused ? checkProblemText(refused.report.problems[0]) : t("canvas.paste_code.nothing"));
+        return;
+      }
+    }
+    const chosen = await this.#confirmPaste(choices, clashes.clashes);
+    if (!chosen || this.#destroyed) return;
+    // Intanto la lavagna può essere cambiata (un altro riquadro, il disco), o
+    // diventata di sola lettura o troppo grande: il riassunto non dice più il
+    // vero, e non si scrive. Mai il silenzio.
+    if (this.#readOnly || this.#isSceneOversized() || !this.#doc) {
+      this.#pasteNotice(t("canvas.paste_code.locked"));
+      return;
+    }
+    if (this.#source !== source) {
+      this.#pasteNotice(t("canvas.paste_code.changed"));
+      return;
+    }
+    const created = this.#writeOps(chosen.ops as CanvasIntentOp[], "canvas.change_refused", seed);
+    if (!created || this.#destroyed || !this.#doc) return;
+    if (chosen.id === "copies") this.#lastPaste = spot.last;
+    const born = new Set(this.#doc.nodes.map((node) => node.id));
+    const cards = created.filter((id) => born.has(id));
+    if (cards.length > 0) {
+      this.#selection = cards;
+      this.#edgeSelection = [];
+      this.#displaySelection();
+      this.#options.onSelectionChange();
+    }
+  }
+
+  /**
+   * La conferma di «Incolla codice»: il riassunto di ogni scelta e gli
+   * avvisi. Senza id presi una scelta, «Incolla»; con id presi «Aggiorna le
+   * schede» (proposta) e «Aggiungi come copie», ognuna col suo riassunto, o
+   * col suo problema e senza bottone se non si può. «Annulla» di serie, Esc
+   * come «Annulla».
+   */
+  #confirmPaste(choices: readonly PasteChoice[], clashes: CodeClashes | null): Promise<PasteChoice | null> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const sentences: string[] = [];
+    const usable = choices.filter((choice) => choice.said !== "");
+    if (!clashes) sentences.push(t("canvas.paste_code.description", { summary: choices[0]!.said }));
+    else {
+      const named = [
+        [clashes.cards.length, "cards"], [clashes.edges.length, "edges"], [clashes.strokes, "strokes"],
+      ] as const;
+      const list = named.filter(([count]) => count > 0)
+        .map(([count, what]) => plural(count, `canvas.paste_code.count.${what}.one` as Key, `canvas.paste_code.count.${what}` as Key));
+      sentences.push(t("canvas.paste_code.clash", { list: list.join(", ") }));
+      for (const choice of choices) {
+        const problem = choice.report.ok ? null : choice.report.problems[0];
+        const summary = problem
+          ? t("canvas.paste_code.option_refused", { n: String((problem.index ?? 0) + 1), problem: problemPhrase(problem) })
+          : choice.said || t("canvas.paste_code.option_nothing");
+        sentences.push(t(choice.id === "update" ? "canvas.paste_code.as_update" : "canvas.paste_code.as_copies", { summary }));
+      }
+    }
+    // Gli avvisi della scelta proposta (la prima che si può).
+    const first = usable[0];
+    const warnings = first ? warningsText(first.report.warnings, first.report.warnings_omitted) : "";
+    if (warnings !== "") sentences.push(warnings);
+    const labels: Readonly<Record<PasteChoice["id"], Key>> = {
+      paste: "canvas.paste_code.action",
+      update: "canvas.paste_code.update",
+      copies: "canvas.paste_code.copies",
+    };
+    const handle = openDialog<PasteChoice | null>({
+      title: t("canvas.paste_code.title"),
+      description: sentences.join(" "),
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: null, autofocus: true },
+        // Prima le copie, poi la proposta, che è il bottone pieno in fondo.
+        ...[...usable].reverse().map((choice, index, all) => ({
+          id: choice.id,
+          label: t(labels[choice.id]),
+          value: choice,
+          ...(index === all.length - 1 ? { kind: "primary" as const } : {}),
+        })),
+      ],
+      dismissValue: null,
+      lifetime: own,
+    });
+    return handle.result.then((chosen) => {
+      own.close();
+      return chosen;
+    });
+  }
+
+  /** Un PDF che non si apre: «Spargi le pagine» si spegne, finché il file non cambia (T72). */
+  #markBroken(path: string): void {
+    if (this.#destroyed || this.#pdfBroken.has(path)) return;
+    const stop = this.#options.cards?.watch(path, () => this.#forgetBroken(path));
+    this.#pdfBroken.set(path, stop ?? (() => {}));
+  }
+
+  /** Il file di un PDF guasto è cambiato, è tornato o si è aperto: il comando torna acceso. */
+  #forgetBroken(path: string): void {
+    const stop = this.#pdfBroken.get(path);
+    if (stop === undefined) return;
+    this.#pdfBroken.delete(path);
+    stop();
+  }
+
+  /**
+   * Toglie le schede `nodes` e le linee `edges`, con le linee che le tengono,
+   * e i tratti `strokes` del livello della radice: un commit solo, che un
+   * annulla riporta. `false` se non c'era niente da togliere, o se un tratto
+   * non si toglie (allora non si toglie niente).
+   */
+  #removeNodes(nodes: readonly string[], edges: readonly string[], strokes: readonly string[] = []): boolean {
+    if (!this.#doc) return false;
+    if (strokes.length === 0) return this.#writeOps(this.#removeOps(nodes, edges)) !== null;
+    // Il taglia del Lazo, coi tratti liberi: un gesto degli appunti (T24),
+    // con `erase_strokes` e `remove` in una lista sola.
+    const ops: CanvasIntentOp[] = [{ op: "erase_strokes", layer: "board", ids: [...strokes] }];
+    ops.push(...(this.#removeOps(nodes, edges) ?? []));
+    return this.#writeOps(ops, null) !== null;
+  }
+
+  /**
+   * `remove` delle schede `nodes` e dei fili `edges` che ci sono (i fili che
+   * toccano una scheda tolta li toglie il nucleo); `null` se nessuno c'è.
+   */
+  #removeOps(nodes: readonly string[], edges: readonly string[]): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const cards = new Set(doc.nodes.map((node) => node.id));
+    const wires = new Set(doc.edges.map((edge) => edge.id));
+    const ids = [...new Set([...nodes.filter((id) => cards.has(id)), ...edges.filter((id) => wires.has(id))])];
+    return ids.length > 0 ? [{ op: "remove", ids }] : null;
+  }
+
+  #reorderSelection(where: "front" | "back"): void {
+    if (!this.#doc || this.#readOnly) return;
+    this.#writeOps(this.#reorderOps(where));
+  }
+
+  /** `reorder` delle schede scelte, nell'ordine in cui sono state scelte. */
+  #reorderOps(where: "front" | "back"): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (ids.length === 0) return null;
+    return [where === "front" ? { op: "reorder", ids } : { op: "reorder", ids, to: "back" }];
+  }
+
+  // --- i comandi (T48) --------------------------------------------------------------
+
+  /**
+   * I comandi della lavagna adesso: il catalogo (`chrome/commands.ts`) con
+   * ciò che fanno qui. Li leggono il menu del tasto destro, i tasti e la
+   * ricerca dei comandi.
+   */
+  commands(): CanvasCommand[] {
+    if (this.#destroyed) return [];
+    return buildCanvasCommands((id) => this.#commandBehaviour(id), t);
+  }
+
+  // --- la banda di stato (T52) ------------------------------------------------
+
+  /** Le voci della banda adesso (`EditorSurface.status`): nessuna senza una lavagna. */
+  statusItems(): SurfaceStatusItem[] {
+    if (this.#destroyed || !this.#doc) return [];
+    return canvasStatusItems(this.#statusPort());
+  }
+
+  /** Ciò che la banda legge della lavagna e ciò che può chiederle. */
+  #statusPort(): CanvasStatusPort {
+    const port: CanvasStatusPort = {
+      zoomPercent: () => Math.round(this.#camera.zoom * 100),
+      chosenCount: () => this.#selection.length,
+      writing: () => {
+        const id = this.#writingId;
+        const entry = id === null ? undefined : this.#cards.get(id);
+        if (!entry || entry.article.dataset.cardEditing === undefined) return null;
+        // In un foglio, anche la cella: «Misure.xlsx · D4» (T27).
+        const cell = this.#writingContext?.cell ?? "";
+        return cell === "" ? writingName(entry.node) : `${writingName(entry.node)} · ${cell}`;
+      },
+      readOnlyWhy: () => (this.#readOnly
+        ? (this.#unwritable ? t("canvas.unwritable") : t("canvas.status.readonly.panel"))
+        : null),
+      folder: () => dropFolderOf(this.#attachmentDeclared, this.#dropChoice, this.#options.documentId ?? ""),
+      twins: () => {
+        const ids = this.#shownTwins();
+        if (ids === null) return null;
+        return {
+          count: ids.length,
+          frame: () => {
+            const chosen = new Set(ids);
+            const nodes = this.#doc?.nodes.filter((node) => chosen.has(node.id)) ?? [];
+            if (nodes.length === 0) return;
+            this.#fitCamera(true, nodes);
+            this.#statusSettle();
+          },
+        };
+      },
+      zoomTo: (zoom) => {
+        if (this.#destroyed || !this.#doc) return;
+        const rect = this.#viewport.getBoundingClientRect();
+        this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, zoom / this.#camera.zoom);
+        this.#statusSettle();
+      },
+      command: (id) => {
+        const found = this.commands().find((command) => command.id === id);
+        if (!found) return null;
+        return {
+          label: found.label,
+          hint: commandHint(found),
+          disabled: found.disabled(),
+          run: () => {
+            found.run();
+            this.#statusSettle();
+          },
+        };
+      },
+      zoomMenuAt: () => {
+        const rect = this.#viewport.getBoundingClientRect();
+        return { x: Math.round(rect.right), y: Math.round(rect.bottom) };
+      },
+    };
+    const openSettings = this.#options.onOpenSettings;
+    return openSettings ? { ...port, openSettings } : port;
+  }
+
+  /**
+   * Avvisa la banda se una sua voce è cambiata, a fine gesto: dentro un gesto
+   * (un trascinamento, una panoramica, la rotella che gira) non dice niente, e
+   * con la stessa firma di prima non avvisa.
+   */
+  #statusSettle(): void {
+    // La barra della selezione si rilegge anche lei qui: dentro un gesto sparisce.
+    this.#syncSelectionBar();
+    if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
+    // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
+    this.#navigator.settle();
+    this.#twinsShown = this.#twinsKey();
+    const shown = statusSignature(canvasStatusItems(this.#statusPort()));
+    if (shown === this.#statusShown) return;
+    this.#statusShown = shown;
+    this.#options.onStatusChange?.();
+  }
+
+  // --- la testata: «↩ N» e le gemelle (T22) ----------------------------------
+
+  /** Rifà la testata di ogni scheda: un conto nuovo dall'indice, la lingua. */
+  #syncHeads(): void {
+    if (this.#destroyed) return;
+    for (const entry of this.#cards.values()) this.#syncHead(entry);
+  }
+
+  /**
+   * Chiede i conti «↩ N» della zona (`headZonePaths`): le schede in vista o
+   * vicine, dallo zoom in cui la testata si vede, più quelle che lavorano.
+   * Lo chiamano la resa e la fine di ogni gesto (`#refreshLive`); a lavagna
+   * nascosta o a gesto in corso non chiede niente.
+   */
+  #askCitations(nodes: readonly CanvasNode[] | undefined = this.#doc?.nodes): void {
+    const citations = this.#citations;
+    if (!citations || !nodes || this.#destroyed) return;
+    if (this.#gestureActive() || !this.#isShown()) return;
+    const kept = new Set<string>();
+    for (const id of [this.#activeId, this.#enteringId, this.#writingId]) if (id !== null) kept.add(id);
+    const { view, zoom } = this.#viewRect();
+    citations.want(headZonePaths(nodes, view, zoom, kept));
+  }
+
+  /** «↩ N» e «×N» nella testata di `entry`, e `data-card-twin` se le sue gemelle sono illuminate. */
+  #syncHead(entry: CardEntry): void {
+    const path = cardFilePath(entry.node);
+    const cites = path !== "" && this.#citations ? this.#citations.get(path) : 0;
+    const twins = path !== "" ? this.#twins.get(path)?.length ?? 0 : 0;
+    syncCardHead(entry.title, cites, twins);
+    const lit = twins > 1 && this.#litTwins?.path === path;
+    if (lit !== entry.article.hasAttribute("data-card-twin")) entry.article.toggleAttribute("data-card-twin", lit);
+  }
+
+  /** Illumina le gemelle della scheda che porta il «×N» `button`. */
+  #lightTwinsFrom(button: Element): void {
+    const id = button.closest<HTMLElement>(".canvas-node")?.dataset.node;
+    this.#lightTwins(id ?? null);
+  }
+
+  /**
+   * Illumina tutte le schede che mostrano il file della scheda `id`, lei
+   * compresa, anche fuori dalla vista; `null` le spegne. La banda dice quante
+   * sono e le inquadra.
+   */
+  #lightTwins(id: string | null): void {
+    const node = id === null ? undefined : this.#cards.get(id)?.node;
+    const path = node ? cardFilePath(node) : "";
+    const next = id !== null && path !== "" && this.#twins.has(path) ? { from: id, path } : null;
+    const now = this.#litTwins;
+    if (now?.from === next?.from && now?.path === next?.path) return;
+    this.#litTwins = next;
+    const touched = new Set([...(now ? this.#twins.get(now.path) ?? [] : []), ...(next ? this.#twins.get(next.path) ?? [] : [])]);
+    for (const twin of touched) {
+      const entry = this.#cards.get(twin);
+      if (entry) this.#syncHead(entry);
+    }
+    this.#statusSettle();
+  }
+
+  /**
+   * Le gemelle che la banda dice: quelle illuminate, o quelle della sola
+   * scheda scelta; `null` se nessuna.
+   */
+  #shownTwins(): readonly string[] | null {
+    let path = this.#litTwins?.path ?? null;
+    if (path === null && this.#selection.length === 1) {
+      const node = this.#cards.get(this.#selection[0]!)?.node;
+      path = node ? cardFilePath(node) : null;
+    }
+    return path ? this.#twins.get(path) ?? null : null;
+  }
+
+  /** Una firma delle gemelle della banda: se cambia, la banda si rilegge. */
+  #twinsKey(): string {
+    const ids = this.#shownTwins();
+    return ids === null ? "" : `${ids.length}\u0000${ids.join("\u0001")}`;
+  }
+
+  /** Che cosa fa il comando `id` su questa tela, o `null` se non lo conosce. */
+  #commandBehaviour(id: string): CanvasCommandBehaviour | null {
+    const writable = (): string | null => (this.#readOnly ? t("canvas.commands.why.read_only") : null);
+    const withSelection = (): string | null =>
+      writable() ?? (this.#selectedNodes().length > 0 ? null : t("canvas.commands.why.no_selection"));
+    const withNodes = (): string | null => (this.#doc?.nodes.length ? null : t("canvas.commands.why.empty"));
+    const only = (): CanvasNode | null => {
+      const nodes = this.#selectedNodes();
+      return nodes.length === 1 ? nodes[0]! : null;
+    };
+    const center = (): { x: number; y: number } => {
+      const rect = this.#viewport.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    };
+    const world = (args?: CanvasCommandArgs) => (args?.at ? this.#screenToWorld(args.at.x, args.at.y) : undefined);
+    const add = (type: CanvasNode["type"]): CanvasCommandBehaviour => ({
+      disabled: writable,
+      op: (input) => this.#addOps(type, undefined, world(input)),
+      run: (args) => this.#addNode(type, undefined, world(args)),
+    });
+    if (id.startsWith("canvas.color.")) {
+      // I colori (T47): nessuno, i sei, i nove delle note; «Altro…» apre il
+      // selettore del kit.
+      const choice = id.slice("canvas.color.".length) as CanvasColorId;
+      if (!(CANVAS_COLORS as readonly string[]).includes(choice)) return null;
+      return {
+        disabled: () => writable() ?? (this.#selectedNodes().length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
+        // «Altro…» scrive il colore che il selettore dà (`value`).
+        op: (input) => {
+          const value = colorValueOf(choice);
+          if (value === null) return input?.value === undefined ? null : this.#colorOps(input.value, input.edge);
+          return this.#colorOps(value, input?.edge);
+        },
+        run: (args) => {
+          const value = colorValueOf(choice);
+          if (value === null) this.#openColorPicker(args?.edge);
+          else this.#colorSelection(value, args?.edge);
+        },
+      };
+    }
+    if (id.startsWith("canvas.layout.")) {
+      // «Disponi» (LIC T25): `layout` sulle schede scelte, o su tutte quelle
+      // fuori dai gruppi; le posizioni le decide il nucleo.
+      const kind = id.slice("canvas.layout.".length) as CanvasLayout;
+      if (!(CANVAS_LAYOUTS as readonly string[]).includes(kind)) return null;
+      return {
+        disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : this.#layoutWhy()),
+        op: () => this.#layoutOps(kind),
+        run: () => this.#arrangeLayout(kind),
+      };
+    }
+    if (id.startsWith("canvas.align.")) {
+      const axis = id.slice("canvas.align.".length) as CanvasAlign;
+      if (!(CANVAS_ALIGN as readonly string[]).includes(axis)) return null;
+      return {
+        disabled: () => writable() ?? (this.#selectedNodes().length >= 2 ? null : t("canvas.commands.why.two")),
+        op: () => this.#arrangeOps(axis),
+        run: () => this.#layoutSelection(axis),
+      };
+    }
+    if (id.startsWith("canvas.text_size.") || id.startsWith("canvas.text_align.")) {
+      // La misura e l'allineamento del testo (T92): delle schede di testo
+      // scelte, in un commit, e delle prossime dello strumento Testo.
+      const size = id.startsWith("canvas.text_size.") ? id.slice("canvas.text_size.".length) : null;
+      const align = id.startsWith("canvas.text_align.") ? id.slice("canvas.text_align.".length) : null;
+      const change: Partial<TextStyle> | null = isTextSize(size) ? { size } : isTextAlign(align) ? { align } : null;
+      if (change === null) return null;
+      return {
+        disabled: () => writable()
+          ?? (this.#isSceneOversized() ? t("canvas.too_large") : null)
+          ?? (this.#tool === "text" || this.#chosenTextNodes().length > 0 ? null : t("canvas.commands.why.no_text_card")),
+        // Le prossime schede del Testo non sono nel file: scrivono solo le scelte.
+        op: () => this.#styleTextOps(change),
+        run: () => this.#styleText(change),
+      };
+    }
+    if (id.startsWith("canvas.tips.")) {
+      const tip = id.slice("canvas.tips.".length) as CanvasTip;
+      if (!(CANVAS_TIPS as readonly string[]).includes(tip)) return null;
+      return {
+        disabled: writable,
+        run: () => {
+          this.#tips = tip;
+          this.#canvasOptions.sync();
+        },
+      };
+    }
+    if (id.startsWith("canvas.nudge.")) {
+      const [way, far] = id.slice("canvas.nudge.".length).split(".") as [CanvasNudge, string | undefined];
+      const step = far === "far" ? CANVAS_SNAP * 4 : far === "fine" ? 1 : CANVAS_SNAP;
+      const dx = way === "left" ? -step : way === "right" ? step : 0;
+      const dy = way === "up" ? -step : way === "down" ? step : 0;
+      return {
+        disabled: withNodes,
+        // In sola lettura le frecce scelgono la scheda vicina: non scrivono.
+        op: () => (this.#readOnly ? null : this.#nudgeOps(dx, dy)),
+        run: () => this.#nudge(dx, dy, way === "down" || way === "right"),
+      };
+    }
+    const tool = toolOfCommand(id);
+    if (tool !== null) {
+      // C con due schede scelte le collega: la sola volta che uno strumento
+      // scrive. Con un filo scelto C non collega (`run` sotto), e così `op`.
+      const pair = tool === "connect" ? { op: () => (this.#edgeSelection.length > 0 ? null : this.#connectPairOps()) } : {};
+      return {
+        disabled: () => (CANVAS_WRITING_TOOLS.has(tool) ? writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null) : null),
+        ...pair,
+        run: () => {
+          // C con una scheda scelta comincia il filo da lei, come «Collega…»
+          // (T17); con due le collega (T67, D-19 (a)); senza, sceglie lo
+          // strumento.
+          const chosen = tool === "connect" && this.#edgeSelection.length === 0 ? this.#selectedNodes() : [];
+          if (chosen.length === 2) this.#connectPair(chosen[0]!, chosen[1]!);
+          else if (chosen.length === 1) this.#beginConnectFrom(chosen[0]!.id);
+          else this.#pickTool(tool);
+        },
+      };
+    }
+    if (id === "canvas.parts") {
+      // «Parti…» (T74): una sola scheda di nota; spenta se la nota, l'ultima
+      // volta che se ne è letto il sommario, non aveva due sezioni.
+      if (!this.#options.parts) return null;
+      return {
+        disabled: () => {
+          const why = writable();
+          if (why !== null) return why;
+          const one = only();
+          if (!one || !this.#partsNote(one)) return t("canvas.commands.why.one_note");
+          const count = this.#partsCounts.get(one.file!);
+          return count !== undefined && count < PARTS_PICKER_MIN_SECTIONS ? t("canvas.commands.why.no_sections") : null;
+        },
+        run: () => {
+          const one = only();
+          if (one && this.#partsNote(one)) void this.#openParts(one.id, "command");
+        },
+      };
+    }
+    if (id === "canvas.whole_file") {
+      // «Mostra tutto il file» (T75): la scheda-estratto torna la nota intera.
+      return {
+        disabled: () => {
+          const why = writable();
+          if (why !== null) return why;
+          const one = only();
+          return one && noteExcerptOf(one) ? null : t("canvas.commands.why.one_excerpt");
+        },
+        op: () => {
+          const one = only();
+          return one ? this.#wholeFileOps(one.id) : null;
+        },
+        run: () => {
+          const one = only();
+          if (one) this.#showWholeFile(one.id);
+        },
+      };
+    }
+    if (id === "canvas.crop") {
+      // «Ritaglia e ruota» (T78): senza il renderer delle immagini non c'è
+      // niente da tagliare, e il comando non c'è.
+      if (!this.#cropRenderer()) return null;
+      return {
+        disabled: () => {
+          const why = writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null);
+          if (why !== null) return why;
+          const one = only();
+          if (!one || !this.#cropImage(one)) return t("canvas.commands.why.one_image");
+          return this.#cropUnreadable(one.id) ? t("canvas.crop.why.unreadable") : null;
+        },
+        run: () => {
+          const one = only();
+          if (one) this.#beginCrop(one.id);
+        },
+      };
+    }
+    if (id === "canvas.extract_note" || id === "canvas.copy_note_text") {
+      // Convertire (T70): senza la porta delle note i due comandi non ci sono.
+      if (!this.#options.notes) return null;
+      if (id === "canvas.extract_note") {
+        return {
+          disabled: () => writable() ?? (only()?.type === "text" ? null : t("canvas.commands.why.one_text")),
+          // `value` è il percorso della nota appena nata: la crea la shell, prima.
+          op: (input) => {
+            const one = only();
+            return one?.type === "text" && input?.value ? [{ op: "convert", id: one.id, file: input.value }] : null;
+          },
+          run: () => {
+            const one = only();
+            if (one?.type === "text") void this.#extractNote(one.id).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      }
+      return {
+        disabled: () => {
+          const one = only();
+          return writable() ?? (one && cardKindOf(one) === "note" ? null : t("canvas.commands.why.one_note"));
+        },
+        // `value` è il testo letto dalla nota (o dalle sezioni dell'estratto).
+        op: (input) => {
+          const one = only();
+          return one && cardKindOf(one) === "note" && input?.value !== undefined ? this.#copyNoteTextOps(one, input.value) : null;
+        },
+        run: () => {
+          const one = only();
+          if (one && cardKindOf(one) === "note") void this.#copyNoteText(one.id).catch((error: unknown) => this.#showIntakeError(error));
+        },
+      };
+    }
+    switch (id) {
+      case "canvas.replace_file":
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            if (!this.#options.onPickFile) return t("canvas.commands.why.no_file_picker");
+            return only()?.type === "file" ? null : t("canvas.commands.why.one_file");
+          },
+          // `value` è il file scelto nel selettore.
+          op: (input) => {
+            const one = only();
+            return one?.type === "file" && input?.value ? this.#replaceFileOps(one, input.value) : null;
+          },
+          run: () => {
+            const one = only();
+            if (one?.type === "file") void this.#replaceFile(one.id).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      // «Il dito scrive» (T64): una scelta di questo computer, anche in sola lettura.
+      case "canvas.finger_writes":
+        return {
+          disabled: () => null,
+          run: () => this.#setFingerWrites(!this.#fingerWritesSetting),
+        };
+      case "canvas.escape":
+        return {
+          disabled: () => (this.#selection.length || this.#edgeSelection.length || this.#strokeSelection.size || this.#tool !== "select"
+            ? null
+            : t("canvas.commands.why.no_selection")),
+          run: () => {
+            // Un filo cominciato da «Collega…» si lascia prima di tutto.
+            if (this.#connectFrom !== null) this.#pickTool("select");
+            else if (this.#selection.length || this.#edgeSelection.length || this.#strokeSelection.size) this.#clearSelection();
+            else this.#pickTool("select");
+          },
+        };
+      case "canvas.undo":
+        return { disabled: () => (this.#undo.length || this.#pending ? null : t("canvas.commands.why.no_undo")), run: () => void this.undo() };
+      case "canvas.redo":
+        return { disabled: () => (this.#redo.length ? null : t("canvas.commands.why.no_redo")), run: () => void this.redo() };
+      case "canvas.commands":
+        return { disabled: () => null, run: () => this.#openCommandSearch() };
+      case "canvas.add.text":
+        return add("text");
+      case "canvas.add.link":
+        return add("link");
+      case "canvas.add.group":
+        return add("group");
+      case "canvas.add.file":
+        return {
+          disabled: () => writable() ?? (this.#options.onPickFile ? null : t("canvas.commands.why.no_file_picker")),
+          // `value` è il file scelto nel selettore.
+          op: (input) => (input?.value ? this.#addOps("file", input.value, world(input)) : null),
+          run: (args) => void this.#addFileNode(world(args)).catch((error: unknown) => this.#showIntakeError(error)),
+        };
+      case "canvas.duplicate":
+        return { disabled: withSelection, op: () => this.#duplicateOps(), run: () => this.#duplicateSelection() };
+      case "canvas.select_all":
+        return { disabled: withNodes, run: () => this.#selectAll() };
+      case "canvas.enter":
+        return {
+          disabled: () => (this.#selectionFocus() ? null : t("canvas.commands.why.no_selection")),
+          // Su una scheda di testo apre il campo: `value` è il testo che vi si registra.
+          op: (input) => {
+            const focus = this.#selectionFocus();
+            return focus?.type === "text" && !this.#readOnly && input?.value !== undefined ? this.#textOps(focus.id, input.value) : null;
+          },
+          run: () => {
+            const focus = this.#selectionFocus();
+            if (focus) this.#enterOrEdit(focus);
+          },
+        };
+      case "canvas.edit":
+        return {
+          disabled: () => writable() ?? (only()?.type === "text" ? null : t("canvas.commands.why.one_text")),
+          // Apre il campo della scheda: `value` è il testo che vi si registra.
+          op: (input) => {
+            const one = only();
+            return one?.type === "text" && input?.value !== undefined ? this.#textOps(one.id, input.value) : null;
+          },
+          run: () => {
+            const one = only();
+            if (one?.type === "text") this.#beginCardEdit(one);
+          },
+        };
+      case "canvas.open":
+        return {
+          disabled: () => {
+            const one = only();
+            return one?.type === "file" && one.file ? null : t("canvas.commands.why.one_file");
+          },
+          run: () => {
+            const one = only();
+            if (one) this.#openFileNode(one);
+          },
+        };
+      case "canvas.open_url":
+        return {
+          disabled: () => {
+            const one = only();
+            if (one?.type !== "link") return t("canvas.commands.why.one_link");
+            return externalUrl(one.url ?? "") !== null && this.#options.media ? null : t("canvas.commands.why.no_url");
+          },
+          run: () => {
+            const one = only();
+            const destination = one?.type === "link" ? externalUrl(one.url ?? "") : null;
+            const media = this.#options.media;
+            if (!destination || !media) return;
+            if (media.openViewer) void media.openViewer(destination);
+            else void media.openExternal(destination);
+          },
+        };
+      // Il menu della scheda (T17).
+      case "canvas.open_beside":
+        return {
+          disabled: () => {
+            const one = only();
+            if (one?.type !== "file" || !one.file) return t("canvas.commands.why.one_file");
+            return this.#options.onOpenPathBeside ? null : t("canvas.commands.why.no_beside");
+          },
+          run: () => {
+            const one = only();
+            const beside = this.#options.onOpenPathBeside;
+            if (one?.type !== "file" || !one.file || !beside) return;
+            const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
+            void Promise.resolve(beside(path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      // «Apri a lato per questo» (T45): la scheda attiva, allo stesso punto.
+      case "canvas.open_beside_here":
+        return {
+          label: () => this.#besideHere()?.label ?? null,
+          disabled: () => {
+            if (this.#besideHere() === null) return t("canvas.commands.why.no_active_card");
+            return this.#besideOpener() ? null : t("canvas.commands.why.no_beside");
+          },
+          run: () => {
+            const here = this.#besideHere();
+            const open = this.#besideOpener();
+            if (!here || !open) return;
+            void Promise.resolve(open(here.path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      case "canvas.open_viewer":
+        return {
+          disabled: () => {
+            const one = only();
+            return one && cardKindOf(one) === "image" ? null : t("canvas.commands.why.one_image");
+          },
+          run: () => {
+            const one = only();
+            if (!one || cardKindOf(one) !== "image" || one.type !== "file" || !one.file) return;
+            const path = `/${cardTarget(one).path.replace(/^\/+/, "")}`;
+            void this.#options.onOpenPath?.(path, this.#options.documentId);
+          },
+        };
+      case "canvas.web_preview":
+        return {
+          disabled: () => {
+            const one = only();
+            if (one?.type !== "link") return t("canvas.commands.why.one_link");
+            const button = this.#webPreviewButton(one.id);
+            return button && !button.disabled ? null : t("canvas.commands.why.no_preview");
+          },
+          // Lo stesso gesto del pulsante della scheda: la sua porta, una
+          // richiesta sola.
+          run: () => {
+            const one = only();
+            const button = one ? this.#webPreviewButton(one.id) : null;
+            if (button && !button.disabled) button.click();
+          },
+        };
+      case "canvas.connect":
+        // Con una scheda comincia il filo da lei; con due le collega, come C
+        // (T67, D-19 (a)): così vale anche nella barra della selezione (T51).
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            const count = this.#selectedNodes().length;
+            return count === 1 || count === 2 ? null : t("canvas.commands.why.one_or_two");
+          },
+          // Con una scheda sola il filo si tira col gesto: scrive solo con due.
+          op: () => this.#connectPairOps(),
+          run: () => {
+            const chosen = this.#selectedNodes();
+            if (chosen.length === 2) this.#connectPair(chosen[0]!, chosen[1]!);
+            else if (chosen.length === 1) this.#beginConnectFrom(chosen[0]!.id);
+          },
+        };
+      case "canvas.group":
+        return {
+          disabled: () => withSelection() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          op: () => this.#groupOps(),
+          run: () => this.#groupSelection(),
+        };
+      case "canvas.trash_file":
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            if (!this.#options.onTrashPath) return t("canvas.commands.why.no_trash");
+            return this.#selectedNodes().some((node) => node.type === "file" && isVaultPath(cardTarget(node).path))
+              ? null
+              : t("canvas.commands.why.no_file_card");
+          },
+          // Il cestino è della shell (`onTrashPath`); poi le schede se ne vanno.
+          op: () => this.#removeOps(this.#selectedNodes().map((node) => node.id), []),
+          run: () => void this.#trashSelectedFiles().catch((error: unknown) => this.#showIntakeError(error)),
+        };
+      case "canvas.spread_pages":
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            const one = only();
+            if (one?.type !== "file" || cardKindOf(one) !== "pdf" || !isVaultPath(cardTarget(one).path)) return t("canvas.commands.why.no_pdf");
+            if (!this.#options.cards?.pdfPages) return t("canvas.commands.why.no_pdf_reader");
+            return this.#pdfBroken.has(cardTarget(one).path) ? t("canvas.commands.why.pdf_unreadable") : null;
+          },
+          // `value` sono le pagine scritte nel campo; il conto e le misure le
+          // legge `canvas.apply` dal PDF, come qui li legge la tela. Quante
+          // pagine nasceranno lo sa solo il conto: l'etichetta del gruppo
+          // resta quella di serie del nucleo.
+          op: (input) => {
+            const one = only();
+            return one && input?.value ? [{ op: "spread_pages", id: one.id, pages: input.value }] : null;
+          },
+          run: () => void this.#spreadPages().catch((error: unknown) => this.#showIntakeError(error)),
+        };
+      case "canvas.edge.reverse":
+        return {
+          disabled: () => writable() ?? (this.#edgeSelection.length ? null : t("canvas.commands.why.no_edge")),
+          op: (input) => this.#reverseOps(input?.edge ?? this.#edgeSelection[0]),
+          run: (args) => this.#reverseEdge(args?.edge ?? this.#edgeSelection[0]),
+        };
+      case "canvas.delete":
+        return {
+          disabled: () => writable() ?? (this.#selection.length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
+          op: () => this.#removeOps(this.#selection, this.#edgeSelection),
+          run: () => this.#deleteSelection(),
+        };
+      case "canvas.bring_front":
+        return { disabled: withSelection, op: () => this.#reorderOps("front"), run: () => this.#reorderSelection("front") };
+      case "canvas.send_back":
+        return { disabled: withSelection, op: () => this.#reorderOps("back"), run: () => this.#reorderSelection("back") };
+      // La lavagna come codice (LIC T25). Copiare non scrive: vale anche in
+      // sola lettura. Incollare legge gli appunti, controlla e chiede.
+      case "canvas.copy_code":
+        return {
+          disabled: () => this.#copyCodeWhy(),
+          run: () => this.#copyCode(),
+        };
+      case "canvas.paste_code":
+        return {
+          disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          // `value` è il testo degli appunti: la lista che scriverebbe, se è una lista.
+          op: (input) => {
+            const read = input?.value === undefined ? null : readCodeList(input.value);
+            return read?.ok ? (read.ops as CanvasIntentOp[]) : null;
+          },
+          run: () => void this.#pasteCode(),
+        };
+      case "canvas.distribute_x":
+      case "canvas.distribute_y": {
+        const axis = id === "canvas.distribute_x" ? "distribute-x" : "distribute-y";
+        return {
+          disabled: () => writable() ?? (this.#selectedNodes().length >= 3 ? null : t("canvas.commands.why.three")),
+          op: () => this.#arrangeOps(axis),
+          run: () => this.#layoutSelection(axis),
+        };
+      }
+      // I menu della riga delle opzioni (T50).
+      case "canvas.pen_menu":
+        return {
+          disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          run: () => {
+            // Con uno strumento che non scrive a mano, prima lo strumento
+            // della penna: la riga mostra il pulsante e il menu ci si apre.
+            if (!CANVAS_INK_TOOLS.has(this.#tool)) this.#pickTool(this.#penChoice.tool);
+            this.#penMenu.open();
+          },
+        };
+      case "canvas.color_menu":
+        return { disabled: withSelection, run: () => this.#canvasOptions.openColorMenu() };
+      case "canvas.align_menu":
+        return {
+          disabled: () => writable() ?? (this.#selectedNodes().length >= 2 ? null : t("canvas.commands.why.two")),
+          run: () => this.#canvasOptions.openAlignMenu(),
+        };
+      case "canvas.fit":
+        return {
+          disabled: () => null,
+          // Un salto (T53): vola, o arriva subito col movimento ridotto.
+          run: () => this.#jumpCamera(this.#fitTarget(this.#doc?.nodes ?? [])),
+        };
+      case "canvas.fit_selection":
+        return {
+          disabled: () => (this.#selectedNodes().length ? null : t("canvas.commands.why.no_selection")),
+          run: () => this.#jumpCamera(this.#fitTarget(this.#selectedNodes())),
+        };
+      case "canvas.zoom_reset":
+        return { disabled: () => null, run: () => this.#zoomToActual() };
+      // Il menu radiale (T63): dove si è cliccato, o al centro della vista.
+      case "canvas.radial":
+        return { disabled: () => null, run: (args) => this.#openRadialFromMenu(args?.at ?? null) };
+      // La griglia di questa lavagna (T71): la vista, anche in sola lettura.
+      case "canvas.grid_toggle":
+        return { disabled: () => null, run: () => this.#toggleGrid() };
+      // Senza interfaccia (T65): la vista, anche in sola lettura.
+      case "canvas.bare":
+        return { disabled: () => null, run: () => this.#workspace.setBare(!this.#workspace.bare) };
+      // Il navigatore (T55): c'è la voce che serve adesso, Nascondi o Mostra.
+      case "canvas.navigator.hide":
+      case "canvas.navigator.show": {
+        const hide = id === "canvas.navigator.hide";
+        if (hide === this.#navigatorClosed()) return null;
+        return { disabled: () => null, run: () => this.#setNavigatorHidden(hide) };
+      }
+      case "canvas.zoom_in":
+      case "canvas.zoom_out":
+        return {
+          disabled: () => null,
+          run: (args) => {
+            const at = args?.at ?? center();
+            this.#zoomAt(at.x, at.y, id === "canvas.zoom_in" ? CANVAS_ZOOM_STEP : 1 / CANVAS_ZOOM_STEP);
+          },
+        };
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Le punte di un filo nuovo, come dice la riga delle opzioni: alla fine
+   * (`toEnd: "arrow"`, come sempre), all'inizio, o nessuna. JSON Canvas mette
+   * la punta alla fine quando `toEnd` manca: «nessuna» la scrive.
+   */
+  #tipEnds(): Pick<CanvasEdge, "fromEnd" | "toEnd"> {
+    if (this.#tips === "none") return { toEnd: "none" };
+    if (this.#tips === "start") return { fromEnd: "arrow", toEnd: "none" };
+    return { toEnd: "arrow" };
+  }
+
+  /** Le schede di testo fra quelle scelte. */
+  #chosenTextNodes(): CanvasNode[] {
+    return this.#selectedNodes().filter((node) => node.type === "text");
+  }
+
+  /**
+   * La misura e l'allineamento che la riga segna (T92): quelli delle schede
+   * di testo scelte (`null` se sono diversi); senza, col Testo quelli delle
+   * sue prossime schede, e nessuno con le altre schede (i controlli sono
+   * spenti).
+   */
+  #chosenText(): CanvasChosenText {
+    const nodes = this.#chosenTextNodes();
+    if (nodes.length === 0) return this.#tool === "text" ? this.#textNext : { size: null, align: null };
+    const styles = nodes.map(textStyle);
+    const first = styles[0]!;
+    return {
+      size: styles.every((style) => style.size === first.size) ? first.size : null,
+      align: styles.every((style) => style.align === first.align) ? first.align : null,
+    };
+  }
+
+  /**
+   * Cambia la misura o l'allineamento (T92): le prossime schede dello
+   * strumento Testo lo prendono, e le schede di testo scelte lo scrivono in
+   * `fub:text`, tutte in un commit (un annulla). Ogni scheda tiene l'altro
+   * valore suo; una che si mostra già così non cambia, e tornata di serie
+   * perde il campo. Il testo della scheda non si tocca.
+   */
+  #styleText(change: Partial<TextStyle>): void {
+    if (this.#readOnly || this.#destroyed) return;
+    this.#textNext = { ...this.#textNext, ...change };
+    this.#writeOps(this.#styleTextOps(change));
+    this.#canvasOptions.sync();
+  }
+
+  /**
+   * La `set` di `fub:text` di ogni scheda di testo scelta che con `change` si
+   * mostra diversa; `null` se nessuna cambia.
+   */
+  #styleTextOps(change: Partial<TextStyle>): CanvasIntentOp[] | null {
+    const ops: CanvasIntentOp[] = [];
+    for (const node of this.#chosenTextNodes()) {
+      const next = withTextStyle(node, { ...textStyle(node), ...change });
+      const op = next ? setOp(node, next) : null;
+      if (op) ops.push(op);
+    }
+    return ops.length > 0 ? ops : null;
+  }
+
+  /** Il colore delle schede scelte: `undefined` quello di serie, `null` se sono diversi. */
+  #chosenColor(): string | null | undefined {
+    const colors = new Set(this.#selectedNodes().map((node) => node.color ?? ""));
+    if (colors.size > 1) return null;
+    const [only] = colors;
+    return only ? only : undefined;
+  }
+
+  /**
+   * La barra di una scheda in scrittura nella riga delle opzioni (T50): la
+   * barra di formato della nota (T41) o la formula della cella (T42), al
+   * posto delle opzioni dello strumento. `null` quando la scheda esce: la
+   * riga torna allo strumento.
+   */
+  setCardOptions(items: readonly OptionItem[] | null): void {
+    if (this.#destroyed) return;
+    this.#canvasOptions.setWriting(items);
+    this.#syncSelectionBar();
+  }
+
+  // --- la barra della selezione (T51) ------------------------------------------
+
+  /**
+   * Mostra la barra della selezione sopra le schede scelte, o la toglie: la
+   * toglie durante un gesto, con la penna giù e mentre si scrive in una scheda
+   * (`selectionBarWanted`), e quando le schede sono tutte fuori dalla vista.
+   * Con la penna giù torna quando si alza (il silenzio della penna).
+   */
+  #syncSelectionBar(): void {
+    const bar = this.#selectionBar as CanvasSelectionBar | undefined;
+    // Le preferenze arrivano anche durante il costruttore, prima della barra.
+    if (!bar) return;
+    const shown = this.#doc && !this.#destroyed && !this.#isSceneOversized() && this.#isShown();
+    const nodes = shown ? this.#selectedNodes() : [];
+    // I tratti scelti col Lazo (T86) contano come le schede.
+    const units = shown ? this.#chosenStrokes() : [];
+    const chosen = nodes.length + units.length;
+    const pen = this.#penDown;
+    // Col ritaglio aperto la sua barra prende il posto di quella della selezione.
+    const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing" || this.#crop !== null;
+    // La vista ha cambiato misura, o la scheda: la barra del ritaglio si riposa.
+    this.#placeCropBar();
+    if (!selectionBarWanted({ chosen, gesture: this.#gestureActive(), pen, writing })) {
+      bar.hide();
+      if (pen && chosen > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
+      return;
+    }
+    const zoom = this.#camera.zoom;
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const node of nodes) {
+      left = Math.min(left, node.x);
+      top = Math.min(top, node.y);
+      right = Math.max(right, node.x + node.width);
+      bottom = Math.max(bottom, node.y + node.height);
+    }
+    for (const unit of units) {
+      left = Math.min(left, unit.minX);
+      top = Math.min(top, unit.minY);
+      right = Math.max(right, unit.maxX);
+      bottom = Math.max(bottom, unit.maxY);
+    }
+    const box = {
+      left: left * zoom + this.#camera.x,
+      top: top * zoom + this.#camera.y,
+      right: right * zoom + this.#camera.x,
+      bottom: bottom * zoom + this.#camera.y,
+    };
+    const rect = this.#viewport.getBoundingClientRect();
+    const one = nodes.length === 1 ? nodes[0]! : null;
+    const open = one?.type === "file" && one.file ? "canvas.open" : one?.type === "link" ? "canvas.open_url" : null;
+    bar.show({
+      chosen: nodes.length,
+      open,
+      crop: one !== null && !this.#readOnly && this.#cropImage(one) && this.#cropRenderer(),
+      strokes: this.#strokesShown(units),
+      box,
+      view: { width: rect.width || 800, height: rect.height || 600 },
+      offset: { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
+    });
+  }
+
+  /**
+   * Raggruppa (T51): un gruppo attorno alle schede scelte, con un margine,
+   * messo nella pila subito sotto la prima di loro, così resta dietro; poi è
+   * scelto lui. Un passo d'annulla solo.
+   */
+  #groupSelection(): void {
+    if (!this.#doc || this.#readOnly || this.#isSceneOversized()) return;
+    const group = this.#writeOps(this.#groupOps())?.[0];
+    if (group === undefined) return;
+    this.#selection = [group];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#render();
+  }
+
+  /** `group` delle schede scelte: il rettangolo, il margine e il posto nella pila li dà il nucleo. */
+  #groupOps(): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    return ids.length > 0 ? [{ op: "group", ids }] : null;
+  }
+
+  /** La prima scheda scelta, a cui vanno le frecce e Invio. */
+  #selectionFocus(): CanvasNode | undefined {
+    const first = this.#selection[0];
+    return first ? this.#doc?.nodes.find((n) => n.id === first) : undefined;
+  }
+
+  #selectAll(): void {
+    if (!this.#doc) return;
+    this.#selection = this.#doc.nodes.map((n) => n.id);
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#render();
+  }
+
+  /**
+   * Le frecce: con la lavagna scrivibile spostano la scelta di `dx`, `dy`;
+   * in sola lettura passano alla scheda dopo (`forward`) o prima; senza
+   * scelta prendono la prima scheda.
+   */
+  #nudge(dx: number, dy: number, forward: boolean): void {
+    if (!this.#doc) return;
+    const focus = this.#selectionFocus();
+    if (focus && !this.#readOnly) {
+      this.#writeOps(this.#nudgeOps(dx, dy));
+    } else if (focus) {
+      const index = this.#doc.nodes.indexOf(focus);
+      const next = this.#doc.nodes[index + (forward ? 1 : -1)];
+      if (next) {
+        this.#selection = [next.id];
+        this.#options.onSelectionChange();
+        this.#render();
+      }
+    } else if (this.#doc.nodes.length) {
+      this.#selection = [this.#doc.nodes[0].id];
+      this.#options.onSelectionChange();
+      this.#render();
+    }
+  }
+
+  /** Il colore `color` (`undefined`: quello di serie) al filo `edge`, o alle schede scelte, o ai fili scelti. */
+  #colorSelection(color: string | undefined, edge?: string): void {
+    if (!this.#doc || this.#readOnly) return;
+    this.#writeOps(this.#colorOps(color, edge));
+  }
+
+  /**
+   * `color` di ciò che il menu colora: il filo `edge`, o le schede scelte, o
+   * i fili scelti (nell'ordine della lavagna). `undefined` toglie il colore.
+   * `null` se non c'è niente da colorare.
+   */
+  #colorOps(color: string | undefined, edge?: string): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const nodes = edge === undefined ? this.#selectedNodes().map((node) => node.id) : [];
+    const wires = edge === undefined ? this.#edgeSelection : [edge];
+    const ids = nodes.length > 0 ? nodes : doc.edges.filter((one) => wires.includes(one.id)).map((one) => one.id);
+    return ids.length > 0 ? [{ op: "color", ids, color: color ?? null }] : null;
+  }
+
+  /** `move` delle schede scelte di `dx`, `dy` (le frecce): un gruppo si sposta da solo. */
+  #nudgeOps(dx: number, dy: number): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    return ids.length > 0 && (dx !== 0 || dy !== 0) ? [{ op: "move", ids, dx, dy }] : null;
+  }
+
+  // --- i colori (T47) ---------------------------------------------------------
+
+  /**
+   * Il colore di ciò che il menu colora: il filo `edge`, o le schede scelte,
+   * o i fili scelti. `undefined` quello di serie, `null` se sono diversi.
+   */
+  #targetColor(edge?: string): string | null | undefined {
+    if (edge !== undefined) return this.#doc?.edges.find((one) => one.id === edge)?.color;
+    if (this.#selectedNodes().length) return this.#chosenColor();
+    const colors = new Set((this.#doc?.edges ?? []).filter((one) => this.#edgeSelection.includes(one.id)).map((one) => one.color ?? ""));
+    if (colors.size > 1) return null;
+    const [only] = colors;
+    return only ? only : undefined;
+  }
+
+  /**
+   * I pallini del menu dei colori: il colore che la pelle dà a ogni scelta,
+   * letto da un campione con la sua chiave dentro la lavagna. Così il menu
+   * mostra le tinte del tema di adesso e non ne scrive una sua; «Nessuno» è
+   * un pallino vuoto, «Altro…» non ne ha.
+   */
+  #colorSwatches(): ReadonlyMap<CanvasColorChoice, string> {
+    const swatches = new Map<CanvasColorChoice, string>([["none", "transparent"]]);
+    const probe = document.createElement("span");
+    probe.hidden = true;
+    this.#root.append(probe);
+    try {
+      for (const choice of [...JSON_CANVAS_COLORS, ...NOTE_COLORS.map((color) => color.id)]) {
+        probe.dataset.canvasColor = choice;
+        const value = getComputedStyle(probe).getPropertyValue("--canvas-color").trim();
+        if (value) swatches.set(choice, value);
+      }
+    } finally {
+      probe.remove();
+    }
+    return swatches;
+  }
+
+  /**
+   * «Altro…» (T47): il selettore del kit sotto la scheda scelta (o sulla
+   * lavagna, per un filo), col colore di adesso, i nove delle note fra i
+   * consigliati e i colori liberi della lavagna fra quelli del documento. Un
+   * colore scelto si scrive `#rrggbb` minuscolo; Esc o un clic fuori lo
+   * chiudono, e con la lavagna si chiude anche lui.
+   */
+  #openColorPicker(edge?: string): void {
+    if (!this.#doc || this.#readOnly || this.#destroyed) return;
+    this.#colorPicker?.close();
+    const current = this.#targetColor(edge);
+    const own = openLifetime();
+    const free = new Set<string>();
+    for (const one of [...this.#doc.nodes, ...this.#doc.edges]) {
+      if (colorLook(one.color)?.key === "custom" && free.size < 12) free.add(one.color!.toLowerCase());
+    }
+    const picker = createColorPicker({
+      value: current && colorLook(current) && current.startsWith("#") ? current : null,
+      text: canvasPickerText(),
+      recommended: NOTE_COLORS.map((color) => ({ color: color.hex, name: colorMenuLabel(color.id) })),
+      documentColors: [...free].map((color) => ({ color, name: color })),
+      onChange: (color) => {
+        const value = writeColor(color);
+        if (value === null) return;
+        this.#recordPending();
+        this.#colorSelection(value, edge);
+      },
+      lifetime: own,
+    });
+    const first = edge === undefined && this.#selection[0];
+    const card = first ? this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(first)}"]`) : null;
+    const handle = openPopover({
+      anchor: card ?? this.#viewport,
+      content: picker.element,
+      label: t("canvas.color.command.other"),
+      className: "kit-color-popover",
+      lifetime: own,
+      onClose: () => {
+        if (this.#colorPicker === handle) this.#colorPicker = null;
+        own.close();
+      },
+    });
+    this.#colorPicker = handle;
+    picker.focus();
+  }
+
+  /** Il filo `edge` va nell'altro verso: estremi, lati e punte si scambiano. */
+  #reverseEdge(edge: string | undefined): void {
+    if (!this.#doc || this.#readOnly) return;
+    this.#writeOps(this.#reverseOps(edge));
+  }
+
+  /**
+   * L'inversione del filo `edge`: `reverse` del nucleo, che scambia estremi e
+   * lati e tiene le punte sulla scheda a cui stavano, come `reversedEdge` di
+   * `model.ts` (#353). `null` se il filo non c'è.
+   */
+  #reverseOps(edge: string | undefined): CanvasIntentOp[] | null {
+    const current = edge === undefined ? undefined : this.#doc?.edges.find((one) => one.id === edge);
+    return current ? [{ op: "reverse", ids: [current.id] }] : null;
+  }
+
+  /**
+   * Apre la ricerca dei comandi sopra la tela, in alto al centro. Esc la
+   * chiude e rimette il fuoco dov'era, anche nel campo di una scheda; un
+   * comando scelto chiude prima il campo (il testo si registra) e poi parte.
+   */
+  #openCommandSearch(): void {
+    if (this.#destroyed || !this.#doc || this.#searching) return;
+    const recents = this.#options.recentCommands ?? SHARED_RECENT_COMMANDS;
+    const documentId = this.#options.documentId ?? "";
+    const viewport = this.#viewport;
+    const anchor = {
+      getBoundingClientRect: () => {
+        const rect = viewport.getBoundingClientRect();
+        return { left: rect.left, top: rect.top + 8, width: rect.width, height: 0 };
+      },
+    };
+    const commands = this.commands().filter((command) => command.id !== "canvas.commands");
+    this.#searching = true;
+    const search = openCommandSearch({
+      anchor,
+      commands,
+      recent: () => recents.list(documentId),
+      lifetime: this.#life,
+      onClose: (reason, chosen) => {
+        this.#commandSearch = null;
+        this.#searching = false;
+        if (this.#destroyed) return;
+        const editor = this.#editor;
+        if (chosen) {
+          if (editor) this.#leaveField(true);
+          recents.remember(documentId, chosen.id);
+          if (chosen.disabled() === null) chosen.run();
+          this.#statusSettle();
+          return;
+        }
+        // Esc riporta il fuoco nel campo; un gesto fuori lo lascia, come
+        // l'avrebbe lasciato senza la ricerca.
+        if (editor && reason !== "escape" && !editor.place.contains(document.activeElement)) this.#leaveField(false);
+      },
+    });
+    this.#commandSearch = search;
+    // I recenti ricordati arrivano dopo la prima lettura, e l'elenco si rifà.
+    void recents.load(documentId).then(() => {
+      if (this.#commandSearch === search) search.refresh();
+    });
+  }
+
+  // --- il selettore delle sezioni (T74) ---------------------------------------
+
+  /** La scheda mostra una nota di cui si possono scegliere le sezioni (`.md`, T73). */
+  #partsNote(node: CanvasNode): node is CanvasNode & { file: string } {
+    return node.type === "file" && isVaultPath(node.file) && partsFit(SECTIONS_PROBE, node.file);
+  }
+
+  /**
+   * Apre il selettore delle sezioni sulla scheda `id`: dopo il rilascio
+   * (`drop`, e solo se la scheda mostra ancora la nota intera) o da «Parti…»
+   * (`command`, con le sezioni di adesso già spuntate). Il sommario arriva
+   * dall'indice; una nota con meno di due titoli non apre niente, e da
+   * «Parti…» la barra dice perché. Una risposta arrivata dopo un'altra
+   * richiesta, o dopo che la scheda è cambiata o sparita, non apre niente.
+   */
+  async #openParts(id: string, from: "drop" | "command"): Promise<void> {
+    const port = this.#options.parts;
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!port || !node || !this.#partsNote(node) || this.#readOnly || this.#destroyed) return;
+    const path = node.file;
+    const round = ++this.#partsRound;
+    this.#closePartsPicker();
+    let headings: readonly PartsHeading[];
+    try {
+      headings = await port.outline(path);
+    } catch {
+      headings = [];
+    }
+    if (round !== this.#partsRound || this.#destroyed || this.#readOnly || !this.#doc || this.#isSceneOversized()) return;
+    const now = this.#doc.nodes.find((one) => one.id === id);
+    if (!now || !this.#partsNote(now) || now.file !== path) return;
+    if (from === "drop" && (now.subpath !== undefined || Object.prototype.hasOwnProperty.call(now, PARTS_KEY))) return;
+    const sections = partsSections(headings);
+    this.#partsCounts.set(path, sections.length);
+    if (sections.length < PARTS_PICKER_MIN_SECTIONS) {
+      if (from === "command") this.#showNotice(t("canvas.commands.why.no_sections"));
+      return;
+    }
+    let opened: PartsPickerHandle | null = null;
+    const forget = (): void => {
+      if (opened !== null && this.#partsPicker?.handle === opened) this.#partsPicker = null;
+    };
+    const show = port.show;
+    opened = openPartsPicker({
+      path,
+      sections,
+      chosen: partsChosen(now),
+      place: () => this.#partsPlace(id),
+      ...(show ? { show: (file: string, heading: string | null, host: HTMLElement, life: Lifetime) => show.call(port, file, heading, host, life) } : {}),
+      onPut: (keys) => {
+        forget();
+        this.#putParts(id, path, keys);
+      },
+      onClose: forget,
+      lifetime: this.#life,
+    });
+    if (!opened.closed) this.#partsPicker = { handle: opened, node: id, path };
+  }
+
+  /**
+   * Scrive le sezioni scelte sulla scheda, in un commit (un annulla riporta
+   * la nota intera): una sezione è il `subpath` `#Titolo`; due o più anche
+   * `fub:parts` `sections` (T73); nessuna toglie l'una e l'altro. I campi
+   * sconosciuti di un `fub:parts` di sezioni valido restano.
+   */
+  #putParts(id: string, path: string, keys: readonly string[]): void {
+    const doc = this.#doc;
+    const node = doc?.nodes.find((one) => one.id === id);
+    if (!doc || !node || node.type !== "file" || node.file !== path || this.#readOnly || this.#destroyed) return;
+    const next: CanvasNode = { ...node };
+    delete next.subpath;
+    delete next[PARTS_KEY];
+    if (keys.length > 0) {
+      const read = nodeParts(node);
+      const extra: PartsExtra = read?.state === "ok" && read.parts.kind === "sections" ? read.parts.extra : {};
+      const written = writeParts(path, { kind: "sections", sections: keys, extra });
+      if (written.outcome !== "written") return;
+      if (written.subpath !== null) next.subpath = written.subpath;
+      if (written.parts !== null) next[PARTS_KEY] = written.parts;
+    }
+    // I campi cambiati della scheda, con una `set` (T24).
+    const op = setOp(node, next);
+    if (op) this.#writeOps([op]);
+  }
+
+  /**
+   * «Mostra tutto il file» (T75): la scheda `id` toglie `fub:parts` e il
+   * `subpath` in un commit, e mostra la nota intera; un annulla riporta
+   * l'estratto. Una scheda che non è un estratto non cambia.
+   */
+  #showWholeFile(id: string): void {
+    if (this.#readOnly || this.#destroyed || this.#isSceneOversized()) return;
+    this.#writeOps(this.#wholeFileOps(id));
+  }
+
+  /** La `set` che toglie `subpath` e `fub:parts` alla scheda-estratto `id`; `null` se non è un estratto. */
+  #wholeFileOps(id: string): CanvasIntentOp[] | null {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node || !noteExcerptOf(node)) return null;
+    const next: CanvasNode = { ...node };
+    delete next.subpath;
+    delete next[PARTS_KEY];
+    const op = setOp(node, next);
+    return op ? [op] : null;
+  }
+
+  /**
+   * Apre la fonte di un estratto alla sua prima sezione (T75): accanto
+   * (`beside`, nella finestra stretta nello stesso riquadro, come «Apri a
+   * lato per questo») o nel riquadro (`pane`, Ctrl+clic). La scheda non
+   * cambia.
+   */
+  #openExcerptSource(node: CanvasNode, where: "beside" | "pane"): void {
+    const excerpt = noteExcerptOf(node);
+    if (!excerpt || node.type !== "file" || !node.file) return;
+    const path = excerptSourcePath(node.file, excerpt);
+    const open = where === "pane" ? this.#options.onOpenPath ?? null : this.#besideOpener() ?? this.#options.onOpenPath ?? null;
+    if (!open) return;
+    void Promise.resolve(open(path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
+  }
+
+  /** Chiude il selettore se la sua scheda non c'è più, mostra un altro file o la lavagna non si scrive. */
+  #syncPartsPicker(): void {
+    const open = this.#partsPicker;
+    if (!open) return;
+    const node = this.#doc?.nodes.find((one) => one.id === open.node);
+    const alive = node !== undefined && node.type === "file" && node.file === open.path;
+    if (alive && !this.#readOnly && !this.#destroyed && !this.#isSceneOversized()) return;
+    this.#closePartsPicker();
+  }
+
+  #closePartsPicker(): void {
+    const open = this.#partsPicker;
+    this.#partsPicker = null;
+    open?.handle.close();
+  }
+
+  // --- il lettore (T76) ---------------------------------------------------------
+
+  /** Il puntatore si è mosso con Spazio giù: oltre `READER_TAP_SLOP` non è più un tocco. */
+  #spaceTapMoved(x: number, y: number): void {
+    const tap = this.#spaceTap;
+    if (!tap || tap.spoiled) return;
+    if (tap.from === null) {
+      tap.from = { x, y };
+      return;
+    }
+    if (Math.hypot(x - tap.from.x, y - tap.from.y) > READER_TAP_SLOP) tap.spoiled = true;
+  }
+
+  /**
+   * Il tocco di Spazio: con una sola scheda di nota scelta (intera o un
+   * estratto) apre il lettore sopra l'area della lavagna. Senza niente
+   * scelto, con più schede, con una scheda d'altro o un file mancante non fa
+   * niente. La vista e la scelta non cambiano; il fuoco va sulla scheda, e
+   * ci torna quando il lettore si chiude.
+   */
+  #openReaderOnChoice(): void {
+    const port = this.#options.parts;
+    if (!port?.show || this.#reader || this.#destroyed || !this.#doc || this.#isSceneOversized()) return;
+    if (this.#selection.length !== 1 || this.#edgeSelection.length > 0) return;
+    const node = this.#doc.nodes.find((one) => one.id === this.#selection[0]);
+    if (!node || !this.#partsNote(node)) return;
+    const entry = this.#cards.get(node.id);
+    if (!entry || entry.article.hasAttribute("data-card-missing")) return;
+    const path = node.file;
+    this.#closePartsPicker();
+    // Il fuoco parte dalla scheda: chiuso il lettore, ci torna.
+    entry.article.focus({ preventScroll: true });
+    const show = port.show;
+    const watch = this.#options.cards?.watch;
+    let opened: ReaderHandle | null = null;
+    opened = openReader({
+      host: this.#area,
+      path,
+      excerpt: partsChosen(node),
+      writable: this.#readerWritable(node),
+      port: {
+        outline: (file) => port.outline(file),
+        show: (file, heading, host, life) => show.call(port, file, heading, host, life),
+        ...(watch ? { watch: (file: string, changed: () => void) => watch(file, changed) } : {}),
+      },
+      onAdd: (keys) => {
+        if (this.#reader?.handle !== opened) return;
+        const now = this.#doc?.nodes.find((one) => one.id === node.id);
+        if (!now || !this.#readerWritable(now)) return;
+        this.#putParts(node.id, path, keys);
+      },
+      onClose: (reason) => {
+        if (opened === null || this.#reader?.handle !== opened) return;
+        this.#reader = null;
+        if (reason === "closed" || this.#destroyed) return;
+        const back = this.#cards.get(node.id);
+        if (back?.article.isConnected) back.article.focus({ preventScroll: true });
+        else this.#viewport.focus({ preventScroll: true });
+      },
+      lifetime: this.#life,
+    });
+    if (!opened.closed) this.#reader = { handle: opened, node: node.id, path };
+  }
+
+  /** «+ Aggiungi all'estratto» c'è: un estratto, su una lavagna che si scrive. */
+  #readerWritable(node: CanvasNode): boolean {
+    return !this.#readOnly && !this.#isSceneOversized() && noteExcerptOf(node) !== null;
+  }
+
+  /**
+   * La lavagna è cambiata col lettore aperto: la scheda tolta, o su un altro
+   * file, lo chiude; un'altra scelta di sezioni o la sola lettura lo
+   * aggiornano.
+   */
+  #syncReader(): void {
+    const open = this.#reader;
+    if (!open) return;
+    const node = this.#doc?.nodes.find((one) => one.id === open.node);
+    if (!node || node.type !== "file" || node.file !== open.path || this.#destroyed || this.#isSceneOversized()) {
+      this.#reader = null;
+      open.handle.close();
+      return;
+    }
+    open.handle.update({ excerpt: partsChosen(node), writable: this.#readerWritable(node) });
+  }
+
+  // --- il ritaglio di un'immagine (T78) ------------------------------------------
+
+  /** C'è chi mostra le immagini nelle schede: senza, niente da ritagliare. */
+  #cropRenderer(): boolean {
+    return this.#options.cards?.registry.rendererFor("image") != null;
+  }
+
+  /** La scheda è un'immagine del vault, che si può ritagliare. */
+  #cropImage(node: CanvasNode): node is CanvasNode & { file: string } {
+    return node.type === "file" && cardKindOf(node) === "image" && isVaultPath(cardTarget(node).path);
+  }
+
+  /** La scheda `id` dice che il suo file manca o non si legge. */
+  #cropUnreadable(id: string): boolean {
+    const entry = this.#cards.get(id);
+    if (!entry) return false;
+    if (entry.missingFor !== null) return true;
+    const state = entry.body.querySelector<HTMLElement>(".canvas-card-image")?.dataset.cardState;
+    return state === "unreadable" || state === "too-large" || state === "missing";
+  }
+
+  /**
+   * La parte della chiave del corpo che dice la vista: le parti che la scheda
+   * mostra, così una zona nuova (o tolta) rimonta la vista. Col ritaglio
+   * aperto la scheda mostra l'immagine intera.
+   */
+  #viewKeyOf(node: CanvasNode): string {
+    const parts = this.#crop?.node === node.id ? null : (node[PARTS_KEY] ?? null);
+    // L'avviso di un estratto ha i suoi pulsanti solo fuori dalla sola lettura (T75).
+    const reading = this.#readOnly && noteExcerptOf(node) !== null ? ":read" : "";
+    return parts === null ? `view${reading}` : `view${reading}:${JSON.stringify(parts)}`;
+  }
+
+  /** L'altezza che la scheda mostra: la sua, o col ritaglio aperto quella dell'immagine intera. */
+  #shownHeight(node: CanvasNode): number {
+    const crop = this.#crop;
+    return crop?.node === node.id && crop.height !== null ? crop.height : node.height;
+  }
+
+  /**
+   * Apre «Ritaglia e ruota» sulla scheda `id`: la scheda mostra l'immagine
+   * intera, viva, con sopra la zona e le maniglie e sotto la barra
+   * (`crop.ts`). Non scrive niente: lo fa `#finishCrop`.
+   */
+  #beginCrop(id: string): void {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node || !this.#cropImage(node) || this.#readOnly || this.#destroyed || this.#isSceneOversized()) return;
+    if (!this.#cropRenderer() || this.#cropUnreadable(id)) return;
+    if (this.#crop) this.#finishCrop(null);
+    if (this.#activeId !== null) this.#leaveCard(true, false);
+    const entry = this.#cards.get(id);
+    if (!entry) return;
+    if (this.#selection.length !== 1 || this.#selection[0] !== id || this.#edgeSelection.length > 0) {
+      this.#selection = [id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+      this.#displaySelection();
+    }
+    const crop: CropSession = { node: id, path: cardTarget(node).path, editor: null, height: null };
+    this.#crop = crop;
+    // Con una zona la vista si rimonta sull'immagine intera.
+    this.#refreshCard(entry, node, true);
+    entry.article.dataset.cardCropping = "";
+    const ink = (this.#inkCards.get(id)?.length ?? 0) > 0;
+    crop.editor = openCropEditor({
+      frame: entry.body,
+      chrome: this.#area,
+      zone: zoneOf(cardParts(node)),
+      ink,
+      picture: () => entry.body.querySelector<CropPicture & HTMLElement>(".canvas-card-image .canvas-card-picture"),
+      lifetime: this.#life,
+      onTurn: () => this.#fitCropHeight(),
+      onMeasured: () => this.#fitCropHeight(),
+      onDone: (zone) => this.#finishCrop("done", zone),
+      onCancel: () => this.#finishCrop(null),
+      onRemove: () => this.#finishCrop("remove"),
+    });
+    this.#fitCropHeight();
+    this.#refreshLive();
+    this.#syncSelectionBar();
+    this.#placeCropBar();
+    crop.editor.focus();
+  }
+
+  /**
+   * Col ritaglio aperto la scheda tiene la larghezza e prende le proporzioni
+   * dell'immagine intera ruotata, per mostrarla tutta; solo sullo schermo.
+   */
+  #fitCropHeight(): void {
+    const crop = this.#crop;
+    const entry = crop ? this.#cards.get(crop.node) : undefined;
+    const natural = crop?.editor?.natural() ?? null;
+    if (!crop?.editor || !entry || !natural) return;
+    const height = this.#cropHeightFor(entry, zoneRatio({ rect: WHOLE_ZONE.rect, turn: crop.editor.zone().turn }, natural));
+    if (height === crop.height) return;
+    crop.height = height;
+    entry.article.style.height = `${height}px`;
+    crop.editor.layout();
+    this.#placeCropBar();
+  }
+
+  /**
+   * Posa la barra del ritaglio sotto la sua scheda, nella vista, come la barra
+   * della selezione: la stessa misura a ogni zoom, sopra la scheda se sotto
+   * non c'è posto (`selectionBarPlaceBelow`). Passa di qui a ogni camera.
+   */
+  #placeCropBar(): void {
+    const crop = this.#crop;
+    const node = crop ? this.#doc?.nodes.find((one) => one.id === crop.node) : undefined;
+    if (!crop?.editor || crop.editor.closed || !node) return;
+    const zoom = this.#camera.zoom;
+    const height = crop.height ?? node.height;
+    const rect = this.#viewport.getBoundingClientRect();
+    crop.editor.place(
+      {
+        left: node.x * zoom + this.#camera.x,
+        top: node.y * zoom + this.#camera.y,
+        right: (node.x + node.width) * zoom + this.#camera.x,
+        bottom: (node.y + height) * zoom + this.#camera.y,
+      },
+      { width: rect.width || 800, height: rect.height || 600 },
+      { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
+    );
+  }
+
+  /**
+   * L'altezza della scheda `entry` che dà al suo contenuto le proporzioni
+   * `ratio` (larghezza su altezza) alla larghezza di adesso: il corpo senza
+   * il suo margine interno, e la testata com'è (come `#contentSize`).
+   */
+  #cropHeightFor(entry: CardEntry, ratio: number): number {
+    const node = entry.node;
+    const shown = this.#shownHeight(node);
+    const style = getComputedStyle(entry.body);
+    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const innerWidth = entry.body.clientWidth - padX;
+    const innerHeight = entry.body.clientHeight - padY;
+    const known = innerWidth > 0 && innerHeight > 0;
+    const width = known ? innerWidth : node.width;
+    const rest = known ? shown - innerHeight : 0;
+    return Math.max(CANVAS_MIN_SIZE, Math.round(rest + width / ratio));
+  }
+
+  /**
+   * Chiude il ritaglio. `done`: la zona diventa `fub:parts` `image` (T73) e
+   * la scheda, tenendo la larghezza, prende le proporzioni della zona
+   * ruotata, in un commit solo; `remove`: il campo si toglie e la scheda
+   * prende le proporzioni dell'immagine intera; `null` (Esc): tutto com'era.
+   * Il file dell'immagine non si scrive mai: cambia solo la lavagna.
+   */
+  #finishCrop(how: "done" | "remove" | null, zone?: ImageZone): void {
+    const crop = this.#crop;
+    if (!crop) return;
+    const editor = crop.editor;
+    const entry = this.#cards.get(crop.node);
+    const doc = this.#doc;
+    const node = doc?.nodes.find((one) => one.id === crop.node);
+    let op: CanvasIntentOp | null = null;
+    if (how !== null && doc && node && entry && node.type === "file" && cardTarget(node).path === crop.path && !this.#readOnly) {
+      const chosen = how === "remove" ? WHOLE_ZONE : zone ?? editor?.zone() ?? WHOLE_ZONE;
+      const next: CanvasNode = { ...node };
+      delete next[PARTS_KEY];
+      let ok = true;
+      if (!isWholeZone(chosen)) {
+        // I campi sconosciuti di una zona valida restano.
+        const read = nodeParts(node);
+        const extra: PartsExtra = read?.state === "ok" && read.parts.kind === "image" ? read.parts.extra : {};
+        const written = writeParts(crop.path, zoneParts(chosen, extra));
+        if (written.outcome === "written") {
+          delete next.subpath;
+          if (written.subpath !== null) next.subpath = written.subpath;
+          if (written.parts !== null) next[PARTS_KEY] = written.parts;
+        } else {
+          ok = false;
+        }
+      }
+      const natural = editor?.natural() ?? null;
+      if (ok && natural) next.height = this.#cropHeightFor(entry, zoneRatio(chosen, natural));
+      op = ok ? setOp(node, next) : null;
+    }
+    const focused = editor !== null && entry !== undefined && entry.article.contains(document.activeElement);
+    this.#crop = null;
+    editor?.close();
+    if (entry) delete entry.article.dataset.cardCropping;
+    if (op) this.#writeOps([op]);
+    // Senza commit (Esc, niente di cambiato) la scheda torna com'era: la sua
+    // altezza e, se aveva una zona, la sua vista.
+    const now = this.#doc?.nodes.find((one) => one.id === crop.node);
+    if (entry && now && this.#cards.get(crop.node) === entry) this.#refreshCard(entry, now, true);
+    this.#refreshLive();
+    this.#syncSelectionBar();
+    if (focused && entry.article.isConnected) entry.article.focus({ preventScroll: true });
+  }
+
+  /** Chiude il ritaglio (com'era) se la sua scheda non c'è più, mostra un altro file o la lavagna non si scrive. */
+  #syncCrop(): void {
+    const crop = this.#crop;
+    if (!crop) return;
+    const node = this.#doc?.nodes.find((one) => one.id === crop.node);
+    const entry = this.#cards.get(crop.node);
+    const alive = node !== undefined && this.#cropImage(node) && cardTarget(node).path === crop.path
+      && entry !== undefined && entry.missingFor === null && entry.body.querySelector(".canvas-crop") !== null;
+    if (alive && !this.#readOnly && !this.#destroyed && !this.#isSceneOversized()) return;
+    this.#finishCrop(null);
+  }
+
+  /** Dove sono la scheda `id` (con la testata sopra, T39) e la lavagna, nella finestra. */
+  #partsPlace(id: string): PartsPickerPlace {
+    const rect = this.#viewport.getBoundingClientRect();
+    const board = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    const zoom = this.#camera.zoom;
+    let card = node
+      ? { left: rect.left + this.#camera.x + node.x * zoom, top: rect.top + this.#camera.y + node.y * zoom, width: node.width * zoom, height: node.height * zoom }
+      : { left: rect.left, top: rect.top, width: 0, height: 0 };
+    const handle = this.#stage.querySelector(`.canvas-node[data-node="${CSS.escape(id)}"] > .canvas-node-handle`)?.getBoundingClientRect();
+    if (handle && handle.height > 0 && handle.top < card.top) {
+      card = { ...card, top: handle.top, height: card.top + card.height - handle.top };
+    }
+    return { card, board, narrow: this.#root.hasAttribute("data-narrow") };
+  }
+
 
   // --- menu -----------------------------------------------------------------------
 
@@ -849,7 +9297,7 @@ export class CanvasEngine {
    *  selezione diventano la selezione; sul vuoto si aggiunge lì. */
   contextMenu(at: { x: number; y: number } | null): SurfaceMenu | null {
     if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return null;
-    const element = at ? document.elementFromPoint(at.x, at.y) : null;
+    const element = at ? this.#elementAt(at.x, at.y) : null;
     if (at && (!element || !this.#viewport.contains(element))) return null;
     const node = element ? this.#nodeAt(element) : this.#selection[0] ?? null;
     const edge = node ? null : element ? this.#edgeAt(element) : this.#edgeSelection[0] ?? null;
@@ -860,154 +9308,244 @@ export class CanvasEngine {
       this.#options.onSelectionChange();
       this.#displaySelection();
     }
-    const writable = !this.#readOnly;
-    const then = (run: () => void) => () => {
-      run();
-      this.#viewport.focus();
+    // Le voci vengono dal catalogo dei comandi (T48): il nome, il tasto, se
+    // si può e perché no. Il menu dice solo quali voci, in che ordine e su
+    // che cosa (`args`); `refocus` rimette il fuoco sulla tela dopo il gesto.
+    const catalog = new Map(this.commands().map((command) => [command.id, command]));
+    const entry: MenuEntryMaker = (id, args, refocus = true, extra = {}) => {
+      const command = catalog.get(id);
+      if (!command) throw new Error(`canvas: il comando ${id} non è nel catalogo`);
+      const why = command.disabled();
+      const chord = menuChord(command.keys);
+      return {
+        id,
+        label: command.label,
+        ...(chord === undefined ? {} : { chord }),
+        enabled: why === null,
+        ...(why === null ? {} : { description: why }),
+        ...(command.danger ? { danger: true } : {}),
+        ...extra,
+        run: () => {
+          if (command.disabled() !== null) return;
+          command.run(args);
+          this.#statusSettle();
+          if (refocus) this.#viewport.focus();
+        },
+      };
     };
-    const colors = (current: string | undefined, apply: (color: string | undefined) => void): SurfaceMenuItem => ({
-      id: "canvas.color",
-      label: t("canvas_menu.color"),
-      enabled: writable,
-      items: ["", "1", "2", "3", "4", "5", "6"].map((value) => ({
-        id: `canvas.color.${value || "none"}`,
-        label: value ? t(`canvas_menu.color.${value}` as Key) : t("canvas.default"),
-        checked: (current ?? "") === value,
-        run: then(() => apply(value || undefined)),
-      })),
-    });
+    const writable = !this.#readOnly;
+    // «Colore ›» (T47): Nessuno e i sei di JSON Canvas col loro pallino,
+    // «Colori delle note ›» coi nove, «Altro…» che apre il selettore. Tutte
+    // scelte esclusive, segnata quella di adesso; `null` (colori diversi) non
+    // ne segna nessuna, come un colore che non è un colore.
+    let swatches: ReadonlyMap<CanvasColorChoice, string> | null = null;
+    const colors: ColorMenuMaker = (current, args) => {
+      swatches ??= this.#colorSwatches();
+      const chosen = current === null ? null : colorChoiceOf(current);
+      const choice = (value: CanvasColorChoice): SurfaceMenuItem => {
+        const swatch = swatches!.get(value);
+        return entry(`canvas.color.${value}`, args, value !== "other", {
+          label: colorMenuLabel(value),
+          radio: true,
+          checked: chosen === value,
+          ...(swatch === undefined ? {} : { swatches: [swatch] }),
+        });
+      };
+      return {
+        id: "canvas.color",
+        label: t("canvas_menu.color"),
+        enabled: writable,
+        items: [
+          choice("none"),
+          ...JSON_CANVAS_COLORS.map(choice),
+          MENU_RULE,
+          {
+            id: "canvas.color.notes",
+            label: t("canvas_menu.color.notes"),
+            enabled: writable,
+            items: NOTE_COLORS.map((color) => choice(color.id)),
+          },
+          choice("other"),
+        ],
+      };
+    };
     if (node) {
       const nodes = this.#selectedNodes();
       const one = nodes.length === 1 ? nodes[0]! : null;
-      const context: SurfaceMenuEntry[] = [];
-      if (one?.type === "text") context.push({ id: "canvas.edit", label: t("canvas_menu.edit"), enabled: writable, run: () => this.#beginCardEdit(one) });
-      if (one?.type === "file" && one.file) {
-        const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
-        context.push({ id: "canvas.open", label: t("canvas_menu.open"), run: () => void this.#options.onOpenPath?.(path, this.#options.documentId) });
+      const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
+      const at = box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined;
+      // Copia, Taglia e Incolla portano le schede, i fili fra loro e l'inchiostro (T68).
+      const clipboard: SurfaceMenuClipboard = {
+        offers: { cut: writable, copy: true, paste: writable },
+        run: (op) => this.#clipboardMenu(op),
+      };
+      if (one?.type !== "group") {
+        // Dentro la scheda attiva (una cella, la nota che si scrive, la
+        // pagina), o dalla tastiera con la scheda attiva, il menu porta in
+        // testa «Apri a lato» su quel punto (T45).
+        const inside = node === this.#activeId && (element === null || this.#insideActive(element, true));
+        return { target: this.#cardMenuTarget(nodes, node), at, context: this.#cardMenu(nodes, entry, colors, inside), clipboard };
       }
-      if (one?.type === "link") {
-        const destination = externalUrl(one.url ?? "");
-        const media = this.#options.media;
-        context.push({
-          id: "canvas.open_url",
-          label: t("canvas.open_url"),
-          enabled: destination !== null && !!media,
-          run: () => {
-            if (!destination) return;
-            if (media?.openViewer) void media.openViewer(destination);
-            else if (media) void media.openExternal(destination);
-          },
-        });
-      }
-      context.push(
-        colors(one?.color, (color) => this.#commit(this.#selectedNodes().map((current) => {
-          const next = { ...current };
-          if (color === undefined) delete next.color;
-          else next.color = color;
-          return upsertNodePatch(this.#doc!, next);
-        }).filter((patch): patch is NonNullable<typeof patch> => patch !== null), "input")),
-        { id: "canvas.duplicate", label: t("canvas.duplicate"), enabled: writable, run: then(() => this.#duplicateSelection()) },
+      // Un gruppo solo ha il suo menu di sempre.
+      const context: SurfaceMenuEntry[] = [
+        colors(one.color),
+        entry("canvas.duplicate"),
         {
           id: "canvas.order",
           label: t("canvas_menu.order"),
           enabled: writable,
-          items: [
-            { id: "canvas.bring_front", label: t("canvas.bring_front"), run: then(() => this.#reorderSelection("front")) },
-            { id: "canvas.send_back", label: t("canvas.send_back"), run: then(() => this.#reorderSelection("back")) },
-          ],
+          items: [entry("canvas.bring_front"), entry("canvas.send_back")],
         },
-      );
-      if (nodes.length >= 2) {
-        const axes = ["left", "center", "right", "top", "middle", "bottom"] as const;
-        context.push({
-          id: "canvas.align",
-          label: t("canvas_menu.align"),
-          enabled: writable,
-          items: [
-            ...axes.map((axis) => ({ id: `canvas.align.${axis}`, label: t(`canvas.align_${axis}`), run: then(() => this.#layoutSelection(axis)) })),
-            ...(nodes.length >= 3
-              ? [
-                  { id: "canvas.distribute_x", label: t("canvas.distribute_x"), run: then(() => this.#layoutSelection("distribute-x")) },
-                  { id: "canvas.distribute_y", label: t("canvas.distribute_y"), run: then(() => this.#layoutSelection("distribute-y")) },
-                ]
-              : []),
-          ],
-        });
-      }
-      context.push(
-        { id: "canvas.fit_selection", label: t("canvas.fit_selection"), run: () => this.#fitCamera(true, this.#selectedNodes()) },
-        { id: "canvas.delete", label: t("canvas.delete"), enabled: writable, danger: true, run: then(() => this.#deleteSelection()) },
-      );
-      const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
-      return {
-        target: { kind: one?.type === "group" ? "group" : "node", ref: node },
-        at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
-        context,
-        clipboard: { offers: { copy: true }, run: () => void writeClipboardText(this.selectedText()?.primary ?? "").catch(() => {}) },
-      };
+        entry("canvas.fit_selection", undefined, false),
+        entry("canvas.delete"),
+      ];
+      return { target: { kind: "group", ref: node }, at, context, clipboard };
     }
     if (edge) {
       const current = this.#doc.edges.find((one) => one.id === edge);
       if (!current) return null;
       return {
         target: { kind: "edge", ref: edge },
-        context: [
-          colors(current.color, (color) => {
-            const next = { ...current };
-            if (color === undefined) delete next.color;
-            else next.color = color;
-            const patch = upsertEdgePatch(this.#doc!, next);
-            if (patch) this.#commit([patch], "input");
-          }),
-          {
-            id: "canvas.edge.reverse",
-            label: t("canvas_menu.reverse"),
-            enabled: writable,
-            run: then(() => {
-              const next = { ...current, fromNode: current.toNode, toNode: current.fromNode };
-              for (const [from, to] of [["fromSide", "toSide"], ["fromEnd", "toEnd"]] as const) {
-                const a = current[from];
-                const b = current[to];
-                if (b === undefined) delete next[from];
-                else (next as Record<string, unknown>)[from] = b;
-                if (a === undefined) delete next[to];
-                else (next as Record<string, unknown>)[to] = a;
-              }
-              const patch = upsertEdgePatch(this.#doc!, next);
-              if (patch) this.#commit([patch], "input");
-            }),
-          },
-          { id: "canvas.delete", label: t("canvas.delete"), enabled: writable, danger: true, run: then(() => this.#deleteSelection()) },
-        ],
+        context: [colors(current.color, { edge }), entry("canvas.edge.reverse", { edge }), entry("canvas.delete")],
       };
     }
-    const point = at ? this.#screenToWorld(at.x, at.y) : undefined;
-    const add = (type: CanvasNode["type"], label: string): SurfaceMenuItem => ({ id: `canvas.add.${type}`, label, run: then(() => this.#addNode(type, undefined, point)) });
+    const here = at ? { at } : undefined;
     return {
       target: { kind: "empty" },
+      clipboard: { offers: { paste: writable }, run: (op) => this.#clipboardMenu(op) },
       context: [
         {
           id: "canvas.add",
           label: t("canvas_menu.add_here"),
           enabled: writable,
           items: [
-            add("text", t("canvas.add_text")),
-            ...(this.#options.onPickFile
-              ? [{ id: "canvas.add.file", label: t("canvas.add_file"), run: () => void this.#addFileNode(point).catch((error: unknown) => this.#showIntakeError(error)) }]
-              : []),
-            add("link", t("canvas.add_link")),
-            add("group", t("canvas.add_group")),
+            entry("canvas.add.text", here),
+            ...(this.#options.onPickFile ? [entry("canvas.add.file", here, false)] : []),
+            entry("canvas.add.link", here),
+            entry("canvas.add.group", here),
           ],
         },
-        { id: "canvas.fit", label: t("canvas.fit"), run: () => { this.#fitCamera(); this.#render(); } },
-        ...(at
-          ? [
-              { id: "canvas.zoom_in", label: t("canvas.zoom_in"), run: () => this.#zoomAt(at.x, at.y, 1.2) },
-              { id: "canvas.zoom_out", label: t("canvas.zoom_out"), run: () => this.#zoomAt(at.x, at.y, 1 / 1.2) },
-            ]
-          : []),
+        // «Disponi ›» senza selezione (LIC T25): tutte le schede fuori dai gruppi.
+        {
+          id: "canvas.arrange",
+          label: t("canvas_menu.arrange"),
+          enabled: writable,
+          items: CANVAS_LAYOUTS.map((kind) => entry(`canvas.layout.${kind}`)),
+        },
+        entry("canvas.copy_code"),
+        entry("canvas.paste_code", undefined, false),
+        MENU_RULE,
+        entry("canvas.fit", undefined, false),
+        ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
+        // Nascondi o Mostra il navigatore (T55), quella che c'è.
+        ...["canvas.navigator.hide", "canvas.navigator.show"].filter((id) => catalog.has(id)).map((id) => entry(id, undefined, false)),
+        // Il menu radiale (T63), anche dalla tastiera (Maiusc+F10): il fuoco
+        // va al menu, non torna sulla lavagna.
+        entry("canvas.radial", here, false),
       ],
     };
+  }
+
+  /**
+   * La testata del menu di una scheda (T17): «Scheda di {specie}» col nome
+   * (il file, l'indirizzo, la prima riga del testo), o «{n} schede».
+   */
+  #cardMenuTarget(nodes: readonly CanvasNode[], ref: string): SurfaceMenu["target"] {
+    if (nodes.length !== 1) return { kind: "node", ref, label: t("canvas_menu.header_many", { n: String(nodes.length) }) };
+    const one = nodes[0]!;
+    const kind = one.type === "text" ? "text" : cardKindOf(one) ?? "file";
+    const label = t("canvas_menu.header", { kind: t(`canvas_menu.kind.${kind}`) });
+    const name = cardMenuName(one);
+    return name ? { kind: "node", ref, label, name } : { kind: "node", ref, label };
+  }
+
+  /**
+   * Il menu «Scheda della lavagna» (T17), voci del catalogo nell'ordine di
+   * `tasto-destro.md`: Apri, Apri a lato, Collega… · C; Colore › (scelte
+   * esclusive), Disponi ›, Duplica; in fondo, in rosso, Togli dalla lavagna e,
+   * con le schede di file, Sposta anche il file nel cestino. Con più schede
+   * niente Apri né Collega…; in sola lettura le voci che cambiano sono spente
+   * col perché, non nascoste. Con `inside` (il tasto destro dentro la scheda
+   * attiva) in testa c'è «Apri a lato» sul punto in cui si è (T45): ciò che
+   * la scheda non fa, nell'editor intero.
+   */
+  #cardMenu(nodes: readonly CanvasNode[], entry: MenuEntryMaker, colors: ColorMenuMaker, inside = false): SurfaceMenuEntry[] {
+    const one = nodes.length === 1 ? nodes[0]! : null;
+    const readOnly = this.#readOnly ? t("canvas.commands.why.read_only") : null;
+    const state = (why: string | null): Pick<SurfaceMenuItem, "enabled" | "description"> =>
+      why === null ? { enabled: true } : { enabled: false, description: why };
+    const context: SurfaceMenuEntry[] = [];
+    if (inside && one?.type === "file" && this.#besideHere() !== null) {
+      context.push(entry("canvas.open_beside_here", undefined, false, { icon: "draw-open-link" }), MENU_RULE);
+    }
+    // «Parti…» per prima, come nel prototipo (T28): riapre il selettore.
+    if (one && this.#options.parts && this.#partsNote(one)) context.push(entry("canvas.parts", undefined, false));
+    // «Mostra tutto il file» sotto «Parti…» (T75, prototipo T28); in sola lettura no.
+    if (one && !this.#readOnly && noteExcerptOf(one)) context.push(entry("canvas.whole_file", undefined, false));
+    if (one?.type === "text") {
+      context.push(entry("canvas.edit", undefined, false));
+      // Convertire (T70): il testo in una nota nuova; il dialogo prende il fuoco.
+      if (this.#options.notes) context.push(entry("canvas.extract_note", undefined, false));
+    }
+    if (one?.type === "file" && one.file) {
+      context.push(entry(cardKindOf(one) === "image" ? "canvas.open_viewer" : "canvas.open", undefined, false));
+      // «Ritaglia e ruota» (T78), come nel prototipo T28 dopo Apri; in sola
+      // lettura la voce non c'è.
+      if (!this.#readOnly && this.#cropImage(one) && this.#cropRenderer()) {
+        context.push(entry("canvas.crop", undefined, false, { icon: "draw-image" }));
+      }
+      if (this.#options.onOpenPathBeside) context.push(entry("canvas.open_beside", undefined, false));
+      // «Spargi le pagine…» (T72): solo su un PDF; spenta, col perché, se non si apre.
+      if (cardKindOf(one) === "pdf") context.push(entry("canvas.spread_pages", undefined, false));
+      // Convertire (T70): il testo della nota accanto; un altro file al posto di questo.
+      if (this.#options.notes && cardKindOf(one) === "note") context.push(entry("canvas.copy_note_text"));
+      if (this.#options.onPickFile) context.push(entry("canvas.replace_file", undefined, false));
+    }
+    if (one?.type === "link") {
+      context.push(entry("canvas.open_url", undefined, false));
+      if (this.#options.cards) context.push(entry("canvas.web_preview", undefined, false));
+    }
+    // Collega… si fa anche con C, il tasto dello strumento.
+    if (one) context.push(entry("canvas.connect", undefined, true, { chord: menuChord([CANVAS_TOOL_KEYS.connect]) }));
+    if (context.length) context.push(MENU_RULE);
+    const two = nodes.length >= 2 ? null : t("canvas.commands.why.two");
+    const three = nodes.length >= 3 ? null : t("canvas.commands.why.three");
+    context.push(
+      { ...colors(this.#chosenColor()), ...state(readOnly) },
+      {
+        id: "canvas.arrange",
+        label: t("canvas_menu.arrange"),
+        ...state(readOnly),
+        items: [
+          entry("canvas.bring_front"),
+          entry("canvas.send_back"),
+          MENU_RULE,
+          {
+            id: "canvas.align",
+            label: t("canvas_menu.align_to"),
+            ...state(readOnly ?? two),
+            items: CANVAS_ALIGN.map((axis) => entry(`canvas.align.${axis}`)),
+          },
+          {
+            id: "canvas.distribute",
+            label: t("canvas_menu.distribute"),
+            ...state(readOnly ?? three),
+            items: [entry("canvas.distribute_x"), entry("canvas.distribute_y")],
+          },
+          // «Disponi» col nucleo (LIC T25): griglia, riga, colonna, albero.
+          MENU_RULE,
+          ...CANVAS_LAYOUTS.map((kind) => entry(`canvas.layout.${kind}`)),
+        ],
+      },
+      entry("canvas.duplicate"),
+      // La lavagna come codice (LIC T25): «Incolla codice» apre la conferma, che prende il fuoco.
+      entry("canvas.copy_code"),
+      entry("canvas.paste_code", undefined, false),
+      MENU_RULE,
+      entry("canvas.delete"),
+    );
+    if (this.#options.onTrashPath && nodes.some((node) => node.type === "file")) context.push(entry("canvas.trash_file", undefined, false));
+    return context;
   }
 
   // --- pointer ------------------------------------------------------------------
@@ -1026,26 +9564,93 @@ export class CanvasEngine {
       el.classList.toggle("selected", this.#selection.includes(el.dataset.node ?? ""));
     }
     if (this.#doc && !this.#isSceneOversized()) this.#drawEdges();
+    this.#syncSelectionFrame();
+    this.#paintLasso();
     this.#drawToolbar();
+    // Una scheda sola scelta con delle gemelle: la banda le dice (T22).
+    if (this.#twinsKey() !== this.#twinsShown) this.#statusSettle();
   }
 
   #pointerDown(event: PointerEvent): void {
-    if (event.button === 1 || event.ctrlKey || event.metaKey || event.altKey) {
-      this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
+    // Sotto il velo della croce (T20d) vale ciò che c'è sotto.
+    const target = this.#targetOf(event);
+    // Un clic fuori dal ritaglio lo applica, come «Fatto» (il ritaglio del
+    // disegno fa lo stesso, A-27). I gesti dentro il ritaglio non arrivano qui.
+    const crop = this.#crop;
+    if (crop?.editor && !crop.editor.contains(target)) this.#finishCrop("done", crop.editor.zone());
+    // Il tasto laterale della penna senza lo strato della penna (la sola
+    // lettura), che altrimenti lo prende prima (T63).
+    if (event.pointerType === "pen" && event.button === 2 && this.#inkLayer === null && this.#penButtonSetting !== "eraser") {
+      event.preventDefault();
+      this.#barrelDown(event);
+      return;
+    }
+    // Un clic fuori dalle maniglie chiude il doppio clic che le adatta (T66).
+    if (!(target instanceof Element && target.closest("[data-resize], [data-resize-frame]"))) this.#handleTap = null;
+    // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
+    if (!(target instanceof Node && this.#editor?.place.contains(target))) this.#recordPending();
+    const pressed = this.#nodeAt(target);
+    this.#pressedSelected = pressed !== null && this.#selection.length === 1 && this.#selection[0] === pressed
+      ? pressed
+      : null;
+    // Un clic fuori dalla scheda attiva ne esce. La penna no: scrive sopra
+    // anche una scheda attiva (N4); e il tasto centrale, che sposta la vista,
+    // non toglie la scrittura (T41).
+    const panning = event.button === 1 && this.#writingId !== null;
+    if (this.#activeId !== null && event.pointerType !== "pen" && !panning && !this.#insideActive(target, false)) {
+      this.#leaveCard(false);
+    }
+    if (event.pointerType === "touch") this.#touchDown(event);
+    else this.#mouseDown(event);
+  }
+
+  #mouseDown(event: PointerEvent): void {
+    const modifier = event.ctrlKey || event.metaKey;
+    const target = this.#targetOf(event);
+    // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
+    // `click` deve arrivare al link, non a uno spostamento della lavagna.
+    if (event.button === 0 && modifier && this.#cardLinkAt(target) !== null) return;
+    // ↗ di un estratto (T75) prende il suo clic, anche con Ctrl (Cmd).
+    if (event.button === 0 && target instanceof Element && target.closest("[data-excerpt-open]")) return;
+    // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
+    // strumento e sopra ogni cosa (T53).
+    if (event.button === 0 && this.#spaceHeld) {
+      // Il clic che segue non entra nella scheda scelta sotto il puntatore.
+      this.#pressedSelected = null;
+      this.#beginPan(event.pointerId, event.clientX, event.clientY);
+      event.preventDefault();
+      return;
+    }
+    // Una maniglia vince su Alt (dal centro) e su Maiusc (le proporzioni):
+    // i tasti si leggono mentre si tira (T66). La Mano sposta e basta.
+    if (event.button === 0 && !modifier && this.#tool !== "hand" && this.#resizeFromHandle(event)) return;
+    // Alt+trascina dal corpo di una scheda tira un filo (T67); nel vuoto Alt
+    // sposta ancora la vista.
+    if (event.button === 0 && event.altKey && !modifier && this.#tool !== "hand"
+      && !this.#insideActive(target, false)) {
+      const from = this.#nodeAt(target);
+      if (from && this.#beginConnect(event, { from })) return;
+    }
+    if (event.button === 1 || modifier || event.altKey) {
+      const toggle = event.button === 0 && modifier && !event.altKey ? this.#nodeAt(target) ?? undefined : undefined;
+      this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y, toggle };
       this.#viewport.setPointerCapture?.(event.pointerId);
       event.preventDefault();
       return;
     }
     if (event.button !== 0) return;
-    const target = event.target;
-    const resizeHandle = target instanceof Element ? target.closest<HTMLElement>("[data-resize]") : null;
-    if (resizeHandle) {
-      const id = resizeHandle.dataset.resize!;
-      const node = this.#doc?.nodes.find((n) => n.id === id);
-      if (!node || this.#readOnly) return;
-      this.#resize = { pointerId: event.pointerId, id, startX: event.clientX, startY: event.clientY, width: node.width, height: node.height };
-      this.#viewport.setPointerCapture?.(event.pointerId);
+    // La Mano sposta la lavagna, anche sopra le schede, e non sceglie niente.
+    if (this.#tool === "hand") {
+      this.#beginPan(event.pointerId, event.clientX, event.clientY);
       event.preventDefault();
+      return;
+    }
+    // Il Lazo (T86): dentro ciò che ha scelto lo sposta; altrove, o con
+    // Maiusc che aggiunge, fa un giro nuovo. In sola lettura sceglie e basta.
+    if (this.#tool === "lasso" && this.#doc && !this.#isSceneOversized()) {
+      event.preventDefault();
+      if (!this.#readOnly && !event.shiftKey && this.#insideChosen(event)) this.#beginStrokeDrag(event);
+      else this.#beginLasso(event);
       return;
     }
     const endpoint = target instanceof Element ? target.closest<SVGElement>("[data-reconnect]") : null;
@@ -1053,373 +9658,2648 @@ export class CanvasEngine {
       const edge = this.#doc?.edges.find((entry) => entry.id === endpoint.dataset.reconnect);
       if (!edge) return;
       const side = endpoint.dataset.endpoint === "from" ? "from" : "to";
-      this.#connect = { pointerId: event.pointerId, from: edge.fromNode, edgeId: edge.id, endpoint: side };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginConnect(event, { from: edge.fromNode, edgeId: edge.id, endpoint: side });
       return;
     }
     const connectHandle = target instanceof Element ? target.closest<HTMLElement>("[data-connect]") : null;
     if (connectHandle) {
       if (this.#readOnly) return;
-      this.#connect = { pointerId: event.pointerId, from: connectHandle.dataset.connect! };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginConnect(event, { from: connectHandle.dataset.connect! });
+      return;
+    }
+    // I quattro punti sui lati (T67): il filo parte da quel lato.
+    const port = target instanceof Element ? target.closest<HTMLElement>(".canvas-port") : null;
+    const portOwner = port ? this.#nodeAt(port) : null;
+    if (port && portOwner) {
+      this.#beginConnect(event, { from: portOwner, fromSide: port.dataset.side as EdgeSide });
       return;
     }
     const nodeId = this.#nodeAt(target);
+    // Collega: da una scheda si trascina il filo fino a un'altra, come dalla
+    // maniglia di collegamento.
+    if (nodeId && this.#tool === "connect" && !this.#readOnly) {
+      // Dopo «Collega…» il filo parte dalla scheda scelta allora, e il clic
+      // su un'altra lo chiude dove si alza (T17).
+      const from = this.#connectFrom;
+      this.#connectFrom = null;
+      this.#beginConnect(event, from !== null && from !== nodeId ? { from, back: true } : { from: nodeId });
+      return;
+    }
+    // Un filo entro 8 px vince sulla scheda dove si vede, fuori dalla scheda (T67).
+    const wire = this.#wireAt(target, event.clientX, event.clientY);
+    if (wire) {
+      this.#selectEdge(wire);
+      return;
+    }
     if (nodeId) {
-      const additive = event.shiftKey;
-      if (additive) {
-        this.#selection = this.#selection.includes(nodeId)
-          ? this.#selection.filter((id) => id !== nodeId)
-          : [...this.#selection, nodeId];
-        this.#edgeSelection = [];
-        this.#options.onSelectionChange();
-        this.#displaySelection();
-      } else if (!this.#selection.includes(nodeId)) {
-        this.#selection = [nodeId];
-        this.#edgeSelection = [];
-        this.#options.onSelectionChange();
-        this.#displaySelection();
-      }
+      this.#selectNode(nodeId, event.shiftKey);
+      this.#keepContentFocus(event, nodeId);
       if (this.#readOnly || !this.#doc || !(target instanceof Element && target.closest(".canvas-node-handle"))) return;
-      const origin = new Map<string, { x: number; y: number }>();
-      for (const id of this.#selection) {
-        const node = this.#doc.nodes.find((n) => n.id === id);
-        if (node) origin.set(id, { x: node.x, y: node.y });
-      }
-      // A group carries every card fully inside it. Containment is geometric,
-      // not a second persisted parent relation that would conflict with Canvas.
-      for (const group of this.#doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
-        for (const child of this.#doc.nodes) {
-          if (child.id !== group.id && child.x >= group.x && child.y >= group.y
-            && child.x + child.width <= group.x + group.width
-            && child.y + child.height <= group.y + group.height) {
-            origin.set(child.id, { x: child.x, y: child.y });
-          }
-        }
-      }
-      this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginDrag(event);
       return;
     }
     const edgeId = this.#edgeAt(target);
     if (edgeId) {
-      this.#edgeSelection = [edgeId];
-      this.#selection = [];
-      this.#options.onSelectionChange();
-      this.#displaySelection();
+      this.#selectEdge(edgeId);
       return;
     }
-    if (!event.shiftKey) {
-      this.#selection = [];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      this.#displaySelection();
+    // Testo: un clic sul vuoto mette lì una scheda di testo, col campo aperto,
+    // e la colonna torna alla Selezione.
+    if (this.#tool === "text" && !this.#readOnly) {
+      event.preventDefault();
+      this.#placeText(event.clientX, event.clientY);
+      return;
     }
-    this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
+    // Col mouse e con la Selezione, il vuoto sceglie con un rettangolo (N6 T20b);
+    // con «sposta la vista» resta il comportamento di prima, qui sotto. Il dito e
+    // la penna nel vuoto spostano sempre la vista, e arrivano da un'altra strada.
+    if (event.pointerType === "mouse" && this.#tool === "select" && this.#doc && this.#dragEmptySetting === "select"
+      && !this.#isSceneOversized()) {
+      this.#beginMarquee(event);
+      return;
+    }
+    if (!event.shiftKey) this.#clearSelection();
+    this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Il trascinamento sinistro sul vuoto con la Selezione (N6 T20b) comincia il
+   * rettangolo: il puntatore è preso dalla lavagna, e il fuoco va sulla vista, così
+   * Esc arriva. Il clic non cambia ancora la scelta: lo fa il rilascio. Il
+   * rettangolo si disegna al movimento; la scelta si aggiorna una volta per
+   * fotogramma, e a fine gesto.
+   */
+  #beginMarquee(event: PointerEvent): void {
+    const at = this.#screenToWorld(event.clientX, event.clientY);
+    this.#marquee = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      from: at,
+      to: at,
+      additive: event.shiftKey,
+      moved: false,
+      base: { nodes: [...this.#selection], edges: [...this.#edgeSelection], strokes: new Set(this.#strokeSelection) },
+    };
     this.#viewport.setPointerCapture?.(event.pointerId);
+    this.#viewport.focus({ preventScroll: true });
+    event.preventDefault();
+  }
+
+  /** Il puntatore del rettangolo si muove: il riquadro segue subito, la scelta aspetta il fotogramma. */
+  #moveMarquee(event: PointerEvent): void {
+    const marquee = this.#marquee;
+    if (!marquee) return;
+    marquee.to = this.#screenToWorld(event.clientX, event.clientY);
+    if (!marquee.moved) {
+      if (!marqueeMoved(marquee.startX, marquee.startY, event.clientX, event.clientY)) return;
+      marquee.moved = true;
+    }
+    this.#paintMarquee(marquee);
+    this.#scheduleMarquee();
+  }
+
+  /**
+   * Lo strato del rettangolo sullo stage, creato la prima volta che serve e poi lo
+   * stesso. Si aggiunge allo stage quando serve, e non a ogni movimento: ogni
+   * spostamento di un figlio dello stage rifà lo stile di ciò che gli sta attorno.
+   */
+  #marqueeLayerNow(): MarqueeLayer {
+    let layer = this.#marqueeLayer;
+    if (!layer) {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "canvas-marquee");
+      svg.setAttribute("aria-hidden", "true");
+      const box = document.createElementNS(ns, "rect");
+      box.setAttribute("class", "canvas-marquee-box");
+      svg.append(box);
+      layer = { svg, box };
+      this.#marqueeLayer = layer;
+    }
+    if (layer.svg.parentElement !== this.#stage) this.#stage.append(layer.svg);
+    return layer;
+  }
+
+  /** Disegna il rettangolo del gesto nel suo strato: quattro attributi, nessuna scheda toccata. */
+  #paintMarquee(marquee: MarqueeGesture): void {
+    const layer = this.#marqueeLayerNow();
+    const box = marqueeBox(marquee.from, marquee.to);
+    layer.box.setAttribute("x", String(box.minX));
+    layer.box.setAttribute("y", String(box.minY));
+    layer.box.setAttribute("width", String(box.maxX - box.minX));
+    layer.box.setAttribute("height", String(box.maxY - box.minY));
+  }
+
+  /** Chiede un fotogramma per la scelta, se non ce n'è già uno in attesa. */
+  #scheduleMarquee(): void {
+    if (this.#marqueeFrame === undefined) this.#marqueeFrame = requestAnimationFrame(() => this.#marqueeStep());
+  }
+
+  /** Il fotogramma del rettangolo: la scelta si rifà una volta, con il rettangolo di adesso. */
+  #marqueeStep(): void {
+    this.#marqueeFrame = undefined;
+    const marquee = this.#marquee;
+    if (marquee !== null && marquee.moved && !this.#destroyed) this.#applyMarquee(marquee);
+  }
+
+  /** La scelta che il rettangolo fa adesso: le schede che tocca (più quelle di prima, con Maiusc) e i fili fra due di loro. */
+  #applyMarquee(marquee: MarqueeGesture): void {
+    const doc = this.#doc;
+    if (!doc) return;
+    const touched = cardsTouched(marqueeBox(marquee.from, marquee.to), doc.nodes);
+    const nodes = marquee.additive ? unionIds(marquee.base.nodes, touched) : touched;
+    const edges = edgesBetween(new Set(nodes), doc.edges);
+    this.#setChoice(
+      nodes,
+      marquee.additive ? unionIds(marquee.base.edges, edges) : edges,
+      marquee.additive ? marquee.base.strokes : new Set(),
+    );
+  }
+
+  /**
+   * Mette la scelta a `nodes`, `edges` e `strokes` e la mostra sullo stage. Solo le
+   * schede che cambiano stato toccano la classe, e i fili si rifanno solo se la
+   * loro scelta cambia: un fotogramma che non sposta niente non tocca lo stage.
+   * La riga delle opzioni e la barra dei comandi si rifanno solo quando la scelta
+   * passa da vuota a piena o viceversa, e lo stato verso chi ascolta (l'ispettore)
+   * solo a fine gesto, come il lazo: a ogni fotogramma costano troppo (N6 T20b).
+   * A fine gesto le rifà chi chiama.
+   */
+  #setChoice(nodes: readonly string[], edges: readonly string[], strokes: ReadonlySet<string>): void {
+    const was = new Set(this.#selection);
+    const next = new Set(nodes);
+    const changed = new Set<string>();
+    for (const id of was) if (!next.has(id)) changed.add(id);
+    for (const id of next) if (!was.has(id)) changed.add(id);
+    const edgesChanged = !sameIds(this.#edgeSelection, edges);
+    const strokesChanged = !sameIds(this.#strokeSelection, strokes);
+    if (changed.size === 0 && !edgesChanged && !strokesChanged) return;
+    this.#selection = [...nodes];
+    this.#edgeSelection = [...edges];
+    this.#strokeSelection = new Set(strokes);
+    if (changed.size > 0) {
+      for (const el of this.#stage.querySelectorAll<HTMLElement>(".canvas-node")) {
+        const id = el.dataset.node ?? "";
+        if (changed.has(id)) el.classList.toggle("selected", next.has(id));
+      }
+    }
+    if (edgesChanged && this.#doc && !this.#isSceneOversized()) this.#drawEdges();
+    if (strokesChanged) this.#paintLasso();
+    this.#syncSelectionFrame();
+    if ((was.size === 0) !== (next.size === 0)) this.#drawToolbar();
+  }
+
+  /**
+   * Il rettangolo finisce col rilascio, con la cattura persa o con la finestra
+   * (una volta sola). Uno spostato lascia la scelta dove il rettangolo l'ha
+   * portata; un clic senza spostamento toglie la scelta, come prima, se non c'è
+   * Maiusc.
+   */
+  #endMarquee(): void {
+    const marquee = this.#marquee;
+    if (marquee === null) return;
+    if (marquee.moved) this.#applyMarquee(marquee);
+    else if (!marquee.additive) this.#clearSelection();
+    this.#stopMarquee();
+    // La riga, la barra dei comandi e chi ascolta la scelta si rifanno a fine gesto, con la scelta di adesso.
+    if (marquee.moved) this.#settleChoice();
+  }
+
+  /** Esc: il rettangolo si annulla e la scelta torna com'era prima del trascinamento. */
+  #cancelMarquee(): void {
+    const marquee = this.#marquee;
+    if (marquee === null) return;
+    this.#stopMarquee();
+    if (marquee.moved) {
+      this.#setChoice(marquee.base.nodes, marquee.base.edges, marquee.base.strokes);
+      this.#settleChoice();
+    }
+  }
+
+  /** La scelta del rettangolo è quella finale: la riga e la barra si rifanno, e chi ascolta la scelta ne è avvisato una volta. */
+  #settleChoice(): void {
+    this.#drawToolbar();
+    this.#options.onSelectionChange();
+  }
+
+  /** Il rettangolo smette: il fotogramma in attesa si ferma e lo strato esce dallo stage. */
+  #stopMarquee(): void {
+    this.#marquee = null;
+    if (this.#marqueeFrame !== undefined) cancelAnimationFrame(this.#marqueeFrame);
+    this.#marqueeFrame = undefined;
+    this.#marqueeLayer?.svg.remove();
+  }
+
+  /**
+   * La scheda di testo dello strumento Testo, nel punto `clientX`, `clientY` della
+   * finestra; senza punto, al centro della vista («Scrivi una scheda», T62). Si
+   * apre in scrittura. Con `link` (un filo lasciato nel vuoto, T67) nasce
+   * collegata alla scheda `link.from`, nello stesso commit. La colonna torna
+   * alla Selezione, salvo con `keepTool` (il doppio tocco, T63).
+   */
+  #placeText(clientX?: number, clientY?: number, link?: CardLink, keepTool = false): void {
+    const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
+    const placed = this.#addNode("text", undefined, at, link);
+    if (!placed) return;
+    // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
+    const born = this.#undo[this.#undo.length - 1] ?? null;
+    // Il doppio tocco (T63) lascia lo strumento com'è.
+    if (!keepTool) this.#pickTool("select");
+    this.#render();
+    this.#beginCardEdit(placed, born);
+  }
+
+  /** La lavagna vuota (T62): le righe e i pulsanti, se la lavagna è vuota e si può scrivere. */
+  #syncEmpty(): void {
+    const doc = this.#doc;
+    this.#empty.sync({
+      empty: !this.#destroyed && doc !== null && isEmptyBoard(doc),
+      editable: !this.#readOnly && !this.#isSceneOversized(),
+    });
+  }
+
+  /**
+   * Ciò che la lavagna vuota riceve, dagli appunti o dal selettore dei file: lo
+   * stesso evento di Ctrl+V sulla vista, così passa dalla stessa strada
+   * (`#intake`) e dal deposito, come un rilascio.
+   */
+  #receive(data: DataTransfer): void {
+    this.#viewport.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }
+
+  /** La scheda `nodeId` presa col clic: `additive` (Maiuscolo) la aggiunge o la toglie. */
+  #selectNode(nodeId: string, additive: boolean): void {
+    if (additive) {
+      this.#selection = this.#selection.includes(nodeId)
+        ? this.#selection.filter((id) => id !== nodeId)
+        : [...this.#selection, nodeId];
+    } else if (!this.#selection.includes(nodeId)) {
+      this.#selection = [nodeId];
+      this.#strokeSelection = new Set();
+    } else {
+      return;
+    }
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  #selectEdge(edgeId: string): void {
+    this.#edgeSelection = [edgeId];
+    this.#selection = [];
+    this.#strokeSelection = new Set();
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  #clearSelection(): void {
+    this.#selection = [];
+    this.#edgeSelection = [];
+    this.#strokeSelection = new Set();
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  /** Comincia a trascinare le schede scelte, e ciò che i gruppi scelti contengono. */
+  #beginDrag(event: PointerEvent): void {
+    if (!this.#doc) return;
+    const origin = new Map<string, { x: number; y: number }>();
+    for (const id of this.#selection) {
+      const node = this.#doc.nodes.find((n) => n.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y });
+    }
+    // A group carries every card fully inside it. Containment is geometric,
+    // not a second persisted parent relation that would conflict with Canvas.
+    for (const group of this.#doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
+      for (const child of this.#doc.nodes) {
+        if (child.id !== group.id && child.x >= group.x && child.y >= group.y
+          && child.x + child.width <= group.x + group.width
+          && child.y + child.height <= group.y + group.height) {
+          origin.set(child.id, { x: child.x, y: child.y });
+        }
+      }
+    }
+    const ids = this.#selection.filter((id) => origin.has(id));
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0 };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+
+  #beginPan(pointerId: number, clientX: number, clientY: number): void {
+    this.#pan = { pointerId, startX: clientX, startY: clientY, camX: this.#camera.x, camY: this.#camera.y };
+    this.#viewport.setPointerCapture?.(pointerId);
+  }
+
+  // --- il dito -----------------------------------------------------------------
+
+  /** «Il dito sposta le schede», adesso. */
+  #fingerMovesCard(): boolean {
+    return this.#options.fingerMovesCard ? this.#options.fingerMovesCard() : this.#fingerMovesCardSetting;
+  }
+
+  /**
+   * Un dito si posa. Il primo sposta la lavagna, anche sopra le schede, e se
+   * si alza presto e vicino fa quello che fa un clic; con «Il dito sposta le
+   * schede» sopra una scheda la sposta. Le maniglie (testata, ridimensiona,
+   * collega) e i controlli (pulsanti, collegamenti, campi) fanno come col
+   * mouse; in sola lettura le maniglie spostano la lavagna. Il secondo dito
+   * comincia il pizzico, salvo durante un gesto su una scheda, che tiene il
+   * dito suo. Con una penna giù il dito non fa niente, e il palmo nemmeno.
+   *
+   * Con «Il dito scrive» (T64) il primo dito scrive e qui non arriva: lo
+   * prende lo strato della penna. Il secondo dito annulla il suo tratto (lo
+   * fa la sessione della penna) e lo prende con sé: i due pizzicano.
+   */
+  #touchDown(event: PointerEvent): void {
+    if (this.#penDown || this.#palm(event.pointerId) || this.#drag || this.#resize || this.#connect || this.#pinch) return;
+    this.#adopted = this.#adoptWritingFingers(event.pointerId);
+    this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.#fingers.size >= 2) {
+      this.#beginPinch();
+      event.preventDefault();
+      return;
+    }
+    const hit = this.#targetOf(event);
+    const target = hit instanceof Element ? hit : null;
+    // Vicino a un angolo della scelta il dito prende la maniglia (T66); un
+    // controllo sotto il dito (il pulsante del filo) resta suo.
+    if (!target?.closest(FINGER_CONTROLS) && this.#resizeFromFinger(event)) return;
+    if (target?.closest(FINGER_CONTROLS) || (!this.#readOnly && target?.closest(FINGER_HANDLES))) {
+      this.#mouseDown(event);
+      return;
+    }
+    const nodeId = this.#nodeAt(target);
+    if (nodeId && !this.#readOnly && this.#doc && this.#fingerMovesCard()) {
+      this.#selectNode(nodeId, event.shiftKey);
+      this.#beginDrag(event);
+      return;
+    }
+    this.#tap = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, at: event.timeStamp, target, shift: event.shiftKey };
+    this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Le dita che scrivevano (T64) e che la sessione della penna ha appena
+   * fatto diventare navigazione, perché si è posato il dito `except`: da qui
+   * la lavagna le segue come le sue, dal punto dove sono adesso. Un dito che
+   * la lavagna non ha preso per altre ragioni (posato durante uno
+   * spostamento, il palmo) non era dello strato e resta fuori.
+   */
+  #adoptWritingFingers(except: number): number[] {
+    const adopted: number[] = [];
+    for (const [id, touch] of this.#touches) {
+      if (id === except || !touch.swallowed || this.#fingers.has(id)) continue;
+      if (this.#inkLayer?.roleOf(id) !== "navigate") continue;
+      touch.swallowed = false;
+      this.#fingers.set(id, { x: touch.x, y: touch.y });
+      adopted.push(id);
+    }
+    return adopted;
+  }
+
+  /** «Il dito scrive» dall'interruttore della colonna: vale subito, e si scrive nelle Impostazioni di questo computer. */
+  #setFingerWrites(on: boolean): void {
+    if (this.#destroyed || on === this.#fingerWritesSetting) return;
+    const before = this.#fingerWritesSetting;
+    this.#fingerWritesSetting = on;
+    this.#rail.sync();
+    // Una scrittura che non riesce lascia il valore di prima, se nel frattempo
+    // nessuno l'ha cambiato.
+    saveFingerWrites(on, () => {
+      if (this.#destroyed || this.#fingerWritesSetting !== on) return;
+      this.#fingerWritesSetting = before;
+      this.#rail.sync();
+    });
+  }
+
+  /**
+   * Il dito `pointerId` è il palmo: lo decide la sessione della penna
+   * (`ink/input/roles.ts`), che fa palmo ogni dito con una penna giù o
+   * sospesa, e le dita già giù quando la penna arriva. Senza lo strato (sola
+   * lettura) non c'è penna che scriva, e nessun dito è palmo.
+   */
+  #palm(pointerId: number): boolean {
+    return this.#inkLayer?.roleOf(pointerId) === "ignore";
+  }
+
+  /** Le prime due dita giù diventano un pizzico: il pan e il tocco breve finiscono. */
+  #beginPinch(): void {
+    const [a, b] = [...this.#fingers.keys()];
+    if (a === undefined || b === undefined) return;
+    this.#pan = null;
+    this.#tap = null;
+    this.#pinch = { a, b, a0: this.#local(this.#fingers.get(a)!), b0: this.#local(this.#fingers.get(b)!), start: { ...this.#camera } };
+    this.#viewport.setPointerCapture?.(b);
+  }
+
+  /** Un punto del client in coordinate del viewport. */
+  #local(point: TouchPoint): TouchPoint {
+    const rect = this.#viewport.getBoundingClientRect();
+    return { x: point.x - rect.left, y: point.y - rect.top };
+  }
+
+  /** Un dito si muove: `true` se l'ha preso il dito, `false` se tocca al gesto comune. */
+  #touchMove(event: PointerEvent): boolean {
+    if (!this.#fingers.has(event.pointerId)) return true;
+    this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // La penna vince, giù o sospesa: il dito si ferma, e una scheda che
+    // spostava torna dov'era.
+    if (this.#penDown || this.#palm(event.pointerId)) {
+      this.#cancelGestures();
+      return true;
+    }
+    const pinch = this.#pinch;
+    if (pinch) {
+      const a = this.#fingers.get(pinch.a);
+      const b = this.#fingers.get(pinch.b);
+      if (a && b && (event.pointerId === pinch.a || event.pointerId === pinch.b)) {
+        this.#camera = { ...pinchCamera(pinch.start, pinch.a0, pinch.b0, this.#local(a), this.#local(b), ZOOM_LIMITS) };
+        this.#applyCamera();
+      }
+      return true;
+    }
+    const tap = this.#tap;
+    if (tap?.pointerId === event.pointerId && !isTap(tap.startX, tap.startY, event.clientX, event.clientY, 0)) this.#tap = null;
+    return false;
+  }
+
+  /**
+   * Un dito si alza: `true` se l'ha preso il dito. Dal pizzico, il dito che
+   * resta sposta la lavagna; un tocco breve fa quello che fa un clic.
+   */
+  #touchUp(event: PointerEvent): boolean {
+    if (!this.#fingers.delete(event.pointerId)) return true;
+    const pinch = this.#pinch;
+    if (pinch) {
+      if (event.pointerId !== pinch.a && event.pointerId !== pinch.b) return true;
+      this.#pinch = null;
+      const rest = [...this.#fingers][0];
+      if (rest) this.#beginPan(rest[0], rest[1].x, rest[1].y);
+      return true;
+    }
+    const tap = this.#tap;
+    if (tap?.pointerId !== event.pointerId) return false;
+    this.#tap = null;
+    this.#pan = null;
+    if (isTap(tap.startX, tap.startY, event.clientX, event.clientY, event.timeStamp - tap.at)) this.#tapAt(tap.target, tap.shift);
+    return true;
+  }
+
+  /** Il tocco breve su `target`: sceglie come il clic del mouse. */
+  #tapAt(target: Element | null, additive: boolean): void {
+    if (!target?.isConnected) return;
+    const nodeId = this.#nodeAt(target);
+    if (nodeId) {
+      this.#selectNode(nodeId, additive);
+      return;
+    }
+    const edgeId = this.#edgeAt(target);
+    if (edgeId) this.#selectEdge(edgeId);
+    else if (!additive) this.#clearSelection();
+  }
+
+  // --- il menu radiale e i gesti (T63) ------------------------------------------
+
+  /** Il colore della penna di adesso: quello dell'evidenziatore con l'evidenziatore. */
+  get #penColor(): string {
+    return this.#penChoice.color[inkStrokeTool(this.#penChoice)];
+  }
+
+  /**
+   * Apre il menu radiale in `x`, `y` della finestra (`openRadial`, che a un
+   * bordo lo sposta dove si vede intero): Annulla e Ripeti, gli ultimi tre
+   * strumenti e gli ultimi tre colori della penna. `held` è il puntatore
+   * ancora giù che l'ha aperto, che il menu segue; `keyboard` lo apre dalla
+   * tastiera, col fuoco sulla prima voce.
+   */
+  #openRadial(x: number, y: number, held: RadialPointer | null, keyboard = false): void {
+    if (this.#destroyed || !this.#doc) return;
+    // Le voci sono comandi del catalogo, letti adesso: dopo una voce la banda
+    // di stato si rilegge, come dopo una voce del menu.
+    const catalog = new Map(this.commands().map((command) => [command.id, command]));
+    let radial: Radial | null = null;
+    radial = openCanvasRadial(x, y, {
+      command: (id) => {
+        const command = catalog.get(id);
+        return command === undefined ? null : {
+          ...command,
+          run: (args) => {
+            command.run(args);
+            this.#statusSettle();
+          },
+        };
+      },
+      tool: this.#tool,
+      recentTools: this.#recentTools,
+      color: this.#penColor,
+      recentColors: this.#recentColors,
+      readOnly: this.#readOnly || this.#isSceneOversized(),
+      pickTool: (tool) => {
+        this.#recordPending();
+        this.#pickTool(tool);
+      },
+      pickColor: (color) => {
+        const tool = inkStrokeTool(this.#penChoice);
+        this.#choosePen({ ...this.#penChoice, color: { ...this.#penChoice.color, [tool]: color } }, true);
+      },
+    }, {
+      held,
+      keyboard,
+      onClose: () => {
+        if (this.#radial === radial) this.#radial = null;
+      },
+    });
+    this.#radial = radial;
+  }
+
+  /** «Menu radiale» del menu del tasto destro: dove si è cliccato, o al centro della vista dalla tastiera. */
+  #openRadialFromMenu(at: { x: number; y: number } | null): void {
+    if (at) {
+      this.#openRadial(at.x, at.y, null);
+      return;
+    }
+    const rect = this.#viewport.getBoundingClientRect();
+    this.#openRadial(rect.left + rect.width / 2, rect.top + rect.height / 2, null, true);
+  }
+
+  /**
+   * La penna si appoggia col tasto laterale (`canvas.pen_button`): apre il
+   * menu radiale, che la segue finché il tasto è giù; o sposta la lavagna; o
+   * fa un giro di Lazo che sceglie come lo strumento Lazo, e lo strumento di
+   * prima resta. Con `eraser` cancella lo strato della penna, e qui non
+   * arriva. I movimenti e il rilascio sono quelli di ogni puntatore.
+   */
+  #barrelDown(event: PointerEvent): void {
+    const action = this.#penButtonSetting;
+    if (this.#destroyed || !this.#doc || action === "eraser") return;
+    this.#menuHeld = event.pointerId;
+    this.#recordPending();
+    if (action === "radial") {
+      this.#openRadial(event.clientX, event.clientY, { pointerType: "pen", pointerId: event.pointerId });
+    } else if (action === "pan") {
+      this.#beginPan(event.pointerId, event.clientX, event.clientY);
+    } else if (!this.#isSceneOversized()) {
+      this.#selectionBar.hide();
+      this.#beginLasso(event);
+    }
+  }
+
+  /**
+   * Un puntatore si alza o si perde, ovunque. Quello che aveva preso un gesto
+   * della lavagna (il tasto laterale, il tocco lungo) lascia dietro di sé, per
+   * poco, il silenzio del menu del sistema. Un dito alzato fuori dalla vista
+   * chiude il suo tocco, che non è più un tocco.
+   */
+  #pointerEnded(event: PointerEvent): void {
+    this.#pointerLeft(event);
+    if (event.pointerType === "touch" && !(event.target instanceof Node && this.#viewport.contains(event.target))) {
+      this.#gestureUp(event, true);
+    }
+  }
+
+  /**
+   * Il puntatore `event` si è alzato davvero: il rilascio vero, dal documento,
+   * prima della vista. Si toglie dal ricordo (`#pressed`), dalle dita che il
+   * tocco teneva e dal menu che aveva aperto. Una chiusura senza rilascio non
+   * lo chiama: un dito che ha perso la cattura può essere ancora giù.
+   */
+  #pointerLeft(event: PointerEvent): void {
+    this.#pressed.delete(event.pointerId);
+    if (event.pointerType === "touch") this.#touches.delete(event.pointerId);
+    this.#menuLet(event.pointerId);
+  }
+
+  /** Il menu che il puntatore `pointerId` teneva non è più suo: il silenzio del menu di sistema resta per poco (`MENU_ECHO_MS`). */
+  #menuLet(pointerId: number): void {
+    if (pointerId !== this.#menuHeld) return;
+    this.#menuHeld = null;
+    this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
+  }
+
+  /**
+   * Un movimento di un puntatore premuto: ne ricorda il punto. Senza tasto, il
+   * rilascio non è arrivato (il browser l'ha perso, o è caduto fuori dalla
+   * finestra): la pressione è finita e il gesto del puntatore si chiude adesso
+   * (T20a). Il dito no: non ha un tasto da lasciare, e il suo contatto lo
+   * chiudono il rilascio, il `pointercancel` o la finestra.
+   */
+  #pointerMoved(event: PointerEvent): void {
+    const seen = this.#pressed.get(event.pointerId);
+    if (seen === undefined) return;
+    seen.last = event;
+    if (event.buttons === 0 && seen.held && event.pointerType !== "touch") {
+      seen.held = false;
+      this.#gestureLost(event);
+    }
+  }
+
+  /**
+   * Il gesto di `event` si chiude senza il suo rilascio, con l'ultimo evento
+   * del puntatore: un movimento senza tasto, o la cattura persa (solo col mouse
+   * e la penna: il browser e lo strato della penna tolgono la cattura a un dito
+   * che passa a scrivere o a far da navigazione, T64), o la finestra che perde
+   * il fuoco. Passa dalla stessa fine del rilascio (`#gestureEnd`) e non fa
+   * niente se il gesto non c'è più: un rilascio che arriva dopo non trova niente
+   * da chiudere. Il ricordo del puntatore (`#pressed`, `#touches`) resta, perché
+   * il suo rilascio vero lo toglie.
+   */
+  #gestureLost(event: PointerEvent): void {
+    if (!this.#gestureOpen(event.pointerId)) return;
+    // Il menu radiale che il puntatore teneva si chiude con lui: senza rilascio
+    // non c'è una voce su cui si è alzato, e nessuna si sceglie.
+    const menu = this.#menuHeld === event.pointerId;
+    this.#gestureEnd(event, true);
+    this.#menuLet(event.pointerId);
+    if (menu) this.#radial?.close();
+    if (this.#viewport.hasPointerCapture?.(event.pointerId)) this.#viewport.releasePointerCapture(event.pointerId);
+  }
+
+  /** La finestra perde il fuoco: ogni puntatore premuto si chiude come se si fosse alzato (`#gestureLost`). */
+  #gesturesLost(): void {
+    for (const { last } of [...this.#pressed.values()]) this.#gestureLost(last);
+  }
+
+  /**
+   * Un gesto della lavagna è aperto per il puntatore `pointerId`: lo spostamento
+   * della vista, il trascinamento di una scheda o di un tratto del Lazo, il
+   * ridimensionamento, il filo, il giro del Lazo, il rettangolo della Selezione
+   * (N6 T20b), il pizzico e il dito, il tocco lungo, il menu radiale che il
+   * puntatore tiene. Il tratto della penna no:
+   * lo tiene l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`), che
+   * lo annulla alla cattura persa e alla finestra.
+   */
+  #gestureOpen(pointerId: number): boolean {
+    return this.#pan?.pointerId === pointerId || this.#tap?.pointerId === pointerId
+      || this.#drag?.pointerId === pointerId || this.#resize?.pointerId === pointerId
+      || this.#connect?.pointerId === pointerId || this.#lasso?.pointerId === pointerId
+      || this.#marquee?.pointerId === pointerId
+      || this.#strokeDrag?.pointerId === pointerId || this.#edgeScroll?.pointerId === pointerId
+      || this.#longPress?.pointerId === pointerId || this.#pinch?.a === pointerId || this.#pinch?.b === pointerId
+      || this.#fingers.has(pointerId) || this.#menuHeld === pointerId;
+  }
+
+  /**
+   * Un dito si posa, dopo ciò che il dito fa di suo (`#touchDown`): comincia
+   * o cresce un tocco di più dita e, se è il primo e si ferma lì, il tocco
+   * lungo. Con la penna giù o col palmo non è un tocco.
+   */
+  #gestureDown(event: PointerEvent): void {
+    const point = { x: event.clientX, y: event.clientY };
+    const hit = this.#targetOf(event);
+    const target = hit instanceof Element ? hit : null;
+    // Le dita che scrivevano, prese da questo (T64), sono nel tocco dal loro
+    // appoggio: un dito che ha già scritto più in là non fa un tocco.
+    const adopted = this.#adopted.flatMap((id) => {
+      const touch = this.#touches.get(id);
+      return touch ? [[id, touch] as const] : [];
+    });
+    this.#adopted = [];
+    const start = Math.min(event.timeStamp, ...adopted.map(([, touch]) => touch.at));
+    const taps = this.#fingerTap ??= { down: new Map(), first: point, most: 0, start, spoiled: false, target };
+    for (const [id, touch] of adopted) {
+      taps.down.set(id, { x: touch.startX, y: touch.startY });
+      if (Math.hypot(touch.x - touch.startX, touch.y - touch.startY) > TAP_SLOP_PX) taps.spoiled = true;
+    }
+    taps.down.set(event.pointerId, point);
+    taps.most = Math.max(taps.most, taps.down.size);
+    if (this.#penDown || this.#palm(event.pointerId)) taps.spoiled = true;
+    // Il secondo dito: è un pizzico o un tocco di più dita, non un tocco lungo.
+    this.#cancelLongPress();
+    if (taps.down.size === 1 && !taps.spoiled && this.#fingers.has(event.pointerId) && this.#longPressHere(target)) {
+      const timer = setTimeout(() => this.#longPressFire(), LONG_PRESS_MS);
+      this.#longPress = { pointerId: event.pointerId, x: point.x, y: point.y, target, timer };
+    }
+  }
+
+  /** Dove il tocco lungo vale: sulla lavagna e sulle schede, non sui controlli né dentro la scheda in cui si scrive. */
+  #longPressHere(target: Element | null): boolean {
+    if (!target || !this.#viewport.contains(target) || target.closest(FINGER_CONTROLS)) return false;
+    if (this.#resize !== null || this.#connect !== null) return false;
+    return !(this.#activeId !== null && this.#insideActive(target, false));
+  }
+
+  /**
+   * Un dito si muove: oltre `TAP_SLOP_PX` dal suo appoggio non è più un tocco
+   * né un tocco lungo (due dita che si muovono sono un pizzico). Solo un
+   * confronto di distanza per evento.
+   */
+  #gestureMove(event: PointerEvent): void {
+    const taps = this.#fingerTap;
+    if (!taps || (taps.spoiled && this.#longPress === null)) return;
+    const from = taps.down.get(event.pointerId);
+    if (!from || Math.hypot(event.clientX - from.x, event.clientY - from.y) <= TAP_SLOP_PX) return;
+    taps.spoiled = true;
+    if (this.#longPress?.pointerId === event.pointerId) this.#cancelLongPress();
+  }
+
+  /** Il tocco lungo che aspetta si ferma, col suo timer. */
+  #cancelLongPress(): void {
+    const press = this.#longPress;
+    if (!press) return;
+    this.#longPress = null;
+    clearTimeout(press.timer);
+  }
+
+  /**
+   * Il dito è rimasto fermo `LONG_PRESS_MS`: sopra una scheda il suo menu
+   * (lo stesso del tasto destro, nel punto del dito), altrove il menu
+   * radiale, che segue il dito finché non si alza. Il gesto del dito si
+   * ferma dov'era. La penna giù, o il dito diventato palmo, vincono.
+   */
+  #longPressFire(): void {
+    const press = this.#longPress;
+    this.#longPress = null;
+    if (!press || this.#destroyed || !this.#doc) return;
+    if (this.#penDown || this.#palm(press.pointerId) || !this.#fingers.has(press.pointerId)) return;
+    this.#lastTap = null;
+    this.#cancelGestures();
+    this.#menuHeld = press.pointerId;
+    const target = press.target;
+    if (target?.isConnected && this.#nodeAt(target) !== null) {
+      const menu = new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true, composed: true, clientX: press.x, clientY: press.y, button: 2,
+      });
+      this.#ownMenu = menu;
+      try {
+        target.dispatchEvent(menu);
+      } finally {
+        this.#ownMenu = null;
+      }
+      return;
+    }
+    this.#openRadial(press.x, press.y, { pointerType: "touch", pointerId: press.pointerId });
+  }
+
+  /**
+   * Un dito si alza (o si perde: `cancelled`). Quando si è alzato l'ultimo:
+   * due dita che non si sono mosse, entro `FINGERS_TAP_MS` dal primo
+   * appoggio, annullano; tre ripetono. Un dito solo nel vuoto, due volte
+   * vicino e presto, mette lì una scheda di testo già in scrittura.
+   */
+  #gestureUp(event: PointerEvent, cancelled: boolean): void {
+    if (this.#longPress?.pointerId === event.pointerId) this.#cancelLongPress();
+    const taps = this.#fingerTap;
+    if (!taps || !taps.down.has(event.pointerId)) return;
+    if (cancelled || this.#penDown) taps.spoiled = true;
+    taps.down.delete(event.pointerId);
+    if (taps.down.size > 0) return;
+    this.#fingerTap = null;
+    const ms = event.timeStamp - taps.start;
+    if (taps.spoiled || taps.most > 3) {
+      this.#lastTap = null;
+      return;
+    }
+    if (taps.most >= 2) {
+      this.#lastTap = null;
+      if (ms <= FINGERS_TAP_MS) this.#fingersTapped(taps.most === 2 ? "undo" : "redo");
+      return;
+    }
+    if (ms > TAP_MAX_MS || !this.#emptyAt(taps.target)) {
+      this.#lastTap = null;
+      return;
+    }
+    const last = this.#lastTap;
+    if (last && taps.start - last.at <= DOUBLE_TAP_MS && Math.hypot(taps.first.x - last.x, taps.first.y - last.y) <= DOUBLE_TAP_PX) {
+      this.#lastTap = null;
+      this.#placeText(taps.first.x, taps.first.y, undefined, true);
+      return;
+    }
+    this.#lastTap = { x: taps.first.x, y: taps.first.y, at: event.timeStamp };
+  }
+
+  /** Il vuoto della lavagna sotto `target`: niente schede, fili, maniglie o controlli, e la lavagna si cambia. */
+  #emptyAt(target: Element | null): boolean {
+    if (!target?.isConnected || !this.#viewport.contains(target) || this.#readOnly || this.#isSceneOversized()) return false;
+    return this.#nodeAt(target) === null && this.#edgeAt(target) === null
+      && target.closest(FINGER_CONTROLS) === null && target.closest(FINGER_HANDLES) === null;
+  }
+
+  /** Il tocco di due dita annulla, quello di tre ripete; se non c'è niente, lo dice. */
+  #fingersTapped(command: "undo" | "redo"): void {
+    const can = !this.#readOnly && (command === "undo" ? this.#undo.length > 0 || this.#pending !== null : this.#redo.length > 0);
+    if (!can) {
+      this.#sayGesture(t(command === "undo" ? "canvas.gesture.no_undo" : "canvas.gesture.no_redo"));
+      return;
+    }
+    if (command === "undo") this.undo();
+    else this.redo();
+    this.#statusSettle();
+  }
+
+  /**
+   * La regione viva della tela: dice al lettore di schermo ciò che un gesto
+   * non ha fatto (T63), ciò che un commit ha cambiato e la scheda che da una
+   * parte non c'è (T61). La stessa frase si ridice: uno spazio fermo in coda,
+   * alterno, la fa annunciare di nuovo.
+   */
+  #sayGesture(text: string): void {
+    if (this.#destroyed) return;
+    let said = this.#gestureSaid;
+    if (!said) {
+      said = document.createElement("div");
+      said.className = "sr-only canvas-gesture-said";
+      said.setAttribute("role", "status");
+      said.setAttribute("aria-live", "polite");
+      this.#root.append(said);
+      this.#gestureSaid = said;
+    }
+    this.#gestureEcho = !this.#gestureEcho;
+    said.textContent = this.#gestureEcho ? text : `${text} `;
+  }
+
+  // --- ridimensionare (T66) ---------------------------------------------------
+
+  /**
+   * Il mouse (o il dito, o la penna) giù su una maniglia: comincia il
+   * ridimensionamento della sua scheda, o della scelta se è una maniglia
+   * della cornice. `false` se sotto non c'è una maniglia che si possa tirare.
+   */
+  #resizeFromHandle(event: PointerEvent): boolean {
+    if (this.#readOnly || !this.#doc) return false;
+    const hit = this.#targetOf(event);
+    const target = hit instanceof Element ? hit : null;
+    const handle = target?.closest<HTMLElement>("[data-resize], [data-resize-frame]");
+    if (!handle) return false;
+    const corner = cornerOf(handle.dataset.corner);
+    const ids = handle.dataset.resize !== undefined ? [handle.dataset.resize] : this.#resizableSelection();
+    if (!this.#beginResize(event, corner, ids)) return false;
+    event.preventDefault();
+    return true;
+  }
+
+  /**
+   * Il dito giù vicino a un angolo della scheda scelta, o della cornice della
+   * scelta: la presa è di 44 px sullo schermo a ogni zoom, più larga di
+   * quella del mouse. Lo spazio Semplice (T65) non c'è ancora: decide il
+   * tipo di puntatore.
+   */
+  #resizeFromFinger(event: PointerEvent): boolean {
+    if (this.#readOnly || !this.#doc || this.#isSceneOversized()) return false;
+    const ids = this.#resizableSelection();
+    const box = this.#boxOf(ids);
+    if (!box) return false;
+    const rect = this.#viewport.getBoundingClientRect();
+    const { x: camX, y: camY, zoom } = this.#camera;
+    let best: { corner: ResizeCorner; distance: number } | null = null;
+    for (const corner of this.#cornersOf(box)) {
+      const east = corner === "ne" || corner === "se";
+      const south = corner === "sw" || corner === "se";
+      const x = rect.left + camX + (box.x + (east ? box.width : 0)) * zoom;
+      const y = rect.top + camY + (box.y + (south ? box.height : 0)) * zoom;
+      const distance = Math.max(Math.abs(event.clientX - x), Math.abs(event.clientY - y));
+      if (distance <= RESIZE_FINGER_GRIP_PX && (!best || distance < best.distance)) best = { corner, distance };
+    }
+    if (!best || !this.#beginResize(event, best.corner, ids)) return false;
+    event.preventDefault();
+    return true;
+  }
+
+  /**
+   * Le schede che un doppio clic su una maniglia adatta: quelle dell'ultima
+   * maniglia presa senza muoversi, o quelle della maniglia sotto `target`;
+   * `null` se il doppio clic non è su una maniglia. Si usa una volta.
+   */
+  #takeHandleTap(target: EventTarget | null): readonly string[] | null {
+    const tap = this.#handleTap;
+    this.#handleTap = null;
+    if (tap) return tap;
+    const handle = target instanceof Element ? target.closest<HTMLElement>("[data-resize], [data-resize-frame]") : null;
+    if (!handle) return null;
+    return handle.dataset.resize !== undefined ? [handle.dataset.resize] : this.#resizableSelection();
+  }
+
+  /** Le schede scelte che il documento ha. */
+  #resizableSelection(): string[] {
+    const doc = this.#doc;
+    if (!doc) return [];
+    // Un insieme, non una ricerca per ogni scelta: il rettangolo (N6 T20b) lo rifà a ogni fotogramma.
+    const present = new Set(doc.nodes.map((node) => node.id));
+    return this.#selection.filter((id) => present.has(id));
+  }
+
+  /** Il rettangolo attorno alle schede `ids` del documento di adesso. */
+  #boxOf(ids: readonly string[]): ResizeBox | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const wanted = new Set(ids);
+    return boxAround(doc.nodes.filter((node) => wanted.has(node.id)));
+  }
+
+  /** Le maniglie che una cornice mostra a questo zoom: troppo piccola, solo quella in basso a destra. */
+  #cornersOf(box: ResizeBox): readonly ResizeCorner[] {
+    return tinyOnScreen(box, this.#camera.zoom) ? ["se"] : RESIZE_CORNERS;
+  }
+
+  #beginResize(event: PointerEvent, corner: ResizeCorner, ids: readonly string[]): boolean {
+    const doc = this.#doc;
+    if (!doc) return false;
+    const origin = new Map<string, ResizeBox>();
+    for (const id of ids) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y, width: node.width, height: node.height });
+    }
+    const box = boxAround([...origin.values()]);
+    if (!box) return false;
+    this.#resize = { pointerId: event.pointerId, corner, startX: event.clientX, startY: event.clientY, box, origin, moved: false };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    return true;
+  }
+
+  /**
+   * Il puntatore che tira una maniglia: Maiusc tiene le proporzioni, Alt
+   * tiene fermo il centro, tutti e due insieme. Una scheda sola ha
+   * l'aggancio di 8 px (A-23); la scelta scala tutto, posizioni comprese,
+   * senza che una scheda scenda sotto il minimo. L'inchiostro attaccato sta
+   * nella scheda e la segue nella resa (N4).
+   */
+  #moveResize(event: PointerAt): void {
+    const resize = this.#resize;
+    const doc = this.#doc;
+    if (!resize || !doc) return;
+    // Un clic sulla maniglia (o il primo dei due del doppio clic) non cambia
+    // la scheda: senza questo l'aggancio la porterebbe subito sulla griglia.
+    if (Math.abs(event.clientX - resize.startX) + Math.abs(event.clientY - resize.startY) > 3) resize.moved = true;
+    if (!resize.moved) return;
+    const dx = (event.clientX - resize.startX) / this.#camera.zoom;
+    const dy = (event.clientY - resize.startY) / this.#camera.zoom;
+    const single = resize.origin.size === 1;
+    const starts = [...resize.origin.values()];
+    const narrowest = Math.max(1, Math.min(...starts.map((start) => start.width)));
+    const shortest = Math.max(1, Math.min(...starts.map((start) => start.height)));
+    const minWidth = single ? CANVAS_MIN_SIZE : resize.box.width * Math.min(1, CANVAS_MIN_SIZE / narrowest);
+    const minHeight = single ? CANVAS_MIN_SIZE : resize.box.height * Math.min(1, CANVAS_MIN_SIZE / shortest);
+    // Le guide (T71) portano il lato che tira sulle schede vicine. Solo per una
+    // scheda sola, senza Alt (che spegne l'aggancio per il gesto), senza Maiusc
+    // (le proporzioni) e con `canvas.snap` acceso.
+    const aligning = single && this.#snapSetting && !event.altKey && !event.shiftKey;
+    let guided = { x: false, y: false };
+    let ddx = dx;
+    let ddy = dy;
+    if (aligning) {
+      const east = resize.corner === "ne" || resize.corner === "se";
+      const south = resize.corner === "se" || resize.corner === "sw";
+      const free = resizeBox(resize.box, resize.corner, dx, dy, { keepRatio: false, fromCenter: false, snap: false, minWidth, minHeight });
+      const guide = snapGuides({
+        moving: free,
+        others: this.#snapTargets(resize.origin),
+        threshold: GUIDE_SCREEN_PX / this.#camera.zoom,
+        sides: { x: [east ? "end" : "start"], y: [south ? "end" : "start"] },
+      });
+      this.#showGuides(guide.segments);
+      ddx = dx + guide.dx;
+      ddy = dy + guide.dy;
+      guided = { x: guide.guidedX, y: guide.guidedY };
+    } else {
+      this.#hideGuides();
+    }
+    const box = resizeBox(resize.box, resize.corner, ddx, ddy, {
+      keepRatio: event.shiftKey,
+      fromCenter: event.altKey,
+      snap: single && this.#snapSetting && !event.altKey,
+      guided,
+      minWidth,
+      minHeight,
+    });
+    for (const [id, start] of resize.origin) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (!node) continue;
+      const next = single ? box : scaleInto(start, resize.box, box, CANVAS_MIN_SIZE);
+      node.x = next.x;
+      node.y = next.y;
+      node.width = next.width;
+      node.height = next.height;
+    }
+    this.#renderLive();
+  }
+
+  /**
+   * La cornice della scelta: con due schede scelte o più, attorno a tutte,
+   * con le sue quattro maniglie che scalano tutto; le maniglie delle schede
+   * allora si nascondono (`data-selection="many"`). In sola lettura niente.
+   */
+  #syncSelectionFrame(): void {
+    const ids = !this.#readOnly && !this.#isSceneOversized() ? this.#resizableSelection() : [];
+    const box = ids.length >= 2 ? this.#boxOf(ids) : null;
+    // Scrivere lo stesso valore non deve rifare lo stile delle maniglie di ogni
+    // scheda: la regola `[data-selection="many"] > .canvas-node` le legge tutte (N6 T20b).
+    if (box) {
+      if (this.#stage.dataset.selection !== "many") this.#stage.dataset.selection = "many";
+    } else if (this.#stage.dataset.selection !== undefined) {
+      delete this.#stage.dataset.selection;
+    }
+    if (!box) {
+      this.#selectionFrame?.remove();
+      return;
+    }
+    let frame = this.#selectionFrame;
+    if (!frame) {
+      frame = document.createElement("div");
+      frame.className = "canvas-selection-frame";
+      frame.setAttribute("aria-hidden", "true");
+      for (const corner of RESIZE_CORNERS) frame.append(resizeHandle(corner, null));
+      this.#selectionFrame = frame;
+    }
+    frame.style.transform = `translate(${box.x}px, ${box.y}px)`;
+    frame.style.width = `${box.width}px`;
+    frame.style.height = `${box.height}px`;
+    markHandles(frame, box, this.#camera.zoom);
+    // Sopra le schede e l'inchiostro libero: le sue maniglie si prendono.
+    if (frame.parentElement !== this.#stage || frame.nextSibling) this.#stage.append(frame);
+  }
+
+  /** Lo zoom è cambiato: le schede (e la cornice) troppo piccole tengono solo una maniglia. */
+  #markAllHandles(): void {
+    const zoom = this.#camera.zoom;
+    if (zoom === this.#handlesZoom) return;
+    this.#handlesZoom = zoom;
+    for (const entry of this.#cards.values()) markHandles(entry.article, entry.node, zoom);
+    const frame = this.#selectionFrame;
+    const box = frame?.isConnected ? this.#boxOf(this.#resizableSelection()) : null;
+    if (frame && box) markHandles(frame, box, zoom);
+  }
+
+  /**
+   * Il doppio clic su una maniglia: ogni scheda `ids` prende la misura del
+   * suo contenuto, in un commit e un annulla. Una scheda di testo la misura
+   * del suo testo, fino a `CANVAS_TEXT_FIT_MAX_WIDTH` di larghezza;
+   * un'immagine o un PDF le proporzioni del contenuto alla larghezza di
+   * adesso; le altre non cambiano. L'angolo in alto a sinistra resta.
+   */
+  #fitToContent(ids: readonly string[]): void {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly || this.#isSceneOversized()) return;
+    const ops: CanvasIntentOp[] = [];
+    for (const id of ids) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      const entry = this.#cards.get(id);
+      if (!node || !entry) continue;
+      const size = this.#contentSize(entry, node);
+      // La misura del contenuto è di nuovo quella che la scheda prende da sé (T44).
+      if (size) this.#sizedByHand.delete(id);
+      if (!size || (size.width === node.width && size.height === node.height)) continue;
+      // La misura la prende la tela dal DOM (il testo come si vede, il corpo
+      // senza testata): il nucleo la scrive con `resize` (T24).
+      ops.push({ op: "resize", id, width: Math.round(size.width), height: Math.round(size.height) });
+    }
+    this.#writeOps(ops);
+  }
+
+  /** La misura del contenuto della scheda `node`; `null` se non c'è o non si sa. */
+  #contentSize(entry: CardEntry, node: CanvasNode): { width: number; height: number } | null {
+    if (node.type === "text") {
+      // Col campo aperto il testo è nel campo, che non ha una misura sua.
+      if (this.#editor?.id === node.id) return null;
+      const measured = measureText(entry.article, entry.body);
+      return measured && { width: Math.max(CANVAS_MIN_SIZE, measured.width), height: Math.max(CANVAS_MIN_SIZE, measured.height) };
+    }
+    if (node.type !== "file" || typeof node.file !== "string") return null;
+    const media = mediaKindOfId(node.file);
+    if (media !== "image" && media !== "pdf") return null;
+    const natural = naturalSize(entry.body);
+    if (!natural) return null;
+    // Il riquadro del contenuto: il corpo senza il suo margine interno; il
+    // resto della scheda (la testata) resta com'è. Senza misure (prima della
+    // prima impaginazione) il contenuto è tutta la scheda.
+    const style = getComputedStyle(entry.body);
+    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const innerWidth = entry.body.clientWidth - padX;
+    const innerHeight = entry.body.clientHeight - padY;
+    const known = innerWidth > 0 && innerHeight > 0;
+    const width = known ? innerWidth : node.width;
+    const rest = known ? node.height - innerHeight : 0;
+    return { width: node.width, height: Math.max(CANVAS_MIN_SIZE, Math.round(rest + width * natural.height / natural.width)) };
   }
 
   #pointerMove(event: PointerEvent): void {
+    if (event.pointerType === "touch" && this.#touchMove(event)) return;
+    if (this.#lasso && event.pointerId === this.#lasso.pointerId) {
+      this.#moveLasso(event);
+      return;
+    }
+    if (this.#marquee && event.pointerId === this.#marquee.pointerId) {
+      this.#moveMarquee(event);
+      return;
+    }
+    if (this.#strokeDrag && event.pointerId === this.#strokeDrag.pointerId) {
+      this.#moveStrokeDrag(event);
+      return;
+    }
+    if (this.#connect && event.pointerId === this.#connect.pointerId) {
+      this.#moveConnect(event.clientX, event.clientY);
+      // Vicino al bordo la vista scorre da sola (T53).
+      if (this.#connect.moved) this.#trackEdge(event);
+      return;
+    }
+    if (!this.#pan && !this.#resize && !this.#drag && event.pointerType === "mouse") {
+      // Sotto il velo della croce (T20d) il mouse scrive: nessun filo si
+      // scurisce, e nessuna ricerca a ogni movimento del tratto.
+      if (event.target === this.#penVeil) this.#setEdgeHover(null);
+      else this.#hoverEdge(event.clientX, event.clientY, event.target);
+    }
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#camera.x = this.#pan.camX + (event.clientX - this.#pan.startX);
       this.#camera.y = this.#pan.camY + (event.clientY - this.#pan.startY);
+      // La scia del dito, per l'inerzia del rilascio (T53).
+      if (event.pointerType === "touch") {
+        const trail = this.#pan.trail ??= [];
+        trail.push({ t: event.timeStamp, x: event.clientX, y: event.clientY });
+        while (trail.length > 1 && event.timeStamp - trail[0]!.t > INERTIA_WINDOW_MS) trail.shift();
+      }
       this.#applyCamera();
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
-      const node = this.#doc.nodes.find((n) => n.id === this.#resize!.id);
-      if (!node) return;
-      const dx = (event.clientX - this.#resize.startX) / this.#camera.zoom;
-      const dy = (event.clientY - this.#resize.startY) / this.#camera.zoom;
-      node.width = Math.max(CANVAS_MIN_SIZE, snap(this.#resize.width + dx));
-      node.height = Math.max(CANVAS_MIN_SIZE, snap(this.#resize.height + dy));
-      this.#renderLive();
+      this.#moveResize(event);
+      if (this.#resize.moved) this.#trackEdge(event);
       return;
     }
     if (this.#drag && event.pointerId === this.#drag.pointerId && this.#doc) {
-      const dx = (event.clientX - this.#drag.startX) / this.#camera.zoom;
-      const dy = (event.clientY - this.#drag.startY) / this.#camera.zoom;
-      if (Math.abs(event.clientX - this.#drag.startX) + Math.abs(event.clientY - this.#drag.startY) > 3) {
-        this.#drag.moved = true;
-      }
-      for (const [id, origin] of this.#drag.origin) {
-        const node = this.#doc.nodes.find((n) => n.id === id);
-        if (node) {
-          node.x = snap(origin.x + dx);
-          node.y = snap(origin.y + dy);
-        }
-      }
-      this.#renderLive();
+      this.#moveDrag(event);
+      if (this.#drag.moved) this.#trackEdge(event);
     }
   }
 
-  #pointerUp(event: PointerEvent): void {
+  /** Le schede che si trascinano seguono il puntatore `at`. */
+  #moveDrag(at: PointerAt): void {
+    const drag = this.#drag;
+    const doc = this.#doc;
+    if (!drag || !doc) return;
+    const dx = (at.clientX - drag.startX) / this.#camera.zoom;
+    const dy = (at.clientY - drag.startY) / this.#camera.zoom;
+    if (Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
+      drag.moved = true;
+    }
+    const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
+    // Alt tenuto, o `canvas.snap` spento: le schede vanno dove le porta il
+    // puntatore, in unità intere. Altrimenti le guide (T71) vincono sulla
+    // griglia, su ogni asse. Lo spostamento è uno per tutte (una `move`, T24):
+    // la griglia aggancia l'angolo in alto a sinistra del loro riquadro, come
+    // le guide, e le schede tengono le loro distanze.
+    const free = at.altKey || !this.#snapSetting;
+    const guide = drag.moved && !free ? this.#dragGuide(drag.origin, byId, dx, dy) : null;
+    if (guide === null) this.#hideGuides();
+    let left = Infinity;
+    let top = Infinity;
+    for (const origin of drag.origin.values()) {
+      left = Math.min(left, origin.x);
+      top = Math.min(top, origin.y);
+    }
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    const along = (start: number, delta: number, guided: boolean, pull: number): number =>
+      free || guided ? Math.round(delta + pull) : snap(start + delta) - start;
+    drag.dx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
+    drag.dy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
+    for (const [id, origin] of drag.origin) {
+      const node = byId.get(id);
+      if (!node) continue;
+      node.x = origin.x + drag.dx;
+      node.y = origin.y + drag.dy;
+    }
+    this.#renderLive();
+  }
+
+  /**
+   * Le guide di uno spostamento: il riquadro delle schede trascinate nella
+   * posizione libera, con le schede in vista che restano. Mostra i segmenti
+   * che vincono e dà lo spostamento; `null` se non c'è nulla da portare.
+   */
+  #dragGuide(
+    origin: ReadonlyMap<string, { readonly x: number; readonly y: number }>,
+    byId: ReadonlyMap<string, CanvasNode>,
+    dx: number,
+    dy: number,
+  ): GuideResult | null {
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const [id, start] of origin) {
+      const node = byId.get(id);
+      if (!node) continue;
+      left = Math.min(left, start.x + dx);
+      top = Math.min(top, start.y + dy);
+      right = Math.max(right, start.x + dx + node.width);
+      bottom = Math.max(bottom, start.y + dy + node.height);
+    }
+    if (!(left <= right)) return null;
+    const guide = snapGuides({
+      moving: { x: left, y: top, width: right - left, height: bottom - top },
+      others: this.#snapTargets(origin),
+      threshold: GUIDE_SCREEN_PX / this.#camera.zoom,
+      sides: { x: MOVE_SIDES, y: MOVE_SIDES },
+    });
+    this.#showGuides(guide.segments);
+    return guide;
+  }
+
+  /**
+   * La fine del gesto di un puntatore: il suo rilascio (`lost` falso) o una
+   * chiusura senza rilascio (`lost` vero, da `#gestureLost`), per una sola
+   * strada. Se chiude uno spostamento, un pizzico, un trascinamento o un
+   * ridimensionamento (A-7), le schede vive si rifanno sulla vista e sulle
+   * schede di adesso. Un tocco chiuso senza rilascio non conta come tocco
+   * breve (`#gestureUp` lo tratta come annullato).
+   */
+  #gestureEnd(event: PointerEvent, lost: boolean): void {
+    const moving = this.#gestureMoving();
+    this.#pointerRelease(event);
+    if (moving) this.#refreshLive();
+    // Dopo il tocco breve della lavagna: il doppio tocco mette la scheda
+    // dopo che il primo ha tolto la scelta (T63).
+    if (event.pointerType === "touch") this.#gestureUp(event, lost);
+    // A fine gesto (e dopo ogni tasto) la banda di stato si rilegge: dentro un
+    // gesto `#statusSettle` non dice niente.
+    this.#statusSettle();
+  }
+
+  #pointerRelease(event: PointerEvent): void {
+    // Il rilascio ferma lo scorrimento al bordo, anche fuori dalla finestra (T53).
+    if (this.#edgeScroll?.pointerId === event.pointerId) this.#stopEdgeScroll();
+    if (event.pointerType === "touch" && this.#touchUp(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
+      const pan = this.#pan;
       this.#pan = null;
+      // Il dito lasciato in corsa: la vista va avanti da sola (T53).
+      if (event.pointerType === "touch" && pan.trail) {
+        const speed = this.#panSpeed(pan.trail, { t: event.timeStamp, x: event.clientX, y: event.clientY });
+        this.#fling(speed.vx, speed.vy);
+      }
+      // Ctrl+clic fermo su una scheda: la aggiunge alla scelta, o la toglie.
+      if (pan.toggle !== undefined
+        && Math.abs(event.clientX - pan.startX) + Math.abs(event.clientY - pan.startY) <= 3) {
+        this.#camera.x = pan.camX;
+        this.#camera.y = pan.camY;
+        this.#applyCamera();
+        this.#selectNode(pan.toggle, true);
+      }
+      return;
+    }
+    if (this.#lasso && event.pointerId === this.#lasso.pointerId) {
+      this.#endLasso();
+      return;
+    }
+    if (this.#marquee && event.pointerId === this.#marquee.pointerId) {
+      this.#endMarquee();
+      return;
+    }
+    if (this.#strokeDrag && event.pointerId === this.#strokeDrag.pointerId) {
+      this.#endStrokeDrag();
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
+      const resize = this.#resize;
       this.#resize = null;
-      this.#commitFromSource("input");
+      this.#hideGuides();
+      this.#handleTap = resize.moved ? null : [...resize.origin.keys()];
+      // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
+      if (resize.moved) for (const id of resize.origin.keys()) this.#sizedByHand.add(id);
+      this.#writeGesture(resize.moved ? this.#resizeOps(resize.origin) : null);
       return;
     }
     if (this.#drag && event.pointerId === this.#drag.pointerId) {
       const drag = this.#drag;
       this.#drag = null;
-      if (drag.moved) this.#commitFromSource("input");
+      this.#hideGuides();
+      if (drag.moved) this.#writeGesture(this.#dragOps(drag));
       return;
     }
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
       const connect = this.#connect;
-      this.#connect = null;
-      const hit = document.elementFromPoint(event.clientX, event.clientY);
-      const target = this.#nodeAt(hit);
-      if (target && this.#doc && !this.#readOnly) {
-        const existing = this.#doc.edges.find((edge) => edge.id === connect.edgeId);
-        const edge: CanvasEdge | null = existing
-          ? { ...existing, [connect.endpoint === "from" ? "fromNode" : "toNode"]: target }
-          : target !== connect.from ? {
-            id: newNodeId("e"), fromNode: connect.from, toNode: target, toEnd: "arrow",
-          } : null;
-        if (edge) {
-          const patch = upsertEdgePatch(this.#doc, edge);
-          if (patch) this.#commit([patch], "input");
-        }
-      }
+      this.#endConnect();
+      // Il filo di «Collega…» fatto, la colonna torna alla Selezione.
+      if (connect.back) this.#pickTool("select");
+      // Nel vuoto nasce una scheda già in scrittura: la disegna `#placeText`.
+      if (this.#finishConnect(connect, event.clientX, event.clientY)) return;
       this.#render();
+    }
+  }
+
+  // --- i fili (T67) --------------------------------------------------------------
+
+  /**
+   * Comincia a tirare un filo (`gesture`): dai punti, da →, con Alt dal
+   * corpo, con lo strumento Collega o riattaccando un'estremità. Mai in sola
+   * lettura e mai con la penna, che scrive (D3 è v2). Il fuoco va sulla vista,
+   * così Esc arriva e annulla.
+   */
+  #beginConnect(
+    event: PointerEvent,
+    gesture: Omit<ConnectGesture, "pointerId" | "startX" | "startY" | "moved">,
+  ): boolean {
+    if (this.#readOnly || !this.#doc || event.pointerType === "pen" || this.#isSceneOversized()) return false;
+    if (!this.#doc.nodes.some((node) => node.id === gesture.from)) return false;
+    this.#endConnect();
+    this.#connect = { ...gesture, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    if (!this.#viewport.contains(document.activeElement)) this.#viewport.focus({ preventScroll: true });
+    const draft = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    draft.classList.add("canvas-edge-draft");
+    this.#connectDraft = draft;
+    this.#edgeLayer.append(draft);
+    this.#viewport.toggleAttribute("data-connecting", true);
+    this.#setEdgeHover(null);
+    return true;
+  }
+
+  /** Il filo in corso segue il puntatore; sopra una scheda arriva al lato che sceglierà. */
+  #moveConnect(clientX: number, clientY: number): void {
+    const connect = this.#connect;
+    if (!connect || !this.#doc) return;
+    if (!connect.moved && Math.abs(clientX - connect.startX) + Math.abs(clientY - connect.startY) > 3) {
+      connect.moved = true;
+    }
+    const target = this.#connectTargetAt(connect, clientX, clientY);
+    this.#markConnectTarget(target);
+    const ends = this.#connectEnds(connect, target, this.#screenToWorld(clientX, clientY));
+    if (ends && this.#connectDraft) this.#connectDraft.setAttribute("d", edgePathData(ends.start, ends.end));
+  }
+
+  /**
+   * La scheda dove il filo arriverebbe sotto `clientX`, `clientY`: la più in
+   * alto, perché `elementFromPoint` dà quella sopra. Un filo nuovo non torna
+   * sulla scheda da cui parte.
+   */
+  #connectTargetAt(connect: ConnectGesture, clientX: number, clientY: number): CanvasNode | null {
+    const id = this.#nodeAt(this.#elementAt(clientX, clientY));
+    if (id === null || (!connect.edgeId && id === connect.from)) return null;
+    return this.#doc?.nodes.find((node) => node.id === id) ?? null;
+  }
+
+  /** I due capi del filo in corso: il capo fermo e quello che segue il puntatore. */
+  #connectEnds(
+    connect: ConnectGesture,
+    target: CanvasNode | null,
+    pointer: EdgePoint,
+  ): { start: EdgePoint; end: EdgePoint } | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const byId = new Map(doc.nodes.map((node) => [node.id, node]));
+    let anchor: CanvasNode | undefined;
+    let anchorSide: EdgeSide | undefined;
+    if (connect.edgeId) {
+      const edge = doc.edges.find((one) => one.id === connect.edgeId);
+      if (!edge) return null;
+      anchor = byId.get(connect.endpoint === "from" ? edge.toNode : edge.fromNode);
+      anchorSide = connect.endpoint === "from" ? edge.toSide ?? "left" : edge.fromSide ?? "right";
+    } else {
+      anchor = byId.get(connect.from);
+      anchorSide = connect.fromSide;
+    }
+    if (!anchor) return null;
+    if (target) {
+      const sides = nearestSides(anchor, target, anchorSide, target.id === anchor.id);
+      return { start: sidePoint(anchor, sides.fromSide), end: sidePoint(target, sides.toSide) };
+    }
+    const side = anchorSide ?? nearestSides(anchor, { x: pointer.x, y: pointer.y, width: 0, height: 0 }).fromSide;
+    return { start: sidePoint(anchor, side), end: pointer };
+  }
+
+  /** La scheda su cui il filo arriverebbe porta `data-connect-target`. */
+  #markConnectTarget(target: CanvasNode | null): void {
+    const id = target?.id ?? null;
+    if (id === this.#connectTarget) return;
+    if (this.#connectTarget !== null) this.#cards.get(this.#connectTarget)?.article.removeAttribute("data-connect-target");
+    this.#connectTarget = id;
+    if (id !== null) this.#cards.get(id)?.article.toggleAttribute("data-connect-target", true);
+  }
+
+  /** Il filo in corso finisce: niente tratto, niente bersaglio, niente gesto. */
+  #endConnect(): void {
+    this.#connect = null;
+    this.#connectDraft?.remove();
+    this.#connectDraft = null;
+    this.#markConnectTarget(null);
+    this.#viewport.removeAttribute("data-connecting");
+  }
+
+  /** Esc mentre si tira un filo: non resta niente, come se non fosse cominciato. */
+  #cancelConnect(): void {
+    const connect = this.#connect;
+    if (!connect) return;
+    this.#endConnect();
+    try {
+      this.#viewport.releasePointerCapture?.(connect.pointerId);
+    } catch {
+      // Il puntatore era già libero.
+    }
+    if (connect.back) this.#pickTool("select");
+  }
+
+  /**
+   * Il rilascio del filo `connect` in `clientX`, `clientY`. Su una scheda: il
+   * filo, coi lati scelti da `edges.ts`; un'estremità riattaccata cambia
+   * scheda. Nel vuoto: un filo nuovo fa nascere lì una scheda di testo
+   * collegata, in un commit solo (`true`: la scheda è in scrittura);
+   * un'estremità torna dov'era. Sulla scheda di partenza non succede niente.
+   */
+  #finishConnect(connect: ConnectGesture, clientX: number, clientY: number): boolean {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly) return false;
+    const hit = this.#elementAt(clientX, clientY);
+    const target = this.#connectTargetAt(connect, clientX, clientY);
+    if (connect.edgeId) {
+      const existing = doc.edges.find((edge) => edge.id === connect.edgeId);
+      if (!existing || !target) return false;
+      const movesFrom = connect.endpoint === "from";
+      const other = doc.nodes.find((node) => node.id === (movesFrom ? existing.toNode : existing.fromNode));
+      if (!other) return false;
+      const otherSide = movesFrom ? existing.toSide ?? "left" : existing.fromSide ?? "right";
+      const side = nearestSides(other, target, otherSide, other.id === target.id).toSide;
+      // L'estremità riattaccata è una `set` dell'arco (T24): la scheda e il lato.
+      const fields = movesFrom ? { fromNode: target.id, fromSide: side } : { toNode: target.id, toSide: side };
+      this.#writeOps([{ op: "set", id: existing.id, fields }]);
+      return false;
+    }
+    const source = doc.nodes.find((node) => node.id === connect.from);
+    if (!source) return false;
+    if (target) {
+      // Il filo lasciato sul corpo di una scheda va ai lati più vicini
+      // (`sides: "auto"`); partito da un lato (un punto della scheda, T67),
+      // tiene quello, e l'arrivo è il lato più vicino a lui (T24).
+      const sides = connect.fromSide === undefined
+        ? "auto"
+        : { from: connect.fromSide, to: nearestSides(source, target, connect.fromSide).toSide };
+      this.#writeOps(this.#connectOps(source.id, target.id, sides));
+      return false;
+    }
+    // Nel vuoto, solo dopo un vero tiro e dentro la vista (non sulla
+    // scheda di partenza, né fuori dalla lavagna).
+    if (!connect.moved || !hit || !this.#viewport.contains(hit) || this.#nodeAt(hit) !== null) return false;
+    this.#placeText(clientX, clientY, { from: source.id, fromSide: connect.fromSide });
+    return true;
+  }
+
+  /** C con due schede scelte (D-19 (a)): un filo dalla prima alla seconda, coi lati di `edges.ts`. */
+  #connectPair(from: CanvasNode, to: CanvasNode): void {
+    if (!this.#doc || this.#readOnly) return;
+    this.#writeOps(this.#connectOps(from.id, to.id));
+  }
+
+  /**
+   * La `connect` delle due schede scelte («Collega…», e C senza fili scelti);
+   * `null` se non sono due.
+   */
+  #connectPairOps(): CanvasIntentOp[] | null {
+    const chosen = this.#selectedNodes();
+    return chosen.length === 2 ? this.#connectOps(chosen[0]!.id, chosen[1]!.id) : null;
+  }
+
+  /**
+   * La `connect` da `from` a `to`, coi lati più vicini (`sides: "auto"`, la
+   * regola di `nearestSides` di `edges.ts`) o coi lati dati, e le punte scelte
+   * nella riga di Collega (T50): `arrow` di serie, `none`, o la sola punta
+   * all'inizio, che la forma breve non ha (allora l'arco intero, coi lati di
+   * `nearestSides`). `born` è l'id di una scheda che nasce nella stessa lista
+   * (Collega nel vuoto, Ctrl+Maiusc+Invio): allora può non esserci ancora.
+   * `null` se una delle due non c'è.
+   */
+  #connectOps(
+    from: string,
+    to: string,
+    sides: "auto" | { readonly from: EdgeSide; readonly to: EdgeSide } = "auto",
+    born?: string,
+  ): CanvasIntentOp[] | null {
+    const a = this.#doc?.nodes.find((node) => node.id === from);
+    const b = this.#doc?.nodes.find((node) => node.id === to);
+    if (!a && from !== born) return null;
+    if (!b && to !== born) return null;
+    if (this.#tips === "start") {
+      const pair = sides === "auto" && a && b ? nearestSides(a, b) : null;
+      const fromSide = pair ? pair.fromSide : sides === "auto" ? undefined : sides.from;
+      const toSide = pair ? pair.toSide : sides === "auto" ? undefined : sides.to;
+      return [{ op: "connect", edge: { fromNode: from, toNode: to, fromSide, toSide, ...this.#tipEnds() } }];
+    }
+    const short = { op: "connect", from, to, sides: sides === "auto" ? sides : { ...sides } };
+    return [this.#tips === "none" ? { ...short, ends: "none" } : short];
+  }
+
+  /** I fili con i loro capi sulla lavagna, per cercare quello sotto il puntatore. */
+  #placedEdges(): PlacedEdge[] {
+    const doc = this.#doc;
+    if (!doc) return [];
+    const byId = new Map(doc.nodes.map((node) => [node.id, node]));
+    const placed: PlacedEdge[] = [];
+    for (const edge of doc.edges) {
+      const from = byId.get(edge.fromNode);
+      const to = byId.get(edge.toNode);
+      if (from && to) placed.push({ id: edge.id, a: sidePoint(from, edge.fromSide ?? "right"), b: sidePoint(to, edge.toSide ?? "left") });
+    }
+    return placed;
+  }
+
+  /**
+   * Il filo entro 8 px dello schermo da `clientX`, `clientY`, fra quelli in
+   * vista. Sopra la scheda `over` il filo vince solo dove si vede, fuori da
+   * lei: altrove la scheda (D8).
+   */
+  #edgeUnder(clientX: number, clientY: number, over: string | null): string | null {
+    const doc = this.#doc;
+    if (!doc || doc.edges.length === 0 || this.#isSceneOversized()) return null;
+    const rect = this.#viewport.getBoundingClientRect();
+    const corner = this.#screenToWorld(rect.left, rect.top);
+    const zoom = this.#camera.zoom;
+    const view = { x: corner.x, y: corner.y, width: (rect.width || 800) / zoom, height: (rect.height || 600) / zoom };
+    const hit = edgeAt(this.#screenToWorld(clientX, clientY), this.#placedEdges(), zoom, view);
+    if (!hit) return null;
+    const card = over === null ? undefined : doc.nodes.find((node) => node.id === over);
+    return card && insideBox(hit.point, card) ? null : hit.id;
+  }
+
+  /**
+   * Il filo che un clic o il passaggio su `target` prende: mai dentro la
+   * scheda attiva né sopra un controllo (un punto, una maniglia, un pulsante,
+   * un link, un campo), che restano loro.
+   */
+  #wireAt(target: EventTarget | null, clientX: number, clientY: number): string | null {
+    if (this.#insideActive(target, false)) return null;
+    if (target instanceof Element && target.closest(".canvas-port, [data-resize], button, a, input, textarea, select")) return null;
+    return this.#edgeUnder(clientX, clientY, this.#nodeAt(target));
+  }
+
+  /** Il passaggio del mouse: il filo sotto si scurisce (`data-hover`). */
+  #hoverEdge(clientX: number, clientY: number, target: EventTarget | null): void {
+    this.#setEdgeHover(this.#wireAt(target, clientX, clientY));
+  }
+
+  #setEdgeHover(id: string | null): void {
+    if (id === this.#edgeHover) return;
+    if (this.#edgeHover !== null) this.#edgeGroup(this.#edgeHover)?.removeAttribute("data-hover");
+    this.#edgeHover = id;
+    if (id !== null) this.#edgeGroup(id)?.toggleAttribute("data-hover", true);
+    this.#viewport.toggleAttribute("data-edge-hover", id !== null);
+  }
+
+  /** Il gruppo SVG del filo `id` sulla scena. */
+  #edgeGroup(id: string): SVGGElement | null {
+    for (const hit of this.#edgeLayer.querySelectorAll<SVGPathElement>(".canvas-edge-hit")) {
+      if (hit.dataset.edge === id) return hit.parentElement as SVGGElement | null;
+    }
+    return null;
+  }
+
+  /** I quattro punti sui lati della scheda `el` (T67): ci sono solo se si può scrivere. */
+  #syncPorts(el: HTMLElement): void {
+    const ports = el.querySelectorAll<HTMLElement>(":scope > .canvas-port");
+    if (this.#readOnly) {
+      for (const port of ports) port.remove();
+      return;
+    }
+    if (ports.length === EDGE_SIDES.length) return;
+    for (const port of ports) port.remove();
+    for (const side of EDGE_SIDES) {
+      const port = document.createElement("div");
+      port.className = "canvas-port";
+      port.dataset.side = side;
+      port.setAttribute("aria-hidden", "true");
+      el.append(port);
     }
   }
 
   #cancelGestures(): void {
-    const active = this.#drag !== null || this.#resize !== null;
+    const active = this.#drag !== null || this.#resize !== null || this.#strokeDrag !== null;
+    const moving = this.#gestureMoving();
     this.#drag = null;
     this.#resize = null;
+    // Il lazo fermato non sceglie; lo spostamento fermato rimette i tratti.
+    const strokeDrag = this.#strokeDrag;
+    this.#strokeDrag = null;
+    if (strokeDrag) {
+      this.#hideStrokeHolder();
+      this.#fadeUnits(strokeDrag.units, false);
+    }
+    if (this.#lasso || strokeDrag) {
+      this.#lasso = null;
+      this.#paintLasso();
+    }
+    // Il rettangolo fermato lascia la scelta com'è (N6 T20b): un documento nuovo la
+    // rifà da sé, e un puntatore annullato non la tocca.
+    if (this.#marquee !== null) this.#stopMarquee();
+    this.#hideGuides();
     this.#pan = null;
-    this.#connect = null;
-    if (active && this.#doc) {
-      this.#doc = parseCanvas(this.#source);
+    this.#endConnect();
+    this.#stopEdgeScroll();
+    this.#fingers.clear();
+    this.#tap = null;
+    this.#pinch = null;
+    // Neanche il tocco lungo e il tocco di più dita (T63) sono più un gesto.
+    this.#cancelLongPress();
+    if (this.#fingerTap) this.#fingerTap.spoiled = true;
+    // Il gesto aveva mosso il modello in mano: torna quello del nucleo.
+    const model = active && this.#doc ? this.#coreModel() : null;
+    if (model) {
+      this.#doc = model;
       this.#render();
     }
+    // Un gesto fermato (la penna che si posa sotto il dito, un pointercancel)
+    // è un gesto finito: la vista è quella dove si è fermato. Con la penna
+    // giù il cambio aspetta che si alzi.
+    if (moving) this.#refreshLive();
+    this.#statusSettle();
   }
 
-  #commitFromSource(origin: EditorChangeOrigin): void {
-    if (!this.#doc) return;
-    // Ricostruisce le patch confrontando live vs sorgente: preimmagini vere,
-    // mai snap del live come before.
-    const before = parseCanvas(this.#source);
-    const patches: CanvasPatch[] = [];
-    const beforeNodes = new Map(before.nodes.map((n) => [n.id, n]));
-    const liveNodes = new Map(this.#doc.nodes.map((n) => [n.id, n]));
-    for (const [id, live] of liveNodes) {
-      const prev = beforeNodes.get(id);
-      if (!prev || JSON.stringify(prev) !== JSON.stringify(live)) {
-        patches.push({
-          kind: "upsert-node",
-          before: prev ? JSON.parse(JSON.stringify(prev)) as CanvasNode : null,
-          after: JSON.parse(JSON.stringify(live)) as CanvasNode,
-        });
+  /**
+   * La fine di un gesto che ha mosso il modello in mano (un trascinamento, un
+   * ridimensionamento): il modello torna quello del nucleo, poi le operazioni
+   * del gesto vanno nel file in un passo d'annulla (T24). Senza operazioni, o
+   * se il nucleo le rifiuta, la lavagna si ridisegna com'era.
+   */
+  #writeGesture(ops: readonly CanvasIntentOp[] | null): void {
+    const model = this.#coreModel();
+    if (model) this.#doc = model;
+    if (this.#writeOps(ops) === null && !this.#destroyed) this.#render();
+  }
+
+  /**
+   * La `move` di un trascinamento (T24): le schede scelte dello spostamento
+   * del gesto; un gruppo porta le schede che ci stanno dentro (`contents`,
+   * T10), come le ha portate la vista. Oltre `MOVE_CONTENTS_MAX` schede
+   * portate il nucleo rifiuta `contents`: allora la `move` dice tutte le
+   * schede che la vista ha portato, una per una. `null` se non si è mosso
+   * niente.
+   */
+  #dragOps(drag: CardDrag): CanvasIntentOp[] | null {
+    if (drag.ids.length === 0 || (drag.dx === 0 && drag.dy === 0)) return null;
+    const groups = drag.ids.some((id) => this.#doc?.nodes.find((node) => node.id === id)?.type === "group");
+    if (groups && drag.origin.size > MOVE_CONTENTS_MAX) {
+      return [{ op: "move", ids: [...drag.origin.keys()], dx: drag.dx, dy: drag.dy }];
+    }
+    return [{ op: "move", ids: [...drag.ids], dx: drag.dx, dy: drag.dy, ...(groups ? { contents: true } : {}) }];
+  }
+
+  /**
+   * Le operazioni di un ridimensionamento (T24), scheda per scheda: una
+   * `move` se l'angolo in alto a sinistra è cambiato (le maniglie a sinistra o
+   * in alto, Alt, la scelta che scala), una `resize` con le misure del gesto se
+   * è cambiata la misura. Le misure sono già in unità intere della lavagna, a
+   * ogni zoom. `null` se niente è cambiato.
+   */
+  #resizeOps(origin: ReadonlyMap<string, ResizeBox>): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const ops: CanvasIntentOp[] = [];
+    for (const [id, start] of origin) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (!node) continue;
+      if (node.x !== start.x || node.y !== start.y) ops.push({ op: "move", ids: [id], dx: node.x - start.x, dy: node.y - start.y });
+      if (node.width !== start.width || node.height !== start.height) {
+        ops.push({ op: "resize", id, width: node.width, height: node.height });
       }
     }
-    for (const [id, prev] of beforeNodes) {
-      if (!liveNodes.has(id)) {
-        patches.push({
-          kind: "remove-node",
-          before: JSON.parse(JSON.stringify(prev)) as CanvasNode,
-          at: before.nodes.findIndex((node) => node.id === id),
-          after: null,
-        });
-      }
-    }
-    const beforeOrder = before.nodes.map((n) => n.id);
-    const liveOrder = this.#doc.nodes.map((n) => n.id);
-    if (JSON.stringify(beforeOrder) !== JSON.stringify(liveOrder)
-      && JSON.stringify([...liveOrder].sort()) === JSON.stringify([...beforeOrder].sort())) {
-      patches.push({ kind: "reorder", before: beforeOrder, after: liveOrder });
-    }
-    this.#doc = before;
-    if (patches.length) this.#commit(patches, origin);
-    else this.#render();
+    return ops.length > 0 ? ops : null;
   }
 
   #wheel(event: WheelEvent): void {
+    const target = this.#targetOf(event);
+    // Sopra la scheda attiva la rotella scorre lei (A-11); Ctrl+rotella e il
+    // pizzico ingrandiscono sempre la lavagna.
+    if (!event.ctrlKey && !event.metaKey && this.#insideActive(target, true)) {
+      this.#wheelUnderVeil(event, target);
+      return;
+    }
+    // Sopra il testo che si scrive in una scheda la rotella scorre il testo
+    // (una scheda di testo lunga, T43).
+    if (!event.ctrlKey && !event.metaKey && target instanceof Node && this.#editor?.place.contains(target)) {
+      this.#wheelUnderVeil(event, target);
+      return;
+    }
     event.preventDefault();
+    // La rotella prende la vista: un volo o un'inerzia si fermano (T53).
+    this.#stopMotion(false);
+    // Prima di muovere la camera: lo zoom della rotella è un gesto in corso.
+    clearTimeout(this.#wheelTimer);
+    this.#wheelTimer = setTimeout(() => {
+      this.#wheelTimer = undefined;
+      this.#refreshLive();
+      // La rotella finita è un gesto finito: la banda legge lo zoom nuovo.
+      this.#statusSettle();
+    }, WHEEL_SETTLE_MS);
+    // Il delta in pixel: la pagina della rotella è la vista, misurata solo se serve.
+    const page = event.deltaMode === 2 ? this.#viewport.getBoundingClientRect() : null;
+    const dx = wheelPixels(event.deltaX, event.deltaMode, page?.width ?? 0);
+    const dy = wheelPixels(event.deltaY, event.deltaMode, page?.height ?? 0);
+    // Ctrl+rotella e il pizzico ingrandiscono con qualunque impostazione; uno
+    // scatto senza parte verticale non ingrandisce.
     if (event.ctrlKey || event.metaKey) {
-      this.#zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.1 : 1 / 1.1);
-    } else {
-      this.#camera.x -= event.deltaX;
-      this.#camera.y -= event.deltaY;
+      if (dy !== 0) this.#zoomAt(event.clientX, event.clientY, dy < 0 ? 1.1 : 1 / 1.1);
+      return;
+    }
+    // Maiusc sposta di lato. Dove il sistema non manda `deltaX`, si usa `deltaY`.
+    if (event.shiftKey) {
+      this.#camera.x -= dx !== 0 ? dx : dy;
       this.#applyCamera();
+      return;
+    }
+    // `zoom`: la rotella ingrandisce. Un evento con una parte orizzontale (le due
+    // dita sul touchpad) sposta, come in `pan`, così il touchpad resta usabile.
+    if (this.#wheelSetting === "zoom" && dx === 0) {
+      if (dy !== 0) this.#zoomAt(event.clientX, event.clientY, dy < 0 ? 1.1 : 1 / 1.1);
+      return;
+    }
+    this.#camera.x -= dx;
+    this.#camera.y -= dy;
+    this.#applyCamera();
+  }
+
+  /**
+   * La rotella sopra la scheda attiva, presa dal velo della croce (T20d): il
+   * browser scorrerebbe gli antenati del velo, cioè niente. La scorre la
+   * lavagna: il primo antenato di `under` che può scorrere in quella
+   * direzione, dentro la vista. Senza velo scorre il browser, come sempre.
+   */
+  #wheelUnderVeil(event: WheelEvent, under: EventTarget | null): void {
+    if (event.target !== this.#penVeil || !(under instanceof Element)) return;
+    for (let element: Element | null = under; element && element !== this.#viewport; element = element.parentElement) {
+      const dx = wheelPixels(event.deltaX, event.deltaMode, element.clientWidth);
+      const dy = wheelPixels(event.deltaY, event.deltaMode, element.clientHeight);
+      const style = getComputedStyle(element);
+      const free = (overflow: string): boolean => overflow === "auto" || overflow === "scroll";
+      const vertical = dy !== 0 && free(style.overflowY) && element.scrollHeight > element.clientHeight;
+      const horizontal = dx !== 0 && free(style.overflowX) && element.scrollWidth > element.clientWidth;
+      if (!vertical && !horizontal) continue;
+      event.preventDefault();
+      element.scrollBy({ left: horizontal ? dx : 0, top: vertical ? dy : 0 });
+      return;
     }
   }
 
   #dblclick(event: MouseEvent): void {
-    if (this.#readOnly || this.#nodeAt(event.target)) return;
-    this.#addNode("text");
+    const target = this.#targetOf(event);
+    if (this.#readOnly || this.#nodeAt(target)) return;
+    // Su una maniglia della cornice della scelta: tutte le schede scelte
+    // prendono la misura del loro contenuto (T66). Con la cattura del
+    // puntatore il doppio clic su una maniglia arriva qui.
+    const tap = this.#takeHandleTap(target);
+    if (tap) {
+      this.#fitToContent(tap);
+      return;
+    }
+    // Il doppio tocco del dito mette la sua scheda da sé (T63): il `dblclick`
+    // che il browser ne fa non ne mette un'altra.
+    if (this.#downByTouch) return;
+    // Nel punto del clic, già in scrittura, come il doppio tocco (T63, T100).
+    this.#placeText(event.clientX, event.clientY);
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented || this.#isSceneOversized()) return;
-    const modifier = event.ctrlKey || event.metaKey;
-    if (modifier && event.key.toLowerCase() === "z") {
+    if (!this.#doc || event.defaultPrevented) return;
+    // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
+    if (this.#crop?.editor?.key(event)) {
       event.preventDefault();
-      if (event.shiftKey) this.redo();
-      else this.undo();
       return;
     }
-    if (modifier && event.key.toLowerCase() === "y") {
+    // Spazio tenuto sulla lavagna sposta la vista, anche in una lavagna troppo
+    // grande (T53); in un campo o dentro la scheda attiva resta uno spazio.
+    if (!(this.#activeId !== null && this.#insideActive(event.target, false)) && this.#holdSpace(event)) return;
+    if (this.#isSceneOversized()) return;
+    // Esc mentre si tira un filo lo lascia, e nient'altro (T67).
+    if (event.key === "Escape" && this.#connect) {
       event.preventDefault();
-      this.redo();
+      this.#cancelConnect();
       return;
     }
-    if (modifier && event.key.toLowerCase() === "a") {
+    // Esc mentre si trascina o si ridimensiona una scheda ferma il gesto: le
+    // schede tornano dov'erano e il file non cambia (T24).
+    if (event.key === "Escape" && (this.#drag !== null || this.#resize !== null)) {
       event.preventDefault();
-      this.#selection = this.#doc.nodes.map((n) => n.id);
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      this.#render();
+      this.#cancelGestures();
       return;
     }
-    if (modifier && event.key.toLowerCase() === "d") {
+    // Esc mentre si trascina il rettangolo lo annulla, e la scelta torna com'era (N6 T20b).
+    if (event.key === "Escape" && this.#marquee !== null) {
       event.preventDefault();
-      this.#duplicateSelection();
+      this.#cancelMarquee();
       return;
     }
-    if (modifier && (event.key === "+" || event.key === "=")) {
-      event.preventDefault();
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.2);
+    // D da solo, fuori dai campi: il mouse scrive finché il tasto è giù
+    // (regola 1). La ripetizione del tasto non cambia niente.
+    if (isInkKey(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+      && !isTextTarget(event.target)) {
+      if (!event.repeat && !this.#inkKeyDown) {
+        this.#inkKeyDown = true;
+        this.#applyInkMouse();
+      }
       return;
     }
-    if (modifier && event.key === "-") {
-      event.preventDefault();
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
-      return;
-    }
-    if (modifier && event.key === "0") {
-      event.preventDefault();
-      this.#fitCamera();
-      this.#render();
-      return;
-    }
-    const focus = this.#selection[0] ? this.#doc.nodes.find((n) => n.id === this.#selection[0]) : undefined;
-    switch (event.key) {
-      case "Delete":
-      case "Backspace": {
-        if ((event.target as HTMLElement)?.tagName === "TEXTAREA"
-          || (event.target as HTMLElement)?.tagName === "INPUT") return;
+    // Dentro la scheda attiva i tasti sono del contenuto; Esc, se il
+    // contenuto non lo usa (un rettangolo di celle che si sta scegliendo),
+    // esce e rimette il fuoco sulla scheda.
+    if (this.#activeId !== null && this.#insideActive(event.target, false)) {
+      if (event.key === "Escape") {
         event.preventDefault();
-        this.#deleteSelection();
-        break;
-      }
-      case "ArrowUp":
-      case "ArrowDown":
-      case "ArrowLeft":
-      case "ArrowRight": {
-        if ((event.target as HTMLElement)?.tagName === "TEXTAREA"
-          || (event.target as HTMLElement)?.tagName === "INPUT") return;
+        this.#leaveCard(true);
+      } else if (isCommandSearchKey(event)) {
+        // Ctrl+/ si apre anche da dentro la scheda, ed Esc ci torna.
         event.preventDefault();
-        const step = event.shiftKey ? CANVAS_SNAP * 4 : CANVAS_SNAP;
-        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
-        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-        if (focus && !this.#readOnly) {
-          const patches: CanvasPatch[] = [];
-          for (const id of this.#selection) {
-            const node = this.#doc.nodes.find((n) => n.id === id);
-            if (node) {
-              const patch = upsertNodePatch(this.#doc, { ...node, x: node.x + dx, y: node.y + dy });
-              if (patch) patches.push(patch);
-            }
-          }
-          this.#commit(patches, "input");
-        } else if (focus) {
-          const index = this.#doc.nodes.indexOf(focus);
-          const next = this.#doc.nodes[index + (event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1)];
-          if (next) {
-            this.#selection = [next.id];
-            this.#options.onSelectionChange();
-            this.#render();
-          }
-        } else if (this.#doc.nodes.length) {
-          this.#selection = [this.#doc.nodes[0].id];
-          this.#options.onSelectionChange();
-          this.#render();
-        }
-        break;
+        this.#openCommandSearch();
       }
-      case "Enter": {
-        if (focus && (event.target === this.#viewport || (event.target as HTMLElement)?.classList.contains("canvas-node"))) {
-          event.preventDefault();
-          this.#beginCardEdit(focus);
-        }
-        break;
+      return;
+    }
+    this.#recordPending();
+    // Tab e Alt+frecce muovono il fuoco fra le schede (T61): non sono comandi,
+    // non cambiano il file.
+    if (this.#tabKey(event) || this.#nearestKey(event)) return;
+    const commands = this.commands();
+    const where = { writing: isTextTarget(event.target), onBoard: this.#onCardOrBoard(event.target) };
+    // Prima i tasti con Ctrl o Alt: valgono anche col fuoco in un campo.
+    const held = commandForKey(commands, event, { ...where, writing: true });
+    if (held) {
+      this.#runKey(event, held);
+      return;
+    }
+    const focus = this.#selectionFocus();
+    // La scheda scelta e non attiva riceve le pagine (il PDF), se li vuole.
+    if (focus && this.#selection.length === 1 && CARD_KEYS.has(event.key) && this.#onCardOrBoard(event.target)) {
+      const view = this.#cards.get(focus.id)?.view;
+      let used = false;
+      try {
+        used = view?.key?.(event) === true;
+      } catch (error) {
+        console.warn(`canvas: la scheda ${focus.id} non prende il tasto`, error);
+      }
+      if (used) {
+        event.preventDefault();
+        return;
       }
     }
+    // Poi i tasti che scrivono (Canc, le frecce, Invio, i segni): mai mentre
+    // si scrive in un campo.
+    const bare = commandForKey(commands, event, where);
+    if (bare) this.#runKey(event, bare);
+  }
+
+  /** Il tasto è del comando `command`: lo prende, e il comando parte se si può. */
+  #runKey(event: KeyboardEvent, command: CanvasCommand): void {
+    // Esc senza niente da togliere resta a chi sta fuori (la shell).
+    if (command.id === "canvas.escape" && command.disabled() !== null) return;
+    event.preventDefault();
+    if (command.disabled() === null) command.run();
+    this.#statusSettle();
+  }
+
+  /**
+   * Un tasto col fuoco sulla colonna: gli strumenti e la ricerca dei comandi
+   * valgono anche qui; frecce, Invio e Spazio restano della colonna (il kit).
+   */
+  #railKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || !this.#doc || this.#isSceneOversized()) return;
+    if (isCommandSearchKey(event)) {
+      event.preventDefault();
+      this.#openCommandSearch();
+      return;
+    }
+    const tools = this.commands().filter((command) => toolOfCommand(command.id) !== null);
+    const command = commandForKey(tools, event, { writing: false, onBoard: false });
+    if (command) this.#runKey(event, command);
+  }
+
+  /**
+   * Stretta (la finestra fino a 700 px, o il riquadro fino a 480): la colonna
+   * va sotto la lavagna, in riga, come nel disegno.
+   */
+  #syncNarrow(): void {
+    const width = this.#root.clientWidth;
+    if (width === 0) return;
+    const narrow = width <= NARROW_PANE || window.innerWidth <= NARROW_WIDTH;
+    if (narrow === this.#root.hasAttribute("data-narrow")) return;
+    this.#root.toggleAttribute("data-narrow", narrow);
+    this.#rail.setNarrow(narrow);
+    // «Apri a lato» diventa «Apri qui» e al contrario (T45).
+    this.#canvasOptions.sync();
   }
 
   // --- render -------------------------------------------------------------------
 
   #renderLive(): void {
     // Drag/resize updates moved nodes and connected edges without replacing cards.
-    const moved = this.#drag?.origin.keys() ?? this.#selection.values();
+    const moved = this.#drag?.origin.keys() ?? this.#strokeDrag?.origin.keys() ?? this.#resize?.origin.keys() ?? this.#selection.values();
     for (const id of moved) {
       const node = this.#doc?.nodes.find((n) => n.id === id);
       const el = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(id)}"]`);
       if (node && el) {
         el.style.transform = `translate(${node.x}px, ${node.y}px)`;
         el.style.width = `${node.width}px`;
-        el.style.height = `${node.height}px`;
+        el.style.height = `${this.#shownHeight(node)}px`;
+        markHandles(el, node, this.#camera.zoom);
       }
     }
     this.#drawEdges();
+    this.#syncSelectionFrame();
   }
 
   #render(): void {
-    if (!this.#doc) return;
-    for (const teardown of this.#markdownTeardowns.values()) teardown();
-    this.#markdownTeardowns.clear();
+    this.#syncEmpty();
+    this.#syncPartsPicker();
+    this.#syncReader();
+    this.#syncCrop();
+    // Dopo `destroy` niente rinasce: una vista montata qui non avrebbe padrone.
+    if (!this.#doc || this.#destroyed) return;
+    this.#syncInkLayer();
     this.#applyCamera();
     this.#drawToolbar();
-    this.#stage.replaceChildren();
     this.#viewport.dataset.canvasNodes = String(this.#doc.nodes.length);
     this.#viewport.dataset.canvasEdges = String(this.#doc.edges.length);
     if (this.#isSceneOversized()) {
+      this.#dropCards();
       this.#edgeLayer.replaceChildren();
+      this.#handleLayer.replaceChildren();
+      // Il livello dei fili resta il primo figlio dello stage (T91).
+      this.#stage.replaceChildren(this.#edgeLayer);
+      delete this.#stage.dataset.selection;
       const fallback = document.createElement("p");
       fallback.className = "canvas-large-fallback";
       fallback.textContent = t("canvas.too_large");
       this.#stage.append(fallback);
       this.#viewport.dataset.canvasProtocol = "source-fallback";
+      // L'inchiostro si vede dove si vedono le schede (A8).
+      this.#inkCards = new Map();
+      this.#inkBoard = [];
+      this.#inkPaths.clear();
       return;
     }
     this.#drawEdges();
-    // Z-order = ordine array: primo sotto, ultimo sopra (come da spec).
-    for (const node of this.#doc.nodes) {
-      this.#stage.append(this.#nodeEl(node));
-    }
+    this.#placeCards(this.#doc.nodes);
+    this.#scheduleLabels();
+    // La ricerca aperta si rifà col documento di adesso; una scheda nata ora
+    // prende il suo segno (T60).
+    this.#findBar.refresh();
+    applyFindMarks(this.#cards, this.#findMarkOf);
+    this.#paintInk();
+    this.#syncSelectionFrame();
     this.#viewport.dataset.canvasProtocol = "source";
+    this.#refreshLive();
+  }
+
+  // --- le schede vive ---------------------------------------------------------
+
+  /**
+   * Un gesto che muove la vista o le schede: il puntatore è ancora giù. Il
+   * rettangolo della Selezione conta da quando si è mosso: finché è un clic, non è
+   * ancora un gesto (N6 T20b).
+   */
+  #gestureMoving(): boolean {
+    return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null
+      || this.#lasso !== null || this.#strokeDrag !== null || this.#marquee?.moved === true;
+  }
+
+  /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */
+  #gestureActive(): boolean {
+    // Il riquadro del navigatore trascinato è un gesto anche lui (T55).
+    return this.#gestureMoving() || this.#wheelTimer !== undefined || this.#motion !== null || this.#navigator.dragging();
+  }
+
+  /**
+   * La lavagna si vede: è nel documento, nessun antenato è `hidden` (la
+   * linguetta di un altro riquadro) e, dove il browser lo sa dire, niente la
+   * toglie dalla pagina (`display: none`).
+   */
+  #isShown(): boolean {
+    const viewport = this.#viewport;
+    if (!viewport.isConnected || viewport.closest("[hidden]") !== null) return false;
+    return typeof viewport.checkVisibility === "function" ? viewport.checkVisibility() : true;
+  }
+
+  /**
+   * Sceglie le schede vive con la vista di adesso, in coordinate della
+   * lavagna, e lo zoom (`liveCardIds`), poi cambia il modo a chi lo deve
+   * cambiare (`updateLiveCards`, nel silenzio della penna: con la penna giù
+   * aspetta che si alzi). Non fa niente a gesto in corso (lo rifà la fine del
+   * gesto) e con la lavagna nascosta (lo rifà la vista che torna e cambia
+   * misura): le schede restano come sono.
+   */
+  #refreshLive(): void {
+    const doc = this.#doc;
+    if (this.#destroyed || !doc) return;
+    if (this.#gestureActive() || !this.#isShown()) return;
+    const { view, zoom } = this.#viewRect();
+    this.#askCitations(doc.nodes);
+    if (this.#views.size === 0) {
+      this.#refreshDetail(zoom);
+      return;
+    }
+    // Contano solo le schede con una vista: una specie senza renderer non
+    // toglie posto a quelle che si accendono.
+    const nodes = doc.nodes.filter((node) => this.#views.has(node.id));
+    // La scheda attiva che esce dalla vista (non da quella allargata) ne esce.
+    const active = this.#activeId;
+    if (active !== null) {
+      const node = nodes.find((candidate) => candidate.id === active);
+      // Quella che scrive resta finché si scrive (T41).
+      if (!node || (!overlaps(node, view) && this.#writingId !== active)) this.#leaveCard(true, false);
+    }
+    // La scheda attiva, e quella in cui si sta entrando, restano vive anche
+    // se la regola le spegnerebbe (lo zoom, il limite).
+    const wanted = liveCardIds(nodes, view, zoom);
+    // E quella col ritaglio aperto (T78): l'immagine intera si legge viva.
+    for (const id of [this.#activeId, this.#enteringId, this.#crop?.node ?? null]) {
+      if (id !== null && this.#views.has(id)) wanted.add(id);
+    }
+    // Prima che le vive si spengano: chi è vivo adesso conta come visto.
+    this.#refreshDetail(zoom);
+    updateLiveCards(this.#views, wanted, this.#liveModes, this.#cardQuiet);
+  }
+
+  /**
+   * Il livello di dettaglio di ogni scheda allo zoom `zoom` (T54, A-22), a
+   * gesto finito: lo chiama solo `#refreshLive`. Un solo giro sulle schede,
+   * che scrive `data-card-detail` solo dove cambia, e la misura del titolo
+   * grande (`--canvas-detail-zoom`) una volta sulla scena. La scheda attiva,
+   * quella in cui si entra, quella che scrive e quella col campo aperto
+   * restano come da vicino.
+   */
+  #refreshDetail(zoom: number): void {
+    for (const [id, mode] of this.#liveModes) {
+      if (mode === "live") this.#seenLive.add(id);
+    }
+    const level = detailLevel(zoom);
+    const kept = new Set<string>();
+    for (const id of [this.#activeId, this.#enteringId, this.#writingId, this.#editor?.id ?? null]) {
+      if (id !== null) kept.add(id);
+    }
+    const seen = this.#seenLive;
+    applyCardDetails(this.#cards, (id) => cardDetail(level, seen.has(id), kept.has(id)));
+    const scale = String(zoom);
+    if (this.#stage.style.getPropertyValue("--canvas-detail-zoom") !== scale) {
+      this.#stage.style.setProperty("--canvas-detail-zoom", scale);
+    }
+  }
+
+  /**
+   * La vista di adesso in coordinate della lavagna, e lo zoom. Senza misura
+   * (happy-dom, una vista non ancora disposta) vale quella di riserva di
+   * `#fitCamera`: la camera è fatta su quella.
+   */
+  #viewRect(): { readonly view: Rect; readonly zoom: number } {
+    return { view: this.#viewRectOf(this.#camera), zoom: this.#camera.zoom };
+  }
+
+  /** La vista in coordinate della lavagna con la camera `camera`, con la misura di riserva di `#viewRect`. */
+  #viewRectOf(camera: Viewport): Rect {
+    const rect = this.#viewport.getBoundingClientRect();
+    const width = rect.width || 800;
+    const height = rect.height || 600;
+    const { x, y, zoom } = camera;
+    return { x: -x / zoom, y: -y / zoom, width: width / zoom, height: height / zoom };
+  }
+
+  // --- entrare e uscire (T14) ---------------------------------------------------
+
+  /** La scheda ha la vista di un renderer, e non è il segnaposto di un file mancante. */
+  #hasLiveContent(entry: CardEntry): boolean {
+    return entry.view !== null && entry.article.dataset.cardMissing === undefined;
+  }
+
+  /**
+   * `target` sta nella scheda attiva: in tutta la scheda, o solo nel corpo
+   * (`bodyOnly`), dove sta il contenuto della vista.
+   */
+  #insideActive(target: EventTarget | null, bodyOnly: boolean): boolean {
+    const id = this.#activeId;
+    if (id === null || !(target instanceof Node)) return false;
+    const entry = this.#cards.get(id);
+    if (!entry) return false;
+    return (bodyOnly ? entry.body : entry.article).contains(target);
+  }
+
+  /** Il tasto arriva alla lavagna o a una scheda col fuoco, non a un campo o al contenuto. */
+  #onCardOrBoard(target: EventTarget | null): boolean {
+    return target === this.#viewport || (target instanceof HTMLElement && target.classList.contains("canvas-node"));
+  }
+
+  /** Il link sotto `target`, se sta nel contenuto della vista di una scheda. */
+  #cardLinkAt(target: EventTarget | null): HTMLAnchorElement | null {
+    if (!(target instanceof Element)) return null;
+    const id = this.#nodeAt(target);
+    const entry = id === null ? undefined : this.#cards.get(id);
+    if (!entry || !this.#hasLiveContent(entry)) return null;
+    const link = target.closest("a");
+    return link !== null && entry.body.contains(link) ? link : null;
+  }
+
+  /**
+   * Il clic nel contenuto di una scheda, prima che lo veda il contenuto.
+   * Dentro la scheda attiva passa. Fuori, Ctrl+clic (Cmd+clic) su un link
+   * passa e il link si segue (D-18 (c)); un pulsante della vista passa (il
+   * suo «Apri»); ogni altro clic si ferma qui (A-12: sceglie, non segue), e
+   * se la scheda era già la sola scelta prima del clic ci entra. Un link che
+   * porta a un file del vault lo segue la tela (T57), non la montatura.
+   */
+  #cardClick(event: MouseEvent): void {
+    const pressed = this.#pressedSelected;
+    this.#pressedSelected = null;
+    const target = this.#targetOf(event);
+    if (event.button !== 0 || !(target instanceof Element)) return;
+    const id = this.#nodeAt(target);
+    const entry = id === null ? undefined : this.#cards.get(id);
+    if (!id || !entry || !this.#hasLiveContent(entry) || !entry.body.contains(target)) return;
+    if (this.#crop?.editor?.contains(target)) return;
+    const modifier = event.ctrlKey || event.metaKey;
+    if ((modifier || this.#activeId === id) && this.#followCardLink(event, entry)) return;
+    if (this.#activeId === id) return;
+    if (modifier && this.#cardLinkAt(target) !== null) return;
+    const button = target.closest("button");
+    if (button !== null && entry.body.contains(button) && !modifier) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!modifier && !event.shiftKey && !event.altKey && pressed === id) this.#enterCard(id);
+  }
+
+  // --- seguire un link (T57) ----------------------------------------------------
+
+  /**
+   * Il clic su un link di una scheda che porta a un file del vault (T57): la
+   * tela lo prende (`preventDefault`, `stopPropagation`) e lo segue con
+   * `#openCardLink`. `false` se il link non è di quelli (un indirizzo web, un
+   * link senza `resolveCardLink`): allora vale la montatura di sempre.
+   */
+  #followCardLink(event: MouseEvent, entry: CardEntry): boolean {
+    const target = this.#targetOf(event);
+    if (!this.#options.resolveCardLink || !(target instanceof Element)) return false;
+    const anchor = this.#cardLinkAt(target);
+    const link = anchor === null ? null : cardLinkOf(anchor);
+    if (link === null) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const node = entry.node;
+    const from = node.type === "file" && node.file ? node.file : this.#options.documentId;
+    void this.#openCardLink(link, from).catch((error: unknown) => this.#showIntakeError(error));
+    return true;
+  }
+
+  /**
+   * Segue un link di una scheda (T57). Se il file a cui punta ha una scheda su
+   * questa lavagna, la vista vola fino a lei e la scheda lampeggia (con
+   * `#jumpCamera`, dunque Indietro torna qui). Altrimenti il file si apre
+   * accanto, come il wikilink di una nota. Un link rotto va dove va quello delle
+   * note: il riquadro, che per un wikilink crea la nota che manca.
+   */
+  async #openCardLink(link: CardLinkRef, from: string | undefined): Promise<void> {
+    const resolve = this.#options.resolveCardLink;
+    if (!resolve) return;
+    const doc = await resolve(link, from);
+    // La lavagna chiusa mentre la shell risolveva: il link non porta più a niente.
+    if (this.#destroyed) return;
+    if (doc === null) {
+      if (link.kind === "wiki") await this.#options.onOpenWikilink?.(link.page, link.heading, link.block);
+      else await this.#options.onOpenPath?.(link.path, from);
+      return;
+    }
+    const node = linkedCardOf(this.#doc?.nodes ?? [], doc, link, this.#viewCenter());
+    if (node) {
+      this.#jumpToCard(node);
+      return;
+    }
+    if (link.kind === "wiki") await (this.#options.onOpenWikilinkBeside ?? this.#options.onOpenWikilink)?.(link.page, link.heading, link.block);
+    else await (this.#options.onOpenPathBeside ?? this.#options.onOpenPath)?.(link.path, from);
+  }
+
+  /** Il centro della vista, in coordinate della lavagna: quale scheda di un file è la più vicina. */
+  #viewCenter(): { x: number; y: number } {
+    const rect = this.#viewport.getBoundingClientRect();
+    return {
+      x: ((rect.width || 800) / 2 - this.#camera.x) / this.#camera.zoom,
+      y: ((rect.height || 600) / 2 - this.#camera.y) / this.#camera.zoom,
+    };
+  }
+
+  /**
+   * Il salto a una scheda (T57): la vista la mette al centro col zoom di adesso,
+   * come ogni salto (`#jumpCamera`, che lo ricorda per Indietro), e la scheda
+   * lampeggia una volta.
+   */
+  #jumpToCard(node: CanvasNode): void {
+    const rect = this.#viewport.getBoundingClientRect();
+    const zoom = this.#camera.zoom;
+    this.#jumpCamera({
+      x: (rect.width || 800) / 2 - (node.x + node.width / 2) * zoom,
+      y: (rect.height || 600) / 2 - (node.y + node.height / 2) * zoom,
+      zoom,
+    });
+    this.#flashCard(node.id);
+  }
+
+  /**
+   * Il lampo di una scheda: `data-card-flash` sulla sua `article`, che il CSS
+   * anima una volta (`pulse`), o che resta fermo (`still`) col movimento ridotto.
+   * Un solo lampo alla volta: un altro lo spegne. Il timer lo toglie, e la
+   * distruzione della lavagna lo ferma.
+   */
+  #flashCard(id: string): void {
+    const entry = this.#cards.get(id);
+    if (!entry) return;
+    this.#endFlash();
+    const article = entry.article;
+    // Via e poi di nuovo, con una lettura in mezzo: il lampo riparte da capo se
+    // la stessa scheda si raggiunge due volte di fila.
+    article.removeAttribute("data-card-flash");
+    void article.offsetWidth;
+    article.dataset.cardFlash = this.#reducedMotion ? "still" : "pulse";
+    this.#flashing = article;
+    this.#flashTimer = setTimeout(() => this.#endFlash(), CARD_FLASH_MS);
+  }
+
+  #endFlash(): void {
+    clearTimeout(this.#flashTimer);
+    this.#flashTimer = undefined;
+    const article = this.#flashing;
+    if (!article) return;
+    this.#flashing = null;
+    delete article.dataset.cardFlash;
+  }
+
+  /**
+   * Il mouse giù nel contenuto di una scheda non attiva: il fuoco va alla
+   * scheda, non a un link o al testo del contenuto (che fuori non prendono
+   * la tastiera), e il testo non si comincia a scegliere. Un pulsante della
+   * vista resta suo.
+   */
+  #keepContentFocus(event: PointerEvent, id: string): void {
+    const target = this.#targetOf(event);
+    const entry = this.#cards.get(id);
+    if (!(target instanceof Element) || !entry || this.#activeId === id || !this.#hasLiveContent(entry)) return;
+    if (!entry.body.contains(target)) return;
+    const button = target.closest("button");
+    if (button !== null && entry.body.contains(button)) return;
+    event.preventDefault();
+    entry.article.focus({ preventScroll: true });
+  }
+
+  /**
+   * Invio, o il doppio clic su una scheda: scrive dentro se si può (T41),
+   * altrimenti entra, altrimenti ciò che faceva (il campo). Una scheda di file
+   * che non si mostra non apre il campo: fa l'azione che serve (T93).
+   */
+  #enterOrEdit(node: CanvasNode, from?: EventTarget | null): void {
+    if (node.type === "file" && this.#fileGesture(node, from)) return;
+    if (node.type !== "text" && (this.#beginWriting(node.id, from) || this.#enterCard(node.id))) return;
+    this.#beginCardEdit(node);
+  }
+
+  /**
+   * Il gesto su una scheda di file che non si mostra, al posto del campo del
+   * percorso (T93): «File mancante» chiede il file come «Ritrova…» (o lo dice, in
+   * sola lettura o senza un selettore); «Non riesco a mostrare» apre il file come
+   * «Apri» del menu (T17); mentre carica non fa niente. `false` se la scheda si
+   * mostra: il gesto va a entrare o al campo, come prima. Con `from` sul
+   * pulsante della scheda, il gesto è del pulsante: il suo clic ha già fatto l'azione.
+   */
+  #fileGesture(node: CanvasNode, from?: EventTarget | null): boolean {
+    const entry = this.#cards.get(node.id);
+    if (!entry) return false;
+    const showing = this.#fileShowing(entry);
+    if (showing === "shown") return false;
+    const button = from instanceof Element ? from.closest("button") : null;
+    if (button !== null && entry.body.contains(button)) return true;
+    if (showing === "loading") return true;
+    if (showing === "unreadable") {
+      this.#openFileNode(node);
+      return true;
+    }
+    if (this.#readOnly || !this.#options.onPickFile) {
+      this.#showNotice(t("canvas.card.missing", { path: cardTarget(node).path }));
+    } else {
+      this.#relink(node.id);
+    }
+    return true;
+  }
+
+  /**
+   * Che cosa mostra una scheda di file (T93): il segnaposto di un file mancante
+   * lo dice la tela (`cardMissing`); carica o non si mostra lo dice la radice
+   * della vista in `data-card-state`, come fanno la nota, l'immagine, il foglio
+   * e il PDF (vedi `docs/reference/canvas-cards.md`).
+   */
+  #fileShowing(entry: CardEntry): FileShowing {
+    if (entry.article.dataset.cardMissing !== undefined) return "missing";
+    const state = entry.body.querySelector<HTMLElement>(":scope > [data-card-state]")?.dataset.cardState;
+    if (state === "loading") return "loading";
+    if (state === "unreadable" || state === "unavailable" || state === "too-large") return "unreadable";
+    return "shown";
+  }
+
+  /**
+   * Dove porta «Apri a lato per questo» (T45): il file della scheda attiva col
+   * punto in cui si è dentro, e il nome della voce che lo dice. Il punto è la
+   * cella che si scrive (`#B3`, dal contesto della scheda, T42), la pagina
+   * mostrata da un PDF (`#page=3`), la sezione che la scheda di nota mostra
+   * (`#Titolo`, il suo `subpath`); senza, il `subpath` della scheda, com'è.
+   * `null` senza una scheda di file attiva. La sola lettura non conta: aprire
+   * è guardare.
+   */
+  #besideHere(): { readonly path: string; readonly label: string } | null {
+    const id = this.#activeId;
+    const entry = id === null ? undefined : this.#cards.get(id);
+    const node = entry?.node;
+    if (!entry || node?.type !== "file") return null;
+    const target = cardTarget(node);
+    const file = target.path.replace(/^\/+/, "");
+    if (file === "") return null;
+    const at = (subpath: string, label: string) => ({ path: `/${file}${subpath}`, label });
+    // Nella finestra stretta si apre nello stesso riquadro, e il nome lo dice.
+    const here = this.#root.hasAttribute("data-narrow");
+    const name = (point: "cell" | "section" | "page" | null, args: Record<string, string> = {}): string =>
+      t((here ? BESIDE_HERE_NAMES.here : BESIDE_HERE_NAMES.beside)[point ?? "none"], args);
+    const cell = this.#writingId === id ? this.#writingContext?.cell ?? "" : "";
+    if (cell !== "") return at(`#${cell}`, name("cell", { cell }));
+    const kind = cardKindOf(node);
+    if (kind === "pdf") {
+      let page: number | undefined;
+      try {
+        page = entry.view?.page?.();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${node.id} non dice la pagina`, error);
+      }
+      if (page !== undefined && Number.isSafeInteger(page) && page >= 1) {
+        return at(`#page=${page}`, name("page", { n: String(page) }));
+      }
+    }
+    const subpath = target.subpath ?? "";
+    const heading = kind === "note" ? noteHeadingOf(target.subpath) : null;
+    if (heading !== null) return at(subpath, name("section", { name: heading }));
+    return at(subpath, name(null));
+  }
+
+  /**
+   * Chi apre per «Apri a lato per questo» (T45): accanto o, nella finestra
+   * stretta, nello stesso riquadro come «Apri»; `null` se da qui non si può.
+   */
+  #besideOpener(): ((path: string, from?: string) => void | Promise<void>) | null {
+    if (this.#root.hasAttribute("data-narrow")) return this.#options.onOpenPath ?? null;
+    return this.#options.onOpenPathBeside ?? null;
+  }
+
+  /** «Apri» del menu di una scheda di file (T17): il file si apre nel riquadro. */
+  #openFileNode(node: CanvasNode): void {
+    if (node.type !== "file" || !node.file) return;
+    const path = `/${node.file.replace(/^\/+/, "")}${node.subpath ?? ""}`;
+    void this.#options.onOpenPath?.(path, this.#options.documentId);
+  }
+
+  /**
+   * Entra nella scheda `id` e ci scrive (T41): la scheda diventa attiva, poi
+   * `edit()` monta l'editor vero del file. `false` se la vista non scrive mai
+   * (non ha `edit`); se `edit()` dice no la scheda resta attiva, da leggere, e
+   * la risposta è `true`. La sola lettura della lavagna non conta (T96): la
+   * scheda scrive in un altro file, con la sua sessione e la sua sola
+   * lettura, che dice la porta.
+   */
+  #beginWriting(id: string, from?: EventTarget | null): boolean {
+    if (this.#writingId === id) return true;
+    const entry = this.#cards.get(id);
+    const view = entry?.view;
+    if (!entry || !view?.edit) return false;
+    if (!this.#enterCard(id)) return false;
+    let started = false;
+    try {
+      started = view.edit(from) === true;
+    } catch (error) {
+      console.warn(`canvas: nella scheda ${id} non si scrive`, error);
+    }
+    if (started) this.#writingId = id;
+    return true;
+  }
+
+  /**
+   * La vista dice che scrive (con la sua barra) o che ha smesso: il segno
+   * `data-card-editing`, la barra nella riga delle opzioni al posto di quelle
+   * dello strumento, il nome nella banda.
+   */
+  #cardWriting(entry: CardEntry, writing: CardWriting | null): void {
+    if (this.#writingId !== entry.id) return;
+    if (writing === null) {
+      this.#writingId = null;
+      this.#clearWritingContext();
+      delete entry.article.dataset.cardEditing;
+      this.setCardOptions(null);
+      this.#statusSettle();
+      return;
+    }
+    entry.article.dataset.cardEditing = "";
+    const context = writing.context ?? null;
+    if (context !== null) {
+      this.#showWritingContext(context);
+      this.#statusSettle();
+      return;
+    }
+    this.#clearWritingContext();
+    if (writing.toolbar) {
+      const item = document.createElement("div");
+      item.className = "canvas-options-item";
+      item.dataset.option = "format";
+      item.append(writing.toolbar);
+      this.setCardOptions([{ id: "format", element: item, priority: 1 }]);
+    } else {
+      this.setCardOptions(null);
+    }
+    this.#statusSettle();
+  }
+
+  /**
+   * Il contesto della scheda che scrive nella riga delle opzioni (T42, come
+   * nel prototipo T27): il nome della cella e la sua formula, nella forma
+   * della barra della formula del foglio. Il primo arrivo monta l'elemento,
+   * i successivi ne cambiano soltanto il testo.
+   */
+  #showWritingContext(context: CardEditorContext): void {
+    this.#writingContext = context;
+    let item = this.#formulaItem;
+    if (item === null) {
+      const element = document.createElement("div");
+      element.className = "canvas-options-item";
+      element.dataset.option = "formula";
+      const bar = document.createElement("div");
+      bar.className = "grid-formula-bar";
+      const cell = document.createElement("span");
+      cell.className = "grid-cell-name";
+      const formula = document.createElement("div");
+      formula.className = "grid-formula-editor";
+      const text = document.createElement("span");
+      text.className = "canvas-formula-text";
+      formula.append(text);
+      bar.append(cell, formula);
+      element.append(bar);
+      item = { cell, formula: text };
+      this.#formulaItem = item;
+      this.setCardOptions([{ id: "formula", element, priority: 1 }]);
+    }
+    item.cell.textContent = context.cell;
+    item.formula.textContent = context.formula;
+    item.formula.title = context.formula;
+    // «Apri a lato su B3» segue la cella (T45).
+    this.#canvasOptions.sync();
+  }
+
+  #clearWritingContext(): void {
+    this.#writingContext = null;
+    this.#formulaItem = null;
+  }
+
+  /**
+   * A che punto è ciò che si scrive nella scheda, nella riga del titolo
+   * (T41, T96): lo stato del salvataggio con la parola della testata dei
+   * riquadri (`.save-state`, `saveStateKey`) o «Sola lettura» col perché
+   * (`.canvas-card-lock`).
+   */
+  #cardEditState(entry: CardEntry, state: CardEditorState | null, reason: string | null): void {
+    const handle = entry.connect.parentElement;
+    if (!handle) return;
+    handle.querySelector(":scope > .save-state")?.remove();
+    handle.querySelector(":scope > .canvas-card-lock")?.remove();
+    if (state === null) return;
+    const mark = document.createElement("span");
+    if (state === "readonly") {
+      mark.className = "canvas-card-lock";
+      mark.textContent = t("canvas.card.readonly");
+      if (reason) mark.title = reason;
+    } else {
+      mark.className = "save-state";
+      mark.dataset.state = state;
+      mark.textContent = t(saveStateKey(state));
+    }
+    entry.connect.before(mark);
+  }
+
+  /**
+   * Entra nella scheda `id`: se è ferma la accende (passando dalla scelta
+   * delle vive, che la tiene accesa con le altre), poi chiama `enter()`. Se
+   * dice sì, la scheda è attiva: `data-card-active`, «Esc per uscire» nella
+   * testata, il fuoco nel corpo. Una scheda fuori dalla vista, o che non si
+   * accende adesso (la penna giù, la lavagna nascosta), non entra.
+   */
+  #enterCard(id: string): boolean {
+    if (this.#activeId === id) return true;
+    const entry = this.#cards.get(id);
+    const view = entry?.view;
+    if (this.#destroyed || !entry || !view?.enter || !this.#hasLiveContent(entry)) return false;
+    if (!overlaps(entry.node, this.#viewRect().view)) return false;
+    this.#leaveCard(false);
+    if (this.#liveModes.get(id) !== "live") {
+      // Un clic o un tasto chiudono il gesto della rotella: la scelta si rifà adesso.
+      clearTimeout(this.#wheelTimer);
+      this.#wheelTimer = undefined;
+      this.#enteringId = id;
+      try {
+        this.#refreshLive();
+      } finally {
+        this.#enteringId = null;
+      }
+      if (this.#liveModes.get(id) !== "live") {
+        this.#refreshLive();
+        return false;
+      }
+    }
+    let entered = false;
+    try {
+      entered = view.enter() === true;
+    } catch (error) {
+      console.warn(`canvas: non si entra nella scheda ${id}`, error);
+    }
+    if (!entered) {
+      // Accesa per entrare e poi no: torna a ciò che dice la regola.
+      this.#refreshLive();
+      return false;
+    }
+    this.#activeId = id;
+    this.#syncSelectionBar();
+    // La riga delle opzioni offre «Apri a lato» su questa scheda (T45).
+    this.#canvasOptions.sync();
+    const article = entry.article;
+    article.dataset.cardActive = "";
+    const hint = document.createElement("span");
+    hint.className = "canvas-exit-hint";
+    hint.textContent = t("canvas.card.exit_hint");
+    article.querySelector(":scope > .canvas-node-handle")?.append(hint);
+    entry.body.tabIndex = -1;
+    entry.body.focus({ preventScroll: true });
+    return true;
+  }
+
+  /**
+   * Esce dalla scheda attiva, se c'è: `leave()`, via segno e suggerimento.
+   * Con `refocus` il fuoco che era dentro torna sulla scheda; con `refresh`
+   * la scelta delle vive si rifà (la scheda può tornare ferma).
+   */
+  #leaveCard(refocus: boolean, refresh = true): void {
+    const id = this.#activeId;
+    if (id === null) return;
+    this.#activeId = null;
+    const entry = this.#cards.get(id);
+    if (entry) {
+      this.#unmarkActive(entry, refocus);
+      try {
+        entry.view?.leave?.();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${id} non esce`, error);
+      }
+    }
+    if (refresh) this.#refreshLive();
+    this.#syncSelectionBar();
+    this.#canvasOptions.sync();
+  }
+
+  #unmarkActive(entry: CardEntry, refocus: boolean): void {
+    const article = entry.article;
+    const focusInside = article.contains(document.activeElement) && document.activeElement !== article;
+    delete article.dataset.cardActive;
+    article.querySelector(":scope > .canvas-node-handle > .canvas-exit-hint")?.remove();
+    // Uscendo si smette anche di scrivere (T41): la riga delle opzioni torna
+    // allo strumento, la riga del titolo perde stato e lucchetto.
+    this.#cardEditState(entry, null, null);
+    if (this.#writingId === entry.id || article.dataset.cardEditing !== undefined) {
+      this.#writingId = null;
+      this.#clearWritingContext();
+      delete article.dataset.cardEditing;
+      this.setCardOptions(null);
+      this.#statusSettle();
+    }
+    entry.body.removeAttribute("tabindex");
+    if (refocus && focusInside && article.isConnected) article.focus({ preventScroll: true });
+  }
+
+  /**
+   * Dice alla vista di `entry` che la scheda ha cambiato misura, a gesto
+   * finito: durante un ridimensionamento aspetta il rilascio, e il primo
+   * disegno dopo lo dice una volta sola.
+   */
+  #resizeView(entry: CardEntry): void {
+    const view = entry.view;
+    const known = entry.viewSize;
+    if (!view || !known || this.#resize !== null) return;
+    const { width, height } = entry.node;
+    if (known.width === width && known.height === height) return;
+    entry.viewSize = { width, height };
+    try {
+      view.resize?.();
+    } catch (error) {
+      console.warn(`canvas: la scheda ${entry.id} non cambia misura`, error);
+    }
   }
 
   #drawEdges(): void {
     if (!this.#doc) return;
     const byId = new Map(this.#doc.nodes.map((n) => [n.id, n]));
     this.#edgeLayer.replaceChildren();
+    this.#handleLayer.replaceChildren();
     const worldW = this.#worldSize();
-    this.#edgeLayer.setAttribute("viewBox", `0 0 ${worldW.w} ${worldW.h}`);
-    this.#edgeLayer.style.width = `${worldW.w}px`;
-    this.#edgeLayer.style.height = `${worldW.h}px`;
+    // Le prese stanno nelle stesse coordinate dei fili (T91).
+    for (const layer of [this.#edgeLayer, this.#handleLayer]) {
+      layer.setAttribute("viewBox", `0 0 ${worldW.w} ${worldW.h}`);
+      layer.style.width = `${worldW.w}px`;
+      layer.style.height = `${worldW.h}px`;
+    }
     for (const edge of this.#doc.edges) {
       const from = byId.get(edge.fromNode);
       const to = byId.get(edge.toNode);
       if (!from || !to) continue;
-      const a = edgePoint(from, edge.fromSide ?? "right", true);
-      const b = edgePoint(to, edge.toSide ?? "left", false);
+      const a = sidePoint(from, edge.fromSide ?? "right");
+      const b = sidePoint(to, edge.toSide ?? "left");
       const selected = this.#edgeSelection.includes(edge.id);
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
       group.classList.add("canvas-edge");
+      // Il filo sotto il puntatore si scurisce (T67).
+      if (this.#edgeHover === edge.id) group.toggleAttribute("data-hover", true);
       const hit = document.createElementNS("http://www.w3.org/2000/svg", "path");
       hit.classList.add("canvas-edge-hit");
       hit.dataset.edge = edge.id;
@@ -1427,15 +12307,14 @@ export class CanvasEngine {
       line.classList.add("canvas-edge-line");
       line.dataset.edge = edge.id;
       if (selected) line.classList.add("selected");
-      const d = `M ${a.x} ${a.y} C ${a.x + (b.x - a.x) / 2} ${a.y}, ${b.x - (b.x - a.x) / 2} ${b.y}, ${b.x} ${b.y}`;
+      const d = edgePathData(a, b);
       hit.setAttribute("d", d);
       line.setAttribute("d", d);
-      if (edge.color) line.setAttribute("stroke", PRESET_FILL[edge.color] ?? edge.color);
+      // Il colore del filo, per la pelle: il tratto e le punte (T47).
+      paintColor(group, edge.color);
       group.append(hit, line);
-      for (const [endpoint, point, end] of [
-        ["from", a, edge.fromEnd], ["to", b, edge.toEnd],
-      ] as const) {
-        if (end !== "arrow") continue;
+      for (const [endpoint, point] of [["from", a], ["to", b]] as const) {
+        if (edgeEnd(edge, endpoint) !== "arrow") continue;
         const angle = Math.atan2(b.y - a.y, b.x - a.x) + (endpoint === "from" ? Math.PI : 0);
         const dx = Math.cos(angle) * 10;
         const dy = Math.sin(angle) * 10;
@@ -1461,15 +12340,14 @@ export class CanvasEngine {
           handle.setAttribute("cx", String(point.x));
           handle.setAttribute("cy", String(point.y));
           handle.setAttribute("r", "8");
-          handle.setAttribute("fill", "var(--accent)");
-          handle.setAttribute("stroke", "var(--doc-bg)");
-          handle.style.cursor = "grab";
-          handle.style.pointerEvents = "all";
-          group.append(handle);
+          // Sopra lo stage, non nel filo: un punto della scheda non la copre (T91, rotta 5).
+          this.#handleLayer.append(handle);
         }
       }
       this.#edgeLayer.append(group);
     }
+    // Il filo che si sta tirando resta sopra gli altri.
+    if (this.#connectDraft) this.#edgeLayer.append(this.#connectDraft);
   }
 
   #worldSize(): { w: number; h: number } {
@@ -1482,45 +12360,135 @@ export class CanvasEngine {
     return { w, h };
   }
 
-  #nodeEl(node: CanvasNode): HTMLElement {
+  /**
+   * Mette sulla scena le schede di `nodes`, tenute per id: chi c'è già si
+   * aggiorna (posto, misura, colore, titolo, scelta), chi è nuovo nasce, chi
+   * non c'è più si distrugge. Il corpo si rifà solo se cambia la sua chiave
+   * (`cardBodyKey`): una vista viva sopravvive a ciò che non la riguarda.
+   * L'ordine sulla scena è quello del file: la prima sotto, l'ultima sopra.
+   * I gruppi però stanno sempre sotto i fili, quindi sotto ogni scheda (T91).
+   */
+  #placeCards(nodes: readonly CanvasNode[]): void {
+    // La scheda col campo aperto non si sposta e non rifà il corpo: muoverla
+    // toglierebbe il fuoco al campo. Le altre le si mettono attorno; se il
+    // documento non l'ha più, resta finché il campo non si chiude.
+    const editor = this.#editor;
+    const keptEntry = editor ? this.#cards.get(editor.id) : undefined;
+    const kept = keptEntry && keptEntry.article === editor?.article && keptEntry.article.parentElement === this.#stage
+      ? keptEntry
+      : undefined;
+    const present = new Set(nodes.map((node) => node.id));
+    // Le gemelle col documento di adesso (T22). Se la scheda da cui si erano
+    // illuminate non c'è più, o non mostra più quel file, o il file ha ormai
+    // una scheda sola, si spengono.
+    this.#twins = twinGroups(nodes);
+    const lit = this.#litTwins;
+    let unlit = false;
+    if (lit !== null) {
+      const from = nodes.find((node) => node.id === lit.from);
+      if (!from || cardFilePath(from) !== lit.path || !this.#twins.has(lit.path)) {
+        this.#litTwins = null;
+        this.#twinsHover = null;
+        unlit = true;
+      }
+    }
+    for (const [id, entry] of this.#cards) {
+      if (present.has(id) || entry === kept) continue;
+      this.#cards.delete(id);
+      this.#releaseBody(entry);
+      entry.article.remove();
+    }
+    // Ciò che sulla scena non è una scheda (il messaggio della scena troppo
+    // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima,
+    // e il bordo del tratto in corso pure.
+    const ours = new Set<Element>([...this.#cards.values()].map((entry) => entry.article));
+    for (const child of [...this.#stage.children]) {
+      // Lo strato dei fili (T91, primo figlio della scena: le schede gli
+      // vanno dopo), il bordo del tratto in corso (T69) e la
+      // cornice della scelta restano: non sono della scena.
+      if (child !== this.#edgeLayer && !ours.has(child) && !child.classList.contains("canvas-ink-board") && !child.classList.contains("canvas-ink-frames") && child !== this.#selectionFrame && child !== this.#lassoLayer?.svg) child.remove();
+    }
+    const children = this.#stage.children;
+    let index = children[0] === this.#edgeLayer ? 1 : 0;
+    for (const node of nodes) {
+      let entry = this.#cards.get(node.id);
+      if (!entry) {
+        entry = this.#createCard(node);
+        this.#cards.set(node.id, entry);
+      }
+      if (entry === kept) {
+        while (children[index] && children[index] !== entry.article) {
+          this.#stage.insertBefore(children[index]!, entry.article.nextSibling);
+        }
+      } else if (children[index] !== entry.article) {
+        this.#stage.insertBefore(entry.article, children[index] ?? null);
+      }
+      index++;
+      this.#refreshCard(entry, node, entry !== kept);
+      // La scheda che si scrive tiene la misura a cui è cresciuta, anche
+      // prima che il suo commit arrivi (T44).
+      const grown = entry === kept ? editor?.grown : null;
+      if (grown) {
+        entry.article.style.width = `${Math.max(node.width, grown.width)}px`;
+        entry.article.style.height = `${Math.max(node.height, grown.height)}px`;
+      }
+      this.#resizeView(entry);
+    }
+    if (unlit) this.#statusSettle();
+    this.#askCitations(nodes);
+  }
+
+  /** L'involucro di una scheda nuova, col corpo ancora vuoto: lo riempie `#refreshCard`. */
+  #createCard(node: CanvasNode): CardEntry {
+    const id = node.id;
     const el = document.createElement("article");
     el.className = `canvas-node canvas-node-${node.type}`;
-    el.dataset.node = node.id;
-    el.style.transform = `translate(${node.x}px, ${node.y}px)`;
-    el.style.width = `${node.width}px`;
-    el.style.height = `${node.height}px`;
-    el.style.background = nodeFill(node.color);
-    if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
+    el.dataset.node = id;
     el.tabIndex = 0;
-    el.setAttribute("role", "group");
-    el.setAttribute("aria-label", `${node.type} ${node.id}`);
-    if (this.#selection.includes(node.id)) el.classList.add("selected");
+    // Il ruolo è quello di `article`, che accetta un nome, scritto per chi
+    // legge solo l'attributo: `role="group"` su un `article` non è ammesso
+    // (axe, `aria-allowed-role`).
+    el.setAttribute("role", "article");
+    // Una scheda nuova non ha ancora il suo nome (T61).
+    this.#labelled.stale = true;
     const header = document.createElement("div");
     header.className = "canvas-node-handle";
-    header.dataset.drag = node.id;
+    header.dataset.drag = id;
     const title = document.createElement("span");
     title.className = "canvas-node-title";
-    title.textContent = nodeTitle(node);
     const connect = document.createElement("button");
     connect.type = "button";
     connect.className = "canvas-connect";
-    connect.dataset.connect = node.id;
-    connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    connect.dataset.connect = id;
     connect.textContent = "→";
     connect.addEventListener("click", (e) => e.stopPropagation());
     header.append(title, connect);
-    el.append(header);
-    el.append(this.#cardBody(node));
-    if (!this.#readOnly) {
-      const resize = document.createElement("div");
-      resize.className = "canvas-resize";
-      resize.dataset.resize = node.id;
-      resize.setAttribute("aria-hidden", "true");
-      el.append(resize);
-    }
+    // ↗ di un estratto (T75): la fonte accanto, alla prima sezione; con
+    // Ctrl (Cmd) nel riquadro. Il pulsante lo mette `syncExcerptHead`.
+    header.addEventListener("click", (e) => {
+      if (!(e.target instanceof Element) || !e.target.closest("[data-excerpt-open]")) return;
+      e.stopPropagation();
+      this.#openExcerptSource(entry.node, e.ctrlKey || e.metaKey ? "pane" : "beside");
+    });
+    const body = document.createElement("div");
+    body.className = "canvas-card-body";
+    // Il titolo grande da lontano (T54), prima dell'inchiostro della scheda:
+    // è trasparente e l'inchiostro gli resta sopra.
+    const far = document.createElement("div");
+    far.className = "canvas-node-far";
+    far.setAttribute("aria-hidden", "true");
+    el.append(header, body, far);
+    const entry: CardEntry = {
+      id, article: el, title, connect, node, type: node.type, body,
+      bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
+      far, detail: null, find: null, label: null, titled: null,
+    };
     el.addEventListener("focus", () => {
-      if (!this.#selection.includes(node.id)) {
-        this.#selection = [node.id];
+      // Col fuoco il nome dev'essere quello di adesso, anche prima del giro
+      // rimandato di `#scheduleLabels`.
+      if (!this.#labelsCurrent()) this.#labelCard(entry);
+      if (!this.#selection.includes(id)) {
+        this.#selection = [id];
         this.#edgeSelection = [];
         this.#options.onSelectionChange();
         this.#displaySelection();
@@ -1528,13 +12496,389 @@ export class CanvasEngine {
     });
     el.addEventListener("dblclick", (e) => {
       e.stopPropagation();
-      this.#beginCardEdit(node);
+      // Il doppio clic su una maniglia adatta la scheda al contenuto (T66).
+      const tap = this.#takeHandleTap(e.target);
+      if (tap) {
+        this.#fitToContent(tap);
+        return;
+      }
+      // Il doppio clic sulla testata di un estratto apre la fonte accanto
+      // (T75), come ↗; quello su ↗ è già il suo clic.
+      if (e.target instanceof Element && e.target.closest(".canvas-node-handle") && noteExcerptOf(entry.node)) {
+        if (!e.target.closest("[data-excerpt-open]")) this.#openExcerptSource(entry.node, "beside");
+        return;
+      }
+      // Dentro la scheda attiva il doppio clic è del contenuto (una parola);
+      // in una nota che si legge comincia a scriverci (T41).
+      // L'elemento sotto il gesto, per una scheda che scrive da lì (la cella
+      // di un foglio, T42): il bersaglio dell'evento è dove il primo clic è
+      // sceso, il corpo della scheda che non prendeva ancora il puntatore; al
+      // doppio clic la scheda è attiva e il contenuto lo prende.
+      const under = document.elementFromPoint?.(e.clientX, e.clientY) ?? null;
+      const from = under !== null && el.contains(under) ? under : e.target;
+      if (this.#activeId === id) {
+        if (this.#writingId !== id) this.#beginWriting(id, from);
+        return;
+      }
+      const kind = cardKindOf(entry.node);
+      // Il visore lo apre la vista dell'immagine, che ascolta il suo doppio clic (T5).
+      if (kind === "image" && this.#hasLiveContent(entry)) return;
+      // Una scheda di file prende il gesto anche senza vista, se manca o non si mostra (T93).
+      const takesGesture = entry.node.type === "file" || (kind !== null && DOUBLE_CLICK_ENTERS.has(kind));
+      if (takesGesture) this.#enterOrEdit(entry.node, from);
+      else this.#beginCardEdit(entry.node);
     });
-    return el;
+    return entry;
   }
-  #cardBody(node: CanvasNode): HTMLElement {
+
+  /**
+   * Aggiorna la scheda `entry` a `node`: l'involucro sempre, il corpo
+   * (`withBody`) solo se la sua chiave è cambiata.
+   */
+  #refreshCard(entry: CardEntry, node: CanvasNode, withBody: boolean): void {
+    entry.node = node;
+    const el = entry.article;
+    if (entry.type !== node.type) {
+      el.classList.replace(`canvas-node-${entry.type}`, `canvas-node-${node.type}`);
+      entry.type = node.type;
+    }
+    el.style.transform = `translate(${node.x}px, ${node.y}px)`;
+    el.style.width = `${node.width}px`;
+    el.style.height = `${this.#shownHeight(node)}px`;
+    // La carta e il colore li dà la pelle (T47); il nome del colore arriva a
+    // chi ascolta.
+    paintColor(el, node.color);
+    paintTextStyle(el, node);
+    if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
+    else delete el.dataset.backgroundStyle;
+    // Il nome per il lettore di schermo (T61) lo scrive `#scheduleLabels`, solo
+    // quando il documento cambia: non qui, a ogni resa.
+    el.classList.toggle("selected", this.#selection.includes(node.id));
+    // I nomi della testata dipendono solo dalla scheda e dalla lingua.
+    if (entry.titled?.node !== node || entry.titled.round !== this.#languageRound) {
+      entry.titled = { node, round: this.#languageRound };
+      const title = nodeTitle(node);
+      if (entry.title.textContent !== title) entry.title.textContent = title;
+      const far = farTitle(node);
+      if (entry.far.textContent !== far) entry.far.textContent = far;
+      // Il nome di → è quello del lettore di schermo: la specie e il nome della scheda.
+      const connectLabel = t("canvas.connect", { card: cardTitle(node) });
+      if (entry.connect.getAttribute("aria-label") !== connectLabel) entry.connect.setAttribute("aria-label", connectLabel);
+    }
+    // «↩ N» e «×N» dopo il titolo, e la luce delle gemelle (T22).
+    this.#syncHead(entry);
+    // La testata dell'estratto (T75): le parti e ↗, prima di →.
+    const handle = entry.connect.parentElement;
+    if (handle) syncExcerptHead(el, handle, entry.connect, node.type === "file" ? node.file ?? null : null, noteExcerptOf(node));
+    this.#syncPorts(el);
+    // Le quattro maniglie (T66): in sola lettura nessuna.
+    if (this.#readOnly) {
+      for (const handle of entry.resize ?? []) handle.remove();
+      entry.resize = null;
+    } else if (!entry.resize) {
+      const handles = RESIZE_CORNERS.map((corner) => resizeHandle(corner, node.id));
+      // Dopo il corpo, prima dell'inchiostro della scheda: come quando nasce.
+      entry.body.after(...handles);
+      entry.resize = handles;
+    }
+    markHandles(el, node, this.#camera.zoom);
+    if (!withBody) return;
+    const kind = cardKindOf(node);
+    const cards = this.#options.cards;
+    const renderer = kind && cards ? cards.registry.rendererFor(kind) : null;
+    // Una vista dipende solo dalla scheda; il corpo di sempre anche dalla
+    // lingua, e quello di testo dalle sintassi e dalla sola lettura (il
+    // pulsante che ne fa una nota).
+    const viewKey = cardBodyKey(node, renderer ? this.#viewKeyOf(node)
+      : node.type === "text" ? `${this.#languageRound}:${this.#formsRound}:${this.#readOnly}`
+      : `${this.#languageRound}`);
+    // Il file cambiato (o la scheda) non è più quello che mancava: si riprova.
+    if (entry.missingFor !== null && entry.missingFor !== viewKey) entry.missingFor = null;
+    // Il segnaposto di un file mancante dipende dalla lingua e dalla sola lettura (i gesti).
+    const missing = entry.missingFor !== null && cards !== undefined;
+    const key = missing ? cardBodyKey(node, `missing:${this.#languageRound}:${this.#readOnly}`) : viewKey;
+    if (key === entry.bodyKey) return;
+    this.#releaseBody(entry);
     const body = document.createElement("div");
     body.className = "canvas-card-body";
+    entry.body.replaceWith(body);
+    entry.body = body;
+    entry.bodyKey = key;
+    if (missing && cards) this.#fillMissing(entry, body, node, cards);
+    else if (renderer && kind && cards) this.#mountView(entry, node, kind, renderer, cards.snapshots);
+    else this.#fillBody(entry, body, node);
+  }
+
+  /**
+   * Monta la vista del renderer nel corpo, ferma: chi è vivo lo decide la
+   * tela più tardi. Un renderer che lancia lascia il corpo di sempre, e la
+   * tela va avanti.
+   */
+  #mountView(entry: CardEntry, node: CanvasNode, kind: CardKind, renderer: CardRenderer, snapshots: CardSnapshots): void {
+    const body = entry.body;
+    const life = openLifetime();
+    const target = cardTarget(node);
+    // Finché il renderer monta, un «file mancante» si registra a montaggio finito.
+    let mounting = true;
+    let missingWhileMounting = false;
+    const context: CardContext = {
+      path: target.path,
+      subpath: target.subpath,
+      documentId: this.#options.documentId ?? "",
+      lifetime: life,
+      snapshots,
+      size: () => ({ width: entry.node.width, height: entry.node.height }),
+      zoom: () => this.#camera.zoom,
+      initialPage: this.#viewMemo?.page(node.id) ?? null,
+      // Le parti dell'estratto (T73); col ritaglio aperto l'immagine intera (T78).
+      parts: this.#crop?.node === node.id ? null : cardParts(node),
+      // I gesti dell'avviso «Sezione non trovata» (T75), non in sola lettura.
+      ...(!this.#readOnly && noteExcerptOf(node) !== null ? {
+        excerpt: {
+          ...(this.#options.parts ? { chooseAgain: () => void this.#openParts(entry.id, "command") } : {}),
+          showWhole: () => this.#showWholeFile(entry.id),
+        },
+      } : {}),
+      pageChanged: (page) => {
+        // Una vista già smontata non parla più per questa scheda.
+        if (life.closed || entry.body !== body) return;
+        this.#viewMemo?.pageChanged(entry.id, page);
+        // «Apri a lato alla pagina 3» segue la pagina della scheda attiva (T45).
+        if (this.#activeId === entry.id) this.#canvasOptions.sync();
+      },
+      // L'inchiostro di pagina segue la pagina che si vede (T19). Durante il
+      // montaggio non c'è ancora la vista: lo disegna il giro della resa.
+      pageShown: () => {
+        if (life.closed || entry.body !== body || mounting) return;
+        this.#pageShown(entry);
+      },
+      // L'inchiostro `scale` segue il contenuto che si vede (T39), come sopra.
+      contentShown: () => {
+        if (life.closed || entry.body !== body || mounting) return;
+        this.#pageShown(entry);
+      },
+      // L'inchiostro di cella segue il foglio che scorre (T38), come sopra.
+      cellsShown: () => {
+        if (life.closed || entry.body !== body || mounting) return;
+        this.#pageShown(entry);
+      },
+      ...(this.#options.cards?.editors ? { editors: this.#options.cards.editors } : {}),
+      writing: (writing) => {
+        if (life.closed || entry.body !== body) return;
+        this.#cardWriting(entry, writing);
+      },
+      editState: (state, reason) => {
+        if (life.closed || entry.body !== body) return;
+        this.#cardEditState(entry, state, reason ?? null);
+      },
+      missing: () => {
+        // Una vista già distrutta non parla più per questa scheda; un link non manca mai.
+        if (life.closed || entry.body !== body || entry.node.type !== "file") return;
+        if (mounting) {
+          missingWhileMounting = true;
+          return;
+        }
+        this.#markMissing(entry);
+      },
+    };
+    let view: CardView;
+    try {
+      view = renderer.mount(node, body, "snapshot", context);
+    } catch (error) {
+      life.close();
+      console.warn(`canvas: la scheda ${node.id} non si mostra (${kind})`, error);
+      if (entry.body === body) {
+        body.replaceChildren();
+        this.#fillBody(entry, body, node);
+      }
+      return;
+    } finally {
+      mounting = false;
+    }
+    entry.view = view;
+    entry.viewLife = life;
+    entry.viewSize = { width: node.width, height: node.height };
+    const article = entry.article;
+    article.dataset.cardKind = kind;
+    article.dataset.cardMode = "snapshot";
+    // Nasce ferma: la tela non le chiede «ferma» di nuovo.
+    this.#liveModes.set(entry.id, "snapshot");
+    this.#views.set(entry.id, {
+      setMode: (mode) => {
+        view.setMode(mode);
+        article.dataset.cardMode = mode;
+      },
+      // Questa voce serve solo al cambio di modo: la vista la smonta `#releaseBody`.
+      destroy: () => {},
+    });
+    if (missingWhileMounting) this.#markMissing(entry);
+  }
+
+  /**
+   * Il renderer dice che il file della scheda non c'è: la vista si smonta, e il
+   * corpo diventa «File mancante» con i suoi gesti. La scheda resta così finché
+   * il file non torna (o cambia): allora la sua vista si rimonta.
+   */
+  #markMissing(entry: CardEntry): void {
+    entry.missingFor = cardBodyKey(entry.node, this.#viewKeyOf(entry.node));
+    this.#refreshCard(entry, entry.node, true);
+  }
+
+  /**
+   * Il file di una scheda mancante è tornato (o è cambiato): la scheda si
+   * rimonta da sé, con la sua vista, e la tela decide se si accende.
+   */
+  #fileBack(id: string): void {
+    const entry = this.#cards.get(id);
+    if (this.#destroyed || !entry || entry.missingFor === null) return;
+    entry.missingFor = null;
+    this.#refreshCard(entry, entry.node, true);
+    this.#refreshLive();
+  }
+
+  /**
+   * Il corpo di una scheda il cui file non c'è: il nome del file, e «Ritrova…» e
+   * «Togli dalla lavagna» se la lavagna si può cambiare. Il file si ascolta da
+   * qui (la vita del corpo): quando torna, `#fileBack` rimonta la vista.
+   */
+  #fillMissing(entry: CardEntry, body: HTMLElement, node: CanvasNode, cards: CanvasCards): void {
+    const id = node.id;
+    const path = cardTarget(node).path;
+    const life = openLifetime();
+    entry.viewLife = life;
+    entry.article.dataset.cardMissing = "true";
+    // Il buco nella lavagna (prototipo T25): il messaggio nel riquadro grigio
+    // delle schede di file, sotto i due pulsanti del kit.
+    const missing = document.createElement("div");
+    missing.className = "canvas-card-missing";
+    const message = document.createElement("span");
+    message.className = "canvas-media-placeholder";
+    message.textContent = t("canvas.card.missing", { path });
+    missing.append(message);
+    body.append(missing);
+    life.add(cards.watch(path, () => this.#fileBack(id)));
+    if (this.#readOnly) return;
+    const actions = document.createElement("div");
+    actions.className = "canvas-card-missing-actions";
+    missing.append(actions);
+    const pick = this.#options.onPickFile;
+    if (pick) {
+      const relink = document.createElement("button");
+      relink.type = "button";
+      relink.className = "kit-button";
+      relink.dataset.kind = "primary";
+      relink.dataset.cardAction = "relink";
+      relink.textContent = t("canvas.card.relink");
+      life.listen(relink, "click", (event) => {
+        event.stopPropagation();
+        this.#relink(id);
+      });
+      actions.append(relink);
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "kit-button";
+    remove.dataset.kind = "normal";
+    remove.dataset.cardAction = "remove";
+    remove.textContent = t("canvas.card.remove");
+    life.listen(remove, "click", (event) => {
+      event.stopPropagation();
+      this.#removeCard(id);
+    });
+    actions.append(remove);
+  }
+
+  /** «Ritrova…» di una scheda mancante, dal pulsante o dal gesto: lo stesso selettore e lo stesso commit (T16, T93). */
+  #relink(id: string): void {
+    const pick = this.#options.onPickFile;
+    if (!pick) return;
+    this.#relinkCard(id, pick).catch((error: unknown) => this.#showIntakeError(error));
+  }
+
+  /**
+   * «Ritrova…»: il file scelto (con il nome di quello che manca in testa) sostituisce
+   * il percorso della scheda, in un commit solo. La scelta vale solo se la scheda è
+   * ancora mancante per lo stesso file: se il file è tornato, o la scheda è cambiata
+   * mentre il selettore era aperto, la scelta è vecchia e non tocca niente.
+   */
+  async #relinkCard(id: string, pick: NonNullable<CanvasEngineOptions["onPickFile"]>): Promise<void> {
+    const expected = this.#cards.get(id)?.missingFor ?? null;
+    const shown = this.#doc?.nodes.find((candidate) => candidate.id === id);
+    if (expected === null || !shown) return;
+    const chosen = await pick(fileName(cardTarget(shown).path));
+    if (!isVaultPath(chosen) || this.#destroyed || this.#readOnly || !this.#doc) return;
+    if (this.#cards.get(id)?.missingFor !== expected) return;
+    const now = this.#doc.nodes.find((candidate) => candidate.id === id);
+    if (!now) return;
+    const op = setOp(now, { ...now, file: relinkedFile(now, chosen) });
+    if (op) this.#writeOps([op]);
+  }
+
+  /** «Togli dalla lavagna» di una scheda mancante: come Canc, per quella scheda sola. */
+  #removeCard(id: string): void {
+    if (this.#removeCards([id], [])) this.#options.onSelectionChange();
+  }
+
+  /** Smonta ciò che tiene vivo il corpo di `entry` (Markdown, vista) e lo segna da rifare. */
+  #releaseBody(entry: CardEntry): void {
+    const teardown = entry.teardown;
+    const view = entry.view;
+    const life = entry.viewLife;
+    entry.teardown = null;
+    entry.view = null;
+    entry.viewLife = null;
+    entry.viewSize = null;
+    entry.bodyKey = null;
+    if (view) {
+      this.#views.delete(entry.id);
+      this.#liveModes.delete(entry.id);
+      this.#seenLive.delete(entry.id);
+    }
+    // La scheda attiva che perde il corpo (tolta, un annulla, un file
+    // cambiato, il campo che prende il posto della vista) ne esce prima.
+    if (this.#activeId === entry.id) {
+      this.#activeId = null;
+      this.#unmarkActive(entry, false);
+      try {
+        view?.leave?.();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${entry.id} non esce`, error);
+      }
+      this.#canvasOptions.sync();
+    }
+    delete entry.article.dataset.cardKind;
+    delete entry.article.dataset.cardMode;
+    delete entry.article.dataset.cardMissing;
+    // Una vista che lancia nel distruggersi non tiene vive le altre.
+    if (teardown) {
+      try {
+        teardown();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${entry.id} non si smonta`, error);
+      }
+    }
+    if (view) {
+      try {
+        view.destroy();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${entry.id} non si smonta`, error);
+      }
+    }
+    life?.close();
+  }
+
+  /** Tutte le schede giù dalla scena: ogni vista si distrugge una volta. */
+  #dropCards(): void {
+    const entries = [...this.#cards.values()];
+    this.#cards.clear();
+    for (const entry of entries) {
+      this.#releaseBody(entry);
+      entry.article.remove();
+    }
+  }
+
+  /** Il corpo di sempre di `node`, in `body`: testo, file, link o gruppo. */
+  #fillBody(entry: CardEntry, body: HTMLElement, node: CanvasNode): void {
     switch (node.type) {
       case "text": {
         const text = node.text ?? "";
@@ -1542,11 +12886,8 @@ export class CanvasEngine {
         if (render) {
           const host = document.createElement("div");
           host.className = "canvas-markdown";
-          const key = `${node.id}`;
-          this.#markdownTeardowns.get(key)?.();
-          this.#markdownTeardowns.delete(key);
           const teardown = render(node.id, text, host, this.#forms);
-          if (typeof teardown === "function") this.#markdownTeardowns.set(key, teardown);
+          if (typeof teardown === "function") entry.teardown = teardown;
           body.append(host);
         } else {
           // Senza hook: testo non interattivo. Nessuno scanner locale: un
@@ -1557,26 +12898,36 @@ export class CanvasEngine {
             body.textContent = t("canvas.empty_text");
           }
         }
-        if (this.#options.onCreateNote && !this.#readOnly) {
+        if (this.#options.notes && !this.#readOnly) {
           const convert = document.createElement("button");
           convert.type = "button";
           convert.className = "canvas-convert-note";
-          convert.textContent = t("canvas.convert_note");
+          convert.textContent = t("canvas.extract_note");
           convert.addEventListener("click", (event) => {
             event.stopPropagation();
-            void this.#convertTextToNote(node).catch((error: unknown) => this.#showIntakeError(error));
+            // Lo stesso gesto di «Estrai in una nota» del menu (T70), sulla
+            // scheda di adesso: il corpo resta anche se la si sposta.
+            void this.#extractNote(entry.id).catch((error: unknown) => this.#showIntakeError(error));
           });
           body.append(convert);
         }
+        // Un testo che non ci sta si ferma sotto l'ultima riga intera (#411),
+        // «Estrai in una nota…» compreso: mai una riga tagliata a metà.
+        const lines = openLifetime();
+        watchWholeLines(body, lines);
+        const unmount = entry.teardown;
+        entry.teardown = () => {
+          lines.close();
+          unmount?.();
+        };
         break;
       }
       case "file": {
         const path = node.file ?? "";
-        const extension = path.split(".").pop()?.toLowerCase();
-        const kind = extension && ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif"].includes(extension) ? "image"
-          : extension && ["mp3", "wav", "ogg", "m4a", "flac"].includes(extension) ? "audio"
-            : extension && ["mp4", "webm", "mov", "mkv"].includes(extension) ? "video"
-              : extension === "pdf" ? "pdf" : "file";
+        // Lo stesso tipo che decide come l'inchiostro segue la scheda
+        // (`inkFitMode`): resa e segnaposto non si contraddicono.
+        const media = mediaKindOfId(path);
+        const kind = media === "other" ? "file" : media;
         body.dataset.mediaKind = kind;
         if (kind !== "file") {
           const placeholder = document.createElement("span");
@@ -1632,109 +12983,570 @@ export class CanvasEngine {
         break;
       }
     }
-    return body;
   }
 
-  #beginCardEdit(node: CanvasNode): void {
+  /**
+   * Apre il campo della scheda `target`. `born` è il passo che l'ha appena
+   * messa per scriverci (lo strumento Testo, Ctrl+Invio): lasciata vuota, se
+   * ne va con lui (T44).
+   */
+  #beginCardEdit(target: CanvasNode, born: CanvasStep | null = null): void {
     if (this.#readOnly || !this.#doc) return;
-    if (this.#finishEditing) {
-      this.#finishEditing(true);
+    const node = this.#doc.nodes.find((candidate) => candidate.id === target.id);
+    if (!node) return;
+    if (this.#editor) {
+      if (this.#editor.id === node.id) return;
+      // Il testo dell'altra scheda si registra prima; se non si può, resta lì.
+      if (!this.#closeField(false)) return;
       this.#render();
     }
-    const body = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"] .canvas-card-body`);
-    if (!body) return;
-    const field = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
-    const initial = node[field];
+    const entry = this.#cards.get(node.id);
+    if (!entry || entry.article.parentElement !== this.#stage) return;
+    const { article, body } = entry;
+    // Il campo prende il posto del corpo: la vista o il Markdown si smontano,
+    // e il corpo si rifà alla prima resa dopo che il campo si chiude. Anche il
+    // «file mancante» e il suo ascolto se ne vanno: alla chiusura il file si chiede di nuovo.
+    this.#releaseBody(entry);
+    entry.missingFor = null;
+    const field: CardField = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
-    input.value = initial ?? "";
-    input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
+    input.value = node[field] ?? "";
+    input.setAttribute("aria-label", t("canvas.edit_text", { card: cardTitle(node) }));
     const lifetime = new AbortController();
-    let finished = false;
-    const applyValue = (value: string | undefined): void => {
-      const current = this.#doc?.nodes.find((candidate) => candidate.id === node.id);
-      if (!current || !this.#doc) return;
-      const next = { ...current };
-      if (value === undefined) delete next[field];
-      else next[field] = value;
-      const patch = upsertNodePatch(this.#doc, next);
-      if (patch && this.#commitLocal([patch], "input", false, false)) this.#redo = [];
+    const editor: CardEditor = {
+      id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false,
+      born, grown: null,
     };
-    const finish = (save: boolean): void => {
-      if (finished) return;
-      finished = true;
-      this.#finishEditing = null;
-      lifetime.abort();
-      if (!save) {
-        applyValue(initial);
-      } else {
-        const current = this.#doc?.nodes.find((candidate) => candidate.id === node.id);
-        if (current && this.#doc) {
-          const before = { ...current };
-          if (initial === undefined) delete before[field];
-          else before[field] = initial;
-          const inverse = upsertNodePatch(this.#doc, before);
-          if (inverse) {
-            this.#undo.push(inverseCanvasPatches([inverse]));
-            if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
-          }
-        }
-      }
-      input.disabled = true;
-    };
-    this.#finishEditing = finish;
-    // L'input entra subito nella sessione condivisa, non soltanto al blur.
-    // Il DOM del campo resta vivo; la history Canvas raggruppa l'intera edit.
-    input.addEventListener("input", () => applyValue(input.value), { signal: lifetime.signal });
+    this.#editor = editor;
+    // Mentre si scrive nella scheda la barra della selezione non c'è (T51).
+    this.#syncSelectionBar();
+    // Il campo semplice ha i suoi ascolti: smettono quando l'editor delle note
+    // lo sostituisce (T43), o quando il campo si chiude.
+    const simple = new AbortController();
+    lifetime.signal.addEventListener("abort", () => simple.abort(), { once: true });
+    const signal = simple.signal;
+    // Il testo resta qui finché non c'è una pausa: niente commit per tasto.
+    input.addEventListener("input", () => this.#fieldText(editor, node, input.value), { signal });
+    // Durante la composizione (IME) la pausa non corre: conta dalla fine.
+    input.addEventListener("compositionstart", () => this.#fieldComposing(editor), { signal });
+    input.addEventListener("compositionend", () => this.#fieldComposed(editor, node, input.value), { signal });
     input.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
+      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo.
       event.stopPropagation();
-      if (event.key === "Escape" || (event.key === "Enter" && (node.type !== "text" || event.ctrlKey || event.metaKey))) {
+      editor.recordOnInput = false;
+      if (event.isComposing || editor.composing) return;
+      if (isCommandSearchKey(event)) {
+        // Ctrl+/ si apre anche mentre si scrive; Esc torna nel campo.
         event.preventDefault();
-        finish(event.key !== "Escape");
-        this.#render();
-        this.#viewport.focus();
+        this.#openCommandSearch();
+      } else if (isBareKey(event)) {
+        // Il campo non usa Ctrl+.: nasconde l'interfaccia, e si resta a scrivere (T65).
+        event.preventDefault();
+        this.#workspace.setBare(!this.#workspace.bare);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.#leaveField(true, true);
+      } else if (event.key === "Enter") {
+        if (field === "text" && !event.ctrlKey && !event.metaKey) {
+          // L'a capo entra nel campo, e con lui il testo si registra.
+          editor.recordOnInput = true;
+          return;
+        }
+        event.preventDefault();
+        // Ctrl+Invio in una scheda di testo apre la scheda dopo (T44); negli altri campi chiude (A15).
+        if (field === "text") this.#writeNext(event.shiftKey);
+        else this.#leaveField(true);
       }
-    }, { signal: lifetime.signal });
+    }, { signal });
+    // Il fuoco che va nella ricerca dei comandi non chiude il campo: ci torna.
     input.addEventListener("blur", () => {
-      finish(true);
-      this.#render();
-    }, { signal: lifetime.signal });
+      if (!this.#searching) this.#leaveField(false);
+    }, { signal });
     body.replaceChildren(input);
     input.focus();
     if (node.type === "text") input.setSelectionRange(input.value.length, input.value.length);
     else input.select();
+    // La scheda di testo si scrive come una nota (T43): l'editor delle note
+    // prende il posto del campo appena si monta; se non si monta, il campo resta.
+    if (node.type === "text") this.#openLiveText(editor, node, body, simple, false);
+  }
+
+  /**
+   * Il testo del campo è cambiato: va nel testo in attesa (la bozza lo vede
+   * subito), e il commit arriva dopo la pausa, o subito dopo un a capo.
+   */
+  #fieldText(editor: CardEditor, node: CanvasNode, text: string): void {
+    if (this.#editor !== editor) return;
+    const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
+    // La scheda di testo cresce col testo (T44); durante una composizione no:
+    // la misura arriva con la sua fine.
+    if (!editor.composing) this.#growWriting(editor, card);
+    this.#setPending({ card, field: editor.field, text, ...(editor.grown ? { size: editor.grown } : {}) });
+    if (editor.composing) return;
+    if (editor.recordOnInput) {
+      editor.recordOnInput = false;
+      this.#recordPending();
+      return;
+    }
+    this.#schedulePause();
+  }
+
+  /**
+   * La scheda di testo che si scrive cresce col testo (T44): in larghezza
+   * fino a `CANVAS_TEXT_FIT_MAX_WIDTH`, se nessuno l'ha ridimensionata a mano,
+   * poi va a capo e cresce in altezza; da sola non si restringe mai. La misura
+   * si vede subito, sta in `editor.grown` e nel testo in sospeso, e arriva al
+   * `.canvas` col commit del testo.
+   */
+  #growWriting(editor: CardEditor, card?: CanvasNode): void {
+    if (editor.field !== "text") return;
+    const node = card ?? this.#doc?.nodes.find((candidate) => candidate.id === editor.id) ?? this.#pending?.card;
+    if (!node || node.type !== "text") return;
+    const measured = measureWriting(editor.article, editor.place, this.#sizedByHand.has(node.id));
+    if (!measured) return;
+    const before = editor.grown ?? node;
+    const width = Math.max(before.width, node.width, measured.width);
+    const height = Math.max(before.height, node.height, measured.height);
+    if (editor.grown?.width === width && editor.grown.height === height) return;
+    if (!editor.grown && width === node.width && height === node.height) return;
+    editor.grown = { width, height };
+    editor.article.style.width = `${width}px`;
+    editor.article.style.height = `${height}px`;
+    const pending = this.#pending;
+    if (pending && pending.card.id === editor.id) pending.size = editor.grown;
+  }
+
+  /**
+   * Ctrl+Invio in una scheda di testo (T44, allarga A15): registra, chiude e
+   * apre una scheda di testo nuova, già in scrittura, larga come questa, a
+   * `NEXT_CARD_GAP` sotto; con `beside` (Ctrl+Maiusc+Invio) a destra,
+   * collegata con un filo. In una scheda nuova ancora vuota non fa niente:
+   * è già la scheda nuova.
+   */
+  #writeNext(beside: boolean): void {
+    const editor = this.#editor;
+    if (!editor || this.#readOnly || !this.#doc) return;
+    const id = editor.id;
+    if (editor.born) {
+      const text = this.#pending?.card.id === id ? this.#pending.text : this.#doc.nodes.find((node) => node.id === id)?.text;
+      if ((text ?? "").trim() === "") return;
+    }
+    if (!this.#closeField(false)) return;
+    this.#render();
+    const source = this.#doc?.nodes.find((node) => node.id === id);
+    const placed = source ? this.#addTextNext(source, beside) : null;
+    if (!placed) {
+      this.#viewport.focus();
+      return;
+    }
+    this.#render();
+    this.#beginCardEdit(placed, this.#undo[this.#undo.length - 1] ?? null);
+  }
+
+  /**
+   * La scheda di testo vuota accanto a `source` (sotto, o a destra con
+   * `beside` e un filo da lei), al primo posto libero; un commit e un passo
+   * d'annulla. Torna la scheda messa, scelta, o `null`.
+   */
+  #addTextNext(source: CanvasNode, beside: boolean): CanvasNode | null {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly) return null;
+    const spot = freeSpot(doc.nodes, beside
+      ? { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height: TEXT_CARD_HEIGHT }
+      : { x: source.x, y: source.y + source.height + NEXT_CARD_GAP, width: source.width, height: TEXT_CARD_HEIGHT });
+    // Il posto lo sceglie la tela (`freeSpot`, larga come la scheda di
+    // partenza): la scheda nasce con `add_card` e il suo `id`, il filo con
+    // `connect`, in una lista sola (T24).
+    const id = this.#newId();
+    const ops: CanvasIntentOp[] = [{ op: "add_card", id, text: "", ...spot }];
+    if (beside) {
+      const edge = this.#connectOps(source.id, id, { from: "right", to: "left" }, id);
+      if (edge) ops.push(...edge);
+    }
+    const written = this.#writeOps(ops)?.[0];
+    const node = written === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === written);
+    if (!node) return null;
+    this.#selection = [node.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    return node;
+  }
+
+  #fieldComposing(editor: CardEditor): void {
+    if (this.#editor !== editor) return;
+    editor.composing = true;
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+  }
+
+  #fieldComposed(editor: CardEditor, node: CanvasNode, text: string): void {
+    if (this.#editor !== editor) return;
+    editor.composing = false;
+    editor.recordOnInput = false;
+    this.#fieldText(editor, node, text);
+  }
+
+  /**
+   * Monta l'editor delle note in Live sopra il testo della scheda (T43), dalla
+   * porta delle schede: la tela non importa nessun editor. Finché non c'è si
+   * scrive nel campo semplice; se nel frattempo lì è cambiato qualcosa, si
+   * riapre una volta sul testo di adesso. Se la porta dice no, il campo resta.
+   */
+  #openLiveText(editor: CardEditor, node: CanvasNode, body: HTMLElement, simple: AbortController, again: boolean): void {
+    const port = this.#options.cards?.editors;
+    if (!port?.openText || this.#editor !== editor) return;
+    const host = document.createElement("div");
+    // L'aspetto della nota che si scrive in una scheda (T41). Il contenitore è
+    // alto quanto il corpo e non trabocca: il testo scorre nell'editor, e ciò
+    // che l'editor tiene sotto di sé per la Lettura resta fuori dalla vista.
+    host.className = "canvas-card-note canvas-text-live";
+    host.style.height = "100%";
+    host.style.overflow = "hidden";
+    host.hidden = true;
+    body.append(host);
+    const life = openLifetime();
+    editor.lifetime.signal.addEventListener("abort", () => life.close(), { once: true });
+    const giveUp = (): void => {
+      life.close();
+      host.remove();
+    };
+    const start = editor.input.value;
+    let opened: Promise<CardTextEditor | null>;
+    try {
+      opened = port.openText(host, start, {
+        // Solo ciò che si scrive nell'editor che si vede.
+        onText: (text) => {
+          if (editor.place === host) this.#fieldText(editor, node, text);
+        },
+        readOnly: this.#readOnly,
+        lifetime: life,
+        documentId: this.#options.documentId ?? "",
+        ...(this.#forms ? { forms: this.#forms } : {}),
+      });
+    } catch (error) {
+      console.warn(`canvas: l'editor delle note non si monta nella scheda ${node.id}`, error);
+      giveUp();
+      return;
+    }
+    void opened.then((live) => {
+      if (!live) {
+        giveUp();
+        return;
+      }
+      if (this.#editor !== editor || life.closed) {
+        live.destroy();
+        giveUp();
+        return;
+      }
+      if (editor.input.value !== start) {
+        live.destroy();
+        giveUp();
+        if (!again) this.#openLiveText(editor, node, body, simple, true);
+        return;
+      }
+      this.#showLiveText(editor, node, live, host, simple);
+    }, (error: unknown) => {
+      console.warn(`canvas: l'editor delle note non si monta nella scheda ${node.id}`, error);
+      giveUp();
+    });
+  }
+
+  /**
+   * L'editor delle note prende il posto del campo semplice, col cursore dove
+   * era. I tasti restano dell'editor (Ctrl+Z annulla lì); Esc, se non chiude
+   * dei suggerimenti, e Ctrl+Invio registrano e chiudono (A14, A15); Invio va a capo e
+   * registra; il fuoco che esce dall'editor chiude, come per il campo.
+   */
+  #showLiveText(editor: CardEditor, node: CanvasNode, live: CardTextEditor, host: HTMLElement, simple: AbortController): void {
+    const input = editor.input;
+    const focused = document.activeElement === input;
+    const caret = input.selectionEnd ?? input.value.length;
+    // Gli ascolti del campo smettono prima che esca: toglierlo col fuoco non lo chiude.
+    simple.abort();
+    editor.live = live;
+    editor.place = host;
+    const signal = editor.lifetime.signal;
+    // Esc chiude prima un elenco di suggerimenti aperto nell'editor; se no esce.
+    // L'editor delle note usa Esc anche per altro (lo segna come usato): non
+    // conta, come nella scheda di nota (T41).
+    let escapeForEditor = false;
+    host.addEventListener("keydown", (event) => {
+      if (!(event instanceof KeyboardEvent)) return;
+      editor.recordOnInput = false;
+      escapeForEditor = false;
+      if (event.isComposing || editor.composing) return;
+      if (event.key === "Escape") {
+        escapeForEditor = host.querySelector('[role="listbox"]') !== null;
+      } else if (isCommandSearchKey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.#openCommandSearch();
+      } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        // Prima dell'editor, che non deve farne un a capo: la scheda dopo (T44).
+        event.preventDefault();
+        event.stopPropagation();
+        this.#writeNext(event.shiftKey);
+      } else if (event.key === "Enter") {
+        // L'a capo che l'editor scrive si registra subito, come nel campo.
+        editor.recordOnInput = true;
+      }
+    }, { signal, capture: true });
+    host.addEventListener("keydown", (event) => {
+      // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede.
+      event.stopPropagation();
+      if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
+      if (event.key === "Escape" && !escapeForEditor) {
+        event.preventDefault();
+        this.#leaveField(true, true);
+      } else if (!event.defaultPrevented && isBareKey(event)) {
+        // Ctrl+. che l'editor non usa nasconde l'interfaccia (T65).
+        event.preventDefault();
+        this.#workspace.setBare(!this.#workspace.bare);
+      }
+    }, { signal });
+    host.addEventListener("compositionstart", () => this.#fieldComposing(editor), { signal });
+    host.addEventListener("compositionend", () => this.#fieldComposed(editor, node, live.text()), { signal });
+    // Il fuoco che va nella ricerca dei comandi non chiude il campo: ci torna.
+    host.addEventListener("focusout", (event) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && host.contains(next)) return;
+      if (!this.#searching) this.#leaveField(false);
+    }, { signal });
+    // Portare il cursore in vista non sposta il contenitore: scorre l'editor.
+    host.addEventListener("scroll", () => {
+      if (host.scrollTop !== 0) host.scrollTop = 0;
+      if (host.scrollLeft !== 0) host.scrollLeft = 0;
+    }, { signal });
+    input.remove();
+    host.hidden = false;
+    if (focused) live.focus(caret);
   }
 }
 
+/**
+ * La `set` che porta la scheda o il filo `before` a `after` (lo stesso id):
+ * i campi cambiati col valore nuovo, quelli tolti a `null`. `null` se non
+ * cambia niente. Un valore uguale scritto con le chiavi in un altro ordine
+ * entra lo stesso: il nucleo lo trova uguale, e non ne fa una toppa.
+ */
+function setOp<T extends { readonly id: string }>(before: T, after: T): CanvasIntentOp | null {
+  const was = before as unknown as Record<string, unknown>;
+  const now = after as unknown as Record<string, unknown>;
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(now)) {
+    if (key !== "id" && JSON.stringify(was[key]) !== JSON.stringify(value)) fields[key] = value === undefined ? null : value;
+  }
+  for (const key of Object.keys(was)) {
+    if (!(key in now) && key !== "id") fields[key] = null;
+  }
+  return Object.keys(fields).length > 0 ? { op: "set", id: before.id, fields } : null;
+}
+
+/**
+ * La scheda `card` col testo in sospeso dentro, e la misura a cui è cresciuta
+ * scrivendo (T44): mai più piccola di com'è adesso.
+ */
+function withPending(card: CanvasNode, pending: PendingText): CanvasNode {
+  const next = { ...card };
+  next[pending.field] = pending.text;
+  if (pending.size) {
+    next.width = Math.max(next.width, pending.size.width);
+    next.height = Math.max(next.height, pending.size.height);
+  }
+  return next;
+}
+
+/** Le toppe dei tratti fra quelle compilate: le operazioni d'inchiostro danno solo quelle. */
+function inkPatches(patches: readonly CanvasPatch[]): InkPatch[] {
+  return patches.filter((patch): patch is InkPatch => patch.kind === "ink");
+}
+
+/** Una copia delle toppe, che chi le ha date può ancora cambiare. */
+function copyPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
+  return JSON.parse(JSON.stringify(patches)) as CanvasPatch[];
+}
+
+/**
+ * Due passi di fila in uno: `first` ha portato il testo da `before` a un
+ * testo di mezzo, `second` da quello ad `after`. Le toppe si fanno in fila
+ * (le inverse al contrario); il tratto del testo è la parte che cambia fra
+ * `before` e `after`, senza spezzare una coppia surrogata.
+ */
+function mergeSteps(before: string, first: CanvasStep, second: CanvasStep, after: string): CanvasStep {
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before.charCodeAt(start) === after.charCodeAt(start)) start++;
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (endBefore > start && endAfter > start && before.charCodeAt(endBefore - 1) === after.charCodeAt(endAfter - 1)) {
+    endBefore--;
+    endAfter--;
+  }
+  if (start > 0 && isHighSurrogate(before.charCodeAt(start - 1))) start--;
+  // Il tratto finale si allarga di un'unità in tutti e due i testi, che lì sono uguali.
+  if (endBefore < before.length && isLowSurrogate(before.charCodeAt(endBefore))) {
+    endBefore++;
+    endAfter++;
+  }
+  return {
+    patches: [...second.patches, ...first.patches],
+    back: [...first.back, ...second.back],
+    start,
+    inserted: after.slice(start, endAfter),
+    removed: before.slice(start, endBefore),
+    version: second.version,
+    restores: first.restores,
+  };
+}
+
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff;
+}
+
+function isLowSurrogate(unit: number): boolean {
+  return unit >= 0xdc00 && unit <= 0xdfff;
+}
+
+/** Una trappola o un'istanza persa: il nucleo va riaperto. */
+function lostCore(error: unknown): boolean {
+  return error instanceof CanvasCoreError && (error.code === "trap" || error.code === "handle");
+}
+
+/**
+ * La modifica al testo che il nucleo ha fatto, come `TextOperation`: il tratto
+ * cambiato così com'è, o, con dei CR nel testo, la differenza contata sui `\n`.
+ */
+function sourceOperation(before: string, after: string, edit: CanvasSourceEdit): Pick<TextOperation, "beforeLength" | "afterLength" | "edits"> {
+  if (before.includes("\r") || after.includes("\r")) {
+    return operationFromText(lineFeeds(before), lineFeeds(after));
+  }
+  const deleted = before.slice(edit.start, edit.end);
+  if (deleted === edit.text) return { beforeLength: before.length, afterLength: after.length, edits: [] };
+  return {
+    beforeLength: before.length,
+    afterLength: after.length,
+    edits: [{ from: edit.start, to: edit.end, deleted, inserted: edit.text }],
+  };
+}
+
+/**
+ * La chiave del corpo di una scheda: ciò che il corpo mostra (`type`, `file`,
+ * `subpath`, `url`, `text`, `label`, lo sfondo di un gruppo) più `extra`, ciò
+ * che il corpo legge da fuori. Posto, misura, colore e scelta non ci sono:
+ * cambiarli non rifà il corpo.
+ */
+function cardBodyKey(node: CanvasNode, extra: string): string {
+  return JSON.stringify([
+    node.type, node.file ?? null, node.subpath ?? null, node.url ?? null,
+    node.text ?? null, node.label ?? null, node.background ?? null, extra,
+  ]);
+}
+
+/** Che cosa dice l'etichetta della penna (T69): la scheda col suo nome, o il tratto libero. */
+function inkHolderText(holder: CanvasNode | null): string {
+  if (!holder) return t("canvas.ink.free");
+  const name = cardMenuName(holder);
+  return name ? t("canvas.ink.attach", { name }) : t("canvas.ink.attach_card");
+}
+
+/**
+ * Scrive la proprietà `name` di `element` a `value` pixel solo se è cambiata:
+ * leggere lo stile in linea non chiede il layout, e non tutti i motori
+ * riconoscono uguale una scrittura col valore di prima (rifarebbero lo stile).
+ */
+function setPixels(element: HTMLElement, name: string, value: number): void {
+  const text = `${value}px`;
+  if (element.style.getPropertyValue(name) !== text) element.style.setProperty(name, text);
+}
+
+/** Il nome di un file senza le cartelle: `Corsi/foto.png` → `foto.png`. */
+function fileName(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
+/** Quanto è lungo, al più, il nome di una scheda nella testata del menu. */
+const MENU_NAME_MAX = 40;
+
+/**
+ * Il nome di una scheda nella testata del menu (T17): il file senza le
+ * cartelle, l'host di una pagina web, la prima riga di un testo senza i segni
+ * del Markdown (`textCardName`), l'etichetta di un gruppo; accorciato con «…».
+ * `""` se non ne ha.
+ */
+function cardMenuName(node: CanvasNode): string {
+  let name = "";
+  if (node.type === "file") name = fileName(cardTarget(node).path);
+  else if (node.type === "link") {
+    const address = externalUrl(node.url ?? "");
+    name = address === null ? node.url ?? "" : new URL(address).host;
+  } else if (node.type === "text") name = textCardName(typeof node.text === "string" ? node.text : "");
+  else name = node.label ?? "";
+  name = name.trim();
+  return name.length > MENU_NAME_MAX ? `${name.slice(0, MENU_NAME_MAX - 1).trimEnd()}…` : name;
+}
+
+/**
+ * Il `file` di una scheda dopo «Ritrova…»: il percorso scelto, col `#…` che la
+ * scheda aveva in linea (il titolo o la pagina). Il `subpath` separato resta com'è.
+ */
+function relinkedFile(node: CanvasNode, chosen: string): string {
+  const file = typeof node.file === "string" ? node.file : "";
+  const hash = file.indexOf("#");
+  return hash < 0 ? chosen : `${chosen}${file.slice(hash)}`;
+}
+
+/**
+ * Il nome che «Estrai in una nota» propone per il testo `text` (T70): la
+ * prima riga senza i `#` di un titolo, pulita come il nome di una nota nuova
+ * (`searchedName`: niente caratteri vietati, al più 80 caratteri). Una prima
+ * riga vuota, o fatta solo di caratteri vietati, dà il nome di serie.
+ */
+export function proposedNoteName(text: string): string {
+  const first = (text.split(/\r?\n/, 1)[0] ?? "").replace(/^\s*#{1,6}(?=\s|$)/, "");
+  return searchedName(first) ?? t("canvas.extract.untitled");
+}
+
+/** Il nome di una nota come lo si legge: il file senza cartella e senza `.md`. */
+function noteDisplayName(path: string): string {
+  return fileName(path).replace(/\.(md|markdown)$/i, "");
+}
+
+/** Il nome di una scheda che scrive, per la banda (T41): il file senza cartella né `.md`. */
+function writingName(node: CanvasNode): string {
+  if (node.type !== "file" || !node.file) return nodeTitle(node);
+  const base = node.file.split("/").pop() || node.file;
+  return base.replace(/\.(md|markdown)$/i, "");
+}
+
+/** Quanto è lungo, al più, il nome di un testo nella testata della scheda. */
+const TITLE_TEXT_MAX = 48;
+
+/**
+ * Il titolo nella testata di una scheda e nell'elenco del filo: il file, l'indirizzo,
+ * il nome di un testo (`textCardName`: la prima riga non vuota senza i segni del
+ * Markdown), l'etichetta di un gruppo. Una scheda che non ha ancora niente da dire
+ * (un testo appena nato, mentre si scrive) dice la sua specie a parole, «Scheda di
+ * testo»: mai l'id interno, che una persona non deve vedere né sentire.
+ */
 function nodeTitle(node: CanvasNode): string {
+  let title = "";
   switch (node.type) {
     case "text":
-      return (node.text ?? "").split("\n", 1)[0]?.slice(0, 48) || node.id;
+      title = textCardName(typeof node.text === "string" ? node.text : "").slice(0, TITLE_TEXT_MAX);
+      break;
     case "file":
-      return node.file ?? node.id;
+      title = node.file ?? "";
+      break;
     case "link":
-      return node.url ?? node.id;
+      title = node.url ?? "";
+      break;
     case "group":
-      return node.label || node.id;
+      title = (node.label ?? "").trim();
+      break;
   }
-}
-
-function edgePoint(
-  node: CanvasNode,
-  side: "top" | "right" | "bottom" | "left",
-  _from: boolean,
-): { x: number; y: number } {
-  switch (side) {
-    case "top":
-      return { x: node.x + node.width / 2, y: node.y };
-    case "bottom":
-      return { x: node.x + node.width / 2, y: node.y + node.height };
-    case "left":
-      return { x: node.x, y: node.y + node.height / 2 };
-    case "right":
-      return { x: node.x + node.width, y: node.y + node.height / 2 };
-  }
+  return title || cardTitle(node, "");
 }
 
 function nodeText(node: CanvasNode): string {
@@ -1744,4 +13556,83 @@ function nodeText(node: CanvasNode): string {
     case "link": return node.url ?? "";
     default: return node.label ?? "";
   }
+}
+
+/// Una specie `sections` qualunque: dice se un file è una nota per `fub:parts`.
+const SECTIONS_PROBE: CanvasParts = { kind: "sections", sections: ["_"], extra: {} };
+
+/**
+ * Le sezioni che la scheda mostra adesso, come chiavi del selettore (T74):
+ * quelle di un `fub:parts` di sezioni valido, sennò quella del `subpath`
+ * (`#Titolo`, anche `#Capitolo#Titolo`); nessuna per la nota intera o un
+ * blocco `#^id`.
+ */
+function partsChosen(node: CanvasNode): string[] {
+  return [...(noteExcerptOf(node)?.sections ?? [])];
+}
+
+/**
+ * Il link di un'ancora della resa di una scheda, se porta a un file del vault
+ * (T57). Le stesse classi che la montatura riconosce: `a.internal-path` col
+ * percorso, `a.wikilink` con i dati del wikilink. Il resto (un indirizzo web)
+ * `null`: lo segue la montatura.
+ */
+function cardLinkOf(anchor: HTMLAnchorElement): CardLinkRef | null {
+  if (anchor.classList.contains("internal-path")) {
+    const path = anchor.dataset.path ?? "";
+    return path === "" ? null : { kind: "path", path };
+  }
+  const page = anchor.dataset.wikilinkPage;
+  if (anchor.classList.contains("wikilink") && page !== undefined) {
+    return {
+      kind: "wiki",
+      page,
+      heading: anchor.dataset.wikilinkHeading ?? null,
+      block: anchor.dataset.wikilinkBlock ?? null,
+    };
+  }
+  return null;
+}
+
+/**
+ * Il percorso di un file del vault senza la barra in testa e senza il frammento
+ * (`#page=3`, o la query), come `pdfIdWithoutFragment`: così un `doc` risolto e
+ * il `file` di una scheda si confrontano.
+ */
+function vaultPathOf(id: string): string {
+  const cut = [id.indexOf("#"), id.indexOf("?")].filter((at) => at >= 0);
+  const bare = cut.length ? id.slice(0, Math.min(...cut)) : id;
+  return bare.replace(/^\/+/, "");
+}
+
+/**
+ * La scheda di `nodes` che un link porta a vedere (T57): una scheda del file
+ * `doc`, quella che ha la sezione del link nel suo `subpath` se ce n'è una, poi
+ * la più vicina al centro della vista `center`. `undefined` se il file non ha
+ * schede sulla lavagna.
+ */
+function linkedCardOf(
+  nodes: readonly CanvasNode[],
+  doc: string,
+  link: CardLinkRef,
+  center: { readonly x: number; readonly y: number },
+): CanvasNode | undefined {
+  const target = vaultPathOf(doc);
+  const cards = nodes.filter((node) => node.type === "file" && vaultPathOf(node.file ?? "") === target);
+  if (cards.length === 0) return undefined;
+  const heading = link.kind === "wiki" ? link.heading?.trim() : undefined;
+  const sectioned = heading ? cards.filter((node) => noteHeadingOf(node.subpath ?? null) === heading) : [];
+  const pool = sectioned.length > 0 ? sectioned : cards;
+  let best: CanvasNode | undefined;
+  let bestDistance = Infinity;
+  for (const node of pool) {
+    const dx = node.x + node.width / 2 - center.x;
+    const dy = node.y + node.height / 2 - center.y;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      best = node;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }

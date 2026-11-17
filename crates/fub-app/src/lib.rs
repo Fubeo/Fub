@@ -41,10 +41,13 @@ use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{
-    GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
-    GridSelection, Notice, PluginError,
+    DrawingCommandInfo, DrawingCommandRequest, DrawingGesture, DrawingOpen, DrawingOutcome,
+    DrawingSync, DrawingSynced, GridBytesSession, GridBytesWindow, GridCommandOutcome,
+    GridCommandRequest, GridCommandState, GridSelection, Notice, PluginError,
 };
-use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host};
+use fub_host::{
+    componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey,
+};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
@@ -58,7 +61,11 @@ pub use fub_host::{
     BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
+mod avvio;
+#[cfg(target_os = "linux")]
+mod disegno;
 mod document_windows;
+mod domande;
 mod frame_rate;
 mod live;
 mod mobile;
@@ -72,6 +79,11 @@ pub use live::{LiveAddress, LiveStart, LiveStarted};
 pub use support::DemoClosed;
 /// Adattatore OS per `fub://` (P13): thin sopra `fub_host::automation`.
 pub mod uri;
+/// Il vblank emulato di WebKitGTK (ADR 0246): il `drmWaitVBlank` che
+/// l'eseguibile esporta (`main.rs`) chiama [`vblank::drm_wait_vblank`].
+#[cfg(target_os = "linux")]
+#[doc(hidden)]
+pub mod vblank;
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `apps/client/src/host/contract.ts`.
@@ -486,15 +498,31 @@ where
         .map_err(|error| unfinished("document", error))?
 }
 
+/// La chiave di apertura facoltativa di `read_document` e `write_document`:
+/// assente o `null` è una lettura o una scrittura semplice, e una chiave
+/// malformata è `BadArgs` prima di toccare il disco (`OpenKey::parse`).
+fn open_key(open: Option<&str>) -> Result<Option<OpenKey>, PluginError> {
+    open.map(OpenKey::parse).transpose()
+}
+
+/// Legge un documento. Senza `open` è una lettura semplice: la stessa
+/// proiezione e la stessa revisione, ma il documento non conta come aperto.
+/// Con `open`, la chiave di una sessione della shell, la revisione letta
+/// resta segnata sotto la chiave finché `document_closed` non la chiude.
 #[tauri::command]
 async fn read_document(
     app: AppHandle,
     id: String,
     vault: Option<String>,
+    open: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
     let id = doc_id(&id)?;
+    let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
+        let (text, revision, format) = match &key {
+            Some(key) => host.open_document_with_format(vault.as_deref(), &id, key)?,
+            None => host.read_document_with_format(vault.as_deref(), &id)?,
+        };
         let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
         let text_kind = document_text(format.as_ref());
         let source_kind = format
@@ -507,6 +535,37 @@ async fn read_document(
             source_kind,
             text_kind,
         })
+    })
+    .await
+}
+
+/// Scalda in sottofondo il motore che apre questa estensione: la shell lo
+/// chiede quando il puntatore si ferma su un file o una cartella si apre.
+/// Un'estensione senza motore, o senza un provider attivo in un vault aperto,
+/// non fa niente e non è un errore (`Host::warm_engine`).
+#[tauri::command]
+async fn warm_engine(app: AppHandle, extension: String) -> Result<(), PluginError> {
+    off_main(app, move |host| {
+        host.warm_engine(&extension);
+        Ok(())
+    })
+    .await
+}
+
+/// La shell ha chiuso la sessione con questa chiave di apertura: l'host
+/// dimentica le prove delle sue revisioni che nessun'altra chiave tiene, e le
+/// cache dei documenti quando non resta aperta nessuna chiave
+/// (`Host::document_closed`). Una chiave sconosciuta o già chiusa, o un vault
+/// non aperto, non sono un errore; una chiave malformata è `BadArgs`.
+#[tauri::command]
+async fn document_closed(
+    app: AppHandle,
+    open: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    let key = OpenKey::parse(&open)?;
+    off_main(app, move |host| {
+        host.document_closed(vault.as_deref(), &key)
     })
     .await
 }
@@ -762,6 +821,127 @@ fn close_grid_bytes(
     host.grid_bytes_close(vault.as_deref(), &surface, &instance)
 }
 
+// Il disegno sul motore (K5, `docs/reference/drawing-ipc.md`): sei porte
+// tipate come quelle della griglia. Il motore lavora fuori dal thread
+// principale: un'apertura importa il disegno, un gesto aspetta il reimport
+// della copia. L'ordine delle richieste di un'istanza lo tiene la sessione del
+// motore nel client, che le manda una alla volta. Senza il motore in questa
+// build ogni porta risponde `unserved` (`fub_host::drawing`).
+
+/// Il lavoro di una porta del disegno, fuori dal thread principale, con
+/// l'errore nella lingua della shell ([`drawing_for_the_shell`]).
+async fn drawing_port<T, F>(
+    app: AppHandle,
+    vault: Option<String>,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host, Option<&str>) -> Result<T, PluginError> + Send + 'static,
+{
+    off_main(app, move |host| {
+        drawing_for_the_shell(host, vault.as_deref(), work)
+    })
+    .await
+}
+
+/// L'esito di `work` con l'errore passato da [`for_the_shell`]: l'host dice
+/// il motore spento con una chiave del suo catalogo, che sul filo sarebbe un
+/// oggetto, e il client riconosce un `unserved` solo da un messaggio che è
+/// una frase (`asPluginError` di `host/errors.ts`). Senza, il motore spento
+/// si leggerebbe come un guasto, e il disegno riaperto resterebbe «fermo».
+fn drawing_for_the_shell<T>(
+    host: &Host,
+    vault: Option<&str>,
+    work: impl FnOnce(&Host, Option<&str>) -> Result<T, PluginError>,
+) -> Result<T, PluginError> {
+    for_the_shell(host, vault, work(host, vault))
+}
+
+/// Apre un'istanza del motore sul testo del disegno `doc` (a capo LF).
+#[tauri::command]
+async fn open_drawing(
+    app: AppHandle,
+    doc: String,
+    text: String,
+    vault: Option<String>,
+) -> Result<DrawingOpen, PluginError> {
+    let doc = doc_id(&doc)?;
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_open(vault, &doc, &text)
+    })
+    .await
+}
+
+/// Porta all'istanza un cambio del testo del disegno.
+#[tauri::command]
+async fn drawing_sync(
+    app: AppHandle,
+    instance: String,
+    sync: DrawingSync,
+    vault: Option<String>,
+) -> Result<DrawingSynced, PluginError> {
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_sync(vault, &instance, sync)
+    })
+    .await
+}
+
+/// Un pezzo di gesto: risponde l'anteprima o le operazioni di scena.
+#[tauri::command]
+async fn drawing_gesture(
+    app: AppHandle,
+    instance: String,
+    gesture: DrawingGesture,
+    vault: Option<String>,
+) -> Result<DrawingOutcome, PluginError> {
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_gesture(vault, &instance, gesture)
+    })
+    .await
+}
+
+/// I comandi del disegno, accesi o spenti sulla selezione.
+#[tauri::command]
+async fn drawing_commands(
+    app: AppHandle,
+    instance: String,
+    selection: Vec<String>,
+    vault: Option<String>,
+) -> Result<Vec<DrawingCommandInfo>, PluginError> {
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_commands(vault, &instance, &selection)
+    })
+    .await
+}
+
+/// Un comando del disegno sulla selezione.
+#[tauri::command]
+async fn drawing_command(
+    app: AppHandle,
+    instance: String,
+    request: DrawingCommandRequest,
+    vault: Option<String>,
+) -> Result<DrawingOutcome, PluginError> {
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_command(vault, &instance, request)
+    })
+    .await
+}
+
+/// Chiude l'istanza del motore.
+#[tauri::command]
+async fn close_drawing(
+    app: AppHandle,
+    instance: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_close(vault, &instance)
+    })
+    .await
+}
+
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
 ///
 /// `base` non è opzionale, e non è una svista: un campo mancante qui è un errore
@@ -770,6 +950,11 @@ fn close_grid_bytes(
 /// Fino alla decisione 0092 era un `Option<String>` col default `null`, e il
 /// default voleva dire «sovrascrivi comunque»: la guardia si perdeva
 /// **omettendola**, che è il modo in cui una guardia non protegge nessuno.
+///
+/// `open` è la chiave di apertura della sessione che scrive: con la chiave,
+/// la revisione sovrascritta e quella nuova restano segnate sotto la chiave,
+/// che si apre se non lo era; senza, le prove che il salvataggio ha lasciato
+/// e che nessuna chiave tiene si dimenticano subito.
 #[tauri::command]
 async fn write_document(
     app: AppHandle,
@@ -777,11 +962,16 @@ async fn write_document(
     source: String,
     base: WriteBase,
     vault: Option<String>,
+    open: Option<String>,
 ) -> Result<String, PluginError> {
     let id = doc_id(&id)?;
+    let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        host.write_document(vault.as_deref(), &id, &source, base)
-            .map(|revision| revision.0)
+        match &key {
+            Some(key) => host.write_open_document(vault.as_deref(), &id, &source, base, key),
+            None => host.write_document(vault.as_deref(), &id, &source, base),
+        }
+        .map(|revision| revision.0)
     })
     .await
 }
@@ -904,15 +1094,27 @@ fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>,
 /// monta da sé — una sola, senza parametri — è
 /// [`ViewInstance::only`](fub_abi::traits::ViewInstance::only), e questo
 /// comando accetta i due campi assenti proprio per non obbligarla a costruirla.
+///
+/// Gira fuori dal thread principale, nella corsia delle viste (`domande`): un
+/// salvataggio invecchia una ventina di view e la shell le ridisegna tutte
+/// insieme. Sul thread principale erano 100 ms di finestra ferma a ogni
+/// salvataggio di una nota lunga; in corsia i disegni restano in fila fra loro
+/// e la finestra continua a presentare fotogrammi.
 #[tauri::command]
-fn render_view(
-    host: State<Host>,
+async fn render_view(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<UiNode, PluginError> {
-    host.render_view(vault.as_deref(), &view_instance(view, instance, params))
+    corsie
+        .chiedi("view render", domande::CORSIA_VISTE.into(), move || {
+            app.state::<Host>()
+                .render_view(vault.as_deref(), &view_instance(view, instance, params))
+        })
+        .await
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
@@ -1026,13 +1228,26 @@ fn invoke_command(
 /// proprio, e la dieta dell'IPC (§16.6) diventa praticabile — un'allowlist che
 /// vieta i comandi bespoke non deve più dire di no a feature che non hanno altra
 /// strada.
+///
+/// Gira fuori dal thread principale, in fila (`domande`): una domanda può
+/// durare centinaia di millisecondi — il correttore che controlla una nota
+/// lunga (`fub.proof`), una ricerca su un vault grande — e sul thread
+/// principale ferma la finestra, che per tutto quel tempo non presenta
+/// fotogrammi. Le domande di una stessa corsia rispondono nell'ordine in cui
+/// sono entrate, come prima.
 #[tauri::command]
-fn query_index(
-    host: State<Host>,
+async fn query_index(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     query: IndexQuery,
     vault: Option<String>,
 ) -> Result<IndexResult, PluginError> {
-    host.query_index(vault.as_deref(), query)
+    let corsia = domande::corsia(&query);
+    corsie
+        .chiedi("index query", corsia, move || {
+            app.state::<Host>().query_index(vault.as_deref(), query)
+        })
+        .await
 }
 
 /// **Ferma un lavoro lungo** (§10.3): l'altro capo di `Host::cancel_job`, che
@@ -1689,6 +1904,185 @@ async fn set_plugin_enabled(
     })?
 }
 
+/// Una riga della pagina «Componenti»: la riga del vault
+/// ([`componenti::RigaNelVault`], appiattita) con ciò che la mappa dice di lei.
+///
+/// Sul filo `nome` è **già nella lingua di chi guarda** (la lingua del vault,
+/// con quella del sistema come ripiego), non la chiave del catalogo che la
+/// riga del vault porta: la shell quel catalogo non ce l'ha. Una chiave che
+/// manca dà l'id. `gruppo` è sempre uno di [`ComponentsMap::gruppi`]: le righe
+/// che non ne dicono uno stanno in `altro`.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentRow {
+    #[serde(flatten)]
+    pub riga: componenti::RigaNelVault,
+    /// Che cosa fa per chi usa Fub, in una frase, risolta come il nome; vuota
+    /// se il catalogo non l'ha.
+    pub descrizione: String,
+    /// Modo, motore, servizio o dati.
+    pub tipo: fub_abi::ComponentKind,
+    /// I pezzi del client che la riga carica, cartelle sotto
+    /// `apps/client/src/` (`editors/media`): gli stessi di `manifest.ui`.
+    pub ui: Vec<String>,
+    /// I requisiti diretti, già risolti in id di righe (`provides` compresi).
+    pub richiede: Vec<String>,
+    /// Gli «usa se c'è» che in questa build sono righe: non accendono niente.
+    pub usa: Vec<String>,
+}
+
+/// Un profilo di [`componenti::profili`], come lo mostra la pagina.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentProfile {
+    pub nome: String,
+    /// Il nome da mostrare, nella lingua di chi guarda; il nome interno se il
+    /// catalogo non l'ha.
+    pub etichetta: String,
+    pub componenti: Vec<String>,
+    /// I componenti che il profilo aspetta e che non esistono ancora.
+    pub arriva_con: Vec<String>,
+    /// Se aspetta qualcosa: allora non si applica («più avanti»).
+    pub piu_avanti: bool,
+}
+
+/// Un gruppo della pagina «Componenti», come la pagina lo intitola.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentGroup {
+    pub id: String,
+    /// Il nome nella lingua di chi guarda; l'id se il catalogo non l'ha.
+    pub nome: String,
+}
+
+/// Ciò che `components_map` risponde: i gruppi, le righe, lo stato, il
+/// profilo attivo (`None` = personalizzato), i profili e gli id che le chiavi
+/// nominano a vuoto.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentsMap {
+    /// I gruppi che la pagina disegna, nel suo ordine: solo quelli che in
+    /// questa build hanno righe.
+    pub gruppi: Vec<ComponentGroup>,
+    pub righe: Vec<ComponentRow>,
+    pub stato: componenti::Stato,
+    pub profilo: Option<String>,
+    pub profili: Vec<ComponentProfile>,
+    pub mancanti: Vec<componenti::Mancante>,
+}
+
+/// Ciò che `components_apply` risponde: l'esito della scelta, o il rifiuto
+/// tipato. Il rifiuto **non** è un errore dell'IPC: è una risposta, e la
+/// shell la dice con le sue parole; l'errore resta per ciò che non è una
+/// scelta (il vault non aperto, l'host che non risponde).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "risposta", rename_all = "snake_case")]
+pub enum ComponentsApplied {
+    Esito(componenti::Esito),
+    Rifiuto(componenti::Rifiuto),
+}
+
+/// La mappa dei componenti di `vault` per la shell: ciò che serve
+/// `components_map`, con gli errori nella lingua di chi guarda.
+pub fn components_map_for(host: &Host, vault: Option<&str>) -> Result<ComponentsMap, PluginError> {
+    let result = host.components(vault).map(|nel_vault| {
+        let testi = host.component_texts(vault);
+        let definizioni = componenti::righe();
+        let mappa = componenti::mappa();
+        let righe = nel_vault
+            .righe
+            .into_iter()
+            // Le righe del vault nascono dalla mappa: una senza definizione
+            // non esiste, e se esistesse la pagina non saprebbe disegnarla.
+            .filter_map(|mut riga| {
+                let definizione = definizioni
+                    .iter()
+                    .find(|definizione| definizione.id == riga.id)?;
+                riga.nome = testi.nome(definizione);
+                Some(ComponentRow {
+                    descrizione: testi.descrizione(definizione),
+                    tipo: definizione.kind,
+                    ui: definizione.ui.iter().map(|ui| ui.to_string()).collect(),
+                    richiede: mappa.richiesti(&riga.id).to_vec(),
+                    usa: definizione
+                        .uses
+                        .iter()
+                        .filter(|id| mappa.componente(id).is_some())
+                        .map(|id| id.to_string())
+                        .collect(),
+                    riga,
+                })
+            })
+            .collect();
+        let profili = componenti::profili()
+            .into_iter()
+            .map(|profilo| ComponentProfile {
+                piu_avanti: profilo.piu_avanti(),
+                nome: profilo.nome.to_string(),
+                etichetta: testi.profilo(&profilo),
+                componenti: profilo.componenti.iter().map(|id| id.to_string()).collect(),
+                arriva_con: profilo.arriva_con.iter().map(|id| id.to_string()).collect(),
+            })
+            .collect();
+        let gruppi = componenti::gruppi()
+            .into_iter()
+            .map(|gruppo| ComponentGroup {
+                id: gruppo.to_string(),
+                nome: testi.gruppo(gruppo),
+            })
+            .collect();
+        ComponentsMap {
+            gruppi,
+            righe,
+            stato: nel_vault.stato,
+            profilo: nel_vault.profilo,
+            profili,
+            mancanti: nel_vault.mancanti,
+        }
+    });
+    for_the_shell(host, vault, result)
+}
+
+/// Applica una scelta sui componenti, o con `apply` falso dice che cosa
+/// cambierebbe: ciò che serve `components_apply`. La regola è quella della
+/// CLI e di MCP ([`Host::apply_components`]).
+pub fn components_apply_for(
+    host: &Host,
+    vault: Option<&str>,
+    azione: componenti::Azione,
+    apply: bool,
+) -> Result<ComponentsApplied, PluginError> {
+    let result = host
+        .apply_components(vault, azione, apply)
+        .map(|risposta| match risposta {
+            Ok(esito) => ComponentsApplied::Esito(esito),
+            Err(rifiuto) => ComponentsApplied::Rifiuto(rifiuto),
+        });
+    for_the_shell(host, vault, result)
+}
+
+/// La mappa dei componenti di un vault, con lo stato e i profili (A7).
+#[tauri::command]
+fn components_map(host: State<Host>, vault: Option<String>) -> Result<ComponentsMap, PluginError> {
+    components_map_for(&host, vault.as_deref())
+}
+
+/// Applica una scelta sui componenti (A7). Senza `apply` è una prova: dice
+/// che cosa cambierebbe e non scrive niente, come la CLI. Come
+/// `set_plugin_enabled` gira fuori dal thread dei comandi: spegnere o
+/// riaccendere la lavagna rimonta il vault, e la riapertura riscandisce.
+/// Non è `program_writable`: lo stato dei componenti lo cambia solo la shell.
+#[tauri::command]
+async fn components_apply(
+    app: AppHandle,
+    vault: Option<String>,
+    azione: componenti::Azione,
+    apply: Option<bool>,
+) -> Result<ComponentsApplied, PluginError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        components_apply_for(&host, vault.as_deref(), azione, apply.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| unfinished("component choice", error))?
+}
+
 /// I vault che questa macchina conosce: preferiti, poi recenti.
 #[tauri::command]
 fn known_vaults(host: State<Host>) -> Vec<VaultEntry> {
@@ -1812,8 +2206,14 @@ fn guard_main_shell(window: &tauri::WebviewWindow, what: &str) -> Result<(), Plu
     let origin = window
         .url()
         .map_err(|error| PluginError::Internal(error.to_string().into()))?;
-    resources::guard_trusted_local(window.label(), origin.as_str())?;
-    if window.label() != "main" {
+    main_shell_only(window.label(), origin.as_str(), what)
+}
+
+/// La regola di [`guard_main_shell`] su label e origin letti lato nativo:
+/// una finestra locale fidata, e fra queste soltanto `main`.
+fn main_shell_only(label: &str, origin: &str, what: &str) -> Result<(), PluginError> {
+    resources::guard_trusted_local(label, origin)?;
+    if label != "main" {
         return Err(PluginError::PermissionDenied(
             format!("only the main shell may {what}").into(),
         ));
@@ -1949,6 +2349,89 @@ async fn reveal_in_system(
     tauri::async_runtime::spawn_blocking(move || reveal::hand_over(root.as_std_path(), &path, open))
         .await
         .map_err(|error| unfinished("reveal", error))?
+}
+
+// --- «Apri con» un'app Craft e l'anteprima fatta dalla sua CLI ---------------
+//
+// Tre comandi della sola shell principale, come `reveal_in_system`: avviano o
+// interrogano programmi della macchina, e un plugin o l'MCP, che raggiungono le
+// porte generiche (`invoke_command`), non devono arrivarci. Le regole stanno
+// in `fub-host` (`open_with.rs`, `craft_render.rs`); qui solo il cancello, il
+// thread di lavoro e l'errore localizzato. `fub-host` ha la feature `craft`
+// fra quelle di default, che l'app non spegne: i tre metodi ci sono sempre.
+
+/// Il lavoro di uno dei comandi Craft fuori dal thread principale, con
+/// l'errore dell'host nella lingua di chi guarda.
+async fn craft_off_main<T, F>(
+    app: AppHandle,
+    vault: Option<String>,
+    what: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host, Option<&str>) -> Result<T, PluginError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let vault = vault.as_deref();
+        for_the_shell(&host, vault, work(&host, vault))
+    })
+    .await
+    .map_err(|error| unfinished(what, error))?
+}
+
+/// Le app Craft che aprono `doc` (percorso relativo alla radice del vault),
+/// nell'ordine della tabella; senza `doc` tutte quelle che Fub conosce.
+#[tauri::command]
+async fn external_editors(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    vault: Option<String>,
+    doc: Option<String>,
+) -> Result<Vec<fub_host::open_with::ExternalEditor>, PluginError> {
+    guard_main_shell(&window, "list external editors")?;
+    craft_off_main(app, vault, "external editors", move |host, vault| {
+        host.external_editors(vault, doc.as_deref())
+    })
+    .await
+}
+
+/// Apre la voce `path` del vault con l'app Craft `editor`; `page` vale per
+/// PdfCraft.
+#[tauri::command]
+async fn open_with(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    vault: Option<String>,
+    path: String,
+    editor: String,
+    page: Option<u32>,
+) -> Result<fub_host::open_with::OpenedWith, PluginError> {
+    guard_main_shell(&window, "open entries with an external editor")?;
+    craft_off_main(app, vault, "open with", move |host, vault| {
+        host.open_with(vault, &path, &editor, page)
+    })
+    .await
+}
+
+/// L'anteprima di `doc` fatta dalla CLI della sua app, dopo un gesto: mette in
+/// coda il job `craft.render` e risponde subito; il risultato arriva come
+/// `job_done`. Non è un comando del bundle `fub.craft`, perché avviare un
+/// programma non passa dalle porte che un plugin e l'MCP raggiungono.
+#[tauri::command]
+async fn craft_render(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    vault: Option<String>,
+    doc: String,
+    size: fub_host::craft_render::PreviewSize,
+) -> Result<fub_host::craft_render::CraftPreview, PluginError> {
+    guard_main_shell(&window, "render previews with an external editor")?;
+    craft_off_main(app, vault, "craft render", move |host, vault| {
+        host.craft_render(vault, &doc, size)
+    })
+    .await
 }
 
 // --- superficie IPC da `support` (demo, diagnostica, recupero) ----------------
@@ -2424,12 +2907,101 @@ fn forward_mobile_opened(app: &AppHandle, raw: &str) {
     }
 }
 
+/// Legge `appearance.rendering` e la macchina, sceglie e scrive le variabili.
+/// Va chiamata quando il processo ha ancora un thread solo
+/// ([`disegno::applica`]). Il log non c'è ancora: chi chiama lo scrive dopo.
+#[cfg(target_os = "linux")]
+fn percorso_di_disegno(
+    config_dir: Option<&Utf8Path>,
+) -> (disegno::Modo, disegno::Diagnosi, disegno::Scelta) {
+    use fub_host::settings::{APPEARANCE_MOTION, APPEARANCE_RENDERING};
+    let valori = fub_host::settings::startup_machine_texts(
+        config_dir,
+        &[APPEARANCE_RENDERING, APPEARANCE_MOTION],
+    );
+    let modo = disegno::Modo::da(valori.get(APPEARANCE_RENDERING).map_or("", String::as_str));
+    let movimento_calmo = matches!(
+        valori.get(APPEARANCE_MOTION).map(String::as_str),
+        Some("calm" | "reduced")
+    );
+    let ambiente = |nome: &str| std::env::var_os(nome).map(|v| v.to_string_lossy().into_owned());
+    let diagnosi = disegno::leggi(std::path::Path::new("/"), &ambiente);
+    let scelta = disegno::scegli(
+        modo,
+        &diagnosi,
+        &|nome| std::env::var_os(nome).is_some(),
+        movimento_calmo,
+    );
+    disegno::applica(&scelta);
+    (modo, diagnosi, scelta)
+}
+
+/// Dice all'host su quale webview gira la shell, dove un default ne dipende
+/// ([`fub_host::settings::motion_default`]).
+///
+/// Su Linux è WebKitGTK, e la versione è quella della libreria **caricata**:
+/// `tauri::webview_version` chiama `webkit_get_{major,minor,micro}_version`
+/// tramite wry. Le altre piattaforme non dichiarano niente e restano come
+/// prima. Una versione illeggibile lascia la webview non dichiarata, cioè i
+/// default di sempre.
+///
+/// Va chiamata prima di [`percorso_di_disegno`], che legge il valore effettivo
+/// di `appearance.motion` e quindi il suo default, e prima che esista il log:
+/// restituisce la versione letta, o il problema, e chi chiama lo scrive dopo
+/// ([`log_the_webview`]).
+fn declare_the_webview() -> Option<Result<String, String>> {
+    #[cfg(target_os = "linux")]
+    return Some(match tauri::webview_version() {
+        Ok(version) => match fub_host::settings::Webview::webkitgtk(&version) {
+            Some(webview) => {
+                fub_host::settings::declare_webview(webview);
+                Ok(version)
+            }
+            None => Err(format!("unreadable webkitgtk version {version}")),
+        },
+        Err(error) => Err(format!("webkitgtk version unavailable: {error}")),
+    });
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+/// Scrive nel log quello che [`declare_the_webview`] ha trovato.
+fn log_the_webview(declared: Option<Result<String, String>>) {
+    match declared {
+        Some(Ok(version)) => tracing::info!(target: "fub.app", %version, "webkitgtk"),
+        Some(Err(problem)) => tracing::warn!(target: "fub.app", %problem, "webkitgtk version"),
+        None => {}
+    }
+}
+
 pub fn run() {
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
     // store installato ricevono lo stesso valore: nessun proprietario riapre
     // l'ambiente o deduce una seconda posizione.
     let config_dir = fub_host::config_dir();
+    // Il percorso di disegno della webview **prima di ogni thread**: le
+    // variabili di WebKitGTK contano solo se scritte prima che parta GTK, e
+    // `set_var` è sicura solo finché il processo ha un thread solo — qui, e
+    // non dopo `install_logging` (vedi `disegno::applica`). Prima ancora la
+    // webview: il livello macchina riceve lo schema, e con lui il default delle
+    // animazioni che il percorso di disegno legge, quando lo si apre.
+    let webview = declare_the_webview();
+    // Il vblank emulato si decide anche lui prima che parta GTK: WebKit crea
+    // il suo monitor del vblank dopo, e la decisione non cambia più.
+    #[cfg(target_os = "linux")]
+    let vblank = vblank::prepara(
+        webview
+            .as_ref()
+            .and_then(|letta| letta.as_ref().ok())
+            .map(String::as_str),
+        std::env::var_os(vblank::INTERRUTTORE).as_deref(),
+    );
+    #[cfg(target_os = "linux")]
+    let percorso = percorso_di_disegno(config_dir.as_deref());
     let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
+    log_the_webview(webview);
+    #[cfg(target_os = "linux")]
+    vblank::scrivi_nel_log(&vblank);
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
             tracing::info!(
@@ -2459,6 +3031,8 @@ pub fn run() {
     // `WebviewEvents`).
     let sink = Arc::new(WebviewEvents::default());
     let bridge = sink.clone();
+    // La webview è già dichiarata (in cima): il livello macchina dell'host
+    // riceve lo schema, e con lui il default delle animazioni, nel costruttore.
     let mut host = Host::new();
     if let Some(dir) = config_dir.as_deref() {
         host = host.with_config_dir(dir);
@@ -2467,6 +3041,33 @@ pub fn run() {
         .with_session_notice(warning)
         .with_levels(levels)
         .with_sink(sink);
+    #[cfg(target_os = "linux")]
+    {
+        let (modo, diagnosi, scelta) = percorso;
+        tracing::info!(
+            target: "fub.app",
+            ?modo,
+            ?diagnosi,
+            software = diagnosi.disegno_software(),
+            variabili = ?scelta.variabili,
+            avvisi = ?scelta.avvisi,
+            "rendering path chosen before GTK"
+        );
+        for avviso in scelta.avvisi {
+            match serde_json::to_value(&avviso) {
+                Ok(payload) => {
+                    host = host.with_startup_notice(Notice::new(
+                        fub_abi::Event::Custom {
+                            topic: disegno::TOPIC.into(),
+                            payload,
+                        },
+                        fub_abi::event::Origin::by(fub_abi::event::Actor::Kernel),
+                    ));
+                }
+                Err(error) => tracing::warn!(target: "fub.app", %error, "rendering notice lost"),
+            }
+        }
+    }
     // Keep the manager alive in `InstalledPlugins`; the startup source is the
     // sole host integration point and its snapshot also carries formats.
     if let InstalledAvailability::Ready(manager) = &installed_availability {
@@ -2557,6 +3158,7 @@ pub fn run() {
         .manage(CatalogConfig(config_dir.clone()))
         .manage(limited)
         .manage(document_windows::DocumentWindows::default())
+        .manage(domande::Corsie::default())
         .manage(live::LiveSessions::new())
         .on_window_event(|window, event| {
             document_windows::on_window_event(window, event);
@@ -2634,10 +3236,21 @@ pub fn run() {
                 .and_then(|entry| entry.value.as_text())
                 == Some("system");
             for window in app.webview_windows().values() {
+                // Il fondo nativo copre l'attimo prima del primo disegno della
+                // pagina (`avvio.rs`). Un errore si ignora: la finestra resta
+                // col fondo di serie, un lampo e non un guasto; su mobile il
+                // fondo nativo non è supportato e non deve fermare l'avvio.
+                let _ = window.set_background_color(Some(avvio::fondo_di_macchina(&machine, window)));
                 window.set_zoom(zoom)?;
                 #[cfg(not(mobile))]
                 if window.label() == "main" {
                     window.set_decorations(system_frame)?;
+                    // La `main` nasce nascosta (`tauri.conf.json`) perché si
+                    // veda già col suo fondo: mostrarla non dipende dal colore,
+                    // e una finestra che non si mostra è peggio di un lampo.
+                    if let Err(error) = window.show() {
+                        tracing::warn!(%error, "main window not shown");
+                    }
                 }
             }
             #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
@@ -2661,6 +3274,9 @@ pub fn run() {
             save_artifact,
             print_artifact,
             reveal_in_system,
+            external_editors,
+            open_with,
+            craft_render,
             demo_root,
             open_demo,
             close_demo,
@@ -2674,6 +3290,8 @@ pub fn run() {
             close_document_window,
             finish_main_close,
             read_document,
+            warm_engine,
+            document_closed,
             resource_open,
             resource_read_chunk,
             resource_close,
@@ -2688,6 +3306,12 @@ pub fn run() {
             grid_bytes_commands,
             grid_bytes_command,
             close_grid_bytes,
+            open_drawing,
+            drawing_sync,
+            drawing_gesture,
+            drawing_commands,
+            drawing_command,
+            close_drawing,
             write_document,
             save_draft,
             list_bundles,
@@ -2734,6 +3358,8 @@ pub fn run() {
             set_installed_plugin_consent,
             remove_installed_plugin,
             set_plugin_enabled,
+            components_map,
+            components_apply,
             known_vaults,
             set_vault_favorite,
             set_vault_look,
@@ -2847,8 +3473,80 @@ pub fn run() {
 }
 
 #[cfg(test)]
+mod drawing_ipc_tests {
+    use super::*;
+
+    /// Il motore spento nel vault arriva alla shell come `unserved` con una
+    /// frase: il client lo legge come «spento» e non come un guasto, e il
+    /// disegno riaperto offre «Accendi…» invece di restare «fermo».
+    #[test]
+    fn the_engine_off_reaches_the_shell_as_unserved_with_a_sentence() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        std::fs::create_dir_all(root.join(".fub")).unwrap();
+        std::fs::write(
+            root.join(".fub").join("settings.json"),
+            serde_json::json!({"version": 1, "values": {"components.off": ["fub.motore-vettoriale"]}})
+                .to_string(),
+        )
+        .unwrap();
+        let config = tempfile::tempdir().expect("config");
+        let host = Host::without_watcher()
+            .with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
+        host.open(&root).expect("il vault si apre");
+        let doc = doc_id("Disegno.svg").unwrap();
+        let text = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+        let vault = Some(root.as_str());
+
+        // Dall'host, la chiave del catalogo: sul filo un oggetto.
+        let raw = host.drawing_open(vault, &doc, text).unwrap_err();
+        assert!(matches!(raw, PluginError::Unserved(_)), "{raw:?}");
+        assert!(serde_json::to_value(&raw).unwrap()["message"].is_object());
+
+        let shown = drawing_for_the_shell(&host, vault, |host, vault| {
+            host.drawing_open(vault, &doc, text)
+        })
+        .unwrap_err();
+        let wire = serde_json::to_value(&shown).unwrap();
+        assert_eq!(wire["kind"], "unserved", "{wire}");
+        assert!(
+            wire["message"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty()),
+            "{wire}"
+        );
+    }
+}
+
+#[cfg(test)]
 mod installed_ipc_tests {
     use super::*;
+
+    /// I comandi che avviano programmi della macchina (`open_with`,
+    /// `craft_render`, `reveal_in_system`…) li chiede soltanto la shell
+    /// principale: una finestra di documento, il visore o una finestra
+    /// navigata su un remoto ricevono `permission_denied` prima del lavoro.
+    #[test]
+    fn only_the_local_main_shell_passes_the_main_shell_gate() {
+        const LOCAL: &str = "tauri://localhost/";
+        assert!(main_shell_only("main", LOCAL, "render").is_ok());
+        assert!(main_shell_only("main", "http://tauri.localhost/", "render").is_ok());
+        for (label, origin) in [
+            ("document-1", LOCAL),
+            ("fub-viewer", LOCAL),
+            ("MAIN", LOCAL),
+            ("main", "https://esempio.it/"),
+            ("main", "fub-asset://localhost/3"),
+        ] {
+            assert!(
+                matches!(
+                    main_shell_only(label, origin, "render"),
+                    Err(PluginError::PermissionDenied(_))
+                ),
+                "{label} su {origin} è passata"
+            );
+        }
+    }
 
     /// Una scelta d'avvio di cui il disco non sa dire se c'è non vale «avvio
     /// pieno»: illeggibile, vale limitato.
@@ -2874,6 +3572,20 @@ mod installed_ipc_tests {
         }
         let missing = config.with_file_name("assente");
         assert!(!limited_startup(Some(missing.as_path())).enabled);
+    }
+
+    /// `open` assente o `null` è una lettura semplice; una chiave malformata
+    /// è `BadArgs` prima che il comando tocchi l'host.
+    #[test]
+    fn the_open_key_is_optional_and_checked() {
+        assert!(open_key(None).unwrap().is_none());
+        assert_eq!(
+            open_key(Some("sessione-1")).unwrap().unwrap().as_str(),
+            "sessione-1"
+        );
+        for bad in ["", "a/b", "../x", "a b"] {
+            assert!(matches!(open_key(Some(bad)), Err(PluginError::BadArgs(_))));
+        }
     }
 
     #[test]

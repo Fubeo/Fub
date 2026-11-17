@@ -55,6 +55,15 @@ export type {
 
 export { pressable } from "./press";
 
+// La lingua dei menu: tessera, riga ed etichetta, comuni al menu, allo spazio
+// comandi e al «/».
+export { createTile } from "./tile";
+export type { TileOptions, TileParts } from "./tile";
+export { createRow, markGlideHost, markLit, markPressed } from "./row";
+export type { RowHandle, RowOptions, RowParts } from "./row";
+export { createGroupLabel } from "./group-label";
+export type { GroupLabelOptions } from "./group-label";
+
 export { RESIST_LIMIT_PX, mountSplitter, resist } from "./splitter";
 export type { SplitterHandle, SplitterOptions } from "./splitter";
 
@@ -63,6 +72,9 @@ export type { OptionItem, OptionsBar, OptionsBarOptions } from "./options-bar";
 
 export { createTabs } from "./tabs";
 export type { TabSpec, TabsHandle, TabsOptions } from "./tabs";
+
+export { rovingToolbar } from "./toolbar-keys";
+export type { RovingToolbar, RovingToolbarOptions } from "./toolbar-keys";
 
 export { FLYOUT_HOLD_MS, createToolRail, toolTip } from "./tool-rail";
 export type { RailGroup, RailSlot, RailTool, ToolRail, ToolRailOptions, ToolRailText } from "./tool-rail";

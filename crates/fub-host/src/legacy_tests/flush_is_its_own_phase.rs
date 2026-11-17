@@ -203,7 +203,7 @@ fn flush_is_its_own_phase() {
     wait_phase("scan_vault");
     wait_phase("graph_sources");
     wait_phase("finish_index_with_graph");
-    let reader = custody.try_read();
+    let reader = super::try_read_within(&custody, super::FREE_WITHIN);
     assert!(
         reader.is_some(),
         "between closing indexing and flush the lock is still held: a \

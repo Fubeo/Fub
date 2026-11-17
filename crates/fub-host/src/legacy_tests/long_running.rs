@@ -311,7 +311,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     assert_eq!(job.step(), Some(1), "the walk read the first note");
     // E chi salva entra **qui**, con centoquarantanove note ancora da leggere.
     // Non «prova a entrare»: entra, e scrive davvero.
-    let mut who_save = ws.try_write().expect(
+    let mut who_save = super::try_write_within(&ws, super::FREE_WITHIN).expect(
         "a saver found the vault occupied after just one note out of 150: the `JobHost`
          holds the borrow for the job's duration instead of one call's, which is
          the defect the entry existed to remove",
@@ -330,7 +330,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
         job.step().expect("the walk continues");
     }
     assert!(
-        ws.try_write().is_some(),
+        super::write_comes_free(&ws),
         "the first gap was there and at mid-walk it is not: the borrow is not released
          per call"
     );
@@ -374,6 +374,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
         Some(1),
         "from this side too the walk read the first note"
     );
+    // Preso: un colpo solo basta, un prestito tenuto non si libera da sé.
     assert!(
         ws.try_write().is_none(),
         "the control column is no longer controlling anything: with a single borrow,
@@ -385,6 +386,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     for _ in 1..NOTE / 2 {
         synchronous.step().expect("the control walk continues");
     }
+    // Preso, come sopra: un colpo solo.
     assert!(
         ws.try_write().is_none(),
         "and at mid-walk neither: where the per-call borrow opened a gap, the single

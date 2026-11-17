@@ -1,0 +1,10 @@
+{
+  "name": "blank-bom-spaces",
+  "description": "R1: il BOM seguito da spazi JSON è una lavagna vuota",
+  "source": "\ufeff \t\n",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": []
+  }
+}

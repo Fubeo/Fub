@@ -15,6 +15,7 @@ import { notify } from "./notify";
 import { openPrimaryView } from "./primary-views";
 import { writeClipboardText } from "../platform/clipboard";
 import { openWebLink } from "./web-viewer";
+import { revealSidePanel } from "./side-panels";
 
 /// Il namespace con cui `settings.export` consegna ciò che ha esportato
 /// (`fub_features::SETTINGS_NS`). Il comando non scrive un file e non può:
@@ -31,6 +32,11 @@ export const CLIPBOARD_TEXT_NS = "fub.clipboard.text";
 /// (`fub_abi::ui::WEB_OPEN_NS`, payload `{ url }`): «Apri nel sito» della
 /// pubblicazione. Va dove va un link web di una nota.
 export const WEB_OPEN_NS = "fub.web.open";
+
+/// Una vista chiede di portare in vista una scheda dell'ispettore
+/// (`fub_abi::ui::INSPECTOR_TAB_NS`, payload `{ view }`): «e altri N» sotto la
+/// Struttura porta ai Collegamenti.
+export const INSPECTOR_TAB_NS = "fub.inspector.tab";
 
 /// Il vault è stato sostituito da uno snapshot (`fub_abi::ui::VAULT_RESTORED_NS`):
 /// ogni buffer, sessione e vista in memoria è del contenuto di prima, e l'unica
@@ -101,6 +107,10 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
         openPage(intent.payload);
         break;
       }
+      if (intent.ns === INSPECTOR_TAB_NS) {
+        await showInspectorTab(intent.payload);
+        break;
+      }
       if (intent.ns === EDITOR_ACTION_NS) {
         editorAction(intent.payload);
         break;
@@ -144,6 +154,20 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       console.info(`Fub: intento ignorato (kind: ${(unknown as { kind: string }).kind}).`);
     }
   }
+}
+
+/// Apre l'ispettore sulla scheda chiesta. L'ispettore (`ui/views.ts`) si
+/// carica qui e non in testa: lui stesso esegue gli intenti, e al montaggio
+/// cerca il suo posto nella pagina. Senza quella scheda (la vista è spenta
+/// fra le funzioni) lo dice, come «Mostra le note che lo usano».
+async function showInspectorTab(payload: unknown): Promise<void> {
+  const view = typeof payload === "object" && payload !== null ? (payload as { view?: unknown }).view : null;
+  if (typeof view !== "string" || view === "") return;
+  revealSidePanel("inspector");
+  const { selectInspectorTab } = await import("./views");
+  if (selectInspectorTab(view)) return;
+  if (view === "backlinks") notify(t("explorer.used_by_missing"), "info");
+  else console.info(`Fub: l'ispettore non ha la scheda «${view}».`);
 }
 
 /// Solo `http(s)`: un altro schema non è una pagina, e non si apre.

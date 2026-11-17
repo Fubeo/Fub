@@ -1,0 +1,10 @@
+{
+  "name": "blank-nothing",
+  "description": "R1: niente è una lavagna vuota",
+  "source": "",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": []
+  }
+}

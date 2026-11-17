@@ -642,18 +642,14 @@ mod tests {
     /// Avvelena la custodia come la avvelena la vita: un thread che pania
     /// tenendo il prestito **esclusivo**.
     ///
-    /// Il panico è di proposito e non deve sporcare l'output del banco: l'hook
-    /// si mette a tacere per la durata del misfatto e si rimette subito.
+    /// Il panico è di proposito e non deve sporcare l'output del banco: tace
+    /// solo il suo thread ([`crate::quiet_panic`]), non quelli degli altri test.
     fn poison<T: Send + Sync + 'static>(c: &Custody<T>) {
         let copy = c.clone();
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let _ = std::thread::spawn(move || {
+        crate::quiet_panic::quietly(move || {
             let _g = copy.write().expect("alive before the misdeed");
             panic!("halfway");
-        })
-        .join();
-        std::panic::set_hook(hook);
+        });
     }
 
     #[test]

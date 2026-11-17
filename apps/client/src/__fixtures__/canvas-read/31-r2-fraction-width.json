@@ -1,0 +1,9 @@
+{
+  "name": "r2-fraction-width",
+  "description": "R2: una frazione vera in width non è un intero sicuro",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":1.5,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import { textProfileExtensions } from "./by-id";
 
-const hooks = { documentId: "note.md", openWikilink: vi.fn(), openPath: vi.fn(), searchTag: vi.fn() };
+const hooks = { documentId: "note.md", openWikilink: vi.fn(), openPath: vi.fn(), searchTag: vi.fn(), openFigure: vi.fn() };
 
 describe("i profili di testo per id", () => {
   it("markdown porta la sua lingua, plain-text nessuna, un id non di testo niente", () => {

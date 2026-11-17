@@ -250,3 +250,70 @@ describe("i contenuti vettoriali", () => {
     }
   });
 });
+
+describe("l'orientamento di una foto", () => {
+  let life: Lifetime;
+
+  beforeEach(() => {
+    setReducedMotionPreference(true);
+    life = openLifetime();
+  });
+
+  afterEach(() => {
+    life.close();
+    document.body.replaceChildren();
+    setReducedMotionPreference(false);
+  });
+
+  function mount(orientation?: number) {
+    const view = mountZoomView("blob:foto", {
+      label: "Foto",
+      size: { width: 2000, height: 1000 },
+      ...(orientation === undefined ? {} : { orientation }),
+    }, life);
+    document.body.append(view.element);
+    Object.defineProperty(view.stage, "clientWidth", { configurable: true, value: viewport.width });
+    Object.defineProperty(view.stage, "clientHeight", { configurable: true, value: viewport.height });
+    view.image.dispatchEvent(new Event("load"));
+    return view;
+  }
+
+  it("lo specchio si scrive per ultimo nella trasformazione", () => {
+    expect(transformOf({ scale: 1, x: 0, y: 0, rotation: 270, mirrored: true }))
+      .toBe("translate(-50%, -50%) translate(0px, 0px) rotate(270deg) scale(1) scaleX(-1)");
+    expect(transformOf({ scale: 1, x: 0, y: 0, rotation: 270, mirrored: false }))
+      .toBe("translate(-50%, -50%) translate(0px, 0px) rotate(270deg) scale(1)");
+  });
+
+  it("6 parte da un quarto di giro, «Adatta» usa la forma girata e ↻ va a 180", () => {
+    const view = mount(6);
+    expect(view.image.style.imageOrientation).toBe("none");
+    expect(view.state().rotation).toBe(90);
+    // Girata, la foto è alta 2000: 568 / 2000.
+    expect(view.state().scale).toBeCloseTo(0.284);
+    view.zoom(2);
+    view.fit();
+    expect(view.state().scale).toBeCloseTo(0.284);
+    view.rotate();
+    expect(view.state().rotation).toBe(180);
+    expect(view.state().scale).toBeCloseTo(0.384);
+    expect(view.image.style.transform).not.toContain("scaleX");
+  });
+
+  it("5 è girata e specchiata, e lo specchio resta adattando e girando", () => {
+    const view = mount(5);
+    expect(view.state()).toMatchObject({ rotation: 270, mirrored: true });
+    expect(view.image.style.transform).toMatch(/rotate\(270deg\) scale\([\d.]+\) scaleX\(-1\)$/);
+    view.fit();
+    view.rotate();
+    expect(view.state()).toMatchObject({ rotation: 0, mirrored: true });
+    expect(view.image.style.transform).toContain("scaleX(-1)");
+  });
+
+  it("senza orientamento tutto come prima: dritta, e il browser decide", () => {
+    const view = mount();
+    expect(view.state()).toEqual({ scale: expect.closeTo(0.384, 3), x: 0, y: 0, rotation: 0 });
+    expect(view.image.style.imageOrientation).toBe("");
+    expect(view.image.style.transform).not.toContain("scaleX");
+  });
+});

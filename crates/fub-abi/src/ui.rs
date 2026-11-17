@@ -913,6 +913,12 @@ pub const EDITOR_ACTION_NS: &str = "fub.editor.action";
 /// payload è `{ "url": "https://..." }`. Aprire un indirizzo scelto da altri
 /// porta fuori dalla finestra, quindi è un intento privilegiato.
 pub const WEB_OPEN_NS: &str = "fub.web.open";
+/// Il `ns` con cui una vista chiede alla shell di portare in vista una scheda
+/// dell'ispettore: il payload è `{ "view": "<id della vista>" }`. La usa la
+/// Struttura per «e altri N», che porta ai Collegamenti. Non è privilegiato:
+/// cambia soltanto quale scheda si guarda, e una shell senza quella scheda lo
+/// dice e non fa altro.
+pub const INSPECTOR_TAB_NS: &str = "fub.inspector.tab";
 
 /// Un intento `Custom` che la shell esegue con un privilegio del processo —
 /// scrivere negli appunti, ricaricare la finestra o modificare il testo aperto —

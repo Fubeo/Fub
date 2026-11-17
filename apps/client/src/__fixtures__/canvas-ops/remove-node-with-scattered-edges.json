@@ -1,0 +1,129 @@
+{
+  "about": "Togliere una scheda i cui archi stanno in mezzo alla lista (posizioni 1 e 3): gli altri archi restano nel loro ordine, e l'inversa rimette scheda e archi ai loro posti.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 200,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "b"
+      },
+      {
+        "id": "c",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "c"
+      },
+      {
+        "id": "d",
+        "type": "text",
+        "x": 600,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "d"
+      }
+    ],
+    "edges": [
+      {
+        "id": "ac",
+        "fromNode": "a",
+        "toNode": "c"
+      },
+      {
+        "id": "ab",
+        "fromNode": "a",
+        "toNode": "b"
+      },
+      {
+        "id": "cd",
+        "fromNode": "c",
+        "toNode": "d"
+      },
+      {
+        "id": "bc",
+        "fromNode": "b",
+        "toNode": "c"
+      },
+      {
+        "id": "ca",
+        "fromNode": "c",
+        "toNode": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "remove",
+      "ids": [
+        "b"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "a"
+        },
+        {
+          "id": "c",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "c"
+        },
+        {
+          "id": "d",
+          "type": "text",
+          "x": 600,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "d"
+        }
+      ],
+      "edges": [
+        {
+          "id": "ac",
+          "fromNode": "a",
+          "toNode": "c"
+        },
+        {
+          "id": "cd",
+          "fromNode": "c",
+          "toNode": "d"
+        },
+        {
+          "id": "ca",
+          "fromNode": "c",
+          "toNode": "a"
+        }
+      ]
+    }
+  }
+}

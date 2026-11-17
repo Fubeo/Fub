@@ -1,0 +1,6 @@
+{
+  "about": "Un id ripetuto nella lista di uno spostamento è DuplicateId: non si sposta due volte.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "move", "ids": ["a", "a"], "dx": 10, "dy": 0 }],
+  "expect": { "outcome": "rejected", "error": { "kind": "DuplicateId", "index": 0, "id": "a" } }
+}

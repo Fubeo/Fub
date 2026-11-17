@@ -10,6 +10,9 @@ export interface TextProfileHooks {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   openPath(path: string, from?: string): void;
   searchTag(tag: string): void;
+  /// Il clic su una figura (un file Craft, un PDF): apre il suo documento e non
+  /// crea mai una nota, a differenza di un wikilink che non risolve.
+  openFigure(doc: string): void;
 }
 
 /// The extensions of a registered text profile, by the id the surface registry
@@ -38,6 +41,7 @@ export function textProfileExtensions(
         openWikilink: (page, heading, block) => hooks.openWikilink(page, heading ?? null, block ?? null),
         openPath: (path, from) => hooks.openPath(path, from),
         searchTag: (tag) => hooks.searchTag(tag),
+        openFigure: (doc) => hooks.openFigure(doc),
       }),
     },
     completions: { searchNotes: async () => [], listTags: async () => [] },

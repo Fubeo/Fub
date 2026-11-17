@@ -46,6 +46,7 @@
 pub mod arena;
 pub mod command;
 pub mod custom;
+pub mod drawing;
 pub mod edit;
 pub mod error;
 pub mod event;
@@ -88,6 +89,15 @@ pub use command::{
 pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
     SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+};
+pub use drawing::{
+    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingFrame,
+    DrawingGesture, DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase,
+    DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle,
+    DrawingSync, DrawingSynced, DrawingTool, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
+    DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, MAX_DRAWING_COLOR_BYTES,
+    MAX_DRAWING_LOSSES, MAX_DRAWING_OPS, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES,
+    MAX_GESTURE_EVENTS,
 };
 pub use edit::{
     AppliedEdit, EditReport, EditRequest, Fnv1a, Revision, RevisionHasher, TextEdit, WriteBase,
@@ -137,9 +147,9 @@ pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;
 pub use model::{
     Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
-    HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate, PropertyScalar,
-    PropertyTime, PropertyType, PropertyTypes, PropertyValue, Span, TableCell, TableRow, Tag,
-    TaskMarker,
+    HeadingSlugs, Inline, Link, LinkTarget, ListItem, OptionMatch, ParsedWikilink, PropertyColor,
+    PropertyDate, PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes,
+    PropertyValue, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};
@@ -159,8 +169,10 @@ pub use settings::{
 };
 pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
 pub use theme::{
-    ThemeEngine, ThemeLight, ThemeManifest, ThemeMotion, ThemeSetting, MAX_THEME_SETTINGS,
-    THEME_ENGINE, THEME_ENGINE_2,
+    ThemeEngine, ThemeFont, ThemeFontStyle, ThemeLight, ThemeManifest, ThemeMotion, ThemeSetting,
+    MAX_THEME_FONTS, MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES,
+    MAX_THEME_ICONS, MAX_THEME_ICONS_BYTES, MAX_THEME_ICON_BYTES, MAX_THEME_ICON_PATHS,
+    MAX_THEME_SETTINGS, THEME_ENGINE, THEME_ENGINE_2,
 };
 pub use traits::{
     BacklinkRef, CivilTime, CommandProvider, ComponentKind, DataRead, DataWrite, Delivery,

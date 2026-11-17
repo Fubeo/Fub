@@ -15,7 +15,16 @@
 // `registerIcon`, e da quel momento la disegnano tutti — la rail, l'ispettore,
 // il nodo `icon` delle view dichiarate — con lo stesso costrutto. Il teardown
 // la ritira.
+//
+// Un tema (`theme-2`, campo `icons` del manifest) può ridisegnare per nome le
+// icone che ci sono: porta soltanto i `d` dei tracciati, validati con la stessa
+// regola delle registrazioni (`fub_abi::rules::theme_icons`, rispecchiata in
+// `rules/mirrored.ts`), e il costrutto resta questo. Il set del tema si guarda
+// per primo, poi la serie, poi le registrazioni; non aggiunge nomi. Ogni
+// `<svg>` porta `data-icon="<nome>"`, così un cambio di tema ridisegna in un
+// passaggio solo le icone già nella pagina.
 import type { Teardown } from "./lifetime";
+import { isPathData, THEME_ICON_LIMITS, themeIconFault } from "../rules/mirrored";
 
 /// Un SVG inline 16×16, stroke 1.6, `currentColor`, pronto da inserire in un
 /// bottone. Restituisce una stringa, non un elemento: così chi la usa può
@@ -43,9 +52,17 @@ const SVG: Record<string, string> = {
   query: '<path d="M5 5h14v10H9l-4 4z"/><path d="M8 9h8M8 12h6"/>',
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
   template: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+  tasks: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
   // --- gli appunti: la riga in cima ai menu ------------------------------
   cut: '<path d="M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0"/><path d="M15.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0"/><path d="M7.8 16.2L17 3"/><path d="M16.2 16.2L7 3"/>',
   copy: '<path d="M9 9h11v11H9z"/><path d="M15 9V4H4v11h5"/>',
+  // --- i segni dei formati: le scelte in riga di «Copia come» -------------
+  // Disegnati apposta, senza parole, perché i tastini restino stretti in ogni
+  // lingua: la M con la freccia in giù, le parentesi angolari con la barra,
+  // il foglio di sole righe.
+  "copy-markdown": '<path d="M2.7 17.25v-10.5l4.35 5.1 4.35-5.1v10.5"/><path d="M18.3 6.75v9.9M15 13.5l3.3 3.6 3.3-3.6"/>',
+  "copy-html": '<path d="M6.9 6.9 2.4 12l4.5 5.1M17.1 6.9l4.5 5.1-4.5 5.1M13.95 4.8l-3.9 14.4"/>',
+  "copy-text": '<rect x="3.75" y="3" width="16.5" height="18" rx="3"/><path d="M7.95 8.4h8.1M7.95 12h8.1M7.95 15.6h4.5"/>',
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
   // --- le view di sincronizzazione e pubblicazione (fub-host) -------------
   sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
@@ -58,11 +75,14 @@ const SVG: Record<string, string> = {
   stats: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
   // --- il formato di un documento (`ui/format-kind.ts`) ------------------
   // Word e OpenDocument sono fogli con una lettera, il foglio di calcolo una
-  // griglia, il disegno due forme. La nota è il foglietto di `notes`.
+  // griglia, il disegno due forme, la foto una stampa col bordo bianco in
+  // basso (un'immagine di PhotoCraft, un XMP). La nota è il foglietto di
+  // `notes`.
   "format-word": '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M8.5 11l1.5 6 2-4.5 2 4.5 1.5-6"/>',
   "format-odt": '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><circle cx="12" cy="14" r="3"/>',
   "format-sheet": '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/>',
   "format-drawing": '<circle cx="8.5" cy="8.5" r="4.5"/><rect x="11" y="11" width="9" height="9" rx="1.5"/>',
+  "format-photo": '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 16h16"/><path d="M7 16l3.5-4.5 2.5 3 1.5-1.5 2.5 3"/><circle cx="15.5" cy="7.5" r="1.3"/>',
   // Il ripiego di una view che non dichiara un'icona conosciuta: un
   // pannello generico, distinto da ogni icona con un significato.
   view: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16"/>',
@@ -93,6 +113,55 @@ const SVG: Record<string, string> = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   keyboard: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
+
+  // --- Scrittoio 2: le modalità e il cassetto ------------------------------
+  // Le figure dei ruoli delle modalità (penna, codice, occhio) e dei Blocchi;
+  // poi il «nuovo», l'ordine e l'ora del cassetto, e la freccia che lo chiude.
+  pen: '<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/>',
+  blocks: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/>',
+  code: '<path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  compose: '<path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+  sort: '<path d="M4 7h16M7 12h10M10 17h4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  "chevron-up": '<path d="M7 14l5-5 5 5"/>',
+  // «…» della testata del foglio: lo disegna la vista del documento, che si
+  // monta prima della cornice; la cornice lo usa uguale.
+  more: '<path d="M6 12h.01M12 12h.01M18 12h.01"/>',
+  // --- Scrittoio 2: le figure che una cartella o una nota sceglie ----------
+  // Monocrome, prendono il colore del testo; `ui/page-mark.ts` le legge da
+  // un valore `fub:<nome>`. `star` non c'è: la cornice la registra già.
+  book: '<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
+  flag: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+  inbox: '<path d="M4 13l2.5-8h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h4.5l1 2h5l1-2H20"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7.2 4.5 4.5 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
+  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  // --- il tipo di una proprietà della testata ----------------------------
+  // Le figure di `.pk` nel prototipo dell'editor (`PLAN-ui/editor.html`,
+  // simboli `i-text`, `i-hash`, …), dalla griglia 16 a questa ×1,5. Stanno
+  // qui e non nella barra del formato, che le registrerebbe solo montata:
+  // la testata le disegna anche in Lettura e nella finestra di un documento.
+  "prop-text": '<path d="M5.25 6.75V4.5h13.5v2.25M12 4.5v15M9 19.5h6"/>',
+  "prop-number": '<path d="M9.3 3.75 7.2 20.25M17.1 3.75 15 20.25M4.5 9h15.75M3.75 15H19.5"/>',
+  "prop-select": '<circle cx="12" cy="12" r="8.25"/><path d="M8.7 10.8 12 14.1l3.3-3.3"/>',
+  // Il prototipo riempie la metà destra; il set non ha riempimenti (un tema
+  // ridisegna soltanto tracciati), quindi la metà piena è fatta di archi
+  // concentrici a un tratto di distanza, che a 16 px si leggono pieni.
+  "prop-status": '<circle cx="12" cy="12" r="8.25"/><path d="M12 3.75v16.5M12 5.35a6.65 6.65 0 0 1 0 13.3M12 6.95a5.05 5.05 0 0 1 0 10.1M12 8.55a3.45 3.45 0 0 1 0 6.9M12 10.15a1.85 1.85 0 0 1 0 3.7M12.6 11.4v1.2"/>',
+  "prop-date": '<rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.75h18M8.25 2.7v3.6M15.75 2.7v3.6"/>',
+  "prop-checkbox": '<rect x="3.75" y="3.75" width="16.5" height="16.5" rx="3.75"/><path d="M7.8 12.3l3 3 5.7-6.3"/>',
+  "prop-people": '<circle cx="12" cy="8.25" r="3.9"/><path d="M4.5 21c.9-4.2 3.9-6.45 7.5-6.45s6.6 2.25 7.5 6.45"/>',
+  "prop-url": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.3 3 14.7 0 18M12 3c-3 3.3-3 14.7 0 18"/>',
+  "prop-tags": '<path d="M3 3.75h8.25L21 13.5l-7.5 7.5-9.75-9.75z"/><circle cx="7.8" cy="8.55" r="1.35"/>',
+  // Elenco e data e ora non sono nel prototipo: l'elenco puntato della barra
+  // del formato e l'orologio del set.
+  "prop-list": '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
 };
 
 /// L'SVG di un'icona, come stringa HTML pronta per `innerHTML`.
@@ -116,31 +185,201 @@ const ALIASES: Record<string, string> = {
 /// Le icone registrate dai moduli della shell, sopra il set di serie.
 const REGISTERED = new Map<string, string>();
 
-/// Solo i comandi e i numeri di un tracciato SVG: niente markup, attributi o
-/// riferimenti, quindi niente che una registrazione possa iniettare.
-const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,+\s-]+$/;
+/// Quante volte le figure disegnabili sono cambiate (una registrazione, il set
+/// del tema). Chi riusa elementi già disegnati senza rifarli (il
+/// riconciliatore di `ui/node.ts`) sa da qui se le loro figure valgono ancora.
+let revision = 0;
+
+/// La revisione delle figure: cambia a ogni registrazione e a ogni set del tema.
+export function iconsRevision(): number {
+  return revision;
+}
+
+/// Il set del tema in vigore, per nome canonico (un alias vale per il nome a
+/// cui punta): il corpo, costruito soltanto da tracciati che hanno passato la
+/// regola. Vuoto quando il tema montato non porta icone.
+let THEMED = new Map<string, string>();
+/// Lo stesso set com'è arrivato, già validato: lo rispecchia la finestra di un
+/// documento e lo legge la diagnosi del tema.
+let THEMED_SOURCE: Readonly<Record<string, readonly string[]>> = {};
+
+function own(record: Readonly<Record<string, string>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+/// Il nome a cui punta un alias, o il nome stesso.
+function canonical(name: string): string {
+  return own(ALIASES, name) ? ALIASES[name]! : name;
+}
+
+/// Il corpo di un'icona: un `<path>` per tracciato. Chi lo chiama ha già
+/// passato ogni `d` dalla regola (`isPathData`), quindi fra le virgolette non
+/// può finire altro che comandi e numeri.
+function pathsBody(paths: readonly string[]): string {
+  return paths.map((d) => `<path d="${d}"/>`).join("");
+}
+
+/// Il corpo di un'icona in vigore: il tema, poi la serie, poi le registrazioni.
+/// Il tema ridisegna soltanto un nome che la serie o un modulo disegna già: un
+/// suo nome che nessuno disegna (un modulo spento) non si vede.
+function drawnBody(name: string): string | undefined {
+  const key = canonical(name);
+  const drawn = (own(SVG, key) ? SVG[key] : undefined) ?? REGISTERED.get(name);
+  return drawn === undefined ? undefined : THEMED.get(key) ?? drawn;
+}
 
 /// Registra un'icona col costrutto del set: soltanto tracciati (i `d` dei suoi
 /// `<path>`), perché griglia, tratto e colore sono quelli di tutte le altre. Un
 /// nome già disegnato (di serie, alias o registrato) non si ridefinisce: due
 /// moduli che volessero la stessa figura se la contenderebbero in silenzio.
+/// Il set del tema non conta: ridisegna un nome, non lo occupa.
 export function registerIcon(name: string, paths: readonly string[]): Teardown {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`icon name «${name}» is not a lowercase id`);
-  if (SVG[name] || ALIASES[name] || REGISTERED.has(name)) throw new Error(`icon «${name}» is already drawn`);
-  if (paths.length === 0 || paths.some((d) => !PATH_DATA.test(d))) {
+  if (own(SVG, name) || own(ALIASES, name) || REGISTERED.has(name)) throw new Error(`icon «${name}» is already drawn`);
+  if (paths.length === 0 || !paths.every(isPathData)) {
     throw new Error(`icon «${name}» accepts only SVG path data`);
   }
-  const body = paths.map((d) => `<path d="${d}"/>`).join("");
+  const body = pathsBody(paths);
   REGISTERED.set(name, body);
+  revision += 1;
   return () => {
-    if (REGISTERED.get(name) === body) REGISTERED.delete(name);
+    if (REGISTERED.get(name) !== body) return;
+    REGISTERED.delete(name);
+    revision += 1;
   };
 }
 
+/// L'SVG di un'icona, come stringa HTML: il set del tema, poi la serie, poi le
+/// registrazioni. Un nome sconosciuto restituisce stringa vuota.
+///
+/// Il nome finisce in `data-icon`: è il nome chiesto, e un nome che ha un corpo
+/// è sempre un id minuscolo (una chiave della serie o degli alias, o un nome
+/// registrato), quindi sta fra virgolette senza fughe.
 export function icon(name: string): string {
-  const body = SVG[ALIASES[name] ?? name] ?? REGISTERED.get(name);
+  const body = drawnBody(name);
   if (!body) return "";
-  return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false">${body}</svg>`;
+  return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false" data-icon="${name}">${body}</svg>`;
+}
+
+/**
+ * Sostituisce il set del tema e ridisegna, in un passaggio solo, le icone già
+ * nella pagina che cambiano figura. `null` (o un set vuoto) torna alla serie.
+ *
+ * Ogni voce ripassa dalla regola (`themeIconFault`) anche se il cancello del
+ * tema l'ha già chiesta: questo modulo non costruisce un `<svg>` da dati che
+ * non ha visto passare. Una voce che non regge lancia prima di toccare
+ * qualunque cosa, e il set di prima resta. Un nome che oggi nessuno disegna
+ * resta nel set (un modulo può registrarlo più tardi) e non si vede.
+ */
+export function replaceThemeIcons(set: Readonly<Record<string, readonly string[]>> | null): void {
+  const entries = set === null ? [] : Object.entries(set);
+  if (entries.length > THEME_ICON_LIMITS.icons) {
+    throw new Error(`theme icon set redraws ${entries.length} icons, at most ${THEME_ICON_LIMITS.icons}`);
+  }
+  for (const [name, paths] of entries) {
+    const fault = themeIconFault(name, paths);
+    if (fault !== null) throw new Error(`theme icon «${name}» does not hold: ${fault}`);
+  }
+  // Un nome scritto per sé vince sull'alias che punta a lui.
+  const next = new Map<string, string>();
+  for (const [name, paths] of entries) if (!own(ALIASES, name)) next.set(name, pathsBody(paths));
+  for (const [name, paths] of entries) {
+    if (own(ALIASES, name) && !next.has(ALIASES[name]!)) next.set(ALIASES[name]!, pathsBody(paths));
+  }
+  const changed = new Set<string>();
+  for (const key of new Set([...THEMED.keys(), ...next.keys()])) {
+    if (THEMED.get(key) !== next.get(key)) changed.add(key);
+  }
+  THEMED = next;
+  THEMED_SOURCE = Object.fromEntries(entries.map(([name, paths]) => [name, [...paths]]));
+  if (changed.size > 0) revision += 1;
+  redrawIcons(changed);
+}
+
+/** Il set del tema in vigore, com'è arrivato: una copia. Vuoto senza tema. */
+export function themeIcons(): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(THEMED_SOURCE).map(([name, paths]) => [name, [...paths]]));
+}
+
+/**
+ * I nomi del set del tema che oggi nessuno disegna: né la serie né un modulo
+ * registrato. Non rifiutano il tema (un modulo può registrarli caricandosi):
+ * sono un avviso per chi scrive il tema.
+ */
+export function undrawnThemeIcons(): string[] {
+  return Object.keys(THEMED_SOURCE).filter((name) => {
+    const key = canonical(name);
+    return !own(SVG, key) && !REGISTERED.has(key);
+  });
+}
+
+/** La figura nuova di un nome: i figli da clonare, e i `d` se sono tutti tracciati. */
+interface IconModel {
+  readonly children: DocumentFragment;
+  readonly paths: readonly string[] | null;
+}
+
+function iconModel(name: string): IconModel | null {
+  const svg = iconEl(name);
+  if (!svg) return null;
+  const children = document.createDocumentFragment();
+  children.append(...svg.childNodes);
+  const nodes = [...children.children];
+  const paths = nodes.every((node) => node.localName === "path")
+    ? nodes.map((node) => node.getAttribute("d") ?? "")
+    : null;
+  return { children, paths };
+}
+
+/**
+ * Ridisegna gli `<svg data-icon>` della pagina il cui nome (canonico) è fra
+ * quelli cambiati: una sola ricerca e un modello per nome. Un elemento che ha
+ * già tanti tracciati quanti il modello cambia solo i loro `d`; gli altri
+ * ricevono una copia dei figli del modello. Gli attributi dell'elemento
+ * (classi, `aria-*`) restano.
+ */
+function redrawIcons(changed: ReadonlySet<string>): void {
+  if (changed.size === 0 || typeof document === "undefined") return;
+  const models = new Map<string, IconModel | null>();
+  for (const svg of document.querySelectorAll<SVGElement>("svg[data-icon]")) {
+    const name = svg.getAttribute("data-icon") ?? "";
+    if (!changed.has(canonical(name))) continue;
+    let model = models.get(name);
+    if (model === undefined) {
+      model = iconModel(name);
+      models.set(name, model);
+    }
+    if (!model) continue;
+    const paths = model.paths;
+    if (paths !== null && onlyPaths(svg, paths.length)) {
+      const current = svg.children;
+      for (let i = 0; i < paths.length; i++) current[i]!.setAttribute("d", paths[i]!);
+    } else {
+      svg.replaceChildren(model.children.cloneNode(true));
+    }
+  }
+}
+
+/** L'elemento ha esattamente `count` figli, tutti `<path>` col solo `d`? */
+function onlyPaths(svg: SVGElement, count: number): boolean {
+  if (svg.childNodes.length !== count) return false;
+  const children = svg.children;
+  if (children.length !== count) return false;
+  for (let i = 0; i < count; i++) {
+    const child = children[i]!;
+    if (child.localName !== "path" || child.attributes.length !== 1 || !child.hasAttribute("d")) return false;
+  }
+  return true;
+}
+
+/// Un'icona come immagine `data:` autonoma (con il suo `xmlns`), pronta per un
+/// `url(…)` CSS: per chi non può mettere un nodo nella pagina, come una
+/// maschera dietro un `::before`. Stringa vuota se il nome è sconosciuto.
+export function iconDataUrl(name: string): string {
+  const html = icon(name);
+  if (!html) return "";
+  const svg = html.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /// L'elemento SVG di un'icona, per chi vuole attaccarci un ascoltore o

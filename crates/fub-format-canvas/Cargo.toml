@@ -8,6 +8,7 @@ description = "JSON Canvas 1.0 (.canvas) FormatProvider: unknown-preserving mode
 
 [dependencies]
 fub-abi = { workspace = true }
+fub-canvas-core = { workspace = true }
 fub-format-markdown = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

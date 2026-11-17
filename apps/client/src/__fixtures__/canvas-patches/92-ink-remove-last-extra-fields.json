@@ -1,0 +1,10 @@
+{
+  "name": "ink-remove-last-extra-fields",
+  "description": "Togliere l'ultimo tratto di un livello con un campo in più: il livello non è vuoto, la chiave resta con strokes vuoto e il campo in più",
+  "before": "{\"nodes\":[],\"edges\":[],\"fub:ink\":{\"v\":1,\"strokes\":[{\"id\":\"s1\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 100,100 10,0\"}],\"fub:pagina\":3}}",
+  "patches": [{"kind":"ink","layer":"board","at":0,"before":{"id":"s1","tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#0072b2","anchor":{"kind":"free"},"ink":"1 s100 cxy 100,100 10,0"},"after":null}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[],\"edges\":[],\"fub:ink\":{\"v\":1,\"strokes\":[],\"fub:pagina\":3}}"
+  }
+}

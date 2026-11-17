@@ -1,0 +1,20 @@
+{
+  "name": "bom-crlf-before-board",
+  "description": "R1: un BOM seguito da CRLF prima di una lavagna vera si salta",
+  "source": "\ufeff\r\n{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}]}\r\n",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t"
+      }
+    ],
+    "edges": []
+  }
+}

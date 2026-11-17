@@ -26,6 +26,27 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "Riquadro, Elenco di attività, Blocco di codice, Colonne", instead: ["Callout", "In colonne"], why: "Le stesse parole dei comandi e del «/»" },
   { say: "Pagina web", instead: ["Segnalibro web"], why: "«Pagina web» è la parola della lavagna" },
   { say: "Arancione, Blu", instead: ["Arancio", "Azzurro"], why: "Una tavolozza sola: i nove colori dei Blocchi" },
+  // I componenti (K2): le parole della pagina Componenti, del riquadro «solo
+  // come file» e della riga di comando sono queste, dappertutto.
+  { say: "Componente", instead: ["Plugin", "Estensione", "Modulo"], why: "Una parola sola per ciò che si accende e si spegne" },
+  { say: "Accendi", instead: ["Abilita", "Attiva il componente"], why: "Come un interruttore, che è ciò che si tocca" },
+  { say: "Spegni", instead: ["Disabilita", "Disattiva"], why: "Il contrario di «Accendi»" },
+  { say: "Serve a", instead: ["Serve per", "Richiesto da", "Necessario a", "Usato da"], why: "Dice chi ne ha bisogno, senza gergo" },
+  { say: "Non serve più", instead: ["Orfano", "Inutilizzato", "Non più necessario"], why: "Dice perché si può togliere" },
+  { say: "Togli", instead: ["Disinstalla"], why: "Si spegne, e i file restano" },
+  { say: "Tienili", instead: ["Mantienili", "Conservali"], why: "Corto, e risponde a «Non servono più»" },
+  { say: "Profilo", instead: ["Preset"], why: "Un insieme di componenti con un nome" },
+  { say: "personalizzato", instead: ["Personalizzata", "Custom"], why: "Il profilo, al maschile e in italiano" },
+  { say: "più avanti", instead: ["In arrivo", "Prossimamente"], why: "Non promette una data" },
+  { say: "solo come file", instead: ["Solo file", "Non supportato", "Formato sconosciuto"], why: "Il file c'è e si apre altrove: dice che cosa si può fare lo stesso" },
+  // L'editor (EC, A-12): la modalità in cui si scrive è una sola.
+  { say: "Scrittura", instead: ["Live", "Modalità Blocchi"], why: "Una modalità sola per scrivere, Live e Blocchi insieme: è la parola dei documenti di Word (Pagina, Scrittura, Lettura)" },
+  // La riga dei suggerimenti (T14, E6): un nome solo nelle Preferenze, nei
+  // menu e nel giro dell'editor.
+  { say: "Riga dei suggerimenti", instead: ["Barra dei suggerimenti", "Suggerimenti dei tasti", "Barra dei tasti"], why: "È una riga della banda, non una barra che si apre: dice dove sta" },
+  // I commenti CriticMarkup (T21): il passo evidenziato con la sua discussione.
+  { say: "Commento", instead: ["Nota a margine", "Annotazione nel testo"], why: "La parola di Word e di Google Documenti; «nota» è già il file, «annotazione» è dei PDF" },
+  { say: "Sbirciata, Sbircia", instead: ["Anteprima modificabile", "Apri in sovrimpressione"], why: "La nota aperta sopra la destra del foglio, dove si scrive: «Anteprima» resta la scheda al passaggio, che si guarda e basta" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

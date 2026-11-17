@@ -21,6 +21,13 @@ const ALLOWED_TIMER_FILES = new Set([
   // Il toast è un oggetto one-shot: il callback verifica ancora l'identità
   // prima di rimuoversi, quindi non esiste un timer da cancellare altrove.
   "apps/client/src/ui/notify.ts",
+  // Il supporto dei test della griglia, che soltanto i test importano:
+  // `settle` aspetta un giro di macrotask perché le promesse in volo finiscano,
+  // e il timer muore con la promessa che risolve.
+  "apps/client/src/editors/grid/test-support.ts",
+  // Le attese dei banchi, che soltanto i test importano: ogni giro di
+  // `waiter` aspetta un timer che muore con la promessa che risolve.
+  "apps/client/src/test-wait.ts",
 ]);
 
 function quoted(value) {

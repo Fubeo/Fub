@@ -10,6 +10,7 @@
 // Gemello Rust: `sanitize_file_name`, `attachment_candidate`,
 // `split_file_name`, `relative_url` in `crates/fub-host/src/resources.rs`.
 import type { Lifetime } from "../../ui/lifetime";
+import type { ResourceWriteOptions } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { folderForNote } from "../../rules/mirrored";
 
@@ -98,9 +99,17 @@ export interface AttachmentReceipt {
   readonly revision: string;
 }
 
+/** La ricevuta di una scrittura. `reused` vero vuol dire che l'host non ha
+ *  scritto: il vault aveva già questi byte (`options.reuse`), e `id` e
+ *  `revision` sono quelli del file che c'era. */
+export interface AttachmentWrite extends AttachmentReceipt {
+  readonly reused?: boolean;
+}
+
 export interface AttachmentDeposit {
-  /** Must create atomically; an existing path must reject with kind already_exists. */
-  write(id: string, bytes: Uint8Array): Promise<AttachmentReceipt>;
+  /** Must create atomically; an existing path must reject with kind already_exists.
+   *  Con `options.reuse` l'host può rispondere col file che ha già questi byte. */
+  write(id: string, bytes: Uint8Array, options?: ResourceWriteOptions): Promise<AttachmentWrite>;
   folder: string;
   fromDocument: string;
 }
@@ -133,6 +142,68 @@ export async function depositAttachment(
     }
   }
   throw new Error(t("errors.attachment.no_name", { name }));
+}
+
+/// Il deposito della lavagna (D-3, G2 di `lavagna.md`). Chiede all'host di
+/// depositare con `reuse: "same-content"`: se il vault ha già questi byte, con
+/// qualsiasi nome, l'host risponde col file che c'è (`reused`) e non scrive;
+/// altrimenti scrive al candidato, come `depositAttachment`. Il client non
+/// legge i file del vault per confrontarli: il confronto è dell'host, che lo
+/// fa prima di rispondere e, nel dubbio, scrive. I candidati sono quelli di
+/// `depositAttachment` («foto.png», «foto 1.png», …): il riuso si chiede solo
+/// al primo, un `already_exists` passa al successivo con una scrittura
+/// semplice, ogni altro errore dell'host (un nome che il vault rifiuta, l'I/O)
+/// risale. Le note e il registratore restano su `depositAttachment`.
+export async function depositOrReuse(
+  deposit: AttachmentDeposit,
+  originalName: string,
+  bytes: Uint8Array,
+): Promise<{ receipt: AttachmentReceipt; reused: boolean }> {
+  const name = sanitizeFileName(originalName);
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new Error(t("errors.attachment.too_large", { name }));
+  }
+  // La domanda «c'è già?» si fa una volta sola, col primo candidato: la sua
+  // risposta dipende dai byte, dall'estensione (uguale per tutti i candidati)
+  // e da ciò che il vault contiene, non dal nome. Dopo un `already_exists`
+  // l'host ha risposto «no» o «non so». «L'indice non è pronto» non arriva
+  // mai da un vault aperto (l'anagrafe c'è prima che il vault si possa usare,
+  // e un rebuild la rimette nello stesso prestito); troppi candidati danno lo
+  // stesso «non so» a ogni domanda con questi byte; il budget di lettura
+  // finito non è stabile, perché le impronte imparate rendono la domanda dopo
+  // più economica, ma il secondo giro lo fa l'host dentro la stessa domanda
+  // (`Host::same_content`). Rifarla qui a ogni nome costerebbe una ricerca per
+  // nome occupato: i nomi seguenti sono scritture «solo se nuovo».
+  let asked = false;
+  for (const candidate of attachmentCandidates(deposit, name)) {
+    const options: ResourceWriteOptions | undefined = asked ? undefined : { reuse: "same-content" };
+    asked = true;
+    try {
+      const written = await deposit.write(candidate, bytes, options);
+      return { receipt: { id: written.id, revision: written.revision }, reused: written.reused === true };
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+    }
+  }
+  throw new Error(t("errors.attachment.no_name", { name }));
+}
+
+/// Il tetto di un allegato, lo stesso di `depositAttachment` e dell'host.
+const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
+
+/// I path da proporre per `name`, nell'ordine di `depositAttachment`.
+function* attachmentCandidates(deposit: AttachmentDeposit, name: string): Generator<string> {
+  const { stem, ext } = splitFileName(name);
+  const folder = folderForNote(deposit.folder, deposit.fromDocument);
+  const atRoot = folder === "" && deposit.folder.trim().startsWith(".");
+  for (let n = 0; n <= 10_000; n++) {
+    const file = attachmentCandidate("", stem, ext, n);
+    yield atRoot ? sanitizeFileName(file) : attachmentTarget(folder, file);
+  }
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "kind" in error && error.kind === "already_exists";
 }
 
 /** Paste/drop files are deposited only after the user's actual gesture. */

@@ -72,7 +72,7 @@ stessa faccia:
   e PDF che esporta; l'SVG pulito nomina il carattere e non lo porta con sé;
 - nel PNG che si [copia](drawing-clipboard.md) negli appunti;
 - in un disegno incorporato in una nota, `![[disegno.svg]]`;
-- nelle parti di un SVG che FubDraw conserva senza modificarle, quando il loro
+- nelle parti di un SVG che Fub conserva senza modificarle, quando il loro
   testo nomina il carattere con l'attributo `font-family`, con lo `style` o
   con un foglio di stile.
 
@@ -125,8 +125,8 @@ apre.
 - **Un carattere la cui licenza non lascia incorporarlo** in un documento
   (`fsType` di OpenType) si vede e si esporta in PNG e in JPEG; nel PDF il
   suo testo diventa tracciati, che si vedono uguali ma non si selezionano.
-- **Un foglio di stile**, in una parte di un SVG che FubDraw conserva senza
-  modificarla, dà un carattere ai suoi testi senza che FubDraw sappia quali
+- **Un foglio di stile**, in una parte di un SVG che Fub conserva senza
+  modificarla, dà un carattere ai suoi testi senza che Fub sappia quali
   sono. Sul foglio e in Lettura il primo nome che dice, se non è di Fub né
   del vault, si vede nel carattere di Fub che l'export userebbe; una famiglia
   generica come `sans-serif` che viene per prima, o un nome che viene prima di
@@ -135,8 +135,10 @@ apre.
 
 ## Dove sta il codice
 
-La scelta delle facce sta in `crates/fub-features/src/draw/fonts.rs`, che le
-descrive, le sceglie e le fissa, e il client la ripete in
+La scelta delle facce sta in `crates/fub-features/src/draw/fonts.rs` e nei suoi
+moduli in `fonts/`, che le descrivono (`describe.rs`), le scelgono
+(`choose.rs`) e le fissano (`instance.rs`, con `settle.rs` per GPOS e GSUB), e
+il client la ripete in
 `apps/client/src/editors/spatial/fonts/faces.ts`: i vettori di
 `apps/client/src/__fixtures__/scene-fonts/choose.json` provano tutti e due.
 Il catalogo del vault e le facce registrate nel browser stanno in

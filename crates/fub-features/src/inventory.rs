@@ -92,7 +92,7 @@ use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
 #[cfg(feature = "backup")]
 use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
 #[cfg(feature = "base")]
-use crate::base::{BaseIndex, BASE_ID};
+use crate::base::{self, BaseCommands, BaseIndex, BASE_ID};
 #[cfg(feature = "blocks")]
 use crate::blocks::{
     self, CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule,
@@ -108,6 +108,8 @@ use crate::draw::{self, DRAW_ID};
 use crate::formatting::{self, FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
+#[cfg(feature = "lavagna")]
+use crate::lavagna::{self, LavagnaCommands, LAVAGNA_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineCommands, OutlineView, OUTLINE_ID};
 #[cfg(feature = "proof")]
@@ -122,6 +124,8 @@ use crate::search::{self, SEARCH_ID};
 use crate::stats::{self, StatsView, STATS_ID};
 #[cfg(feature = "tags")]
 use crate::tags::{self, TagCommands, TagPanelView, TAGS_ID};
+#[cfg(feature = "tasks")]
+use crate::tasks::{self, TasksView, TASKS_ID};
 #[cfg(feature = "template")]
 use crate::template::{self, TemplateCommands, TemplateView, TEMPLATE_ID};
 #[cfg(feature = "trash")]
@@ -326,6 +330,26 @@ static OFFICIALS: &[OfficialFeature] = &[
         requires: &[],
         wiring: HostWiring::None,
     },
+    // I compiti usano la ricerca se c'è (`uses` nella mappa, non `requires`: la
+    // ricerca non offre servizi), e la vista dice quando non può leggere.
+    #[cfg(feature = "tasks")]
+    OfficialFeature {
+        id: TASKS_ID,
+        name: "Tasks",
+        catalog: tasks::catalog,
+        view: Some(|| Box::new(TasksView)),
+        commands: None,
+        index: None,
+        // Il recinto ```tasks```: dichiararlo è ciò che lo fa leggere reso, e
+        // col componente spento resta codice.
+        syntax: Some(tasks::syntax_rules),
+        renderers: Some(tasks::renderers),
+        exports: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
     #[cfg(feature = "properties")]
     OfficialFeature {
         id: PROPERTIES_ID,
@@ -502,9 +526,11 @@ static OFFICIALS: &[OfficialFeature] = &[
     OfficialFeature {
         id: BASE_ID,
         name: "Base",
-        catalog: fub_format_base::embed_catalog,
+        catalog: base::catalog,
         view: None,
-        commands: None,
+        // Scrivere una chiave, aggiungere o togliere una vista: la toppa del
+        // testo sta in `fub-format-base`, il comando qui.
+        commands: Some(|| Box::new(BaseCommands)),
         index: Some(|| Box::new(BaseIndex::new())),
         syntax: Some(|| vec![Box::new(fub_format_base::BaseRule)]),
         renderers: Some(|| vec![Box::new(fub_format_base::BaseRenderer)]),
@@ -571,6 +597,25 @@ static OFFICIALS: &[OfficialFeature] = &[
         renderers: None,
         exports: Some(draw::exports),
         settings: Some(draw::settings),
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
+    // In coda anche lei, per la stessa ragione: non registra pannelli, e il
+    // suo solo comando si aggiunge dopo quelli che c'erano. La Penna che la
+    // sua riga richiede sta solo nella mappa (`SOLO_DELLA_MAPPA`).
+    #[cfg(feature = "lavagna")]
+    OfficialFeature {
+        id: LAVAGNA_ID,
+        name: "Whiteboard",
+        catalog: lavagna::catalog,
+        view: None,
+        commands: Some(|| Box::new(LavagnaCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: None,
+        settings: Some(lavagna::settings),
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,

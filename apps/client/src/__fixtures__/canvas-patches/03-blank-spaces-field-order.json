@@ -1,0 +1,11 @@
+{
+  "name": "blank-spaces-field-order",
+  "description": "R1 e R10: solo spazi JSON è vuoto; la scheda scritta per intero segue l'ordine di R10 anche se la toppa ha le chiavi in un altro ordine",
+  "before": " \t\n",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"text":"t","id":"c","fub:z":true,"type":"text","color":"3","x":5,"y":-5,"width":10,"height":10}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\n  \"nodes\": [\n    {\n      \"id\": \"c\",\n      \"type\": \"text\",\n      \"x\": 5,\n      \"y\": -5,\n      \"width\": 10,\n      \"height\": 10,\n      \"color\": \"3\",\n      \"text\": \"t\",\n      \"fub:z\": true\n    }\n  ],\n  \"edges\": []\n}\n",
+    "undo": "{\n  \"nodes\": [],\n  \"edges\": []\n}\n"
+  }
+}

@@ -136,14 +136,23 @@ export function installToolbar(ctx: EditorContext): void {
   root.className = "draw-editor";
   const header = document.createElement("div");
   ctx.header = header;
-  header.className = "draw-header";
+  // La testa è una barra in una fila del kit (`kit-bar`): il vassoio, i
+  // foglietti (`kit-bar-group`) e i pulsanti (`kit-bar-button`). È lei la
+  // barra degli strumenti, con un solo punto di Tab e le frecce del kit
+  // (`input.ts`): il menu, Annulla e Ripeti, la riga delle opzioni con il
+  // suo «…», i comandi del foglio di un PDF ed «Esporta».
+  header.className = "draw-header kit-bar";
+  header.setAttribute("role", "toolbar");
+  header.setAttribute("aria-orientation", "horizontal");
   // La riga delle opzioni (B4): i gruppi della barra, e in «…» quelli che
-  // non ci stanno, i meno importanti per primi.
+  // non ci stanno, i meno importanti per primi. Sta dentro la testa, che è
+  // la barra: la riga resta una fila e basta, senza un ruolo suo.
   const optionsBar = createOptionsBar({ label: t("draw.toolbar"), moreLabel: t("draw.chrome.options.more"), lifetime: life });
   ctx.optionsBar = optionsBar;
   const toolbar = optionsBar.element as HTMLDivElement;
   ctx.toolbar = toolbar;
   toolbar.classList.add("draw-toolbar");
+  for (const name of ["role", "aria-orientation", "aria-label"]) toolbar.removeAttribute(name);
   const toolbarGroups: OptionItem[] = [];
   const surface = document.createElement("div");
   ctx.surface = surface;
@@ -173,17 +182,18 @@ export function installToolbar(ctx: EditorContext): void {
   const labelSurface = (): void => surface.setAttribute("aria-label", folio === undefined ? t("draw.surface") : folio.label());
   ctx.labelSurface = labelSurface;
   relabels.push(() => {
-    toolbar.setAttribute("aria-label", t("draw.toolbar"));
+    header.setAttribute("aria-label", t("draw.toolbar"));
     labelSurface();
     showSurfaceHint();
   });
 
   /// Un gruppo della riga delle opzioni, con la sua priorità: un involucro
   /// lo porta, così la riga mostra e nasconde l'involucro e il gruppo resta
-  /// del livello. `into` lo mette altrove.
+  /// del livello. `into` lo mette altrove, fuori dalla testa: lì non è un
+  /// foglietto del vassoio.
   const group = (label: DrawKey, radio: boolean, priority = 0, into?: HTMLElement): HTMLElement => {
     const element = document.createElement("div");
-    element.className = "draw-group";
+    element.className = into === undefined ? "draw-group kit-bar-group" : "draw-group";
     element.setAttribute("role", radio ? "radiogroup" : "group");
     relabels.push(() => element.setAttribute("aria-label", t(label)));
     if (into !== undefined) into.append(element);
@@ -326,13 +336,13 @@ export function installToolbar(ctx: EditorContext): void {
   installPenOptions(ctx, group("draw.pen.choose", false, 3), group("draw.eraser.mode", true, 3));
 
   // La barra in alto (B4): a sinistra il menu del disegno, Annulla e
-  // Ripeti; a destra «Esporta». Sono fuori dalla riga delle opzioni, e il
-  // Tab li raggiunge uno per uno.
+  // Ripeti; a destra «Esporta». Sono fuori dalla riga delle opzioni, in un
+  // foglietto ciascuno, e stanno nello stesso giro di frecce della testa.
   const topStart = document.createElement("div");
-  topStart.className = "draw-group draw-top";
+  topStart.className = "draw-group draw-top kit-bar-group";
   ctx.topStart = topStart;
   const topEnd = document.createElement("div");
-  topEnd.className = "draw-group draw-top";
+  topEnd.className = "draw-group draw-top kit-bar-group";
   ctx.topEnd = topEnd;
   const menuButton = button(topStart, "draw-button", () => t("draw.chrome.menu"), "draw-menu", () => ctx.openMenu(menuButton, ctx.drawMenuItems()));
   ctx.menuButton = menuButton;
@@ -354,15 +364,6 @@ export function installToolbar(ctx: EditorContext): void {
     text.setAttribute("aria-hidden", "true");
     exportButton.append(text);
     relabels.push(() => (text.textContent = t("draw.chrome.export")));
-  }
-  // Fuori dal roving della riga: nel Tab come ogni pulsante, e uno spento
-  // ne esce da sé.
-  for (const control of [menuButton, undoButton, redoButton, exportButton]) control?.removeAttribute("tabindex");
-  // Il puntatore non prende il fuoco, che resta al foglio con i suoi tasti.
-  for (const bar of [topStart, topEnd]) {
-    life.listen(bar, "mousedown", (event) => {
-      if ((event.target as Element | null)?.closest("button")) event.preventDefault();
-    });
   }
 
   const editGroup = group("draw.edit", false, 2);
@@ -567,6 +568,15 @@ export function installToolbar(ctx: EditorContext): void {
   titleInput.spellcheck = true;
   titleField.append(titleText, titleInput);
   optionsBar.setItems(toolbarGroups);
+  // I pulsanti della testa sono quelli del kit: i suoi, quelli della penna e
+  // della gomma (`chrome/pen-options.ts`) e quelli del foglio di un PDF, che
+  // arriva con i suoi comandi in un foglietto. Il pozzo del colore resta il
+  // pozzo del kit; la colonna e la barra della selezione hanno la loro pelle.
+  const folioControls = folio?.controls ?? null;
+  folioControls?.classList.add("kit-bar-group");
+  for (const holder of [topStart, topEnd, toolbar, folioControls]) {
+    for (const control of holder?.querySelectorAll<HTMLButtonElement>("button.draw-button") ?? []) control.classList.add("kit-bar-button");
+  }
   /// Il sottomenu «Vista» del menu «Disegno»: inquadrare e come si vede.
   const viewItems = (): MenuItem[] => {
     const none = ctx.selection.length === 0;

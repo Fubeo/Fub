@@ -108,10 +108,31 @@ describe("il compositore del menu dell'editor", () => {
       clipboard: { offers: { cut: false, copy: false, paste: true, "paste-plain": true }, run: () => {} },
     }, host);
     expect(first.clipboard).toEqual([]);
-    expect(groupsOf(first.items)).toEqual([["Incolla", "Incolla senza formattazione"], ["Inserisci un blocco…"]]);
+    // «Incolla senza formattazione» non ruba un posto: si trova scrivendo.
+    expect(groupsOf(first.items)).toEqual([["Incolla"], ["Inserisci un blocco…"]]);
+    expect(labels(first.searchable)).toContain("Incolla senza formattazione");
     expect(first.header?.kind).toBe("Paragrafo");
-    // Le icone stanno nella testata e nella riga degli appunti, non sulle voci.
-    expect(first.items.filter((item) => item.icon !== undefined)).toEqual([]);
+    // Come nel prototipo, ogni voce ha la sua figura: anche «Incolla».
+    expect(first.items.find((item) => item.label === "Incolla")?.icon).toBeDefined();
+  });
+
+  it("«Copia come ▸» chiude il primo gruppo del posto, dopo «Collega a una nota…», come nel prototipo", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const menu = composeEditorMenu({
+      target: { kind: "selection", name: "3 parole" },
+      context: [
+        { id: "link", label: "Collega a una nota…", run: () => {} },
+        MENU_RULE,
+        { id: "extract", label: "Estrai in una nota nuova", run: () => {} },
+      ],
+      clipboard: {
+        offers: { cut: true, copy: true, paste: true },
+        copyAs: [{ id: "md", label: "Markdown", run: () => {} }],
+        run: () => {},
+      },
+    }, host);
+    expect(groupsOf(menu.items)).toEqual([["Collega a una nota…", "Copia come"], ["Estrai in una nota nuova"]]);
+    expect(menu.items.find((item) => item.label === "Copia come")?.icon).toBe("copy");
   });
 
   it("la testata prende l'icona che la superficie dà, o quella del tipo", () => {
@@ -177,6 +198,19 @@ describe("il compositore del menu dell'editor", () => {
     expect(surface.editorActions!.run).toHaveBeenCalledWith("markdown.heading.3");
   });
 
+  it("il pallino di una voce colore arriva al menu (T47)", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const { items } = composeEditorMenu({
+      target: { kind: "node" },
+      context: [
+        { id: "red", label: "Rosso", radio: true, checked: true, swatches: ["#b7191c"], run: () => {} },
+        { id: "plain", label: "Senza", run: () => {} },
+      ],
+    }, host);
+    expect(items[0]).toMatchObject({ label: "Rosso", choice: "radio", checked: true, swatches: ["#b7191c"] });
+    expect(items[1]!.swatches).toBeUndefined();
+  });
+
   it("un sottomenu senza voci risolte sparisce, e i comandi del vault si eseguono per la via del «/»", () => {
     const surface = surfaceWith({});
     const host = hostFor(surface, [spec("note.daily", "Nota del giorno", ["slash"]), spec("note.extract", "Estrai")]);
@@ -210,6 +244,34 @@ describe("il compositore del menu dell'editor", () => {
     }, host).items;
     item!.run!();
     expect(order).toEqual(["cursore", "shell.mode.reading"]);
+  });
+
+  it("un sottomenu da preparare diventa un sottomenu a cascata, con le voci della superficie", async () => {
+    const ran: string[] = [];
+    const host = hostFor(surfaceWith({}), []);
+    const { searchable } = composeEditorMenu({
+      target: { kind: "media" },
+      tail: [{
+        id: "open",
+        label: "Apri con un'altra app",
+        load: async () => [
+          { id: "system", label: "L'app predefinita del sistema", run: () => void ran.push("system") },
+          MENU_RULE,
+          { id: "spenta", label: "VectorCraft", enabled: false, description: "Non installata" },
+          { id: "muta", label: "Senza motivo", enabled: false },
+        ],
+      }],
+    }, host);
+    const [open] = searchable;
+    expect(open!.submenu).toBe(true);
+    expect(typeof open!.items).toBe("function");
+    const items = await (open!.items as () => Promise<readonly MenuItem[]>)();
+    expect(items.map((item) => [item.label, item.disabled, item.description])).toEqual([
+      ["L'app predefinita del sistema", false, undefined],
+      ["VectorCraft", true, "Non installata"],
+    ]);
+    items[0]!.run!();
+    expect(ran).toEqual(["system"]);
   });
 });
 

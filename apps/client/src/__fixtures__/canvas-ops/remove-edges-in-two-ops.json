@@ -1,0 +1,98 @@
+{
+  "about": "Due operazioni di fila tolgono e3 e poi e1: le posizioni sono quelle di inizio giro, e l'inversa rimette i due archi ai loro posti fra e2 ed e4.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 200,
+        "y": 0,
+        "width": 100,
+        "height": 60,
+        "text": "b"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "a",
+        "toNode": "b"
+      },
+      {
+        "id": "e2",
+        "fromNode": "b",
+        "toNode": "a"
+      },
+      {
+        "id": "e3",
+        "fromNode": "a",
+        "toNode": "a"
+      },
+      {
+        "id": "e4",
+        "fromNode": "b",
+        "toNode": "b"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "remove",
+      "ids": [
+        "e3"
+      ]
+    },
+    {
+      "op": "remove",
+      "ids": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "a"
+        },
+        {
+          "id": "b",
+          "type": "text",
+          "x": 200,
+          "y": 0,
+          "width": 100,
+          "height": 60,
+          "text": "b"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e2",
+          "fromNode": "b",
+          "toNode": "a"
+        },
+        {
+          "id": "e4",
+          "fromNode": "b",
+          "toNode": "b"
+        }
+      ]
+    }
+  }
+}

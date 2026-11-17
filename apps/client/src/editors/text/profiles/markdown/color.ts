@@ -49,7 +49,9 @@ type Wrapper = { open: { from: number; to: number }; close: { from: number; to: 
 const OPEN_BEFORE = /<(span|mark)\s+class\s*=\s*(?:"([^"]*)"|'([^']*)')\s*>$/i;
 
 function wrapperOf(state: EditorState, from: number, to: number): Wrapper | null {
-  const before = state.sliceDoc(Math.max(0, from - 120), from);
+  // Con "\n" fra le righe: la lunghezza del tag andato a capo è in posizioni
+  // anche in una nota CRLF (#394).
+  const before = state.doc.sliceString(Math.max(0, from - 120), from);
   const open = OPEN_BEFORE.exec(before);
   if (!open) return null;
   const classes = colorClasses(open[2] ?? open[3] ?? "");
@@ -76,13 +78,40 @@ export function colorsAt(state: EditorState): { text: ContentColor | null; fill:
   return { text: pick("text"), fill: pick("fill") };
 }
 
+/// Ciò che «Colore» farebbe sul tratto: niente (`null`), la coppia vuota in
+/// una riga vuota, o il tag da cambiare, togliere o aggiungere con le sue
+/// classi. È la decisione senza la transazione: la barra chiede per ogni
+/// colore se il comando agirebbe, a ogni movimento del cursore e a ogni
+/// cambio di scheda, e costruire una transazione per saperlo costava quanto
+/// applicarla.
+type ColorPlan =
+  | { k: "empty" }
+  | { k: "change"; range: { from: number; to: number }; wrapper: Wrapper | null; classes: string | null };
+
+function colorPlan(state: EditorState, kind: ColorKind, color: ContentColor | null, at?: { from: number; to: number }): ColorPlan | null {
+  if (state.readOnly) return null;
+  const range = at ?? colorRange(state);
+  // Una riga ancora vuota: c'è da fare solo se c'è un colore da dare.
+  if (!range) return color ? { k: "empty" } : null;
+  const wrapper = wrapperOf(state, range.from, range.to);
+  const kept = (wrapper?.classes.split(" ") ?? []).filter((each) => !each.startsWith(PREFIX[kind]));
+  const classes = colorClasses([...kept, ...(color ? [`${PREFIX[kind]}${color}`] : [])].join(" "));
+  if (wrapper ? wrapper.classes === (classes ?? "") : !classes) return null;
+  return { k: "change", range, wrapper, classes };
+}
+
+/// Se `setContentColor` agirebbe qui, senza costruire la transazione.
+export function colorApplies(kind: ColorKind, color: ContentColor | null): (state: EditorState) => boolean {
+  return (state) => colorPlan(state, kind, color) !== null;
+}
+
 /// Dà al tratto il colore `color` del testo o del fondo; `null` lo toglie.
 /// `at` sceglie il tratto al posto della selezione (il menu del blocco).
 export function setContentColor(kind: ColorKind, color: ContentColor | null, at?: { from: number; to: number }): StateCommand {
   return ({ state, dispatch }) => {
-    if (state.readOnly) return false;
-    const range = at ?? colorRange(state);
-    if (!range) {
+    const plan = colorPlan(state, kind, color, at);
+    if (!plan) return false;
+    if (plan.k === "empty") {
       // Una riga ancora vuota (il «/» appena scritto): la coppia vuota, col
       // cursore dentro, perché il colore valga per ciò che si scrive dopo.
       if (!color) return false;
@@ -95,13 +124,10 @@ export function setContentColor(kind: ColorKind, color: ContentColor | null, at?
       }));
       return true;
     }
-    const wrapper = wrapperOf(state, range.from, range.to);
-    const kept = (wrapper?.classes.split(" ") ?? []).filter((each) => !each.startsWith(PREFIX[kind]));
-    const classes = colorClasses([...kept, ...(color ? [`${PREFIX[kind]}${color}`] : [])].join(" "));
+    const { range, wrapper, classes } = plan;
     let changes: ChangeSpec[];
     let shift: number;
     if (wrapper) {
-      if (wrapper.classes === (classes ?? "")) return false;
       if (classes) {
         const open = `<${wrapper.name} class="${classes}">`;
         changes = [{ from: wrapper.open.from, to: wrapper.open.to, insert: open }];

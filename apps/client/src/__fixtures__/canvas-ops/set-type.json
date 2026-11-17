@@ -1,0 +1,6 @@
+{
+  "about": "Il tipo di una scheda non si cambia con set: Invalid, anche se gli altri campi andrebbero bene.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "set", "id": "a", "fields": { "type": "link", "url": "https://example.org" } }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

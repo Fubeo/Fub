@@ -12,6 +12,10 @@
 export const SETTINGS_WITH_THEIR_OWN_GESTURE: readonly string[] = [
   "chrome.schema",
   "plugins.disabled",
+  "components.off",
+  "components.kept",
+  "components.waiting",
+  "components.profile",
   "chrome.rail.order",
   "chrome.rail.hidden",
   "properties.types",

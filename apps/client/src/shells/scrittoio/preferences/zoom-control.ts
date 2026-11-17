@@ -44,9 +44,11 @@ export function zoomControl(lifetime: Lifetime): Dress {
     setAttr(slider, "aria-valuetext", text);
   };
 
-  // Il cursore segue la riga solo quando la riga è un'altra: fra una
-  // riscrittura e l'altra è della mano che lo trascina.
-  let shownRow: HTMLElement | null = null;
+  // Il cursore segue la riga solo quando la vista ne ha riscritto il campo (c'è
+  // un valore riletto): fra una riscrittura e l'altra è della mano che lo
+  // trascina. La riga resta lo stesso nodo da un aggiornamento all'altro; il
+  // campo no.
+  let shownField: HTMLInputElement | null = null;
   lifetime.listen(slider, "input", () => show(Number(slider.value)));
   // Al rilascio, come il cursore della vista: trascinare non è scrivere.
   lifetime.listen(slider, "change", () => {
@@ -62,8 +64,8 @@ export function zoomControl(lifetime: Lifetime): Dress {
       setText(name, row.querySelector(".setting-text > label")?.textContent ?? "");
       setAttr(slider, "aria-describedby", field.getAttribute("aria-describedby"));
       setDisabled([slider], field.disabled);
-      if (shownRow !== row) {
-        shownRow = row;
+      if (shownField !== field) {
+        shownField = field;
         const percent = zoomPercent(field.value);
         slider.value = String(percent);
         show(percent);

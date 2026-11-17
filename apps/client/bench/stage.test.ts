@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 // stage.mjs is intentionally outside the browser TypeScript boundary.
 // @ts-expect-error JavaScript benchmark module has no declaration file.
-const { openStage } = await import("./stage.mjs");
+const { openStage, waitUntilSettled, PENDING } = await import("./stage.mjs");
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -63,6 +63,39 @@ describe("stage lifecycle", () => {
     });
   });
 
+  it("moves the server only when a port is given", async () => {
+    const configs: Array<Record<string, unknown>> = [];
+    const server = { config: { server: { port: 1448 } }, listen: async () => {}, close: async () => {} };
+    const options = {
+      createServer: async (config: Record<string, unknown>) => {
+        configs.push(config);
+        return server;
+      },
+      chromium: { launch: async () => ({ close: async () => {} }) },
+    };
+    await (await openStage(options)).close();
+    await (await openStage({ ...options, port: 1448, strictPort: true })).close();
+    expect(configs[0]).not.toHaveProperty("server");
+    expect(configs[1]?.server).toEqual({ port: 1448, strictPort: true });
+  });
+
+  it("adds a bench's own browser options after the shared ones", async () => {
+    const launches: Array<{ args?: string[] }> = [];
+    const options = {
+      createServer: async () => ({ config: { server: { port: 1431 } }, listen: async () => {}, close: async () => {} }),
+      chromium: {
+        launch: async (config: { args?: string[] }) => {
+          launches.push(config);
+          return { close: async () => {} };
+        },
+      },
+    };
+    await (await openStage(options)).close();
+    await (await openStage({ ...options, browserArgs: ["--disable-partial-raster"] })).close();
+    expect(launches[0]?.args).not.toContain("--disable-partial-raster");
+    expect(launches[1]?.args).toEqual([...(launches[0]?.args ?? []), "--disable-partial-raster"]);
+  });
+
   it("preserves launch failure while exposing a failed rollback", async () => {
     const rollbackError = new Error("server rollback failed");
     const launchError = new Error("browser launch failed");
@@ -92,5 +125,35 @@ describe("stage lifecycle", () => {
         error: { name: "Error", message: "server rollback failed" },
       },
     });
+  });
+});
+
+describe("waitUntilSettled", () => {
+  it("aspetta che nessun elemento porti data-pending", async () => {
+    const calls: unknown[][] = [];
+    const page = {
+      waitForFunction: async (...args: unknown[]) => {
+        calls.push(args);
+      },
+    };
+    await waitUntilSettled(page, 1234);
+    expect(PENDING).toBe("[data-pending]");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toBe(PENDING);
+    expect(calls[0]![2]).toEqual({ timeout: 1234 });
+  });
+
+  it("se la pagina non si ferma, lancia dicendo chi è ancora in attesa", async () => {
+    const timeout = new Error("Timeout 50ms exceeded");
+    const page = {
+      waitForFunction: async () => {
+        throw timeout;
+      },
+      evaluate: async () => ["#status-hints"],
+    };
+    const error = await waitUntilSettled(page, 50).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("la pagina non si ferma: dopo 50 ms #status-hints porta ancora data-pending");
+    expect((error as { cause?: unknown }).cause).toBe(timeout);
   });
 });

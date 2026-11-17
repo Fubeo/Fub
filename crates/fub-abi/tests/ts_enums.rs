@@ -19,7 +19,8 @@
 //! # Cosa entra qui, e chi lo decide
 //!
 //! Tutti e soli gli `enum` **senza payload** dichiarati `pub` in
-//! `fub-abi/src/*.rs`, letti da [`common::fieldless_enums`]. L'elenco non è
+//! `fub-abi/src/*.rs` (sotto-moduli su file compresi, come `traits/*.rs`),
+//! letti da [`common::fieldless_enums`]. L'elenco non è
 //! scritto da nessuna parte: è una **regola**, quindi un enum nuovo entra senza
 //! che nessuno se ne ricordi e il file committato diventa stantio — cioè rosso.
 //! È il criterio del §16.7 applicato al posto in cui il §16.5 chiedeva un

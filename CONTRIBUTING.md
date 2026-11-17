@@ -13,6 +13,10 @@ contributi e i controlli da eseguire. Le regole architetturali sono spiegate in
 - dipendenze di sistema richieste da Tauri;
 - `cargo-deny` soltanto per il controllo della supply chain;
 - target `wasm32-wasip2` per i test completi del runtime WASM.
+- target `wasm32-unknown-unknown` per il client: `npm test`, `npm run build` e
+  `npm run dev` compilano il nucleo della lavagna (`crates/fub-canvas-wasm`) in
+  un modulo `.wasm` con cargo, e senza il target si fermano con il comando che
+  lo installa (`rustup target add wasm32-unknown-unknown`).
 
 Usa `npm ci`, non sostituire npm con un altro package manager.
 
@@ -20,9 +24,14 @@ Usa `npm ci`, non sostituire npm con un altro package manager.
 
 Lo stesso ciclo sta in un comando solo, `scripts/check.sh`: fa quello che la
 CI fa su Linux, banchi esclusi, e stampa una riga per passo. Con `--rapido`
-controlla soltanto ciò che il diff tocca e i crate che lo usano; con `--banchi`
+controlla soltanto ciò che il diff tocca e i crate che lo usano, più i test di
+`fub-abi`, che leggono i sorgenti di ogni crate e i documenti; con `--banchi`
 aggiunge i banchi del client. `check-locale-loop.mjs` verifica che contenga
 ogni comando del blocco `ci-required` qui sotto.
+
+Un file del client che un crate nomina nei suoi test (le porte di
+`host/ipc.ts`, gli specchi TS dei tipi) fa girare con `--rapido` anche i test
+di quel crate.
 
 I comandi uno per uno, dalla radice:
 
@@ -31,9 +40,11 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --no-fail-fast
 cargo deny check
+node .github/scripts/sbom.mjs --out fub-sbom.spdx.json
 ```
 
-La CI fa girare gli stessi test con `cargo nextest run`, che li distribuisce
+L'ultimo scrive la SBOM Rust in SPDX 2.3 e fallisce se non corrisponde a
+`Cargo.lock`. La CI fa girare gli stessi test con `cargo nextest run --profile ci`, che li distribuisce
 anche fra un eseguibile e l'altro, più gli esempi della documentazione con
 `cargo test --doc`. I fuzzer del Markdown girano a 2000 casi; per la prova a
 fondo si passano `FUB_FUZZ_CASI=20000` e `FUB_FUZZ_TRASFERIMENTO=20000`, che la
@@ -50,6 +61,7 @@ npm run build
 npm run bench:a11y
 npm run bench:verify
 npm run bench:motion
+npm run bench:conformita
 npm run bench:fidelity
 npm run bench:grid
 npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
@@ -76,12 +88,13 @@ I comandi seguenti costituiscono il nucleo che deve rimanere presente in CI.
 ```text
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo nextest run --workspace --no-fail-fast
+cargo nextest run --workspace --no-fail-fast --profile ci
 cargo test --workspace --doc --no-fail-fast
 npm run typecheck
 npm test
 npm run build
 npm run bench:grid
+npm run bench:lampo
 node .github/scripts/check-host-workspace-boundary.mjs
 node .github/scripts/check-error-literals.mjs
 node .github/scripts/check-rust-comments.mjs
@@ -97,6 +110,8 @@ node .github/scripts/check-mermaid.mjs --render
 node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
 node .github/scripts/check-locale-loop.mjs
+node .github/scripts/baseline-dal-runner.mjs --self-test
+node .github/scripts/sbom.mjs --self-test
 ```
 <!-- ci-required:end -->
 

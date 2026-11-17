@@ -210,30 +210,61 @@ Gli snapshot congelati rendono meccanica l'additività. Sono incompatibili:
 - spostamento fra interfacce;
 - modifica della firma.
 
-Un campo nuovo in un record che attraversa il confine rompe i plugin già
-compilati, anche quando sta in coda. Nel component model l'host controlla il
-tipo di un record campo per campo: un plugin compilato contro il manifest a
-undici campi non si istanzia davanti all'host che ne ha sedici («expected
-record of 16 fields, found 11 fields»). Lo prova
-`crates/fub-wasm-host/tests/published_record_does_not_grow.rs`, e il perché
-della regola è nell'[ADR 0235](../decisions/0235-un-record-pubblicato-non-cresce.md).
+Dal primo rilascio di una versione il confine non cresce. Quando istanzia un
+plugin, wasmtime controlla per intero il tipo di ogni funzione che il plugin
+importa ed esporta, e un plugin compilato contro la forma di prima non si
+istanzia davanti a un host che ne ha una più larga. La regola, da `0.2.0`:
 
-Dal primo rilascio di una versione, quindi, un record pubblicato non cresce.
-Le novità arrivano con interfacce nuove: l'host cerca gli export una
-interfaccia alla volta, e un plugin vecchio quell'interfaccia semplicemente
-non ce l'ha, per cui l'host prende il default.
+| Cosa cambia | Nel confine | Fuori dal confine |
+|---|---|---|
+| campo nuovo in un record, anche in coda | incompatibile | compatibile in coda |
+| caso nuovo in un `enum`, `variant` o `flags`, anche in coda | incompatibile | compatibile in coda |
+| funzione nuova in un'interfaccia esportata dal plugin | incompatibile | — |
+| funzione nuova in un'interfaccia importata dal plugin | compatibile | — |
+| interfaccia nuova, con i suoi tipi | compatibile | compatibile |
 
-Sono compatibili:
+«Nel confine» vuol dire raggiunto, nello snapshot, da una firma di un
+`world` (import o export), seguendo campi, casi, `option`, `list`,
+`result`, `tuple` e alias. Un tipo che nessuna firma raggiunge resta
+dell'host.
 
-- nuovo record o alias, usato soltanto da superfici nuove;
-- nuova funzione in un'interfaccia che l'host offre (un import del guest): il
-  guest importa solo ciò che usa;
-- nuova interfaccia.
+Le prove sono componenti veri compilati contro la WIT di prima:
 
-Un nuovo caso o una nuova funzione in un'interfaccia **esportata** dal plugin
-vanno trattati come un campo nuovo finché un test non dice il contrario:
-l'host controlla con `GuestIndices` il tipo di ogni funzione dell'interfaccia
-esportata, e non c'è una prova che un caso o una funzione in più passino.
+- un plugin compilato contro il manifest a undici campi non si istanzia
+  davanti all'host che ne ha sedici («expected record of 16 fields, found 11
+  fields»): `crates/fub-wasm-host/tests/published_record_does_not_grow.rs`,
+  [ADR 0235](../decisions/0235-un-record-pubblicato-non-cresce.md);
+- un plugin compilato senza `data`, l'ultimo caso dell'`enum component-kind`
+  di `plugin`, non si istanzia («expected enum of 4 names, found 3 names»), e
+  lo stesso vale per un `variant` con un caso in coda («expected variant of 3
+  cases, found 2 cases»);
+- lo stesso caso in più rompe anche **dal lato degli import**: un plugin che
+  riceve dall'host un `enum` o un `variant` cresciuto non si istanzia, anche
+  se l'host non manderebbe mai il caso nuovo;
+- un plugin compilato senza `run-job`, l'ultima funzione di `plugin`, non si
+  istanzia: l'host non trova la funzione;
+- una funzione in più in un'interfaccia che l'host offre il plugin non la
+  chiede e nessuno la controlla: il plugin vecchio gira come prima.
+
+Le ultime quattro sono in `crates/fub-wasm-host/tests/new_case_and_function.rs`,
+e il perché della regola è nell'[ADR 0238](../decisions/0238-un-caso-o-una-funzione-del-confine-non-cresce.md).
+Un `flags` segue l'`enum`: wasmtime ne confronta l'elenco dei nomi allo stesso
+modo, e un bit in più è un tipo diverso.
+
+Il caso nuovo non arriva mai a un guest vecchio. L'host di Fub è tipizzato e
+lo rifiuta al caricamento; per la via dinamica di wasmtime (`Func::call` con
+un `Val`) il valore si abbassa secondo il tipo del guest, e un caso che il
+guest non conosce è un errore restituito all'host, non una trap. Quell'errore
+però chiude l'istanza: la chiamata dopo, anche con un caso noto, è una trap
+«cannot enter component instance».
+
+`fub:abi@0.2.0`, la versione della pre-alpha, è congelata in
+`wit/frozen/0.2.0.wit`, e `wit_additivity.rs` applica la regola per
+snapshot: contro `0.2.0` e ogni versione dopo vale la tabella qui sopra;
+contro `0.1.0` e `0.1.1` restano le regole di allora, che ammettevano il
+campo e il caso in coda. Le novità arrivano con interfacce nuove: l'host cerca
+gli export una interfaccia alla volta, e un plugin vecchio quell'interfaccia
+semplicemente non ce l'ha, per cui l'host prende il default.
 
 La patch non cambia la superficie.
 

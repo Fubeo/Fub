@@ -1,0 +1,9 @@
+{
+  "name": "not-blank-u2028",
+  "description": "R1: un separatore di riga (U+2028) dopo un a capo non è vuoto, e non è JSON",
+  "source": "\n\u2028",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

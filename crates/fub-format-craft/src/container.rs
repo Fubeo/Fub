@@ -1,0 +1,836 @@
+//! I tre contenitori dei file Craft, letti senza il motore dell'app: il JSON
+//! di VectorCraft (a volte gzip, con i blob in coda), lo ZIP di PhotoCraft
+//! con `manifest.json` e lo ZIP di FigCraft con `document.json`.
+//!
+//! Ogni file è input ostile: le misure si controllano prima di leggere, ogni
+//! lettura ha un tetto, e nessuna allocazione la decide un numero scritto nel
+//! file.
+//!
+//! [`read_meta`] dà i metadati, il testo e i file collegati; [`embedded_preview`]
+//! l'anteprima che il file porta, e [`embedded_preview_from`] la stessa letta
+//! a pezzi da un `Read + Seek`; [`Png`] e [`png_size`] le misure di un PNG,
+//! che usa anche
+//! [`PreviewImage::from_png`](crate::contract::PreviewImage::from_png).
+
+mod fields;
+pub(crate) mod zip_tail;
+
+use std::io::{Cursor, Read, Seek, SeekFrom};
+
+use base64::alphabet;
+use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
+use base64::Engine;
+use flate2::read::GzDecoder;
+use zip::read::{ArchiveOffset, Config};
+use zip::result::ZipError;
+use zip::ZipArchive;
+
+use fields::{Failure, Fields, Preview, Want};
+use zip_tail::{Budget, Budgeted};
+
+use crate::apps::CraftApp;
+use crate::contract::PreviewSize;
+
+/// Il file più grande che si legge, JSON o ZIP.
+pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
+/// L'anteprima più grande che si prende dal file.
+pub const MAX_PREVIEW_BYTES: usize = 8 * 1024 * 1024;
+/// Le voci al massimo di uno ZIP.
+pub const MAX_ZIP_ENTRIES: usize = 10_000;
+/// Il testo per la ricerca, tagliato su un confine di carattere.
+pub const MAX_TEXT_BYTES: usize = 64 * 1024;
+/// La directory centrale più lunga che uno ZIP letto a pezzi può dichiarare.
+pub const MAX_CENTRAL_DIRECTORY_BYTES: u64 = 4 * 1024 * 1024;
+/// Il JSON più grande da cui un'anteprima letta a pezzi prende la versione:
+/// `manifest.json` di un `.pcraft`, `document.json` di un `.figcraft`.
+pub const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
+
+/// La firma di 8 byte di ogni PNG.
+pub const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+
+/// Ciò che si legge da un file Craft per il modello del documento.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Contents {
+    /// La versione del formato scritta nel file, sempre come stringa.
+    pub format_version: Option<String>,
+    /// Il titolo, se il file lo dice.
+    pub title: Option<String>,
+    /// I testi del documento, uno per riga, per la ricerca.
+    pub text: String,
+    /// I file collegati che il documento nomina, con le regole di
+    /// [`linked::collect`](crate::linked::collect).
+    pub links: Vec<String>,
+}
+
+/// Perché un contenitore non si legge. Senza testi: la frase per chi guarda
+/// la sceglie chi riceve l'errore.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContainerError {
+    /// Il file, o una sua voce, supera un limite.
+    TooLarge,
+    /// Non è uno ZIP leggibile.
+    NotZip,
+    /// Il documento non è un JSON leggibile.
+    NotJson,
+    /// Lo gzip di VectorCraft è rotto o troncato.
+    BadGzip,
+    /// Manca ciò che il formato vuole.
+    Missing,
+    /// Il JSON di un `.vectorcraft`, prima dei blob, supera il peso che chi
+    /// legge a pezzi ha concesso.
+    OverLimit,
+}
+
+/// Ciò che [`embedded_preview_from`] trova nel file: la versione del formato
+/// e l'anteprima, ognuna con il suo esito, perché una si legge anche quando
+/// l'altra no.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Embedded {
+    /// La versione scritta nel file: dal manifesto di un `.pcraft`, dal
+    /// documento di un `.figcraft` (se non passa [`MAX_MANIFEST_BYTES`]) o dal
+    /// JSON di un `.vectorcraft`.
+    pub format_version: Result<Option<String>, ContainerError>,
+    /// L'anteprima, come la dà [`embedded_preview`].
+    pub png: Result<Option<Png>, ContainerError>,
+}
+
+/// Un PNG con le misure prese dalla sua intestazione.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Png {
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Png {
+    /// I byte, se sono un PNG con misure lecite ([`png_size`]).
+    pub fn new(bytes: Vec<u8>) -> Option<Png> {
+        let (width, height) = png_size(&bytes)?;
+        Some(Png {
+            bytes,
+            width,
+            height,
+        })
+    }
+}
+
+/// Larghezza e altezza di un PNG, dall'intestazione: la firma di 8 byte, poi
+/// il primo chunk lungo 13 e di tipo `IHDR`, con larghezza e altezza big
+/// endian. Misure a zero, o oltre i 2³¹ − 1 che il formato ammette, non sono
+/// un PNG.
+pub fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let rest = bytes.strip_prefix(&PNG_SIGNATURE[..])?;
+    let length = u32::from_be_bytes(rest.get(0..4)?.try_into().ok()?);
+    if length != 13 || rest.get(4..8)? != b"IHDR" {
+        return None;
+    }
+    let width = u32::from_be_bytes(rest.get(8..12)?.try_into().ok()?);
+    let height = u32::from_be_bytes(rest.get(12..16)?.try_into().ok()?);
+    // I 13 byte dell'intestazione ci sono tutti: un IHDR troncato non dà misure.
+    rest.get(8..21)?;
+    let lawful = |side: u32| side != 0 && side <= i32::MAX as u32;
+    (lawful(width) && lawful(height)).then_some((width, height))
+}
+
+/// I metadati, il testo e il documento di un file Craft.
+///
+/// - PhotoCraft: lo ZIP con `manifest.json`; la versione da `format_version`
+///   e il titolo da `title` o `name`; i file collegati dal manifesto.
+/// - FigCraft: lo ZIP con `document.json`; la versione da `format_version` o
+///   `version`, il titolo da `title` o `name`, il testo da ogni campo stringa
+///   `text`, `content` o `characters`.
+/// - VectorCraft: il JSON, scompattato se è gzip e tagliato prima dei blob;
+///   versione, titolo e testo come FigCraft.
+///
+/// Del JSON si leggono al più i primi [`MAX_META_JSON_BYTES`]: un documento
+/// più lungo dà ciò che porta prima del taglio, se fin lì è valido. Nessun
+/// documento intero si costruisce in memoria: si tengono solo i campi che
+/// servono.
+///
+/// Uno ZIP senza il suo JSON dà i contenuti vuoti, non un errore; un JSON
+/// valido che non è un oggetto non ha titolo né versione. Un XMP non è un
+/// contenitore: i suoi metadati li legge [`xmp`](crate::xmp).
+pub fn read_meta(app: CraftApp, bytes: &[u8]) -> Result<Contents, ContainerError> {
+    check_file_size(bytes)?;
+    match app {
+        CraftApp::Xmp => Ok(Contents::default()),
+        CraftApp::PhotoCraft => entry_meta(bytes, PHOTOCRAFT_MANIFEST, MANIFEST_META),
+        CraftApp::FigCraft => entry_meta(bytes, FIGCRAFT_DOCUMENT, DOCUMENT_META),
+        CraftApp::VectorCraft => vectorcraft_meta(bytes),
+    }
+}
+
+/// L'anteprima che il file porta per la misura `size`, se c'è ed è un PNG.
+///
+/// - PhotoCraft: `thumb.png` per [`PreviewSize::Small`] e
+///   `composite/preview.png` per [`PreviewSize::Large`], ciascuna con l'altra
+///   come riserva.
+/// - FigCraft: `thumbnail.png` per le due misure.
+/// - VectorCraft: `/preview/data`, in base64 con o senza il prefisso
+///   `data:…;base64,`.
+///
+/// Un'anteprima che non è un PNG, vuota o che non si decodifica è `None`.
+/// Una più grande di [`MAX_PREVIEW_BYTES`] è [`ContainerError::TooLarge`], se
+/// la riserva non dà un PNG al suo posto.
+pub fn embedded_preview(
+    app: CraftApp,
+    bytes: &[u8],
+    size: PreviewSize,
+) -> Result<Option<Png>, ContainerError> {
+    check_file_size(bytes)?;
+    let embedded = embedded_preview_from(
+        app,
+        &mut Cursor::new(bytes),
+        bytes.len() as u64,
+        size,
+        MAX_FILE_BYTES as u64,
+    )
+    .map_err(|error| match error {
+        ContainerError::OverLimit => ContainerError::TooLarge,
+        other => other,
+    })?;
+    embedded.png
+}
+
+/// L'anteprima di [`embedded_preview`], letta a pezzi dai `len` byte di
+/// `reader`, con la versione del formato.
+///
+/// - Uno ZIP (PhotoCraft, FigCraft) non ha un peso massimo: si guarda la coda
+///   (al più 65 557 byte, la fine della directory e quella ZIP64), poi `zip`
+///   legge la directory centrale, al più [`MAX_CENTRAL_DIRECTORY_BYTES`] e
+///   [`MAX_ZIP_ENTRIES`] voci, e solo le voci che servono: l'anteprima fino a
+///   [`MAX_PREVIEW_BYTES`] e il JSON della versione fino a
+///   [`MAX_MANIFEST_BYTES`]. Una directory che esce dal file è
+///   [`ContainerError::NotZip`].
+/// - Un `.vectorcraft` si legge dall'inizio fino al separatore dei blob o
+///   alla fine, scompattato se comincia come uno gzip: un JSON oltre
+///   `max_bytes`, prima o dopo lo gzip, è [`ContainerError::OverLimit`].
+///
+/// Un errore di `reader` diventa un errore del contenitore: chi legge da un
+/// file che può cambiare guarda i suoi errori di lettura prima del risultato.
+pub fn embedded_preview_from<R: Read + Seek>(
+    app: CraftApp,
+    reader: &mut R,
+    len: u64,
+    size: PreviewSize,
+    max_bytes: u64,
+) -> Result<Embedded, ContainerError> {
+    match app {
+        CraftApp::Xmp => Ok(Embedded {
+            format_version: Ok(None),
+            png: Ok(None),
+        }),
+        CraftApp::PhotoCraft => {
+            let order = match size {
+                PreviewSize::Small => [PHOTOCRAFT_THUMB, PHOTOCRAFT_COMPOSITE],
+                PreviewSize::Large => [PHOTOCRAFT_COMPOSITE, PHOTOCRAFT_THUMB],
+            };
+            zip_preview(
+                reader,
+                len,
+                &order,
+                PHOTOCRAFT_MANIFEST,
+                MANIFEST_META.version_keys,
+            )
+        }
+        CraftApp::FigCraft => zip_preview(
+            reader,
+            len,
+            &[FIGCRAFT_THUMBNAIL],
+            FIGCRAFT_DOCUMENT,
+            &VERSION_KEYS,
+        ),
+        CraftApp::VectorCraft => {
+            let mut fields = vectorcraft_fields_from(reader, max_bytes)?;
+            Ok(Embedded {
+                format_version: Ok(fields.version()),
+                png: vectorcraft_preview(fields.preview()),
+            })
+        }
+    }
+}
+
+/// Il manifesto di un `.pcraft`.
+pub const PHOTOCRAFT_MANIFEST: &str = "manifest.json";
+/// L'anteprima piccola di un `.pcraft`.
+pub const PHOTOCRAFT_THUMB: &str = "thumb.png";
+/// L'anteprima grande di un `.pcraft`.
+pub const PHOTOCRAFT_COMPOSITE: &str = "composite/preview.png";
+/// Il documento di un `.figcraft`.
+pub const FIGCRAFT_DOCUMENT: &str = "document.json";
+/// L'anteprima di un `.figcraft`, per le due misure.
+pub const FIGCRAFT_THUMBNAIL: &str = "thumbnail.png";
+/// Il separatore dopo il quale un `.vectorcraft` dalla versione 4 tiene i
+/// blob: il JSON finisce prima.
+pub const VECTORCRAFT_BLOBS: &[u8] = b"\n\0VCBLOBS\0";
+/// Dove sta l'anteprima nel JSON di un `.vectorcraft`.
+pub const VECTORCRAFT_PREVIEW_POINTER: &str = "/preview/data";
+
+/// I due byte con cui comincia uno gzip.
+const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+/// La stringa base64 più lunga che [`MAX_PREVIEW_BYTES`] diventano, con il
+/// riempimento.
+const MAX_PREVIEW_BASE64: usize = MAX_PREVIEW_BYTES.div_ceil(3) * 4;
+/// I campi da cui si prende il titolo, nell'ordine.
+const TITLE_KEYS: [&str; 2] = ["title", "name"];
+/// I campi da cui si prende la versione di un documento, nell'ordine.
+const VERSION_KEYS: [&str; 2] = ["format_version", "version"];
+/// I campi stringa che sono testo del documento, a ogni profondità.
+const TEXT_KEYS: [&str; 3] = ["text", "content", "characters"];
+/// I byte di JSON al più che [`read_meta`] legge: un tetto suo, più basso
+/// del file intero.
+pub const MAX_META_JSON_BYTES: usize = 16 * 1024 * 1024;
+
+/// Ciò che [`read_meta`] prende dal manifesto di un `.pcraft`.
+const MANIFEST_META: Want = Want {
+    version_keys: &["format_version"],
+    title: true,
+    text: false,
+    links: true,
+    preview: false,
+};
+/// Ciò che [`read_meta`] prende dal documento di FigCraft e VectorCraft.
+const DOCUMENT_META: Want = Want {
+    version_keys: &VERSION_KEYS,
+    title: true,
+    text: true,
+    links: true,
+    preview: false,
+};
+
+/// Solo la versione, dai campi `keys`.
+const fn version_only(keys: &'static [&'static str]) -> Want {
+    Want {
+        version_keys: keys,
+        title: false,
+        text: false,
+        links: false,
+        preview: false,
+    }
+}
+
+/// La fine della directory centrale di uno ZIP: la firma e i 22 byte fissi.
+const EOCD_SIGNATURE: [u8; 4] = [b'P', b'K', 0x05, 0x06];
+const EOCD_LEN: usize = 22;
+/// Il commento in coda a uno ZIP è lungo al massimo 65 535 byte.
+const EOCD_SEARCH: usize = EOCD_LEN + u16::MAX as usize;
+/// Il localizzatore ZIP64, nei 20 byte prima della fine della directory.
+const ZIP64_LOCATOR_SIGNATURE: [u8; 4] = [b'P', b'K', 0x06, 0x07];
+const ZIP64_LOCATOR_LEN: usize = 20;
+/// La fine della directory centrale ZIP64.
+const ZIP64_EOCD_SIGNATURE: [u8; 4] = [b'P', b'K', 0x06, 0x06];
+
+type Archive<'a> = ZipArchive<Cursor<&'a [u8]>>;
+
+/// I byte in più che `zip` può leggere oltre la directory dichiarata per
+/// aprire l'archivio: la coda, cercata anche due volte, e la fine ZIP64.
+pub(crate) const OPEN_SLACK: u64 = 4 * EOCD_SEARCH as u64 + 128 * 1024;
+/// I byte in più che `zip` può leggere oltre il doppio del tetto di una voce:
+/// l'intestazione locale con nome e campo extra, e il buffer dello deflate.
+pub(crate) const ENTRY_SLACK: u64 = 30 + 2 * u16::MAX as u64 + 256 * 1024;
+
+/// Lo ZIP letto a pezzi: la coda, poi l'archivio con un tetto sui byte, poi
+/// la prima anteprima di `names` e la versione dal JSON `manifest`.
+fn zip_preview<R: Read + Seek>(
+    reader: &mut R,
+    len: u64,
+    names: &[&str],
+    manifest: &str,
+    version_keys: &'static [&'static str],
+) -> Result<Embedded, ContainerError> {
+    let tail = zip_tail::check(reader, len)?;
+    let budget = Budget::default();
+    let open = tail
+        .central_directory
+        .checked_add(OPEN_SLACK)
+        .ok_or(ContainerError::TooLarge)?;
+    budget.arm(open);
+    // `Known(0)`: senza, `zip` cerca l'inizio dell'archivio leggendo il file
+    // dall'inizio alla directory.
+    let config = Config {
+        archive_offset: ArchiveOffset::Known(0),
+    };
+    let mut archive = ZipArchive::with_config(config, Budgeted::new(reader, budget.clone()))
+        .map_err(|_| over_budget(&budget, ContainerError::NotZip))?;
+    if archive.len() > MAX_ZIP_ENTRIES {
+        return Err(ContainerError::TooLarge);
+    }
+    let mut entry = |name: &str, limit: usize| {
+        budget.arm((limit as u64).saturating_mul(2).saturating_add(ENTRY_SLACK));
+        read_entry(&mut archive, name, limit).map_err(|error| over_budget(&budget, error))
+    };
+    let png = first_png(names, |name| entry(name, MAX_PREVIEW_BYTES));
+    let format_version = match entry(manifest, MAX_MANIFEST_BYTES) {
+        Ok(Some(bytes)) => fields::from_slice(&bytes, version_only(version_keys))
+            .map(|mut fields| fields.version())
+            .map_err(|_| ContainerError::NotJson),
+        Ok(None) => Ok(None),
+        // Un documento grande non è un errore: la versione resta da sapere.
+        Err(ContainerError::TooLarge) => Ok(None),
+        Err(error) => Err(error),
+    };
+    Ok(Embedded {
+        format_version,
+        png,
+    })
+}
+
+/// `error`, o [`ContainerError::TooLarge`] se il tetto di `budget` lo ha
+/// causato.
+pub(crate) fn over_budget(budget: &Budget, error: ContainerError) -> ContainerError {
+    if budget.exhausted() {
+        ContainerError::TooLarge
+    } else {
+        error
+    }
+}
+
+/// Un file oltre [`MAX_FILE_BYTES`] non si apre.
+fn check_file_size(bytes: &[u8]) -> Result<(), ContainerError> {
+    if bytes.len() > MAX_FILE_BYTES {
+        Err(ContainerError::TooLarge)
+    } else {
+        Ok(())
+    }
+}
+
+/// Lo ZIP, se le voci che dichiara e quelle che ha non passano
+/// [`MAX_ZIP_ENTRIES`]. Il conto dichiarato si guarda prima di aprire, perché
+/// aprire legge tutta la directory centrale.
+fn open_zip(bytes: &[u8]) -> Result<Archive<'_>, ContainerError> {
+    if declared_entries(bytes).is_some_and(|count| count > MAX_ZIP_ENTRIES as u64) {
+        return Err(ContainerError::TooLarge);
+    }
+    let archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| ContainerError::NotZip)?;
+    if archive.len() > MAX_ZIP_ENTRIES {
+        return Err(ContainerError::TooLarge);
+    }
+    Ok(archive)
+}
+
+/// Il numero di voci più alto che le fini della directory centrale in coda
+/// al file dichiarano, ZIP64 compreso: conta solo una fine il cui commento
+/// arriva all'ultimo byte. `None` se non se ne trova nessuna: allora decide
+/// l'apertura, e dopo il conto delle voci aperte.
+fn declared_entries(bytes: &[u8]) -> Option<u64> {
+    let from = bytes.len().saturating_sub(EOCD_SEARCH);
+    let tail = bytes.get(from..)?;
+    let mut highest: Option<u64> = None;
+    for (at, window) in tail.windows(EOCD_LEN).enumerate() {
+        // Una fine vera arriva, con il suo commento, all'ultimo byte del file.
+        let comment = usize::from(u16::from_le_bytes(window.get(20..22)?.try_into().ok()?));
+        if window.get(0..4)? != EOCD_SIGNATURE || from + at + EOCD_LEN + comment != bytes.len() {
+            continue;
+        }
+        let total = u64::from(u16::from_le_bytes(window.get(10..12)?.try_into().ok()?));
+        let count = if total == u64::from(u16::MAX) {
+            zip64_entries(bytes, from + at).unwrap_or(total)
+        } else {
+            total
+        };
+        highest = Some(highest.map_or(count, |seen| seen.max(count)));
+    }
+    highest
+}
+
+/// Le voci che la fine della directory ZIP64 dichiara, seguendo il
+/// localizzatore che sta subito prima della fine classica in `eocd`.
+fn zip64_entries(bytes: &[u8], eocd: usize) -> Option<u64> {
+    let locator = bytes.get(eocd.checked_sub(ZIP64_LOCATOR_LEN)?..eocd)?;
+    if locator.get(0..4)? != ZIP64_LOCATOR_SIGNATURE {
+        return None;
+    }
+    let offset = u64::from_le_bytes(locator.get(8..16)?.try_into().ok()?);
+    let start = usize::try_from(offset).ok()?;
+    let record = bytes.get(start..start.checked_add(40)?)?;
+    if record.get(0..4)? != ZIP64_EOCD_SIGNATURE {
+        return None;
+    }
+    Some(u64::from_le_bytes(record.get(32..40)?.try_into().ok()?))
+}
+
+/// I byte della voce `name`, al massimo `limit`: `None` se la voce non c'è o
+/// è una cartella. La misura dichiarata si guarda prima di leggere, e la
+/// lettura ha comunque il tetto, perché una voce può dichiararsi piccola e
+/// scompattarsi grande. Il nome si confronta così com'è scritto: una voce
+/// `../manifest.json` non è il manifesto.
+pub(crate) fn read_entry<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    name: &str,
+    limit: usize,
+) -> Result<Option<Vec<u8>>, ContainerError> {
+    let mut entry = match archive.by_name(name) {
+        Ok(entry) => entry,
+        Err(ZipError::FileNotFound) => return Ok(None),
+        Err(_) => return Err(ContainerError::NotZip),
+    };
+    if entry.is_dir() {
+        return Ok(None);
+    }
+    if entry.size() > limit as u64 {
+        return Err(ContainerError::TooLarge);
+    }
+    let mut out = Vec::new();
+    (&mut entry)
+        .take(limit as u64 + 1)
+        .read_to_end(&mut out)
+        .map_err(|_| ContainerError::NotZip)?;
+    if out.len() > limit {
+        return Err(ContainerError::TooLarge);
+    }
+    Ok(Some(out))
+}
+
+/// Il primo PNG fra le voci `names`, nell'ordine, ognuna letta da `read`.
+/// Una voce che manca, che non è un PNG o che non si legge passa la mano alla
+/// seguente; se nessuna dà un PNG, l'errore della prima che non si è letta,
+/// altrimenti `None`.
+fn first_png(
+    names: &[&str],
+    mut read: impl FnMut(&str) -> Result<Option<Vec<u8>>, ContainerError>,
+) -> Result<Option<Png>, ContainerError> {
+    let mut failure = None;
+    for name in names {
+        match read(name) {
+            Ok(Some(bytes)) => {
+                if let Some(png) = Png::new(bytes) {
+                    return Ok(Some(png));
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                failure.get_or_insert(error);
+            }
+        }
+    }
+    failure.map_or(Ok(None), Err)
+}
+
+/// I contenuti dal JSON nella voce `name` di uno ZIP: al più i primi
+/// [`MAX_META_JSON_BYTES`], letti dalla voce senza copiarla. Una voce che
+/// dichiara più di [`MAX_FILE_BYTES`] non si legge; una che non si scompatta
+/// o il cui CRC non torna non è uno ZIP.
+fn entry_meta(bytes: &[u8], name: &str, want: Want) -> Result<Contents, ContainerError> {
+    let mut archive = open_zip(bytes)?;
+    let mut entry = match archive.by_name(name) {
+        Ok(entry) => entry,
+        Err(ZipError::FileNotFound) => return Ok(Contents::default()),
+        Err(_) => return Err(ContainerError::NotZip),
+    };
+    if entry.is_dir() {
+        return Ok(Contents::default());
+    }
+    if entry.size() > MAX_FILE_BYTES as u64 {
+        return Err(ContainerError::TooLarge);
+    }
+    match fields::from_prefix(&mut entry, want, MAX_META_JSON_BYTES as u64) {
+        Ok(fields) => Ok(contents_of(fields)),
+        Err(Failure::Read) => Err(ContainerError::NotZip),
+        Err(Failure::Json) => Err(ContainerError::NotJson),
+    }
+}
+
+/// I contenuti di un `.vectorcraft` in memoria: il JSON, scompattato se
+/// comincia come uno gzip e tagliato al primo [`VECTORCRAFT_BLOBS`], al più
+/// [`MAX_FILE_BYTES`] (oltre è [`ContainerError::TooLarge`]), di cui si
+/// leggono i primi [`MAX_META_JSON_BYTES`].
+fn vectorcraft_meta(bytes: &[u8]) -> Result<Contents, ContainerError> {
+    let gzip = bytes.starts_with(&GZIP_MAGIC);
+    let source: Box<dyn Read + '_> = if gzip {
+        Box::new(GzDecoder::new(bytes))
+    } else {
+        Box::new(bytes)
+    };
+    let mut json = UntilBlobs::new(source, MAX_FILE_BYTES as u64);
+    let parsed = fields::from_prefix(&mut json, DOCUMENT_META, MAX_META_JSON_BYTES as u64);
+    // Lo gzip e il tetto contano prima del JSON, come quando si scompattava
+    // tutto prima di leggerlo.
+    json.drain();
+    if json.failed {
+        return Err(ContainerError::BadGzip);
+    }
+    if json.over {
+        return Err(ContainerError::TooLarge);
+    }
+    parsed.map(contents_of).map_err(|_| ContainerError::NotJson)
+}
+
+fn contents_of(mut fields: Fields) -> Contents {
+    Contents {
+        format_version: fields.version(),
+        title: fields.title(),
+        text: fields.text(),
+        links: fields.links(),
+    }
+}
+
+/// Il pezzo che [`UntilBlobs`] legge alla volta.
+const VECTORCRAFT_CHUNK: usize = 64 * 1024;
+
+/// I campi di un `.vectorcraft` letto da `reader`: dall'inizio fino al primo
+/// [`VECTORCRAFT_BLOBS`] o alla fine, scompattato se comincia come uno gzip.
+/// I byte compressi letti e il JSON hanno lo stesso tetto `max`: oltre è
+/// [`ContainerError::OverLimit`]. Il JSON passa dal lettore al visitatore a
+/// pezzi: in memoria resta un pezzo, non il file.
+fn vectorcraft_fields_from<R: Read + Seek>(
+    reader: &mut R,
+    max: u64,
+) -> Result<Fields, ContainerError> {
+    reader
+        .seek(SeekFrom::Start(0))
+        .map_err(|_| ContainerError::NotJson)?;
+    let mut head = [0u8; 2];
+    let mut got = 0;
+    while got < head.len() {
+        match reader.read(&mut head[got..]) {
+            Ok(0) => break,
+            Ok(n) => got += n,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return Err(ContainerError::NotJson),
+        }
+    }
+    let start = head.get(..got).unwrap_or_default();
+    let source = Cursor::new(start).chain(reader);
+    let want = Want {
+        preview: true,
+        ..version_only(&VERSION_KEYS)
+    };
+    if start == GZIP_MAGIC {
+        let mut json = UntilBlobs::new(GzDecoder::new(source.take(max)), max);
+        let parsed = fields::from_reader(&mut json, want);
+        json.drain();
+        if json.failed {
+            // Lo gzip si rompe dove il tetto lo ha tagliato.
+            return Err(if json.inner.get_ref().limit() == 0 {
+                ContainerError::OverLimit
+            } else {
+                ContainerError::BadGzip
+            });
+        }
+        if json.over {
+            return Err(ContainerError::OverLimit);
+        }
+        parsed.map_err(|_| ContainerError::NotJson)
+    } else {
+        let mut json = UntilBlobs::new(
+            source.take(max.saturating_add(VECTORCRAFT_BLOBS.len() as u64)),
+            max,
+        );
+        let parsed = fields::from_reader(&mut json, want);
+        json.drain();
+        if json.over {
+            return Err(ContainerError::OverLimit);
+        }
+        parsed.map_err(|_| ContainerError::NotJson)
+    }
+}
+
+/// Un lettore che dà i byte di `inner` fino al primo [`VECTORCRAFT_BLOBS`] o
+/// alla fine, al più `max`: oltre è un errore e `over` lo ricorda; un errore
+/// di `inner` lo ricorda `failed`. Il separatore si cerca anche a cavallo di
+/// due pezzi: gli ultimi byte di un pezzo, che possono esserne l'inizio, si
+/// tengono finché il pezzo dopo non lo dice.
+struct UntilBlobs<R> {
+    inner: R,
+    max: u64,
+    chunk: Vec<u8>,
+    /// I byte letti e non ancora dati: `chunk[start..end]`.
+    start: usize,
+    end: usize,
+    given: u64,
+    /// Il separatore o la fine di `inner` sono arrivati: ciò che resta nel
+    /// pezzo si dà tutto.
+    done: bool,
+    over: bool,
+    failed: bool,
+}
+
+impl<R: Read> UntilBlobs<R> {
+    fn new(inner: R, max: u64) -> Self {
+        UntilBlobs {
+            inner,
+            max,
+            chunk: vec![0u8; VECTORCRAFT_CHUNK],
+            start: 0,
+            end: 0,
+            given: 0,
+            done: false,
+            over: false,
+            failed: false,
+        }
+    }
+
+    /// Legge fino alla fine senza tenere niente: dice se il JSON supera il
+    /// tetto o se `inner` si rompe più avanti.
+    fn drain(&mut self) {
+        let mut sink = [0u8; 4096];
+        while !self.over && !self.failed {
+            match self.read(&mut sink) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    }
+}
+
+impl<R: Read> Read for UntilBlobs<R> {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let hold = VECTORCRAFT_BLOBS.len() - 1;
+        loop {
+            if self.over || self.failed {
+                return Err(std::io::Error::other("lettura del JSON fermata"));
+            }
+            let pending = self.end - self.start;
+            let ready = if self.done {
+                pending
+            } else {
+                pending.saturating_sub(hold)
+            };
+            if ready > 0 {
+                if self.given.saturating_add(ready as u64) > self.max {
+                    self.over = true;
+                    continue;
+                }
+                let n = ready.min(out.len());
+                let (Some(to), Some(from)) =
+                    (out.get_mut(..n), self.chunk.get(self.start..self.start + n))
+                else {
+                    return Ok(0);
+                };
+                to.copy_from_slice(from);
+                self.start += n;
+                self.given += n as u64;
+                return Ok(n);
+            }
+            if self.done {
+                return Ok(0);
+            }
+            // Quel che resta (meno di un separatore) va in testa al pezzo.
+            self.chunk.copy_within(self.start..self.end, 0);
+            self.end = pending;
+            self.start = 0;
+            let room = self.chunk.get_mut(self.end..).unwrap_or_default();
+            let got = match self.inner.read(room) {
+                Ok(got) => got,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => {
+                    self.failed = true;
+                    return Err(error);
+                }
+            };
+            if got == 0 {
+                self.done = true;
+                continue;
+            }
+            let from = self.end;
+            self.end += got;
+            if let Some(at) = self
+                .chunk
+                .get(from.saturating_sub(hold)..self.end)
+                .and_then(|tail| find(tail, VECTORCRAFT_BLOBS))
+            {
+                self.end = from.saturating_sub(hold) + at;
+                self.done = true;
+            }
+        }
+    }
+}
+
+/// Dove comincia la prima copia di `needle` in `haystack`.
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    let first = *needle.first()?;
+    let mut from = 0;
+    while let Some(rest) = haystack.get(from..) {
+        let at = from + rest.iter().position(|byte| *byte == first)?;
+        if haystack.get(at..)?.starts_with(needle) {
+            return Some(at);
+        }
+        from = at + 1;
+    }
+    None
+}
+
+/// L'anteprima di un `.vectorcraft`, dal base64 che il JSON porta in
+/// `/preview/data`: il tetto sulla stringa l'ha già guardato chi l'ha letta.
+fn vectorcraft_preview(preview: Preview) -> Result<Option<Png>, ContainerError> {
+    let encoded = match preview {
+        Preview::Absent => return Ok(None),
+        Preview::TooLarge => return Err(ContainerError::TooLarge),
+        Preview::Encoded(encoded) => encoded,
+    };
+    let compact: String = encoded
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect();
+    if compact.is_empty() {
+        return Ok(None);
+    }
+    let engine = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+    let Ok(decoded) = engine.decode(compact) else {
+        return Ok(None);
+    };
+    // Il tetto della stringa lascia passare un byte in più di
+    // [`MAX_PREVIEW_BYTES`], quando la misura giusta ha il riempimento.
+    if decoded.len() > MAX_PREVIEW_BYTES {
+        return Err(ContainerError::TooLarge);
+    }
+    Ok(Png::new(decoded))
+}
+
+/// Il base64 di `data`: tolto il prefisso `data:…;base64,` se c'è. Un URL
+/// `data:` che non è in base64 non dà niente. Il prefisso si confronta così
+/// com'è scritto. Il tetto si guarda sulla stringa, prima di decodificare:
+/// gli spazi contano, così nessuna stringa più lunga del tetto si copia.
+fn strip_data_url(data: &str) -> Option<&str> {
+    if !data.starts_with("data:") {
+        return Some(data);
+    }
+    let (head, encoded) = data.split_once(',')?;
+    head.ends_with(";base64").then_some(encoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Un'intestazione PNG di `width` × `height`, fino alla fine di `IHDR`.
+    fn header(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = PNG_SIGNATURE.to_vec();
+        bytes.extend_from_slice(&13u32.to_be_bytes());
+        bytes.extend_from_slice(b"IHDR");
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes.extend_from_slice(&[8, 6, 0, 0, 0]);
+        bytes
+    }
+
+    #[test]
+    fn le_misure_vengono_dall_intestazione() {
+        assert_eq!(png_size(&header(256, 180)), Some((256, 180)));
+        let png = Png::new(header(3, 4)).unwrap();
+        assert_eq!((png.width, png.height), (3, 4));
+    }
+
+    #[test]
+    fn un_intestazione_storta_non_dà_misure() {
+        assert_eq!(png_size(&[]), None);
+        assert_eq!(png_size(&header(0, 10)), None);
+        assert_eq!(png_size(&header(10, 0)), None);
+        assert_eq!(png_size(&header(u32::MAX, 10)), None);
+        let mut short = header(10, 10);
+        short.truncate(PNG_SIGNATURE.len() + 8 + 12);
+        assert_eq!(png_size(&short), None);
+        let mut long = header(10, 10);
+        long[PNG_SIGNATURE.len() + 3] = 14;
+        assert_eq!(png_size(&long), None);
+        let mut other = header(10, 10);
+        other[PNG_SIGNATURE.len() + 4..PNG_SIGNATURE.len() + 8].copy_from_slice(b"IDAT");
+        assert_eq!(png_size(&other), None);
+        let mut jpeg = header(10, 10);
+        jpeg[0] = 0xff;
+        assert_eq!(png_size(&jpeg), None);
+    }
+}

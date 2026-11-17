@@ -1,0 +1,33 @@
+{
+  "about": "duplicate di a e b: le copie stanno a 32 e 32 (agganciate), in cima; l'arco e1 fra a e b si copia, l'arco e2 da b a c no (c non è copiata). Gli id vengono dal seme 0: il primo e il secondo alle schede, il terzo all'arco.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Evaporazione" },
+      { "id": "c", "type": "text", "x": 0, "y": 240, "width": 320, "height": 160, "text": "Altro" }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "a", "toNode": "b", "fromSide": "right", "toSide": "left", "toEnd": "arrow", "label": "usa" },
+      { "id": "e2", "fromNode": "b", "toNode": "c", "toEnd": "arrow" }
+    ]
+  },
+  "ops": [{ "op": "duplicate", "ids": ["a", "b"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Evaporazione" },
+        { "id": "c", "type": "text", "x": 0, "y": 240, "width": 320, "height": 160, "text": "Altro" },
+        { "id": "e220a8397b1dcdaf", "type": "text", "x": 32, "y": 32, "width": 320, "height": 160, "text": "Ciclo dell'acqua" },
+        { "id": "6e789e6aa1b965f4", "type": "text", "x": 432, "y": 32, "width": 320, "height": 160, "text": "Evaporazione" }
+      ],
+      "edges": [
+        { "id": "e1", "fromNode": "a", "toNode": "b", "fromSide": "right", "toSide": "left", "toEnd": "arrow", "label": "usa" },
+        { "id": "e2", "fromNode": "b", "toNode": "c", "toEnd": "arrow" },
+        { "id": "06c45d188009454f", "fromNode": "e220a8397b1dcdaf", "toNode": "6e789e6aa1b965f4", "fromSide": "right", "toSide": "left", "toEnd": "arrow", "label": "usa" }
+      ]
+    },
+    "created": ["e220a8397b1dcdaf", "6e789e6aa1b965f4", "06c45d188009454f"]
+  }
+}

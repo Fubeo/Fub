@@ -1,0 +1,17 @@
+{
+  "about": "Spostare un gruppo non sposta le schede che stanno dentro (come la tela); le schede nominate si spostano tutte, anche in negativo.",
+  "before": { "nodes": [
+    { "id": "g", "type": "group", "x": 0, "y": 0, "width": 500, "height": 300, "label": "Gruppo" },
+    { "id": "a", "type": "text", "x": 20, "y": 20, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 200, "y": 20, "width": 100, "height": 60, "text": "b" }
+  ] },
+  "ops": [{ "op": "move", "ids": ["g", "b"], "dx": -30, "dy": 1e1 }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "g", "type": "group", "x": -30, "y": 10, "width": 500, "height": 300, "label": "Gruppo" },
+      { "id": "a", "type": "text", "x": 20, "y": 20, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 170, "y": 30, "width": 100, "height": 60, "text": "b" }
+    ] }
+  }
+}

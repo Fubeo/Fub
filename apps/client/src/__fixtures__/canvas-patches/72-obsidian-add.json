@@ -1,0 +1,10 @@
+{
+  "name": "obsidian-add",
+  "description": "Sulla lavagna di Obsidian una scheda nuova va in fondo alle schede, dopo l'ultima, con il separatore che la lista già usa (virgola, a capo e due tab): si aggiungono solo quei byte e la scheda, compatta; le schede di prima, l'arco e i tab restano. L'annulla toglie gli stessi byte",
+  "before": "{\n\t\"nodes\":[\n\t\t{\"id\":\"6f1d2a\",\"type\":\"text\",\"text\":\"# Idea\\n\\nvedi [[Nota]]\",\"x\":-120,\"y\":-60,\"width\":250,\"height\":60,\"color\":\"4\"},\n\t\t{\"id\":\"9c0b7e\",\"type\":\"file\",\"file\":\"Nota.md\",\"x\":200,\"y\":-60,\"width\":400,\"height\":400}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e71a\",\"fromNode\":\"6f1d2a\",\"fromSide\":\"right\",\"toNode\":\"9c0b7e\",\"toSide\":\"left\"}\n\t]\n}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"c3","type":"text","x":0,"y":400,"width":250,"height":60,"text":"nuova"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\n\t\"nodes\":[\n\t\t{\"id\":\"6f1d2a\",\"type\":\"text\",\"text\":\"# Idea\\n\\nvedi [[Nota]]\",\"x\":-120,\"y\":-60,\"width\":250,\"height\":60,\"color\":\"4\"},\n\t\t{\"id\":\"9c0b7e\",\"type\":\"file\",\"file\":\"Nota.md\",\"x\":200,\"y\":-60,\"width\":400,\"height\":400},\n\t\t{\"id\":\"c3\",\"type\":\"text\",\"x\":0,\"y\":400,\"width\":250,\"height\":60,\"text\":\"nuova\"}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e71a\",\"fromNode\":\"6f1d2a\",\"fromSide\":\"right\",\"toNode\":\"9c0b7e\",\"toSide\":\"left\"}\n\t]\n}"
+  }
+}

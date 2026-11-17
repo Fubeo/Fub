@@ -1,0 +1,9 @@
+{
+  "name": "r5-beyond-f64-nested",
+  "description": "R5: -1e999 in fondo a un campo sconosciuto",
+  "source": "{\"nodes\":[],\"meta\":{\"a\":[-1e999]}}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

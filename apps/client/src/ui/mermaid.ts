@@ -1,6 +1,7 @@
 import type { Mermaid } from "mermaid";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
+import { fetchLocal } from "../editors/core/local-fetch";
 import { onLanguage, t } from "../i18n/strings";
 import { writeClipboardText } from "../platform/clipboard";
 import { on } from "../state/store";
@@ -31,6 +32,7 @@ import {
   type TokenReader,
 } from "./mermaid-styles";
 import { notify } from "./notify";
+import { withPageNonce } from "./stylesheets";
 import { attributeValue, external, isAllowedLink } from "./sanitize";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -238,7 +240,7 @@ function embeddedFont(font: DiagramFont): Promise<string | null> {
   if (typeof document.fonts?.load !== "function" || typeof fetch !== "function") return Promise.resolve(null);
   let pending = fontData.get(font);
   if (!pending) {
-    pending = fetch(DIAGRAM_FONTS[font].file)
+    pending = fetchLocal(DIAGRAM_FONTS[font].file)
       .then((response) => response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status))))
       .then((buffer) => base64Of(new Uint8Array(buffer)))
       .catch(() => {
@@ -655,7 +657,9 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       staging.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;width:1200px";
       document.body.append(staging);
       try {
-        const result = await mermaid.render(identifier("fub-mermaid"), source, staging);
+        // Mermaid misura le etichette col foglio che mette in un `<style>`:
+        // con il nonce della pagina la CSP lo lascia valere.
+        const result = await withPageNonce(() => mermaid.render(identifier("fub-mermaid"), source, staging));
         const svgDocument = new DOMParser().parseFromString(result.svg, "image/svg+xml");
         const description = Array.from(svgDocument.querySelectorAll("title, desc"))
           .map((node) => node.textContent?.trim()).filter(Boolean).join(". ");

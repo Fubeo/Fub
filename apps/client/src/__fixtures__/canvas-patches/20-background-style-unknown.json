@@ -1,0 +1,11 @@
+{
+  "name": "background-style-unknown",
+  "description": "R8: un backgroundStyle che la tela non conosce si legge e si conserva",
+  "before": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":400,\"height\":300,\"label\":\"Gruppo\",\"background\":\"img/sfondo.png\",\"backgroundStyle\":\"mosaico\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"g","type":"group","x":0,"y":0,"width":400,"height":300,"label":"Gruppo","background":"img/sfondo.png","backgroundStyle":"mosaico"},"after":{"id":"g","type":"group","x":0,"y":50,"width":400,"height":300,"label":"Gruppo","background":"img/sfondo.png","backgroundStyle":"mosaico"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":50,\"width\":400,\"height\":300,\"label\":\"Gruppo\",\"background\":\"img/sfondo.png\",\"backgroundStyle\":\"mosaico\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":400,\"height\":300,\"label\":\"Gruppo\",\"background\":\"img/sfondo.png\",\"backgroundStyle\":\"mosaico\"}],\"edges\":[]}"
+  }
+}

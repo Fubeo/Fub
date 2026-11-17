@@ -1,0 +1,9 @@
+{
+  "name": "not-blank-two-boms",
+  "description": "R1: due BOM non sono vuoto: il secondo non è JSON",
+  "source": "\ufeff\ufeff",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

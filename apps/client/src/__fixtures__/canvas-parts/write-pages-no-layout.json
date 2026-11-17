@@ -1,0 +1,17 @@
+{
+  "name": "write-pages-no-layout",
+  "description": "Senza layout scelto il campo non lo scrive.",
+  "file": "Libro.pdf",
+  "parts": {
+    "kind": "pages",
+    "pages": [
+      8,
+      2
+    ]
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#page=8",
+    "parts": "{\"kind\":\"pages\",\"pages\":[8,2]}"
+  }
+}

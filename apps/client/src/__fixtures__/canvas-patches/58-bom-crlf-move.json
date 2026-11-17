@@ -1,0 +1,10 @@
+{
+  "name": "bom-crlf-move",
+  "description": "Su un file bom-crlf sposta una scheda: il testo tiene terminatori e BOM, e l'annulla torna alla lavagna di prima",
+  "before": "\ufeff{\r\n  \"nodes\": [\r\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\r\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\r\n  ],\r\n  \"edges\": [\r\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\r\n  ]\r\n}\r\n",
+  "patches": [{"kind":"upsert-node","before":{"id":"b","type":"text","x":300,"y":0,"width":200,"height":100,"text":"due"},"after":{"id":"b","type":"text","x":888,"y":0,"width":200,"height":100,"text":"due"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "\ufeff{\r\n  \"nodes\": [\r\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\r\n    {\"id\":\"b\",\"type\":\"text\",\"x\":888,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\r\n  ],\r\n  \"edges\": [\r\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\r\n  ]\r\n}\r\n"
+  }
+}

@@ -18,7 +18,9 @@ import { SCENE as scenes } from "./scene.mjs";
 import {
   ALLOWED,
   CHOREOGRAPHIES as choreographies,
+  BROWSER_ARGS,
   EXIT_LIMIT_MS,
+  FRAME_STREAK,
   UNCOVERED as uncovered,
   cssName,
   family,
@@ -27,14 +29,15 @@ import {
   jumps,
   longExits,
   midpoint,
+  perFrame,
   residue,
 } from "./motion-rules.mjs";
 
-/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti e dei Blocchi, come Vite li vede: il percorso dalla
+/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti, dei Blocchi e del menu, come Vite li vede: il percorso dalla
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/ui/motion.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/ui/motion.ts", "../src/ui/menu.ts"], {
       eager: true,
       query: "?raw",
       import: "default",
@@ -161,6 +164,18 @@ describe("la regola 3: solo le proprietà ammesse", () => {
     // Ciò che non si conosce costa come un layout: non passa per pittura.
     expect(family("--qualcosa")).toBe("layout");
   });
+
+  it("durante un gesto è scritta a ogni fotogramma la proprietà estranea cambiata in due fotogrammi di fila", () => {
+    expect(FRAME_STREAK).toBe(2);
+    const slot = ".cm-fub-block-slot";
+    expect(perFrame([
+      { target: slot, property: "top", frames: 1 },
+      { target: slot, property: "height", frames: 2 },
+      { target: slot, property: "transform", frames: 30 },
+      { target: slot, property: "translate", frames: 30 },
+      { target: slot, property: "opacity", frames: 12 },
+    ])).toEqual([{ target: slot, property: "height", frames: 2 }]);
+  });
 });
 
 describe("la regola 2: nessun residuo", () => {
@@ -177,6 +192,31 @@ describe("la regola 2: nessun residuo", () => {
 
   it("chiama residuo anche un valore diverso: è un altro stato finale", () => {
     expect(residue([notch], [{ ...notch, value: "0px 14px" }])).toEqual([{ ...notch, still: "0px 14px" }]);
+  });
+
+  // La cascata d'avvio scala il riquadro; CodeMirror compensa sui suoi strati
+  // e, a scala finita, ci lascia la scala neutra (CI di #308).
+  const layer = "#pane-main-tabpanel > div.pane-editor.look-tema:nth-child(2) > div.cm-editor.ͼ1:nth-child(1) > div.cm-scroller:nth-child(2)";
+  const selection = { path: `${layer} > div.cm-layer.cm-selectionLayer:nth-child(4)`, property: "transform", value: "scale(1, 1)" };
+  const above = { path: `${layer} > div.cm-layer.cm-layer-above:nth-child(3)`, property: "transform", value: " scale(1) " };
+
+  it("non chiama residuo la scala neutra che CodeMirror lascia sui suoi strati", () => {
+    expect(residue([selection, above], [])).toEqual([]);
+  });
+
+  it("chiama residuo una scala non neutra sugli strati, e la neutra fuori da loro", () => {
+    const scaled = { ...selection, value: "scale(0.98, 0.98)" };
+    const moved = { ...selection, value: "translate(4px, 0px)" };
+    const scroller = { path: layer, property: "transform", value: "scale(1, 1)" };
+    const inside = { path: `${selection.path} > div.cm-selectionBackground`, property: "transform", value: "scale(1, 1)" };
+    const named = { ...selection, property: "scale", value: "1" };
+    expect(residue([scaled, moved, scroller, inside, named], []).map((entry) => entry.value)).toEqual([
+      "scale(0.98, 0.98)",
+      "translate(4px, 0px)",
+      "scale(1, 1)",
+      "scale(1, 1)",
+      "1",
+    ]);
   });
 });
 
@@ -195,11 +235,22 @@ describe("la regola 4: l'inversione non riparte da zero", () => {
 
   it("chiama salto una corsa ripartita dalla posa di partenza", () => {
     const restarted = { ...flying, left: 112, opacity: 0 };
-    expect(jumps([flying], [restarted])).toEqual([{ key: "pannello", px: 12, opacity: 0.5, nearest: "pannello" }]);
+    expect(jumps([flying], [restarted])).toEqual([
+      {
+        key: "pannello",
+        px: 12,
+        opacity: 0.5,
+        nearest: "pannello",
+        was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 },
+        is: { left: 112, top: 50, width: 200, height: 80, opacity: 0 },
+      },
+    ]);
   });
 
   it("chiama salto ciò che sparisce senza lasciare un'immagine", () => {
-    expect(jumps([flying], [])).toEqual([{ key: "pannello", px: null, opacity: null, nearest: null }]);
+    expect(jumps([flying], [])).toEqual([
+      { key: "pannello", px: null, opacity: null, nearest: null, was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 }, is: null },
+    ]);
   });
 });
 
@@ -215,6 +266,15 @@ describe("la metà corsa", () => {
   it("senza corse vale il ripiego, e non scende mai sotto un fotogramma", () => {
     expect(midpoint([], 50)).toBeCloseTo(3 * frame, 9);
     expect(midpoint([4])).toBeCloseTo(frame, 9);
+  });
+});
+
+describe("gli scatti delle regole 1 e 4", () => {
+  // Col raster parziale lo stesso stato, raggiunto per due strade, dava ogni
+  // tanto un pixel diverso di due livelli (le Preferenze, regola 4): il
+  // confronto al pixel regge solo se ogni tessera toccata si rifà intera.
+  it("vengono da un Chromium che rasterizza intera ogni tessera toccata", () => {
+    expect(BROWSER_ARGS).toContain("--disable-partial-raster");
   });
 });
 

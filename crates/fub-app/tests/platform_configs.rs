@@ -7,7 +7,7 @@
 //! qui e rosso là. Questa prova le legge tutte, sul desktop, come le fonde
 //! `tauri-build`: la config base più quella della piattaforma.
 
-use tauri::utils::config::{parse, Config};
+use tauri::utils::config::{parse, Config, Csp};
 use tauri::utils::platform::Target;
 
 /// La fusione di `tauri-build` (RFC 7396): un oggetto entra campo per campo,
@@ -62,4 +62,279 @@ fn the_mobile_settings_reach_their_platform() {
     let android = config_for(Target::Android);
     assert_eq!(android.bundle.android.min_sdk_version, 24);
     assert!(!android.bundle.android.auto_increment_version_code);
+}
+
+// La CSP della WebView (D-3 (a) del piano N3, decisione 0237): la WebView
+// compila WebAssembly per il nucleo della lavagna, e nient'altro si apre.
+// `'wasm-unsafe-eval'` permette di compilare un modulo WebAssembly; non
+// permette di eseguire testo come JavaScript (`eval`, `new Function`,
+// `setTimeout` con una stringa), che resta vietato.
+
+/// Le sole fonti di `script-src`, senza guardare l'ordine.
+const SCRIPT_SRC: [&str; 2] = ["'self'", "'wasm-unsafe-eval'"];
+
+/// Le direttive che ridefinirebbero `script-src` per gli elementi o per gli
+/// attributi, scavalcandolo: non devono esserci.
+const SCRIPT_SRC_OVERRIDES: [&str; 2] = ["script-src-elem", "script-src-attr"];
+
+/// Controlla una CSP direttiva per direttiva. Le parole chiave e i nomi delle
+/// direttive della CSP non guardano le maiuscole, e le fonti si separano con
+/// uno spazio bianco qualsiasi: il controllo fa lo stesso.
+///
+/// Rifiuta: `'unsafe-eval'` in una direttiva qualsiasi; `'wasm-unsafe-eval'`
+/// fuori da `script-src`; `script-src` che manca, che compare due volte o
+/// che non è esattamente `'self' 'wasm-unsafe-eval'`; `script-src-elem` e
+/// `script-src-attr`.
+fn check_csp(policy: &str) -> Result<(), String> {
+    let mut script_src: Option<Vec<String>> = None;
+    let mut seen: Vec<String> = Vec::new();
+    for directive in policy.split(';') {
+        let mut tokens = directive.split_ascii_whitespace();
+        let Some(name) = tokens.next() else { continue };
+        let name = name.to_ascii_lowercase();
+        let sources: Vec<String> = tokens.map(str::to_ascii_lowercase).collect();
+        if seen.contains(&name) {
+            return Err(format!("la direttiva `{name}` compare due volte"));
+        }
+        seen.push(name.clone());
+        if sources.iter().any(|s| s == "'unsafe-eval'") {
+            return Err(format!("`'unsafe-eval'` in `{name}`"));
+        }
+        if name != "script-src" && sources.iter().any(|s| s == "'wasm-unsafe-eval'") {
+            return Err(format!(
+                "`'wasm-unsafe-eval'` fuori da `script-src`, in `{name}`"
+            ));
+        }
+        if SCRIPT_SRC_OVERRIDES.contains(&name.as_str()) {
+            return Err(format!("`{name}` scavalca `script-src`"));
+        }
+        if name == "script-src" {
+            script_src = Some(sources);
+        }
+    }
+    let Some(mut sources) = script_src else {
+        return Err("manca `script-src`".into());
+    };
+    sources.sort();
+    let mut expected: Vec<String> = SCRIPT_SRC.iter().map(|s| s.to_string()).collect();
+    expected.sort();
+    if sources != expected {
+        return Err(format!(
+            "`script-src` è `{}` invece di `'self' 'wasm-unsafe-eval'`",
+            sources.join(" ")
+        ));
+    }
+    Ok(())
+}
+
+/// La CSP come la scrive Tauri, sia come testo sia come mappa di direttive.
+fn check(csp: &Csp) -> Result<(), String> {
+    check_csp(&csp.to_string())
+}
+
+// Gli stili (voce A2 dell'audit del 2026-10-30): nessuno stile in linea. Un
+// `<style>` vale soltanto con il nonce che Tauri scrive nelle pagine servite e
+// aggiunge a `style-src`; un attributo `style` scritto come markup non vale
+// mai. Gli stili dell'app sono file (`'self'`) o fogli costruiti
+// (`adoptedStyleSheets`), che la CSP non guarda; `element.style` resta libero.
+
+/// Le parole chiave che riaprirebbero gli stili in linea, in qualsiasi
+/// direttiva.
+const INLINE_STYLE_OPENINGS: [&str; 2] = ["'unsafe-inline'", "'unsafe-hashes'"];
+
+/// Controlla le direttive degli stili: `style-src` è esattamente `'self'`,
+/// `style-src-attr` esattamente `'none'`, `style-src-elem` non c'è (lo
+/// scavalcherebbe), e nessuna direttiva ha `'unsafe-inline'` o
+/// `'unsafe-hashes'`. I nonce e gli hash scritti a mano sono rifiutati
+/// anche loro: li aggiunge Tauri, pagina per pagina.
+fn check_style_csp(policy: &str) -> Result<(), String> {
+    let mut style_src = None;
+    let mut style_src_attr = None;
+    for directive in policy.split(';') {
+        let mut tokens = directive.split_ascii_whitespace();
+        let Some(name) = tokens.next() else { continue };
+        let name = name.to_ascii_lowercase();
+        let sources: Vec<String> = tokens.map(str::to_ascii_lowercase).collect();
+        if let Some(opening) = sources
+            .iter()
+            .find(|source| INLINE_STYLE_OPENINGS.contains(&source.as_str()))
+        {
+            return Err(format!("`{opening}` in `{name}`"));
+        }
+        match name.as_str() {
+            "style-src" => style_src = Some(sources),
+            "style-src-attr" => style_src_attr = Some(sources),
+            "style-src-elem" => return Err("`style-src-elem` scavalca `style-src`".into()),
+            _ => {}
+        }
+    }
+    match style_src.as_deref() {
+        Some([only]) if only == "'self'" => {}
+        Some(other) => {
+            return Err(format!(
+                "`style-src` è `{}` invece di `'self'`",
+                other.join(" ")
+            ))
+        }
+        None => return Err("manca `style-src`".into()),
+    }
+    match style_src_attr.as_deref() {
+        Some([only]) if only == "'none'" => Ok(()),
+        Some(other) => Err(format!(
+            "`style-src-attr` è `{}` invece di `'none'`",
+            other.join(" ")
+        )),
+        None => Err("manca `style-src-attr 'none'`".into()),
+    }
+}
+
+#[test]
+fn every_platform_csp_refuses_inline_styles() {
+    for target in [
+        Target::Linux,
+        Target::Windows,
+        Target::MacOS,
+        Target::Android,
+        Target::Ios,
+    ] {
+        let security = config_for(target).app.security;
+        let csp = security
+            .csp
+            .unwrap_or_else(|| panic!("la config di {target:?} non ha una CSP"));
+        if let Err(why) = check_style_csp(&csp.to_string()) {
+            panic!("la CSP di {target:?}: {why}");
+        }
+        if let Some(dev) = security.dev_csp {
+            if let Err(why) = check_style_csp(&dev.to_string()) {
+                panic!("la `devCsp` di {target:?}: {why}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_style_check_accepts_only_the_closed_shape() {
+    for policy in [
+        "default-src 'self'; style-src 'self'; style-src-attr 'none'",
+        "STYLE-SRC 'SELF' ;\tstyle-src-attr\n'NONE'",
+    ] {
+        assert_eq!(check_style_csp(policy), Ok(()), "{policy}");
+    }
+    for policy in [
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'",
+        "default-src 'self'; style-src 'self'; style-src-attr 'unsafe-hashes' 'sha256-x'",
+        "default-src 'self' 'unsafe-inline'; style-src 'self'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self' 'nonce-abc'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self' data:; style-src-attr 'none'",
+        "default-src 'self'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self'",
+    ] {
+        assert!(check_style_csp(policy).is_err(), "passa: {policy}");
+    }
+}
+
+#[test]
+fn every_platform_csp_compiles_webassembly_and_never_evaluates_text() {
+    for target in [
+        Target::Linux,
+        Target::Windows,
+        Target::MacOS,
+        Target::Android,
+        Target::Ios,
+    ] {
+        let security = config_for(target).app.security;
+        let csp = security
+            .csp
+            .unwrap_or_else(|| panic!("la config di {target:?} non ha una CSP"));
+        if let Err(why) = check(&csp) {
+            panic!("la CSP di {target:?}: {why}");
+        }
+        if let Some(dev) = security.dev_csp {
+            if let Err(why) = check(&dev) {
+                panic!("la `devCsp` di {target:?}: {why}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_csp_check_accepts_the_shape_it_promises() {
+    for policy in [
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'",
+        "default-src 'self'; script-src 'wasm-unsafe-eval' 'self'",
+        "DEFAULT-SRC 'self' ;\tSCRIPT-SRC  'SELF'\n'WASM-UNSAFE-EVAL' ;;",
+    ] {
+        assert_eq!(check_csp(policy), Ok(()), "{policy}");
+    }
+}
+
+#[test]
+fn the_csp_check_refuses_every_opening_beyond_webassembly() {
+    for policy in [
+        // I casi del piano.
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
+        "default-src 'self' 'wasm-unsafe-eval'; script-src 'self' 'wasm-unsafe-eval'",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'",
+        "default-src 'self';  script-src  'self'  'wasm-unsafe-eval'  'UNSAFE-EVAL'  ",
+        // `'unsafe-eval'` in un'altra direttiva.
+        "default-src 'self' 'unsafe-eval'; script-src 'self' 'wasm-unsafe-eval'",
+        // `script-src` diverso da `'self' 'wasm-unsafe-eval'`.
+        "default-src 'self'; script-src 'self'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' data:",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' *",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.example",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'wasm-unsafe-eval'",
+        // Due `script-src`, o una direttiva che lo scavalca.
+        "script-src 'self' 'wasm-unsafe-eval'; script-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'wasm-unsafe-eval'; script-src-elem 'self' 'unsafe-inline'",
+        "script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'unsafe-inline'",
+        // `'wasm-unsafe-eval'` dove non serve.
+        "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' 'wasm-unsafe-eval'",
+    ] {
+        assert!(check_csp(policy).is_err(), "passa: {policy}");
+    }
+}
+
+#[test]
+fn the_csp_check_reads_the_directive_map_form_too() {
+    use std::collections::HashMap;
+    use tauri::utils::config::CspDirectiveSources;
+
+    let map = |script: &[&str]| {
+        Csp::DirectiveMap(HashMap::from([
+            (
+                "default-src".to_string(),
+                CspDirectiveSources::List(vec!["'self'".into()]),
+            ),
+            (
+                "script-src".to_string(),
+                CspDirectiveSources::List(script.iter().map(|s| s.to_string()).collect()),
+            ),
+        ]))
+    };
+    assert_eq!(check(&map(&["'self'", "'wasm-unsafe-eval'"])), Ok(()));
+    assert!(check(&map(&["'self'", "'wasm-unsafe-eval'", "'unsafe-eval'"])).is_err());
+    assert!(check(&map(&["'self'"])).is_err());
+}
+
+#[test]
+fn a_platform_config_that_opens_eval_is_caught() {
+    // La config fusa di una piattaforma che un giorno ridefinisse la CSP: la
+    // stessa strada di `config_for`, con la toppa scritta qui.
+    let mut base = serde_json::json!({
+        "app": { "security": { "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'" } }
+    });
+    merge(
+        &mut base,
+        &serde_json::json!({
+            "app": { "security": { "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'" } }
+        }),
+    );
+    let csp: Csp =
+        serde_json::from_value(base["app"]["security"]["csp"].clone()).expect("la CSP si legge");
+    assert!(check(&csp).is_err());
 }

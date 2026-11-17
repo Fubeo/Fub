@@ -111,6 +111,15 @@ pub struct Patterns {
     exceptions: HashMap<String, Box<[usize]>>,
 }
 
+impl crate::slot::HeapBytes for Patterns {
+    fn heap_bytes(&self) -> usize {
+        use crate::slot::map_bytes;
+        self.alpha.other.capacity() * std::mem::size_of::<(char, u8)>()
+            + map_bytes(&self.map, |_, v| v.len())
+            + map_bytes(&self.exceptions, |k, v| k.capacity() + v.len() * std::mem::size_of::<usize>())
+    }
+}
+
 /// Which TeX block [`Patterns::parse`] is reading.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Block {

@@ -1,0 +1,11 @@
+{
+  "name": "root-without-nodes",
+  "description": "Una radice senza nodes lo riceve in fondo quando arriva la prima scheda",
+  "before": "{\"edges\":[],\"fub:v\":2}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"edges\":[],\"fub:v\":2,\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}]}",
+    "undo": "{\"edges\":[],\"fub:v\":2,\"nodes\":[]}"
+  }
+}

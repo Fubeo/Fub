@@ -1,0 +1,6 @@
+{
+  "about": "Uno spostamento con una frazione vera non si legge come operazione: niente arrotondamenti nascosti.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "move", "ids": ["a"], "dx": 0.5, "dy": 0 }],
+  "expect": { "outcome": "malformed" }
+}

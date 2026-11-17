@@ -50,7 +50,7 @@ export function severityOf(code: Code): Severity {
 /// Che cosa vuol dire il codice, per chi lo legge.
 export const CODE_MESSAGES: Readonly<Record<Code, string>> = {
   S001: "il disegno non ha un titolo: manca la descrizione accessibile",
-  S002: "il documento contiene contenuto che FubDraw conserva ma non modifica",
+  S002: "il documento contiene contenuto che Fub conserva ma non modifica",
   S003: "id duplicato: il documento si apre in sola lettura",
   S004: "inchiostro o pennello non validi: il tratto non si ridisegna",
   S005: "contenuto attivo conservato ma mai eseguito",

@@ -10,8 +10,8 @@
 > `apps/client/src/editors/spatial/scene/export.ts` e `scene/print.ts`, che
 > derivano, misurano e impaginano allo stesso modo per l'anteprima, con i
 > vettori di prova in `apps/client/src/__fixtures__/scene-export/`; le
-> opzioni, i formati e i nomi in `crates/fub-features/src/draw.rs` e
-> `draw/choice.rs`; Excalidraw e draw.io in `draw/interop.rs`.
+> opzioni, i formati e i nomi in `crates/fub-features/src/draw.rs`,
+> `draw/export.rs` e `draw/choice.rs`; Excalidraw e draw.io in `draw/interop.rs`.
 
 Una parte del [formato della scena](scene-format.md), §9. L'export legge il
 file del vault e ne fa il file da scrivere in tre passi: sceglie che cosa,
@@ -139,7 +139,9 @@ Cambia il testo del documento in tre punti, e lascia uguale ogni altro byte.
   allarga.
 - **Gli esiti:** il testo derivato, o un errore: `unknown-board` e
   `unknown-object` con l'id, `empty-selection`, `bad-box`, `malformed` e
-  `not-svg`, gli stessi nei due linguaggi.
+  `not-svg`, gli stessi nei due linguaggi. Solo l'export di Rust ha in più
+  `too-many-nodes`: un disegno di oltre `MAX_EXPORT_NODES` nodi XML
+  ([limiti](scene-format.md#11-limiti)) non si legge per esportarlo.
 
 ## 3. L'SVG pulito
 

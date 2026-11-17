@@ -1,0 +1,30 @@
+{
+  "about": "Collegare due schede aggiunge un arco in fondo alla lista; senza id prende il primo del seme 7. Un arco da una scheda a sé stessa va bene.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+    ],
+    "edges": [{ "id": "e0", "fromNode": "b", "toNode": "a" }]
+  },
+  "seed": 7,
+  "ops": [
+    { "op": "connect", "edge": { "fromNode": "a", "toNode": "b", "toEnd": "arrow", "color": "#ff8800" } },
+    { "op": "connect", "edge": { "id": "loop", "fromNode": "a", "toNode": "a" } }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+        { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+      ],
+      "edges": [
+        { "id": "e0", "fromNode": "b", "toNode": "a" },
+        { "id": "63cbe1e459320dd7", "fromNode": "a", "toNode": "b", "toEnd": "arrow", "color": "#ff8800" },
+        { "id": "loop", "fromNode": "a", "toNode": "a" }
+      ]
+    },
+    "created": ["63cbe1e459320dd7", "loop"]
+  }
+}

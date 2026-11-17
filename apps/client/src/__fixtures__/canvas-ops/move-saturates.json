@@ -1,0 +1,9 @@
+{
+  "about": "Le coordinate saturano a ±(2^53−1), anche con uno spostamento enorme.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 9007199254740000, "y": -10, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "move", "ids": ["a"], "dx": 1e20, "dy": -9007199254740991 }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [{ "id": "a", "type": "text", "x": 9007199254740991, "y": -9007199254740991, "width": 100, "height": 60, "text": "a" }] }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "r7-node-optionals-null",
+  "description": "R7: i campi facoltativi di una scheda a null spariscono",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"color\":null,\"file\":null,\"subpath\":null,\"url\":null,\"label\":null,\"background\":null,\"backgroundStyle\":null}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t"
+      }
+    ],
+    "edges": []
+  }
+}

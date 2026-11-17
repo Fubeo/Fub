@@ -202,6 +202,33 @@ describe("la barra di un riquadro", () => {
     expect(bold.hasAttribute("aria-pressed")).toBe(false);
   });
 
+  it("un aggiornamento senza cambi non tocca il DOM: in WebKit ogni attributo riscritto ridipinge", async () => {
+    const fake = fakeActions(["markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.bold", "markdown.italic", "markdown.table.row.after"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    fake.set("markdown.bold", { enabled: true, active: true });
+    fake.set("markdown.heading.1", { enabled: true, active: true });
+    fake.set("markdown.italic", { enabled: false, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((list) => records.push(...list));
+    observer.observe(bar.element, { subtree: true, attributes: true, childList: true, characterData: true });
+    // La superficie avvisa a ogni battuta e a ogni passo del cursore, ma lo
+    // stato dei pulsanti resta quello: niente si riscrive.
+    for (let step = 0; step < 3; step++) {
+      fake.set("markdown.bold", { enabled: true, active: true });
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    }
+    records.push(...observer.takeRecords());
+    expect(records.map((record) => `${record.type} ${record.attributeName ?? ""} ${(record.target as Element).className ?? ""}`)).toEqual([]);
+    // Ciò che cambia, invece, si scrive.
+    fake.set("markdown.bold", { enabled: true, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(records.map((record) => record.attributeName)).toEqual(["aria-pressed"]);
+  });
+
   it("un clic esegue l'azione nella superficie, senza passare dal kernel", () => {
     const fake = fakeActions(["markdown.bold"]);
     const commands: string[] = [];
@@ -240,6 +267,35 @@ describe("la barra di un riquadro", () => {
     expect(document.activeElement).toBe(bold);
   });
 
+  it("← e → girano ai capi, Fine va all'ultimo, e i pulsanti spenti si saltano", async () => {
+    const fake = fakeActions(["markdown.bold", "markdown.italic", "markdown.table"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    fake.set("markdown.italic", { enabled: false, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    const at = (id: string) => bar.element.querySelector<HTMLButtonElement>(`[data-command="${id}"]`)!;
+    const bold = at("markdown.bold");
+    const italic = at("markdown.italic");
+    const reachable = buttons(bar).filter((button) => !button.disabled && !button.closest("[hidden]"));
+    const last = reachable[reachable.length - 1]!;
+    expect(italic.disabled).toBe(true);
+    expect(reachable.filter((button) => button.tabIndex === 0)).toHaveLength(1);
+    const press = (on: HTMLElement, key: string) =>
+      on.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    bold.focus();
+    press(bold, "ArrowRight");
+    expect(document.activeElement, "lo spento si salta").not.toBe(italic);
+    expect(document.activeElement).toBe(reachable[reachable.indexOf(bold) + 1]);
+    press(document.activeElement as HTMLElement, "End");
+    expect(document.activeElement).toBe(last);
+    press(last, "ArrowRight");
+    expect(document.activeElement, "dopo l'ultimo si torna al primo").toBe(reachable[0]);
+    press(reachable[0]!, "ArrowLeft");
+    expect(document.activeElement, "prima del primo si va all'ultimo").toBe(last);
+    expect(last.tabIndex).toBe(0);
+    expect(reachable.filter((button) => button.tabIndex === 0)).toHaveLength(1);
+  });
+
   it("lo stile del paragrafo dice lo stile corrente e apre il menu dei titoli", () => {
     const fake = fakeActions(["markdown.paragraph", "markdown.heading.1", "markdown.heading.2"]);
     fake.set("markdown.heading.2", { enabled: true, active: true });
@@ -269,6 +325,148 @@ describe("la barra di un riquadro", () => {
       menu.getAttribute("aria-label"),
     );
     expect(names).toEqual(["Colore e sfondo", "Altri collegamenti", "Operazioni sulla tabella"]);
+  });
+
+  it("veste la barra in una fila del kit, e la bolla resta senza vassoio", () => {
+    const fake = fakeActions(["markdown.bold", "markdown.paragraph", "markdown.heading.1"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    expect(bar.element.classList.contains("format-bar")).toBe(true);
+    expect(bar.element.classList.contains("kit-bar")).toBe(true);
+    const groups = [...bar.element.querySelectorAll<HTMLElement>(".format-bar-group")];
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) expect(group.classList.contains("kit-bar-group"), group.dataset.group).toBe(true);
+    // Ogni pulsante, il selettore dello stile e «…» compresi.
+    for (const button of buttons(bar)) {
+      expect(button.classList.contains("kit-bar-button"), button.className).toBe(true);
+    }
+    expect(bar.element.querySelector(".format-bar-style.kit-bar-button")).not.toBeNull();
+    expect(bar.element.querySelector(".format-bar-overflow.kit-bar-button")).not.toBeNull();
+    const bubble = createFormatBar({ surface: () => surfaceWith(fake.actions), writing: () => true, focusPane: () => {}, runCommand: () => {}, only: ["inline"] });
+    bars.push(bubble);
+    bubble.update(SPECS);
+    expect(bubble.element.classList.contains("format-bar")).toBe(true);
+    expect(bubble.element.classList.contains("kit-bar"), "la bolla non sta nel vassoio").toBe(false);
+    expect(bubble.element.querySelector('[data-command="markdown.bold"]')!.classList.contains("kit-bar-button")).toBe(true);
+  });
+
+  it("Escape riporta il fuoco al testo", () => {
+    const fake = fakeActions(["markdown.bold"]);
+    let focused = 0;
+    const surface: EditorSurface = { ...surfaceWith(fake.actions), focus: () => { focused += 1; } };
+    const { bar } = mount(surface);
+    bar.update(SPECS);
+    const bold = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    bold.focus();
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    bold.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(focused).toBe(1);
+  });
+
+  it("il menu di un pulsante, chiuso, rende il fuoco al pulsante", () => {
+    const fake = fakeActions(["markdown.paragraph", "markdown.heading.1"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    const style = bar.element.querySelector<HTMLButtonElement>(".format-bar-style")!;
+    style.focus();
+    style.click();
+    expect(document.querySelector("#context-menu")).not.toBeNull();
+    closeContextMenu();
+    expect(document.activeElement).toBe(style);
+    expect(style.tabIndex).toBe(0);
+  });
+
+  it("col dito e il cursore in una tabella, Tab, Invio e «+ riga» in testa alla barra", () => {
+    const fake = fakeActions(["markdown.bold", "markdown.table", "markdown.table.row.after"]);
+    let coarse = true;
+    const make = () => {
+      const bar = createFormatBar({
+        surface: () => surfaceWith(fake.actions),
+        writing: () => true,
+        focusPane: () => {},
+        runCommand: () => {},
+        coarse: () => coarse,
+      });
+      document.body.append(bar.element);
+      bars.push(bar);
+      return bar;
+    };
+    // Il testo dove sta il cursore: riceve i tasti.
+    const editor = document.createElement("div");
+    editor.tabIndex = 0;
+    document.body.append(editor);
+    const keys: string[] = [];
+    editor.addEventListener("keydown", (event) => keys.push(event.key));
+    editor.focus();
+
+    const bar = make();
+    fake.set("markdown.table.row.after", { enabled: false, active: null });
+    bar.update(SPECS);
+    const touch = bar.element.querySelector<HTMLElement>(".format-bar-touch")!;
+    expect(bar.element.firstElementChild).toBe(touch);
+    // Fuori da una tabella il gruppo non si vede.
+    expect(touch.hidden).toBe(true);
+    fake.set("markdown.table.row.after", { enabled: true, active: null });
+    bar.update(SPECS);
+    expect(touch.hidden).toBe(false);
+    const [tab, enter, add] = [...touch.querySelectorAll<HTMLButtonElement>("button")];
+    expect([tab!.textContent, enter!.textContent, add!.textContent]).toEqual(["Tab", "Invio", "+ riga"]);
+    tab!.click();
+    enter!.click();
+    add!.click();
+    expect(keys).toEqual(["Tab", "Enter"]);
+    expect(fake.runs).toEqual(["markdown.table.row.after"]);
+    expect(document.activeElement).toBe(editor);
+
+    // Col mouse non c'è.
+    coarse = false;
+    const desk = make();
+    desk.update(SPECS);
+    expect(desk.element.querySelector(".format-bar-touch")).toBeNull();
+    editor.remove();
+  });
+
+  it("passando a un'altra superficie con la stessa barra, i pulsanti restano e seguono la nuova", async () => {
+    const first = fakeActions(["markdown.bold", "markdown.italic"]);
+    const second = fakeActions(["markdown.bold", "markdown.italic"]);
+    let surface = surfaceWith(first.actions);
+    const bar = createFormatBar({ surface: () => surface, writing: () => true, focusPane: () => {}, runCommand: () => {} });
+    document.body.append(bar.element);
+    bars.push(bar);
+    bar.update(SPECS);
+    const bold = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    surface = surfaceWith(second.actions);
+    second.set("markdown.bold", { enabled: true, active: true });
+    bar.update(SPECS);
+    // Lo stesso nodo, non uno rifatto: cambiare scheda non ridisegna la barra.
+    expect(bar.element.querySelector('[data-command="markdown.bold"]')).toBe(bold);
+    expect(bold.getAttribute("aria-pressed")).toBe("true");
+    expect(first.listeners.size).toBe(0);
+    expect(second.listeners.size).toBe(1);
+    second.set("markdown.bold", { enabled: true, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(bold.getAttribute("aria-pressed")).toBe("false");
+    // Una scorciatoia diversa è un'altra barra: il suggerimento la deve dire.
+    const third = fakeActions(["markdown.bold", "markdown.italic"]);
+    surface = surfaceWith({ ...third.actions, chord: (id) => (id === "markdown.bold" ? "Mod-g" : null) });
+    bar.update(SPECS);
+    const again = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    expect(again).not.toBe(bold);
+    expect(again.getAttribute("aria-keyshortcuts")).toBe("Control+G");
+    expect(second.listeners.size).toBe(0);
+  });
+
+  it("misura la riga al fotogramma, non dentro il ridisegno", async () => {
+    const fake = fakeActions(["markdown.bold", "markdown.italic"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    let reads = 0;
+    Object.defineProperty(bar.element, "scrollWidth", { configurable: true, get: () => (reads++, 0) });
+    bar.update(SPECS);
+    bar.update(SPECS);
+    expect(reads).toBe(0);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(reads).toBe(1);
   });
 
   it("smontata, non segue più la superficie", () => {

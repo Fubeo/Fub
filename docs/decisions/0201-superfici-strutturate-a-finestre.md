@@ -1,6 +1,6 @@
 # 0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate
 
-- **Stato:** accolta
+- **Stato:** sostituita
 - **Data:** 2026-09-15
 - **Ambito:** contratto
 - **Sostituisce:** —

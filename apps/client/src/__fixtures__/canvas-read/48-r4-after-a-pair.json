@@ -1,0 +1,9 @@
+{
+  "name": "r4-after-a-pair",
+  "description": "R4: un surrogato basso in coda a una coppia",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"label\":\"\\ud83d\\ude00\\ude00\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

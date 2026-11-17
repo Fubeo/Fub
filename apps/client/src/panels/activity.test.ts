@@ -206,6 +206,69 @@ describe("lo storico del centro attività", () => {
   });
 });
 
+describe("la lista dopo una riconciliazione fallita (#237 R05)", () => {
+  const PANEL = `
+    <button id="activity-button"></button>
+    <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+  `;
+  const FAILURE = { kind: "io", message: "Vault non raggiungibile" };
+  const staleText = () => t("activity.stale", { reason: FAILURE.message });
+  const listText = () => document.getElementById("activity-list")!.textContent ?? "";
+  const retryButton = () =>
+    [...document.querySelectorAll<HTMLButtonElement>("#activity-list button")]
+      .find((button) => button.textContent === t("activity.retry"));
+
+  it("senza una lista buona non dice «nessun lavoro»: dice che non lo sa", async () => {
+    document.body.innerHTML = PANEL;
+    const query = vi.spyOn(api, "queryIndex").mockRejectedValue(FAILURE);
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      // Il vault di un test prima non lascia lavori: si parte da una lista vuota.
+      forwardNotice(notice({ type: "vault_closed", root: "/vecchio" }));
+      document.getElementById("activity-button")!.click();
+      await vi.waitFor(() => expect(listText()).toContain(staleText()));
+      expect(listText()).not.toContain(t("activity.none"));
+      expect(retryButton()).toBeDefined();
+    } finally {
+      lifetime.close();
+      query.mockRestore();
+    }
+  });
+
+  it("tiene la lista di prima, lo dice, e Riprova la richiede", async () => {
+    document.body.innerHTML = PANEL;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({
+      kind: "jobs",
+      value: [{ id: "7", job: "export", progress: null }],
+    } as never);
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      forwardNotice(notice({ type: "vault_closed", root: "/vecchio" }));
+      document.getElementById("activity-button")!.click();
+      await vi.waitFor(() => expect(document.querySelectorAll("#activity-list .activity-row")).toHaveLength(1));
+
+      // Un overflow chiede di riconciliare, e la domanda fallisce.
+      query.mockRejectedValue(FAILURE);
+      forwardNotice(notice({ type: "overflow", dropped: 3 }));
+      await vi.waitFor(() => expect(listText()).toContain(staleText()));
+      expect(document.querySelectorAll("#activity-list .activity-row")).toHaveLength(1);
+      expect(listText()).toContain("export");
+
+      // Riprova: la domanda va, e lo stato «non aggiornato» se ne va con lei.
+      query.mockResolvedValue({ kind: "jobs", value: [] } as never);
+      retryButton()!.click();
+      await vi.waitFor(() => expect(listText()).not.toContain(staleText()));
+      expect(document.querySelectorAll("#activity-list .activity-row")).toHaveLength(0);
+      expect(listText()).toContain(t("activity.none"));
+    } finally {
+      lifetime.close();
+      query.mockRestore();
+    }
+  });
+});
+
 describe("export artifacts from completed transfer jobs", () => {
   const complete = (artifact: unknown): KernelNotice =>
     notice({ type: "job_done", id: "9007199254740993", job: ARTIFACT_JOB,

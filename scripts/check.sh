@@ -133,6 +133,7 @@ client_checks() { # client_checks completo|rapido
   run "confine ProseMirror" bash -c 'node .github/scripts/check-prosemirror-boundary.mjs --self-test && node .github/scripts/check-prosemirror-boundary.mjs'
   run "confine della Tabella" bash -c 'node .github/scripts/check-tabella-boundary.mjs --self-test && node .github/scripts/check-tabella-boundary.mjs'
   run "tema non scritto inline" bash -c 'node .github/scripts/check-inline-theme.mjs --self-test && node .github/scripts/check-inline-theme.mjs'
+  run "nessuno stile in linea (CSP)" bash -c 'node .github/scripts/check-inline-styles.mjs --self-test && node .github/scripts/check-inline-styles.mjs'
   run "ascoltatori con una Vita" node .github/scripts/check-listeners.mjs
   run "nessuna attesa nascosta" node .github/scripts/check-races.mjs
   run "pacchetti npm in copia unica" node .github/scripts/check-npm-copies.mjs
@@ -141,6 +142,7 @@ client_checks() { # client_checks completo|rapido
 rust_guards() {
   run "confine host/workspace" node .github/scripts/check-host-workspace-boundary.mjs
   run "confine dei motori" node .github/scripts/check-engine-boundary.mjs
+  run "interfaccia e doppioni di fub-app" bash -c 'node .github/scripts/check-motori.mjs --self-test && node .github/scripts/check-motori.mjs'
   run "errori letterali" node .github/scripts/check-error-literals.mjs
   run "commenti di Rust" bash -c 'node .github/scripts/check-rust-comments.mjs --self-test && node .github/scripts/check-rust-comments.mjs'
   run "versioni in un posto solo" node .github/scripts/check-cargo-versions.mjs
@@ -148,6 +150,7 @@ rust_guards() {
   run "cargo feature compilate" node .github/scripts/check-cargo-feature-default.mjs
   run "forme di libreria consumate" node .github/scripts/check-crate-type.mjs
   run "profilo dev deciso" node .github/scripts/check-dev-profile.mjs
+  run "SBOM = Cargo.lock" bash -c "node .github/scripts/sbom.mjs --self-test && node .github/scripts/sbom.mjs --out '$LOG_DIR/fub-sbom.spdx.json'"
 }
 
 doc_guards() {
@@ -164,12 +167,16 @@ doc_guards() {
 vendor_guards() {
   run "WordCraft = upstream + patch" node tools/vendor-craft/vendor.mjs wordcraft check
   run "GridCraft = upstream + patch" node tools/vendor-craft/vendor.mjs gridcraft check
+  run "VectorCraft = upstream + patch" node tools/vendor-craft/vendor.mjs vectorcraft check
+  run "craft-docpath = upstream" node tools/vendor-craft/vendor.mjs craft-docpath check
+  run "craft-vectorcraft-format = upstream" node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
   run "patch dei motori a tre vie" node tools/vendor-craft/vendor.mjs self-test
+  run "dati di vendor = dati.mjs, cartelle dichiarate" bash -c 'node tools/vendor-craft/provenienza.mjs self-test && node tools/vendor-craft/provenienza.mjs check && node tools/vendor-craft/provenienza.mjs elenco'
 }
 
 benches() {
   client_ready
-  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:fidelity" \
+  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:conformita" "bench:fidelity" \
            "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \
@@ -214,16 +221,44 @@ if [ "$MODE" = rapido ]; then
       case " $CRATES " in *" fub-wasm-host "*) wasm_prep ;; esac
       run "test (crate toccati e chi li usa)" tests $SEL
       case " $CRATES " in *" fub-features "*)
-        run "fub-features senza feature" cargo check -p fub-features --no-default-features --all-targets ;;
+        run "fub-features senza feature" cargo test -p fub-features --no-default-features ;;
+      esac
+      case " $CRATES " in *" fub-testkit "*)
+        run "clippy del banco con pixel" cargo clippy -p fub-testkit --features pixel --all-targets -- -D warnings
+        run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel ;;
       esac
     fi
     rust_guards
   fi
 
   if [ "$(val client)" = 1 ] || [ "$WANT_CLIENT" = 1 ]; then client_checks rapido; fi
+  # Il client compila il nucleo della lavagna in `.wasm` (`apps/client/build/canvas-wasm.mjs`):
+  # un cambio ai due crate si prova anche dalla parte di TypeScript.
+  if [ "$(val canvaswasm)" = 1 ]; then
+    if has_target wasm32-unknown-unknown; then
+      run "la lavagna attraverso il .wasm" bash -c 'cd apps/client && npx vitest run src/editors/canvas build'
+    else
+      skip "la lavagna attraverso il .wasm" "target mancante: rustup target add wasm32-unknown-unknown"
+    fi
+  fi
   if [ "$(val docs)" = 1 ]; then doc_guards; fi
+  # I test di fub-abi leggono i sorgenti di tutti i crate (il censimento delle
+  # regole dei nomi, la tabella degli escape, le forme normalizzate) e i
+  # documenti (il grafo delle dipendenze di overview.md): un diff che tocca un
+  # altro crate o soli documenti li fa girare, se non sono già fra i crate
+  # toccati. Nessuno usa fub-abi come dev-dependency per questi test, quindi
+  # «chi li usa» non li raggiunge.
+  if [ "$(val docs)" = 1 ] || [ -n "$CRATES" ]; then
+    case " $CRATES " in
+      *" fub-abi "*) ;;
+      *) [ -n "$CRATES_ARG" ] || [ "$(val all)" = 1 ] \
+           || run "test di fub-abi (leggono sorgenti e documenti)" tests -p fub-abi ;;
+    esac
+  fi
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
+    run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
+    run "SBOM = Cargo.lock (autoprova)" node .github/scripts/sbom.mjs --self-test
     [ "$(val docs)" = 1 ] || run "ciclo locale = CI" bash -c 'node .github/scripts/check-locale-loop.mjs --self-test && node .github/scripts/check-locale-loop.mjs'
   fi
   if [ "$(val vendor)" = 1 ]; then vendor_guards; fi
@@ -238,6 +273,7 @@ else
   run "cargo clippy --workspace --all-targets -- -D warnings" cargo clippy --workspace $EXCLUDE --all-targets -- -D warnings
   run "clippy dell'host senza draw" cargo clippy -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --all-targets -- -D warnings
   run "clippy di fub-features con draw" cargo clippy -p fub-features --features draw --all-targets -- -D warnings
+  run "clippy del banco con pixel" cargo clippy -p fub-testkit --features pixel --all-targets -- -D warnings
   if has_target x86_64-pc-windows-msvc; then
     run "kernel per Windows" cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
   else
@@ -246,6 +282,7 @@ else
   rust_guards
   vendor_guards
   run "cancello del rilascio (autoprova)" node .github/scripts/check-release-gate.mjs --self-test
+  run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
   if has_target wasm32-unknown-unknown; then
     run "il contratto attraversa il confine wasm" cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
   else
@@ -272,8 +309,14 @@ else
       cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked &&
       cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked'
   fi
+  # Il nucleo della lavagna lo carica la WebView come modulo WebAssembly.
+  if has_target wasm32-unknown-unknown; then
+    run "fub-canvas-core per wasm32-unknown-unknown" cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
+  else
+    skip "fub-canvas-core per wasm32-unknown-unknown" "target mancante: rustup target add wasm32-unknown-unknown"
+  fi
   if [ "$NEXTEST" = 1 ]; then
-    run "cargo nextest run --workspace --no-fail-fast" cargo nextest run --workspace $EXCLUDE --no-fail-fast --profile ci
+    run "cargo nextest run --workspace --no-fail-fast --profile ci" cargo nextest run --workspace $EXCLUDE --no-fail-fast --profile ci
   else
     run "cargo test --workspace --no-fail-fast" cargo test --workspace $EXCLUDE --no-fail-fast
   fi
@@ -282,9 +325,13 @@ else
 
   # varianti
   run "host senza draw (test)" tests -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich
+  run "i disegni senza il motore (componenti, porte)" tests -p fub-host --no-default-features --features draw --test componenti --test drawing
   run "fub-features con draw (test)" tests -p fub-features --features draw
+  run "fub-features con engine-drawing (test)" tests -p fub-features --features engine-drawing
+  run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel
   run "motori di WordCraft (workspace loro)" env CARGO_TARGET_DIR=target/wordcraft cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
   run "motori di GridCraft (workspace loro)" env CARGO_TARGET_DIR=target/gridcraft cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
+  run "motori di VectorCraft (workspace loro)" env CARGO_TARGET_DIR=target/vectorcraft cargo test --manifest-path vendor/vectorcraft/Cargo.toml --workspace --locked --no-fail-fast
 
   # supply chain
   if have cargo-deny; then

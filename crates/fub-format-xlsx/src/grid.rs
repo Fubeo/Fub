@@ -52,6 +52,7 @@ use crate::display::{self, NotShown, Warning};
 use crate::graft::{graft, CellEdit, GraftError};
 use crate::input::{self, InputError, NewValue};
 use crate::locks::SheetLocks;
+use crate::motore::{Fogli, Presa};
 use crate::objects;
 use crate::package::Package;
 use crate::{guarded, sheet_xml, XlsxError, FORMAT_ID};
@@ -218,18 +219,44 @@ struct Instance {
     facade: Option<Facade>,
     /// La riscrittura della cartella, misurata alla prima domanda.
     rewrite: Rewrite,
+    /// La presa sul motore dei fogli: conta l'istanza fra quelle aperte.
+    /// Data dopo che l'istanza è nata: un'apertura fallita non conta.
+    presa: Option<Presa>,
 }
 
 /// Il provider della griglia per le cartelle di Excel.
-#[derive(Default)]
+///
+/// Il motore dei fogli ([`crate::motore`]) nasce alla prima apertura, non con
+/// il provider; ogni istanza aperta lo tiene, e quando si chiude l'ultima le
+/// sue cache si svuotano.
 pub struct XlsxGridProvider {
     next_instance: u64,
     instances: HashMap<String, Instance>,
+    fogli: Arc<Fogli>,
+}
+
+impl Default for XlsxGridProvider {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl XlsxGridProvider {
+    /// Il provider sul motore dei fogli del processo. Il primo provider del
+    /// processo iscrive il motore nel registro; nessuno lo costruisce.
     pub fn new() -> Self {
-        Self::default()
+        Self::con_fogli(Fogli::processo())
+    }
+
+    /// Il provider su un motore dei fogli dato: per le prove, con servizi e
+    /// budget loro.
+    #[doc(hidden)]
+    pub fn con_fogli(fogli: Arc<Fogli>) -> Self {
+        Self {
+            next_instance: 0,
+            instances: HashMap::new(),
+            fogli,
+        }
     }
 
     fn instance(&mut self, instance: &str) -> Result<&mut Instance, PluginError> {
@@ -275,11 +302,17 @@ impl GridBytesProvider for XlsxGridProvider {
             ));
         }
         journal.validate()?;
+        // La prima apertura costruisce il motore.
+        let motore = self
+            .fogli
+            .motore()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         let read = crate::read(source).map_err(xlsx_error)?;
         let mut instance = Instance::new(source.to_vec(), revision, read)?;
         instance.set_journal(journal.clone())?;
         let id = self.new_instance_id();
         let summary = instance.summary(&id)?;
+        instance.presa = Some(self.fogli.prendi(motore));
         self.instances.insert(id, instance);
         Ok(summary)
     }
@@ -325,7 +358,13 @@ impl GridBytesProvider for XlsxGridProvider {
         request: GridCommandRequest,
     ) -> Result<GridCommandOutcome, PluginError> {
         request.validate()?;
-        let outcome = self.instance(instance)?.command(&request)?;
+        let instance = self.instance(instance)?;
+        let outcome = instance.command(&request);
+        // Anche un comando fallito può aver usato le cache.
+        if let Some(presa) = &instance.presa {
+            presa.motore().dopo_il_comando(&request.command.id);
+        }
+        let outcome = outcome?;
         outcome.validate()?;
         Ok(outcome)
     }
@@ -338,15 +377,27 @@ impl GridBytesProvider for XlsxGridProvider {
         self.instance(instance)?.bytes_to_write(&expected)
     }
 
+    /// Chiude l'istanza. Se era l'ultima aperta sul motore dei fogli, la sua
+    /// presa svuota le cache e rende la memoria al sistema; in ogni caso il
+    /// budget rispetta il tetto. Il provider non ha lucchetti suoi: l'istanza
+    /// esce dall'elenco prima, e le cache si chiamano dopo.
     fn close(&mut self, instance: &str) -> Result<(), PluginError> {
-        self.instances
+        let closed = self
+            .instances
             .remove(instance)
-            .map(|_| ())
-            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
+            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))?;
+        drop(closed);
+        self.fogli.chiusa();
+        Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), PluginError> {
-        self.instances.clear();
+        let closed = std::mem::take(&mut self.instances);
+        let any = !closed.is_empty();
+        drop(closed);
+        if any {
+            self.fogli.chiusa();
+        }
         Ok(())
     }
 }
@@ -406,6 +457,7 @@ impl Instance {
             commanding: false,
             facade: None,
             rewrite: Rewrite::Unknown,
+            presa: None,
         })
     }
 

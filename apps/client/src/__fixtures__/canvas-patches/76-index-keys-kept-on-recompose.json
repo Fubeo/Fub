@@ -1,0 +1,10 @@
+{
+  "name": "index-keys-kept-on-recompose",
+  "description": "Chiavi che sembrano indici (\"10\", \"2\", \"0\") in una scheda che si ricompone per un color nuovo: restano nel loro ordine e con i loro byte, anche il null di \"0\" che è un campo sconosciuto; si aggiunge solo \",\\\"color\\\":\\\"1\\\"\" in fondo",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"10\":\"dieci\",\"type\":\"text\",\"x\":0,\"y\":0,\"2\":true,\"width\":100,\"height\":50,\"text\":\"uno\",\"0\":null}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","0":null,"2":true,"10":"dieci"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"color":"1","text":"uno","0":null,"2":true,"10":"dieci"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"10\":\"dieci\",\"type\":\"text\",\"x\":0,\"y\":0,\"2\":true,\"width\":100,\"height\":50,\"text\":\"uno\",\"0\":null,\"color\":\"1\"}],\"edges\":[]}"
+  }
+}

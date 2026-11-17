@@ -1,0 +1,9 @@
+{
+  "name": "r3-edge-key-twice",
+  "description": "R3: una chiave nota due volte in un arco",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"a\",\"label\":\"u\",\"label\":\"d\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

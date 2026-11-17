@@ -1,0 +1,20 @@
+{
+  "name": "r2-max-safe",
+  "description": "R2: il massimo intero sicuro in x e y è un intero",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":9007199254740991,\"y\":9007199254740991,\"width\":10,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 9007199254740991,
+        "y": 9007199254740991,
+        "width": 10,
+        "height": 10,
+        "text": "t"
+      }
+    ],
+    "edges": []
+  }
+}

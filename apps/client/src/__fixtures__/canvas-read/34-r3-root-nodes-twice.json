@@ -1,0 +1,9 @@
+{
+  "name": "r3-root-nodes-twice",
+  "description": "R3: nodes due volte sulla radice",
+  "source": "{\"nodes\":[],\"nodes\":[]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

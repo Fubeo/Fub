@@ -1,0 +1,44 @@
+{
+  "name": "note-md",
+  "description": "Una nota: l'inchiostro resta alla misura in cui è stato scritto, in alto a sinistra; ciò che esce dalla scheda resta dov'è.",
+  "card": {
+    "type": "file",
+    "file": "Lezioni/Lezione 4.md"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 400,
+    "height": 300
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          50,
+          25
+        ],
+        "to": [
+          50,
+          25
+        ]
+      },
+      {
+        "from": [
+          250,
+          10
+        ],
+        "to": [
+          250,
+          10
+        ]
+      }
+    ]
+  }
+}

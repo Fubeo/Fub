@@ -1,0 +1,10 @@
+{
+  "name": "blank-bom",
+  "description": "R1: solo il BOM è una lavagna vuota",
+  "source": "\ufeff",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": []
+  }
+}

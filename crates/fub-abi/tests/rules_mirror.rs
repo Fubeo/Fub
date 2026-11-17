@@ -44,6 +44,16 @@ use fub_abi::rules::folders::for_note;
 use fub_abi::rules::keys;
 use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
+use fub_abi::rules::tasks::{civil_day, due_urgency, task_due, DueUrgency};
+use fub_abi::rules::theme_font::{
+    theme_font_fault, MAX_THEME_FONTS, MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY,
+    MAX_THEME_FONT_FILE_NAME, MAX_THEME_FONT_TOTAL_BYTES, RESERVED_FONT_FAMILIES,
+    SERIES_FONT_FAMILIES, THEME_FONT_WEIGHTS,
+};
+use fub_abi::rules::theme_icons::{
+    theme_icon_fault, theme_icons_file_holds, MAX_THEME_ICONS, MAX_THEME_ICONS_BYTES,
+    MAX_THEME_ICONS_FILE_NAME, MAX_THEME_ICON_BYTES, MAX_THEME_ICON_NAME, MAX_THEME_ICON_PATHS,
+};
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
 use serde_json::{json, Value};
@@ -351,6 +361,73 @@ fn task_checked_cases() -> Vec<Value> {
             })
         })
         .collect()
+}
+
+/// La scadenza di un compito: l'ultima `📅`, la data che segue, e il tratto
+/// che occupa. I casi ostili sono quelli su cui due letture dissentono: la
+/// data che non esiste, la `📅` senza niente dopo, una parola al posto della
+/// data, la data attaccata al segno o seguita da una virgola, una cifra di
+/// troppo, una `📅` prima dell'ultima, il testo con caratteri fuori dal BMP
+/// prima del segno (dove byte e unità UTF-16 contano diverso).
+fn task_due_cases() -> Vec<Value> {
+    [
+        "Pagare 📅 2026-10-19",
+        "Ricorda 📅 2026-10-01 poi 📅 2026-10-19 ✅",
+        "Senza scadenza",
+        "Refuso 📅 2026-02-30",
+        "Bisestile 📅 2028-02-29",
+        "Vuoto 📅",
+        "Spazi 📅   ",
+        "Parola 📅 domani e poi",
+        "Attaccata 📅2026-10-19, con la virgola",
+        "Tabulazione 📅\t2026-10-19",
+        "Troppe cifre 📅 2026-10-199",
+        "Mese tredici 📅 2026-13-01",
+        "Emoji 🎉🎉 prima 📅 2026-10-19 dopo",
+        "📅 2026-10-19",
+    ]
+    .into_iter()
+    .map(|text| {
+        let out = task_due(text).map(|due| {
+            json!({
+                "span": &text[due.from..due.to],
+                "date": due.iso(),
+            })
+        });
+        json!({"text": text, "out": out})
+    })
+    .collect()
+}
+
+/// Quanto preme una scadenza: i bordi sono il giorno prima, oggi, il quarto,
+/// il sesto, il settimo e il decimo giorno dopo, e un cambio di mese e d'anno
+/// in mezzo (dove una somma fatta sulle stringhe sbaglierebbe).
+fn due_urgency_cases() -> Vec<Value> {
+    [
+        ("2026-11-18", "2026-11-14"),
+        ("2026-11-24", "2026-11-14"),
+        ("2027-01-01", "2027-01-02"),
+        ("2026-11-13", "2026-11-14"),
+        ("2026-11-14", "2026-11-14"),
+        ("2026-11-20", "2026-11-14"),
+        ("2026-11-21", "2026-11-14"),
+        ("2027-01-02", "2026-12-28"),
+        ("2027-01-04", "2026-12-28"),
+        ("2024-03-01", "2024-02-24"),
+        ("2024-03-02", "2024-02-24"),
+    ]
+    .into_iter()
+    .map(|(date, today)| {
+        let day = civil_day(date).expect("giorno del caso");
+        let now = civil_day(today).expect("oggi del caso");
+        let out = match due_urgency(day, now) {
+            DueUrgency::Overdue => "overdue",
+            DueUrgency::Near => "near",
+            DueUrgency::Later => "later",
+        };
+        json!({"date": date, "today": today, "out": out})
+    })
+    .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -825,6 +902,7 @@ fn search_syntax_cases() -> Vec<Value> {
             false,
         ),
         ("task:todo task:done match-case:API ignore-case:Api", false),
+        ("comment:Anna -comment:\"da rivedere\" passo", false),
         ("/fo+\\/bar/ -/x/", false),
         (
             "[stato] [stato:attivo] [priorità:>2] [scadenza:<2026-10-01] [fatto:false]",
@@ -883,8 +961,225 @@ fn search_syntax_cases() -> Vec<Value> {
     .collect()
 }
 
+// ---------------------------------------------------------------------------
+// I caratteri di un tema (PA T39)
+// ---------------------------------------------------------------------------
+//
+// L'host rifiuta un manifest con una voce di `fonts` che non regge; la shell
+// rifà la stessa domanda al fascio prima di scrivere una regola `@font-face`.
+// Attraversa la fixture l'etichetta del guasto, come per la politica dei nomi.
+
+/// Le voci ostili: una per ogni modo in cui due letture plausibili possono
+/// dissentire. La famiglia con lo spazio doppio, le virgolette o il `;` (che
+/// romperebbero la regola scritta), i 64 e 65 caratteri, una di serie con un
+/// altro maiuscolo, le parole chiave; i file che non sono un asset; i pesi ai
+/// bordi e quello non intero; gli stili.
+fn theme_font_fault_cases() -> Vec<Value> {
+    let longest = "B".repeat(64);
+    let too_long = "B".repeat(65);
+    let long_file = format!("fonts/{}.woff2", "f".repeat(64));
+    let too_long_file = format!("fonts/{}.woff2", "f".repeat(65));
+    let ok = ("Carta Serif", "fonts/carta.woff2", 400.0, "normal");
+    let mut entries: Vec<(String, String, f64, String)> = Vec::new();
+    let mut push = |family: &str, file: &str, weight: f64, style: &str| {
+        entries.push((family.into(), file.into(), weight, style.into()));
+    };
+    // Le famiglie.
+    for family in [
+        "Carta Serif",
+        "Carta-Serif 2",
+        "Carta  Serif",
+        " Carta",
+        "Carta ",
+        "Carta\"Serif",
+        "Carta; src: url(x)",
+        "Carta_Serif",
+        "Cartà",
+        "",
+        longest.as_str(),
+        too_long.as_str(),
+        "Inter Variable",
+        "inter variable",
+        "IBM PLEX MONO",
+        "serif",
+        "Serif",
+        "inherit",
+        "Revert-Layer",
+    ] {
+        push(family, ok.1, ok.2, ok.3);
+    }
+    // I file.
+    for file in [
+        "fonts/carta-italic_2.woff2",
+        long_file.as_str(),
+        too_long_file.as_str(),
+        "https://example.com/carta.woff2",
+        "theme://acme.carta/fonts/carta.woff2",
+        "../x.woff2",
+        "fonts/../x.woff2",
+        "fonts/sotto/x.woff2",
+        "fonts/a.ttf",
+        "fonts/a.WOFF2",
+        "fonts/.woff2",
+        "carta.woff2",
+    ] {
+        push(ok.0, file, ok.2, ok.3);
+    }
+    // I pesi e gli stili.
+    for weight in [99.0, 100.0, 400.0, 900.0, 901.0, 400.5, -400.0] {
+        push(ok.0, ok.1, weight, ok.3);
+    }
+    for style in ["normal", "italic", "oblique", "Italic", ""] {
+        push(ok.0, ok.1, ok.2, style);
+    }
+    entries
+        .into_iter()
+        .map(|(family, file, weight, style)| {
+            json!({
+                "family": family,
+                "file": file,
+                "weight": weight,
+                "style": style,
+                "out": theme_font_fault(&family, &file, weight, &style),
+            })
+        })
+        .collect()
+}
+
+/// I limiti e gli elenchi di nomi della regola, come valori: la shell non li
+/// ricopia a mano, li confronta con questi.
+fn theme_font_limit_cases() -> Vec<Value> {
+    let (lightest, heaviest) = THEME_FONT_WEIGHTS;
+    [
+        ("fonts", json!(MAX_THEME_FONTS)),
+        ("font_bytes", json!(MAX_THEME_FONT_BYTES)),
+        ("font_total_bytes", json!(MAX_THEME_FONT_TOTAL_BYTES)),
+        ("family_chars", json!(MAX_THEME_FONT_FAMILY)),
+        ("file_name_chars", json!(MAX_THEME_FONT_FILE_NAME)),
+        ("weights", json!([lightest, heaviest])),
+        ("series_families", json!(SERIES_FONT_FAMILIES)),
+        ("reserved_families", json!(RESERVED_FONT_FAMILIES)),
+    ]
+    .into_iter()
+    .map(|(name, out)| json!({"name": name, "out": out}))
+    .collect()
+}
+
+/// Le voci del set di icone di un tema (PA T40): i nomi ai bordi, i
+/// tracciati che non sono tracciati (markup, virgolette, spazi non ASCII, un
+/// `url(`), il numero di tracciati e il peso ai bordi.
+fn theme_icon_fault_cases() -> Vec<Value> {
+    let ok = "M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z";
+    let longest = "a".repeat(64);
+    let too_long = "a".repeat(65);
+    let full = "M".repeat(4096);
+    let over = "M".repeat(4097);
+    let half = "M".repeat(2048);
+    let mut entries: Vec<(String, Vec<String>)> = Vec::new();
+    let mut push = |name: &str, paths: &[&str]| {
+        entries.push((name.into(), paths.iter().map(|d| d.to_string()).collect()));
+    };
+    for name in [
+        "search",
+        "format-word",
+        "0-day",
+        "a",
+        longest.as_str(),
+        too_long.as_str(),
+        "",
+        "-search",
+        "Search",
+        "search_2",
+        "cerca\u{300}",
+        "search icon",
+        "__proto__",
+        "constructor",
+    ] {
+        push(name, &[ok]);
+    }
+    let path_cases: &[&[&str]] = &[
+        &[],
+        &[ok, ok, ok, ok, ok, ok, ok, ok],
+        &[ok, ok, ok, ok, ok, ok, ok, ok, ok],
+        &[""],
+        &["M0 0\"/><script>alert(1)</script><path d=\""],
+        &["M0 0<"],
+        &["M0 0 url(#x)"],
+        &["M0,0 L1e-3 2E+2z"],
+        &["M0\t0\n1\r2\x0c3"],
+        &["M0\x0b0"],
+        &["M0\u{a0}0"],
+        &["M0\u{2028}0"],
+        &["M0 0&#x3c;"],
+        &[full.as_str()],
+        &[over.as_str()],
+        &[half.as_str(), half.as_str()],
+        &[half.as_str(), half.as_str(), "M"],
+    ];
+    for paths in path_cases {
+        push("search", paths);
+    }
+    entries
+        .into_iter()
+        .map(|(name, paths)| {
+            json!({
+                "name": name,
+                "paths": paths,
+                "out": theme_icon_fault(&name, &paths),
+            })
+        })
+        .collect()
+}
+
+/// Il file del set nel manifest: il nome giusto, il manifest, le maiuscole,
+/// una cartella, un path che esce, un'altra estensione.
+fn theme_icons_file_cases() -> Vec<Value> {
+    let longest = format!("{}.json", "i".repeat(64));
+    let too_long = format!("{}.json", "i".repeat(65));
+    [
+        "icons.json",
+        "icone_2-fini.json",
+        longest.as_str(),
+        too_long.as_str(),
+        "manifest.json",
+        "Manifest.json",
+        "Icons.json",
+        "icons/set.json",
+        "../icons.json",
+        "theme://acme/icons.json",
+        "icons.JSON",
+        "icons.json5",
+        ".json",
+        "icons",
+        "",
+    ]
+    .into_iter()
+    .map(|file| json!({"file": file, "out": theme_icons_file_holds(file)}))
+    .collect()
+}
+
+/// I limiti della regola delle icone, come valori.
+fn theme_icon_limit_cases() -> Vec<Value> {
+    [
+        ("icons", json!(MAX_THEME_ICONS)),
+        ("paths", json!(MAX_THEME_ICON_PATHS)),
+        ("icon_bytes", json!(MAX_THEME_ICON_BYTES)),
+        ("set_bytes", json!(MAX_THEME_ICONS_BYTES)),
+        ("name_chars", json!(MAX_THEME_ICON_NAME)),
+        ("file_name_chars", json!(MAX_THEME_ICONS_FILE_NAME)),
+    ]
+    .into_iter()
+    .map(|(name, out)| json!({"name": name, "out": out}))
+    .collect()
+}
+
 fn expected() -> Value {
     json!({
+        "theme_font_fault": theme_font_fault_cases(),
+        "theme_font_limit": theme_font_limit_cases(),
+        "theme_icon_fault": theme_icon_fault_cases(),
+        "theme_icons_file": theme_icons_file_cases(),
+        "theme_icon_limit": theme_icon_limit_cases(),
         "search_syntax": search_syntax_cases(),
         "page_name": page_name_cases(),
         "name_fault": name_fault_cases(),
@@ -893,6 +1188,8 @@ fn expected() -> Value {
         "relative_ref": relative_ref_cases(),
         "resolve_against": resolve_against_cases(),
         "task_checked": task_checked_cases(),
+        "task_due": task_due_cases(),
+        "due_urgency": due_urgency_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
         "folder_for_note": folder_for_note_cases(),

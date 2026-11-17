@@ -1,0 +1,11 @@
+{
+  "name": "null-in-patch-before-matches-absent",
+  "description": "R7 e R9: un campo noto facoltativo a null nella foto di prima combacia con una scheda che non ce l'ha",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"a\"}]}",
+  "patches": [{"kind":"upsert-edge","before":{"id":"e","fromNode":"a","toNode":"a","label":null},"after":{"id":"e","fromNode":"a","toNode":"a","label":"ciao","color":null}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"a\",\"label\":\"ciao\"}]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"a\"}]}"
+  }
+}

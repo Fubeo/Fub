@@ -138,10 +138,14 @@ Regole:
 - un diagramma, una domanda;
 - massimo consigliato 20 nodi o partecipanti;
 - id ASCII ed etichette in italiano;
+- un'id per nodo: Mermaid disegna un solo nodo per id, con l'ultima etichetta;
 - niente colori o stili hardcoded;
 - niente diagrammi duplicati;
 - una frase prima e una breve interpretazione dopo;
 - nessuna relazione futura in un diagramma corrente.
+
+`check-mermaid.mjs` controlla tipo, stili, numero di nodi e id doppie nei
+diagrammi di `docs/` e del `README.md`, e con `--render` li disegna tutti.
 
 ## Tabelle
 

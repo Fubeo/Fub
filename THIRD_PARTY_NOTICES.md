@@ -4,6 +4,8 @@ Questo file raccoglie gli avvisi di copyright e i testi di licenza del codice
 di terzi da cui Fub deriva. Le dipendenze dichiarate nei manifest
 (`Cargo.toml`, `package.json`) non stanno qui: le governano `deny.toml` e lo
 SBOM.
+Il logo in `assets/logo/` non è materiale di terzi né codice: è dell'autore,
+con tutti i diritti riservati ([`assets/logo/LICENZA.md`](assets/logo/LICENZA.md)).
 
 ## Stabilizzatore del tratto
 
@@ -69,4 +71,34 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+## Entità nominate di HTML
+
+La tabella delle entità nominate con cui il client scioglie `&nome;` nel
+Markdown (`apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts`)
+deriva da `entities.json` dell'HTML Living Standard, sezione «Named character
+references», © WHATWG (Apple, Google, Mozilla, Microsoft),
+<https://html.spec.whatwg.org/>, sotto licenza Creative Commons Attribution
+4.0 International (<https://creativecommons.org/licenses/by/4.0/>). La copia
+intatta, con URL, data e sha256, è in `vendor/whatwg-entities/`; la tabella
+derivata tiene soltanto i nomi con il `;` finale e i loro caratteri.
+
+## Avvisi richiesti dalle dipendenze
+
+Le dipendenze dichiarate nei manifest non stanno in questo file, salvo quelle
+la cui licenza chiede un avviso nella documentazione di chi distribuisce
+l'eseguibile. Ognuna ha la sua eccezione in `deny.toml`, con il perché.
+
+### jpeg-encoder
+
+`jpeg-encoder` 0.6 (`(MIT OR Apache-2.0) AND IJG`) scrive i JPEG del motore
+del disegno; lo porta `vectorcraft-render`. La trasformata discreta del coseno
+deriva dal codice dell'Independent JPEG Group, passato da mozjpeg e
+libjpeg-turbo: i file `src/fdct.rs` e `src/avx2/fdct.rs` del crate. La
+licenza IJG chiede, a chi la usa in un programma, di riconoscerlo nella
+documentazione:
+
+```text
+This software is based in part on the work of the Independent JPEG Group.
 ```

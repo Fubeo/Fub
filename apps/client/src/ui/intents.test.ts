@@ -24,6 +24,16 @@ vi.mock("../state/obsidian-bookmarks", () => ({
   },
 }));
 vi.mock("../state/bookmarks-ui", () => ({ openBookmarksPanel: () => imported.opened++ }));
+// L'ispettore vero si monta sulla pagina intera: qui conta solo quale scheda
+// gli si chiede, e se ce l'ha.
+const inspector = vi.hoisted(() => ({ asked: [] as string[], has: true, revealed: [] as string[] }));
+vi.mock("./views", () => ({
+  selectInspectorTab: (view: string) => {
+    inspector.asked.push(view);
+    return inspector.has;
+  },
+}));
+vi.mock("./side-panels", () => ({ revealSidePanel: (side: string) => inspector.revealed.push(side) }));
 // Il layout ricorda se stesso a ogni cambio: qui non c'è un backend a cui dirlo.
 vi.mock("../host/ipc", () => ({ api: { setViewState: async () => {} } }));
 
@@ -33,6 +43,7 @@ import { activeTab, defaultLayout, layout, setLayout } from "../state/layout";
 import {
   applyIntent,
   CLIPBOARD_TEXT_NS,
+  INSPECTOR_TAB_NS,
   OBSIDIAN_IMPORTED_NS,
   setReloaderForTests,
   takeNoticeAfterReload,
@@ -168,6 +179,24 @@ describe("una view aperta da un comando (OpenView)", () => {
     await applyIntent({ kind: "open_view", view: "outline", params: null });
     expect(layout.panes[layout.focus]!.tabs).toEqual([]);
     expect(notified).toEqual([[t("views.open_unavailable", { view: "outline" }), "guasto"]]);
+  });
+});
+
+describe("l'intento della scheda dell'ispettore (S2 T13)", () => {
+  it("apre l'ispettore sulla scheda chiesta, e dice quando i Collegamenti non ci sono", async () => {
+    inspector.asked.length = 0;
+    inspector.revealed.length = 0;
+    inspector.has = true;
+    await applyIntent({ kind: "custom", ns: INSPECTOR_TAB_NS, payload: { view: "backlinks" } });
+    expect(inspector.revealed).toEqual(["inspector"]);
+    expect(inspector.asked).toEqual(["backlinks"]);
+    expect(notified).toEqual([]);
+    inspector.has = false;
+    await applyIntent({ kind: "custom", ns: INSPECTOR_TAB_NS, payload: { view: "backlinks" } });
+    expect(notified).toEqual([[t("explorer.used_by_missing"), "info"]]);
+    // Un payload senza vista non apre niente.
+    await applyIntent({ kind: "custom", ns: INSPECTOR_TAB_NS, payload: {} });
+    expect(inspector.asked).toEqual(["backlinks", "backlinks"]);
   });
 });
 

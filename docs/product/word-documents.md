@@ -16,8 +16,18 @@ schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
 comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
-Paragrafo in un pulsante ciascuno. Un comando che adesso non si dà resta al
-suo posto, spento, e il suggerimento dice perché.
+Paragrafo in un pulsante ciascuno, e per ultimo Carattere; un gruppo raccolto si apre sul posto,
+nella barra, e gli altri si raccolgono per fargli posto: Esc lo richiude e
+torna al suo pulsante. Un comando che adesso non si dà resta al suo posto,
+spento, e il suggerimento dice perché. La barra è quella dei fogli: le
+schede sono segmenti come le schede dell'ispettore, con la scelta su un
+foglietto, e i comandi stanno in foglietti su un vassoio un tono sotto la
+carta. Si muove anche come quella dei fogli: cambiando scheda il segno scorre
+e i foglietti entrano uno dopo l'altro dal lato della scheda; ritirandola la
+ricerca e la pagina salgono sul vassoio che svanisce, e riaprendola
+riscendono, senza che lo scorrimento cambi; il gruppo che si apre sul posto
+si alza, e gli altri scivolano per fargli posto. Con il moto ridotto gli
+stessi stati arrivano subito.
 
 Si modificano:
 
@@ -60,8 +70,11 @@ Si modificano:
   Tab e Maiusc+Tab vanno alla cella dopo e prima, col suo testo scelto, e
   Tab nell'ultima cella aggiunge una riga. Maiusc con una freccia alla fine
   (o all'inizio) del testo di una cella, o il trascinamento da una cella a
-  un'altra, sceglie più celle: Canc le svuota, Ctrl+C e Ctrl+X le copiano
-  come un foglio di calcolo, «Unisci celle» le unisce se stanno in una riga;
+  un'altra, sceglie più celle: Canc le svuota, Ctrl+C le copia come un foglio
+  di calcolo, Ctrl+X le segna e l'incolla le sposta, «Unisci celle» le unisce
+  se stanno in una riga; sulle celle scelte valgono i gesti dei fogli di
+  calcolo (Ctrl+Spazio, Ctrl+D, Ctrl+«+», Maiusc+F8…), descritti in
+  [Tabelle](editor-tables.md#nei-documenti);
 - le immagini e le note nuove, dalla scheda **Inserisci**:
   **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
   mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
@@ -182,9 +195,12 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
   il modello non si rilegge uguale, o il corpo del file non si legge blocco
   per blocco come lo legge il codec.
 
-Il chip dice anche «Si scrive», quando il file si riscrive tutto, e «Sola
-lettura», con il perché nella lingua di chi scrive; il suo riquadro offre di
-cercare. Accanto al chip, «Registra» dice che le modifiche si registrano.
+Il chip dice anche «Sola lettura», con il perché nella lingua di chi scrive;
+il suo riquadro offre di cercare. Quando il file si riscrive tutto lo stato è
+normale, e lo dice la banda di stato, accanto alla modalità: «Si scrive», che
+apre la stessa spiegazione del chip (sul telefono è la prima voce di «…»).
+Accanto al chip, «Registra» dice che le modifiche si registrano; quando si
+scrive tutto, e il chip non c'è, lo dice la voce «Registra» della banda.
 
 Un salvataggio che tocca soltanto il testo è un **innesto**: il file resta
 com'era, byte per byte, tranne i paragrafi e le tabelle toccati, che arrivano
@@ -256,8 +272,9 @@ Un documento si guarda in tre modi, dal selettore accanto al percorso:
 
 Mentre il documento ha il fuoco, la banda di stato dice il foglio del cursore
 («Pagina 2 di 5», in Pagina e in Lettura), le parole («12 di 418 parole» con
-una selezione), la lingua che il file dice per il testo e **Registra** quando
-le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
+una selezione), la lingua che il file dice per il testo (in una finestra sotto
+gli 800 px si fa da parte: la dice già il correttore), **Si scrive** quando il
+file si riscrive tutto e **Registra** quando le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
 un clic ci porta; il conteggio della nota, che la banda mostra per le altre
 note, si fa da parte.
 
@@ -282,7 +299,7 @@ il predefinito, se l'aspetto del contenuto in Preferenze › Aspetto è
 automatico. I segni di Fub (revisioni, correttore, ricerca, commenti)
 prendono i colori della carta su cui stanno.
 
-Cambiando modo, ritirando la barra o cambiando lo zoom si muove la carta, e
+Cambiando modo o cambiando lo zoom si muove la carta, e
 il testo è già al suo posto: il paragrafo in cima alla vista resta in cima, e
 lo zoom tiene fermo il centro della vista. Un foglio aperto da `Ctrl+Invio`
 esce da quello sopra; tolto il salto, la sua sagoma si dissolve. Un documento

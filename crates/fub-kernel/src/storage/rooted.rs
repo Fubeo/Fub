@@ -8,8 +8,8 @@ use cap_std::fs::{Dir, Metadata, OpenOptions};
 use cap_std::{ambient_authority, AmbientAuthority};
 
 use super::{
-    same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry, EntryKind, FileIdentity,
-    Merge, Stat, VaultStorage,
+    refuse_read_only, same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry,
+    EntryKind, FileIdentity, Merge, Stat, VaultStorage, WriteBits,
 };
 
 /// Filesystem di produzione ancorato alla directory aperta al mount.
@@ -356,11 +356,32 @@ impl RootedFsStorage {
         Ok(!metadata.is_file())
     }
 
+    /// I nomi del file a `path`. Su Unix bastano i metadati già letti; su
+    /// Windows il numero sta soltanto sull'handle, e il file si apre per
+    /// chiederlo a [`Self::handle_link_count`].
     fn link_count(&self, path: &Utf8Path, metadata: &Metadata) -> io::Result<u64> {
         #[cfg(unix)]
         {
             use cap_std::fs::MetadataExt;
             let _ = path;
+            Ok(metadata.nlink())
+        }
+        #[cfg(windows)]
+        {
+            let file = self.dir.open(self.rel(path)?)?;
+            Self::handle_link_count(&file, metadata)
+        }
+    }
+
+    /// I nomi del file **già aperto**: su Unix dai suoi metadati, su Windows
+    /// dal suo handle. [`Self::link_count`] su Windows riapre il path, e fra
+    /// la prima apertura e la seconda il nome può portare a un altro file:
+    /// chi ha già un handle conta su quello.
+    fn handle_link_count(file: &cap_std::fs::File, metadata: &Metadata) -> io::Result<u64> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let _ = file;
             Ok(metadata.nlink())
         }
         #[cfg(windows)]
@@ -371,10 +392,9 @@ impl RootedFsStorage {
                 GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
             };
             let _ = metadata;
-            let file = self.dir.open(self.rel(path)?)?;
             let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
             // SAFETY: `info` è storage valido per la syscall e l'handle resta
-            // vivo per l'intera chiamata.
+            // vivo per l'intera chiamata (lo tiene `file`, preso in prestito).
             let ok =
                 unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
             if ok == 0 {
@@ -463,7 +483,15 @@ impl RootedFsStorage {
         let rel = self.rel_buf(path)?;
         let name = path.file_name().unwrap_or("senza-nome");
         let parent = path.parent().unwrap_or(&self.root);
-        let permissions = self.dir.metadata(&rel).ok().map(|m| m.permissions());
+        // Ciò che c'è già al nome: un'assenza vuol dire file nuovo, ogni altro
+        // guasto risale, perché senza guardarlo non si sa se lo si può
+        // sovrascrivere. Un file in sola lettura si rifiuta qui, prima del
+        // temporaneo, così la cartella resta com'era (PA T59).
+        let existing = crate::error::optional(self.dir.metadata(&rel))?;
+        if let Some(metadata) = &existing {
+            refuse_read_only(path, WriteBits::of_cap(metadata))?;
+        }
+        let permissions = existing.map(|m| m.permissions());
 
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -771,11 +799,39 @@ impl VaultStorage for RootedFsStorage {
         })
     }
 
+    /// La stessa regola della scrittura ([`Self::unsafe_write_target`]): un
+    /// symlink, un hardlink o un target non regolare dentro il vault non si
+    /// appende, perché le righe finirebbero nel file a cui il collegamento
+    /// porta (un registro `.fub/journal.jsonl` che punta a una nota la
+    /// riempirebbe di JSON). Si guarda prima di aprire e di nuovo sul file
+    /// aperto, prima di scrivere un byte: un collegamento messo al posto del
+    /// file fra le due cose ha un'altra identità e si rifiuta.
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         self.create_parent(path)?;
+        let refuse =
+            |why: &str| io::Error::new(io::ErrorKind::InvalidInput, format!("{why}: {path}"));
+        if self.unsafe_write_target(path)? {
+            return Err(refuse(
+                "append rifiutato su symlink, hardlink o target non regolare",
+            ));
+        }
         let mut options = OpenOptions::new();
         options.append(true).create(true);
         let mut file = self.dir.open_with(self.rel(path)?, &options)?;
+        let opened = file.metadata()?;
+        if !opened.is_file() || Self::handle_link_count(&file, &opened)? != 1 {
+            return Err(refuse("append rifiutato su un target non regolare"));
+        }
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let named = self.dir.symlink_metadata(self.rel(path)?)?;
+            if named.file_type().is_symlink()
+                || (named.dev(), named.ino()) != (opened.dev(), opened.ino())
+            {
+                return Err(refuse("target cambiato durante l'append"));
+            }
+        }
         file.write_all(bytes)
     }
 
@@ -793,6 +849,69 @@ impl VaultStorage for RootedFsStorage {
         // Windows la sorgente serializzata evita inoltre due successi sullo
         // stesso file verso destinazioni differenti.
         self.with_move_locks(from, to, || self.rename_no_replace_locked(from, to))
+    }
+
+    fn move_in_no_replace(&self, outside: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        if outside.starts_with(&self.root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{outside} è dentro la root montata: si sposta con rename_no_replace"),
+            ));
+        }
+        let (Some(source_parent), Some(source_name)) = (outside.parent(), outside.file_name())
+        else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{outside} non è un file rinominabile"),
+            ));
+        };
+        self.create_parent_synced(to)?;
+        self.with_lock(to, || {
+            // La sorgente è del sistema e si apre per nome; la destinazione
+            // passa dalla capability, come ogni scrittura del vault.
+            let source_dir =
+                Dir::open_ambient_dir(source_parent.as_std_path(), ambient_authority())?;
+            let source_name = Path::new(source_name);
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::AsRawFd;
+                let moved = super::rename_no_replace_at(
+                    source_dir.as_raw_fd(),
+                    source_name,
+                    to_parent.as_raw_fd(),
+                    &to_name,
+                )?;
+                if !moved {
+                    // Senza la primitiva del sistema: il lucchetto di `to`
+                    // tiene fuori gli altri writer fra la verifica e la mossa.
+                    match to_parent.symlink_metadata(&to_name) {
+                        Ok(_) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!("{to}: esiste già"),
+                            ))
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
+                    }
+                    source_dir.rename(source_name, &to_parent, &to_name)?;
+                }
+            }
+            #[cfg(windows)]
+            rename_no_replace_windows(&source_dir, source_name, &to_parent, &to_name)?;
+            #[cfg(not(any(unix, windows)))]
+            {
+                if to_parent.symlink_metadata(&to_name).is_ok() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("{to}: esiste già"),
+                    ));
+                }
+                source_dir.rename(source_name, &to_parent, &to_name)?;
+            }
+            self.sync_parents(to, None)
+        })
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
@@ -1316,6 +1435,93 @@ mod tests {
         assert!(!moved.join("source.txt").exists());
         assert_eq!(std::fs::read(&from).unwrap(), b"outside");
         assert!(!to.exists());
+    }
+
+    /// Un registro del vault che è un collegamento a una nota: appendere
+    /// scriverebbe le righe del registro dentro la nota. Come la scrittura,
+    /// l'append rifiuta symlink, hardlink e target non regolari, e la nota
+    /// resta com'era.
+    #[cfg(unix)]
+    #[test]
+    fn append_refuses_links_inside_the_vault() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
+        let note = root.join("Nota.md");
+        std::fs::write(&note, b"# Nota\n").unwrap();
+        std::fs::create_dir_all(root.join(".fub")).unwrap();
+        symlink("../Nota.md", root.join(".fub/journal.jsonl")).unwrap();
+        std::fs::hard_link(&note, root.join(".fub/entries.jsonl")).unwrap();
+        std::fs::create_dir_all(root.join(".fub/cartella")).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+
+        for name in ["journal.jsonl", "entries.jsonl", "cartella"] {
+            let error = storage
+                .append(&root.join(".fub").join(name), b"{\"op\":1}\n")
+                .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{name}: {error}");
+        }
+        assert_eq!(std::fs::read(&note).unwrap(), b"# Nota\n");
+
+        // Un file regolare, o uno che non c'è ancora, si appende.
+        let log = root.join(".fub/nuovo.jsonl");
+        storage.append(&log, b"uno\n").unwrap();
+        storage.append(&log, b"due\n").unwrap();
+        assert_eq!(std::fs::read(&log).unwrap(), b"uno\ndue\n");
+    }
+
+    /// Una voce del cestino del sistema torna nel vault passando dalla
+    /// capability: se la sua cartella è diventata un collegamento che porta
+    /// fuori, la mossa si rifiuta e il file resta nel cestino (B11 dell'audit).
+    #[cfg(unix)]
+    #[test]
+    fn moving_in_from_outside_stays_inside_the_capability() {
+        use std::os::unix::fs::symlink;
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_owned()).unwrap();
+        let trash = tempfile::tempdir().unwrap();
+        let trash = Utf8PathBuf::from_path_buf(trash.path().to_owned()).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let elsewhere = Utf8PathBuf::from_path_buf(elsewhere.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+
+        // La cartella è un collegamento verso fuori: la mossa non passa.
+        let trashed = trash.join("Nota.md");
+        std::fs::write(&trashed, b"# Nota\n").unwrap();
+        symlink(&elsewhere, root.join("dir")).unwrap();
+        assert!(storage
+            .move_in_no_replace(&trashed, &root.join("dir/Nota.md"))
+            .is_err());
+        assert!(
+            !elsewhere.join("Nota.md").exists(),
+            "the file left the vault"
+        );
+        assert_eq!(std::fs::read(&trashed).unwrap(), b"# Nota\n");
+
+        // Una destinazione occupata resta com'era, e la sorgente pure.
+        std::fs::write(root.join("Nota.md"), b"nuova").unwrap();
+        let error = storage
+            .move_in_no_replace(&trashed, &root.join("Nota.md"))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(root.join("Nota.md")).unwrap(), b"nuova");
+        assert!(trashed.exists());
+
+        // Una sorgente dentro il vault non è «da fuori».
+        let error = storage
+            .move_in_no_replace(&root.join("Nota.md"), &root.join("Altra.md"))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+
+        // Il caso buono: torna al suo posto, creando la cartella che manca.
+        storage
+            .move_in_no_replace(&trashed, &root.join("sotto/Nota.md"))
+            .unwrap();
+        assert_eq!(
+            std::fs::read(root.join("sotto/Nota.md")).unwrap(),
+            b"# Nota\n"
+        );
+        assert!(!trashed.exists());
     }
 
     #[cfg(unix)]

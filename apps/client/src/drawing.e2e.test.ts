@@ -13,6 +13,7 @@ import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 import { DEFAULT_CURVE } from "./ink/input/pressure";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -96,14 +97,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
@@ -112,11 +106,10 @@ async function open(doc: string): Promise<void> {
   await loaded();
 }
 
-/// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi.
-/// La prima volta lo si trasforma tutto, e con la suite intera che gira
-/// accanto ci vuole più dei due secondi degli altri.
+/// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi
+/// (vedi [`FIRST_IMPORT_MS`]).
 async function loaded(): Promise<void> {
-  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, 15_000);
+  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, FIRST_IMPORT_MS);
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
@@ -225,7 +218,7 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 
 /// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
 /// Semplice hanno la stessa colonna, e cambiano i comandi.
-const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect"];
+const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;

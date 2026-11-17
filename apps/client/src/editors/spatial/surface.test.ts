@@ -226,7 +226,7 @@ describe("un documento che non si modifica subito", () => {
   it("un SVG estraneo è l'immagine del documento intero, e «Modifica» lo adotta", () => {
     const { surface, changes } = mount(FOREIGN);
     expect(shown()).toEqual({
-      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.",
+      notice: "Questo SVG non è stato fatto con Fub: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.",
       adopt: true,
       draw: false,
       read: true,

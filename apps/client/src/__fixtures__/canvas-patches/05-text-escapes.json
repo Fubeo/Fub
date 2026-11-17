@@ -1,0 +1,11 @@
+{
+  "name": "text-escapes",
+  "description": "R6: l'escape di JSON.stringify, solo virgolette, barra rovescia e controlli; barra, non ASCII, emoji e U+2028 restano come sono",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"x\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"x"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a\"b\\c\/d\ne\tf\u0001g\u001f\b\fè😀\u2028"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\\\"b\\\\c/d\\ne\\tf\\u0001g\\u001f\\b\\fè😀\u2028\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"x\"}],\"edges\":[]}"
+  }
+}

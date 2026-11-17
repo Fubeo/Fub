@@ -1,10 +1,15 @@
 // La schermata senza vault e i controlli della demo sono UI di macchina:
 // i dati e le mutazioni passano dall'adattatore host, mai dal registro plugin.
 import { api, type ConfigReport, type SupportPreview } from "../host/ipc";
+import type { ComponentsMap } from "../host/contract";
+import { settings, vaultEntries } from "../host/query";
 import { pickSupportDestination } from "../host/dialog";
 import { confirm } from "../platform/confirm";
 import { errorText, asPluginError } from "../host/errors";
-import { on } from "../state/store";
+import { onEvent } from "../state/kernel";
+import { on, state } from "../state/store";
+import { guardDisabledKeys, laterReason, profileButton, RECOMMENDED } from "../panels/component-profiles";
+import { trapFocus } from "./a11y";
 import { t, onLanguage } from "../i18n/strings";
 import { notify } from "./notify";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
@@ -401,4 +406,219 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
   }));
   refresh();
   return teardown;
+}
+
+// --- il profilo di un vault nuovo ---------------------------------------------
+
+/// Quanto la schermata del profilo aspetta, dopo una scelta che rimonta il
+/// vault (la lavagna che si spegne o si accende), il `vault_opened` che dice
+/// «è di nuovo su». Oltre, il vault si mostra lo stesso: la schermata non resta
+/// appesa a un evento che non arriva.
+export const PROFILE_REMOUNT_WAIT_MS = 2000;
+
+/// Un vault appena aperto è **nuovo** (A6) se non ha voci visibili e nessuna
+/// chiave `components.*` scritta nel vault. Lo si chiede all'anagrafe e alle
+/// impostazioni, con le domande che la finestra fa già; una risposta che non
+/// arriva vale «non nuovo», perché chiedere un profilo a un vault che ne ha uno
+/// è peggio che non chiederlo.
+export async function isNewVault(): Promise<boolean> {
+  try {
+    const [entries, entriesSettings] = await Promise.all([
+      vaultEntries({ offset: 0, limit: 1 }),
+      settings(),
+    ]);
+    if (entries.total > 0) return false;
+    return !entriesSettings.some((entry) => entry.spec.key.startsWith("components.") && entry.source === "vault");
+  } catch {
+    return false;
+  }
+}
+
+export interface VaultProfileHooks {
+  /// Riscopre ciò che i bundle registrano, dopo che un profilo ne ha accesi o
+  /// spenti (le stesse due domande della pagina «Componenti»).
+  reloadProvider(): Promise<void>;
+}
+
+/// La schermata che chiede il profilo a un vault nuovo, dentro il benvenuto:
+/// i profili con la riga condivisa, «Studio» già scelto, «Continua». Niente si
+/// applica prima di «Continua» o di Esc, che vale «Studio». Si scioglie quando
+/// il profilo è applicato (e il vault, se si è rimontato, è di nuovo su),
+/// quando l'applicazione fallisce — il vault si apre come prima e l'errore si
+/// dice —, quando un altro vault prende il suo posto o quando `parent` chiude.
+export async function askVaultProfile(root: string, hooks: VaultProfileHooks, parent?: Lifetime): Promise<void> {
+  const onboarding = document.getElementById("onboarding");
+  if (!onboarding || parent?.closed) return;
+  let map: ComponentsMap;
+  try {
+    map = await api.componentsMap(root);
+  } catch (error) {
+    profileFailed(errorText(error));
+    return;
+  }
+  if (parent?.closed || state.vaultRoot !== root) return;
+  const profiles = map.profili;
+  const available = profiles.filter((profile) => !profile.piu_avanti);
+  if (available.length === 0) return;
+  const recommended = available.find((profile) => profile.nome === RECOMMENDED) ?? available[0]!;
+
+  const lifetime = openLifetime();
+  let done!: () => void;
+  const finished = new Promise<void>((resolve) => { done = resolve; });
+  lifetime.add(() => done());
+  if (parent) {
+    parent.add(() => lifetime.close());
+    if (parent.closed) lifetime.close();
+  }
+
+  let chosen = recommended.nome;
+  let busy = false;
+
+  const screen = document.createElement("section");
+  screen.id = "onboarding-profile";
+  screen.className = "onboarding-profile";
+  // Tiene il fuoco ed Esc ha un significato: è una finestra di dialogo, e lo
+  // dice, così chi legge lo schermo non cerca dietro ciò che non si raggiunge.
+  screen.setAttribute("role", "dialog");
+  screen.setAttribute("aria-modal", "true");
+  screen.setAttribute("aria-labelledby", "onboarding-profile-title");
+  const title = document.createElement("h2");
+  title.id = "onboarding-profile-title";
+  const lede = document.createElement("p");
+  lede.className = "onboarding-profile-lede";
+  const row = document.createElement("div");
+  row.className = "components-profiles";
+  row.setAttribute("role", "group");
+  row.setAttribute("aria-labelledby", title.id);
+  const said = document.createElement("p");
+  said.className = "onboarding-profile-status";
+  said.setAttribute("role", "status");
+  said.hidden = true;
+  const actions = document.createElement("div");
+  actions.className = "onboarding-actions";
+  const go = document.createElement("button");
+  go.type = "button";
+  go.className = "primary";
+  go.id = "onboarding-profile-continue";
+  actions.append(go);
+  const note = document.createElement("p");
+  note.className = "onboarding-profile-note";
+  screen.append(title, lede, row, said, actions, note);
+
+  const say = (text: string | null): void => {
+    said.hidden = !text;
+    said.textContent = text ?? "";
+  };
+  const draw = (): void => {
+    title.textContent = t("onboarding.profile.title");
+    lede.textContent = t("onboarding.profile.lede");
+    go.textContent = t("onboarding.profile.continue");
+    note.textContent = t("onboarding.profile.note");
+    const focused = row.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement).closest<HTMLElement>("[data-profile]")?.dataset.profile
+      : undefined;
+    row.replaceChildren(...profiles.map((profile) => profileButton(profile, {
+      pressed: profile.nome === chosen,
+      busy,
+      busyHere: false,
+      onLater: (later) => say(laterReason(later)),
+      onChoose: (picked) => {
+        chosen = picked.nome;
+        say(null);
+        draw();
+      },
+    })));
+    if (busy) {
+      go.setAttribute("aria-disabled", "true");
+      go.setAttribute("aria-busy", "true");
+    } else {
+      go.removeAttribute("aria-disabled");
+      go.removeAttribute("aria-busy");
+    }
+    if (focused) row.querySelector<HTMLElement>(`[data-profile="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+  };
+  guardDisabledKeys(lifetime, screen, (name) => profiles.find((profile) => profile.nome === name), (later) =>
+    say(laterReason(later)),
+  );
+
+  const apply = async (name: string): Promise<void> => {
+    if (busy || lifetime.closed) return;
+    busy = true;
+    const profile = profiles.find((candidate) => candidate.nome === name);
+    say(t("onboarding.profile.applying", { name: profile?.etichetta ?? name }));
+    draw();
+    // L'attesa del rimontaggio si arma **prima** di applicare: gli eventi
+    // arrivano dietro la risposta, e uno perso lascerebbe aspettare a vuoto.
+    let closed = false;
+    let reopened!: () => void;
+    const remounted = new Promise<void>((resolve) => { reopened = resolve; });
+    const stopClosed = onEvent("vault_closed", (event) => {
+      if (event.root === root) closed = true;
+    });
+    const stopOpened = onEvent("vault_opened", (event) => {
+      if (event.root === root && closed) reopened();
+    });
+    lifetime.add(stopClosed);
+    lifetime.add(stopOpened);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    lifetime.add(() => clearTimeout(timer));
+    try {
+      const result = await api.componentsApply({ azione: "profilo", nome: name }, true, root);
+      if (lifetime.closed) return;
+      if (result.risposta === "rifiuto") {
+        profileFailed(result.rifiuto === "profilo_piu_avanti" && profile
+          ? laterReason(profile)
+          : t("components.refused.profile", { name: "nome" in result ? result.nome : name }));
+        return;
+      }
+      for (const warning of result.avvisi) notify(errorText(warning), "guasto");
+      if (result.scritture.some((write) => write.id === LAVAGNA)) {
+        await Promise.race([
+          remounted,
+          new Promise<void>((resolve) => { timer = setTimeout(resolve, PROFILE_REMOUNT_WAIT_MS); }),
+        ]);
+        if (lifetime.closed) return;
+      }
+      if (result.applicato && result.scritture.some((write) => write.bundle)) {
+        try {
+          await hooks.reloadProvider();
+        } catch (error) {
+          notify(t("settings.components.reload_failed", { reason: errorText(error) }), "guasto");
+        }
+      }
+    } catch (error) {
+      if (!lifetime.closed) profileFailed(errorText(error));
+    } finally {
+      lifetime.close();
+    }
+  };
+
+  lifetime.listen(go, "click", () => void apply(chosen));
+  // Un altro vault al posto di questo: la domanda non è più sua.
+  lifetime.add(on("vault", () => {
+    if (state.vaultRoot !== root && !busy) lifetime.close();
+  }));
+  lifetime.add(onLanguage(() => {
+    if (!busy) draw();
+  }));
+
+  draw();
+  onboarding.append(screen);
+  onboarding.dataset.step = "profile";
+  lifetime.add(() => {
+    screen.remove();
+    if (onboarding.dataset.step === "profile") delete onboarding.dataset.step;
+  });
+  // Esc vale «Studio»: applica il consigliato e apre, come «Continua» su di lui.
+  lifetime.add(trapFocus(screen, () => void apply(recommended.nome)));
+  row.querySelector<HTMLElement>(`[data-profile="${CSS.escape(chosen)}"]`)?.focus();
+  return finished;
+}
+
+/// L'id della lavagna: una scrittura sua vuol dire che il vault si rimonta
+/// (`ComponentOutcome` in `host/contract.ts`).
+const LAVAGNA = "fub.lavagna";
+
+function profileFailed(reason: string): void {
+  notify(t("onboarding.profile.failed", { reason }), "guasto");
 }

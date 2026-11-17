@@ -1,0 +1,9 @@
+{
+  "name": "r5-root-1e999",
+  "description": "R5: 1e999 in un campo sconosciuto della radice",
+  "source": "{\"nodes\":[],\"edges\":[],\"future\":1e999}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

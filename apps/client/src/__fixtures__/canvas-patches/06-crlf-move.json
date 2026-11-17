@@ -1,0 +1,11 @@
+{
+  "name": "crlf-move",
+  "description": "CRLF: il ritocco tocca solo il numero, i terminatori restano",
+  "before": "{\r\n  \"nodes\": [\r\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}\r\n  ],\r\n  \"edges\": []\r\n}\r\n",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":10,"y":0,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\r\n  \"nodes\": [\r\n    {\"id\":\"a\",\"type\":\"text\",\"x\":10,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}\r\n  ],\r\n  \"edges\": []\r\n}\r\n",
+    "undo": "{\r\n  \"nodes\": [\r\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}\r\n  ],\r\n  \"edges\": []\r\n}\r\n"
+  }
+}

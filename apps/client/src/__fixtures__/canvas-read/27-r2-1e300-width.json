@@ -1,0 +1,9 @@
+{
+  "name": "r2-1e300-width",
+  "description": "R2: 1e300 in width non è un intero sicuro",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":1e300,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

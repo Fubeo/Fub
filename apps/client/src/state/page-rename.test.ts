@@ -40,7 +40,7 @@ vi.mock("../i18n/strings", () => ({
   t: (key: string, args?: Record<string, string>) => (args ? `${key} ${Object.values(args).join(" | ")}` : key),
 }));
 
-import { newSubpage, pageRenameTarget, renamePage, renamedPath } from "./page-rename";
+import { newSubpage, pageRenameTarget, renamePage, renamedPageName, renamedPath } from "./page-rename";
 
 beforeEach(() => {
   world.pending = [];
@@ -62,6 +62,12 @@ describe("che cosa cambia nome", () => {
   it("la pagina di una cartella rinomina la cartella", () => {
     expect(pageRenameTarget("Viaggi/Roma/_index.md", "Napoli")).toEqual({ kind: "folder", from: "Viaggi/Roma", to: "Viaggi/Napoli" });
     expect(pageRenameTarget("Roma/_index.md", "Napoli")).toEqual({ kind: "folder", from: "Roma", to: "Napoli" });
+  });
+
+  it("il nome che la pagina prende: l'ultimo pezzo del percorso, o la cartella", () => {
+    expect(renamedPageName("Nuova.md", "Archivio/Nuova")).toBe("Nuova");
+    expect(renamedPageName("Guida/Nota.md", "Appunti")).toBe("Appunti");
+    expect(renamedPageName("Viaggi/Roma/_index.md", "Napoli")).toBe("Napoli");
   });
 
   it("un `_index` alla radice è una nota come le altre", () => {

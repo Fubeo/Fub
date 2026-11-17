@@ -72,7 +72,7 @@ sé stesso.».
 L'SVG pulito tiene i simboli che un'istanza disegna, anche attraverso un
 altro simbolo, e lascia gli altri; il PNG, il JPEG e il PDF disegnano ogni
 istanza col suo simbolo ([Disegni, esportare](drawing-export.md)). Un
-programma che non conosce i simboli di FubDraw vede `symbol` e `use`, che
+programma che non conosce i simboli di Fub vede `symbol` e `use`, che
 ogni lettore di SVG disegna.
 
 ## Accessibilità

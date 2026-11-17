@@ -1,0 +1,9 @@
+{
+  "name": "file-subpath-without-hash",
+  "description": "Il subpath di una scheda file comincia con #",
+  "source": "{\"nodes\":[{\"id\":\"n\",\"type\":\"file\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"file\":\"a.md\",\"subpath\":\"x\"}],\"edges\":[]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

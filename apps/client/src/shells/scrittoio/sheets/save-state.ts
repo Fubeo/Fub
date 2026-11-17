@@ -45,6 +45,7 @@ import { on } from "../../../state/store";
 import { focusableElements } from "../../../ui/a11y";
 import { allCommands, displayBinding, type CommandEntry } from "../../../ui/commands";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { attachTooltip, setTooltip } from "../../../ui/tooltip";
 
 const SAVE = "shell.doc.save";
 const KEEP_MINE = "shell.doc.conflict.mine";
@@ -102,10 +103,14 @@ export function mountSaveState(lifetime: Lifetime): void {
   button.className = "save-state sheet-save";
   button.setAttribute("aria-haspopup", "dialog");
   button.hidden = true;
+  // Il suggerimento ha la vita del bottone: `sync` ne cambia solo il testo.
+  lifetime.add(attachTooltip(button, ""));
 
   /// L'ora dell'ultimo salvataggio visto, per documento.
   const savedAt = new Map<string, number>();
   let opened: Opened | null = null;
+  /// La parola che il suggerimento del bottone dice adesso.
+  let tip = "";
 
   const stateNow = (): SaveState | null => {
     const value = live.dataset.state ?? "";
@@ -127,6 +132,12 @@ export function mountSaveState(lifetime: Lifetime): void {
     if ((button.getAttribute("aria-label") ?? "") !== name) {
       if (name === "") button.removeAttribute("aria-label");
       else button.setAttribute("aria-label", name);
+    }
+    // Il suggerimento ridice la parola dello stato: sul telefono in piedi il
+    // bottone mostra solo la spunta, o il punto. Si scrive solo quando cambia.
+    if (tip !== word) {
+      tip = word;
+      setTooltip(button, word);
     }
   };
 

@@ -1,0 +1,10 @@
+{
+  "name": "edge-removed-from-middle-comes-back",
+  "description": "R11: l'arco di mezzo si toglie con \"at\":1; vanno via i suoi byte e la virgola che lo precede, gli altri due archi restano. L'annulla lo rimette al suo posto, fra e1 ed e3, e il testo torna quello di prima",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"b\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\"},{\"id\":\"e2\",\"fromNode\":\"b\",\"toNode\":\"a\",\"label\":\"mezzo\"},{\"id\":\"e3\",\"fromNode\":\"a\",\"toNode\":\"a\"}]}",
+  "patches": [{"kind":"remove-edge","before":{"id":"e2","fromNode":"b","toNode":"a","label":"mezzo"},"after":null,"at":1}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"b\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"a\",\"toNode\":\"b\"},{\"id\":\"e3\",\"fromNode\":\"a\",\"toNode\":\"a\"}]}"
+  }
+}

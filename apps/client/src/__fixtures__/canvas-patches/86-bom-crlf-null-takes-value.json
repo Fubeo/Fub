@@ -1,0 +1,11 @@
+{
+  "name": "bom-crlf-null-takes-value",
+  "description": "BOM e CRLF con i tab di Obsidian: il null di label prende un valore al suo posto e quello di background resta; cambiano solo i byte \"null\" di label, che diventano \"\\\"ora\\\"\"; BOM, terminatori e rientri restano, ed edges assente non arriva. L'annulla torna al modello di prima, senza label: il campo va via, e il null di background resta",
+  "before": "﻿{\r\n\t\"nodes\":[\r\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"a\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"label\":null,\"background\":null}\r\n\t]\r\n}\r\n",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a","label":"ora"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "﻿{\r\n\t\"nodes\":[\r\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"a\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"label\":\"ora\",\"background\":null}\r\n\t]\r\n}\r\n",
+    "undo": "﻿{\r\n\t\"nodes\":[\r\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"a\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"background\":null}\r\n\t]\r\n}\r\n"
+  }
+}

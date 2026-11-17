@@ -58,7 +58,7 @@
 
 import { INK_MAX_SAMPLES, type InkSample, type InkTilt } from "../sample";
 import type { InkPointerType, PointerSample } from "./pointer";
-import { buttonMask, classifyPointer, strokes, type PointerRole, type StrokeRole, type TouchPolicy } from "./roles";
+import { buttonMask, classifyPointer, strokes, type MousePolicy, type PointerRole, type StrokeRole, type TouchPolicy } from "./roles";
 import { Stabilizer, type StabilizerConfig, NO_STABILIZER } from "./stabilizer";
 import { penAngles, reportsTilt, type PenAngles } from "./tilt";
 
@@ -122,6 +122,8 @@ export type PressureMap = (pressure: number) => number;
 export interface SessionConfig {
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
+  /// Che cosa fa il tasto principale del mouse (default `ink`).
+  readonly mouse?: MousePolicy;
   /// Campioni per tratto prima di dividerlo, da 2 a `INK_MAX_SAMPLES` (default
   /// `INK_MAX_SAMPLES`).
   readonly maxSamples?: number;
@@ -188,6 +190,7 @@ function tiltOf(sample: InkTilt): PenAngles | null {
 export class Session {
   private readonly maxSamples: number;
   private touch: TouchPolicy;
+  private mouse: MousePolicy;
   private curve: PressureMap | null;
   private stabilizer: StabilizerConfig;
   /// I puntatori giù su questa superficie, col loro ruolo.
@@ -210,6 +213,7 @@ export class Session {
     }
     this.maxSamples = maxSamples;
     this.touch = config.touch ?? "auto";
+    this.mouse = config.mouse ?? "ink";
     this.curve = config.curve ?? null;
     this.stabilizer = config.stabilizer ?? NO_STABILIZER;
   }
@@ -243,6 +247,12 @@ export class Session {
     this.touch = policy;
   }
 
+  /// Che cosa fa il tasto principale del mouse dal prossimo appoggio: un
+  /// tratto già cominciato finisce com'è.
+  setMousePolicy(policy: MousePolicy): void {
+    this.mouse = policy;
+  }
+
   /// La curva della pressione per i campioni da adesso.
   setCurve(curve: PressureMap | null): void {
     this.curve = curve;
@@ -266,6 +276,7 @@ export class Session {
     if (kind === "pen") this.notePen(event.pointerId);
     let role = classifyPointer(event, {
       touch: this.touch,
+      mouse: this.mouse,
       penSeen: this.seenPen,
       penNear: this.penNear(),
       touchesDown: this.touchesDown(),

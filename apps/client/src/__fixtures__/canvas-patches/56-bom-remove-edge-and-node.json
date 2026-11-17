@@ -1,0 +1,11 @@
+{
+  "name": "bom-remove-edge-and-node",
+  "description": "Su un file bom toglie un arco e una scheda: il testo tiene terminatori e BOM, e l'annulla torna alla lavagna di prima",
+  "before": "\ufeff{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\n  ]\n}\n",
+  "patches": [{"kind":"remove-edge","before":{"id":"e","fromNode":"a","toNode":"b"},"after":null},{"kind":"remove-node","before":{"id":"b","type":"text","x":300,"y":0,"width":200,"height":100,"text":"due"},"after":null,"at":1}],
+  "expect": {
+    "outcome": "applied",
+    "text": "\ufeff{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"}\n  ],\n  \"edges\": []\n}\n",
+    "undo": "\ufeff{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}]\n}\n"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "about": "Togliere un id che non è né una scheda né un arco è UnknownEdge (cercato fra le schede, poi fra gli archi).",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "remove", "ids": ["a", "zzz"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownEdge", "index": 0, "id": "zzz" } }
+}

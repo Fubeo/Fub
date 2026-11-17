@@ -1,0 +1,6 @@
+{
+  "about": "Un lato che non esiste («middle») non si legge: la lista è malformata, nessuna scheda si compila.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }] },
+  "ops": [{ "op": "add_card", "id": "b", "text": "b", "near": "a", "side": "middle" }],
+  "expect": { "outcome": "malformed" }
+}

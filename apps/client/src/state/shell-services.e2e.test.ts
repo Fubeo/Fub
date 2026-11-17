@@ -25,7 +25,8 @@ import {
   mountedTextEditors as editorViews,
 } from "../editors/text/test-support";
 import type { FakeHost } from "../host/fake";
-import type { DraftInfo } from "../host/contract";
+import type { DraftInfo, SettingEntry, ViewSpec } from "../host/contract";
+import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -46,6 +47,8 @@ const box = vi.hoisted(() => {
     draftsFail: false,
     /// L'aggancio alla chiusura della finestra fallisce.
     closeHookFails: false,
+    /// Le impostazioni che l'host dichiara: di solito nessuna.
+    settings: [] as SettingEntry[],
     /// Porte e segnali, nell'ordine in cui la shell li ha toccati.
     trace: [] as string[],
     /// Ciò che una prova vuole guardare **nell'istante** di un passo.
@@ -170,12 +173,10 @@ interface Mounted extends Shell {
 async function mount(
   file: Record<string, string>,
   watch: (shell: Shell) => void = () => {},
+  view: ViewSpec[] = [testViewSpec(TRASH_VIEW, "left_sidebar")],
 ): Promise<Mounted> {
   vi.resetModules();
-  const host = createFakeHost({
-    file,
-    view: [testViewSpec(TRASH_VIEW, "left_sidebar")],
-  });
+  const host = createFakeHost({ file, view, settings: box.settings });
   box.host = host;
   box.trace = [];
   const store = await import("./store");
@@ -220,8 +221,9 @@ async function mount(
 async function start(
   file: Record<string, string>,
   watch?: (shell: Shell) => void,
+  view?: ViewSpec[],
 ): Promise<Mounted> {
-  const mounted = await mount(file, watch);
+  const mounted = await mount(file, watch, view);
   await mounted.startup;
   await settle();
   return mounted;
@@ -234,14 +236,7 @@ async function settle(rounds = 6): Promise<void> {
 }
 
 /// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
 function textToVideo(): string {
@@ -278,12 +273,12 @@ function firstEditor(): ReturnType<typeof editorViews>[number] {
 /// così non resta un canale aperto dopo la prova.
 async function holdWindowOpening(shell: Shell): Promise<{ abandon(): Promise<void> }> {
   const { openCurrentInNewWindow } = await import("./document-windows");
-  const reads = shell.host.atGate("readDocument").length;
-  const unlock = shell.host.throttle("readDocument");
+  const reads = shell.host.atGate("openDocument").length;
+  const unlock = shell.host.throttle("openDocument");
   const opening = openCurrentInNewWindow("note/Spesa.md");
   await waitFor(
     "la finestra comincia ad aprirsi",
-    () => shell.host.atGate("readDocument").length === reads + 1,
+    () => shell.host.atGate("openDocument").length === reads + 1,
   );
   return {
     abandon: async () => {
@@ -320,6 +315,7 @@ beforeEach(() => {
   box.drafts = [];
   box.draftsFail = false;
   box.closeHookFails = false;
+  box.settings = [];
   box.probes.clear();
 });
 
@@ -347,7 +343,7 @@ describe("aprire un vault: i passi e il loro ordine", () => {
       "pendingKeybindings",
       "queryIndex:vault_status",
       // La prima nota: il layout era vuoto, quindi nessuno aveva letto niente.
-      "readDocument",
+      "openDocument",
     ];
     expect(firstOccurrences(box.trace, steps)).toEqual(steps);
   });
@@ -371,7 +367,7 @@ describe("aprire un vault: i passi e il loro ordine", () => {
       "viewState:layout",
       "viewState:expanded",
       "viewState:activeSpace",
-      "readDocument",
+      "openDocument",
       "queryIndex:drafts",
       "signal:vault:/altro",
       "signal:documents",
@@ -598,6 +594,88 @@ describe("aprire un vault: i passi e il loro ordine", () => {
   });
 });
 
+describe("la scheda di una view principale quando il vault cambia (#237 R08)", () => {
+  /// Una view che si apre in un riquadro, come il grafo: l'host finto sa
+  /// disegnare soltanto il cestino, e qui basta che sia una view principale.
+  const mainViews = (): ViewSpec[] => [testViewSpec(TRASH_VIEW, "main")];
+  /// Il vault che ha nominato l'ultimo disegno della view, o `null` se non
+  /// l'ha disegnata nessuno.
+  const lastRenderVault = (shell: Shell): unknown => {
+    const calls = shell.host.atGate("renderView");
+    return calls[calls.length - 1]?.args[3] ?? null;
+  };
+  const renders = (shell: Shell): number => shell.host.atGate("renderView").length;
+  /// La view si vede nel riquadro: la sua superficie è accesa e ha un albero.
+  const paneShowsView = (): boolean => {
+    const surface = document.querySelector<HTMLElement>(".pane .pane-view");
+    return !!surface && !surface.hidden && surface.childElementCount > 0;
+  };
+
+  async function openTab(shell: Shell): Promise<void> {
+    const { openPrimaryView } = await import("../ui/primary-views");
+    openPrimaryView(TRASH_VIEW);
+    await waitFor("la view si disegna nel riquadro", () => lastRenderVault(shell) === "/vault" && paneShowsView());
+  }
+
+  it("dopo due cambi di fila la scheda si ridisegna nel vault aperto, e riaprendolo pure", async () => {
+    const shell = await start(VAULT, undefined, mainViews());
+    await openTab(shell);
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+    await openVault("/terzo");
+    await settle();
+    expect(lastRenderVault(shell)).toBe("/terzo");
+    expect(paneShowsView()).toBe(true);
+    // Nessun disegno, dopo l'apertura, nomina un vault lasciato.
+    const before = renders(shell);
+    await openVault("/terzo");
+    await settle();
+    expect(renders(shell)).toBeGreaterThan(before);
+    expect(shell.host.atGate("renderView").slice(before).map((call) => call.args[3])).toEqual(
+      Array(renders(shell) - before).fill("/terzo"),
+    );
+    expect(paneShowsView()).toBe(true);
+  });
+
+  /// La seconda `synchronize()` dell'apertura sembra in più: la prima ha già
+  /// rimesso le schede. Ma la prima gira con le view **del vault di prima**, e
+  /// una scheda la cui view quel vault non dichiarava resta vuota finché le
+  /// view del vault nuovo non sono montate e non si rifà il giro.
+  it("una view che il vault di prima non dichiarava torna nella sua scheda", async () => {
+    const views = mainViews();
+    const shell = await start(VAULT, undefined, views);
+    await openTab(shell);
+    const { openVault } = await import("../desktop-shell");
+
+    const declared = views.splice(0);
+    await openVault("/senza");
+    await settle();
+    expect(paneShowsView()).toBe(false);
+    // Il vault che non la dichiara non si sente chiedere di disegnarla: con
+    // l'host vero sarebbe un errore, e un avviso, per una view che non c'è.
+    expect(shell.host.atGate("renderView").filter((call) => call.args[3] === "/senza")).toEqual([]);
+
+    views.push(...declared);
+    await openVault("/con");
+    await settle();
+    expect(lastRenderVault(shell)).toBe("/con");
+    expect(paneShowsView()).toBe(true);
+  });
+
+  it("smontata la shell, la scheda non si ridisegna più", async () => {
+    const shell = await start(VAULT, undefined, mainViews());
+    await openTab(shell);
+    const stop = await shell.startup;
+
+    stop();
+    const before = renders(shell);
+    shell.host.writeFromOutside("Benvenuto.md", "cambiato da fuori\n");
+    await settle();
+    expect(renders(shell)).toBe(before);
+  });
+});
+
 describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
   /// Crea e rinomina passano dal registro dei comandi, e senza `vault` l'host
   /// risponde con il corrente: un gesto che aspetta mentre se ne apre un altro
@@ -623,9 +701,11 @@ describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
   it("la lettura di un documento aperto nomina il vault aperto", async () => {
     const shell = await start(VAULT);
 
-    const reads = shell.host.atGate("readDocument").map((call) => call.args);
-    expect(reads.length).toBeGreaterThan(0);
-    for (const args of reads) expect(args[1]).toBe("/vault");
+    // Una sessione legge sotto la sua chiave: `[id, chiave, vault]`.
+    const opens = shell.host.atGate("openDocument").map((call) => call.args);
+    expect(opens.length).toBeGreaterThan(0);
+    for (const args of opens) expect(args[2]).toBe("/vault");
+    for (const args of shell.host.atGate("readDocument").map((call) => call.args)) expect(args[1]).toBe("/vault");
   });
 
   /// Le letture che compongono la shell — l'elenco delle view, il disegno delle
@@ -875,5 +955,38 @@ describe("rilasciare una linguetta", () => {
       () => shell.sessions.get("Benvenuto.md") === undefined,
     );
     expect(shell.host.files()["Benvenuto.md"]).toContain("battuta in due riquadri");
+  });
+});
+
+describe("ricordare un pannello laterale", () => {
+  const machine = (key: string, kind: SettingEntry["spec"]["kind"], value: SettingEntry["value"]): SettingEntry => ({
+    spec: { key, label: key, description: "", group: "Cornice", scope: "machine", kind, program_writable: false },
+    value,
+    source: "default",
+  });
+
+  /// Aprire e chiudere la barra dal comando scrive `chrome.sidebar.visible`, e
+  /// l'host risponde con un `setting_changed`. Prima ogni ascoltatore rileggeva
+  /// tutte le impostazioni (tema, lingua, cronologia, cornice: cinque letture a
+  /// gesto, e il tema rimontato); adesso le rilegge solo chi possiede la chiave.
+  it("la barra dal comando rilegge le impostazioni una volta sola, dalla shell che la possiede", async () => {
+    box.settings = [
+      machine("chrome.schema", { kind: "number", default: 1, min: 0, max: 9 }, 1),
+      machine("chrome.sidebar.visible", { kind: "toggle", default: true }, true),
+      machine("chrome.inspector.visible", { kind: "toggle", default: true }, true),
+    ];
+    await start(VAULT);
+    const { toggleSidePanel } = await import("../ui/side-panels");
+    const sidebar = document.getElementById("sidebar")!;
+    expect(sidebar.hidden).toBe(false);
+    for (const hidden of [true, false]) {
+      box.trace = [];
+      toggleSidePanel("sidebar");
+      await settle();
+      await settle();
+      expect(sidebar.hidden).toBe(hidden);
+      expect(box.trace.filter((step) => step === "setSetting")).toHaveLength(1);
+      expect(box.trace.filter((step) => step === "queryIndex:settings")).toHaveLength(1);
+    }
   });
 });

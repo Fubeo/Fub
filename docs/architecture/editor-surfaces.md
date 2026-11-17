@@ -31,7 +31,7 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece una `EditorSurface`.
+Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md).
 `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
@@ -61,7 +61,7 @@ contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
 finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
-shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)).
+shell. Un caricamento fallito lascia il testo alla sessione. Nei disegni la superficie apre anche una sessione del motore (`editors/spatial/motore/sessione.ts`): un'istanza del motore del disegno nell'host, tenuta allineata al testo della `DocumentSession`, che fa girare Selezione, forme e Testo; senza il motore gli strumenti fanno da sé ([il disegno sul motore](disegno.md)). Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -70,10 +70,10 @@ accanto») la imposta nel riquadro nuovo di una divisione verso destra, o va al
 riquadro che la mostra già. Aprire e chiudere non sono mai disponibili
 insieme; stanno nella palette e nel menu del riquadro, senza accordo. Il
 cambio passa dalla via del cambio di scheda: il riquadro stacca e distrugge la
-superficie e ne monta un'altra sulla stessa `DocumentSession`, che restituisce
-testo e descrittore senza leggere il disco. Testo sporco, coda di salvataggio
-e bozza restano; la cronologia locale della superficie smontata si perde come
-a ogni cambio di scheda, quella degli altri riquadri no. Il fuoco va sulla
+superficie, senza metterla da parte, e ne monta un'altra sulla stessa
+`DocumentSession`, che restituisce testo e descrittore senza leggere il disco.
+Testo sporco, coda e bozza restano; la cronologia locale della superficie
+smontata si perde, quella degli altri riquadri no. Il fuoco va sulla
 superficie nuova. Se il riquadro ricorda una lettura per la famiglia della
 vista, l'apertura passa alla scrittura che sceglierebbe `Mod-E`, perché chi
 chiede il sorgente vuole il testo; accanto passa alla modalità di ruolo
@@ -122,11 +122,11 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   argomenti; `null` lascia il menu del sistema. Lo dichiarano il Markdown
   (scrittura e Lettura), i documenti di Word, i fogli, la tela, le basi e il
   visualizzatore dei media;
-- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
-  Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
-  formattazione;
-- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`,
-  dietro `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich);
+- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di Word,
+  i fogli) sopra il menu; il Markdown usa i gruppi della barra di formattazione;
+- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`, dietro
+  `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich, disegno). `writes`
+  («Si scrive») lo dice la banda (`standing-open`, `StandingChip.openFrom`);
 - `ownBar` dice che la superficie disegna la sua barra dei comandi (i
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della
@@ -161,7 +161,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
   una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
   nella sessione. In Lettura o in sola lettura ogni azione è spenta. Ne sono
-  clienti la barra di formattazione (`panels/format-bar.ts`) e `fub.editor.action`;
+  clienti `fub.editor.action` e la barra di formato (`panels/format-bar.ts`, in `kit-bar`);
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`
@@ -275,9 +275,9 @@ TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
 ### Markdown: Source, Live e Reading
 
-Source, Live e Reading sono tre viste sullo stesso `TextEngine` e sullo stesso
-buffer della `DocumentSession`: il cambio modo riusa la vista di scrittura e
-Reading ridisegna dal buffer corrente, senza salvataggio imposto.
+Source, Live e Reading sono tre viste sullo stesso `TextEngine` e buffer della
+`DocumentSession`. Il cambio modo riusa la vista di scrittura; Reading ridisegna
+dal buffer senza salvare, e in conflitto la fascia (`drawConflict`) lo dice.
 
 I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
@@ -384,7 +384,7 @@ Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
 `apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
 
-La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
+La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
 `TextEngine` nudo, senza completamenti dal vault né slash palette. Un documento
@@ -401,6 +401,19 @@ non un secondo sistema di tasti. Il foglio del disegno tiene per sé i tasti
 di un gesto (frecce, `Spazio`, `Invio`, `?`, `Tab` con una selezione) e
 `Mod-0`, il suo 100%; gli accordi che non usa, come `Mod-E`, arrivano alla
 shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
+
+### La lavagna
+
+`CanvasEngine` (`editors/canvas/engine.ts`) disegna il modello che il nucleo
+della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`. Un gesto passa
+le sue toppe al nucleo e il testo nuovo è il tratto cambiato. Annulla e ripeti
+rimettono il tratto di prima byte per byte con un `reset` se la versione del
+testo (un contatore del motore) è quella lasciata dal passo, se no le toppe
+inverse. Il nucleo si carica alla prima lavagna e poi resta; una trappola la
+riapre su un'istanza nuova dal testo della sessione. Il testo di una scheda si
+registra a 250 ms di pausa, all'uscita, con Invio o Esc e prima di ogni gesto;
+se il nucleo lo rifiuta resta nel campo con un avviso. È già nella [bozza](frontend-and-ipc.md#il-testo-in-sospeso);
+le toppe sono nelle [operazioni della lavagna](../reference/canvas-operations.md).
 
 ### La griglia
 
@@ -426,24 +439,11 @@ mantiene CodeMirror un servizio della shell testuale.
 
 - `apps/client/src/editors/text/engine.ts`
 - `apps/client/src/editors/text/history-footprints.ts`
-- `apps/client/src/editors/text/profiles/markdown/profile.ts`
-- `apps/client/src/editors/text/profiles/markdown/commands.ts`
-- `apps/client/src/editors/text/profiles/markdown/actions.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-model.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-grid.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-widget.ts`
-- `apps/client/src/editors/core/editor-actions.ts`
+- `apps/client/src/editors/text/profiles/`
+- `apps/client/src/editors/core/`
 - `apps/client/src/panels/format-bar.ts`
-- `apps/client/src/editors/text/profiles/markdown/completions.ts`
-- `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
-- `apps/client/src/editors/text/profiles/plain-text.ts`
-- `apps/client/src/editors/text/profiles/formula.ts`
-- `apps/client/src/editors/text/profiles/markdown/surface.ts`
-- `apps/client/src/editors/core/registry.ts`
-- `apps/client/src/editors/core/surface-modes.ts`
-- `apps/client/src/editors/core/bootstrap.ts`
 - `apps/client/src/editors/spatial/lazy.ts`
 - `apps/client/src/state/layout.ts`
 - `apps/client/src/editors/grid/`
-- `apps/client/src/editors/core/text-operation.ts`
+- `apps/client/src/editors/canvas/`
 - `apps/client/src/state/document-session.ts`

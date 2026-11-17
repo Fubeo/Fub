@@ -68,6 +68,48 @@ export const KIT: PartAnatomy = {
       states: [S("rest"), S("hover"), S("focused")],
       hooks: ["kit-options", "kit-options-row", "kit-options-more", "kit-options-overflow"],
     },
+    // La barra a schede (`kit/ribbon/`): la radice e ogni pezzo portano
+    // `kit-ribbon-<pezzo>` accanto alla classe col prefisso di chi la monta;
+    // la pelle di serie sta su queste, comune ai fogli e ai documenti.
+    {
+      name: "kit-ribbon",
+      states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")],
+      hooks: [
+        "kit-ribbon",
+        "kit-ribbon-head",
+        "kit-ribbon-quick",
+        "kit-ribbon-tabs",
+        "kit-ribbon-contextual",
+        "kit-ribbon-toggle",
+        "kit-ribbon-toolbar",
+        "kit-ribbon-group",
+        "kit-ribbon-group-label",
+        "kit-ribbon-group-body",
+        "kit-ribbon-group-toggle",
+        "kit-ribbon-stack",
+        "kit-ribbon-row",
+        "kit-ribbon-button",
+        "kit-ribbon-large",
+        "kit-ribbon-arrow",
+        "kit-ribbon-split",
+        "kit-ribbon-glyph",
+        "kit-ribbon-color-bar",
+        "kit-ribbon-select",
+        "kit-ribbon-input",
+        "kit-ribbon-check",
+        "kit-ribbon-keytip",
+        "kit-ribbon-chevron",
+        "kit-ribbon-label",
+      ],
+    },
+    // La barra in una fila: il vassoio, i foglietti, i pulsanti e i campi. Le
+    // classi le mette chi costruisce la barra (la barra di formato, la testa
+    // del disegno, la barra del PDF).
+    {
+      name: "kit-bar",
+      states: SELECTABLE,
+      hooks: ["kit-bar", "kit-bar-group", "kit-bar-button", "kit-bar-field"],
+    },
     { name: "kit-field-clear", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["kit-field-clear"] },
     // La riga attiva è `hover`: la porta il puntatore o la portano le frecce.
     // `selected` è la scelta dichiarata, che resta mentre l'attiva si muove.
@@ -76,6 +118,21 @@ export const KIT: PartAnatomy = {
       states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")],
       hooks: ["kit-list", "kit-list-item", "kit-list-highlight"],
     },
+    // La lingua dei menu (`kit/row.ts`, `kit/tile.ts`, `kit/group-label.ts`):
+    // `hover` è la scelta accesa (`data-lit`), `pressed` la risposta prima
+    // che il menu si chiuda (`data-pressed`), `disabled` la voce spenta col
+    // suo perché.
+    {
+      name: "kit-row",
+      states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")],
+      hooks: ["kit-row", "kit-row-icon", "kit-row-label", "kit-row-note", "kit-row-keys", "kit-row-more"],
+    },
+    {
+      name: "kit-tile",
+      states: [S("rest"), S("hover"), S("pressed"), S("disabled")],
+      hooks: ["kit-tile", "kit-tile-icon", "kit-tile-label"],
+    },
+    { name: "kit-group-label", states: [S("rest")], hooks: ["kit-group-label"] },
     {
       name: "kit-tabs",
       states: SELECTABLE,

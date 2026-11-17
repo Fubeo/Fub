@@ -18,6 +18,17 @@ describe("scorciatoie di Excel", () => {
     expect(shortcutCommand(key("KeyB", { key: "b", ctrlKey: true, altKey: true }), CELL)).toBeNull();
   });
 
+  it("Alt+= conta il carattere, sulla tastiera inglese e su quella italiana", () => {
+    const autoSum = { id: "formulas.autoSum", params: "{}" };
+    expect(shortcutCommand(key("Equal", { key: "=", altKey: true }), CELL)).toEqual(autoSum);
+    // Sulla tastiera italiana «=» è Maiusc+0.
+    expect(shortcutCommand(key("Digit0", { key: "=", altKey: true, shiftKey: true }), CELL)).toEqual(autoSum);
+    // Su macOS Opzione cambia il carattere in «≠».
+    expect(shortcutCommand(key("Equal", { key: "≠", altKey: true }), CELL)).toEqual(autoSum);
+    // Il tasto «Equal» della tastiera italiana scrive «ì»: non è la somma.
+    expect(shortcutCommand(key("Equal", { key: "ì", altKey: true }), CELL)).toBeNull();
+  });
+
   it("danno i formati di numero di Excel e la valuta della lingua", () => {
     const format = (code: string) => JSON.parse(shortcutCommand(key(code, { ctrlKey: true, shiftKey: true }), CELL)!.params) as unknown;
     expect(format("Backquote")).toEqual({ format: "General" });
@@ -29,9 +40,10 @@ describe("scorciatoie di Excel", () => {
       .toEqual({ id: "home.borders", params: JSON.stringify({ preset: "outside" }) });
   });
 
-  it("Alt+= è la somma automatica", () => {
-    expect(shortcutCommand(key("Equal", { altKey: true }), CELL)).toEqual({ id: "formulas.autoSum", params: "{}" });
-    expect(shortcutCommand(key("Equal", { altKey: true, shiftKey: true }), CELL)).toBeNull();
+  it("Alt+= è la somma automatica, Alt+«+» no", () => {
+    expect(shortcutCommand(key("Equal", { key: "=", altKey: true }), CELL)).toEqual({ id: "formulas.autoSum", params: "{}" });
+    // Sulla tastiera inglese Maiusc con quel tasto scrive «+».
+    expect(shortcutCommand(key("Equal", { key: "+", altKey: true, shiftKey: true }), CELL)).toBeNull();
   });
 
   it("Ctrl+«+» e Ctrl+«-» inseriscono e tolgono soltanto righe o colonne intere", () => {
@@ -46,6 +58,14 @@ describe("scorciatoie di Excel", () => {
     // Ctrl+Maiusc+«-» è togliere i bordi, non le righe.
     expect(shortcutCommand(key("Minus", { ctrlKey: true, shiftKey: true }), { ...CELL, wholeRows: true }))
       .toEqual({ id: "home.borders", params: JSON.stringify({ preset: "none" }) });
+    // Sulla tastiera italiana «+» ha un tasto suo: vale come nelle tabelle.
+    expect(shortcutCommand(key("BracketRight", { key: "+", ctrlKey: true }), { ...CELL, wholeRows: true })?.id).toBe("home.insertRows");
+  });
+
+  it("Ctrl+D e Ctrl+R riempiono come in ogni tabella, Maiusc no", () => {
+    expect(shortcutCommand(key("KeyD", { key: "d", ctrlKey: true }), CELL)?.id).toBe("edit.fillDown");
+    expect(shortcutCommand(key("KeyR", { key: "r", metaKey: true }), CELL)?.id).toBe("edit.fillRight");
+    expect(shortcutCommand(key("KeyD", { key: "D", ctrlKey: true, shiftKey: true }), CELL)).toBeNull();
   });
 
   it("le scorciatoie delle finestre di Excel chiedono la loro finestra", () => {

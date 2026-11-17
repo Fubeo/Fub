@@ -286,6 +286,31 @@ fn daily_outline_wordcount_and_random_answer_through_their_owners() {
     );
     assert_eq!(missing.status.code(), Some(1), "a missing note: {said}");
     assert!(said.contains("not_found"), "{said}");
+
+    // Un PDF non ha parole: la view lo dice con la sua chiave, e il comando
+    // rifiuta l'argomento invece di cercare un conteggio che non c'è.
+    std::fs::write(vault.join("Stampa.pdf"), b"%PDF-1.7\n%\x80\x81\x82\x83\n").unwrap();
+    let binary = cli(&[
+        "--vault",
+        vault.to_str().unwrap(),
+        "--config-dir",
+        config.to_str().unwrap(),
+        "--format",
+        "json",
+        "wordcount",
+        "Stampa.pdf",
+    ]);
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&binary.stdout),
+        String::from_utf8_lossy(&binary.stderr)
+    );
+    assert_eq!(
+        binary.status.code(),
+        Some(2),
+        "a file that is not text: {said}"
+    );
+    assert!(said.contains("bad_args"), "{said}");
 }
 
 /// Un comando secco apre il vault, domanda ed esce: le domande sul grafo e il
@@ -391,11 +416,18 @@ fn second_process_cannot_take_writer_and_sigint_exits_repl() {
         let result = stdout.read_exact(&mut prompt).map(|_| prompt);
         let _ = sender.send(result);
     });
-    let prompt = receiver.recv_timeout(Duration::from_secs(10));
+    // Il prompt esce quando il vault è aperto, e l'apertura scrive su disco con
+    // fsync: a macchina ferma ci vogliono 20–70 ms, ma con il disco occupato da
+    // altri scrittori (due `dd ... conv=fsync` bastano) si sono misurati più di
+    // 20 s (#301). L'attesa è un cane da guardia, non una misura: costa solo
+    // quando la REPL non risponde davvero.
+    let prompt = receiver.recv_timeout(Duration::from_secs(60));
     if prompt.is_err() {
         let _ = holder.kill();
         let _ = holder.wait();
-        panic!("REPL prompt timeout");
+        let mut stderr = String::new();
+        let _ = holder.stderr.take().unwrap().read_to_string(&mut stderr);
+        panic!("REPL prompt timeout; stderr: {stderr}");
     }
     assert_eq!(prompt.unwrap().unwrap(), *b"fub> ");
     let contender = cli(&[

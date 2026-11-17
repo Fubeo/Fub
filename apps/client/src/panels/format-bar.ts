@@ -23,8 +23,22 @@
 //
 // Il modello è quello della barra degli strumenti WAI-ARIA: un solo punto di
 // tabulazione, le frecce si spostano fra i pulsanti, Home ed End ai capi,
-// Escape torna al testo. Il puntatore non toglie il fuoco all'editor: la
+// Escape torna al testo: sono le frecce di ogni barra in una fila
+// (`kit/toolbar-keys.ts`). Il puntatore non toglie il fuoco all'editor: la
 // selezione su cui il pulsante agisce resta dov'era.
+//
+// # Il dito
+//
+// Dove si scrive col dito (`pointer: coarse`) e il cursore sta in una tabella,
+// la barra apre in testa i tasti che sul vetro mancano: Tab, Invio e
+// «+ riga» (`drawTouch`). Tab e Invio arrivano all'editor come i tasti veri.
+//
+// # Aspetto
+//
+// La barra di un riquadro veste la barra in una fila del kit: `kit-bar` sulla
+// radice (il vassoio), `kit-bar-group` sui gruppi, `kit-bar-button` sui
+// pulsanti. Le classi `format-bar*` restano per i test, la bolla della
+// selezione e `data-formatbar-off`. La bolla (`only`) non sta nel vassoio.
 import type { CommandSpec } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import {
@@ -34,6 +48,7 @@ import {
 } from "../editors/core/editor-actions";
 import { t, type Key } from "../i18n/strings";
 import { ariaBinding, displayBinding } from "../ui/commands";
+import { rovingToolbar } from "../kit/toolbar-keys";
 import { iconEl, registerIcon } from "../ui/icons";
 import { openLifetime, type Teardown } from "../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../ui/menu";
@@ -268,6 +283,29 @@ export interface FormatBarHost {
   runCommand(id: string): void;
   /// Solo questi gruppi, nell'ordine dei comandi. Assente = tutti.
   readonly only?: readonly GroupId[];
+  /// Se si scrive col dito. Assente = il puntatore grossolano del sistema.
+  coarse?(): boolean;
+}
+
+/// L'azione che dice se il cursore sta in una tabella, e che «+ riga» esegue.
+const ROW_AFTER = "markdown.table.row.after";
+
+function coarsePointer(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+}
+
+/// La barra si rinfresca a ogni battuta e a ogni movimento del cursore, e lo
+/// stato dei pulsanti quasi sempre resta quello di prima. In WebKitGTK anche
+/// un attributo riscritto uguale invalida lo stile, e la finestra intera si
+/// ridipinge a ogni tasto (C6): si scrive soltanto ciò che cambia.
+function setAttr(element: Element, name: string, value: string | null): void {
+  if (element.getAttribute(name) === value) return;
+  if (value === null) element.removeAttribute(name);
+  else element.setAttribute(name, value);
+}
+
+function setDisabled(control: HTMLButtonElement, disabled: boolean): void {
+  if (control.disabled !== disabled) control.disabled = disabled;
 }
 
 export interface FormatBar {
@@ -330,7 +368,10 @@ function hintOf(actions: SurfaceEditorActions | undefined, entry: Entry): string
 /// stessa barra ristretta ai gesti che si fanno su un testo scelto.
 export function createFormatBar(host: FormatBarHost): FormatBar {
   const element = document.createElement("div");
-  element.className = "format-bar";
+  // La barra di un riquadro sta nel vassoio di serie (`kit-bar`); la bolla
+  // della selezione e la mini-barra (`only`) sono bolle: gli stessi gruppi e
+  // gli stessi pulsanti, senza vassoio.
+  element.className = host.only ? "format-bar" : "format-bar kit-bar";
   element.setAttribute("role", "toolbar");
   element.setAttribute("aria-orientation", "horizontal");
   element.setAttribute("aria-label", t("format_bar.label"));
@@ -339,6 +380,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   /// Ciò che il disegno corrente possiede: suggerimenti, iscrizione alla
   /// superficie. Si scioglie a ogni ridisegno della struttura.
   let drawn = openLifetime();
+  /// L'iscrizione alla superficie seguita: cambia con lei, senza ridisegnare.
+  let following = openLifetime();
   let signature = "";
   let groups: Group[] = [];
   let observed: SurfaceEditorActions | null = null;
@@ -346,9 +389,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let refreshers: (() => void)[] = [];
   let groupEls: HTMLElement[] = [];
   let overflowButton: HTMLButtonElement | null = null;
-  /// Il controllo che riceve il Tab: l'ultimo toccato, o il primo.
-  let current: HTMLButtonElement | null = null;
   let frame: number | null = null;
+  let fitFrame: number | null = null;
 
   const actions = (): SurfaceEditorActions | undefined => host.surface()?.editorActions;
   const stateOf = (entry: Entry): EditorActionState => {
@@ -372,52 +414,18 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   life.listen(element, "mousedown", (event) => {
     if ((event.target as Element | null)?.closest("button")) event.preventDefault();
   });
-  life.listen(element, "keydown", (event) => {
-    const controls = focusable();
-    const at = controls.indexOf(document.activeElement as HTMLButtonElement);
-    if (at < 0) return;
-    let next: number | null = null;
-    if (event.key === "ArrowRight") next = (at + 1) % controls.length;
-    else if (event.key === "ArrowLeft") next = (at - 1 + controls.length) % controls.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = controls.length - 1;
-    else if (event.key === "Escape") {
-      event.preventDefault();
-      host.surface()?.focus?.();
-      return;
-    }
-    if (next === null) return;
-    event.preventDefault();
-    focusControl(controls[next]!);
-  });
-  life.listen(element, "focusin", (event) => {
-    const target = event.target;
-    if (target instanceof HTMLButtonElement && element.contains(target)) roving(target);
-  });
-
-  /// I controlli raggiungibili adesso: visibili e non spenti.
-  function focusable(): HTMLButtonElement[] {
-    return [...element.querySelectorAll<HTMLButtonElement>("button")]
-      .filter((button) => !button.disabled && !button.closest("[hidden]"));
-  }
-
-  function roving(target: HTMLButtonElement | null): void {
-    const controls = focusable();
-    current = target && controls.includes(target) ? target : controls[0] ?? null;
-    for (const button of element.querySelectorAll<HTMLButtonElement>("button")) {
-      button.tabIndex = button === current ? 0 : -1;
-    }
-  }
-
-  function focusControl(button: HTMLButtonElement): void {
-    roving(button);
-    button.focus();
-  }
+  // Le frecce sono quelle di ogni barra in una fila (`kit/toolbar-keys.ts`):
+  // contano i pulsanti visibili e accesi, «…» compreso quando c'è, ed Escape
+  // torna al testo.
+  const keys = rovingToolbar(element, {
+    controls: () => [...element.querySelectorAll<HTMLButtonElement>("button")],
+    onEscape: () => host.surface()?.focus?.(),
+  }, life);
 
   function button(className: string, label: string, hint: string | null): HTMLButtonElement {
     const control = document.createElement("button");
     control.type = "button";
-    control.className = className;
+    control.className = `${className} kit-bar-button`;
     control.tabIndex = -1;
     control.setAttribute("aria-label", label);
     const shown = displayBinding(hint);
@@ -436,9 +444,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     control.addEventListener("click", () => run(entry));
     refreshers.push(() => {
       const state = stateOf(entry);
-      control.disabled = !state.enabled;
-      if (state.active === null) control.removeAttribute("aria-pressed");
-      else control.setAttribute("aria-pressed", String(state.active));
+      setDisabled(control, !state.enabled);
+      setAttr(control, "aria-pressed", state.active === null ? null : String(state.active));
     });
     return control;
   }
@@ -483,13 +490,61 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     trigger.addEventListener("click", () => openMenu(trigger, menuItems(group.menu)));
     refreshers.push(() => {
       const states = group.menu.map(stateOf);
-      trigger.disabled = !states.some((state) => state.enabled);
+      setDisabled(trigger, !states.some((state) => state.enabled));
       if (!style) return;
       const active = group.menu[states.findIndex((state) => state.active === true)];
-      text.textContent = active?.spec.title ?? label;
-      trigger.setAttribute("aria-label", active ? `${label}: ${active.spec.title}` : label);
+      const shown = active?.spec.title ?? label;
+      if (text.textContent !== shown) text.textContent = shown;
+      setAttr(trigger, "aria-label", active ? `${label}: ${active.spec.title}` : label);
     });
     return trigger;
+  }
+
+  /// I tasti della tabella per il dito: col cursore in una tabella e senza
+  /// tastiera, Tab e Invio arrivano alla tabella come i tasti veri (la cella
+  /// dopo, la riga sotto, la riga nuova dall'ultima cella), e «+ riga»
+  /// aggiunge una riga sotto. Il gruppo sta in testa alla barra e non scende
+  /// mai nel menu «altri».
+  function drawTouch(): HTMLElement {
+    const box = document.createElement("div");
+    box.className = "format-bar-group format-bar-touch kit-bar-group";
+    box.dataset.group = "touch";
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", t("format_bar.touch.label"));
+    const key = (name: "Tab" | "Enter", label: Key, hint: Key) => {
+      const control = button("format-bar-button format-bar-key", t(hint), null);
+      control.dataset.key = name;
+      control.textContent = t(label);
+      control.addEventListener("click", () => pressKey(name));
+      return control;
+    };
+    const add = button("format-bar-button format-bar-key", t("format_bar.touch.add_row_hint"), null);
+    add.dataset.command = ROW_AFTER;
+    add.textContent = t("format_bar.touch.add_row");
+    add.addEventListener("click", () => {
+      host.focusPane();
+      actions()?.run(ROW_AFTER);
+      refresh();
+    });
+    box.append(key("Tab", "format_bar.touch.tab", "format_bar.touch.tab_hint"), key("Enter", "format_bar.touch.enter", "format_bar.touch.enter_hint"), add);
+    refreshers.push(() => {
+      const surface = actions();
+      const hidden = !(surface?.editable() && surface.state(ROW_AFTER).enabled);
+      if (box.hidden !== hidden) box.hidden = hidden;
+    });
+    return box;
+  }
+
+  /// Un tasto della barra del dito, a chi ha il fuoco nell'editor: la cornice
+  /// della tabella o il testo. Il pulsante non prende il fuoco; se ce l'ha
+  /// (la tastiera nella barra) lo ridà prima all'editor.
+  function pressKey(key: "Tab" | "Enter"): void {
+    host.focusPane();
+    if (element.contains(document.activeElement)) host.surface()?.focus?.();
+    const target = document.activeElement;
+    if (!(target instanceof HTMLElement) || element.contains(target)) return;
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true }));
+    refresh();
   }
 
   function drawOverflow(): HTMLButtonElement {
@@ -523,7 +578,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       if (element.scrollWidth <= element.clientWidth) break;
       groupEls[index]!.hidden = true;
     }
-    roving(current);
+    keys.refresh();
   }
 
   // Senza `ResizeObserver` (un banco senza layout) la barra resta intera.
@@ -532,6 +587,22 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   observer?.observe(element);
   life.add(() => observer?.disconnect());
 
+  /// La misura della riga si prende al fotogramma, non subito: chiedere
+  /// `scrollWidth` a metà di un cambio di scheda obbliga il motore a impaginare
+  /// la finestra intera prima del tempo, e poi di nuovo per disegnarla. Dentro
+  /// `requestAnimationFrame` l'impaginazione è quella che il fotogramma fa
+  /// comunque, e la barra ristretta compare già nel primo disegno.
+  function scheduleFit(): void {
+    if (fitFrame !== null || life.closed) return;
+    fitFrame = requestAnimationFrame(() => {
+      fitFrame = null;
+      fit();
+    });
+  }
+  life.add(() => {
+    if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+  });
+
   function refresh(): void {
     if (frame !== null) {
       cancelAnimationFrame(frame);
@@ -539,7 +610,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     }
     const focused = element.contains(document.activeElement) ? document.activeElement : null;
     for (const update of refreshers) update();
-    roving(current);
+    const current = keys.refresh();
     // Il pulsante a fuoco si è spento (annulla senza più niente da annullare):
     // il fuoco resta nella barra invece di cadere sulla pagina.
     if (focused instanceof HTMLButtonElement && focused.disabled) current?.focus();
@@ -558,18 +629,31 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     if (frame !== null) cancelAnimationFrame(frame);
   });
 
-  function rebuild(next: Group[], surface: SurfaceEditorActions | undefined): void {
+  /// Segue un'altra superficie con la stessa barra: cambia l'iscrizione, i
+  /// pulsanti restano. Una barra vuota non ha stato da seguire: niente
+  /// iscrizione, niente lavoro a ogni movimento del cursore.
+  function follow(surface: SurfaceEditorActions | undefined): void {
+    following.close();
+    following = openLifetime();
+    observed = surface ?? null;
+    if (surface && groups.length > 0) {
+      const stopActions = surface.subscribe(scheduleRefresh);
+      following.add(stopActions);
+    }
+  }
+
+  function rebuild(next: Group[], surface: SurfaceEditorActions | undefined, touch: boolean): void {
     drawn.close();
     drawn = openLifetime();
     groups = next;
     refreshers = [];
     groupEls = [];
-    current = null;
     element.replaceChildren();
     element.setAttribute("aria-label", t("format_bar.label"));
+    if (touch) element.append(drawTouch());
     for (const group of groups) {
       const box = document.createElement("div");
-      box.className = "format-bar-group";
+      box.className = "format-bar-group kit-bar-group";
       box.dataset.group = group.id;
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", t(GROUP_LABELS[group.id]));
@@ -580,15 +664,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     }
     overflowButton = drawOverflow();
     element.append(overflowButton);
-    observed = surface ?? null;
-    // Una barra vuota non ha stato da seguire: niente iscrizione, niente
-    // lavoro a ogni movimento del cursore.
-    if (surface && groups.length > 0) {
-      const stopActions = surface.subscribe(scheduleRefresh);
-      drawn.add(stopActions);
-    }
+    follow(surface);
     refresh();
-    fit();
   }
 
   return {
@@ -603,20 +680,27 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       const all = host.writing() && !own ? toolbarGroups(specs, surface) : [];
       const next = only ? all.filter((group) => only.includes(group.id)) : all;
       // La lingua fa parte della forma: gruppi ed etichette sono della shell.
-      const shape = t("format_bar.label") + "#" + next.map((group) =>
-        `${group.id}:${group.inline.map((e) => `${e.spec.id}=${e.spec.title}`).join(",")}` +
-        `|${group.menu.map((e) => `${e.spec.id}=${e.spec.title}`).join(",")}`
+      // Anche le scorciatoie scritte nei suggerimenti e i tasti del dito: le
+      // dice la superficie. Il resto della superficie no, e tornare a una
+      // scheda dello stesso tipo non ridisegna i pulsanti, cambia chi seguono.
+      const entry = (e: Entry) => `${e.spec.id}=${e.spec.title}=${hintOf(surface, e) ?? ""}`;
+      const touch = !only && surface?.has(ROW_AFTER) === true && next.length > 0 && (host.coarse ?? coarsePointer)();
+      const shape = t("format_bar.label") + (touch ? "#touch#" : "#") + next.map((group) =>
+        `${group.id}:${group.inline.map(entry).join(",")}|${group.menu.map(entry).join(",")}`
       ).join(";");
-      element.hidden = next.length === 0;
-      if (shape === signature && surface === (observed ?? undefined)) {
+      const empty = next.length === 0;
+      if (element.hidden !== empty) element.hidden = empty;
+      if (shape !== signature) {
+        signature = shape;
+        rebuild(next, surface, touch);
+      } else {
+        if (surface !== (observed ?? undefined)) follow(surface);
         refresh();
-        fit();
-        return;
       }
-      signature = shape;
-      rebuild(next, surface);
+      scheduleFit();
     },
     destroy() {
+      following.close();
       drawn.close();
       life.close();
       element.remove();

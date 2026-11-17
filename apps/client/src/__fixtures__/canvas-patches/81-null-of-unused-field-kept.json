@@ -1,0 +1,10 @@
+{
+  "name": "null-of-unused-field-kept",
+  "description": "R7: url null su una scheda di testo, dove url non vale: il modello lo legge assente; la scheda perde label e si ricompone, va via solo \",\\\"label\\\":\\\"via\\\"\", e \"url\":null resta",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\",\"url\":null,\"label\":\"via\"}]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a","label":"via"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\",\"url\":null}]}"
+  }
+}

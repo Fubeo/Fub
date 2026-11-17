@@ -236,11 +236,22 @@ pub use fub_abi::transfer::{MemorySink, PLUGIN_EXPORT_LIMIT};
 /// ([`artifact_key`]), e prima della `rename` decide il filesystem: un nome
 /// che porta alla voce di un file già consegnato è quel file, qualunque cosa
 /// ne pensi la chiave.
+///
+/// # Le scritture passano da cartelle aperte
+///
+/// La cartella scelta si apre una volta, al primo artefatto, e da lì ogni
+/// creazione, rinomina e rimozione passa da handle di cartella (`cap_std`),
+/// mai da un path ricomposto: fra il controllo di [`stays_inside`] e la
+/// `rename` un componente sostituito da un collegamento non porta i byte
+/// altrove, perché la `rename` avviene nella cartella che si era aperta e
+/// un collegamento che esce dalla radice aperta non si attraversa.
 pub struct DirectorySink {
     root: PathBuf,
     /// La radice risolta con `canonicalize`, calcolata una sola volta: è fissa
     /// per la vita del sink, e `stays_inside` la chiedeva a ogni artefatto.
     root_real: Option<PathBuf>,
+    /// La radice aperta, insieme a `root_real`: ogni scrittura parte da qui.
+    root_dir: Option<cap_std::fs::Dir>,
     open: BTreeMap<u64, Artifact>,
     next: u64,
     /// Le [`artifact_key`] già aperte, chiuse comprese.
@@ -259,10 +270,14 @@ type Entry = (FileIdentity, std::ffi::OsString);
 struct Artifact {
     path: String,
     media_type: String,
-    /// Il temporaneo accanto al destinatario. È il file che si sta scrivendo.
-    of_side: PathBuf,
     /// Dove la `rename` lo porterà alla chiusura.
     dest: PathBuf,
+    /// La cartella aperta di entrambi: temporaneo e destinatario si toccano
+    /// per nome dentro di lei, mai per path.
+    parent: cap_std::fs::Dir,
+    /// Il temporaneo accanto al destinatario. È il file che si sta scrivendo.
+    of_side_name: PathBuf,
+    dest_name: PathBuf,
     file: File,
     written: u64,
 }
@@ -273,6 +288,7 @@ impl DirectorySink {
         DirectorySink {
             root: root.into(),
             root_real: None,
+            root_dir: None,
             open: BTreeMap::new(),
             next: 0,
             opened: BTreeSet::new(),
@@ -340,19 +356,37 @@ impl ArtifactSink for DirectorySink {
             return Err(artifact_already_open(path));
         }
         let dir = dest.parent().unwrap_or(&self.root).to_path_buf();
-        // Prima di creare, non dopo: `create_dir_all` attraversa un
-        // collegamento senza chiedere, e le cartelle nate di là restano lì
-        // anche se poi l'artefatto lo rifiutiamo.
+        // Prima di creare, non dopo: le cartelle nate oltre un collegamento
+        // resterebbero lì anche se poi l'artefatto lo rifiutiamo.
         if self.root_real.is_none() {
-            self.root_real = Some(self.root.canonicalize().map_err(|and| {
+            let resolve = |and: std::io::Error| {
                 PluginError::Io(format!("cannot resolve `{}`: {and}", self.root.display()).into())
-            })?);
+            };
+            let real = self.root.canonicalize().map_err(resolve)?;
+            let opened = cap_std::fs::Dir::open_ambient_dir(&real, cap_std::ambient_authority())
+                .map_err(resolve)?;
+            self.root_real = Some(real);
+            self.root_dir = Some(opened);
         }
         let root_real = self.root_real.as_ref().expect("just resolved");
+        let root_dir = self.root_dir.as_ref().expect("just opened");
         stays_inside(root_real, &dir)?;
-        std::fs::create_dir_all(&dir).map_err(|and| {
+        // La cartella dell'artefatto si crea e si apre dalla radice aperta:
+        // `check_artifact_path` ha già tolto `..` e path assoluti, e un
+        // collegamento che porta fuori dalla radice qui non si attraversa.
+        let cannot_create = |and: std::io::Error| {
             PluginError::Io(format!("cannot create `{}`: {and}", dir.display()).into())
-        })?;
+        };
+        let parent = match Path::new(path)
+            .parent()
+            .filter(|rel| !rel.as_os_str().is_empty())
+        {
+            Some(rel) => {
+                root_dir.create_dir_all(rel).map_err(cannot_create)?;
+                root_dir.open_dir(rel).map_err(cannot_create)?
+            }
+            None => root_dir.try_clone().map_err(cannot_create)?,
+        };
         // Il nome del file lo dà il provider ed è già passato da
         // `check_artifact_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
@@ -360,6 +394,7 @@ impl ArtifactSink for DirectorySink {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("artefatto");
+        let dest_name = PathBuf::from(file_name);
         // Creazione esclusiva: un temporaneo che coincide con un file già
         // presente (un artefatto consegnato prima, un collegamento) non lo
         // tronca né lo attraversa, si sceglie un altro nome.
@@ -368,15 +403,16 @@ impl ArtifactSink for DirectorySink {
         // (FUB-012): i byte di un export riservato non passano per un file
         // leggibile da altri nemmeno per il tempo della scrittura. La umask può
         // solo togliere bit, quindi `close_artifact` li rimette com'erano.
-        let existing_permissions = std::fs::metadata(&dest)
+        let existing_permissions = parent
+            .metadata(&dest_name)
             .ok()
-            .filter(std::fs::Metadata::is_file)
+            .filter(cap_std::fs::Metadata::is_file)
             .map(|existing| existing.permissions());
         let mut attempts = 0;
-        let (of_side, file) = loop {
-            let of_side = dest.with_file_name(crate::storage::temp_name(file_name));
-            match create_temporary(&of_side, existing_permissions.as_ref()) {
-                Ok(file) => break (of_side, file),
+        let (of_side_name, file) = loop {
+            let of_side_name = PathBuf::from(crate::storage::temp_name(file_name));
+            match create_temporary(&parent, &of_side_name, existing_permissions.as_ref()) {
+                Ok(file) => break (of_side_name, file),
                 Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists && attempts < 64 => {
                     attempts += 1;
                 }
@@ -394,8 +430,10 @@ impl ArtifactSink for DirectorySink {
             Artifact {
                 path: path.to_string(),
                 media_type: media_type.to_string(),
-                of_side,
                 dest,
+                parent,
+                of_side_name,
+                dest_name,
                 file,
                 written: 0,
             },
@@ -422,34 +460,35 @@ impl ArtifactSink for DirectorySink {
         // temporaneo: un artefatto che non è arrivato non deve lasciare per
         // terra un file nascosto in una cartella dell'utente, che non è il
         // vault e non ha nessuna raccolta che ci passi.
-        let failure = |of_side: &Path, and: std::io::Error, what: &str| {
-            let _ = std::fs::remove_file(of_side);
+        let failure = |and: std::io::Error, what: &str| {
+            let _ = a.parent.remove_file(&a.of_side_name);
             PluginError::Io(format!("`{}` {what}: {and}", a.path).into())
         };
         // Il conto esce dopo che i byte sono sul disco, non dopo un `flush` che
         // su un `File` non fa niente.
         if let Err(and) = a.file.sync_all() {
-            return Err(failure(&a.of_side, and, "sync failed"));
+            return Err(failure(and, "sync failed"));
         }
         drop(a.file);
-        let of_side = a.of_side;
         // Di nuovo qui e non solo all'apertura: due artefatti aperti insieme
         // non si vedono fino a quando il primo non arriva.
         if self.delivered_at(&a.dest) {
-            let _ = std::fs::remove_file(&of_side);
+            let _ = a.parent.remove_file(&a.of_side_name);
             return Err(artifact_already_open(&a.path));
         }
         // Riesportare sopra un file esistente non ne allarga i permessi: il
         // sostitutivo nasce con la umask, quindi eredita quelli della
         // destinazione. Best-effort come nel vault: un filesystem senza
         // permessi non è una ragione per non consegnare.
-        if let Ok(existing) = std::fs::metadata(&a.dest) {
+        if let Ok(existing) = a.parent.metadata(&a.dest_name) {
             if existing.is_file() {
-                let _ = std::fs::set_permissions(&of_side, existing.permissions());
+                let _ = a
+                    .parent
+                    .set_permissions(&a.of_side_name, existing.permissions());
             }
         }
-        if let Err(and) = std::fs::rename(&of_side, &a.dest) {
-            return Err(failure(&of_side, and, "rename to destination failed"));
+        if let Err(and) = a.parent.rename(&a.of_side_name, &a.parent, &a.dest_name) {
+            return Err(failure(and, "rename to destination failed"));
         }
         if let Some(identity) = identity_at(&a.dest) {
             self.delivered.insert(identity);
@@ -471,20 +510,26 @@ impl ArtifactSink for DirectorySink {
     }
 }
 
-/// Crea il temporaneo di un artefatto, in modo esclusivo, con i permessi che la
-/// destinazione ha già (dove il sistema li ha: su Windows non c'è una modalità
-/// da portare).
-fn create_temporary(path: &Path, existing: Option<&std::fs::Permissions>) -> std::io::Result<File> {
-    let mut options = std::fs::OpenOptions::new();
+/// Crea il temporaneo `name` di un artefatto dentro la cartella aperta
+/// `parent`, in modo esclusivo, con i permessi che la destinazione ha già (dove
+/// il sistema li ha: su Windows non c'è una modalità da portare).
+fn create_temporary(
+    parent: &cap_std::fs::Dir,
+    name: &Path,
+    existing: Option<&cap_std::fs::Permissions>,
+) -> std::io::Result<File> {
+    let mut options = cap_std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
     if let Some(existing) = existing {
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        use cap_std::fs::{OpenOptionsExt, PermissionsExt};
         options.mode(existing.mode() & 0o7777);
     }
     #[cfg(not(unix))]
     let _ = existing;
-    options.open(path)
+    parent
+        .open_with(name, &options)
+        .map(cap_std::fs::File::into_std)
 }
 
 /// Un sink che se ne va con degli artefatti ancora aperti non lascia i loro
@@ -497,7 +542,7 @@ fn create_temporary(path: &Path, existing: Option<&std::fs::Permissions>) -> std
 impl Drop for DirectorySink {
     fn drop(&mut self) {
         for (_, a) in std::mem::take(&mut self.open) {
-            let _ = std::fs::remove_file(&a.of_side);
+            let _ = a.parent.remove_file(&a.of_side_name);
         }
     }
 }
@@ -640,6 +685,13 @@ pub fn resource_read_at(
     offset: u64,
     len: usize,
 ) -> Result<Vec<u8>, KernelError> {
+    // La lease ha i campi pubblici e si clona: il path che porta si recinta
+    // di nuovo qui, dove si compone, come fa `Vault::path_for`. Un `..` o un
+    // path assoluto scritto dopo l'apertura non arriva allo storage.
+    fub_abi::rules::path_policy::fenced(&lease.path).map_err(|why| KernelError::BadName {
+        name: lease.path.clone(),
+        why: why.to_string(),
+    })?;
     let path = lease.root.join(lease.path.as_str());
     let before = storage.stat(&path).map_err(|source| KernelError::Io {
         path: path.clone(),
@@ -731,6 +783,47 @@ mod tests {
                 .count(),
             0,
             "the export placed something outside the folder the user chose"
+        );
+    }
+
+    /// **Fra l'apertura e la chiusura la cartella non si cambia con un
+    /// collegamento** (B13 dell'audit). La `rename` della chiusura usava il
+    /// path: se nel frattempo `sotto` diventava un collegamento verso fuori,
+    /// la rinomina si risolveva di là e portava fuori il file che ci trovava.
+    /// Adesso avviene nella cartella aperta all'inizio, e fuori non cambia
+    /// niente.
+    #[cfg(unix)]
+    #[test]
+    fn swapping_a_folder_for_a_link_mid_export_does_not_move_the_bytes() {
+        let choice = tempfile::tempdir().expect("the folder chosen in the dialog");
+        let elsewhere = tempfile::tempdir().expect("a folder nobody chose");
+        let mut sink = DirectorySink::new(choice.path());
+        let handle = sink
+            .open_artifact("sotto/rapporto.txt", "text/plain")
+            .expect("open");
+        sink.write_artifact(handle, b"esportato").expect("write");
+        let temporary = sink.open[&handle.0].of_side_name.clone();
+
+        // La cartella si sposta di lato e al suo posto c'è un collegamento
+        // verso una cartella con un file dal nome del temporaneo.
+        std::fs::rename(choice.path().join("sotto"), choice.path().join("prima")).unwrap();
+        std::fs::write(elsewhere.path().join(&temporary), b"di altri").unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), choice.path().join("sotto")).unwrap();
+
+        let delivered = sink.close_artifact(handle).expect("close");
+        assert_eq!(delivered.content, ArtifactContent::Delivered(9));
+        assert!(
+            !elsewhere.path().join("rapporto.txt").exists(),
+            "the rename followed the link out of the chosen folder"
+        );
+        assert_eq!(
+            std::fs::read(elsewhere.path().join(&temporary)).unwrap(),
+            b"di altri"
+        );
+        assert_eq!(
+            std::fs::read(choice.path().join("prima/rapporto.txt")).unwrap(),
+            b"esportato",
+            "the bytes land in the folder that was opened"
         );
     }
 

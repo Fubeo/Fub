@@ -1,0 +1,10 @@
+{
+  "name": "reconnect-edge-end",
+  "description": "Riattaccare un estremo di un arco tiene i suoi campi, anche sconosciuti; l'annulla lo riporta",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":100,\"text\":\"a\"},{\"id\":\"b\",\"type\":\"text\",\"x\":120,\"y\":0,\"width\":100,\"height\":100,\"text\":\"b\"},{\"id\":\"c\",\"type\":\"text\",\"x\":240,\"y\":0,\"width\":100,\"height\":100,\"text\":\"c\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\",\"fromEnd\":\"arrow\",\"toSide\":\"top\",\"color\":\"#abcdef\",\"label\":\"note\",\"vendor\":{\"keep\":true}}],\"xFuture\":true}",
+  "patches": [{"kind":"upsert-edge","before":{"id":"e","fromNode":"a","fromEnd":"arrow","toNode":"b","toSide":"top","color":"#abcdef","label":"note","vendor":{"keep":true}},"after":{"id":"e","fromNode":"a","fromEnd":"arrow","toNode":"c","toSide":"top","toEnd":"none","color":"#abcdef","label":"note","vendor":{"keep":true}}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":100,\"text\":\"a\"},{\"id\":\"b\",\"type\":\"text\",\"x\":120,\"y\":0,\"width\":100,\"height\":100,\"text\":\"b\"},{\"id\":\"c\",\"type\":\"text\",\"x\":240,\"y\":0,\"width\":100,\"height\":100,\"text\":\"c\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"c\",\"fromEnd\":\"arrow\",\"toSide\":\"top\",\"color\":\"#abcdef\",\"label\":\"note\",\"vendor\":{\"keep\":true},\"toEnd\":\"none\"}],\"xFuture\":true}"
+  }
+}

@@ -79,8 +79,32 @@ pub enum Saved {
     Bytes(Vec<u8>),
 }
 
-/// Apre i byte di un file come proiezione.
+/// Apre i byte di un file come proiezione, e ricorda nel motore dei
+/// documenti ([`crate::motore`]) la prova a vuoto accettata: il salvataggio
+/// degli stessi byte non la rifà. Chi apre così un documento lo deve poi
+/// chiudere, dimenticando la prova
+/// ([`crate::motore::MotoreDocumenti::dimentica`]).
 pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
+    open_as(codec, bytes, Memory::Remember)
+}
+
+/// Apre i byte di un file come [`open`], con la stessa proiezione (le stesse
+/// parti chiuse, la stessa sola lettura), ma senza ricordare la prova a vuoto:
+/// la lettura di chi guarda il documento senza tenerlo aperto (l'anteprima,
+/// la CLI, un lavoro). La prova si fa lo stesso, perché la proiezione la
+/// descrive, e cade con la chiamata.
+pub fn open_unremembered(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
+    open_as(codec, bytes, Memory::Forget)
+}
+
+/// Se l'apertura ricorda la prova a vuoto accettata.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Memory {
+    Remember,
+    Forget,
+}
+
+fn open_as(codec: Codec, bytes: &[u8], memory: Memory) -> Result<Opened, RichError> {
     if codec == Codec::Odt {
         return crate::odt::open(bytes);
     }
@@ -89,7 +113,7 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
     let readonly = match policy(&normal) {
         Some(reason) => Some(reason),
         None if !codec.lossless() => Some(ReadOnly::Import),
-        None => match fidelity(codec, bytes, &projection, &normal)? {
+        None => match fidelity(codec, bytes, &projection, &normal, memory)? {
             Ok(baseline) => {
                 projection.close(&baseline.locked, baseline.whole);
                 None
@@ -320,6 +344,7 @@ fn fidelity(
     original: &[u8],
     projection: &Projection,
     document: &Document,
+    memory: Memory,
 ) -> Result<Result<Arc<preservation::Baseline>, ReadOnly>, RichError> {
     let json = projection.to_json()?;
     let (wire, dry) = parallel::join(
@@ -340,7 +365,9 @@ fn fidelity(
         return Ok(Err(ReadOnly::Codec));
     };
     let baseline = Arc::new(baseline);
-    preservation::remember(preservation::key(original), Arc::clone(&baseline));
+    if memory == Memory::Remember {
+        preservation::remember(preservation::key(original), Arc::clone(&baseline));
+    }
     Ok(Ok(baseline))
 }
 

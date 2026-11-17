@@ -1,0 +1,9 @@
+{
+  "name": "corrupt-json",
+  "description": "JSON corrotto non si apre",
+  "source": "{",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

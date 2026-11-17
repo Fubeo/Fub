@@ -1,0 +1,26 @@
+{
+  "name": "r3-unknown-twice-last-value-first-place",
+  "description": "R3: una chiave sconosciuta doppia tiene l'ultimo valore nella posizione della prima",
+  "source": "{\"z\":1,\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"k\":1,\"q\":0,\"k\":2}],\"q\":3,\"z\":2}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t",
+        "k": 2,
+        "q": 0
+      }
+    ],
+    "edges": [],
+    "extra": {
+      "z": 2,
+      "q": 3
+    }
+  }
+}

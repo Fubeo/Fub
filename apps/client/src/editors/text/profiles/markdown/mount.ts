@@ -7,7 +7,8 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
-import { claimQueryBlocks, fillQueryBlock } from "./query-block";
+import { claimQueryBlocks, embedTasksBlocks, fillQueryBlock, markTaskDues } from "./query-block";
+import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
@@ -24,12 +25,25 @@ import { pngOf } from "../../../core/png";
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { routeHref } from "./link-syntax";
+import { renderedLinkGesture, type WikilinkGesture } from "./link-gesture";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
   readonly resources?: MarkdownResources;
-  readonly openWikilink?: (page: string, heading?: string, block?: string) => void | Promise<void>;
-  readonly openPath?: (path: string, from?: string) => void | Promise<void>;
+  /**
+   * The click on a wikilink. `gesture` is the click read with the rule of
+   * `open-link.ts` (Alt asks for the peek, any other click is the opening
+   * click): the host decides what it means.
+   */
+  readonly openWikilink?: (page: string, heading?: string, block?: string, gesture?: WikilinkGesture) => void | Promise<void>;
+  /** The click on a link to a vault document (`[text](note.md)`), like `openWikilink`. */
+  readonly openPath?: (path: string, from?: string, gesture?: WikilinkGesture) => void | Promise<void>;
+  /**
+   * Opens the document a figure shows (a Craft file, a PDF) with the gesture.
+   * Unlike `openWikilink` it never creates a note: a file that is gone is a
+   * failure the figure reports. Without it a figure opens nothing (print).
+   */
+  readonly openFigure?: (doc: string) => void | Promise<void>;
   readonly navigateFragment?: (id: string) => boolean;
   readonly searchTag?: (tag: string) => void;
   /** UTF-16 offset of the task symbol in the current, LF-normalized buffer. */
@@ -61,10 +75,19 @@ export interface MarkdownMountOptions {
     show?(id: string, where: "app" | "explorer"): void;
   };
   readonly imageMenu?: boolean;
+  /**
+   * Alla chiusura la resa resta nel contenitore, ferma: si spengono
+   * ascoltatori, componenti e lavoro in volo, ma i nodi non si tolgono. Serve
+   * a chi mostra l'ultima immagine di una resa che non vive più (la scheda di
+   * nota ferma della lavagna). Senza, la chiusura svuota il contenitore.
+   */
+  readonly keepOnTeardown?: boolean;
 }
 
 const MAX_EMBED_DEPTH = 5;
 const mounts = new WeakMap<HTMLElement, Teardown>();
+/// L'involucro che scorre attorno a ogni tabella resa (`skin/document.css`).
+const TABLE_SCROLL = "markdown-table-scroll";
 
 
 function hydrateAllowedHtml(container: HTMLElement): void {
@@ -127,7 +150,17 @@ export function sourceElementAt(container: HTMLElement, offset: number): HTMLEle
 
 function wireContent(container: HTMLElement, options: MarkdownMountOptions, life: Lifetime): void {
   for (const table of container.querySelectorAll<HTMLTableElement>("table")) {
-    if (!table.closest("[data-ui-slot]")) table.tabIndex = 0;
+    if (table.closest("[data-ui-slot]")) continue;
+    table.tabIndex = 0;
+    // La tabella è larga quanto la colonna del testo e non va a capo nelle
+    // celle: l'involucro scorre in orizzontale quando il contenuto non ci sta.
+    // La tabella resta focalizzabile, così le frecce lo fanno scorrere.
+    if (!table.parentElement?.classList.contains(TABLE_SCROLL)) {
+      const scroll = document.createElement("div");
+      scroll.className = TABLE_SCROLL;
+      table.replaceWith(scroll);
+      scroll.append(table);
+    }
   }
   const codeLabels: { pre: HTMLElement; button: HTMLButtonElement | null }[] = [];
   for (const pre of container.querySelectorAll<HTMLElement>("pre")) {
@@ -224,8 +257,9 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
       return;
     }
     if (!link) return;
+    const gesture = renderedLinkGesture(event);
     const openPath = (path: string): void => {
-      if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path)).catch((error: unknown) => {
+      if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path, options.documentId, gesture)).catch((error: unknown) => {
         if (life.closed) return;
         link.classList.add("unresolved");
         notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
@@ -239,7 +273,7 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     if (link.classList.contains("wikilink") && options.openWikilink) {
       event.preventDefault();
       const page = link.dataset.wikilinkPage ?? "";
-      void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock))
+      void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock, gesture))
         .catch((error: unknown) => {
           if (life.closed) return;
           link.classList.add("unresolved");
@@ -302,6 +336,7 @@ function enhanceContent(
     appearance: options.diagramAppearance,
   }));
   life.add(mountMathBlocks(container));
+  markTaskDues(container);
   wireContent(container, options, life);
   wireFootnotePreviews(container, life);
   if (options.imageMenu !== false) wireImageMenu(container, life, options.imageActions);
@@ -476,6 +511,15 @@ async function hydrateEmbeds(
       await showEmbeddedDrawing(container, slot, drawing, life);
       return;
     }
+    // Un file Craft (`![[logo.vectorcraft]]`) torna come il segnaposto del
+    // suo formato: diventa la sua anteprima, e un clic lo apre nella sua
+    // scheda. L'app non parte mai da una nota.
+    const craft = craftPlaceholder(content.html);
+    if (craft && craft.doc === content.doc_id) {
+      const open = opener(options, life);
+      await showEmbeddedCraft(container, slot, craft, life, open ? { open } : {});
+      return;
+    }
     // Embedded offsets never mutate the containing note.
     const embeddedOptions: MarkdownMountOptions = {
       ...options,
@@ -493,9 +537,21 @@ async function hydrateEmbeds(
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
     await Promise.all([
       hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life),
-      hydrateVaultMedia(slot, content.doc_id, expected, life),
+      hydrateVaultMedia(slot, content.doc_id, expected, life, undefined, opener(embeddedOptions, life)),
     ]);
   }));
+}
+
+/// Apre la scheda di un documento dal clic su una figura (un file Craft, un
+/// PDF), e dice da sé se non ci riesce; `undefined` dove la nota non apre
+/// niente (la stampa). Non passa da `openWikilink`: un bersaglio che non
+/// risolve là crea una nota, e un clic su una figura non scrive nel vault.
+function opener(options: MarkdownMountOptions, life: Lifetime): ((doc: string) => Promise<void>) | undefined {
+  const openFigure = options.openFigure;
+  if (!openFigure) return undefined;
+  return (doc) => Promise.resolve().then(() => openFigure(doc)).catch((error: unknown) => {
+    if (!life.closed) notify(t("preview.open_failed", { page: doc, reason: errorText(error) }), "guasto");
+  });
 }
 
 /** Shared Live/Reading mount: sanitization precedes every component and fetch. */
@@ -517,7 +573,7 @@ export function mountMarkdown(
     life.close();
     if (mounts.get(container) === dispose) {
       mounts.delete(container);
-      container.replaceChildren();
+      if (!options.keepOnTeardown) container.replaceChildren();
     }
   };
   mounts.set(container, dispose);
@@ -529,6 +585,10 @@ export function mountMarkdown(
     contentLife?.close();
     const mountedLife = contentLife = openLifetime();
     const mountedRace = contentRace = new Race();
+    // Chi ospita la resa ci mette in cima cose sue (la testata della Lettura,
+    // `data-md-pinned`): una resa rifatta da sé le rimette dov'erano, con i
+    // loro ascoltatori. Non sono della resa, e i passi qui sotto non le vedono.
+    const pinned = [...container.querySelectorAll<HTMLElement>(":scope > [data-md-pinned]")];
     setSanitizedHtml(container, html);
     hydrateAllowedHtml(container);
     if (firstFrom === null) {
@@ -563,6 +623,7 @@ export function mountMarkdown(
       }
     }
     const queries = claimQueryBlocks(container);
+    embedTasksBlocks(container, mountedLife);
     enhanceContent(container, parts, options, mountedLife);
     hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
     const hasImages = !!container.querySelector("img[data-vault-src]");
@@ -572,7 +633,7 @@ export function mountMarkdown(
         ...(documentId && (hasEmbeds || hasImages)
           ? [
             hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
-            hydrateVaultMedia(container, documentId, expected, mountedLife),
+            hydrateVaultMedia(container, documentId, expected, mountedLife, undefined, opener(options, mountedLife)),
           ]
           : []),
         ...queries.map(({ block, query }) => fillQueryBlock(block, query, expected, mountedLife)),
@@ -580,6 +641,7 @@ export function mountMarkdown(
         if (!mountedLife.closed) notify(t("preview.embed_failed", { reason: errorText(error) }), "guasto");
       });
     }
+    container.prepend(...pinned);
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
   }
 

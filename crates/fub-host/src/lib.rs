@@ -86,13 +86,26 @@ mod bridge;
 /// La cattura rapida: il comando dell'host `capture.apply`, uno per ogni
 /// trasporto (clipper, condivisione mobile, CLI).
 pub mod capture;
+/// I componenti di un vault: la mappa (le righe stanno in `fub-features`, il
+/// risolutore in `fub-componenti`), lo stato nelle chiavi del vault, e come
+/// si accendono e si spengono.
+pub mod componenti;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 mod connector_tokens;
 /// Il canale di controllo: la CLI e l'host nativo del clipper chiedono all'app
 /// che tiene aperto il vault, invece di trovarlo occupato.
 pub mod control;
+/// I file delle app Craft: il bundle `fub.craft`, che risponde l'anteprima di
+/// un file con la sua cache.
+#[cfg(feature = "craft")]
+pub mod craft;
+/// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
+pub mod craft_render;
 mod custody;
+/// I disegni aperti nel motore del disegno e le sei porte lato host (K5).
+mod drawing;
+mod engines;
 mod export_folder;
 pub mod format_source;
 pub mod jobs;
@@ -105,12 +118,17 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+#[cfg(any(feature = "rich", feature = "xlsx"))]
+mod new_file;
 pub mod obsidian_import;
+/// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
+pub mod open_with;
 #[cfg(feature = "http-client")]
 pub mod publish;
 mod query;
 pub mod records;
 pub mod registry;
+pub mod regular_file;
 #[cfg(feature = "http-client")]
 pub mod remote;
 pub mod resources;
@@ -126,6 +144,7 @@ pub mod theme;
 #[cfg(feature = "http-client")]
 pub mod updates;
 pub mod uri_inbox;
+pub mod vault_path;
 pub mod vaults;
 /// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
 /// (FUB-019): il grafo che lascia cedere a chi sta dentro il guest.
@@ -137,9 +156,7 @@ pub mod web_clip;
 mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
-/// La mappa dei componenti (K1): le righe e il risolutore stanno in
-/// `fub-features`, da cui `mount` costruisce i manifest.
-pub use fub_features::componenti;
+pub use engines::OpenKey;
 #[cfg(feature = "notify-watcher")]
 pub use watcher::NotifyWatcher;
 #[cfg(test)]
@@ -150,6 +167,8 @@ pub(crate) use watcher::{ExternalChange, ExternalSync};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 #[cfg(test)]
 mod legacy_tests;
+#[cfg(test)]
+mod quiet_panic;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};

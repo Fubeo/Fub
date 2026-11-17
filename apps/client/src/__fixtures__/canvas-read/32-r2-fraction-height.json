@@ -1,0 +1,9 @@
+{
+  "name": "r2-fraction-height",
+  "description": "R2: una frazione vera in height non è un intero sicuro",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":1.5,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

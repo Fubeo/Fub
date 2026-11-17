@@ -1,0 +1,11 @@
+{
+  "name": "added-fields-go-last",
+  "description": "R10: le chiavi aggiunte a una scheda che c'era vanno in fondo, nell'ordine di R10 (color prima di label) qualunque sia l'ordine della toppa",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:z\":1}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","fub:z":1},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"label":"L","text":"uno","fub:z":1,"color":"2"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:z\":1,\"color\":\"2\",\"label\":\"L\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:z\":1}],\"edges\":[]}"
+  }
+}

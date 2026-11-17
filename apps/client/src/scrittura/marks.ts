@@ -8,9 +8,12 @@
 //
 // L'aspetto si scrive come variabile CSS (`--file-font`, `--file-size`,
 // `--file-color`, `--file-hl`) e non come proprietà: chi monta lo schema
-// decide se e come la pelle la usa (ADR 0222).
+// decide se e come la pelle la usa (ADR 0222). La variabile si scrive via
+// CSSOM (`styledElement`), mai come attributo `style`: la CSP dell'app lo
+// rifiuterebbe.
 import type { MarkSpec } from "prosemirror-model";
 import { fontStack } from "./fonts";
+import { styledElement } from "../ui/stylesheets";
 
 /// Un colore come lo scrivono le marche: `#rrggbb` minuscolo.
 export function colorValue(value: string | null): string | null {
@@ -39,7 +42,7 @@ export function writingMarks(options: WritingMarksOptions): Record<string, MarkS
       parseDOM: [{ tag: "mark", getAttrs: (dom) => ({ color: colorValue((dom as HTMLElement).getAttribute("data-rich-hl")) }) }],
       toDOM: (mark) => {
         const color = mark.attrs.color as string | null;
-        return ["mark", { ...(color ? { "data-rich-hl": color } : {}), style: `--file-hl: ${color ?? options.highlight}` }, 0];
+        return styledElement("mark", color ? { "data-rich-hl": color } : {}, { "--file-hl": color ?? options.highlight });
       },
     },
     sup: { excludes: "sup sub", parseDOM: [{ tag: "sup" }], toDOM: () => ["sup", 0] },
@@ -49,7 +52,7 @@ export function writingMarks(options: WritingMarksOptions): Record<string, MarkS
       parseDOM: [{ tag: "span[data-rich-font]", getAttrs: (dom) => ({ family: (dom as HTMLElement).getAttribute("data-rich-font") }) }],
       toDOM: (mark) => {
         const family = mark.attrs.family as string;
-        return ["span", { "data-rich-font": family, style: `--file-font: ${fontStack(family)}` }, 0];
+        return styledElement("span", { "data-rich-font": family }, { "--file-font": fontStack(family) });
       },
     },
     size: {
@@ -65,7 +68,7 @@ export function writingMarks(options: WritingMarksOptions): Record<string, MarkS
       ],
       toDOM: (mark) => {
         const pt = mark.attrs.pt as number;
-        return ["span", { "data-rich-size": String(pt), style: `--file-size: ${pt}pt` }, 0];
+        return styledElement("span", { "data-rich-size": String(pt) }, { "--file-size": `${pt}pt` });
       },
     },
     color: {
@@ -73,9 +76,7 @@ export function writingMarks(options: WritingMarksOptions): Record<string, MarkS
       parseDOM: [{ tag: "span[data-rich-color]", getAttrs: (dom) => ({ value: (dom as HTMLElement).getAttribute("data-rich-color") }) }],
       toDOM: (mark) => {
         const value = mark.attrs.value as string;
-        const attrs: Record<string, string> = { "data-rich-color": value };
-        if (value !== options.auto) attrs.style = `--file-color: ${value}`;
-        return ["span", attrs, 0];
+        return styledElement("span", { "data-rich-color": value }, value === options.auto ? {} : { "--file-color": value });
       },
     },
   };

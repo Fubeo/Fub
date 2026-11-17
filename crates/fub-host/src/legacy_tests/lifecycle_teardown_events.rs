@@ -64,10 +64,10 @@ impl EventHandler for ObservingHandler {
             .as_ref()
             .unwrap()
             .clone();
-        let workspace_read = workspace.try_read().is_some();
-        let workspace_write = workspace.try_write().is_some();
-        let registry_read = registry.try_read().is_some();
-        let registry_write = registry.try_write().is_some();
+        let workspace_read = super::read_comes_free(&workspace);
+        let workspace_write = super::write_comes_free(&workspace);
+        let registry_read = super::read_comes_free(&registry);
+        let registry_write = super::write_comes_free(&registry);
         let capability_live = workspace_read
             && workspace_write
             && registry_read

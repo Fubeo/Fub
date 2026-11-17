@@ -1,0 +1,9 @@
+{
+  "name": "r8-background-style-number",
+  "description": "R8: un backgroundStyle che non è una stringa è un errore",
+  "source": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"backgroundStyle\":3}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

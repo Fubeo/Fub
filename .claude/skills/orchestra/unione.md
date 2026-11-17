@@ -11,10 +11,21 @@ Read this when a coder reports `FATTO`.
 - Read the diff of the non-test code. Skim the tests only to confirm they prove
   the task's `Fatto quando`, and that none was deleted, skipped or weakened.
 - Graphic task: open the screenshots named under `FOTO` and compare them with
-  the prototype, both lights and the narrow width.
+  the prototype, both lights and the narrow width. Its pieces are in the map of
+  `apps/client/bench/conformita/` and `npm run bench:conformita` is green; every
+  new entry in `eccezioni-<prototipo>.json` cites DECISIONS or the plan.
 - Check the `CLAUDE.md` closing gate against what you read: owner of the rule,
   generated files from their source, docs updated, no new dependency nobody
   asked for.
+- Before every integration, a medium-level `code-review` of the task's diff
+  (`<base>..<sha>`), by a reviewer that sees the code, not your conclusion. Ask
+  it to judge each item under `DIFFERENZE DAL PIANO` too. Send what it finds
+  back to the coder at once: a defect found here costs one round, the same
+  defect found in the final review of the plan costs a full CI.
+- Graphic task: look at the screenshots critically yourself, as the person
+  using Fub would: the UI language everywhere, no raw host text, a sensible
+  order, human error messages, empty, error and focus states, nothing clipped
+  at 700 px.
 
 Not convincing: resume the coder with what is wrong, precisely. Don't fix a
 whole task yourself.

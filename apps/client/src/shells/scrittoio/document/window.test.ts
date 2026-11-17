@@ -375,15 +375,18 @@ describe("il ponte", () => {
       openWikilink: (page: string, heading: string | null, block: string | null) => void;
       openPath: (path: string) => void;
       searchTag: (tag: string) => void;
+      openFigure: (doc: string) => void;
     };
     expect(hooks.documentId).toBe("Diario/Oggi.md");
     hooks.openWikilink("Pagina", "Titolo", null);
     hooks.openPath("Altro.md");
     hooks.searchTag("tema");
+    hooks.openFigure("Foto/scatto.photocraft");
     expect(bridge().navigated).toEqual([
       { kind: "wikilink", page: "Pagina", heading: "Titolo", block: null },
       { kind: "path", path: "Altro.md" },
       { kind: "tag", tag: "tema" },
+      { kind: "figure", doc: "Foto/scatto.photocraft" },
     ]);
   });
 

@@ -154,3 +154,9 @@ riferimenti esterni, stili e script, mentre un `<img>` non esegue nulla.
 - mount e unmount ripetuti senza listener residui, con un test della superficie
   oltre al controllo statico di `check-listeners`;
 - `axe` e baseline visuali della scena nel banco.
+
+> **Nota (2026-11-08).** FubDraw resta il nome tecnico del formato: il
+> namespace `fub:`, lo stato `fubdraw`, gli id e le pagine di riferimento lo
+> portano ancora. Chi usa Fub non lo legge: l'interfaccia, gli avvisi e i
+> messaggi che arrivano a MCP dicono «Fub» o «il disegno», e i formati si
+> chiamano «Disegno SVG» e «Annotazioni PDF». La decisione non cambia.

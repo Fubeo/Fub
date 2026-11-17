@@ -1,0 +1,9 @@
+{
+  "name": "r2-1e300-y",
+  "description": "R2: 1e300 in y non è un intero sicuro",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":1e300,\"width\":10,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

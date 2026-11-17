@@ -19,3 +19,8 @@ fub-abi = { path = "../../crates/fub-abi" }
 [profile.release]
 strip = true
 opt-level = "s"
+
+# Un workspace suo, vuoto: chi lo compila da un worktree annidato in un altro
+# checkout (per esempio sotto `.claude/worktrees/`) non risale al
+# `Cargo.toml` di quel checkout, che non lo elenca fra i membri.
+[workspace]

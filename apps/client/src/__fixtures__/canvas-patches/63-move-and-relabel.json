@@ -1,0 +1,10 @@
+{
+  "name": "move-and-relabel",
+  "description": "Spostare una scheda e cambiare l'etichetta di un arco sono un commit solo, e l'annulla li rimette tutti e due",
+  "before": "{\"nodes\":[{\"id\":\"n1\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":120,\"text\":\"vedi [[Nota]] e #tag\"},{\"id\":\"n2\",\"type\":\"file\",\"x\":300,\"y\":0,\"width\":200,\"height\":120,\"file\":\"foto.png\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"n1\",\"toNode\":\"n2\",\"toEnd\":\"arrow\",\"label\":\"usa\"}],\"xFuture\":{\"nested\":[1,2]}}",
+  "patches": [{"kind":"upsert-node","before":{"id":"n1","type":"text","x":0,"y":0,"width":200,"height":120,"text":"vedi [[Nota]] e #tag"},"after":{"id":"n1","type":"text","x":8,"y":8,"width":200,"height":120,"text":"vedi [[Nota]] e #tag"}},{"kind":"upsert-edge","before":{"id":"e1","fromNode":"n1","toNode":"n2","toEnd":"arrow","label":"usa"},"after":{"id":"e1","fromNode":"n1","toNode":"n2","toEnd":"arrow","label":"dipende"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"n1\",\"type\":\"text\",\"x\":8,\"y\":8,\"width\":200,\"height\":120,\"text\":\"vedi [[Nota]] e #tag\"},{\"id\":\"n2\",\"type\":\"file\",\"x\":300,\"y\":0,\"width\":200,\"height\":120,\"file\":\"foto.png\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"n1\",\"toNode\":\"n2\",\"toEnd\":\"arrow\",\"label\":\"dipende\"}],\"xFuture\":{\"nested\":[1,2]}}"
+  }
+}

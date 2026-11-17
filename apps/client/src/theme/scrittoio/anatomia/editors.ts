@@ -12,6 +12,8 @@ export const EDITORS: PartAnatomy = {
     { name: "text-editor-search", layers: { "cm-searchMatch": "segno", "cm-searchMatch-selected": "segno" }, states: SELECTABLE, hooks: ["cm-panels", "cm-panels-top", "cm-panels-bottom", "cm-panel", "cm-search", "cm-textfield", "cm-button", "cm-searchMatch", "cm-searchMatch-selected"] },
     { name: "text-editor-tooltip", states: [S("rest"), S("selected")], hooks: ["cm-tooltip", "cm-tooltip-arrow", "cm-tooltip-autocomplete", "cm-completionMatchedText", "cm-completionDetail", "cm-completionInfo"] },
     { name: "surface-fallback", states: [S("rest"), S("focused")], hooks: ["document-surface-error", "document-surface-viewer", "media-surface"] },
+    // Il file di un componente spento (K2): nome, dimensione, «Accendi …».
+    { name: "surface-file-only", states: [S("rest"), S("focused")], hooks: ["document-surface-file-only", "file-only-title", "file-only-name", "file-only-size", "file-only-note", "file-only-actions", "file-only-problem"] },
     // Le celle sono contenuto con l'aspetto del file: la pelle ne veste i segni
     // dalla riga (`.grid-row .selected`), non dalla cella. Le intestazioni e la
     // vista sono cornice, l'editor della cella è un segno.
@@ -19,21 +21,85 @@ export const EDITORS: PartAnatomy = {
     // Gli oggetti di un foglio (grafici, immagini, forme) hanno i colori del
     // file in linea: il gate dell'aspetto non li copre ancora.
     { name: "grid-objects", layers: { "grid-object": "contenuto", "grid-object-handle": "segno", "grid-object-missing": "segno", "grid-object-text-editor": "segno" }, states: SELECTABLE, hooks: ["grid-object", "grid-object-handle", "grid-object-missing", "grid-object-text-editor"] },
-    // La barra multifunzione del foglio, e ciò che apre nei riquadri.
-    { name: "grid-ribbon", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["grid-ribbon", "grid-ribbon-mini", "grid-ribbon-head", "grid-ribbon-tabs", "grid-ribbon-toggle", "grid-ribbon-toolbar", "grid-ribbon-group", "grid-ribbon-group-body", "grid-ribbon-group-label", "grid-ribbon-stack", "grid-ribbon-row", "grid-ribbon-button", "grid-ribbon-large", "grid-ribbon-arrow", "grid-ribbon-split", "grid-ribbon-glyph", "grid-ribbon-bold", "grid-ribbon-italic", "grid-ribbon-underline", "grid-ribbon-strike", "grid-ribbon-color-bar", "grid-ribbon-select", "grid-ribbon-input", "grid-ribbon-check", "grid-ribbon-field-label", "grid-ribbon-keytip", "grid-ribbon-contextual", "kit-tabs", "kit-tab"] },
+    // La barra multifunzione del foglio, e ciò che apre nei riquadri. La sua
+    // forma e la sua pelle sono quelle del kit (`kit-ribbon`, in `kit.ts`):
+    // qui restano le parti solo sue, i segni, la mini-barra e «Comandi».
+    { name: "grid-ribbon", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["grid-ribbon-mini", "grid-ribbon-quick", "grid-ribbon-button", "grid-ribbon-bold", "grid-ribbon-italic", "grid-ribbon-underline", "grid-ribbon-strike", "grid-ribbon-field-label", "grid-ribbon-label"] },
     { name: "grid-ribbon-popover", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["grid-ribbon-popup-group", "grid-ribbon-palette", "grid-ribbon-palette-empty", "grid-ribbon-palette-title", "grid-ribbon-palette-grid", "grid-ribbon-swatch", "grid-ribbon-swatch-base", "grid-ribbon-gallery", "grid-ribbon-gallery-grid", "grid-ribbon-gallery-item", "grid-ribbon-table-preview", "grid-ribbon-cell-sample"] },
     // Le finestre che la barra apre (Formato celle, Ordina, Gestione nomi…).
-    { name: "grid-dialog", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["grid-dialog", "grid-dialog-border-cell", "grid-dialog-border-preview", "grid-dialog-check", "grid-dialog-choice", "grid-dialog-choices", "grid-dialog-color-button", "grid-dialog-color-chip", "grid-dialog-color-chip--auto", "grid-dialog-error", "grid-dialog-field", "grid-dialog-fields", "grid-dialog-form", "grid-dialog-label", "grid-dialog-legend", "grid-dialog-names-head", "grid-dialog-names-row", "grid-dialog-note", "grid-dialog-preview", "grid-preview-stage", "grid-preview-page", "grid-dialog-palette", "grid-dialog-palette-auto", "grid-dialog-palette-grid", "grid-dialog-palette-title", "grid-dialog-preview-text", "grid-dialog-results", "grid-dialog-sample-text", "grid-dialog-section", "grid-dialog-signature", "grid-dialog-swatch", "grid-dialog-toolbar"] },
-    { name: "base-surface", states: INTERACTIVE, hooks: ["base-surface", "base-toolbar", "base-status", "base-body", "base-summaries"] },
-    { name: "base-table", layer: "contenuto", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-cell", "base-cell-error"] },
+    { name: "grid-dialog", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["grid-dialog", "grid-dialog-border-cell", "grid-dialog-border-preview", "grid-dialog-check", "grid-dialog-choice", "grid-dialog-choices", "grid-dialog-color-button", "grid-dialog-color-chip", "grid-dialog-color-chip--auto", "grid-dialog-error", "grid-dialog-field", "grid-dialog-fields", "grid-dialog-form", "grid-dialog-label", "grid-dialog-legend", "grid-dialog-names-head", "grid-dialog-names-row", "grid-dialog-note", "grid-dialog-preview", "grid-preview-stage", "grid-preview-page", "grid-dialog-palette", "grid-dialog-palette-auto", "grid-dialog-palette-grid", "grid-dialog-palette-title", "grid-dialog-preview-text", "grid-dialog-results", "grid-result-key", "grid-result-number", "grid-result-ref", "grid-result-table", "grid-dialog-sample-text", "grid-dialog-section", "grid-dialog-signature", "grid-dialog-swatch", "grid-dialog-toolbar"] },
+    { name: "base-surface", states: INTERACTIVE, hooks: ["base-surface", "base-status", "base-body", "base-summaries"] },
+    // La barra della Base (T15): le linguette delle viste, gli strumenti,
+    // «+» (una vista nuova), «Nuova», la riga di «Cerca», le etichette e «Nel
+    // file .base».
+    { name: "base-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["base-bar", "base-tabs", "base-tab", "base-tab-label", "base-tab-more", "base-tab-more-count", "base-bar-space", "base-tool", "base-tool-count", "base-tool-new-view", "compact", "on", "base-new", "base-search-row", "base-search", "base-strip", "base-chips", "base-chip", "base-note", "base-written", "base-written-lines", "base-written-where", "base-written-added", "base-written-removed"] },
+    // I popover della barra: Filtro, Ordina (con «Raggruppa»), Proprietà, e
+    // «Rinomina la proprietà» del menu della colonna.
+    { name: "base-popover", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["base-popover", "base-pop-title", "base-pop-note", "base-pop-foot", "base-filter-rows", "base-filter-row", "base-filter-value", "base-filter-search", "base-filter-remove", "base-filter-add", "base-sort-rows", "base-sort-row", "base-sort-name", "base-sort-add", "base-sort-remove", "base-grouping", "base-column-list", "base-column", "base-column-grip", "base-column-hidden", "base-column-label", "dragging", "base-rename", "base-rename-field"] },
+    { name: "base-table", layer: "contenuto", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-table-viewport", "base-cell", "base-cell-error", "base-head", "base-head-icon", "base-head-label", "base-head-sort", "base-title", "base-add-row", "base-add-row-button", "base-foot-count", "base-foot-summary", "base-foot-value", "base-foot-error", "base-foot-dimmed"] },
     { name: "base-cards", layer: "contenuto", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["base-cards", "base-list", "base-card", "base-field"] },
     { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card"] },
+    // Il calendario (T17): la testa col mese e i passi, la griglia dei
+    // giorni, le note che si trascinano e «+N»; il vuoto senza la data.
+    { name: "base-calendar", layer: "contenuto", states: DRAGGABLE, hooks: ["base-calendar", "base-cal-head", "base-cal-title", "base-cal-nav", "base-cal-prev", "base-cal-today", "base-cal-undated", "base-cal-scroll", "base-cal-grid", "base-cal-week", "base-cal-dow", "base-cal-day", "base-cal-num", "base-cal-weekday", "base-cal-event", "base-cal-more", "base-cal-empty"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
-    { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source"] },
-    { name: "canvas-node", layer: "contenuto", layers: { "canvas-node-handle": "segno", "canvas-connect": "segno", "canvas-resize": "segno", "canvas-convert-note": "cornice", "canvas-open-url": "cornice" }, states: DRAGGABLE, hooks: ["canvas-node", "canvas-node-group", "canvas-node-handle", "canvas-connect", "canvas-resize", "canvas-card-body", "canvas-markdown", "canvas-empty", "canvas-group-label", "canvas-group-bg", "canvas-url-text", "canvas-media-placeholder", "canvas-convert-note", "canvas-open-url", "canvas-file-link", "canvas-text-editor", "canvas-field-editor"] },
-    // La barra multifunzione del documento: quella del kit, come la barra del
-    // foglio, con l'accesso rapido e la galleria degli stili.
-    { name: "rich-ribbon", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["rich-ribbon", "rich-ribbon-arrow", "rich-ribbon-bold", "rich-ribbon-button", "rich-ribbon-check", "rich-ribbon-color-bar", "rich-ribbon-contextual", "rich-ribbon-field-label", "rich-ribbon-glyph", "rich-ribbon-group", "rich-ribbon-group-body", "rich-ribbon-group-label", "rich-ribbon-head", "rich-ribbon-input", "rich-ribbon-italic", "rich-ribbon-keytip", "rich-ribbon-large", "rich-ribbon-marker", "rich-ribbon-mini", "rich-ribbon-popup-group", "rich-ribbon-quick", "rich-ribbon-row", "rich-ribbon-select", "rich-ribbon-split", "rich-ribbon-stack", "rich-ribbon-strike", "rich-ribbon-style", "rich-ribbon-styles", "rich-ribbon-tabs", "rich-ribbon-toggle", "rich-ribbon-toolbar", "rich-ribbon-underline"] },
+    // La griglia e le guide (T71) sono segni di Fub sulla vista, non contenuto.
+    { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-toolbar-item", "kit-options-row", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },
+    // La colonna degli strumenti della lavagna (T49): quella del kit, con le
+    // caselle `canvas-tool`; uno strumento spento in sola lettura si vede.
+    { name: "canvas-rail", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-rail", "canvas-tool"] },
+    // La lavagna vuota (T62): le tre righe e i pulsanti al centro. I pulsanti
+    // sono del kit; qui solo il testo.
+    { name: "canvas-empty", states: REST, hooks: ["canvas-blank", "canvas-blank-lines", "canvas-blank-actions"] },
+    // Il navigatore della lavagna (T55): la mappa è una sola <canvas> dipinta
+    // coi colori della pelle (le variabili di `.canvas-navigator`).
+    { name: "canvas-navigator", states: [S("rest"), S("focused")], hooks: ["canvas-navigator"] },
+    // Cerca nella lavagna (T60): la barra in alto a destra della vista, col
+    // campo, il contatore e la riga che dice «senza indice»; i pulsanti sono
+    // quelli della riga (`canvas-button`).
+    { name: "canvas-find", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["canvas-find", "canvas-find-input", "canvas-find-count", "canvas-find-scope"] },
+    // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
+    // pulsanti della riga del kit, il pozzo del colore delle schede scelte,
+    // le «A» della misura del testo (T92).
+    { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well", "canvas-text-size"] },
+    // La barra della selezione della lavagna (T51): una pillola sopra le
+    // schede scelte, coi pulsanti della riga e il pallino del colore.
+    { name: "canvas-selection-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-selection-bar", "canvas-selection-chip"] },
+    // Il menu della penna della lavagna (N4 T21): il pulsante nella riga
+    // delle opzioni e il suo rialzo. Le anteprime sono inchiostro su carta.
+    { name: "canvas-pen-menu", states: SELECTABLE, hooks: ["canvas-ink-pen", "canvas-ink-pen-name", "canvas-pen-popover", "canvas-pen-menu", "canvas-pen-section", "canvas-pen-heading", "canvas-pen-list", "canvas-pen-item", "canvas-pen-preview", "canvas-pen-swatches", "canvas-pen-swatch", "canvas-pen-more", "canvas-pen-note", "canvas-pen-width", "canvas-pen-width-value", "canvas-pen-width-preview"] },
+    // L'ispettore della lavagna (T58): «Schede», il filtro e l'elenco in
+    // ordine di lettura, nel pannello della shell. T59: «Scheda» e «Fili», con
+    // i numeri, il pozzo del colore, «Avanzate» e il popover dei colori.
+    { name: "canvas-inspector", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-inspector", "canvas-inspector-filter", "canvas-inspector-heading", "canvas-inspector-list", "canvas-inspector-row", "canvas-inspector-kind", "canvas-inspector-note", "canvas-inspector-numbers", "canvas-inspector-fields", "canvas-inspector-field", "canvas-inspector-path", "canvas-inspector-disclosure", "canvas-inspector-raw", "canvas-inspector-actions", "canvas-inspector-tips", "canvas-inspector-swatches", "canvas-inspector-swatch", "canvas-inspector-popover"] },
+    // Le fonti della lavagna (T77), la linguetta «Fonti» dell'ispettore: una
+    // riga per file col nome, il numero delle schede e la barra delle pagine o
+    // delle sezioni, i pezzi sulla lavagna in colore d'accento.
+    { name: "canvas-sources", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-sources-list", "canvas-sources-file", "canvas-sources-name", "canvas-sources-count", "canvas-sources-bar", "canvas-sources-piece", "canvas-sources-loose", "canvas-sources-state", "canvas-sources-empty"] },
+    // Il selettore delle sezioni di una nota (T74): un popover del kit
+    // attaccato alla scheda, con il campo, la lista a caselle, l'anteprima
+    // (la resa della scheda di nota) e il piede.
+    { name: "canvas-parts-picker", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-parts-title", "canvas-parts-close", "canvas-parts-field-hint", "canvas-parts-row", "canvas-parts-check", "canvas-parts-preview", "canvas-parts-preview-title", "canvas-card-note-content", "canvas-parts-keys", "canvas-parts-count"] },
+    // La scheda-estratto (T75): nella testata sopra la scheda le parti e ↗,
+    // segni di Fub; nel corpo le sezioni della nota, ognuna col suo titolo in
+    // piccolo, e l'avviso della sezione che non c'è più. Il corpo di una
+    // sezione, la riga dei pulsanti e la frase dell'avviso sono solo impianto.
+    { name: "canvas-excerpt", layer: "contenuto", layers: { "canvas-excerpt-parts": "segno", "canvas-excerpt-open": "segno" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["canvas-excerpt-parts", "canvas-excerpt-open", "canvas-excerpt-section", "canvas-excerpt-section-title", "canvas-excerpt-missing"] },
+    // Il lettore (T76): copre l'area della lavagna; la testata col nome, le
+    // parti e la crocetta, i titoli a lato, la nota grande con le sezioni
+    // dell'estratto segnate e «+ Aggiungi all'estratto» su quella dove si legge.
+    { name: "canvas-reader", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-reader", "canvas-reader-head", "canvas-reader-title", "canvas-reader-hint", "canvas-reader-outline", "canvas-reader-outline-row", "canvas-reader-doc", "canvas-reader-page", "canvas-reader-section", "canvas-reader-unreadable"] },
+    // Il ritaglio di un'immagine (T78):la zona col velo e le maniglie sopra
+    // la scheda, la barra sotto e la riga dell'inchiostro; segni di Fub sulla
+    // lavagna. L'immagine intera sotto la zona (`canvas-crop-picture`) e la
+    // zona di un SVG nella scheda (`canvas-card-zone`) sono solo impianto.
+    { name: "canvas-crop", layers: { "canvas-crop-box": "segno", "canvas-crop-handle": "segno" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["canvas-crop", "canvas-crop-box", "canvas-crop-handle", "canvas-crop-bar", "canvas-crop-note"] },
+    { name: "canvas-node", layer: "contenuto", layers: { "canvas-node-handle": "segno", "canvas-connect": "segno", "canvas-node-cites": "segno", "canvas-node-twins": "segno", "canvas-resize": "segno", "canvas-port": "segno", "canvas-selection-frame": "segno", "canvas-convert-note": "cornice", "canvas-open-url": "cornice" }, states: DRAGGABLE, hooks: ["canvas-node", "canvas-node-group", "canvas-node-file", "canvas-node-link", "canvas-node-handle", "canvas-node-far", "canvas-connect", "canvas-resize", "canvas-port", "canvas-selection-frame", "canvas-card-body", "canvas-markdown", "canvas-empty", "canvas-group-label", "canvas-group-bg", "canvas-url-text", "canvas-media-placeholder", "canvas-convert-note", "canvas-open-url", "canvas-file-link", "canvas-text-editor", "canvas-field-editor", "canvas-card-craft", "canvas-card-craft-actions", "canvas-card-craft-file", "canvas-card-craft-name", "canvas-card-craft-info", "canvas-card-craft-state", "canvas-card-craft-consent", "canvas-card-craft-render", "canvas-node-cites", "canvas-node-twins", "canvas-card-pdf", "canvas-card-pdf-page", "canvas-card-pdf-previous", "canvas-card-pdf-next", "canvas-card-pdf-status", "canvas-card-missing"] },
+    // La barra multifunzione del documento. La sua forma e la sua pelle sono
+    // quelle del kit (`kit-ribbon`, in `kit.ts`), come per la barra del
+    // foglio: qui restano le parti solo sue, l'accesso rapido, i segni del
+    // formato, i campi e la galleria degli stili.
+    { name: "rich-ribbon", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["rich-ribbon-bold", "rich-ribbon-color-bar", "rich-ribbon-field-label", "rich-ribbon-input", "rich-ribbon-italic", "rich-ribbon-marker", "rich-ribbon-mini", "rich-ribbon-quick", "rich-ribbon-select", "rich-ribbon-strike", "rich-ribbon-style", "rich-ribbon-styles", "rich-ribbon-underline"] },
     { name: "rich-surface", gate: { scope: ["rich-page"] }, layers: { "rich-content": "contenuto", "rich-para": "contenuto", "rich-heading": "contenuto", "rich-list": "contenuto", "rich-quote": "contenuto", "rich-link": "contenuto", "rich-section": "contenuto", "rich-break-page": "contenuto", "rich-break-column": "contenuto", "rich-table": "contenuto", "rich-cell": "contenuto" }, states: [S("rest"), S("focused"), S("selected"), S("disabled")], hooks: ["rich-surface", "rich-notice", "rich-page", "rich-sheet-paper", "rich-sheet-ghost", "rich-content", "rich-para", "rich-heading", "rich-list", "rich-quote", "rich-link", "rich-section", "rich-break-page", "rich-break-column", "rich-table", "rich-cell", "rich-strip-swatches", "rich-strip-swatch", "rich-strip-swatch-none", "rich-strip-swatch-custom", "rich-findbar", "rich-findbar-row", "rich-findbar-close", "rich-strip-panel", "rich-strip-panel-title", "rich-strip-panel-body", "rich-strip-panel-pairs", "rich-strip-panel-actions", "rich-strip-panel-check", "rich-strip-panel-note", "rich-strip-panel-fields", "rich-strip-panel-area", "rich-side", "rich-side-compose", "rich-side-list", "rich-side-item", "rich-side-quote", "rich-side-head", "rich-side-text", "rich-side-reply", "rich-side-actions", "rich-side-answer", "rich-side-switch", "rich-side-change", "rich-side-section", "rich-side-section-title", "rich-side-preview", "rich-side-preview-sheet", "rich-side-preview-text", "rich-side-preview-column", "rich-side-facts", "rich-side-dot", "rich-side-open", "rich-strip-table-grid", "rich-strip-table-cell", "rich-strip-count", "rich-drawing-editor", "rich-drawing-bar", "rich-drawing-title"] },
     { name: "content-look", layer: "contenuto", states: REST, hooks: ["look-tema", "look-file", "look-adattato"] },
     // Il segnaposto di un oggetto che Fub non disegna è un segno di Fub sulla
@@ -46,6 +112,37 @@ export const EDITORS: PartAnatomy = {
     // un'interruzione fra due fogli, e l'intestazione che si scrive sul posto.
     // Sono segni di Fub sulla carta, non il testo del file.
     { name: "rich-sheet-marks", layer: "segno", states: [S("rest"), S("focused")], hooks: ["rich-sheet-head", "rich-sheet-foot", "rich-sheet-name", "rich-running-bar", "rich-running-label", "rich-running-area", "rich-token"] },
-    { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno" }, states: [S("rest"), S("selected"), S("dragging")], hooks: ["canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
+    // I compiti nella nota: la pastiglia della scadenza (Live e Lettura) è un
+    // segno di Fub sulla carta; il recinto ```tasks``` è la vista del
+    // componente dei compiti, vestita da blocco della carta.
+    { name: "task-due", layer: "segno", layers: { "cm-fub-code": "contenuto" }, states: REST, hooks: ["cm-fub-due", "cm-fub-due-near", "cm-fub-due-overdue", "cm-fub-due-bad", "task-due", "task-due-near", "task-due-overdue", "task-due-bad", "cm-fub-code"] },
+    { name: "tasks-block", layer: "segno", layers: { "markdown-rendered": "contenuto", "ui-stack": "cornice", "ui-checkbox": "cornice", "ui-field-label": "cornice", "ui-badge": "cornice", "ui-button": "cornice", "ui-text": "cornice", "ui-empty-state": "cornice", "ui-empty-title": "cornice", "intent-danger": "cornice", "intent-primary": "cornice" }, states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["markdown-rendered", "block-tasks", "block-query-note", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button", "ui-text", "ui-empty-state", "ui-empty-title", "intent-danger", "intent-primary"] },
+    { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno", "canvas-edge-draft": "segno" }, states: [S("rest"), S("hover"), S("selected"), S("dragging")], hooks: ["canvas-edge", "canvas-edge-draft", "canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
+    // Si scrive in una scheda di nota (T41): l'anello della scheda che
+    // scrive, «Esc per uscire» pieno, lo stato del salvataggio e «Sola
+    // lettura» nella riga del titolo, l'editor della nota e il conflitto nel
+    // corpo, la barra di formato nella riga delle opzioni; la scheda di
+    // foglio che scrive e la sua formula nella riga delle opzioni (T42).
+    { name: "canvas-card-writing", layers: { "cm-fub-heading-line": "contenuto" }, states: [S("rest"), S("focused")], hooks: ["canvas-card-note", "canvas-exit-hint", "canvas-card-lock", "save-state", "format-bar", "conflict-banner", "conflict-actions", "cm-fub-heading-line", "canvas-card-sheet", "canvas-formula-text"] },
+    // Mentre si scrive (T69): l'etichetta accanto alla penna, che dice a che
+    // cosa si attaccherà il tratto, e il bordo tratteggiato attorno alla
+    // scheda, che è un segno di Fub sulla lavagna.
+    { name: "canvas-ink-target", layers: { "canvas-ink-frame": "segno" }, states: REST, hooks: ["canvas-ink-label", "canvas-ink-frame"] },
+    // Il Lazo (T86): il giro, la cornice dei tratti scelti e il loro
+    // contorno, segni di Fub sulla lavagna.
+    { name: "canvas-lasso", layers: { "canvas-lasso-path": "segno", "canvas-lasso-frame": "segno", "canvas-lasso-chosen": "segno" }, states: REST, hooks: ["canvas-lasso-path", "canvas-lasso-frame", "canvas-lasso-chosen"] },
+    // Il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b): il
+    // velo e il bordo, segno di Fub sulla lavagna.
+    { name: "canvas-marquee", layers: { "canvas-marquee-box": "segno" }, states: REST, hooks: ["canvas-marquee-box"] },
+    // Il fantasma del rilascio (T15, T22): dove nasceranno le schede di un
+    // trascinamento, o la cornice del gruppo oltre i dodici col numero.
+    { name: "canvas-drop", layers: { "canvas-drop-ghost": "segno", "canvas-drop-ghost-group": "segno", "canvas-drop-ghost-name": "segno" }, states: REST, hooks: ["canvas-drop-ghost", "canvas-drop-ghost-group", "canvas-drop-ghost-name"] },
+    // Il righello (T87): la riga velata con le tacche e l'angolo, sopra la
+    // lavagna; il suo corpo si sposta e prende il fuoco.
+    { name: "canvas-ruler", states: [S("rest"), S("focused")], hooks: ["canvas-ruler-bar", "canvas-ruler-grip", "canvas-ruler-angle"] },
+    // I commenti nel testo (EC T21): il fondo del passo commentato in
+    // Scrittura e in Lettura, più pieno col cursore dentro, e il commento
+    // intero colorato in Sorgente. Segni di Fub sulla carta, non il testo.
+    { name: "note-comments", layer: "segno", layers: { "markdown-rendered": "contenuto" }, states: [S("rest"), S("focused")], hooks: ["cm-fub-comment-range", "cm-fub-comment-range-on", "comment-range", "cm-fub-comment-source", "markdown-rendered"] },
   ],
 };

@@ -1,0 +1,40 @@
+{
+  "name": "r3-known-twice-inside-unknown",
+  "description": "R3: una chiave nota doppia dentro un campo sconosciuto va bene",
+  "source": "{\"meta\":{\"nodes\":1,\"nodes\":2},\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"extra\":{\"x\":1,\"x\":2,\"id\":\"u\",\"id\":\"v\"}}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"a\",\"fub\":[{\"label\":1,\"label\":2}]}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t",
+        "extra": {
+          "x": 2,
+          "id": "v"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e",
+        "fromNode": "a",
+        "toNode": "a",
+        "fub": [
+          {
+            "label": 2
+          }
+        ]
+      }
+    ],
+    "extra": {
+      "meta": {
+        "nodes": 2
+      }
+    }
+  }
+}

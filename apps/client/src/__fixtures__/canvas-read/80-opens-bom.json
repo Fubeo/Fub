@@ -1,0 +1,35 @@
+{
+  "name": "opens-bom",
+  "description": "La lavagna di due schede e un arco, scritta su più righe (bom), si apre",
+  "source": "\ufeff{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\n  ]\n}\n",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 100,
+        "text": "uno"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 300,
+        "y": 0,
+        "width": 200,
+        "height": 100,
+        "text": "due"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e",
+        "fromNode": "a",
+        "toNode": "b"
+      }
+    ]
+  }
+}

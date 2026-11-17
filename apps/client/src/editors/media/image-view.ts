@@ -12,7 +12,8 @@
 import type { Lifetime } from "../../ui/lifetime";
 import { formatBytes, type ResourceDescriptor } from "./media-types";
 import { t } from "../../i18n/strings";
-import { mountZoomView, type Size, type ZoomView } from "./zoom-view";
+import { mountZoomView, turned, type Size, type ZoomView } from "./zoom-view";
+import { orientationOf } from "./orientation";
 
 export interface DecodedImage {
   readonly blob: Blob;
@@ -206,8 +207,20 @@ export function imageInfo(image: Pick<DecodedImage, "format" | "blob">, width: n
     : t("media.image.info_unsized", { format: image.format, size });
 }
 
-/** Monta l'immagine decodificata in una vista con zoom. */
-export function mountImageView(image: DecodedImage, alt: string, life: Lifetime): ImageView {
+/// Le misure di una foto come la si guarda: con l'orientamento EXIF 5–8 la
+/// larghezza e l'altezza si scambiano.
+function upright(width: number | null, height: number | null, orientation: number | null | undefined): [number | null, number | null] {
+  if (!width || !height) return [width, height];
+  const shown = turned({ width, height }, orientationOf(orientation).rotation);
+  return [shown.width, shown.height];
+}
+
+/**
+ * Monta l'immagine decodificata in una vista con zoom. Con `orientation`
+ * (l'EXIF di una foto) la vista parte già dritta e la riga dei dati dice le
+ * misure della foto dritta.
+ */
+export function mountImageView(image: DecodedImage, alt: string, life: Lifetime, orientation?: number | null): ImageView {
   const figure = document.createElement("figure");
   figure.className = "media-image";
   let revoked = false;
@@ -220,8 +233,9 @@ export function mountImageView(image: DecodedImage, alt: string, life: Lifetime)
     label: alt,
     size: image.width && image.height ? { width: image.width, height: image.height } : null,
     backdrop: "checker",
-    info: imageInfo(image, image.width, image.height),
+    info: imageInfo(image, ...upright(image.width, image.height, orientation)),
     vector: image.format === "SVG",
+    ...(orientation === undefined || orientation === null ? {} : { orientation }),
     onError: () => {
       revoke();
       const message = document.createElement("p");
@@ -231,9 +245,12 @@ export function mountImageView(image: DecodedImage, alt: string, life: Lifetime)
     },
   }, life);
   life.listen(view.image, "load", () => {
-    const width = view.image.naturalWidth || image.width;
-    const height = view.image.naturalHeight || image.height;
-    view.info(imageInfo(image, width, height));
+    // Le misure dichiarate valgono più di quelle naturali per una foto con
+    // orientamento: quelle del browser possono essere già girate o no.
+    const oriented = orientation !== undefined && orientation !== null && image.width && image.height;
+    const width = oriented ? image.width : view.image.naturalWidth || image.width;
+    const height = oriented ? image.height : view.image.naturalHeight || image.height;
+    view.info(imageInfo(image, ...upright(width, height, orientation)));
   });
   figure.append(view.element);
   life.add(() => {

@@ -804,7 +804,7 @@ fn model(source: &str, doc_id: &str) -> DocumentModel {
 /// I tag ci sono, e la ragione va scritta perché la prima versione di questa
 /// funzione li escludeva credendo il contrario: un `tag: [a, b]` nel frontmatter
 /// **non è** un tag del documento. `parse_markdown` popola `model.tags` solo dai
-/// `#tag` scritti nel corpo (`parse.rs`, `push_plain_or_tags`) e non travasa mai il
+/// `#tag` scritti nel corpo (`parse/inlines.rs`, `push_plain_or_tags`) e non travasa mai il
 /// frontmatter; quindi togliendo il frontmatter i tag non cambiano, e escluderli
 /// era buttare via del segnale credendo di dichiarare una scelta.
 ///

@@ -4,6 +4,7 @@ import { settings } from "../host/query";
 import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
 import { asPluginError, errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
+import { settingTouches } from "../state/setting-change";
 import { emit, on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { reportThemeTrouble } from "../ui/notify";
@@ -12,7 +13,9 @@ import {
   mountPreferences,
   mountThemeBundle,
   validateThemeBundle,
+  mountedCss,
   declareThemeProfile,
+  type ThemeBundle,
   type ThemeBundleManifest,
   type ThemeMountResult,
   type ThemeProfile,
@@ -102,6 +105,13 @@ export interface ThemeSeries {
   sheet(light: Theme, contrast: ContrastLevel): string;
   /** I token di densità, accento e cornice: ciò che è proprio della serie. */
   tokens(preferences: AppearancePreferences, light: Theme, contrast: ContrastLevel): Record<string, string>;
+  /**
+   * Completa il foglio di un tema installato con i ruoli facoltativi che la
+   * serie sa ricavare dai suoi colori (la cartella del logo, D26). Rende il
+   * foglio com'è quando non c'è niente da aggiungere. Una serie che non lo dà
+   * lascia i fogli dei temi come sono.
+   */
+  completeSheet?(sheet: string, light: Theme, contrast: ContrastLevel): string;
 }
 
 let series: ThemeSeries = SCRITTOIO_SERIES;
@@ -156,6 +166,35 @@ let warn: (theme: Theme) => void = () => {};
 /// che il tema montato dichiara.
 let settingEntries: readonly SettingEntry[] = [];
 let mountedOptions: ThemeOptions = { themeId: SERIES_THEME_ID, themeName: "", options: [] };
+
+/// La prima lettura delle impostazioni di questo montaggio è stata applicata:
+/// da qui il tema montato è quello scelto (anche dal catalogo, se c'è), non più
+/// quello della cache del primo fotogramma. Lo aspetta la consegna dello strato
+/// d'avvio (`avvio/consegna.ts`), che ne legge i colori.
+let themeSettled = false;
+let settledWaiters: (() => void)[] = [];
+
+function settleTheme(): void {
+  themeSettled = true;
+  const waiting = settledWaiters;
+  settledWaiters = [];
+  for (const resolve of waiting) resolve();
+}
+
+/// Si risolve quando il tema è quello definitivo dell'avvio: la prima lettura
+/// delle impostazioni e del catalogo è applicata, comunque sia andata. Chi non
+/// può aspettare a lungo la mette in gara con un tempo suo.
+export function whenThemeSettled(): Promise<void> {
+  if (themeSettled) return Promise.resolve();
+  return new Promise((resolve) => settledWaiters.push(resolve));
+}
+
+/// Le scelte di luce e di contrasto, non il loro risultato: `""` è «come il
+/// sistema». Le salva lo strato d'avvio, che le risolve da sé al prossimo
+/// avvio con le regole di `effectiveTheme` ed `effectiveContrast`.
+export function themeChoices(): { readonly light: Theme | ""; readonly contrast: string } {
+  return { light: themeChoice, contrast: contrastChoice };
+}
 
 /** Le scelte del tema montato, col valore che vale adesso. */
 export interface ThemeOptions {
@@ -241,17 +280,29 @@ export function preferenceTokens(
   return tokens;
 }
 
-function themeBundle(payload: ThemePayload): {
-  manifest: ThemeBundleManifest;
-  sheet: string;
-  skin?: string;
-  assets: Readonly<Record<string, unknown>>;
-} {
+/**
+ * Il fascio da montare per una luce di un tema installato. Un tema che eredita
+ * dalla serie (`extends: "fub.serie"`) e non porta il foglio di questa luce
+ * prende quello di serie della stessa luce e dello stesso contrasto, e porta
+ * con sé la pelle di serie, che resta montata sotto la sua (ADR 0240).
+ * Ereditare da altro che la serie non si sa fare: il fascio parte senza
+ * eredità e il cancello lo rifiuta dicendo da chi voleva ereditare.
+ *
+ * Il foglio portato dal tema passa dalla serie (`completeSheet`) prima del
+ * cancello: aggiunge i ruoli facoltativi che la serie sa ricavare dai colori
+ * del tema, come la cartella del logo (D26).
+ */
+function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLevel): ThemeBundle {
+  const inherits = payload.manifest.extends === SERIES_THEME_ID;
+  const own = payload.sheet;
   return {
     manifest: payload.manifest,
-    sheet: payload.sheet,
+    sheet: own !== null && own !== undefined
+      ? series.completeSheet?.(own, light, contrast) ?? own
+      : inherits ? series.sheet(light, contrast) : "",
     skin: payload.skin ?? undefined,
     assets: payload.assets,
+    ...(inherits ? { inherited: { skin: series.skin } } : {}),
   };
 }
 
@@ -311,7 +362,7 @@ async function apply(): Promise<void> {
         if (payload.manifest.id !== requestedId || payload.light !== light) {
           reportLoadFailure(requestedId, "risposta del canale non coerente");
         } else {
-          mounted = mountThemeBundle(themeBundle(payload), light);
+          mounted = mountThemeBundle(themeBundle(payload, light, contrast), light);
           if (mounted.mounted) actualId = requestedId;
         }
       } catch (error) {
@@ -363,8 +414,50 @@ async function apply(): Promise<void> {
   emit("theme");
 }
 
+/// Le chiavi che `reread` legge. Lo zoom e i frammenti CSS hanno i loro
+/// ascoltatori (`state/zoom.ts`, `snippets.ts`), e la cornice non è del tema:
+/// rimontare il tema per loro costava un rimontaggio intero a ogni gesto.
+const THEME_READS: ReadonlySet<string> = new Set([
+  THEME_KEY, THEME_ID_KEY, CONTRAST_KEY, MOTION_KEY, FRAME_RATE_KEY, DIAGRAM_STYLE_KEY,
+  CONTENT_LOOK_KEY, DENSITY_KEY, BODY_KEY, LINE_HEIGHT_KEY, MEASURE_KEY, FONT_KEY,
+  UI_FONT_KEY, MONO_FONT_KEY, ACCENT_KEY, COMPACTNESS_KEY,
+]);
+
+/// Un cambio di `key` può cambiare il tema montato? Le chiavi lette da
+/// `reread` e le scelte di un tema (`<id>:<nome>`, `options.ts`): della serie e
+/// dei temi installati, o di qualunque tema finché il catalogo non è letto.
+function themeWatchesSetting(key: string): boolean {
+  if (THEME_READS.has(key)) return true;
+  const colon = key.indexOf(":");
+  if (colon <= 0) return false;
+  const id = key.slice(0, colon);
+  return !catalogLoaded || id === SERIES_THEME_ID ||
+    installedThemes.some((installed) => installed.manifest.id === id);
+}
+
 function valueOf(entries: Awaited<ReturnType<typeof settings>>, key: string): unknown {
   return entries.find((entry) => entry.spec.key === key)?.value;
+}
+
+/// La rilettura in volo per un `setting_changed`, e se un altro è arrivato
+/// mentre volava. Un cambio di profilo manda un evento per chiave: senza
+/// questo ogni evento rimontava il tema per conto suo. Con questo le
+/// riletture sono al più due per raffica, e l'ultima parte dopo l'ultimo
+/// evento arrivato, quindi legge tutto ciò che è stato scritto.
+let rereadInFlight: Promise<void> | null = null;
+let rereadAgain = false;
+
+function rereadForSetting(): void {
+  if (rereadInFlight) {
+    rereadAgain = true;
+    return;
+  }
+  rereadInFlight = reread().finally(() => {
+    rereadInFlight = null;
+    if (!rereadAgain) return;
+    rereadAgain = false;
+    rereadForSetting();
+  });
 }
 
 async function reread(): Promise<void> {
@@ -459,7 +552,10 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 // Un fascio che il cancello rifiuta resta installato ma fuori
                 // dal catalogo, e la persona sa perché: è anche il caso di un
                 // tema `theme-1`, scritto per la shell di prima.
-                const reasons = validateThemeBundle(themeBundle(payload), light);
+                // Il foglio ereditato si misura col contrasto di adesso: è
+                // quello che `apply` monterà.
+                const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+                const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
                 if (reasons.length > 0) {
                   reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
                   return null;
@@ -626,7 +722,7 @@ function loadCache(): void {
 export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void): void {
   if (lifetime.closed) return;
   const hadMountedTheme =
-    document.head.querySelector<HTMLStyleElement>('style[data-fub="foglio"]') !== null;
+    mountedCss("foglio") !== null;
   lifetime.add(() => {
     applyGeneration++;
     selectionGeneration++;
@@ -652,7 +748,13 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
     const media = window.matchMedia?.(query);
     if (media) lifetime.listen(media, "change", () => void apply());
   }
-  lifetime.add(onEvent("setting_changed", () => void reread()));
+  lifetime.add(onEvent("setting_changed", ({ key }) => {
+    if (settingTouches(key, themeWatchesSetting)) rereadForSetting();
+  }));
   lifetime.add(on("vault", () => void reread()));
-  void reread();
+  themeSettled = false;
+  const epoch = catalogEpoch;
+  void reread().finally(() => {
+    if (epoch === catalogEpoch) settleTheme();
+  });
 }

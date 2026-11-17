@@ -1,0 +1,9 @@
+{
+  "name": "r7-x-null",
+  "description": "R7: x a null è come mancante",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":null,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

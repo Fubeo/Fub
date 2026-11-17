@@ -3,8 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeMotions } from "../moto/animate";
 import { createManualDriver, setMotionDriver, type ManualDriver, type RecordedPlay } from "../moto/driver";
+import { curveOf } from "../moto/easing";
 import { setMotionPreference } from "../moto/level";
-import { beginTreeMotion } from "./explorer-motion";
+import { DURATION } from "../moto/spring";
+import { beginTreeMotion, CLOSE_EASING } from "./explorer-motion";
 
 const ROW_PX = 28;
 let driver: ManualDriver;
@@ -21,6 +23,10 @@ function measured(this: Element): DOMRect {
   const live = [...list.querySelectorAll(".tree-row")].filter((row) => !row.closest("[inert]"));
   const index = live.indexOf(this);
   if (index >= 0) return new DOMRect(0, index * ROW_PX, 240, ROW_PX);
+  if (this.matches('li[role="treeitem"]')) {
+    const row = this.querySelector(":scope > .tree-row");
+    return row ? measured.call(row) : new DOMRect();
+  }
   if (this.matches(".tree-children")) {
     const inside = live.filter((row) => this.contains(row));
     if (inside.length === 0) return new DOMRect();
@@ -29,29 +35,48 @@ function measured(this: Element): DOMRect {
   return new DOMRect();
 }
 
-/// Disegna l'albero come `renderChildren`: `docs` aperta mostra due note.
-function render(open: boolean): void {
-  const item = (path: string): HTMLLIElement => {
-    const li = document.createElement("li");
-    li.setAttribute("role", "treeitem");
-    li.dataset.path = path;
-    const row = document.createElement("div");
-    row.className = "tree-row";
-    row.dataset.path = path;
-    row.draggable = true;
-    li.append(row);
-    return li;
-  };
+/// Una voce dell'albero, come la disegna `renderChildren`.
+function item(path: string): HTMLLIElement {
+  const li = document.createElement("li");
+  li.setAttribute("role", "treeitem");
+  li.dataset.path = path;
+  const row = document.createElement("div");
+  row.className = "tree-row";
+  row.dataset.path = path;
+  row.draggable = true;
+  li.append(row);
+  return li;
+}
+
+/// Apre o chiude `docs` toccando solo il suo sottoalbero, come `patchFolder`.
+function patch(open: boolean): void {
+  const folder = list.querySelector<HTMLElement>('[data-path="docs"]')!;
+  folder.setAttribute("aria-expanded", String(open));
+  if (!open) {
+    folder.querySelector(":scope > .tree-children:not([inert])")?.remove();
+    return;
+  }
+  const nested = document.createElement("ul");
+  nested.className = "tree-children";
+  nested.setAttribute("role", "group");
+  nested.append(item("docs/a.md"), item("docs/b.md"));
+  folder.querySelector(":scope > .tree-row")!.after(nested);
+}
+
+/// Disegna l'albero come `renderChildren`: `docs` aperta mostra `inside` note
+/// (di serie due), e sotto di lei stanno le voci di `tail`.
+function render(open: boolean, inside = 2, tail = ["zeta.md"]): void {
   const folder = item("docs");
   folder.setAttribute("aria-expanded", String(open));
   if (open) {
     const nested = document.createElement("ul");
     nested.className = "tree-children";
     nested.setAttribute("role", "group");
-    nested.append(item("docs/a.md"), item("docs/b.md"));
+    const names = inside === 2 ? ["a", "b"] : Array.from({ length: inside }, (_, index) => `n${index}`);
+    nested.append(...names.map((name) => item(`docs/${name}.md`)));
     folder.append(nested);
   }
-  list.replaceChildren(item("alfa.md"), folder, item("zeta.md"));
+  list.replaceChildren(item("alfa.md"), folder, ...tail.map(item));
 }
 
 const entries = (): string[] =>
@@ -64,6 +89,15 @@ beforeEach(() => {
   document.body.append(list);
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(measured);
 });
+
+/// La finestra alta `rows` righe: la parte dell'albero che si vede.
+function viewport(rows: number): void {
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(rows * ROW_PX);
+}
+
+/// Le corse partite sulla riga di `path`.
+const playsOf = (path: string): RecordedPlay[] =>
+  driver.plays.filter((play) => (play.el.parentElement as HTMLElement | null)?.dataset.path === path);
 
 afterEach(() => {
   driver.advance(5000);
@@ -152,6 +186,62 @@ describe("il moto dell'albero", () => {
     expect(moved).toEqual(new Set(["zeta.md", "alfa.md", "docs"]));
     expect(driver.plays.every((play) => play.keyframes[0]?.opacity === undefined)).toBe(true);
     expect(list.querySelector("[inert]")).toBeNull();
+  });
+
+  it("aprendo una cartella lunga entrano solo le righe che si vedono", () => {
+    viewport(10);
+    render(false, 60);
+    const motion = beginTreeMotion(list, "docs");
+    render(true, 60);
+    motion.settle();
+    driver.advance(5000);
+
+    // `alfa.md` e `docs` occupano le prime due righe: dentro se ne vedono otto.
+    const entered = entries().filter((path) => path.startsWith("docs/") && playsOf(path).length > 0);
+    expect(entered).toEqual(Array.from({ length: 8 }, (_, index) => `docs/n${index}.md`));
+    // La riga sotto si vedeva: scivola via.
+    expect(playsOf("zeta.md")).toHaveLength(1);
+  });
+
+  it("chiudendo, la riga sotto parte da ferma e appena oltre il bordo, non da dove stava", () => {
+    viewport(10);
+    render(true, 60, ["zeta.md", "omega.md"]);
+    const motion = beginTreeMotion(list, "docs");
+    render(false, 60, ["zeta.md", "omega.md"]);
+    motion.settle();
+
+    const [play] = playsOf("zeta.md");
+    expect(play).toBeDefined();
+    // Stava a 62 righe, sotto la finestra; arriva alla terza. Parte dal bordo
+    // di sotto: otto righe più giù, non sessanta.
+    expect(String(play!.keyframes[0]?.transform)).toContain(`${8 * ROW_PX}px`);
+    // Chi la segue fa lo stesso passo: restano in fila, non ammucchiate sul bordo.
+    expect(playsOf("omega.md")[0]?.keyframes[0]?.transform).toBe(play!.keyframes[0]?.transform);
+    // Breve come un'uscita, e senza salto: nel primo fotogramma fa meno del
+    // 5 % della corsa (con `ease-out` ne faceva il 19 %).
+    expect(play!.timing.duration).toBe(DURATION.swap);
+    expect(play!.timing.easing).toBe(curveOf(CLOSE_EASING).css);
+    expect(curveOf(play!.timing.easing).at(1000 / 60 / play!.timing.duration)).toBeLessThan(0.05);
+    // L'immagine di chi esce arriva al bordo: otto voci, non sessanta.
+    const ghost = list.querySelector('[data-path="docs"] > .tree-children[inert]');
+    expect(ghost?.children).toHaveLength(8);
+  });
+
+  it("una riga ancora in volo riparte sullo stesso nodo, e la corsa vecchia si ferma", () => {
+    render(true);
+    const zeta = () => list.querySelector('[data-path="zeta.md"] > .tree-row');
+    const row = zeta();
+    const closing = beginTreeMotion(list, "docs");
+    patch(false);
+    closing.settle();
+    driver.advance(2000 / 60);
+
+    const opening = beginTreeMotion(list, "docs");
+    patch(true);
+    opening.settle();
+    expect(zeta()).toBe(row);
+    expect(playsOf("zeta.md").map((play) => play.state)).toEqual(["canceled", "running"]);
+    expect(entries()).toEqual(["alfa.md", "docs", "docs/a.md", "docs/b.md", "zeta.md"]);
   });
 
   it("si compie una volta sola", () => {

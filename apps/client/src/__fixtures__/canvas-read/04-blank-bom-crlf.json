@@ -1,0 +1,10 @@
+{
+  "name": "blank-bom-crlf",
+  "description": "R1: il BOM seguito da CRLF è una lavagna vuota",
+  "source": "\ufeff\r\n",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": []
+  }
+}

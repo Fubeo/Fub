@@ -23,11 +23,27 @@
 //   dello schermo dell'ultimo evento vero dello stesso puntatore riprende il
 //   suo punto nella scena. Se intanto la vista si è mossa, alzarsi senza
 //   muoversi non aggiunge un tratto che il puntatore non ha fatto.
+// - **Un campione, una volta.** Dove il motore manda `pointerrawupdate`, ogni
+//   campione arriva lì prima, e il `pointermove` che segue lo riporta
+//   (Pointer Events 3: i suoi coalescenti sono gli stessi cambiamenti). Il
+//   `pointermove` di solito ha lo stesso istante, ma non è promesso: con
+//   l'orologio finto di Playwright (quello del banco) ogni evento prende
+//   l'istante del suo invio, e il `pointermove` arriva 2–15 ms dopo. La
+//   sessione, che riconosce un doppione dall'istante, lo terrebbe due volte. Allora il campione del
+//   `pointermove` che ha gli stessi valori di uno di `pointerrawupdate` non
+//   ancora riportato è quel campione, e non entra; uno senza gemello entra,
+//   come sempre. Una penna ferma che manda due campioni uguali in istanti
+//   diversi li dà tutti e due: ognuno ha il suo gemello e lo consuma.
 // - **Gli eventi, in cattura.** Gli ascoltatori sono in fase di cattura, così
 //   ruoli e stato sono già aggiornati quando gli ascoltatori della camera, in
 //   bolla sullo stesso elemento, li leggono. Il `pointerup` e il
 //   `pointercancel` si ascoltano sul documento: arrivano anche se la cattura non
 //   è riuscita e il puntatore si è alzato fuori dalla superficie.
+// - **Il rilascio perso.** La cattura persa e la finestra che perde il fuoco
+//   chiudono il tratto aperto come un rilascio: il tratto si salva fino al suo
+//   ultimo punto (N6 T20a). Il `pointercancel` lo annulla, perché il sistema si
+//   prende il gesto (palmo, gesto del sistema), e la pagina nascosta lo annulla
+//   come prima. Un movimento senza il tasto del tratto lo chiude già la sessione.
 // - **La cattura è una richiesta.** La sessione chiede di catturare e di
 //   rilasciare il puntatore; un puntatore che il motore non considera attivo
 //   non si cattura, e il tratto prosegue con gli eventi che arrivano.
@@ -46,7 +62,7 @@ import { openLifetime } from "../../ui/lifetime";
 import type { Lifetime } from "../../ui/lifetime";
 import type { InkSample } from "../sample";
 import { pointerTypeOf, type PointerSample } from "../input/pointer";
-import type { PointerRole, TouchPolicy } from "../input/roles";
+import type { MousePolicy, PointerRole, TouchPolicy } from "../input/roles";
 import {
   Session,
   type CancelReason,
@@ -83,6 +99,9 @@ export interface InkInputOptions {
   readonly onCancel: (id: number, reason: CancelReason) => void;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
+  /// Che cosa fa il tasto principale del mouse (default `ink`). Con `ignore`
+  /// il mouse non disegna e i suoi eventi restano a chi sta sotto.
+  readonly mouse?: MousePolicy;
   /// Campioni per tratto prima di dividerlo (default `INK_MAX_SAMPLES`).
   readonly maxSamples?: number;
   /// La curva della pressione: dalla pressione della penna, 0…1, a quella del
@@ -110,6 +129,9 @@ export interface InkInput {
   /// Un tratto è in corso.
   readonly drawing: boolean;
   setTouchPolicy(policy: TouchPolicy): void;
+  /// La politica del mouse dal prossimo appoggio; un tratto in corso finisce
+  /// com'è.
+  setMousePolicy(policy: MousePolicy): void;
   /// Annulla il tratto in corso (`reason: "api"`); il puntatore smette di
   /// disegnare finché non si alza.
   cancel(): void;
@@ -123,6 +145,7 @@ export interface InkInput {
 export function attachInkInput(element: HTMLElement, options: InkInputOptions, owner: Lifetime): InkInput {
   const session = new Session({
     ...(options.touch === undefined ? {} : { touch: options.touch }),
+    ...(options.mouse === undefined ? {} : { mouse: options.mouse }),
     ...(options.maxSamples === undefined ? {} : { maxSamples: options.maxSamples }),
     curve: options.pressure ?? null,
   });
@@ -133,6 +156,9 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
   /// Il tratto che chi disegna ha ricevuto con `onStart` e a cui non ha ancora
   /// dato fine né annullamento.
   let open: number | null = null;
+  /// L'ultimo campione che la sessione ha avuto per il tratto aperto: la
+  /// finestra che perde il fuoco lo chiude da lì, come un rilascio.
+  let lastOpen: PointerSample | null = null;
   /// Quante consegne sono in corso (le callback rientrano) e a che punto è la
   /// generazione: un'interruzione dentro una consegna la fa avanzare, e gli
   /// effetti ancora da consegnare di quelle precedenti non valgono più.
@@ -168,6 +194,16 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
   /// Dov'era, sullo schermo e nella scena, l'ultimo evento vero di ogni
   /// puntatore giù.
   const seen = new Map<number, { readonly clientX: number; readonly clientY: number; readonly x: number; readonly y: number }>();
+
+  /// Per ogni puntatore che disegna, i campioni arrivati con `pointerrawupdate`
+  /// e non ancora riportati da un `pointermove`, e l'ultimo campione che ne è
+  /// andato alla sessione.
+  const raw = new Map<number, { pending: RawEcho[]; last: PointerSample | null }>();
+
+  function forget(pointerId: number): void {
+    seen.delete(pointerId);
+    raw.delete(pointerId);
+  }
 
   /// Il campione di un evento, con la vista letta una volta per evento. Un
   /// puntatore fermo sullo schermo resta dov'era nella scena anche se intanto
@@ -291,6 +327,29 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     if (failed) throw failure;
   }
 
+  /// Ricorda l'ultimo campione di un puntatore che la sessione tiene per un
+  /// tratto aperto. Dopo ogni consegna: un puntatore che non disegna non lascia niente.
+  function remember(sample: PointerSample): void {
+    if (session.tracks(sample.pointerId)) lastOpen = sample;
+  }
+
+  /// Chiude il tratto del puntatore di `sample` come se il tasto si fosse alzato
+  /// senza il suo evento: la sessione lo finisce all'ultimo campione, che si
+  /// salva (`onEnd`), e il puntatore resta giù senza disegnare, come dopo un
+  /// annullamento (la sessione lo chiama «il tasto rilasciato con un altro
+  /// ancora giù»). Un puntatore senza tratto non fa niente.
+  function releasedButton(sample: PointerSample): void {
+    if (session.tracks(sample.pointerId)) run(session.pointerMove([], { ...sample, buttons: 0 }, []));
+  }
+
+  /// Chiude il tratto aperto per la finestra che perde il fuoco, dall'ultimo
+  /// campione che la sessione ha avuto. Senza un tratto aperto non fa niente.
+  function endOpenStroke(): void {
+    const last = lastOpen;
+    lastOpen = null;
+    if (last !== null) releasedButton(last);
+  }
+
   /// Un'interruzione (di chi disegna o della piattaforma): consegna gli effetti
   /// della sessione e annulla il tratto che chi disegna ha ancora aperto e la
   /// sessione non conosce più, come quello che stava per cominciare la
@@ -311,8 +370,13 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
   life.listen(element, "pointerdown", (event) => {
     if (options.stabilizer) session.setStabilizer(options.stabilizer());
     // Un contatto nuovo si porta nella scena con la vista di adesso.
-    seen.delete(event.pointerId);
-    run(session.pointerDown(pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1)));
+    forget(event.pointerId);
+    const sample = pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1);
+    try {
+      run(session.pointerDown(sample));
+    } finally {
+      remember(sample);
+    }
   }, { capture: true });
 
   life.listen(element, "pointermove", (event) => {
@@ -324,13 +388,45 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     }
     const turn = options.turn?.() ?? 0;
     const scale = options.scale?.() ?? 1;
-    const coalesced = typeof event.getCoalescedEvents === "function"
-      ? event.getCoalescedEvents().map((one) => pointerOf(one, turn, scale))
-      : [];
-    const predicted = options.onPredicted !== undefined && typeof event.getPredictedEvents === "function"
+    // Le predizioni dopo i campioni veri: una ferma sullo schermo riprende il
+    // loro punto nella scena.
+    const predictedOf = (): PointerSample[] => options.onPredicted !== undefined && typeof event.getPredictedEvents === "function"
       ? event.getPredictedEvents().map((one) => pointerOf(one, turn, scale, false))
       : [];
-    run(session.pointerMove(coalesced, pointerOf(event, turn, scale), predicted));
+    const echoes = raw.get(event.pointerId);
+    if (echoes === undefined) {
+      const coalesced = typeof event.getCoalescedEvents === "function"
+        ? event.getCoalescedEvents().map((one) => pointerOf(one, turn, scale))
+        : [];
+      const sample = pointerOf(event, turn, scale);
+      try {
+        run(session.pointerMove(coalesced, sample, predictedOf()));
+      } finally {
+        remember(sample);
+      }
+      return;
+    }
+    // I campioni già arrivati con `pointerrawupdate` non rientrano: restano
+    // quelli senza gemello, nell'ordine.
+    const pending = echoes.pending;
+    echoes.pending = [];
+    const fresh = samplesOf(event).filter((one) => {
+      const twin = pending.findIndex((echo) => sameEcho(echo, one));
+      if (twin < 0) return true;
+      pending.splice(twin, 1);
+      return false;
+    }).map((one) => pointerOf(one, turn, scale));
+    const last = fresh[fresh.length - 1] ?? null;
+    // Senza campioni nuovi il `pointermove` porta ancora i tasti e la
+    // predizione: l'ultimo campione già dato, che la sessione riconosce come
+    // doppione (stesso istante, stessi valori) e non aggiunge.
+    const sample = last ?? (echoes.last === null ? null : { ...echoes.last, buttons: event.buttons });
+    if (sample === null) return;
+    try {
+      run(session.pointerMove(fresh.slice(0, -1), sample, predictedOf()));
+    } finally {
+      if (last !== null) remember(last);
+    }
   }, { capture: true });
 
   // `pointerrawupdate` arriva prima di `pointermove`, appena il dispositivo
@@ -338,7 +434,8 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
   // tratto cresce subito, dentro il gestore, senza aspettare il fotogramma
   // (FD-748, DEC-26). Il `pointermove` che segue porta gli stessi campioni,
   // che la sessione scarta come doppioni, e le predizioni; una predizione
-  // vecchia si toglie al primo campione vero.
+  // vecchia si toglie al primo campione vero. I campioni si ricordano finché
+  // il `pointermove` non li riporta («Un campione, una volta»).
   life.listen(element, "pointerrawupdate" as "pointermove", (event: PointerEvent) => {
     if (!session.tracks(event.pointerId)) return;
     const turn = options.turn?.() ?? 0;
@@ -346,7 +443,21 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     const coalesced = typeof event.getCoalescedEvents === "function"
       ? event.getCoalescedEvents().map((one) => pointerOf(one, turn, scale))
       : [];
-    run(session.pointerMove(coalesced, pointerOf(event, turn, scale), []));
+    const sample = pointerOf(event, turn, scale);
+    let echoes = raw.get(event.pointerId);
+    if (echoes === undefined) {
+      echoes = { pending: [], last: null };
+      raw.set(event.pointerId, echoes);
+    }
+    // Un motore che non ascolta più il pointermove non fa crescere la lista.
+    const pending = [...echoes.pending, ...samplesOf(event).map(echoOf)];
+    echoes.pending = pending.length > RAW_PENDING_MAX ? pending.slice(-RAW_PENDING_MAX) : pending;
+    echoes.last = sample;
+    try {
+      run(session.pointerMove(coalesced, sample, []));
+    } finally {
+      remember(sample);
+    }
   }, { capture: true });
 
   // Sul documento, in cattura: il `pointerup` arriva anche se la cattura non è
@@ -355,17 +466,21 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     const sample = session.tracks(event.pointerId)
       ? pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1)
       : bare(event);
-    seen.delete(event.pointerId);
+    forget(event.pointerId);
     run(session.pointerUp(sample));
   }, { capture: true });
 
   life.listen(doc, "pointercancel", (event) => {
-    seen.delete(event.pointerId);
+    forget(event.pointerId);
     run(session.pointerCancel(event.pointerId));
   }, { capture: true });
 
+  // La cattura persa è un rilascio che non arriva più: il tratto si chiude e si
+  // salva all'ultimo campione, come un rilascio (N6 T20a). Il punto dell'evento
+  // non entra: il tasto non ha più un evento da cui leggerlo.
   life.listen(element, "lostpointercapture", (event) => {
-    run(session.lostCapture(event.pointerId));
+    if (!session.tracks(event.pointerId)) return;
+    releasedButton(pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1));
   });
 
   // `pointerleave` non risale: senza cattura arriva solo quando il puntatore
@@ -375,7 +490,17 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     session.pointerLeave(event.pointerId, pointerTypeOf(event.pointerType));
   });
 
-  if (view) life.listen(view, "blur", () => interrupt(session.interrupt("blur"), "blur"));
+  // La finestra che perde il fuoco chiude e salva il tratto aperto come un
+  // rilascio (N6 T20a); poi il resto della sessione si annulla come prima.
+  if (view) {
+    life.listen(view, "blur", () => {
+      try {
+        endOpenStroke();
+      } finally {
+        interrupt(session.interrupt("blur"), "blur");
+      }
+    });
+  }
   life.listen(doc, "visibilitychange", () => {
     if (doc.visibilityState === "hidden") interrupt(session.interrupt("hidden"), "hidden");
   });
@@ -399,9 +524,64 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     setTouchPolicy(policy) {
       session.setTouchPolicy(policy);
     },
+    setMousePolicy(policy) {
+      session.setMousePolicy(policy);
+    },
     cancel() {
       if (!destroyed) interrupt(session.cancel(), "api");
     },
     destroy,
   };
+}
+
+/// Quanti campioni di `pointerrawupdate` si ricordano al più, per puntatore, in
+/// attesa del `pointermove` che li riporta: più di quanti un motore ne riunisce
+/// in un fotogramma.
+const RAW_PENDING_MAX = 256;
+
+/// I valori con cui un campione di `pointerrawupdate` si riconosce quando il
+/// `pointermove` lo riporta: tutto quello che il campione dice, tranne l'istante.
+/// Le coordinate sono quelle del client, perché quelle della scena dipendono
+/// dalla vista, che intanto può essersi mossa.
+interface RawEcho {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly pressure: number;
+  readonly tiltX: number;
+  readonly tiltY: number;
+  readonly altitudeAngle: number | undefined;
+  readonly azimuthAngle: number | undefined;
+  readonly twist: number;
+  readonly buttons: number;
+}
+
+function echoOf(event: PointerEvent): RawEcho {
+  return {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    pressure: event.pressure,
+    tiltX: event.tiltX,
+    tiltY: event.tiltY,
+    altitudeAngle: event.altitudeAngle,
+    azimuthAngle: event.azimuthAngle,
+    twist: event.twist ?? 0,
+    buttons: event.buttons,
+  };
+}
+
+/// Lo stesso campione: gli stessi valori (`Object.is`, così due NaN sono
+/// uguali), qualunque sia l'istante.
+function sameEcho(echo: RawEcho, event: PointerEvent): boolean {
+  const other = echoOf(event);
+  return (Object.keys(echo) as (keyof RawEcho)[]).every((key) => Object.is(echo[key], other[key]));
+}
+
+/// I campioni distinti che un evento porta: i suoi coalescenti, e l'evento se
+/// non è già l'ultimo di loro (stesso istante, stessi valori); senza
+/// coalescenti, l'evento.
+function samplesOf(event: PointerEvent): PointerEvent[] {
+  const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+  const tail = coalesced[coalesced.length - 1];
+  if (tail !== undefined && tail.timeStamp === event.timeStamp && sameEcho(echoOf(tail), event)) return coalesced;
+  return [...coalesced, event];
 }

@@ -1,0 +1,11 @@
+{
+  "name": "new-node-field-order",
+  "description": "R10: una scheda nuova si scrive compatta nell'ordine di R10, poi i campi sconosciuti; le chiavi che sembrano indici vanno prima",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"fub:x":1,"text":"due","height":50,"width":100,"y":0,"x":200,"type":"text","id":"b","2":true,"color":"4","10":null}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"2\":true,\"10\":null,\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"color\":\"4\",\"text\":\"due\",\"fub:x\":1}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}"
+  }
+}

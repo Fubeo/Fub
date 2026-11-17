@@ -1,0 +1,10 @@
+{
+  "name": "reorder-keeps-unknown-bytes",
+  "description": "Cambiare l'ordine delle schede tiene i byte dei loro campi sconosciuti e della radice",
+  "before": "{ \"nodes\": [ {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\",\"future\": { \"escaped\": \"\\\\u0055\" }}, {\"id\":\"b\",\"type\":\"text\",\"x\":20,\"y\":0,\"width\":10,\"height\":10,\"text\":\"b\"} ], \"edges\": [], \"tail\": [ 1,  2 ] }",
+  "patches": [{"kind":"reorder","before":["a","b"],"after":["b","a"]}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{ \"nodes\": [ {\"id\":\"b\",\"type\":\"text\",\"x\":20,\"y\":0,\"width\":10,\"height\":10,\"text\":\"b\"}, {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\",\"future\": { \"escaped\": \"\\\\u0055\" }} ], \"edges\": [], \"tail\": [ 1,  2 ] }"
+  }
+}

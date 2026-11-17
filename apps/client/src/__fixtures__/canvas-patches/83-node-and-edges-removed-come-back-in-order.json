@@ -1,0 +1,10 @@
+{
+  "name": "node-and-edges-removed-come-back-in-order",
+  "description": "Una scheda e i suoi due archi tolti insieme, con le posizioni di partenza (cb a 2, ab a 0, b a 1): restano solo a, c e l'arco ac. L'annulla rimette b fra a e c e i due archi ai loro posti, prima e dopo ac: il testo torna quello di prima",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"b\"},{\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"c\"}],\"edges\":[{\"id\":\"ab\",\"fromNode\":\"a\",\"toNode\":\"b\"},{\"id\":\"ac\",\"fromNode\":\"a\",\"toNode\":\"c\"},{\"id\":\"cb\",\"fromNode\":\"c\",\"toNode\":\"b\"}]}",
+  "patches": [{"kind":"remove-edge","before":{"id":"cb","fromNode":"c","toNode":"b"},"after":null,"at":2},{"kind":"remove-edge","before":{"id":"ab","fromNode":"a","toNode":"b"},"after":null,"at":0},{"kind":"remove-node","before":{"id":"b","type":"text","x":200,"y":0,"width":100,"height":50,"text":"b"},"after":null,"at":1}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"},{\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"c\"}],\"edges\":[{\"id\":\"ac\",\"fromNode\":\"a\",\"toNode\":\"c\"}]}"
+  }
+}

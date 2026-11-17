@@ -172,6 +172,7 @@ import { installKeys } from "./editor/keys";
 import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
+import { installGestiMotore, type MotoreDelDisegno } from "../motore/gesti";
 export { DRAW_SCALE_LIMITS } from "./editor/constants";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -330,6 +331,11 @@ export interface DrawEditorOptions {
   /// chiede («Esporta la selezione» dell'ispettore). Senza, il pulsante non
   /// c'è.
   readonly onExport?: (what?: "selection") => void;
+  /// Il motore del disegno (K5): con lui Selezione, Rettangolo, Ellisse,
+  /// Linea e Freccia chiedono a lui che cosa fare (`motore/gesti.ts`).
+  /// Senza, o finché non c'è, gli strumenti fanno da sé, come sempre. Il
+  /// foglio delle annotazioni non lo usa.
+  readonly motore?: MotoreDelDisegno;
   /// Dove stanno barra, colonna, foglio e pannelli (default
   /// `inlineChrome()`: tutto dentro l'editor).
   readonly chrome?: DrawChrome;
@@ -464,6 +470,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installInkGestures(ctx);
   installInserts(ctx);
   installStrokeShapes(ctx);
+  installGestiMotore(ctx);
   installCurvatureTool(ctx);
   installSheetCursor(ctx);
   installInput(ctx);

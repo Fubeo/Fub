@@ -1,0 +1,11 @@
+{
+  "name": "null-in-patch-after-is-absent",
+  "description": "R7: un campo noto facoltativo a null nel dopo di una toppa vale come assente, e non si scrive",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"color\":\"1\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","color":"1"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","color":null}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"color\":\"1\"}],\"edges\":[]}"
+  }
+}

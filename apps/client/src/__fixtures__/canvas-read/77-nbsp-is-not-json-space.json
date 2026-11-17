@@ -1,0 +1,9 @@
+{
+  "name": "nbsp-is-not-json-space",
+  "description": "Solo gli spazi JSON separano: un U+00A0 fra [ e la scheda non è JSON",
+  "source": "{\"nodes\":[\u00a0{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

@@ -232,6 +232,42 @@ describe("prepareExit", () => {
     expect(document.querySelectorAll("[inert]")).toHaveLength(1);
   });
 
+  it("con `cutBelow` l'immagine lascia fuori le ultime figlie, da quella che comincia oltre il bordo", () => {
+    const list = document.createElement("ul");
+    document.body.append(list);
+    place(list, 0, 0, 200, 600);
+    for (let index = 0; index < 6; index++) {
+      const li = document.createElement("li");
+      li.textContent = `voce ${index}`;
+      // Una nipote in ogni voce: le coppie originale-copia restano allineate.
+      const mark = document.createElement("span");
+      li.append(mark);
+      list.append(li);
+      place(li, 0, index * 100, 200, 100);
+    }
+    const ghost = prepareExit(list, { cutBelow: 250 });
+    list.remove();
+    ghost.play();
+
+    const image = ghostOf()!;
+    expect([...image.children].map((li) => li.textContent)).toEqual(["voce 0", "voce 1", "voce 2"]);
+    // Il riquadro resta quello intero.
+    expect(image.style.height).toBe("600px");
+  });
+
+  it("senza `cutBelow`, o con un bordo oltre l'ultima, l'immagine le porta tutte", () => {
+    const list = document.createElement("ul");
+    document.body.append(list);
+    place(list, 0, 0, 200, 200);
+    for (let index = 0; index < 2; index++) {
+      const li = document.createElement("li");
+      list.append(li);
+      place(li, 0, index * 100, 200, 100);
+    }
+    prepareExit(list, { cutBelow: 900 }).play();
+    expect(ghostOf()?.children).toHaveLength(2);
+  });
+
   it("se l'elemento stava entrando, l'immagine esce dalla posa in cui era", () => {
     const el = surface();
     enter(el, { from: { y: 12, opacity: 0 } });

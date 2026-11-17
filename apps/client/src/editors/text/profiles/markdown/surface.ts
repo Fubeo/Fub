@@ -13,15 +13,29 @@ import { currentTheme as getCurrentTheme, type Theme } from "../../../../theme/t
 import type { SyntaxForm } from "../../../../host/contract";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../../../../rules/offsets";
 import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored";
-import { t } from "../../../../i18n/strings";
+import { renamedPageName, renamedPagePath } from "../../../../state/page-rename";
+import { onLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
+import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
+import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
+import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
+import { refreshPageHeader, retitleView } from "./blocks/page";
+import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./page/properties/kind";
+import { api } from "../../../../host/ipc";
+import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
+import { selectBlockThenAll, selectBody } from "./blocks/keys";
+import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
+import { mountReadingHeader, type PageOptions } from "./page/header";
+import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
+import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type WikilinkGesture } from "./link-gesture";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
-import { openLifetime } from "../../../../ui/lifetime";
+import { openVaultRoot } from "../../../../state/store";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
@@ -36,9 +50,12 @@ import type {
   SurfacePoint,
   SurfaceReference,
   SurfaceScrollLink,
+  SurfaceCellSelectionSource,
 } from "../../../core/registry";
+import { modeById } from "../../../core/surface-modes";
 import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
+import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
 import { cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type SlashMenuSource } from "./slash";
 import { dailyLink } from "./completions";
@@ -60,9 +77,11 @@ import {
 } from "../../../core/editor-actions";
 import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
-import { frontmatterRange, renderMarkdown } from "./render";
+import { declaredLanguage, frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
+import { commentCut, copiedSelection, FUB_MARKDOWN_TYPE, rememberCut, type CarriedCut } from "./comments/copy";
+import { COMMENT_ACTION, COMMENT_CHORD, markdownComments } from "./comments/discussions";
 import type { ProofPorts } from "../../../core/proof-ports";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
@@ -85,6 +104,9 @@ import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
 
+/// Quanti caratteri del paragrafo dice la testata del menu.
+const EXCERPT_CHARS = 34;
+
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri
 /// si scrivono con «Altro…».
 const CODE_LANGUAGES: readonly (readonly [string, string])[] = [
@@ -99,18 +121,25 @@ const CODE_LANGUAGES: readonly (readonly [string, string])[] = [
 /// testo, «Originale» toglie la misura.
 const IMAGE_WIDTHS = { small: 240, medium: 480 } as const;
 
-/// Le quattro viste esclusive sullo stesso buffer. `source`, `live_preview`
-/// e `blocks` scrivono nella stessa vista; `reading` la nasconde e mostra il
-/// reso. I Blocchi sono la Live con maniglie, menu e trascinamento: per i
-/// comandi della shell hanno il ruolo della Live.
-export type MarkdownMode = "source" | "live_preview" | "blocks" | "reading";
+/// Le tre viste esclusive sullo stesso buffer (D1 A, E1). `live_preview` è
+/// **Scrittura**: la resa viva con dentro i Blocchi (maniglie, testata,
+/// selezione di blocchi); `source` è il Markdown com'è sul disco; le due
+/// scrivono nella stessa vista. `reading` la nasconde e mostra il reso.
+export type MarkdownMode = "source" | "live_preview" | "reading";
 
+/// `blocks`, la modalità Blocchi di prima, è confluita in Scrittura: un
+/// riquadro salvato lì o un comando che la nomina ottiene Scrittura.
 export const MARKDOWN_MODES: readonly SurfaceMode[] = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
-  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
-  { id: "blocks", label: () => liveStrings.t("blocks.mode"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+  { id: "source", label: () => t("mode.source"), description: () => liveStrings.t("mode.source.desc"), presentation: "surface", contextMode: "source", looks: ["tema"] },
+  { id: "live_preview", label: () => t("mode.live"), description: () => liveStrings.t("mode.writing.desc"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], formerIds: ["blocks"] },
   { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["tema"] },
 ];
+
+/// La modalità che `requested` nomina, o quella in cui è confluita; `null`
+/// se la nota non la conosce.
+export function markdownModeOf(requested: string): MarkdownMode | null {
+  return (modeById(MARKDOWN_MODES, requested)?.id as MarkdownMode | undefined) ?? null;
+}
 
 /// Un file come lo nomina la nota (un percorso o un wikilink), o come lo sa
 /// già il vault (`vault`, l'id della resa).
@@ -138,13 +167,23 @@ export interface MarkdownSurfaceOptions {
   onChange(change: EditorChange): void;
   /// Invocato quando cambia la selezione.
   onSelectionChange(): void;
-  /// Click su un wikilink nella resa.
-  onOpenWikilink(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  /// Click su un wikilink nella resa. `from` è il documento di questa
+  /// superficie, da cui il nome si risolve.
+  onOpenWikilink(page: string, heading: string | null, block: string | null, from?: string): void | Promise<void>;
   onOpenPath(path: string, from?: string): void | Promise<void>;
+  /// Clic su una figura (un file Craft, un PDF): apre il suo documento col
+  /// gesto, e non crea mai una nota. Senza, la figura non apre niente.
+  onOpenFigure?(doc: string): void | Promise<void>;
   /// Apre un documento del vault per id (l'immagine resa nel visore).
   onOpenDocument?(id: string): void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink. Senza, la voce non c'è.
-  onOpenWikilinkBeside?(page: string, heading: string | null, block: string | null): void | Promise<void>;
+  onOpenWikilinkBeside?(page: string, heading: string | null, block: string | null, from?: string): void | Promise<void>;
+  /// La sbirciata (E11, T20): Alt col clic o Alt-Invio su un link a un
+  /// documento del vault, e la voce «Sbircia» del suo menu. `from` è il
+  /// documento di questa superficie. Senza, quei gesti aprono il documento.
+  onPeekLink?(link: PeekLink, from: string): void | Promise<void>;
+  /// Che cosa fa il clic che apre un link (`editor.link-click`). Senza, apre.
+  linkClick?(): "apri" | "sbircia";
   /// Un file nominato dalla nota aperto con un'altra app o mostrato
   /// nell'esploratore. Senza, le due voci non ci sono.
   onShowFile?(target: SystemTarget, from: string, where: "app" | "explorer"): void | Promise<void>;
@@ -166,6 +205,10 @@ export interface MarkdownSurfaceOptions {
   pageIcons?: PageIcons;
   /// Le schede dei collegamenti (K8): senza, un URL da solo resta un link.
   linkCards?: LinkCardSource;
+  /// La riga dei dati sotto il titolo (modificata, collegamenti, etichette):
+  /// chi la legge, perché l'editor non chiama l'host da sé. Senza, la riga
+  /// non c'è.
+  noteFacts?: NoteFactsSource;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -227,15 +270,20 @@ export function slashOpensAt(lineBefore: string): boolean {
 /// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
+
+/// Il modulo del correttore, dopo che il primo editor lo ha caricato. Da lì in
+/// poi ogni superficie nuova (ogni cambio di nota) lo monta insieme alle
+/// altre estensioni, prima di creare la vista: aggiungerlo dopo era una
+/// seconda configurazione di CodeMirror, con un ricalcolo dello stile, sopra
+/// l'editor appena disegnato.
+let proofModule: typeof import("./proof") | null = null;
 /// Quanto un riquadro che ha seguito lo scorrimento di un altro tace: copre
 /// lo scorrimento in due tempi del motore (il blocco, poi il pixel).
 const FOLLOW_QUIET_MS = 150;
 const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
 const RTL_KEY = "editor.rtl";
-
-function isMarkdownMode(mode: string): mode is MarkdownMode {
-  return MARKDOWN_MODES.some((candidate) => candidate.id === mode);
-}
+/// Il registro dei tipi delle proprietà del vault (`fub-kernel`, `TYPES`).
+const PROPERTY_TYPES_KEY = "properties.types";
 
 /// I titoli della pagina, fuori dai blocchi di codice: l'anteprima
 /// dell'Indice nel «/» mostra questi.
@@ -285,8 +333,40 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const parent = context.parent;
   const documentId = context.documentId;
   const resources = acquireMarkdownResources(documentId);
+  /// Il vault in cui la nota si è aperta (FUB-001): i posti fuori dalla
+  /// colonna si chiedono per la nota di questo vault, non per lo stesso
+  /// percorso in un altro.
+  const vault = openVaultRoot();
+  /// Il documento di questa superficie, letto a ogni gesto: una rinomina lo
+  /// cambia mentre la superficie è montata. I link si risolvono da qui, non
+  /// dal riquadro col fuoco (una sbirciata, una scheda della lavagna).
+  const linkSource = (): string => resources?.documentId ?? documentId;
   const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
-    opts.onOpenWikilink(page, heading ?? null, block ?? null);
+    opts.onOpenWikilink(page, heading ?? null, block ?? null, linkSource());
+  /// Come si segue un link da questa superficie: aprire, sbirciare, e la
+  /// regola del clic (`open-link.ts`).
+  const follow: WikilinkFollow = {
+    openWikilink: (page, heading, block) => openWikilink(page, heading, block),
+    openPath: (path) => opts.onOpenPath(path, linkSource()),
+    ...(opts.onPeekLink ? { peekLink: (link: PeekLink) => opts.onPeekLink!(link, linkSource()) } : {}),
+    ...(opts.linkClick ? { linkClick: () => opts.linkClick!() } : {}),
+  };
+  /// Il clic su un link della resa (la Lettura, un blocco reso): Alt sbircia,
+  /// ogni altro clic è il clic che apre e segue `editor.link-click`.
+  const clickWikilink = (page: string, heading?: string, block?: string, gesture?: WikilinkGesture) =>
+    followWikilink(follow, page, heading ?? null, block ?? null, gesture ?? "click");
+  const clickPath = (path: string, _from?: string, gesture?: WikilinkGesture) =>
+    followPath(follow, path, gesture ?? "click");
+  /// Le schede dei collegamenti, con le schede delle note lette da questo
+  /// documento: il nome di un wikilink si risolve dalla nota che lo contiene.
+  const cards = opts.linkCards;
+  const linkCards: LinkCardSource | undefined = cards && {
+    view: (url) => cards.view(url),
+    request: (url) => cards.request(url),
+    watch: (changed) => cards.watch(changed),
+    ...(cards.note ? { note: (page: string) => cards.note!(page, linkSource()) } : {}),
+    ...(cards.holdNote ? { holdNote: (page: string) => cards.holdNote!(page, linkSource()) } : {}),
+  };
   /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
   /// sulle sue celle invece che sul cursore del testo.
   let tableGrid: TableGridActions | null = null;
@@ -327,9 +407,18 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (id !== "markdown.date" || typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return params;
     return dates ? dailyLink(iso, dates) : {};
   };
+  /// I dati della riga sotto il titolo, gli ultimi arrivati.
+  let facts: NoteFacts | null = null;
+  const factsActions = {
+    openLinks: () => opts.noteFacts?.openLinks(),
+    searchTag: (tag: string) => opts.onSearchTag(tag),
+  };
   const profile = createMarkdownProfile({
+    ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
       openWikilink,
+      ...(follow.peekLink ? { peekLink: follow.peekLink } : {}),
+      ...(follow.linkClick ? { linkClick: follow.linkClick } : {}),
       searchTag: opts.onSearchTag,
       // Come in Lettura: il percorso si risolve rispetto a questo documento,
       // e un documento che non c'è lo dice invece di tacere.
@@ -343,20 +432,25 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       slashEnabled: () => Boolean(slashMenu && slashHost?.enabled()),
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
-      linkCard: opts.linkCards,
+      linkCard: linkCards,
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
           actionsChanged();
+          cellsChanged();
         },
-        changed: () => actionsChanged(),
+        changed: () => {
+          actionsChanged();
+          cellsChanged();
+        },
       },
       mountRendered: (container, html, actions) => mountMarkdown(container, html, {
         ...actions,
         get documentId() { return resources?.documentId ?? documentId; },
         resources,
-        openWikilink,
-        openPath: opts.onOpenPath,
+        openWikilink: clickWikilink,
+        openPath: clickPath,
+        openFigure: opts.onOpenFigure,
         searchTag: opts.onSearchTag,
         toggleTask: readOnly ? undefined : actions.toggleTask,
         editFence: readOnly ? undefined : actions.editFence,
@@ -376,27 +470,63 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const actionsChanged = () => {
     for (const listener of [...actionListeners]) listener();
   };
+  /// Chi segue le celle scelte nella griglia attiva (la somma nella banda).
+  const cellListeners = new Set<() => void>();
+  const cellsChanged = () => {
+    for (const listener of [...cellListeners]) listener();
+  };
+  /// Le celle scelte, coi numeri letti nella lingua della nota (`lang:`) o in
+  /// quella dell'interfaccia. Si legge quando la banda chiede, non a ogni
+  /// battuta.
+  const cellSelection: SurfaceCellSelectionSource = {
+    read: () => {
+      const values = mode === "reading" ? null : tableGrid?.selectedValues() ?? null;
+      if (!values) return null;
+      const locale = engine.readState((state) => declaredLanguage(state.doc)) ?? resolvedLanguage();
+      return { locale, values: () => values };
+    },
+    subscribe: (listener) => {
+      cellListeners.add(listener);
+      return () => cellListeners.delete(listener);
+    },
+  };
   // Copiare o tagliare una selezione porta anche l'HTML, per incollare con la
   // formattazione fuori da Fub. Il testo si legge prima di CodeMirror, perché
   // un taglio lo toglie dal documento; l'HTML si aggiunge dopo, perché
   // CodeMirror svuota gli appunti prima di scriverci il testo semplice.
+  // Il testo che va negli appunti: in Sorgente quello scritto; in Scrittura e
+  // in Lettura un commento tagliato dalla selezione non vi porta i segni
+  // nascosti (`comments/copy.ts`).
+  const selectionSource = (state: EditorState): string | null => {
+    if (mode !== "source") return copiedSelection(state, forms);
+    const parts = state.selection.ranges.filter((range) => !range.empty).map((range) => state.sliceDoc(range.from, range.to));
+    return parts.length > 0 ? parts.join(state.lineBreak) : null;
+  };
+  // Il commento che un taglio porta con sé, soltanto in Scrittura: è lì che
+  // tagliare il testo di un passo toglie anche il commento (`comments/mask.ts`).
+  const carriedCut = (state: EditorState): CarriedCut | null => (mode === "live_preview" ? commentCut(state, forms) : null);
   let copied: string | null = null;
+  let carried: CarriedCut | null = null;
   const beforeCopy = (event: ClipboardEvent) => {
     copied = null;
+    carried = null;
     if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
     // La griglia di una tabella copia le sue celle da sé.
     if (event.target.closest(".tb-frame")) return;
-    copied = engine.readState((state) => {
-      const parts = state.selection.ranges.filter((range) => !range.empty)
-        .map((range) => state.sliceDoc(range.from, range.to));
-      return parts.length > 0 ? parts.join(state.lineBreak) : null;
-    });
+    copied = engine.readState(selectionSource);
+    // Tagliare tutto il testo di un passo porta il commento negli appunti di
+    // Fub (`comments/copy.ts`); qualunque altra copia lo dimentica.
+    carried = event.type === "cut" ? engine.readState(carriedCut) : null;
+    rememberCut(carried);
   };
   const afterCopy = (event: ClipboardEvent) => {
     const text = copied;
+    const cut = carried;
     copied = null;
+    carried = null;
     if (text === null || !event.defaultPrevented || !event.clipboardData) return;
     event.clipboardData.setData("text/html", clipboardHtml(text, forms));
+    if (cut) event.clipboardData.setData(FUB_MARKDOWN_TYPE, cut.markdown);
   };
   life.listen(parent, "copy", beforeCopy, { capture: true });
   life.listen(parent, "cut", beforeCopy, { capture: true });
@@ -444,6 +574,113 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     );
   }, { capture: true });
 
+  // Il correttore si carica dopo la superficie: la scrittura non lo aspetta,
+  // e un guasto nel caricarlo lascia l'editor com'era. Già caricato, si monta
+  // qui, con le altre estensioni.
+  const proof = opts.proof;
+  const installProof = (module: typeof import("./proof")): void => {
+    if (!proof) return;
+    const mounted = module.mountMarkdownProof(proof.ports, { notify: proof.notify, forms: () => forms });
+    life.add(() => mounted.dispose());
+    profile.setProof(mounted.extension);
+  };
+  if (proofModule) installProof(proofModule);
+
+  // I Blocchi sono dentro Scrittura, la modalità in cui la nota si apre:
+  // si montano con l'editor, non dopo, perché testata e maniglie ci siano
+  // dal primo disegno e nessun secondo `reconfigure` sposti il testo. Sono una
+  // preferenza (`editor.blocks`): spenti, Scrittura è un editor di testo con
+  // la stessa testata. Si parte dall'ultimo valore letto; la lettura di
+  // questa superficie, e ogni cambio, li accendono o spengono senza riaprire
+  // la nota. La testata della pagina è la stessa in Scrittura e in Lettura
+  // (`page/header.ts`): le stesse opzioni per tutte e due.
+  // Il registro dei tipi delle proprietà: lo legge la lettura delle
+  // impostazioni di questa superficie, e ogni suo cambio rifà la testata.
+  let propertyTypes: PropertyTypes = NO_TYPES;
+  let propertyTypesRaw: unknown = undefined;
+  const pageOptions: PageOptions = {
+    page: () => pageName(resources?.documentId ?? documentId),
+    notify: (message, tone) => notify(message, tone),
+    folderPage: () => isFolderPage(resources?.documentId ?? documentId),
+    renamedPage: (name) => renamedPageName(resources?.documentId ?? documentId, name),
+    // La rinomina riuscita riscrive l'H1 ripiegato (T7) sulla vista viva
+    // della superficie: rinominare può rifare la vista, e quella che ha
+    // aperto il campo del titolo non è più nella pagina.
+    rename: opts.onRenamePage
+      ? async (name) => {
+        const from = resources?.documentId ?? documentId;
+        const to = renamedPagePath(from, name);
+        const problem = await opts.onRenamePage!(from, name);
+        // La superficie che mostra la pagina adesso, in questo riquadro: se
+        // la rinomina ha rifatto la superficie è un'altra, nello stesso posto.
+        if (problem === null) retitleIn(parent.closest("[data-pane]") ?? parent, { from, to }, pageName(from), pageName(to));
+        return problem;
+      }
+      : undefined,
+    // L'immagine della Live ha il menu della superficie, con la
+    // larghezza e «Sostituisci»: la resa non apre il suo.
+    mountImage: (root, html) => mountMarkdown(root, html, { ...renderedOptions(), imageMenu: false }),
+    subpage: opts.onNewSubpage
+      ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
+      : undefined,
+    propertyTypes: () => propertyTypes,
+    // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
+    // comando del registro (`property.type.set`) a scriverlo.
+    setPropertyType: async (key, type) => {
+      try {
+        await api.invokeCommand("property.type.set", { key, type }, "apply");
+        void readSurfaceSettings();
+        return null;
+      } catch (error) {
+        return errorText(error);
+      }
+    },
+    // Le persone: la cartella delle persone, se c'è; se no le note.
+    searchPeople: (text) => {
+      const people = opts.completions.people;
+      return people && people.folder() !== "" ? people.search(text) : opts.completions.searchNotes(text);
+    },
+  };
+  const blocksOptions: BlocksOptions = {
+    ...pageOptions,
+    // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
+    // Blocchi, la testata non li usa.
+    document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
+    // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
+    escapeLeaves: context.escapeLeaves === true,
+  };
+  const blocksExtension: Extension = blocksMode(blocksOptions);
+  const plainExtension: Extension = plainMode(blocksOptions);
+  let blocksOn = blocksPreferred();
+  /// «Altre N proprietà» nella testata della Lettura, fra una resa e l'altra.
+  let readingMoreOpen = false;
+  const readingMore = {
+    get open() { return readingMoreOpen; },
+    set: (open: boolean) => { readingMoreOpen = open; },
+  };
+  presentation(mode);
+
+  // I commenti (T22): il margine, la discussione, il pannello. Leggono e
+  // scrivono il buffer della vista; la Lettura li rimonta a ogni resa.
+  const comments = markdownComments({
+    forms: () => forms,
+    mode: () => mode,
+    readOnly: () => readOnly,
+    withView: (run) => {
+      let out: ReturnType<typeof run> | null = null;
+      engine.runViewCommand((view) => {
+        out = run(view);
+        return true;
+      });
+      return out;
+    },
+    reading: () => reading,
+    focus: () => {
+      if (mode === "reading") reading.focus();
+      else engine.focus();
+    },
+  });
+
   const engine = createTextEngine(parent, {
     onChange: (change) => {
       closeSlashPalette(parent);
@@ -458,7 +695,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       actionsChanged();
     },
     theme: getCurrentTheme(),
-    extensions: () => profile.extensions(),
+    extensions: () => [profile.extensions(), comments.extension()],
   });
   if (opts.linkCards) {
     life.add(opts.linkCards.watch(() => {
@@ -468,6 +705,18 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       });
     }));
   }
+  // La rinomina dal titolo del foglio porta con sé l'H1 ripiegato nel titolo
+  // (T7): in ogni modalità, perché l'H1 resti uguale al nome anche quando si
+  // torna in Scrittura.
+  const titleKeeper = {
+    root: parent,
+    documentId: () => resources?.documentId ?? documentId,
+    retitle: (before: string, after: string) => {
+      if (life.closed) return;
+      engine.runViewCommand((view) => retitleView(view, before, after));
+    },
+  };
+  life.add(keepTitle(titleKeeper));
   if (opts.pageIcons) {
     life.add(opts.pageIcons.watch(() => {
       engine.runViewCommand((view) => {
@@ -483,12 +732,72 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   reading.setAttribute("role", "document");
   parent.append(reading);
   parent.dataset.markdownMode = mode;
+
+  /// La riga dei dati in Lettura: dopo il primo `h1` della resa (fuori dagli
+  /// embed), e senza titolo in cima. Si rimette a ogni resa e a ogni dato.
+  let readingFactsLife: Lifetime | null = null;
+  /// La testata della Lettura: resta in cima quando la resa si rifà da sé, e
+  /// si rimonta quando la riga dei dati comincia (o smette) di mostrare le
+  /// etichette, che allora escono (o tornano) fra le proprietà.
+  let unmountReadingPage: (() => void) | null = null;
+  let readingPageTags = false;
+  function readingFactTags(): boolean {
+    return opts.noteFacts !== undefined && (noteFactsLabels(facts)?.tags.length ?? 0) > 0;
+  }
+  function mountReadingPage(): void {
+    unmountReadingPage?.();
+    readingPageTags = readingFactTags();
+    unmountReadingPage = engine.readState((state) => mountReadingHeader(reading, state, pageOptions, state.facet(propertiesDisplay), readingMore, readingPageTags));
+  }
+
+  function placeReadingFacts(): void {
+    readingFactsLife?.close();
+    readingFactsLife = null;
+    for (const old of reading.querySelectorAll(":scope .note-facts")) old.remove();
+    if (mode !== "reading") return;
+    if (unmountReadingPage && readingFactTags() !== readingPageTags) mountReadingPage();
+    if (!opts.noteFacts) return;
+    const labels = noteFactsLabels(facts);
+    if (!labels) return;
+    readingFactsLife = openLifetime();
+    const row = renderNoteFacts(labels, factsActions, readingFactsLife);
+    // In fondo alla testata della pagina, come in Scrittura.
+    const header = reading.querySelector(":scope > .cm-fub-page");
+    if (header) {
+      header.append(row);
+      return;
+    }
+    const title = [...reading.querySelectorAll("h1")].find((h1) => !h1.closest(".embed-loaded, [data-ui-slot]"));
+    if (title) title.after(row);
+    else reading.prepend(row);
+  }
+  /// I dati nuovi (o la lingua nuova) nella Live, nei Blocchi e in Lettura.
+  const drawFacts = (): void => {
+    if (life.closed) return;
+    engine.runViewCommand((view) => {
+      view.dispatch({ effects: noteFactsChanged.of(facts) });
+      return true;
+    });
+    placeReadingFacts();
+  };
+  if (opts.noteFacts) {
+    life.add(opts.noteFacts.follow(() => resources?.documentId ?? documentId, (next) => {
+      facts = next;
+      drawFacts();
+    }));
+    life.add(onLanguage(drawFacts));
+    life.add(() => {
+      readingFactsLife?.close();
+      readingFactsLife = null;
+    });
+  }
   // «Interruzioni di riga rigorose» spente: in Lettura un a capo singolo
   // resta un'interruzione. La resa lo dice con un attributo, e la pelle lo
   // legge; il testo del documento non cambia. «Testo da destra a sinistra»
   // gira la Lettura; l'editor lo legge da sé.
+  // Nella stessa lettura i blocchi di Scrittura (`editor.blocks`).
   let breaksRead = 0;
-  const readLineBreaks = async (): Promise<void> => {
+  const readSurfaceSettings = async (): Promise<void> => {
     const mine = ++breaksRead;
     const entries = await settings().catch(() => null);
     if (!entries || mine !== breaksRead || life.closed) return;
@@ -497,11 +806,55 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     else delete parent.dataset.lineBreaks;
     if (entries.find((entry) => entry.spec.key === RTL_KEY)?.value === true) reading.dir = "rtl";
     else reading.removeAttribute("dir");
+    const types = entries.find((entry) => entry.spec.key === PROPERTY_TYPES_KEY)?.value;
+    if (types !== propertyTypesRaw) {
+      propertyTypesRaw = types;
+      const next = parsePropertyTypes(types);
+      if (!sameTypes(next, propertyTypes)) {
+        propertyTypes = next;
+        engine.runViewCommand((view) => refreshPageHeader(view));
+      }
+    }
+    setBlocks(rememberBlocks(entries));
   };
-  void readLineBreaks();
+  void readSurfaceSettings();
   life.add(onEvent("setting_changed", (event) => {
-    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY) void readLineBreaks();
+    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY || event.key === PROPERTY_TYPES_KEY) void readSurfaceSettings();
   }));
+
+  // Accendere o spegnere i blocchi riconfigura soltanto Scrittura, sulla
+  // stessa vista: testo, selezione, cronologia e scorrimento restano. Una
+  // selezione di blocchi diventa una selezione di testo, perché il suo campo
+  // se ne va coi blocchi. Durante una composizione (IME) si aspetta la sua
+  // fine, come le preferenze del motore: riconfigurare la interromperebbe.
+  let blocksPending = false;
+  function setBlocks(on: boolean): void {
+    if (life.closed || on === blocksOn) return;
+    blocksOn = on;
+    if (mode === "live_preview") applyBlocks();
+  }
+  function applyBlocks(force = false): void {
+    if (!force && engine.runViewCommand((view) => view.compositionStarted)) {
+      blocksPending = true;
+      return;
+    }
+    blocksPending = false;
+    if (mode !== "live_preview") return;
+    const anchor = engine.getScrollAnchor();
+    presentation(mode);
+    engine.reconfigure();
+    engine.restoreScrollAnchor(anchor);
+  }
+  const settlePending = (force: boolean) => {
+    if (!blocksPending) return;
+    queueMicrotask(() => {
+      if (!life.closed && blocksPending) applyBlocks(force);
+    });
+  };
+  life.listen(parent, "compositionend", () => settlePending(false));
+  // Una composizione abbandonata col fuoco che se ne va può non dare mai il
+  // suo `compositionend`: uscendo dalla nota il cambio non aspetta più.
+  life.listen(parent, "focusout", () => settlePending(true));
 
   // Reading owns browser selection; only history commands reach the hidden editor.
   life.listen(reading, "keydown", (event) => {
@@ -636,8 +989,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       get documentId() { return resources?.documentId ?? documentId; },
       resources,
-      openWikilink,
-      openPath: opts.onOpenPath,
+      openWikilink: clickWikilink,
+      openPath: clickPath,
+      openFigure: opts.onOpenFigure,
       searchTag: opts.onSearchTag,
       toggleTask,
       importRemoteImage: toggleTask ? importRemoteImage : undefined,
@@ -672,48 +1026,28 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     unmountReading?.();
     // In sola lettura vera le caselle risultano disabilitate, così la
     // superficie non sembra interattiva mentre la cancellazione è sospesa.
-    unmountReading = mountMarkdown(
+    const unmountBody = mountMarkdown(
       reading,
       renderMarkdown(text, forms).html,
       renderedOptions(readOnly ? undefined : toggleTaskAt),
     );
+    mountReadingPage();
+    const unmountComments = comments.readingRendered();
+    unmountReading = () => {
+      unmountComments();
+      unmountReadingPage?.();
+      unmountReadingPage = null;
+      unmountBody();
+    };
+    placeReadingFacts();
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
 
-  // I Blocchi stanno in un pezzo a parte, caricato la prima volta che
-  // servono: chi non li usa non lo paga. Finché arriva, la Live con la
-  // politica `mai`; poi si rimonta con le loro estensioni.
-  let blocksExtension: Extension | null = null;
-  let blocksLoading = false;
+  // Scrittura monta i Blocchi con la resa viva, o, spenti, la testata coi
+  // tasti del testo; Sorgente e Lettura nessuno dei due.
   function presentation(next: MarkdownMode): void {
-    profile.setLivePreview(next === "live_preview" || next === "blocks");
-    profile.setBlocks(next === "blocks" ? (blocksExtension ?? []) : null);
-    if (next !== "blocks" || blocksExtension || blocksLoading) return;
-    blocksLoading = true;
-    void import("./blocks").then(
-      ({ blocksMode }) => {
-        blocksLoading = false;
-        if (life.closed) return;
-        blocksExtension = blocksMode({
-          page: () => pageName(resources?.documentId ?? documentId),
-          notify: (message, tone) => notify(message, tone),
-          folderPage: () => isFolderPage(resources?.documentId ?? documentId),
-          rename: opts.onRenamePage
-            ? (name) => opts.onRenamePage!(resources?.documentId ?? documentId, name)
-            : undefined,
-          // L'immagine della Live ha il menu della superficie, con la
-          // larghezza e «Sostituisci»: la resa non apre il suo.
-          mountImage: (root, html) => mountMarkdown(root, html, { ...renderedOptions(), imageMenu: false }),
-          subpage: opts.onNewSubpage
-            ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
-            : undefined,
-        });
-        if (mode !== "blocks") return;
-        profile.setBlocks(blocksExtension);
-        engine.reconfigure();
-      },
-      () => { blocksLoading = false; },
-    );
+    profile.setLivePreview(next === "live_preview");
+    profile.setBlocks(next === "live_preview" ? (blocksOn ? blocksExtension : plainExtension) : null);
   }
 
   /// Il blocco della Lettura su cui si è aperto l'ultimo menu: in Lettura è
@@ -741,6 +1075,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       parent.dataset.markdownMode = next;
       unmountReading?.();
       unmountReading = null;
+      placeReadingFacts();
       presentation(next);
       engine.reconfigure();
       // La selezione di scrittura non si è mai mossa: la lettura non la
@@ -751,6 +1086,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           top: anchor.top,
         });
       }
+      arrive(next);
       return;
     }
     const anchor = engine.getScrollAnchor();
@@ -759,6 +1095,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     presentation(next);
     engine.reconfigure();
     engine.restoreScrollAnchor(anchor);
+    arrive(next);
+  }
+
+  /// Il gesto che porta in Scrittura fa arrivare la pagina; aprire la nota no.
+  function arrive(next: MarkdownMode): void {
+    if (next !== "live_preview") return;
+    engine.runViewCommand((view) => {
+      view.dispatch({ effects: pageArrives.of(null) });
+      return true;
+    });
   }
 
   function syncReading(): void {
@@ -769,16 +1115,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// Le azioni dell'editor: il catalogo del profilo più annulla e ripeti, che
   /// sono del motore. Si scrive soltanto in una modalità di scrittura e fuori
   /// dalla sola lettura; negli altri casi ogni azione è spenta, non assente.
-  // Il correttore si carica dopo la superficie: la scrittura non lo aspetta,
-  // e un guasto nel caricarlo lascia l'editor com'era.
-  const proof = opts.proof;
-  if (proof) {
+  if (proof && !proofModule) {
     void import("./proof").then(
-      ({ mountMarkdownProof }) => {
+      (module) => {
+        proofModule = module;
         if (life.closed) return;
-        const mounted = mountMarkdownProof(proof.ports, { notify: proof.notify, forms: () => forms });
-        life.add(() => mounted.dispose());
-        profile.setProof(mounted.extension);
+        installProof(module);
         engine.reconfigure();
       },
       () => {},
@@ -786,7 +1128,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id),
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION,
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
@@ -795,6 +1137,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
       }
+      if (id === COMMENT_ACTION) return { enabled: comments.canComment(), active: null };
       if (tableGrid) return tableGrid.actionState(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return ACTION_UNAVAILABLE;
@@ -807,6 +1150,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (id === "text.redo") return engine.redo();
       const fold = FOLDS.get(id);
       if (fold) return engine.runViewCommand(fold);
+      if (id === COMMENT_ACTION) return comments.comment();
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -818,6 +1162,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     chord(id) {
       if (id === "text.undo") return "Mod-z";
       if (id === "text.redo") return "Mod-y";
+      if (id === COMMENT_ACTION) return COMMENT_CHORD;
       return MARKDOWN_ACTIONS.get(id)?.chord ?? null;
     },
     subscribe(listener) {
@@ -867,16 +1212,34 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     });
   };
 
-  const selectedSource = (): string =>
-    engine.readState((state) =>
-      state.selection.ranges.filter((range) => !range.empty).map((range) => state.sliceDoc(range.from, range.to)).join(state.lineBreak),
-    );
+  /// Il Markdown della selezione da copiare: in Sorgente quello scritto; in
+  /// Scrittura e in Lettura senza i segni nascosti dei commenti che la
+  /// selezione taglia (`comments/copy.ts`), come Mod-c.
+  const selectedSource = (): string => engine.readState(selectionSource) ?? "";
 
   /// Il testo di una resa senza i segni del Markdown, per «Copia come testo».
   const plainText = (markdown: string): string => {
     const html = renderMarkdown(normalizeLineBreaks(markdown), forms).html;
     const parsed = new DOMParser().parseFromString(html, "text/html");
     return (parsed.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+  };
+
+  /// Le prime parole del paragrafo sotto `pos`, senza i segni, per la
+  /// testata del menu («Paragrafo · La mostra apre il 20 marzo nella…»): al
+  /// più 34 caratteri, come nel prototipo; «vuoto» per una riga vuota.
+  const paragraphExcerpt = (pos: number): string => {
+    const raw = engine.readState((state) => {
+      let line = state.doc.lineAt(Math.min(pos, state.doc.length));
+      while (line.number > 1 && line.text.trim() !== "") {
+        const before = state.doc.line(line.number - 1);
+        if (before.text.trim() === "") break;
+        line = before;
+      }
+      return line.text;
+    });
+    const text = raw.trim() === "" ? "" : plainText(raw).replace(/\s+/g, " ");
+    if (text === "") return t("editor_menu.head.empty");
+    return text.length > EXCERPT_CHARS ? `${text.slice(0, EXCERPT_CHARS - 1).trimEnd()}…` : text;
   };
 
   /// Incolla dagli appunti: tutti i tipi, o soltanto il testo.
@@ -895,17 +1258,28 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
 
   const docId = (): string => resources?.documentId ?? documentId;
 
+  /// «Seleziona tutto» del tasto destro fa ciò che fa Mod-a, che la voce
+  /// mostra: in Scrittura coi blocchi il blocco e poi tutti, senza il corpo
+  /// della nota; in Sorgente tutto il testo.
+  const selectAll = (): void => {
+    if (mode !== "live_preview" || !engine.runViewCommand(blocksOn ? selectBlockThenAll : selectBody)) engine.selectAll();
+  };
+
   /// Gli appunti della scrittura: i gesti offerti, e «Copia come ▸» sulla
   /// selezione.
   const writingClipboard = (offers: SurfaceMenuClipboard["offers"], copyAs = false): SurfaceMenuClipboard => ({
     offers,
     run(op) {
-      if (op === "select-all") engine.selectAll();
+      if (op === "select-all") selectAll();
       else if (op === "paste" || op === "paste-plain") pasteFromClipboard(op === "paste-plain");
       else {
         const text = selectedSource();
+        // Tagliare tutto il testo di un passo porta il commento: si legge prima
+        // della scrittura negli appunti, sulla stessa selezione del testo.
+        const carry = op === "cut" ? engine.readState(carriedCut) : null;
         void copyRich(text).then(
           () => {
+            rememberCut(carry);
             if (op === "cut" && !life.closed) engine.deleteSelection();
           },
           () => notify(t("editor_menu.copy_failed"), "guasto"),
@@ -933,7 +1307,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   };
 
   /// «Incolla» come voce del posto, dove gli appunti non fanno una riga.
-  const pasteItem = (): SurfaceMenuItem => ({ id: "markdown.paste", label: t("editor_menu.paste"), chord: "Mod-v", run: () => pasteFromClipboard(false) });
+  const pasteItem = (): SurfaceMenuItem => ({ id: "markdown.paste", label: t("editor_menu.paste"), icon: "template", chord: "Mod-v", run: () => pasteFromClipboard(false) });
 
   /// «Inserisci un blocco…»: il «/» sotto il blocco del cursore, come il «+»
   /// della maniglia.
@@ -943,14 +1317,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       id: "markdown.insert_block",
       label: t("editor_menu.insert_block"),
       description: undefined,
-      chord: null,
-      icon: undefined,
+      // Il tasto che lo fa da solo, su una riga vuota.
+      chord: "/",
+      icon: "plus",
       run: () => void engine.runViewCommand((view) => {
         const line = view.state.doc.lineAt(Math.min(pos, view.state.doc.length));
         const blank = line.text.trim() === "";
         const at = blank ? line.from : line.to;
         const insert = blank ? "/" : "\n/";
-        view.dispatch({ changes: { from: at, to: blank ? line.to : at, insert }, selection: { anchor: at + insert.length }, userEvent: "input", scrollIntoView: true });
+        view.dispatch({ changes: { from: at, to: blank ? line.to : at, insert: withLineBreaks(view.state, insert) }, selection: { anchor: at + insert.length }, userEvent: "input", scrollIntoView: true });
         view.focus();
         return openSlashAt(view, at + insert.length - 1);
       }),
@@ -982,7 +1357,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
 
   /// «Copia il link a questo punto», o il nome che il posto gli dà.
   const anchorItem = (label = t("editor_menu.anchor_here")): SurfaceMenuItem =>
-    ({ id: "markdown.anchor", label, command: "shell.doc.copy_anchor_link" });
+    ({ id: "markdown.anchor", label, icon: "fmt-link", command: "shell.doc.copy_anchor_link" });
 
   /// Il riquadro «Collegamento» sulla tratta `from`–`to`, dove la vista lo ha
   /// (Live e Blocchi).
@@ -1008,6 +1383,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const remove: SurfaceMenuEntry[] = link.embed || !writable ? [] : [MENU_RULE, {
       id: "markdown.link.remove",
       label: t("editor_menu.link.remove"),
+      icon: "fmt-clear",
       run: () => void engine.applyUserEdit(link.from, link.to, link.text),
     }];
     const edit = writable && !link.embed ? linkDialogItem(t("editor_menu.link.edit"), link.from, link.to) : [];
@@ -1018,13 +1394,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return {
         target: { kind: "wikilink", name: link.text },
         context: [
-          { id: "markdown.link.open", label: t("editor_menu.link.open_note"), chord: "Alt-Enter", run: () => void openWikilink(page, link.heading, link.block) },
+          ...(opts.onPeekLink
+            ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "wiki", page, heading: link.heading, block: link.block }, docId()) }]
+            : []),
+          { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void openWikilink(page, link.heading, link.block) },
           ...(opts.onOpenWikilinkBeside
-            ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block) }]
+            ? [{ id: "markdown.link.beside", label: t("editor_menu.link.beside"), icon: "panel-right", run: () => void opts.onOpenWikilinkBeside!(page, link.heading, link.block, docId()) }]
             : []),
           ...(shown && canPreviewLink() ? [{ id: "markdown.link.preview", label: t("editor_menu.link.preview"), run: () => void previewLink(shown) }] : []),
           MENU_RULE,
-          { id: "markdown.link.copy", label: t("editor_menu.link.copy"), run: () => copyText(`[[${target}]]`, t("editor_menu.copied")) },
+          { id: "markdown.link.copy", label: t("editor_menu.link.copy"), icon: "copy", run: () => copyText(`[[${target}]]`, t("editor_menu.copied")) },
           ...edit,
           ...remove,
         ],
@@ -1041,10 +1420,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       target: { kind: "link", name: site },
       context: [
-        external
-          ? { id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }
-          : { id: "markdown.link.open", label: t("editor_menu.link.open_note"), chord: "Alt-Enter", run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
-        { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), run: () => copyText(link.url, t("editor_menu.copied")) },
+        ...(external
+          ? [{ id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }]
+          : [
+            ...(opts.onPeekLink
+              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeURI(link.url) }, docId()) }]
+              : []),
+            { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
+          ]),
+        { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), icon: "copy", run: () => copyText(link.url, t("editor_menu.copied")) },
         ...edit,
         ...remove,
       ],
@@ -1159,7 +1543,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     return {
       target: { kind: "code", name: code.language || undefined },
       context: [
-        { id: "markdown.code.copy", label: t("editor_menu.code.copy"), run: () => copyText(code.code, t("editor_menu.copied")) },
+        { id: "markdown.code.copy", label: t("editor_menu.code.copy"), icon: "copy", run: () => copyText(code.code, t("editor_menu.copied")) },
         ...(writable ? [{
           id: "markdown.code.language",
           label: t("editor_menu.code.language"),
@@ -1177,6 +1561,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...(writable ? [{
           id: "markdown.code.unwrap",
           label: t("editor_menu.code.unwrap"),
+          icon: "trash",
           run: () => void engine.applyUserEdit(code.from, code.to, code.code.replace(/\n$/, "")),
         }] : []),
       ],
@@ -1192,7 +1577,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       element = document.elementFromPoint(at.x, at.y);
       if (!element || !parent.contains(element) || !element.closest(".cm-editor")) return null;
       // Le proprietà rese hanno i loro gesti, e soltanto quelli.
-      if (element.closest(".cm-fub-properties")) return propertiesMenu();
+      if (element.closest(".cm-fub-properties, .cm-fub-page-props")) return propertiesMenu();
       const picture = element.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
       if (picture) {
         const menu = imageMenu(picture);
@@ -1291,23 +1676,29 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...common,
         target: { kind: "selection", name: t(words === 1 ? "editor_menu.words.one" : "editor_menu.words.many", { count: words }) },
         clipboard: writingClipboard({ cut: writable, copy: true, paste: writable, "paste-plain": writable, "select-all": true }, true),
+        // Come nel prototipo: «Collega a una nota…» e «Copia come ▸» (che la
+        // composizione mette in coda a questo gruppo), poi «Estrai». «Cerca
+        // nel vault» non ruba un posto: si trova scrivendo.
         context: [
           ...(writable
             ? live
-              ? linkDialogItem(t("editor_menu.link.to_note"), range.from, range.to, "Mod-k")
-              : [actionItem("markdown.wikilink", t("editor_menu.link.to_note"))]
+              ? linkDialogItem(t("editor_menu.link.to_note"), range.from, range.to, "Mod-k").map((item) => ({ ...item, icon: "fmt-link" }))
+              : [actionItem("markdown.wikilink", t("editor_menu.link.to_note"), { icon: "fmt-link" })]
             : []),
-          ...(writable ? [{ id: "markdown.extract", label: t("editor_menu.extract"), slash: "note.extract" }] : []),
-          { id: "markdown.search.vault", label: t("editor_menu.search_vault"), find: { where: "vault" as const, query: plainText(text) } },
+          MENU_RULE,
+          ...(writable ? [{ id: "markdown.extract", label: t("editor_menu.extract"), icon: "notes", slash: "note.extract" }] : []),
           ...footnoteItem,
+        ],
+        searchable: [
+          { id: "markdown.search.vault", label: t("editor_menu.search_vault"), icon: "search", find: { where: "vault" as const, query: plainText(text) } },
         ],
       };
     }
     const task = engine.readState((state) => taskAt(state, pos));
     const item = engine.readState((state) => listItemAt(state, pos));
     const indents: SurfaceMenuEntry[] = item === null || !writable ? [] : [
-      ...(item.indent ? [actionItem("markdown.list.indent", t("editor_menu.list.indent"), { chord: "Tab" })] : []),
-      ...(item.dedent ? [actionItem("markdown.list.dedent", t("editor_menu.list.dedent"), { chord: "Shift-Tab" })] : []),
+      ...(item.indent ? [actionItem("markdown.list.indent", t("editor_menu.list.indent"), { chord: "Tab", icon: "fmt-indent" })] : []),
+      ...(item.dedent ? [actionItem("markdown.list.dedent", t("editor_menu.list.dedent"), { chord: "Shift-Tab", icon: "fmt-outdent" })] : []),
     ];
     const paste: SurfaceMenuEntry[] = writable ? [pasteItem()] : [];
     if (task) {
@@ -1318,6 +1709,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable ? [{
             id: "markdown.task.toggle",
             label: t(task.checked ? "editor_menu.task.undone" : "editor_menu.task.done"),
+            icon: "check",
             chord: "Mod-Enter",
             run: () => void engine.applyUserEdit(task.symbol, task.symbol + 1, task.checked ? " " : "x"),
           }] : []),
@@ -1339,6 +1731,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable ? [{
             id: "markdown.list.kind",
             label: t("editor_menu.list.kind"),
+            icon: "sync",
             items: [
               radio("markdown.list.bullet", t("editor_menu.list.bullet")),
               radio("markdown.list.ordered", t("editor_menu.list.ordered")),
@@ -1365,6 +1758,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           {
             id: "markdown.heading.fold",
             label: t("editor_menu.heading.fold"),
+            icon: "fmt-details",
             run: () => void engine.runViewCommand((view) => {
               const line = view.state.doc.lineAt(pos);
               const span = foldable(view.state, line.from, line.to);
@@ -1374,6 +1768,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable && section ? [{
             id: "markdown.heading.extract",
             label: t("editor_menu.heading.extract"),
+            icon: "notes",
             slash: "note.extract",
             run: () => void engine.runViewCommand((view) => {
               view.dispatch({ selection: { anchor: section.from, head: section.to } });
@@ -1384,6 +1779,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ...(writable ? [{
             id: "markdown.heading.level",
             label: t("editor_menu.heading.level"),
+            icon: "sync",
             items: [radio("markdown.paragraph", t("editor_menu.block.text")), ...[1, 2, 3, 4, 5, 6].map(heading)],
           }] : []),
           MENU_RULE,
@@ -1394,11 +1790,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     return {
       ...common,
-      target: { kind: "text" },
+      // La testata dice il paragrafo con le sue prime parole, come la
+      // maniglia; il menu, come nel prototipo: Incolla, poi «Trasforma il
+      // blocco ▸» e «Inserisci un blocco… /», poi il link.
+      target: { kind: "text", name: paragraphExcerpt(pos) },
       clipboard: writingClipboard({ paste: writable, "paste-plain": writable, "select-all": true }),
       context: [
+        ...(writable ? [{ id: "markdown.transform", label: t("editor_menu.transform_block"), icon: "sync", items: transformItems() }] : []),
         ...(writable ? insertBlockItem(pos) : []),
-        ...(writable ? [{ id: "markdown.transform", label: t("editor_menu.transform_block"), items: transformItems() }] : []),
         MENU_RULE,
         anchorItem(),
         ...footnoteItem,
@@ -1486,15 +1885,21 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // scelte, non il punto di partenza.
     defaultMode: "live_preview",
     setMode(next) {
-      if (!isMarkdownMode(next)) throw new RangeError(`surface mode ${next} is not supported`);
-      setMode(next);
+      const known = markdownModeOf(next);
+      if (known === null) throw new RangeError(`surface mode ${next} is not supported`);
+      setMode(known);
       actionsChanged();
+      cellsChanged();
     },
     buffer: {
       setDoc: (text) => {
         closeSlashPalette(parent);
         engine.setDoc(text);
         syncReading();
+        // Il testo di un documento appena rinominato dal titolo: l'H1
+        // ripiegato prende il nome nuovo (T7). Dopo questo giro, fuori da
+        // chi sta montando la superficie.
+        queueMicrotask(() => retitleWaiting(titleKeeper));
       },
       syncDoc: (update) => {
         closeSlashPalette(parent);
@@ -1515,6 +1920,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       profile.setSyntaxForms(next);
       engine.reconfigure();
       syncReading();
+      comments.formsChanged();
     },
     undo: () => engine.undo(),
     redo: () => engine.redo(),
@@ -1547,6 +1953,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // copia. Negli altri modi si rende il buffer corrente.
       if (mode === "reading") {
         host.replaceChildren(...Array.from(reading.childNodes, (node) => node.cloneNode(true)));
+        // La testata e la riga dei dati non sono della nota: la copia non le
+        // porta, e il frontmatter torna com'è nella resa (lo nascondeva un
+        // attributo della Lettura, che la copia non ha).
+        for (const row of host.querySelectorAll(".note-facts, .cm-fub-page")) row.remove();
         return () => host.replaceChildren();
       }
       return mountMarkdown(host, renderMarkdown(normalizeLineBreaks(engine.getDoc()), forms).html, renderedOptions());
@@ -1563,6 +1973,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
     setTheme: (theme) => engine.setTheme(theme),
     editorActions,
+    panels: comments.panels,
     contextMenu: (at) => {
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
@@ -1579,10 +1990,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return found.anchor;
     },
     scrollLink,
+    cellSelection,
     destroy: () => {
       actionListeners.clear();
+      cellListeners.clear();
       closeSlashPalette(parent);
       cancelReadingSync();
+      comments.destroy();
       life.close();
       unmountReading?.();
       unmountReading = null;

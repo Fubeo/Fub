@@ -6,7 +6,7 @@
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
-import { revealSidePanel } from "../ui/side-panels";
+import { dismissSidePanel, revealSidePanel } from "../ui/side-panels";
 import { pickFromList, promptText } from "../ui/dialogs";
 import { vaultEntries, vaultFolders, folderContent, existingDocuments, settings, WITHOUT_PAGE } from "../host/query";
 import { pageIcon } from "../state/page-icons";
@@ -40,12 +40,15 @@ import {
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
-import { FORMAT_ICON, formatKindOf } from "../ui/format-kind";
+import { FORMAT_ICON, formatKindOf, formatTagOf } from "../ui/format-kind";
+import { craftServed } from "../state/craft-previews";
+import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
 import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
-  canCreateDrawing,
+  newKinds,
   canImportDrawing,
   canImportFile,
   hasKernelCommand,
@@ -58,12 +61,14 @@ import {
   displayBinding,
 } from "../ui/commands";
 import { VAULT_EXPORT } from "../ui/vault-export";
+import { openWithEntry } from "./open-with";
 import { DEFAULT_ATTACHMENT_FOLDER } from "../editors/media/attachment-target";
 import { IMPORT_PREPARE } from "../ui/note-import";
 import { showPanel } from "./sidebar";
 import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
+import { onComponents } from "../state/components";
 import { canShowFile, copyNoteLinks, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
@@ -72,6 +77,7 @@ import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 import { beginTreeMotion, type TreeMotion } from "./explorer-motion";
+import { changedOnlyInside, signatureOf, type View } from "./explorer-view";
 import { errorText } from "../host/errors";
 import { FOLDER_PAGE_STEM, folderForNote, isFolderPage, nameFault, normalizedName } from "../rules/mirrored";
 import { onLanguage, plural, t } from "../i18n/strings";
@@ -81,6 +87,8 @@ import { nameFaultText } from "../ui/name-fault";
 import { setTooltip } from "../ui/tooltip";
 import { mediaKindOfId } from "../editors/media/media-types";
 import type { ResourceKind } from "../host/contract";
+import { api } from "../host/ipc";
+import { engineExtension, engineWarmup, type EngineWarmup } from "./engine-warmup";
 
 const fileListEl = $("#file-list");
 /// Il moto della cartella appena aperta o chiusa, finché l'albero non si
@@ -92,6 +100,10 @@ const spaceStripEl = $("#space-strip");
 const spaceTitleEl = $("#space-title");
 const pinnedTitleEl = $("#pinned-title");
 const pinnedListEl = $("#pinned-list");
+const allTitleEl = $("#all-title");
+const allCountEl = $("#all-count");
+const sortButtonEl = $("#explorer-sort");
+const newNoteEl = $("#new-note");
 
 /// Il drag in corso nella sidebar, se c'è.
 /// Il trascinamento in corso dentro l'albero: la voce presa e, se era nella
@@ -127,24 +139,23 @@ function scheduleHoverOpen(path: string): void {
   }, HOVER_OPEN_MS);
 }
 
-/// Ciò che serve a disegnare l'albero, come il kernel l'ha risposto (§14.3,
-/// §14.4).
-///
-/// **Solo le cartelle visibili**: la radice (o lo spazio attivo) e ognuna di
-/// quelle aperte. Prima qui c'era l'elenco di tutte le note del vault e
-/// l'albero se lo costruiva la shell; adesso un vault da diecimila note ne
-/// trasferisce quante ne sono a schermo.
-interface View {
-  /// Il contenuto di ogni cartella visibile, non ordinato: l'ordine dipende
-  /// dall'organizzazione, che cambia senza che il kernel c'entri.
-  folders: Map<string, FolderContent>;
-  /// I documenti «attesi» che esistono davvero: le folder note possibili delle
-  /// cartelle disegnate, e le note appuntate. Una domanda sola per entrambe —
-  /// sono la stessa domanda, «quali di questi path ci sono».
-  existing: Set<string>;
+let view: View = { folders: new Map(), existing: new Set(), total: null };
+/// La cartella che `toggleFolder` ha appena aperto o chiuso, finché un giro
+/// non ridisegna: se fuori da lei non è cambiato niente, quel giro tocca solo
+/// il suo sottoalbero.
+let toggled: string | null = null;
+/// Chi scalda i motori dei formati al passaggio del puntatore e all'apertura
+/// di una cartella: vive finché il pannello è montato (`mountExplorer`).
+let warmup: EngineWarmup | null = null;
+
+/// La riga di un file con motore scalda il motore quando il puntatore ci si
+/// ferma; le altre righe non ascoltano niente.
+function wireWarmup(row: HTMLElement, id: string): void {
+  if (engineExtension(id) === null) return;
+  row.addEventListener("pointerenter", () => warmup?.hover(id));
+  row.addEventListener("pointerleave", () => warmup?.leave());
 }
 
-let view: View = { folders: new Map(), existing: new Set() };
 /// La finestra richiesta per ogni livello visibile. Cresce solo per il livello
 /// il cui pulsante «altre» è stato attivato; nessuna domanda perde il proprio
 /// limite mentre gli altri livelli conservano il costo iniziale.
@@ -156,11 +167,26 @@ let lastSignature = "";
 
 export function mountExplorer(lifetime: Lifetime): void {
   treeLife = lifetime;
+  thumbnails = mountTreeThumbnails(lifetime);
   lifetime.add(() => {
     treeLife = null;
     treeMotion = null;
+    thumbnails = null;
+    showXmp = true;
+    treeThumbs = false;
   });
-  lifetime.listen($("#new-note"), "click", () => void newNote());
+  // Le due azioni del titolo sono figure: il nome e il suggerimento li danno
+  // gli attributi di `index.html`, che seguono la lingua.
+  newNoteEl.replaceChildren(iconEl("compose") ?? "");
+  sortButtonEl.replaceChildren(iconEl("sort") ?? "");
+  lifetime.listen(newNoteEl, "click", () => void newNote());
+  lifetime.listen(sortButtonEl, "click", () => {
+    sortButtonEl.setAttribute("aria-expanded", "true");
+    showContextMenu(sortButtonEl, sortItems(), {
+      label: t("explorer.sort"),
+      onClose: () => sortButtonEl.setAttribute("aria-expanded", "false"),
+    });
+  });
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
   // spazio attivo), e così lo spazio vuoto sotto l'ultima riga: il loro
   // contestuale crea lì, importa e ordina l'albero.
@@ -285,6 +311,14 @@ export function mountExplorer(lifetime: Lifetime): void {
   wireRootDropTarget(lifetime);
   wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
+  const warming = engineWarmup((extension) => api.warmEngine(extension));
+  warmup = warming;
+  lifetime.add(() => {
+    warming.dispose();
+    if (warmup === warming) warmup = null;
+  });
+  // Un vault nuovo ha i suoi componenti: le estensioni si riscaldano.
+  lifetime.add(on("vault", () => warming.reset()));
   selection = mountTreeSelection({
     list: fileListEl,
     currentDoc: () => state.currentDoc,
@@ -298,6 +332,9 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
+  // «Tutte le note» sta subito sopra l'albero, sotto la barra della scelta
+  // multipla, che si è appena messa davanti all'albero.
+  fileListEl.before(allTitleEl);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
   // `data-i18n` sopra glielo riscriverebbe a «Note» a ogni cambio di lingua,
@@ -332,6 +369,13 @@ export function mountExplorer(lifetime: Lifetime): void {
   // ne va. Un albero con delle note non ha niente da ridisegnare.
   lifetime.add(on("commands", () => {
     if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
+    // Le miniature le serve il componente «File delle app Craft»: acceso o
+    // spento, lo dice l'elenco dei comandi.
+    else paintThumbnails();
+  }));
+  // Le porte di un componente (i disegni) seguono ciò che è acceso.
+  lifetime.add(onComponents(() => {
+    if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
   }));
   lifetime.add(on("active-doc", markActive));
   // «Mostra la nota aperta»: cambiando nota l'albero segue, senza aprire il
@@ -354,9 +398,28 @@ export function mountExplorer(lifetime: Lifetime): void {
     await refreshFromKernel(true);
   });
   void readLegacyPages();
+  // Gli XMP e le miniature nell'albero (T26): cambiano soltanto ciò che si
+  // disegna, e l'albero si ridisegna senza chiedere niente al kernel.
+  const craftTreeReads = new Race();
+  const readCraftTree = () => craftTreeReads.last(async (expected) => {
+    const entries = await expected(settings().catch(() => null));
+    if (!entries) return;
+    const toggle = (key: string, fallback: boolean): boolean => {
+      const value = entries.find((entry) => entry.spec.key === key)?.value;
+      return typeof value === "boolean" ? value : fallback;
+    };
+    const xmp = toggle(CRAFT_TREE_SHOW_XMP, true);
+    const thumbs = toggle(CRAFT_TREE_THUMBNAILS, false);
+    if (xmp === showXmp && thumbs === treeThumbs) return;
+    showXmp = xmp;
+    treeThumbs = thumbs;
+    renderFileList();
+  });
+  void readCraftTree();
   lifetime.add(onEvent("setting_changed", (event) => {
     if (event.key === FILES_AUTO_REVEAL) void readAutoReveal();
     if (event.key === FILES_LEGACY_FOLDER_PAGES) void readLegacyPages();
+    if (event.key === CRAFT_TREE_SHOW_XMP || event.key === CRAFT_TREE_THUMBNAILS) void readCraftTree();
   }));
   lifetime.add(on("active-doc", () => { if (autoReveal) void followActive(); }));
 
@@ -400,7 +463,8 @@ export function mountExplorer(lifetime: Lifetime): void {
     drag = null;
     levelWindows.clear();
     lastSignature = "";
-    view = { folders: new Map(), existing: new Set() };
+    toggled = null;
+    view = { folders: new Map(), existing: new Set(), total: null };
     fileListEl.replaceChildren();
   });
 }
@@ -431,19 +495,25 @@ const race = new Race();
 
 async function refreshFromKernel(force = false): Promise<void> {
   await race.last(async (expected) => {
-    const folders = await expected(loadVisible());
+    const [folders, total] = await expected(Promise.all([loadVisible(), visibleTotal()]));
     const expectedItems = [
       ...[...folders.values()].flatMap((c) =>
         c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions, legacyPages)),
       ),
       ...state.meta.pinned,
     ];
-    const newItem: View = { folders, existing: await expected(existingDocuments(expectedItems)) };
-    const signature = signatureOf(newItem);
+    const newItem: View = { folders, existing: await expected(existingDocuments(expectedItems)), total };
+    const signature = signatureOf(newItem, state.explorerSort);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
+    const before = view;
     view = newItem;
-    renderFileList();
+    // Il DOM disegna `before`: se da lì è cambiata soltanto la cartella
+    // aperta o chiusa, si rifà solo lei.
+    const only = toggled;
+    toggled = null;
+    const outside = only === null ? null : { folder: only, pinned: state.meta.pinned };
+    renderFileList(outside !== null && changedOnlyInside(before, newItem, state.explorerSort, outside) ? only : null);
   });
 }
 
@@ -478,19 +548,16 @@ async function loadVisible(): Promise<Map<string, FolderContent>> {
   return out;
 }
 
-/// Cosa il kernel ha risposto, in una stringa: due viste con la stessa impronta
-/// disegnano lo stesso albero.
-function signatureOf(v: View): string {
-  const folders = [...v.folders.entries()].map(
-    ([path, c]) =>
-      `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}][${c.files.join(",")}]`,
-  );
-  // La data entra nell'impronta solo se è lei a decidere l'ordine: altrimenti
-  // ogni salvataggio ridisegnerebbe l'albero per niente.
-  const dated = state.explorerSort.startsWith("modified")
-    ? [...v.folders.values()].map((c) => JSON.stringify(c.mtimes ?? {})).join(";")
-    : "";
-  return `${folders.join(";")}|${[...v.existing].sort().join(",")}|${state.explorerSort}|${dated}`;
+/// Quante voci ha ciò che si vede, a ogni profondità: una domanda sola, con
+/// una finestra di una riga, perché serve il conto e non le voci.
+async function visibleTotal(): Promise<number | null> {
+  const space = state.activeSpace;
+  const scope = space ? { path: space, descendants: true } : undefined;
+  try {
+    return (await vaultEntries({ offset: 0, limit: 1 }, undefined, scope)).total;
+  } catch {
+    return null;
+  }
 }
 
 /// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
@@ -499,7 +566,14 @@ function children(path: string): FolderContent | null {
   return content ? sortContent(content, state.meta, state.explorerSort) : null;
 }
 
-function renderFileList(): void {
+/// La voce che aveva il fuoco quando una rinomina in posto è stata confermata,
+/// e il path che avrà: `renderFileList` porta il fuoco sulla riga nuova.
+let renameFocus: { from: string; to: string } | null = null;
+
+/// Ridisegna l'albero. Con `only`, la cartella aperta o chiusa da
+/// `toggleFolder` quando fuori da lei non è cambiato niente: si rifà soltanto
+/// il suo sottoalbero, e le altre righe restano gli stessi nodi.
+function renderFileList(only: string | null = null): void {
   // Uno spazio rimosso (o la cui cartella non esiste più) non può restare
   // selezionato: si torna a casa senza dire niente.
   if (state.activeSpace !== null && !state.meta.spaces.includes(state.activeSpace)) {
@@ -509,17 +583,47 @@ function renderFileList(): void {
   renderSpaceStrip();
   renderSpaceTitle();
   renderPinned();
-  // Chi stava navigando da tastiera non deve perdere il posto: aprire una
-  // cartella ridisegna **tutto** l'albero, e senza questa riga il fuoco
+  renderAllTitle();
+  // Chi stava navigando da tastiera non deve perdere il posto: un ridisegno
+  // intero rifà **tutto** l'albero, e senza questa riga il fuoco
   // tornerebbe in cima al documento a ogni freccia destra — cioè la
   // navigazione da tastiera si romperebbe proprio nel momento in cui la si sta
   // usando.
   const active = document.activeElement;
   const focused =
     active instanceof HTMLElement && fileListEl.contains(active) ? active : null;
-  const toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
+  let toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
   const onChevron = focused?.matches("button.chevron");
 
+  if (only === null || !patchFolder(only)) rebuildTree();
+
+  // Una voce appena rinominata col fuoco addosso: il fuoco la segue al path
+  // nuovo appena l'albero lo disegna. Un ridisegno che arriva prima disegna
+  // ancora la voce vecchia, e il fuoco resta lì; se intanto il fuoco è andato
+  // altrove, la voce non lo riprende.
+  const renamed = renameFocus;
+  if (renamed !== null && toRestore !== renamed.from) renameFocus = null;
+  else if (renamed !== null && entry(renamed.to)) {
+    toRestore = renamed.to;
+    renameFocus = null;
+  }
+
+  roving(toRestore);
+  selection?.repaint();
+  treeMotion?.settle();
+  treeMotion = null;
+  paintThumbnails();
+  if (toRestore !== undefined) {
+    const row = entry(toRestore);
+    const control = onChevron
+      ? row?.querySelector<HTMLElement>(":scope > .tree-row > .chevron:not(:disabled)")
+      : null;
+    (control ?? row)?.focus();
+  }
+}
+
+/// Rifà l'albero intero, dal contenuto caricato.
+function rebuildTree(): void {
   // Durante un trascinamento la riga trascinata **non si ricrea**: un nodo
   // staccato non riceve più `dragend`, e il gesto resterebbe appeso a un
   // `drag` che nessuno azzera. Si tiene il nodo e, rifatto l'albero, lo si
@@ -528,6 +632,7 @@ function renderFileList(): void {
     ? fileListEl.querySelector<HTMLElement>(`.tree-row[draggable="true"][data-path="${CSS.escape(drag.path)}"]`)
     : null;
   fileListEl.innerHTML = "";
+  hiddenXmp = 0;
   renderChildren(state.activeSpace ?? "", fileListEl);
   if (held && drag) {
     fileListEl
@@ -535,7 +640,8 @@ function renderFileList(): void {
       ?.replaceWith(held);
   }
   // Un vault (o uno spazio) senza niente dentro lo dice, e offre il primo gesto.
-  if (fileListEl.childElementCount === 0 && state.vaultRoot !== "" && children(state.activeSpace ?? "")) {
+  // Gli XMP nascosti non fanno vuoto un vault che ha soltanto quelli.
+  if (fileListEl.childElementCount === 0 && hiddenXmp === 0 && state.vaultRoot !== "" && children(state.activeSpace ?? "")) {
     const li = document.createElement("li");
     li.setAttribute("role", "none");
     li.className = "tree-empty";
@@ -548,7 +654,7 @@ function renderFileList(): void {
     create.addEventListener("click", () => void newNote());
     li.append(text, create);
     // Il primo gesto può anche essere un disegno, se il kernel sa farli.
-    if (canCreateDrawing()) {
+    if (newKinds().includes("drawing")) {
       const draw = document.createElement("button");
       draw.type = "button";
       draw.className = "link-button";
@@ -559,18 +665,38 @@ function renderFileList(): void {
     }
     fileListEl.append(li);
   }
+}
 
-  roving(toRestore);
-  selection?.repaint();
-  treeMotion?.settle();
-  treeMotion = null;
-  if (toRestore !== undefined) {
-    const row = entry(toRestore);
-    const control = onChevron
-      ? row?.querySelector<HTMLElement>(":scope > .tree-row > .chevron:not(:disabled)")
-      : null;
-    (control ?? row)?.focus();
+/// Rifà il sottoalbero della cartella `path` appena aperta o chiusa, e la sua
+/// freccia; il resto dell'albero non si tocca. `false` se la cartella non è
+/// disegnata come ci si aspetta: allora si rifà tutto.
+///
+/// Aprire una cartella di duecento voci ricreava anche le righe di fuori, e
+/// in un albero già lungo era quello a far saltare il fotogramma del moto. Le
+/// righe di fuori restano gli stessi nodi: la riga trascinata non si stacca,
+/// il puntatore che resta sulla cartella non trova una riga nuova.
+function patchFolder(path: string): boolean {
+  const li = fileListEl.querySelector<HTMLElement>(`li[role="treeitem"][data-path="${CSS.escape(path)}"]`);
+  const row = li?.querySelector<HTMLElement>(":scope > .tree-row.folder");
+  const chevron = row?.querySelector<HTMLElement>(":scope > .chevron:not(:disabled)");
+  if (!li || !row || !chevron) return false;
+  const open = state.expanded.has(path);
+  // L'immagine di una chiusura ancora in corsa è `inert`: non è il gruppo.
+  const group = li.querySelector<HTMLElement>(":scope > .tree-children:not([inert])");
+  if (open === (group !== null)) return false;
+  if (open) {
+    const nested = document.createElement("ul");
+    nested.className = "tree-children";
+    nested.setAttribute("role", "group");
+    renderChildren(path, nested);
+    row.after(nested);
+  } else {
+    group?.remove();
   }
+  li.setAttribute("aria-expanded", String(open));
+  chevron.textContent = open ? "▾" : "▸";
+  chevron.setAttribute("aria-expanded", String(open));
+  return true;
 }
 
 /// Le voci dell'albero, nell'ordine in cui si vedono.
@@ -784,6 +910,7 @@ function renderChildren(path: string, ul: HTMLElement): void {
   const folderNoteId = folderNoteOf(node, state.handledExtensions, legacyPages);
   for (const id of node.notes) {
     if (id === folderNoteId) continue;
+    if (hidesXmp(id)) continue;
     const li = document.createElement("li");
     const row = noteRow(id, { draggable: true });
     li.appendChild(row);
@@ -794,6 +921,7 @@ function renderChildren(path: string, ul: HTMLElement): void {
     ul.appendChild(li);
   }
   for (const id of node.files) {
+    if (hidesXmp(id)) continue;
     const li = document.createElement("li");
     const row = fileRow(id);
     li.appendChild(row);
@@ -859,9 +987,14 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   row.dataset.path = id;
   setTooltip(row, id);
   // L'icona data dall'esplora vince; altrimenti quella della pagina (`icon:`).
-  const icon = state.meta.icons[id] ?? pageIcon(id);
+  // Un `fub:` che questa versione non sa disegnare vale come nessuna icona.
+  const icon = [state.meta.icons[id], pageIcon(id)].find((value) => readPageMark(value) !== null) ?? null;
   const kind = formatKindOf(id);
-  if (icon) row.appendChild(rowIcon(icon));
+  if (icon) {
+    row.appendChild(rowIcon(icon));
+    // L'icona scelta vince anche sulla miniatura.
+    row.dataset.ownIcon = "";
+  }
   // Un documento che non è una nota dice il suo formato: un Word, un ODT e
   // una nota non hanno la stessa icona, perché non si fanno le stesse cose.
   else if (kind && kind !== "note") row.appendChild(rowIcon(null, FORMAT_ICON[kind]));
@@ -874,13 +1007,22 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   name.textContent = pageName(id);
   row.appendChild(name);
 
-  row.addEventListener("click", () => void openDocument(id));
+  row.addEventListener("click", () => openChosen(id));
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     noteMenu(e, row, id);
   });
+  wireWarmup(row, id);
   if (opts.draggable) wireDrag(row, id, "note");
   return row;
+}
+
+/// Apre il documento scelto nell'albero. Se l'albero è un cassetto sopra i
+/// fogli, la scelta lo chiude subito: il documento si apre dove si vede, e il
+/// fuoco va a lui e non al foglio coperto dal velo (`desktop-shell.ts`).
+function openChosen(id: string): void {
+  dismissSidePanel("sidebar");
+  void openDocument(id, { gesture: true });
 }
 
 const FILE_ICONS: Record<ResourceKind, string> = {
@@ -901,8 +1043,9 @@ function fileRow(id: string): HTMLElement {
   row.dataset.path = id;
   setTooltip(row, id);
   const kind = mediaKindOfId(id);
-  // Un SVG è anche un disegno, e si apre nel suo editor.
-  row.appendChild(formatKindOf(id) === "drawing" ? rowIcon(null, FORMAT_ICON.drawing) : rowIcon(FILE_ICONS[kind]));
+  // Un SVG è anche un disegno, e si apre nel suo editor; un RAW è una foto.
+  const format = formatKindOf(id);
+  row.appendChild(format === "drawing" || format === "photo" ? rowIcon(null, FORMAT_ICON[format]) : rowIcon(FILE_ICONS[kind]));
   const name = document.createElement("span");
   name.className = "row-name";
   name.textContent = childName(id);
@@ -912,13 +1055,14 @@ function fileRow(id: string): HTMLElement {
   // importandolo: la finestra lo prepara, e niente si scrive prima di
   // «Importa».
   row.addEventListener("click", () => {
-    if (canShowFile(id)) void openDocument(id);
+    if (canShowFile(id)) openChosen(id);
     else if (!(canImportFile(id) && importDrawing({ kind: "vault", path: id }))) notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     fileMenu(e, row, id);
   });
+  wireWarmup(row, id);
   return row;
 }
 
@@ -996,7 +1140,7 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
         ...folderPageAction(id),
         ...reorder,
         { separator: true, label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
-        { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+        openWithEntry(id, { system: () => void handToSystem(id, true) }),
       ],
     },
     { separator: true, label: t("explorer.trash"), hint: displayBinding("Delete"), danger: true, run: () => void trashWithConfirm(id) },
@@ -1015,11 +1159,11 @@ function fileMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
     ...(shown
       ? [
-          { label: t("explorer.open"), run: () => void openDocument(id) },
+          { label: t("explorer.open"), run: () => openChosen(id) },
           { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
         ]
       : []),
-    { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+    openWithEntry(id, { system: () => void handToSystem(id, true) }),
     { separator: true, label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
     { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
     copyItems(id, t("explorer.copy.file_short")),
@@ -1242,12 +1386,22 @@ function folderRow(folder: VaultFolder): HTMLElement {
   // L'icona della cartella è quella della sua pagina, se l'esplora non gliene
   // ha data una sua.
   const pageMark = folderNoteId ? pageIcon(folderNoteId) : null;
-  row.appendChild(rowIcon(state.meta.icons[folder.path] ?? pageMark, "folder"));
+  const chosen = [state.meta.icons[folder.path], pageMark].find((value) => readPageMark(value) !== null) ?? null;
+  row.appendChild(rowIcon(chosen, "folder"));
 
   const name = document.createElement("span");
   name.className = "row-name";
   name.textContent = childName(folder.path);
   row.appendChild(name);
+  // Quante voci dirette ha: fuori dal nome accessibile (lo dà `.row-name`), e
+  // lo zero non si scrive.
+  if (folder.entries > 0) {
+    const count = document.createElement("span");
+    count.className = "row-count";
+    count.setAttribute("aria-hidden", "true");
+    count.textContent = String(folder.entries);
+    row.appendChild(count);
+  }
   if (folderNoteId) row.classList.add("has-note");
   row.addEventListener("click", () => {
     if (folderNoteId) {
@@ -1301,7 +1455,7 @@ function folderMenu(at: MouseEvent, path: string): void {
           { label: t("explorer.new.folder"), run: () => startNewFolder(path) },
           // Il disegno nasce se il kernel sa farli: la cartella arriva alla
           // galleria già scelta.
-          ...(canCreateDrawing() ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
+          ...(newKinds().includes("drawing") ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
         ],
       },
       importItems(path),
@@ -1343,17 +1497,8 @@ function rootMenu(at: MouseEvent): void {
   showContextMenu(at, [
     { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
     { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
-    ...(canCreateDrawing() ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
-    {
-      separator: true,
-      label: t("explorer.sort"),
-      items: EXPLORER_SORTS.map((mode) => ({
-        label: t(SORT_LABELS[mode]),
-        choice: "radio" as const,
-        checked: state.explorerSort === mode,
-        run: () => setSort(mode),
-      })),
-    },
+    ...(newKinds().includes("drawing") ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
+    { separator: true, label: t("explorer.sort"), items: sortItems() },
     { label: t("explorer.collapse_all"), run: () => collapseAll() },
     { separator: true, ...importItems(root) },
   ], {
@@ -1362,21 +1507,33 @@ function rootMenu(at: MouseEvent): void {
   });
 }
 
-/// L'icona di una riga: quella scelta da chi scrive, che resta com'è, o
-/// senza una scelta la figura a linea del kit (`line`).
+/// Gli ordini dell'albero, a scelta singola: li apre il bottone del titolo e
+/// il sottomenu «Ordina» del contestuale della radice.
+function sortItems(): MenuItem[] {
+  return EXPLORER_SORTS.map((mode) => ({
+    label: t(SORT_LABELS[mode]),
+    choice: "radio" as const,
+    checked: state.explorerSort === mode,
+    run: () => setSort(mode),
+  }));
+}
+
+/// L'icona di una riga: quella scelta da chi scrive (un'emoji com'è, o una
+/// figura del set: `page-mark.ts`), o senza una scelta — o con una figura che
+/// questa versione non conosce — la figura a linea del kit (`line`).
 function rowIcon(icon: string | null, line?: string): HTMLElement {
   const span = document.createElement("span");
   span.className = "row-icon";
-  if (icon !== null) span.textContent = icon;
-  else if (line) span.append(iconEl(line) ?? "");
+  if (!drawPageMark(span, icon) && line) span.append(iconEl(line) ?? "");
   span.setAttribute("aria-hidden", "true");
   return span;
 }
 
 /// Il nome di una cartella preceduto dall'icona che chi scrive le ha dato, se
-/// gliene ha data una: nei menu e nei titoli una figura di ripiego è rumore.
+/// è un'emoji: nei menu e nei titoli una figura (scelta o di ripiego) è
+/// rumore, e nel testo non si scrive.
 function namedFolder(path: string, name = childName(path)): string {
-  const icon = state.meta.icons[path];
+  const icon = pageMarkText(state.meta.icons[path]);
   return icon ? `${icon} ${name}` : name;
 }
 
@@ -1384,14 +1541,20 @@ function namedFolder(path: string, name = childName(path)): string {
 /// (§14.4): non c'era in memoria, perché in memoria c'è ciò che si vede.
 ///
 /// Il moto si misura qui, prima del giro, e si compie al ridisegno che segue:
-/// se il giro è superato da un altro, lo compie quello.
+/// se il giro è superato da un altro, lo compie quello. Il ridisegno tocca
+/// solo il sottoalbero della cartella, se fuori da lei non è cambiato niente
+/// (`patchFolder`).
 function toggleFolder(path: string): void {
   if (!state.expanded.delete(path)) state.expanded.add(path);
   saveExpanded();
+  toggled = path;
   const motion = drag === null ? beginTreeMotion(fileListEl, path, treeLife ?? undefined) : null;
   treeMotion = motion;
   void refreshFromKernel(true).finally(() => {
     if (treeMotion === motion) treeMotion = null;
+    // Aperta, la cartella scalda i motori dei suoi file.
+    const content = state.expanded.has(path) ? view.folders.get(path) : undefined;
+    if (content) warmup?.folder([...content.notes, ...content.files]);
   });
 }
 
@@ -1405,8 +1568,35 @@ const FILES_AUTO_REVEAL = "files.auto-reveal";
 const FILES_CONFIRM_TRASH = "files.confirm-trash";
 const FILES_LEGACY_FOLDER_PAGES = "files.legacy-folder-pages";
 
+const CRAFT_TREE_SHOW_XMP = "craft.tree-show-xmp";
+const CRAFT_TREE_THUMBNAILS = "craft.tree-thumbnails";
+
 /// Vero se la macchina vuole che l'albero segua la nota aperta.
 let autoReveal = false;
+/// Falso se la macchina nasconde gli XMP dall'albero (`craft.tree-show-xmp`):
+/// la ricerca, il selettore rapido, i backlink e i tag li trovano ancora.
+let showXmp = true;
+/// Vero se la macchina vuole le miniature nell'albero (`craft.tree-thumbnails`).
+let treeThumbs = false;
+/// Le miniature dell'albero, vive finché il pannello è montato.
+let thumbnails: TreeThumbnails | null = null;
+/// Quanti XMP l'ultimo disegno ha lasciato fuori.
+let hiddenXmp = 0;
+
+/// Un XMP che l'albero non disegna; lo conta.
+function hidesXmp(id: string): boolean {
+  if (showXmp || formatTagOf(id) !== "XMP") return false;
+  hiddenXmp += 1;
+  return true;
+}
+
+/// Dà alle righe disegnate le loro miniature, o le spegne. Senza il
+/// componente `fub.craft` nessuno sa dirle.
+function paintThumbnails(): void {
+  if (!thumbnails) return;
+  if (treeThumbs && craftServed()) thumbnails.paint(fileListEl);
+  else thumbnails.reset();
+}
 /// Vero se il vault riconosce anche `X/X` e `X/index` come pagina di `X`.
 let legacyPages = false;
 
@@ -1566,10 +1756,29 @@ function renderPinned(): void {
   for (const id of pinned) {
     const li = document.createElement("li");
     const row = noteRow(id, { draggable: false });
+    // Fra le appuntate la colonna dell'icona la tiene la puntina: dice perché
+    // la riga sta lì. L'icona della nota resta nella sua riga dell'albero.
+    row.querySelector(":scope > .row-icon")?.remove();
+    row.classList.remove("no-icon");
+    const pin = rowIcon(null, "pin");
+    pin.classList.add("row-pin");
+    row.prepend(pin);
     if (id === state.currentDoc) row.setAttribute("aria-current", "true");
     li.appendChild(row);
     pinnedListEl.appendChild(li);
   }
+}
+
+/// «Tutte le note» e il conto di ciò che si vede, sopra l'albero. Col filtro
+/// aperto l'elenco filtrato prende il posto dell'albero, e il titolo va con
+/// lui; senza un vault (o prima della prima risposta) non c'è niente da
+/// contare. Zero voci: il titolo resta, il numero no.
+function renderAllTitle(): void {
+  const loaded = state.vaultRoot !== "" && view.folders.has(state.activeSpace ?? "");
+  allTitleEl.hidden = !loaded || filter?.active() === true;
+  const total = view.total ?? 0;
+  allCountEl.hidden = total === 0;
+  allCountEl.textContent = total === 0 ? "" : String(total);
 }
 
 function togglePin(id: string): void {
@@ -1579,7 +1788,7 @@ function togglePin(id: string): void {
 function chooseIcon(at: MouseEvent, path: string): void {
   pickIcon(at, (icon) => {
     void setIcon(path, icon ?? null);
-  });
+  }, { current: state.meta.icons[path] ?? null });
 }
 
 // Uno spazio è una cartella registrata nella striscia di icone in cima alla
@@ -1594,22 +1803,35 @@ function renderSpaceStrip(): void {
   spaceStripEl.setAttribute("role", "toolbar");
   spaceStripEl.setAttribute("aria-label", t("explorer.notes"));
 
+  // Gli spazi stanno in un pozzetto: l'acceso mostra anche il nome, gli altri
+  // soltanto la figura (il nome resta la loro etichetta). «+» sta fuori.
+  const well = document.createElement("span");
+  well.className = "space-well";
+  const chipName = (text: string): HTMLElement => {
+    const name = document.createElement("span");
+    name.className = "space-chip-name";
+    name.setAttribute("aria-hidden", "true");
+    name.textContent = text;
+    return name;
+  };
+
   const home = document.createElement("button");
   home.className = "space-chip";
   home.setAttribute("aria-pressed", String(state.activeSpace === null));
-  home.append(iconEl("home") ?? "");
+  home.append(iconEl("home") ?? "", chipName(t("explorer.whole_vault.short")));
   home.setAttribute("aria-label", t("explorer.whole_vault"));
   setTooltip(home, t("explorer.whole_vault"));
   home.addEventListener("click", () => selectSpace(null));
-  spaceStripEl.appendChild(home);
+  well.appendChild(home);
 
   for (const path of state.meta.spaces) {
     const chip = document.createElement("button");
     chip.className = "space-chip";
     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
-    const chosen = state.meta.icons[path];
-    if (chosen) chip.textContent = chosen;
-    else chip.append(iconEl("folder") ?? "");
+    const icon = document.createElement("span");
+    icon.className = "space-chip-icon";
+    if (!drawPageMark(icon, state.meta.icons[path])) icon.append(iconEl("folder") ?? "");
+    chip.append(icon, chipName(childName(path)));
     // Nome annunciato (V15): l'emoji scelta e il nome dello spazio, non solo
     // il simbolo.
     chip.setAttribute("aria-label", namedFolder(path));
@@ -1622,8 +1844,9 @@ function renderSpaceStrip(): void {
         { label: t("explorer.not_a_space"), run: () => removeSpace(path) },
       ]);
     });
-    spaceStripEl.appendChild(chip);
+    well.appendChild(chip);
   }
+  spaceStripEl.appendChild(well);
 
   const add = document.createElement("button");
   add.className = "space-chip add";
@@ -1953,19 +2176,30 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
     renderFileList();
     entry(id)?.focus();
   };
-  const confirm = async () => {
+  /// `next`: dove va il fuoco quando la conferma viene da un clic altrove
+  /// (`relatedTarget` del `blur`); `null` se il clic non era su niente di
+  /// focalizzabile.
+  const confirm = async (next?: EventTarget | null) => {
     if (closed || busy) return;
     const newItem = input.value.trim();
     if (!newItem || newItem === current) {
       closed = true;
       renderFileList();
-      entry(id)?.focus();
+      if (!(next instanceof HTMLElement)) entry(id)?.focus();
       return;
     }
     // Conferma ottimista chiusa subito: il campo sparisce, la riga mostra il
     // progresso (U11) e un altro giro non può partire dallo stesso campo.
     busy = true;
     closed = true;
+    // Il fuoco resta sulla voce, come con Esc: un campo disabilitato lo
+    // perderebbe, e chi ha premuto Invio si ritroverebbe su `body`. Un clic su
+    // qualcosa di focalizzabile lo porta lì, e lì resta.
+    const item = row.closest<HTMLElement>('li[role="treeitem"]');
+    if (item && fileListEl.contains(item) && !(next instanceof HTMLElement)) {
+      renameFocus = { from: id, to: renamedPath(id, newItem, folder) };
+      item.focus({ preventScroll: true });
+    }
     input.disabled = true;
     row.setAttribute("aria-busy", "true");
     if (folder) await renameFolderTo(id, newItem, input.value);
@@ -1978,7 +2212,7 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   });
   // Cliccare altrove conferma il nome scritto, come nei file manager: solo
   // Esc annulla.
-  input.addEventListener("blur", () => void confirm());
+  input.addEventListener("blur", (e) => void confirm(e.relatedTarget));
 }
 
 /// Una collisione riapre il campo col nome digitato e la frase accanto: il nome
@@ -1996,12 +2230,23 @@ function reportRenameCollision(outcome: RenameResult, typed: string): boolean {
   );
   return true;
 }
-async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {
+/// Il path che una rinomina in posto dà alla voce: per una nota cambia il
+/// nome pagina e restano cartella ed estensione, per una cartella l'ultimo
+/// segmento.
+function renamedPath(from: string, newName: string, folder = false): string {
+  if (folder) {
+    const parent = parentOf(from);
+    return normalizedName(parent ? `${parent}/${newName}` : newName);
+  }
   const slash = from.lastIndexOf("/");
   const dir = slash === -1 ? "" : from.slice(0, slash + 1);
   const dot = from.lastIndexOf(".");
   const ext = dot > slash ? from.slice(dot) : "";
-  const to = normalizedName(`${dir}${newPageName}${ext}`);
+  return normalizedName(`${dir}${newName}${ext}`);
+}
+
+async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {
+  const to = renamedPath(from, newPageName);
 
   // Il no arriva **prima** del giro IPC (§15.5), e con la stessa regola che il
   // kernel applicherebbe (`rules/mirrored.ts`, legata alla gemella Rust dalla
@@ -2048,6 +2293,7 @@ async function renameDoc(from: string, newPageName: string, typed?: string): Pro
 /// Riapre il campo di rinomina sullo stesso `treeitem` col testo digitato:
 /// su errore il nome precedente resta nel vault e l'input non si perde.
 function reopenRename(id: string, typed: string, problem?: string, folder = false): void {
+  renameFocus = null;
   renderFileList();
   const row = folder ? folderRowOf(id) : entry(id);
   if (!row) return;
@@ -2066,8 +2312,7 @@ function renameFolderRow(path: string): boolean {
 /// Rinomina in posto di una cartella: cambia l'ultimo segmento, la madre resta.
 /// Il nome passa dalla stessa regola di un nome che nasce, prima del giro IPC.
 async function renameFolderTo(from: string, newName: string, typed: string): Promise<void> {
-  const parent = parentOf(from);
-  const to = normalizedName(parent ? `${parent}/${newName}` : newName);
+  const to = renamedPath(from, newName, true);
   const failure = nameFault(to, "new");
   if (failure !== null) {
     reopenRename(from, typed, t("explorer.bad_name", { name: newName, reason: nameFaultText(failure) }), true);

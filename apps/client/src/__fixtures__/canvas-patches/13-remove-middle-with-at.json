@@ -1,0 +1,11 @@
+{
+  "name": "remove-middle-with-at",
+  "description": "T6: togliere la scheda di mezzo con at; l'annulla la rimette al suo posto con il separatore del file",
+  "before": "{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"},\n    {\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"tre\"}\n  ],\n  \"edges\": []\n}\n",
+  "patches": [{"kind":"remove-node","before":{"id":"b","type":"text","x":200,"y":0,"width":100,"height":50,"text":"due"},"after":null,"at":1}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},\n    {\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"tre\"}\n  ],\n  \"edges\": []\n}\n",
+    "undo": "{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"},\n    {\"id\":\"c\",\"type\":\"text\",\"x\":400,\"y\":0,\"width\":100,\"height\":50,\"text\":\"tre\"}\n  ],\n  \"edges\": []\n}\n"
+  }
+}

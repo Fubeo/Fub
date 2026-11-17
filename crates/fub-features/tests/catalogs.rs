@@ -360,16 +360,80 @@ fn every_component_has_its_name_in_every_language() {
     }
     let mut missing = Vec::new();
     for riga in fub_features::componenti::righe() {
-        for catalog in &catalogs {
-            if !catalog.entries.contains_key(riga.nome) {
-                missing.push(format!(
-                    "{}: «{}» manca in «{}»",
-                    riga.id, riga.nome, catalog.locale
-                ));
+        for key in [riga.nome.to_string(), riga.descrizione()] {
+            for catalog in &catalogs {
+                if catalog
+                    .entries
+                    .get(&key)
+                    .is_none_or(|text| text.trim().is_empty())
+                {
+                    missing.push(format!(
+                        "{}: «{key}» manca in «{}»",
+                        riga.id, catalog.locale
+                    ));
+                }
             }
         }
     }
+    // Anche le righe che questa build non compila: ogni nome ha la sua
+    // descrizione, e nessuna descrizione è di un componente che non c'è.
+    let names: std::collections::BTreeSet<&str> = reference
+        .iter()
+        .filter_map(|key| key.strip_prefix("component."))
+        .filter_map(|key| key.strip_suffix(".name"))
+        .filter(|name| !name.starts_with("group."))
+        .collect();
+    let described: std::collections::BTreeSet<&str> = reference
+        .iter()
+        .filter_map(|key| key.strip_prefix("component."))
+        .filter_map(|key| key.strip_suffix(".description"))
+        .collect();
+    assert_eq!(
+        names, described,
+        "un nome senza descrizione, o il contrario"
+    );
     assert!(missing.is_empty(), "{}", missing.join("\n  "));
+}
+
+/// I gruppi della pagina hanno un nome in ogni lingua, quelli del piano.
+#[test]
+fn the_component_groups_have_the_names_of_the_plan() {
+    let catalogs = fub_features::componenti::catalog();
+    let lingua = |locale: &str| {
+        catalogs
+            .iter()
+            .find(|c| c.locale == locale)
+            .unwrap_or_else(|| panic!("il catalogo «{locale}»"))
+    };
+    let (it, en) = (lingua("it"), lingua("en"));
+    let piano = [
+        ("scrivere", "Scrivere", "Write"),
+        ("leggere", "Leggere", "Read"),
+        ("pensare", "Pensare", "Think"),
+        ("disegnare", "Disegnare", "Draw"),
+        ("ufficio", "Ufficio", "Office"),
+        ("foto", "Foto", "Photos"),
+        ("altro", "Altro", "Other"),
+        ("supporto", "Di supporto", "Support"),
+    ];
+    assert_eq!(
+        fub_features::componenti::GRUPPI.to_vec(),
+        piano.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+        "i gruppi, nell'ordine della pagina"
+    );
+    for (id, it_nome, en_nome) in piano {
+        let key = fub_features::componenti::nome_del_gruppo(id);
+        assert_eq!(
+            it.entries.get(&key).map(String::as_str),
+            Some(it_nome),
+            "«{key}»"
+        );
+        assert_eq!(
+            en.entries.get(&key).map(String::as_str),
+            Some(en_nome),
+            "«{key}»"
+        );
+    }
 }
 
 /// I nomi italiani che il piano dei componenti dà: sono le parole della pagina.
@@ -390,11 +454,100 @@ fn the_component_names_are_those_of_the_plan() {
         ("component.dizionari.name", "Dizionari"),
         ("component.motore-documenti.name", "Motore dei documenti"),
         ("component.motore-fogli.name", "Motore dei fogli"),
+        ("component.motore-vettoriale.name", "Motore del disegno"),
     ] {
         assert_eq!(
             it.entries.get(key).map(String::as_str),
             Some(name),
             "«{key}»"
         );
+    }
+}
+
+/// Il Motore del disegno con le parole del prototipo (T25), nelle due lingue:
+/// il nome e la frase che dice che cosa succede spento. Il catalogo è uno
+/// solo, quindi le chiavi ci sono anche nelle build senza il motore.
+#[test]
+fn the_drawing_engine_speaks_as_the_prototype() {
+    let catalogs = fub_features::componenti::catalog();
+    let lingua = |locale: &str| {
+        catalogs
+            .iter()
+            .find(|c| c.locale == locale)
+            .unwrap_or_else(|| panic!("il catalogo «{locale}»"))
+    };
+    for (locale, nome, descrizione) in [
+        (
+            "it",
+            "Motore del disegno",
+            "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+        ),
+        (
+            "en",
+            "Drawing engine",
+            "Draws, moves and reshapes the shapes in drawings. When off, drawings use the simple tools.",
+        ),
+    ] {
+        let catalog = lingua(locale);
+        assert_eq!(
+            catalog
+                .entries
+                .get("component.motore-vettoriale.name")
+                .map(String::as_str),
+            Some(nome),
+            "il nome in «{locale}»"
+        );
+        assert_eq!(
+            catalog
+                .entries
+                .get("component.motore-vettoriale.description")
+                .map(String::as_str),
+            Some(descrizione),
+            "la descrizione in «{locale}»"
+        );
+    }
+}
+
+/// I titoli dei comandi della lavagna sono quelli del piano, nelle due
+/// lingue: sono le parole della palette e della riga di comando.
+#[cfg(feature = "lavagna")]
+#[test]
+fn the_whiteboard_commands_have_the_titles_of_the_plan() {
+    let component = components()
+        .into_iter()
+        .find(|c| c.id == fub_features::LAVAGNA_ID)
+        .expect("il componente Lavagna");
+    let specs = fub_features::LavagnaCommands.commands();
+    for (id, italiano, english) in [
+        (
+            fub_features::CANVAS_APPLY,
+            "Applica operazioni alla lavagna",
+            "Apply operations to the whiteboard",
+        ),
+        (
+            fub_features::lavagna::CANVAS_CREATE,
+            "Nuova lavagna",
+            "New whiteboard",
+        ),
+    ] {
+        let spec = specs
+            .iter()
+            .find(|spec| spec.id == id)
+            .unwrap_or_else(|| panic!("manca «{id}»"));
+        let Some(message) = spec.title.as_message() else {
+            panic!("«{id}» ha un titolo cablato");
+        };
+        for (locale, expected) in [("it", italiano), ("en", english)] {
+            let catalog = component
+                .catalogs
+                .iter()
+                .find(|c| c.locale == locale)
+                .unwrap_or_else(|| panic!("manca il catalogo «{locale}»"));
+            assert_eq!(
+                catalog.entries.get(&message.key).map(String::as_str),
+                Some(expected),
+                "«{id}» in «{locale}»"
+            );
+        }
     }
 }

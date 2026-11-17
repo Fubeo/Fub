@@ -1,0 +1,10 @@
+{
+  "name": "reorder-not-permutation",
+  "description": "Un ordine nuovo che non è una permutazione: stale",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+  "patches": [{"kind":"reorder","before":["a","b"],"after":["a","a"]}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "stale"
+  }
+}

@@ -50,6 +50,8 @@
 //   mostra «Apri come sorgente».
 
 import { errorText } from "../../host/errors";
+import { api } from "../../host/ipc";
+import { documentSessions } from "../../state/document-session";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { relativeRef, resolveAgainst } from "../../rules/mirrored";
 import { focusZone, identifier } from "../../ui/a11y";
@@ -96,6 +98,11 @@ import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
+import { motoreDa, type MotoreAperto } from "./motore/gesti";
+import { apriSessione } from "./motore/sessione";
+import { drawStanding, MOTORE_VETTORIALE } from "./motore/standing";
+import { components, onComponents } from "../../state/components";
+import { showComponent } from "../../ui/commands";
 
 type VectorMode = "draw" | "read";
 
@@ -420,8 +427,76 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   // --- L'editor -------------------------------------------------------------
 
+  /// Il motore del disegno (K5), aperto la prima volta che l'editor si
+  /// monta su un documento della `DocumentSession`, e chiuso con la
+  /// superficie. In tutti e due gli spazi di lavoro: gli strumenti del
+  /// disegno sono gli stessi. Senza sessione del documento, il motore non
+  /// si apre e gli strumenti fanno da sé.
+  ///
+  /// Una sessione nuova a ogni riapertura (il motore riacceso, «Riprova»):
+  /// col nome e il testo che il documento ha in quel momento. La pagina
+  /// Componenti la segue: la riga del motore spenta chiude la sessione e lo
+  /// dice subito; riaccesa, il disegno torna al motore senza riaprire il
+  /// file. La sessione finisce con la superficie, o con la
+  /// `DocumentSession` (il file cancellato, il vault chiuso o cambiato); con
+  /// il file rinominato resta.
+  let motore: MotoreAperto | null = null;
+  const openMotore = (): MotoreAperto | null => {
+    if (motore !== null) return motore;
+    const session = documentSessions.get(context.documentId);
+    if (session === undefined) return null;
+    const vault = documentSessions.vaultFor(context.documentId) ?? null;
+    const opened = motoreDa(() => apriSessione(api, session.id, session.text(), session, { vault }));
+    motore = opened;
+    // Le parti che restano come sono si sanno col motore aperto: il chip lo
+    // segue.
+    life.add(opened.quandoCambia(() => standing.changed()));
+    standing.changed();
+    life.add(onComponents((next) => {
+      // La mappa di un altro vault non dice niente di questo disegno.
+      if (vault !== null && next.root !== vault) return;
+      if (!next.on(MOTORE_VETTORIALE)) opened.spento();
+      else if (opened.assente()?.perche === "spento") opened.riapri();
+      // La mappa dice anche se questa versione ha il motore: il chip la
+      // rilegge.
+      standing.changed();
+    }));
+    return opened;
+  };
+  life.add(() => {
+    void motore?.chiudi();
+    motore = null;
+  });
+
+  /// Il chip del disegno (T21, T23): le parti del motore sulla scena che si
+  /// modifica adesso, o il motore spento o fermo, con «Accendi…» (la riga del
+  /// motore nella pagina Componenti, se questa versione lo ha) e «Riprova».
+  /// Il foglio nascosto (in Lettura, un SVG estraneo o in sola lettura) e la
+  /// scrittura tolta non ne hanno: lì parla l'avviso della superficie. Si
+  /// aggiorna a ogni `paint()`, a ogni cambio del motore e della mappa dei
+  /// componenti.
+  const standing = drawStanding({
+    motore: () => motore,
+    scene: () => (drawHost.hidden || readOnly || editor === null ? null : editor.engine.scene()),
+    reveal: (offset) => {
+      if (drawHost.hidden || editor === null || !editor.reveal(offset)) return false;
+      editor.focus();
+      return true;
+    },
+    inBuild: (id) => {
+      const known = components();
+      // La mappa di un altro vault, o nessuna: non si sa, e il motore c'è.
+      const vault = documentSessions.vaultFor(context.documentId) ?? null;
+      if (known === null || known.map === null || (vault !== null && known.root !== vault)) return true;
+      return known.row(id) !== undefined;
+    },
+    showComponent,
+  });
+  life.add(() => standing.dispose());
+
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const editorLifetime = openLifetime();
+    const drawing = openMotore();
     const made = inspectorChrome();
     const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
       chrome: made,
@@ -463,6 +538,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
           }),
       onFontNotes: sayFonts,
       place,
+      ...(drawing === null ? {} : { motore: drawing }),
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };
@@ -769,6 +845,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       panelsChanged();
       statusChanged();
     }
+    standing.changed();
   };
 
   life.listen(adoptButton, "click", () => {
@@ -961,6 +1038,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         return () => statusListeners.delete(listener);
       },
     },
+    standing,
     reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
     selections: (): EditorSelections | undefined => {
       const [first, ...rest] = selectedRanges();

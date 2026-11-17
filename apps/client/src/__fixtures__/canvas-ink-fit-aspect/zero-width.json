@@ -1,0 +1,17 @@
+{
+  "name": "zero-width",
+  "description": "Una scheda larga zero: il riquadro del contenuto è largo zero, s = 0 (il tratto non si vede), senza NaN.",
+  "card": { "type": "file", "file": "Corsi/dispensa.pdf" },
+  "aspect": 0.75,
+  "ref": { "width": 600, "height": 400 },
+  "size": { "width": 0, "height": 400 },
+  "expect": {
+    "mode": "scale",
+    "s": 0,
+    "x": 0,
+    "y": 200,
+    "points": [
+      { "from": [100, 100], "to": [0, 200] }
+    ]
+  }
+}

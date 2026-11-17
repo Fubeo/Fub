@@ -6,8 +6,12 @@
 // cornice ha attorno; trova per id i manici che `index.html` le lascia.
 import "../../theme/scrittoio/structure.css";
 import "./declare";
+import { consegna } from "../../avvio/consegna";
 import { startup as shellStartup } from "../../desktop-shell";
+import { warmFonts } from "../../theme/font-warmup";
+import { themeChoices, whenThemeSettled } from "../../theme/theme";
 import { openLifetime, type Teardown } from "../../ui/lifetime";
+import { warmups } from "../../ui/warmup";
 import { mountShellCommands } from "./commands";
 import { mountConfirm } from "./confirm";
 import { mountFrame } from "./frame";
@@ -19,7 +23,7 @@ import { mountStageMotion } from "./stage-motion";
 import { mountViewsMotion } from "./views-motion";
 import { mountThemeSettingsSource } from "./theme-settings-source";
 
-export const startup: Promise<Teardown> = shellStartup.then((teardownShell) => {
+export const startup: Promise<Teardown> = shellStartup.then(async (teardownShell) => {
   const lifetime = openLifetime();
   mountMotion(lifetime);
   mountViewsMotion(lifetime);
@@ -34,6 +38,15 @@ export const startup: Promise<Teardown> = shellStartup.then((teardownShell) => {
   // Prima la sorgente, poi la schermata che le chiede le voci.
   mountThemeSettingsSource(lifetime);
   mountPreferences(lifetime);
+  // La fine vera dell'avvio: la cornice è montata, lo strato d'avvio lascia il
+  // posto all'app, e solo dopo `startup` si risolve. Se la shell è caduta lo
+  // strato resta, col guasto e Riprova.
+  await consegna({ tema: { definitivo: whenThemeSettled, scelte: themeChoices }, vita: lifetime });
+  // Le prime volte care si scaldano a riposo, dopo la consegna (`ui/warmup.ts`):
+  // ciò che si è registrato montando la shell (il grafo), poi i caratteri che
+  // i menu e il lanciatore userebbero per primi.
+  lifetime.add(warmups.register((next) => warmFonts(next)));
+  warmups.start(lifetime);
   return () => {
     lifetime.close();
     teardownShell();

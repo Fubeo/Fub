@@ -14,8 +14,12 @@
 // - Con `editor.preview-modifier` serve Ctrl/Cmd dappertutto.
 // - Si chiude uscendo dal link e dalla scheda, con Esc, o quando la shell si
 //   smonta. Un link che non si risolve non apre niente.
+// - Il nome si risolve dalla nota che contiene il link: quella del riquadro,
+//   o quella che un contenitore dichiara con `data-link-source` (la
+//   sbirciata, T20, che mostra un'altra nota sopra il riquadro).
 import { resolvedReference, settings } from "../host/query";
 import { onEvent } from "../state/kernel";
+import { appPreviewSubject, previewOf } from "../state/craft-previews";
 import { cancelScheduledPreview, hidePreview, schedulePreview } from "../state/preview";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
@@ -32,7 +36,13 @@ interface Target {
   heading: string | null;
   block: string | null;
   live: boolean;
+  /// La nota da cui il nome si risolve, se un contenitore la dichiara.
+  from: string | null;
 }
+
+/// L'attributo con cui un contenitore dice da quale nota si risolvono i link
+/// che mostra, quando non è la nota del riquadro.
+export const LINK_SOURCE_ATTRIBUTE = "data-link-source";
 
 /// Il bersaglio del wikilink sotto il puntatore, se ce n'è uno. Un link
 /// dentro un testo che si sta scrivendo (`contenteditable` acceso, la Live)
@@ -49,6 +59,7 @@ export function linkTarget(element: Element | null): { link: HTMLElement; target
       heading: link.dataset.wikilinkHeading ?? null,
       block: link.dataset.wikilinkBlock ?? null,
       live: editable !== null && editable.getAttribute("contenteditable") !== "false",
+      from: link.closest(`[${LINK_SOURCE_ATTRIBUTE}]`)?.getAttribute(LINK_SOURCE_ATTRIBUTE) || null,
     },
   };
 }
@@ -119,14 +130,20 @@ export function mountLinkPreview(life: Lifetime): void {
     const resolved = target.page || target.heading || target.block
       ? await resolvedReference(
           { kind: "wiki", value: { page: target.page, heading: target.heading, block: target.block } },
-          state.currentDoc ?? undefined,
+          target.from ?? state.currentDoc ?? undefined,
         ).catch(() => null)
       : null;
     if (mine !== generation || !resolved || !link.isConnected) return;
     // Solo un documento ha una resa da mostrare: un allegato nominato da un
-    // wikilink si apre, non si trasclude in una scheda di testo.
+    // wikilink si apre, non si trasclude in una scheda di testo. Un PDF di
+    // cui un'app ha fatto l'anteprima piccola (T31) mostra la sua prima
+    // pagina; la domanda non avvia mai l'app.
     const extension = resolved.doc.slice(resolved.doc.lastIndexOf(".") + 1).toLowerCase();
-    if (!state.handledExtensions.includes(extension)) return;
+    if (!state.handledExtensions.includes(extension)) {
+      if (appPreviewSubject(resolved.doc) === null) return;
+      const answer = await previewOf(resolved.doc, "small").catch(() => null);
+      if (mine !== generation || !answer?.preview.image || !link.isConnected) return;
+    }
     const rect = link.getBoundingClientRect();
     const popover = document.createElement("div");
     popover.className = "link-preview";

@@ -1,0 +1,9 @@
+{
+  "name": "duplicate-node-ids",
+  "description": "Due schede con lo stesso id",
+  "source": "{\"nodes\":[{\"id\":\"n1\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":120,\"text\":\"vedi [[Nota]] e #tag\"},{\"id\":\"n2\",\"type\":\"file\",\"x\":300,\"y\":0,\"width\":200,\"height\":120,\"file\":\"foto.png\"},{\"id\":\"n1\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":120,\"text\":\"vedi [[Nota]] e #tag\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"n1\",\"toNode\":\"n2\",\"toEnd\":\"arrow\",\"label\":\"usa\"}],\"xFuture\":{\"nested\":[1,2]}}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

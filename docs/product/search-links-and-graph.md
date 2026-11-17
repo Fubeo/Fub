@@ -43,22 +43,22 @@ stessa espressione dalla regola `fub_abi::rules::search_syntax`. La sua gemella
 TypeScript è legata da una fixture, così la barra della shell, `fub-cli search`
 e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
 
-- parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR`
-  maiuscolo fra alternative e `( … )` per raggruppare;
-- `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`,
-  `[chiave:>v]`, `[chiave:<v]`, con valori numerici, booleani o date ISO
-  confrontati per specie;
-- gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`,
-  `ext:`, `task:todo`, `task:done` e `match-case:` e `ignore-case:` (quest’ultimo vince sull’opzione «maiuscole» della barra), con valore anche fra
-  virgolette;
-- `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa
-  riga scritta, nello stesso blocco (paragrafo, titolo, voce, codice, tabella)
-  o sotto lo stesso titolo: `line:(rosa spina)`, `block:"frase"`. Diventano
-  la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
+- parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR` maiuscolo fra
+  alternative e `( … )` per raggruppare;
+- `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`, `[chiave:>v]`, `[chiave:<v]`,
+  con valori numerici, booleani o date ISO confrontati per specie;
+- gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`, `ext:`, `task:todo`,
+  `task:done` e `match-case:` e `ignore-case:` (quest’ultimo vince sull’opzione «maiuscole» della
+  barra), con valore anche fra virgolette;
+- `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa riga scritta, nello stesso
+  blocco (paragrafo, titolo, voce, codice, tabella) o sotto lo stesso titolo: `line:(rosa spina)`,
+  `block:"frase"`. Diventano la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
+- `comment:parola` cerca nei messaggi dei [commenti](../reference/note-conventions.md), autore compreso,
+  che `content:` non vede: predicato `custom` `fub:comment` col suo `TextQuery`, campo `comments` (schema v9).
 - `due:2026-10-19`, `due:<D`, `due:<=D`, `due:>D` e `due:>=D`: le note con una
   task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
   plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
-  `task_due`; l'indice full-text tiene le scadenze delle task aperte (schema v8).
+  `task_due`; l'indice tiene le scadenze delle task aperte lette come la vista [Compiti](tasks-and-reminders.md) (schema v10).
 
 Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
 sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e
@@ -72,8 +72,8 @@ Un risultato del pannello si trascina come una nota dell'albero: in una nota
 diventa un collegamento, sulla striscia delle schede si apre, nei segnalibri
 resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del
 cambio rapido: la modale lascia passare il rilascio e si chiude a gesto finito.
-Anche le righe del pannello dei collegamenti (entranti, uscenti e menzioni non
-collegate) si trascinano come la nota che nominano, ma fuori dall'app non
+Anche le righe dei collegamenti (in entrata, in uscita, menzioni non collegate)
+portano l'icona della nota e si trascinano come lei, ma fuori dall'app non
 portano il file. Così anche un wikilink in Lettura, quando la nota esiste; in
 Live il collegamento è testo e trascinarlo sposta il testo.
 
@@ -145,10 +145,10 @@ propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
 letti dalla sessione aperta se c'è, altrimenti dal file. La ricerca dei blocchi
 di tutto il vault (`[[^^`) non c'è.
 
-Il pannello Struttura mostra i titoli della nota aperta come un albero. Il
-campo in cima lo filtra: restano i titoli che contengono il testo, con i
-titoli sopra di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre
-su quello che trova.
+Il pannello Struttura mostra i titoli della nota aperta come un albero. Il campo
+in cima lo filtra: restano i titoli che contengono il testo, con i titoli sopra
+di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre su quello che
+trova. Sotto, «In entrata · N» elenca chi la cita, cinque righe e «e altri N».
 
 `heading.rename`, dalla palette, rinomina un titolo della nota aperta e
 aggiorna i `[[nota#titolo]]` che lo nominano, nella nota stessa
@@ -178,10 +178,10 @@ disturbare chi scrive. La scheda legge dal canale dati come gli embed, non apre
 sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
 link che non si risolve non apre niente.
 
-Nell'editor, Live o Sorgente, `Alt+Invio` apre il link su cui sta il cursore:
-un wikilink porta alla nota, alla sezione o al blocco che nomina, come
-Ctrl/Cmd+click; un indirizzo esterno si apre solo se la policy di Lettura lo
-permette. Dentro il codice il tasto non apre niente. In Live `Maiusc+Alt+Invio`
+Nell'editor, Scrittura o Sorgente, `Alt+Invio` su un wikilink apre la nota, alla
+sezione o al blocco che nomina, nella [sbirciata](editor-writing.md#la-sbirciata)
+(Ctrl/Cmd+click la apre come dice `editor.link-click`); su un indirizzo esterno
+lo apre solo se la policy di Lettura lo permette. Dentro il codice il tasto non apre niente. In Scrittura `Maiusc+Alt+Invio`
 su un wikilink apre la sua scheda col fuoco sulle azioni; Esc torna al testo.
 
 «Copia il link a questo punto», dalla palette, mette negli appunti il link al
@@ -223,7 +223,7 @@ quindi si risolve al momento della domanda. I backlink di un allegato elencano
 le note che lo nominano. Il pannello Collegamenti elenca fra gli uscenti solo i
 documenti.
 
-Il pannello Collegamenti mostra una sezione per parte (entranti, uscenti,
+Il pannello Collegamenti mostra una sezione per parte (in entrata, in uscita,
 menzioni non collegate nei due versi) con il numero nel titolo; una parte vuota
 resta chiusa su una riga. Il contesto si legge come testo: un wikilink compare
 col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle
@@ -394,10 +394,10 @@ nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
 
 ## Proprietà nella nota
 
-L'impostazione di macchina `editor.properties` sceglie come Live mostra il
-frontmatter in cima alla nota: **YAML** (il default) lo lascia testo,
-**Visibili** lo fa una tabella chiave–valore, **Nascoste** una riga sola col
-numero delle proprietà. La tabella è una lettura: una lista diventa `a, b`, un
+L'impostazione di macchina `editor.properties` sceglie come la nota mostra il
+frontmatter, nella [testata](editor-writing.md#la-testata): **YAML** lo
+lascia testo, **Visibili** (il default) ne fa righe chiave–valore, **Nascoste**
+le mette dietro «Altre N proprietà». Le righe sono una lettura: lista `a, b`, un
 testo su più righe una riga; il valore resta quello del file. Un clic su una
 proprietà, o un cursore che entra nel frontmatter, riapre lo YAML su quella
 riga; Sorgente mostra sempre lo YAML. Con il frontmatter chiuso, ciò che si
@@ -407,8 +407,8 @@ Mod+; apre una riga vuota per una proprietà nuova prima della chiusura, o crea
 il frontmatter in cima se non c'è. Alt+↑ e Alt+↓ sulla riga di una chiave
 spostano la proprietà intera, con le righe rientrate della sua lista; ai bordi
 del frontmatter il tasto resta fermo, e fuori da una riga di chiave sposta le
-righe come altrove. I tre gesti sono anche comandi della palette e voci del
-menu dei blocchi nella barra di formattazione. Il pannello Proprietà
+righe come altrove, salvo la testata. I tre gesti sono anche comandi della palette
+e voci del menu dei blocchi nella barra di formattazione. Il pannello Proprietà
 dell'ispettore resta il modo strutturato di scrivere valori tipizzati.
 La banda di stato dice quante proprietà ha la nota attiva (vista
 `properties.status`); tace su una nota senza proprietà e su un documento che
@@ -438,7 +438,7 @@ non è Markdown.
 - lo sleep del loop è preservato quando alpha, camera e trascinamento non
   richiedono lavoro;
 - i valori osservati e i criteri provvisori sono raccolti nel
-  [budget di performance](performance-budget.md#budget-proposti-e-stato) e nei
+  [budget di performance](performance-budget.md#budget-proposti) e nei
   [criteri di acceptance](acceptance.md);
 - il benchmark misura una fixture deterministica, non ogni grafo possibile:
   quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore

@@ -73,13 +73,9 @@ abbassarlo è ricavare dal testo solo la parte che il passo ha cambiato.
 
 ## Il banco
 
-```bash
-cd apps/client
-npm run bench:large                     # 5 000, 20 000 e 49 900 elementi, con le soglie
-npm run bench:large -- --elements 30000 # da 200 a 49 900 elementi, senza soglie
-npm run bench:large -- --cpu 4          # la pagina quattro volte più lenta
-```
-
+Il banco si lancia con `npm run bench:large` (da `apps/client/`; l'elenco
+completo dei comandi è in
+[testing-and-quality.md](../development/testing-and-quality.md#banchi)).
 Il banco ([`large.mjs`](../../apps/client/bench/large.mjs)) apre il disegno
 nell'app vera, nello spazio Completo, e fa otto corse: lo zoom coi tasti, la
 rotella che porta un rettangolo al centro della vista, Ctrl+rotella su di
@@ -100,6 +96,16 @@ Le soglie, in CI a ogni push:
 - l'**apertura** entro 4, 6 e 10 secondi;
 - nessun compito lungo, oltre 50 ms, fuori dai passi che rispondono,
   scrivono o ridisegnano e dagli assestamenti.
+
+Un passo è un evento solo: un compito del runner che cade nel suo
+fotogramma, come il garbage collector, lo porta da solo sopra la soglia, e
+un compito del runner fra due passi fa da solo un compito lungo fuori dai
+passi. Per questo ogni corsa si fa tre volte, ognuna dallo stesso stato, e
+si giudicano sulla **mediana** dei tre giri, con le stesse soglie, ogni
+passo, l'assestamento peggiore di ogni giro e il compito lungo peggiore
+fuori dai passi (zero per un giro che non ne ha): un campione storto non la
+sposta, una lentezza vera tocca tutti i giri. Il referto ha ogni campione e
+il peggiore di ogni giro. L'apertura si misura una volta.
 
 Il banco prova anche sé stesso: un passo sbagliato e uno lento, piantati
 apposta, devono fargli vedere il rosso. Il referto, con ogni passo, sta in

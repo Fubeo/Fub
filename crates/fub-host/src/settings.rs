@@ -115,6 +115,20 @@ pub const VERSIONING_ENABLED: &str = "versioning.enabled";
 /// Gli id dei bundle che l'utente ha spento (chiave dell'app).
 pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 
+/// Le righe senza bundle spente a mano (Lavagna, PDF): ciò che
+/// `plugins.disabled` non sa dire. Le legge e le scrive `crate::componenti`.
+pub const COMPONENTS_OFF: &str = "components.off";
+
+/// I componenti di supporto tenuti accesi con «Tienili».
+pub const COMPONENTS_KEPT: &str = "components.kept";
+
+/// I componenti che non servono più a nessuno, accesi in attesa di «Togli» o
+/// «Tienili».
+pub const COMPONENTS_WAITING: &str = "components.waiting";
+
+/// Il profilo scelto; vuoto (o assente) vuol dire «personalizzato».
+pub const COMPONENTS_PROFILE: &str = "components.profile";
+
 /// In che luce si guarda Fub: `""` (come il sistema), `light`, `dark`.
 ///
 /// Il valore vuoto è «come il sistema» per la stessa convenzione delle chiavi
@@ -194,6 +208,10 @@ pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
 /// destro; `off` mai.
 pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// Che cosa fa il clic che apre un link a una nota: `apri` la porta nel
+/// riquadro, come sempre; `sbircia` la apre nella sbirciata, sopra la destra
+/// del foglio. Alt col clic (o Alt-Invio) sbircia comunque.
+pub const EDITOR_LINK_CLICK: &str = "editor.link-click";
 /// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
 /// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
 pub const EDITOR_SLASH: &str = "editor.slash";
@@ -203,8 +221,15 @@ pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
 /// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
 /// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
 pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
-/// In che modalità si apre un riquadro nuovo: `source`, `live_preview`,
-/// `blocks` o `reading`, gli id delle modalità della superficie testuale.
+/// La riga dei suggerimenti al centro della banda: i tasti utili per ciò che
+/// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
+/// non c'è al telefono né sotto i 620 px.
+pub const EDITOR_HINTS: &str = "editor.hints";
+/// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
+/// `source` o `reading`, gli id delle modalità della superficie testuale.
+/// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
+/// valido e vale Scrittura: non si riscrive e non si mostra
+/// (`editor_settings`).
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
 /// Quanto della sintassi Markdown si vede in Live: `mai` scrive come in Word,
 /// senza segni nemmeno col cursore dentro; `elemento` rivela, attenuati, i
@@ -215,6 +240,25 @@ pub const EDITOR_LIVE_REVEAL: &str = "editor.live-reveal";
 /// segue e mostra in grigio la chiusura che manca; lo spazio chiude apice e
 /// pedice. Spenta, i segni restano testo finché non si chiudono.
 pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
+/// I blocchi di Scrittura: accesi (di serie) ogni blocco ha maniglia e «+», Esc
+/// seleziona il blocco, Mod+A prende il blocco e poi tutti i blocchi, Mod+D
+/// duplica il blocco; spenti, Scrittura si comporta come un editor di testo
+/// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
+/// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
+pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
+/// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
+/// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
+/// nome finisce nel file della nota. È della macchina perché dice chi siede
+/// davanti allo schermo, non di che cosa parla il vault.
+pub const PROFILE_NAME: &str = "profile.name";
+/// Come firma i commenti questo vault: col nome di [`PROFILE_NAME`], con le
+/// sue iniziali o senza firma. È del vault perché la scelta segue le note: il
+/// nome nel vault del lavoro, niente in quello personale. Un commento senza
+/// firma si legge «Senza nome», come quelli scritti da un altro programma.
+pub const COMMENTS_AUTHOR: &str = "comments.author";
+/// Le firme che [`COMMENTS_AUTHOR`] offre, la predefinita per prima.
+pub const COMMENTS_AUTHOR_CHOICES: [&str; 3] = ["nome", "iniziali", "niente"];
 /// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
 /// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
 /// valore scavalca la richiesta di moto ridotto del sistema.
@@ -225,6 +269,92 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
 pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+/// Chi disegna le pagine della webview su Linux (WebKitGTK): `auto` lascia
+/// il percorso di WebKit e avvisa dei problemi noti, `gpu` lo stesso senza
+/// proposte, `cpu` chiede il disegno col processore
+/// (`WEBKIT_SKIA_ENABLE_CPU_RENDERING`). Si legge una volta, prima che parta
+/// GTK (`fub_app::disegno`): cambiarla vale dal prossimo avvio. Dichiarata
+/// solo su Linux.
+pub const APPEARANCE_RENDERING: &str = "appearance.rendering";
+/// I percorsi offerti, il predefinito per primo.
+pub const RENDERING_MODES: [&str; 3] = ["auto", "gpu", "cpu"];
+
+/// La webview su cui gira la shell, per quel tanto che decide un default.
+///
+/// È un fatto della piattaforma, e lo dichiara l'app (`fub_app::run`, con
+/// [`declare_webview`]) leggendo la versione **dalla libreria caricata** —
+/// non dal nome del pacchetto né dal momento della compilazione: chi ha
+/// compilato con la 2.52 può girare con la 2.54, e viceversa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Webview {
+    /// WebKitGTK, con la versione `major.minor.micro` della libreria caricata.
+    WebKitGtk(u32, u32, u32),
+}
+
+impl Webview {
+    /// La WebKitGTK di una versione scritta `major.minor.micro`, come la dà
+    /// `webkit_get_{major,minor,micro}_version` (via `tauri::webview_version`).
+    /// Una stringa che non è tre numeri non dice niente: `None`.
+    pub fn webkitgtk(version: &str) -> Option<Self> {
+        let mut parts = version.trim().split('.').map(str::parse::<u32>);
+        let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(micro)), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return None;
+        };
+        Some(Self::WebKitGtk(major, minor, micro))
+    }
+
+    /// Questa webview ha il difetto che fa sfarfallare le animazioni
+    /// ([`WEBKITGTK_FLICKER_FROM`])?
+    pub fn flickers_after_animations(self) -> bool {
+        match self {
+            Self::WebKitGtk(major, minor, micro) => (major, minor, micro) >= WEBKITGTK_FLICKER_FROM,
+        }
+    }
+}
+
+/// **La prima WebKitGTK che sfarfalla dopo un'animazione**, ed è l'unico posto
+/// in cui l'intervallo difettoso è scritto.
+///
+/// Dalla 2.54.0 il renderer DMA-BUF di WebKitGTK, finita un'animazione,
+/// ripresenta per un istante fotogrammi vecchi; su ogni GPU, non solo NVIDIA
+/// (janhq/jan#9588, cjpais/Handy#2166 e #2360). La 2.52 non lo fa. Con
+/// Impostazioni → Aspetto → Animazioni = «ridotte» lo sfarfallio sparisce
+/// (verificato su Debian 13, WebKitGTK 2.54, 2026-11-16).
+///
+/// L'intervallo è aperto in alto: nessuna versione corretta è ancora
+/// verificata. Il giorno che una lo è, si aggiunge qui un limite superiore
+/// escluso (per esempio `WEBKITGTK_FLICKER_UNTIL = (2, 54, 4)`) e
+/// [`Webview::flickers_after_animations`] lo confronta; i test di questo file
+/// dicono quale versione resta difettosa e quale no.
+pub const WEBKITGTK_FLICKER_FROM: (u32, u32, u32) = (2, 54, 0);
+
+static WEBVIEW: std::sync::OnceLock<Webview> = std::sync::OnceLock::new();
+
+/// Dichiara la webview del processo. La chiama l'app **prima** di costruire
+/// l'[`Host`](crate::Host), perché il livello macchina riceve lo schema (e i
+/// suoi default) nel costruttore. Vale una volta sola, come la libreria che
+/// il processo ha caricato: una seconda dichiarazione è ignorata e la funzione
+/// dice `false`. Chi non dichiara niente — le altre piattaforme, la CLI, i
+/// test — ha i default di sempre.
+pub fn declare_webview(webview: Webview) -> bool {
+    WEBVIEW.set(webview).is_ok()
+}
+
+/// Il default di [`APPEARANCE_MOTION`] su questa webview: `reduced` dove la
+/// webview sfarfalla dopo le animazioni, altrimenti `""` (segue il sistema).
+///
+/// Cambia **solo il default**: un valore che la persona ha scritto — anche
+/// `""` — resta il suo, perché il livello macchina legge il default soltanto
+/// dove non c'è un valore. La shell mostra il perché sotto la riga quando il
+/// default è `reduced` (`decorateMotion` in `apps/client/src/panels/settings.ts`).
+pub fn motion_default(webview: Option<Webview>) -> &'static str {
+    match webview {
+        Some(webview) if webview.flickers_after_animations() => "reduced",
+        _ => fub_kernel::locale::AS_SYSTEM,
+    }
+}
 /// Lo stile dei diagrammi Mermaid: uno degli id di [`DIAGRAM_STYLES`]. Lo
 /// disegna la shell (`apps/client/src/ui/mermaid-styles.ts`); una nota può
 /// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
@@ -275,6 +405,52 @@ pub const FILES_LEGACY_FOLDER_PAGES: &str = "files.legacy-folder-pages";
 /// `unique`, `capture`. Di macchina, e vuota di default: un vault arrivato da
 /// fuori non può decidere che un link del browser scriva in silenzio.
 pub const URI_ALLOWED: &str = "uri.allowed";
+/// Dove sono le app Craft quando Fub non le trova da solo: una riga
+/// `id=percorso` (`vectorcraft=/opt/vc/vectorcraft`) o `id-cli=percorso` per
+/// la riga di comando. Di **macchina**: i percorsi dei programmi sono di
+/// questo computer e non viaggiano col vault. Le legge
+/// `craft::editors::detect`.
+#[cfg(feature = "craft")]
+pub const CRAFT_EDITOR_PATHS: &str = "craft.editor-paths";
+/// Le anteprime fatte dalle app: se Fub fa fare alla riga di comando di
+/// un'app Craft l'anteprima di un file che non ne ha una. Una scelta fra
+/// [`CRAFT_CLI_PREVIEWS_ASK`] (di partenza), [`CRAFT_CLI_PREVIEWS_ON`] e
+/// [`CRAFT_CLI_PREVIEWS_OFF`]; di macchina e **non** `program_writable` (vedi
+/// `craft_settings`). La legge `craft::consent::current`. Un valore di
+/// un'altra specie, come il booleano che la chiave portava prima, non regge
+/// lo schema e vale la scelta di partenza: mai un sì.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS: &str = "craft.cli-previews";
+/// Chiedere a chi guarda, la prima volta.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS_ASK: &str = "ask";
+/// Farle senza chiedere.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS_ON: &str = "on";
+/// Non farle mai.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS_OFF: &str = "off";
+/// Il peso massimo, in MiB, di un file che va letto intero per la sua
+/// anteprima; i file che si leggono a pezzi non hanno limite. Di macchina, da
+/// [`CRAFT_PREVIEW_MAX_MIB_MIN`] a [`CRAFT_PREVIEW_MAX_MIB_MAX`], di partenza
+/// [`CRAFT_PREVIEW_MAX_MIB_DEFAULT`]. La legge `craft::consent::max_bytes`.
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB: &str = "craft.preview-max-mib";
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB_MIN: f64 = 1.0;
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB_MAX: f64 = 4096.0;
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB_DEFAULT: f64 = 64.0;
+/// Le miniature accanto al nome nell'albero, prese dall'anteprima che il
+/// file ha già: l'albero non avvia mai un'app. Di macchina, spenta. La legge
+/// la shell.
+#[cfg(feature = "craft")]
+pub const CRAFT_TREE_THUMBNAILS: &str = "craft.tree-thumbnails";
+/// Gli XMP nell'albero; spenta, spariscono dall'albero e restano nella
+/// ricerca e nei dati della foto. Di macchina, accesa. La legge la shell.
+#[cfg(feature = "craft")]
+pub const CRAFT_TREE_SHOW_XMP: &str = "craft.tree-show-xmp";
 /// Come nasce un link a una nota trascinata o copiata: wikilink (`[[Nota]]`)
 /// o link Markdown (`[Nota](Nota.md)`), che leggono anche gli altri programmi.
 pub const FILES_LINK_STYLE: &str = "files.link-style";
@@ -370,6 +546,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     let mut settings = appearance_settings();
     settings.extend(chrome_settings());
     settings.extend(editor_settings());
+    settings.extend(profile_settings());
     settings.push(
         SettingSpec::new(
             ATTACHMENT_FOLDER,
@@ -535,6 +712,9 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_PLUGINS_DISABLED_DESC))
         .grouped(Text::key(C_GROUP_COMPONENTS)),
     );
+    // Lo stato dei componenti che `plugins.disabled` non sa dire. Come lei,
+    // **non** `program_writable`: lo scrive soltanto chi accende e spegne.
+    settings.extend(components_settings());
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
@@ -543,6 +723,8 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.extend(service_settings());
     settings.extend(live_settings());
     settings.extend(viewer_settings());
+    #[cfg(feature = "craft")]
+    settings.extend(craft_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -577,6 +759,39 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
         .collect()
 }
 
+/// Chi scrive (D11 A): il nome della persona, di macchina, e la firma dei
+/// commenti scelta per il vault. Nessuna delle due è `program_writable`: il
+/// nome che finisce nei file lo sceglie la persona, dalla shell.
+fn profile_settings() -> Vec<SettingSpec> {
+    let [name_choice, initials_choice, none_choice] = COMMENTS_AUTHOR_CHOICES;
+    vec![
+        SettingSpec::new(
+            PROFILE_NAME,
+            Text::key(C_PROFILE_NAME),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_PROFILE_NAME_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE))
+        .for_machine(),
+        SettingSpec::new(
+            COMMENTS_AUTHOR,
+            Text::key(C_COMMENTS_AUTHOR),
+            SettingKind::Choice {
+                default: name_choice.into(),
+                options: vec![
+                    UiOption::new(name_choice, Text::key(C_COMMENTS_AUTHOR_NAME)),
+                    UiOption::new(initials_choice, Text::key(C_COMMENTS_AUTHOR_INITIALS)),
+                    UiOption::new(none_choice, Text::key(C_COMMENTS_AUTHOR_NONE)),
+                ],
+            },
+        )
+        .describing(Text::key(C_COMMENTS_AUTHOR_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE)),
+    ]
+}
+
 fn editor_settings() -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
@@ -597,10 +812,18 @@ fn editor_settings() -> Vec<SettingSpec> {
         C_EDITOR_DEFAULT_MODE_DESC,
         "live_preview",
         vec![
-            UiOption::new("live_preview", Text::key(C_MODE_LIVE)),
-            UiOption::new("blocks", Text::key(C_MODE_BLOCKS)),
+            UiOption::new("live_preview", Text::key(C_MODE_WRITING)),
             UiOption::new("source", Text::key(C_MODE_SOURCE)),
             UiOption::new("reading", Text::key(C_MODE_READING)),
+            // I Blocchi sono dentro Scrittura (E1). Chi li aveva scelti ha
+            // `blocks` nel file della macchina, e quel valore resta suo: non si
+            // riscrive, e una scelta tolta lo farebbe ignorare con un avviso e
+            // ricadere sul predefinito. Resta allora fra le scelte, in fondo,
+            // con l'etichetta di Scrittura: due scelte con la stessa etichetta
+            // sono la stessa scelta, e il pannello mostra soltanto la prima
+            // (`visibleChoices` in `apps/client/src/panels/settings-model.ts`).
+            // La shell apre `blocks` in Scrittura (`SurfaceMode.formerIds`).
+            UiOption::new("blocks", Text::key(C_MODE_WRITING)),
         ],
     )];
     settings.push(choice(
@@ -614,6 +837,14 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("riga", Text::key(C_EDITOR_LIVE_REVEAL_LINE)),
         ],
     ));
+    // I blocchi come preferenza (D1, E2): una voce a sé, subito dopo i segni
+    // di Scrittura, perché sono la prima scelta su come si scrive.
+    settings.push(
+        SettingSpec::toggle(EDITOR_BLOCKS, Text::key(C_EDITOR_BLOCKS), true)
+            .describing(Text::key(C_EDITOR_BLOCKS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
     settings.extend(
         [
             (
@@ -719,7 +950,7 @@ fn editor_settings() -> Vec<SettingSpec> {
         EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES_DESC,
-        "source",
+        "visible",
         vec![
             UiOption::new("visible", Text::key(C_EDITOR_PROPERTIES_VISIBLE)),
             UiOption::new("hidden", Text::key(C_EDITOR_PROPERTIES_HIDDEN)),
@@ -738,9 +969,25 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("off", Text::key(C_EDITOR_MINIBAR_OFF)),
         ],
     ));
+    settings.push(choice(
+        EDITOR_LINK_CLICK,
+        C_EDITOR_LINK_CLICK,
+        C_EDITOR_LINK_CLICK_DESC,
+        "apri",
+        vec![
+            UiOption::new("apri", Text::key(C_EDITOR_LINK_CLICK_OPEN)),
+            UiOption::new("sbircia", Text::key(C_EDITOR_LINK_CLICK_PEEK)),
+        ],
+    ));
     settings.push(
         SettingSpec::toggle(EDITOR_SLASH, Text::key(C_EDITOR_SLASH), true)
             .describing(Text::key(C_EDITOR_SLASH_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
+            .describing(Text::key(C_EDITOR_HINTS_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
     );
@@ -788,6 +1035,12 @@ fn editor_settings() -> Vec<SettingSpec> {
 /// un pezzo di 6.2, dove si decide se un componente possa avere in mano
 /// l'aspetto e con che permesso.
 fn appearance_settings() -> Vec<SettingSpec> {
+    appearance_settings_on(WEBVIEW.get().copied())
+}
+
+/// Le chiavi dell'aspetto su una webview data: i test scelgono la webview che
+/// il processo, una volta dichiarata, non può più cambiare.
+fn appearance_settings_on(webview: Option<Webview>) -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
             key,
@@ -822,7 +1075,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .for_machine()
     };
 
-    vec![
+    let mut settings = vec![
         choice(
             APPEARANCE_THEME,
             C_THEME,
@@ -859,7 +1112,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_ACCENT,
             C_ACCENT,
             C_ACCENT_DESC,
-            265.0,
+            160.0,
             0.0,
             360.0,
         ),
@@ -887,7 +1140,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MOTION,
             C_MOTION,
             C_MOTION_DESC,
-            fub_kernel::locale::AS_SYSTEM,
+            motion_default(webview),
             vec![
                 system(),
                 UiOption::new("calm", Text::key(C_MOTION_CALM)),
@@ -967,7 +1220,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
-        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 17.0, 12.0, 28.0),
+        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 18.0, 12.0, 28.0),
         number(
             APPEARANCE_LINE_HEIGHT,
             C_LINE_HEIGHT,
@@ -980,7 +1233,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MEASURE,
             C_MEASURE,
             C_MEASURE_DESC,
-            68.0,
+            58.0,
             40.0,
             100.0,
         ),
@@ -994,7 +1247,30 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_CSS_SNIPPETS_DESC))
         .grouped(Text::key(C_GROUP_APPEARANCE))
         .for_machine(),
-    ]
+    ];
+    // Solo dove c'è WebKitGTK: su Windows e macOS la scelta non avrebbe
+    // niente da cambiare, e una riga che non fa niente è una riga che mente.
+    if cfg!(target_os = "linux") {
+        let at = settings
+            .iter()
+            .position(|spec| spec.key == APPEARANCE_FRAME_RATE)
+            .map_or(settings.len(), |index| index + 1);
+        settings.insert(
+            at,
+            choice(
+                APPEARANCE_RENDERING,
+                C_RENDERING,
+                C_RENDERING_DESC,
+                RENDERING_MODES[0],
+                vec![
+                    UiOption::new(RENDERING_MODES[0], Text::key(C_RENDERING_AUTO)),
+                    UiOption::new(RENDERING_MODES[1], Text::key(C_RENDERING_GPU)),
+                    UiOption::new(RENDERING_MODES[2], Text::key(C_RENDERING_CPU)),
+                ],
+            ),
+        );
+    }
+    settings
 }
 
 fn chrome_settings() -> Vec<SettingSpec> {
@@ -1104,8 +1380,110 @@ pub fn frame_rate_cap(value: &str) -> Option<u32> {
         .filter(|cap| FRAME_RATE_CAPS.contains(cap))
 }
 
+/// I valori di testo di macchina che servono **prima che parta GTK**, letti dal
+/// file di macchina senza montare l'host: oggi `appearance.rendering` e
+/// `appearance.motion`, per il percorso di disegno di `fub_app::run`.
+///
+/// Si legge come lo legge l'host: schema del core, profilo attivo, un valore
+/// sconosciuto che vale il predefinito, un file assente o illeggibile che vale
+/// i predefiniti. Il file non si scrive. Senza cartella di configurazione
+/// valgono i predefiniti. Una chiave non dichiarata (`appearance.rendering`
+/// fuori da Linux) non compare.
+pub fn startup_machine_texts(
+    config_dir: Option<&camino::Utf8Path>,
+    keys: &[&str],
+) -> BTreeMap<String, String> {
+    let machine = match config_dir {
+        Some(dir) => {
+            fub_kernel::MachineSettings::open(&crate::config::machine_settings_path(dir)).0
+        }
+        None => fub_kernel::MachineSettings::in_memory(),
+    };
+    if machine.declare(&core_machine_settings()).is_err() {
+        return BTreeMap::new();
+    }
+    keys.iter()
+        .filter_map(|key| {
+            let (value, _) = machine.effective(key).ok()?;
+            Some(((*key).to_owned(), value.as_text()?.to_owned()))
+        })
+        .collect()
+}
+
 pub fn setting_requires_reopen(key: &str) -> bool {
     matches!(key, CHROME_FRAME | CHROME_SCHEMA)
+}
+
+/// Le app Craft (N7): dove sono i loro programmi, se Fub può farne avviare la
+/// riga di comando per le anteprime, quanto pesa al più un file da leggere
+/// intero per l'anteprima, e i due interruttori dell'albero. Tutte di
+/// macchina (i programmi e le scelte sono di questo computer e non viaggiano
+/// col vault), nel gruppo «App esterne».
+#[cfg(feature = "craft")]
+fn craft_settings() -> Vec<SettingSpec> {
+    let external = |spec: SettingSpec, description: &str| {
+        spec.describing(Text::key(description))
+            .grouped(Text::key(C_GROUP_EXTERNAL_APPS))
+            .for_machine()
+    };
+    vec![
+        external(
+            SettingSpec::new(
+                CRAFT_EDITOR_PATHS,
+                Text::key(C_CRAFT_EDITOR_PATHS),
+                SettingKind::List {
+                    default: Vec::new(),
+                },
+            ),
+            C_CRAFT_EDITOR_PATHS_DESC,
+        ),
+        // **Non** `program_writable`, ed è la riga che conta, come per
+        // `plugins.disabled` e i permessi: accenderla vuol dire lasciare che
+        // Fub avvii un programma esterno, e quell'azione la decide la persona
+        // davanti allo schermo, dalla shell o dalla CLI di Fub nel suo
+        // terminale. Un plugin, un bundle o un comando del registro che
+        // potessero accenderla avvierebbero programmi da sé; un vault
+        // importato non può, perché la chiave è di macchina.
+        external(
+            SettingSpec::new(
+                CRAFT_CLI_PREVIEWS,
+                Text::key(C_CRAFT_CLI_PREVIEWS),
+                SettingKind::Choice {
+                    default: CRAFT_CLI_PREVIEWS_ASK.into(),
+                    options: vec![
+                        UiOption::new(CRAFT_CLI_PREVIEWS_ASK, Text::key(C_CRAFT_CLI_PREVIEWS_ASK)),
+                        UiOption::new(CRAFT_CLI_PREVIEWS_ON, Text::key(C_CRAFT_CLI_PREVIEWS_ON)),
+                        UiOption::new(CRAFT_CLI_PREVIEWS_OFF, Text::key(C_CRAFT_CLI_PREVIEWS_OFF)),
+                    ],
+                },
+            ),
+            C_CRAFT_CLI_PREVIEWS_DESC,
+        ),
+        external(
+            SettingSpec::new(
+                CRAFT_PREVIEW_MAX_MIB,
+                Text::key(C_CRAFT_PREVIEW_MAX_MIB),
+                SettingKind::Number {
+                    default: CRAFT_PREVIEW_MAX_MIB_DEFAULT,
+                    min: Some(CRAFT_PREVIEW_MAX_MIB_MIN),
+                    max: Some(CRAFT_PREVIEW_MAX_MIB_MAX),
+                },
+            ),
+            C_CRAFT_PREVIEW_MAX_MIB_DESC,
+        ),
+        external(
+            SettingSpec::toggle(
+                CRAFT_TREE_THUMBNAILS,
+                Text::key(C_CRAFT_TREE_THUMBNAILS),
+                false,
+            ),
+            C_CRAFT_TREE_THUMBNAILS_DESC,
+        ),
+        external(
+            SettingSpec::toggle(CRAFT_TREE_SHOW_XMP, Text::key(C_CRAFT_TREE_SHOW_XMP), true),
+            C_CRAFT_TREE_SHOW_XMP_DESC,
+        ),
+    ]
 }
 
 #[cfg(feature = "http-client")]
@@ -1306,6 +1684,20 @@ const C_FILES_LEGACY_FOLDER_PAGES: &str = "core.files_legacy_folder_pages";
 const C_FILES_LEGACY_FOLDER_PAGES_DESC: &str = "core.files_legacy_folder_pages.desc";
 const C_URI_ALLOWED: &str = "core.uri_allowed";
 const C_URI_ALLOWED_DESC: &str = "core.uri_allowed.desc";
+const C_GROUP_EXTERNAL_APPS: &str = "core.group.external_apps";
+const C_CRAFT_EDITOR_PATHS: &str = "core.craft.editor_paths";
+const C_CRAFT_EDITOR_PATHS_DESC: &str = "core.craft.editor_paths.desc";
+const C_CRAFT_CLI_PREVIEWS: &str = "core.craft.cli_previews";
+const C_CRAFT_CLI_PREVIEWS_DESC: &str = "core.craft.cli_previews.desc";
+const C_CRAFT_CLI_PREVIEWS_ASK: &str = "core.craft.cli_previews.ask";
+const C_CRAFT_CLI_PREVIEWS_ON: &str = "core.craft.cli_previews.on";
+const C_CRAFT_CLI_PREVIEWS_OFF: &str = "core.craft.cli_previews.off";
+const C_CRAFT_PREVIEW_MAX_MIB: &str = "core.craft.preview_max_mib";
+const C_CRAFT_PREVIEW_MAX_MIB_DESC: &str = "core.craft.preview_max_mib.desc";
+const C_CRAFT_TREE_THUMBNAILS: &str = "core.craft.tree_thumbnails";
+const C_CRAFT_TREE_THUMBNAILS_DESC: &str = "core.craft.tree_thumbnails.desc";
+const C_CRAFT_TREE_SHOW_XMP: &str = "core.craft.tree_show_xmp";
+const C_CRAFT_TREE_SHOW_XMP_DESC: &str = "core.craft.tree_show_xmp.desc";
 const C_FILES_LINK_STYLE: &str = "core.files_link_style";
 const C_FILES_LINK_STYLE_DESC: &str = "core.files_link_style.desc";
 const C_FILES_LINK_WIKI: &str = "core.files_link_style.wiki";
@@ -1328,6 +1720,14 @@ const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
+const C_GROUP_PROFILE: &str = "core.group.profile";
+const C_PROFILE_NAME: &str = "core.profile.name";
+const C_PROFILE_NAME_DESC: &str = "core.profile.name.desc";
+const C_COMMENTS_AUTHOR: &str = "core.comments.author";
+const C_COMMENTS_AUTHOR_DESC: &str = "core.comments.author.desc";
+const C_COMMENTS_AUTHOR_NAME: &str = "core.comments.author.name";
+const C_COMMENTS_AUTHOR_INITIALS: &str = "core.comments.author.initials";
+const C_COMMENTS_AUTHOR_NONE: &str = "core.comments.author.none";
 const C_EDITOR_SPELLCHECK: &str = "core.editor.spellcheck";
 const C_EDITOR_SPELLCHECK_DESC: &str = "core.editor.spellcheck.desc";
 const C_EDITOR_VIM: &str = "core.editor.vim";
@@ -1372,8 +1772,14 @@ const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
 const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
 const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
 const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_LINK_CLICK: &str = "core.editor.link_click";
+const C_EDITOR_LINK_CLICK_DESC: &str = "core.editor.link_click.desc";
+const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
+const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
+const C_EDITOR_HINTS: &str = "core.editor.hints";
+const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -1392,9 +1798,10 @@ const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
 const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
+const C_EDITOR_BLOCKS: &str = "core.editor.blocks";
+const C_EDITOR_BLOCKS_DESC: &str = "core.editor.blocks.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
-const C_MODE_LIVE: &str = "core.mode.live";
-const C_MODE_BLOCKS: &str = "core.mode.blocks";
+const C_MODE_WRITING: &str = "core.mode.writing";
 const C_MODE_READING: &str = "core.mode.reading";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
@@ -1402,6 +1809,14 @@ const C_HISTORY: &str = "core.history";
 const C_HISTORY_DESC: &str = "core.history.desc";
 const C_PLUGINS_DISABLED: &str = "core.plugins_disabled";
 const C_PLUGINS_DISABLED_DESC: &str = "core.plugins_disabled.desc";
+const C_COMPONENTS_OFF: &str = "core.components_off";
+const C_COMPONENTS_OFF_DESC: &str = "core.components_off.desc";
+const C_COMPONENTS_KEPT: &str = "core.components_kept";
+const C_COMPONENTS_KEPT_DESC: &str = "core.components_kept.desc";
+const C_COMPONENTS_WAITING: &str = "core.components_waiting";
+const C_COMPONENTS_WAITING_DESC: &str = "core.components_waiting.desc";
+const C_COMPONENTS_PROFILE: &str = "core.components_profile";
+const C_COMPONENTS_PROFILE_DESC: &str = "core.components_profile.desc";
 const C_THEME: &str = "core.theme";
 const C_THEME_DESC: &str = "core.theme.desc";
 const C_THEME_LIGHT: &str = "core.theme.light";
@@ -1452,6 +1867,11 @@ const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
 const C_FRAME_RATE_DISPLAY: &str = "core.frame_rate.display";
 const C_FRAME_RATE_CAP: &str = "core.frame_rate.cap";
+const C_RENDERING: &str = "core.rendering";
+const C_RENDERING_DESC: &str = "core.rendering.desc";
+const C_RENDERING_AUTO: &str = "core.rendering.auto";
+const C_RENDERING_GPU: &str = "core.rendering.gpu";
+const C_RENDERING_CPU: &str = "core.rendering.cpu";
 const C_DIAGRAM_STYLE: &str = "core.diagram_style";
 const C_DIAGRAM_STYLE_DESC: &str = "core.diagram_style.desc";
 const C_DIAGRAM_STYLE_ARMONIA: &str = "core.diagram_style.armonia";
@@ -1621,6 +2041,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "Un template vale solo per una cattura che crea una nota.")
         .with("host.capture.moved", "«{doc}» è cambiata durante la cattura: riprova.")
         .with("host.vault.moved", "«{doc}» è cambiata dopo aver letto la sua revisione: riprova.")
+        .with("host.open_key.malformed", "La chiave di apertura del documento non è valida: da 1 a 64 lettere, cifre, «-» o «_».")
         .with("host.rich.encrypted", "«{doc}» è protetto da una password: Fub non lo apre.")
         .with("host.rich.readonly.revisions", "«{doc}» ha revisioni tracciate: si legge, ma non si scrive da qui.")
         .with("host.rich.readonly.track_changes", "«{doc}» registra le modifiche: si legge, ma non si scrive da qui.")
@@ -1639,6 +2060,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.locked.block", "«{doc}» non è stato salvato: il paragrafo o la tabella {block} del testo ha parti che Fub non sa riscrivere senza perderle, e da qui non si cambia.")
         .with("host.rich.locked.outside", "«{doc}» non è stato salvato: la modifica tocca parti del file fuori dal testo che Fub non sa riscrivere senza perderle. Si salvano soltanto i paragrafi e le tabelle del testo.")
         .with("host.rich.codec", "«{doc}» non si legge o non si scrive nel suo formato: {why}")
+        .with("host.resource.reuse_with_expected", "«{doc}» non si deposita: riusare un file con gli stessi byte vale solo per un file nuovo, non per ricoprirne uno.")
         .with("host.xlsx.readonly", "«{doc}» è una cartella di Excel: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
         .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella di Excel dalle celle cambiate.")
         .with("host.xlsx.journal", "Le celle cambiate da salvare in «{doc}» non sono leggibili: {why}")
@@ -1649,12 +2071,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("xlsx.rewrite.loses", "La cartella non si salva: riscriverla perderebbe parti del file che Fub non sa scrivere, e il file resta com'era ({why}).")
         .with("host.grid.protocol", "La superficie della griglia parla un'altra versione del protocollo: questa porta non la serve.")
         .with("host.grid.no_surface", "Un provider della griglia deve dichiarare almeno una superficie.")
+        .with("host.drawing.unserved", "Il Motore del disegno non c'è in questa versione di Fub: il disegno usa gli strumenti semplici.")
+        .with("host.drawing.engine_off", "Il Motore del disegno è spento in questo vault: il disegno usa gli strumenti semplici.")
+        .with("host.drawing.instance", "Il disegno aperto «{instance}» non c'è più: va riaperto.")
+        .with("host.drawing.stopped", "Il Motore del disegno si è fermato sul disegno «{instance}»: si può riprovare.")
+        .with("host.drawing.poisoned", "Il Motore del disegno si è fermato: si può riprovare.")
         .with("host.grid.not_bytes", "La superficie della griglia «{surface}» non è della versione a byte.")
         .with("host.grid.surface_format", "La superficie della griglia «{surface}» non apre «{doc}»: è di un altro formato.")
         .with("host.grid.source_too_large", "La sorgente della griglia pesa {bytes} byte, più del limite.")
         .with("host.grid.source_revision", "La sorgente della griglia non ha la revisione con cui è arrivata.")
         .with("host.wasm.reentrant", "Il componente è stato richiamato mentre era già al lavoro.")
         .with("host.wasm.missing_export", "Il componente non esporta «{interface}».")
+        .with("host.wasm.memory_budget", "I componenti hanno finito la memoria: ne tengono già {used} MiB su {ceiling}. Chiudi o disattiva un plugin e riprova.")
         .with("host.turn.cycle", "Il vault sta salvando una nota che aspetta questo componente, e questo componente aspetta il vault: il lavoro si ferma per lasciar finire il salvataggio. Riprova.")
         .with("host.instance.cycle", "Questo componente aspetta un altro componente che a sua volta aspetta questo: il lavoro si ferma per non bloccarli entrambi. Riprova.")
         .with("host.capture.source", "Fonte: {url}")
@@ -1714,6 +2142,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
         .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
         .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.uri.capture_replayed", "Questa cattura è già stata scritta: un nuovo invio con lo stesso nonce non la scrive di nuovo.")
         .with("host.web.clip.title", "Salva la pagina web come nota")
         .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
         .with("host.param.url", "Indirizzo")
@@ -1728,6 +2157,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.control.closed", "L'app ha chiuso il canale di controllo senza rispondere.")
         .with("host.control.bad_reply", "La risposta del canale di controllo non si legge: {reason}")
         .with("host.control.busy", "L'app sta già servendo troppe domande: riprova.")
+        .with("host.sync.kdf_unsupported", "Il server della sincronizzazione è di un'altra versione e non accetta la protezione di questa chiave del vault: aggiorna Fub o il server, poi riprova.")
         .with("host.control.too_large", "Domanda troppo grande o interrotta.")
         .with("host.control.unreadable", "Domanda illeggibile.")
         .with("host.control.bad_token", "Il token del canale di controllo non è valido.")
@@ -1738,6 +2168,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_open", "Il visore web non è aperto.")
         .with("host.reveal.outside", "{path} è fuori dal vault.")
         .with("host.reveal.root", "La cartella del vault non si legge: {reason}")
+        .with(
+            "host.open_with.off",
+            "Le app Craft sono spente in questo vault: accendi il componente Craft.",
+        )
+        .with("host.open_with.unknown_editor", "«{editor}» non è un'app che Fub conosce.")
+        .with("host.open_with.wrong_kind", "{app} non apre {path}.")
+        .with(
+            "host.open_with.not_installed",
+            "{app} non è installata su questo computer.",
+        )
+        .with("host.open_with.missing", "{path} non c'è più nel vault.")
+        .with("host.open_with.launch_failed", "{app} non si è avviata.")
+        .with("host.craft_render.off", "Le anteprime dei file Craft sono spente in questo vault.")
+        .with(
+            "host.craft_render.no_consent",
+            "Fub non usa le app Craft per le anteprime: si permette nelle impostazioni.",
+        )
+        .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
+        .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
+        .with(
+            "host.craft_render.over_limit",
+            "Il file supera il peso massimo per un'anteprima fatta dall'app.",
+        )
         .with(
             "host.mobile.shared_path",
             "La cartella condivisa non ha un percorso utilizzabile.",
@@ -1825,10 +2278,42 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_LEGACY_FOLDER_PAGES_DESC,
             "Oltre a Cartella/_index.md, apre come pagina della cartella anche Cartella/Cartella.md e Cartella/index.md, come Obsidian. Nessun file cambia nome.",
         )
+        .with(C_GROUP_EXTERNAL_APPS, "App esterne")
+        .with(C_CRAFT_EDITOR_PATHS, "Dove sono le app Craft")
+        .with(
+            C_CRAFT_EDITOR_PATHS_DESC,
+            "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS, "Anteprime fatte dalle app")
+        .with(
+            C_CRAFT_CLI_PREVIEWS_DESC,
+            "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS_ASK, "Chiedi la prima volta")
+        .with(C_CRAFT_CLI_PREVIEWS_ON, "Accese")
+        .with(C_CRAFT_CLI_PREVIEWS_OFF, "Spente")
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB,
+            "Peso massimo da leggere per un'anteprima (MiB)",
+        )
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB_DESC,
+            "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.",
+        )
+        .with(C_CRAFT_TREE_THUMBNAILS, "Miniature nell'albero")
+        .with(
+            C_CRAFT_TREE_THUMBNAILS_DESC,
+            "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.",
+        )
+        .with(C_CRAFT_TREE_SHOW_XMP, "Mostra i file XMP nell'albero")
+        .with(
+            C_CRAFT_TREE_SHOW_XMP_DESC,
+            "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.",
+        )
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
             C_URI_ALLOWED_DESC,
-            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
+            "Le azioni scelte (nota nuova, giornaliera, nota unica) scrivono appena il collegamento arriva, senza conferma. Una cattura e l'apertura di un altro vault chiedono sempre. Vale su questo computer.",
         )
         .with(C_FILES_LINK_STYLE, "Nuovi link")
         .with(
@@ -1891,6 +2376,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
         .with(C_FRAME_SYSTEM, "Del sistema")
         .with(C_FRAME_CUSTOM, "Personalizzata")
+        .with(C_GROUP_PROFILE, "Profilo")
+        .with(C_PROFILE_NAME, "Il tuo nome")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Firma i commenti che scrivi nelle note. Il nome finisce nel file della nota: chi lo apre, anche con un altro programma, lo legge. Cambiarlo vale per i commenti nuovi.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Firma dei commenti in questo vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "Che cosa scrive Fub accanto a ogni commento nuovo di questo vault. Senza firma il commento si legge «Senza nome».",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "Il nome")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "Le iniziali")
+        .with(C_COMMENTS_AUTHOR_NONE, "Nessuna firma")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Controllo ortografico")
         .with(C_EDITOR_SPELLCHECK_DESC, "Usa il controllo ortografico del sistema mentre scrivi.")
@@ -1926,7 +2425,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_2, "2 spazi")
         .with(C_EDITOR_INDENT_4, "4 spazi")
         .with(C_EDITOR_PROPERTIES, "Proprietà nel testo")
-        .with(C_EDITOR_PROPERTIES_DESC, "Come Live mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
+        .with(C_EDITOR_PROPERTIES_DESC, "Come Scrittura mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
@@ -1936,24 +2435,31 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
         .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_LINK_CLICK, "Clic su un link a una nota")
+        .with(C_EDITOR_LINK_CLICK_DESC, "Che cosa fa il clic che apre un link: portare la nota nel riquadro, o aprirla nella sbirciata, sopra la destra del foglio, dove si scrive senza lasciare la nota di prima. Alt col clic, o Alt Invio, sbircia sempre.")
+        .with(C_EDITOR_LINK_CLICK_OPEN, "Apre la nota")
+        .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
+        .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
+        .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
         .with(C_EDITOR_SLASH_SECTIONS_DESC, "Le sezioni dopo Suggeriti, Preferiti e Recenti. Quelle non elencate seguono nel loro ordine.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
-        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Live")
-        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Live.")
+        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Scrittura")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Scrittura.")
         .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai, come in Word")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Dell'elemento del cursore")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
-        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_BLOCKS, "Blocchi: maniglie e selezione")
+        .with(C_EDITOR_BLOCKS_DESC, "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.")
         .with(C_MODE_SOURCE, "Sorgente")
-        .with(C_MODE_LIVE, "Live")
-        .with(C_MODE_BLOCKS, "Blocchi")
+        .with(C_MODE_WRITING, "Scrittura")
         .with(C_MODE_READING, "Lettura")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
@@ -1969,6 +2475,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Gli id dei componenti che non vengono montati all'apertura di questo \
              vault. Si cambiano accendendo e spegnendo un componente, non scrivendo \
              qui dentro.",
+        )
+        .with(C_COMPONENTS_OFF, "Altri componenti spenti")
+        .with(
+            C_COMPONENTS_OFF_DESC,
+            "I componenti spenti che non sono fra quelli montati, come la lavagna \
+             e il PDF. Si cambiano accendendo e spegnendo un componente.",
+        )
+        .with(C_COMPONENTS_KEPT, "Componenti tenuti")
+        .with(
+            C_COMPONENTS_KEPT_DESC,
+            "I componenti tenuti accesi con «Tienili» anche se non servono più a \
+             nessun altro.",
+        )
+        .with(C_COMPONENTS_WAITING, "Componenti in attesa")
+        .with(
+            C_COMPONENTS_WAITING_DESC,
+            "I componenti che non servono più a nessuno e sono ancora accesi, in \
+             attesa che tu scelga «Togli» o «Tienili».",
+        )
+        .with(C_COMPONENTS_PROFILE, "Profilo")
+        .with(
+            C_COMPONENTS_PROFILE_DESC,
+            "Il profilo dei componenti scelto per questo vault. Vuoto vuol dire \
+             personalizzato: lo diventa appena accendi o spegni un componente.",
         )
         .with(C_THEME, "Tema")
         .with(
@@ -2038,6 +2568,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
         .with(C_FRAME_RATE_DISPLAY, "Massimo dello schermo")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Disegno delle pagine")
+        .with(
+            C_RENDERING_DESC,
+            "Chi disegna le finestre di Fub. Automatico lascia la scelta a WebKit e ti avvisa dei problemi noti; Processore aiuta con alcuni driver che sfarfallano. Vale dal prossimo avvio.",
+        )
+        .with(C_RENDERING_AUTO, "Automatico")
+        .with(C_RENDERING_GPU, "Scheda grafica")
+        .with(C_RENDERING_CPU, "Processore")
         .with(C_DIAGRAM_STYLE, "Stile dei diagrammi")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -2167,6 +2705,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "A template only applies to a capture that creates a note.")
         .with("host.capture.moved", "“{doc}” changed during the capture: try again.")
         .with("host.vault.moved", "“{doc}” changed after its revision was read: try again.")
+        .with("host.open_key.malformed", "The document's open key is not valid: 1 to 64 letters, digits, “-” or “_”.")
         .with("host.rich.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
         .with("host.rich.readonly.revisions", "“{doc}” has tracked changes: it can be read, but not written from here.")
         .with("host.rich.readonly.track_changes", "“{doc}” tracks changes: it can be read, but not written from here.")
@@ -2185,6 +2724,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.locked.block", "“{doc}” was not saved: paragraph or table {block} of the text has parts Fub cannot rewrite without losing them, and it cannot be changed from here.")
         .with("host.rich.locked.outside", "“{doc}” was not saved: the change touches parts of the file outside the text that Fub cannot rewrite without losing them. Only the paragraphs and tables of the text are saved.")
         .with("host.rich.codec", "“{doc}” cannot be read or written in its format: {why}")
+        .with("host.resource.reuse_with_expected", "“{doc}” was not deposited: reusing a file with the same bytes only applies to a new file, not to overwriting one.")
         .with("host.xlsx.readonly", "“{doc}” is an Excel workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
         .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an Excel workbook from changed cells.")
         .with("host.xlsx.journal", "The changed cells to save in “{doc}” cannot be read: {why}")
@@ -2195,12 +2735,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("xlsx.rewrite.loses", "The workbook was not saved: rewriting it would lose parts of the file that Fub cannot write, so the file stays as it was ({why}).")
         .with("host.grid.protocol", "The grid surface speaks another protocol version: this port does not serve it.")
         .with("host.grid.no_surface", "A grid provider must declare at least one surface.")
+        .with("host.drawing.unserved", "The drawing engine is not in this build of Fub: the drawing uses the simple tools.")
+        .with("host.drawing.engine_off", "The drawing engine is off in this vault: the drawing uses the simple tools.")
+        .with("host.drawing.instance", "The open drawing “{instance}” is gone: open it again.")
+        .with("host.drawing.stopped", "The drawing engine stopped on the drawing “{instance}”: you can try again.")
+        .with("host.drawing.poisoned", "The drawing engine stopped: you can try again.")
         .with("host.grid.not_bytes", "The grid surface “{surface}” is not a byte surface.")
         .with("host.grid.surface_format", "The grid surface “{surface}” does not open “{doc}”: it belongs to another format.")
         .with("host.grid.source_too_large", "The grid source is {bytes} bytes, more than the limit.")
         .with("host.grid.source_revision", "The grid source does not have the revision it arrived with.")
         .with("host.wasm.reentrant", "The component was called again while it was already working.")
         .with("host.wasm.missing_export", "The component does not export “{interface}”.")
+        .with("host.wasm.memory_budget", "Components have run out of memory: they already hold {used} MiB of {ceiling}. Close or turn off a plugin and try again.")
         .with("host.turn.cycle", "The vault is saving a note that waits for this component, and this component waits for the vault: the work stops so the save can finish. Try again.")
         .with("host.instance.cycle", "This component waits for another one that in turn waits for this one: the work stops so neither blocks. Try again.")
         .with("host.capture.source", "Source: {url}")
@@ -2260,6 +2806,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
         .with("host.uri.reads", "“{action}” does not write: the window runs it.")
         .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.uri.capture_replayed", "This capture has already been written: sending it again with the same nonce does not write it twice.")
         .with("host.web.clip.title", "Save the web page as a note")
         .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
         .with("host.param.url", "Address")
@@ -2274,6 +2821,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.control.closed", "The app closed the control channel without answering.")
         .with("host.control.bad_reply", "The control channel answer cannot be read: {reason}")
         .with("host.control.busy", "The app is already serving too many requests: try again.")
+        .with("host.sync.kdf_unsupported", "The sync server is a different version and does not accept the protection of this vault key: update Fub or the server, then try again.")
         .with("host.control.too_large", "Request too large or interrupted.")
         .with("host.control.unreadable", "Unreadable request.")
         .with("host.control.bad_token", "The control channel token is not valid.")
@@ -2284,6 +2832,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_open", "The web viewer is not open.")
         .with("host.reveal.outside", "{path} is outside the vault.")
         .with("host.reveal.root", "The vault folder cannot be read: {reason}")
+        .with(
+            "host.open_with.off",
+            "The Craft apps are off in this vault: turn on the Craft component.",
+        )
+        .with("host.open_with.unknown_editor", "“{editor}” is not an app Fub knows.")
+        .with("host.open_with.wrong_kind", "{app} does not open {path}.")
+        .with(
+            "host.open_with.not_installed",
+            "{app} is not installed on this computer.",
+        )
+        .with("host.open_with.missing", "{path} is no longer in the vault.")
+        .with("host.open_with.launch_failed", "{app} did not start.")
+        .with("host.craft_render.off", "Craft file previews are off in this vault.")
+        .with(
+            "host.craft_render.no_consent",
+            "Fub does not use the Craft apps for previews: allow it in the settings.",
+        )
+        .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
+        .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
+        .with(
+            "host.craft_render.over_limit",
+            "The file is over the maximum size for a preview made by the app.",
+        )
         .with(
             "host.mobile.shared_path",
             "The shared folder has no usable path.",
@@ -2394,10 +2965,42 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_LEGACY_FOLDER_PAGES_DESC,
             "Besides Folder/_index.md, opens Folder/Folder.md and Folder/index.md as the folder page too, like Obsidian. No file is renamed.",
         )
+        .with(C_GROUP_EXTERNAL_APPS, "External apps")
+        .with(C_CRAFT_EDITOR_PATHS, "Where the Craft apps are")
+        .with(
+            C_CRAFT_EDITOR_PATHS_DESC,
+            "One line per program, like vectorcraft=/opt/vc/vectorcraft, or vectorcraft-cli=… for the command line. The full path wins over what Fub finds on its own.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS, "Previews made by the apps")
+        .with(
+            C_CRAFT_CLI_PREVIEWS_DESC,
+            "Fub has the app that opens a file make the preview the file lacks, on a copy, only when you open the file yourself.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS_ASK, "Ask the first time")
+        .with(C_CRAFT_CLI_PREVIEWS_ON, "On")
+        .with(C_CRAFT_CLI_PREVIEWS_OFF, "Off")
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB,
+            "Largest file to read for a preview (MiB)",
+        )
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB_DESC,
+            "A file that has to be read whole for its preview and weighs more stays without one: files read in pieces have no limit.",
+        )
+        .with(C_CRAFT_TREE_THUMBNAILS, "Thumbnails in the tree")
+        .with(
+            C_CRAFT_TREE_THUMBNAILS_DESC,
+            "Next to the name of a Craft file, a RAW, a PDF or a document, the small preview the file already has. The tree never starts an app.",
+        )
+        .with(C_CRAFT_TREE_SHOW_XMP, "Show XMP files in the tree")
+        .with(
+            C_CRAFT_TREE_SHOW_XMP_DESC,
+            "Off, XMP files disappear from the tree: search finds them and the photo shows their data.",
+        )
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
             C_URI_ALLOWED_DESC,
-            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
+            "The chosen actions (new note, daily note, unique note) write as soon as the link arrives, without a confirmation. A capture and opening another vault always ask. Applies on this computer.",
         )
         .with(C_FILES_LINK_STYLE, "New links")
         .with(
@@ -2434,6 +3037,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
         .with(C_GROUP_APPEARANCE, "Appearance")
+        .with(C_GROUP_PROFILE, "Profile")
+        .with(C_PROFILE_NAME, "Your name")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Signs the comments you write in notes. The name ends up in the note's file: anyone who opens it, even with another program, reads it. Changing it applies to new comments.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Comment signature in this vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "What Fub writes next to every new comment in this vault. Without a signature the comment reads “No name”.",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "The name")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "The initials")
+        .with(C_COMMENTS_AUTHOR_NONE, "No signature")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")
         .with(C_EDITOR_SPELLCHECK_DESC, "Use the system spellchecker while editing.")
@@ -2469,7 +3086,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_2, "2 spaces")
         .with(C_EDITOR_INDENT_4, "4 spaces")
         .with(C_EDITOR_PROPERTIES, "Properties in the text")
-        .with(C_EDITOR_PROPERTIES_DESC, "How Live shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
+        .with(C_EDITOR_PROPERTIES_DESC, "How Writing shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
@@ -2479,24 +3096,31 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
         .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
         .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_LINK_CLICK, "Clicking a link to a note")
+        .with(C_EDITOR_LINK_CLICK_DESC, "What the click that opens a link does: bring the note into the pane, or open it in the peek, over the right of the sheet, where you write without leaving the note you were in. Alt with the click, or Alt Enter, always peeks.")
+        .with(C_EDITOR_LINK_CLICK_OPEN, "Opens the note")
+        .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
+        .with(C_EDITOR_HINTS, "Hints row")
+        .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
         .with(C_EDITOR_SLASH_SECTIONS_DESC, "The sections after Suggested, Favorites and Recent. Those not listed follow in their own order.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
-        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Live")
-        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Live shows them too.")
+        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Writing")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Writing shows them too.")
         .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never, as in Word")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Of the element at the cursor")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
-        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_BLOCKS, "Blocks: handles and selection")
+        .with(C_EDITOR_BLOCKS_DESC, "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.")
         .with(C_MODE_SOURCE, "Source")
-        .with(C_MODE_LIVE, "Live")
-        .with(C_MODE_BLOCKS, "Blocks")
+        .with(C_MODE_WRITING, "Writing")
         .with(C_MODE_READING, "Reading")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
@@ -2504,6 +3128,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "The ids of the components that are not mounted when this vault is \
              opened. You change them by turning a component on and off, not by \
              writing in here.",
+        )
+        .with(C_COMPONENTS_OFF, "Other disabled components")
+        .with(
+            C_COMPONENTS_OFF_DESC,
+            "The disabled components that are not among the mounted ones, such as \
+             the whiteboard and PDF. You change them by turning a component on and off.",
+        )
+        .with(C_COMPONENTS_KEPT, "Kept components")
+        .with(
+            C_COMPONENTS_KEPT_DESC,
+            "The components kept on with «Keep them» even though nothing else \
+             needs them any more.",
+        )
+        .with(C_COMPONENTS_WAITING, "Waiting components")
+        .with(
+            C_COMPONENTS_WAITING_DESC,
+            "The components nothing needs any more that are still on, waiting for \
+             you to choose «Remove» or «Keep them».",
+        )
+        .with(C_COMPONENTS_PROFILE, "Profile")
+        .with(
+            C_COMPONENTS_PROFILE_DESC,
+            "The component profile chosen for this vault. Empty means custom: it \
+             becomes so as soon as you turn a component on or off.",
         )
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Recent searches and notes")
@@ -2575,6 +3223,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
         .with(C_FRAME_RATE_DISPLAY, "Display maximum")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Page rendering")
+        .with(
+            C_RENDERING_DESC,
+            "What draws Fub's windows. Automatic leaves the choice to WebKit and warns you about known problems; Processor helps with some drivers that flicker. Applies from the next start.",
+        )
+        .with(C_RENDERING_AUTO, "Automatic")
+        .with(C_RENDERING_GPU, "Graphics card")
+        .with(C_RENDERING_CPU, "Processor")
         .with(C_DIAGRAM_STYLE, "Diagram style")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -2788,6 +3444,39 @@ pub fn versioning_enabled(ws: &fub_kernel::Workspace) -> bool {
         .unwrap_or(true)
 }
 
+/// Le quattro chiavi `components.*` (D-5), nel gruppo «Componenti».
+pub fn components_settings() -> Vec<SettingSpec> {
+    let list = |key: &str, name: &str, desc: &str| {
+        SettingSpec::new(
+            key,
+            Text::key(name),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(desc))
+        .grouped(Text::key(C_GROUP_COMPONENTS))
+    };
+    vec![
+        list(COMPONENTS_OFF, C_COMPONENTS_OFF, C_COMPONENTS_OFF_DESC),
+        list(COMPONENTS_KEPT, C_COMPONENTS_KEPT, C_COMPONENTS_KEPT_DESC),
+        list(
+            COMPONENTS_WAITING,
+            C_COMPONENTS_WAITING,
+            C_COMPONENTS_WAITING_DESC,
+        ),
+        SettingSpec::new(
+            COMPONENTS_PROFILE,
+            Text::key(C_COMPONENTS_PROFILE),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_COMPONENTS_PROFILE_DESC))
+        .grouped(Text::key(C_GROUP_COMPONENTS)),
+    ]
+}
+
 /// Gli id spenti per questo vault.
 pub fn disabled_plugins(ws: &fub_kernel::Workspace) -> Vec<String> {
     ws.setting(PLUGINS_DISABLED)
@@ -2862,6 +3551,44 @@ fn set_log_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Senza la feature `craft` nessuna delle cinque di «App esterne» c'è.
+    #[cfg(not(feature = "craft"))]
+    #[test]
+    fn without_craft_no_craft_setting_is_declared() {
+        let craft: Vec<String> = core_settings()
+            .into_iter()
+            .map(|spec| spec.key)
+            .filter(|key| key.starts_with("craft."))
+            .collect();
+        assert!(craft.is_empty(), "{craft:?}");
+    }
+
+    /// Con la feature ci sono tutte e cinque, nel gruppo «App esterne» e di
+    /// macchina.
+    #[cfg(feature = "craft")]
+    #[test]
+    fn with_craft_the_five_external_app_settings_are_of_the_machine() {
+        let craft: Vec<SettingSpec> = core_settings()
+            .into_iter()
+            .filter(|spec| spec.key.starts_with("craft."))
+            .collect();
+        let keys: Vec<&str> = craft.iter().map(|spec| spec.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                CRAFT_EDITOR_PATHS,
+                CRAFT_CLI_PREVIEWS,
+                CRAFT_PREVIEW_MAX_MIB,
+                CRAFT_TREE_THUMBNAILS,
+                CRAFT_TREE_SHOW_XMP,
+            ]
+        );
+        for spec in &craft {
+            assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+            assert_eq!(spec.group, Text::key(C_GROUP_EXTERNAL_APPS), "{}", spec.key);
+        }
+    }
 
     /// La cartella delle persone (K5) è del vault, viaggia con lui, e parte da
     /// `Persone`: `@` propone le note che ci stanno.
@@ -3019,6 +3746,241 @@ mod tests {
         assert!(!spec.program_writable);
     }
 
+    /// I blocchi sono una preferenza della macchina, accesa di serie, subito
+    /// dopo i segni di Scrittura: chi la spegne scrive come in un editor di
+    /// testo, e un programma non la cambia.
+    #[test]
+    fn blocks_are_a_machine_switch_on_by_default_after_the_writing_marks() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(at(EDITOR_BLOCKS), at(EDITOR_LIVE_REVEAL).map(|i| i + 1));
+        let spec = &machine[at(EDITOR_BLOCKS).expect("i blocchi fra le impostazioni")];
+        assert!(matches!(spec.kind, SettingKind::Toggle { default: true }));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert_eq!(spec.label, Text::key(C_EDITOR_BLOCKS));
+        assert!(!spec.program_writable);
+    }
+
+    /// Chi firma i commenti (D11 A): il nome è della macchina, vuoto finché la
+    /// persona non lo sceglie; la firma è del vault, col nome di serie e le
+    /// iniziali o niente come scelte. Un programma non le cambia, e tutte e
+    /// due stanno nel gruppo «Profilo», con le parole nelle due lingue.
+    #[test]
+    fn the_comment_signature_is_a_machine_name_and_a_vault_choice() {
+        let all = core_settings();
+        let spec = |key: &str| {
+            all.iter()
+                .find(|spec| spec.key == key)
+                .unwrap_or_else(|| panic!("{key} fra le impostazioni"))
+        };
+        let name = spec(PROFILE_NAME);
+        assert_eq!(name.scope, fub_abi::settings::SettingScope::Machine);
+        assert!(matches!(&name.kind, SettingKind::Text { default } if default.is_empty()));
+        assert_eq!(name.group, Text::key(C_GROUP_PROFILE));
+        assert!(!name.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == PROFILE_NAME));
+
+        let author = spec(COMMENTS_AUTHOR);
+        assert_eq!(author.scope, fub_abi::settings::SettingScope::Vault);
+        let SettingKind::Choice { default, options } = &author.kind else {
+            panic!("la firma è una scelta");
+        };
+        assert_eq!(default, "nome");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, COMMENTS_AUTHOR_CHOICES);
+        assert_eq!(author.group, Text::key(C_GROUP_PROFILE));
+        assert!(!author.program_writable);
+        assert!(!core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == COMMENTS_AUTHOR));
+
+        for catalog in core_catalog() {
+            for key in [
+                C_GROUP_PROFILE,
+                C_PROFILE_NAME,
+                C_PROFILE_NAME_DESC,
+                C_COMMENTS_AUTHOR,
+                C_COMMENTS_AUTHOR_DESC,
+                C_COMMENTS_AUTHOR_NAME,
+                C_COMMENTS_AUTHOR_INITIALS,
+                C_COMMENTS_AUTHOR_NONE,
+            ] {
+                assert!(
+                    catalog.entries.contains_key(key),
+                    "{key} in {}",
+                    catalog.locale
+                );
+            }
+        }
+    }
+
+    /// Le scelte della modalità iniziale sono Scrittura, Sorgente e Lettura;
+    /// `blocks` resta valido in fondo, con l'etichetta di Scrittura, perché il
+    /// pannello lo nasconda (due scelte con la stessa etichetta sono una) e la
+    /// shell lo apra in Scrittura.
+    #[test]
+    fn the_initial_mode_offers_writing_source_reading_and_keeps_blocks_as_writing() {
+        let spec = core_machine_settings()
+            .into_iter()
+            .find(|spec| spec.key == EDITOR_DEFAULT_MODE)
+            .expect("il core dichiara la modalità iniziale");
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("la modalità iniziale è una scelta");
+        };
+        assert_eq!(default, "live_preview");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["live_preview", "source", "reading", "blocks"]);
+        let label = |value: &str| {
+            options
+                .iter()
+                .find(|option| option.value == value)
+                .map(|option| option.label.clone())
+        };
+        assert_eq!(label("blocks"), label("live_preview"));
+        assert_eq!(label("live_preview"), Some(Text::key(C_MODE_WRITING)));
+        assert!(spec
+            .kind
+            .rejects(&fub_abi::settings::SettingValue::Text("blocks".into()))
+            .is_none());
+        let said = |locale: &str| {
+            core_catalog()
+                .into_iter()
+                .find(|catalog| catalog.locale == locale)
+                .and_then(|catalog| catalog.entries.get(C_MODE_WRITING).cloned())
+        };
+        assert_eq!(said("it").as_deref(), Some("Scrittura"));
+        assert_eq!(said("en").as_deref(), Some("Writing"));
+    }
+
+    /// Il file della macchina di chi aveva scelto i Blocchi: `blocks` si legge
+    /// com'è scritto, da lui e non dal predefinito, e il file resta byte per
+    /// byte quello di prima, dopo l'apertura, la dichiarazione e la lettura.
+    /// Un valore sconosciuto vale il predefinito, come sempre, e nemmeno lui si
+    /// riscrive.
+    #[test]
+    fn blocks_in_the_machine_file_reads_back_as_written_and_the_file_stays_byte_for_byte() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("settings.json"))
+            .expect("percorso UTF-8");
+        // Il file come lo scriveva un Fub che aveva la modalità Blocchi.
+        {
+            let (old, warning) = MachineSettings::open(&path);
+            assert_eq!(warning, None);
+            old.declare(&core_machine_settings()).expect("schema");
+            old.set(EDITOR_DEFAULT_MODE, SettingValue::Text("blocks".into()))
+                .expect("`blocks` è una scelta valida");
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert!(String::from_utf8_lossy(&before).contains("\"blocks\""));
+
+        let read = |path: &camino::Utf8Path| {
+            let (machine, warning) = MachineSettings::open(path);
+            assert_eq!(warning, None);
+            machine.declare(&core_machine_settings()).expect("schema");
+            let entry = machine
+                .entries()
+                .into_iter()
+                .find(|entry| entry.spec.key == EDITOR_DEFAULT_MODE)
+                .expect("la riga della modalità iniziale");
+            assert_eq!(
+                machine.effective(EDITOR_DEFAULT_MODE).expect("dichiarata"),
+                (entry.value.clone(), entry.source)
+            );
+            (entry.value, entry.source)
+        };
+        assert_eq!(
+            read(&path),
+            (SettingValue::Text("blocks".into()), SettingSource::Machine)
+        );
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before.clone())
+            .expect("JSON")
+            .replace("\"blocks\"", "\"pagine\"")
+            .into_bytes();
+        std::fs::write(&path, &unknown).expect("scrive il valore sconosciuto");
+        assert_eq!(
+            read(&path),
+            (
+                SettingValue::Text("live_preview".into()),
+                SettingSource::Default
+            )
+        );
+        assert_eq!(std::fs::read(&path).expect("il file"), unknown);
+    }
+
+    /// Il percorso di disegno si legge prima di GTK, senza host: senza file,
+    /// senza cartella o con un valore sconosciuto vale `auto`; una scelta
+    /// scritta si legge com'è; il file non cambia di un byte. Solo Linux
+    /// dichiara la chiave.
+    #[test]
+    fn rendering_is_read_before_the_host_and_unknown_values_are_auto() {
+        use fub_abi::settings::SettingValue;
+        use fub_kernel::MachineSettings;
+
+        let keys = [APPEARANCE_RENDERING, APPEARANCE_MOTION];
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let config =
+            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("percorso UTF-8");
+        let rendering = |config: Option<&camino::Utf8Path>| {
+            startup_machine_texts(config, &keys)
+                .get(APPEARANCE_RENDERING)
+                .cloned()
+        };
+        if !cfg!(target_os = "linux") {
+            assert_eq!(rendering(Some(&config)), None);
+            assert!(!core_machine_settings()
+                .iter()
+                .any(|spec| spec.key == APPEARANCE_RENDERING));
+            return;
+        }
+        // Un file di prima, che la chiave non la conosce.
+        assert_eq!(rendering(None).as_deref(), Some("auto"));
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        let path = crate::config::machine_settings_path(&config);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text("calm".into()))
+                .expect("motion");
+        }
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(
+            startup_machine_texts(Some(&config), &keys)
+                .get(APPEARANCE_MOTION)
+                .map(String::as_str),
+            Some("calm")
+        );
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("cpu".into()))
+                .expect("`cpu` è una scelta valida");
+            assert!(machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("never".into()))
+                .is_err());
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("cpu"));
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before)
+            .expect("JSON")
+            .replace("\"cpu\"", "\"never\"");
+        std::fs::write(&path, &unknown).expect("valore sconosciuto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        std::fs::write(&path, b"{ rotto").expect("file rotto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(std::fs::read(&path).expect("il file"), b"{ rotto");
+    }
+
     /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello
     /// si legge come tale: un'opzione che `frame_rate_cap` non riconoscesse
     /// resterebbe nel menu e non limiterebbe niente.
@@ -3041,5 +4003,104 @@ mod tests {
         assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
         assert_eq!(frame_rate_cap("59"), None);
         assert_eq!(frame_rate_cap("veloce"), None);
+    }
+
+    fn motion_spec(webview: Option<Webview>) -> SettingSpec {
+        appearance_settings_on(webview)
+            .into_iter()
+            .find(|spec| spec.key == APPEARANCE_MOTION)
+            .expect("l'aspetto dichiara le animazioni")
+    }
+
+    fn motion_spec_default(webview: Option<Webview>) -> String {
+        let SettingKind::Choice { default, options } = motion_spec(webview).kind else {
+            panic!("le animazioni sono una scelta");
+        };
+        assert!(
+            options.iter().any(|option| option.value == default),
+            "il default `{default}` è fra le scelte"
+        );
+        default
+    }
+
+    /// Sulla WebKitGTK che sfarfalla (dalla 2.54.0, senza limite superiore
+    /// finché nessuna versione corretta è verificata) le animazioni partono
+    /// ridotte; sulla 2.52 e su ogni webview non dichiarata seguono il sistema.
+    #[test]
+    fn motion_starts_reduced_only_on_the_flickering_webkitgtk() {
+        for faulty in ["2.54.0", "2.54.3", "2.55.1", "2.56.0", "3.0.0"] {
+            let webview = Webview::webkitgtk(faulty).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "reduced", "{faulty}");
+        }
+        for sound in ["2.52.3", "2.53.90", "2.50.0", "2.44.1"] {
+            let webview = Webview::webkitgtk(sound).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "", "{sound}");
+        }
+        // Le altre piattaforme non dichiarano una webview: come prima.
+        assert_eq!(motion_spec_default(None), "");
+        // Il processo dei test non ne dichiara nessuna.
+        assert_eq!(
+            core_machine_settings()
+                .into_iter()
+                .find(|spec| spec.key == APPEARANCE_MOTION)
+                .map(|spec| spec.kind),
+            Some(motion_spec(None).kind)
+        );
+    }
+
+    /// Solo tre numeri sono una versione: altrimenti la webview resta non
+    /// dichiarata e il default non cambia.
+    #[test]
+    fn a_webkitgtk_version_is_three_numbers() {
+        assert_eq!(
+            Webview::webkitgtk("2.54.0"),
+            Some(Webview::WebKitGtk(2, 54, 0))
+        );
+        assert_eq!(
+            Webview::webkitgtk(" 2.52.3\n"),
+            Some(Webview::WebKitGtk(2, 52, 3))
+        );
+        for junk in [
+            "",
+            "2.54",
+            "2.54.0.1",
+            "2.54.x",
+            "webkit 2.54.0",
+            "130.0.2849.80x",
+        ] {
+            assert_eq!(Webview::webkitgtk(junk), None, "{junk:?}");
+        }
+    }
+
+    /// Il default nuovo non scavalca una scelta: un valore scritto — anche
+    /// `""`, «segue il sistema» — si legge com'è, con la provenienza della
+    /// macchina; senza un valore si legge `reduced`, con la provenienza del
+    /// default.
+    #[test]
+    fn a_written_motion_value_beats_the_webkitgtk_default() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let specs: Vec<SettingSpec> = appearance_settings_on(Webview::webkitgtk("2.54.0"))
+            .into_iter()
+            .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
+            .collect();
+        let machine = MachineSettings::in_memory();
+        machine.declare(&specs).expect("schema");
+        let read = || machine.effective(APPEARANCE_MOTION).expect("dichiarata");
+        assert_eq!(
+            read(),
+            (SettingValue::Text("reduced".into()), SettingSource::Default)
+        );
+        for written in ["", "calm", "reduced"] {
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text(written.into()))
+                .expect("una scelta valida");
+            assert_eq!(
+                read(),
+                (SettingValue::Text(written.into()), SettingSource::Machine),
+                "{written:?}"
+            );
+        }
     }
 }

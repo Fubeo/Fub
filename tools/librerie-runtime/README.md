@@ -2,7 +2,8 @@
 
 Questa cartella prova il livello 3 del piano dei componenti (K0): componenti
 Rust in librerie dinamiche, caricati a runtime da un ospite, con le dipendenze
-comuni in una libreria condivisa. La prova gira su Linux, macOS e Windows.
+comuni in una libreria condivisa. La prova sa girare su Linux, macOS e
+Windows.
 
 > **Per chi:** chi decide se Fub può caricare componenti nativi a runtime, o
 > rifà la prova dopo un aggiornamento di Rust.
@@ -46,9 +47,11 @@ libreria comune e la libreria standard di Rust in `bin/`, i componenti in
 5. su macOS, che ogni file abbia una firma valida (`codesign -v`).
 
 Scrive `DIR/referto.json`, con le prove e il peso dei file, ed esce con 1 se
-una prova non passa. La CI la fa girare sui tre sistemi nel job
+una prova non passa. La CI la fa girare su Linux e Windows nel job
 `librerie-runtime` e carica il referto come artifact
-`librerie-runtime-<sistema>-<sha>`.
+`librerie-runtime-<sistema>-<sha>`; macOS è in pausa
+([ADR 0245](../../docs/decisions/0245-macos-e-ios-in-pausa.md)), e su un Mac la
+prova si lancia a mano.
 
 ## Che cosa non prova
 

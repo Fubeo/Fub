@@ -12,6 +12,21 @@ export const FRAME: PartAnatomy = {
     },
     { name: "brand-mark", states: INTERACTIVE, hooks: ["brand-mark", "brand-glyph"] },
     {
+      // Marcuzzo, il logo (D26): nel marchio e nelle Informazioni. La cartella
+      // e i fogli prendono la tinta, il gufo ha i colori del disegno.
+      name: "logo",
+      states: REST,
+      hooks: [
+        "brand-logo",
+        "marcuzzo",
+        "logo-cartella",
+        "logo-cartella-retro",
+        "logo-cartella-ombra",
+        "logo-foglio-1",
+        "logo-foglio-2",
+      ],
+    },
+    {
       name: "vault-chip",
       states: INTERACTIVE,
       hooks: ["vault-chip", "vault-chip-icon", "vault-chip-name", "vault-chip-none", "vault-chip-caret"],
@@ -49,7 +64,23 @@ export const FRAME: PartAnatomy = {
     {
       name: "status-band",
       states: INTERACTIVE,
-      hooks: ["status-band", "status-side", "status-item", "status-item--button"],
+      hooks: [
+        "status-band",
+        "status-side",
+        "status-item",
+        "status-item--button",
+        "status-mode",
+        "status-mode-arrow",
+        "status-standing",
+        "status-standing-mark",
+        "status-sum",
+        "status-sum-part",
+        "status-sum-value",
+        "status-sum-dot",
+        "status-hints",
+        "status-hints-key",
+        "views-status",
+      ],
     },
   ],
 };

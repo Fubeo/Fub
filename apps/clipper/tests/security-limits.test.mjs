@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
 const Capture = require("../src/capture.js");
@@ -21,6 +22,8 @@ describe("capture v1 limits (frozen with AutomationOwner)", () => {
       [{ markdown: "x".repeat(1048576 + 1) }, "markdown:"],
       [{ markdown: "é".repeat(524289) }, "markdown:"],
       [{ source_url: "ftp://h/x" }, "source_url:"],
+      [{ source_url: "https://user:token@example.com/a" }, "source_url:"],
+      [{ source_url: "https://token@example.com/" }, "source_url:"],
       [{ target: { mode: "create", folder: "../etc" } }, "target.folder:"],
       [{ target: { mode: "create", note: "/abs.md" } }, "target.note:"],
       [{ target: { mode: "create", note: "C:\\a.md" } }, "target.note:"],
@@ -32,6 +35,16 @@ describe("capture v1 limits (frozen with AutomationOwner)", () => {
         (e) => e.code === "bad_args" && e.details.length === 1 && e.details[0].startsWith(invalidField));
     }
     assert.equal(Capture.buildArtifact(T({ markdown: "é".repeat(524288) }), { nonce: "valid-nonce-1" }).payload.v, 1);
+  });
+
+  it("the page address loses user name and password before it is captured", () => {
+    assert.equal(Capture.withoutCredentials("https://user:token@example.com/a?b=c#d"), "https://example.com/a?b=c#d");
+    assert.equal(Capture.withoutCredentials("http://token@example.com/"), "http://example.com/");
+    // An "@" after the authority is not a credential: the address stays as it is.
+    assert.equal(Capture.withoutCredentials("https://example.com/@name?to=a@b"), "https://example.com/@name?to=a@b");
+    assert.ok(Capture.isHttpUrl("https://example.com/@name?to=a@b"));
+    assert.equal(Capture.withoutCredentials("about:blank"), "about:blank");
+    // The popup's wiring is proven in popup-credentials.test.mjs.
   });
   it("fub:// round-trips small captures and refuses oversized ones", () => {
     const a = Capture.buildArtifact(
@@ -149,6 +162,16 @@ describe("convert mirror (TransferOwner schema)", () => {
     assert.equal(Object.hasOwn(r.assets[0], "sha256"), false, "remote reference is not downloaded bytes");
     assert.ok(r.notes.some((n) => n.entry === "script") && r.notes.some((n) => n.entry === "iframe"));
     assert.ok(r.markdown.startsWith("---\n"));
+  });
+
+  it("reads an href as the browser does and writes only safe link destinations", () => {
+    // Same input and output as `links_keep_only_safe_destinations` in
+    // crates/fub-importers/src/html.rs: the two converters stay 1:1.
+    const html = "<p><a href=\"java\tscript:alert(1)\">a</a> <a href=\"\u0001javascript:alert(1)\">b</a> <a href=\"data:text/html,x\">c</a> <a href=\"&#106;avascript:alert(1)\">d</a> <a href=\"javascript\\:alert(1)\">e</a> <a href=\"other.html#s\">f</a> <a href=\"#comment-1\">g</a> <a href=\"mailto:a@b.it\">h</a> <a href=\" https://x.it/a \">i</a> <a href=\"//evil.it/x\">j</a> <a href=\"evernote://a/b\">k</a> <a href=\"VBScript:x\">l</a> <a href=\"a&amp;b.html\">m</a> <a href=\"dir\\f.html\">n</a> <a href=\"javascript&colon;alert(1)\">o</a> <a href=\"javascript&#58;alert(1)\">p</a> <a href=\"java&Tab;script:alert(1)\">q</a> <a>r</a> <a href=\"https://en.wikipedia.org/wiki/Hitchhiker's_Guide\">w</a></p>";
+    const notes = [];
+    const md = Convert.htmlToMarkdown(html, {}, [], notes);
+    assert.equal(md, "a b c d e [f](other.html#s) [g](#comment-1) [h](mailto:a@b.it) [i](https://x.it/a) [j](//evil.it/x) [k](evernote://a/b) l [m](a&amp;b.html) [n](dir\\f.html) o p q r [w](https://en.wikipedia.org/wiki/Hitchhiker's_Guide)");
+    assert.equal(notes.filter((n) => n.message === "dropped javascript: URL").length, 2);
   });
 
   it("keeps markdown under the 1 MiB capture ceiling at the exact boundary", () => {
@@ -528,5 +551,25 @@ describe("channel: native authenticated, imports unauthenticated, errors structu
     await Channel.sendArtifact(a, { browserNs: bn });
     await Channel.sendArtifact(a, { browserNs: bn });
     assert.deepEqual(seen, [a.envelope.nonce, a.envelope.nonce]);
+  });
+});
+
+describe("manifests: optional host permissions stay narrow", () => {
+  const manifest = (name) => JSON.parse(readFileSync(new URL("../" + name, import.meta.url), "utf8"));
+  // Host part of a match pattern, path ignored: the browsers ignore it for
+  // host permissions, and MV3 writes `https://*/` where MV2 writes `/*`.
+  const hosts = (patterns) => patterns.map((p) => p.replace(/^([a-z*]+:\/\/[^/]*)\/.*$/, "$1")).sort();
+
+  it("Firefox asks for the same hosts as Chromium, never <all_urls>", () => {
+    const chromium = manifest("manifest.json");
+    const firefox = manifest("manifest.firefox.json");
+    for (const m of [chromium, firefox]) {
+      const all = [].concat(m.permissions || [], m.optional_permissions || [], m.host_permissions || [], m.optional_host_permissions || []);
+      assert.ok(!all.includes("<all_urls>"), "no manifest asks for <all_urls>");
+      assert.ok(!all.some((p) => /^(\*|http):\/\/\*/.test(p)), "no wildcard host on plain http or on every scheme");
+    }
+    assert.deepEqual(chromium.host_permissions, []);
+    const origins = (firefox.optional_permissions || []).filter((p) => p.includes("://"));
+    assert.deepEqual(hosts(origins), hosts(chromium.optional_host_permissions));
   });
 });

@@ -1,0 +1,10 @@
+{
+  "name": "rejected-duplicate-unknown-key",
+  "description": "R3: il lettore apre una chiave sconosciuta doppia, il ritocco la rifiuta: rejected",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[],\"fub:k\":1,\"fub:k\":2}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":10,"y":0,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "rejected"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "about": "resize con fit content su un testo: la larghezza resta, l'altezza è quella della stima del testo (sei righe da 24 più 32, agganciate a 176).",
+  "before": {
+    "nodes": [
+      { "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "uno\ndue\ntre\nquattro\ncinque\nsei" }
+    ]
+  },
+  "ops": [{ "op": "resize", "id": "t", "fit": "content" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 176, "text": "uno\ndue\ntre\nquattro\ncinque\nsei" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# Calendario e linea del tempo nella forma di ripiego (T17a, Q3): `type: table`
+# con il blocco `fub:`, che Obsidian ignora. È la forma che Fub scrive finché
+# la prova con Obsidian non dice che Obsidian regge i tipi nativi.
+version: 1
+views:
+  # Le note nel giorno della loro scadenza.
+  - name: Calendario
+    type: table
+    fub:
+      view: calendar
+      date: scadenza   # la proprietà della data
+  # Le note come barre fra l'inizio e la fine.
+  - name: Linea
+    type: table
+    fub:
+      view: timeline
+      start: inizio
+      end: fine

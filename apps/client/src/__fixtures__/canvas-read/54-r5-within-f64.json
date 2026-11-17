@@ -1,0 +1,20 @@
+{
+  "name": "r5-within-f64",
+  "description": "R4 e R5: 1e308, -0, true, null, una coppia e un escape in un campo sconosciuto vanno bene",
+  "source": "{\"nodes\":[],\"meta\":[1e308,-0,true,null,\"\\ud83d\\ude00\",\"\\n\\u0041\"]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": [],
+    "extra": {
+      "meta": [
+        1e+308,
+        0,
+        true,
+        null,
+        "😀",
+        "\nA"
+      ]
+    }
+  }
+}

@@ -71,10 +71,9 @@ un altro usa.
 
 ### Negative
 
-- i componenti senza bundle (la lavagna, la penna, i dizionari, i
-  motori) si possono accendere e spegnere solo nella risposta della CLI: la
-  scelta non resta salvata finché non diventano bundle o hanno uno stato
-  loro;
+- i componenti senza bundle (la penna, i dizionari, i motori) si possono
+  accendere e spegnere solo nella risposta della CLI: la scelta non resta
+  salvata finché non diventano bundle o hanno uno stato loro;
 - finché lo stato è `plugins.disabled`, «in attesa» non sopravvive fra un
   comando e l'altro;
 - `fub-cli` dipende da `fub-componenti` direttamente, perché usa i tipi del

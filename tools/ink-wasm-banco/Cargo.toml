@@ -1,0 +1,43 @@
+# Il banco dell'inchiostro in WebAssembly: `crates/fub-ink` compilato per
+# `wasm32-unknown-unknown`, con un'interfaccia C scritta a mano, per misurarlo
+# contro la copia TypeScript (`apps/client/src/ink/wasm.bench.ts`).
+#
+# Serve **solo a misurare** (piano N3, T17, decisione D-4 (a)): la shell non lo
+# carica e la decisione 0204 resta com'è. Sta fuori dal workspace, con un
+# `[workspace]` suo come `tools/varco-wasm`, perché vuole un bersaglio che il
+# workspace non ha e un `cdylib` che nessun crate del workspace deve portare.
+# Dipende soltanto da `fub-ink`, per percorso: il `Cargo.lock` accanto ha due
+# pacchetti, questo e lui.
+#
+# Si costruisce con
+#
+#   cargo build --manifest-path tools/ink-wasm-banco/Cargo.toml --release \
+#     --target wasm32-unknown-unknown
+#
+# e il modulo finisce in
+# `tools/ink-wasm-banco/target/wasm32-unknown-unknown/release/ink_wasm_banco.wasm`
+# (la cartella `target/` è ignorata da `.gitignore`).
+[package]
+name = "ink-wasm-banco"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+# `cdylib` è la forma che un modulo WebAssembly prende davvero. Qui è lecito:
+# `check-crate-type.mjs` guarda i crate del workspace, e questo non lo è.
+crate-type = ["cdylib"]
+
+[dependencies]
+fub-ink = { path = "../../crates/fub-ink" }
+
+# Un banco di velocità: si ottimizza per la velocità e non per il peso, con
+# tutto l'albero in un'unità sola (`fub-ink` si porta dentro il modulo).
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,22 @@
+{
+  "name": "r4-pair-escaped-or-raw",
+  "description": "R4: una coppia di surrogati, con escape o cruda, va bene",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"label\":\"\\ud83d\\ude00 😀\",\"😀\":1}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t",
+        "label": "😀 😀",
+        "😀": 1
+      }
+    ],
+    "edges": []
+  }
+}

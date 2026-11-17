@@ -1,0 +1,6 @@
+{
+  "about": "Un campo che l'operazione non conosce (qui «dX» al posto di «dx») non si legge: un errore di battitura non diventa uno spostamento di zero.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "move", "ids": ["a"], "dX": 5, "dx": 0, "dy": 0 }],
+  "expect": { "outcome": "malformed" }
+}

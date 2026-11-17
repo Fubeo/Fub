@@ -1,0 +1,10 @@
+{
+  "name": "blank-json-spaces",
+  "description": "R1: solo spazi JSON è una lavagna vuota",
+  "source": " \t\r\n",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": []
+  }
+}

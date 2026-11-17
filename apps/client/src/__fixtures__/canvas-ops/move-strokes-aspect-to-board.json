@@ -1,0 +1,81 @@
+{
+  "about": "Lo stesso tratto portato sulla radice senza spostarlo, con la proporzione del contenuto (aspect = 2, s = 4/3, il contenuto in (100, −100) nella scheda): (150, 150) → (300, 100) e (160, 150) → (313,33, 100) sulla lavagna, lì dove si vedeva; lo spessore segue la scala (3 → 4).",
+  "before": {
+    "nodes": [
+      {
+        "id": "img",
+        "type": "file",
+        "file": "Foto/lavagna.png",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 200,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 300,
+                "height": 300
+              },
+              "ink": "1 s100 cxy 15000,15000 1000,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": {
+        "node": "img"
+      },
+      "ids": [
+        "s1"
+      ],
+      "dx": 0,
+      "dy": 0,
+      "to": "board",
+      "aspect": 2
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "img",
+          "type": "file",
+          "file": "Foto/lavagna.png",
+          "x": 0,
+          "y": 0,
+          "width": 600,
+          "height": 200
+        }
+      ],
+      "edges": [],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "s1",
+            "tool": "pen",
+            "brush": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxy 30000,10000 1333,0"
+          }
+        ]
+      }
+    }
+  }
+}
