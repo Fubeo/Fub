@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
@@ -70,7 +70,9 @@ describe("una formula in riga", () => {
     const view = mount("x $a+b$ y", 2);
     view.focus();
     expect(press(view, "ArrowRight")).toBe(true);
-    await settle();
+    // La prima formula del file carica KaTeX: sulla CI, a freddo, ci mette
+    // più di un fotogramma. Si aspetta la superficie pronta, non un tempo.
+    await vi.waitFor(() => expect(document.querySelector(".cm-fub-mx-surface")?.getAttribute("data-state")).toBe("ready"));
     expect(document.querySelector(".cm-fub-mx-popover")).not.toBeNull();
     expect(document.activeElement).toBe(input());
     // Nella frase la formula che si modifica ha il suo segno.
