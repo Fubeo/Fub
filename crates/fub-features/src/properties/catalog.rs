@@ -211,6 +211,21 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "note.type.set.expected_revision.desc",
                 "La revisione della nota letta: se è cambiata, non si scrive niente.",
             )
+            .with("note.type.list.title", "Elenca i tipi di nota")
+            .with(
+                "note.type.list.desc",
+                "I tipi della cartella dei tipi, con quante note ha ognuno.",
+            )
+            .with("note.type.get.title", "Leggi un tipo di nota")
+            .with(
+                "note.type.get.desc",
+                "Il tipo che un nome nomina: icona e proprietà, o che cosa non va.",
+            )
+            .with("note.type.get.type.title", "Tipo")
+            .with(
+                "note.type.get.type.desc",
+                "Il tipo: un link come [[Tipi/Libro]], un percorso o un nome.",
+            )
             .with("note.properties.clear.doc.title", "Nota")
             .with(
                 "note.properties.clear.doc.desc",
@@ -416,6 +431,21 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 "note.type.set.expected_revision.desc",
                 "The revision of the note that was read: if it changed, nothing is written.",
+            )
+            .with("note.type.list.title", "List note types")
+            .with(
+                "note.type.list.desc",
+                "The types in the types folder, with how many notes each one has.",
+            )
+            .with("note.type.get.title", "Read a note type")
+            .with(
+                "note.type.get.desc",
+                "The type a name points to: icon and properties, or what is wrong.",
+            )
+            .with("note.type.get.type.title", "Type")
+            .with(
+                "note.type.get.type.desc",
+                "The type: a link like [[Tipi/Libro]], a path or a name.",
             ),
     ]))
 }

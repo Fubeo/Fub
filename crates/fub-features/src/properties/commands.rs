@@ -109,6 +109,10 @@ impl CommandProvider for PropertiesCommands {
                     ParamKind::Text,
                 ))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            command(NOTES_TYPE_LIST).with_scope(CommandScope::read_only()),
+            command(NOTES_TYPE_GET)
+                .with_param(parameter(NOTES_TYPE_GET, types::TYPE, ParamKind::Text).required())
+                .with_scope(CommandScope::read_only()),
             command(PROPERTY_TYPES_RESTORE)
                 .with_param(parameter(PROPERTY_TYPES_RESTORE, VALUE, ParamKind::Text).required())
                 .with_param(parameter(PROPERTY_TYPES_RESTORE, EXPECTED, ParamKind::Text).required())
@@ -145,6 +149,8 @@ impl CommandProvider for PropertiesCommands {
             PROPERTY_TARGET_SET => set_relation_target(Args::new(&args), mode, host),
             PROPERTY_TYPES_RESTORE => restore_property_types(Args::new(&args), mode, host),
             NOTES_TYPE_SET => types::set_note_type(Args::new(&args), mode, host),
+            NOTES_TYPE_LIST => types::list_note_types(host),
+            NOTES_TYPE_GET => types::get_note_type(Args::new(&args), host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
