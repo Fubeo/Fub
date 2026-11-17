@@ -1903,7 +1903,7 @@ un test DOM del trascinamento sul cassetto; l'annulla rimette le due note.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 move_block; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 1999e82d8, 2026-11-17)
 
 ## T33a · I tipi di nota nel core
 
