@@ -44,6 +44,30 @@
 //! [`TaskDue::from`]..[`TaskDue::to`] è il tratto che la scadenza occupa nel
 //! testo, segno compreso: è ciò che una superficie disegna come pastiglia, e
 //! ciò che una vista toglie dal testo quando la data la mostra a parte.
+//!
+//! # Il promemoria
+//!
+//! Il promemoria lo scrive il plugin Reminder di Obsidian, nella forma che
+//! accanto al plugin Tasks si legge: `⏰ 2026-11-13 09:00` nel testo del
+//! compito. La regola è la gemella di quella della scadenza, sullo stesso
+//! testo ([`task_reminder`]):
+//!
+//! - conta l'**ultimo** `⏰` del testo;
+//! - dopo il segno si saltano spazi e tabulazioni, poi una data `AAAA-MM-GG`
+//!   che esiste e, separata da spazi o tabulazioni, un'ora `HH:MM` (da `00:00`
+//!   a `23:59`); né la data né l'ora sono seguite da un'altra cifra;
+//! - senza ora il promemoria suona alle nove ([`DEFAULT_REMINDER_MINUTE`]);
+//! - altrimenti il promemoria c'è ma **non si legge** ([`TaskReminder::minute`]
+//!   è `None`), come una `📅` scritta male: anche un'ora che non esiste
+//!   (`25:00`) è un refuso, non un promemoria delle nove.
+//!
+//! L'ora è **l'ora del muro**, senza fuso: «alle nove» vuol dire le nove dove
+//! si trova chi legge quando arrivano, anche se nel frattempo ha cambiato fuso
+//! o è scattata l'ora legale. Per questo il promemoria diventa un minuto
+//! civile ([`TaskReminder::minute`], minuti dall'epoca dell'ora del muro) e si
+//! confronta con l'ora del muro di adesso ([`civil_minute`]), mai con un
+//! istante UTC calcolato una volta: l'offset di oggi applicato a una data di
+//! marzo sbaglierebbe di un'ora dopo il cambio.
 
 use crate::locale::{civil_from_days, days_from_civil, days_in_month};
 use crate::model::{Block, Inline, LinkTarget};
@@ -123,6 +147,145 @@ pub fn task_due(text: &str) -> Option<TaskDue> {
         to: if word == 0 { mark_end } else { start + word },
         day: None,
     })
+}
+
+/// Il segno che introduce il promemoria.
+pub const REMINDER_MARK: &str = "⏰";
+
+/// Il minuto del giorno di un promemoria scritto senza ora: le nove.
+pub const DEFAULT_REMINDER_MINUTE: i64 = 9 * 60;
+
+/// I minuti di un giorno.
+const DAY_MINUTES: i64 = 24 * 60;
+
+/// Un minuto, in millisecondi.
+const MINUTE_MS: i64 = 60_000;
+
+/// Il promemoria trovato in un testo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TaskReminder {
+    /// Dove comincia il segno, in byte del testo.
+    pub from: usize,
+    /// Dove finisce l'ora, o la data se l'ora non c'è, o la parola che doveva
+    /// esserlo; il segno da solo, se dopo non c'è niente.
+    pub to: usize,
+    /// Il minuto civile, in minuti dall'epoca dell'ora del muro, se si legge.
+    pub minute: Option<i64>,
+    /// L'ora era scritta: senza, il promemoria suona alle nove.
+    pub timed: bool,
+}
+
+impl TaskReminder {
+    /// Il promemoria nella forma `AAAA-MM-GG HH:MM`, se si legge.
+    pub fn text(&self) -> Option<String> {
+        self.minute.map(reminder_text)
+    }
+}
+
+/// Il promemoria di un testo, se ha un `⏰`. Vedi il modulo per la regola.
+pub fn task_reminder(text: &str) -> Option<TaskReminder> {
+    let from = text.rfind(REMINDER_MARK)?;
+    let mark_end = from + REMINDER_MARK.len();
+    let start = skip_blanks(text, mark_end);
+    let unreadable = |at: usize| {
+        let rest = &text[at..];
+        let word = rest.find([' ', '\t']).unwrap_or(rest.len());
+        TaskReminder {
+            from,
+            // Una parola vuota succede solo subito dopo il segno: il tratto è
+            // il segno da solo, come per la scadenza.
+            to: if word == 0 { mark_end } else { at + word },
+            minute: None,
+            timed: false,
+        }
+    };
+    let after = &text[start..];
+    let day = after
+        .get(..10)
+        .filter(|date| shaped(date) && !next_is_digit(&after[10..]))
+        .and_then(civil_day);
+    let Some(day) = day else {
+        return Some(unreadable(start));
+    };
+    let date_end = start + 10;
+    // L'ora è facoltativa, ma ciò che dopo la data comincia con una cifra è
+    // un'ora o un refuso: `⏰ 2026-11-13 25:00` non suona alle nove.
+    let time_start = skip_blanks(text, date_end);
+    if time_start == date_end || !next_is_digit(&text[time_start..]) {
+        return Some(TaskReminder {
+            from,
+            to: date_end,
+            minute: Some(day * DAY_MINUTES + DEFAULT_REMINDER_MINUTE),
+            timed: false,
+        });
+    }
+    let rest = &text[time_start..];
+    match rest.get(..5).and_then(clock_minute) {
+        Some(minute) if !next_is_digit(&rest[5..]) => Some(TaskReminder {
+            from,
+            to: time_start + 5,
+            minute: Some(day * DAY_MINUTES + minute),
+            timed: true,
+        }),
+        _ => Some(unreadable(time_start)),
+    }
+}
+
+/// `AAAA-MM-GG HH:MM`, o `AAAA-MM-GG` per le nove, in minuti civili
+/// dall'epoca: è la forma con cui un promemoria si scrive e si chiede.
+pub fn reminder_minute(text: &str) -> Option<i64> {
+    let day = civil_day(text.get(..10)?)?;
+    let rest = &text[10..];
+    if rest.is_empty() {
+        return Some(day * DAY_MINUTES + DEFAULT_REMINDER_MINUTE);
+    }
+    let time = rest.strip_prefix(' ')?;
+    Some(day * DAY_MINUTES + clock_minute(time)?)
+}
+
+/// Un minuto civile dall'epoca nella forma `AAAA-MM-GG HH:MM`.
+pub fn reminder_text(minute: i64) -> String {
+    let day = minute.div_euclid(DAY_MINUTES);
+    let of_day = minute.rem_euclid(DAY_MINUTES);
+    format!("{} {:02}:{:02}", iso_day(day), of_day / 60, of_day % 60)
+}
+
+/// L'ora del muro di adesso, in minuti dall'epoca: l'istante UTC spostato
+/// dell'offset **di adesso** di chi guarda.
+///
+/// Con un promemoria si confronta questo, ricalcolato a ogni domanda: un
+/// cambio di fuso o l'ora legale spostano l'ora del muro, e il promemoria delle
+/// nove suona alle nove nuove.
+pub fn civil_minute(utc_offset_minutes: i16, utc_millis: u64) -> i64 {
+    let civil =
+        i64::try_from(utc_millis).unwrap_or(i64::MAX) + i64::from(utc_offset_minutes) * MINUTE_MS;
+    civil.div_euclid(MINUTE_MS)
+}
+
+/// `HH:MM` in minuti del giorno, da `00:00` a `23:59`.
+fn clock_minute(text: &str) -> Option<i64> {
+    let bytes = text.as_bytes();
+    if bytes.len() != 5 || bytes[2] != b':' {
+        return None;
+    }
+    let digits = [bytes[0], bytes[1], bytes[3], bytes[4]];
+    if !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let number = |high: u8, low: u8| i64::from(high - b'0') * 10 + i64::from(low - b'0');
+    let (hour, minute) = (number(digits[0], digits[1]), number(digits[2], digits[3]));
+    (hour < 24 && minute < 60).then_some(hour * 60 + minute)
+}
+
+/// Dove finiscono gli spazi e le tabulazioni che cominciano a `at`.
+fn skip_blanks(text: &str, at: usize) -> usize {
+    let rest = &text[at..];
+    at + (rest.len() - rest.trim_start_matches([' ', '\t']).len())
+}
+
+/// Il testo comincia con una cifra.
+fn next_is_digit(rest: &str) -> bool {
+    rest.chars().next().is_some_and(|c| c.is_ascii_digit())
 }
 
 /// `AAAA-MM-GG` come forma: cifre e trattini al loro posto.
@@ -243,6 +406,97 @@ mod tests {
             span("Troppe cifre 📅 2026-10-199"),
             Some(("📅 2026-10-199", None))
         );
+    }
+
+    fn reminder(text: &str) -> Option<(&str, Option<String>, bool)> {
+        task_reminder(text).map(|r| (&text[r.from..r.to], r.text(), r.timed))
+    }
+
+    #[test]
+    fn the_reminder_is_the_last_mark_with_its_wall_clock_time() {
+        assert_eq!(
+            reminder("Chiamare ⏰ 2026-11-13 09:30"),
+            Some(("⏰ 2026-11-13 09:30", Some("2026-11-13 09:30".into()), true))
+        );
+        assert_eq!(
+            reminder("Senza ora ⏰ 2026-11-13 e poi"),
+            Some(("⏰ 2026-11-13", Some("2026-11-13 09:00".into()), false)),
+            "senza ora suona alle nove"
+        );
+        assert_eq!(
+            reminder("Due ⏰ 2026-11-01 08:00 poi ⏰ 2026-11-13 18:45"),
+            Some(("⏰ 2026-11-13 18:45", Some("2026-11-13 18:45".into()), true)),
+            "conta l'ultimo"
+        );
+        assert_eq!(
+            reminder("Tab ⏰\t2026-11-13\t07:05 📅 2026-11-14"),
+            Some((
+                "⏰\t2026-11-13\t07:05",
+                Some("2026-11-13 07:05".into()),
+                true
+            ))
+        );
+        assert_eq!(
+            reminder("Mezzanotte ⏰ 2026-11-13 00:00"),
+            Some(("⏰ 2026-11-13 00:00", Some("2026-11-13 00:00".into()), true))
+        );
+        assert_eq!(reminder("Niente"), None);
+        assert_eq!(reminder("Vuoto ⏰"), Some(("⏰", None, false)));
+        assert_eq!(
+            reminder("Giorno ⏰ 2026-02-30 09:00"),
+            Some(("⏰ 2026-02-30", None, false))
+        );
+        assert_eq!(
+            reminder("Ora ⏰ 2026-11-13 25:00 dopo"),
+            Some(("⏰ 2026-11-13 25:00", None, false)),
+            "un'ora che non esiste è un refuso, non le nove"
+        );
+        assert_eq!(
+            reminder("Minuti ⏰ 2026-11-13 09:60"),
+            Some(("⏰ 2026-11-13 09:60", None, false))
+        );
+        assert_eq!(
+            reminder("Cifre ⏰ 2026-11-13 09:000"),
+            Some(("⏰ 2026-11-13 09:000", None, false))
+        );
+        assert_eq!(
+            reminder("Parola ⏰ domani"),
+            Some(("⏰ domani", None, false))
+        );
+    }
+
+    #[test]
+    fn the_reminder_text_goes_and_comes_back() {
+        for text in ["2026-11-13 09:00", "1969-12-31 23:59", "2028-02-29 00:01"] {
+            let minute = reminder_minute(text).expect(text);
+            assert_eq!(reminder_text(minute), text);
+        }
+        assert_eq!(
+            reminder_minute("2026-11-13"),
+            reminder_minute("2026-11-13 09:00"),
+            "senza ora sono le nove"
+        );
+        for bad in [
+            "2026-11-13 9:00",
+            "2026-11-13  09:00",
+            "2026-11-13T09:00",
+            "2026-11-13 24:00",
+            "",
+            "domani",
+        ] {
+            assert_eq!(reminder_minute(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_wall_clock_now_follows_the_offset_of_now() {
+        let nine_utc = (days_from_civil(2026, 11, 13) as u64 * 1_440 + 9 * 60) * 60_000;
+        let at = |offset| reminder_text(civil_minute(offset, nine_utc));
+        assert_eq!(at(0), "2026-11-13 09:00");
+        assert_eq!(at(60), "2026-11-13 10:00", "Roma d'inverno");
+        assert_eq!(at(120), "2026-11-13 11:00", "Roma d'estate");
+        assert_eq!(at(-600), "2026-11-12 23:00", "Honolulu: il giorno prima");
+        assert_eq!(at(345), "2026-11-13 14:45", "Kathmandu");
     }
 
     #[test]
