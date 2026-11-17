@@ -2025,7 +2025,7 @@ Fatto quando: test della proiezione e dei riepiloghi; il registro senza
 `target` torna byte per byte; il mirror è verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-abi -p
 fub-kernel -p fub-features -p fub-format-base properties base
-Stato: [~] in corso (coder, `feat/relazione-nel-contratto`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (c1af0753b, 2026-11-17), in attesa del gruppo
 
 ## T35 · Relazioni e riepiloghi nell'editor e nella Base
 
@@ -2812,7 +2812,7 @@ indietro uscendo dal menu; `%% stile:` scritto e tolto senza toccare il
 resto del recinto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/mermaid.test.ts src/editors/text/profiles/markdown/diagram-live.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T58 · Diagramma: sorgente affiancato, errore con la riga, didascalia, misura
 
@@ -2923,7 +2923,7 @@ byte; le scene nelle due luci e al telefono; la battuta sotto i 4 ms.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
 src/editors/text/profiles/markdown/math-live.dom.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T61 · Formule: i simboli per nome e i pezzi coi loro spazi vuoti
 
@@ -3674,7 +3674,7 @@ telefono; un test che i tasti arrivano alla banda e non stanno nel
 pannello.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/launcher src/shells/scrittoio/frame/pill.test.ts
-Stato: [~] in corso (coder, `feat/spazio-comandi-lingua`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (d803189f6, 2026-11-17), in attesa del gruppo; 4 scene nuove (baseline dal runner)
 
 ## T83 · Tessera, etichetta e riga nel kit; le guardie
 
