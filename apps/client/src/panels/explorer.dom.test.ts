@@ -244,6 +244,22 @@ describe("le azioni del titolo", () => {
     const top = [...document.querySelectorAll<HTMLElement>("#file-list > li[data-path]")].map((li) => li.dataset.path);
     expect(top.indexOf("Progetti")).toBeLessThan(top.indexOf("Guida"));
 
+    // Il secondo clic sul pulsante chiude il menu che il primo ha aperto
+    // (IMP-006), e lo stato dice ciò che si vede.
+    sort.click();
+    await quiet();
+    expect(document.querySelectorAll('.context-menu [role="menuitemradio"]').length).toBe(5);
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+    sort.click();
+    await quiet();
+    expect(document.querySelectorAll('.context-menu [role="menuitemradio"]').length).toBe(0);
+    expect(sort.getAttribute("aria-expanded")).toBe("false");
+    sort.click();
+    await quiet();
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await quiet();
+
     // Il contestuale della radice ha le stesse voci, con la scelta nuova.
     document.getElementById("files-title")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
     await quiet();

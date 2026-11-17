@@ -44,7 +44,7 @@ import { FORMAT_ICON, formatKindOf, formatTagOf } from "../ui/format-kind";
 import { craftServed } from "../state/craft-previews";
 import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
-import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { closeContextMenu, pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
@@ -181,6 +181,13 @@ export function mountExplorer(lifetime: Lifetime): void {
   sortButtonEl.replaceChildren(iconEl("sort") ?? "");
   lifetime.listen(newNoteEl, "click", () => void newNote());
   lifetime.listen(sortButtonEl, "click", () => {
+    // Il secondo clic sul pulsante chiude il menu che ha aperto (IMP-006):
+    // riaprirlo chiudeva il vecchio, che rimetteva `aria-expanded` a «false»
+    // sopra un menu nuovo e aperto.
+    if (sortButtonEl.getAttribute("aria-expanded") === "true") {
+      closeContextMenu();
+      return;
+    }
     sortButtonEl.setAttribute("aria-expanded", "true");
     showContextMenu(sortButtonEl, sortItems(), {
       label: t("explorer.sort"),
