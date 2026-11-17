@@ -183,6 +183,22 @@ export const VISTE = {
     },
     app: { scena: "menu-selezione" },
   },
+  /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
+  /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
+  /// formula della nota; l'app dalla scena del banco.
+  "formula-simboli": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La formula si tocca");
+        await page.waitForSelector("#win .mx");
+        await page.keyboard.press("End");
+        await page.keyboard.type("+\\fr");
+        await page.waitForSelector("#win .mx-ac:not([hidden]) button.act");
+      },
+    },
+    app: { scena: "formula-04-simboli" },
+  },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
   maniglie: {
@@ -254,6 +270,19 @@ export const VISTE = {
     },
     app: { scena: "base-calendario" },
   },
+  /// La linea del tempo della Base: il prototipo allo stesso passo con la
+  /// vista Linea del tempo scelta, l'app dalla scena della linea del tempo.
+  tempo: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Bacheca e calendario");
+        await page.click('#win .bview[data-bv="tempo"]');
+        await page.waitForSelector("#win .tl .tl-b");
+      },
+    },
+    app: { scena: "base-tempo" },
+  },
   /// La riga dei suggerimenti al centro della banda, con dei tasti scritti:
   /// il prototipo al primo passo, «A riposo» (i tasti della riga
   /// qualunque), l'app con una parola scelta (grassetto, corsivo, collega).
@@ -281,6 +310,19 @@ export const VISTE = {
       },
     },
     app: { scena: "slash-01-aperto" },
+  },
+  /// La Base incorporata nella nota (T18, E12, E19): il prototipo al passo
+  /// «La Base si costruisce a vista», l'app dalla scena con
+  /// `![[Opere.base#Tabella]]` nella nota della Live.
+  "base-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La Base si costruisce a vista");
+        await page.waitForSelector('#win .blk[data-t="base"]');
+      },
+    },
+    app: { scena: "base-nota" },
   },
 };
 
@@ -616,6 +658,37 @@ export const PEZZI = [
     app: ".context-menu .menu-foot-keys kbd",
     proprieta: BASE,
   },
+  // ── le proposte dei simboli della formula (T61) ───────────────────────────
+  {
+    id: "formula.proposte",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac",
+    app: ".cm-fub-mx-popover .cm-fub-mx-symbols",
+    // La larghezza è quella del riquadro (T60): il prototipo lo stringe a 380 px
+    // col `max-width` di `.pop`, l'app lo tiene a 392 come il piano.
+    proprieta: BASE,
+  },
+  {
+    id: "formula.proposta-scelta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.proposta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button:not(.act)",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="false"]',
+    proprieta: ["padding", "gap", "font", "color", "background", "height"],
+  },
+  {
+    id: "formula.proposta-disegno",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act .g",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-glyph',
+    proprieta: ["width", "font", "color", ...ALLINEAMENTO],
+  },
   // Le maniglie: «+» e la presa a due occhi.
   {
     id: "maniglie.aggiungi",
@@ -914,6 +987,53 @@ export const PEZZI = [
     proprieta: [...BASE, "display", "white-space", "text-overflow"],
   },
 
+  // ── la linea del tempo della Base (T34) ─────────────────────────────────
+  // Il prototipo mostra otto settimane da metà ottobre a dicembre in quattro
+  // colonne, l'app otto settimane in otto: il fondo della traccia (le righe
+  // delle colonne) non si confronta, i pezzi sì.
+  {
+    id: "tempo.griglia",
+    vista: "tempo",
+    prototipo: ".tl",
+    app: ".base-tl",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "tempo.scala",
+    vista: "tempo",
+    prototipo: ".tl-a",
+    app: ".base-tl-axis",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "tempo.oggi",
+    vista: "tempo",
+    prototipo: ".tl-s .now",
+    app: ".base-tl-now",
+    proprieta: [...BASE, "white-space"],
+  },
+  {
+    id: "tempo.riga",
+    vista: "tempo",
+    prototipo: ".tl-r",
+    app: ".base-tl-row",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "tempo.nome",
+    vista: "tempo",
+    prototipo: ".tl-r > span",
+    app: ".base-tl-name",
+    proprieta: [...BASE, "white-space", "text-overflow"],
+  },
+  {
+    id: "tempo.barra",
+    vista: "tempo",
+    prototipo: ".tl-b.k-green",
+    app: '.base-tl-bar:not([data-inverted="true"]):not([data-clip-start="true"]):not([data-clip-end="true"])',
+    proprieta: [...BASE, "height", "top", "white-space"],
+  },
+
   // ── la riga dei suggerimenti (T14): #383 ─────────────────────────────────
   {
     id: "suggerimenti.riga",
@@ -1014,6 +1134,15 @@ export const PEZZI = [
     prototipo: ".sl-tx .y",
     app: ".slash-syntax",
     proprieta: ["font", "color", "margin", "white-space", "text-overflow"],
+  },
+  // ── la Base nella nota (T18) ────────────────────────────────────────────
+  // Oltre la colonna fino al margine a tutta larghezza, nella colonna a 700.
+  {
+    id: "base.incorporata",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"]',
+    app: '.pane.focus .base-surface[data-embedded="true"]',
+    proprieta: ["margin-right"],
   },
 ];
 

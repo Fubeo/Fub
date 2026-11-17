@@ -560,6 +560,144 @@
   box-shadow: none;
 }
 
+/* **La barra che segue il blocco** (E8, `panels/format-bar.ts`): la barra di
+   formato del foglio quando dice dove sta il cursore. Un vassoio basso, i
+   gruppi divisi da un filo corto invece che sui cartoncini, lo stile del
+   blocco a parole, il gruppo del blocco sul velo d'accento col suo nome in
+   maiuscoletto, e «+ Inserisci» in fondo a destra, rialzato sul vassoio.
+   È la barra del prototipo dell'editor (`.fbar`), coi gettoni di Fub; il
+   menu che apre è un menu come gli altri. */
+.format-bar-follow.kit-bar {
+  gap: var(--space-1);
+  margin: 0 var(--space-5) var(--space-1);
+  padding: 3px;
+  border-radius: var(--radius-menu);
+  background: var(--sheet-2);
+  min-width: 0;
+  transition: opacity var(--duration-fast);
+}
+.format-bar-follow.kit-bar > .kit-bar-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.format-bar-follow.kit-bar > .kit-bar-group + .kit-bar-group::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-2);
+  background: var(--border-strong);
+}
+.format-bar-follow .kit-bar-button {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--space-3);
+  border-radius: 7px;
+  gap: 5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.format-bar-follow .kit-bar-button:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.format-bar-follow .kit-bar-button[aria-pressed="true"] {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+/* I pulsanti col nome scritto (lo stile, i gesti del blocco, «Inserisci»). */
+.format-bar-follow .format-bar-labelled {
+  padding: 0 var(--space-4);
+}
+.format-bar-follow .format-bar-caret {
+  width: 12px;
+  height: 12px;
+  margin-left: -1px;
+  color: var(--muted);
+}
+/* Lo stile del blocco non tiene la larghezza del selettore della fila
+   completa: dice il blocco e basta. */
+.format-bar-follow .format-bar-style {
+  min-width: 0;
+  justify-content: center;
+  font-weight: var(--weight-regular);
+}
+/* Il gruppo del blocco: il velo d'accento, il nome davanti ai gesti. Entra
+   scivolando appena da sinistra quando il blocco cambia. */
+.format-bar-follow.kit-bar > .format-bar-context {
+  padding: 0 var(--space-1) 0 var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--accent-veil);
+  animation: format-bar-context-in 180ms ease-out;
+}
+.format-bar-follow.kit-bar > .format-bar-context::before {
+  display: none;
+}
+.format-bar-context-name {
+  margin-right: var(--space-2);
+  color: var(--accent-soft);
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+@keyframes format-bar-context-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+/* «…» resta accanto ai gruppi, e «+ Inserisci» va in fondo. */
+.format-bar-follow .format-bar-overflow {
+  margin-left: 0;
+}
+.format-bar-follow.kit-bar > .format-bar-insert-group {
+  margin-left: auto;
+}
+.format-bar-follow.kit-bar > .format-bar-insert-group::before {
+  display: none;
+}
+.format-bar-follow .format-bar-insert {
+  padding: 0 10px 0 var(--space-4);
+  background: var(--sheet);
+  box-shadow: var(--shadow-raise);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.format-bar-follow .format-bar-insert:hover:not(:disabled) {
+  background: var(--sheet);
+}
+@media (prefers-reduced-motion: reduce) {
+  .format-bar-follow.kit-bar > .format-bar-context {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .format-bar-follow.kit-bar > .format-bar-context,
+  .format-bar-follow .format-bar-insert {
+    border: 1px solid CanvasText;
+  }
+}
+/* Al telefono la barra sta sopra la tastiera (`mobile.css`): i gesti si
+   dicono con la figura, e il gruppo del blocco lascia il posto ai fissi,
+   come nel prototipo. I fili fra i gruppi sono quelli di `mobile.css`, e
+   «+» è un pulsante della fila come gli altri, senza rialzo. */
+:root[data-client-shell="mobile"] .format-bar-follow .format-bar-labelled:has(svg:not(.format-bar-caret)) > .format-bar-text,
+:root[data-client-shell="mobile"] .format-bar-follow.kit-bar > .format-bar-context,
+:root[data-client-shell="mobile"] .format-bar-follow.kit-bar > .kit-bar-group + .kit-bar-group::before {
+  display: none;
+}
+:root[data-client-shell="mobile"] .format-bar-follow .format-bar-insert {
+  background: transparent;
+  box-shadow: none;
+}
+
 /* In colori forzati il rialzo non ha né fondo suo né ombra: il menu si stacca
    con un bordo, il filetto e la spunta prendono l'inchiostro del sistema, la
    scelta un bordo d'evidenza. Le strisce di colore non si possono dipingere,

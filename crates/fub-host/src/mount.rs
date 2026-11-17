@@ -76,6 +76,9 @@ struct CoreBundle {
     strings: Vec<StringCatalog>,
     provides: Vec<&'static str>,
     requires: Vec<&'static str>,
+    /// I permessi oltre a quelli del core, dalla riga dell'inventario
+    /// (`OfficialFeature::permissions`): nel manifest come quelli di un plugin.
+    permissions: Vec<&'static str>,
     /// Dalla riga della mappa dei componenti (`fub_features::componenti`),
     /// per chi ne ha una: usa se c'è, tipo, gruppo e pezzi del client.
     uses: Vec<&'static str>,
@@ -100,6 +103,7 @@ impl CoreBundle {
             strings: Vec::new(),
             provides: Vec::new(),
             requires: Vec::new(),
+            permissions: Vec::new(),
             uses: Vec::new(),
             kind: ComponentKind::default(),
             group: None,
@@ -126,6 +130,11 @@ impl CoreBundle {
 
     fn requiring(mut self, services: &[&'static str]) -> Self {
         self.requires.extend_from_slice(services);
+        self
+    }
+
+    fn permitting(mut self, permissions: &[&'static str]) -> Self {
+        self.permissions.extend_from_slice(permissions);
         self
     }
 
@@ -172,6 +181,9 @@ impl Bundle for CoreBundle {
             .speaking(self.default_locale, self.strings.clone())
             .providing(&self.provides)
             .requiring(&self.requires);
+        for permission in &self.permissions {
+            manifest.permissions.granted.set(*permission, true);
+        }
         manifest.uses = self.uses.iter().map(|id| id.to_string()).collect();
         manifest.kind = self.kind;
         manifest.group = self.group.map(str::to_string);
@@ -516,6 +528,7 @@ pub(crate) fn mount_with_formats(
         )
         .providing(feature.provides)
         .requiring(feature.requires)
+        .permitting(feature.permissions)
         .described_by(rows.iter().find(|row| row.id == feature.id));
         bundles.push(Arc::new(bundle));
     }

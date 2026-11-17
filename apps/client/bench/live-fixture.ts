@@ -165,6 +165,45 @@ const DIAGRAM_STYLES = ["armonia", "acquerello", "aurora", "blueprint", "inchios
   .map((style) => `## ${style}\n\n${fence(`%% stile: ${style}`, "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])")}`)
   .join("\n\n");
 
+/// Il tracciato (E26, T59): il flusso del prototipo (`DG0`), con un ritorno e
+/// le etichette sui collegamenti, giù e poi a destra, in uno stile.
+const TRACE_FLOW = [
+  "  A[Richiesta di prestito] --> B{Polizza consegnata?}",
+  "  B -->|sì| C[Ritiro delle opere]",
+  "  B -->|no| D[Sollecito al prestatore]",
+  "  D --> B",
+  "  C --> E[Allestimento in sala]",
+  "  E --> F([Apertura, 20 marzo])",
+];
+const diagramTrace = (style: string) => [
+  `Il flusso in ${style}, giù e poi a destra:`,
+  "",
+  fence("---", "title: Il percorso di un prestito", "---", `%% stile: ${style}`, "flowchart TD", ...TRACE_FLOW),
+  "",
+  fence(`%% stile: ${style}`, "flowchart LR", ...TRACE_FLOW),
+].join("\n");
+
+/// I casi limite del tracciato: etichette lunghe, un collegamento a tratti e
+/// uno senza punta, e un diagramma di sequenza.
+const DIAGRAM_TRACE_CASES = [
+  "Un'etichetta lunga, un tratteggio, un collegamento senza punta:",
+  "",
+  fence(
+    "flowchart TD",
+    "  A[Domanda] -->|una risposta lunga che non sta sul tratto corto| B[Esito]",
+    "  A -.->|forse| C[Rinvio]",
+    "  B --- D[Archivio]",
+    "  C --> D",
+  ),
+  "",
+  fence(
+    "sequenceDiagram",
+    "  Museo->>Prestatore: Richiesta di prestito",
+    "  Prestatore-->>Museo: Polizza",
+    "  Museo-)Corriere: Ritiro",
+  ),
+].join("\n");
+
 const DIAGRAM_CASES = [
   "Un diagramma con un errore mostra il sorgente:",
   "",
@@ -211,6 +250,19 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "Vedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani, §ok.\n\nVedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani.",
   ),
   "riga-vuota": at("# Nota nuova\n\n§"),
+  // La Base nella nota (T18, con `?base=nota`): una riga vuota fra due
+  // paragrafi per «/base», e la Base già incorporata, larga fino al margine.
+  "base-slash": at("# Letture\n\nI libri dell'anno, in una tabella.\n\n§\n\nSotto, il testo che segue."),
+  "base-incorporata": {
+    text: "# Letture\n\nI libri dell'anno, in una tabella.\n\n![[Opere.base#Tabella]]\n\nSotto, il testo che segue.",
+    cursor: null,
+  },
+  // La formula che si modifica toccandola (T60): una in riga col cursore
+  // davanti, un blocco `$$` da cliccare; poi una formula con un errore.
+  "formula-toccata": at(
+    "# Il moto\n\nLa velocità media è §$v = \\frac{s}{t}$, e lo spazio cresce con $t^{2}$.\n\n$$\n\\frac{a+b}{c} + x^{2} + \\sqrt{y}\n$$\n\nSotto, il testo che segue.",
+  ),
+  "formula-errore": at("# Il moto\n\nUna formula rotta: §$\\frac{a}$ da correggere.\n\nSotto, il testo che segue."),
   "immagine-selezionata": selected("Sopra, il testo.\n\n", "![Lo schema del viaggio|240](../Risorse/schema.png)", "\n\nSotto, il testo che segue."),
   // La testata della pagina dei Blocchi (H12, H13): icona, copertina e
   // proprietà; la seconda con la pagina a tutta larghezza.
@@ -324,6 +376,11 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   diagramma: { text: DIAGRAM_NOTE, cursor: null },
   "diagramma-stili": { text: DIAGRAM_STYLES, cursor: null },
   "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
+  ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
+    .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
+  "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
+  // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
+  "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

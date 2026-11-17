@@ -1718,11 +1718,6 @@ button.cm-fub-page-icon:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* L'avviso sotto il diagramma che si scrive: l'ultima resa buona resta. */
-.cm-editor .cm-content .cm-fub-diagram-notice {
-  color: var(--doc-danger);
-  font-family: var(--font-ui);
-}
 /* Il riquadro della formula (C6): il TeX in carattere fisso, e sotto la resa. */
 .cm-fub-math-field {
   font-family: var(--font-mono);
@@ -1923,9 +1918,14 @@ button.cm-fub-page-icon:focus-visible {
   max-width: 100%;
   vertical-align: baseline;
 }
+/* Una formula larga scorre di lato; in verticale no: i puntelli invisibili di
+   KaTeX sotto una frazione sporgono di qualche pixel, e col solo `overflow-x`
+   il blocco scorrerebbe anche in alto e in basso, diventando una fermata del
+   Tab senza niente da leggere. */
 .markdown-rendered .math-block {
   display: block;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: var(--space-2) 0;
   text-align: center;
 }

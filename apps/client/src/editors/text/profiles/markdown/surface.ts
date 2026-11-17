@@ -27,7 +27,7 @@ import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
 import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type WikilinkGesture } from "./link-gesture";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
-import { settings } from "../../../../host/query";
+import { resolvedReference, settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
 import { openVaultRoot } from "../../../../state/store";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
@@ -52,7 +52,9 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { api } from "../../../../host/ipc";
+import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 
@@ -98,23 +100,10 @@ import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource 
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
+import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup } from "./block-groups";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
-
-/// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri
-/// si scrivono con «Altro…».
-const CODE_LANGUAGES: readonly (readonly [string, string])[] = [
-  ["python", "Python"],
-  ["rust", "Rust"],
-  ["typescript", "TypeScript"],
-  ["json", "JSON"],
-  ["bash", "Bash"],
-];
-
-/// Le larghezze di «Larghezza ▸», in pixel CSS; «Piena» è la colonna del
-/// testo, «Originale» toglie la misura.
-const IMAGE_WIDTHS = { small: 240, medium: 480 } as const;
 
 /// Le tre viste esclusive sullo stesso buffer (D1 A, E1). `live_preview` è
 /// **Scrittura**: la resa viva con dentro i Blocchi (maniglie, testata,
@@ -380,7 +369,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const { entry } = choice;
       const params = actionParams(entry.id, choice.params);
       const selection = transform ? engine.selections().primary.text : undefined;
-      if (entry.action && transform) {
+      if (entry.id === BASE_ACTION && !transform) {
+        // Il «/base» resta finché il file non c'è: lo toglie l'embed.
+        startBase(view, from, to);
+      } else if (entry.action && transform) {
         const action = MARKDOWN_ACTIONS.get(entry.id);
         const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
         if (command) engine.runCommand(command);
@@ -391,6 +383,34 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       }
       slashHost.chosen(entry, parent, engine.anchorBox(), selection);
     },
+  };
+  /// «Base» dal «/» o da un menu (E12): il file accanto alla nota, poi
+  /// l'embed. Una alla volta: la seconda aspetta che la prima finisca.
+  let creatingBase = false;
+  const startBase = (view: EditorView, from: number, to: number): void => {
+    if (creatingBase) return;
+    creatingBase = true;
+    const port: NewBasePort = {
+      note: linkSource(),
+      taken: async (file) =>
+        (await resolvedReference({ kind: "wiki", value: { page: file } }, linkSource()).catch(() => null)) !== null,
+      ask: (proposal, taken) => promptText({
+        title: liveStrings.t("base.new.title"),
+        label: taken === null ? liveStrings.t("base.new.name") : liveStrings.t("base.new.taken", { name: taken }),
+        value: proposal,
+        okLabel: liveStrings.t("base.new.create"),
+      }),
+      create: async (id, text) => {
+        await api.resourceWrite(id, new TextEncoder().encode(text), null, vault);
+      },
+      writable: () => editable() && !tableGrid,
+      notify: (message) => {
+        if (!life.closed) notify(message, "guasto");
+      },
+    };
+    void createBaseHere(view, from, to, port)
+      .catch((error: unknown) => port.notify(errorText(error)))
+      .finally(() => { creatingBase = false; });
   };
   /// Gli argomenti di un'azione come li vuole il profilo: la data detta
   /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
@@ -426,6 +446,17 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
       linkCard: linkCards,
+      // La pagina del giorno (E17): in fondo alla giornaliera, se questa nota
+      // lo è con la cartella e il formato di adesso.
+      ...(opts.completions.dates?.dailyDate ? {
+        dayPage: {
+          current: () => {
+            const doc = resources?.documentId ?? documentId;
+            const date = opts.completions.dates?.dailyDate?.(doc) ?? null;
+            return date === null ? null : { doc, date };
+          },
+        },
+      } : {}),
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -1067,11 +1098,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION,
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION,
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
       if (FOLDS.has(id)) return { enabled: true, active: null };
+      if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -1090,6 +1122,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const fold = FOLDS.get(id);
       if (fold) return engine.runViewCommand(fold);
       if (id === COMMENT_ACTION) return comments.comment();
+      if (id === BASE_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid || creatingBase) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startBase(view, at, at);
+          return true;
+        });
+      }
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -1912,6 +1953,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     contextMenu: (at) => {
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
+    },
+    // Il gruppo del blocco nella barra di formato: si scrive soltanto, e la
+    // barra la chiede dopo una pausa, non a ogni battuta (`block-groups.ts`).
+    blockGroup: (at) => {
+      if (life.closed || mode === "reading") return null;
+      const pos = at ? engine.posAtPoint(at.x, at.y) : null;
+      if (at && pos === null) return null;
+      return markdownBlockGroup({
+        read: (read) => engine.readState(read),
+        write: (change) => editable() && engine.runViewCommand((view) => {
+          const spec = change(view.state);
+          if (!spec) return false;
+          view.dispatch(spec);
+          return true;
+        }),
+        view: (gesture) => engine.runViewCommand(gesture),
+        editable,
+        copy: (text) => copyText(text, t("editor_menu.copied")),
+        openLink: (page, heading, block) => void openWikilink(page, heading, block),
+      }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
     anchorHere: () => {

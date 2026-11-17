@@ -28,6 +28,9 @@ import {
 import { EditorView, keymap, showTooltip, ViewPlugin, type Tooltip, type TooltipView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import type { SlashChoice, SlashPanel, SlashPanelEvents, SlashPlace } from "../../../core/editor-menu";
+import { errorText } from "../../../../host/errors";
+import { pageName } from "../../../../rules/mirrored";
+import { liveStrings } from "./strings";
 
 /// Ciò che il pannello dice all'editor; il resto glielo aggiunge la superficie.
 export type SlashPanelCore = Pick<SlashPanelEvents, "choose" | "dismiss" | "active">;
@@ -528,6 +531,220 @@ export function runSlashAction(
   }
   startCompletion(view);
   return true;
+}
+
+// ── La Base dal «/» ──────────────────────────────────────────────────────────
+//
+// «Base» (E12) crea `Nome.base` accanto alla nota, con una vista Tabella
+// sulle note della cartella, e scrive `![[Nome.base#Tabella]]` al posto della
+// riga del «/». Il file nasce prima: se non nasce, la nota non cambia, e il
+// «/base» resta dov'era. Poi l'embed entra in una transazione sola, che un
+// Annulla toglie lasciando il file, come un allegato.
+
+/// L'azione «Base» del «/»: lo stesso id di `BASE_ENTRY` in
+/// `panels/slash/entries.ts`, che la mette nel menu.
+export const BASE_ACTION = "markdown.base";
+
+/// Quanti nomi si provano, al più, per trovarne uno libero.
+const BASE_NAME_TRIES = 100;
+
+/// Un nome di file non supera 255 byte, `.base` compreso.
+const BASE_FILE_BYTES = 255;
+
+/// Ciò che serve per creare la Base: la superficie lo dà con l'host, i test
+/// con un finto.
+export interface NewBasePort {
+  /// La nota: la Base nasce nella sua cartella, col suo titolo di serie.
+  readonly note: string;
+  /// Un file con questo nome (`Nome.base`) c'è già nel vault: un link per
+  /// nome troverebbe quello invece del nuovo.
+  taken(file: string): Promise<boolean>;
+  /// Chiede il nome, con `proposal` già scritto; `taken` è il nome appena
+  /// rifiutato perché c'era già. `null` se l'utente rinuncia.
+  ask(proposal: string, taken: string | null): Promise<string | null>;
+  /// Crea il file soltanto se non c'è: altrimenti rifiuta con
+  /// `already_exists`, e non scrive niente.
+  create(id: string, text: string): Promise<void>;
+  /// La nota si può ancora scrivere (aperta, non in sola lettura).
+  writable(): boolean;
+  /// Dice all'utente che cosa non è andato.
+  notify(message: string): void;
+}
+
+/// Il nome di una Base come lo scrive l'utente, pulito: senza `.base` e
+/// senza i caratteri che romperebbero il link (`# | ^ [ ]`) o il nome del
+/// file su un sistema (`/ \ : * ? " < >`). Vuoto se non resta niente.
+export function baseStem(name: string): string {
+  return name
+    .replace(/\.base\s*$/i, "")
+    .replace(/[\\/#|^[\]:*?"<>\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.]+|[\s.]+$/g, "");
+}
+
+/// Il nome numero `n` per `stem`: `stem` per il primo, poi «stem 2»,
+/// «stem 3»…, accorciato perché il file stia in 255 byte.
+export function baseName(stem: string, n = 1): string {
+  const suffix = n <= 1 ? "" : ` ${n}`;
+  const encoder = new TextEncoder();
+  const room = BASE_FILE_BYTES - encoder.encode(`${suffix}.base`).byteLength;
+  let kept = "";
+  let used = 0;
+  for (const char of stem) {
+    const width = encoder.encode(char).byteLength;
+    if (used + width > room) break;
+    used += width;
+    kept += char;
+  }
+  return `${kept.trimEnd()}${suffix}`;
+}
+
+/// Il testo del file: una vista Tabella sulle note della cartella della nota
+/// (e delle sue sottocartelle), nella forma che `fub-format-base` legge e
+/// scrive. Una nota nella radice guarda tutto il vault, e il filtro non serve.
+export function baseFileText(folder: string, view: string): string {
+  const filter = folder === ""
+    ? ""
+    : `filters:\n  condition:\n    file: path\n    op: in_folder\n    value: ${JSON.stringify(folder)}\n`;
+  return `${filter}views:\n  - name: ${JSON.stringify(view)}\n    type: table\n`;
+}
+
+/// L'embed della vista `view` della Base `name`.
+export function baseEmbed(name: string, view: string): string {
+  return `![[${name}.base#${view}]]`;
+}
+
+/// Dove va l'embed, e dove il cursore, togliendo `from..to` (il «/query»,
+/// vuoto se la Base arriva da un menu): da solo sulla riga, se la riga ha
+/// soltanto il «/»; altrimenti in un paragrafo nuovo sotto. Sempre staccato
+/// da una riga vuota dal testo intorno, perché sia un blocco suo. Il cursore
+/// va oltre la Base, perché in Live la si veda e non il suo sorgente: al
+/// testo che segue o, in fondo alla nota, su una riga nuova dove scrivere.
+export function baseInsertion(state: EditorState, from: number, to: number, embed: string): { from: number; to: number; insert: string; cursor: number } {
+  const line = state.doc.lineAt(from);
+  const end = Math.max(to, from);
+  const rest = state.sliceDoc(line.from, from) + state.sliceDoc(end, line.to);
+  const br = state.lineBreak;
+  // Le righe vuote dopo la riga diventano una sola, quella che stacca la Base.
+  let until = line.to;
+  for (let n = line.number + 1; n <= state.doc.lines; n++) {
+    const next = state.doc.line(n);
+    if (next.text.trim() !== "") break;
+    until = next.to;
+  }
+  const last = until === state.doc.length;
+  const prev = line.number > 1 ? state.doc.line(line.number - 1).text : null;
+  const kept = rest.trim() === "" ? "" : rest.replace(/\s+$/, "");
+  const head = kept !== "" ? `${kept}${br}${br}` : prev !== null && prev.trim() !== "" ? br : "";
+  // In fondo alla nota la riga dove scrivere; altrimenti la riga vuota prima
+  // del testo che segue, che resta dov'è.
+  const insert = `${head}${embed}${br}${last ? br : ""}`;
+  return { from: line.from, to: until, insert, cursor: line.from + insert.length + (last ? 0 : br.length) };
+}
+
+/// Le Basi in attesa del nome o del file: dove sta il loro «/query», seguito
+/// attraverso le modifiche che arrivano nel frattempo.
+const trackBase = StateEffect.define<{ readonly id: number; readonly from: number; readonly to: number } | { readonly id: number; readonly drop: true }>();
+const pendingBases = StateField.define<ReadonlyMap<number, { readonly from: number; readonly to: number }>>({
+  create: () => new Map(),
+  update(value, tr) {
+    let next = value;
+    if (tr.docChanged && value.size > 0) {
+      next = new Map([...value].map(([id, range]) => {
+        const from = tr.changes.mapPos(range.from, 1);
+        return [id, { from, to: Math.max(from, tr.changes.mapPos(range.to, -1)) }];
+      }));
+    }
+    for (const effect of tr.effects) {
+      if (!effect.is(trackBase)) continue;
+      const copy = new Map(next);
+      if ("drop" in effect.value) copy.delete(effect.value.id);
+      else copy.set(effect.value.id, { from: effect.value.from, to: effect.value.to });
+      next = copy;
+    }
+    return next;
+  },
+});
+
+let baseIds = 0;
+
+function alreadyExists(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "kind" in error && (error as { kind: unknown }).kind === "already_exists";
+}
+
+/// Il primo nome libero da `stem` in su: «stem», o «stem 2», «stem 3»…
+/// Un nome che finisce già con un numero continua da lì.
+async function freeBaseName(port: NewBasePort, stem: string, skip: boolean): Promise<string> {
+  const numbered = /^(.*\S) (\d{1,6})$/.exec(stem);
+  const root = numbered ? numbered[1]! : stem;
+  const first = numbered ? Number(numbered[2]) : 1;
+  let candidate = baseName(root, first);
+  for (let n = first + (skip ? 1 : 0), tries = 0; tries < BASE_NAME_TRIES; n++, tries++) {
+    candidate = baseName(root, n);
+    if (!(await port.taken(`${candidate}.base`))) return candidate;
+  }
+  return candidate;
+}
+
+/// Crea la Base dal «/» (o da un menu, con `from === to` sul cursore): chiede
+/// il nome, crea il file e scrive l'embed al posto di `from..to`. `true` se
+/// l'embed è entrato nella nota. Non tiene ferma la finestra: aspetta il nome
+/// e l'host, e intanto la nota resta scrivibile.
+export async function createBaseHere(view: EditorView, from: number, to: number, port: NewBasePort): Promise<boolean> {
+  const viewName = liveStrings.t("base.new.view");
+  const id = ++baseIds;
+  if (view.state.field(pendingBases, false) === undefined) {
+    view.dispatch({ effects: StateEffect.appendConfig.of(pendingBases) });
+  }
+  view.dispatch({ effects: trackBase.of({ id, from, to }) });
+  try {
+    const cut = port.note.lastIndexOf("/");
+    const folder = cut < 0 ? "" : port.note.slice(0, cut);
+    const title = baseStem(pageName(port.note)) || viewName;
+    let proposal = await freeBaseName(port, title, false);
+    let taken: string | null = null;
+    for (;;) {
+      const answer = await port.ask(proposal, taken);
+      if (answer === null || !port.writable()) return false;
+      const name = baseName(baseStem(answer) || proposal);
+      // Un nome cambiato a mano si controlla di nuovo: quello proposto lo è già.
+      if (name !== proposal && (await port.taken(`${name}.base`))) {
+        taken = name;
+        proposal = await freeBaseName(port, name, true);
+        continue;
+      }
+      if (!port.writable()) return false;
+      try {
+        await port.create(folder === "" ? `${name}.base` : `${folder}/${name}.base`, baseFileText(folder, viewName));
+      } catch (error) {
+        if (!alreadyExists(error)) {
+          port.notify(liveStrings.t("base.new.failed", { name, reason: errorText(error) }));
+          return false;
+        }
+        // Nato nel frattempo, o non ancora nell'indice: il nome dopo.
+        taken = name;
+        proposal = await freeBaseName(port, name, true);
+        continue;
+      }
+      const range = view.state.field(pendingBases, false)?.get(id);
+      if (!range || !port.writable()) {
+        port.notify(liveStrings.t("base.new.orphan", { name }));
+        return false;
+      }
+      const at = baseInsertion(view.state, range.from, range.to, baseEmbed(name, viewName));
+      view.dispatch({
+        changes: { from: at.from, to: at.to, insert: at.insert },
+        selection: EditorSelection.cursor(at.cursor),
+        scrollIntoView: true,
+        userEvent: "input.complete",
+      });
+      view.focus();
+      return true;
+    }
+  } finally {
+    // Anche su un editor già chiuso: CodeMirror allora aggiorna solo lo stato.
+    view.dispatch({ effects: trackBase.of({ id, drop: true }) });
+  }
 }
 
 // ── I completamenti che una voce riapre ──────────────────────────────────────

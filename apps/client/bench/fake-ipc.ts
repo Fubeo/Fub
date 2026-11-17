@@ -84,7 +84,7 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
-import { baseFixture } from "./base-fixture";
+import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
@@ -290,12 +290,15 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
   : {};
 
 /// La Base delle scene `base-*` (`?base=1`, T15; `?base=venti`, T16;
-/// `?base=calendario`, T17):
+/// `?base=calendario`, T17; `?base=tempo`, T34; `?base=nota`, T18, la stessa
+/// di `1` incorporata nella nota della Live, con la voce «Base» del «/»):
 /// `Opere.base` e le note di `Opere/`, con le domande `fub.base` e i comandi
 /// `base.view.*` che il finto da solo non ha. Gli attrezzi del finto li chiede
 /// quando servono, cioè dopo che il finto è nato.
-const BASE_VARIANT = params.get("base");
-const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario"
+const BASE_PARAM = params.get("base");
+const BASE_IN_NOTE = BASE_PARAM === "nota";
+const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
+const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
       writeByCommand: async (doc, text) => {
@@ -431,6 +434,9 @@ if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE 
 /// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
 /// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
 const TRASH_FULL = params.get("cestino") === "3";
+/// La pagina del giorno (T39): `?giorno=1` dichiara la view `day_page` e la
+/// cartella delle giornaliere del componente dei template (`daily.folder`).
+const DAY_PAGE = params.get("giorno") === "1";
 
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
@@ -632,6 +638,9 @@ const VIEWS: ViewSpec[] = [
   // La Scrivania solo nelle sue scene: nelle altre il binario resta quello
   // delle loro foto.
   ...(DESK === null ? [] : [view("desk", "Scrivania", "main", "dashboard", 1)]),
+  // La pagina del giorno (T39), con la cartella del diario del componente
+  // dei template: solo nelle sue scene, perché le altre non cambino.
+  ...(DAY_PAGE ? [view("day_page", "La pagina del giorno", "main", "calendar", 1)] : []),
 ];
 
 /// Un `CommandSpec` di lettura, che è la forma della gran parte.
@@ -1293,6 +1302,22 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
+/// La cartella delle giornaliere come la dichiara `fub.template`
+/// (`daily.folder`): il diario del banco sta in `Diario/`.
+const DAY_FOLDER: readonly SettingEntry[] = DAY_PAGE ? [{
+  spec: {
+    key: "daily.folder",
+    label: "Cartella delle note del giorno",
+    description: "Dove nascono le note del giorno.",
+    group: "Note del giorno",
+    scope: "vault",
+    kind: { kind: "text", default: "Daily" },
+    program_writable: true,
+  },
+  value: "Diario",
+  source: "vault",
+}] : [];
+
 /// Come la nota mostra le proprietà (`editor.properties`), come la voce
 /// dell'host: di macchina, di serie `visible`. Le scene della testata (T6)
 /// la cambiano con `?properties=visible|hidden|source`.
@@ -1531,6 +1556,20 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   },
   render_embed: (q) => {
     if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
+    // Una Base incorporata (`?base=nota`, T18): il blocco `fub:base` che il
+    // kernel darebbe, col testo del file e la vista della sezione. Le domande
+    // `fub.base` del finto rispondono per `Opere.base` qualunque sia il file.
+    if (BASE !== null && q.page.endsWith(".base") && !q.block) {
+      const source = BASE.files[BASE_DOC] ?? "";
+      return {
+        kind: "render_embed",
+        value: {
+          doc_id: q.page.includes("/") ? q.page : BASE_DOC,
+          html: '<div class="ui-slot" data-ui-slot="0" data-custom-kind="base"></div>',
+          parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, view: q.heading ?? null, container: q.page.includes("/") ? q.page : BASE_DOC }, fallback: [] } }],
+        },
+      };
+    }
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
     const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
     if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {
@@ -1751,6 +1790,43 @@ const TREES: Record<string, UiNode> = {
     },
     fallback: [{ node: "text", content: "Il grafo, per chi non sa disegnarlo." }],
   },
+  // La pagina del giorno (T39) in fondo a `Diario/2026-08-19.md`: la forma è
+  // quella di `fub_features::template` (`day_page`), i tre gruppi col conto.
+  // Solo nelle scene `?giorno=1`, che dichiarano la view.
+  day_page: {
+    node: "stack",
+    dir: "column",
+    gap: 4,
+    children: [
+      {
+        node: "section", title: "Compiti di oggi · 2", collapsed: false, key: "day-tasks", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Mandare le foto del banco", subtitle: "Il banco che vede", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#4" },
+            { node: "list_item", title: "Rileggere la sintassi delle date, e dire a Mario cosa cambia nei frammenti di codice", subtitle: "Sintassi di Fub", action: { action: "day.open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#9" },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Stesso giorno · 1", collapsed: false, key: "day-same", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Il banco che vede", subtitle: "scadenza", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md" },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Create e cambiate · 3", collapsed: false, key: "day-changed", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Il banco che vede", subtitle: "Cambiata alle 18:40", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md" },
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Cambiata alle 11:05", action: { action: "day.open", payload: { doc: "Guida/Frammenti di codice.md" } }, selected: false, key: "Guida/Frammenti di codice.md" },
+            { node: "list_item", title: "Benvenuto", subtitle: "Cambiata alle 09:12", action: { action: "day.open", payload: { doc: "Benvenuto.md" } }, selected: false, key: "Benvenuto.md" },
+          ],
+        }],
+      },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -1784,11 +1860,17 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: [
-    ...(ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
+    // Con la barra e il «/» insieme («+ Inserisci» della barra) le voci del
+    // «/» si aggiungono a quelle della barra, senza ripeterne gli id.
+    ...(ON_MOBILE
+      ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS, ...SLASH_COMMANDS.filter((spec) => !FORMAT_COMMANDS.some((format) => format.id === spec.id))]
+      : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
+    // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
+    ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {

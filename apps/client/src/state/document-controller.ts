@@ -72,7 +72,7 @@ import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-cac
 import { newSubpage, renamePage } from "./page-rename";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
-import { dailyPath, firstWeekday } from "./dates";
+import { dailyDate, dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
 import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
 import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
@@ -1494,7 +1494,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
       blocksOf: (page: string) => noteBlocks(page).catch(() => []),
       people: { folder: peopleFolder, search: searchPeople, create: createPerson },
-      dates: { dailyPath, firstDay: firstWeekday },
+      dates: { dailyPath, dailyDate, firstDay: firstWeekday },
     },
     gridHost: api,
     exportDocument: {

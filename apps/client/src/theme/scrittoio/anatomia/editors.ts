@@ -29,6 +29,9 @@ export const EDITORS: PartAnatomy = {
     // Le finestre che la barra apre (Formato celle, Ordina, Gestione nomi…).
     { name: "grid-dialog", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["grid-dialog", "grid-dialog-border-cell", "grid-dialog-border-preview", "grid-dialog-check", "grid-dialog-choice", "grid-dialog-choices", "grid-dialog-color-button", "grid-dialog-color-chip", "grid-dialog-color-chip--auto", "grid-dialog-error", "grid-dialog-field", "grid-dialog-fields", "grid-dialog-form", "grid-dialog-label", "grid-dialog-legend", "grid-dialog-names-head", "grid-dialog-names-row", "grid-dialog-note", "grid-dialog-preview", "grid-preview-stage", "grid-preview-page", "grid-dialog-palette", "grid-dialog-palette-auto", "grid-dialog-palette-grid", "grid-dialog-palette-title", "grid-dialog-preview-text", "grid-dialog-results", "grid-result-key", "grid-result-number", "grid-result-ref", "grid-result-table", "grid-dialog-sample-text", "grid-dialog-section", "grid-dialog-signature", "grid-dialog-swatch", "grid-dialog-toolbar"] },
     { name: "base-surface", states: INTERACTIVE, hooks: ["base-surface", "base-status", "base-body", "base-summaries"] },
+    // La Base incorporata in una nota (T18): l'embed che la porta, senza il
+    // filo delle note riportate, e la larghezza fino al margine.
+    { name: "base-embed", states: REST, hooks: ["ui-slot", "ui-custom"] },
     // La barra della Base (T15): le linguette delle viste, gli strumenti,
     // «+» (una vista nuova), «Nuova», la riga di «Cerca», le etichette e «Nel
     // file .base».
@@ -42,6 +45,10 @@ export const EDITORS: PartAnatomy = {
     // Il calendario (T17): la testa col mese e i passi, la griglia dei
     // giorni, le note che si trascinano e «+N»; il vuoto senza la data.
     { name: "base-calendar", layer: "contenuto", states: DRAGGABLE, hooks: ["base-calendar", "base-cal-head", "base-cal-title", "base-cal-nav", "base-cal-prev", "base-cal-today", "base-cal-undated", "base-cal-scroll", "base-cal-grid", "base-cal-week", "base-cal-dow", "base-cal-day", "base-cal-num", "base-cal-weekday", "base-cal-event", "base-cal-more", "base-cal-empty"] },
+    // La linea del tempo (T34): la testa con i passi e la scala, la riga dei
+    // nomi delle colonne, le righe con le barre, i punti, i bordi che si
+    // prendono e le date fuori dai giorni mostrati; il vuoto senza l'inizio.
+    { name: "base-timeline", layer: "contenuto", states: DRAGGABLE, hooks: ["base-timeline", "base-tl-head", "base-tl-title", "base-tl-nav", "base-tl-prev", "base-tl-today", "base-tl-zoom", "base-tl-zoom-option", "base-tl-undated", "base-tl-scroll", "base-tl", "base-tl-axis", "base-tl-axis-label", "base-tl-scale", "base-tl-tick", "base-tl-now", "base-tl-row", "base-tl-name", "base-tl-track", "base-tl-bar", "base-tl-edge", "base-tl-point", "base-tl-off", "base-tl-none", "base-tl-empty"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
     // La griglia e le guide (T71) sono segni di Fub sulla vista, non contenuto.
     { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto", "canvas-grid": "segno", "canvas-guide": "segno" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-toolbar-item", "kit-options-row", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source", "canvas-grid", "canvas-guide"] },
@@ -117,6 +124,10 @@ export const EDITORS: PartAnatomy = {
     // componente dei compiti, vestita da blocco della carta.
     { name: "task-due", layer: "segno", layers: { "cm-fub-code": "contenuto" }, states: REST, hooks: ["cm-fub-due", "cm-fub-due-near", "cm-fub-due-overdue", "cm-fub-due-bad", "task-due", "task-due-near", "task-due-overdue", "task-due-bad", "cm-fub-code"] },
     { name: "tasks-block", layer: "segno", layers: { "markdown-rendered": "contenuto", "ui-stack": "cornice", "ui-checkbox": "cornice", "ui-field-label": "cornice", "ui-badge": "cornice", "ui-button": "cornice", "ui-text": "cornice", "ui-empty-state": "cornice", "ui-empty-title": "cornice", "intent-danger": "cornice", "intent-primary": "cornice" }, states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["markdown-rendered", "block-tasks", "block-query-note", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button", "ui-text", "ui-empty-state", "ui-empty-title", "intent-danger", "intent-primary"] },
+    // La pagina del giorno (T39): in fondo alla giornaliera, dopo l'ultima
+    // riga, la vista `day_page` del componente dei template. È un segno di
+    // Fub sulla carta, non testo del file.
+    { name: "day-page", layer: "segno", layers: { "cm-editor": "contenuto", "cm-content": "contenuto", "ui-section": "cornice", "ui-children": "cornice", "ui-list-item": "cornice", "ui-list-item-title": "cornice", "ui-list-item-subtitle": "cornice", "ui-text": "cornice", "ui-empty-state": "cornice", "ui-empty-title": "cornice" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["cm-editor", "cm-content", "cm-day-page", "cm-day-page-note", "ui-section", "ui-children", "ui-list-item", "ui-list-item-title", "ui-list-item-subtitle", "ui-text", "ui-empty-state", "ui-empty-title"] },
     { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno", "canvas-edge-draft": "segno" }, states: [S("rest"), S("hover"), S("selected"), S("dragging")], hooks: ["canvas-edge", "canvas-edge-draft", "canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
     // Si scrive in una scheda di nota (T41): l'anello della scheda che
     // scrive, «Esc per uscire» pieno, lo stato del salvataggio e «Sola

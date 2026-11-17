@@ -4,7 +4,7 @@ import type { SourceKind } from "../../host/enums.generated";
 import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
 import type { DocumentUpdate, EditorChange } from "./text-operation";
 import type { SurfaceEditorActions } from "./editor-actions";
-import type { SurfaceMenu, SurfaceMiniBar } from "./editor-menu";
+import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMiniBar } from "./editor-menu";
 
 /**
  * The family of a surface: a name its registration owns, one owner at a time.
@@ -663,6 +663,18 @@ export interface EditorSurface {
    */
   contextMenu?(at: SurfacePoint | null): SurfaceMenu | null;
   /**
+   * The group of the block at `at`, or under the cursor when `at` is `null`,
+   * for the format bar: its name («Compito») and the gestures of that block
+   * (a due date, the language of a code block). `null` where there is no
+   * such block: plain text, the cursor between two blocks, a selection over
+   * more than one block. The shell draws it next to the fixed buttons
+   * (`panels/format-bar.ts`), and asks again after a short pause when the
+   * actions change, never at each keystroke. The surface declares the group:
+   * no field of `CommandSpec` says it, and a plugin's command stays in the
+   * general bar.
+   */
+  blockGroup?(at: SurfacePoint | null): SurfaceBlockGroup | null;
+  /**
    * The mini toolbar for a surface with controls of its own (a Word document,
    * a sheet); without it the shell narrows the formatting bar.
    */
@@ -674,6 +686,22 @@ export interface EditorSurface {
    */
   paletteCommands?(): readonly SurfacePaletteCommand[];
   destroy(): void;
+}
+
+/**
+ * The group of a block in the format bar. `items` are entries as in the
+ * editor menu (`editor-menu.ts`): an id the shell resolves (an editor action
+ * the surface knows, a command), or an item with its own name and gesture.
+ * Items are read again when they are used, so a gesture always acts on the
+ * block where the cursor is then; the shell redraws the group only when what
+ * it shows changes. In read-only mode the surface leaves out what writes.
+ */
+export interface SurfaceBlockGroup {
+  /** The kind of block, stable: `task`, `callout`, `table`, `code`... */
+  readonly id: string;
+  /** The name the bar shows before the gestures, in the UI language. */
+  readonly label: string;
+  readonly items: readonly SurfaceMenuEntry[];
 }
 
 /** A command a surface offers to the command palette. */

@@ -94,13 +94,14 @@ import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { DiagramLiveWidget, diagramBlockKeys, fenceBody } from "./diagram-live";
+import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
+import { dayPage, type DayPageSource } from "./day-page";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
-import { blockTex, MathBlockLiveWidget, mathPopovers, type LiveFormula } from "./math-live";
+import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, type LiveFormula } from "./math-live";
 import { imageGestures } from "./image-live";
 import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code-block";
 import { blockPrefixes } from "./block-prefix";
@@ -159,6 +160,9 @@ export interface LivePreviewCallbacks {
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
+  /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
+  readonly dayPage?: DayPageSource;
 }
 
 /// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
@@ -2718,10 +2722,19 @@ export function livePreview(
       return { decision: `k${card.kind}`, ranges };
     }
     const block = movedBlock(mark.block, from + mark.offset);
-    if (!grid && touched(state, from, to)) {
-      // Un diagramma toccato si scrive come codice, e il disegno resta
-      // sotto (C5).
-      if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
+    if (!grid && block.kind === "math" && touched(state, from, to) && mathTouchable(state) && blockTexRange(state, from)) {
+      // Un blocco `$$` toccato si modifica sul posto, senza il suo LaTeX (T60).
+      ranges.push(Decoration.replace({ block: true, widget: new MathBlockEditWidget(from, blockTex(block.source)) }).range(from, to));
+      return { decision: "mx", ranges };
+    }
+    const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
+    // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
+    // scrive (E26).
+    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+      // Un diagramma toccato si scrive come codice, e il disegno gli sta
+      // accanto (C5, E26).
+      if (mermaid) {
+        ranges.push(...diagramSourceLines(state, from, to));
         ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
       } else if (block.kind === "math") {
         // Così anche un blocco `$$` (C6).
@@ -3201,5 +3214,6 @@ export function livePreview(
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
     noteHolds,
     diagramBlockKeys,
+    callbacks.dayPage ? dayPage(callbacks.dayPage) : [],
   ];
 }

@@ -430,6 +430,31 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .pane-editor .cm-content");
     },
   },
+  // **La pagina del giorno** (T39): in fondo alla giornaliera, in Live, i tre
+  // gruppi della vista `day_page` (`?giorno=1` la dichiara, con la cartella
+  // `Diario` del componente dei template).
+  ...[
+    ["pagina-del-giorno", "La pagina del giorno in fondo alla giornaliera: compiti, stesso giorno, create e cambiate", undefined],
+    ["pagina-del-giorno-stretta", "La pagina del giorno nella finestra stretta: le righe lunghe vanno a capo", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "giorno=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // Nella finestra stretta l'albero è nel cassetto chiuso: la nota si apre
+      // larga, poi la finestra si stringe.
+      if (viewport) await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Diario/2026-08-19.md");
+      if (viewport) {
+        await page.setViewportSize(viewport);
+        await page.waitForSelector("#layout.layout-compact");
+      }
+      await page.waitForSelector(".pane.focus .cm-day-page:not([hidden]) .ui-section .ui-list-item");
+      await page.$eval(".pane.focus .cm-day-page", (section) => section.scrollIntoView({ block: "end" }));
+      await page.mouse.move(0, 0);
+    },
+  })),
   {
     id: "inspector",
     title: "L'ispettore, sulla seconda scheda",
@@ -716,6 +741,57 @@ export const SCENE = onPage("shell", [
       await page.focus('.pane.focus .base-cal-day[data-day="2026-08-12"]');
       await page.keyboard.press("ArrowRight");
       await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
+    },
+  },
+  // **La linea del tempo** (T34), su `?base=tempo`: otto settimane dal 10
+  // agosto 2026 (oggi il 19), le opere dalla richiesta alla consegna: una
+  // tagliata a sinistra, una rovesciata, un punto, una con l'ora, una oltre i
+  // giorni mostrati e una senza date.
+  {
+    id: "base-tempo",
+    title: "Base: la linea del tempo, le opere dalla richiesta alla consegna",
+    query: "base=tempo",
+    prepare: openTimeline,
+  },
+  {
+    id: "base-tempo-stretto",
+    title: "Base: la linea del tempo nella finestra minima, 800 px",
+    query: "base=tempo",
+    viewport: NOTE_NARROW,
+    prepare: openTimeline,
+  },
+  {
+    id: "base-tempo-trascina",
+    title: "Base: una barra presa e trascinata di tre giorni, prima del rilascio",
+    query: "base=tempo",
+    prepare: openTimeline,
+    // Il puntatore vero, fermo a metà: la barra segue a giorni interi e la
+    // scritta dice le date nuove; niente è ancora scritto. È l'ultimo gesto
+    // (`hover`), dopo che il banco ha portato il puntatore nell'angolo.
+    hover: async (page) => {
+      const bar = page.locator('.pane.focus .base-tl-row[data-doc="Opere/Ritratto di signora.md"] .base-tl-bar');
+      const box = await bar.boundingBox();
+      const track = await page.locator('.pane.focus .base-tl-row[data-doc="Opere/Ritratto di signora.md"] .base-tl-track').boundingBox();
+      const day = track.width / 56;
+      const x = box.x + box.width / 2, y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + day, y);
+      await page.mouse.move(x + day * 3, y);
+      await page.waitForSelector('.pane.focus .base-tl-bar[data-dragging="true"]');
+    },
+  },
+  {
+    id: "base-tempo-mesi",
+    title: "Base: la linea del tempo per mesi, col fuoco su una riga dalla tastiera",
+    query: "base=tempo",
+    prepare: async (page) => {
+      await openTimeline(page);
+      await page.focus('.pane.focus .base-tl-row[data-doc="Opere/Annunciazione.md"] .base-tl-track');
+      await page.keyboard.press("-");
+      await page.waitForSelector('.pane.focus .base-tl-zoom-option[aria-pressed="true"]:text-is("Mesi")');
+      await page.keyboard.press("ArrowDown");
+      await page.waitForFunction(() => document.activeElement?.closest(".base-tl-row")?.getAttribute("data-doc") === "Opere/Il concerto.md");
     },
   },
   {
@@ -1156,6 +1232,64 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
+  // **La barra che segue il blocco** (T11, E8 del prototipo dell'editor): la
+  // barra compatta col gruppo del blocco del cursore, sulla nota della
+  // sintassi; a 700 px ciò che non entra scende in «…»; poi i due menu della
+  // barra, «Trasforma in» e «+ Inserisci». Il telefono è `mobile-keyboard`.
+  ...[
+    ["barra-blocco-compito", "La barra che segue il blocco: il cursore in un compito, «Compito · Scadenza»", "Da fare", "task"],
+    ["barra-blocco-codice", "La barra che segue il blocco: il cursore nel codice, il linguaggio e «Copia»", "let (x, y)", "code"],
+    ["barra-blocco-stretta", "La barra che segue il blocco nella finestra minima (800 px), nel codice: la fila compatta entra intera", "let (x, y)", "code", { width: 800, height: 800 }],
+  ].map(([id, title, line, block, viewport]) => ({
+    id,
+    title,
+    query: "formatbar=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // La nota si apre dall'albero, che a 700 px sta nel cassetto chiuso: si
+      // apre a finestra larga, poi la finestra torna quella della scena.
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      if (viewport) await page.setViewportSize(viewport);
+      // Il codice sta in fondo alla nota, fuori dalle righe che CodeMirror
+      // disegna: prima il cursore in fondo, poi la riga.
+      if (block === "code") {
+        await page.click(".pane.focus .pane-editor .cm-content");
+        await page.keyboard.press("Control+End");
+      }
+      await placeCursorOn(page, line);
+      // Il gruppo arriva dopo la pausa della barra (un tempo vero: l'orologio
+      // fermo del banco ferma la data, non i timer).
+      await page.waitForSelector(`.pane.focus .format-bar-context[data-block="${block}"]`, { state: "attached" });
+      await settleBar(page);
+    },
+  })),
+  {
+    id: "barra-blocco-trasforma",
+    title: "La barra che segue il blocco: lo stile del blocco apre «Trasforma in»",
+    // `slash=1`: i comandi di «Testo» e «Titolo 3» li dà il «/» dell'host finto.
+    query: "formatbar=1&slash=1",
+    prepare: async (page) => {
+      await placeCursorOn(page, "Un elenco corto");
+      await page.waitForSelector(".pane.focus .format-bar-style:not(:disabled)");
+      await page.click(".pane.focus .format-bar-style");
+      await page.waitForSelector('#context-menu [role="menuitemradio"][aria-checked="true"]');
+      await page.mouse.move(0, 0);
+    },
+  },
+  {
+    id: "barra-blocco-inserisci",
+    title: "La barra che segue il blocco: «+ Inserisci», gli stessi blocchi del «/» coi nomi",
+    // `slash=1` dà all'host finto i comandi del «/»: «+ Inserisci» offre quelli.
+    query: "formatbar=1&slash=1",
+    prepare: async (page) => {
+      await placeCursorOn(page, "Un elenco corto");
+      await page.waitForSelector(".pane.focus .format-bar-insert:not(:disabled)");
+      await page.click(".pane.focus .format-bar-insert");
+      await page.waitForSelector("#context-menu .menu-field-input");
+      await page.mouse.move(0, 0);
+    },
+  },
   ...[
     ["icone-figure", "Il selettore dell'icona su una cartella: le figure del vault", ""],
     ["icone-emoji", "Il selettore dell'icona su una cartella, col vault delle emoji", "icone=emoji"],
@@ -1213,6 +1347,27 @@ export const SCENE = onPage("shell", [
     query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
+  })),
+  // La formula che si modifica toccandola (T60, E27): → davanti alla formula
+  // in riga apre sotto di lei il riquadro con la formula grande, il cursore
+  // nel numeratore; il blocco `$$` si apre col clic, sul posto, e la scena
+  // prova i clic su numeratore, denominatore, esponente e radice (il posto
+  // detto al lettore di schermo), se no è rossa; la formula con un errore si
+  // apre col suo LaTeX (il telefono sta fra le scene di `mobile.html`).
+  ...[
+    ["formula-01-riga", "formula-toccata", "La formula in riga toccata: il riquadro sotto, la formula grande col cursore nel numeratore", "inline"],
+    ["formula-02-blocco", "formula-toccata", "Il blocco $$ toccato: la formula sul posto col bordo d'accento, il cursore dove cade il clic", "block"],
+    ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e la nota che lo dice", "error"],
+    // Le proposte dei simboli (T61): `\fr` in fondo alla formula in riga
+    // propone le frazioni e le frecce, disegnate e col nome; `\s` nel
+    // blocco le radici, la somma e il sigma.
+    ["formula-04-simboli", "formula-toccata", "La barra rovesciata e le prime lettere: le proposte dei simboli, disegnati e col nome, sotto la formula", "symbols"],
+    ["formula-05-simboli-blocco", "formula-toccata", "Le proposte dei simboli sotto il blocco $$ toccato", "symbols-block"],
+  ].map(([id, live, title, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    prepare: (page) => touchFormula(page, gesture),
   })),
   // Scrittura a riposo (T3, E1, passo 1 del prototipo): la pagina mostra solo
   // ciò che si legge. Prima della foto la scena prova i livelli di presenza:
@@ -1358,7 +1513,8 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       // Il sorgente di un diagramma disegnato è nascosto, col suo «Copia»:
       // conta ciò che si vede. Con un errore il sorgente c'è, ed è suo.
-      const controls = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram:not([data-state='error']) :is(button, figcaption)")]
+      // La didascalia (il `title`, T58) è testo della figura, non un controllo.
+      const controls = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram:not([data-state='error']) :is(button, figcaption:not(.mermaid-diagram-caption))")]
         .filter((node) => node.getClientRects().length > 0).length);
       if (controls > 0) throw new Error(`un diagramma ha ${controls} controlli dentro la cornice`);
       if (gesture !== "menu") return;
@@ -1376,6 +1532,101 @@ export const SCENE = onPage("shell", [
         if (controls > 0) throw new Error(`al passaggio il diagramma mostra ${controls} controlli`);
       },
     } : {}),
+  })),
+  // Il tracciato dei collegamenti (E26, T59): il flusso del prototipo, con un
+  // ritorno e le etichette, giù e poi a destra, in ognuno dei cinque stili;
+  // poi i casi limite (etichette lunghe, tratteggio, senza punta, sequenza).
+  // La finestra è alta perché i due orientamenti stiano in uno scatto.
+  ...[
+    ...["armonia", "acquerello", "aurora", "blueprint", "inchiostro"].map((style) => [
+      `diagramma-07-tracciato-${style}`,
+      `diagramma-tracciato-${style}`,
+      `Il tracciato in ${style[0].toUpperCase()}${style.slice(1)}: frecce che arrivano dritte, punte sottili, gomiti arrotondati, il ritorno di lato; giù e a destra`,
+    ]),
+    ["diagramma-08-tracciato-casi", "diagramma-tracciato-casi", "Il tracciato nei casi limite: un'etichetta lunga, un tratteggio, un collegamento senza punta, un diagramma di sequenza"],  ].map(([id, live, title]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    viewport: { width: 1280, height: 1500 },
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => {
+        const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+        return all.length > 0 && all.every((figure) => figure.dataset.state === "ready");
+      });
+      // Lo stile in linea del contenitore dove Mermaid misura (#473), come
+      // nelle scene qui sopra.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
+  // Il sorgente del diagramma (T58): accanto al disegno, metà e metà, con
+  // «Fatto» nella testata; con un errore il disegno di prima attenuato e la
+  // riga che dice dove; uno sopra l'altro nel foglio stretto; a tutta
+  // finestra sul fondo dello stile.
+  ...[
+    // Accanto serve un foglio di almeno 941 px: la finestra larga.
+    ["diagramma-sorgente-01-accanto", "Il sorgente aperto: le righe a sinistra, il disegno accanto, la didascalia sotto", null, { width: 1600, height: 900 }],
+    ["diagramma-sorgente-02-errore", "Un errore nel sorgente: il disegno di prima attenuato, «Riga N» in parole semplici", "errore", { width: 1600, height: 900 }],
+    ["diagramma-sorgente-03-stretta", "Nel foglio stretto il sorgente e il disegno stanno uno sopra l'altro", "errore", { width: 800, height: 800 }],
+    ["diagramma-sorgente-04-ingrandito", "Ingrandisci: il diagramma a tutta finestra, sul fondo dello stile", "ingrandisci"],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: `live=${gesture === "ingrandisci" ? "diagramma" : "diagramma-sorgente"}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const ready = () => page.waitForFunction(() => {
+        const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+        return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+      });
+      await ready();
+      // Lo stesso stile in linea di Mermaid delle scene qui sopra (#473).
+      const forgetMermaidStyle = () => page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      if (gesture === "ingrandisci") {
+        // Dal menu del tasto destro: in Scrittura il clic porta il cursore nel recinto.
+        const box = await page.locator(".pane.focus .pane-editor .mermaid-diagram img").first().boundingBox();
+        if (!box) throw new Error("il diagramma non ha un disegno");
+        await page.mouse.click(box.x + box.width / 2, box.y + 24, { button: "right" });
+        await page.waitForSelector(".diagram-menu");
+        await page.click(".diagram-menu [data-action='enlarge']");
+        await page.waitForSelector(".lightbox.lightbox-diagram");
+        await page.waitForFunction(() => document.getAnimations().length === 0);
+        await forgetMermaidStyle();
+        return;
+      }
+      await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram[data-state='ready']");
+      if (gesture === "errore") {
+        await page.evaluate(async () => {
+          const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+          const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+          const at = view.state.doc.toString().indexOf("D[Cambia giorno]") + "D[Cambia giorno]".length;
+          view.dispatch({ changes: { from: at, insert: "\n  D --> --> A" }, selection: { anchor: at + 14 }, userEvent: "input.type" });
+        });
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .cm-fub-diagram-notice:not([hidden])", { timeout: 15000 });
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram.is-stale");
+      }
+      // Il recinto in cima al foglio: sotto si vedono il disegno e la didascalia.
+      await page.evaluate(() => {
+        const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+        const header = document.querySelector(".pane.focus .pane-editor .cm-fub-code-header");
+        scroller.scrollTop += header.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+      });
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await forgetMermaidStyle();
+    },
   })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
   // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
@@ -1432,6 +1683,53 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
+  // La Base nella nota (T18, E12, E19): incorporata, si allarga oltre la
+  // colonna del testo fino al margine; nella finestra stretta resta nella
+  // colonna. Poi «/base»: il nome chiesto, e la Base nata al posto della riga.
+  ...[
+    ["base-nota", "La Base incorporata in una nota: oltre la colonna del testo fino al margine", "base-incorporata"],
+    ["base-nota-stretta", "La Base incorporata nella finestra minima: resta nella colonna", "base-incorporata", { width: 800, height: 800 }],
+  ].map(([id, title, live, viewport]) => ({
+    id,
+    title,
+    query: `live=${live}&base=nota`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await waitForEmbeddedBase(page);
+    },
+  })),
+  {
+    id: "base-slash-nome",
+    title: "«/base»: il nome della Base, di serie il titolo della nota",
+    query: "live=base-slash&base=nota&slash=1",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.keyboard.type("/base");
+      await page.waitForSelector(".slash-panel");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".palette-form input");
+      await page.mouse.move(0, 0);
+    },
+  },
+  {
+    id: "base-slash-creata",
+    title: "«/base» confermato: il file accanto alla nota e la Base al posto della riga",
+    query: "live=base-slash&base=nota&slash=1",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.keyboard.type("/base");
+      await page.waitForSelector(".slash-panel");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".palette-form input");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".palette-form", { state: "detached" });
+      await waitForEmbeddedBase(page);
+      await page.mouse.move(0, 0);
+    },
+  },
   {
     id: "compact",
     title: "Lo spazio dell'interfaccia al passo più stretto: le barre si ritirano, il foglio no",
@@ -1801,6 +2099,15 @@ export const SCENE = onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // La formula in riga toccata (T60) sul telefono: il riquadro non esce
+    // dallo schermo.
+    {
+      id: "mobile-formula",
+      title: "Il telefono: la formula in riga toccata, il riquadro dentro lo schermo",
+      query: "live=formula-toccata",
+      viewport: PHONE,
+      prepare: (page) => touchFormula(page, "inline"),
+    },
     // La testata della pagina (T6) sul telefono: la copertina bassa, le
     // colonne delle proprietà strette.
     {
@@ -2000,6 +2307,14 @@ export const SCENE = onPage("shell", [
       query: "base=calendario",
       viewport: PHONE,
       prepare: openCalendar,
+    },
+    // La linea del tempo della Base in piedi (T34): il nome sopra la barra.
+    {
+      id: "mobile-base-tempo",
+      title: "Il telefono: la linea del tempo della Base, il nome sopra la barra",
+      query: "base=tempo",
+      viewport: PHONE,
+      prepare: openTimeline,
     },
     // La barra dei fogli in piedi: la Home in tre colonne di due foglietti
     // chiusi, e uno di loro aperto sul posto.
@@ -2252,6 +2567,21 @@ export async function chooseMode(page, mode, label = MODE_LABELS[mode]) {
 /// e la cartella contiene il testo di tutti i suoi figli. Il `data-path` è
 /// invece l'identità stabile che l'esploratore mette sulle voci dell'albero e
 /// che non dipende dall'implementazione del tooltip.
+/// Il cursore in fondo alla riga del foglio a fuoco che contiene `text`, con
+/// la barra di formato già montata coi suoi pulsanti.
+async function placeCursorOn(page, text) {
+  await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+  await page.click(`.pane.focus .pane-editor .cm-content .cm-line:has-text(${JSON.stringify(text)})`);
+  await page.keyboard.press("End");
+}
+
+/// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
+/// senza suggerimenti.
+async function settleBar(page) {
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 async function openNote(page, path) {
   const folder = path.slice(0, path.lastIndexOf("/"));
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
@@ -2306,6 +2636,70 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// La formula toccata (T60). `inline`: → davanti alla formula in riga, poi
+/// due → fino al numeratore. `block`: il clic su ogni pezzo del blocco `$$`
+/// deve portare il cursore lì (il posto detto al lettore di schermo), e la
+/// foto resta col cursore nel numeratore. `error`: → davanti alla formula rotta.
+async function touchFormula(page, gesture) {
+  const ready = ".cm-fub-mx-surface[data-state=\"ready\"]";
+  const said = () => page.evaluate(() => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "");
+  if (gesture === "symbols" || gesture === "symbols-block") {
+    // Le proposte dei simboli (T61): in fondo alla formula, `+` e il nome.
+    if (gesture === "symbols") {
+      await openLive(page, ["@ArrowRight"], "top");
+      await page.waitForSelector(`.cm-fub-mx-popover ${ready}`);
+    } else {
+      await openLive(page, [], "top");
+      const box = await page.locator(".cm-content .math-block").first().boundingBox();
+      if (!box) throw new Error("manca il blocco $$");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    }
+    await page.keyboard.press("End");
+    await page.keyboard.type(gesture === "symbols" ? "+\\fr" : "+\\s");
+    await page.waitForSelector(".cm-fub-mx-symbols:not([hidden]) [aria-selected=\"true\"] .katex");
+    const names = await page.locator(".cm-fub-mx-symbol-name").allTextContents();
+    if (names.length < 3) throw new Error(`poche proposte: ${names.join(", ")}`);
+  } else if (gesture === "block") {
+    await openLive(page, [], "top");
+    const centre = async (selector, fy = 0.5, fx = 0.5) => {
+      const box = await page.locator(selector).first().boundingBox();
+      if (!box) throw new Error(`la formula non ha ${selector}`);
+      return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+    };
+    // Il primo clic, sulla formula resa, la apre già nel numeratore.
+    const first = await centre(".cm-content .math-block .mfrac", 0.2);
+    await page.mouse.click(first.x, first.y);
+    await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    const clicks = [
+      [".cm-fub-mx-block .mfrac", 0.85, 0.5, "denominatore"],
+      [".cm-fub-mx-block .msupsub", 0.3, 0.6, "esponente di x"],
+      [".cm-fub-mx-block .sqrt", 0.5, 0.7, "sotto la radice"],
+      [".cm-fub-mx-block .mfrac", 0.15, 0.5, "numeratore"],
+    ];
+    const wrong = [];
+    if ((await said()) !== "numeratore") wrong.push(`apertura: ${await said()}`);
+    for (const [selector, fy, fx, expected] of clicks) {
+      const point = await centre(selector, fy, fx);
+      await page.mouse.click(point.x, point.y);
+      const got = await said();
+      if (got !== expected) wrong.push(`${expected}: ${got}`);
+    }
+    if (wrong.length) throw new Error(`il clic non porta il cursore dove cade: ${wrong.join("; ")}`);
+  } else {
+    await openLive(page, ["@ArrowRight"], "top");
+    await page.waitForSelector(gesture === "error" ? ".cm-fub-mx[data-mode=\"latex\"] .cm-fub-mx-latex" : `.cm-fub-mx-popover ${ready}`);
+    if (gesture === "inline") {
+      // Un pezzo alla volta: v, =, poi dentro la frazione.
+      for (let i = 0; i < 6 && (await said()) !== "numeratore"; i++) await page.keyboard.press("ArrowRight");
+      if ((await said()) !== "numeratore") throw new Error(`le frecce non entrano nel numeratore: ${await said()}`);
+    }
+  }
+  // Il puntatore lontano dai bottoni: nessun suggerimento nella foto.
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => document.getAnimations().length === 0);
 }
 
 /// La nota dei commenti (T22) in `mode`, poi il gesto: `open` apre la
@@ -2705,6 +3099,15 @@ async function openBase(page) {
   });
 }
 
+/// Aspetta la Base incorporata nella nota della Live, con le sue righe.
+async function waitForEmbeddedBase(page) {
+  await page.waitForFunction(() => {
+    const base = document.querySelector('.pane.focus .base-surface[data-embedded="true"]');
+    return (base?.querySelectorAll(".base-table tbody tr").length ?? 0) > 0
+      && base?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
 /// Apre il calendario di `?base=calendario` e aspetta il mese con le sue note.
 async function openCalendar(page) {
   await page.evaluate(async () => {
@@ -2714,6 +3117,20 @@ async function openCalendar(page) {
   await page.waitForFunction(() => {
     const pane = document.querySelector(".pane.focus");
     return (pane?.querySelectorAll(".base-cal-event").length ?? 0) > 0
+      && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
+/// Apre la linea del tempo di `?base=tempo` e aspetta le sue barre.
+async function openTimeline(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-tl-bar").length ?? 0) > 0
       && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
       && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
   });

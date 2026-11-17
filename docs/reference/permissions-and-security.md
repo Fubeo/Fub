@@ -49,8 +49,27 @@ copie divergenti delle regole.
 | tempo e random | quantità e disponibilità |
 | impostazioni | livello scrivibile e chiave dichiarata |
 | transfer | handle e contenuto, non path arbitrari |
+| notifiche | `fub:notifications` dichiarato e non spento |
 
 L'elenco esatto delle funzioni vive nel contratto.
+
+### Le notifiche del sistema
+
+`fub:notifications` è un permesso del core stretto come gli altri: non sta in
+`PluginPermissions::core()`, e lo dichiara soltanto il componente che ne ha
+bisogno, dalla sua riga dell'inventario (`OfficialFeature::permissions`).
+Lo dichiara «Compiti» (`fub.tasks`), per i promemoria. Come ogni permesso
+dichiarato ha il suo interruttore nella pagina **Componenti** delle
+impostazioni (`fub.tasks:permissions.notifications`), acceso di serie.
+
+Nessun metodo dell'host mostra una notifica, e il permesso non ha una funzione
+WIT: un plugin WASM non può notificare. Chi notifica è l'app
+(`crates/fub-app/src/promemoria.rs`), a nome del componente, e prima di ogni
+notifica chiede al `Guard` del vault se la famiglia `Notifications` è concessa
+in quel momento (`Host::component_allows`). Spento l'interruttore, o spento il
+componente, la risposta è no dalla notifica dopo; i promemoria restano nella
+nota. La prova è `the_reminder_notifications_are_a_permission_of_the_tasks_alone`
+in `crates/fub-host/src/legacy_tests/switches.rs`.
 
 ## Path fence
 

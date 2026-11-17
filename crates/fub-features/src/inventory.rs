@@ -195,6 +195,12 @@ pub struct OfficialFeature {
     pub provides: &'static [&'static str],
     /// I servizi senza i quali il bundle non si monta.
     pub requires: &'static [&'static str],
+    /// I permessi che il bundle chiede oltre a quelli di ogni bundle del core
+    /// (`PluginPermissions::core`), dai nomi di
+    /// [`fub_abi::options::permission`]. Finiscono nel manifest come quelli di
+    /// un plugin, quindi ognuno ha il suo interruttore nelle impostazioni e lo
+    /// stesso `Guard` che li controlla: il core non ha una strada sua.
+    pub permissions: &'static [&'static str],
     /// Il collegamento che soltanto chi monta sa fare.
     pub wiring: HostWiring,
 }
@@ -258,6 +264,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(search::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::SearchIndex,
     },
     #[cfg(feature = "versioning")]
@@ -280,6 +287,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(versioning::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::VersionStore,
     },
     #[cfg(feature = "backlinks")]
@@ -296,6 +304,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "outline")]
@@ -312,6 +321,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "tags")]
@@ -328,6 +338,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     // I compiti usano la ricerca se c'è (`uses` nella mappa, non `requires`: la
@@ -339,7 +350,9 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: tasks::catalog,
         view: Some(|| Box::new(TasksView)),
         commands: None,
-        index: None,
+        // I promemoria: un indice in memoria, ricostruito dalle note a ogni
+        // apertura del vault.
+        index: Some(|| Box::new(tasks::reminders::ReminderIndex::new())),
         // Il recinto ```tasks```: dichiararlo è ciò che lo fa leggere reso, e
         // col componente spento resta codice.
         syntax: Some(tasks::syntax_rules),
@@ -348,6 +361,10 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        // Le notifiche dei promemoria: un permesso che chi usa Fub può
+        // spegnere dalle impostazioni, e allora i promemoria restano nella nota
+        // e nell'elenco all'avvio.
+        permissions: &[fub_abi::options::permission::NOTIFICATIONS],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "properties")]
@@ -365,6 +382,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // `note.property.set`/`remove`, che template e Base invocano.
         provides: &[PROPERTIES_ID],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "template")]
@@ -386,6 +404,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         // Fonde le proprietà del template con `note.property.set`.
         requires: &[PROPERTIES_ID],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "queries")]
@@ -402,6 +421,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "dashboard")]
@@ -419,6 +439,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(dashboard::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "backup")]
@@ -435,6 +456,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(backup::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "trash")]
@@ -453,6 +475,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // Il pannello invoca `trash.restore`/`trash.empty`, che appartengono al
         // bundle dei comandi: senza quel servizio il cestino non si monta.
         requires: &[COMMANDS_ID],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "graph")]
@@ -470,6 +493,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "formatting")]
@@ -487,6 +511,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "proof")]
@@ -505,6 +530,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(proof::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::MachineDictionaries,
     },
     #[cfg(feature = "stats")]
@@ -521,6 +547,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "base")]
@@ -540,6 +567,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         // Una cella modificata diventa `note.property.set`/`remove`.
         requires: &[PROPERTIES_ID],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "commands")]
@@ -558,6 +586,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // garantisce che non sopravviva a una registrazione fallita.
         provides: &[COMMANDS_ID],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     #[cfg(feature = "blocks")]
@@ -581,6 +610,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: None,
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     // Ultima, e non per caso: non registra pannelli, e il suo solo comando,
@@ -600,6 +630,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(draw::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
     // In coda anche lei, per la stessa ragione: non registra pannelli, e il
@@ -619,6 +650,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(lavagna::settings),
         provides: &[],
         requires: &[],
+        permissions: &[],
         wiring: HostWiring::None,
     },
 ];

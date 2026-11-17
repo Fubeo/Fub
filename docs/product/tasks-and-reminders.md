@@ -84,7 +84,8 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
   ridisegno costa così circa 70 ms invece di 180.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
-- I promemoria non ci sono ancora.
+- Il `⏰` nel testo non ha una pastiglia, e i promemoria passati ad app chiusa
+  non hanno un elenco all'avvio: c'è la notifica (vedi sotto).
 
 ## La scadenza nel testo
 
@@ -101,6 +102,47 @@ pastiglia tratteggiata in rosso, e passandoci sopra dice come si scrive. In Live
 la pastiglia resta anche sulla riga del cursore: la data si scrive dentro. Una
 pastiglia non si spezza mai: se la data sta a metà di un codice, di un link o di
 un evidenziato, la pastiglia prende l'elemento intero.
+
+## I promemoria
+
+Un compito aperto suona all'ora scritta dopo `⏰`:
+
+```markdown
+- [ ] Chiamare Mario ⏰ 2026-11-13 09:30 📅 2026-11-14
+- [ ] Pagare l'affitto ⏰ 2026-12-01
+```
+
+La data è `AAAA-MM-GG`, l'ora `HH:MM` dalle `00:00` alle `23:59`; senza ora il
+promemoria suona alle **9:00**. Conta l'ultimo `⏰` del compito. L'ora è quella
+**del muro**, cioè dell'orologio di chi guarda: un promemoria delle 9:30 suona
+alle 9:30 anche dopo un volo in un altro fuso o dopo il cambio dell'ora legale.
+Il file non cambia mai: il `⏰` resta scritto com'è.
+
+- Con l'app aperta arriva una **notifica del sistema** all'ora scritta.
+  Cliccarla apre la nota sulla sezione del compito (il titolo sopra di lui).
+- Ciò che è passato mentre l'app era chiusa **non** arriva come notifica: è il
+  posto dell'elenco dei promemoria passati. Per la stessa ragione un promemoria
+  scritto per un'ora già passata non suona.
+- Quando l'orologio torna indietro (l'ora legale che finisce, un viaggio verso
+  ovest) i promemoria dell'ora ripetuta non suonano due volte. Quando salta
+  avanti (verso est, l'ora legale che inizia) suonano subito quelli del salto.
+- Più di cinque promemoria alla stessa ora diventano quattro notifiche e una
+  che dice quanti altri ce ne sono.
+- Un compito spuntato, un `⏰` cancellato o una nota cestinata non suonano più,
+  dal salvataggio della nota. Un `⏰` con una data che non esiste
+  (`⏰ 2026-02-30`) o un'ora che non si legge (`⏰ 2026-11-13 25:00`) non suona.
+
+Le notifiche hanno un interruttore: **Impostazioni → Componenti → Compiti →
+Può mostrare notifiche del sistema**. Spento, i promemoria restano nella nota e
+non arriva nessuna notifica; riacceso, non arriva la raffica di quelli suonati
+nel frattempo. Se il sistema non mostra notifiche (le ha negate a Fub, o su
+Linux non c'è un servizio di notifiche) l'app lo scrive nel log e va avanti.
+
+L'indice dei promemoria sta in memoria e si ricostruisce dalle note a ogni
+apertura del vault (`crates/fub-features/src/tasks/reminders.rs`); la notifica
+la mostra l'app (`crates/fub-app/src/promemoria.rs`), con `notify-rust`.
+Provato su Linux; macOS e Windows usano la stessa libreria, senza una prova a
+mano.
 
 ## Il recinto ```` ```tasks ````
 
@@ -166,6 +208,47 @@ posto in `apps/client/src/editors/text/profiles/markdown/query-block.ts`, che
 monta la vista attraverso `apps/client/src/ui/embedded-views.ts`; la pastiglia è
 in `task-due.ts` (con `query-block.ts` per la Lettura e `livepreview.ts` per la
 Live).
+
+## La pagina del giorno
+
+In fondo alla nota del giorno, in Live, dopo l'ultima riga, Fub mostra la
+**pagina del giorno**: tre gruppi che si chiudono con un clic sul titolo.
+
+- **Compiti del giorno** (sulla giornaliera del giorno corrente il titolo lo
+  dice): i compiti aperti che scadono quel giorno, in tutto il vault, col nome
+  della nota accanto.
+- **Stesso giorno**: le note con una proprietà data di quel giorno (anche in
+  una lista di date), con accanto il nome della proprietà.
+- **Create e cambiate**: le note cambiate quel giorno, la più recente in cima,
+  con l'ora. La giornaliera stessa non c'è.
+
+Una riga apre la sua nota. Il giorno è quello del nome della nota, non il giorno
+corrente: la giornaliera di ieri mostra i compiti di ieri. Il giorno di una
+modifica e l'ora seguono il fuso e il formato dell'ora di chi guarda.
+
+La pagina **non è nel file**: non si scrive, non entra in ciò che si copia né
+nell'esportazione, e il cursore non ci entra. È la vista `day_page` del
+componente dei template (`crates/fub-features/src/template/view/day.rs`), che
+legge tutto dall'indice con `query_index`; la shell la monta in fondo alla nota
+con `apps/client/src/editors/text/profiles/markdown/day-page.ts`, attraverso
+`apps/client/src/ui/embedded-views.ts`. Si ridisegna quando l'indice cambia,
+mai a ogni tasto. Una nota è una giornaliera quando il suo percorso, tolta
+l'estensione, è quello che la cartella e il formato delle note del giorno
+scrivono per la sua data: la shell lo riconosce (`dailyDate` in
+`apps/client/src/state/dates.ts`) e il componente lo ricontrolla; una nota che
+non lo è non ha la pagina, e nemmeno una richiesta in più.
+
+Limiti:
+
+- ogni gruppo mostra al più **50** righe e scrive quante ne restano;
+- i compiti si leggono al più da **50** note con compiti di quel giorno, e la
+  pagina scrive quante altre note non ha letto;
+- i compiti vengono dall'indice di ricerca: senza un indice attivo il gruppo lo
+  dice invece di restare vuoto;
+- «Create e cambiate» guarda l'ultima modifica del file: il vault non tiene la
+  data di nascita, e una nota creata e poi ricambiata un altro giorno compare
+  in quel giorno;
+- i compiti nella pagina non si spuntano: la riga apre la nota.
 
 ## La Scrivania
 

@@ -211,6 +211,13 @@ pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
 /// destro; `off` mai.
 pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// La forma della barra di formato del foglio: `compatta` (poche cose fisse,
+/// lo stile e il gruppo del blocco del cursore, «+ Inserisci»), `completa`
+/// (tutti i pulsanti, la fila della pre-alpha), `nascosta` (resta la
+/// mini-barra sulla selezione). Finché nessuno la sceglie,
+/// `chrome.formatbar.visible` spento da un Fub di prima vale `nascosta`; quella
+/// chiave non si riscrive più.
+pub const EDITOR_TOOLBAR: &str = "editor.toolbar";
 /// Che cosa fa il clic che apre un link a una nota: `apri` la porta nel
 /// riquadro, come sempre; `sbircia` la apre nella sbirciata, sopra la destra
 /// del foglio. Alt col clic (o Alt-Invio) sbircia comunque.
@@ -255,6 +262,12 @@ pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
 /// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
 /// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
 pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Le formule di Scrittura mostrano il loro LaTeX: accesa, il clic su una
+/// formula apre il riquadro col TeX e un blocco `$$` toccato mostra la
+/// sorgente col disegno sotto. Spenta (di serie) la formula si modifica
+/// toccandola: resta disegnata, col cursore dentro, e il LaTeX nel file non si
+/// vede. Coi tasti di Vim le formule mostrano il LaTeX comunque.
+pub const EDITOR_MATH_SOURCE: &str = "editor.math.source";
 /// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
 /// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
 /// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
@@ -905,6 +918,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 true,
             ),
             (
+                EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE_DESC,
+                false,
+            ),
+            (
                 EDITOR_FOLD_GUTTER,
                 C_EDITOR_FOLD_GUTTER,
                 C_EDITOR_FOLD_GUTTER_DESC,
@@ -1000,6 +1019,17 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("always", Text::key(C_EDITOR_MINIBAR_ALWAYS)),
             UiOption::new("menu", Text::key(C_EDITOR_MINIBAR_MENU)),
             UiOption::new("off", Text::key(C_EDITOR_MINIBAR_OFF)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_TOOLBAR,
+        C_EDITOR_TOOLBAR,
+        C_EDITOR_TOOLBAR_DESC,
+        "compatta",
+        vec![
+            UiOption::new("compatta", Text::key(C_EDITOR_TOOLBAR_COMPACT)),
+            UiOption::new("completa", Text::key(C_EDITOR_TOOLBAR_FULL)),
+            UiOption::new("nascosta", Text::key(C_EDITOR_TOOLBAR_HIDDEN)),
         ],
     ));
     settings.push(choice(
@@ -1815,6 +1845,11 @@ const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
 const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
 const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
 const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_TOOLBAR: &str = "core.editor.toolbar";
+const C_EDITOR_TOOLBAR_DESC: &str = "core.editor.toolbar.desc";
+const C_EDITOR_TOOLBAR_COMPACT: &str = "core.editor.toolbar.compatta";
+const C_EDITOR_TOOLBAR_FULL: &str = "core.editor.toolbar.completa";
+const C_EDITOR_TOOLBAR_HIDDEN: &str = "core.editor.toolbar.nascosta";
 const C_EDITOR_LINK_CLICK: &str = "core.editor.link_click";
 const C_EDITOR_LINK_CLICK_DESC: &str = "core.editor.link_click.desc";
 const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
@@ -1843,6 +1878,8 @@ const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
 const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
+const C_EDITOR_MATH_SOURCE: &str = "core.editor.math_source";
+const C_EDITOR_MATH_SOURCE_DESC: &str = "core.editor.math_source.desc";
 const C_EDITOR_BLOCKS: &str = "core.editor.blocks";
 const C_EDITOR_BLOCKS_DESC: &str = "core.editor.blocks.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -2487,6 +2524,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
         .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_TOOLBAR, "Barra di formato")
+        .with(C_EDITOR_TOOLBAR_DESC, "Sopra il foglio. Compatta: poche cose fisse, lo stile e gli strumenti del blocco in cui sta il cursore. Completa: tutti i pulsanti. Nascosta: resta la mini-barra sul testo scelto.")
+        .with(C_EDITOR_TOOLBAR_COMPACT, "Compatta")
+        .with(C_EDITOR_TOOLBAR_FULL, "Completa")
+        .with(C_EDITOR_TOOLBAR_HIDDEN, "Nascosta")
         .with(C_EDITOR_LINK_CLICK, "Clic su un link a una nota")
         .with(C_EDITOR_LINK_CLICK_DESC, "Che cosa fa il clic che apre un link: portare la nota nel riquadro, o aprirla nella sbirciata, sopra la destra del foglio, dove si scrive senza lasciare la nota di prima. Alt col clic, o Alt Invio, sbircia sempre.")
         .with(C_EDITOR_LINK_CLICK_OPEN, "Apre la nota")
@@ -2510,6 +2552,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_MATH_SOURCE, "Mostra il LaTeX delle formule")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "Accesa, il clic su una formula apre il suo LaTeX. Spenta, la formula resta disegnata e si modifica toccandola: si clicca dove si vuole scrivere.")
         .with(C_EDITOR_BLOCKS, "Blocchi: maniglie e selezione")
         .with(C_EDITOR_BLOCKS_DESC, "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -3157,6 +3201,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
         .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
         .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_TOOLBAR, "Formatting toolbar")
+        .with(C_EDITOR_TOOLBAR_DESC, "Above the sheet. Compact: a few fixed buttons, the style and the tools of the block the cursor is in. Full: every button. Hidden: the mini toolbar on selected text remains.")
+        .with(C_EDITOR_TOOLBAR_COMPACT, "Compact")
+        .with(C_EDITOR_TOOLBAR_FULL, "Full")
+        .with(C_EDITOR_TOOLBAR_HIDDEN, "Hidden")
         .with(C_EDITOR_LINK_CLICK, "Clicking a link to a note")
         .with(C_EDITOR_LINK_CLICK_DESC, "What the click that opens a link does: bring the note into the pane, or open it in the peek, over the right of the sheet, where you write without leaving the note you were in. Alt with the click, or Alt Enter, always peeks.")
         .with(C_EDITOR_LINK_CLICK_OPEN, "Opens the note")
@@ -3180,6 +3229,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_MATH_SOURCE, "Show the LaTeX of formulas")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "On, clicking a formula opens its LaTeX. Off, the formula stays drawn and you edit it by touching it: click where you want to write.")
         .with(C_EDITOR_BLOCKS, "Blocks: handles and selection")
         .with(C_EDITOR_BLOCKS_DESC, "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.")
         .with(C_MODE_SOURCE, "Source")

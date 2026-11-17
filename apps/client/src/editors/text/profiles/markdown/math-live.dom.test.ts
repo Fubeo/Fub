@@ -6,13 +6,15 @@ import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
-import { liveReveal, type RevealPolicy } from "../../live-reveal";
-import { blockTex, setTex } from "./math-live";
+import { liveReveal, mathSource, type RevealPolicy } from "../../live-reveal";
+import { blockTex, blockTexRange, setTex } from "./math-live";
 
 vi.mock("katex", () => ({ default: { render(tex: string, el: HTMLElement) { el.textContent = `«${tex}»`; } } }));
 vi.mock("katex/dist/katex.min.css", () => ({}));
 
-// Le formule con l'anteprima (C6).
+// Le formule col LaTeX a vista e l'anteprima (C6): con «Mostra il LaTeX»
+// (`editor.math.source`) o coi tasti di Vim. La formula che si modifica
+// toccandola, di serie, ha i suoi test in `math/touch.dom.test.ts`.
 
 const views: EditorView[] = [];
 afterEach(() => {
@@ -20,13 +22,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function mount(doc: string, anchor: number, policy: RevealPolicy = "mai"): EditorView {
+function mount(doc: string, anchor: number, policy: RevealPolicy = "mai", source = true): EditorView {
   const view = new EditorView({
     parent: document.body,
     state: EditorState.create({
       doc,
       selection: { anchor },
-      extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy))],
+      extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy)), mathSource.of(source)],
     }),
   });
   ensureSyntaxTree(view.state, view.state.doc.length, 1000);
@@ -49,9 +51,21 @@ describe("le regole", () => {
     expect(blockTex("$$\nE = mc^2\n$$")).toBe("E = mc^2");
     expect(blockTex("$$ x $$ ^eq")).toBe("x");
   });
+
+  it("il posto del TeX di un blocco lascia stare dollari, a capo e id", () => {
+    const at = (doc: string) => {
+      const range = blockTexRange(EditorState.create({ doc }), 0);
+      return range && doc.slice(0, range.from) + "|" + doc.slice(range.from, range.to) + "|" + doc.slice(range.to);
+    };
+    expect(at("$$\nE = mc^2\n$$ ^eq")).toBe("$$\n|E = mc^2|\n$$ ^eq");
+    expect(at("$$ x $$")).toBe("$$ |x| $$");
+    expect(at("$$\n\n$$")).toBe("$$\n||\n$$");
+    expect(at("> $$\n> a\n> $$")).toBeNull();
+    expect(at("niente")).toBeNull();
+  });
 });
 
-describe("con `mai`", () => {
+describe("con `mai` e «Mostra il LaTeX»", () => {
   it("→ davanti alla formula apre il riquadro; scrivere cambia il TeX, Invio esce dopo", () => {
     const doc = "x $a+b$ y";
     const view = mount(doc, 2);

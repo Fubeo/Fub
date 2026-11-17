@@ -26,6 +26,7 @@ export const ORDER = [
   "sheets",
   "document",
   "tabella",
+  "math",
   "editors",
   "draw",
   "media",
