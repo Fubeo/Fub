@@ -97,4 +97,20 @@ describe("un pezzo che arriva con un import()", () => {
     part.warm();
     expect(idle).toHaveBeenCalledTimes(1);
   });
+
+  it("un'intenzione prima del thread libero toglie il riscaldamento in attesa", async () => {
+    const idle = vi.fn((_run: () => void, _options?: { timeout?: number }) => 9);
+    const cancel = vi.fn();
+    vi.stubGlobal("requestIdleCallback", idle);
+    vi.stubGlobal("cancelIdleCallback", cancel);
+    const source = deferred<string>();
+    const part = lazyPart(source.importer);
+    part.warm();
+    void part.load();
+    expect(cancel).toHaveBeenCalledWith(9);
+    expect(source.calls()).toBe(1);
+    source.arrive("pronto");
+    await part.load();
+    expect(source.calls()).toBe(1);
+  });
 });

@@ -41,6 +41,7 @@ export const LAZY_WARM_TIMEOUT_MS = 1500;
 
 interface IdleScope {
   readonly requestIdleCallback?: (run: () => void, options?: { timeout?: number }) => number;
+  readonly cancelIdleCallback?: (handle: number) => void;
 }
 
 /// Ogni pezzo creato: `loadLazyParts` li aspetta tutti.
@@ -58,8 +59,15 @@ export function lazyPart<T>(importer: () => Promise<T>): LazyPart<T> {
   let module: T | null = null;
   let request: Promise<T> | null = null;
   let warming = false;
+  // Il riscaldamento in attesa: un `load` che arriva prima lo toglie.
+  let idleWarm: number | undefined;
+  let laterWarm: ReturnType<typeof setTimeout> | undefined;
+  const scope = globalThis as IdleScope;
 
   const load = (): Promise<T> => {
+    if (idleWarm !== undefined) scope.cancelIdleCallback?.(idleWarm);
+    if (laterWarm !== undefined) clearTimeout(laterWarm);
+    idleWarm = laterWarm = undefined;
     if (module) return Promise.resolve(module);
     request ??= importer().then(
       (loaded) => {
@@ -80,15 +88,16 @@ export function lazyPart<T>(importer: () => Promise<T>): LazyPart<T> {
     warm() {
       if (module || warming) return;
       warming = true;
-      const scope = globalThis as IdleScope;
       const start = (): void => {
+        idleWarm = laterWarm = undefined;
         // Un suggerimento: se non arriva, il gesto lo chiede di nuovo.
         void load().catch(() => {
           warming = false;
         });
       };
-      if (typeof scope.requestIdleCallback === "function") scope.requestIdleCallback(start, { timeout: LAZY_WARM_TIMEOUT_MS });
-      else setTimeout(start, 0);
+      // Senza `requestIdleCallback` (WebKit), dopo il giro che monta.
+      if (typeof scope.requestIdleCallback === "function") idleWarm = scope.requestIdleCallback(start, { timeout: LAZY_WARM_TIMEOUT_MS });
+      else laterWarm = setTimeout(start, 0);
     },
     run(gesture, alive = () => true) {
       if (module) {
