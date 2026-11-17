@@ -17546,10 +17546,10 @@ h6.ui-heading {
 
 /* Un menu è un rialzo: il foglio del prototipo (`.pop`), staccato dall'ombra
    di ciò che si apre sopra tutto (`--shadow-pop`, il `--sh-pop` del
-   prototipo, la stessa del lanciatore); un tema che non la dichiara ha un filo
-   appena accennato e l'ombra della struttura. Contestuale o a tendina è lo stesso oggetto
-   (`ui/menu.ts`), con la lingua del «/»: testata, appunti e piede restano
-   fermi, l'elenco in mezzo scorre. Cambia solo da dove parte. */
+   prototipo, la stessa del lanciatore); un tema che non la dichiara ha un
+   filo appena accennato e l'ombra della struttura. Contestuale o a tendina è
+   lo stesso oggetto (`ui/menu.ts`), con la lingua del «/»: testata, appunti e
+   piede restano fermi, l'elenco in mezzo scorre. Cambia solo da dove parte. */
 .context-menu {
   position: fixed;
   z-index: var(--z-menu);
