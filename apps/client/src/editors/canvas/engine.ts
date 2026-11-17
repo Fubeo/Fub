@@ -9689,18 +9689,23 @@ export class CanvasEngine {
     const wire = this.#wireAt(target, event.clientX, event.clientY);
     if (wire) {
       this.#selectEdge(wire);
+      this.#claimFocus(null);
       return;
     }
     if (nodeId) {
       this.#selectNode(nodeId, event.shiftKey);
       this.#keepContentFocus(event, nodeId);
-      if (this.#readOnly || !this.#doc || !(target instanceof Element && target.closest(".canvas-node-handle"))) return;
+      // Il fuoco rimasto su un pulsante della colonna o della riga torna alla
+      // lavagna: Canc, Ctrl+Z e lo zoom valgono per la scheda appena scelta (IMP-040).
+      this.#claimFocus(this.#cards.get(nodeId)?.article ?? null);
+      if (this.#readOnly || !this.#doc || !this.#dragsCard(target, nodeId)) return;
       this.#beginDrag(event);
       return;
     }
     const edgeId = this.#edgeAt(target);
     if (edgeId) {
       this.#selectEdge(edgeId);
+      this.#claimFocus(null);
       return;
     }
     // Testo: un clic sul vuoto mette lì una scheda di testo, col campo aperto,
@@ -9719,7 +9724,36 @@ export class CanvasEngine {
       return;
     }
     if (!event.shiftKey) this.#clearSelection();
+    this.#claimFocus(null);
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Il fuoco fuori dalla lavagna (un pulsante della colonna, della riga delle
+   * opzioni o della barra dei comandi appena cliccato) va su `card`, o sulla
+   * vista: i tasti della lavagna arrivano di nuovo (IMP-040). Il fuoco già
+   * dentro la vista resta dov'è (una scheda, il campo che scrive).
+   */
+  #claimFocus(card: HTMLElement | null): void {
+    if (this.#viewport.contains(document.activeElement)) return;
+    (card?.isConnected ? card : this.#viewport).focus({ preventScroll: true });
+  }
+
+  /**
+   * Il mouse giù su `target` sposta la scheda `id` (IMP-041): dalla testata
+   * sempre; dal corpo se la scheda non è attiva né in scrittura (allora il
+   * corpo è del contenuto) e se sotto il puntatore non c'è un controllo della
+   * vista (un pulsante, un campo), che tiene il suo clic. Un clic fermo resta
+   * un clic: lo spostamento comincia oltre i 3 px.
+   */
+  #dragsCard(target: EventTarget | null, id: string): boolean {
+    if (!(target instanceof Element)) return false;
+    if (target.closest(".canvas-node-handle")) return true;
+    if (this.#activeId === id || this.#editor?.id === id) return false;
+    const entry = this.#cards.get(id);
+    if (!entry || !entry.article.contains(target)) return false;
+    const control = target.closest("button, input, textarea, select, [contenteditable=''], [contenteditable='true']");
+    return control === null || !entry.article.contains(control);
   }
 
   /**
@@ -10962,6 +10996,8 @@ export class CanvasEngine {
       const drag = this.#drag;
       this.#drag = null;
       this.#hideGuides();
+      // Una scheda spostata dal corpo non ci entra col clic che segue il rilascio.
+      if (drag.moved) this.#pressedSelected = null;
       if (drag.moved) this.#writeGesture(this.#dragOps(drag));
       return;
     }
@@ -12394,9 +12430,13 @@ export class CanvasEngine {
     }
     for (const [id, entry] of this.#cards) {
       if (present.has(id) || entry === kept) continue;
+      // La scheda col fuoco che se ne va (Canc, un annulla) lo lascia alla
+      // vista: il tasto dopo (Ctrl+Z) arriva ancora alla lavagna (IMP-040).
+      const hadFocus = entry.article.contains(document.activeElement);
       this.#cards.delete(id);
       this.#releaseBody(entry);
       entry.article.remove();
+      if (hadFocus && !this.#destroyed) this.#viewport.focus({ preventScroll: true });
     }
     // Ciò che sulla scena non è una scheda (il messaggio della scena troppo
     // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima,
