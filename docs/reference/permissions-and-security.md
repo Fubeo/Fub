@@ -61,8 +61,7 @@ l'interruttore `fub.tasks:permissions.notifications` in **Componenti**, acceso
 di serie. Non ha una funzione WIT, quindi un plugin WASM non può notificare:
 notifica l'app (`crates/fub-app/src/promemoria.rs`), che prima di ognuna chiede
 al `Guard` (`Host::component_allows`). Spento l'interruttore o il componente, la
-notifica dopo non parte e i promemoria restano nella nota. Prova:
-`the_reminder_notifications_are_a_permission_of_the_tasks_alone`.
+notifica dopo non parte e i promemoria restano nella nota (prova in `switches.rs`).
 
 ## Path fence
 
