@@ -707,7 +707,7 @@ byte per byte.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page
 src/shells/scrittoio/sheets/title-rename.test.ts
-Stato: [~] PR #421 (bozza fino alle baseline; T7 8ee25be6e, T8 7703499f7)
+Stato: [x] PR #421 unita in main il 2026-11-17 (857294f2f), CI completa verde, baseline dal runner
 
 ## T8 · Le proprietà con l'editor del tipo
 
@@ -746,7 +746,7 @@ modifica una proprietà e la rilegge dal file; le foto del banco somigliano
 alla riga 294.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/page
-Stato: [~] PR #421 (bozza fino alle baseline; T7 8ee25be6e, T8 7703499f7)
+Stato: [x] PR #421 unita in main il 2026-11-17 (857294f2f), CI completa verde, baseline dal runner
 
 ## T9 · Selezione e Stato: gli editor e la Bacheca per Stato
 
