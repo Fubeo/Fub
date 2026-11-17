@@ -371,7 +371,10 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
   ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
     .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
-  "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },  "battuta-50": typingNote(50),
+  "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
+  // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
+  "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
+  "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),
 };

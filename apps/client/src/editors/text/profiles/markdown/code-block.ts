@@ -17,6 +17,7 @@ import { writeClipboardText } from "../../../../platform/clipboard";
 import { notify } from "../../../../ui/notify";
 import { openLifetime } from "../../../../ui/lifetime";
 import { liveReveal } from "../../live-reveal";
+import { leaveDiagramSource } from "./diagram-live";
 import { CODE_LANGUAGES } from "./slash";
 import { liveStrings } from "./strings";
 
@@ -164,6 +165,15 @@ export class CodeHeaderWidget extends WidgetType {
     copy.className = "cm-fub-code-copy";
     copy.textContent = liveStrings.t("live.code.copy");
     header.append(language, wrap, copy);
+    // Il sorgente di un diagramma si chiude da qui (E26): «Fatto», come Esc.
+    if (/^mermaid$/i.test(this.info.trim().split(/\s+/)[0] ?? "")) {
+      const done = document.createElement("button");
+      done.type = "button";
+      done.className = "cm-fub-code-done";
+      done.textContent = liveStrings.t("live.diagram.done");
+      done.setAttribute("aria-label", liveStrings.t("live.diagram.done.label"));
+      header.append(done);
+    }
     return header;
   }
   // I clic arrivano ai gestori del plugin; i tasti restano ai pulsanti, che
@@ -232,11 +242,14 @@ export function removeEmptyBlock(state: EditorState): TransactionSpec | null {
 
 // ── I gesti della testata ────────────────────────────────────────────────────
 
-function header(event: Event): { el: HTMLElement; part: "lang" | "wrap" | "copy" } | null {
+function header(event: Event): { el: HTMLElement; part: "lang" | "wrap" | "copy" | "done" } | null {
   const target = event.target instanceof Element ? event.target : null;
-  const el = target?.closest<HTMLElement>(".cm-fub-code-lang, .cm-fub-code-wrap, .cm-fub-code-copy");
+  const el = target?.closest<HTMLElement>(".cm-fub-code-lang, .cm-fub-code-wrap, .cm-fub-code-copy, .cm-fub-code-done");
   if (!el) return null;
-  const part = el.classList.contains("cm-fub-code-lang") ? "lang" : el.classList.contains("cm-fub-code-wrap") ? "wrap" : "copy";
+  const part = el.classList.contains("cm-fub-code-lang") ? "lang"
+    : el.classList.contains("cm-fub-code-wrap") ? "wrap"
+      : el.classList.contains("cm-fub-code-done") ? "done"
+        : "copy";
   return { el, part };
 }
 
@@ -341,7 +354,10 @@ const plugin = ViewPlugin.fromClass(
         event.preventDefault();
         if (hit.part === "lang") this.languages(hit.el);
         else if (hit.part === "copy") this.copy(hit.el);
-        else {
+        else if (hit.part === "done") {
+          const fence = this.fence(hit.el);
+          if (fence) leaveDiagramSource(this.view, fence.body?.from ?? fence.open.to);
+        } else {
           const fence = this.fence(hit.el);
           if (fence) this.view.dispatch({ effects: toggleWrap.of(fence.from) });
         }

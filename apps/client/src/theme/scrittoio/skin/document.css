@@ -1718,11 +1718,6 @@ button.cm-fub-page-icon:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* L'avviso sotto il diagramma che si scrive: l'ultima resa buona resta. */
-.cm-editor .cm-content .cm-fub-diagram-notice {
-  color: var(--doc-danger);
-  font-family: var(--font-ui);
-}
 /* Il riquadro della formula (C6): il TeX in carattere fisso, e sotto la resa. */
 .cm-fub-math-field {
   font-family: var(--font-mono);

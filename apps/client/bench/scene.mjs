@@ -1493,7 +1493,8 @@ export const SCENE = onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       // Il sorgente di un diagramma disegnato è nascosto, col suo «Copia»:
       // conta ciò che si vede. Con un errore il sorgente c'è, ed è suo.
-      const controls = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram:not([data-state='error']) :is(button, figcaption)")]
+      // La didascalia (il `title`, T58) è testo della figura, non un controllo.
+      const controls = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram:not([data-state='error']) :is(button, figcaption:not(.mermaid-diagram-caption))")]
         .filter((node) => node.getClientRects().length > 0).length);
       if (controls > 0) throw new Error(`un diagramma ha ${controls} controlli dentro la cornice`);
       if (gesture !== "menu") return;
@@ -1542,6 +1543,69 @@ export const SCENE = onPage("shell", [
         }
       });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
+  // Il sorgente del diagramma (T58): accanto al disegno, metà e metà, con
+  // «Fatto» nella testata; con un errore il disegno di prima attenuato e la
+  // riga che dice dove; uno sopra l'altro nel foglio stretto; a tutta
+  // finestra sul fondo dello stile.
+  ...[
+    // Accanto serve un foglio di almeno 941 px: la finestra larga.
+    ["diagramma-sorgente-01-accanto", "Il sorgente aperto: le righe a sinistra, il disegno accanto, la didascalia sotto", null, { width: 1600, height: 900 }],
+    ["diagramma-sorgente-02-errore", "Un errore nel sorgente: il disegno di prima attenuato, «Riga N» in parole semplici", "errore", { width: 1600, height: 900 }],
+    ["diagramma-sorgente-03-stretta", "Nel foglio stretto il sorgente e il disegno stanno uno sopra l'altro", "errore", { width: 800, height: 800 }],
+    ["diagramma-sorgente-04-ingrandito", "Ingrandisci: il diagramma a tutta finestra, sul fondo dello stile", "ingrandisci"],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: `live=${gesture === "ingrandisci" ? "diagramma" : "diagramma-sorgente"}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const ready = () => page.waitForFunction(() => {
+        const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+        return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+      });
+      await ready();
+      // Lo stesso stile in linea di Mermaid delle scene qui sopra (#473).
+      const forgetMermaidStyle = () => page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      if (gesture === "ingrandisci") {
+        // Dal menu del tasto destro: in Scrittura il clic porta il cursore nel recinto.
+        const box = await page.locator(".pane.focus .pane-editor .mermaid-diagram img").first().boundingBox();
+        if (!box) throw new Error("il diagramma non ha un disegno");
+        await page.mouse.click(box.x + box.width / 2, box.y + 24, { button: "right" });
+        await page.waitForSelector(".diagram-menu");
+        await page.click(".diagram-menu [data-action='enlarge']");
+        await page.waitForSelector(".lightbox.lightbox-diagram");
+        await page.waitForFunction(() => document.getAnimations().length === 0);
+        await forgetMermaidStyle();
+        return;
+      }
+      await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram[data-state='ready']");
+      if (gesture === "errore") {
+        await page.evaluate(async () => {
+          const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+          const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+          const at = view.state.doc.toString().indexOf("D[Cambia giorno]") + "D[Cambia giorno]".length;
+          view.dispatch({ changes: { from: at, insert: "\n  D --> --> A" }, selection: { anchor: at + 14 }, userEvent: "input.type" });
+        });
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .cm-fub-diagram-notice:not([hidden])", { timeout: 15000 });
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram.is-stale");
+      }
+      // Il recinto in cima al foglio: sotto si vedono il disegno e la didascalia.
+      await page.evaluate(() => {
+        const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+        const header = document.querySelector(".pane.focus .pane-editor .cm-fub-code-header");
+        scroller.scrollTop += header.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+      });
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await forgetMermaidStyle();
     },
   })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei

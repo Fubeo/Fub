@@ -107,6 +107,9 @@ function diagramNotes(svg: Document): string[] {
 }
 
 const MAX_SOURCE_LENGTH = 50_000;
+/// Il diagramma non si rimpicciolisce sotto questa parte della sua misura
+/// (E26): oltre, scorre di lato.
+export const MIN_SCALE = 0.72;
 // Mermaid has process-wide configuration. Theme selection and rendering must
 // share the same queue, not just calls to mermaid.render().
 let rendering: Promise<unknown> = Promise.resolve();
@@ -411,17 +414,251 @@ async function chooseStyle(style: DiagramStyleId): Promise<void> {
 // Il sorgente che il menu legge e riscrive: il titolo, la direzione del flusso.
 // ---------------------------------------------------------------------------
 
+/// La riga `title:` del frontmatter: dove comincia, dove finisce (senza l'a
+/// capo, con le righe che la continuano) e il valore scritto. `null` se non
+/// c'è un frontmatter o non ha un titolo.
+interface TitleLine {
+  readonly from: number;
+  readonly to: number;
+  readonly written: string;
+  readonly continuation: readonly string[];
+}
+
+const TITLE_KEY = /^(\s*)title\s*:(.*)$/;
+
+function titleLine(source: string, end: number): TitleLine | null {
+  let from = source.indexOf("\n") + 1;
+  while (from < end) {
+    const stop = source.indexOf("\n", from);
+    const lineEnd = stop < 0 || stop >= end ? end : stop;
+    const line = source.slice(from, lineEnd).replace(/\r$/, "");
+    const match = TITLE_KEY.exec(line);
+    if (match && line.trim() !== "---") {
+      // Le righe più rientrate della chiave la continuano (`title: |`, o un
+      // valore che va a capo).
+      const indent = match[1]!.length;
+      const continuation: string[] = [];
+      let to = lineEnd;
+      let next = lineEnd + 1;
+      while (next < end) {
+        const nextStop = source.indexOf("\n", next);
+        const nextEnd = nextStop < 0 || nextStop >= end ? end : nextStop;
+        const text = source.slice(next, nextEnd).replace(/\r$/, "");
+        if (text.trim() === "---" || !text.trim() || /^\s*/.exec(text)![0].length <= indent) break;
+        continuation.push(text.trim());
+        to = nextEnd;
+        next = nextEnd + 1;
+      }
+      return { from, to: source[to - 1] === "\r" ? to - 1 : to, written: match[2]!.trim(), continuation };
+    }
+    from = lineEnd + 1;
+  }
+  return null;
+}
+
+/// Il valore di uno scalare YAML su una riga: tolte le virgolette, coi loro
+/// escape, o il commento di uno scalare semplice.
+function yamlValue(written: string, continuation: readonly string[]): string {
+  if (/^[|>][+-]?$/.test(written)) return continuation.join(written.startsWith("|") ? "\n" : " ");
+  if (written.startsWith("\"")) {
+    const closed = /^"((?:[^"\\]|\\.)*)"/.exec(written);
+    if (closed) {
+      try {
+        return JSON.parse(`"${closed[1]!}"`) as string;
+      } catch {
+        return closed[1]!.replace(/\\(.)/g, "$1");
+      }
+    }
+  }
+  if (written.startsWith("'")) {
+    const closed = /^'((?:[^']|'')*)'/.exec(written);
+    if (closed) return closed[1]!.replace(/''/g, "'");
+  }
+  return [written.replace(/\s+#.*$/, ""), ...continuation].join(" ");
+}
+
 /// Il `title` del frontmatter di Mermaid, senza virgolette; `null` se non c'è.
 export function diagramTitle(source: string): string | null {
   const end = frontmatterEnd(source);
   if (end === 0) return null;
-  for (const line of source.slice(0, end).split("\n").slice(1, -1)) {
-    const match = /^\s*title\s*:\s*(.*?)\s*$/.exec(line.replace(/\r$/, ""));
-    if (!match) continue;
-    const value = match[1]!.replace(/^(["'])(.*)\1$/, "$2").trim();
-    return value || null;
+  const line = titleLine(source, end);
+  if (!line) return null;
+  const value = yamlValue(line.written, line.continuation).replace(/\s+/g, " ").trim();
+  return value || null;
+}
+
+/// Un titolo come scalare YAML: semplice se si legge uguale, altrimenti fra
+/// virgolette doppie. Mermaid legge il frontmatter con lo schema JSON: un
+/// titolo che sembra un numero, un booleano o che ha `: ` e ` #` va fra
+/// virgolette.
+function yamlScalar(value: string): string {
+  const plain = /^[^\s\-?:,[\]{}#&*!|>'"%@`]/.test(value)
+    && !/:(\s|$)|\s#|[\\"]/.test(value)
+    && !/^(true|false|null|yes|no|on|off|~)$/i.test(value)
+    && !/^[-+]?(\.?\d|0x|\.inf|\.nan)/i.test(value);
+  return plain ? value : JSON.stringify(value);
+}
+
+/// La modifica che dà al diagramma il titolo `title` (la didascalia, E26):
+/// riscrive la riga `title:` del frontmatter, la aggiunge, o la toglie con un
+/// titolo vuoto, e con lei il frontmatter se resta vuoto. `null` se il titolo
+/// è già quello.
+export function titleEdit(source: string, title: string): SourceEdit | null {
+  const clean = title.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+  if ((diagramTitle(source) ?? "") === clean) return null;
+  const written = clean ? `title: ${yamlScalar(clean)}` : null;
+  const end = frontmatterEnd(source);
+  if (end === 0) return written ? { from: 0, to: 0, insert: `---\n${written}\n---\n` } : null;
+  const line = titleLine(source, end);
+  if (line && written) return { from: line.from, to: line.to, insert: written };
+  if (!line) {
+    if (!written) return null;
+    const at = source.indexOf("\n") + 1;
+    return { from: at, to: at, insert: `${written}\n` };
+  }
+  // Via il titolo: con lui il frontmatter, se non resta altro.
+  const opener = source.indexOf("\n") + 1;
+  const closer = source.lastIndexOf("\n", end - 2) + 1;
+  const rest = source.slice(opener, line.from) + source.slice(Math.min(line.to + 1, end), closer);
+  if (!rest.trim()) return { from: 0, to: end, insert: "" };
+  const stop = source.indexOf("\n", line.to);
+  return { from: line.from, to: stop < 0 ? line.to : stop + 1, insert: "" };
+}
+
+/// Il sorgente senza il titolo: la didascalia lo mostra sotto il disegno, e
+/// Mermaid non lo ridisegna dentro.
+export function withoutTitle(source: string): string {
+  const edit = titleEdit(source, "");
+  return edit ? source.slice(0, edit.from) + edit.insert + source.slice(edit.to) : source;
+}
+
+// ---------------------------------------------------------------------------
+// L'errore di un diagramma, in chiaro: la riga del sorgente e che cosa non va.
+// ---------------------------------------------------------------------------
+
+/// Che cosa non va in un diagramma, detto a chi lo scrive: `line` è la riga
+/// del corpo del recinto (da 1), se si sa; `text` una frase senza il punto,
+/// mai il messaggio di Mermaid.
+export interface DiagramProblem {
+  readonly line: number | null;
+  readonly text: string;
+}
+
+/// Una resa che non riesce, col suo problema già detto in chiaro.
+class DiagramFailure extends Error {
+  constructor(readonly problem: DiagramProblem) {
+    super(problem.text);
+  }
+}
+
+// Le stesse espressioni con cui Mermaid 11 pulisce il testo prima di leggerlo
+// (`preprocessDiagram`): il frontmatter, le direttive `%%{…}%%`, i commenti a
+// riga intera, gli spazi in testa. Le righe dei suoi errori contano il testo
+// pulito.
+const MERMAID_FRONT_MATTER = /^([^\S\n\r]*)-{3}\s*[\n\r](.*?)[\n\r]\1-{3}\s*[\n\r]+/s;
+const MERMAID_DIRECTIVE = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
+const MERMAID_COMMENT = /^\s*%%(?!{)[^\n]+\n?/gm;
+const LEADING_SPACE = /^\s+/;
+
+/// Per ogni riga del testo che Mermaid legge, la riga del sorgente da cui
+/// viene (da 1).
+export function mermaidLineOrigins(source: string): number[] {
+  let text = source.replace(/\r\n?/g, "\n");
+  // La riga d'origine di ogni carattere.
+  let origin = new Int32Array(text.length);
+  for (let i = 0, line = 1; i < text.length; i++) {
+    origin[i] = line;
+    if (text[i] === "\n") line++;
+  }
+  const lastLine = text.split("\n").length;
+  const strip = (pattern: RegExp) => {
+    const kept: string[] = [];
+    const keptOrigin: number[] = [];
+    let at = 0;
+    pattern.lastIndex = 0;
+    const take = (from: number, to: number) => {
+      kept.push(text.slice(from, to));
+      for (let i = from; i < to; i++) keptOrigin.push(origin[i]!);
+    };
+    for (let match = pattern.exec(text); match; match = pattern.global ? pattern.exec(text) : null) {
+      take(at, match.index);
+      at = match.index + match[0].length;
+      if (match[0].length === 0) pattern.lastIndex++;
+    }
+    take(at, text.length);
+    text = kept.join("");
+    origin = Int32Array.from(keptOrigin);
+  };
+  strip(MERMAID_FRONT_MATTER);
+  strip(MERMAID_DIRECTIVE);
+  strip(MERMAID_COMMENT);
+  strip(LEADING_SPACE);
+  const lines: number[] = [];
+  for (let start = 0; ; ) {
+    lines.push(start < text.length ? origin[start]! : lastLine);
+    const stop = text.indexOf("\n", start);
+    if (stop < 0) break;
+    start = stop + 1;
+  }
+  return lines;
+}
+
+/// Il tipo scritto in cima al diagramma, come Mermaid lo cerca: la prima
+/// parola del testo pulito.
+function writtenKind(source: string): { word: string; line: number } | null {
+  const origins = mermaidLineOrigins(source);
+  const text = source.replace(/\r\n?/g, "\n");
+  const lines = text.split("\n");
+  for (const line of new Set(origins)) {
+    const word = /^\s*([^\s;{]+)/.exec(lines[line - 1] ?? "")?.[1];
+    if (word && !word.startsWith("%%") && word !== "---") return { word, line };
   }
   return null;
+}
+
+/// Il nome di un errore di Mermaid senza riga: il tipo che non conosce.
+const UNKNOWN_KIND = /No diagram type detected|UnknownDiagramError/i;
+
+/// Un errore di Mermaid detto in chiaro, con la riga del sorgente dove sta.
+export function diagramProblem(error: unknown, source: string): DiagramProblem {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const name = error instanceof Error ? error.name : "";
+  const kind = writtenKind(source);
+  if (UNKNOWN_KIND.test(name) || UNKNOWN_KIND.test(message)) {
+    if (!kind) return { line: null, text: t("mermaid.problem.empty") };
+    return {
+      line: kind.line,
+      text: /^[A-Za-z][\w-]*$/.test(kind.word) ? t("mermaid.problem.kind", { word: kind.word }) : t("mermaid.problem.no_kind"),
+    };
+  }
+  const at = /\b(?:parse|lexical|lexer)\s+error\s+on\s+line\s+(\d+)/i.exec(message);
+  if (!at) return { line: null, text: t("mermaid.problem.other") };
+  const origins = mermaidLineOrigins(source);
+  const cleaned = Math.max(1, Number(at[1]));
+  const unfinished = /got\s+'EOF'/.test(message);
+  // Un diagramma che finisce prima del tempo ha l'errore in fondo: sull'ultima
+  // riga scritta, non su quella vuota dopo.
+  const written = source.replace(/\r\n?/g, "\n").split("\n");
+  const lastWritten = () => {
+    for (let i = origins.length - 1; i >= 0; i--) if (written[origins[i]! - 1]?.trim()) return origins[i]!;
+    return origins[0] ?? 1;
+  };
+  const line = unfinished || cleaned > origins.length ? lastWritten() : origins[cleaned - 1]!;
+  let text: string;
+  if (/lexical|lexer/i.test(message)) text = t("mermaid.problem.symbol");
+  else if (unfinished) text = t("mermaid.problem.unfinished");
+  else if (kind && /^(flowchart(-elk)?|graph)$/i.test(kind.word)) text = t("mermaid.problem.flow");
+  else if (kind && /^sequenceDiagram$/i.test(kind.word)) text = t("mermaid.problem.sequence");
+  else text = t("mermaid.problem.syntax");
+  return { line, text };
+}
+
+/// La frase intera: «Riga 12: questa riga …», o la sola frase con la
+/// maiuscola. Sempre col punto.
+export function problemSentence(problem: DiagramProblem): string {
+  const text = /[.!?…]$/.test(problem.text) ? problem.text : `${problem.text}.`;
+  if (problem.line === null) return text.charAt(0).toUpperCase() + text.slice(1);
+  return `${t("mermaid.problem.line", { line: problem.line })}: ${text}`;
 }
 
 /// La direzione di un diagramma di flusso, come la scrive Mermaid.
@@ -572,6 +809,11 @@ let toldWritten = false;
 
 export interface MermaidView {
   readonly element: HTMLElement;
+  /// La didascalia sotto il disegno: il `title` del frontmatter (E26). Chi
+  /// monta la vista può spostarla dove la vuole; resta di questa vista.
+  readonly caption: HTMLElement;
+  /// Che cosa non va, quando il diagramma non si disegna; `null` altrimenti.
+  readonly problem: DiagramProblem | null;
   /// Apre il menu del diagramma nel punto `at`. `pointer`: aperto dal puntatore.
   menu(at: MenuPoint, pointer: boolean): void;
   /// Il diagramma a tutta finestra; `false` se non c'è ancora un disegno.
@@ -631,12 +873,26 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   code.textContent = source;
   pre.append(code);
   details.append(summary, pre);
-  element.append(status, stage, linkList, details);
+  // La didascalia: il titolo del frontmatter, sotto il disegno, coi caratteri
+  // della nota. Dove il sorgente si riscrive la si scrive lì; vuota non occupa
+  // spazio (il CSS la toglie finché non la si apre).
+  // La figura tiene la didascalia, il testo che si scrive sta dentro: un
+  // `figcaption` non può essere una casella di testo.
+  const title = diagramTitle(source) ?? "";
+  const caption = document.createElement("figcaption");
+  caption.className = "mermaid-diagram-caption";
+  const captionText = document.createElement("span");
+  captionText.className = "mermaid-diagram-caption-text";
+  captionText.textContent = title;
+  caption.append(captionText);
+  const markEmpty = () => caption.toggleAttribute("data-empty", (captionText.textContent ?? "") === "");
+  markEmpty();
+  element.append(status, stage, caption, linkList, details);
 
   let generation = 0;
   let url: string | undefined;
   let phase: "loading" | "ready" | "error" = "loading";
-  let reason = "";
+  let problem: DiagramProblem | null = null;
   let accessibleDescription = "";
   /// Lo stile in anteprima dal menu, finché il puntatore ci sta sopra.
   let preview: DiagramStyleId | null = null;
@@ -648,18 +904,19 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     image.alt = accessibleDescription || t("mermaid.diagram");
     summary.textContent = t("mermaid.source");
     pre.setAttribute("aria-label", t("mermaid.source"));
-    status.textContent = phase === "error" ? t("mermaid.error", { reason }) : t("mermaid.loading");
+    captionText.setAttribute("aria-label", t("mermaid.caption"));
+    captionText.dataset.placeholder = t("mermaid.caption.placeholder");
+    status.textContent = phase === "error" && problem ? problemSentence(problem) : t("mermaid.loading");
     status.hidden = phase === "ready";
     details.hidden = phase !== "error";
     element.dataset.state = phase;
     element.dataset.diagramStyle = look.style;
     element.setAttribute("aria-busy", String(phase === "loading"));
   };
-  const fail = (error: unknown) => {
+  const fail = (found: DiagramProblem) => {
     phase = "error";
     shown = null;
-    reason = error instanceof Error ? error.message : String(error);
-    reason = reason.slice(0, 1200);
+    problem = found;
     linkItems.replaceChildren();
     linkList.hidden = true;
     image.hidden = true;
@@ -669,19 +926,38 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   };
   const resize = () => options.onResize?.();
   // Il diagramma a tutta finestra, con lo zoom: dal menu, da Spazio o dal clic.
+  // Sul fondo del suo stile (E26): la carta, o la pagina per Armonia. La
+  // rotella e il trascinamento sono della lightbox; Esc o Spazio chiudono.
   const enlarge = (): boolean => {
     const rendered = shown;
     if (!rendered) return false;
-    openLightbox({
+    const box = openLightbox({
       source: svgSource(rendered.svg),
       label: accessibleDescription || t("mermaid.diagram"),
-      caption: `Mermaid · ${diagramKind(source)}`,
+      caption: title || `Mermaid · ${diagramKind(source)}`,
       size: rendered.width !== null && rendered.height !== null
         ? { width: rendered.width, height: rendered.height }
         : null,
       background: rendered.background,
       vector: true,
     });
+    const overlay = box.element;
+    overlay.classList.add("lightbox-diagram");
+    overlay.style.setProperty("--diagram-paper", rendered.background);
+    const hint = document.createElement("p");
+    hint.className = "lightbox-diagram-hint";
+    hint.setAttribute("aria-hidden", "true");
+    hint.textContent = t("mermaid.enlarge.hint");
+    overlay.append(hint);
+    // La lightbox chiude con Esc; Spazio, che l'ha aperta, la richiude.
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey) return;
+      // Su un pulsante della lightbox Spazio lo preme, come sempre.
+      if (event.target instanceof Element && event.target.closest("button, input, select, textarea")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      box.close();
+    }, { capture: true });
     return true;
   };
   life.listen(image, "click", (event) => {
@@ -691,7 +967,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   });
   life.listen(details, "toggle", resize);
   life.listen(image, "load", resize);
-  life.listen(image, "error", () => fail(new Error(t("mermaid.image_failed"))));
+  life.listen(image, "error", () => fail({ line: null, text: t("mermaid.image_failed") }));
   life.add(onLanguage(labels));
   life.add(() => {
     generation++;
@@ -743,6 +1019,11 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     // del tema continua a stringere i diagrammi grandi.
     if (rendered.width !== null) image.width = Math.ceil(rendered.width);
     else image.removeAttribute("width");
+    // La misura (E26): mai oltre la sua, mai sotto il 72%; più stretto il
+    // riquadro scorre di lato e il testo resta leggibile. Una proprietà del
+    // CSSOM, che la CSP lascia scrivere; la regola sta nella pelle.
+    if (rendered.width !== null) image.style.setProperty("--diagram-min-width", `${Math.round(rendered.width * MIN_SCALE)}px`);
+    else image.style.removeProperty("--diagram-min-width");
     linkItems.replaceChildren(...items);
     linkList.hidden = items.length === 0;
     image.hidden = false;
@@ -776,7 +1057,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     }
     labels();
     if (source.length > MAX_SOURCE_LENGTH) {
-      fail(new Error(t("mermaid.too_large", { limit: MAX_SOURCE_LENGTH })));
+      fail({ line: null, text: t("mermaid.too_large", { limit: MAX_SOURCE_LENGTH }) });
       return;
     }
     const key = `${wanted.key}\n${source}`;
@@ -796,7 +1077,10 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
           drawing = undefined;
           throw error;
         }),
-      ]);
+      ]).catch(() => {
+        // Un pezzo dell'app che non arriva non è un errore del sorgente.
+        throw new DiagramFailure({ line: null, text: t("mermaid.problem.unavailable") });
+      });
       if (!current()) return;
       const palette = paletteFor(wanted.style, wanted.light, wanted.contrast, wanted.read);
       const [font] = await Promise.all([embeddedFont(palette.font), fontReady(palette.font)]);
@@ -823,10 +1107,12 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       try {
         // Mermaid misura le etichette col foglio che mette in un `<style>`:
         // con il nonce della pagina la CSP lo lascia valere.
-        const result = await withPageNonce(() => mermaid.render(identifier("fub-mermaid"), source, staging));
+        // Il titolo non entra nel disegno: è la didascalia, sotto.
+        const result = await withPageNonce(() => mermaid.render(identifier("fub-mermaid"), withoutTitle(source), staging))
+          .catch((error: unknown) => { throw new DiagramFailure(diagramProblem(error, source)); });
         const svgDocument = new DOMParser().parseFromString(result.svg, "image/svg+xml");
-        const description = Array.from(svgDocument.querySelectorAll("title, desc"))
-          .map((node) => node.textContent?.trim()).filter(Boolean).join(". ");
+        const description = [title, ...Array.from(svgDocument.querySelectorAll("title, desc"), (node) => node.textContent?.trim())]
+          .filter(Boolean).join(". ");
         const links = diagramLinks(svgDocument);
         const notes = diagramNotes(svgDocument);
         // Carta, carattere ed etichette delle fette entrano nell'SVG prima che
@@ -865,7 +1151,9 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       }
     });
     // Failure of one diagram never poisons the queue for the rest of the note.
-    rendering = task.catch((error) => { if (current()) fail(error); });
+    rendering = task.catch((error: unknown) => {
+      if (current()) fail(error instanceof DiagramFailure ? error.problem : { line: null, text: t("mermaid.problem.other") });
+    });
   };
 
   /// Ridisegna soltanto se l'aspetto è davvero cambiato: tema, contrasto,
@@ -1009,14 +1297,64 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     openMenu({ x: event.clientX, y: event.clientY }, !fromKeyboard(event));
   });
 
+  // La didascalia si scrive dove il sorgente si riscrive: Invio o l'uscita la
+  // portano nel frontmatter (una modifica sola, un solo passo d'annulla), Esc
+  // la rimette com'era.
+  if (options.editSource) {
+    try {
+      captionText.contentEditable = "plaintext-only";
+    } catch {
+      captionText.contentEditable = "true";
+    }
+    captionText.spellcheck = true;
+    captionText.setAttribute("role", "textbox");
+    // Fuori dal percorso Tab: nell'editor il Tab è della nota, e dalla
+    // tastiera il titolo si scrive nel sorgente, nella riga `title:`.
+    captionText.tabIndex = -1;
+    life.listen(captionText, "input", markEmpty);
+    life.listen(captionText, "keydown", (event: KeyboardEvent) => {
+      // I tasti della didascalia sono suoi, non della nota attorno.
+      event.stopPropagation();
+      if (event.isComposing) return;
+      if (event.key === "Enter" || event.key === "Escape") {
+        event.preventDefault();
+        if (event.key === "Escape") {
+          captionText.textContent = title;
+          markEmpty();
+        }
+        captionText.blur();
+      }
+    });
+    life.listen(captionText, "blur", () => {
+      const edit = titleEdit(source, captionText.textContent ?? "");
+      if (edit) options.editSource?.(edit);
+    });
+  }
+
   render();
-  return {
+  const handle: MermaidView = {
     element,
+    caption,
+    get problem() {
+      return phase === "error" ? problem : null;
+    },
     menu: openMenu,
     enlarge,
     copy,
     destroy: () => life.close(),
   };
+  views.set(element, handle);
+  life.add(() => views.delete(element));
+  return handle;
+}
+
+/// Le viste per il loro elemento: i tasti del blocco scelto trovano così il
+/// disegno reso nella nota.
+const views = new WeakMap<Element, MermaidView>();
+
+/// La vista di un diagramma dal suo elemento, se è viva.
+export function mermaidViewOf(element: Element): MermaidView | null {
+  return views.get(element) ?? null;
 }
 
 /// Un `contextmenu` nato dal mouse e non dalla tastiera (il tasto Menu,
