@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, slashMenuEntries } from "./entries";
+import { BASE_ENTRY, COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -101,5 +101,37 @@ describe("le voci del «/» nel testo", () => {
     const { sections, entries } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), sections: ["code", "nessuna", "lists"] });
     expect(sections.slice(0, 3)).toEqual(["code", "lists", "text"]);
     expect(entries[0]!.section).toBe("code");
+  });
+});
+
+describe("la Base dal «/» (T18)", () => {
+  // `base.view.add` c'è soltanto con la componente delle Basi accesa.
+  const WITH_BASES = [...LIST, spec("base.view.add", "Aggiungi una vista", ["toolbar"])];
+
+  it("sta fra i blocchi subito dopo la Tabella, con la sua figura e «/base»", () => {
+    const { entries } = slashMenuEntries(WITH_BASES, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.table") + 1]).toBe(BASE_ENTRY);
+    expect(entries.find((entry) => entry.id === BASE_ENTRY)).toMatchObject({
+      label: "Base", section: "blocks", action: true, picker: null, icon: "collection", hint: "/base",
+    });
+  });
+
+  it("in un vault nuovo è la tessera dopo Tabella", () => {
+    const { top } = slashMenuEntries(WITH_BASES, "", ALL);
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table", BASE_ENTRY, "markdown.list.bullet",
+    ]);
+  });
+
+  it("scrivendo «/base» o «database» la si trova per prima", () => {
+    expect(slashMenuEntries(WITH_BASES, "base", ALL).entries[0]!.id).toBe(BASE_ENTRY);
+    expect(slashMenuEntries(WITH_BASES, "database", ALL).entries[0]!.id).toBe(BASE_ENTRY);
+  });
+
+  it("non c'è senza le Basi, dove la superficie non sa crearla, né se è nascosta", () => {
+    expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BASES, "", (id) => id !== BASE_ENTRY && ALL(id)).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BASES, "base", ALL, undefined, { ...use(), hidden: [BASE_ENTRY] }).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
   });
 });

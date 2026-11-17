@@ -327,6 +327,13 @@ const IT = {
   "comments.panel.point": "Commento su un punto",
   "comments.panel.clear": "Svuota i risolti",
   "comments.panel.cleared": "Risolti svuotati: l'archivio è uscito dal file.",
+  "base.new.title": "Nuova Base",
+  "base.new.name": "Nome della Base, accanto alla nota",
+  "base.new.taken": "«{name}» c'è già nel vault: un altro nome",
+  "base.new.create": "Crea",
+  "base.new.view": "Tabella",
+  "base.new.failed": "La Base «{name}» non è stata creata: {reason}. La nota resta com'era.",
+  "base.new.orphan": "La Base «{name}» è creata, ma la nota non si può più scrivere: il file resta accanto alla nota.",
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
@@ -646,6 +653,13 @@ const EN: Record<keyof typeof IT, string> = {
   "comments.panel.point": "Comment on a point",
   "comments.panel.clear": "Clear resolved",
   "comments.panel.cleared": "Resolved cleared: the archive left the file.",
+  "base.new.title": "New Base",
+  "base.new.name": "Name of the Base, next to the note",
+  "base.new.taken": "“{name}” is already in the vault: another name",
+  "base.new.create": "Create",
+  "base.new.view": "Table",
+  "base.new.failed": "The Base “{name}” wasn't created: {reason}. The note is unchanged.",
+  "base.new.orphan": "The Base “{name}” is created, but the note can no longer be written: the file stays next to the note.",
 };
 
 // Il catalogo nasce alla prima frase, non all'import: chi importa la Live

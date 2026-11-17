@@ -436,9 +436,10 @@ tenui e lo dicono («su tutte le 50 note della vista»).
 
 ## Dove si vede una Base
 
-Una Base si mette in una nota con un blocco di codice ```` ```base ```` oppure con
-un collegamento `![[Nome.base#Vista]]`. Con il `#` si vede la vista nominata;
-senza, la prima vista del file.
+Una Base va in una nota con un blocco ```` ```base ````, un `![[Nome.base#Vista]]`
+(col `#` la vista nominata, senza la prima) o «Base» del [menu «/»](editor-menus.md#una-base-dal-),
+che crea il file accanto. Nella pagina si allarga fino al margine (64 dei 96 px
+di destra), resta nella colonna sotto i 940 px e non ha il filo delle note.
 
 ## Vedi anche
 

@@ -84,7 +84,7 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
-import { baseFixture } from "./base-fixture";
+import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
@@ -289,11 +289,14 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
   : {};
 
 /// La Base delle scene `base-*` (`?base=1`, T15; `?base=venti`, T16;
-/// `?base=calendario`, T17; `?base=tempo`, T34):
+/// `?base=calendario`, T17; `?base=tempo`, T34; `?base=nota`, T18, la stessa
+/// di `1` incorporata nella nota della Live, con la voce «Base» del «/»):
 /// `Opere.base` e le note di `Opere/`, con le domande `fub.base` e i comandi
 /// `base.view.*` che il finto da solo non ha. Gli attrezzi del finto li chiede
 /// quando servono, cioè dopo che il finto è nato.
-const BASE_VARIANT = params.get("base");
+const BASE_PARAM = params.get("base");
+const BASE_IN_NOTE = BASE_PARAM === "nota";
+const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
 const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
@@ -1545,6 +1548,20 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   },
   render_embed: (q) => {
     if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
+    // Una Base incorporata (`?base=nota`, T18): il blocco `fub:base` che il
+    // kernel darebbe, col testo del file e la vista della sezione. Le domande
+    // `fub.base` del finto rispondono per `Opere.base` qualunque sia il file.
+    if (BASE !== null && q.page.endsWith(".base") && !q.block) {
+      const source = BASE.files[BASE_DOC] ?? "";
+      return {
+        kind: "render_embed",
+        value: {
+          doc_id: q.page.includes("/") ? q.page : BASE_DOC,
+          html: '<div class="ui-slot" data-ui-slot="0" data-custom-kind="base"></div>',
+          parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, view: q.heading ?? null, container: q.page.includes("/") ? q.page : BASE_DOC }, fallback: [] } }],
+        },
+      };
+    }
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
     const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
     if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {
@@ -1842,6 +1859,8 @@ const options: Options = {
       : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
+    // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
+    ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
   settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
