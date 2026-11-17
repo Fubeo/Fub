@@ -211,7 +211,7 @@ Due regole:
   mette accanto alla maniglia e prende il fuoco, e la selezione arriva dopo,
   nello stesso gesto. Le voci ritrovano il blocco dalla sua chiave
   (`withRun`), non dalla selezione. Il primo menu della maniglia scende da
-  29 a 25 ms di mediana; restano ~10 ms del primo layout del menu stesso
+  30 a 26 ms di mediana; restano ~10 ms del primo layout del menu stesso
   (le tre misure di `placeBeside`) e ~10 dell'aggiornamento di CodeMirror per
   la selezione, entrambi solo la prima volta. La guardia è
   `blocks.dom.test.ts` («seleziona la tratta dopo che il menu è al suo posto
