@@ -81,6 +81,7 @@ import {
   describeTab,
   docTitle,
   exportWindow,
+  loadPaneTools,
   mountDocumentController,
   nameTab,
   offeredExports,
@@ -1404,6 +1405,9 @@ function hostPaneStatus(slot: HTMLElement): void {
 /// dove la mano le cerca. Registratore, slide e stampa seguono le capacità
 /// che la superficie montata dichiara.
 function openPaneMenu(r: Pane, event: MouseEvent): void {
+  // La stampa, le slide e il registratore arrivano con un `import()`: si
+  // chiedono adesso, e quando se ne sceglie uno il codice c'è già.
+  loadPaneTools();
   const command = (id: string): CommandEntry | undefined => allCommands().find((entry) => entry.id === id);
   const chord = (id: string): string | undefined => displayBinding(command(id)?.binding ?? null) || undefined;
   const runCommand = (id: string): void => {

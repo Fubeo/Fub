@@ -1,17 +1,22 @@
 // Una riga delle proprietà della testata (T8): la figura del tipo e il nome,
 // che aprono il menu della proprietà, poi il valore, che apre l'editor del
 // suo tipo. In sola lettura e in Lettura la riga si guarda soltanto.
+import { lazyPart } from "../../../../../../ui/lazy-part";
 import type { Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry } from "../../properties";
 import { liveStrings } from "../../strings";
 import { openWebLink } from "../../../../../../ui/web-viewer";
 import { emptyValue, KIND_ICONS, linkName, optionOf, outsideOptions, rowIcon, rowKind, type PropertyTypes, type RowKind } from "./kind";
-import { openEditor, toggleCheckbox } from "./editors";
-import { openPropertyMenu } from "./menu";
 import { chipElement, figure, longDate, optionElement, personElement, typeName, type PropertyRowHost } from "./values";
 
 export type { PropertyRowHost, WriteOutcome } from "./values";
 export { entryStamp } from "./values";
+
+/// Gli editor dei valori e il menu della proprietà (`property-actions.ts`): arrivano
+/// con un `import()`, fuori dal chunk che apre la nota. Una riga che si può
+/// modificare li chiede a thread libero, e di nuovo quando il puntatore o il
+/// fuoco ci arrivano; un clic che arriva prima li aspetta e non si perde.
+export const propertyActions = lazyPart(() => import("./property-actions"));
 
 /// Un indirizzo che il browser apre: http o https.
 const WEB = /^https?:\/\/\S+$/i;
@@ -123,10 +128,16 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
   // Un indirizzo del web è un link: il clic lo apre, la matita lo modifica.
   const link = kind.kind === "url" && entry.simple && WEB.test(entry.value.trim()) ? entry.value.trim() : null;
   if (key instanceof HTMLButtonElement && value instanceof HTMLButtonElement) {
+    propertyActions.warm();
+    const intent = () => void propertyActions.load().catch(() => {});
+    life.listen(row, "pointerenter", intent);
+    life.listen(row, "focusin", intent);
+    const alive = () => !life.closed;
+    const openMenu = () => propertyActions.run((actions) => actions.openPropertyMenu(entry, kind, key, host, life, featured), alive);
     key.type = "button";
     key.setAttribute("aria-haspopup", "menu");
     key.setAttribute("aria-label", liveStrings.t("page.properties.key", { key: entry.key, type }));
-    life.listen(key, "click", () => openPropertyMenu(entry, kind, key, host, life, featured));
+    life.listen(key, "click", openMenu);
     value.type = "button";
     value.dataset.pageNav = "";
     if (kind.kind === "checkbox") {
@@ -139,14 +150,14 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
       value.setAttribute("aria-haspopup", kind.kind === "text" || kind.kind === "number" || kind.kind === "url" ? "false" : kind.kind === "select" || kind.kind === "status" ? "listbox" : "dialog");
       value.setAttribute("aria-label", liveStrings.t("page.properties.edit", { key: entry.key, value: shown }));
     }
-    const edit = () => openEditor(entry, kind, value, host, life);
+    const edit = () => propertyActions.run((actions) => actions.openEditor(entry, kind, value, host, life), alive);
     life.listen(value, "click", () => {
       if (!entry.simple) {
         host.open(entry.from);
         return;
       }
       if (link) openWebLink(link, false);
-      else if (kind.kind === "checkbox") toggleCheckbox(entry, host);
+      else if (kind.kind === "checkbox") propertyActions.run((actions) => actions.toggleCheckbox(entry, host), alive);
       else edit();
     });
     // Il menu della proprietà anche dal valore, da tastiera; F2 modifica
@@ -154,7 +165,7 @@ export function propertyRow(entry: PropertyEntry, host: PropertyRowHost, life: L
     life.listen(value, "keydown", (event) => {
       if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
         event.preventDefault();
-        openPropertyMenu(entry, kind, key, host, life, featured);
+        openMenu();
       } else if (event.key === "F2" && link) {
         event.preventDefault();
         edit();

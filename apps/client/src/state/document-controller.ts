@@ -53,17 +53,14 @@ import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
 import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
-import { pdfIdWithoutFragment, pdfPageFromFragment } from "../editors/media/pdf-view";
+import { pdfIdWithoutFragment, pdfPageFromFragment } from "../editors/media/pdf-ids";
 import { formatBytes, mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
 import { depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
-import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
-import { mountRecorderSurface } from "../editors/media/recorder-surface";
-import { printDocument } from "../editors/media/print-view";
-import { mountSlidePresentation } from "../ui/slides";
+import { lazyPart } from "../ui/lazy-part";
 import { mountMarkdown, mountRenderedDocument, type MarkdownMountOptions } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
@@ -3601,6 +3598,19 @@ export function runEditorAction(action: string, params: Readonly<Record<string, 
   return "done";
 }
 
+/// Il registratore, le slide e la stampa di un riquadro: arrivano con un
+/// `import()`, fuori dal chunk che apre una nota. Il menu del riquadro, che
+/// li offre, li chiede appena si apre (`loadPaneTools`).
+const recorderPart = lazyPart(() => import("../editors/media/recorder-part"));
+const slidesPart = lazyPart(() => import("../ui/slides"));
+const printPart = lazyPart(() => import("../editors/media/print-view"));
+
+/// Chiede il codice dei gesti del menu del riquadro: quando se ne sceglie
+/// uno, c'è già.
+export function loadPaneTools(): void {
+  for (const part of [recorderPart, slidesPart, printPart]) void part.load().catch(() => {});
+}
+
 export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
   if (r.disposeRecorder) {
     r.disposeRecorder();
@@ -3609,8 +3619,10 @@ export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
   }
   const surface = r.surface;
   try {
-    const attachment = await attachmentDeposit(doc);
+    const [attachment, { createViewStateCrashDeposit, mountRecorderSurface }] = await Promise.all([attachmentDeposit(doc), recorderPart.load()]);
     if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+    // Un secondo clic mentre il codice arrivava ha già aperto il registratore.
+    if (r.disposeRecorder) return;
     r.disposeRecorder = mountRecorderSurface(view.recorderHost(r), {
       staging: createViewStateCrashDeposit({ get: (key) => api.viewState(key), set: api.setViewState }),
       attachment,
@@ -3629,6 +3641,16 @@ export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
 export function presentSlides(r: Pane, doc: string): void {
   const surface = r.surface;
   if (r.shown?.k !== "doc" || r.shown.doc !== doc || !surface?.mountPresentation) return;
+  // Se il codice delle slide non è ancora arrivato, partono appena arriva,
+  // purché il riquadro mostri ancora la stessa nota.
+  slidesPart.run(({ mountSlidePresentation }) => {
+    if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc || !surface.mountPresentation) return;
+    showSlides(r, surface, mountSlidePresentation);
+  });
+}
+
+function showSlides(r: Pane, surface: NonNullable<Pane["surface"]>, mountSlidePresentation: typeof import("../ui/slides").mountSlidePresentation): void {
+  if (!surface.mountPresentation) return;
   r.disposeSlides?.();
   const content = document.createElement("div");
   let contentStop: (() => void) | null = null;
@@ -3655,6 +3677,7 @@ export async function presentPrint(r: Pane, doc: string): Promise<void> {
       (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
       () => new Set<string>(),
     );
+    const { printDocument } = await printPart.load();
     const stop = await printDocument(doc, docTitle(doc), renderPrint, (container, rendered) =>
       mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }));
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) {

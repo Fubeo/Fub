@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
@@ -13,6 +13,11 @@ import { blocksMode } from "../../blocks/index";
 import type { BlocksOptions } from "../../blocks/handles";
 import { parsePropertyTypes } from "./kind";
 import { parseDateInput } from "./editors";
+import { loadLazyParts } from "../../../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // Gli editor dei tipi della testata (T8): ogni modifica è una scrittura, un
 // passo d'annullamento, e il file dice il valore nel modo in cui YAML lo

@@ -203,6 +203,39 @@ Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
 può appartenere alle dipendenze statiche degli ingressi applicativi.
 Il controllo misura il codice finale, dopo la riscrittura degli import di
 Vite, e interrompe la build in caso di superamento.
+Il limite non si alza per far passare un chunk: si toglie dal chunk ciò che
+non serve al suo primo uso.
+
+Il ponte dei documenti (`document-bridge`) e il chunk condiviso `search` si
+caricano all'avvio, e dentro hanno solo ciò che serve per aprire e scrivere
+una nota. Le parti che servono a un gesto arrivano con un `import()` dal
+loro modulo d'ingresso, che dà il nome al chunk:
+
+- il riquadro delle formule (`math-editing`) e le frasi dei loro errori
+  (`math-errors`, dopo KaTeX);
+- i campi e il menu delle proprietà (`property-actions`);
+- il menu dei diagrammi (`diagram-menu`), con le tavolozze
+  (`mermaid-styles`, che arrivano anche col primo diagramma da disegnare);
+- la lightbox (`lightbox`);
+- la modifica di un brano incluso (`range-surface`);
+- il visore dei PDF (`pdf-view`);
+- il registratore (`recorder-part`), le slide (`slides`) e la stampa
+  (`print-view`).
+
+Le carica
+[`ui/lazy-part.ts`](../../apps/client/src/ui/lazy-part.ts) (`lazyPart`):
+
+- `warm()` chiede il codice a thread libero (`requestIdleCallback`) appena
+  la superficie che lo userà monta;
+- il puntatore o il fuoco sopra l'elemento lo chiedono prima del gesto;
+- un gesto che arriva prima del codice va in coda e si fa appena il codice
+  arriva, se chi l'ha chiesto c'è ancora;
+- un `import()` che non riesce lo dice con una nota, e il gesto dopo riprova.
+
+Nessuna di queste parti è un chunk che si carica all'avvio: l'elenco di
+quelli che ogni pagina carica sta in `dist/startup-chunks.json`. Le prove che guardano un gesto col codice già lì
+aspettano `loadLazyParts()`; quelle del gesto che arriva prima stanno in
+`ui/lazy-part.test.ts` e in `markdown/math-live-lazy.dom.test.ts`.
 La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
 `theme-skin`), che Vite non minimizza: nella build
 [`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie

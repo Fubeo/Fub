@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EmbedContent } from "../../../../host/contract";
 import { renderMarkdown } from "./render";
 
@@ -33,6 +33,11 @@ import { registerCustomRenderer } from "../../../../ui/custom";
 import { closeLightbox } from "../../../../ui/lightbox";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { setReducedMotionPreference } from "../../../../theme/reduced-motion";
+import { loadLazyParts } from "../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 const disposers: (() => void)[] = [];
 function mount(html: string, element: HTMLElement = document.createElement("div")): HTMLElement {

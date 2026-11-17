@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { cursorCharLeft, cursorCharRight, undo } from "@codemirror/commands";
@@ -10,6 +10,11 @@ import { createTextEngine } from "../../engine";
 import { livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { closeContextMenu } from "../../../../ui/menu";
+import { loadLazyParts } from "../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // I diagrammi del test non passano da Mermaid: basta un'immagine qualsiasi.
 vi.mock("mermaid", () => ({

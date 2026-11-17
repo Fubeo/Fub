@@ -18,7 +18,9 @@ import { openResourcePort, readAllResource, type ResourcePort, type ResourceTran
 import { decodeImage, mountImageView, type ImageView } from "./image-view";
 import { ZOOM_STEP } from "./zoom-view";
 import { mountAudioView, mountVideoView } from "./player-view";
-import { mountPdfView, pdfIdWithoutFragment, pdfPageFromFragment, pdfWhereText, type PdfEngineLoader, type PdfView } from "./pdf-view";
+import { pdfIdWithoutFragment, pdfPageFromFragment, pdfWhereText } from "./pdf-ids";
+import type { PdfEngineLoader, PdfView } from "./pdf-view";
+import { lazyPart } from "../../ui/lazy-part";
 import { openWithChoices, shellOpenWith, type OpenWithHost } from "../../state/external-editors";
 
 export interface MediaSurfaceDeps {
@@ -149,6 +151,9 @@ export function mountMediaSurface(
       message("viewer.unavailable");
       return;
     }
+    // Il visore dei PDF si chiede subito, insieme ai byte: quando sono letti
+    // il suo codice di solito c'è già.
+    if (kind === "pdf") void pdfViewer.load().catch(() => {});
     // Le annotazioni accanto al PDF si cercano subito, insieme ai byte del
     // PDF: quando il PDF è letto la risposta di solito c'è già.
     const marks = kind === "pdf" ? watchAnnotations(bareId) : null;
@@ -373,6 +378,10 @@ export function mountMediaSurface(
   };
 }
 
+/// Il visore dei PDF (`pdf-view.ts`): arriva con un `import()` quando si apre
+/// un PDF, fuori dal chunk che le finestre condividono.
+const pdfViewer = lazyPart(() => import("./pdf-view"));
+
 async function mountBytes(
   descriptor: ResourceDescriptor,
   bytes: Uint8Array,
@@ -403,6 +412,8 @@ async function mountBytes(
       return { kind, element: view.element };
     }
     case "pdf": {
+      const { mountPdfView } = await pdfViewer.load();
+      if (life.closed) return null;
       const page = wantedPage ?? pdfPageFromFragment(documentId);
       const view = mountPdfView(
         descriptor,

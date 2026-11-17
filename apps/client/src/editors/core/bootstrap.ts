@@ -36,7 +36,8 @@ import {
 import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
 import { isRawPhoto } from "../../ui/format-kind";
 import { showPhotoData } from "../craft/photo-data";
-import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
+import { pdfIdWithoutFragment } from "../media/pdf-ids";
+import type { PdfEngineLoader, PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
@@ -340,8 +341,9 @@ const GRID_MODE_KEYS = { ready: "grid.mode.ready", insert: "grid.mode.insert", e
 let pdfEngine: Promise<PdfEngineLoader> | null = null;
 
 function pdfEngineLoader(): Promise<PdfEngineLoader> {
-  pdfEngine ??= import("pdfjs-dist/build/pdf.worker.min.mjs?url").then(
-    ({ default: workerUrl }) => makePdfJsLoader(
+  // Il visore (`pdf-view.ts`) arriva anche lui col primo PDF: col worker.
+  pdfEngine ??= Promise.all([import("pdfjs-dist/build/pdf.worker.min.mjs?url"), import("../media/pdf-view")]).then(
+    ([{ default: workerUrl }, { makePdfJsLoader }]) => makePdfJsLoader(
       () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
       workerUrl,
     ),

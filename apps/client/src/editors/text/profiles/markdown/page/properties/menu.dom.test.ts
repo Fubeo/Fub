@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
@@ -11,6 +11,11 @@ import { liveReveal } from "../../../../live-reveal";
 import { propertiesDisplay } from "../../../../properties-display";
 import { blocksMode } from "../../blocks/index";
 import type { BlocksOptions } from "../../blocks/handles";
+import { loadLazyParts } from "../../../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // Il menu di una proprietà (T8), dal suo nome: Rinomina, Tipo, In evidenza,
 // Togli dalla nota. Da tastiera e col puntatore.

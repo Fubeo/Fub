@@ -31,13 +31,14 @@
 // altrove. Salvataggio, revisione e conflitto sono quelli di sempre.
 import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
-import { RangeSurface, type RangeStatus } from "../../../core/range-surface";
+import type { RangeStatus, RangeSurface } from "../../../core/range-surface";
 import { formatSectionAnchor, parseSectionAnchor, type SectionAnchor } from "../../../core/section-anchor";
 import type { EditorChange } from "../../../core/text-operation";
 import type { DocumentSession, DocumentSessionCollection, DocumentSessionEvent } from "../../../../state/document-session";
 import { errorText } from "../../../../host/errors";
 import type { Theme } from "../../../../theme/theme";
 import { icon, registerIcon } from "../../../../ui/icons";
+import { lazyPart } from "../../../../ui/lazy-part";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../../engine";
 import { blockSelection } from "./blocks/selection";
@@ -181,6 +182,12 @@ interface Writing {
 
 let nextSurface = 0;
 
+/// La superficie su un tratto (`RangeSurface`): serve soltanto a «Modifica
+/// qui», e arriva con un `import()`, fuori dal chunk che apre la nota. Una
+/// trasclusione che si può scrivere la chiede a thread libero, e di nuovo
+/// quando il puntatore o il fuoco arrivano su «Modifica qui».
+const rangeSurfaces = lazyPart(() => import("../../../core/range-surface"));
+
 /// Una nota riportata al primo livello, vestita da trasclusione viva.
 export class LiveTransclusion {
   readonly slot: HTMLElement;
@@ -260,6 +267,10 @@ export class LiveTransclusion {
 
     if (this.#edit) {
       const edit = this.#edit;
+      rangeSurfaces.warm();
+      const intent = () => void rangeSurfaces.load().catch(() => {});
+      life.listen(edit, "pointerenter", intent);
+      life.listen(edit, "focus", intent);
       life.listen(edit, "click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -343,8 +354,9 @@ export class LiveTransclusion {
     const path = this.embed.doc;
     const retained = { path, release: deps.sessions.retain(path) };
     let session: DocumentSession | undefined;
+    let surfaces: typeof import("../../../core/range-surface");
     try {
-      await deps.sessions.read(path);
+      [, surfaces] = await Promise.all([deps.sessions.read(path), rangeSurfaces.load()]);
       session = deps.sessions.get(path);
     } catch (error) {
       return this.#fail(retained, liveStrings.t("transclusion.failed", { doc: transclusionDocName(path), reason: errorText(error) }));
@@ -352,7 +364,7 @@ export class LiveTransclusion {
     if (this.#life.closed) return this.#fail(retained, null);
     if (!session) return this.#fail(retained, liveStrings.t("transclusion.closed", { doc: transclusionDocName(path) }));
     if (deps.held(session.id)) return this.#fail(retained, this.#readOnlyText(deps, session.id));
-    const range = RangeSurface.open(session, { id: `transclusion:${++nextSurface}`, anchor });
+    const range = surfaces.RangeSurface.open(session, { id: `transclusion:${++nextSurface}`, anchor });
     if (!range) {
       return this.#fail(retained, liveStrings.t("transclusion.missing", {
         doc: transclusionDocName(session.id),

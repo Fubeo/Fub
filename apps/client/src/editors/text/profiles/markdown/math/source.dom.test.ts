@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
@@ -10,6 +10,11 @@ import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { MathEditor, type MathPreferences } from "./editor";
 import { attachPalette } from "./palette";
+import { loadLazyParts } from "../../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // «Mostra il LaTeX», la scrittura veloce e le tre misure di aiuto (T63, E27):
 // il campo del LaTeX sotto la formula, la formula che si tocca coi suoi tasti
