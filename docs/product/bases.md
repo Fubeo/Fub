@@ -376,7 +376,7 @@ voci) apre il suo menu:
 |---|---|---|
 | Ordina crescente / decrescente | mette la colonna in testa all'ordinamento; le altre chiavi restano dopo | `sort` |
 | Raggruppa | raggruppa la tabella, le schede o l'elenco per la colonna; di nuovo, toglie il gruppo. Toglie anche il raggruppamento scelto in questa finestra con Ordina (che torna se il file rifiuta la scrittura); togliere un gruppo scelto solo in questa finestra toglie la scelta e non scrive il file | `group` |
-| Riepilogo › | il riepilogo della colonna nel piede: Conteggio, Vuote, Piene; per i numeri anche Somma, Media, Minimo, Massimo; per le date La prima e L'ultima | `summaries` |
+| Riepilogo › | il riepilogo della colonna nel piede: Conteggio, Vuote, Piene; per i numeri anche Somma, Media, Minimo, Massimo; per le date La prima e L'ultima; per una Relazione anche Note legate e Somma, Media, Minimo, Massimo delle note legate › una proprietà numero (o data) del registro | `summaries` |
 | Rinomina la proprietà… | cambia il nome della proprietà in tutte le note (`property.key.rename`, che si annulla dalla tavolozza), poi nelle viste di questo file che la nominano | le note, poi `filters`, `sort`, `order`, `group`, `map`, `date`, `start`, `end`, `summaries` |
 | Tipo › | il tipo della proprietà nel registro del vault (`property.type.set`) | il registro dei tipi |
 | Copia la colonna | i valori della colonna, uno per riga | niente |
@@ -384,14 +384,14 @@ voci) apre il suo menu:
 
 La specie di una colonna (numeri, date o testo) si legge dai valori delle
 righe: una colonna di testo ha solo Conteggio, Vuote e Piene. Il riepilogo
-scelto dal menu è uno per colonna, senza nome e senza formula: quelli scritti
-a mano con un `name` o un'`expression` restano come sono. La colonna della nota
-ha solo Ordina e Copia; le colonne `file.*` e le formule non si rinominano e
-non hanno un tipo. In sola lettura e in una Base dentro una nota le voci che
-scrivono il `.base` sono spente col perché. In una Base dentro una nota sono
-spenti anche Rinomina e Tipo: rinominare in tutto il vault lascerebbe il
-blocco della nota sulla chiave vecchia, e la voce dice di farlo dal file
-`.base`.
+scelto dal menu è uno per colonna, senza nome e senza formula; quello di una
+Relazione è un `rollup` ([Le Relazioni](../reference/property-types.md#il-riepilogo-in-una-base))
+nell'`expression`, col nome («Somma di pagine»): spento se la chiave ha spazi.
+Gli altri scritti a mano restano. La colonna della nota ha solo Ordina e
+Copia; le colonne `file.*` e le formule non si rinominano e non hanno un tipo.
+In sola lettura e in una Base dentro una nota le voci che scrivono il `.base`
+sono spente col perché; in una Base dentro una nota anche Rinomina e Tipo (il
+blocco resterebbe sulla chiave vecchia): la voce dice di farlo dal `.base`.
 
 Rinominare tocca solo questo file `.base`, le chiavi della mappa e delle date
 comprese: **le formule e le altre Basi del vault che nominano la proprietà non

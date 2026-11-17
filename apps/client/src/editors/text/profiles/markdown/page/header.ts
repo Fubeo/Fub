@@ -26,7 +26,7 @@ import { lastEntry, listItems, propertyBlock, type PropertyBlock, type PropertyE
 import type { PropertyType } from "../../../../../host/enums.generated";
 import { NO_TYPES, type PropertyTypes } from "./properties/kind";
 import type { WriteOutcome } from "./properties/row";
-import type { NewOption } from "./properties/values";
+import type { NewOption, RelationPort } from "./properties/values";
 import { liveStrings } from "../strings";
 import { coverElement, coverYOf } from "./cover";
 import { foldedHeading } from "./title";
@@ -69,6 +69,8 @@ export interface PageOptions {
   /// Le persone il cui nome combacia con il testo, per l'editor delle
   /// persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
+  /// Le note delle Relazioni (T35): cercarle nel bersaglio, crearle, aprirle.
+  readonly relations?: RelationPort;
   /// Il tipo (E5) che il valore `raw` di `tipo` nomina, se si sa già; `null`
   /// finché non si sa. Chi risponde rifà la testata quando lo sa.
   readonly noteType?: (raw: string) => NoteTypeState | null;
@@ -196,6 +198,8 @@ export interface PageHost {
   addPropertyOption?(key: string, option: NewOption): Promise<string | null>;
   /// Le persone per l'editor delle persone.
   searchPeople?(text: string): Promise<string[]>;
+  /// Le note delle Relazioni: cercarle, crearle, aprirle.
+  readonly relations?: RelationPort;
   /// «Scegli il tipo»: i tipi del vault, e la scelta scritta nella nota.
   listTypes?(): Promise<NoteTypeList>;
   chooseType?(type: NoteType): void;
@@ -339,28 +343,30 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   // e dove si scrive offre «Scegli il tipo». La nota non cambia da sola.
   const listTypes = host.listTypes;
   const chooseType = host.chooseType;
+  // «Scegli il tipo»: dall'avviso e dal valore di `tipo` (T35).
+  const openChooser = writable && listTypes && chooseType ? (anchor: HTMLElement) => {
+    closePopover();
+    host.popover?.(true);
+    void listTypes().then((list) => {
+      if (life.closed || !anchor.isConnected) {
+        host.popover?.(false);
+        return;
+      }
+      popover = openTypeChooser(anchor, list, (type) => {
+        chooseType(type);
+        host.focusText();
+      }, life, () => {
+        popover = null;
+        host.popover?.(false);
+      });
+    }, (error: unknown) => {
+      host.popover?.(false);
+      host.notify?.(error instanceof Error ? error.message : String(error), "guasto");
+    });
+  } : undefined;
   const notice = typeNoticeElement(data.noteType, {
     open: host.openType ? (doc) => host.openType!(doc) : undefined,
-    choose: writable && listTypes && chooseType ? (anchor) => {
-      closePopover();
-      host.popover?.(true);
-      void listTypes().then((list) => {
-        if (life.closed || !anchor.isConnected) {
-          host.popover?.(false);
-          return;
-        }
-        popover = openTypeChooser(anchor, list, (type) => {
-          chooseType(type);
-          host.focusText();
-        }, life, () => {
-          popover = null;
-          host.popover?.(false);
-        });
-      }, (error: unknown) => {
-        host.popover?.(false);
-        host.notify?.(error instanceof Error ? error.message : String(error), "guasto");
-      });
-    } : undefined,
+    choose: openChooser,
   }, life);
   if (notice) root.append(notice);
 
@@ -379,6 +385,8 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
       setType: host.setPropertyType ? (key, type) => host.setPropertyType!(key, type) : undefined,
       addOption: host.addPropertyOption ? (key, option) => host.addPropertyOption!(key, option) : undefined,
       searchPeople: host.searchPeople ? (text) => host.searchPeople!(text) : undefined,
+      relations: host.relations,
+      chooseType: openChooser,
       notify: host.notify ? (message, tone) => host.notify!(message, tone) : undefined,
       editing: (open) => host.popover?.(open),
     }, life);
@@ -829,6 +837,8 @@ export function mountReadingHeader(
     currentProperty: (key) => lastEntry(block?.entries ?? [], key),
     renameProperty: () => null,
     featureProperty: noop,
+    // I nomi delle note legate si aprono anche in Lettura.
+    relations: options.relations,
     openType: options.openType,
     classes: () => data.classes,
     openProperty: noop,

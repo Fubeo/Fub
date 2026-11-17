@@ -1598,6 +1598,21 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openOptionsEditor(page, gesture),
   })),
+  // La Relazione (T35, passo 4 del prototipo): il tipo e i libri legati come
+  // nomi di note; poi il riquadro col puntatore, le note della cartella del
+  // bersaglio sotto quelle legate; «Crea» per un nome che non c'è; a 800 px.
+  ...[
+    ["relazioni-01-righe", "Il tipo e una Relazione nella testata: i nomi delle note, sottolineati"],
+    ["relazioni-02-editor", "Il riquadro della Relazione, aperto col puntatore: le legate spuntate, poi la cartella", "open"],
+    ["relazioni-03-crea", "La Relazione con «Crea» per un nome che non c'è, da tastiera", "create"],
+    ["relazioni-04-stretta", "Il riquadro della Relazione nella finestra minima, 800 px", "open", { width: 800, height: 800 }],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=relazioni&tipi=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openRelationEditor(page, gesture),
+  })),
   // I tipi di nota (T33, E5; il prototipo `newNote()` e la sezione «Tipi» del
   // cassetto): «Nuova nota» che chiede il tipo, la testata di una nota con un
   // tipo, quella di una nota il cui tipo non c'è, e «Scegli il tipo»; poi a
@@ -3265,6 +3280,29 @@ async function openPropertyEditor(page, gesture) {
       await page.waitForSelector(".cm-fub-prop-menu [role=menuitemradio]");
     }
   }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await frames();
+}
+
+/// La Relazione (T35): `open` apre il riquadro col puntatore sul valore
+/// (non sul nome, che apre la nota); `create` lo apre da tastiera e scrive
+/// un nome che non c'è.
+async function openRelationEditor(page, gesture) {
+  await openHeader(page, "live_preview");
+  const row = '.pane.focus .cm-fub-page-prop[data-key="libri"]';
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (gesture === "open") {
+    const box = await page.locator(`${row} .cm-fub-page-prop-value`).boundingBox();
+    await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+    await page.waitForSelector(".cm-fub-prop-relation [role=option]:not(.cm-fub-prop-group)");
+  } else if (gesture === "create") {
+    await page.focus(`${row} .cm-fub-page-prop-value`);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".cm-fub-prop-relation [role=option]");
+    await page.keyboard.type("Neuromante");
+    await page.waitForSelector(".cm-fub-prop-relation .cm-fub-prop-create");
+  }
+  if (gesture !== "open") await page.mouse.move(0, 0);
   await page.waitForFunction(() => document.getAnimations().length === 0);
   await frames();
 }

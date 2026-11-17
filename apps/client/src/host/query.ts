@@ -268,6 +268,27 @@ export async function notesInFolder(folder: string, text: string, count = MAX_NA
   return page.items.map((m) => m.doc);
 }
 
+/// Le note che hanno la proprietà `key` e il cui nome combacia con `text`
+/// (con `text` vuoto, le prime), ognuna col valore indicizzato di `key`. È la
+/// domanda dell'editor della Relazione ristretta a un tipo (T35): chi chiede
+/// sceglie fra queste con la regola del core, senza rifarla.
+export async function notesWithProperty(key: string, text: string, count: number): Promise<{ doc: string; value: unknown }[]> {
+  const written = text.trim();
+  const has = { negated: false, predicate: { kind: "property" as const, filter: { key, test: { op: "exists" } } } };
+  const matching: QueryExpr = written
+    ? { any: nameQuery(written).any.map((clause) => ({ all: [...clause.all, has] })) }
+    : { any: [{ all: [has] }] };
+  const page = await runQuery({
+    kind: "documents",
+    matching,
+    sort: null,
+    select: { kind: "keys", keys: [key] },
+    page: { offset: 0, limit: count },
+    excerpts: "omit",
+  });
+  return page.items.map((m) => ({ doc: m.doc, value: m.properties?.find((p) => p.key === key)?.value }));
+}
+
 /// Le note di [`notesByName`], ognuna con i suoi alias del frontmatter.
 ///
 /// L'indice cerca il nome **e** gli alias nello stesso campo, quindi una nota

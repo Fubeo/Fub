@@ -471,6 +471,107 @@ describe("le persone", () => {
   });
 });
 
+describe("la Relazione (T35)", () => {
+  const notes = [
+    { doc: "Libri/Dune.md", link: "[[Libri/Dune]]" },
+    { doc: "Libri/Solaris.md", link: "[[Libri/Solaris]]" },
+    { doc: "Libri/Ubik.md", link: "[[Libri/Ubik]]" },
+  ];
+  const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { libri: "relation" }, targets: { libri: "Libri" } }));
+  const port = (opened: string[] = [], asked: unknown[] = []) => ({
+    search: async (text: string, target: unknown) => {
+      asked.push(target);
+      return notes.filter((note) => note.doc.toLowerCase().includes(text.toLowerCase()));
+    },
+    create: async (name: string) => ({ doc: `Libri/${name}.md`, link: `[[Libri/${name}]]` }),
+    open: (link: string) => { opened.push(link); },
+  });
+  const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); };
+  const options = () => [...popover().querySelectorAll<HTMLElement>("[role=option]")];
+
+  it("si legge come i nomi delle note, e il nome apre la nota", () => {
+    const opened: string[] = [];
+    const { view } = mount("---\nlibri: [\"[[Libri/Dune]]\", \"[[Solaris|Il pianeta]]\"]\n---\n", { propertyTypes: () => types, relations: port(opened) });
+    expect(row(view, "libri").dataset.kind).toBe("relation");
+    expect(valueOf(view, "libri").textContent).toBe("Dune, Il pianeta");
+    valueOf(view, "libri").querySelector<HTMLElement>(".cm-fub-prop-rel")!.click();
+    expect(opened).toEqual(["[[Libri/Dune]]"]);
+    expect(document.querySelector(".cm-fub-prop-popover")).toBeNull();
+    key(valueOf(view, "libri"), "Enter", { altKey: true });
+    expect(opened).toEqual(["[[Libri/Dune]]", "[[Libri/Dune]]"]);
+  });
+
+  it("un link solo scritto come testo è una Relazione: `tipo` mostra il nome, non il testo grezzo", () => {
+    const { view } = mount("---\ntipo: \"[[Tipi/Libro]]\"\n---\n", { relations: port() });
+    expect(row(view, "tipo").dataset.kind).toBe("relation");
+    expect(valueOf(view, "tipo").textContent).toBe("Libro");
+  });
+
+  it("da tastiera: la ricerca nel bersaglio, ↓ e Invio legano una nota; il valore è un elenco di link", async () => {
+    const asked: unknown[] = [];
+    const { view } = mount("---\nlibri: [\"[[Libri/Dune]]\"]\n---\nTesto", { propertyTypes: () => types, relations: port([], asked) });
+    byKeyboard(view, "libri");
+    const input = popover().querySelector<HTMLInputElement>(".cm-fub-prop-search input")!;
+    expect(document.activeElement).toBe(input);
+    await settle();
+    expect(asked[0]).toEqual({ kind: "folder", path: "Libri" });
+    expect(options().map((option) => option.getAttribute("aria-selected"))).toEqual(["false", "true", "false", "false"]);
+    type(input, "sol");
+    await settle();
+    expect(options().map((option) => option.textContent)).toEqual(["Note", "SolarisLibri", "Crea «sol»in «Libri», legata qui"]);
+    key(input, "Enter");
+    expect(text(view)).toBe("---\nlibri: [\"[[Libri/Dune]]\", \"[[Libri/Solaris]]\"]\n---\nTesto");
+  });
+
+  it("col puntatore: un clic toglie una nota legata; un nome che non c'è si crea e si lega", async () => {
+    const { view } = mount("---\nlibri: [\"[[Libri/Dune]]\", \"[[Libri/Ubik]]\"]\n---\n", { propertyTypes: () => types, relations: port() });
+    valueOf(view, "libri").click();
+    await settle();
+    const option = (label: string) => options().find((element) => element.textContent?.includes(label))!;
+    option("Dune").click();
+    expect(text(view)).toBe("---\nlibri: [\"[[Libri/Ubik]]\"]\n---\n");
+    const input = popover().querySelector<HTMLInputElement>(".cm-fub-prop-search input")!;
+    type(input, "Neuromante");
+    await settle();
+    expect(popover().querySelector(".cm-fub-prop-empty")!.hasAttribute("hidden")).toBe(true);
+    option("Crea «Neuromante»").click();
+    await settle();
+    expect(text(view)).toBe("---\nlibri: [\"[[Libri/Ubik]]\", \"[[Libri/Neuromante]]\"]\n---\n");
+  });
+
+  it("il bersaglio senza note lo dice; un link solo resta un link solo", async () => {
+    const empty = { search: async () => [], open: () => {} };
+    const { view } = mount("---\nautore: \"[[Mario]]\"\n---\n", { relations: empty });
+    valueOf(view, "autore").click();
+    await settle();
+    const option = (label: string) => options().find((element) => element.textContent?.includes(label))!;
+    option("Mario").click();
+    expect(text(view)).toBe("---\nautore:\n---\n");
+    // Niente di legato, niente trovato: il riquadro lo dice.
+    const said = popover().querySelector<HTMLElement>(".cm-fub-prop-empty")!;
+    expect(said.hidden).toBe(false);
+    expect(said.textContent).toBe("Il vault non ha ancora note: scrivi un nome per crearne una");
+  });
+
+  it("in sola lettura il nome è un link che apre la nota, e il valore non si modifica", () => {
+    const opened: string[] = [];
+    const { view } = mount("---\nlibri: [\"[[Libri/Dune]]\"]\n---\n", { readOnly: true, propertyTypes: () => types, relations: port(opened) });
+    const link = valueOf(view, "libri").querySelector<HTMLAnchorElement>("a.cm-fub-prop-rel")!;
+    link.click();
+    expect(opened).toEqual(["[[Libri/Dune]]"]);
+    expect(document.querySelector(".cm-fub-prop-popover")).toBeNull();
+  });
+
+  it("cento note legate stanno tutte nel riquadro, spuntate", async () => {
+    const many = Array.from({ length: 100 }, (_, i) => `"[[Libri/N${i}]]"`).join(", ");
+    const { view } = mount(`---\nlibri: [${many}]\n---\n`, { propertyTypes: () => types, relations: port() });
+    expect(valueOf(view, "libri").querySelectorAll(".cm-fub-prop-rel")).toHaveLength(100);
+    valueOf(view, "libri").click();
+    await settle();
+    expect(options().filter((option) => option.getAttribute("aria-selected") === "true")).toHaveLength(100);
+  });
+});
+
 describe("aprire e uscire senza cambiare niente non riscrive il file (revisione #421)", () => {
   // Ciò che la testata mostra non è il testo scritto: un'uscita senza
   // modifiche non deve diventare una scrittura che lo «normalizza».

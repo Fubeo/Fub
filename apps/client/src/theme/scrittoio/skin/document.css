@@ -1194,6 +1194,51 @@ button.cm-fub-page-icon:focus-visible {
   text-decoration-thickness: 1px;
   text-underline-offset: 0.22em;
 }
+/* La Relazione (T35, `.lnk` del prototipo): i nomi delle note legate, color
+   inchiostro e sottolineati d'accento; il nome apre la nota, il resto del
+   valore il riquadro. Un valore che non è un link resta testo. */
+.cm-fub-prop-rels {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cm-fub-prop-rel {
+  color: var(--doc-fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 50%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cm-fub-prop-rel:hover {
+  text-decoration-color: var(--doc-link);
+}
+.cm-fub-prop-rel-text {
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-relation {
+  width: 300px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-relation .cm-fub-prop-note {
+  margin: var(--space-4) var(--space-5);
+}
+.cm-fub-prop-relation [role="option"] > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-relation .cm-fub-prop-menu-label {
+  display: grid;
+  min-width: 0;
+}
+.cm-fub-prop-relation .cm-fub-prop-menu-label > span,
+.cm-fub-prop-relation .cm-fub-prop-menu-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cm-fub-prop-url-cell {
   display: flex;
   align-items: flex-start;

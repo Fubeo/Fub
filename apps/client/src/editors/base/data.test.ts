@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
-  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments,
+  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
   parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
   persistBaseView, restoreBaseView, setBaseViewKey, writtenLines, type BaseSurfaceDeps,
 } from "./data";
@@ -170,5 +170,41 @@ describe("i gesti della barra con base.view.set", () => {
       removed: [], added: ["    sort:", "      - key: stato"], line: 4,
     });
     expect(writtenLines("a\nb\nc\n", "a\nB\nc\n")).toEqual({ removed: ["b"], added: ["B"], line: 2 });
+  });
+});
+
+describe("le note legate dei riepiloghi di Relazione (T35)", () => {
+  const wiki = (page: string) => ({ kind: "link", value: { kind: "wiki", value: { page, heading: null, block: null } } });
+  const rows = [
+    { doc: "Letture/2025.md", properties: [{ key: "libri", value: { kind: "list", value: [wiki("Dune"), wiki("Rotto")] } }] },
+    { doc: "Letture/2026.md", properties: [{ key: "libri", value: wiki("Dune") }, { key: "altro", value: wiki("Ubik") }] },
+  ];
+
+  it("risolve ogni pagina una volta, legge le note trovate con le proprietà chieste e lascia fuori i link rotti", async () => {
+    const asked: IndexQuery[] = [];
+    const bridge = deps(async (query) => {
+      asked.push(query);
+      if (query.kind === "resolve") {
+        const page = (query.target as { value: { page: string } }).value.page;
+        return { kind: "resolved", value: page === "Dune" ? { doc: "Libri/Dune.md" } : null } as IndexResult;
+      }
+      return { kind: "documents", value: { offset: 0, total: 1, items: [{ doc: "Libri/Dune.md", properties: [{ key: "pagine", value: { kind: "number", value: 600 } }] }] } } as IndexResult;
+    });
+    const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, rows);
+    expect(linked).toEqual([{ target: "Dune", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
+    expect(asked.filter((query) => query.kind === "resolve")).toHaveLength(2);
+    expect(asked.find((query) => query.kind === "resolve")).toMatchObject({ from: "Letture/2025.md" });
+  });
+
+  it("una vista senza riepiloghi di Relazione non chiede niente", async () => {
+    const queryIndex = vi.fn(async () => custom(null));
+    expect(await linkedNotes(deps(queryIndex), { relations: [], linkedProps: [] }, rows)).toEqual([]);
+    expect(queryIndex).not.toHaveBeenCalled();
+  });
+
+  it("il piano porta le Relazioni e le proprietà legate; un host che non le dice vale come vuote", async () => {
+    const raw = { view: "T", view_type: "table", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} };
+    await expect(planBaseView(deps(async () => custom(raw)), source, "T")).resolves.toMatchObject({ relations: [], linkedProps: [] });
+    await expect(planBaseView(deps(async () => custom({ ...raw, relations: ["libri"], linked_props: ["pagine"] })), source, "T")).resolves.toMatchObject({ relations: ["libri"], linkedProps: ["pagine"] });
   });
 });

@@ -20,13 +20,13 @@ import { LOCAL_FETCH } from "../core/local-fetch";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
   addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
-  fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
+  fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
   type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
-import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
+import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, relationColumn, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
 import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
 import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
@@ -524,7 +524,11 @@ export function mountBaseSurface(
       if (!nextPlan) throw new Error("base: piano assente");
       const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, nextPlan.allProperties ? { kind: "all" } : { kind: "keys", keys: nextPlan.requiredProps }, { offset: 0, limit: 256 }, request.signal);
       if (!valid(ticket)) return;
-      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container);
+      // Le note legate dai riepiloghi di Relazione (T35): nessuna domanda in
+      // più se la vista non ne ha.
+      const linked = await linkedNotes(deps, nextPlan, found.rows, request.signal);
+      if (!valid(ticket)) return;
+      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked);
       if (!valid(ticket)) return;
       rows = result.rows;
       read = readProperties(found.rows);
@@ -833,6 +837,7 @@ export function mountBaseSurface(
     return columnMenu({
       plan, column, label: labelOf(column), kind: column === NOTE_COLUMN ? "text" : columnKind(rows, column),
       grouping: grouping(), regroupable: regroupable(), lock: lock(), busy: busy || sequencing > 0, readOnly,
+      relation: column === NOTE_COLUMN ? null : relationColumn(propertyTypes, column),
     }, {
       write: (key, value) => { if (current()) void writeView(key, value); },
       rename: (key) => { if (current()) startRename(key); },

@@ -50,7 +50,7 @@ import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
 import type { PropertyType } from "../../../../../host/enums.generated";
 import type { PropertyTypes } from "../page/properties/kind";
-import type { NewOption } from "../page/properties/values";
+import type { NewOption, RelationPort } from "../page/properties/values";
 import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 
 export interface BlocksOptions {
@@ -92,6 +92,8 @@ export interface BlocksOptions {
   readonly addPropertyOption?: (key: string, option: NewOption) => Promise<string | null>;
   /// Le persone il cui nome combacia col testo, per l'editor delle persone.
   readonly searchPeople?: (text: string) => Promise<string[]>;
+  /// Le note delle Relazioni della testata (T35), come in `PageOptions`.
+  readonly relations?: RelationPort;
   /// «Sposta in…» (E13): le note del vault, i loro titoli e il comando che
   /// sposta il blocco. Senza, il menu non offre la voce e le note del cassetto
   /// non sono bersagli.

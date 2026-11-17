@@ -29,6 +29,7 @@ import type { MoveBlockPort } from "./blocks/move-to";
 import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
+import type { RelationPort } from "./page/properties/values";
 import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
@@ -766,6 +767,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     noteTypes.refresh();
   };
+  // Le note delle Relazioni (T35): la ricerca e la creazione arrivano con un
+  // `import()` quando l'editor si apre. Il tipo di una nota lo dice il core;
+  // le risposte valgono finché l'editor cerca, e si richiedono quando si
+  // riapre (la ricerca vuota).
+  let relationLookup: import("../../../../state/relations").TypeLookup | null = null;
+  const relationPort: RelationPort = {
+    search: (text, target) => import("../../../../state/relations").then((relations) => {
+      if (relationLookup === null || text.trim() === "") relationLookup = relations.cachedTypeLookup();
+      return relations.searchRelation(text, target, (written) => opts.completions.searchNotes(written), relationLookup);
+    }),
+    create: (name, target) => import("../../../../state/relations").then((relations) => relations.createRelation(name, target)),
+    open: (link) => {
+      const inner = link.trim().replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0]!;
+      const hash = inner.indexOf("#");
+      const page = (hash < 0 ? inner : inner.slice(0, hash)).trim();
+      const anchor = hash < 0 ? "" : inner.slice(hash + 1).trim();
+      void Promise.resolve(openWikilink(page, anchor.startsWith("^") ? null : anchor || null, anchor.startsWith("^") ? anchor.slice(1) : null))
+        .catch((error: unknown) => notify(errorText(error), "guasto"));
+    },
+  };
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
@@ -829,6 +850,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const people = opts.completions.people;
       return people && people.folder() !== "" ? people.search(text) : opts.completions.searchNotes(text);
     },
+    relations: relationPort,
   };
   const blocksOptions: BlocksOptions = {
     ...pageOptions,

@@ -1,6 +1,6 @@
 // `.base` uses the generic query and command registries. The definition is
 // source text; notes and their indexed properties remain the authoritative data.
-import { EVERY_DOCUMENT, type DocumentMatch, type Excerpts, type IndexQuery, type IndexResult, type InvokeMode, type Paged, type PropertySelect, type QueryExpr, type UiNode } from "../../host/contract";
+import { EVERY_DOCUMENT, type DocumentMatch, type Excerpts, type IndexQuery, type IndexResult, type InvokeMode, type LinkTarget, type Paged, type PropertySelect, type QueryExpr, type UiNode } from "../../host/contract";
 import type { Theme } from "../../theme/theme";
 import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
@@ -115,6 +115,11 @@ export interface BasePlan {
   readonly dateKey: string | null;
   readonly startKey: string | null;
   readonly endKey: string | null;
+  /// Le Relazioni che i riepiloghi (`rollup`) leggono, e le proprietà delle
+  /// note legate che chiedono (T35a): la superficie risolve quei link e manda
+  /// le note legate a `derive`. Vuote se la vista non ne ha.
+  readonly relations: string[];
+  readonly linkedProps: string[];
 }
 /// Gli aggregati di un riepilogo (`AggregateKind` di `fub-format-base`).
 export type BaseAggregate =
@@ -239,7 +244,86 @@ export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: 
     dateKey: raw.date_key === undefined ? null : optionalKey("date_key"),
     startKey: raw.start_key === undefined ? null : optionalKey("start_key"),
     endKey: raw.end_key === undefined ? null : optionalKey("end_key"),
+    // Un host che non le dice (prima di T35a) vale come una vista senza.
+    relations: raw.relations === undefined ? [] : strings(raw.relations, "relazioni"),
+    linkedProps: raw.linked_props === undefined ? [] : strings(raw.linked_props, "proprietà legate"),
   };
+}
+
+/// Una nota legata come la vuole `derive`: la pagina del link com'è scritta
+/// nella Relazione (`Dune` per `[[Dune]]`), il documento a cui il vault la
+/// risolve e le proprietà che il piano chiede.
+export interface BaseLinkedNote {
+  readonly target: string;
+  readonly doc: string;
+  readonly props: Record<string, unknown>;
+}
+
+/// Quante pagine di link si risolvono insieme: le domande partono a gruppi,
+/// non una alla volta né tutte insieme.
+const RESOLVE_BATCH = 16;
+
+/// I link di un valore di Relazione indicizzato (`PropertyValue`): un link
+/// solo o un elenco; ogni voce che non è un link non lega niente.
+function relationTargets(value: unknown): LinkTarget[] {
+  if (!value || typeof value !== "object") return [];
+  const { kind, value: inner } = value as { kind?: unknown; value?: unknown };
+  if (kind === "link") return isLinkTarget(inner) ? [inner] : [];
+  if (kind !== "list" || !Array.isArray(inner)) return [];
+  return inner.flatMap((item: unknown) => {
+    if (!item || typeof item !== "object") return [];
+    const scalar = item as { kind?: unknown; value?: unknown };
+    return scalar.kind === "link" && isLinkTarget(scalar.value) ? [scalar.value] : [];
+  });
+}
+
+function isLinkTarget(value: unknown): value is LinkTarget {
+  if (!value || typeof value !== "object") return false;
+  const target = value as { kind?: unknown; value?: unknown };
+  if (target.kind === "wiki") return !!target.value && typeof target.value === "object" && typeof (target.value as { page?: unknown }).page === "string";
+  return target.kind === "path" && typeof target.value === "string";
+}
+
+/// La pagina con cui `derive` cerca la nota legata: quella del link, senza
+/// titolo né blocco (`rollup` legge la nota), o il percorso.
+function linkedKey(target: LinkTarget): string | null {
+  if (target.kind === "wiki") return target.value.page.trim() || null;
+  return target.kind === "path" ? target.value : null;
+}
+
+/// Le note legate dalle Relazioni del piano nelle righe `rows`: ogni pagina
+/// di link si risolve una volta, con le regole del vault (`resolve`, dalla
+/// prima nota che la scrive), e le note trovate si leggono in una domanda
+/// sola, con le proprietà che il piano chiede. Un link rotto non si manda.
+/// Niente da fare se la vista non ha riepiloghi di Relazione.
+export async function linkedNotes(deps: BaseSurfaceDeps, plan: Pick<BasePlan, "relations" | "linkedProps">, rows: readonly BaseRowInput[], signal?: AbortSignal): Promise<BaseLinkedNote[]> {
+  if (plan.relations.length === 0) return [];
+  const pages = new Map<string, { target: LinkTarget; from: string }>();
+  for (const row of rows) {
+    for (const property of row.properties ?? []) {
+      if (!plan.relations.includes(property.key)) continue;
+      for (const target of relationTargets(property.value)) {
+        const key = linkedKey(target);
+        if (key !== null && !pages.has(key)) pages.set(key, { target: target.kind === "wiki" ? { kind: "wiki", value: { page: target.value.page } } : target, from: row.doc });
+      }
+    }
+  }
+  if (pages.size > MAX_DERIVE_ROWS) throw new Error(`base: ${pages.size} note legate superano il budget di ${MAX_DERIVE_ROWS}; nessun risultato parziale`);
+  const resolved = new Map<string, string>();
+  const entries = [...pages];
+  for (let at = 0; at < entries.length; at += RESOLVE_BATCH) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    await Promise.all(entries.slice(at, at + RESOLVE_BATCH).map(async ([key, { target, from }]) => {
+      const answer = await deps.queryIndex({ kind: "resolve", target, from });
+      if (answer.kind !== "resolved") throw new Error("base: risoluzione fuori tema");
+      if (answer.value) resolved.set(key, answer.value.doc);
+    }));
+  }
+  if (resolved.size === 0) return [];
+  const docs = [...new Set(resolved.values())];
+  const found = await fetchAllDocuments(deps, { any: [{ all: [{ negated: false, predicate: { kind: "docs", docs } }] }] }, { kind: "keys", keys: plan.linkedProps }, { offset: 0, limit: 256 }, signal);
+  const props = new Map(found.rows.map((row) => [row.doc, Object.fromEntries((row.properties ?? []).map((entry) => [entry.key, entry.value]))]));
+  return [...resolved].map(([target, doc]) => ({ target, doc, props: props.get(doc) ?? {} }));
 }
 
 /// Le chiavi di una vista che i gesti della barra, del menu della colonna e
@@ -374,8 +458,8 @@ function isCell(value: unknown): value is BaseCellValue {
     default: return false;
   }
 }
-export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view: string | null, rows: BaseRowInput[], nowMs = Date.now(), container: string | null = null): Promise<BaseDerived> {
-  const raw = await baseQuery(deps, { version: 1, op: "derive", source, view, now_ms: nowMs, container, rows: rows.map((row) => ({ doc: row.doc, props: Object.fromEntries((row.properties ?? []).map((property) => [property.key, property.value])) })) });
+export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view: string | null, rows: BaseRowInput[], nowMs = Date.now(), container: string | null = null, linked: readonly BaseLinkedNote[] = []): Promise<BaseDerived> {
+  const raw = await baseQuery(deps, { version: 1, op: "derive", source, view, now_ms: nowMs, container, rows: rows.map((row) => ({ doc: row.doc, props: Object.fromEntries((row.properties ?? []).map((property) => [property.key, property.value])) })), ...(linked.length > 0 ? { linked } : {}) });
   if (!Array.isArray(raw.rows)) throw new Error("base: righe malformate");
   const properties = new Map(rows.map((row) => [row.doc, Object.fromEntries((row.properties ?? []).map((entry) => [entry.key, entry.value]))]));
   const derived = raw.rows.map((item): BaseRow => {
