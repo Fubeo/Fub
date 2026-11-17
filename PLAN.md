@@ -1021,7 +1021,7 @@ scorciatoia cambiata; un test del vault d'esempio in `support.rs`; la scena
 del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/frame; cargo nextest run -p fub-host support
-Stato: [~] PR #383 (feat/riga-dei-suggerimenti @ 39dd7f5db spinta il 2026-11-17 con main dentro, CI completa in corso, baseline dal runner): la riga sotto il controllo di conformità (`suggerimenti.riga`, `suggerimenti.tasto`) e corretta regola per regola dal prototipo; a 700 px toglie le voci intere invece di tagliare con «…» e scrive «Ctrl+O» (da `displayBinding`, fuori perimetro); si spinge dopo #431, poi baseline `live-*` dal runner
+Stato: [x] in main con #383 (2026-11-17; baseline dal runner guardate): la riga sotto il controllo di conformità (`suggerimenti.riga`, `suggerimenti.tasto`) e corretta regola per regola dal prototipo; a 700 px toglie le voci intere invece di tagliare con «…» e scrive «Ctrl+O» (da `displayBinding`, fuori perimetro); si spinge dopo #431, poi baseline `live-*` dal runner
 
 ## T15a · Le toppe mirate del `.base`
 
