@@ -264,9 +264,8 @@ cssclasses: [wide, sans]
   un carattere solo (una parola, un path) non si mostra, e torna «Aggiungi
   un'icona». L'icona si vede anche fuori dalla pagina, quando l'indice ha
   letto la nota salvata: nella sua riga dell'esplora (e della cartella di cui
-  è la pagina, se l'esplora non le ha dato un'icona sua), nella sua scheda e
-  prima dei `[[wikilink]]` che la nominano in Live e in Blocchi, se due
-  omonime non ne hanno di diverse.
+  è la pagina, se non ne ha una sua), nella scheda e prima dei `[[wikilink]]`
+  che la nominano in Live e in Blocchi, se due omonime non ne hanno diverse.
 - **Copertina.** Un'immagine del vault, con lo stesso path di un'immagine nel
   testo, un indirizzo, o un colore pieno (`cover: "#a3c4f3"`); per
   un'immagine «Riposiziona» ne sceglie la parte che si vede.

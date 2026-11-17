@@ -91,16 +91,24 @@ function knownFigure(name: string): PageFigure | null {
   return icon(name) === "" ? null : (name as PageFigure);
 }
 
+/// Il segmentatore per grafemi, se il motore lo ha: le librerie ES2021 del
+/// progetto non lo dichiarano (come in `editors/spatial/tools/measure.ts`).
+interface GraphemeSegmenter {
+  segment(text: string): Iterable<unknown>;
+}
+const Segmenter = (Intl as unknown as {
+  Segmenter?: new (locale: undefined, options: { granularity: "grapheme" }) => GraphemeSegmenter;
+}).Segmenter;
+const segmenter = Segmenter === undefined ? null : new Segmenter(undefined, { granularity: "grapheme" });
+
 /// `true` se il testo è un carattere solo come lo vede chi legge: una
-/// lettera, un'emoji, anche composta (una bandiera, una famiglia).
+/// lettera, un'emoji, anche composta (una bandiera, una famiglia). Senza
+/// segmentatore conta i punti di codice: un'emoji composta allora non passa.
 function isSingleGrapheme(text: string): boolean {
-  if (typeof Intl.Segmenter === "function") {
-    const segments = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
-    let count = 0;
-    for (const _ of segments) if (++count > 1) return false;
-    return count === 1;
-  }
-  return [...text].length === 1;
+  if (!segmenter) return [...text].length === 1;
+  let count = 0;
+  for (const _ of segmenter.segment(text)) if (++count > 1) return false;
+  return count === 1;
 }
 
 /// Il valore letto: una figura nota, un carattere da mostrare, o `null`
