@@ -1,11 +1,10 @@
 # Basi (file `.base`)
 
 Una Base è un file `.base` che mostra le note del vault come tabella, schede,
-elenco, bacheca o mappa. Il calendario e la linea del tempo si leggono e si
-scrivono già nel file, ma la Base non li disegna ancora: arrivano con le
-prossime modifiche dell'editor (vedi sotto). Il file è testo YAML che si legge
-e si scrive a mano: Fub lo cambia solo nelle righe che un comando tocca, e lascia
-il resto com'è.
+elenco, bacheca, mappa o calendario; la linea del tempo è già nel file, ma la
+Base non la disegna ancora (vedi sotto). Il file è testo YAML che si legge e si
+scrive a mano: Fub lo cambia solo nelle righe che un comando tocca, e lascia il
+resto com'è.
 
 ```mermaid
 flowchart LR
@@ -35,9 +34,9 @@ Le chiavi che Fub non conosce restano nel file e non vengono interpretate.
 Ogni voce di `views` ha una chiave `name` (obbligatoria, unica nel file) e una
 chiave `type`, che è una fra `table`, `cards`, `list`, `kanban`, `map`,
 `calendar` e `timeline`. Un `type` che Fub non conosce rende il file illeggibile
-come Base. La Base disegna le prime cinque: una vista `calendar` o
-`timeline` si mostra come un tipo che la Base non disegna (un errore sulla vista,
-con «Riprova»). Le altre chiavi sono facoltative:
+come Base. La Base disegna le prime sei: una vista `timeline` si mostra come
+un tipo che la Base non disegna (un errore sulla vista, con «Riprova»). Le
+altre chiavi sono facoltative:
 
 | Chiave | A che serve |
 |---|---|
@@ -53,12 +52,13 @@ con «Riprova»). Le altre chiavi sono facoltative:
 
 ## Calendario e linea del tempo
 
-Il calendario mostrerà le note nel giorno di una proprietà data. La linea del
-tempo mostrerà ogni nota come una barra fra la proprietà d'inizio e quella di
-fine, o come un punto se manca la fine. Il file le legge e le scrive, e la
-valutazione dà il giorno di ogni nota, ma la superficie non le disegna: le
-disegnano i task T17 (calendario) e T34 (linea del tempo) del piano dell'editor.
-Tutte e due leggono le proprietà delle note, e le chiavi che dicono quali sono
+Il calendario mostra le note nel giorno di una proprietà data, e si sposta
+una nota trascinandola su un altro giorno ([Il calendario della
+Base](bases-calendar.md)). La linea del tempo mostrerà ogni nota come una
+barra fra la proprietà d'inizio e quella di fine, o come un punto se manca la
+fine: il file la legge e la scrive, ma la superficie non la disegna ancora (il
+task T34 del piano dell'editor). Tutte e due leggono le proprietà delle note,
+e le chiavi che dicono quali sono
 stanno nel blocco `fub:` della vista:
 
 | Chiave in `fub` | Vista | A che serve |
@@ -346,15 +346,16 @@ modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna
 
 ### Una vista nuova
 
-«+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa. La
-vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
+«+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa,
+Calendario. La vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
 **eredita il filtro e le colonne** della vista aperta; una bacheca prende come
 corsie il raggruppamento della vista aperta o la sua prima colonna che è una
 proprietà, una mappa le coordinate della vista aperta o le proprietà `lat` e
-`lon` (`latitude`/`longitude`) delle righe. Senza corsie o senza coordinate la
-voce è spenta e dice perché. Sono più scritture, una chiave per volta come ogni
-gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`
-scrive `filters`, `order` e, se servono, `group` o `map`, ognuna con la
+`lon` (`latitude`/`longitude`) delle righe, un calendario la data della vista
+aperta o la prima proprietà delle righe che ha per valori delle date. Senza
+corsie, senza coordinate o senza date la voce è spenta e dice perché. Sono
+più scritture, una chiave per volta come ogni gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`
+scrive `filters`, `order` e, se servono, `group`, `map` o `date`, ognuna con la
 revisione. Un filtro che la Base non sa ridire (un valore lista, per esempio)
 si copia com'è scritto. Alla fine la vista si apre, e l'avviso ha «Annulla»,
 che toglie la vista con tutte le sue chiavi (`base.view.remove`). Se un passo è

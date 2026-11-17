@@ -288,12 +288,13 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
     }
   : {};
 
-/// La Base delle scene `base-*` (`?base=1`, T15; `?base=venti`, T16):
+/// La Base delle scene `base-*` (`?base=1`, T15; `?base=venti`, T16;
+/// `?base=calendario`, T17):
 /// `Opere.base` e le note di `Opere/`, con le domande `fub.base` e i comandi
 /// `base.view.*` che il finto da solo non ha. Gli attrezzi del finto li chiede
 /// quando servono, cioè dopo che il finto è nato.
 const BASE_VARIANT = params.get("base");
-const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti"
+const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
       writeByCommand: async (doc, text) => {

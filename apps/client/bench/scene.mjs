@@ -650,6 +650,54 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .base-tabs.compact");
     },
   },
+  // **Il calendario** (T17), su `?base=calendario`: agosto 2026, il mese
+  // dell'orologio del banco, con cinque consegne il 12 («+2»), una con l'ora
+  // il 20 e una il 3 settembre fra i giorni fuori dal mese.
+  {
+    id: "base-calendario",
+    title: "Base: il calendario di agosto, le consegne nei loro giorni e «+2»",
+    query: "base=calendario",
+    prepare: openCalendar,
+  },
+  {
+    id: "base-calendario-stretto",
+    title: "Base: il calendario nella finestra minima, 800 px",
+    query: "base=calendario",
+    viewport: NOTE_NARROW,
+    prepare: openCalendar,
+  },
+  {
+    id: "base-calendario-trascina",
+    title: "Base: una consegna trascinata sopra un altro giorno, che si accende",
+    query: "base=calendario",
+    prepare: async (page) => {
+      await openCalendar(page);
+      // Il trascinamento del browser a metà: la nota presa, il giorno sotto
+      // acceso. Playwright non tiene un drag HTML5 fermo a metà.
+      await page.evaluate(() => {
+        const pane = document.querySelector(".pane.focus");
+        const note = pane.querySelector('.base-cal-event[data-doc="Opere/Ritratto di signora.md"]');
+        const target = pane.querySelector('.base-cal-day[data-day="2026-08-06"]');
+        const transfer = new DataTransfer();
+        note.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }));
+        target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      });
+      await page.waitForSelector('.pane.focus .base-cal-day[data-day="2026-08-06"][data-over="true"]');
+    },
+  },
+  {
+    id: "base-calendario-fuoco",
+    title: "Base: il fuoco sui giorni dalla tastiera, e «+2» aperto",
+    query: "base=calendario",
+    prepare: async (page) => {
+      await openCalendar(page);
+      await page.click('.pane.focus .base-cal-day[data-day="2026-08-12"] .base-cal-more');
+      await page.waitForFunction(() => document.querySelectorAll('.pane.focus .base-cal-day[data-day="2026-08-12"] .base-cal-event').length === 5);
+      await page.focus('.pane.focus .base-cal-day[data-day="2026-08-12"]');
+      await page.keyboard.press("ArrowRight");
+      await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
+    },
+  },
   {
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
@@ -1869,6 +1917,15 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector(".rich-side-comments .rich-side-comment");
       },
     },
+    // Il calendario della Base in piedi (T17): una colonna di giorni, col nome
+    // del giorno accanto al numero.
+    {
+      id: "mobile-base-calendario",
+      title: "Il telefono: il calendario della Base in una colonna di giorni",
+      query: "base=calendario",
+      viewport: PHONE,
+      prepare: openCalendar,
+    },
     // La barra dei fogli in piedi: la Home in tre colonne di due foglietti
     // chiusi, e uno di loro aperto sul posto.
     {
@@ -2561,6 +2618,20 @@ async function openBase(page) {
   await page.waitForFunction(() => {
     const pane = document.querySelector(".pane.focus");
     return (pane?.querySelectorAll(".base-table tbody tr").length ?? 0) > 0
+      && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
+/// Apre il calendario di `?base=calendario` e aspetta il mese con le sue note.
+async function openCalendar(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-cal-event").length ?? 0) > 0
       && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
       && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
   });

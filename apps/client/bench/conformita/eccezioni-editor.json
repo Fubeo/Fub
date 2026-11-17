@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "pezzo": "calendario.oggi",
+    "proprieta": "color",
+    "motivo": "Il prototipo scrive a mano #fff sul suo accento; Fub scrive sull'accento il suo inchiostro, --accent-contrast, che la ricetta del tema genera col contrasto garantito: di notte l'accento è un verde chiaro, e il bianco del prototipo non si leggerebbe.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent; i colori si prendono dal tema); T17"
+  }
+]

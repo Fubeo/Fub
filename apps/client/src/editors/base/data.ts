@@ -45,7 +45,11 @@ export interface BaseDocumentWrites {
   expect(doc: string): () => void;
 }
 
-export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map";
+export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map" | "calendar";
+/// I tipi di vista che la superficie disegna. La linea del tempo (`timeline`)
+/// il contratto la porta già (T17a), ma finché la superficie non la disegna
+/// (T34) si legge come un tipo sconosciuto.
+const DRAWN_VIEW_KINDS: readonly string[] = ["table", "cards", "list", "kanban", "map", "calendar"];
 export type BaseCellValue =
   | { kind: "empty" }
   | { kind: "number" | "date" | "duration"; value: number }
@@ -60,6 +64,10 @@ export interface BaseRow {
   readonly doc: string;
   readonly values: Record<string, BaseCellValue>;
   readonly properties: Record<string, unknown>;
+  /// Il giorno della nota in una vista di calendario (`2026-11-14`: il giorno
+  /// civile della proprietà data, che l'ora non sposta), `null` se la nota non
+  /// ha la data; assente nelle altre viste. Lo dice `derive`.
+  readonly day?: string | null;
 }
 export interface BaseMapConfig {
   readonly lat_key: string;
@@ -186,11 +194,7 @@ export async function listBaseViews(deps: BaseSurfaceDeps, source: string): Prom
 export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: string | null): Promise<BasePlan> {
   const raw = await baseQuery(deps, { version: 1, op: "plan", source, view });
   if (typeof raw.view !== "string") throw new Error("base: piano senza vista");
-  // calendar e timeline il contratto le porta già (T17a), ma la superficie non le
-  // disegna ancora: finché non le disegnano (T17 e T34) sono tipi che non si
-  // mostrano, come un tipo sconosciuto. T17 toglie questa riga e aggiunge i due
-  // tipi a BaseViewKind.
-  if (!["table", "cards", "list", "kanban", "map"].includes(String(raw.view_type))) throw new Error("base: tipo vista sconosciuto");
+  if (!DRAWN_VIEW_KINDS.includes(String(raw.view_type))) throw new Error("base: tipo vista sconosciuto");
   const columns = strings(raw.columns, "colonne");
   const requiredProps = strings(raw.required_props, "dipendenze");
   const columnLabels = object(raw.column_labels, "etichette");
@@ -240,7 +244,7 @@ export const BASE_VIEW_SET = "base.view.set";
 export const BASE_VIEW_ADD = "base.view.add";
 export const BASE_VIEW_REMOVE = "base.view.remove";
 /// I tipi di vista che «+» crea: quelli che la Base disegna.
-export const NEW_VIEW_KINDS: readonly BaseViewKind[] = ["table", "cards", "list", "kanban", "map"];
+export const NEW_VIEW_KINDS: readonly BaseViewKind[] = ["table", "cards", "list", "kanban", "map", "calendar"];
 
 /// Scrive la chiave `key` della vista `view` del file `doc` con
 /// `base.view.set`: `value` è il valore JSON, `null` toglie la chiave. Con
@@ -373,7 +377,12 @@ export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view
     if (typeof record.doc !== "string" || !properties.has(record.doc)) throw new Error("base: documento derivato sconosciuto");
     const values = object(record.values, "valori");
     for (const [key, value] of Object.entries(values)) if (!isCell(value)) throw new Error(`base: cella malformata ${key}`);
-    return { doc: record.doc, values: values as Record<string, BaseCellValue>, properties: properties.get(record.doc)! };
+    const row: BaseRow = { doc: record.doc, values: values as Record<string, BaseCellValue>, properties: properties.get(record.doc)! };
+    if (record.time === undefined) return row;
+    const time = object(record.time, "tempo");
+    if (time.day === undefined) return row;
+    if (time.day !== null && (typeof time.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(time.day))) throw new Error("base: giorno malformato");
+    return { ...row, day: time.day };
   });
   const summaries = object(raw.summaries, "riepiloghi");
   for (const [key, value] of Object.entries(summaries)) if (!isCell(value)) throw new Error(`base: riepilogo malformato ${key}`);
