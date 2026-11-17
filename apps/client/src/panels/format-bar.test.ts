@@ -814,6 +814,56 @@ describe("il gruppo del blocco", () => {
     expect(block.ran).toEqual(["python"]);
   });
 
+  it("al tocco resta nella barra sopra la tastiera: annulla e ripeti scendono in «…» prima di lui", async () => {
+    // Una riga finta: ogni pulsante è largo 44 px, il nome del gruppo 60.
+    const size = (each: HTMLElement): number => {
+      if (each.hidden || each.classList.contains("sr-only")) return 0;
+      const count = each.matches("button") ? 1 : each.querySelectorAll("button").length;
+      return count * 44 + (each.classList.contains("format-bar-context") ? 60 : 0);
+    };
+    const row = (bar: FormatBar, width: () => number) => {
+      Object.defineProperty(bar.element, "clientWidth", { configurable: true, get: width });
+      Object.defineProperty(bar.element, "scrollWidth", {
+        configurable: true,
+        get: () => [...bar.element.children].reduce((sum, each) => sum + size(each as HTMLElement), 0),
+      });
+    };
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    for (const coarse of [true, false]) {
+      const fake = fakeActions(FOLLOW_KNOWN);
+      const block = blockSurface(fake);
+      block.move("task");
+      const bar = createFormatBar({
+        surface: () => block.surface,
+        writing: () => true,
+        focusPane: () => {},
+        runCommand: () => {},
+        blocks: true,
+        form: () => "compatta",
+        coarse: () => coarse,
+      });
+      document.body.append(bar.element);
+      bars.push(bar);
+      const history = () => bar.element.querySelector<HTMLElement>('[data-group="history"]')!;
+      const insert = () => bar.element.querySelector<HTMLElement>(".format-bar-insert-group")!;
+      // C'è posto per il gruppo del blocco, «…» e «Inserisci», non per annulla.
+      row(bar, () => size(context(bar)) + 44 + size(insert()) + 10);
+      bar.update(FOLLOW_SPECS);
+      await frame();
+      if (coarse) {
+        expect(context(bar).hidden, "al tocco il gruppo del blocco resta").toBe(false);
+        expect(history().hidden, "annulla e ripeti stanno in «…»").toBe(true);
+        bar.element.querySelector<HTMLButtonElement>(".format-bar-overflow")!.click();
+        expect(menuItemsShown().map((each) => each.textContent)).toEqual(expect.arrayContaining([expect.stringContaining("Annulla")]));
+        closeContextMenu();
+      } else {
+        // Col puntatore resta la regola di T11: annulla e ripeti non scendono.
+        expect(context(bar).hidden).toBe(true);
+        expect(history().hidden).toBe(false);
+      }
+    }
+  });
+
   it("smontata la barra, la pausa in corso non chiede più niente", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const fake = fakeActions(FOLLOW_KNOWN);

@@ -11,7 +11,7 @@
 // presa e di nuovo soltanto se cambia la parte montata da CodeMirror; per
 // fotogramma si scrivono soltanto `transform` e `opacity`; il documento cambia
 // al rilascio, in una transazione.
-import { EditorSelection, type EditorState, type Extension, Facet } from "@codemirror/state";
+import { EditorSelection, type EditorState, type Extension, Facet, StateEffect, StateField } from "@codemirror/state";
 import { BlockType, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { closeContextMenu, menuKeyFoot, showContextMenu, type MenuItem } from "../../../../../ui/menu";
 import { displayBinding } from "../../../../../ui/commands";
@@ -362,6 +362,31 @@ const CARD_PAD = 8;
 /// L'inclinazione più grande del blocco che corre di lato (gradi).
 const TILT_MAX = 1;
 
+/// Il puntatore c'è (E18, «Al tocco»): basta che uno dei puntatori sappia
+/// passare sopra le cose. Un tablet con la tastiera e il mouse segue il
+/// puntatore; un telefono, o un tablet col solo dito, no.
+const POINTER_QUERY = "(any-hover: hover)";
+
+function pointerQuery(): MediaQueryList | null {
+  return typeof matchMedia === "function" ? matchMedia(POINTER_QUERY) : null;
+}
+
+const setTouch = StateEffect.define<boolean>();
+
+/// Se l'editor è al tocco: senza puntatore il secondo livello di presenza (il
+/// «+» e la maniglia) non aspetta il passaggio e sta sul blocco del cursore.
+/// È una sola fonte per il codice e per la pelle: la classe
+/// `cm-fub-blocks-touch` sull'editor la dice al CSS. Cambia quando cambia il
+/// sistema (un mouse collegato, staccato).
+export const touchMode = StateField.define<boolean>({
+  create: () => !(pointerQuery()?.matches ?? true),
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setTouch)) value = effect.value;
+    return value;
+  },
+  provide: (field) => EditorView.editorAttributes.from(field, (touch): Record<string, string> => (touch ? { class: "cm-fub-blocks-touch" } : {})),
+});
+
 /// Un colpetto aptico, se il sistema lo offre.
 function tap(): void {
   try {
@@ -440,10 +465,14 @@ class HandlesView {
   readonly posed = new Set<HTMLElement>();
   /// Il blocco lasciato che torna a casa: `land` lo posa subito.
   returning: { land(quiet?: boolean): void } | null = null;
-  readonly hoverable: boolean;
+
+  /// C'è un puntatore che passa sopra i blocchi: le maniglie seguono lui.
+  /// Senza (al tocco) seguono il cursore.
+  get hoverable(): boolean {
+    return !this.view.state.field(touchMode, false);
+  }
 
   constructor(readonly view: EditorView) {
-    this.hoverable = typeof matchMedia !== "function" || matchMedia("(hover: hover)").matches;
     this.root.className = "cm-fub-block-handles";
     markPresence(this.root, "hover");
     this.root.hidden = true;
@@ -525,6 +554,16 @@ class HandlesView {
       }
     });
     life.listen(this.grip, "pointerdown", (event) => this.startDrag(event));
+    // Un mouse collegato o staccato cambia la regola mentre la nota è aperta.
+    const query = pointerQuery();
+    if (query) {
+      life.listen(query, "change", () => {
+        const touch = !query.matches;
+        if (touch === view.state.field(touchMode, false)) return;
+        this.hovered = null;
+        view.dispatch({ effects: setTouch.of(touch) });
+      });
+    }
     this.schedule();
   }
 
@@ -558,7 +597,8 @@ class HandlesView {
       this.pinned = map(this.pinned);
     }
     if (update.docChanged || update.selectionSet || update.focusChanged || update.geometryChanged || update.viewportChanged ||
-      update.state.field(blockModel) !== update.startState.field(blockModel)) {
+      update.state.field(blockModel) !== update.startState.field(blockModel) ||
+      update.state.field(touchMode, false) !== update.startState.field(touchMode, false)) {
       this.schedule();
     }
   }
@@ -1885,6 +1925,7 @@ class HandlesView {
 export const handlesView = ViewPlugin.fromClass(HandlesView);
 
 export const blockHandles: Extension = [
+  touchMode,
   handlesView,
   EditorView.baseTheme({
     // I colori sono della pelle (`document.css`); qui soltanto la forma.
@@ -1915,6 +1956,20 @@ export const blockHandles: Extension = [
       font: "inherit",
       fontSize: "1rem",
       lineHeight: "1",
+    },
+    // Al tocco (`touchMode`) la maniglia sta accanto alla prima riga e il
+    // «+», che aggiunge sotto, sta sotto di lei: in colonna entrano nel
+    // margine stretto del telefono, e ognuno è un bersaglio da dito di
+    // 28 × 28. Il «+» sborda sotto la riga nel margine, mai sul testo.
+    "&.cm-fub-blocks-touch .cm-fub-block-handles": {
+      flexDirection: "column-reverse",
+      justifyContent: "center",
+      transform: "translate(calc(-100% - 6px), 14px)",
+    },
+    "&.cm-fub-blocks-touch .cm-fub-block-add, &.cm-fub-blocks-touch .cm-fub-block-grip": {
+      width: "28px",
+      height: "28px",
+      flex: "none",
     },
     ".cm-fub-block-grip": { cursor: "grab", touchAction: "none" },
     "&.cm-fub-blocks-dragging .cm-fub-block-grip": { cursor: "grabbing" },

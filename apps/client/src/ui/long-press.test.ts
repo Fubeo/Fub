@@ -37,14 +37,19 @@ describe("pressione lunga", () => {
     expect(menus).toHaveLength(1);
     expect([menus[0]!.clientX, menus[0]!.clientY]).toEqual([30, 40]);
 
+    // Col dito ancora giù, Invio su un controllo è un click della tastiera.
+    row.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+    expect(clicks).toBe(1);
+    clicks = 0;
+
     row.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
-    row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
     expect(clicks).toBe(0);
 
     // La pressione successiva è un tocco normale.
     press(row, { pointerType: "touch" });
     row.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
-    row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
     expect(clicks).toBe(1);
   });
 

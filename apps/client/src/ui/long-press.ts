@@ -71,8 +71,11 @@ export function mountLongPressMenus(lifetime: Lifetime): void {
       e.stopImmediatePropagation();
     }
   }, { capture: true });
+  // Solo il click del dito (`detail` > 0): Invio o Spazio su un controllo
+  // (`detail` 0) restano della tastiera anche col dito ancora giù, per esempio
+  // su un blocco preso per la maniglia.
   lifetime.listen(document, "click", (e) => {
-    if (!pressed) return;
+    if (!pressed || e.detail === 0) return;
     pressed = false;
     e.preventDefault();
     e.stopImmediatePropagation();
