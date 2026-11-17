@@ -241,7 +241,7 @@ describe("le righe che nominano un posto di un documento (T2b)", () => {
     try {
       const { dropOffers } = await import("../editors/core/registry");
       const offers = dropOffers(NOTE);
-      expect(offers.map((offer) => [offer.title, offer.span.start, offer.span.end, offer.rect.top])).toEqual([
+      expect(offers.map((offer) => [offer.title, offer.kind === "place" ? offer.span.start : -1, offer.kind === "place" ? offer.span.end : -1, offer.rect.top])).toEqual([
         ["Primo", 0, 8, 0],
         ["Dentro", 10, 20, 28],
       ]);

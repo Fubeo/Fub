@@ -4320,6 +4320,15 @@ kbd,
   background: var(--accent-wash);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+/* **Una nota sotto un blocco in mano** (E13, «Sposta in…»): come il titolo
+   della Struttura, il filo e il velo d'accento, col cartellino dei Blocchi
+   sopra; vince sul passaggio e sulla nota aperta. */
+.tree-row[data-drop-hot],
+.tree-row[data-drop-hot]:hover,
+[role="treeitem"][aria-selected="true"] > .tree-row[data-drop-hot] {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
 /* **Colori forzati.** Fondi, ombre e sfumature sono del sistema o spariscono:
    ciò che qui era detto con quelli torna a dirsi con contorni e caratteri. */
 @media (forced-colors: active) {
@@ -4347,7 +4356,8 @@ kbd,
   .tree-row.drop-after {
     border-bottom: 2px solid Highlight;
   }
-  .tree-row.drop-into {
+  .tree-row.drop-into,
+  .tree-row[data-drop-hot] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }

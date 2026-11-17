@@ -243,17 +243,36 @@ export interface SurfaceRect {
  * - `place`: a row of a declared view that names a place of a document (a
  *   heading of the Structure): its span, in UTF-8 bytes of the source the view
  *   was drawn from, and the row's words.
+ * - `note`: a row that names a whole note of the same vault (a note of the
+ *   drawer's tree): dropped there, the block goes to that note («Sposta in»,
+ *   T32). The note may be the document itself.
  */
-export interface SurfaceDropOffer {
+export type SurfaceDropOffer = SurfacePlaceOffer | SurfaceNoteOffer;
+
+/** What every offer has: where it is on screen and how it shows the pointer over it. */
+interface SurfaceDropRow {
+  /** The visible part of the row, measured when the offers were asked for. */
+  readonly rect: SurfaceRect;
+  /** The pointer, with something in hand, is over the place (or leaves it): the shell shows it. */
+  hover(on: boolean): void;
+}
+
+/** A place of the document itself: see `SurfaceDropOffer`. */
+export interface SurfacePlaceOffer extends SurfaceDropRow {
   readonly kind: "place";
   /** The document the place belongs to, in the vault `vault`. */
   readonly document: SurfaceDropDocument;
   readonly span: Span;
   readonly title: string;
-  /** The visible part of the row, measured when the offers were asked for. */
-  readonly rect: SurfaceRect;
-  /** The pointer, with something in hand, is over the place (or leaves it): the shell shows it. */
-  hover(on: boolean): void;
+}
+
+/** A note of the same vault: see `SurfaceDropOffer`. */
+export interface SurfaceNoteOffer extends SurfaceDropRow {
+  readonly kind: "note";
+  /** The note the row names, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  /** Its name as the row shows it. */
+  readonly title: string;
 }
 
 /**
@@ -294,16 +313,17 @@ export function offerDropTargets(source: SurfaceDropOffers): () => void {
 }
 
 /**
- * The drop places every source offers for `document` now: same document and
- * same vault. A source that throws offers nothing: a gesture never breaks for
- * a place it can't reach.
+ * The drop places every source offers for `document` now: its own places
+ * (same document, same vault) and the notes of its vault. A source that throws
+ * offers nothing: a gesture never breaks for a place it can't reach.
  */
 export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
   const out: SurfaceDropOffer[] = [];
   for (const source of [...dropOfferSources]) {
     try {
       for (const offer of source.offers(document)) {
-        if (offer.document.documentId === document.documentId && offer.document.vault === document.vault) out.push(offer);
+        if (offer.document.vault !== document.vault) continue;
+        if (offer.kind === "note" || offer.document.documentId === document.documentId) out.push(offer);
       }
     } catch {
       // Una sorgente guasta non toglie le altre.

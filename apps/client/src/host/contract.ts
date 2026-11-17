@@ -2845,6 +2845,7 @@ export const COMMANDS = {
   trashFolder: "folder.trash",
   folderPage: "note.folder_page",
   subpage: "note.subpage",
+  moveBlock: "note.block.move",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

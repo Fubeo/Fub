@@ -18,6 +18,7 @@ import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
+import type { MoveBlockPort } from "./blocks/move-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
 import { propertiesDisplay } from "../../properties-display";
@@ -184,6 +185,9 @@ export interface MarkdownSurfaceOptions {
   /// «Nuova sottopagina» dalla testata dei Blocchi: `null` se è andata,
   /// altrimenti la frase che dice perché no.
   onNewSubpage?(doc: string, name: string): Promise<string | null>;
+  /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
+  /// blocco. Senza, il menu del blocco non lo offre.
+  moveBlock?: MoveBlockPort;
   /// Le icone delle pagine (`icon:`) per i wikilink della Live (K9): la
   /// lettura per nome, e chi avvisa quando cambiano.
   pageIcons?: PageIcons;
@@ -637,6 +641,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
     // Blocchi, la testata non li usa.
     document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
+    ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
