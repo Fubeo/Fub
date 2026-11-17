@@ -1851,7 +1851,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         failed,
       );
     };
-    const copyWord = (): void => {
+    const copyEquation = (): void => {
       const mathml = loadKatex().then((library) => {
         const made = wordMathml(library.renderToString(formula.tex, { ...readOptions(display, formula.tex), output: "mathml" }));
         if (made === null) throw new Error(s("live.math.menu.copy_failed", { reason: "MathML" }));
@@ -1864,7 +1864,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           "text/html": mathml.then((made) => new Blob([mathmlHtml(made)], { type: "text/html" })),
         })
         : mathml.then(writeClipboardText);
-      void done.then(() => notify(s("live.math.menu.copied_word"), "info"), failed);
+      void done.then(() => notify(s("live.math.menu.copied_equation"), "info"), failed);
     };
     const toPlace = formula.block ? toInline(formula) : engine.readState((state) => toBlock(state, formula));
     return {
@@ -1873,7 +1873,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         ...(writable ? [{ id: "markdown.math.edit", label: s("live.math.menu.edit"), icon: "pen", run: () => void engine.runViewCommand((view) => editFormulaAt(view, pos)) }] : []),
         MENU_RULE,
         ...(clipboardSupports("image/png") ? [{ id: "markdown.math.copy_image", label: s("live.math.menu.image"), icon: "image", run: copyImage }] : []),
-        { id: "markdown.math.copy_word", label: s("live.math.menu.word"), run: copyWord },
+        { id: "markdown.math.copy_equation", label: s("live.math.menu.equation"), run: copyEquation },
         { id: "markdown.math.copy_latex", label: s("live.math.menu.latex"), icon: "copy", run: () => copyText(formula.tex, s("live.math.menu.copied_latex")) },
         MENU_RULE,
         ...(writable && toPlace !== null ? [{

@@ -1,6 +1,6 @@
 // Copiare e incollare le formule (T65): i delimitatori che se ne vanno, le
 // formule di un assistente che diventano quelle di Fub, i dollari che non
-// sono formule e restano, il MathML per Word.
+// sono formule e restano, il MathML per i documenti.
 import katex from "katex";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "../grammar";
@@ -83,7 +83,7 @@ describe("nella nota le formule di un assistente diventano quelle di Fub", () =>
   });
 });
 
-describe("la copia per Word", () => {
+describe("la copia come equazione", () => {
   it("il solo <math>, con lo spazio dei nomi, senza l'annotazione del TeX", () => {
     const made = wordMathml(katex.renderToString("\\frac{a}{b} + \\sqrt{x}", { ...readOptions(false), output: "mathml" }));
     expect(made).not.toBeNull();

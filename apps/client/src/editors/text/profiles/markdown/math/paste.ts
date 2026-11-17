@@ -6,7 +6,7 @@
 // Il testo con dollari che non fanno una formula (`costa $5 e $6`) entra
 // com'è.
 //
-// Qui anche la copia per Word: il MathML di KaTeX senza l'annotazione del TeX,
+// Qui anche la copia come equazione: il MathML di KaTeX senza l'annotazione del TeX,
 // che Word e LibreOffice leggono come un'equazione.
 //
 // Le regole sono senza DOM; in fondo l'aggancio all'incolla della nota.

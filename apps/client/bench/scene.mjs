@@ -2967,7 +2967,7 @@ async function touchFormula(page, gesture) {
     await page.click(".cm-content .cm-fub-math", { button: "right" });
     await page.waitForSelector("#context-menu .menu-head");
     const items = await page.locator("#context-menu [role=menuitem]").allTextContents();
-    for (const label of ["Modifica", "Copia come immagine", "Copia per Word", "Copia il LaTeX", "Da riga a blocco"]) {
+    for (const label of ["Modifica", "Copia come immagine", "Copia come equazione", "Copia il LaTeX", "Da riga a blocco"]) {
       if (!items.some((item) => item.includes(label))) throw new Error(`nel menu della formula manca «${label}»: ${items.join(" · ")}`);
     }
     await page.mouse.move(0, 0);

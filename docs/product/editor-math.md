@@ -204,8 +204,8 @@ parole.
 - **Il tasto destro.** Su una formula, in Live, il menu ha in testa «Formula»
   col suo TeX, e poi: «Modifica» (apre il riquadro o il blocco), «Copia come
   immagine» (un PNG disegnato dalla resa di KaTeX, col colore della pagina,
-  più il TeX come testo), «Copia per Word» (il MathML, che Word e LibreOffice
-  incollano come equazione), «Copia il LaTeX» e «Da riga a blocco» o «Da
+  più il TeX come testo), «Copia come equazione» (il MathML, che i programmi
+  di scrittura incollano come equazione modificabile), «Copia il LaTeX» e «Da riga a blocco» o «Da
   blocco a riga». Al passaggio del mouse non compare niente.
 - **Il posto.** «Da riga a blocco» porta la formula su un blocco `$$` suo:
   se era in mezzo a una frase, la frase si divide prima e dopo. «Da blocco a
