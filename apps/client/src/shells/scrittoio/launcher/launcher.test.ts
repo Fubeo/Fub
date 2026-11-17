@@ -484,25 +484,6 @@ describe("il campo è un combobox, l'elenco un listbox", () => {
     }
   });
 
-  it("aprendosi misura la fila dei modi solo dopo la superficie", () => {
-    // La fila misurata dentro `setMode` forzava un layout che le righe e
-    // l'anteprima rendevano subito vecchio, e la misura della corsa lo rifaceva
-    // da capo (giro 5 della fluidità).
-    const read = vi.spyOn(Element.prototype, "getBoundingClientRect");
-    try {
-      launcher.open("all");
-      const order = read.mock.contexts as Element[];
-      const at = order.indexOf(surface()!);
-      expect(at, "la corsa misura la superficie").toBeGreaterThanOrEqual(0);
-      const strip = surface()!.querySelector(".launcher-modes")!;
-      expect(order.slice(0, at).filter((each) => strip.contains(each)), "nessuna misura della fila prima").toEqual([]);
-      expect(order.slice(at).some((each) => strip.contains(each)), "la fila si misura dopo").toBe(true);
-    } finally {
-      read.mockRestore();
-      launcher.close();
-    }
-  });
-
   it("la superficie è un dialogo con un nome, e la pillola dice che è aperto", () => {
     launcher.open("all");
     expect(surface()!.getAttribute("role")).toBe("dialog");

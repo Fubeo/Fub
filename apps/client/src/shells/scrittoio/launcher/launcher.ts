@@ -337,9 +337,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     /// e lì l'anteprima non deve spegnersi e riaccendersi. `paint` chiama
     /// `watch` a fine lavoro.
     let painting = false;
-    /// Vero finché la superficie non è misurata per la corsa d'apertura: fino
-    /// ad allora la fila dei modi non si misura (vedi `keepInView`).
-    let opening = true;
     let askTimer: number | undefined;
     let slowTimer: number | undefined;
     life.add(() => {
@@ -793,10 +790,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       input.value = value;
       memory.remember(next, value);
       if (tabs.selected() !== next) tabs.select(next);
-      // Aprendo, la fila si misura dopo la superficie: misurarla qui forzava
-      // un layout che il resto di `setMode` (le righe, l'anteprima) rendeva
-      // subito vecchio, e la misura della corsa lo rifaceva da capo.
-      if (!opening) keepInView(next);
+      keepInView(next);
       outOfTabOrder();
       const name = t(MODE_LABEL[next]);
       if (said.textContent !== name) said.textContent = name;
@@ -986,10 +980,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     // resta una dissolvenza.
     const from = pill?.getBoundingClientRect() ?? null;
     const box = surface.getBoundingClientRect();
-    // Il layout è appena fatto: la fila si legge senza rifarlo, e prima della
-    // corsa, che scala la superficie.
-    opening = false;
-    keepInView(mode);
     if (motionLevel() === "reduced") {
       animate(surface, { from: { opacity: 0 }, whenReduced: "fade", lifetime: life });
     } else if (from && from.width > 0 && box.width > 0 && box.height > 0) {

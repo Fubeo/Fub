@@ -200,8 +200,8 @@ fuoco doppio (primo menu 19).
 
 Un gesto che prima scrive e poi misura fa rifare il layout alla WebView dentro
 il gesto stesso; se dopo la misura scrive ancora, il layout del fotogramma lo
-rifà da capo. Tre regole tengono le misure dove il layout è già fatto, o le
-tolgono del tutto:
+rifà da capo; e un conto rifatto a ogni prova costa anche se non tocca il DOM.
+Due regole:
 
 - **il menu della maniglia seleziona la tratta dopo essersi messo al suo
   posto**: `openMenu` (`blocks/handles.ts`) selezionava i blocchi e poi
@@ -216,13 +216,6 @@ tolgono del tutto:
   la selezione, entrambi solo la prima volta. La guardia è
   `blocks.dom.test.ts` («seleziona la tratta dopo che il menu è al suo posto
   e ha il fuoco»);
-- **il lanciatore misura la fila dei modi dopo la superficie**: aprendo,
-  `setMode` misurava la scheda del modo per tenerla in vista e il resto
-  dell'apertura (le righe, l'anteprima) rendeva subito vecchio quel layout,
-  che la misura della corsa rifaceva. La fila si misura adesso subito dopo la
-  superficie, sullo stesso layout; cambiando modo a lanciatore aperto si
-  misura come prima. La guardia è `launcher.test.ts` («aprendosi misura la
-  fila dei modi solo dopo la superficie»);
 - **la ricetta del tema conta i fondi una volta**: a ogni cambio d'accento la
   tavolozza si ricalcola, e `hold` (`theme/scrittoio/recipe.ts`) cerca la
   luminosità di ogni colore con una bisezione che, a ogni tentativo, rileggeva
@@ -232,19 +225,22 @@ tolgono del tutto:
   per byte (`npm run theme:verify`) e una tavolozza costa in Node 1,0 ms
   invece di 3,4. La guardia è `recipe-cost.test.ts`.
 
-Misura breve con una sonda sull'ispettore remoto di WebKit nell'app vera,
-pc-debian-di-fub, 17 novembre 2026, vault del banco, giri alternati; tempo
-sincrono del gesto e blocco più lungo del thread in ms, carico medio a un
-minuto fra 0,1 e 3,9:
+Misura con una sonda sull'ispettore remoto di WebKit nell'app vera,
+pc-debian-di-fub, 17 novembre 2026, vault del banco, cinque giri alternati per
+build, carico medio a un minuto fino a 0,93; mediana e massimo in ms:
 
 | Gesto | Prima: sincrono · blocco | Dopo: sincrono · blocco |
 |---|---:|---:|
-| Primo menu della maniglia (5 giri) | 29 · 30–44 (mediana 29) | 21–35 · 22–37 (mediana 25) |
-| Primo lanciatore (Ctrl O, 2 giri) | 24 · 25, 35 · 38 | 24 · 26, 23 · 28 |
-| Cambio d'accento (12 cambi): fotogramma più lungo | 29–46 | 27–44 |
+| Primo menu della maniglia | 30, 38 · 37, 46 | 26, 35 · 32, 42 |
+| Cambio d'accento (30 cambi): fotogramma più lungo | 28–49 | 27–47 |
 
 «Prima» è `2890f9e8f`. Il cambio d'accento resta dominato dal ricalcolo
-dello stile (sotto).
+dello stile (sotto): la differenza sta dentro il rumore. Sul 13600KF di questa
+macchina lo stesso gesto costa quasi il doppio quando il thread della WebView
+gira su un core E (CPU 12–19): primo menu contestuale 21–29 ms contro 14,
+primo lanciatore 44–45 contro 24. Senza fissare l'app sui core P (`taskset`)
+ogni gesto ha due mode a circa 10 ms l'una dall'altra, in tutte e due le
+build, e cinque giri non bastano a separare una differenza più piccola.
 
 Quello che resta non è di chi apre il gesto, o non vale il rischio:
 
@@ -263,7 +259,11 @@ Quello che resta non è di chi apre il gesto, o non vale il rischio:
   prima volta il passo delle scorciatoie della shell compila) e 9–11 ms per il
   primo layout della superficie. Un HTML uguale montato a riposo non lo
   abbassa; un'apertura e chiusura vera a riposo sì (9 ms invece di 25), ma
-  toccherebbe fuoco, pillola e memoria dei modi, e non si fa;
+  toccherebbe fuoco, pillola e memoria dei modi, e non si fa. Misurare la
+  fila dei modi dopo la superficie, invece che dentro `setMode`, toglie un
+  layout forzato da 3–4 ms nelle marcature, ma nelle serie fissate sui core P
+  non si vede (primo lanciatore 19 ms di mediana in tutte e due le build): non
+  si fa;
 - **la prima apertura del grafo** resta un fotogramma da ~50 ms
   (`graph/chart.ts`), che si potrebbe dividere separando il montaggio dal
   primo `tick`.
