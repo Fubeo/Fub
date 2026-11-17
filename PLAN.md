@@ -906,7 +906,7 @@ Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/format-bar.test.ts
 src/editors/text/profiles/markdown/block-groups.test.ts &&
 FUB_BENCH_PORT=1460 npm run bench:a11y
-Stato: [~] in corso (coder, base `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (de3e6e1fc, 2026-11-17), PR bozza #472; scostamenti: Immagine offre «Testo alternativo», niente «In foglio» per la tabella, il menu Inserisci senza piede, stretta a 800 px
 
 ## T12 · La mini-barra con Commenta e Colore
 
@@ -937,7 +937,7 @@ Fatto quando: un test per pulsante confronta il risultato con quello della
 scorciatoia; le foto del banco nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/mini-bar.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 185812a03, 2026-11-17)
 
 ## T13 · Ctrl O: prefissi, anteprima, azioni
 
@@ -1209,7 +1209,7 @@ Fatto quando: un test che il file e l'embed nascono insieme e che un errore
 di creazione lascia la nota com'era; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/slash.test.ts src/panels/slash
-Stato: [ ] da fare
+Stato: [~] in corso (coder, dal gruppo integra/editor-1, 2026-11-17)
 
 ## T19a · Il provider dei compiti
 
@@ -2872,7 +2872,7 @@ Fatto quando: scene di un flusso per stile nelle due luci, confrontate a
 occhio con la riga 900 e descritte in `Stato`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/mermaid-styles.test.ts
-Stato: [~] in corso (coder, da `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (185812a03, 2026-11-17), PR bozza #472; curva rounded in ogni stile, punta sottile; resta: la punta del messaggio asincrono `-)` delle sequenze è ancora quella di Mermaid; un tracciato ortogonale chiederebbe @mermaid-js/layout-elk (nuova dipendenza, non presa)
 
 ## T60 · Formule: la formula che si modifica toccandola
 
