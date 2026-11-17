@@ -138,6 +138,22 @@ export class MathEditor {
     this.input.focus({ preventScroll: true });
   }
 
+  /// Un simbolo scelto nella tavolozza (T62): entra dove sta il cursore, coi
+  /// suoi spazi vuoti e il cursore nel primo, come una proposta. Un nome che
+  /// si stava scrivendo dopo `\` se ne va. `false` se la formula non si
+  /// leggerebbe più (un pezzo dentro `\text{}`) o se si vede il LaTeX.
+  insert(symbol: MathSymbol): boolean {
+    if (this.mode !== "visual" || this.life.closed) return false;
+    this.dropPending();
+    const outcome = rules.insertSymbol(this.state, symbol.template, this.state.caret, (tex) => this.reads(tex), { inTable: this.options.inTable });
+    if (outcome.kind === "none") return false;
+    this.apply(outcome);
+    // Il posto si ridice: «numeratore, spazio vuoto».
+    this.said = "";
+    this.announce();
+    return true;
+  }
+
   // ── Il disegno ─────────────────────────────────────────────────────────────
 
   private reads(tex: string): boolean {

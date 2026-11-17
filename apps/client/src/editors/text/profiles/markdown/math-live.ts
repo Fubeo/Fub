@@ -3,7 +3,8 @@
 // che ci entrano, aprono sotto la formula in riga un riquadro di 392 px con la
 // formula grande e il cursore dentro, e mentre si scrive cambia anche quella
 // nella frase; un blocco `$$` toccato si modifica sul posto, col bordo
-// d'accento. Il LaTeX non si vede (`math/`).
+// d'accento. Il LaTeX non si vede (`math/`). Sotto la formula, in riga e a
+// blocco, la tavolozza dei simboli (`math/palette.ts`, T62).
 //
 // Con «Mostra il LaTeX» (`editor.math.source`) o coi tasti di Vim resta il
 // comportamento di prima: il riquadro col TeX e l'anteprima, il blocco `$$`
@@ -18,6 +19,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { liveReveal, mathSource } from "../../live-reveal";
 import { mountMathBlocks } from "./math";
 import { MathEditor, type LeaveReason, type MathStart } from "./math/editor";
+import { attachPalette } from "./math/palette";
 import { liveStrings } from "./strings";
 
 /// Una formula in riga come la mostra la Live: dove sta, quanto sono lunghi i
@@ -252,6 +254,7 @@ function editInline(view: EditorView, formula: LiveFormula, start: MathStart, ow
     onLeave: leave,
     lifetime: life,
   });
+  attachPalette(editor, life);
   const popover = openPopover({
     anchor,
     content: editor.element,
@@ -351,6 +354,7 @@ export class MathBlockEditWidget extends WidgetType {
       onLeave: (reason) => plugin.leaveBlock(root, reason),
       lifetime: life,
     });
+    attachPalette(editor, life);
     root.append(editor.element);
     // Il fuoco va nella formula quando ci arriva dalla nota (un clic, le
     // frecce); una selezione messa da fuori, a nota ferma, non lo ruba.
