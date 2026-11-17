@@ -1903,7 +1903,7 @@ un test DOM del trascinamento sul cassetto; l'annulla rimette le due note.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 move_block; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [~] in corso (coder, da 1999e82d8, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (10536a95b, 2026-11-17), PR bozza #472. Il prototipo ha un sottomenu di note; il piano chiede anche dove va il blocco e cosa resta al suo posto. Per questo i passi sono due: un elenco di note da filtrare, poi «Dove» e «Al suo posto» con le scelte di serie già fatte, così Invio sposta subito. Trascinare sul cassetto applica le scelte di serie senza domande. Se la nota cambia mentre si sceglie non si sposta niente, e il messaggio lo dice. Annulla rimette tutte e due le note in un passo. Il banco a11y salta la prova Esc del menu quando c'è un blocco in mano. Le baseline delle 4 scene vengono dal runner.
 
 ## T33a · I tipi di nota nel core
 
