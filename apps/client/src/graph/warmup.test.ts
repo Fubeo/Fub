@@ -63,4 +63,32 @@ describe("warmGraph", () => {
     ).rejects.toThrow("fermo");
     expect(document.querySelector(".graph-warmup")).toBeNull();
   });
+
+  // Lo stato «grafo già aperto» è del modulo e dura la sessione: ogni caso
+  // qui sotto prende un modulo nuovo, e i casi sopra restano com'erano.
+  it("con un grafo vero già aperto non cuoce e non monta niente", async () => {
+    vi.resetModules();
+    const fresh = await import("./warmup");
+    fresh.noteGraphOpened();
+    const next = vi.fn(async () => {});
+    const append = vi.spyOn(document.body, "append");
+    await fresh.warmGraph(next, { frame });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(append).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("canvas")).toHaveLength(0);
+  });
+
+  it("un grafo vero aperto durante l'attesa ferma il passo del grafico", async () => {
+    vi.resetModules();
+    const fresh = await import("./warmup");
+    let steps = 0;
+    const frames = vi.fn((run: () => void) => void setTimeout(run, 0));
+    await fresh.warmGraph(async () => {
+      steps += 1;
+      if (steps === 2) fresh.noteGraphOpened();
+    }, { frame: frames });
+    expect(steps).toBe(2);
+    expect(frames, "il grafico d'esercizio non si monta").not.toHaveBeenCalled();
+    expect(document.querySelector(".graph-warmup"), "l'host se ne va").toBeNull();
+  });
 });
