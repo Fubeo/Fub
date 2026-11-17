@@ -3302,6 +3302,135 @@ describe("il fuoco dopo un gesto che toglie ciò che lo aveva", () => {
   });
 });
 
+// Un cambio di scheda fatto con un tasto globale porta il fuoco nell'editor
+// della scheda che diventa attiva, da qualunque punto del riquadro parta: dal
+// testo, o dalla linguetta su cui un clic lo aveva lasciato. Senza, la battuta
+// dopo il tasto finiva sul `body` o su una linguetta e si perdeva in silenzio
+// (IMP-048…051). Il tasto passa dalla tastiera vera (`ui/keyboard.ts`), come
+// nell'app.
+describe("il fuoco dopo un cambio di scheda da tastiera", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const selected = () => document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Il tasto, con Ctrl, sull'elemento col fuoco: dove lo manda il WebView.
+  /// Maiusc+Tab arriva come lo passa WebKitGTK, `Unidentified` col tasto
+  /// fisico in `code` (GTK lo chiama `ISO_Left_Tab`).
+  const press = (key: string, shift = false) => {
+    const webkit = shift && key === "Tab" ? { key: "Unidentified", code: "Tab" } : { key };
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", {
+      ...webkit, ctrlKey: true, shiftKey: shift, bubbles: true, cancelable: true,
+    }));
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+  };
+  /// Il fuoco è nell'editor che si vede, e quell'editor mostra `text`.
+  const focusedEditorShows = (text: string): boolean => {
+    const focused = document.activeElement;
+    if (!(focused instanceof HTMLElement) || focused === document.body) return false;
+    const content = focused.closest(".cm-content");
+    return !!content && !!focused.closest(".pane-editor") && !focused.closest("[hidden]")
+      && (content.textContent ?? "").includes(text);
+  };
+  const editorOf = (text: string) => editorViews().find((view) => view.state.doc.toString().includes(text))!;
+  /// Due schede, Benvenuto e Riunione (attiva), col fuoco nel testo di Riunione.
+  const twoTabs = async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    expect(selected()).toBe("Riunione");
+    editorOf("Appunti della riunione").focus();
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  };
+  /// Il clic su una linguetta lascia il fuoco sulla linguetta (le frecce della
+  /// striscia partono da lì): un tasto globale dopo il clic lo porta comunque
+  /// nell'editor.
+  const clickTab = async (name: string) => {
+    const tab = tabs().find((each) => each.textContent?.includes(name))!;
+    tab.focus();
+    tab.click();
+    await settle();
+    expect(document.activeElement).toBe(tabs().find((each) => each.textContent?.includes(name)));
+  };
+  const lands = async (name: string, text: string) => {
+    await waitFor(`la scheda ${name} è attiva`, () => selected() === name);
+    await waitFor(`il fuoco è nel testo di ${name}`, () => focusedEditorShows(text));
+    await settle();
+    expect(focusedEditorShows(text)).toBe(true);
+  };
+
+  it("Ctrl+W porta il fuoco nell'editor della scheda vicina, non sulla sua linguetta (IMP-048)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Tab porta il fuoco nell'editor della scheda nuova, dal testo e dalla linguetta (IMP-049)", async () => {
+    await twoTabs();
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Riunione");
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Maiusc+Tab torna alla scheda usata prima, col fuoco nel suo editor (IMP-050)", async () => {
+    await twoTabs();
+    press("Tab", true);
+    await lands("Benvenuto", "Il primo documento");
+    press("Tab", true);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+PagGiù e Ctrl+PagSu portano il fuoco nell'editor della scheda nuova (IMP-049)", async () => {
+    await twoTabs();
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("PageUp");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+1 e Ctrl+9 portano il fuoco nell'editor della scheda scelta (IMP-049)", async () => {
+    await twoTabs();
+    press("1");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("9");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await clickTab("Benvenuto");
+    press("T", true);
+    await waitFor("Riunione torna", () => tabs().length === 2);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+\\ porta il fuoco nell'editor del riquadro nuovo anche dalla linguetta", async () => {
+    await twoTabs();
+    await clickTab("Riunione");
+    press("\\");
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await waitFor("il riquadro nuovo ha il suo editor", () => editorViews().length >= 2);
+    await settle();
+    const second = document.querySelectorAll<HTMLElement>(".pane")[1]!;
+    await waitFor("il fuoco è nel riquadro nuovo", () => second.contains(document.activeElement));
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  });
+
+  it("un tasto di scheda col fuoco fuori dai riquadri porta il fuoco nella scheda nuova", async () => {
+    await twoTabs();
+    const search = document.querySelector<HTMLElement>("#file-list .tree-row")!;
+    search.focus();
+    expect(search.contains(document.activeElement)).toBe(true);
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+  });
+});
+
 describe("chiudere un riquadro", () => {
   const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
   const tabNames = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>(".tab .tab-name")].map((tab) => tab.textContent);

@@ -128,13 +128,29 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 - **Fuoco dopo un ridisegno.** Se un giro di disegno dei riquadri toglie o
   riappende ciò che aveva il fuoco (la superficie della scheda chiusa con la
   ×, l'editor che una divisione sposta), il fuoco torna nel riquadro col
-  fuoco: all'elemento di prima se è ancora lì, altrimenti all'editor, alla
-  linguetta attiva o al riquadro vuoto (`keepFocusInPanes` in
-  `state/document-controller.ts`). Un fuoco andato altrove intanto non si
-  tocca. Il divisore fra riquadri mosso con le frecce si rifà a ogni passo e
-  il fuoco passa a quello nuovo nello stesso posto (`layoutTree`). Il
-  lanciatore, aprendosi, chiude il menu aperto sotto: un Esc lo chiude, e il
-  fuoco torna a chi aveva aperto il menu.
+  fuoco: all'elemento di prima se è ancora lì, altrimenti alla superficie
+  della scheda attiva, alla linguetta attiva o al riquadro vuoto
+  (`keepFocusInPanes` in `state/document-controller.ts`). Un fuoco andato
+  altrove intanto non si tocca. Il divisore fra riquadri mosso con le
+  frecce si rifà a ogni passo e il fuoco passa a quello nuovo nello stesso
+  posto (`layoutTree`). Il lanciatore, aprendosi, chiude il menu aperto
+  sotto: un Esc lo chiude, e il fuoco torna a chi aveva aperto il menu.
+- **Fuoco dopo un cambio di scheda da tastiera.** Un comando che cambia la
+  scheda attiva (Ctrl+W, Ctrl+Tab e Ctrl+Maiusc+Tab, Ctrl+PagGiù/PagSu,
+  Ctrl+1…9, Ctrl+Maiusc+T, Ctrl+\ e «Dividi sotto», Ctrl+Maiusc+W,
+  Alt+←/→ fra le schede), dalla tastiera, dalla palette o da un menu, porta a
+  giro di disegno finito il fuoco nella superficie della scheda che diventa
+  attiva: il testo col suo cursore, il foglio di un disegno, la pagina in
+  Lettura. Se la superficie non lo prende va sulla linguetta attiva, mai sul
+  `body` (`focusShownAfter` e `focusPaneSurface` in
+  `state/document-controller.ts`). Vale anche se il fuoco era sulla
+  linguetta o nell'albero; un fuoco andato intanto altrove fuori dai riquadri
+  (un dialogo, il lanciatore) non si tocca. Un clic su una linguetta lascia
+  invece il fuoco sulla linguetta, da cui le frecce della striscia
+  continuano. WebKitGTK passa Maiusc+Tab come `Unidentified` col tasto
+  fisico in `code`: la tastiera dell'app rilegge dal tasto fisico Tab, Invio
+  ed Esc (`namedKey` in `ui/commands.ts`), e Ctrl+Maiusc+Tab arriva al suo
+  comando.
 - **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
   all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
