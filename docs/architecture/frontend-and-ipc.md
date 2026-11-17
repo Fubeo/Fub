@@ -356,22 +356,10 @@ dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 `theme/loader.ts` monta gli strati del tema (caratteri, foglio, pelli,
 preferenze, frammenti) come fogli costruiti in `document.adoptedStyleSheets`,
-non come elementi `<style>`: la CSP non ammette stili in linea, e un foglio
-costruito non è in linea
-([Gli stili e la CSP](../reference/styles-and-csp.md)).
-Un canale ha al più un foglio; il caricatore li tiene nell'ordine dichiarato
-(`ORDER`), davanti agli altri fogli costruiti della pagina, e sostituisce
-quelli di un tema con una sola assegnazione, cioè tutti insieme o nessuno.
-Vengono dopo i file CSS della pagina, quindi vincono su di loro a parità di
-specificità. Il testo montato di un canale lo dice `mountedCss()`.
-Le `@font-face` dei due canali dei caratteri (`caratteri`, `caratteri-tema`)
-non restano nel loro foglio: il caricatore ne fa altrettante `FontFace` in
-`document.fonts`, nell'ordine dei canali, e il foglio resta montato vuoto.
-In Chromium una `@font-face` di un foglio costruito si ricrea e si ricarica
-ogni volta che la pagina riceve un altro foglio con una sua `@font-face` (il
-CSS di KaTeX alla prima formula), e per qualche fotogramma il testo si misura
-col carattere di riserva; una `FontFace` aggiunta a mano resta la stessa.
-Rimontare lo stesso testo dei caratteri tiene le stesse facce.
+non come elementi `<style>`, che la CSP rifiuterebbe: un foglio per canale,
+nell'ordine dichiarato, sostituiti tutti insieme; le `@font-face` diventano
+`FontFace` in `document.fonts`. Ordine, cascata e caratteri:
+[Gli stili e la CSP](../reference/styles-and-csp.md#il-caricatore-del-tema).
 
 ### Comportamenti della shell
 
