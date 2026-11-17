@@ -1258,6 +1258,38 @@ describe("i commenti nella superficie (T21)", () => {
     }
   });
 
+  it("il testo di una scheda della lavagna non è una pagina: niente titolo, proprietà né icona (IMP-044)", () => {
+    const mount = (pageless: boolean) => {
+      const parent = document.createElement("div");
+      document.body.appendChild(parent);
+      const ed = mountMarkdownSurface({ paneId: "card:2", documentId: "Lavagne/c4.canvas#card:2", parent, compact: true, escapeLeaves: true, pageless }, {
+        onChange: () => {},
+        onSelectionChange: () => {},
+        onOpenWikilink: () => {},
+        onOpenPath: () => {},
+        onSearchTag: () => {},
+        completions: { searchNotes: async () => [], listTags: async () => [] },
+      });
+      ed.setMode("live_preview");
+      ed.buffer.setDoc("");
+      return { parent, ed };
+    };
+    // La nota vera ha la testata, col titolo dal nome del file.
+    const page = mount(false);
+    expect(page.parent.querySelector(".cm-fub-page")).not.toBeNull();
+    page.ed.destroy();
+    page.parent.remove();
+    // La scheda di testo mostra solo il corpo.
+    const card = mount(true);
+    expect(card.parent.querySelector(".cm-fub-page")).toBeNull();
+    expect(card.parent.textContent).not.toContain("c4");
+    card.ed.buffer.setDoc("# Titolo\n\nciao\n");
+    expect(card.ed.buffer.getDoc()).toBe("# Titolo\n\nciao\n");
+    expect(card.parent.querySelector(".cm-fub-page")).toBeNull();
+    card.ed.destroy();
+    card.parent.remove();
+  });
+
   it("nella nota dentro una scheda della lavagna valgono le stesse regole", () => {
     // La scheda monta questa superficie, compatta e con Esc che esce
     // (`state/card-editors.ts`).

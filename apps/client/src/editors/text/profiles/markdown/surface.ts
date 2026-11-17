@@ -862,8 +862,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
-  const blocksExtension: Extension = blocksMode(blocksOptions);
-  const plainExtension: Extension = plainMode(blocksOptions);
+  // Un testo che non è una pagina (la scheda di testo della lavagna) non ha
+  // testata: niente titolo dal nome del file, proprietà, icona né copertina.
+  const isPage = context.pageless !== true;
+  const blocksExtension: Extension = blocksMode(blocksOptions, isPage);
+  const plainExtension: Extension = plainMode(blocksOptions, isPage);
   let blocksOn = blocksPreferred();
   /// «Altre N proprietà» nella testata della Lettura, fra una resa e l'altra.
   let readingMoreOpen = false;

@@ -669,6 +669,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         parent: host,
         compact: true,
         escapeLeaves: true,
+        // Il testo della scheda non è una pagina: solo il corpo (IMP-044).
+        pageless: true,
         formatId: TEXT_CARD_FORMAT,
       });
       mounted = surface;
