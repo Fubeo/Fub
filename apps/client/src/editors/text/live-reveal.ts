@@ -25,3 +25,12 @@ export function revealPolicyOf(value: unknown): RevealPolicy {
 export const liveGuide = Facet.define<boolean, boolean>({
   combine: (values) => values[0] ?? true,
 });
+
+/// Le formule di Scrittura mostrano il loro LaTeX (impostazione
+/// `editor.math.source`, spenta di serie): accesa, il clic su una formula apre
+/// il riquadro col TeX e un blocco `$$` toccato mostra la sorgente, come prima
+/// della formula che si modifica toccandola (T60). La accendono anche i tasti
+/// di Vim, che restano com'erano. Vince un valore acceso qualunque.
+export const mathSource = Facet.define<boolean, boolean>({
+  combine: (values) => values.some(Boolean),
+});

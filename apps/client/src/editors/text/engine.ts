@@ -71,7 +71,7 @@ import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
 import { smartLists } from "./smart-lists";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "./properties-display";
-import { liveGuide, liveReveal, revealPolicyOf, type RevealPolicy } from "./live-reveal";
+import { liveGuide, liveReveal, mathSource, revealPolicyOf, type RevealPolicy } from "./live-reveal";
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
 import { softCursor } from "./soft-cursor";
@@ -139,6 +139,7 @@ export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
 export const EDITOR_LIVE_REVEAL_KEY = "editor.live-reveal";
 export const EDITOR_LIVE_GUIDE_KEY = "editor.live-guide";
+export const EDITOR_MATH_SOURCE_KEY = "editor.math.source";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
@@ -157,6 +158,7 @@ const INPUT_KEYS = new Set([
   EDITOR_PROPERTIES_KEY,
   EDITOR_LIVE_REVEAL_KEY,
   EDITOR_LIVE_GUIDE_KEY,
+  EDITOR_MATH_SOURCE_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -192,6 +194,8 @@ interface LayoutPreferences {
   readonly reveal: RevealPolicy;
   /// La guida della Live: stile in sospeso e chiusura in grigio.
   readonly guide: boolean;
+  /// Le formule mostrano il loro LaTeX invece di toccarsi (T60).
+  readonly mathSource: boolean;
 }
 const DEFAULT_LAYOUT: LayoutPreferences = {
   lineNumbers: true,
@@ -209,6 +213,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   properties: "visible",
   reveal: "mai",
   guide: true,
+  mathSource: false,
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
@@ -244,6 +249,7 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     propertiesDisplay.of(layout.properties),
     liveReveal.of(layout.reveal),
     liveGuide.of(layout.guide),
+    mathSource.of(layout.mathSource),
     layout.indentGuides ? indentGuides : [],
     // Il facet tiene la cadenza più breve fra quelle dichiarate: lo zero vince
     // sui 1200 ms di `drawSelection()`, e un'animazione di zero ms non spegne
@@ -612,7 +618,8 @@ export class TextEngine {
       && next.rtl === this.layout.rtl
       && next.properties === this.layout.properties
       && next.reveal === this.layout.reveal
-      && next.guide === this.layout.guide;
+      && next.guide === this.layout.guide
+      && next.mathSource === this.layout.mathSource;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -626,7 +633,7 @@ export class TextEngine {
     this.pendingInput = false;
     if (this.appliedVim !== this.vimEnabled) {
       this.appliedVim = this.vimEnabled;
-      this.view.dispatch({ effects: this.vimCompartment.reconfigure(this.vimEnabled ? vimInput() : []) });
+      this.view.dispatch({ effects: this.vimCompartment.reconfigure(this.vimEnabled ? [vimInput(), mathSource.of(true)] : []) });
     }
     if (this.appliedLayout !== this.layout) {
       this.appliedLayout = this.layout;
@@ -695,6 +702,7 @@ export class TextEngine {
         properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
         reveal: revealPolicyOf(value(EDITOR_LIVE_REVEAL_KEY)),
         guide: value(EDITOR_LIVE_GUIDE_KEY) !== false,
+        mathSource: value(EDITOR_MATH_SOURCE_KEY) === true,
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.
@@ -1012,7 +1020,7 @@ export class TextEngine {
       ]),
       this.profile.of(this.profileExtensions()),
       this.phrasesCompartment.of(editorPhrases()),
-      this.vimCompartment.of(this.vimEnabled ? vimInput() : []),
+      this.vimCompartment.of(this.vimEnabled ? [vimInput(), mathSource.of(true)] : []),
       this.spellcheckCompartment.of(EditorView.contentAttributes.of({
         spellcheck: String(this.spellcheckEnabled),
         dir: "auto",

@@ -43,7 +43,7 @@ flowchart LR
 | [Operazioni sul vault](product/vault-operazioni.md) | note, cartelle, cattura, import/export |
 | [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
-| [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
+| [Editor e anteprima](product/editor-and-preview.md) e [le formule in Live](product/editor-math.md) | le superfici di scrittura; la formula che si modifica toccandola |
 | [Scrittura](product/editor-writing.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi; il passo commentato |
 | [Blocchi](product/editor-blocks.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; i gesti delle tabelle in note, documenti e fogli |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) e [i diagrammi](product/editor-diagrams.md) | i menu degli editor; il disegno Mermaid, il suo menu e i tasti del blocco |

@@ -1270,6 +1270,22 @@ export const SCENE = onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
   })),
+  // La formula che si modifica toccandola (T60, E27): → davanti alla formula
+  // in riga apre sotto di lei il riquadro con la formula grande, il cursore
+  // nel numeratore; il blocco `$$` si apre col clic, sul posto, e la scena
+  // prova i clic su numeratore, denominatore, esponente e radice (il posto
+  // detto al lettore di schermo), se no è rossa; la formula con un errore si
+  // apre col suo LaTeX (il telefono sta fra le scene di `mobile.html`).
+  ...[
+    ["formula-01-riga", "formula-toccata", "La formula in riga toccata: il riquadro sotto, la formula grande col cursore nel numeratore", "inline"],
+    ["formula-02-blocco", "formula-toccata", "Il blocco $$ toccato: la formula sul posto col bordo d'accento, il cursore dove cade il clic", "block"],
+    ["formula-03-errore", "formula-errore", "Una formula con un errore si apre col suo LaTeX e la nota che lo dice", "error"],
+  ].map(([id, live, title, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    prepare: (page) => touchFormula(page, gesture),
+  })),
   // Scrittura a riposo (T3, E1, passo 1 del prototipo): la pagina mostra solo
   // ciò che si legge. Prima della foto la scena prova i livelli di presenza:
   // al passaggio maniglie e strumenti della testata compaiono senza spostare
@@ -1857,6 +1873,15 @@ export const SCENE = onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // La formula in riga toccata (T60) sul telefono: il riquadro non esce
+    // dallo schermo.
+    {
+      id: "mobile-formula",
+      title: "Il telefono: la formula in riga toccata, il riquadro dentro lo schermo",
+      query: "live=formula-toccata",
+      viewport: PHONE,
+      prepare: (page) => touchFormula(page, "inline"),
+    },
     // La testata della pagina (T6) sul telefono: la copertina bassa, le
     // colonne delle proprietà strette.
     {
@@ -2370,6 +2395,53 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// La formula toccata (T60). `inline`: → davanti alla formula in riga, poi
+/// due → fino al numeratore. `block`: il clic su ogni pezzo del blocco `$$`
+/// deve portare il cursore lì (il posto detto al lettore di schermo), e la
+/// foto resta col cursore nel numeratore. `error`: → davanti alla formula rotta.
+async function touchFormula(page, gesture) {
+  const ready = ".cm-fub-mx-surface[data-state=\"ready\"]";
+  const said = () => page.evaluate(() => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "");
+  if (gesture === "block") {
+    await openLive(page, [], "top");
+    const centre = async (selector, fy = 0.5, fx = 0.5) => {
+      const box = await page.locator(selector).first().boundingBox();
+      if (!box) throw new Error(`la formula non ha ${selector}`);
+      return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+    };
+    // Il primo clic, sulla formula resa, la apre già nel numeratore.
+    const first = await centre(".cm-content .math-block .mfrac", 0.2);
+    await page.mouse.click(first.x, first.y);
+    await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    const clicks = [
+      [".cm-fub-mx-block .mfrac", 0.85, 0.5, "denominatore"],
+      [".cm-fub-mx-block .msupsub", 0.3, 0.6, "esponente di x"],
+      [".cm-fub-mx-block .sqrt", 0.5, 0.7, "sotto la radice"],
+      [".cm-fub-mx-block .mfrac", 0.15, 0.5, "numeratore"],
+    ];
+    const wrong = [];
+    if ((await said()) !== "numeratore") wrong.push(`apertura: ${await said()}`);
+    for (const [selector, fy, fx, expected] of clicks) {
+      const point = await centre(selector, fy, fx);
+      await page.mouse.click(point.x, point.y);
+      const got = await said();
+      if (got !== expected) wrong.push(`${expected}: ${got}`);
+    }
+    if (wrong.length) throw new Error(`il clic non porta il cursore dove cade: ${wrong.join("; ")}`);
+  } else {
+    await openLive(page, ["@ArrowRight"], "top");
+    await page.waitForSelector(gesture === "error" ? ".cm-fub-mx[data-mode=\"latex\"] .cm-fub-mx-latex" : `.cm-fub-mx-popover ${ready}`);
+    if (gesture === "inline") {
+      // Un pezzo alla volta: v, =, poi dentro la frazione.
+      for (let i = 0; i < 6 && (await said()) !== "numeratore"; i++) await page.keyboard.press("ArrowRight");
+      if ((await said()) !== "numeratore") throw new Error(`le frecce non entrano nel numeratore: ${await said()}`);
+    }
+  }
+  // Il puntatore lontano dai bottoni: nessun suggerimento nella foto.
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => document.getAnimations().length === 0);
 }
 
 /// La nota dei commenti (T22) in `mode`, poi il gesto: `open` apre la

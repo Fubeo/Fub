@@ -785,6 +785,20 @@
     "has-cell-selection",
     "is-cell-selected",
     "is-cell-cut",
+    "cm-fub-mx-popover",
+    "cm-fub-mx",
+    "cm-fub-mx-surface",
+    "cm-fub-mx-caret",
+    "cm-fub-mx-placeholder",
+    "cm-fub-mx-input",
+    "cm-fub-mx-latex",
+    "cm-fub-mx-note",
+    "cm-fub-mx-block",
+    "cm-fub-math-on",
+    "cm-fub-math",
+    "katex",
+    "text",
+    "mord",
     "cm-focused",
     "cm-scroller",
     "cm-activeLine",
@@ -2764,6 +2778,20 @@
     "has-cell-selection": "contenuto",
     "is-cell-selected": "segno",
     "is-cell-cut": "segno",
+    "cm-fub-mx-popover": "cornice",
+    "cm-fub-mx": "cornice",
+    "cm-fub-mx-surface": "cornice",
+    "cm-fub-mx-caret": "segno",
+    "cm-fub-mx-placeholder": "cornice",
+    "cm-fub-mx-input": "cornice",
+    "cm-fub-mx-latex": "cornice",
+    "cm-fub-mx-note": "cornice",
+    "cm-fub-mx-block": "cornice",
+    "cm-fub-math-on": "segno",
+    "cm-fub-math": "segno",
+    "katex": "cornice",
+    "text": "cornice",
+    "mord": "cornice",
     "cm-focused": "contenuto",
     "cm-scroller": "contenuto",
     "cm-activeLine": "segno",
@@ -6121,6 +6149,44 @@
         "focused",
         "disabled",
         "selected"
+      ]
+    },
+    {
+      "name": "math-popover",
+      "part": "math",
+      "hooks": [
+        "kit-popover",
+        "cm-fub-mx-popover"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "math-editor",
+      "part": "math",
+      "hooks": [
+        "cm-editor",
+        "cm-content",
+        "cm-fub-mx",
+        "cm-fub-mx-surface",
+        "cm-fub-mx-caret",
+        "cm-fub-mx-placeholder",
+        "cm-fub-mx-input",
+        "cm-fub-mx-latex",
+        "cm-fub-mx-note",
+        "cm-fub-mx-block",
+        "cm-fub-math-on",
+        "cm-fub-math",
+        "katex",
+        "katex-display",
+        "text",
+        "mord"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -10517,10 +10583,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 1977,
+    "hooks": 1991,
     "state_names": 7,
-    "assigned_states": 914,
-    "components": 267,
+    "assigned_states": 918,
+    "components": 269,
     "preference_tokens": 191
   }
 }
