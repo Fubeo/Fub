@@ -1938,7 +1938,7 @@ Fatto quando: test con `MemoryHost`: creare, cambiare tipo, tipo guasto,
 cartella cambiata.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 template properties; cargo nextest run -p fub-host settings
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17), solo core: il legame col menu «Nuovo» di PA T43 resta a T33
 
 ## T33 · I tipi di nota nell'editor
 
@@ -2172,7 +2172,7 @@ separatore resta); Vim; testo arrivato in un colpo.
 Fatto quando: un test per regola e per ogni luogo dove non vale.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/typography.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, 2026-11-17)
 
 ## T39 · La pagina del giorno
 
@@ -3761,4 +3761,4 @@ risultati, nelle due luci; un test dell'ordine per uso; un test che i tasti
 arrivano alla banda; nessuna classe della versione a due colonne rimasta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/slash
-Stato: [~] in corso (coder, `feat/slash-una-colonna`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (1830b4b1f, 2026-11-17), in attesa del gruppo; baseline di slash-01…09 dal runner
