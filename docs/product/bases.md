@@ -290,6 +290,11 @@ un'altra app, da un'altra finestra o da un altro comando si dice come sempre.
 Se il `.base` è aperto anche come testo con modifiche non salvate, il gesto
 prima le salva; se non si salvano, il gesto non parte e la barra lo dice.
 
+Ctrl+Z (⌘Z su Mac), fuori da un campo di testo, chiede lo stesso «Annulla» del
+vault, anche quando non c'è niente da disfare; dentro un campo di testo il tasto
+resta del campo. Ctrl+Maiusc+Z e Ctrl+Y non rifanno: il vault non ha il rifare.
+In sola lettura il tasto non fa niente.
+
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
 o con `OR`, anche negato (`-[stato:Prenotata]`). Il testo libero no: la Base
