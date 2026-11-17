@@ -4,6 +4,10 @@
 // non lascia mai una formula rotta: un simbolo se ne va intero, dopo un pezzo
 // Backspace ci entra, un pezzo tutto vuoto se ne va con un tasto solo, le
 // graffe restano in pari.
+//
+// In fondo la scrittura veloce e le regole del campo del LaTeX (T63).
+import type { MathHelp } from "../../../live-reveal";
+import { commandName, SYMBOLS } from "./symbols";
 import {
   argumentsOf,
   atomEndingAt,
@@ -363,4 +367,216 @@ export function finishCommand(state: MathState, from: number, renders: (tex: str
     return edit(joined.tex, hole < 0 ? joined.caret : start + hole + 1);
   }
   return null;
+}
+
+// ── La scrittura veloce (T63) ───────────────────────────────────────────────
+//
+// Quello che si scrive com'è diventa LaTeX: `a/` una frazione, `->` una
+// freccia, `alpha` e uno spazio la lettera greca, `3,14` la virgola
+// decimale, `"due parole"` il testo dritto. Ogni trasformazione si annulla con
+// Backspace subito dopo, che rimette ciò che si era scritto. Le regole sono
+// quelle del prototipo (`quick`, `MUNI`, `MPAIR`, `MWORD`), sul TeX e senza
+// DOM: le usa il campo del LaTeX, e la formula che si tocca dopo che il tasto
+// ha scritto il suo segno.
+
+/// I caratteri che una tastiera (o un'altra app) scrive già disegnati.
+const UNICODE: Readonly<Record<string, string>> = {
+  "α": "\\alpha ", "β": "\\beta ", "γ": "\\gamma ", "δ": "\\delta ", "θ": "\\theta ", "λ": "\\lambda ", "μ": "\\mu ",
+  "π": "\\pi ", "σ": "\\sigma ", "ω": "\\omega ", "×": "\\times ", "·": "\\cdot ", "÷": "\\div ", "≤": "\\le ",
+  "≥": "\\ge ", "≠": "\\ne ", "≈": "\\approx ", "±": "\\pm ", "∞": "\\infty ", "→": "\\to ", "∑": "\\sum ",
+  "∫": "\\int ", "√": "\\sqrt{}", "²": "^2", "³": "^3", "°": "^\\circ ", "∈": "\\in ",
+};
+
+/// I segni scritti con più tasti: il più lungo prima (`<->` prima di `->`).
+const PAIRS: readonly (readonly [string, string])[] = [
+  ["<->", "\\leftrightarrow "], ["->", "\\to "], ["=>", "\\Rightarrow "], ["<=", "\\le "], [">=", "\\ge "],
+  ["!=", "\\ne "], ["+-", "\\pm "], ["~=", "\\approx "], ["...", "\\dots "],
+];
+
+/// Le parole che diventano un comando quando sono finite (uno spazio, un
+/// segno): le lettere greche, le funzioni, e la scrittura veloce di ogni
+/// simbolo del catalogo che ne ha una fatta di lettere.
+const WORDS: ReadonlyMap<string, string> = (() => {
+  const words = new Map<string, string>();
+  for (const word of ["alpha", "beta", "gamma", "delta", "theta", "lambda", "mu", "pi", "sigma", "omega", "phi", "rho", "tau", "sum", "int", "lim", "sin", "cos", "tan", "log", "ln", "min", "max"]) {
+    words.set(word, `\\${word}`);
+  }
+  for (const symbol of SYMBOLS) {
+    if (/^[a-z]{2,7}$/.test(symbol.quick) && commandName(symbol) === `\\${symbol.quick}`) words.set(symbol.quick, `\\${symbol.quick}`);
+  }
+  words.set("sqrt", "\\sqrt{}");
+  words.set("inf", "\\infty");
+  return words;
+})();
+
+/// Le parole della scrittura veloce, per la prova del catalogo.
+export const QUICK_WORDS: ReadonlySet<string> = new Set(WORDS.keys());
+
+/// Una trasformazione appena fatta: Backspace con il cursore in `at` rimette
+/// `literal` al posto di `replaced`, che comincia in `from`.
+export interface QuickUndo {
+  readonly at: number;
+  readonly from: number;
+  readonly replaced: string;
+  readonly literal: string;
+}
+
+export interface QuickWrite {
+  readonly state: MathState;
+  /// `null` quando il gesto non si annulla (un segno che esce da un esponente).
+  readonly undo: QuickUndo | null;
+}
+
+export interface QuickOptions {
+  readonly help: MathHelp;
+  /// `3,14` con la virgola decimale all'italiana (`3{,}14`): solo in italiano;
+  /// in inglese la virgola separa.
+  readonly decimalComma: boolean;
+}
+
+/// Il cursore sta dentro un testo (`\text{…` ancora aperto): lì si scrive
+/// com'è, `->` compreso.
+export function inTextGroup(before: string): boolean {
+  return /\\(?:text|textrm|textbf|textit|mathrm|operatorname)\{[^{}]*$/.test(before);
+}
+
+const NUMERATOR = /(\([^()]*\)|\\[a-zA-Z]+(?:\{[^{}]*\})+|\\[a-zA-Z]+ ?|(?<![\\A-Za-z0-9.])[A-Za-z0-9.]+(?:[\^_](?:\{[^{}]*\}|[A-Za-z0-9]))*)\/$/;
+const WORD_END = /(?<![\\a-zA-Z])([a-zA-Z]{2,7})([^a-zA-Z\\])$/;
+
+/// La scrittura veloce dopo che `typed` è entrato davanti al cursore. `null`
+/// se non c'è niente da trasformare: il testo resta com'è. Con `discrete`
+/// valgono solo i caratteri già disegnati e le cifre di un esponente (che
+/// senza graffe resterebbero fuori); con `spente` niente.
+export function quickWrite(state: MathState, typed: string, options: QuickOptions): QuickWrite | null {
+  if (options.help === "spente" || !typed) return null;
+  const { tex, caret } = state;
+  const before = tex.slice(0, caret);
+  if (!before.endsWith(typed) || inTextGroup(before)) return null;
+  const swap = (length: number, to: string, offset = to.length): QuickWrite => {
+    const from = caret - length;
+    const at = from + offset;
+    return {
+      state: { tex: tex.slice(0, from) + to + tex.slice(caret), caret: at },
+      undo: { at, from, replaced: to, literal: before.slice(from) },
+    };
+  };
+  // Un esponente di più cifre si è raggruppato da solo: il primo segno che non
+  // è una cifra ne esce.
+  if (!/[\dA-Za-z{}]/.test(typed) && tex[caret] === "}" && /[\^_]\{\d+.$/.test(before)) {
+    const out = tex.slice(0, caret - typed.length) + "}" + typed + tex.slice(caret + 1);
+    return { state: { tex: out, caret: caret + 1 }, undo: null };
+  }
+  const drawn = UNICODE[typed];
+  if (drawn) return swap(typed.length, drawn, drawn.endsWith("{}") ? drawn.length - 1 : drawn.length);
+  if (/^\d$/.test(typed)) {
+    const script = /([\^_])(\d)(\d)$/.exec(before);
+    if (script) return swap(3, `${script[1]}{${script[2]}${script[3]}}`, 4);
+    const decimal = options.help === "piene" && options.decimalComma ? /(\d),(\d)$/.exec(before) : null;
+    if (decimal) return swap(3, `${decimal[1]}{,}${decimal[2]}`);
+  }
+  if (options.help !== "piene") return null;
+  for (const [keys, to] of PAIRS) if (before.endsWith(keys)) return swap(keys.length, to);
+  if (typed === "/") {
+    const match = NUMERATOR.exec(before);
+    if (match) {
+      const numerator = match[1]!.replace(/^\((.*)\)$/, "$1").trimEnd();
+      const to = `\\frac{${numerator}}{}`;
+      return swap(match[0].length, to, to.length - 1);
+    }
+  }
+  if (typed === "\"") {
+    const match = /"([^"]+)"$/.exec(before);
+    if (match) return swap(match[0].length, `\\text{${match[1]}}`);
+  }
+  const word = WORD_END.exec(before);
+  const command = word ? WORDS.get(word[1]!) : undefined;
+  if (word && command) {
+    const after = word[2]!;
+    if (command.endsWith("{}")) {
+      // `sqrt` e uno spazio (o una parentesi) aprono la radice; un altro segno
+      // ci va dentro.
+      const inner = after === " " || after === "(" ? "" : after;
+      const to = `${command.slice(0, -1)}${inner}}`;
+      return swap(word[0].length, to, to.length - 1);
+    }
+    return swap(word[0].length, `${command}${after}`);
+  }
+  return null;
+}
+
+/// Backspace subito dopo una trasformazione: rimette ciò che si era scritto.
+/// `null` se il cursore non è più lì o il testo è cambiato.
+export function undoQuick(state: MathState, undo: QuickUndo): MathState | null {
+  if (state.caret !== undo.at) return null;
+  const { tex } = state;
+  if (tex.slice(undo.from, undo.from + undo.replaced.length) !== undo.replaced) return null;
+  return {
+    tex: tex.slice(0, undo.from) + undo.literal + tex.slice(undo.from + undo.replaced.length),
+    caret: undo.from + undo.literal.length,
+  };
+}
+
+const OPENERS: Readonly<Record<string, string>> = { "(": ")", "[": "]", "{": "}" };
+
+/// Una parentesi che si chiude da sola: `(` scrive `()` col cursore in mezzo.
+/// Dopo una `\` (`\{`) no: è un segno, non un gruppo.
+export function openPair(state: MathState, key: string): MathState | null {
+  const close = OPENERS[key];
+  if (!close) return null;
+  const before = state.tex.slice(0, state.caret);
+  if (/(?:^|[^\\])(?:\\\\)*\\$/.test(before)) return null;
+  return { tex: before + key + close + state.tex.slice(state.caret), caret: state.caret + 1 };
+}
+
+/// La parentesi chiusa che c'è già: il tasto la scavalca invece di scriverne
+/// un'altra.
+export function stepOver(state: MathState, key: string): number | null {
+  return (key === ")" || key === "]" || key === "}") && state.tex[state.caret] === key ? state.caret + 1 : null;
+}
+
+/// Backspace fra due parentesi vuote le toglie tutte e due.
+export function dropPair(state: MathState): MathState | null {
+  const { tex, caret } = state;
+  if (caret === 0 || !["{}", "()", "[]"].includes(tex.slice(caret - 1, caret + 1))) return null;
+  if (tex[caret - 2] === "\\") return null;
+  return { tex: tex.slice(0, caret - 1) + tex.slice(caret + 1), caret: caret - 1 };
+}
+
+// ── Il campo del LaTeX (T63) ────────────────────────────────────────────────
+
+/// Gli spazi vuoti scritti nel LaTeX: il punto dentro ogni `{}`.
+export function sourceHoles(tex: string): number[] {
+  const out: number[] = [];
+  for (let i = tex.indexOf("{}"); i >= 0; i = tex.indexOf("{}", i + 1)) {
+    if (tex[i - 1] !== "\\") out.push(i + 1);
+  }
+  return out;
+}
+
+/// Tab nel campo del LaTeX: allo spazio vuoto dopo; senza, fuori dalla graffa
+/// in cui si è; in fondo esce dalla formula. Maiusc Tab allo spazio vuoto
+/// prima.
+export function sourceTab(state: MathState, back: boolean): Outcome {
+  const holes = sourceHoles(state.tex);
+  if (back) {
+    const previous = holes.filter((at) => at < state.caret).pop();
+    return previous === undefined ? NONE : move(previous);
+  }
+  const next = holes.find((at) => at > state.caret);
+  if (next !== undefined) return move(next);
+  const close = state.tex.indexOf("}", state.caret);
+  if (close >= 0 && state.caret < state.tex.length) return move(close + 1);
+  return { kind: "leave", side: "after" };
+}
+
+/// Un modello del catalogo nel campo del LaTeX, al posto di `[from, to)`: il
+/// cursore va su `§`, o nel primo spazio vuoto, o dopo. Un comando di lettere
+/// non si incolla alla lettera che segue.
+export function insertTemplate(state: MathState, template: string, from: number, to = state.caret): MathState {
+  const mark = template.indexOf("§");
+  const clean = template.replace("§", "");
+  const hole = clean.indexOf("{}");
+  const target = mark >= 0 ? mark : hole >= 0 ? hole + 1 : -1;
+  const joined = join(state.tex.slice(0, from), clean, state.tex.slice(to));
+  return { tex: joined.tex, caret: target < 0 ? joined.caret : from + joined.lead + target };
 }

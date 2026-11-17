@@ -6,15 +6,16 @@ import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
-import { liveReveal, mathSource, type RevealPolicy } from "../../live-reveal";
+import { liveReveal, mathClassic, type RevealPolicy } from "../../live-reveal";
 import { blockTex, blockTexRange, setTex } from "./math-live";
 
 vi.mock("katex", () => ({ default: { render(tex: string, el: HTMLElement) { el.textContent = `«${tex}»`; } } }));
 vi.mock("katex/dist/katex.min.css", () => ({}));
 
-// Le formule col LaTeX a vista e l'anteprima (C6): con «Mostra il LaTeX»
-// (`editor.math.source`) o coi tasti di Vim. La formula che si modifica
-// toccandola, di serie, ha i suoi test in `math/touch.dom.test.ts`.
+// Le formule col LaTeX a vista e l'anteprima (C6), come erano prima della
+// formula da toccare: coi tasti di Vim (`mathClassic`). La formula che si modifica
+// toccandola, e quella col campo del LaTeX (T63), hanno i loro test in
+// `math/touch.dom.test.ts` e `math/source.dom.test.ts`.
 
 const views: EditorView[] = [];
 afterEach(() => {
@@ -22,13 +23,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function mount(doc: string, anchor: number, policy: RevealPolicy = "mai", source = true): EditorView {
+function mount(doc: string, anchor: number, policy: RevealPolicy = "mai", classic = true): EditorView {
   const view = new EditorView({
     parent: document.body,
     state: EditorState.create({
       doc,
       selection: { anchor },
-      extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy)), mathSource.of(source)],
+      extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy)), mathClassic.of(classic)],
     }),
   });
   ensureSyntaxTree(view.state, view.state.doc.length, 1000);
@@ -65,7 +66,7 @@ describe("le regole", () => {
   });
 });
 
-describe("con `mai` e «Mostra il LaTeX»", () => {
+describe("con `mai` e i tasti di Vim", () => {
   it("→ davanti alla formula apre il riquadro; scrivere cambia il TeX, Invio esce dopo", () => {
     const doc = "x $a+b$ y";
     const view = mount(doc, 2);

@@ -119,12 +119,16 @@ export interface MathPaletteOptions {
   onPick(symbol: MathSymbol): void;
   /// Il fuoco torna alla formula (Esc, Maiusc Tab dalla fila dei pezzi).
   onReturn(): void;
+  /// Si vede il LaTeX (T63): il suggerimento dice anche il comando.
+  source?(): boolean;
   readonly lifetime: Lifetime;
 }
 
-/// La tavolozza sotto una formula toccata: un simbolo scelto entra dove sta il
+/// La tavolozza sotto una formula: un simbolo scelto entra dove sta il
 /// cursore e il fuoco torna nella formula; Alt ↓ dalla formula porta nella
-/// fila dei pezzi. Una formula col LaTeX a vista non la mostra (la pelle).
+/// fila dei pezzi. Col LaTeX a vista la mostrano gli aiuti (T63): sempre coi
+/// pieni, a richiesta coi discreti (lo decide la formula), mai con gli spenti;
+/// la formula che non si legge non la mostra (la pelle).
 export function attachPalette(editor: MathEditor, lifetime: Lifetime): MathPalette {
   const palette = new MathPalette({
     onPick: (symbol) => {
@@ -132,13 +136,16 @@ export function attachPalette(editor: MathEditor, lifetime: Lifetime): MathPalet
       editor.focus();
     },
     onReturn: () => editor.focus(),
+    source: () => editor.currentMode !== "visual",
     lifetime,
   });
   editor.element.append(palette.element);
+  editor.adoptPalette({ row: palette.row, focus: () => palette.focus(), retell: () => palette.retell() });
   lifetime.listen(editor.element, "keydown", (event) => {
     if (event.key !== "ArrowDown" || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (event.target instanceof Node && palette.element.contains(event.target)) return;
-    if (editor.element.dataset.mode !== "visual") return;
+    const mode = editor.currentMode;
+    if (mode === "latex" || (mode === "source" && editor.help !== "piene")) return;
     event.preventDefault();
     event.stopPropagation();
     palette.focus();
@@ -287,6 +294,16 @@ export class MathPalette {
     if (current) this.toolbar.focus(current);
   }
 
+  /// Rifà l'invito in fondo: col LaTeX a vista dice «come si scrive».
+  retell(): void {
+    this.tell(null);
+  }
+
+  /// La fila dei pezzi: col blocco toccato ci stanno anche i tre puntini.
+  get row(): HTMLElement {
+    return this.quick;
+  }
+
   /// «Tutti» è aperto.
   get expanded(): boolean {
     return !this.full.hidden;
@@ -399,19 +416,38 @@ export class MathPalette {
     }
   }
 
-  /// Il nome del simbolo in fondo; `null` lascia l'invito.
+  /// Il nome del simbolo in fondo, col suo comando quando si vede il LaTeX e
+  /// la sua scrittura veloce (T63); `null` lascia l'invito.
   private tell(symbol: MathSymbol | null): void {
+    const t = liveStrings.t.bind(liveStrings);
+    const source = this.options.source?.() ?? false;
     if (!symbol) {
-      if (this.tip.dataset.empty === "true") return;
+      const invite = t(source ? "live.math.palette.tip_source" : "live.math.palette.tip");
+      if (this.tip.dataset.empty === "true" && this.tip.textContent === invite) return;
       this.tip.dataset.empty = "true";
-      this.tip.textContent = liveStrings.t("live.math.palette.tip");
+      this.tip.textContent = invite;
       return;
     }
     const name = document.createElement("b");
     name.className = "cm-fub-mx-tip-name";
     name.textContent = symbolName(symbol, this.language);
+    const parts: HTMLElement[] = [name];
+    if (source) {
+      const code = document.createElement("code");
+      code.className = "cm-fub-mx-tip-code";
+      code.textContent = symbol.template.replace(/§/g, "").trim();
+      parts.push(code);
+    }
+    if (symbol.quick) {
+      const quick = document.createElement("span");
+      quick.className = "cm-fub-mx-tip-quick";
+      const key = document.createElement("kbd");
+      key.textContent = symbol.quick;
+      quick.append(`${t("live.math.palette.quick")} `, key);
+      parts.push(quick);
+    }
     this.tip.dataset.empty = "false";
-    this.tip.replaceChildren(name);
+    this.tip.replaceChildren(...parts);
   }
 
   // ── I gesti ────────────────────────────────────────────────────────────

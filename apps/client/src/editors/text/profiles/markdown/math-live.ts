@@ -6,19 +6,24 @@
 // d'accento. Il LaTeX non si vede (`math/`). Sotto la formula, in riga e a
 // blocco, la tavolozza dei simboli (`math/palette.ts`, T62).
 //
-// Con «Mostra il LaTeX» (`editor.math.source`) o coi tasti di Vim resta il
-// comportamento di prima: il riquadro col TeX e l'anteprima, il blocco `$$`
-// che torna sorgente con la resa sotto. Con `elemento` la sorgente si vede col
-// cursore dentro e l'anteprima sta in un riquadro sopra la riga, senza
-// prendere il fuoco.
+// Con «Mostra il LaTeX» (`editor.math.source`, T63) lo stesso riquadro ha
+// sotto la formula il campo del suo LaTeX, con gli aiuti scelti
+// (`editor.math.help`); i tre puntini del riquadro cambiano le due preferenze
+// e le scrivono nelle Impostazioni. Coi tasti di Vim resta il comportamento di
+// prima: il riquadro col TeX e l'anteprima, il blocco `$$` che torna sorgente
+// con la resa sotto. Con `elemento` la sorgente si vede col cursore dentro e
+// l'anteprima sta in un riquadro sopra la riga, senza prendere il fuoco.
 import { syntaxTree } from "@codemirror/language";
 import { Annotation, type ChangeDesc, type EditorState, type Extension, Facet, Prec } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
+import { errorText } from "../../../../host/errors";
+import { api } from "../../../../host/ipc";
 import { openPopover, type PopoverHandle, textField, type VirtualAnchor } from "../../../../kit";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
-import { liveReveal, mathSource } from "../../live-reveal";
+import { notify } from "../../../../ui/notify";
+import { liveReveal, MATH_HELP_SETTING, MATH_SOURCE_SETTING, mathClassic, mathHelp, mathSource } from "../../live-reveal";
 import { mountMathBlocks } from "./math";
-import { MathEditor, type LeaveReason, type MathStart } from "./math/editor";
+import { MathEditor, type LeaveReason, type MathEditorOptions, type MathPreferences, type MathStart } from "./math/editor";
 import { attachPalette } from "./math/palette";
 import { liveStrings } from "./strings";
 
@@ -90,10 +95,15 @@ const formulaLookup = Facet.define<FormulaLookup, FormulaLookup | null>({
   combine: (values) => values[0] ?? null,
 });
 
-/// La formula si modifica toccandola: `mai`, senza «Mostra il LaTeX» né Vim, e
-/// la nota non è in sola lettura.
+/// La formula si apre nel suo riquadro (da toccare, o col campo del LaTeX):
+/// `mai`, senza i tasti di Vim, e la nota non è in sola lettura.
 export function mathTouchable(state: EditorState): boolean {
-  return state.facet(liveReveal) === "mai" && !state.facet(mathSource) && !state.readOnly;
+  return state.facet(liveReveal) === "mai" && !state.facet(mathClassic) && !state.readOnly;
+}
+
+/// Le due preferenze delle formule nella vista.
+function preferencesOf(state: EditorState): MathPreferences {
+  return { source: state.facet(mathSource), help: state.facet(mathHelp) };
 }
 
 function inTableRow(state: EditorState, pos: number): boolean {
@@ -198,7 +208,7 @@ interface InlineSession {
   mark(): void;
 }
 
-function editInline(view: EditorView, formula: LiveFormula, start: MathStart, owner: Lifetime): InlineSession {
+function editInline(view: EditorView, plugin: MathPlugin, formula: LiveFormula, start: MathStart, owner: Lifetime): InlineSession {
   const life = openLifetime();
   const dollars = dollarsOf(view.state, formula);
   const marks = "$".repeat(dollars);
@@ -250,10 +260,12 @@ function editInline(view: EditorView, formula: LiveFormula, start: MathStart, ow
     display: false,
     start,
     inTable: inTableRow(view.state, formula.from),
+    ...plugin.editorOptions(),
     onChange: write,
     onLeave: leave,
     lifetime: life,
   });
+  plugin.adopt(editor, life);
   attachPalette(editor, life);
   const popover = openPopover({
     anchor,
@@ -350,10 +362,12 @@ export class MathBlockEditWidget extends WidgetType {
       tex: this.tex,
       display: true,
       start: plugin.takeEntry(this.from),
+      ...plugin.editorOptions(),
       onChange: (tex) => plugin.writeBlock(root, tex),
       onLeave: (reason) => plugin.leaveBlock(root, reason),
       lifetime: life,
     });
+    plugin.adopt(editor, life);
     attachPalette(editor, life);
     root.append(editor.element);
     // Il fuoco va nella formula quando ci arriva dalla nota (un clic, le
@@ -387,12 +401,59 @@ class MathPlugin {
   private lastHead = 0;
   /// Il prossimo blocco aperto prende il fuoco anche se la nota non lo ha.
   entryFocus = false;
+  /// Le formule aperte adesso: cambiano con le preferenze.
+  private readonly editors = new Set<MathEditor>();
+  /// Le preferenze come le vede la vista (le Impostazioni).
+  private preferences: MathPreferences;
+  /// L'ultima scrittura dai tre puntini: una risposta vecchia non disfa una
+  /// scelta nuova.
+  private writes = 0;
 
   constructor(readonly view: EditorView) {
     this.lastHead = view.state.selection.main.head;
+    this.preferences = preferencesOf(view.state);
+  }
+
+  /// Le opzioni comuni delle formule aperte in questa vista.
+  editorOptions(): Pick<MathEditorOptions, "preferences" | "onPreferences" | "tell"> {
+    return {
+      preferences: this.preferences,
+      onPreferences: (next) => this.choose(next),
+      tell: (message) => notify(message),
+    };
+  }
+
+  adopt(editor: MathEditor, life: Lifetime): void {
+    this.editors.add(editor);
+    life.add(() => this.editors.delete(editor));
+  }
+
+  /// Una scelta dai tre puntini: vale subito in tutte le formule aperte, e
+  /// si scrive nelle Impostazioni, che la rimandano a ogni vista. Se la
+  /// scrittura non riesce, la scelta di prima torna e lo si dice.
+  private choose(next: MathPreferences): void {
+    const before = this.preferences;
+    this.apply(next);
+    const write = ++this.writes;
+    const writes: Promise<void>[] = [];
+    if (next.source !== before.source) writes.push(api.setSetting(MATH_SOURCE_SETTING, next.source));
+    if (next.help !== before.help) writes.push(api.setSetting(MATH_HELP_SETTING, next.help));
+    void Promise.all(writes).catch((error: unknown) => {
+      if (this.life.closed) return;
+      if (write === this.writes) this.apply(preferencesOf(this.view.state));
+      notify(liveStrings.t("live.math.options.failed", { reason: errorText(error) }), "guasto");
+    });
+  }
+
+  private apply(next: MathPreferences): void {
+    this.preferences = next;
+    for (const editor of this.editors) editor.configure(next);
   }
 
   update(update: ViewUpdate): void {
+    const before = preferencesOf(update.startState);
+    const after = preferencesOf(update.state);
+    if (before.source !== after.source || before.help !== after.help) this.apply(after);
     for (const transaction of update.transactions) {
       if (transaction.docChanged && !transaction.annotation(ownEdit)) this.inline?.map(transaction.changes);
     }
@@ -449,7 +510,7 @@ class MathPlugin {
     this.inline = null;
     const view = this.view;
     if (mathTouchable(view.state)) {
-      const session = editInline(view, formula, start, this.life);
+      const session = editInline(view, this, formula, start, this.life);
       this.inline = session;
       this.editing = session.popover;
       return;

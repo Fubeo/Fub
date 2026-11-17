@@ -9941,6 +9941,16 @@ button.cm-fub-page-icon:focus-visible {
   background: var(--overlay-hover);
   color: var(--text);
 }
+/* Col LaTeX a vista la proposta dice anche il suo comando (T63). */
+.cm-fub-mx-symbol-code {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-code {
+  color: var(--accent-soft);
+}
 /* Nel blocco le proposte stanno sotto la formula, larghe come il riquadro
    della formula in riga. */
 .cm-fub-mx-block .cm-fub-mx-symbols {
@@ -9959,8 +9969,12 @@ button.cm-fub-page-icon:focus-visible {
   min-width: 0;
   border-top: 1px solid var(--border);
 }
-/* Una formula col LaTeX a vista non ha la tavolozza. */
-.cm-fub-mx[data-mode="latex"] .cm-fub-mx-palette {
+/* Una formula che non si legge non ha la tavolozza; col campo del LaTeX la
+   decidono gli aiuti (T63): coi discreti si apre a richiesta, con gli
+   spenti non c'è. */
+.cm-fub-mx[data-mode="latex"] .cm-fub-mx-palette,
+.cm-fub-mx[data-help="spente"] .cm-fub-mx-palette,
+.cm-fub-mx[data-help="discrete"]:not([data-palette="open"]) .cm-fub-mx-palette {
   display: none;
 }
 /* Sopra la tavolozza la formula ha gli angoli in basso dritti. */
@@ -10138,6 +10152,15 @@ button.cm-fub-page-icon:focus-visible {
   color: var(--text);
   font-weight: 600;
 }
+/* Il comando (col LaTeX a vista) e la scrittura veloce del simbolo (T63). */
+.cm-fub-mx-tip-code {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.cm-fub-mx-tip-quick kbd {
+  font-size: 11px;
+}
 /* Nel blocco la tavolozza sta in una scheda sotto la formula. */
 .cm-fub-mx-block .cm-fub-mx-palette {
   margin-top: 8px;
@@ -10173,8 +10196,10 @@ button.cm-fub-page-icon:focus-visible {
   box-shadow: none;
 }
 .cm-fub-mx-latex {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
-  margin: 8px 8px 0 10px;
+  margin: 0;
   padding: 5px 6px;
   border: 0;
   border-radius: 7px;
@@ -10188,14 +10213,170 @@ button.cm-fub-page-icon:focus-visible {
   resize: none;
   overflow: hidden;
 }
+.cm-fub-mx-latex:focus,
 .cm-fub-mx-latex:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
+/* Col fuoco da tastiera il prototipo arrotonda a 6 px, come ogni anello. */
+.cm-fub-mx-latex:focus-visible {
+  border-radius: 6px;
+}
+.cm-fub-mx-latex::placeholder {
+  color: var(--muted);
+  font-family: var(--font-ui);
+}
 .cm-fub-mx-note {
-  margin: 8px 10px 10px;
+  margin: 0 10px 10px;
   color: var(--muted);
   font-size: 12.5px;
+}
+
+/* ── «Mostra il LaTeX» e le tre misure di aiuto ───────────────────────────
+   (T63, E27; il prototipo `.mx-prev`, `.mx-row`, `.mx-tex`, `.mx-more`,
+   `.mx-opts`, `.seg2`.) Sopra la resa della formula, sotto la fila col campo
+   del LaTeX, il pulsante della tavolozza (coi discreti) e i tre puntini; i
+   tre puntini aprono «Mostra il LaTeX» e gli aiuti. Nella formula che si
+   tocca la fila sta in cima a destra e ha soltanto i tre puntini. */
+.cm-fub-mx-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 8px 8px 10px;
+}
+.cm-fub-mx[data-mode="visual"] .cm-fub-mx-row {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 0;
+}
+.cm-fub-mx-more {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cm-fub-mx-more > svg {
+  width: 16px;
+  height: 16px;
+}
+.cm-fub-mx-more:hover,
+.cm-fub-mx-more[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-mx-more:focus-visible,
+.cm-fub-mx-palette-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Sotto un blocco toccato i tre puntini chiudono la fila dei pezzi. */
+.cm-fub-mx-quick .cm-fub-mx-more {
+  margin-left: 2px;
+}
+/* La tavolozza a richiesta, con gli aiuti discreti. */
+.cm-fub-mx-palette-toggle {
+  flex: none;
+  height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-palette-toggle[hidden] {
+  display: none;
+}
+.cm-fub-mx-palette-toggle:hover,
+.cm-fub-mx-palette-toggle[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-mx-options {
+  display: grid;
+  gap: 6px;
+  padding: 2px 10px 10px;
+}
+.cm-fub-mx-options[hidden] {
+  display: none;
+}
+.cm-fub-mx[data-mode="visual"] .cm-fub-mx-options {
+  padding-top: 10px;
+}
+.cm-fub-mx-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.cm-fub-mx-option-name {
+  flex: 1;
+  min-width: 0;
+}
+/* La scelta: un vassoio, e la parte premuta è un foglio rialzato. */
+.cm-fub-mx-segments {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.cm-fub-mx-segment {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-segment:hover {
+  color: var(--text);
+}
+.cm-fub-mx-segment[aria-pressed="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.cm-fub-mx-segment:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Col campo la formula sopra è la sua anteprima: più bassa, e il clic porta
+   soltanto agli spazi vuoti. */
+.cm-fub-mx[data-mode="source"] .cm-fub-mx-surface {
+  min-height: 76px;
+  padding: 16px;
+  font-size: 20px;
+  cursor: default;
+}
+.cm-fub-mx[data-mode="source"]:focus-within .cm-fub-mx-surface {
+  box-shadow: none;
+}
+.cm-fub-mx[data-mode="source"] .cm-fub-mx-surface [data-fubhole] {
+  cursor: pointer;
+}
+.cm-fub-mx-popover .cm-fub-mx[data-mode="source"] .cm-fub-mx-surface {
+  border-radius: 14px 14px 0 0;
 }
 
 /* Il blocco `$$` toccato, sul posto: la formula col bordo d'accento. */
@@ -10212,11 +10393,27 @@ button.cm-fub-page-icon:focus-visible {
   font-size: inherit;
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
-.cm-fub-mx-block .cm-fub-mx-latex {
-  margin: 8px 0 0;
+.cm-fub-mx-block .cm-fub-mx:not([data-mode="visual"]) .cm-fub-mx-row {
+  padding: 8px 0 0;
 }
 .cm-fub-mx-block .cm-fub-mx-note {
   margin: 6px 0 0;
+}
+/* Col campo il blocco è l'anteprima: niente bordo d'accento, che sta sul
+   campo col fuoco. */
+.cm-fub-mx-block .cm-fub-mx[data-mode="source"] .cm-fub-mx-surface {
+  min-height: 0;
+  padding: 12px 8px;
+  font-size: inherit;
+  box-shadow: none;
+}
+/* Le opzioni del blocco in una scheda sotto la formula, come la tavolozza. */
+.cm-fub-mx-block .cm-fub-mx-options {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
 /* Nella frase, la formula che si sta modificando. */
@@ -10235,7 +10432,8 @@ button.cm-fub-page-icon:focus-visible {
     outline: 1px solid Highlight;
   }
   .cm-fub-mx-symbol[aria-selected="true"],
-  .cm-fub-mx-group[aria-selected="true"] {
+  .cm-fub-mx-group[aria-selected="true"],
+  .cm-fub-mx-segment[aria-pressed="true"] {
     outline: 1px solid Highlight;
     outline-offset: -1px;
   }

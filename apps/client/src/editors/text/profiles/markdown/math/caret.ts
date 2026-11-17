@@ -64,6 +64,21 @@ export function instrument(tex: string, pending: { from: number; to: number } | 
   return out;
 }
 
+/// Il TeX dell'anteprima del campo del LaTeX (T63): soltanto gli spazi vuoti
+/// (`{}`) hanno il loro segno, un quadretto che si clicca; il resto del
+/// disegno non porta il cursore. `holes` sono i punti dentro ogni `{}`
+/// (`sourceHoles` di `edit.ts`).
+export function instrumentHoles(tex: string, holes: readonly number[]): string {
+  let out = tex;
+  for (let i = holes.length - 1; i >= 0; i--) {
+    const at = holes[i]!;
+    // Nel testo `\square` non si può: il quadretto lo disegna la pelle.
+    const body = /\\(?:text|textrm|textbf|textit|mathrm|operatorname)\{[^{}]*$/.test(tex.slice(0, at)) ? "" : "\\square";
+    out = `${out.slice(0, at)}\\htmlData{fubp=${at},fubhole=1}{${body}}${out.slice(at)}`;
+  }
+  return out;
+}
+
 /// Un segno disegnato: il suo offset e il suo rettangolo nella finestra.
 export interface Marker {
   readonly at: number;

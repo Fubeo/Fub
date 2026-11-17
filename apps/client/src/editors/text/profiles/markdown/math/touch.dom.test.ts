@@ -6,7 +6,7 @@ import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
-import { liveReveal, mathSource, type RevealPolicy } from "../../../live-reveal";
+import { liveReveal, mathClassic, type RevealPolicy } from "../../../live-reveal";
 import { CORPUS, LONG_FORMULA } from "./corpus";
 import { MathEditor } from "./editor";
 import { openLifetime } from "../../../../../ui/lifetime";
@@ -29,7 +29,7 @@ afterEach(() => {
 
 interface Mount {
   readonly policy?: RevealPolicy;
-  readonly source?: boolean;
+  readonly classic?: boolean;
   readonly readOnly?: boolean;
 }
 
@@ -43,7 +43,7 @@ function mount(doc: string, anchor: number, options: Mount = {}): EditorView {
         markdown({ base: markdownGrammar }),
         livePreview({ openWikilink() {}, searchTag() {} }),
         Prec.highest(liveReveal.of(options.policy ?? "mai")),
-        mathSource.of(options.source ?? false),
+        mathClassic.of(options.classic ?? false),
         EditorState.readOnly.of(options.readOnly ?? false),
       ],
     }),
@@ -188,8 +188,8 @@ describe("un blocco $$", () => {
 });
 
 describe("restano com'erano", () => {
-  it("con «Mostra il LaTeX» il clic apre il riquadro col TeX", async () => {
-    const view = mount("x $a$ y", 2, { source: true });
+  it("coi tasti di Vim → apre il riquadro col TeX", async () => {
+    const view = mount("x $a$ y", 2, { classic: true });
     view.focus();
     press(view, "ArrowRight");
     expect(document.querySelector<HTMLInputElement>(".cm-fub-math-popover input")?.value).toBe("a");

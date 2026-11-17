@@ -1412,6 +1412,15 @@ export const SCENE = touchLast(onPage("shell", [
     ["formula-08-ricerca-vuota", "formula-toccata", "Una ricerca senza risultati: la frase che dice come cercare", "search-empty"],
     ["formula-09-tavolozza-blocco", "formula-toccata", "La tavolozza sotto il blocco $$ toccato, in una scheda, con «Tutti» aperto", "palette-block"],
     ["formula-10-tavolozza-tastiera", "formula-toccata", "Alt ↓ porta alla fila dei pezzi: il pezzo col fuoco e il suo nome in fondo", "palette-keys"],
+    // «Mostra il LaTeX» e gli aiuti (T63): il campo sotto la formula, con la
+    // scrittura veloce (`a/` è già una frazione, il cursore nel
+    // denominatore); i tre puntini aperti; i discreti col pulsante della
+    // tavolozza; gli spenti, soltanto il LaTeX e l'anteprima; il blocco.
+    ["formula-11-latex", "formula-toccata&mathsource=1", "Mostra il LaTeX: sotto la formula il campo, e «a/» è già una frazione col cursore nel denominatore", "source"],
+    ["formula-12-latex-opzioni", "formula-toccata&mathsource=1", "I tre puntini aperti: Mostra il LaTeX e gli aiuti, Pieni scelti", "source-options"],
+    ["formula-13-latex-discreti", "formula-toccata&mathsource=1&mathhelp=discrete", "Gli aiuti discreti: il completamento resta, la tavolozza a richiesta col pulsante «Simboli»", "source-discrete"],
+    ["formula-14-latex-spenti", "formula-toccata&mathsource=1&mathhelp=spente", "Gli aiuti spenti: soltanto il LaTeX e la sua anteprima", "source-off"],
+    ["formula-15-latex-blocco", "formula-toccata&mathsource=1", "Il blocco $$ con Mostra il LaTeX: la formula sopra, il campo e la tavolozza sotto", "source-block"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -2784,7 +2793,47 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 async function touchFormula(page, gesture) {
   const ready = ".cm-fub-mx-surface[data-state=\"ready\"]";
   const said = () => page.evaluate(() => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "");
-  if (gesture.startsWith("palette") || gesture.startsWith("search")) {
+  if (gesture.startsWith("source")) {
+    // Il campo del LaTeX (T63). La scena prova che il campo c'è, che la
+    // scrittura veloce trasforma e che gli aiuti fanno quello che dicono; se
+    // no è rossa.
+    const field = ".cm-fub-mx[data-mode=\"source\"] .cm-fub-mx-field";
+    if (gesture === "source-block") {
+      await openLive(page, [], "top");
+      const box = await page.locator(".cm-content .math-block").first().boundingBox();
+      if (!box) throw new Error("manca il blocco $$");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForSelector(`.cm-fub-mx-block ${field}`);
+      await page.click(`.cm-fub-mx-block ${field}`);
+    } else {
+      await openLive(page, ["@ArrowRight"], "top");
+      await page.waitForSelector(`.cm-fub-mx-popover ${field}`);
+    }
+    await page.waitForSelector(`.cm-fub-mx[data-mode="source"] ${ready}`);
+    const value = () => page.locator(field).first().inputValue();
+    await page.keyboard.press("End");
+    if (gesture === "source" || gesture === "source-block") {
+      await page.keyboard.type(gesture === "source" ? "+a/" : " ->y");
+      const tex = await value();
+      const expected = gesture === "source" ? "+\\frac{a}{}" : "\\to y";
+      if (!tex.endsWith(expected)) throw new Error(`la scrittura veloce non trasforma: ${tex}`);
+      await page.waitForSelector(".cm-fub-mx-palette .cm-fub-mx-quick .cm-fub-mx-tile .katex");
+    } else if (gesture === "source-options") {
+      await page.click(".cm-fub-mx-row .cm-fub-mx-more");
+      await page.waitForSelector(".cm-fub-mx-options:not([hidden]) [data-help=\"piene\"][aria-pressed=\"true\"]");
+    } else if (gesture === "source-discrete") {
+      await page.keyboard.type("+a/b");
+      if (!(await value()).endsWith("+a/b")) throw new Error(`coi discreti «a/b» si trasforma: ${await value()}`);
+      if (await page.locator(".cm-fub-mx-palette").isVisible()) throw new Error("coi discreti la tavolozza si vede senza chiederla");
+      await page.waitForSelector(".cm-fub-mx-palette-toggle:not([hidden])");
+      await page.keyboard.type("+\\al");
+      await page.waitForSelector(".cm-fub-mx-symbols:not([hidden]) .cm-fub-mx-symbol-code");
+    } else {
+      await page.keyboard.type("+a/b->c (");
+      if (!(await value()).endsWith("+a/b->c (")) throw new Error(`con gli aiuti spenti qualcosa si trasforma: ${await value()}`);
+      if (await page.locator(".cm-fub-mx-palette").isVisible()) throw new Error("con gli aiuti spenti c'è la tavolozza");
+    }
+  } else if (gesture.startsWith("palette") || gesture.startsWith("search")) {
     // La tavolozza (T62): la formula in riga aperta (o il blocco), «Tutti» e,
     // per la ricerca, una parola nel campo; da tastiera Alt ↓ e una freccia.
     if (gesture === "palette-block") {
@@ -2802,7 +2851,7 @@ async function touchFormula(page, gesture) {
       await page.keyboard.press("Alt+ArrowDown");
       await page.keyboard.press("ArrowRight");
       const focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
-      const tip = await page.locator(".cm-fub-mx-tip").textContent();
+      const tip = await page.locator(".cm-fub-mx-tip .cm-fub-mx-tip-name").textContent();
       if (focused !== "Potenza" || tip !== "Potenza") throw new Error(`Alt ↓ e → non portano a «Potenza»: ${focused}, ${tip}`);
     } else {
       await page.click(".cm-fub-mx-all");
