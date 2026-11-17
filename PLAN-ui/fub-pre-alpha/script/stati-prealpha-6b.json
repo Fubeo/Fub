@@ -1,4 +1,0 @@
-[
- {"id":"toast","scena":"toast","mods":["corniceConAvvisi","banda","modo","via"]},
- {"id":"toast-700","scena":"toast","mods":["corniceConAvvisi","banda","modo","via"],"dopo":700,"modsDopo":["modo"]}
-]

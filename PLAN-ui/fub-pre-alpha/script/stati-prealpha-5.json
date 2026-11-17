@@ -1,4 +1,0 @@
-[
- {"id":"aspetto","scena":"prefs-appearance","mods":["cornice","banda","modo","via"]},
- {"id":"aspetto-700","scena":"prefs-appearance","mods":["cornice","banda","modo","via"],"dopo":700,"modsDopo":["modo"]}
-]
