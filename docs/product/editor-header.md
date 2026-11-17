@@ -64,9 +64,21 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   del valore: Invio o l'uscita dal campo scrivono, Esc torna a prima; un
   numero si accetta anche all'italiana (`12,5`) e ciò che non è un numero non
   si scrive. La casella si spunta col clic. La data apre un riquadro con il
-  campo (ISO o `gg/mm/aaaa`, con l'ora), le scelte rapide (il giorno
-  stesso, l'indomani, fra una settimana, il venerdì), il mese da scorrere con le frecce e Pagina su/giù,
-  «Togli la data» e «Aggiungi l'ora». Elenco ed etichette aprono le voci con
+  campo «a parole», le scelte rapide (il giorno stesso, l'indomani, fra una
+  settimana, il venerdì), il mese da scorrere con le frecce e Pagina su/giù,
+  «Togli la data» e «Aggiungi l'ora». Il campo capisce le date con la regola
+  di `@` («venerdì», «prossimo venerdì», «fra due settimane», «3 giorni fa»,
+  «20 marzo», «3/4», `2026-03-20`, anche in inglese), più un'ora facoltativa
+  («venerdì 18:30», «domani alle 9»): mentre si scrive il giorno capito si
+  vede scelto nel mese, e Invio lo scrive. Nel file va sempre `AAAA-MM-GG`
+  (con l'ora `AAAA-MM-GGTHH:MM`): le parole sono solo il modo di dirla. Un
+  giorno e un mese senza anno sono i prossimi che vengono; un anno di due
+  cifre è del 2000; in «3/4» l'ordine è quello della lingua (in inglese
+  americano il mese prima). Ciò che non si capisce, o un giorno che non c'è
+  («31/2»), resta scritto nel campo e il riquadro lo dice: il valore di prima
+  non cambia. «Aggiungi l'ora» su una proprietà dichiarata Data la dichiara
+  Data e ora nel registro (le date senza ora ci stanno ancora); dove il
+  registro non si scrive l'ora non si offre. Elenco ed etichette aprono le voci con
   la «×» e un campo: Invio aggiunge (più voci separate da virgola), Backspace
   nel campo vuoto toglie l'ultima. Le persone aprono una ricerca fra le note
   (la cartella delle persone, se c'è): chi è scelto sta in cima, un clic o
