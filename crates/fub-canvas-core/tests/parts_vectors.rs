@@ -20,7 +20,7 @@ use std::path::PathBuf;
 
 use fub_canvas_core::commit::Core;
 use fub_canvas_core::js::encode;
-use fub_canvas_core::ops::{compile, CanvasOp};
+use fub_canvas_core::ops::{compile, CanvasOp, MoveArgs};
 use fub_canvas_core::parts::{
     node_parts, read_parts, write_parts, CanvasParts, PartsRefused, PartsState, PARTS_KEY,
 };
@@ -146,11 +146,12 @@ fn moving_keeps_parts(source: &str, node: &str, state: &PartsState) -> Result<()
         .map(|(at, _)| at)
         .find(|&at| node_at(source, at) == Some(index))
         .ok_or_else(|| format!("{node}: la chiave non è nel sorgente"))?;
-    let op = CanvasOp::Move {
+    let op = CanvasOp::Move(MoveArgs {
         ids: vec![node.to_owned()],
         dx: 40,
         dy: 0,
-    };
+        contents: None,
+    });
     let compiled = compile(core.canvas(), &[op], 0).map_err(|error| error.to_string())?;
     let committed = core
         .commit(&compiled.patches)
@@ -245,11 +246,12 @@ fn a_future_kind_survives_a_move_byte_for_byte() {
     );
     let after = before.replacen("\"x\": 0", "\"x\": 40", 1);
     let mut core = Core::open(before).expect("la lavagna si apre");
-    let op = CanvasOp::Move {
+    let op = CanvasOp::Move(MoveArgs {
         ids: vec!["n1".to_owned()],
         dx: 40,
         dy: 0,
-    };
+        contents: None,
+    });
     let compiled = compile(core.canvas(), &[op], 0).expect("lo spostamento si compila");
     let committed = core
         .commit(&compiled.patches)

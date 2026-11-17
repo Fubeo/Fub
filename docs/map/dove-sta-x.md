@@ -24,6 +24,14 @@
 | le annotazioni PDF (`.fubann`) | `docs/reference/annotation-format.md` |
 | JSON Canvas (`.canvas`) | `crates/fub-format-canvas/schema/canvas-v1.schema.json` |
 | il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
+| la lavagna letta come codice (`outline`, `code`, `json`) | `crates/fub-canvas-core/src/describe.rs` e `docs/reference/canvas-code.md` |
+| lo schema delle operazioni della lavagna, i problemi di forma (`validate`) | `crates/fub-canvas-core/src/spec.rs` e `docs/reference/canvas-schema.md` |
+| la lettura di Mermaid e delle scalette (`from_mermaid`, `from_outline`) e la loro disposizione | `crates/fub-canvas-core/src/import/`, `src/ops/import.rs` e `docs/reference/canvas-import.md` |
+| il controllo di una lista prima di scriverla (`check`) e il suo riassunto | `crates/fub-canvas-core/src/check.rs`, `summary.rs` e `docs/reference/canvas-check.md` |
+| le misure e i posti delle schede (`born_size`, `auto_place`, `place_near`, `nearest_sides`, `group_rect`) e le disposizioni (allinea, distribuisci, griglia, riga, colonna, albero) | `crates/fub-canvas-core/src/layout.rs` e `src/layout/arrange.rs`; le regole in `docs/reference/canvas-code.md` («Misure e posti») |
+| l'anteprima di una lavagna (il disegno SVG, poi il PNG) | `crates/fub-canvas-core/src/preview.rs`; il PNG e il comando `canvas.preview` in `crates/fub-features/src/lavagna/preview.rs`; `docs/reference/canvas-operations.md` |
+| i comandi della lavagna `canvas.apply`, `canvas.create`, `canvas.read`, `canvas.check`, `canvas.guide`, `canvas.preview` | `crates/fub-features/src/lavagna.rs` e `crates/fub-features/src/lavagna/` (un file per comando; `prefill.rs` le misure dei file, `guida.md` la guida); `docs/reference/canvas-operations.md` |
+| gli strumenti MCP della lavagna (`fub_canvas_guide`, `fub_canvas_read`, `fub_canvas_create`, `fub_canvas_apply`) | `crates/fub-cli/src/mcp/tools.rs` e `docs/reference/mcp-server.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
@@ -40,6 +48,7 @@
 | `DocumentSession` | `apps/client/src/state/document-session.ts` |
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
+| la porta dei suggerimenti (`openHintSource`) e la riga della banda | `apps/client/src/editors/core/hints.ts`; la riga in `apps/client/src/shells/scrittoio/frame/hints-row.ts` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
 | `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
@@ -59,6 +68,7 @@
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i colori della lavagna (i sei di JSON Canvas, i nove delle note, «Altro…») | `apps/client/src/editors/canvas/colors.ts` |
 | le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`) e il contratto dei renderer | `apps/client/src/editors/canvas/cards.ts`; i renderer in `apps/client/src/editors/canvas/cards/` e `apps/client/src/editors/grid/card.ts` |
+| l'inventario della parità della lavagna (le voci e i test) | `apps/client/src/__fixtures__/canvas-parity/`, con le regole in `docs/development/canvas-parity.md` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
 | il sanificatore dell'HTML | `apps/client/src/ui/sanitize.ts` |
 | le molle del moto | `apps/client/src/moto/spring.ts` |
@@ -81,10 +91,13 @@
 | `apps/client/src/editors/rich/paper.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection` |
 | le fixture dei mirror (in `src/__fixtures__/`) | lo stesso giro di `UPDATE_MIRROR=1` del test che le cita |
 | la pelle del tema di serie | `npm run theme:generate` da `apps/client/` |
+| `apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts` | `npm run entities:generate` da `apps/client/` (verifica: `npm run entities:verify`, e `npm test`) |
 | il catalogo dei comandi serviti dei fogli | `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito` |
 | il corpus dei documenti ricchi | `cargo run -p fub-format-rich --example genera_corpus` |
 | le baseline visuali | solo dal runner Linux: `npm run bench:update` |
+| `apps/client/bench/conformita/<prototipo>.json` (gli stili attesi del prototipo) | `git fetch`, poi `node bench/conformita/estrai.mjs <prototipo>` da `apps/client/`; la chiave `_intestazione` nomina ramo, commit e file del prototipo |
 | `vendor/<motore>/` | `node tools/vendor-craft/vendor.mjs <motore> update --rev <sha>` |
+| `vendor/whatwg-entities/entities.json` | riscaricato a mano, con i passi del suo `UPSTREAM.md`; lo sha256 atteso sta in `tools/vendor-craft/dati.mjs` |
 
 La regola vale per tutti: mai a mano. Il primo commento di ogni file generato
 nomina il comando esatto.
@@ -100,6 +113,7 @@ nomina il comando esatto.
 | il banco visivo | `npm run bench:verify` |
 | l'accessibilità | `npm run bench:a11y` |
 | il moto | `npm run bench:motion` |
+| la grafica uguale al prototipo | `npm run bench:conformita` |
 | la battuta | `node bench/interaction.mjs --only=battuta` |
 | la WebView vera | `npm run bench:webview` |
 | un motore di terzi | `node tools/motori-prova/misura.mjs --out DIR` |

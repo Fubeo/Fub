@@ -1,14 +1,16 @@
 // Gli scenari di N0, S7 di N13, S8 di N4 (la penna sulla lavagna), S9 di N6
 // (la lavagna coi fogli vivi), la
 // memoria (R1), le tessere (T1) e l'indicizzazione (I1) di K0, il nucleo
-// della lavagna (L1) di N3 e i chunk di ciascun profilo dei componenti (C1)
-// di K2, nella WebView vera, guidati da WebDriver.
+// della lavagna (L1) di N3, i chunk di ciascun profilo dei componenti (C1)
+// di K2 e i fotogrammi rispetto allo schermo (F1 rAF a vuoto, F2 quiete, F3
+// thread principale per gesto), nella WebView vera, guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
 //        [--gc=no]
 //        [--x11 | --wayland]  (con WAYLAND_DISPLAY: --x11 sotto Xvfb, --wayland sullo schermo)
+//        [--hz=N]  (la frequenza dello schermo, se il banco non la legge: `refresh.mjs`)
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -30,16 +32,19 @@
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { cpus, hostname, release, tmpdir, totalmem, type as osType } from "node:os";
+import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { holdDisplay, waylandProblem } from "./display.mjs";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
-import { GC_ENV, appGone, buildCollector, collect, pendenza, settled } from "./memory.mjs";
-import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
+import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
+import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
+import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
+import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
+import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
+import { S1_ROUNDS, S1_ROUND_GAP_MS, S1_TYPED, s1Note, s1Values } from "./typing.mjs";
+import { commandLines, gtkWatcher, openWithGtkRetry, waylandProblem, xvfbResetProblem } from "./display.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -47,7 +52,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
@@ -56,6 +61,8 @@ const port = Number(args.port ?? 4444);
 /// La raccolta forzata prima delle letture di R1: di serie sì, `--gc=no` la
 /// spegne.
 const gcAsked = args.gc !== "no";
+/// WebKitWebDriver sulla porta dopo: due banchi con `--port` diversi non si pestano.
+const nativePort = port + 1;
 const base = `http://127.0.0.1:${port}`;
 
 const CTRL = "";
@@ -65,6 +72,8 @@ const SHIFT = "";
 const ALT = "";
 const ESCAPE = "";
 
+const PAGE_DOWN = "\uE00F";
+
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /// Il processo del driver: la memoria di R1 si legge sui suoi discendenti.
@@ -72,9 +81,29 @@ let driverPid = null;
 /// L'estensione della raccolta forzata: `{ dir }` se è pronta, `{ skipped }`
 /// col motivo se no.
 let collector = { skipped: "non ancora costruita" };
+/// Il driver in corso (`startDriver`) e chi aspetta le righe di GTK che non
+/// parte dal suo stderr.
+let driver = null;
+const gtkListeners = new Set();
+/// L'ambiente del driver: il vault e la configurazione del banco.
+let driverEnv = null;
 /// Il vault del banco, nella cartella temporanea: S8 legge dal disco i byte
 /// del foglio prima e dopo la penna.
 let benchVault = null;
+/// Lo schermo (`displayRate`) e il tetto del motore (`engineCap`, da F1): le
+/// soglie in periodi si risolvono con `cap.effectiveMs`.
+let display = null;
+let cap = null;
+/// `webkit://gpu` letta prima degli scenari, con l'ambiente dell'app (`webkitGpu`).
+let gpuInfo = null;
+
+/// F1: quanto dura il rAF a vuoto. F2: quanto dura la quiete.
+const IDLE_RAF_MS = 5_000;
+const QUIET_MS = 20_000;
+/// F3: i gesti, quante volte ciascuno (un numero pari: lo stato torna quello
+/// di partenza) e quanto si aspetta dopo ognuno.
+const GESTURE_REPS = { barra: 6, scheda: 8, cartella: 8 };
+const GESTURE_WAIT_MS = 700;
 
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
@@ -92,7 +121,10 @@ const R1_ROUNDS = 30;
 const R1_POLL_MS = 5_000;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
-/// col selettore rapido e la modalità che il referto nomina.
+/// col selettore rapido e la modalità che il referto nomina. Il lanciatore
+/// trova per nome anche PDF e immagini (launcher/sources.ts), e niente nome
+/// trovato non è una riga: un file che non c'è fa scadere l'attesa invece di
+/// aprire una nota nuova col suo nome.
 const MODES = [
   ["Lunga", "nota"],
   ["Lavagna", "lavagna"],
@@ -164,7 +196,7 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
   await session.waitFor(`return (document.querySelector(${JSON.stringify(PICKER_FIRST)})?.textContent ?? '').includes(arguments[0])`, [name], timeoutMs);
   if (mark) {
-    await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .cm-content", text]);
+    await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .pane-editor .cm-content", text]);
   }
   await session.keys(ENTER);
   if (mark) {
@@ -341,7 +373,7 @@ const count = (session, css) => session.execute("return document.querySelectorAl
 async function clickVisibleLine(session) {
   const at = await session.execute(`
     const top = 160, bottom = innerHeight - 40;
-    const line = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => {
+    const line = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].find((l) => {
       const r = l.getBoundingClientRect();
       return r.top >= top && r.bottom <= bottom && r.width > 0;
     });
@@ -446,16 +478,14 @@ async function placeCard(session, css) {
 /// con il pulsante di mezzo premuto (il suo rilascio non arriva), e dopo non
 /// arrivano alla lavagna né i clic né i tasti (misurato in T46: il clic arriva
 /// come `click` con `buttons` a 4, senza `pointerdown`). L'app di S9 si chiude
-/// prima con `closeSession`, che aspetta l'uscita dei suoi processi: Fub ha
-/// un'istanza sola (plugin single-instance), e una seconda che parte mentre la
-/// prima è viva può cederle.
+/// prima, e `launch` aspetta che sia uscita.
 async function noteTyping(notes) {
   const card = `.pane.focus .canvas-node[data-node="${SHEET_NOTE_CARD}"]`;
   const invalid = (why) => {
     notes.push(`S9.keyToPaint non misurato: ${why}`);
     return { p95: null, count: 0, typed: false };
   };
-  const session = await openSession(base, app);
+  const session = await launch("S9");
   try {
     await ready(session);
     await indexed(session);
@@ -510,7 +540,7 @@ async function noteTyping(notes) {
     if (report.input.key.count === 0) return invalid("la sonda non registra nessun tasto mentre si scrive");
     return { p95: report.input.key.p95, count: report.input.key.count, typed: true };
   } finally {
-    await closeSession(session);
+    await session.close();
   }
 }
 
@@ -644,17 +674,124 @@ const PHASES_SCRIPT = `
 `;
 const PHASES_READ = "return window.__fubS8Phases?.() ?? null;";
 
+/// La riga di una cartella nell'albero dei file.
+const treeRow = (path) => `li[role="treeitem"][data-path="${path}"] > .tree-row`;
+
+/// F3: un gesto ripetuto `reps` volte col registratore acceso: il thread
+/// principale bloccato per ripetizione, i fotogrammi e la CPU dei processi.
+async function gesture(session, reps, act) {
+  await session.execute("window.__fubRec.start(); return true;");
+  const before = cpuTicks(driverPid);
+  const since = performance.now();
+  for (let i = 0; i < reps; i++) {
+    await session.execute("window.__fubRec.mark(); return true;");
+    await act();
+    await pause(GESTURE_WAIT_MS);
+  }
+  const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+  const recorded = await session.execute("return window.__fubRec.stop();");
+  return {
+    mainBlocked: blockedPerRepetition(recorded),
+    frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
+    cpu,
+    longtasks: recorded.longtasks ? recorded.tasks.map(([, duration]) => Math.round(duration)) : "non supportati",
+  };
+}
+
 const SCENARIOS = {
-  /// Scrivere 200 caratteri in una nota di 5.000 righe.
+  /// Il rAF a vuoto: 5 s su una pagina ferma, la mediana confrontata col
+  /// periodo dello schermo. Decide il tetto del motore per gli scenari dopo.
+  async F1(session) {
+    await pause(1_500);
+    const deltas = await session.executeAsync(IDLE_RAF_SCRIPT, [IDLE_RAF_MS]);
+    const frames = frameStats(deltas, display.periodMs);
+    cap = engineCap(frames?.median ?? null, display.periodMs);
+    const webview = (descendants(driverPid) ?? []).filter((proc) => proc.group === "webview" || proc.group === "gpu");
+    const gl = await session.execute(RENDERER_SCRIPT);
+    const render = renderPath({ gpu: gpuInfo, webgl: gl?.renderer ?? null, libraries: glLibraries(webview) });
+    return {
+      report: { frames, display, cap, render, vendor: gl?.vendor ?? null },
+      values: { "F1.raf.mediana": frames?.median ?? null },
+      samples: deltas.length,
+      notes: [
+        `schermo ${display.hz} Hz, P ${display.periodMs} ms (${display.source}); rAF a vuoto ${frames?.hz ?? "—"} Hz`,
+        cap.label,
+        `disegno: ${render.path}${render.renderer ? ` (${render.renderer}, da ${render.source})` : ""}${render.vblank ? `; vblank di WebKit ${render.vblank}` : ""}`,
+      ],
+    };
+  },
+  /// La quiete: 20 s senza gesti, le richieste di fotogramma della pagina e la
+  /// CPU dei processi. L'obiettivo è zero e zero.
+  async F2(session) {
+    await pause(3_000);
+    await session.execute(RAF_COUNTER_SCRIPT);
+    const before = cpuTicks(driverPid);
+    const since = performance.now();
+    await pause(QUIET_MS);
+    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+    const counted = await session.execute("return window.__fubRafCount.read();");
+    const values = { "F2.raf": counted.requests };
+    // La CPU si legge da `/proc`: fuori da Linux non c'è, e non è una misura che manca.
+    if (cpu) values["F2.cpu.webview"] = cpu.webview ?? 0;
+    return {
+      report: { rafRequests: counted.requests, animations: counted.animations, cpu, ms: QUIET_MS },
+      values,
+      samples: 1,
+      notes: [`CPU in quiete, % di un core: ${JSON.stringify(cpu)}`, ...(counted.animations.length ? [`animazioni che girano: ${counted.animations.join("; ")}`] : [])],
+    };
+  },
+  /// Il thread principale bloccato per gesto: la barra laterale dal comando,
+  /// il cambio scheda fra la nota lunga e una corta, una cartella aperta e
+  /// chiusa nell'albero.
+  async F3(session) {
+    await openByName(session, "Lunga", "Una nota lunga");
+    await openByName(session, noteName(1), noteMark(1));
+    if (!(await session.execute("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)]))) {
+      await session.click(treeRow(GESTURE_FOLDER.split("/")[0]));
+      await session.waitFor("return !!document.querySelector(arguments[0]);", [treeRow(GESTURE_FOLDER)], 15_000);
+    }
+    await session.execute(RECORDER_SCRIPT);
+    const acts = {
+      barra: () => chord2(session, CTRL, ALT, "b"),
+      scheda: () => chord(session, CTRL, PAGE_DOWN),
+      cartella: () => session.click(treeRow(GESTURE_FOLDER)),
+    };
+    const gestures = {};
+    const values = {};
+    for (const [name, act] of Object.entries(acts)) {
+      // Una volta avanti e una indietro fuori dalla misura: il primo gesto
+      // carica il codice e gli stili che servono.
+      await act();
+      await pause(GESTURE_WAIT_MS);
+      await act();
+      await pause(GESTURE_WAIT_MS);
+      gestures[name] = await gesture(session, GESTURE_REPS[name], act);
+      values[`F3.${name}.mainBlocked`] = gestures[name].mainBlocked.median;
+    }
+    const rows = Object.entries(gestures).map(([name, g]) => `${name}: bloccato ${g.mainBlocked.perRep.join("/")} ms, fotogrammi ${g.frames?.median ?? "—"}/${g.frames?.p90 ?? "—"} ms, persi ${g.frames?.lost ?? "—"}, CPU web ${g.cpu?.webview ?? "—"} %, long task ${Array.isArray(g.longtasks) ? g.longtasks.length : g.longtasks}`);
+    return { report: { gestures, timerGapMs: TIMER_GAP_MS }, values, samples: Object.values(GESTURE_REPS).reduce((a, b) => a + b, 0), notes: rows };
+  },
+  /// Scrivere 200 caratteri in una nota di 5.000 righe, `S1_ROUNDS` giri: il
+  /// valore è la mediana dei p95 dei giri (`s1Values`, #293).
   async S1(session) {
     await openByName(session, "Lunga", "Una nota lunga");
     await clickVisibleLine(session);
     await chord(session, CTRL, END);
-    await start(session);
-    await session.keys("Il corso di analisi del lunedì, in aula. ".repeat(5).slice(0, 200));
-    await pause(500);
-    const report = await stop(session);
-    return { report, values: { "S1.keyToPaint.p95": report.input.key.p95 }, samples: report.input.key.count };
+    const rounds = [];
+    for (let round = 0; round < S1_ROUNDS; round++) {
+      if (round > 0) {
+        // Fuori dalla misura: il salvataggio del giro prima finisce, e il giro
+        // scrive su una riga nuova, così la riga non cresce di giro in giro.
+        await pause(S1_ROUND_GAP_MS);
+        await session.keys(ENTER);
+      }
+      await start(session);
+      await session.keys(S1_TYPED);
+      await pause(500);
+      rounds.push(await stop(session));
+    }
+    const samples = rounds.reduce((sum, r) => sum + r.input.key.count, 0);
+    return { report: rounds[0], rounds, values: s1Values(rounds), samples, notes: [s1Note(rounds)] };
   },
   /// Un vault di 10.000 note, venti passaggi da una nota all'altra.
   async S2(session) {
@@ -662,7 +799,7 @@ const SCENARIOS = {
     for (let i = 0; i < 20; i++) {
       // Lontane fra loro: il testo della nota prima non nomina quella dopo.
       const n = 1 + ((i * 487) % 10_000);
-      await openByName(session, noteName(n), noteName(n), "noteSwitch");
+      await openByName(session, noteName(n), noteMark(n), "noteSwitch");
     }
     const report = await stop(session);
     return { report, values: { "S2.noteSwitch.p95": report.marks.noteSwitch?.p95 ?? null }, samples: report.marks.noteSwitch?.count ?? 0 };
@@ -770,7 +907,7 @@ const SCENARIOS = {
     // Dopo la finestra dei fotogrammi: i tasti della nota non entrano nel
     // massimo dello spostamento, e la sonda di sopra non conta i loro. Il
     // tasto ha un'app sua (vedi `noteTyping`): questa si chiude prima.
-    await closeSession(session);
+    await session.close();
     const typing = await noteTyping(notes);
     return {
       report,
@@ -822,14 +959,14 @@ const SCENARIOS = {
   /// ritorno (N13).
   async S7(session) {
     await openByName(session, "Blocchi", "Una nota a blocchi");
-    await session.click(".pane.focus .cm-content");
+    await session.click(".pane.focus .pane-editor .cm-content");
     await chord2(session, CTRL, SHIFT, "b");
-    await session.waitFor("return !!document.querySelector('.pane.focus .cm-fub-block-handles')", [], 30_000);
+    await session.waitFor("return !!document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles')", [], 30_000);
     // La maniglia compare sul blocco sotto il puntatore: la riga più vicina
     // al centro della finestra fra quelle che si vedono intere. CodeMirror
     // disegna anche righe fuori vista, e un puntatore mandato lì è «move
     // target out of bounds».
-    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
+    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
     if (!line) throw new Error("nessuna riga di blocco in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
     // La maniglia sta sul blocco sotto il puntatore, o su quello del cursore
@@ -837,14 +974,14 @@ const SCENARIOS = {
     // muove (la WebKitGTK del runner sotto Xvfb): va bene tutte e due, perché
     // il trascinamento parte dalla maniglia dove si vede.
     try {
-      await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
+      await session.waitFor("const h = document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
     } catch (error) {
       // Che cosa vedeva la pagina: senza, il referto dice soltanto che
       // l'attesa è scaduta.
-      const seen = await session.execute("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
+      const seen = await session.execute("const h = document.querySelector('.pane.focus .pane-editor .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
       throw new Error(`${error.message} — ${seen}`);
     }
-    const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
+    const grip = await centerOf(session, ".pane.focus .pane-editor .cm-fub-block-grip");
     const height = await session.execute("return innerHeight;");
     if (!grip || grip.y < 0 || grip.y > height) throw new Error(`la maniglia è fuori dalla finestra: ${JSON.stringify(grip)}`);
     // Su e giù di 160 px, o meno se la maniglia è vicina a un bordo.
@@ -860,7 +997,7 @@ const SCENARIOS = {
     await session.releaseActions();
     await pause(500);
     // Il cursore su un paragrafo in vista, non su una riga vuota.
-    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
+    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .pane-editor .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
     if (!text) throw new Error("nessun paragrafo in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", x: text.x, y: text.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
@@ -1129,6 +1266,9 @@ const SCENARIOS = {
     const empty = await read();
     const steps = [];
     for (const [name, mode] of MODES) {
+      // Chi cerca per nome lo fa a indice pronto: aprire il precedente può
+      // rimettere l'indice al lavoro, e un nome cercato in quel momento manca.
+      await indexed(session);
       await openByName(session, name, "");
       await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
       await pause(MEMORY_QUIET_MS);
@@ -1298,13 +1438,13 @@ const SCENARIOS = {
         await openByName(current, "Lunga", "Una nota lunga");
         await current.close();
         current = null;
-        current = await openSession(base, app);
+        current = await launch("C1");
         await current.waitFor("return !!window.__fubProbe && window.__fubProbe.stop().coldStart !== null", [], 120_000);
         const report = await stop(current);
         const startup = await current.execute(CHUNKS_SCRIPT);
         await ready(current);
         await indexed(current);
-        await openByName(current, noteName(1), noteName(1));
+        await openByName(current, noteName(1), noteMark(1));
         await pause(MEMORY_QUIET_MS);
         const after = await current.execute(CHUNKS_SCRIPT);
         const afterNote = after.filter((name) => !startup.includes(name));
@@ -1328,20 +1468,23 @@ const SCENARIOS = {
     // Il nome con l'hash viene da `dist/`: deve essere la build che l'app
     // di release ha dentro.
     const { url } = builtModule(args.dist ? resolve(args.dist) : undefined);
-    const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
-    const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
-    if (report.error) {
-      throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+    // `L1_ROUNDS` giri nella stessa pagina, ognuno col modulo compilato da
+    // capo: l'istanza e i p95 sono la mediana dei giri (`l1Values`, #388,
+    // #434).
+    const rounds = [];
+    for (let round = 0; round < L1_ROUNDS; round++) {
+      const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
+      const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
+      if (report.error) {
+        throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+      }
+      if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
+      rounds.push(report);
     }
-    if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
-    const values = { "L1.istanza": report.instanceMs };
-    for (const board of report.boards) {
-      values[`L1.open.${board.size}.prima`] = board.firstOpenMs;
-      values[`L1.open.${board.size}.p95`] = board.open.p95;
-      values[`L1.commit.${board.size}.primo`] = board.firstCommitMs;
-      values[`L1.commit.${board.size}.p95`] = board.commit.p95;
-    }
-    return { report, values, samples: report.boards.reduce((n, b) => n + b.open.count + b.commit.count, 0) };
+    const values = l1Values(rounds);
+    const samples = rounds.reduce((n, r) => n + r.boards.reduce((m, b) => m + b.open.count + b.commit.count, 0), 0);
+    // `report` resta il primo giro, nella forma di prima; `rounds` li ha tutti.
+    return { report: rounds[0], rounds, values, samples };
   },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
@@ -1364,15 +1507,6 @@ async function keep(session, id) {
   }
 }
 
-/// Chiude la sessione e aspetta che l'app sia uscita del tutto, con i
-/// processi della WebView: lo scenario dopo parte su un'app sola, e la sua
-/// memoria non conta quella di prima.
-async function closeSession(session) {
-  await session.close();
-  const left = await appGone(driverPid, pause);
-  if (left > 0) console.log(`· ${left} processi dell'app chiusa girano ancora dopo 10 s`);
-}
-
 /// Ferma `tauri-driver` e ciò che ha avviato, e aspetta che esca (al più 10 s).
 async function stopDriver(driver) {
   const exited = new Promise((done) => {
@@ -1386,6 +1520,77 @@ async function stopDriver(driver) {
     // Già uscito.
   }
   await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000).unref())]);
+}
+
+/// Avvia `tauri-driver` e aspetta che risponda. Il suo stderr, che l'app e
+/// WebKitWebDriver ereditano, si ricopia com'è e si legge: la riga di GTK che
+/// non parte va a `launch` (`openWithGtkRetry`).
+async function startDriver() {
+  driver = spawn(args.driver ?? "tauri-driver", [
+    "--port", String(port), "--native-port", String(nativePort),
+    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
+  ], {
+    env: driverEnv,
+    stdio: ["ignore", "inherit", "pipe"],
+    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
+    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
+    detached: process.platform !== "win32",
+  });
+  driverPid = driver.pid;
+  const watch = gtkWatcher((line) => {
+    for (const listener of gtkListeners) listener(line);
+  });
+  driver.stderr.on("data", (chunk) => {
+    process.stderr.write(chunk);
+    watch(chunk.toString("utf8"));
+  });
+  await waitForDriver(base);
+}
+
+/// Quanto si aspetta al più che l'app della sessione chiusa esca.
+const APP_EXIT_MS = 30_000;
+
+/// Aspetta che l'app della sessione appena chiusa e i processi della sua
+/// WebView siano usciti, guardando i discendenti del driver per PID. Fub ha
+/// un'istanza sola (plugin single-instance): un'app che parte mentre la
+/// vecchia è ancora viva le cede, e il driver aspetta una finestra che non
+/// arriva (S9 dopo S3 in T46, «UND_ERR_HEADERS_TIMEOUT»). Se dopo
+/// `APP_EXIT_MS` resta qualcosa lo dice, e si va avanti. Fuori da Linux i
+/// processi non si leggono: resta la pausa di prima.
+async function appGone(label) {
+  if (descendants(driverPid) === null) {
+    await pause(3_000);
+    return;
+  }
+  const deadline = performance.now() + APP_EXIT_MS;
+  for (;;) {
+    const left = descendants(driverPid);
+    if (left.length === 0) return;
+    if (performance.now() > deadline) {
+      console.log(`⚠ ${label}: dopo ${APP_EXIT_MS / 1000} s restano processi dell'app di prima (${left.map((p) => `${p.comm} ${p.pid}`).join(", ")}): parte lo stesso`);
+      return;
+    }
+    await pause(50);
+  }
+}
+
+/// L'app di una sessione nuova, avviata soltanto quando quella di prima è
+/// uscita (`appGone`). Se muore perché GTK non parte, un solo nuovo tentativo
+/// col driver riavviato, e lo dice (`openWithGtkRetry`, #287).
+async function launch(label) {
+  await appGone(label);
+  return openWithGtkRetry(label, {
+    open: (signal) => openSession(base, app, { signal }),
+    watch: (listener) => {
+      gtkListeners.add(listener);
+      return () => gtkListeners.delete(listener);
+    },
+    restart: async () => {
+      await stopDriver(driver);
+      await startDriver();
+    },
+    log: (text) => console.log(text),
+  });
 }
 
 function git(...command) {
@@ -1403,10 +1608,6 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
-  // Un client X collegato per tutta la corsa: senza, Xvfb si azzera a ogni
-  // app chiusa e l'app dello scenario dopo può non partire (#287).
-  const display = await holdDisplay();
-  console.log(display.skipped ? `· display non tenuto: ${display.skipped}` : "· display X tenuto aperto per tutta la corsa");
   // L'estensione della raccolta forzata di R1, in una cartella della corsa.
   if (!only.has("R1")) collector = { skipped: "R1 non gira" };
   else if (!gcAsked) collector = { skipped: "spenta con --gc=no" };
@@ -1418,39 +1619,43 @@ async function main() {
   if (collector.dir) console.log("· estensione della raccolta forzata costruita");
   else if (only.has("R1") && gcAsked) console.log(`· ${collector.skipped}`);
   benchVault = vault;
-  /// `extra` va nell'ambiente del driver, e quindi delle app che avvia.
-  const startDriver = (extra = {}) => {
-    // `--x11` toglie `WAYLAND_DISPLAY` al driver e chiede X11: la guardia in
-    // fondo al file ha già detto che cosa scegliere (`display.mjs`).
-    const driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config, ...extra };
-    if (x11) {
-      delete driverEnv.WAYLAND_DISPLAY;
-      driverEnv.GDK_BACKEND = "x11";
-    }
-    const started = spawn(args.driver ?? "tauri-driver", [
-      "--port", String(port),
-      ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
-    ], {
-      env: driverEnv,
-      stdio: ["ignore", "inherit", "inherit"],
-      // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
-      // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
-      detached: process.platform !== "win32",
-    });
-    driverPid = started.pid;
-    return started;
-  };
-  let driver = startDriver();
+  // `--x11` toglie `WAYLAND_DISPLAY` al driver e chiede X11: la guardia in
+  // fondo al file ha già detto che cosa scegliere (`display.mjs`).
+  driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config };
+  if (x11) {
+    delete driverEnv.WAYLAND_DISPLAY;
+    driverEnv.GDK_BACKEND = "x11";
+  }
+  // Lo schermo dove si aprirà la finestra, con l'ambiente che avrà l'app.
+  display = displayRate({ args, env: driverEnv });
+  cap = engineCap(null, display.periodMs);
+  // Il percorso di disegno e il vblank di WebKitGTK, da una WebView a parte
+  // con lo stesso ambiente: senza PyGObject o WebKit2 resta `null`.
+  gpuInfo = webkitGpu(driverEnv);
+  if (gpuInfo) console.log(`· webkit://gpu: ${gpuInfo.renderer ?? "?"}; vblank ${gpuInfo.vblank ?? "?"}, ${gpuInfo.vblankRate ?? "?"}`);
+  console.log(`· schermo: ${display.hz} Hz, P ${display.periodMs} ms (${display.source})`);
+  for (const note of display.notes) console.log(`· schermo: ${note}`);
+  // Le soglie in periodi chiedono il tetto del motore, cioè F1, prima degli
+  // scenari che misurano.
+  if (hasPeriodLimits(limits) && !only.has("F1")) {
+    only.add("F1");
+    console.log("· F1 aggiunto: le soglie in periodi chiedono il rAF a vuoto");
+  }
+  // Un Xvfb che si rigenera fra un'app e l'altra fa cadere ogni tanto l'avvio
+  // dello scenario dopo (#287): si dice subito, prima delle misure.
+  const reset = xvfbResetProblem(driverEnv, commandLines());
+  if (reset) console.log(`⚠ ${reset}`);
+  /// Se il driver in corso ha il gancio della raccolta nell'ambiente (R1).
   let driverGc = false;
   const results = {};
   let failed = 0;
   try {
-    await waitForDriver(base);
+    await startDriver();
     // Il primo avvio sul vault nuovo legge dal disco diecimila note: lo fa una
     // sessione che non misura, e aspetta che la ricerca per nome risponda. Gli
     // avvii dopo indicizzano di nuovo da capo, e ogni scenario aspetta che
     // l'indice sia pronto (`indexed`).
-    const warm = await openSession(base, app);
+    const warm = await launch("riscaldamento");
     try {
       await ready(warm);
       await openByName(warm, "Lunga", "Una nota lunga", null, 300_000);
@@ -1459,29 +1664,39 @@ async function main() {
       await keep(warm, "riscaldamento");
       console.log(`✗ riscaldamento: ${String(error?.message ?? error)}`);
     } finally {
-      await closeSession(warm);
+      await warm.close();
     }
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
-    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "T1", "L1", "C1"].filter((id) => only.has(id));
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto». F1 prima di
+    // ogni scenario con una soglia in periodi: decide il tetto del motore. F2
+    // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
+    // note che gli avvii dopo riaprono.
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.
       const wantGc = id === "R1" && collector.dir !== undefined;
       if (wantGc !== driverGc) {
+        // Fermare il driver ferma anche l'app di prima: `launch` non ha più
+        // niente da aspettare. Il driver nuovo, e quello che `launch` riavvia
+        // se GTK non parte, prendono l'ambiente di `driverEnv`.
         await stopDriver(driver);
-        driver = startDriver(wantGc ? { [GC_ENV]: collector.dir } : {});
+        if (wantGc) driverEnv = { ...driverEnv, [GC_ENV]: collector.dir };
+        else {
+          driverEnv = { ...driverEnv };
+          delete driverEnv[GC_ENV];
+        }
         driverGc = wantGc;
-        await waitForDriver(base);
+        await startDriver();
       }
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
       let session;
       try {
-        session = await openSession(base, app);
+        session = await launch(id);
       } catch (error) {
         failed++;
         // `fetch` dice «fetch failed» e la causa (la porta, il timeout) è in `cause`.
@@ -1494,7 +1709,10 @@ async function main() {
         if (id !== "S6") await ready(session);
         // I1 misura proprio l'indicizzazione dell'avvio: non la aspetta.
         if (id !== "S6" && id !== "I1") await indexed(session);
+        const loadBefore = loadavg()[0];
         const result = await SCENARIOS[id](session);
+        // Il carico della macchina: un numero alto dice che la misura è rumorosa.
+        result.load = { before: Math.round(loadBefore * 10) / 10, after: Math.round(loadavg()[0] * 10) / 10 };
         // Zero campioni non è un tempo di zero: se la sonda non ha visto niente
         // (un fotogramma che non arriva, un tasto perso) il referto non scrive
         // un numero, e la soglia lo conta come misura che manca.
@@ -1508,11 +1726,15 @@ async function main() {
           continue;
         }
         for (const [key, value] of Object.entries(result.values)) {
-          const limit = limits[key];
+          // Una soglia in periodi vale col periodo efficace: quello dello
+          // schermo, o 60 Hz finché c'è il tetto del motore (`refresh.mjs`).
+          const entry = limits[key];
+          const limit = resolveLimit(entry, cap.effectiveMs);
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : key.endsWith(".liveCards") ? "schede" : "ms";
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : key.endsWith(".liveCards") ? "schede" : key === "F2.raf" ? "rAF" : key.includes(".cpu.") ? "% di un core" : "ms";
+          const periods = typeof entry === "object" ? ` = ${entry.periodi} × ${cap.effectiveMs} ms${cap.capped ? ", tetto del motore" : ""}` : "";
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit}${periods})` : ""} · ${result.samples} campioni`);
         }
         for (const note of result.notes ?? []) console.log(`· ${id}: ${note}`);
         for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
@@ -1530,15 +1752,12 @@ async function main() {
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
         // C1 chiude da sé le sessioni che apre, anche la prima.
-        // Fub ha un'istanza sola: l'app di questo scenario deve finire prima
-        // che parta la successiva (S9 dopo S3 dava «UND_ERR_HEADERS_TIMEOUT»,
-        // T46). `closeSession` aspetta che i processi dell'app chiusa escano.
-        if (id !== "C1") await closeSession(session);
+        // L'app dopo parte quando questa è uscita (`launch`).
+        if (id !== "C1") await session.close();
       }
     }
   } finally {
     await stopDriver(driver);
-    display.close();
     // L'app che si chiude può scrivere nel vault ancora un attimo: la
     // rimozione riprova, e una cartella temporanea che resta non cancella le
     // misure già prese.
@@ -1554,6 +1773,12 @@ async function main() {
     system: { os: osType(), release: release(), session: x11 ? "x11" : process.env.XDG_SESSION_TYPE ?? (process.env.WAYLAND_DISPLAY ? "wayland" : process.env.DISPLAY ? "x11" : null) },
     webview: Object.values(results).find((r) => r.report?.userAgent)?.report.userAgent ?? null,
     budgets: budgetsKind,
+    // Lo schermo, il tetto del motore e il percorso di disegno: le soglie in
+    // periodi del referto valgono con `cap.effectiveMs`.
+    display,
+    cap,
+    render: results.F1?.report?.render ?? null,
+    load: loadavg().map((x) => Math.round(x * 10) / 10),
     results,
   };
   writeFileSync(join(out, "referto.json"), JSON.stringify(report, null, 2) + "\n");

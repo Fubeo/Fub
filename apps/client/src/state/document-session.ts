@@ -22,6 +22,10 @@ import { lineFeeds, tryApplyOperation, type TextOperation } from "../editors/cor
 import { rebaseGridJournalText } from "./grid-journal";
 
 const SAVE_MS = 400;
+/// Quanto vale l'annuncio di una scrittura di un comando (`expectWrite`): il
+/// suo evento arriva mentre il comando scrive, cioè subito. Oltre, l'annuncio
+/// non zittisce più niente.
+const EXPECTED_WRITE_MS = 10_000;
 /** La cadenza delle bozze: al più una ogni `DRAFT_MS` mentre si scrive. */
 export const DRAFT_MS = 1_000;
 
@@ -153,7 +157,9 @@ export type ExternalChangeResult =
   | { kind: "untracked" }
   | { kind: "echo" }
   | { kind: "warning"; cause: "altra_app" | "riscrittura" }
-  | { kind: "reloaded"; text: string; changed: boolean }
+  /// `quiet`: la scrittura era quella che un comando aveva annunciato
+  /// (`expectWrite`), e la ricarica non si dice.
+  | { kind: "reloaded"; text: string; changed: boolean; quiet?: true }
   | { kind: "stale" }
   | { kind: "unavailable" };
 
@@ -508,10 +514,21 @@ export class DocumentSession implements DraftBuffer {
     }
   }
 
-  /** Consume an external event before applying the clean/dirty policy. */
-  async handleExternalChange(source: Origin): Promise<ExternalChangeResult> {
+  /**
+   * Consume an external event before applying the clean/dirty policy.
+   *
+   * `expected`: l'evento è la scrittura che un comando lanciato da qui aveva
+   * annunciato (un gesto della barra di una Base). A buffer pulito si
+   * ricarica in silenzio: non è un cambio «da fuori». A buffer sporco vale la
+   * regola di sempre, perché il testo non salvato va protetto comunque.
+   */
+  async handleExternalChange(source: Origin, expected = false): Promise<ExternalChangeResult> {
     this.settlePending();
     const generation = ++this.#externalGeneration;
+    if (expected && !this.#state.dirty) {
+      const reload = await this.#reloadFromDisk(generation);
+      return reload.kind === "reloaded" ? { ...reload, quiet: true } : reload;
+    }
     const underChange = consumeUnderChange(this.#state, source);
     if (underChange === "eco") return { kind: "echo" };
     if (underChange === "altra_app" || underChange === "riscrittura") {
@@ -1128,6 +1145,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
   readonly #journals = new WeakSet<DocumentSession>();
   readonly #listeners = new Set<SessionListener>();
   readonly #identityVersions = new Map<string, number>();
+  /// Le scritture che un comando sta per fare su un documento, annunciate da
+  /// chi lo lancia (`expectWrite`). Ognuna è un gettone con la sua scadenza:
+  /// la consuma il primo evento dell'utente su quel documento.
+  readonly #expectedWrites = new Map<string, { readonly deadline: number }[]>();
   readonly #renaming = new Set<string>();
   readonly #deletions = new Map<string, Promise<DeletionResult>>();
   /// Aliases for an owner whose confirmation survives a rename. The pending
@@ -1238,9 +1259,48 @@ export class DocumentSessionCollection implements DraftBufferStore {
     };
   }
   async handleExternalChange(id: string, source: Origin): Promise<ExternalChangeResult> {
+    // L'annuncio si consuma anche senza sessione: non resta appeso a zittire
+    // il prossimo evento, quando il documento si apre. Un evento fuori lotto
+    // con un salvataggio della sessione in volo è l'eco di quel salvataggio:
+    // lo consuma l'eco (`consumeUnderChange`), e l'annuncio aspetta il suo.
     const session = this.#sessions.get(id);
+    const echo = source.batch === null && (session?.snapshot().echoes ?? 0) > 0;
+    const expected = source.actor.kind === "user" && !echo && this.#consumeExpected(id);
     if (!session) return { kind: "untracked" };
-    return session.handleExternalChange(source);
+    return session.handleExternalChange(source, expected);
+  }
+
+  /**
+   * Annuncia che un comando lanciato da qui sta per riscrivere `id` (un gesto
+   * della barra di una Base scrive con `base.view.set`). L'evento di quella
+   * scrittura arriva come un cambio dell'utente in un lotto, e senza annuncio
+   * la sessione lo direbbe con «è cambiato su disco ed è stato ricaricato».
+   * Con l'annuncio la sessione ricarica in silenzio. Si annuncia **prima** di
+   * lanciare il comando, perché l'evento parte mentre il comando scrive,
+   * prima che la sua risposta arrivi; e si ritira se il comando non scrive
+   * (rifiutato, o niente da cambiare), o resterebbe a zittire un cambio vero.
+   * Soltanto un evento dell'utente lo consuma: un'altra app (il watcher) e il
+   * kernel avvisano sempre. L'annuncio scade dopo `EXPECTED_WRITE_MS`.
+   */
+  expectWrite(id: string): () => void {
+    const token = { deadline: Date.now() + EXPECTED_WRITE_MS };
+    const tokens = this.#expectedWrites.get(id) ?? [];
+    tokens.push(token);
+    this.#expectedWrites.set(id, tokens);
+    return () => {
+      const left = (this.#expectedWrites.get(id) ?? []).filter((each) => each !== token);
+      if (left.length) this.#expectedWrites.set(id, left);
+      else this.#expectedWrites.delete(id);
+    };
+  }
+
+  #consumeExpected(id: string): boolean {
+    const now = Date.now();
+    const live = (this.#expectedWrites.get(id) ?? []).filter((each) => each.deadline > now);
+    const taken = live.shift() !== undefined;
+    if (live.length) this.#expectedWrites.set(id, live);
+    else this.#expectedWrites.delete(id);
+    return taken;
   }
   async reloadIfClean(id: string): Promise<ReloadResult> {
     return (await this.#sessions.get(id)?.reloadIfClean()) ?? { kind: "missing" };
@@ -1879,6 +1939,12 @@ export const documentSessions = new DocumentSessionCollection();
 
 export function flushPendingSave(): Promise<string[]> {
   return documentSessions.flushPendingSave();
+}
+
+/// Annuncia la scrittura di un comando su `id` (`expectWrite`): la ricarica
+/// che ne viene, a buffer pulito, non si dice.
+export function expectDocumentWrite(id: string): () => void {
+  return documentSessions.expectWrite(id);
 }
 
 export function flushBeforeClose(): Promise<string[]> {

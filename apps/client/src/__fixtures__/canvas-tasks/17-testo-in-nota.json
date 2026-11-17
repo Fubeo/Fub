@@ -1,0 +1,27 @@
+{
+  "about": "Trasformare un testo in nota: la scheda di testo diventa un file Markdown, e la freccia verso l'altra scheda resta.",
+  "prompt": "Trasforma la scheda «Appunti acqua» in una nota, il file Idee/acqua.md: la freccia verso «Ciclo dell'acqua» deve restare.",
+  "before": {
+    "nodes": [
+      { "id": "ap", "type": "text", "text": "Appunti acqua", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "ci", "type": "text", "text": "Ciclo dell'acqua", "x": 400, "y": 0, "width": 320, "height": 160 }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "ap", "toNode": "ci", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
+    ]
+  },
+  "ops_today": [
+    { "op": "remove", "ids": ["ap"] },
+    { "op": "add_card", "node": { "id": "nota", "type": "file", "file": "Idee/acqua.md", "x": 0, "y": 0, "width": 320, "height": 240 } },
+    { "op": "connect", "edge": { "fromNode": "nota", "toNode": "ci", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "convert", "id": "ap", "file": "Idee/acqua.md" }
+  ],
+  "needs": [],
+  "checks": [
+    { "has_card": { "file": "Idee/acqua.md" } },
+    { "count": { "kind": "text", "n": 1 } },
+    { "has_edge": { "from_text": "Idee/acqua.md", "to_text": "Ciclo dell'acqua" } }
+  ]
+}

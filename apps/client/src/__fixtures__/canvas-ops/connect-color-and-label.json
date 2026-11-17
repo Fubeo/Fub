@@ -1,0 +1,21 @@
+{
+  "about": "Colore e etichetta dell'arco: «orange» diventa \"2\", come nel file, e l'etichetta arriva così com'è.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+      { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+    ]
+  },
+  "ops": [{ "op": "connect", "from": "a", "to": "b", "color": "orange", "label": "porta a" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" },
+        { "id": "b", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "b" }
+      ],
+      "edges": [{ "id": "e220a8397b1dcdaf", "fromNode": "a", "toNode": "b", "toEnd": "arrow", "color": "2", "label": "porta a" }]
+    },
+    "created": ["e220a8397b1dcdaf"]
+  }
+}

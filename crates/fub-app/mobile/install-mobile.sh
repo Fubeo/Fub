@@ -71,6 +71,7 @@ if android.is_dir():
     activities = apps[0].findall('activity') if len(apps) == 1 else []
     if len(activities) != 1 or len(fragment.findall('application/activity')) != 1:
         fail('manifest ambiguo: occorre una application e una activity')
+    updated = original
     marker = 'android:scheme="fub"'
     if marker not in original:
         insertion = snippet.split('<activity>', 1)[1].split('</activity>', 1)[0]
@@ -79,14 +80,31 @@ if android.is_dir():
         receiver = snippet.split('<receiver', 1)[1].split('</receiver>', 1)[0]
         updated = original.replace('</activity>', insertion + '\n</activity>', 1)
         updated = updated.replace('</application>', '<receiver' + receiver + '</receiver>\n</application>', 1)
+    elif not all(value in original for value in ('android.intent.action.SEND', 'android.app.shortcuts', 'FubWidgetProvider')):
+        fail('manifest parzialmente fuso: intervento manuale richiesto')
+    # La classe Application del template (FubApplication.kt): passa a Rust la
+    # cartella privata prima di ogni activity. Un'altra Application già
+    # dichiarata non si sovrascrive in silenzio.
+    android_name = '{http://schemas.android.com/apk/res/android}name'
+    wanted_app = fragment.find('application').get(android_name)
+    present_app = apps[0].get(android_name)
+    if wanted_app is None:
+        fail('snippet senza android:name su <application>')
+    if present_app is None:
+        opening = re.findall(r'<application\b', updated)
+        if len(opening) != 1:
+            fail('manifest senza un solo <application> in cui dichiarare la classe')
+        updated = updated.replace('<application', f'<application\n        android:name="{wanted_app}"', 1)
+    elif present_app != wanted_app:
+        fail(f'manifest dichiara già un\'altra Application ({present_app}): intervento manuale richiesto')
+    if updated != original:
         try:
             ET.fromstring(updated)
         except ET.ParseError as error:
             fail(f'fusione manifest non valida: {error}')
         patch(manifest, updated)
-    elif not all(value in original for value in ('android.intent.action.SEND', 'android.app.shortcuts', 'FubWidgetProvider')):
-        fail('manifest parzialmente fuso: intervento manuale richiesto')
     for src, dst in (
+        ('FubApplication.kt', 'java/dev/fub/app/FubApplication.kt'),
         ('FubTreeAccess.kt', 'java/dev/fub/app/FubTreeAccess.kt'),
         ('FubTreePlugin.kt', 'java/dev/fub/app/FubTreePlugin.kt'),
         ('ShareBridge.kt', 'java/dev/fub/app/ShareBridge.kt'),

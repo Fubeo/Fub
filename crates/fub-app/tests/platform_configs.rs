@@ -132,6 +132,109 @@ fn check(csp: &Csp) -> Result<(), String> {
     check_csp(&csp.to_string())
 }
 
+// Gli stili (voce A2 dell'audit del 2026-10-30): nessuno stile in linea. Un
+// `<style>` vale soltanto con il nonce che Tauri scrive nelle pagine servite e
+// aggiunge a `style-src`; un attributo `style` scritto come markup non vale
+// mai. Gli stili dell'app sono file (`'self'`) o fogli costruiti
+// (`adoptedStyleSheets`), che la CSP non guarda; `element.style` resta libero.
+
+/// Le parole chiave che riaprirebbero gli stili in linea, in qualsiasi
+/// direttiva.
+const INLINE_STYLE_OPENINGS: [&str; 2] = ["'unsafe-inline'", "'unsafe-hashes'"];
+
+/// Controlla le direttive degli stili: `style-src` è esattamente `'self'`,
+/// `style-src-attr` esattamente `'none'`, `style-src-elem` non c'è (lo
+/// scavalcherebbe), e nessuna direttiva ha `'unsafe-inline'` o
+/// `'unsafe-hashes'`. I nonce e gli hash scritti a mano sono rifiutati
+/// anche loro: li aggiunge Tauri, pagina per pagina.
+fn check_style_csp(policy: &str) -> Result<(), String> {
+    let mut style_src = None;
+    let mut style_src_attr = None;
+    for directive in policy.split(';') {
+        let mut tokens = directive.split_ascii_whitespace();
+        let Some(name) = tokens.next() else { continue };
+        let name = name.to_ascii_lowercase();
+        let sources: Vec<String> = tokens.map(str::to_ascii_lowercase).collect();
+        if let Some(opening) = sources
+            .iter()
+            .find(|source| INLINE_STYLE_OPENINGS.contains(&source.as_str()))
+        {
+            return Err(format!("`{opening}` in `{name}`"));
+        }
+        match name.as_str() {
+            "style-src" => style_src = Some(sources),
+            "style-src-attr" => style_src_attr = Some(sources),
+            "style-src-elem" => return Err("`style-src-elem` scavalca `style-src`".into()),
+            _ => {}
+        }
+    }
+    match style_src.as_deref() {
+        Some([only]) if only == "'self'" => {}
+        Some(other) => {
+            return Err(format!(
+                "`style-src` è `{}` invece di `'self'`",
+                other.join(" ")
+            ))
+        }
+        None => return Err("manca `style-src`".into()),
+    }
+    match style_src_attr.as_deref() {
+        Some([only]) if only == "'none'" => Ok(()),
+        Some(other) => Err(format!(
+            "`style-src-attr` è `{}` invece di `'none'`",
+            other.join(" ")
+        )),
+        None => Err("manca `style-src-attr 'none'`".into()),
+    }
+}
+
+#[test]
+fn every_platform_csp_refuses_inline_styles() {
+    for target in [
+        Target::Linux,
+        Target::Windows,
+        Target::MacOS,
+        Target::Android,
+        Target::Ios,
+    ] {
+        let security = config_for(target).app.security;
+        let csp = security
+            .csp
+            .unwrap_or_else(|| panic!("la config di {target:?} non ha una CSP"));
+        if let Err(why) = check_style_csp(&csp.to_string()) {
+            panic!("la CSP di {target:?}: {why}");
+        }
+        if let Some(dev) = security.dev_csp {
+            if let Err(why) = check_style_csp(&dev.to_string()) {
+                panic!("la `devCsp` di {target:?}: {why}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_style_check_accepts_only_the_closed_shape() {
+    for policy in [
+        "default-src 'self'; style-src 'self'; style-src-attr 'none'",
+        "STYLE-SRC 'SELF' ;\tstyle-src-attr\n'NONE'",
+    ] {
+        assert_eq!(check_style_csp(policy), Ok(()), "{policy}");
+    }
+    for policy in [
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'",
+        "default-src 'self'; style-src 'self'; style-src-attr 'unsafe-hashes' 'sha256-x'",
+        "default-src 'self' 'unsafe-inline'; style-src 'self'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self' 'nonce-abc'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self' data:; style-src-attr 'none'",
+        "default-src 'self'; style-src-attr 'none'",
+        "default-src 'self'; style-src 'self'",
+    ] {
+        assert!(check_style_csp(policy).is_err(), "passa: {policy}");
+    }
+}
+
 #[test]
 fn every_platform_csp_compiles_webassembly_and_never_evaluates_text() {
     for target in [

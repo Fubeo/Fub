@@ -106,8 +106,7 @@ const TYPING = {
   notes: [50, 400],
   modes: [
     ["source", "Sorgente"],
-    ["live_preview", "Live"],
-    ["blocks", "Blocchi"],
+    ["live_preview", "Scrittura"],
   ],
   keystrokes: 30,
   moves: 20,
@@ -253,12 +252,12 @@ async function measureTyping(stage, sections, mode) {
     await click(page, '#sidebar .tree-row[data-path="Guida/Live.md"]');
     await page.waitForSelector(tabOf("Guida/Live.md"));
     await chooseMode(page, mode);
-    await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
-    // I Blocchi arrivano in un pezzo a parte: si misura quando ci sono.
-    if (mode === "blocks") await page.waitForSelector(".pane.focus .cm-fub-block-handles", { state: "attached" });
+    await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .pane-editor .cm-content`);
+    // Scrittura ha i Blocchi dentro: si misura con le maniglie montate.
+    if (mode === "live_preview") await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles", { state: "attached" });
     return await page.evaluate(async ({ keystrokes, moves }) => {
       const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
-      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .cm-editor").parentElement);
+      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
       const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
       // La nota si assesta prima: il primo parse e la prima resa non sono
       // battute.
@@ -326,7 +325,7 @@ async function measureOpening(stage) {
             let quietSince = performance.now();
             let last = performance.now();
             const tick = (now) => {
-              if (result.visible === null && [...document.querySelectorAll(".pane.focus .cm-line")]
+              if (result.visible === null && [...document.querySelectorAll(".pane.focus .pane-editor .cm-line")]
                 .some((line) => line.textContent.startsWith("Paragrafo 1:"))) result.visible = now;
               // Quieta: mezzo secondo di fotogrammi brevi, dopo il testo.
               if (now - last > 50) quietSince = now;
@@ -385,7 +384,7 @@ async function measureSwitch(stage) {
     for (const note of SWITCH.notes) {
       await click(page, `#sidebar .tree-row[data-path="${note}"]`);
       await page.waitForSelector(tabOf(note));
-      await page.waitForSelector(".pane.focus .cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
       await page.waitForTimeout(300);
     }
     if (cpu > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: cpu });
@@ -405,7 +404,7 @@ async function measureSwitch(stage) {
             result.start = event.timeStamp;
             const tick = (now) => {
               const tab = document.querySelector('.pane.focus .tab[aria-selected="true"]');
-              const content = document.querySelector(".pane.focus .cm-content");
+              const content = document.querySelector(".pane.focus .pane-editor .cm-content");
               if (result.visible === null && tab?.dataset.key?.includes(JSON.stringify(note)) && (content?.textContent ?? "") !== "") {
                 result.visible = now;
                 requestAnimationFrame(() => requestAnimationFrame(() => resolve(result)));

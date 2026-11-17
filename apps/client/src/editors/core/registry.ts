@@ -47,6 +47,18 @@ export interface SurfaceMode {
    * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
    */
   readonly icon?: string;
+  /**
+   * One line under the label in the mode menu that says what the mode is
+   * for. Without it the menu shows the label alone.
+   */
+  readonly description?: () => string;
+  /**
+   * Ids this mode answers to besides its own: modes the surface no longer
+   * declares because they merged into this one (the Markdown `blocks`, now
+   * inside Scrittura). A saved pane or a command that names one gets this
+   * mode; the menu never lists them.
+   */
+  readonly formerIds?: readonly string[];
 }
 
 export interface SurfaceMountContext {
@@ -78,6 +90,13 @@ export interface SurfaceMountContext {
    * `false`: a pane always mounts the whole editor.
    */
   readonly compact?: boolean;
+  /**
+   * Escape belongs to the host, which leaves the surface with it (a board
+   * card, compact or not): the surface keeps Escape only to close what it has
+   * open (a menu, a selection of blocks) and gives it no meaning of its own.
+   * Absent means `false`: in a pane Escape is the surface's.
+   */
+  readonly escapeLeaves?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -208,6 +227,114 @@ export interface SurfacePoint {
   readonly y: number;
 }
 
+/** A rectangle on screen, in client coordinates. */
+export interface SurfaceRect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * A place outside the document's column where something carried out of it (a
+ * block in hand) can be dropped, as the shell offers it: the editor says what
+ * the drop does there, the shell only where the place is and what it is called.
+ *
+ * - `place`: a row of a declared view that names a place of a document (a
+ *   heading of the Structure): its span, in UTF-8 bytes of the source the view
+ *   was drawn from, and the row's words.
+ */
+export interface SurfaceDropOffer {
+  readonly kind: "place";
+  /** The document the place belongs to, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  readonly span: Span;
+  readonly title: string;
+  /** The visible part of the row, measured when the offers were asked for. */
+  readonly rect: SurfaceRect;
+  /** The pointer, with something in hand, is over the place (or leaves it): the shell shows it. */
+  hover(on: boolean): void;
+}
+
+/**
+ * A document in a vault: the same path in two vaults is two documents.
+ * `vault` is the vault root the view or the surface was mounted in
+ * (`undefined`: the one open when no root is known, as `vaultArg` reads it).
+ */
+export interface SurfaceDropDocument {
+  readonly documentId: string;
+  readonly vault: string | undefined;
+}
+
+/** Who offers drop places: the shell, for the views it draws. */
+export interface SurfaceDropOffers {
+  /**
+   * The places of `document` that can be seen now, measured now. Asked when
+   * something leaves the column and again when the shell says they changed
+   * (`dropOffersChanged`) or the window scrolls; never per frame.
+   */
+  offers(document: SurfaceDropDocument): readonly SurfaceDropOffer[];
+}
+
+const dropOfferSources = new Set<SurfaceDropOffers>();
+const dropOfferWatchers = new Set<() => void>();
+
+/**
+ * Registers a source of drop places outside the document's column: the shell
+ * calls it, the editor asks `dropOffers`, and neither imports the other's DOM.
+ * The returned disposer takes the source back.
+ */
+export function offerDropTargets(source: SurfaceDropOffers): () => void {
+  dropOfferSources.add(source);
+  dropOffersChanged();
+  return () => {
+    dropOfferSources.delete(source);
+    dropOffersChanged();
+  };
+}
+
+/**
+ * The drop places every source offers for `document` now: same document and
+ * same vault. A source that throws offers nothing: a gesture never breaks for
+ * a place it can't reach.
+ */
+export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  const out: SurfaceDropOffer[] = [];
+  for (const source of [...dropOfferSources]) {
+    try {
+      for (const offer of source.offers(document)) {
+        if (offer.document.documentId === document.documentId && offer.document.vault === document.vault) out.push(offer);
+      }
+    } catch {
+      // Una sorgente guasta non toglie le altre.
+    }
+  }
+  return out;
+}
+
+/**
+ * The shell redrew rows that offer places (or took them away): whoever holds
+ * offers from before measures them again. Watchers run synchronously; one
+ * that throws doesn't stop the others.
+ */
+export function dropOffersChanged(): void {
+  for (const watcher of [...dropOfferWatchers]) {
+    try {
+      watcher();
+    } catch {
+      // Un osservatore guasto non toglie gli altri.
+    }
+  }
+}
+
+/** Listens for `dropOffersChanged`, while something is out of the column; the disposer stops it. */
+export function watchDropOffers(watcher: () => void): () => void {
+  dropOfferWatchers.add(watcher);
+  return () => {
+    dropOfferWatchers.delete(watcher);
+  };
+}
+
 /**
  * An export the document offers as one of its own gestures: a target the host
  * registers (`ExportTarget.id`) and the options it runs with. The words are
@@ -292,6 +419,29 @@ export interface SurfaceActiveCellSource {
   /** The active cell now; `null` before a workbook is shown. */
   read(): SurfaceActiveCell | null;
   /** Called when the active cell or what it holds may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * The cells a surface has selected, as it shows them: the status band sums
+ * them in the shell, with no IPC (E24). A Markdown table, a Base and a sheet
+ * card give the same port, so the same selection gives the same number.
+ */
+export interface SurfaceCellSelection {
+  /** The BCP 47 tag the shown numbers are written in: `it`, `en-US`. */
+  readonly locale: string;
+  /**
+   * Each selected cell once, header rows excluded: a number the format already
+   * types as one, or the text the cell shows. Read once per selection change,
+   * never per keystroke.
+   */
+  values(): Iterable<string | number>;
+}
+
+export interface SurfaceCellSelectionSource {
+  /** The selection now; `null` with no cells or a single cell selected. */
+  read(): SurfaceCellSelection | null;
+  /** Called when the selection or the selected values may have changed. */
   subscribe(listener: () => void): () => void;
 }
 
@@ -435,6 +585,8 @@ export interface EditorSurface {
   readonly status?: SurfaceStatus;
   /** The active cell of a grid, for a host that hides the formula bar. */
   readonly activeCell?: SurfaceActiveCellSource;
+  /** The cells selected in a table or a Base, for the sum in the status band. */
+  readonly cellSelection?: SurfaceCellSelectionSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
   /**

@@ -84,7 +84,9 @@ export function holdForcedStates(lifetime: Lifetime, doc: Document = document): 
   };
 
   const twinSheets = (): void => {
-    for (const sheet of Array.from(doc.styleSheets)) {
+    // I fogli dei file e quelli costruiti: il tema è un foglio costruito
+    // (`theme/loader.ts`, per la CSP), e non sta in `document.styleSheets`.
+    for (const sheet of [...Array.from(doc.styleSheets), ...doc.adoptedStyleSheets]) {
       if (seen.has(sheet)) continue;
       seen.add(sheet);
       try {
@@ -100,11 +102,33 @@ export function holdForcedStates(lifetime: Lifetime, doc: Document = document): 
   // da solo.
   const remounted = new MutationObserver(twinSheets);
   remounted.observe(doc.head, { childList: true, subtree: true, characterData: true });
+  // Un foglio costruito si monta assegnando `adoptedStyleSheets`, e nessun
+  // osservatore lo vede: finché `lifetime` vive, l'assegnazione passa da un
+  // setter della sola finestra che rifà i gemelli.
+  const adopted = Object.getOwnPropertyDescriptor(Document.prototype, "adoptedStyleSheets");
+  let hooked = false;
+  if (adopted?.get && adopted.set && !Object.prototype.hasOwnProperty.call(doc, "adoptedStyleSheets")) {
+    const { get, set } = adopted;
+    Object.defineProperty(doc, "adoptedStyleSheets", {
+      configurable: true,
+      get(this: Document) {
+        return get.call(this);
+      },
+      set(this: Document, sheets: CSSStyleSheet[]) {
+        set.call(this, sheets);
+        twinSheets();
+      },
+    });
+    hooked = true;
+  }
   lifetime.add(() => {
     remounted.disconnect();
+    if (hooked) delete (doc as { adoptedStyleSheets?: unknown }).adoptedStyleSheets;
+    const live = new Set(doc.adoptedStyleSheets);
     for (const [rule, selector] of originals) {
       // Un foglio tolto nel frattempo non ha più niente da rimettere.
-      if (rule.parentStyleSheet?.ownerNode?.isConnected) rule.selectorText = selector;
+      const sheet = rule.parentStyleSheet;
+      if (sheet?.ownerNode?.isConnected || (sheet !== null && live.has(sheet))) rule.selectorText = selector;
     }
     originals.clear();
   });

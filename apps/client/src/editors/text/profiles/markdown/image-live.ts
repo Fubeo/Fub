@@ -10,6 +10,7 @@ import { EditorView, keymap, ViewPlugin } from "@codemirror/view";
 import { openPopover, type PopoverHandle, textButton, textField } from "../../../../kit";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { liveReveal } from "../../live-reveal";
+import { withLineBreaks } from "../../line-breaks";
 import { liveStrings } from "./strings";
 
 /// Un'immagine come sta scritta: `![alt|320](file "titolo")` o `![[file|320]]`.
@@ -100,12 +101,15 @@ export function rewriteImage(
   to: number,
   next: { alt?: string; file?: string; width?: number | null },
 ) {
-  const image = parseImage(state.sliceDoc(from, to));
+  // Il testo con "\n" (l'alt può andare a capo): le lunghezze sono
+  // posizioni; nella nota entra con i suoi a capo.
+  const source = state.doc.sliceString(from, to);
+  const image = parseImage(source);
   if (!image) return null;
   const text = writeImage(image, next);
-  if (text === state.sliceDoc(from, to)) return null;
+  if (text === source) return null;
   return {
-    changes: { from, to, insert: text },
+    changes: { from, to, insert: withLineBreaks(state, text) },
     selection: EditorSelection.single(from, from + text.length),
     userEvent: "input",
   } as const;

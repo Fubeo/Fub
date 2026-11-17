@@ -90,6 +90,7 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
+import { baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { GiroWorkbook, giroResources } from "./giro-fixture";
@@ -347,6 +348,23 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
       }, null, "\t"),
     }
   : {};
+
+/// La Base delle scene `base-*` (`?base=1`, T15; `?base=venti`, T16;
+/// `?base=calendario`, T17):
+/// `Opere.base` e le note di `Opere/`, con le domande `fub.base` e i comandi
+/// `base.view.*` che il finto da solo non ha. Gli attrezzi del finto li chiede
+/// quando servono, cioè dopo che il finto è nato.
+const BASE_VARIANT = params.get("base");
+const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario"
+  ? baseFixture(() => ({
+      revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
+      writeByCommand: async (doc, text) => {
+        const { revision } = await host.module.api.readDocument(doc);
+        await host.module.api.writeDocument(doc, text, { kind: "descends_from", value: revision });
+        host.emit({ type: "document_changed", id: doc });
+      },
+    }), BASE_VARIANT)
+  : null;
 
 /// Gli stati della barra dei fogli che la cartella generata non ha
 /// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
@@ -1133,6 +1151,20 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "editor.blocks",
+      label: "Blocchi: maniglie e selezione",
+      description:
+        "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.",
+      group: "Editor",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    },
+    value: true,
+    source: "default",
+  },
+  {
+    spec: {
       key: "editor.line_numbers",
       label: "Numeri di riga",
       description: "Mostra la grondaia con il numero di ogni riga.",
@@ -1358,6 +1390,33 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
+/// Come la nota mostra le proprietà (`editor.properties`), come la voce
+/// dell'host: di macchina, di serie `visible`. Le scene della testata (T6)
+/// la cambiano con `?properties=visible|hidden|source`.
+const PROPERTIES_PARAM = params.get("properties");
+const PROPERTIES_CHOSEN = PROPERTIES_PARAM === "visible" || PROPERTIES_PARAM === "hidden" || PROPERTIES_PARAM === "source" ? PROPERTIES_PARAM : null;
+const PROPERTIES_DISPLAY: readonly SettingEntry[] = [{
+  spec: {
+    key: "editor.properties",
+    label: "Proprietà",
+    description: "Come la nota mostra il frontmatter.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "visible",
+      options: [
+        { value: "visible", label: "In evidenza" },
+        { value: "hidden", label: "Nascoste" },
+        { value: "source", label: "Come YAML" },
+      ],
+    },
+    program_writable: true,
+  },
+  value: PROPERTIES_CHOSEN ?? "visible",
+  source: PROPERTIES_CHOSEN ? "machine" : "default",
+}];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1500,10 +1559,71 @@ function askedDocs(expr: QueryExpr): string[] | null {
   return docs.length > 0 ? docs : null;
 }
 
+/// Una resa di Markdown per le note che il banco non ha scritte a mano in
+/// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
+/// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
+/// esserlo: basta a non mostrare il sorgente grezzo, col suo `#`, nell'anteprima.
+function plainHtml(markdown: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (s: string) => esc(s)
+    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const out: string[] = [];
+  let paragraph: string[] = [];
+  let items: string[] = [];
+  let fence: string[] | null = null;
+  const flush = (): void => {
+    if (paragraph.length > 0) out.push(`<p>${paragraph.map(inline).join(" ")}</p>`);
+    if (items.length > 0) out.push(`<ul>${items.join("")}</ul>`);
+    paragraph = [];
+    items = [];
+  };
+  for (const line of markdown.split("\n")) {
+    if (fence !== null) {
+      if (line.startsWith("```")) {
+        out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
+        fence = null;
+      } else fence.push(line);
+      continue;
+    }
+    if (line.startsWith("```")) {
+      flush();
+      fence = [];
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      flush();
+      const level = heading[1]!.length;
+      out.push(`<h${level}>${inline(heading[2]!)}</h${level}>`);
+      continue;
+    }
+    const item = /^\s*[-*]\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line);
+    if (item) {
+      if (paragraph.length > 0) flush();
+      const box = item[1] === undefined ? "" : `<input type="checkbox" disabled${item[1] === " " ? "" : " checked"}> `;
+      items.push(`<li>${box}${inline(item[2]!)}</li>`);
+      continue;
+    }
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
+    if (items.length > 0) flush();
+    paragraph.push(line);
+  }
+  if (fence !== null) out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
+  flush();
+  return out.join("\n");
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
-    const html = OUTPUT[doc] ?? `<p>${(CORPUS[doc] ?? "").split("\n")[0] ?? ""}</p>`;
+    const html = OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? "");
     return { kind: "render_preview", value: { html, parts: [] } };
   },
   render_embed: (q) => {
@@ -1748,6 +1868,7 @@ const options: Options = {
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
+    ...(BASE === null ? {} : BASE.files),
   },
   resources: TREE !== null || NEW_VAULT ? {} : {
     ...RESOURCES,
@@ -1772,8 +1893,9 @@ const options: Options = {
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
+  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
+  ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
     gridBytes: {
@@ -2133,6 +2255,9 @@ export const api: typeof host.module.api = {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
     }
+    // Il gesto della barra della Base delle scene `base-*`.
+    const based = BASE?.invoke(id, args);
+    if (based) return based as ReturnType<typeof behind.invokeCommand>;
     const trashBefore = TRASH_COMMANDS.has(id) ? trashFingerprint() : null;
     const outcome = await behind.invokeCommand(id, args, ...rest);
     // Dopo un comando che cambia il cestino il kernel vero rifà l'indice, e il
@@ -2158,6 +2283,17 @@ export const api: typeof host.module.api = {
     }
     const response = RESPONSES[q.kind];
     const result = response ? response(q) : await behind.queryIndex(q);
+    if (BASE !== null && q.kind === "documents" && result.kind === "documents") {
+      // Le proprietà delle note della Base, come le leggerebbe l'indice dal
+      // frontmatter: il finto non le legge.
+      return {
+        ...result,
+        value: { ...result.value, items: result.value.items.map((hit) => {
+          const properties = BASE.properties(hit.doc);
+          return properties === null ? hit : { ...hit, properties };
+        }) },
+      };
+    }
     if (q.kind === "documents" && result.kind === "documents" && LIVE !== null && q.select?.kind === "keys") {
       // Le classi della nota della Live (`cssclasses: [wide]`), come le
       // leggerebbe l'indice dal frontmatter: le scene della pagina larga.

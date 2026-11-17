@@ -30,8 +30,8 @@
  * passaggio, e una ricetta che ne importasse gli aiutanti la terrebbe in vita
  * per tre funzioni.
  */
-import { contrast } from "../contrast";
-import { toHex, type Oklch } from "../oklch";
+import { channelLuminance, contrast, luminance, luminanceRatio } from "../contrast";
+import { channelsOf, toHex, type Oklch } from "../oklch";
 import type { CONTENT_COLORS } from "../../ui/sanitize";
 
 export type Light = "light" | "dark";
@@ -111,9 +111,14 @@ function hold(start: Oklch, backgrounds: readonly string[], target: number, ligh
 
 /// La luminosità che `hold` trova: serve a chi sposta altri colori insieme.
 function holdLightness(start: Oklch, backgrounds: readonly string[], target: number, light: Light): number {
+  // Le luminanze dei fondi non cambiano fra un tentativo e l'altro: contarle a
+  // ogni prova costava metà della ricetta, rifatta a ogni cambio d'accento
+  // (`docs/product/performance-webview.md`). Il conto è lo stesso di
+  // `contrast`, quindi i byte non cambiano.
+  const floors = backgrounds.map(luminance);
   const passes = (color: Oklch): boolean => {
-    const hex = toHex(color);
-    return backgrounds.every((background) => contrast(hex, background) >= target);
+    const ink = channelLuminance(channelsOf(color));
+    return floors.every((floor) => luminanceRatio(ink, floor) >= target);
   };
   if (passes(start)) return start.l;
 
@@ -213,6 +218,30 @@ function shadow(light: Light, near: readonly [number, number, number], far: read
   const ink = light === "light" ? "24 28 44" : "0 0 0";
   const layer = ([y, blur, alpha]: readonly [number, number, number]) => `0 ${y}px ${blur}px rgb(${ink} / ${alpha}%)`;
   return `${layer(near)}, ${layer(far)}`;
+}
+
+/// Il rialzo più basso (`--shadow-raise`): un foglio appena sollevato dentro
+/// un'altra superficie, come quello dell'anteprima del lanciatore. Un anello
+/// di un pixel e un'ombra corta, più bassi di `shadow-1`, che è già un'ombra
+/// da carta con un alone di 20 px. Sono i valori del prototipo (`--sh-raise`):
+/// di giorno l'inchiostro verde scuro, di notte un filo di luce e il nero.
+/// Come le altre ombre, col contrasto alto gli stessi valori.
+function raiseShadow(light: Light): string {
+  return light === "light"
+    ? "0 0 0 1px rgb(20 44 30 / 6%), 0 1px 3px rgb(20 44 30 / 10%)"
+    : "0 0 0 1px rgb(255 255 255 / 6%), 0 1px 3px rgb(0 0 0 / 50%)";
+}
+
+/// L'ombra di ciò che si apre sopra tutto (`--shadow-pop`): il lanciatore,
+/// poi i menu. Un anello sottile che la tiene staccata anche su un fondo
+/// uguale, e un'ombra lunga che scende sotto il bordo. Sono i valori del
+/// prototipo (`--sh-pop`): di giorno l'inchiostro verde scuro in tre parti, di
+/// notte un filo di luce e un nero profondo. Come le altre ombre, col
+/// contrasto alto gli stessi valori.
+function popShadow(light: Light): string {
+  return light === "light"
+    ? "0 0 0 1px rgb(20 44 30 / 8%), 0 4px 12px rgb(20 44 30 / 8%), 0 18px 44px -10px rgb(20 44 30 / 24%)"
+    : "0 0 0 1px rgb(255 255 255 / 7%), 0 18px 48px -8px rgb(0 0 0 / 70%)";
 }
 
 /// L'ombra del foglio appoggiato sulla scrivania (`--shadow-sheet`, e
@@ -533,6 +562,12 @@ export function palette(
     // pelle legge col ripiego di `shadow-1` e `shadow-2`.
     "shadow-sheet": sheetShadow(light, false),
     "shadow-sheet-focus": sheetShadow(light, true),
+    // Il foglio appena rialzato dentro un riquadro: facoltativo anche questo,
+    // col ripiego di `shadow-1`.
+    "shadow-raise": raiseShadow(light),
+    // Ciò che si apre sopra tutto: facoltativo, col ripiego che la pelle
+    // scrive accanto.
+    "shadow-pop": popShadow(light),
     "shadow-5": levels[4]!,
     "shadow-6": levels[5]!,
     "shadow-7": levels[6]!,
@@ -735,14 +770,14 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`), i colori del logo (`--logo-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`) e l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), i colori del logo (`--logo-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`), l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`), il rialzo più basso (`--shadow-raise`) e ciò che si apre sopra tutto (`--shadow-pop`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
   (name) => name.startsWith("paper-") || name.startsWith("logo-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
-    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus",
+    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus", "shadow-raise", "shadow-pop",
       "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );
 

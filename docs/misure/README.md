@@ -31,6 +31,10 @@ resta **non provato**.
 |---|---|---|---|
 | 2026-10-30 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI](2026-10-30-linux-webkitgtk-runner.md) |
 | 2026-10-31 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: la memoria e le tessere](2026-10-31-linux-webkitgtk-runner-k0.md) |
+| 2026-11-16 | Debian 13, niri su Wayland, schermo a 180 Hz | WebKitGTK 2.54, Safari 605.1.15 | [Le soglie in periodi sullo schermo a 180 Hz](2026-11-16-linux-webkitgtk-frequenza-schermo.md) |
+| 2026-11-17 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54 | [Il tetto dei 60 Hz su NVIDIA](2026-11-17-linux-webkitgtk-tetto-60hz.md) |
+| 2026-11-17 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54 | [Il vblank emulato su NVIDIA](2026-11-17-linux-vblank-emulato.md) |
+| 2026-11-17 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: il tasto di S1 e la lavagna piccola](2026-11-17-banco-webview-s1-l1-runner.md) |
 
 ## I motori
 
@@ -52,6 +56,7 @@ sul suo cancello.
 |---|---|---|---|
 | 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](2026-11-02-k3-motori-server-di-fub.md) |
 | 2026-11-12 | K5, il disegno sul motore | `pc-debian-di-fub`, Intel Core i5-13600KF | [Il cancello di K5](2026-11-12-disegno-linux-13600kf.md) |
+| 2026-11-16 | C5, il cambio fra schede aperte | `pc-debian-di-fub`, Intel Core i5-13600KF, WebKitGTK 2.54 con la GPU | [Il cambio scheda](2026-11-16-linux-webkitgtk-cambio-scheda.md) |
 
 ## Gli inventari
 
@@ -76,13 +81,16 @@ in quella Rust compilata in WebAssembly
 ## Il nucleo della lavagna
 
 La misura di N3 (T15): il modulo `fub-canvas-wasm` in Node e nella WebView
-di Linux, con la CSP dell'app
+di Linux, con la CSP dell'app, e quella del runner da cui vengono le soglie
+della CI
 ([`bench/webview/canvas.mjs`](../../apps/client/bench/webview/canvas.mjs),
 scenario L1).
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](2026-11-03-lavagna-wasm.md) |
+| 2026-11-15 | Linux 7.0 (Azure), X11 sotto Xvfb, WebKitGTK | runner della CI, AMD EPYC 7763, 4 nuclei | [Il nucleo della lavagna sul runner della CI](2026-11-15-lavagna-wasm-runner.md) |
+| 2026-11-17 | Linux (Azure), X11 sotto Xvfb, WebKitGTK | runner della CI, 4 nuclei | [L'istanza del nucleo della lavagna sul runner della CI](2026-11-17-lavagna-wasm-istanza-runner.md) |
 
 ## L'inchiostro sulla lavagna
 

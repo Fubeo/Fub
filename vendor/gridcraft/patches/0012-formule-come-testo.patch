@@ -1,0 +1,167 @@
+diff --git a/crates/engine/src/display.rs b/crates/engine/src/display.rs
+index 218c228e2..23c2f52f1 100644
+--- a/crates/engine/src/display.rs
++++ b/crates/engine/src/display.rs
+@@ -157,7 +157,9 @@ pub fn value_text_as(wb: &Workbook, v: &Value, code: &str) -> String {
+     }
+ }
+ 
+-/// Tab-separated text of a range, as the system clipboard gets it.
++/// Tab-separated text of a range, as the system clipboard gets it. A text that looks like a
++/// formula gets a leading apostrophe ([`gridcraft_xlsx::defuse_formula`]): another spreadsheet
++/// types the pasted text in, and would run it; pasted back here it is the same text.
+ pub fn range_text(wb: &Workbook, sheet: usize, r: RangeRef) -> String {
+     let Some(sh) = wb.sheet(sheet) else { return String::new() };
+     let mut out = String::new();
+@@ -172,7 +174,8 @@ pub fn range_text(wb: &Workbook, sheet: usize, r: RangeRef) -> String {
+                 out.push('\t');
+             }
+             first = false;
+-            let t = cell_text(wb, sh, CellRef::new(row, col));
++            let shown = cell_text(wb, sh, CellRef::new(row, col));
++            let t = gridcraft_xlsx::defuse_formula(&shown);
+             if t.contains(['\t', '\n', '"']) {
+                 out.push('"');
+                 out.push_str(&t.replace('"', "\"\""));
+diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
+index 8b01645a0..83caf82c3 100644
+--- a/crates/engine/src/tests.rs
++++ b/crates/engine/src/tests.rs
+@@ -581,6 +581,30 @@ fn copy_paste_shifts_formulas() {
+     assert_eq!(f["formula"], "=E5+B1");
+ }
+ 
++#[test]
++fn text_that_looks_like_a_formula_leaves_as_text_and_numbers_stay_numbers() {
++    let mut s = s();
++    for (cell, input) in [("A1", "'=HYPERLINK(\"http://x\",\"y\")"), ("B1", "'@SUM(1)"), ("C1", "'-2+3"), ("D1", "-5"), ("E1", "'\tx")] {
++        s.execute("cell.set", json!({"cell": cell, "input": input})).unwrap();
++    }
++    assert_eq!(v(&s, "A1"), Value::text("=HYPERLINK(\"http://x\",\"y\")"));
++    // The clipboard text: another spreadsheet types it in, so a formula-looking text gets `'`.
++    let copied = s.execute("edit.copy", json!({"range": "A1:E1"})).unwrap();
++    assert_eq!(copied["text"], "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\"\t'@SUM(1)\t'-2+3\t-5\t\"'\tx\"\n");
++    // Pasted back from the system clipboard, it is the same text again.
++    s.execute("edit.clearClipboard", json!({})).unwrap();
++    s.execute("edit.paste", json!({"at": "A3", "text": copied["text"]})).unwrap();
++    assert_eq!(v(&s, "A3"), Value::text("=HYPERLINK(\"http://x\",\"y\")"));
++    assert_eq!(v(&s, "C3"), Value::text("-2+3"));
++    assert_eq!(v(&s, "D3"), Value::Number(-5.0));
++    // Save As CSV and TSV: the same rule.
++    let csv = crate::io::save_bytes(&s.doc().unwrap().wb, "out.csv").unwrap();
++    let first = String::from_utf8(csv).unwrap().lines().next().unwrap().to_string();
++    assert_eq!(first, "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\",'@SUM(1),'-2+3,-5,'\tx");
++    let tsv = crate::io::save_bytes(&s.doc().unwrap().wb, "out.tsv").unwrap();
++    assert!(String::from_utf8(tsv).unwrap().starts_with("\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\"\t'@SUM(1)\t'-2+3\t-5\t\"'\tx\""));
++}
++
+ #[test]
+ fn rich_clipboard_copies_selected_displayed_cells_and_styles() {
+     let mut s = s();
+diff --git a/crates/xlsx/src/csv.rs b/crates/xlsx/src/csv.rs
+index 78a29a9be..c8bf7cf0f 100644
+--- a/crates/xlsx/src/csv.rs
++++ b/crates/xlsx/src/csv.rs
+@@ -305,7 +305,8 @@ pub fn read_csv(bytes: &[u8], opts: &CsvOptions) -> Result<Workbook, IoError> {
+ /// Writes the sheet as CSV from A1 to the end of its used range, so leading empty columns and rows
+ /// stay as empty fields and every cell keeps its position (CRLF line ends, UTF-8 without BOM). `cell_text` gives
+ /// each cell's field text: the caller decides how values look (Save As CSV writes them as
+-/// displayed, number formats applied); quoting is done here.
++/// displayed, number formats applied); quoting is done here, and so is [`defuse_formula`]: a text
++/// that looks like a formula is never evaluated by the spreadsheet that opens the file.
+ ///
+ /// The output is capped at [`MAX_CSV_BYTES`]: a cell far from A1 makes the file as big as the whole
+ /// rectangle between them (`A1` and `XFD1048576` are 16 GiB of commas).
+@@ -316,6 +317,39 @@ pub fn write_csv(sheet: &Sheet, delimiter: u8, cell_text: impl FnMut(CellRef) ->
+     write_csv_limited(sheet, delimiter, MAX_CSV_BYTES, cell_text)
+ }
+ 
++/// The field text a spreadsheet reads as text, never as a formula (CSV injection, OWASP).
++///
++/// Excel, LibreOffice and Google Sheets evaluate a delimited field that starts with `=`, `+`, `-`
++/// or `@` (`=HYPERLINK(...)`, `=cmd|' /C calc'!A0`, `@SUM(...)`), also after leading blanks, and
++/// treat a leading tab or carriage return the same way. Such a field gets a leading apostrophe,
++/// which a spreadsheet reads as "this is text". A plain signed number (`-12`, `+3.5`,
++/// `-1,234.50`, `-12%`, `-1.5E+10`) is a number, never a formula, and stays as it is, so negative
++/// values keep their type.
++pub fn defuse_formula(text: &str) -> std::borrow::Cow<'_, str> {
++    let trimmed = text.trim_start();
++    let risky = text.starts_with(['\t', '\r']) || trimmed.starts_with(['=', '+', '-', '@']);
++    if !risky || is_signed_number(trimmed) { std::borrow::Cow::Borrowed(text) } else { std::borrow::Cow::Owned(format!("'{text}")) }
++}
++
++/// A sign, digits with `.`, `,` or blank group separators, an optional exponent and an optional
++/// trailing `%`: what a number format shows for a signed number, and nothing a formula needs.
++fn is_signed_number(text: &str) -> bool {
++    let Some(rest) = text.strip_prefix(['+', '-']) else { return false };
++    let rest = rest.strip_suffix('%').unwrap_or(rest);
++    let (mantissa, exponent) = match rest.find(['e', 'E']) {
++        Some(at) => (&rest[..at], Some(&rest[at + 1..])),
++        None => (rest, None),
++    };
++    let mantissa_ok = mantissa.starts_with(|c: char| c.is_ascii_digit() || c == '.')
++        && mantissa.chars().any(|c| c.is_ascii_digit())
++        && mantissa.chars().all(|c| c.is_ascii_digit() || matches!(c, '.' | ',' | ' ' | '\u{a0}' | '\u{202f}'));
++    let exponent_ok = exponent.is_none_or(|e| {
++        let e = e.strip_prefix(['+', '-']).unwrap_or(e);
++        !e.is_empty() && e.chars().all(|c| c.is_ascii_digit())
++    });
++    mantissa_ok && exponent_ok
++}
++
+ /// [`write_csv`] with the output cap `limit` (bytes) given.
+ pub fn write_csv_limited(sheet: &Sheet, delimiter: u8, limit: usize, mut cell_text: impl FnMut(CellRef) -> String) -> Result<Vec<u8>, IoError> {
+     let delim = if delimiter == 0 { ',' } else { delimiter as char };
+@@ -336,7 +370,8 @@ pub fn write_csv_limited(sheet: &Sheet, delimiter: u8, limit: usize, mut cell_te
+             if col > 0 {
+                 out.push(delim);
+             }
+-            let t = cell_text(CellRef::new(row, col));
++            let shown = cell_text(CellRef::new(row, col));
++            let t = defuse_formula(&shown);
+             let quoted = t.contains(delim) || t.contains('"') || t.contains('\n') || t.contains('\r');
+             // The exact size of the field as written (the delimiter was pushed above), so a row
+             // never grows past the cap unseen and no doubled-quote copy of the text is built.
+diff --git a/crates/xlsx/src/lib.rs b/crates/xlsx/src/lib.rs
+index 4274f1196..bf752ccc2 100644
+--- a/crates/xlsx/src/lib.rs
++++ b/crates/xlsx/src/lib.rs
+@@ -45,7 +45,7 @@ use gridcraft_core::DateSystem;
+ use gridcraft_model::Workbook;
+ 
+ pub use crypto::{DecryptError, check_encryption, decrypt};
+-pub use csv::{MAX_CSV_BYTES, read_csv, write_csv, write_csv_limited};
++pub use csv::{MAX_CSV_BYTES, defuse_formula, read_csv, write_csv, write_csv_limited};
+ pub use ods::read_ods;
+ pub use package::MAX_PART;
+ pub use passthrough::rebase_links;
+diff --git a/crates/xlsx/src/tests/csv_tests.rs b/crates/xlsx/src/tests/csv_tests.rs
+index 066f507e0..c7be99b4d 100644
+--- a/crates/xlsx/src/tests/csv_tests.rs
++++ b/crates/xlsx/src/tests/csv_tests.rs
+@@ -326,3 +326,25 @@ fn parser_stops_collecting_fields_at_max_cols() {
+     });
+     assert_eq!(lens, vec![MAX_COLS as usize]);
+ }
++
++#[test]
++fn a_field_that_looks_like_a_formula_is_written_as_text() {
++    use crate::defuse_formula;
++    for risky in ["=1+1", "=cmd|' /C calc'!A0", "+1+1", "-2+3", "@SUM(A1)", "\tx", "\rx", "  =1+1", "-", "-x", "+", "-1-1", "-1e", "--1", "- 1"] {
++        assert_eq!(defuse_formula(risky), format!("'{risky}"), "{risky:?}");
++    }
++    for plain in ["", "x", "1+1", "'=1", "-5", "+3.5", "-1,234.50", "-12%", "-1.5E+10", "-.5", "1 234", "a=b"] {
++        assert_eq!(defuse_formula(plain), plain, "{plain:?}");
++    }
++    let mut s = Sheet::new("S");
++    s.set_value(CellRef::new(0, 0), Value::text("=HYPERLINK(\"http://x\",\"y\")"));
++    s.set_value(CellRef::new(0, 1), Value::text("@SUM(A1)"));
++    s.set_value(CellRef::new(0, 2), Value::text("-5"));
++    let out = String::from_utf8(write_csv(&s, b',', text_of(&s)).unwrap()).unwrap();
++    assert_eq!(out, "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\",'@SUM(A1),-5\r\n");
++    // The cap measures the field as written, apostrophe included.
++    let mut one = Sheet::new("O");
++    one.set_value(CellRef::new(0, 0), Value::text("=1"));
++    assert!(write_csv_limited(&one, b',', 4, text_of(&one)).is_err());
++    assert_eq!(write_csv_limited(&one, b',', 5, text_of(&one)).unwrap(), b"'=1\r\n");
++}

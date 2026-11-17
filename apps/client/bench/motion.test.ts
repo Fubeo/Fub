@@ -18,7 +18,9 @@ import { SCENE as scenes } from "./scene.mjs";
 import {
   ALLOWED,
   CHOREOGRAPHIES as choreographies,
+  BROWSER_ARGS,
   EXIT_LIMIT_MS,
+  FRAME_STREAK,
   UNCOVERED as uncovered,
   cssName,
   family,
@@ -27,6 +29,7 @@ import {
   jumps,
   longExits,
   midpoint,
+  perFrame,
   residue,
 } from "./motion-rules.mjs";
 
@@ -161,6 +164,18 @@ describe("la regola 3: solo le proprietà ammesse", () => {
     // Ciò che non si conosce costa come un layout: non passa per pittura.
     expect(family("--qualcosa")).toBe("layout");
   });
+
+  it("durante un gesto è scritta a ogni fotogramma la proprietà estranea cambiata in due fotogrammi di fila", () => {
+    expect(FRAME_STREAK).toBe(2);
+    const slot = ".cm-fub-block-slot";
+    expect(perFrame([
+      { target: slot, property: "top", frames: 1 },
+      { target: slot, property: "height", frames: 2 },
+      { target: slot, property: "transform", frames: 30 },
+      { target: slot, property: "translate", frames: 30 },
+      { target: slot, property: "opacity", frames: 12 },
+    ])).toEqual([{ target: slot, property: "height", frames: 2 }]);
+  });
 });
 
 describe("la regola 2: nessun residuo", () => {
@@ -251,6 +266,15 @@ describe("la metà corsa", () => {
   it("senza corse vale il ripiego, e non scende mai sotto un fotogramma", () => {
     expect(midpoint([], 50)).toBeCloseTo(3 * frame, 9);
     expect(midpoint([4])).toBeCloseTo(frame, 9);
+  });
+});
+
+describe("gli scatti delle regole 1 e 4", () => {
+  // Col raster parziale lo stesso stato, raggiunto per due strade, dava ogni
+  // tanto un pixel diverso di due livelli (le Preferenze, regola 4): il
+  // confronto al pixel regge solo se ogni tessera toccata si rifà intera.
+  it("vengono da un Chromium che rasterizza intera ogni tessera toccata", () => {
+    expect(BROWSER_ARGS).toContain("--disable-partial-raster");
   });
 });
 

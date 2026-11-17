@@ -10,20 +10,30 @@
 // `ci` legge `GITHUB_REPOSITORY` e `GH_TOKEN` (o `GITHUB_TOKEN`); `signing`
 // guarda soltanto se le variabili dei segreti sono valorizzate, mai il valore.
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { TEST } from "./baseline-dal-runner.mjs";
+
 const CI_WORKFLOW = "ci.yml";
 
 // I job che la CI esegue su ogni push: una corsa che non li ha tutti verdi,
-// anche saltati, non è una prova.
+// anche saltati, non è una prova. macOS è in pausa
+// (docs/decisions/0245-macos-e-ios-in-pausa.md): `build + test (macos-latest)`
+// torna in `TEST` quando torna nella matrice di `ci.yml`. I job dei test
+// (Linux e le parti di Windows) sono `TEST` di `baseline-dal-runner.mjs`, che
+// la sua autoprova confronta con la matrice; i motori in vendor su una PR
+// possono saltare, su `main` no.
 export const REQUIRED_JOBS = [
   "invarianti",
   "supply chain",
   "fmt + clippy",
-  "build + test (ubuntu-latest)",
-  "build + test (windows-latest)",
-  "build + test (macos-latest)",
+  ...TEST,
   "documentazione canonica",
   "client",
-  "varianti di feature e motori in vendor",
+  "varianti di feature",
+  "motori in vendor",
   "banco visivo",
   "contrasto e tastiera (dark)",
   "contrasto e tastiera (light)",
@@ -31,15 +41,10 @@ export const REQUIRED_JOBS = [
   "banchi del movimento",
 ];
 
+// Le firme che il canale stabile promette, per piattaforma. Senza macOS non
+// si promette la firma Apple; quando torna, tornano qui i sei segreti
+// `APPLE_*` (certificato, password, identità, id, password dell'app, team).
 export const SIGNING = {
-  macos: [
-    "APPLE_CERTIFICATE",
-    "APPLE_CERTIFICATE_PASSWORD",
-    "APPLE_SIGNING_IDENTITY",
-    "APPLE_ID",
-    "APPLE_PASSWORD",
-    "APPLE_TEAM_ID",
-  ],
   windows: ["WINDOWS_CERTIFICATE", "WINDOWS_CERTIFICATE_PASSWORD"],
 };
 
@@ -114,6 +119,23 @@ async function checkCi(sha) {
   return ciProblems(sha, runs, (run) => jobs.get(run.id) ?? []);
 }
 
+/**
+ * I job richiesti che `ci.yml` non nomina più: un job rinominato o diviso
+ * senza aggiornare `REQUIRED_JOBS` fermerebbe ogni rilascio. Un nome di
+ * matrice, come «contrasto e tastiera (dark)», basta che ci sia il suo
+ * modello; i nomi di `TEST` li confronta l'autoprova di
+ * `baseline-dal-runner.mjs`.
+ */
+function requiredInCi() {
+  const ci = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "workflows", CI_WORKFLOW), "utf8");
+  return REQUIRED_JOBS.filter((name) => {
+    if (TEST.includes(name)) return false;
+    if (ci.includes(`name: ${name}`)) return false;
+    const matrice = name.match(/^(.*) \([^)]*\)$/);
+    return !(matrice && ci.includes(`name: ${matrice[1]} (\${{ matrix.`));
+  });
+}
+
 function selfTest() {
   const sha = "a".repeat(40);
   const green = REQUIRED_JOBS.map((name) => ({ name: `${name} (x)`, conclusion: "success" }));
@@ -126,12 +148,14 @@ function selfTest() {
     ["una corsa rossa non basta", ciProblems(sha, [run({ conclusion: "failure" })], () => green).length === 1],
     ["un job saltato non è verde", ciProblems(sha, [run({})], () => green.map((job, i) => (i === 0 ? { ...job, conclusion: "skipped" } : job))).length === 1],
     ["un job mancante non è verde", ciProblems(sha, [run({})], () => green.slice(1)).length === 1],
+    ["una parte di Windows che manca non è verde", ciProblems(sha, [run({})], () => green.filter((job) => !job.name.startsWith(TEST.at(-1)))).length === 1],
+    ["ogni job richiesto ha il suo nome in ci.yml", requiredInCi().length === 0],
     ["una rossa e una verde: basta la verde", ciProblems(sha, [run({ id: 2, conclusion: "failure" }), run({})], () => green).length === 0],
     ["v1.2.3 è stabile", isStable("v1.2.3")],
     ["v1.2.3-rc.1 non è stabile", !isStable("v1.2.3-rc.1")],
-    ["lo stabile senza segreti fallisce", signingProblems("v1.2.3", {}).length === 8],
+    ["lo stabile senza segreti fallisce", signingProblems("v1.2.3", {}).length === 2],
     ["lo stabile con tutti i segreti passa", signingProblems("v1.2.3", Object.fromEntries(Object.values(SIGNING).flat().map((name) => [name, "x"]))).length === 0],
-    ["una variabile vuota è un segreto mancante", signingProblems("v1.2.3", { APPLE_ID: "" }).length === 8],
+    ["una variabile vuota è un segreto mancante", signingProblems("v1.2.3", { WINDOWS_CERTIFICATE: "" }).length === 2],
     ["una prerelease non chiede firme", signingProblems("v1.2.3-rc.1", {}).length === 0],
   ];
   const failed = cases.filter(([, ok]) => !ok);

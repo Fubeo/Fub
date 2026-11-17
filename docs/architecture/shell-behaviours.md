@@ -44,12 +44,13 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   figlio del foglio dopo la barra di formato, che la cornice mostra solo dove
   la banda non c'è. L'ordine segue il ruolo: le modalità
   `live_preview` come la superficie le dichiara, il sorgente, una riga, la
-  lettura; una nota dà Live, Blocchi, Sorgente e Lettura. La figura è la
-  `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare, sennò quella
-  del ruolo (penna, codice, occhio). La scorciatoia è quella del comando che
-  porta alla modalità, anche se la persona l'ha cambiata: `shell.mode.blocks`
-  per i Blocchi, il comando del ruolo per la prima modalità di quel ruolo,
-  nessuna per le altre. Il menu dà il fuoco al suo riquadro all'apertura e di
+  lettura; una nota dà Scrittura, Sorgente e Lettura (i Blocchi sono
+  confluiti in Scrittura: un id vecchio si riconosce da `SurfaceMode.formerIds`).
+  La figura è la `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare,
+  sennò quella del ruolo (penna, codice, occhio). La scorciatoia è quella del
+  comando che porta alla modalità, anche se la persona l'ha cambiata: il
+  comando del ruolo per la prima modalità di quel ruolo, nessuna per le altre;
+  `shell.mode.blocks` resta e porta anche lui a Scrittura. Il menu dà il fuoco al suo riquadro all'apertura e di
   nuovo alla scelta, perché chiudendosi rende il fuoco a chi l'aveva.
 - **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
   (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
@@ -87,7 +88,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   solo ciò che si vede (`panels/explorer-view.ts`, `explorer-motion.ts`).
 - **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
   `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
-  riporta a `[]`.
+  riporta a `[]`. Il clic su Cerca o su Note fa la strada della loro
+  scorciatoia (`enterPanel` in `panels/sidebar.ts`): la barra si apre e il
+  fuoco entra nel campo della ricerca, col testo già scritto selezionato, o
+  nell'albero; un secondo clic sull'icona del pannello davanti chiude la
+  barra. Sul telefono la barra è un foglio dal basso e il fuoco resta alla
+  sua maniglia, perché un campo col fuoco alzerebbe la tastiera.
 - **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
   insieme di interruttori di visibilità per gruppo, che si compone con la
   maschera della linea del tempo.
@@ -97,6 +103,48 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   una linguetta di nota diventa finestra, solo con
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
+  Una linguetta non scende sotto `--tab-min` (132 px, una decina di lettere
+  oltre figura e chiusura): quelle che non ci stanno scorrono, e l'elenco in
+  fondo alla striscia le nomina tutte. Un nome troppo lungo si taglia alla
+  fine; se due nomi della striscia cominciano uguali (le note del diario,
+  due omonime con la cartella in coda) la vista lo divide in testa e coda
+  (`panels/tab-names.ts`) e a cedere con l'ellissi è la testa, così resta a
+  vista la parte che li distingue. Il nome intero resta nel nome accessibile
+  e nel suggerimento.
+  Chiusa, aperta o spostata una linguetta, le altre (e il «+») scorrono dal
+  posto di prima a quello nuovo in un passo solo: la misura è già quella
+  finale dal primo fotogramma e si muove solo una trasformazione; col moto
+  ridotto il passo è uno scatto unico (`shells/scrittoio/sheets/tab-strip.ts`).
+  Le prime schede di un foglio nuovo arrivano col foglio, e lì non scorre
+  niente.
+- **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
+  all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
+  portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
+  riquadro. Un documento lento da aprire (un `.docx` da impaginare) non toglie
+  il fuoco al lanciatore, a un dialogo o a un campo aperti intanto, e il loro
+  Invio non finisce nel documento. Se il fuoco sta già dentro il documento
+  aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
+  lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Cassetti sopra i fogli.** Sotto i 960 px l'albero, e sotto i 1200
+  l'ispettore, sono cassetti col velo (`desktop-shell.ts`), e il velo è
+  modale: la tastiera non arriva a ciò che copre. Scegliere un documento
+  dall'albero (clic, Invio, «Apri») chiude il cassetto subito, con lo stesso
+  moto di Esc e del clic sul velo, e il fuoco va al documento aperto invece di
+  tornare al bottone che aveva aperto il cassetto (`dismissSidePanel` in
+  `ui/side-panels.ts`). Qualunque fuoco che entra sotto il velo (l'editor
+  raggiunto da una voce dello schema o da un collegamento dell'ispettore, il
+  Tab che esce dal cassetto) chiude il cassetto prima che arrivi una battuta,
+  e resta dove è andato. Il fuoco sulla rail, sulla barra, in un menu o in un
+  dialogo, che stanno sopra il velo, lo lascia aperto.
+- **Aperture decise dalla shell.** Le aperture vanno in fila e vince l'ultima
+  chiesta. La prima nota di un vault senza schede e la nota d'avvio
+  (`files.startup`) la shell le decide da sola, prima di un'attesa
+  sull'host: passano a `openDocument` il segno `openingsSoFar()` preso alla
+  decisione (`unlessOpenedSince`), e se intanto è stata chiesta un'altra
+  apertura non partono e non toccano schede, riquadro, contesto né fuoco.
+  Mentre l'editor di un'apertura si carica, linguetta e percorso in testa
+  sono già del documento chiesto (`show` ridisegna la testata appena cambia
+  scheda).
 - **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
   (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
   cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto
@@ -117,7 +165,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   finire il trascinamento lo azzera.
 - **Rinomina nell'albero.** Un nome rifiutato (non valido, già in uso, errore
   del kernel) riapre il campo con ciò che è stato scritto e la frase accanto,
-  `role="alert"`, che sparisce alla prima battuta; il toast non serve.
+  `role="alert"`, che sparisce alla prima battuta; il toast non serve. Dopo
+  Invio, Esc o un clic su qualcosa che non prende il fuoco, il fuoco resta
+  sulla voce e la segue al nome nuovo quando l'albero la ridisegna; un clic su
+  un controllo lo lascia a quel controllo.
+- **Indice delle impostazioni.** «In questa pagina» (`panels/settings.ts`)
+  segna la sezione in lettura. Una voce scelta col clic resta la voce attiva
+  anche quando la sua sezione sta nell'ultimo schermo e lo scorrimento non può
+  portarla in cima, finché chi legge non scorre di suo (rotella, dito, barra,
+  tasti di scorrimento) o non cambia filtro o scheda. Scorrendo a mano è
+  attiva l'ultima sezione il cui titolo è salito in cima, e in fondo l'ultima
+  visibile.
 - **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
   `panels/document.ts`) il foglio tiene una riga per avviso: errore di
   salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una

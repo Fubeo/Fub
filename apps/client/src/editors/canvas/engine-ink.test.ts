@@ -14,7 +14,7 @@ import { decodeInk, encodeInk, inkFromQuantized, inkLength, inkPoint } from "../
 import { CanvasEngine, type CanvasChange, type CanvasCorePort } from "./engine";
 import { INK_SCALE_ASPECT } from "./ink-paint";
 import type { CanvasPatch } from "./operation";
-import { CanvasCoreError, canvasCoreReady, openCoreNow } from "./wasm/core";
+import { CanvasCoreError, canvasCoreReady, openCoreNow, type CanvasIntentOp } from "./wasm/core";
 
 // Il limite dei campioni di un pezzo, piccolo: un tratto spezzato si prova con
 // qualche decina di eventi invece che con diecimila (la scia si rifà a ogni
@@ -131,8 +131,8 @@ const BOARD = JSON.stringify({
   edges: [],
 });
 
-/** Il nucleo vero, con ogni chiamata contata per nome. */
-function countingPort(calls: string[]): CanvasCorePort {
+/** Il nucleo vero, con ogni chiamata contata per nome e le operazioni che compila. */
+function countingPort(calls: string[], compiled: CanvasIntentOp[][]): CanvasCorePort {
   return {
     ready: canvasCoreReady,
     openNow: (text) => {
@@ -144,6 +144,7 @@ function countingPort(calls: string[]): CanvasCorePort {
           if (typeof value !== "function") return value;
           return (...args: unknown[]) => {
             calls.push(String(prop));
+            if (prop === "compile") compiled.push(JSON.parse(JSON.stringify(args[0])) as CanvasIntentOp[]);
             if (prop === "commit" && refuseCommits) throw new CanvasCoreError("limit", "troppo grande");
             return (value as (...a: unknown[]) => unknown).apply(target, args);
           };
@@ -158,6 +159,7 @@ function mounted(source = BOARD) {
   document.body.append(host);
   const changes: CanvasChange[] = [];
   const calls: string[] = [];
+  const compiled: CanvasIntentOp[][] = [];
   // Ogni porta che potrebbe scrivere altro: nessuna deve essere chiamata.
   const ports = {
     deposit: vi.fn(async () => [] as string[]),
@@ -172,7 +174,7 @@ function mounted(source = BOARD) {
     surfaceId: "ink",
     formatId: "canvas",
     documentId: "lavagna.canvas",
-    core: countingPort(calls),
+    core: countingPort(calls, compiled),
     onChange: (change) => changes.push(change),
     onSelectionChange: () => {},
     notes: { freeName: async (_folder: string, name: string) => name, create: ports.createNote, read: ports.readNote },
@@ -182,7 +184,7 @@ function mounted(source = BOARD) {
     attachments: { deposit: ports.deposit, resolvePaths: ports.resolvePaths },
   });
   engine.setDoc(source);
-  return { engine, host, changes, calls, ports };
+  return { engine, host, changes, calls, compiled, ports };
 }
 
 /** La camera della lavagna, letta dalla trasformazione dello stage. */
@@ -1049,7 +1051,7 @@ describe("l'interruttore «Scrivi col mouse»", () => {
   it("sta in testa alla barra di N4 (la penna è nella riga delle opzioni), col nome, il suggerimento e lo stato per il lettore di schermo", () => {
     const { host } = mounted();
     const button = inkMouseButton(host);
-    const bar = host.querySelector(".canvas-toolbar")!;
+    const bar = host.querySelector(".canvas-toolbar > .kit-options-row")!;
     expect(bar.firstElementChild).toBe(button);
     expect(button.textContent).toBe(t("canvas.ink.mouse"));
     expect(button.title).toBe(t("canvas.ink.mouse_hint"));
@@ -1687,6 +1689,7 @@ describe("a chi appartiene il tratto (T69)", () => {
         measured = callback;
       }
       observe(): void {}
+      unobserve(): void {}
       disconnect(): void {}
     });
     try {
@@ -2236,8 +2239,11 @@ describe("le forme dal tratto, Maiusc e il righello", () => {
     }
     // Il file ha solo tratti `fub:ink`: niente di nuovo fuori dal livello.
     expect(keysOf(changes[1]!.text)).toEqual(keysOf(changes[0]!.text));
+    // `erase_strokes` e `add_strokes` con lo stesso id (T24): il tratto era
+    // l'ultimo del livello, e la forma resta al suo posto.
     expect(changes[1]!.operation.patches).toEqual([
-      expect.objectContaining({ kind: "ink", layer: "board", at: 0, before: drawn, after: shaped }),
+      expect.objectContaining({ kind: "ink", layer: "board", at: 0, before: drawn, after: null }),
+      expect.objectContaining({ kind: "ink", layer: "board", at: 0, before: null, after: shaped }),
     ]);
 
     expect(engine.undo()).toBe(true);
@@ -2361,5 +2367,47 @@ describe("le forme dal tratto, Maiusc e il righello", () => {
     grip.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, button: -1, buttons: 1, clientX: 60, clientY: 10 }));
     grip.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, button: 0, buttons: 0, clientX: 60, clientY: 10 }));
     expect(parseFloat(bar.style.getPropertyValue("--canvas-ruler-x"))).toBeCloseTo(x + 50, 6);
+  });
+});
+
+// T24: i gesti dell'inchiostro scrivono con le operazioni del nucleo.
+describe("i gesti dell'inchiostro scrivono con le operazioni (T24)", () => {
+  const opsOf = (compiled: readonly CanvasIntentOp[][]) => compiled.map((ops) => ops.map((op) => op.op).join());
+
+  it("la penna: `add_strokes` nel livello della lavagna o della scheda", () => {
+    const { host, changes, compiled } = mounted();
+    pen(host, viewportOf(host), [[100, 300], [140, 320], [180, 330]]);
+    pen(host, card(host, "t"), across(0, 0));
+    expect(changes).toHaveLength(2);
+    const adds = compiled.filter((ops) => ops[0]?.op === "add_strokes");
+    expect(adds.map((ops) => ops.map((op) => op.layer))).toEqual([["board"], [{ node: "t" }]]);
+    // Il tratto entra senza id: lo dà il nucleo.
+    for (const ops of adds) expect((ops[0]!.strokes as Json[])[0]).not.toHaveProperty("id");
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+  });
+
+  it("la gomma intera: `erase_strokes`; quella del pezzo: `erase_along` sulla lavagna e sulla scheda", () => {
+    const { engine, host, changes, compiled } = mounted();
+    pen(host, card(host, "t"), [[20, 50], [60, 52], [100, 54], [140, 56], [180, 58]]);
+    pen(host, viewportOf(host), [[100, 300], [140, 300], [180, 300], [220, 300], [260, 300]]);
+    compiled.length = 0;
+    engine.setInkEraser("piece");
+    eraser(host, viewportOf(host), [[100, 20], [100, 90], [180, 200], [180, 320]]);
+    expect(changes).toHaveLength(3);
+    const along = compiled.find((ops) => ops.some((op) => op.op === "erase_along"))!;
+    expect(along.map((op) => op.on)).toEqual(["t", "board"]);
+    // Sulla scheda i punti sono suoi: la scheda sta in 0,0, la lavagna è uguale.
+    expect(along[0]!.points).toEqual(along[1]!.points);
+    expect(along.every((op) => Number(op.size) > 0)).toBe(true);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(2);
+
+    compiled.length = 0;
+    engine.setInkEraser("stroke");
+    eraser(host, viewportOf(host), [[150, 280], [150, 320]]);
+    expect(opsOf(compiled)).toContain("erase_strokes");
+    const erase = compiled.find((ops) => ops[0]?.op === "erase_strokes")!;
+    expect(erase).toHaveLength(1);
+    expect(erase[0]).toMatchObject({ op: "erase_strokes", layer: "board" });
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(1);
   });
 });

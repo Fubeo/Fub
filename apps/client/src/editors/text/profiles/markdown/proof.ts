@@ -35,7 +35,7 @@ import {
 import { inlineDelimiters, scanTags, spans, wikilink, type SyntaxForm } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
 import { FOOTNOTE_DEFINITION } from "./grammar";
-import { frontmatterRange } from "./render";
+import { declaredLanguage, frontmatterRange } from "./render";
 
 export { locate, type ProseLocation, type ProsePiece, type ProseSegment };
 
@@ -280,14 +280,11 @@ export function extractProse(
   return out;
 }
 
-/// La lingua dichiarata dal frontmatter (`lang: it-IT`), se c'è.
+/// La lingua dichiarata dal frontmatter (`lang: it-IT`), se c'è. La regola
+/// sta accanto a `frontmatterRange`, perché la legge anche la somma nella
+/// banda, senza caricare il correttore.
 export function frontmatterLanguage(state: EditorState): string | null {
-  const range = frontmatterRange(state.doc);
-  if (!range) return null;
-  const match = /^lang(?:uage)?[ \t]*:[ \t]*["']?([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*)["']?[ \t]*$/m.exec(
-    state.doc.sliceString(range.from, range.to),
-  );
-  return match ? match[1] : null;
+  return declaredLanguage(state.doc);
 }
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere.

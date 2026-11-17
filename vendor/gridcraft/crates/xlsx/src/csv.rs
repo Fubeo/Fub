@@ -305,7 +305,8 @@ pub fn read_csv(bytes: &[u8], opts: &CsvOptions) -> Result<Workbook, IoError> {
 /// Writes the sheet as CSV from A1 to the end of its used range, so leading empty columns and rows
 /// stay as empty fields and every cell keeps its position (CRLF line ends, UTF-8 without BOM). `cell_text` gives
 /// each cell's field text: the caller decides how values look (Save As CSV writes them as
-/// displayed, number formats applied); quoting is done here.
+/// displayed, number formats applied); quoting is done here, and so is [`defuse_formula`]: a text
+/// that looks like a formula is never evaluated by the spreadsheet that opens the file.
 ///
 /// The output is capped at [`MAX_CSV_BYTES`]: a cell far from A1 makes the file as big as the whole
 /// rectangle between them (`A1` and `XFD1048576` are 16 GiB of commas).
@@ -314,6 +315,39 @@ pub fn read_csv(bytes: &[u8], opts: &CsvOptions) -> Result<Workbook, IoError> {
 /// [`IoError::TooLarge`]; accepted exports keep every field in its place.
 pub fn write_csv(sheet: &Sheet, delimiter: u8, cell_text: impl FnMut(CellRef) -> String) -> Result<Vec<u8>, IoError> {
     write_csv_limited(sheet, delimiter, MAX_CSV_BYTES, cell_text)
+}
+
+/// The field text a spreadsheet reads as text, never as a formula (CSV injection, OWASP).
+///
+/// Excel, LibreOffice and Google Sheets evaluate a delimited field that starts with `=`, `+`, `-`
+/// or `@` (`=HYPERLINK(...)`, `=cmd|' /C calc'!A0`, `@SUM(...)`), also after leading blanks, and
+/// treat a leading tab or carriage return the same way. Such a field gets a leading apostrophe,
+/// which a spreadsheet reads as "this is text". A plain signed number (`-12`, `+3.5`,
+/// `-1,234.50`, `-12%`, `-1.5E+10`) is a number, never a formula, and stays as it is, so negative
+/// values keep their type.
+pub fn defuse_formula(text: &str) -> std::borrow::Cow<'_, str> {
+    let trimmed = text.trim_start();
+    let risky = text.starts_with(['\t', '\r']) || trimmed.starts_with(['=', '+', '-', '@']);
+    if !risky || is_signed_number(trimmed) { std::borrow::Cow::Borrowed(text) } else { std::borrow::Cow::Owned(format!("'{text}")) }
+}
+
+/// A sign, digits with `.`, `,` or blank group separators, an optional exponent and an optional
+/// trailing `%`: what a number format shows for a signed number, and nothing a formula needs.
+fn is_signed_number(text: &str) -> bool {
+    let Some(rest) = text.strip_prefix(['+', '-']) else { return false };
+    let rest = rest.strip_suffix('%').unwrap_or(rest);
+    let (mantissa, exponent) = match rest.find(['e', 'E']) {
+        Some(at) => (&rest[..at], Some(&rest[at + 1..])),
+        None => (rest, None),
+    };
+    let mantissa_ok = mantissa.starts_with(|c: char| c.is_ascii_digit() || c == '.')
+        && mantissa.chars().any(|c| c.is_ascii_digit())
+        && mantissa.chars().all(|c| c.is_ascii_digit() || matches!(c, '.' | ',' | ' ' | '\u{a0}' | '\u{202f}'));
+    let exponent_ok = exponent.is_none_or(|e| {
+        let e = e.strip_prefix(['+', '-']).unwrap_or(e);
+        !e.is_empty() && e.chars().all(|c| c.is_ascii_digit())
+    });
+    mantissa_ok && exponent_ok
 }
 
 /// [`write_csv`] with the output cap `limit` (bytes) given.
@@ -336,7 +370,8 @@ pub fn write_csv_limited(sheet: &Sheet, delimiter: u8, limit: usize, mut cell_te
             if col > 0 {
                 out.push(delim);
             }
-            let t = cell_text(CellRef::new(row, col));
+            let shown = cell_text(CellRef::new(row, col));
+            let t = defuse_formula(&shown);
             let quoted = t.contains(delim) || t.contains('"') || t.contains('\n') || t.contains('\r');
             // The exact size of the field as written (the delimiter was pushed above), so a row
             // never grows past the cap unseen and no doubled-quote copy of the text is built.

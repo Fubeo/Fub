@@ -133,6 +133,7 @@ client_checks() { # client_checks completo|rapido
   run "confine ProseMirror" bash -c 'node .github/scripts/check-prosemirror-boundary.mjs --self-test && node .github/scripts/check-prosemirror-boundary.mjs'
   run "confine della Tabella" bash -c 'node .github/scripts/check-tabella-boundary.mjs --self-test && node .github/scripts/check-tabella-boundary.mjs'
   run "tema non scritto inline" bash -c 'node .github/scripts/check-inline-theme.mjs --self-test && node .github/scripts/check-inline-theme.mjs'
+  run "nessuno stile in linea (CSP)" bash -c 'node .github/scripts/check-inline-styles.mjs --self-test && node .github/scripts/check-inline-styles.mjs'
   run "ascoltatori con una Vita" node .github/scripts/check-listeners.mjs
   run "nessuna attesa nascosta" node .github/scripts/check-races.mjs
   run "pacchetti npm in copia unica" node .github/scripts/check-npm-copies.mjs
@@ -149,6 +150,7 @@ rust_guards() {
   run "cargo feature compilate" node .github/scripts/check-cargo-feature-default.mjs
   run "forme di libreria consumate" node .github/scripts/check-crate-type.mjs
   run "profilo dev deciso" node .github/scripts/check-dev-profile.mjs
+  run "SBOM = Cargo.lock" bash -c "node .github/scripts/sbom.mjs --self-test && node .github/scripts/sbom.mjs --out '$LOG_DIR/fub-sbom.spdx.json'"
 }
 
 doc_guards() {
@@ -169,11 +171,12 @@ vendor_guards() {
   run "craft-docpath = upstream" node tools/vendor-craft/vendor.mjs craft-docpath check
   run "craft-vectorcraft-format = upstream" node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
   run "patch dei motori a tre vie" node tools/vendor-craft/vendor.mjs self-test
+  run "dati di vendor = dati.mjs, cartelle dichiarate" bash -c 'node tools/vendor-craft/provenienza.mjs self-test && node tools/vendor-craft/provenienza.mjs check && node tools/vendor-craft/provenienza.mjs elenco'
 }
 
 benches() {
   client_ready
-  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:fidelity" \
+  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:conformita" "bench:fidelity" \
            "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \
@@ -254,6 +257,8 @@ if [ "$MODE" = rapido ]; then
   fi
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
+    run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
+    run "SBOM = Cargo.lock (autoprova)" node .github/scripts/sbom.mjs --self-test
     [ "$(val docs)" = 1 ] || run "ciclo locale = CI" bash -c 'node .github/scripts/check-locale-loop.mjs --self-test && node .github/scripts/check-locale-loop.mjs'
   fi
   if [ "$(val vendor)" = 1 ]; then vendor_guards; fi
@@ -277,6 +282,7 @@ else
   rust_guards
   vendor_guards
   run "cancello del rilascio (autoprova)" node .github/scripts/check-release-gate.mjs --self-test
+  run "baseline dal runner (autoprova)" node .github/scripts/baseline-dal-runner.mjs --self-test
   if has_target wasm32-unknown-unknown; then
     run "il contratto attraversa il confine wasm" cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
   else

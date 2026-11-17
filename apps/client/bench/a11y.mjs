@@ -12,8 +12,9 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { modalComboboxGap } from "./a11y-rules.mjs";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
-import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
+import { openStage, openPage, prepareScene, assertCsp, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
 /// ogni violazione fuori dal debito resta bloccante e viene riportata.
 const DEBT = [
@@ -124,9 +125,22 @@ async function aScene(page, scene, light, base, axeSource) {
   // Lo script resta nella pagina fra una scena e l'altra, ma non si usa mai
   // una configurazione precedente: ogni passata parte dal documento corrente.
   const hasAxe = await page.evaluate(() => Boolean(window.axe));
-  if (!hasAxe) await page.addScriptTag({ content: axeSource });
+  // Valutato come espressione e non con `addScriptTag`: un `<script>` in linea
+  // la CSP del banco (quella dell'app) lo rifiuta.
+  if (!hasAxe) await page.evaluate(axeSource);
 
   await paperUnderText(page);
+  // Anche ciò che il banco aggiunge per misurare passa dalla CSP: un rifiuto
+  // qui cambierebbe la misura senza dirlo.
+  try {
+    await assertCsp(page);
+  } catch (e) {
+    await removePaper(page);
+    row.outcome = OUTCOMES.unstable;
+    row.reason = e.message.replace(/:?\n\s*/g, " — ");
+    console.error(`✗ ${scene.id} (${light}): ${row.reason}`);
+    return row;
+  }
   // Nessuna selezione manuale: una nuova regola axe applicabile deve diventare
   // senza che questo file debba essere aggiornato a mano.
   const outcome = await page.evaluate(
@@ -139,10 +153,7 @@ async function aScene(page, scene, light, base, axeSource) {
       }),
   );
 
-  await page.evaluate(() => {
-    document.getElementById("bench-carta")?.remove();
-    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
-  });
+  await removePaper(page);
 
   const count = (group) => group.reduce((n, r) => n + r.nodes.length, 0);
   row.examined =
@@ -192,8 +203,8 @@ async function aScene(page, scene, light, base, axeSource) {
 /// sopra, col colore che ha davvero: ciò che si vede non cambia, e axe confronta
 /// il testo con la carta vera invece di arrendersi.
 async function paperUnderText(page) {
+  await removePaper(page);
   await page.evaluate(() => {
-    document.getElementById("bench-carta")?.remove();
     const rules = [".pane::before, .pane::after { background: transparent !important; }"];
     document.querySelectorAll(".pane").forEach((pane, index) => {
       const paper = getComputedStyle(pane, "::before").backgroundColor;
@@ -201,10 +212,25 @@ async function paperUnderText(page) {
       pane.dataset.benchCarta = String(index);
       rules.push(`.pane[data-bench-carta="${index}"] > :not(.pane-tabs) { background-color: ${paper} !important; }`);
     });
-    const style = document.createElement("style");
-    style.id = "bench-carta";
-    style.textContent = rules.join("\n");
-    document.head.append(style);
+    // Un foglio costruito, non un `<style>`: senza il nonce della pagina la
+    // CSP del banco lo rifiuterebbe in silenzio, e axe tornerebbe a vedere lo
+    // pseudo-elemento invece della carta (e a tacere sul contrasto del foglio).
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(rules.join("\n"));
+    Object.defineProperty(window, "__benchCarta", { value: sheet, configurable: true });
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  });
+}
+
+/// Toglie la carta messa da `paperUnderText`.
+async function removePaper(page) {
+  await page.evaluate(() => {
+    const sheet = window.__benchCarta;
+    if (sheet !== undefined) {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((existing) => existing !== sheet);
+      delete window.__benchCarta;
+    }
+    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
   });
 }
 
@@ -399,8 +425,12 @@ async function inspectKeyboard(page) {
       const rect = el.getBoundingClientRect();
       return rect.width === 0 || rect.height === 0;
     };
+    // Un menu dentro una superficie modale (il menu della maniglia: un
+    // dialogo col campo della ricerca e, sotto, il menu delle voci) ne è una
+    // parte: il giro del Tab è quello della superficie, campo compreso.
     const modal = [...document.querySelectorAll("[aria-modal=\"true\"], [role=\"menu\"]")]
       .filter((el) => !hidden(el))
+      .filter((el) => el.getAttribute("role") !== "menu" || !el.parentElement?.closest("[aria-modal=\"true\"]"))
       .at(-1);
     const scope = modal ?? document;
     const nodes = [...scope.querySelectorAll("*")].filter(
@@ -485,7 +515,19 @@ async function inspectKeyboard(page) {
     let previousDescendant = null;
     // L'applicazione che contiene il fuoco di prima (lei stessa o un figlio).
     let previousApp = null;
-    const readActual = () => page.evaluate(() => {
+    // Il combobox di una finestra modale mostra il fuoco col cursore e la
+    // riga attiva, non con un anello: i fatti si raccolgono qui nella
+    // pagina, il giudizio (stretto, con i suoi casi) sta in
+    // `a11y-rules.mjs`, `modalComboboxGap`.
+    const readActual = async () => {
+      const actual = await readFocused();
+      if (actual?.combobox) {
+        if (!actual.indicator && modalComboboxGap(actual.combobox) === null) actual.indicator = true;
+        delete actual.combobox;
+      }
+      return actual;
+    };
+    const readFocused = () => page.evaluate(() => {
         const el = document.activeElement;
         if (!(el instanceof HTMLElement)) return null;
         const hasIndicator = (style, pseudo, after) =>
@@ -541,7 +583,73 @@ async function inspectKeyboard(page) {
         const indicator =
           (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator)) ||
           (el.tagName === "IFRAME" && shellIndicator);
+        // I fatti del combobox, per l'eccezione della finestra modale: solo
+        // per un campo combobox senza un indicatore suo.
+        const lookOf = (node) => {
+          const s = getComputedStyle(node);
+          const sides = ["Top", "Right", "Bottom", "Left"];
+          const drawn = sides.filter((side) => s[`border${side}Style`] !== "none" && parseFloat(s[`border${side}Width`]) > 0);
+          return {
+            background: s.backgroundColor,
+            backgroundImage: s.backgroundImage,
+            border: drawn.length === 0 ? "none" : sides.map((side) => `${s[`border${side}Width`]} ${s[`border${side}Style`]} ${s[`border${side}Color`]}`).join(", "),
+            outline: s.outlineStyle === "none" ? "none" : `${s.outlineWidth} ${s.outlineStyle} ${s.outlineColor}`,
+            boxShadow: s.boxShadow,
+          };
+        };
+        let combobox = null;
+        if (!indicator && el.tagName === "INPUT" && el.getAttribute("role") === "combobox") {
+          const controlsId = el.getAttribute("aria-controls");
+          const list = controlsId ? document.getElementById(controlsId) : null;
+          const dialog = el.closest('[role="dialog"]');
+          const rect = el.getBoundingClientRect();
+          let activeFacts = null;
+          if (descendantId) {
+            if (descendant === null) activeFacts = { exists: false };
+            else {
+              const owner = descendant.closest('[role="listbox"]');
+              const other = owner
+                ? [...owner.querySelectorAll('[role="option"]')].find((one) => one !== descendant && !one.matches(":hover")) ??
+                  [...owner.querySelectorAll('[role="option"]')].find((one) => one !== descendant) ??
+                  null
+                : null;
+              const highlight = owner?.querySelector(":scope > .kit-list-highlight") ?? null;
+              activeFacts = {
+                exists: true,
+                look: lookOf(descendant),
+                otherLook: other ? lookOf(other) : null,
+                highlight: highlight
+                  ? {
+                      hidden: highlight.hidden || getComputedStyle(highlight).display === "none" || getComputedStyle(highlight).visibility !== "visible",
+                      look: lookOf(highlight),
+                      sameSize:
+                        Math.abs(highlight.offsetWidth - descendant.offsetWidth) <= 1 &&
+                        Math.abs(highlight.offsetHeight - descendant.offsetHeight) <= 1 &&
+                        descendant.offsetWidth > 0 &&
+                        descendant.offsetHeight > 0,
+                    }
+                  : null,
+              };
+            }
+          }
+          combobox = {
+            tag: el.tagName,
+            role: el.getAttribute("role"),
+            focusVisible: el.matches(":focus-visible"),
+            readOnly: el.readOnly,
+            disabled: el.disabled,
+            caretColor: style.caretColor,
+            color: style.color,
+            width: rect.width,
+            height: rect.height,
+            visibility: style.visibility,
+            controls: list?.getAttribute("role") ?? null,
+            dialog: dialog ? { modal: dialog.getAttribute("aria-modal") } : null,
+            descendant: activeFacts,
+          };
+        }
         return {
+          combobox,
           probe: el.dataset.a11yProbe ?? null,
           indicator,
           descendant: descendant

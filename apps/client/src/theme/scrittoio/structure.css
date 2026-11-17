@@ -54,7 +54,11 @@
   /* Il foglio di testo che resta solo in concentrazione. */
   --focus-sheet-width: 56rem;
   --tab-h: 34px;
-  --tab-min: 96px;
+  /* La linguetta più stretta tiene a vista una decina di lettere oltre la
+     figura e la chiusura («2026-08-19» intero): sotto, i nomi diventavano
+     due lettere e un'ellissi. Le linguette che non ci stanno scorrono, e
+     l'elenco in fondo le nomina tutte. */
+  --tab-min: 132px;
   --tab-max: 220px;
   --sheet-head-h: 40px;
   --format-bar-h: 36px;
@@ -112,6 +116,24 @@
 
 [hidden] {
   display: none !important;
+}
+
+/* Il grafo che si scalda a riposo (`graph/warmup.ts`): dentro la pagina perché
+ * il canvas si dipinga davvero, ma trasparente, sotto tutto e senza puntatore.
+ * Qui e non in linea: lo stile in linea di un elemento non porta `opacity`. */
+.graph-warmup {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 200px;
+  height: 200px;
+  opacity: 0;
+  pointer-events: none;
+  contain: strict;
+  z-index: -1;
+}
+.graph-warmup-stage {
+  width: 100%;
+  height: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1184,6 +1206,21 @@ body {
   flex: 1;
   min-height: 0;
   min-width: 0;
+}
+
+/* Lo scorrimento del foglio è una radice di layout. La sua misura la decide
+   la catena flessibile qui sopra, mai il testo che contiene: con il
+   contenimento di misura e di layout una battuta ridispone soltanto il testo
+   dello scorrimento. Senza, WebKit risale fino alla finestra (nessun antenato
+   ha larghezza e altezza fisse) e a ogni tasto ridispone e ridipinge la
+   finestra intera sotto la barra del titolo.
+   Niente `paint`: non taglia nulla in più di quanto già tagli lo scorrimento.
+   I suggerimenti di CodeMirror (completamento, menu «/», anteprime) stanno
+   fuori dallo scorrimento, in `.cm-editor`, e restano fissi rispetto alla
+   finestra; le maniglie dei blocchi vi stanno già in assoluto, e il blocco in
+   mano sale nello strato sopra la finestra, che il contenimento non tocca. */
+.pane-editor[data-markdown-mode] > .cm-editor > .cm-scroller {
+  contain: size layout;
 }
 
 .pane-editor[data-markdown-mode="live_preview"] .cm-gutters,
@@ -3064,14 +3101,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: auto;
 }
 
+/* La barra dei comandi è la fila del kit (`kit/options-bar.ts`): una riga
+   sola, e ciò che non ci sta va in «…» (#411). Non scorre di lato. */
 .canvas-toolbar {
-  display: flex;
   flex: none;
-  overflow-x: auto;
-  white-space: nowrap;
 }
 
-.canvas-toolbar > button {
+.canvas-toolbar-item {
   flex: none;
 }
 
@@ -3831,6 +3867,14 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow-wrap: anywhere;
   overscroll-behavior: contain;
 }
+/* Il taglio a riga intera (#411, `whole-lines.ts`): una scheda di testo che
+   non ci sta si ferma sotto l'ultima riga che si legge intera, e non scorre
+   (un clic la apre nel campo). La misura la scrive la tela in
+   `--canvas-card-cut`. */
+.canvas-node-text > .canvas-card-body {
+  max-height: var(--canvas-card-cut, none);
+  overflow: hidden;
+}
 
 /* D-21 (a), il titolo sopra (T39). Le schede di file e di pagina web portano
    il titolo fuori dal bordo, sopra: la scheda è tutta contenuto, e il nodo
@@ -4095,11 +4139,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 
 /* L'ombra che dice «continua» (T22): fuori dalla scheda attiva la nota è
-   alta quanto il corpo e lo taglia; la pelle la sfuma sul fondo. Dentro, il
-   corpo scorre e l'ombra non c'è. */
+   alta quanto il corpo e lo taglia sotto l'ultima riga intera (#411,
+   `--canvas-card-cut`); la pelle la sfuma sul fondo. Dentro, il corpo scorre
+   e l'ombra non c'è. */
 .canvas-node:not([data-card-active]) > .canvas-card-body > .canvas-card-note {
   box-sizing: border-box;
   height: 100%;
+  max-height: var(--canvas-card-cut, none);
   overflow: hidden;
 }
 
@@ -4889,6 +4935,15 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .base-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+/* Le tabelle Markdown, in Lettura e nella griglia della Live, hanno i bordi
+   separati e accostati: è il modello in cui la loro cornice
+   (`skin/document.css`, `skin/tabella.css`) arrotonda gli angoli, e una
+   pelle non può scrivere `border-spacing`. */
+.markdown-rendered table {
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 /* L'intestazione resta in vista mentre la tabella scorre. */

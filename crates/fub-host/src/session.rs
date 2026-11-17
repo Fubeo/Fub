@@ -1124,6 +1124,10 @@ pub struct Host {
     /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
     /// chiamata, non a chi risponde alla prima.
     session_notice: Mutex<Option<String>>,
+    /// Gli altri avvisi nati prima della shell, in coda dopo la diagnosi del
+    /// log: oggi il percorso di disegno della webview che `fub_app::run`
+    /// sceglie prima di GTK. Stessa forma di consegna, un tiraggio per volta.
+    startup_notices: Mutex<std::collections::VecDeque<Notice>>,
     /// I `fub://` che il sistema ha consegnato e la shell non ha ancora
     /// preso: la coda è della macchina, come l'app che li riceve.
     uris: crate::uri_inbox::UriInbox,
@@ -1291,6 +1295,7 @@ impl Host {
             theme_folder: Mutex::new(crate::theme::ThemeFolderGrant::default()),
             theme_keeper: Arc::default(),
             local_keys_turn: Mutex::new(()),
+            startup_notices: Mutex::new(std::collections::VecDeque::new()),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -1582,6 +1587,19 @@ impl Host {
             .session_notice
             .lock()
             .unwrap_or_else(|and| and.into_inner()) = warning;
+        self
+    }
+
+    /// Mette in coda un avviso nato prima della shell, dopo la diagnosi del
+    /// log: [`Self::session_notice`] li consegna uno per chiamata, nell'ordine.
+    /// Lo chiama `fub_app::run` con l'esito del percorso di disegno
+    /// (`disegno.rs`), che esiste prima di GTK e quindi prima di ogni
+    /// ascoltatore.
+    pub fn with_startup_notice(self, notice: Notice) -> Self {
+        self.startup_notices
+            .lock()
+            .unwrap_or_else(|and| and.into_inner())
+            .push_back(notice);
         self
     }
 
@@ -3479,12 +3497,22 @@ impl Host {
     /// consuma una volta. L'origine è `Kernel` (0012): la diagnosi non è di
     /// nessun altro — non l'ha chiesta la persona e non l'ha prodotta un
     /// plugin.
+    ///
+    /// Dopo la diagnosi vengono gli avvisi di [`Self::with_startup_notice`],
+    /// uno per chiamata: la shell tira finché la risposta è `None`.
     pub fn session_notice(&self) -> Option<Notice> {
         let warning = self
             .session_notice
             .lock()
             .unwrap_or_else(|and| and.into_inner())
-            .take()?;
+            .take();
+        let Some(warning) = warning else {
+            return self
+                .startup_notices
+                .lock()
+                .unwrap_or_else(|and| and.into_inner())
+                .pop_front();
+        };
         Some(Notice::new(
             fub_abi::Event::Trouble {
                 severity: fub_abi::event::Severity::Warning,
@@ -3541,9 +3569,11 @@ impl Host {
     /// decidere se una domanda si può servire senza vault.
     /// Un `fub://` che il sistema ha consegnato all'app: resta in coda finché
     /// la shell non lo prende con `uri.pending`, anche se arriva prima che
-    /// la shell esista. `false` se la coda è piena e l'URI resta fuori.
+    /// la shell esista. `false` se la coda è piena e l'URI resta fuori. Un
+    /// nuovo tentativo di una cattura già in coda o già scritta (stesso
+    /// `nonce`) non si accoda di nuovo, e non è un rifiuto: dà `true`.
     pub fn receive_uri(&self, raw: &str) -> bool {
-        self.uris.push(raw)
+        self.uris.push(raw) != crate::uri_inbox::Received::Refused
     }
 
     pub fn has_current_vault(&self) -> bool {

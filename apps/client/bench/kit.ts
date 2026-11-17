@@ -62,6 +62,9 @@ root.append(header, table);
 let sections = 0;
 renderKit({
   lifetime,
+  // La lingua dei menu solo con `?lingua` (la scena `kit-lingua`): le altre
+  // scene fotografano la cima della pagina, e restano quelle di prima.
+  menuLanguage: params.has("lingua"),
   section(title, column, ...content) {
     const node = el("section", "sezione");
     const heading = el("h2", undefined, title);

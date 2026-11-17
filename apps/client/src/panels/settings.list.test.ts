@@ -43,6 +43,7 @@ vi.mock("../ui/motion", () => ({
 vi.mock("../ui/tooltip", () => ({ setTooltip: () => {} }));
 vi.mock("../ui/notify", () => ({ notify: vi.fn() }));
 
+import { onEvent } from "../state/kernel";
 import { mountSettings } from "./settings";
 
 const EXCLUDED = "files.excluded-folders";
@@ -347,5 +348,338 @@ describe("il focus resta sulla riga (A03)", () => {
       expect(document.activeElement?.id).toBe("setting-a.first");
     });
     expect(document.activeElement).not.toBe(document.body);
+  });
+
+  const FIRST = "a.first";
+  const SECOND = "b.second";
+  const control = (key: string) => document.getElementById(`setting-${key}`) as HTMLInputElement;
+  const stored = (key: string) =>
+    fake.entries.find((candidate) => candidate.spec.key === key) as unknown as SettingEntry;
+  const settled = (key: string) => control(key).closest(".setting-row")?.getAttribute("aria-busy") === null;
+
+  /// L'osservatore `setting_changed` dell'ultimo pannello montato: è la stessa
+  /// via del backend vero, che emette l'evento dopo ogni scrittura e per ogni
+  /// cambio da fuori (un comando, un'altra finestra); il pannello rilegge e
+  /// ricostruisce tutte le righe.
+  function settingChanged(key: string): void {
+    const call = [...vi.mocked(onEvent).mock.calls].reverse().find(([name]) => name === "setting_changed");
+    expect(call, "il pannello ascolta setting_changed").toBeDefined();
+    (call![1] as (event: { type: "setting_changed"; key: string; scope: "vault" }) => void)({
+      type: "setting_changed",
+      key,
+      scope: "vault",
+    });
+  }
+
+  async function openToggles(): Promise<HTMLInputElement> {
+    fake.setSetting.mockImplementation(async (key: string, value: boolean) => {
+      stored(key).value = value;
+      stored(key).source = "vault";
+    });
+    await openPanel([toggleEntry(FIRST, false), toggleEntry(SECOND, false)]);
+    const first = control(FIRST);
+    expect(first.getAttribute("role")).toBe("switch");
+    first.focus();
+    expect(document.activeElement).toBe(first);
+    return first;
+  }
+
+  it("Spazio (il click nativo della casella): il valore cambia e il fuoco resta", async () => {
+    const first = await openToggles();
+    first.click();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(FIRST, true));
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    await vi.waitFor(() => expect(settled(FIRST)).toBe(true));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("Invio sull'interruttore: lo commuta e il fuoco resta", async () => {
+    const first = await openToggles();
+    first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(FIRST, true));
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    await vi.waitFor(() => expect(settled(FIRST)).toBe(true));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("il valore salvato che torna dall'host con setting_changed ridisegna la riga e il fuoco resta", async () => {
+    const first = await openToggles();
+    stored(FIRST).value = true;
+    stored(FIRST).source = "vault";
+    settingChanged(FIRST);
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("un setting_changed per un'altra chiave rifà solo quella riga, e il fuoco resta", async () => {
+    const first = await openToggles();
+    stored(SECOND).value = true;
+    settingChanged(SECOND);
+    await vi.waitFor(() => expect(control(SECOND).checked).toBe(true));
+    expect(control(FIRST)).toBe(first);
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("un setting_changed senza chiave ridisegna tutto, e il fuoco resta sulla riga", async () => {
+    const first = await openToggles();
+    settingChanged("");
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("Spazio e subito dopo il setting_changed della scrittura: il fuoco resta", async () => {
+    const first = await openToggles();
+    first.click();
+    settingChanged(FIRST);
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(FIRST, true));
+    await vi.waitFor(() => expect(control(FIRST)).not.toBe(first));
+    await vi.waitFor(() => expect(settled(FIRST)).toBe(true));
+    expect(control(FIRST).checked).toBe(true);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("una scrittura rifiutata: l'esito sotto la riga, il valore autorevole e il fuoco sulla casella", async () => {
+    const first = await openToggles();
+    fake.setSetting.mockImplementation(async () => {
+      throw new Error("disco pieno");
+    });
+    first.click();
+    await vi.waitFor(() =>
+      expect(control(FIRST).closest(".setting-row")?.querySelector(".setting-error")).not.toBeNull(),
+    );
+    expect(control(FIRST).checked).toBe(false);
+    expect(document.activeElement).toBe(control(FIRST));
+  });
+
+  it("il fuoco fuori dal corpo non si sposta al ridisegno", async () => {
+    await openToggles();
+    const close = document.querySelector<HTMLButtonElement>("#settings-close")!;
+    close.focus();
+    settingChanged(SECOND);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(document.activeElement).toBe(close);
+  });
+});
+
+describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
+  const DIARY = "journal.folder";
+  const OTHER = "z.other";
+  const SIZE = "editor.size";
+  const control = (key: string) => document.getElementById(`setting-${key}`) as HTMLInputElement;
+  const stored = (key: string) =>
+    fake.entries.find((candidate) => candidate.spec.key === key) as unknown as SettingEntry;
+
+  function entry(key: string, kind: SettingEntry["spec"]["kind"], value: SettingEntry["value"]): SettingEntry {
+    return {
+      spec: { key, label: key, description: "", group: "File", scope: "vault", kind, program_writable: false },
+      value,
+      source: "default",
+    };
+  }
+
+  /// Come `settingChanged` qui sopra: la via del backend vero.
+  function settingChanged(key: string): void {
+    const call = [...vi.mocked(onEvent).mock.calls].reverse().find(([name]) => name === "setting_changed");
+    expect(call, "il pannello ascolta setting_changed").toBeDefined();
+    (call![1] as (event: { type: "setting_changed"; key: string; scope: "vault" }) => void)({
+      type: "setting_changed",
+      key,
+      scope: "vault",
+    });
+  }
+
+  /// Un evento senza chiave: «può essere cambiato tutto», e il corpo si
+  /// ridisegna intero. È la via in cui ogni bozza deve passare al controllo nuovo.
+  function redrawAll(): void {
+    settingChanged("");
+  }
+
+  /// Scrive come una persona: il valore cambia e parte `input`, ma niente
+  /// `change` — il campo non è ancora uscito né ha avuto Invio.
+  function type(input: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  async function openText(): Promise<HTMLInputElement> {
+    fake.setSetting.mockImplementation(async (key: string, value: SettingEntry["value"]) => {
+      stored(key).value = value;
+      stored(key).source = "vault";
+    });
+    await openPanel([
+      entry(DIARY, { kind: "text", default: "Diario" }, "Diario"),
+      entry(OTHER, { kind: "toggle", default: false }, false),
+    ]);
+    const input = control(DIARY);
+    input.focus();
+    type(input, "Diario/2026");
+    input.setSelectionRange(3, 5);
+    return input;
+  }
+
+  it("un setting_changed di un'altra chiave non tocca la riga in cui si scrive", async () => {
+    const before = await openText();
+    stored(OTHER).value = true;
+    settingChanged(OTHER);
+    await vi.waitFor(() => expect(control(OTHER).checked).toBe(true));
+    expect(control(DIARY)).toBe(before);
+    expect(before.value).toBe("Diario/2026");
+    expect(document.activeElement).toBe(before);
+    expect([before.selectionStart, before.selectionEnd]).toEqual([3, 5]);
+    expect(fake.setSetting).not.toHaveBeenCalled();
+  });
+
+  it("un ridisegno intero non cancella il testo non salvato, e fuoco e selezione restano", async () => {
+    const before = await openText();
+    stored(OTHER).value = true;
+    redrawAll();
+    await vi.waitFor(() => expect(control(OTHER).checked).toBe(true));
+    const after = control(DIARY);
+    expect(after).not.toBe(before);
+    expect(after.value).toBe("Diario/2026");
+    expect(document.activeElement).toBe(after);
+    expect([after.selectionStart, after.selectionEnd]).toEqual([3, 5]);
+    // La bozza resta bozza: nessuna scrittura partita da sola.
+    expect(fake.setSetting).not.toHaveBeenCalled();
+    expect(document.getElementById(`setting-${DIARY}-changed`)).toBeNull();
+  });
+
+  it("il change che Chromium manda al campo tolto col fuoco non salva la bozza da solo", async () => {
+    const before = await openText();
+    // Chromium, togliendo il campo che ha il fuoco, gli dà `blur` e `change`
+    // mentre è ancora nel documento; happy-dom no, e qui lo si rifà.
+    const body = document.getElementById("settings-body")!;
+    const replace = body.replaceChildren.bind(body);
+    body.replaceChildren = (...nodes: (Node | string)[]) => {
+      // Una volta sola, al primo ridisegno: quello per l'altra chiave.
+      body.replaceChildren = replace;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLInputElement && body.contains(focused)) {
+        focused.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      replace(...nodes);
+    };
+    redrawAll();
+    await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fake.setSetting).not.toHaveBeenCalled();
+    expect(control(DIARY).value).toBe("Diario/2026");
+  });
+
+  it("la bozza ripristinata si salva ancora uscendo dal campo, come prima del ridisegno", async () => {
+    const before = await openText();
+    redrawAll();
+    await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
+    expect(document.activeElement).toBe(control(DIARY));
+    control(DIARY).blur();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(DIARY, "Diario/2026"));
+    expect(fake.setSetting).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(control(DIARY).closest(".setting-row")?.getAttribute("aria-busy")).toBeNull());
+    expect(control(DIARY).value).toBe("Diario/2026");
+  });
+
+  it("la bozza ripristinata si salva con Invio", async () => {
+    const before = await openText();
+    redrawAll();
+    await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
+    control(DIARY).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    control(DIARY).dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(DIARY, "Diario/2026"));
+    expect(fake.setSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it("il valore salvato della sua chiave cambia da fuori: la riga col fuoco resta, la bozza pure, e una riga lo dice", async () => {
+    const before = await openText();
+    stored(DIARY).value = "Quaderno";
+    stored(DIARY).source = "vault";
+    settingChanged(DIARY);
+    await vi.waitFor(() => expect(document.getElementById(`setting-${DIARY}-changed`)).not.toBeNull());
+    // La riga in cui si scrive non si sostituisce: testo, fuoco e selezione
+    // restano gli stessi nodi.
+    expect(control(DIARY)).toBe(before);
+    expect(before.value).toBe("Diario/2026");
+    expect(document.activeElement).toBe(before);
+    expect([before.selectionStart, before.selectionEnd]).toEqual([3, 5]);
+    const note = document.getElementById(`setting-${DIARY}-changed`);
+    expect(note?.textContent).toContain("cambiato altrove");
+    expect(before.getAttribute("aria-describedby")?.split(" ")).toContain(note!.id);
+    // Un aggiornamento per un'altra chiave, e poi un ridisegno intero, non
+    // fanno sparire l'avviso: il salvato è ancora diverso da quello da cui si
+    // era partiti.
+    stored(OTHER).value = true;
+    settingChanged(OTHER);
+    await vi.waitFor(() => expect(control(OTHER).checked).toBe(true));
+    expect(document.querySelectorAll(`[id="setting-${DIARY}-changed"]`)).toHaveLength(1);
+    redrawAll();
+    await vi.waitFor(() => expect(control(DIARY)).not.toBe(before));
+    expect(control(DIARY).value).toBe("Diario/2026");
+    expect(document.getElementById(`setting-${DIARY}-changed`)).not.toBeNull();
+    expect(fake.setSetting).not.toHaveBeenCalled();
+    // Confermata, la bozza si scrive con il testo di chi scrive.
+    control(DIARY).blur();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(DIARY, "Diario/2026"));
+  });
+
+  it("una scrittura della riga rifiutata: torna il valore autorevole e l'input provato sta sotto", async () => {
+    const before = await openText();
+    fake.setSetting.mockImplementation(async () => {
+      throw new Error("disco pieno");
+    });
+    before.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(control(DIARY).closest(".setting-row")?.querySelector(".setting-error")).not.toBeNull(),
+    );
+    expect(control(DIARY).value).toBe("Diario");
+    expect(control(DIARY).closest(".setting-row")?.querySelector(".setting-attempted")?.textContent).toBe("Diario/2026");
+  });
+
+  it("il campo numerico accanto al cursore: la bozza resta e il cursore la segue", async () => {
+    await openPanel([
+      entry(SIZE, { kind: "number", default: 16, min: 10, max: 30 }, 16),
+      entry(OTHER, { kind: "toggle", default: false }, false),
+    ]);
+    const number = control(SIZE);
+    expect(number.type).toBe("number");
+    number.focus();
+    type(number, "22");
+    redrawAll();
+    await vi.waitFor(() => expect(control(SIZE)).not.toBe(number));
+    expect(control(SIZE).value).toBe("22");
+    expect((document.getElementById(`setting-${SIZE}-range`) as HTMLInputElement).value).toBe("22");
+    expect(document.activeElement).toBe(control(SIZE));
+    expect(fake.setSetting).not.toHaveBeenCalled();
+  });
+
+  it("la cartella esclusa ancora da aggiungere resta nel campo anche senza fuoco", async () => {
+    await openPanel([listEntry(EXCLUDED, ["node_modules"]), entry(OTHER, { kind: "toggle", default: false }, false)]);
+    const input = control(EXCLUDED);
+    type(input, "Bozze");
+    redrawAll();
+    await vi.waitFor(() => expect(control(EXCLUDED)).not.toBe(input));
+    expect(control(EXCLUDED).value).toBe("Bozze");
+  });
+
+  it("la riga senza fuoco che cambia da fuori si rifà da sola, e la sua bozza passa al campo nuovo", async () => {
+    await openPanel([listEntry(EXCLUDED, ["node_modules"]), entry(OTHER, { kind: "toggle", default: false }, false)]);
+    const input = control(EXCLUDED);
+    const other = control(OTHER);
+    type(input, "Bozze");
+    stored(EXCLUDED).value = ["node_modules", "target"];
+    stored(EXCLUDED).source = "vault";
+    settingChanged(EXCLUDED);
+    await vi.waitFor(() => expect(control(EXCLUDED)).not.toBe(input));
+    expect(control(EXCLUDED).value).toBe("Bozze");
+    expect(control(OTHER)).toBe(other);
+  });
+
+  it("cambiando scheda la bozza non torna: la pagina di prima non c'è più", async () => {
+    await openPanel([listEntry(EXCLUDED, ["node_modules"])]);
+    type(control(EXCLUDED), "Bozze");
+    document.querySelector<HTMLButtonElement>("#settings-close")!.click();
+    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+    await vi.waitFor(() => expect(control(EXCLUDED)?.value).toBe(""));
   });
 });

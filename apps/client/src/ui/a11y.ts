@@ -180,7 +180,14 @@ export function focusZone(zone: HTMLElement): void {
 /// Che l'ultima aperta sia anche quella dipinta sopra non è un caso da sperare:
 /// una superficie che intrappola il fuoco sta sul piano `--z-modal`, ed è scritto
 /// in `theme/scrittoio/structure.css` accanto ai piani.
-export function trapFocus(root: HTMLElement, close: () => void): Teardown {
+///
+/// **Chi sa già dove va il fuoco lo dice** (`moveFocus: false`): la trappola
+/// allora non lo mette sul primo elemento, e il chiamante lo mette subito dopo
+/// dentro `root` (il campo del lanciatore, la voce scelta di un menu). In
+/// WebKit ogni `focus()` ricalcola lo stile della pagina, e cercare il primo
+/// elemento raggiungibile ne forza il layout (`offsetParent`): due spostamenti
+/// del fuoco all'apertura costavano due ricalcoli nel fotogramma del gesto.
+export function trapFocus(root: HTMLElement, close: () => void, options: TrapOptions = {}): Teardown {
   const lifetime = openLifetime();
   // *Questa* trappola nella pila: conta la sua identità (due trappole sulla
   // stessa `root` sono due), e porta dove il fuoco tornerà.
@@ -248,8 +255,15 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
   // trappola lo veda.
   lifetime.listen(document, "keydown", onKey, { capture: true });
 
-  const inside = focusableElements(root);
-  (inside[0] ?? root).focus();
+  if (options.moveFocus !== false) {
+    const inside = focusableElements(root);
+    (inside[0] ?? root).focus();
+  }
 
   return () => lifetime.close();
+}
+
+export interface TrapOptions {
+  /// `false`: il fuoco lo mette dentro `root` il chiamante, subito dopo.
+  readonly moveFocus?: boolean;
 }

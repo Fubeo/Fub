@@ -185,6 +185,19 @@ che esiste da una parte sola:
 - il plugin a istanza singola si collega solo fuori da Android e iOS
   (`Cargo.toml`).
 
+La cartella di configurazione la sceglie il bootstrap di `run()` una volta
+sola, come sul desktop (`fub_host::config_dir`, vedi
+[Layout su disco](../reference/on-disk-layout.md#configurazione-della-macchina)).
+Su iOS è `HOME/Library/Application Support/fub`, dentro il contenitore
+dell'app. Su Android il processo non ha né `HOME` né `XDG_CONFIG_HOME`, e la
+cartella privata dell'app la dice solo il lato Java: `FubApplication.kt`
+(template di `crates/fub-app/mobile/`, dichiarato sull'`<application>` del
+manifest da `install-mobile.sh`) esporta `Context.getFilesDir()` nella
+variabile `FUB_ANDROID_FILES_DIR` in `Application.onCreate`, prima di ogni
+activity e quindi prima che la libreria Rust parta. La cartella di Fub è
+`<filesDir>/fub`. Senza quella variabile Fub lavora in memoria e lo dice
+all'avvio.
+
 Il ponte fra le due parti, i comandi e lo storage del telefono sono descritti
 in [Frontend e IPC](frontend-and-ipc.md).
 
@@ -198,8 +211,22 @@ di CI non costruisce:
   progetto con `cargo tauri android init --ci`, fonde e verifica i template
   nativi di `crates/fub-app/mobile/install-mobile.sh`, costruisce un APK di
   debug per `aarch64` e lo carica come artefatto `fub-android-debug`;
-- **iOS:** compila soltanto il Rust per il dispositivo
-  (`cargo check --target aarch64-apple-ios`); nessun `.ipa` esce da qui.
+- **Android nell'emulatore** (job `android-emulatore`, solo sulle PR pronte
+  e su `main`): costruisce lo stesso APK di debug per `x86_64`, accende KVM
+  sul runner, crea con l'SDK del runner un AVD (API 34, `google_apis`,
+  x86_64) e lo avvia senza finestra, fino a 5 minuti. Installa l'APK, apre
+  `dev.fub.app/.MainActivity`, aspetta che la finestra di Fub sia in primo
+  piano, poi 20 s: il job fallisce se il processo non c'è più, se Fub non è
+  più in primo piano o se logcat ha un crash. Carica l'artefatto
+  `android-emulatore-<sha>` con la foto dello schermo (`scrivania.png`),
+  logcat e il log dell'emulatore. Un runner senza `/dev/kvm` fa fallire il
+  job, che lo dice. Nessuna action di terzi.
+
+iOS è in pausa, come macOS
+([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): il codice resta, e
+`.github/workflows/macos-in-pausa.yml` ne compila soltanto il Rust per il
+dispositivo (`cargo check --target aarch64-apple-ios`) una volta alla
+settimana; nessun `.ipa` esce da lì.
 
 Il workflow non è un controllo richiesto. Gira su `main`, a richiesta e
 sulle PR che toccano `Cargo.lock` (un aggiornamento delle dipendenze può
@@ -243,8 +270,8 @@ questa pagina nella stessa PR.
   questa pagina è il punto da cui quel piano parte.
 - Il tablet non ha una cornice sua: da 600 px il telefono usa la
   disposizione stretta del desktop.
-- Non c'è un'app iOS costruita: il progetto Xcode chiede a mano i target
-  Share e Widget e una firma.
+- Non c'è un'app iOS costruita: iOS è in pausa, e il progetto Xcode chiede a
+  mano i target Share e Widget e una firma.
 - Non c'è un APK firmato né un rilascio per il telefono.
 - Il banco non prova il ponte nativo: sospensione, ripresa, cartelle
   condivise e link del sistema si vedono solo su un dispositivo.

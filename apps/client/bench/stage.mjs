@@ -1,4 +1,4 @@
-// Il palco: il server, il browser, e **le sei cose che il banco tiene ferme**.
+// Il palco: il server, il browser, e **le otto cose che il banco tiene ferme**.
 //
 // Le usano in due — il fotografo (`foto.mjs`) e il controllo di accessibilità
 // (`a11y.mjs`) — e stanno qui perché una stabilità dichiarata in due posti è
@@ -7,7 +7,7 @@
 //
 // # La stabilità è una decisione, non un'impostazione (§31.1)
 //
-// Sono sei, e ognuna è qui perché senza di lei il banco sfarfalla — e un banco
+// Sono otto, e ognuna è qui perché senza di lei il banco sfarfalla — e un banco
 // visivo che sfarfalla si spegne da solo entro tre settimane, perché il primo
 // rosso che nessuno sa spiegare insegna a non guardarlo più.
 //
@@ -28,8 +28,19 @@
 //    è successo alla prima corsa di questo file.
 // 6. **La finestra è una.** Viewport fisso e `deviceScaleFactor: 1`: la
 //    baseline è per una misura, non per lo schermo di chi passa.
+// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso.
+//    CodeMirror lo usa nella ricerca di una posizione sotto un punto
+//    (`InlineCoordsScan.scan`), e la selezione la cerca ai due bordi della
+//    riga a capo: col caso vero, in una corsa su due i due bordi differivano
+//    di un carattere e tre lettere scelte si dipingevano come una riga intera
+//    (`riga-dei-suggerimenti`).
+// 8. **Ciò che cambierà da sé lo dice.** Un elemento che sta per riscriversi
+//    senza che nessuno lo tocchi (la riga dei suggerimenti durante la sua
+//    pausa) porta `data-pending`; prima dello scatto si aspetta che nella
+//    pagina non ce ne sia più nessuno. Un tempo indovinato sarebbe giusto
+//    sulla macchina di chi l'ha scelto e sbagliato sul runner.
 //
-// La settima non sta qui perché non è del palco: le baseline sono **solo
+// La nona non sta qui perché non è del palco: le baseline sono **solo
 // Linux**. Il perché sta in `foto.mjs`, accanto alla soglia.
 import { createServer } from "vite";
 import { chromium } from "playwright";
@@ -69,6 +80,18 @@ const QUIET = `
   .avvio-scia { animation: none !important; }
 `;
 
+/// Il seme del caso del banco: conta che sia sempre lo stesso, non quale sia.
+const RANDOM_SEED = 0x5eed_f0b;
+
+/// Ciò che nella pagina sta per cambiare da sé (la regola 8): finché c'è, non
+/// si scatta.
+export const PENDING = "[data-pending]";
+
+/// Quanto si aspetta che la pagina smetta di avere elementi in attesa (ms).
+/// La riga dei suggerimenti si ferma entro due pause (600 ms); il resto è
+/// margine per un runner carico.
+const PENDING_TIMEOUT = 5_000;
+
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 
 /// La cartella delle baseline, versionata.
@@ -83,10 +106,15 @@ export const OUTPUT = here("./.output");
 ///
 /// `port` sposta il server per una corsa sola (`--port` di chi lo chiama), come
 /// `FUB_BENCH_PORT` per tutte: senza, vale la porta della config.
+///
+/// `browserArgs` aggiunge opzioni di Chromium a quelle di tutti i banchi, per
+/// il banco che ne ha bisogno e per lui solo (il moto: `BROWSER_ARGS` di
+/// `motion-rules.mjs`).
 export async function openStage({
   quiet = true,
   port,
   strictPort = true,
+  browserArgs = [],
   createServer: createServerImpl = createServer,
   chromium: chromiumImpl = chromium,
 } = {}) {
@@ -99,6 +127,16 @@ export async function openStage({
       ...(port === undefined ? {} : { server: { port, strictPort } }),
     });
     await server.listen();
+    // Il riscaldamento della config (`server.warmup`, #395) parte con
+    // `listen()` e, lasciato correre, si contende la CPU con la prima scena:
+    // su un runner carico la sua `page.goto` passava i 30 s. Il palco si apre
+    // a riscaldamento finito (le richieste in corso si riusano, non si rifanno).
+    const warm = server.config?.server?.warmup?.clientFiles ?? [];
+    if (typeof server.warmupRequest === "function") {
+      await Promise.all(warm.map((file) => server.warmupRequest(file.replace(/^\.\//, "/"))));
+      // Anche i loro import statici, che Vite prepara da sé senza aspettarli.
+      await server.waitForRequestsIdle?.();
+    }
     const base = `http://localhost:${server.config.server.port}`;
     browser = await chromiumImpl.launch({
       args: [
@@ -106,6 +144,7 @@ export async function openStage({
         "--disable-lcd-text",
         "--force-color-profile=srgb",
         "--disable-dev-shm-usage",
+        ...browserArgs,
       ],
     });
     let closePromise;
@@ -182,7 +221,21 @@ export async function openPage(browser, light, { clock = true } = {}) {
     reducedMotion: "reduce",
     colorScheme: light,
   });
+  await watchCsp(context);
   const page = await context.newPage();
+  // Il caso a seme fisso (la regola 7), anche lui prima di ogni documento:
+  // mulberry32, che basta a chi lo usa per spezzare un pareggio e non per
+  // cifrare. `crypto` resta quello vero.
+  await page.addInitScript((seed) => {
+    let state = seed >>> 0;
+    Math.random = () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, RANDOM_SEED);
   // Prima di ogni navigazione: si installa come script d'avvio, quindi la
   // pagina nasce già con l'ora ferma. Dopo il `goto` sarebbe tardi — chi legge
   // l'orologio lo legge montandosi.
@@ -202,6 +255,65 @@ export async function openPage(browser, light, { clock = true } = {}) {
     });
   }
   return page;
+}
+
+/// **Le violazioni della CSP**, raccolte dal primo istante di ogni documento.
+///
+/// Il server del banco manda la CSP dell'app vera (`vite.bench.config.ts`):
+/// un `<style>` senza il nonce della pagina, o un attributo `style` scritto
+/// come markup, lì è rifiutato in silenzio — la pagina resta in piedi, e la
+/// foto mostra al più un pezzo senza stile che nessuno nota. Qui lo si rende
+/// rumoroso: ogni `securitypolicyviolation` del documento finisce in
+/// `window.__fubCsp`, e `prepareScene` fallisce se ce n'è anche una.
+///
+/// Si ascolta su `window` in cattura: l'evento nasce sull'elemento rifiutato (o
+/// sul documento, se l'elemento non è montato) e risale fin lì.
+///
+/// Conta soltanto ciò che si vede: una violazione su un elemento montato
+/// nella pagina (`inPage`). Il browser segnala anche lo `style` di un markup
+/// parsato in un documento inerte — il `DOMParser` del sanitizzatore legge
+/// l'HTML di una nota con le sue celle allineate — e quella segnalazione arriva
+/// sul documento: lì nessuno stile si applica, il sanitizzatore lo riscrive
+/// via CSSOM sull'elemento vero, e nella pagina non manca niente. Si tiene,
+/// per chi la vuole leggere, ma non ferma la scena.
+export async function watchCsp(context) {
+  await context.addInitScript(() => {
+    const found = [];
+    Object.defineProperty(window, "__fubCsp", { value: found });
+    window.addEventListener(
+      "securitypolicyviolation",
+      (event) => {
+        found.push({
+          directive: event.effectiveDirective,
+          blocked: event.blockedURI,
+          source: event.sourceFile,
+          line: event.lineNumber,
+          column: event.columnNumber,
+          sample: event.sample,
+          inPage: event.target instanceof Node && event.target !== document && event.target.isConnected,
+        });
+      },
+      true,
+    );
+  });
+}
+
+/// Le violazioni del documento aperto. `null` se la pagina non le raccoglie:
+/// chi la apre senza `watchCsp` lo deve sapere, non leggere «nessuna».
+export async function cspViolations(page) {
+  return page.evaluate(() => (Array.isArray(window.__fubCsp) ? [...window.__fubCsp] : null));
+}
+
+/// Fallisce se la pagina ha violato la CSP su un elemento montato, nominando
+/// ogni violazione.
+export async function assertCsp(page) {
+  const all = await cspViolations(page);
+  if (all === null) throw new Error("la pagina non raccoglie le violazioni della CSP: apri il contesto con watchCsp");
+  const found = all.filter((violation) => violation.inPage);
+  if (found.length === 0) return;
+  const lines = found.map(({ directive, blocked, source, line, column, sample }) =>
+    `${directive} · ${blocked || "-"} · ${source || "-"}:${line}:${column}${sample ? ` · «${sample}»` : ""}`);
+  throw new Error(`${found.length} violazioni della CSP:\n  ${lines.join("\n  ")}`);
 }
 
 /// Porta la pagina allo stato di una scena, e la lascia ferma.
@@ -241,12 +353,46 @@ export async function prepareScene(page, scene, light, base, url) {
   await page.evaluate(() =>
     Promise.all([...document.images].map((img) => (img.complete ? null : img.decode().catch(() => null)))),
   );
-  await page.addStyleTag({ content: QUIET });
+  // Ciò che sta per cambiare da sé si aspetta dopo l'ultimo gesto: è il gesto
+  // ad armare la pausa della riga dei suggerimenti.
+  await waitUntilSettled(page);
+  // Un foglio costruito e non `addStyleTag`: un `<style>` senza il nonce della
+  // pagina la CSP lo rifiuta, come rifiuterebbe quello di un modulo dell'app.
+  await page.evaluate((css) => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  }, QUIET);
+  await assertCsp(page);
   // Un fotogramma dopo l'ultimo gesto: il layout è già calcolato, ma ciò che è
   // stato scritto adesso deve ancora essere dipinto.
   await page.evaluate(
     () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
   );
+}
+
+/// Aspetta che nella pagina non ci sia più niente in attesa (`PENDING`, la
+/// regola 8). Se dopo `PENDING_TIMEOUT` qualcosa è ancora in attesa, lancia
+/// dicendo chi: è una pausa che si riarma da sola, e va trovata, non
+/// aspettata di più.
+export async function waitUntilSettled(page, timeout = PENDING_TIMEOUT) {
+  try {
+    await page.waitForFunction((selector) => !document.querySelector(selector), PENDING, { timeout });
+  } catch (error) {
+    const still = await page
+      .evaluate(
+        (selector) =>
+          [...document.querySelectorAll(selector)].map((el) =>
+            el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`,
+          ),
+        PENDING,
+      )
+      .catch(() => []);
+    throw new Error(
+      `la pagina non si ferma: dopo ${timeout} ms ${still.join(", ") || "qualcosa"} porta ancora data-pending`,
+      { cause: error },
+    );
+  }
 }
 
 /// Uno scatto che è **uguale a sé stesso**.
@@ -266,7 +412,11 @@ export async function stillShot(page, attempts = 4) {
       () => new Promise((r) => setTimeout(() => requestAnimationFrame(r), 250)),
     );
     const after = await page.screenshot();
-    if (before.equals(after)) return after;
+    // Due scatti uguali con una pausa ancora armata non sono una scena ferma:
+    // sono una scena che non è ancora cambiata.
+    const pending = await page.evaluate((selector) => document.querySelector(selector) !== null, PENDING);
+    if (before.equals(after) && !pending) return after;
+    if (pending) await waitUntilSettled(page);
     before = after;
   }
   throw new Error("la scena non sta ferma: due scatti di fila non coincidono mai");

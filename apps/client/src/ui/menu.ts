@@ -13,6 +13,9 @@ import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
 import { enterSurface, exitSurface } from "./motion";
 import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
+import { createGroupLabel } from "../kit/group-label";
+import { createRow, markGlideHost, markLit, markPressed } from "../kit/row";
+import { createTile } from "../kit/tile";
 
 export interface MenuItem {
   label: string;
@@ -113,6 +116,34 @@ export interface ContextMenuOptions {
   /// Le voci spente si raggiungono con le frecce, con `aria-disabled`, e
   /// non si attivano: chi ascolta sente il perché nella loro descrizione.
   reachDisabled?: boolean;
+  /// Un campo in cima, con questo segnaposto, in cui si scrive per filtrare
+  /// le voci (e trovare `searchable`): la ricerca si vede dove si scrive, e
+  /// il piede non la ripete. Il menu si apre col fuoco nel campo; ↓ scende
+  /// alle voci, ↑ dalla prima torna al campo, Invio sceglie la trovata accesa.
+  field?: string;
+  /// Il titolo quieto in cima alle voci: il nome di ciò su cui il menu
+  /// lavora («Riquadro»), quando non serve una testata. Scrivendo sparisce,
+  /// come i gruppi.
+  title?: string;
+  /// Il piede coi tasti che il menu ascolta, quando non c'è quello della
+  /// ricerca: «↵ sceglie · → apre · Esc chiude».
+  keys?: readonly MenuKey[];
+}
+
+/// Un tasto del piede e che cosa fa.
+export interface MenuKey {
+  readonly key: string;
+  readonly does: string;
+}
+
+/// Il piede dei tasti di un menu che si sceglie da tastiera:
+/// «↵ sceglie · → apre · Esc chiude».
+export function menuKeyFoot(): MenuKey[] {
+  return [
+    { key: "↵", does: t("context.keys.pick") },
+    { key: "→", does: t("context.keys.open") },
+    { key: "Esc", does: t("context.keys.close") },
+  ];
 }
 
 /// Il menu aperto, per chi l'ha aperto: le voci si cambiano senza chiuderlo,
@@ -170,6 +201,10 @@ interface Chrome {
   readonly searchable: readonly MenuItem[];
   readonly search: boolean;
   readonly full: boolean;
+  /// Il segnaposto del campo della ricerca, se il menu ne ha uno.
+  readonly field: string | null;
+  readonly title: string | null;
+  readonly keys: readonly MenuKey[];
 }
 
 /// Ciò che il menu principale passa ai suoi sottomenu.
@@ -185,6 +220,43 @@ const SEARCH_LIMIT = 9;
 
 /// Il confronto della ricerca: minuscole e senza accenti.
 const fold = (text: string): string => text.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/// I nomi dei tasti come li scrive un menu, nella lingua dell'interfaccia: in
+/// italiano come sono stampati sulla tastiera italiana («Maiusc», «Canc»), e
+/// Invio col suo segno, che non ha lingua.
+const menuKeyName = (part: string): string => {
+  switch (part) {
+    case "Shift":
+    case "Maiusc":
+      return t("context.key.shift");
+    case "Del":
+    case "Delete":
+      return t("context.key.delete");
+    case "Space":
+      return t("context.key.space");
+    case "Enter":
+      return "↵";
+    default:
+      return part;
+  }
+};
+
+/// La scorciatoia di una voce come la scrive il menu: i tasti di un accordo
+/// separati da uno spazio, coi nomi della lingua («Ctrl Maiusc ↑», «Canc») invece
+/// della forma col «+» di `displayBinding` («Ctrl+Shift+↑», «Del»). Vale solo
+/// nei menu, come nel prototipo dell'editor: altrove (suggerimenti, palette,
+/// impostazioni) la scorciatoia resta col «+». Ciò che non è un accordo
+/// («Alt clic», «SVG o PNG») e la forma del Mac («⌘⇧K») restano come sono.
+export function menuKeys(hint: string): string {
+  return hint
+    .split(" ")
+    .map((token) => {
+      const chord = /^((?:(?:Ctrl|Alt|Shift|Maiusc)\+)+)(.+)$/.exec(token);
+      const parts = chord ? [...chord[1]!.split("+").filter(Boolean), chord[2]!] : [token];
+      return parts.map(menuKeyName).join(" ");
+    })
+    .join(" ");
+}
 
 /// Una voce trovata scrivendo e il sottomenu da cui viene.
 interface Row {
@@ -220,6 +292,13 @@ const SUB_SHIFT = 12;
 
 /// I segni dei formati che una scelta in riga sa disegnare (`icons.ts`).
 const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text"]);
+
+/// Accende o spegne una parte del menu: la classe `menu-lit`, che il banco del
+/// moto e le scene leggono, e lo stato del kit, che veste righe e tessere.
+function light(el: HTMLElement, on: boolean): void {
+  el.classList.toggle("menu-lit", on);
+  markLit(el, on);
+}
 
 /// Il segno di una scelta: la sua icona, se è uno dei segni dei formati, o
 /// quello del formato che il suo nome dice. Le superfici di oggi dichiarano
@@ -363,8 +442,11 @@ export function showContextMenu(
     header: options.header,
     clipboard: clipboard.length >= 2 ? clipboard : [],
     searchable: options.searchable ?? [],
-    search: options.search ?? anchor === null,
+    search: options.field !== undefined || (options.search ?? anchor === null),
     full: options.fullSearch === true,
+    field: options.field ?? null,
+    title: options.title ?? null,
+    keys: options.keys ?? [],
   };
   const withClipboard = (list: readonly MenuItem[]): readonly MenuItem[] => (clipboard.length === 1 ? [clipboard[0]!, ...list] : list);
   const root = renderMenu(withClipboard(items), lifetime, replaceWith, chrome, { disabled: options.reachDisabled === true, typed: null });
@@ -375,6 +457,10 @@ export function showContextMenu(
   if (anchor === null) menu.classList.add("menu-at-point");
   if (options.label) menu.setAttribute("aria-label", options.label);
   else if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
+  else if (options.title && !options.header) menu.setAttribute("aria-label", options.title);
+  // Col campo la superficie è un dialogo, e il suo nome è anche quello del
+  // menu delle voci che tiene.
+  if (root.field !== null) menu.querySelector(".menu-items")?.setAttribute("aria-labelledby", menu.id);
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   const workspace = document.getElementById("workspace");
@@ -398,11 +484,16 @@ export function showContextMenu(
   // e, se nel frattempo se n'era aperto un altro, chiudeva quello. Su una vita
   // già chiusa `ascolta` non fa niente, e il caso non è da ricordarsi: non c'è.
   if (strip !== null) stripTabs(menu, strip, () => root.focusActive(), lifetime);
-  lifetime.add(trapFocus(menu, closeContextMenu));
   // `trapFocus` conserva e ripristina il fuoco precedente; il fuoco operativo
-  // del menu, però, è una sola voce, secondo la regola del roving tabindex.
+  // del menu, però, è una sola voce, secondo la regola del roving tabindex, e
+  // lo mette qui sotto una volta sola (ogni `focus()` ricalcola lo stile).
   // Aperto dal puntatore, il fuoco sta nel menu finché una freccia non sceglie.
-  if (pointer) root.menu.focus({ preventScroll: true });
+  lifetime.add(trapFocus(menu, closeContextMenu, { moveFocus: false }));
+  // Col campo della ricerca, il fuoco sta nel campo: si scrive subito.
+  if (root.field !== null) {
+    if (pointer) root.field.classList.add("menu-field-pointer");
+    root.field.focus({ preventScroll: true });
+  } else if (pointer) root.menu.focus({ preventScroll: true });
   else root.focusActive();
   // Un click nella barra o in un menu, invece, è un gesto dentro la superficie:
   // la barra lavora coi suoi controlli, una voce chiude da sé quando agisce, e
@@ -449,6 +540,8 @@ async function itemsOf(item: MenuItem): Promise<readonly MenuItem[]> {
 
 interface RenderedMenu {
   readonly menu: HTMLElement;
+  /// Il campo della ricerca, se il menu ne ha uno.
+  readonly field: HTMLInputElement | null;
   focusActive(): void;
   /// Le voci nuove al posto di quelle di prima, nello stesso menu.
   update(items: readonly MenuItem[]): void;
@@ -488,6 +581,9 @@ function renderMenu(
   let items = initialItems;
   const menu = document.createElement("div");
   menu.className = "context-menu";
+  // La scelta la disegnano la pastiglia dell'elenco e la linguetta della barra
+  // degli appunti, che scivolano: i pezzi del kit non mettono il loro fondo.
+  markGlideHost(menu);
   // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
   // permette di uscirne sapendo di esserci entrati.
   menu.setAttribute("role", "menu");
@@ -583,7 +679,7 @@ function renderMenu(
         back();
       }
     });
-    childLifetime.add(trapFocus(sub, back));
+    childLifetime.add(trapFocus(sub, back, { moveFocus: false }));
     if (focus) child.focusActive();
     else button.focus({ preventScroll: true });
   };
@@ -636,6 +732,50 @@ function renderMenu(
     menu.append(head);
     menu.setAttribute("aria-label", chrome.header.name ? `${chrome.header.kind} · ${chrome.header.name}` : chrome.header.kind);
   }
+  // Il campo della ricerca, se il menu ne ha uno: in cima, sopra le voci.
+  let field: HTMLInputElement | null = null;
+  let fieldRow: HTMLElement | null = null;
+  if (chrome?.field != null) {
+    fieldRow = document.createElement("div");
+    fieldRow.className = "menu-field";
+    const glyph = iconEl("search");
+    if (glyph !== null) {
+      glyph.setAttribute("aria-hidden", "true");
+      fieldRow.append(glyph);
+    }
+    field = document.createElement("input");
+    field.type = "text";
+    field.className = "menu-field-input";
+    field.placeholder = chrome.field;
+    field.setAttribute("aria-label", chrome.field);
+    field.autocomplete = "off";
+    field.spellcheck = false;
+    fieldRow.append(field);
+    menu.append(fieldRow);
+    // Un menu ha soltanto voci, e un campo dentro di lui non ci può stare. Col
+    // campo la superficie è un piccolo dialogo modale (la trappola del fuoco
+    // la fa già tale) che tiene il campo e, sotto, il menu delle voci: è il
+    // modello dei menu con la ricerca, in cui ↓ dal campo porta il fuoco sulle
+    // voci e ↑ dalla prima lo riporta qui.
+    menu.setAttribute("role", "dialog");
+    menu.setAttribute("aria-modal", "true");
+    menu.removeAttribute("aria-orientation");
+    list.setAttribute("role", "menu");
+    list.setAttribute("aria-orientation", "vertical");
+    // Aperto dal puntatore, il campo prende il fuoco senza anello, come nel
+    // prototipo: dove si è lo dicono il cursore che lampeggia e la voce
+    // accesa (`menu-field-pointer`, messo da `showContextMenu`). Appena il
+    // fuoco ci torna dalla tastiera, o il Tab chiede dove si è, l'anello.
+    const quiet = field;
+    lifetime.listen(quiet, "blur", () => quiet.classList.remove("menu-field-pointer"));
+    lifetime.listen(quiet, "keydown", (e) => {
+      if (e.key === "Tab") quiet.classList.remove("menu-field-pointer");
+    });
+  }
+  // Il titolo quieto in cima alle voci: un'etichetta del kit, come quelle dei
+  // gruppi; sta nell'elenco, e scrivendo sparisce. Il nome del menu lo dice
+  // già a chi ascolta.
+  const title = chrome?.title != null ? createGroupLabel({ text: chrome.title, className: "menu-title" }) : null;
   let bar: HTMLElement | null = null;
   const tab = document.createElement("div");
   tab.className = "menu-clipboard-glide";
@@ -647,20 +787,15 @@ function renderMenu(
     bar.setAttribute("aria-label", t("context.clipboard"));
     bar.append(tab);
     for (const item of chrome.clipboard) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "menu-quick";
-      b.setAttribute("role", "menuitem");
+      // Una parte della barra è una tessera del kit, nella forma affiancata.
+      const b = createTile({
+        label: item.label,
+        ...(item.icon === undefined ? {} : { icon: item.icon }),
+        ...(item.hint ? { keys: item.hint } : {}),
+        role: "menuitem",
+        className: "menu-quick",
+      });
       b.tabIndex = -1;
-      const glyph = item.icon === undefined ? null : iconEl(item.icon);
-      if (glyph !== null) {
-        glyph.setAttribute("aria-hidden", "true");
-        b.append(glyph);
-      }
-      const label = document.createElement("span");
-      label.textContent = item.label;
-      b.append(label);
-      if (item.hint) b.setAttribute("aria-keyshortcuts", item.hint);
       b.addEventListener("click", () => press(b, item));
       b.addEventListener("pointerenter", (e) => hoverCascade(e, null, null));
       bar.append(b);
@@ -672,9 +807,11 @@ function renderMenu(
   menu.append(list);
   // Il piede: una fascia tenue che invita a scrivere, poi mostra che cosa si
   // è scritto. Per chi ascolta parlano le voci trovate, che prendono il fuoco.
-  const foot = chrome?.search ? document.createElement("div") : null;
+  // Col campo, la ricerca si vede lì e il piede, se c'è, dice i tasti.
+  const keysFoot = (chrome?.keys.length ?? 0) > 0;
+  const foot = (chrome?.search && field === null) || keysFoot ? document.createElement("div") : null;
   if (foot !== null) {
-    foot.className = "menu-foot";
+    foot.className = keysFoot ? "menu-foot menu-foot-keys" : "menu-foot";
     foot.setAttribute("aria-hidden", "true");
     menu.append(foot);
   }
@@ -687,6 +824,18 @@ function renderMenu(
   let lastQuick = 0;
   const drawFoot = (found: number): void => {
     if (foot === null) return;
+    if (keysFoot) {
+      if (foot.childElementCount > 0) return;
+      for (const { key, does } of chrome!.keys) {
+        const part = document.createElement("span");
+        part.className = "menu-foot-key";
+        const kbd = document.createElement("kbd");
+        kbd.textContent = key;
+        part.append(kbd, ` ${does}`);
+        foot.append(part);
+      }
+      return;
+    }
     foot.classList.toggle("menu-finding", query !== "");
     const glyph = iconEl("search");
     glyph?.setAttribute("aria-hidden", "true");
@@ -710,26 +859,23 @@ function renderMenu(
   /// La riga di una voce con due o tre scelte che hanno il loro segno: i
   /// tastini accanto al nome, al posto del sottomenu.
   function drawChoices(item: MenuItem, options: readonly MenuItem[], host: HTMLElement, pictured: boolean): void {
-    const row = document.createElement("div");
-    row.className = "menu-choices";
-    row.setAttribute("role", "group");
+    // Una riga del kit che non si preme: i pulsanti sono i tastini accanto.
+    const drawn = createRow({
+      tag: "div",
+      role: "group",
+      label: item.label,
+      ...(item.icon === undefined ? {} : { icon: item.icon }),
+      holdIcon: pictured,
+      className: "menu-choices",
+      parts: { icon: "menu-icon", label: "menu-label" },
+    });
+    const row = drawn.element;
     row.setAttribute("aria-label", item.label);
-    const glyph = item.icon === undefined ? null : iconEl(item.icon);
-    if (glyph !== null || pictured) {
-      const picture = document.createElement("span");
-      picture.className = "menu-icon";
-      picture.setAttribute("aria-hidden", "true");
-      if (glyph !== null) picture.append(glyph);
-      row.append(picture);
-    }
-    const label = document.createElement("span");
-    label.className = "menu-label";
+    const label = drawn.label;
     label.setAttribute("aria-hidden", "true");
-    label.textContent = item.label;
     const name = document.createElement("span");
     name.className = "menu-choice-name";
     label.append(name);
-    row.append(label);
     const set = document.createElement("span");
     set.className = "menu-choice-set";
     const own: HTMLButtonElement[] = [];
@@ -764,6 +910,7 @@ function renderMenu(
   /// Mette nell'elenco le voci `rows`, al posto di quelle di prima.
   function fill(rows: readonly Row[]): void {
     list.replaceChildren(glide);
+    if (title !== null && query === "") list.append(title);
     glide.hidden = true;
     buttons.length = 0;
     usable.length = 0;
@@ -798,13 +945,7 @@ function renderMenu(
           node.className = "menu-group";
           node.setAttribute("role", "group");
           node.setAttribute("aria-label", named);
-          if (heading) {
-            const title = document.createElement("div");
-            title.className = "menu-group-label";
-            title.setAttribute("aria-hidden", "true");
-            title.textContent = named;
-            node.append(title);
-          }
+          if (heading) node.append(createGroupLabel({ text: named, className: "menu-group-label" }));
           list.appendChild(node);
           group = { name: named, node };
         }
@@ -815,9 +956,28 @@ function renderMenu(
         drawChoices(item, options, host, pictured);
         continue;
       }
-      const b = document.createElement("button");
-      b.type = "button";
-      b.setAttribute("role", item.choice ? `menuitem${item.choice}` : "menuitem");
+      // La riga è del kit: figura, nome, nota, scorciatoia, freccia. Il menu
+      // ci aggiunge ciò che è solo suo: le strisce dei colori, il campione di
+      // uno stile, il percorso di una voce trovata, la spunta di una scelta.
+      const glyphed = item.sample === undefined && item.icon !== undefined && icon(item.icon) !== "";
+      const nested = item.items !== undefined;
+      const drawn = createRow({
+        label: item.label,
+        ...(glyphed ? { icon: item.icon! } : {}),
+        holdIcon: glyphed || pictured,
+        ...(item.description ? { note: item.description } : {}),
+        ...(item.hint ? { keys: menuKeys(item.hint) } : {}),
+        more: item.submenu === true || nested,
+        disabled: item.disabled === true,
+        role: item.choice ? `menuitem${item.choice}` : "menuitem",
+        ...(item.danger ? { className: "danger" } : {}),
+        parts: { icon: "menu-icon", label: "menu-label", note: "menu-description", keys: "menu-hint", more: "menu-hint menu-more" },
+      });
+      const b = drawn.element as HTMLButtonElement;
+      // Chi ascolta sente la scorciatoia nella forma col «+», che è quella di
+      // `aria-keyshortcuts`; lo spazio della forma del menu lì separerebbe
+      // due alternative.
+      if (item.hint) b.setAttribute("aria-keyshortcuts", item.hint);
       if (item.choice) b.setAttribute("aria-checked", String(item.checked === true));
       b.tabIndex = -1;
       if (item.swatches?.length) {
@@ -830,71 +990,36 @@ function renderMenu(
           swatch.style.background = color;
           strip.append(swatch);
         }
-        b.append(strip);
+        b.prepend(strip);
       }
-      const glyph = item.sample !== undefined || item.icon === undefined ? null : iconEl(item.icon);
-      if (glyph !== null || pictured) {
-        const picture = document.createElement("span");
-        picture.className = "menu-icon";
-        picture.setAttribute("aria-hidden", "true");
-        if (glyph !== null) picture.append(glyph);
-        if (item.sample !== undefined) {
-          const sample = document.createElement("span");
-          sample.className = item.sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
-          sample.textContent = item.sample.text;
-          for (const [name, value] of Object.entries(item.sample.css)) sample.style.setProperty(name, value);
-          picture.append(sample);
-        }
-        b.append(picture);
+      if (item.sample !== undefined && drawn.icon !== null) {
+        const sample = document.createElement("span");
+        sample.className = item.sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
+        sample.textContent = item.sample.text;
+        for (const [name, value] of Object.entries(item.sample.css)) sample.style.setProperty(name, value);
+        drawn.icon.append(sample);
       }
       if (path) {
         const trail = document.createElement("span");
         trail.className = "menu-path";
         trail.textContent = `${path} ›`;
-        b.append(trail);
+        drawn.label.before(trail);
       }
-      const label = document.createElement("span");
-      label.className = "menu-label";
-      label.textContent = item.label;
-      b.append(label);
       // Una riga sola: la spiegazione sta a destra, in grigio, dove non c'è una
       // scorciatoia; con la scorciatoia la sente soltanto chi ascolta. Il
       // perché di una voce spenta si vede sempre.
-      if (item.description) {
-        const description = document.createElement("span");
-        description.className = item.hint && !item.disabled ? "menu-description menu-quiet" : "menu-description";
-        description.textContent = item.description;
-        b.append(description);
-      }
+      if (drawn.note !== null && item.hint && !item.disabled) drawn.note.classList.add("menu-quiet");
       if (item.choice) {
         const check = document.createElement("span");
         check.className = "menu-check";
         check.setAttribute("aria-hidden", "true");
         check.textContent = item.checked ? "✓" : "";
-        b.append(check);
+        (drawn.note ?? drawn.label).after(check);
       }
-      if (item.hint) {
-        const hint = document.createElement("kbd");
-        hint.className = "menu-hint";
-        hint.textContent = item.hint;
-        b.append(hint);
-        b.setAttribute("aria-keyshortcuts", item.hint);
-      }
-      const nested = item.items !== undefined;
-      if (item.submenu || nested) {
-        const more = document.createElement("span");
-        more.className = "menu-hint menu-more";
-        more.setAttribute("aria-hidden", "true");
-        more.textContent = "›";
-        b.append(more);
-        b.setAttribute("aria-haspopup", "menu");
-        if (nested) b.setAttribute("aria-expanded", "false");
-      }
-      if (item.danger) b.className = "danger";
+      if (nested) b.setAttribute("aria-expanded", "false");
       b.addEventListener("pointerenter", (e) => hoverCascade(e, b, item));
       buttonOf.set(item, b);
       if (item.disabled) {
-        b.setAttribute("aria-disabled", "true");
         host.appendChild(b);
         if (reach.disabled) {
           buttons.push(b);
@@ -970,6 +1095,11 @@ function renderMenu(
       focusItem(delta > 0 ? first : count - 1);
       return;
     }
+    // Col campo della ricerca, ↑ dalla prima voce torna a scrivere.
+    if (field !== null && delta < 0 && at === first) {
+      field.focus({ preventScroll: true });
+      return;
+    }
     if (first > 0 && ((delta > 0 && at === count - 1) || (delta < 0 && at === first))) {
       focusItem(Math.min(lastQuick, first - 1));
       return;
@@ -1022,7 +1152,7 @@ function renderMenu(
   let glideOn = false;
   let tabOn = false;
   const paint = (target: EventTarget | null): void => {
-    for (const lit of menu.querySelectorAll(".menu-lit")) lit.classList.remove("menu-lit");
+    for (const lit of menu.querySelectorAll<HTMLElement>(".menu-lit")) light(lit, false);
     for (const choices of new Set(choicesOf.values())) choices.name.textContent = "";
     const button = target instanceof HTMLButtonElement ? target : null;
     const inBar = button !== null && quick.includes(button) && query === "";
@@ -1030,7 +1160,7 @@ function renderMenu(
     if (bar !== null) bar.classList.toggle("is-on", inBar);
     if (inBar) {
       lastQuick = quick.indexOf(button);
-      button.classList.add("menu-lit");
+      light(button, true);
       slide(tab, button, tabOn, (left, width) => {
         tab.style.left = `${left}px`;
         tab.style.width = `${width}px`;
@@ -1046,9 +1176,9 @@ function renderMenu(
     }
     const choices = choicesOf.get(button);
     const row = choices?.row ?? button;
-    row.classList.add("menu-lit");
+    light(row, true);
     if (choices) {
-      button.classList.add("menu-lit");
+      light(button, true);
       choices.name.textContent = choices.items[choices.current]!.label;
     }
     glide.classList.toggle("danger", row.classList.contains("danger"));
@@ -1066,7 +1196,9 @@ function renderMenu(
     if (on) flip([mark], move, { duration: mark === tab ? TAB_GLIDE_MS : GLIDE_MS, easing: ENTER_EASING, scale: false });
     else move();
   };
-  lifetime.listen(menu, "focusin", (e) => paint(e.target));
+  // Col fuoco nel campo resta accesa la voce che Invio sceglie, come nel
+  // prototipo: all'apertura la prima.
+  lifetime.listen(menu, "focusin", (e) => paint(field !== null && e.target === field ? (buttons[active] ?? null) : e.target));
 
   const onKey = (e: KeyboardEvent): void => {
     // Il tasto arriva anche dai sottomenu, che stanno fuori del menu nel DOM ma
@@ -1076,6 +1208,23 @@ function renderMenu(
     // volte non copia due volte.
     if (pressing) {
       if (e.key !== "Escape" && e.key !== "Tab") e.preventDefault();
+      return;
+    }
+    // Nel campo si scrive: le lettere, lo spazio e Backspace sono sue. ↓ e ↑
+    // vanno alla voce dopo o prima di quella accesa (dalla prima, ↑ fa il giro
+    // in fondo), Invio sceglie quella accesa.
+    if (field !== null && e.target === field) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (buttons.length === 0) return;
+        const from = Math.max(0, Math.min(active, buttons.length - 1));
+        if (e.key === "ArrowDown") focusItem(Math.min(from + 1, buttons.length - 1));
+        else focusItem(from > lead() ? from - 1 : buttons.length - 1);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const button = buttons[active];
+        if (button !== undefined && !usable[active]?.disabled) button.click();
+      }
       return;
     }
     const current = document.activeElement as HTMLButtonElement;
@@ -1115,7 +1264,8 @@ function renderMenu(
       }
     } else if (chrome?.search && e.key === "Backspace" && query !== "") {
       e.preventDefault();
-      search(query.slice(0, -1));
+      if (field !== null) typeInField(query.slice(0, -1));
+      else search(query.slice(0, -1));
     } else if (at >= 0 && usable[at]?.disabled && (e.key === "Enter" || (e.key === " " && !(chrome?.search && query !== "")))) {
       // Una voce spenta raggiunta con le frecce non si attiva.
       e.preventDefault();
@@ -1127,12 +1277,24 @@ function renderMenu(
       } else if (chrome?.search) {
         if (e.key === " " && query === "") return;
         e.preventDefault();
-        search(query + e.key);
+        if (field !== null) typeInField(query + e.key);
+        else search(query + e.key);
       } else if (e.key !== " " && typeahead(e.key)) {
         e.preventDefault();
       }
     }
   };
+  /// Una lettera scritta su una voce va nel campo, che riprende il fuoco.
+  const typeInField = (text: string): void => {
+    if (field === null) return;
+    field.value = text;
+    field.focus({ preventScroll: true });
+    search(text, false, true);
+  };
+  if (field !== null) {
+    const input = field;
+    lifetime.listen(input, "input", () => search(input.value, false, true));
+  }
   menu.addEventListener("keydown", onKey);
   lifetime.add(() => menu.removeEventListener("keydown", onKey));
   // Esc svuota la ricerca prima di chiudere: la trappola del fuoco ascolta in
@@ -1181,14 +1343,22 @@ function renderMenu(
   /// si trovano soltanto scrivendo; la prima col fuoco. Niente scritto, il
   /// menu com'era. Con `keep`, la voce col fuoco resta quella di prima: le
   /// voci sono cambiate sotto chi le stava guardando.
-  function search(text: string, keep = false): void {
+  function search(text: string, keep = false, typing = false): void {
     query = text;
+    if (field !== null && field.value !== text) field.value = text;
     closeOpen();
     const was = keep ? buttons.indexOf(document.activeElement as HTMLButtonElement) : -1;
     if (query === "") {
       fill(items.map((item) => ({ item })));
       drawFoot(0);
-      focusItem(quick.length);
+      if (field !== null && (typing || document.activeElement === field)) {
+        // Il campo vuoto: il menu com'era, con la prima voce accesa.
+        active = lead();
+        if (buttons[active]) buttons[active].tabIndex = 0;
+        paint(buttons[active] ?? null);
+      } else {
+        focusItem(quick.length);
+      }
       return;
     }
     prepare();
@@ -1229,6 +1399,16 @@ function renderMenu(
       list.append(empty);
     }
     drawFoot(found);
+    if (field !== null && (typing || document.activeElement === field)) {
+      // Si scrive nel campo: il fuoco resta lì, e la prima trovata è accesa,
+      // quella che Invio sceglie.
+      active = 0;
+      buttons.forEach((button, i) => {
+        button.tabIndex = i === active ? 0 : -1;
+      });
+      paint(buttons[active] ?? null);
+      return;
+    }
     if (was >= 0 && buttons.length > 0) focusItem(Math.min(was, buttons.length - 1));
     else if (keep) return;
     else if (buttons.length > 0) focusItem(0);
@@ -1263,6 +1443,7 @@ function renderMenu(
     }
     pressing = true;
     button.classList.add("menu-pressed");
+    markPressed(button, true);
     if (bar !== null && quick.includes(button)) bar.classList.add("menu-pressed");
     // Esc durante la spunta chiude il menu e annulla il gesto: il tempo muore
     // con il menu.
@@ -1304,11 +1485,12 @@ function renderMenu(
   }
   const parts = (): HTMLElement[] => [
     ...(head === null ? [] : [head]),
+    ...(fieldRow === null ? [] : [fieldRow]),
     ...(bar === null ? [] : [bar]),
     ...[...list.children].filter((child): child is HTMLElement => child instanceof HTMLElement && child !== glide),
     ...(foot === null ? [] : [foot]),
   ];
-  return { menu, focusActive: () => focusItem(active), update, parts };
+  return { menu, field, focusActive: () => focusItem(active), update, parts };
 }
 
 /// La mini-barra sopra il menu: un contenitore che chi apre il menu riempie, e
@@ -1589,12 +1771,11 @@ export function pickIcon(
   // Il selettore di icona è la stessa specie di superficie fissa effimera.
   lifetime.add(() => exitSurface(pop, () => pop.remove()));
   enterSurface(pop);
-  // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
-  // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
-  // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare
-  // venti pulsanti. Le due righe non sono in conflitto: la seconda sposta il
-  // fuoco dentro la stessa superficie, che è dove la trappola lo vuole.
-  lifetime.add(trapFocus(pop, close));
+  // La trappola prima del `focus()` esplicito, e senza spostare il fuoco da
+  // sé: lo metterebbe sul primo elemento — la prima emoji — mentre qui la cosa
+  // giusta è il campo, che è ciò che permette di scriverne una qualsiasi senza
+  // attraversare venti pulsanti.
+  lifetime.add(trapFocus(pop, close, { moveFocus: false }));
   input.focus();
   lifetime.listen(document, "mousedown", outside, { capture: true });
 }

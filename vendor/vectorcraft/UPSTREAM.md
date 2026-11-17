@@ -1,7 +1,7 @@
 # VectorCraft vendorizzato
 
 Questa cartella contiene il motore di
-[VectorCraft](https://github.com/storytold/vectorcraft), copiato con le due
+[VectorCraft](https://github.com/storytold/vectorcraft), copiato con le cinque
 patch elencate qui sotto. Fub non dipende da VectorCraft via Git: `deny.toml`
 ammette soltanto crates.io, e i crate non sono pubblicati là.
 
@@ -31,9 +31,10 @@ sono copiati: l'interfaccia (`ui-egui`), il server MCP (`mcp`), le app
 
 | Percorso qui | Percorso upstream | Patch che lo toccano |
 |---|---|---|
-| `crates/geom/`, `color/`, `doc/`, `pathops/`, `brush/`, `trace/`, `text/`, `plugins/`, `three-d/`, `svg/`, `format/`, `cad/`, `metafile/`, `affinity/`, `scriptcheck/`, `tools/`, `testkit/` | gli stessi | nessuna |
+| `crates/geom/`, `color/`, `doc/`, `pathops/`, `brush/`, `trace/`, `text/`, `plugins/`, `three-d/`, `format/`, `cad/`, `metafile/`, `affinity/`, `scriptcheck/`, `tools/`, `testkit/` | gli stessi | nessuna |
 | `crates/effects/` | `crates/effects/` | `0001` (`Cargo.toml`, `src/catalog.rs`, `src/geometry.rs`, `src/params.rs`) |
-| `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test) |
+| `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test); `0003` (`src/tests/placed_document.rs`); `0005` (`src/pattern/tests.rs`, `src/addons/halftone/tests.rs`) |
+| `crates/svg/` | `crates/svg/` | `0004` (`src/import/convert.rs`, `tests/it/prop_svg.rs`) |
 | `crates/engine/` | `crates/engine/` | `0001` (22 file: `Cargo.toml`, 12 di `src/`, 9 di test); `0002` (85 file: `Cargo.toml`, 23 di `src/`, 61 di test) |
 | `xtask/src/sha256.rs`, `xtask/affinity-corpus.sha256` | gli stessi | nessuna |
 | `assets/fonts/` | `assets/fonts/` | nessuna |
@@ -79,14 +80,19 @@ l'upstream, non una copia.
 
 ### Le patch
 
-Le due patch spengono parti del motore che il disegno di Fub non usa, perché
-non entrino nella build né nel lock. Entrambe sono **UPSTREAM-API**: una
-feature in più, che l'upstream terrebbe accesa di serie.
+Le prime due patch spengono parti del motore che il disegno di Fub non usa,
+perché non entrino nella build né nel lock. Entrambe sono **UPSTREAM-API**:
+una feature in più, che l'upstream terrebbe accesa di serie. La terza e la
+quinta correggono test instabili dell'upstream, la quarta un difetto
+dell'importazione SVG che un test a caso trovava (**UPSTREAM-BUGFIX**).
 
 | Patch | Tipo | File | Cosa fa | Upstream | Quando cade |
 |---|---|---|---|---|---|
 | `0001-importatori-opzionali` | UPSTREAM-API | 27 (`effects` 4, `engine` 22, `render` 1), +170 −13 | in `engine` le feature `metafile` (EMF, WMF), `affinity` (Affinity Designer) e `plugins` (i plug-in WebAssembly, con `effects/plugins`), spente; i crate diventano dipendenze opzionali, il codice che li chiama sta dietro `#[cfg]` | da proporre a monte: gli importatori e i plug-in dietro feature | quando l'upstream ha feature equivalenti |
 | `0002-pdf-opzionale` | UPSTREAM-API | 85, tutti in `engine`, +540 −17 | toglie `vectorcraft-pdf` e `vectorcraft-eps` dalle dipendenze di `engine`; il codice del PDF, dell'EPS e dell'Illustrator (`.ai`), con i comandi che li leggono e li scrivono (`document.exportPdf`, la stampa, i predefiniti PDF e di stampa, `clipboard.importPdf`, …), sta dietro `#[cfg(feature = "pdf")]` | da proporre a monte: il PDF dietro una feature (`pdf = ["dep:vectorcraft-pdf", "dep:vectorcraft-eps"]`, accesa di serie) | quando l'upstream ha la feature |
+| `0003-bitmap-trattenute` | UPSTREAM-BUGFIX | 1, in `render` (`src/tests/placed_document.rs`), +42 −1 | il test `a_ready_bitmap_draws_again_where_its_file_shows` cadeva a caso sui runner carichi (issue #382): il lavoratore in background poteva finire i bitmap fra `schedule` e la rilettura della cache in `draw_placed_bitmap`, e il primo disegno, che deve mostrare i segnaposto, li mostrava già. Il caricatore finto del test trattiene i file `held…` finché il primo disegno non è finito; l'asserzione resta la stessa | da proporre a monte | quando l'upstream rende il test deterministico |
+| `0004-ellissi-importate` | UPSTREAM-BUGFIX | 2, in `svg` (`src/import/convert.rs`, `tests/it/prop_svg.rs`), +141 −1 | il proptest `plain_art_survives_visually` cadeva a caso in CI (issue #407): un `<ellipse>` scritto dall'esportazione tornava come le cubiche che usvg fa degli archi (quattro, otto o più, in `f32`, con due ancore `Corner`), non come l'ellisse di quattro ancore `Smooth` di partenza; uguale entro lo 0,03% dei raggi, ma vello appiattisce ogni curva con corde sue (0,25 px), e su un'ellisse stretta, con le punte più curve di mezzo pixel, i bordi vicino alle punte venivano diversi (0,400% di pixel > 0,200%). L'importazione riconosce dalla forma il tracciato di un'ellisse intera (`<circle>`, `<ellipse>` o un `<path>` con gli stessi archi, anche ruotato) e lo rifà come `shapes::ellipse`, partendo da ore 3 come in SVG; ogni altro tracciato resta com'è. Due test nuovi: il caso minimo trovato in CI e i cerchi e le ellissi importati | da proporre a monte | quando l'upstream legge le ellissi come le scrive |
+| `0005-test-paralleli` | UPSTREAM-BUGFIX | 2, in `render` (`src/pattern/tests.rs`, `src/addons/halftone/tests.rs`), +41 −12 | due test cadevano soltanto sotto carico estremo, per un dato globale che un altro test cambiava in parallelo (issue #407; i contatori, già per thread, non c'entrano). `kept_tiles_count_the_images_they_could_not_decode`: la piastrella di un motivo che mostra immagini resta valida finché non cambiano i caratteri di `FontDb::global()`, e altri test dello stesso binario ne aggiungono; se capita fra due disegni, la piastrella si rifà (giustamente) e il conto viene 2: una misura presa mentre i caratteri cambiano si ripete con un documento nuovo. `unchanged_art_is_not_sampled_again`: i retini sono tenuti in una cache unica del processo di 8 voci, e `the_settings_change_the_dots` da solo ne fa 9; i cinque test dei retini ora girano uno alla volta (`serial()`, come in `placed_document.rs`). Le asserzioni restano le stesse | da proporre a monte | quando l'upstream rende i test indipendenti |
 
 La feature `pdf` non è dichiarata nel `Cargo.toml` di `engine`: dichiararla
 vorrebbe le dipendenze `vectorcraft-pdf` ed `vectorcraft-eps`, che il lock
@@ -146,7 +152,7 @@ Misurati sulla copia di questo commit (2026-11-09, 16 thread, Rust 1.95,
 
 - sorgenti: 27 MB in 1.268 file, di cui 23 MB nei crate (485.000 righe di
   Rust, 206.000 nei test; `engine` da solo 11 MB) e 3,3 MB di caratteri in
-  `assets/fonts/`; le patch 174 kB; `upstream.lock` 184 kB;
+  `assets/fonts/`; le patch 174 kB (prima della `0003`); `upstream.lock` 184 kB;
 - compilazione da zero dei test del workspace (`cargo test --workspace
   --locked --no-run` in una cartella `target` vuota): 407 s (6 min 47 s);
   la sola libreria di `vectorcraft-engine`, ricompilata dopo senza i test,

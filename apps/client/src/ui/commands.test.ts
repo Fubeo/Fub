@@ -36,10 +36,10 @@ import {
   newKinds,
   newDrawing,
   registerNewKindHost,
-  registerTemplateOpener,
   registerComponentRow,
   showComponent,
   loadKeyOverrides,
+  onKeyOverridesLoaded,
   validateKeybinding,
   keyboardPlatform,
   type CommandEntry,
@@ -261,6 +261,31 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
     fromBackend.mockResolvedValue([settingEntry("keys.shell.switcher", "")]);
     await loadKeyOverrides();
     expect(allCommands()[0]!.binding).toBeNull();
+  });
+
+  it("una lettura vecchia che arriva tardi non vince su quella nuova, e avvisa solo la nuova", async () => {
+    registerShellCommand({
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
+      layer: "global",
+      run: () => {},
+    });
+    let answerOld: (entries: SettingEntry[]) => void = () => {};
+    fromBackend.mockImplementationOnce(() => new Promise((resolve) => (answerOld = resolve)));
+    fromBackend.mockResolvedValueOnce([settingEntry("keys.shell.switcher", "Mod-Alt-p")]);
+    const loaded = vi.fn(() => allCommands()[0]!.binding);
+    const stop = onKeyOverridesLoaded(loaded);
+    const old = loadKeyOverrides();
+    await loadKeyOverrides();
+    answerOld([settingEntry("keys.shell.switcher", "Mod-Alt-v")]);
+    await old;
+    expect(allCommands()[0]!.binding).toBe("Mod-Alt-p");
+    expect(loaded).toHaveBeenCalledTimes(1);
+    expect(loaded).toHaveReturnedWith("Mod-Alt-p");
+    stop();
+    await loadKeyOverrides();
+    expect(loaded).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -970,17 +995,15 @@ describe("il menu «Nuovo»", () => {
     expect(started).toEqual([{ id: "sheet.create", prefill: { folder: "Progetti" } }]);
   });
 
-  it("«da un modello» di una cartella apre i modelli con quella cartella, se il lanciatore la sa ricevere", async () => {
+  it("«da un modello» di una cartella lancia il comando con quella cartella; senza, il comando della cornice", async () => {
     state.commandSpecs = [spec({ id: "note.from_template" })];
     declareTemplates();
-    const remove = registerTemplateOpener((folder) => void made.push(`modelli:${folder}`));
-    try {
-      newEntries("Scienze").find((entry) => entry.kind === "template")!.run();
-      newEntries().find((entry) => entry.kind === "template")!.run();
-      await vi.waitFor(() => expect(made).toEqual(["modelli:Scienze", "modelli:"]));
-    } finally {
-      remove();
-    }
+    const started: { id: string; prefill: Readonly<Record<string, string>> }[] = [];
+    registerCommandStarter((entry, prefill) => started.push({ id: entry.id, prefill }));
+    newEntries("Scienze").find((entry) => entry.kind === "template")!.run();
+    expect(started).toEqual([{ id: "note.from_template", prefill: { folder: "Scienze" } }]);
+    newEntries().find((entry) => entry.kind === "template")!.run();
+    await vi.waitFor(() => expect(made).toEqual(["modelli"]));
   });
 
   it("un editor che si spegne a menu aperto: la voce lo dice come un comando sparito", () => {

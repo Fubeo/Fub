@@ -132,7 +132,8 @@ disegna.
 - **Le guide.** Mentre si sposta una scheda, o si tira un angolo di una scheda
   sola, il bordo e il centro della scheda si agganciano ai bordi e ai centri
   delle altre schede in vista, entro 6 px sullo schermo. Spostando più schede
-  insieme conta il riquadro di tutte. Contano solo le schede in vista, anche
+  insieme conta il riquadro di tutte: la griglia aggancia il suo angolo, e
+  le distanze fra le schede restano. Contano solo le schede in vista, anche
   con duemila schede sulla lavagna.
 - **Spazi uguali.** Tre schede in fila (sovrapposte sull'altro asse): la scheda
   che si muove si mette dopo, prima o in mezzo, con due spazi uguali a quello
@@ -210,6 +211,26 @@ sulla superficie come `data-workspace`:
   che sparisce torna alla lavagna, e F6 salta ciò che non si vede.
 
 L'ispettore è della shell: la lavagna non lo apre mai da sé, in nessuno spazio.
+
+## Il testo che non ci sta
+
+Fuori dalla scheda attiva, una scheda di testo e la resa di una nota
+(viva o ferma) che non ci stanno si fermano sotto l'ultima riga che si legge
+intera, mai a metà di una riga (`whole-lines.ts`). La tela misura le righe
+(`Range.getClientRects`, riportate alla scala della scheda, perché lo zoom è
+una trasformazione) e scrive l'altezza in `--canvas-card-cut`, che la pelle
+usa come `max-height`; la misura si rifà quando la scheda cambia misura,
+quando il contenuto cambia, quando arrivano immagini o caratteri, tutte le
+schede insieme in un microtask. Il taglio cade sul bordo del riempimento (il
+riempimento sotto si perde, se no la riga dopo spunterebbe lì) e mai dentro un
+pulsante, un campo o un'immagine: o si vedono interi o non si vedono. Una
+scheda di testo non scorre: «Estrai in una nota…» resta fuori se non entra (il
+gesto c'è anche nel menu della scheda). Un controllo tutto sotto il taglio è
+`inert`, quindi niente Tab e fuori dall'albero dell'accessibilità, finché non
+torna a starci. La nota tiene l'ombra che dice «continua», che si ferma a un
+terzo sull'ultima riga intera. Se non entra neanche la prima riga, nessun
+taglio. Dentro la scheda attiva il testo scorre, il taglio non conta e nessun
+controllo diventa `inert`.
 
 ## Da lontano
 
@@ -360,6 +381,13 @@ scrive i nomi sulle schede.
   l'elenco sta nell'ispettore. I nomi si riscrivono solo quando cambia il
   documento o la lingua, a thread libero, 250 schede per passo, e solo dove il
   testo cambia; la scheda che prende il fuoco ha subito il suo.
+- **Mai l'id interno.** Il pulsante → («Collega: Scheda di testo Idee») e il
+  campo che scrive («Modifica il testo: …») dicono la specie e il nome della
+  scheda come la testata del menu. Il titolo della testata è il nome di un
+  testo (`textCardName`), il file, l'indirizzo o l'etichetta; una scheda che
+  non ha ancora niente da dire, come un testo appena nato mentre si scrive,
+  mostra la sua specie («Scheda di testo», «Gruppo»). Il titolo grande da
+  lontano resta vuoto.
 - **La regione viva** della tela (quella di «Niente da annullare.») dice ciò
   che un commit ha cambiato: «Hai tolto dalla lavagna: …», «Hai collegato … a
   …», «Hai spostato: …» (una frase, in quest'ordine), o quante schede. Testo,

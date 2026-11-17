@@ -316,7 +316,9 @@ export interface Options {
   /// Con `null` l'avvio finisce sul benvenuto, mentre `root` resta il vault
   /// che i comandi servono quando lo si apre (un vault nuovo appena creato).
   initialVault?: string | null;
-  sessionNotice?: KernelNotice | null;
+  /// Gli avvisi di sessione, consegnati uno per tiraggio come fa l'host;
+  /// finiti, il tiraggio risponde `null`.
+  sessionNotice?: KernelNotice | readonly KernelNotice[] | null;
   /// La versione che `appVersion` dichiara; di serie `0.1.0`.
   appVersion?: string;
   view?: ViewSpec[];
@@ -660,6 +662,12 @@ function renameRewrites(texts: ReadonlyMap<string, string>, from: string, to: st
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
+  const sessionNotices: KernelNotice[] =
+    options.sessionNotice == null
+      ? []
+      : Array.isArray(options.sessionNotice)
+        ? [...(options.sessionNotice as readonly KernelNotice[])]
+        : [options.sessionNotice as KernelNotice];
   const gridBytes = options.gridBytes;
   const gridBytesInstances = new Map<string, GridBytesSession>();
   const gridBytesKey = (revision: string, sheet: string, row: number, column: number) =>
@@ -1411,7 +1419,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
     const text = docs.get(id)?.text ?? "";
     switch (p.kind) {
       case "text": {
-        const haystack = p.case_sensitive ? `${id}\n${text}` : `${id}\n${text}`.toLowerCase();
+        // I campi come la regex: `name` è il nome (qui il path), `body` il
+        // testo; nessun campo, tutti e due. Una ricerca per nome che trovasse
+        // anche il testo metterebbe fra i nomi note che il kernel non dà.
+        const scope = p.fields.length === 0 ? `${id}\n${text}` : p.fields.flatMap((field) => (field === "name" ? [id] : field === "body" ? [text] : [])).join("\n");
+        const haystack = p.case_sensitive ? scope : scope.toLowerCase();
         const needle = p.case_sensitive ? p.text : p.text.toLowerCase();
         return p.mode === "phrase" ? haystack.includes(needle) : needle.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
       }
@@ -2001,7 +2013,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       initialVault: () => gate("initialVault", [], Promise.resolve(options.initialVault === undefined ? root : options.initialVault)),
       appVersion: () => gate("appVersion", [], Promise.resolve(options.appVersion ?? "0.1.0")),
       sessionNotice: () =>
-        gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
+        gate("sessionNotice", [], Promise.resolve(sessionNotices.shift() ?? null)),
       // Il vault in memoria non ha cartella di configurazione, log o dialog
       // di sistema. Non simulare un export/recovery riuscito senza disco.
       demoRoot: () => gate("demoRoot", [], Promise.resolve(null)),

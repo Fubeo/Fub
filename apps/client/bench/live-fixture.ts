@@ -129,8 +129,31 @@ export function longNote(paragraphs: number): LiveCase {
   return { text: `${text}\n`, cursor: null };
 }
 
+/// La nota dei commenti (T22): due discussioni aperte, una con la risposta, e
+/// l'archivio dei risolti in fondo, che in Scrittura e in Lettura non si vede.
+const COMMENTS = [
+  "# La mostra di primavera",
+  "",
+  "Il {==Museo Rossi==}{>>@Anna Bianchi 2026-11-08 17:40: Il prestito delle tre tele va confermato per iscritto.<<}{>>@Luca Ferri 2026-11-09 09:12: Ho scritto alla direttrice, risponde entro venerdì.<<} presta le tre tele del secondo piano; il trasporto è assicurato dal museo.",
+  "",
+  "L'allestimento comincia il 3 marzo. Le {==didascalie in due lingue==}{>>@Marta Rinaldi 2026-11-09 11:48: Chi le traduce? Serve un nome entro gennaio.<<} si stampano a febbraio, con il catalogo.",
+  "",
+  "L'inaugurazione è il 21 marzo alle 18.",
+  "",
+  "%%fub:risolto 2026-11-10 10:05: il budget del catalogo%%",
+  "%%> @Anna Bianchi 2026-11-07 16:20: Restiamo sotto i 4.000 euro?%%",
+  "%%> @Luca Ferri 2026-11-08 09:00: Sì, con la carta riciclata.%%",
+  "",
+].join("\n");
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
+  commenti: { text: COMMENTS, cursor: null },
+  "commenti-scelta": {
+    text: COMMENTS,
+    cursor: COMMENTS.indexOf("inaugurazione"),
+    head: COMMENTS.indexOf("inaugurazione") + "inaugurazione".length,
+  },
   panoramica: { text: NOTE, cursor: null },
   "riga-attiva": inNote("Il **treno**", 6),
   "titolo-attivo": inNote("## Cose da fare", 8),
@@ -162,6 +185,23 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   // proprietà; la seconda con la pagina a tutta larghezza.
   pagina: inNote("Il **treno**", 6, "---\nicon: 🧳\ncover: ../Risorse/schema.png\ntags: [viaggio]\n---\n" + NOTE),
   "pagina-larga": inNote("Il **treno**", 6, "---\nicon: 🧳\ncssclasses: [wide]\n---\n" + NOTE),
+  // La testata in Scrittura e in Lettura (T6, E3), da guardare con
+  // `?properties=visible`: copertina, icona, titolo, quattro proprietà in
+  // evidenza e «Altre 2»; poi senza frontmatter, illeggibile, con la
+  // copertina che non si trova. Il cursore resta fuori: la testata a riposo.
+  testata: {
+    text: "---\nicon: 🧳\ncover: ../Risorse/schema.png\ntipo: Viaggio\nstato: In corso\npartenza: 2027-03-20\npersone: [Anna, Luca]\nluogo: Lisbona\nbudget:\ntags: [viaggio]\n---\n" + NOTE,
+    cursor: null,
+  },
+  "testata-vuota": { text: NOTE, cursor: null },
+  // Gli editor dei tipi (T8): una voce per tipo, le prime quattro come nella
+  // riga «Le proprietà» del prototipo.
+  proprieta: {
+    text: "---\nicon: 📚\ntipo: Progetto\nstato: In corso\nscadenza: 2027-03-20\npersone: [\"[[Anna Bianchi]]\", \"[[Luca Ferri]]\"]\nluogo: Biblioteca civica\nbudget: 4800\nfatto: false\nluoghi: [Torino, Lisbona, Porto]\n---\n" + NOTE,
+    cursor: null,
+  },
+  "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
+  "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },
   // I colori del contenuto (K1): i nove del testo e i nove del fondo, uno per
   // riga, col cursore fuori.
   colori: at([

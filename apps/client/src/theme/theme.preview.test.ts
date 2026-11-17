@@ -41,6 +41,7 @@ function systemLight(): void {
 beforeEach(async () => {
   host.setSetting.mockClear();
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   document.documentElement.dataset.theme = "light";
   document.documentElement.dataset.contrast = "normal";
   localStorage.clear();

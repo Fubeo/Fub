@@ -1,0 +1,145 @@
+{
+  "about": "Gli archi: `---` senza punte, `<-->` con due, `-.->` e `==>` come frecce semplici con una nota style_dropped, le etichette in mezzo e fra le barre.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "flowchart LR\n  A --- B\n  B <--> C\n  C -.-> D\n  D ==> E\n  E -- porta a --> F\n  F -->|poi| G"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "A",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "A"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 416,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "B"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 832,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "C"
+        },
+        {
+          "id": "D",
+          "type": "text",
+          "x": 1248,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "D"
+        },
+        {
+          "id": "E",
+          "type": "text",
+          "x": 1664,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "E"
+        },
+        {
+          "id": "F",
+          "type": "text",
+          "x": 2080,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "F"
+        },
+        {
+          "id": "G",
+          "type": "text",
+          "x": 2496,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "G"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "none"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "B",
+          "toNode": "C",
+          "fromEnd": "arrow",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "C",
+          "toNode": "D",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "f88bb8a8724c81ec",
+          "fromNode": "D",
+          "toNode": "E",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "1b39896a51a8749b",
+          "fromNode": "E",
+          "toNode": "F",
+          "toEnd": "arrow",
+          "label": "porta a"
+        },
+        {
+          "id": "53cb9f0c747ea2ea",
+          "fromNode": "F",
+          "toNode": "G",
+          "toEnd": "arrow",
+          "label": "poi"
+        }
+      ]
+    },
+    "created": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f",
+      "f88bb8a8724c81ec",
+      "1b39896a51a8749b",
+      "53cb9f0c747ea2ea"
+    ],
+    "notes": [
+      {
+        "index": 0,
+        "code": "style_dropped",
+        "detail": "line 4: a dotted link is drawn as a plain line"
+      },
+      {
+        "index": 0,
+        "code": "style_dropped",
+        "detail": "line 5: a thick link is drawn as a plain line"
+      }
+    ]
+  }
+}

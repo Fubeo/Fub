@@ -1,6 +1,8 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
-//! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «aggiungi
-//! tratti», «cancella tratti». Un agente o
+//! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
+//! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
+//! «trasforma in file», «spargi le pagine», «estratto», «da Mermaid», «da una scaletta», «aggiungi tratti»,
+//! «cancella tratti», «disegna», «cancella lungo un cammino». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -12,13 +14,17 @@
 //!
 //! Il modello di dopo resta valido: ogni scheda e ogni arco che
 //! un'operazione mette passa le regole di [`Canvas::validate`], e i limiti
-//! [`MAX_NODES`] e [`MAX_EDGES`] danno [`OpError::TooMany`]. `compile` si
-//! aspetta un modello di partenza valido, come quello che dà
-//! [`crate::parse`].
+//! [`crate::model::MAX_NODES`] e [`crate::model::MAX_EDGES`] danno
+//! [`OpError::TooMany`]; il tetto di `move` con `contents` dà
+//! [`OpError::TooManyMoved`]. `compile` si aspetta un modello di partenza
+//! valido, come quello che dà [`crate::parse`].
+//!
+//! Ciò che un'operazione non ha potuto tenere (la forma di un nodo Mermaid, una
+//! riga di stili) non è un errore: è una nota in [`Compiled::notes`].
 //!
 //! Gli id nuovi vengono da un seme del chiamante ([`IdSource`]): stesso
 //! seme, stessi id. Le regole e un esempio per operazione sono nella sezione
-//! «Operazioni» di `docs/reference/canvas-operations.md`.
+//! «Le operazioni» di `docs/reference/canvas-code.md`.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -32,14 +38,47 @@ use fub_ink_codec::brush::InkBrush;
 use fub_ink_codec::ink::{round_half_up, Ink};
 
 use crate::ink::{
-    DrawnStroke, InkAnchor, InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY, INK_MAX_BYTES,
+    DrawnStroke, InkAnchor, InkFit, InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY,
+    INK_MAX_BYTES,
 };
 use crate::js::js_number;
-use crate::model::{
-    Canvas, CanvasEdge, CanvasError, CanvasNode, CanvasNodeType, MAX_EDGES, MAX_NODES,
-    MAX_SAFE_INTEGER,
-};
+use crate::model::{Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_SAFE_INTEGER};
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
+
+mod adjust;
+mod align;
+mod anchor;
+mod card;
+pub(crate) mod color;
+mod connect;
+mod convert;
+pub(crate) mod draw;
+mod duplicate;
+pub(crate) mod erase;
+mod group;
+mod import;
+mod insert;
+mod layout;
+mod pages;
+mod reverse;
+
+pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
+pub use align::{AlignArgs, AlignTo, DistributeArgs, DistributeAxis};
+pub use card::AddCardArgs;
+pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
+pub use convert::ConvertArgs;
+pub use draw::{DrawArgs, DrawShape, InkOn, OnCell, OnPage, MAX_DRAW_POINTS, ON_AUTO, ON_BOARD};
+pub use duplicate::DuplicateArgs;
+pub use erase::{EraseAlongArgs, MAX_ERASE_POINTS, MAX_ERASE_WORK};
+pub use group::GroupArgs;
+pub use import::{FromMermaidArgs, FromOutlineArgs};
+pub use insert::{InsertArgs, MAX_INSERTED};
+pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
+pub use pages::{
+    chosen_pages, ChosenPages, ExcerptArgs, PageList, PagesProblem, SpreadPagesArgs,
+    MAX_SPREAD_PAGES, SPREAD_GROUP_ABOVE,
+};
+pub use reverse::ReverseArgs;
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
 /// `snake_case`; un campo che l'operazione non conosce è un errore di
@@ -47,41 +86,71 @@ use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CanvasOp {
-    /// Aggiunge una scheda in cima all'ordine. `node` è una scheda come nel
-    /// file; `id` è facoltativo (assente o `null`: lo dà il seme).
-    AddCard { node: Map<String, Value> },
-    /// Sposta le schede `ids` di `dx`, `dy`. Un gruppo si sposta da solo: le
-    /// schede dentro restano dove sono, come sulla tela.
-    Move {
-        ids: Vec<String>,
-        #[serde(deserialize_with = "saturating_integer")]
-        dx: i64,
-        #[serde(deserialize_with = "saturating_integer")]
-        dy: i64,
-    },
-    /// Dà alla scheda `id` le misure `width` × `height`.
-    Resize {
-        id: String,
-        #[serde(deserialize_with = "saturating_integer")]
-        width: i64,
-        #[serde(deserialize_with = "saturating_integer")]
-        height: i64,
-    },
-    /// Aggiunge un arco in fondo alla lista. `edge` è un arco come nel file;
-    /// `id` è facoltativo come in `add_card`.
-    Connect { edge: Map<String, Value> },
+    /// Aggiunge una scheda in cima all'ordine: la scheda come nel file
+    /// (`node`), o la forma breve. Le regole sono in `ops/card.rs`.
+    AddCard(AddCardArgs),
+    /// Sposta le schede `ids`; con `contents` un gruppo porta le schede dentro
+    /// di sé. Le regole sono in `ops/adjust.rs`.
+    Move(MoveArgs),
+    /// Dà alla scheda le misure, o con `fit` la misura del suo contenuto. Le
+    /// regole sono in `ops/adjust.rs`.
+    Resize(ResizeArgs),
+    /// Aggiunge un arco in fondo alla lista: l'arco come nel file (`edge`), o
+    /// la forma breve fra due schede. Le regole sono in `ops/connect.rs`.
+    Connect(ConnectArgs),
     /// Toglie schede e archi. Gli archi che toccano una scheda tolta vanno
     /// via prima, nella stessa operazione.
     Remove { ids: Vec<String> },
     /// Cambia i campi di una scheda o di un arco; un campo `null` lo toglie.
-    /// `id` (e `type` di una scheda) non si cambiano.
+    /// `id` (e `type` di una scheda) non si cambiano. Il `color` accetta i nomi
+    /// di `add_card`.
     Set {
         id: String,
+        #[serde(deserialize_with = "set_fields")]
         fields: Map<String, Value>,
     },
-    /// Porta le schede `ids` in cima all'ordine, nell'ordine dato; le altre
-    /// restano sotto nel loro ordine. Con tutti gli id, è l'ordine nuovo.
-    Reorder { ids: Vec<String> },
+    /// Porta le schede in cima all'ordine (o in fondo, con `to: back`). Le
+    /// regole sono in `ops/adjust.rs`.
+    Reorder(ReorderArgs),
+    /// Colora più schede e archi in una volta. Le regole sono in `ops/adjust.rs`.
+    Color(ColorArgs),
+    /// Allinea le schede al lato comune, come i bottoni della barra. Le regole
+    /// sono in `ops/align.rs`.
+    Align(AlignArgs),
+    /// Distribuisce le schede lungo un asse. Le regole sono in `ops/align.rs`.
+    Distribute(DistributeArgs),
+    /// Copia le schede e gli archi che le collegano fra loro. Le regole sono in
+    /// `ops/duplicate.rs`.
+    Duplicate(DuplicateArgs),
+    /// Inverte gli archi: la partenza diventa l'arrivo. Le regole sono in
+    /// `ops/reverse.rs`.
+    Reverse(ReverseArgs),
+    /// Mette le schede in un gruppo, sotto di loro. Le regole sono in
+    /// `ops/group.rs`.
+    Group(GroupArgs),
+    /// Dispone le schede in griglia, in riga, in colonna o ad albero. Le regole
+    /// sono in `ops/layout.rs`.
+    Layout(LayoutArgs),
+    /// Incolla un frammento degli appunti (`{version: 1, nodes, edges}`) con id
+    /// nuovi, come un blocco. Le regole sono in `ops/insert.rs`.
+    Insert(InsertArgs),
+    /// Una scheda di testo diventa una scheda di file, allo stesso posto. Le
+    /// regole sono in `ops/convert.rs`.
+    Convert(ConvertArgs),
+    /// Le pagine di un PDF in fila accanto alla sua scheda, una scheda per
+    /// pagina, come «Spargi le pagine…». Le regole sono in `ops/pages.rs`.
+    SpreadPages(SpreadPagesArgs),
+    /// L'estratto di una scheda di file (`fub:parts`): una scheda nuova sullo
+    /// stesso file, o la scheda stessa con `in_place`. Le regole sono in
+    /// `ops/pages.rs`.
+    Excerpt(ExcerptArgs),
+    /// Un diagramma Mermaid (`flowchart`) diventa schede, gruppi e archi, già
+    /// disposti. Il lettore è in `import/mermaid.rs`, le regole in
+    /// `ops/import.rs`.
+    FromMermaid(FromMermaidArgs),
+    /// Una scaletta rientrata diventa un albero di schede. Il lettore è in
+    /// `import/outline.rs`, le regole in `ops/import.rs`.
+    FromOutline(FromOutlineArgs),
     /// Aggiunge i tratti `strokes` in cima al livello `layer` (la radice o
     /// una scheda), nell'ordine dato. Ogni tratto è come nel file, campi
     /// sconosciuti compresi, e deve disegnarsi in quel livello; `id` è
@@ -92,6 +161,10 @@ pub enum CanvasOp {
     },
     /// Cancella dal livello `layer` i tratti `ids`.
     EraseStrokes { layer: LayerRef, ids: Vec<String> },
+    /// Scrive un tratto d'inchiostro con i punti o con una forma, la penna e
+    /// il colore per nome; il tratto entra come con `add_strokes`. Le regole
+    /// sono in `ops/draw.rs`.
+    Draw(DrawArgs),
     /// Sposta i tratti `ids` del livello `layer` di `dx`, `dy` in unità della
     /// lavagna. Con `to` diverso da `layer` i tratti passano a quel livello:
     /// i punti si riportano nelle unità della nuova ancora (`card` alla
@@ -121,29 +194,133 @@ pub enum CanvasOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         aspect: Option<f64>,
     },
+    /// Taglia i tratti che il cammino `points`, largo `size`, tocca, come la
+    /// gomma «Solo il pezzo»: i pezzi che restano prendono il posto di ogni
+    /// tratto. Le regole sono in `ops/erase.rs`.
+    EraseAlong(EraseAlongArgs),
 }
 
-/// Il risultato di [`compile`]: le toppe e gli id creati.
+impl CanvasOp {
+    /// Il nome dell'operazione nella forma JSON, cioè il campo `op`. È la
+    /// stessa stringa di [`crate::spec::OPS`]. Il `match` non ha `_`: una
+    /// variante nuova senza nome non compila.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::AddCard(_) => "add_card",
+            Self::Move(_) => "move",
+            Self::Resize(_) => "resize",
+            Self::Connect(_) => "connect",
+            Self::Remove { .. } => "remove",
+            Self::Set { .. } => "set",
+            Self::Reorder(_) => "reorder",
+            Self::Color(_) => "color",
+            Self::Align(_) => "align",
+            Self::Distribute(_) => "distribute",
+            Self::Duplicate(_) => "duplicate",
+            Self::Reverse(_) => "reverse",
+            Self::Group(_) => "group",
+            Self::Layout(_) => "layout",
+            Self::Insert(_) => "insert",
+            Self::Convert(_) => "convert",
+            Self::SpreadPages(_) => "spread_pages",
+            Self::Excerpt(_) => "excerpt",
+            Self::FromMermaid(_) => "from_mermaid",
+            Self::FromOutline(_) => "from_outline",
+            Self::AddStrokes { .. } => "add_strokes",
+            Self::EraseStrokes { .. } => "erase_strokes",
+            Self::Draw(_) => "draw",
+            Self::MoveStrokes { .. } => "move_strokes",
+            Self::RestyleStrokes { .. } => "restyle_strokes",
+            Self::EraseAlong(_) => "erase_along",
+        }
+    }
+}
+
+/// Il risultato di [`compile`]: le toppe, gli id creati e le note.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Compiled {
     /// Le toppe, nell'ordine in cui si applicano.
     pub patches: Vec<CanvasPatch>,
-    /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`,
-    /// `connect`, `add_strokes`), dati o generati, nell'ordine delle
-    /// operazioni; e quelli nuovi dei tratti che `move_strokes` porta in un
-    /// livello dove il loro id era già preso.
+    /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`, `connect`,
+    /// `duplicate`, `group`, `insert`, `spread_pages`, `excerpt`,
+    /// `from_mermaid`, `from_outline`,
+    /// `add_strokes`, `draw`, i pezzi di `erase_along`), dati o generati,
+    /// nell'ordine delle operazioni; e quelli nuovi dei tratti che
+    /// `move_strokes` porta in un livello dove il loro id era già preso.
     pub created: Vec<String>,
+    /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
+    /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<CompileNote>,
+    /// Quante note non entrano in `notes`. Zero non si scrive.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub notes_omitted: usize,
+}
+
+/// Quante note porta al più un [`Compiled`]: le altre si contano in
+/// [`Compiled::notes_omitted`].
+pub const MAX_NOTES: usize = crate::import::MAX_NOTES;
+
+/// Una cosa che un'operazione non ha potuto tenere. Non è un errore: le
+/// operazioni si compilano, e la nota lo dice.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompileNote {
+    /// La posizione dell'operazione nella lista, da zero.
+    pub index: usize,
+    pub code: NoteCode,
+    /// Che cosa e dove, in inglese come gli errori: `line 3: the circle shape
+    /// of "A" becomes a rectangle`.
+    pub detail: String,
+}
+
+/// I codici delle note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteCode {
+    /// La forma di un nodo (un cerchio, un rombo) diventa un rettangolo.
+    ShapeDropped,
+    /// Uno stile (un arco tratteggiato o spesso, una classe) non si tiene.
+    StyleDropped,
+    /// Una riga che non si capisce, o di soli stili (`classDef`, `style`,
+    /// `linkStyle`, `click`), si salta.
+    LineSkipped,
+    /// Un rientro della scaletta che non cade su un livello vale il più vicino.
+    IndentRounded,
+    /// Un tratto che Fub non disegna, o un livello estraneo, sotto il cammino
+    /// di `erase_along`: non si taglia.
+    InkKept,
+    /// Le pagine chieste da `spread_pages` oltre l'ultima del PDF si
+    /// tagliano.
+    PagesCut,
+    /// Il `page_count` dato a `spread_pages`, a `excerpt` o a `on` sulla pagina
+    /// di un PDF (`draw`, `erase_along`) non è quello del
+    /// PDF: vale quello letto dal file. La scrive chi legge il file
+    /// (`canvas.apply`, `canvas.check`), non la compilazione.
+    PageCountFromFile,
+    /// Il `page_size` dato a `on` sulla pagina di un PDF (`draw`,
+    /// `erase_along`) non è la misura della pagina nel file: vale quello dato,
+    /// e la nota lo dice. La scrive chi legge il file, come
+    /// [`NoteCode::PageCountFromFile`].
+    PageSizeNotFile,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 /// Perché una lista di operazioni non si compila. `index` è la posizione
 /// dell'operazione nella lista, da zero.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum OpError {
-    /// L'operazione vuole una scheda che non c'è (`move`, `resize`,
-    /// `reorder`, gli estremi di un arco).
+    /// L'operazione vuole una scheda che non c'è (`move`, `resize`, `reorder`,
+    /// `align`, `distribute`, `duplicate`, `group`, `convert`,
+    /// `spread_pages`, `excerpt`, il `near` di `insert`, gli estremi di un
+    /// arco).
     #[error("canvas op {index}: there is no node {id:?}")]
     UnknownNode { index: usize, id: String },
-    /// `remove` o `set` di un id che non è né una scheda né un arco.
+    /// `remove`, `set` o `color` di un id che non è né una scheda né un arco; e
+    /// `reverse` di un id che non è un arco (anche se è una scheda).
     #[error("canvas op {index}: there is no node or edge {id:?}")]
     UnknownEdge { index: usize, id: String },
     /// Un id dato che c'è già (nel modello di partenza o creato nello stesso
@@ -151,13 +328,21 @@ pub enum OpError {
     /// `ids` di un'operazione.
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
-    /// La lavagna avrebbe più schede o archi del limite.
+    /// La lavagna avrebbe più schede o archi del limite, un `insert` porta
+    /// più schede di [`MAX_INSERTED`], uno `spread_pages` più pagine di
+    /// [`MAX_SPREAD_PAGES`], un tratto di `draw` avrebbe più punti
+    /// di [`MAX_DRAW_POINTS`], o il cammino di `erase_along` ne ha più di
+    /// [`MAX_ERASE_POINTS`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
     TooMany {
         index: usize,
         what: &'static str,
         limit: usize,
     },
+    /// Un `move` con `contents` tocca più schede del tetto (quelle di `ids` e
+    /// quelle che i gruppi portano con sé): la lista si divide in più `move`.
+    #[error("canvas op {index}: `move` with `contents` moves at most {limit} cards")]
+    TooManyMoved { index: usize, limit: usize },
     /// L'operazione porterebbe a una scheda o a un arco non validi, o non si
     /// può fare così com'è (un campo vietato, un id ambiguo).
     #[error("canvas op {index}: {reason}")]
@@ -166,7 +351,8 @@ pub enum OpError {
     /// un tratto del livello.
     #[error("canvas op {index}: there is no ink stroke {id:?} in the layer")]
     UnknownStroke { index: usize, id: String },
-    /// Il livello d'inchiostro è estraneo: Fub non ci scrive.
+    /// Il livello d'inchiostro è estraneo: Fub non ci scrive (anche l'`on` di
+    /// `erase_along` su una scheda col livello estraneo).
     #[error("canvas op {index}: the ink layer is foreign")]
     ForeignLayer { index: usize, layer: LayerRef },
 }
@@ -179,6 +365,7 @@ impl OpError {
             | Self::UnknownEdge { index, .. }
             | Self::DuplicateId { index, .. }
             | Self::TooMany { index, .. }
+            | Self::TooManyMoved { index, .. }
             | Self::Invalid { index, .. }
             | Self::UnknownStroke { index, .. }
             | Self::ForeignLayer { index, .. } => *index,
@@ -224,6 +411,8 @@ pub fn compile(canvas: &Canvas, ops: &[CanvasOp], seed: u64) -> Result<Compiled,
     Ok(Compiled {
         patches: compiler.patches,
         created: compiler.created,
+        notes: compiler.notes,
+        notes_omitted: compiler.notes_omitted,
     })
 }
 
@@ -242,6 +431,13 @@ struct Compiler {
     /// Le posizioni degli archi all'inizio della serie di `remove-edge` in
     /// corso, come `run_start` per le schede.
     edge_run_start: Option<HashMap<String, usize>>,
+    /// L'ultima scheda messa in fondo alla lista automatica di `add_card`: la
+    /// prossima va sotto di lei, se è ancora nel modello.
+    auto_last: Option<String>,
+    /// Le note delle operazioni compilate finora, al più [`MAX_NOTES`].
+    notes: Vec<CompileNote>,
+    /// Le note che non entrano in `notes`.
+    notes_omitted: usize,
 }
 
 impl Compiler {
@@ -260,20 +456,50 @@ impl Compiler {
             ids: IdSource::new(seed),
             run_start: None,
             edge_run_start: None,
+            auto_last: None,
+            notes: Vec::new(),
+            notes_omitted: 0,
+        }
+    }
+
+    /// Una nota dell'operazione `index`, se c'è posto; se no si conta.
+    fn note(&mut self, index: usize, code: NoteCode, detail: String) {
+        if self.notes.len() < MAX_NOTES {
+            self.notes.push(CompileNote {
+                index,
+                code,
+                detail,
+            });
+        } else {
+            self.notes_omitted += 1;
         }
     }
 
     fn op(&mut self, index: usize, op: &CanvasOp) -> Result<(), OpError> {
         let patches = match op {
-            CanvasOp::AddCard { node } => self.add_card(index, node)?,
-            CanvasOp::Move { ids, dx, dy } => self.move_nodes(index, ids, *dx, *dy)?,
-            CanvasOp::Resize { id, width, height } => self.resize(index, id, *width, *height)?,
-            CanvasOp::Connect { edge } => self.connect(index, edge)?,
+            CanvasOp::AddCard(card) => self.add_card(index, card)?,
+            CanvasOp::Move(args) => self.move_nodes(index, args)?,
+            CanvasOp::Resize(args) => self.resize(index, args)?,
+            CanvasOp::Connect(link) => self.connect(index, link)?,
             CanvasOp::Remove { ids } => self.remove(index, ids)?,
             CanvasOp::Set { id, fields } => self.set(index, id, fields)?,
-            CanvasOp::Reorder { ids } => self.reorder(index, ids)?,
+            CanvasOp::Reorder(args) => self.reorder(index, args)?,
+            CanvasOp::Color(args) => self.color(index, args)?,
+            CanvasOp::Align(args) => self.align(index, args)?,
+            CanvasOp::Distribute(args) => self.distribute(index, args)?,
+            CanvasOp::Duplicate(args) => self.duplicate(index, args)?,
+            CanvasOp::Reverse(args) => self.reverse(index, args)?,
+            CanvasOp::Group(args) => self.group(index, args)?,
+            CanvasOp::Layout(args) => self.layout(index, args)?,
+            CanvasOp::Insert(args) => self.insert(index, args)?,
+            CanvasOp::Convert(args) => self.convert(index, args)?,
+            CanvasOp::SpreadPages(args) => self.spread_pages(index, args)?,
+            CanvasOp::Excerpt(args) => self.excerpt(index, args)?,
+            CanvasOp::FromMermaid(args) => self.import_mermaid(index, args)?,
+            CanvasOp::FromOutline(args) => self.import_outline(index, args)?,
             CanvasOp::AddStrokes { layer, strokes } => self.add_strokes(index, layer, strokes)?,
             CanvasOp::EraseStrokes { layer, ids } => self.erase_strokes(index, layer, ids)?,
+            CanvasOp::Draw(args) => self.draw(index, args)?,
             CanvasOp::MoveStrokes {
                 layer,
                 ids,
@@ -289,6 +515,7 @@ impl Compiler {
                 size,
                 aspect,
             } => self.restyle_strokes(index, layer, ids, (color.as_deref(), *size), *aspect)?,
+            CanvasOp::EraseAlong(args) => self.erase_along(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -326,6 +553,13 @@ impl Compiler {
             })
     }
 
+    /// Le schede `ids` com'erano nel modello, nell'ordine dato. Un id ripetuto è
+    /// `DuplicateId`; un id che non è una scheda è `UnknownNode`.
+    fn cards(&self, index: usize, ids: &[String]) -> Result<Vec<CanvasNode>, OpError> {
+        distinct(index, ids)?;
+        ids.iter().map(|id| self.node(index, id).cloned()).collect()
+    }
+
     fn has_node(&self, id: &str) -> bool {
         self.working.nodes.iter().any(|node| node.id == id)
     }
@@ -335,119 +569,37 @@ impl Compiler {
     }
 
     /// L'id di un elemento nuovo: quello dato, se è libero, o il prossimo
-    /// libero del seme.
+    /// libero del seme. Un `id` che non è un testo non si legge.
     fn claim_id(&mut self, index: usize, given: Option<&Value>) -> Result<String, OpError> {
-        let id = match given {
-            None | Some(Value::Null) => loop {
-                let id = self.ids.next_id();
-                if !self.taken.contains(&id) {
-                    break id;
-                }
-            },
-            Some(Value::String(id)) => {
-                if self.taken.contains(id) {
-                    return Err(OpError::DuplicateId {
-                        index,
-                        id: id.clone(),
-                    });
-                }
-                id.clone()
-            }
-            Some(_) => {
-                return Err(OpError::Invalid {
-                    index,
-                    reason: "`id` must be a string".to_owned(),
-                })
-            }
-        };
-        Ok(id)
+        match given {
+            None | Some(Value::Null) => Ok(self.fresh_id()),
+            Some(Value::String(id)) => self.claim_text(index, id),
+            Some(_) => Err(OpError::Invalid {
+                index,
+                reason: "`id` must be a string".to_owned(),
+            }),
+        }
     }
 
-    fn add_card(
-        &mut self,
-        index: usize,
-        node: &Map<String, Value>,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        if self.working.nodes.len() >= MAX_NODES {
-            return Err(OpError::TooMany {
+    /// Il prossimo id del seme che non è preso.
+    fn fresh_id(&mut self) -> String {
+        loop {
+            let id = self.ids.next_id();
+            if !self.taken.contains(&id) {
+                return id;
+            }
+        }
+    }
+
+    /// Un id dato a mano: `DuplicateId` se è già preso.
+    fn claim_text(&mut self, index: usize, id: &str) -> Result<String, OpError> {
+        if self.taken.contains(id) {
+            return Err(OpError::DuplicateId {
                 index,
-                what: "nodes",
-                limit: MAX_NODES,
+                id: id.to_owned(),
             });
         }
-        let id = self.claim_id(index, node.get("id"))?;
-        let mut fields = node.clone();
-        fields.insert("id".to_owned(), Value::String(id.clone()));
-        let node: CanvasNode = from_fields(index, "node", fields)?;
-        check_node(index, &node)?;
-        self.taken.insert(id.clone());
-        self.created.push(id);
-        Ok(vec![CanvasPatch::UpsertNode {
-            before: None,
-            after: node,
-            at: None,
-        }])
-    }
-
-    fn move_nodes(
-        &mut self,
-        index: usize,
-        ids: &[String],
-        dx: i64,
-        dy: i64,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        distinct(index, ids)?;
-        let mut patches = Vec::new();
-        for id in ids {
-            let mut node = self.node(index, id)?.clone();
-            node.x = saturate(node.x.saturating_add(dx));
-            node.y = saturate(node.y.saturating_add(dy));
-            check_node(index, &node)?;
-            patches.extend(upsert_node_patch(&self.working, &node));
-        }
-        Ok(patches)
-    }
-
-    fn resize(
-        &mut self,
-        index: usize,
-        id: &str,
-        width: i64,
-        height: i64,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        let mut node = self.node(index, id)?.clone();
-        node.width = width;
-        node.height = height;
-        check_node(index, &node)?;
-        Ok(upsert_node_patch(&self.working, &node)
-            .into_iter()
-            .collect())
-    }
-
-    fn connect(
-        &mut self,
-        index: usize,
-        edge: &Map<String, Value>,
-    ) -> Result<Vec<CanvasPatch>, OpError> {
-        if self.working.edges.len() >= MAX_EDGES {
-            return Err(OpError::TooMany {
-                index,
-                what: "edges",
-                limit: MAX_EDGES,
-            });
-        }
-        let id = self.claim_id(index, edge.get("id"))?;
-        let mut fields = edge.clone();
-        fields.insert("id".to_owned(), Value::String(id.clone()));
-        let edge: CanvasEdge = from_fields(index, "edge", fields)?;
-        self.check_edge(index, &edge)?;
-        self.taken.insert(id.clone());
-        self.created.push(id);
-        Ok(vec![CanvasPatch::UpsertEdge {
-            before: None,
-            after: edge,
-            at: None,
-        }])
+        Ok(id.to_owned())
     }
 
     /// Toglie schede e archi: prima gli archi (quelli nominati e quelli che
@@ -568,6 +720,10 @@ impl Compiler {
         id: &str,
         fields: &Map<String, Value>,
     ) -> Result<Vec<CanvasPatch>, OpError> {
+        // Un colore scritto con un nome diventa il valore del file, come in
+        // `add_card`: `set` non legge i nomi da solo.
+        let fields = color::canonical_fields(index, fields)?;
+        let fields = fields.as_ref();
         match (self.has_node(id), self.has_edge(id)) {
             (true, true) => Err(ambiguous(index, id)),
             (true, false) => {
@@ -613,30 +769,6 @@ impl Compiler {
                 id: id.to_owned(),
             }),
         }
-    }
-
-    fn reorder(&mut self, index: usize, ids: &[String]) -> Result<Vec<CanvasPatch>, OpError> {
-        distinct(index, ids)?;
-        for id in ids {
-            self.node(index, id)?;
-        }
-        let lifted: HashSet<&str> = ids.iter().map(String::as_str).collect();
-        let before: Vec<String> = self
-            .working
-            .nodes
-            .iter()
-            .map(|node| node.id.clone())
-            .collect();
-        let after: Vec<String> = before
-            .iter()
-            .filter(|id| !lifted.contains(id.as_str()))
-            .cloned()
-            .chain(ids.iter().cloned())
-            .collect();
-        if after == before {
-            return Ok(Vec::new());
-        }
-        Ok(vec![CanvasPatch::Reorder { before, after }])
     }
 
     /// Il livello d'inchiostro `layer` com'è adesso: vuoto se chi lo tiene
@@ -810,7 +942,7 @@ impl Compiler {
     /// altro livello (`to`) li toglie da `layer` come `erase_strokes`, poi li
     /// aggiunge in fondo a `to` nell'ordine dato, con l'ancora nuova; un id
     /// che `to` ha già ne prende uno nuovo dal seme. `aspect` è la
-    /// proporzione del contenuto della scheda di `layer` (`ink_fit`).
+    /// proporzione del contenuto della scheda di `layer` (`InkFit::of`).
     fn move_strokes(
         &mut self,
         index: usize,
@@ -876,8 +1008,8 @@ impl Compiler {
             // Il punto `p` dell'ancora vecchia sta sulla lavagna in
             // `angolo + fit + s·p`; nella nuova ancora, meno il suo angolo.
             let offset = (
-                start.0 + fit.x + delta.0 - origin.0,
-                start.1 + fit.y + delta.1 - origin.1,
+                start.0 + fit.dx + delta.0 - origin.0,
+                start.1 + fit.dy + delta.1 - origin.1,
             );
             let moved = shifted(&drawn.ink, fit.s, offset)
                 .map_err(|reason| stroke_error(index, id, &reason))?;
@@ -1031,128 +1163,19 @@ impl Frame {
     /// scheda lo sa solo la resa, e il nucleo non sposta né ridimensiona quel
     /// tratto (`hidden`). `aspect` è la proporzione del contenuto che la
     /// scheda mostra, se il client la sa.
-    fn fit(&self, anchor: &InkAnchor, aspect: Option<f64>) -> Fit {
-        match (self, anchor) {
-            (Frame::Card(node), InkAnchor::Card { width, height }) => {
-                ink_fit(node, *width, *height, aspect)
-            }
-            (_, InkAnchor::Page { .. } | InkAnchor::Cell { .. }) => Fit::HIDDEN,
-            _ => Fit::IDENTITY,
-        }
+    fn fit(&self, anchor: &InkAnchor, aspect: Option<f64>) -> InkFit {
+        let node = match self {
+            Frame::Board => None,
+            Frame::Card(node) => Some(&**node),
+        };
+        InkFit::of(node, anchor, aspect).unwrap_or(InkFit::HIDDEN)
     }
-}
-
-/// Da unità dell'ancora a unità della scheda di adesso: il punto `(px, py)`
-/// va a `(x + s·px, y + s·py)`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Fit {
-    s: f64,
-    x: f64,
-    y: f64,
-}
-
-impl Fit {
-    const IDENTITY: Fit = Fit {
-        s: 1.0,
-        x: 0.0,
-        y: 0.0,
-    };
-    const HIDDEN: Fit = Fit {
-        s: 0.0,
-        x: 0.0,
-        y: 0.0,
-    };
 }
 
 #[allow(clippy::cast_precision_loss)]
 fn corner(node: &CanvasNode) -> (f64, f64) {
     // Coordinate intere entro ±(2^53−1): il cast è esatto.
     (node.x as f64, node.y as f64)
-}
-
-/// Le estensioni delle schede `scale` (`canvas-ink.md`, «La misura della
-/// scheda»): le immagini e il PDF.
-const SCALED_EXTENSIONS: [&str; 13] = [
-    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic", "tif", "tiff", "pdf",
-];
-
-/// Il modo `scale`: una scheda `file` il cui file, per l'estensione (senza
-/// distinguere maiuscole), è un'immagine o un PDF. È la regola di
-/// `inkFitMode` del client, con gli stessi vettori (`canvas-ink-fit/`).
-fn scales(node: &CanvasNode) -> bool {
-    if node.node_type != CanvasNodeType::File {
-        return false;
-    }
-    let Some(file) = node.file.as_deref() else {
-        return false;
-    };
-    let base = file.rsplit('/').next().unwrap_or("");
-    let Some((stem, extension)) = base.rsplit_once('.') else {
-        return false;
-    };
-    // `.png` da solo è un nome nascosto senza estensione.
-    if stem.is_empty() {
-        return false;
-    }
-    let extension = extension.to_ascii_lowercase();
-    SCALED_EXTENSIONS.contains(&extension.as_str())
-}
-
-/// La regola `inkFit` del client: con `scale` lo stesso fattore nei due
-/// sensi, il minore, centrato; con `fixed` il tratto resta com'è. Con una
-/// proporzione del contenuto `aspect` che vale (finita e maggiore di zero) il
-/// riquadro del contenuto nella misura `ref` va sul riquadro del contenuto
-/// nella misura di adesso (`content_box`); senza, o con una che non vale, la
-/// regola di N4. Mai `NaN`. Gli stessi vettori del client:
-/// `canvas-ink-fit/` e `canvas-ink-fit-aspect/`.
-#[allow(clippy::cast_precision_loss)]
-fn ink_fit(node: &CanvasNode, ref_width: f64, ref_height: f64, aspect: Option<f64>) -> Fit {
-    if !scales(node) {
-        return Fit::IDENTITY;
-    }
-    let (w, h) = (node.width as f64, node.height as f64);
-    if !(ref_width.is_finite() && ref_height.is_finite() && ref_width > 0.0 && ref_height > 0.0) {
-        return Fit::HIDDEN;
-    }
-    if !(w.is_finite() && h.is_finite() && w >= 0.0 && h >= 0.0) {
-        return Fit::HIDDEN;
-    }
-    if let Some(aspect) = aspect.filter(|aspect| aspect.is_finite() && *aspect > 0.0) {
-        let from = content_box((ref_width, ref_height), aspect);
-        let to = content_box((w, h), aspect);
-        let (Some(from), Some(to)) = (from, to) else {
-            return Fit::HIDDEN;
-        };
-        // `content_box` dà misure finite: qui zero è l'unico caso.
-        if from.2 <= 0.0 {
-            return Fit::HIDDEN;
-        }
-        let s = to.2 / from.2;
-        if !s.is_finite() {
-            return Fit::HIDDEN;
-        }
-        return Fit {
-            s,
-            x: to.0 - s * from.0,
-            y: to.1 - s * from.1,
-        };
-    }
-    let s = (w / ref_width).min(h / ref_height);
-    Fit {
-        s,
-        x: (w - ref_width * s) / 2.0,
-        y: (h - ref_height * s) / 2.0,
-    }
-}
-
-/// Il riquadro `(x, y, larghezza, altezza)` del contenuto di proporzione
-/// `aspect` in una scheda `w × h`: il più grande che ci sta intero, al centro
-/// (`contentBox` del client). `None` se non è finito.
-fn content_box((w, h): (f64, f64), aspect: f64) -> Option<(f64, f64, f64, f64)> {
-    let width = w.min(h * aspect);
-    let height = width / aspect;
-    (width.is_finite() && height.is_finite())
-        .then(|| ((w - width) / 2.0, (h - height) / 2.0, width, height))
 }
 
 /// L'inchiostro `ink` coi punti `p` portati a `scale·p + offset` (unità
@@ -1393,127 +1416,55 @@ fn saturating_integer<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64,
     deserializer.deserialize_any(Saturating)
 }
 
+/// I campi di `set`: un oggetto, il cui `color` (se c'è e non è `null`) è un
+/// colore che la tavola legge, come in `add_card`. Così un colore sbagliato è un
+/// errore di lettura, come negli altri comandi che scrivono un colore.
+fn set_fields<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Map<String, Value>, D::Error> {
+    let fields = Map::<String, Value>::deserialize(deserializer)?;
+    match fields.get("color") {
+        None | Some(Value::Null) => Ok(fields),
+        Some(Value::String(text)) if color::parse(text).is_some() => Ok(fields),
+        Some(other) => Err(de::Error::custom(format_args!("unknown color {other}"))),
+    }
+}
+
+/// Lo stesso di [`saturating_integer`], o assente: `null` vale come assente (R7).
+fn saturating_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<i64>, D::Error> {
+    #[derive(Deserialize)]
+    struct Saturated(#[serde(deserialize_with = "saturating_integer")] i64);
+
+    Ok(Option::<Saturated>::deserialize(deserializer)?.map(|Saturated(value)| value))
+}
+
+/// Un motivo di rifiuto di un'operazione di forma breve, con la sua posizione.
+fn refuse(index: usize, reason: impl Into<String>) -> OpError {
+    OpError::Invalid {
+        index,
+        reason: reason.into(),
+    }
+}
+
+/// Un valore calcolato dal nucleo (un posto, una misura) come intero del
+/// modello. Un valore non intero, o fuori dai limiti del modello, non entra.
+fn whole(index: usize, value: f64) -> Result<i64, OpError> {
+    let bound = MAX_SAFE_INTEGER as f64;
+    if value.is_finite() && value.fract() == 0.0 && value.abs() <= bound {
+        // Dentro ±(2^53−1) un `f64` intero è esatto: il cast non arrotonda.
+        #[allow(clippy::cast_possible_truncation)]
+        let integer = value as i64;
+        Ok(integer)
+    } else {
+        Err(refuse(
+            index,
+            "a position or a size is not a whole number within the model limits",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
-
-    /// La scheda di un vettore di `canvas-ink-fit/`, alla misura `size`.
-    fn fit_card(card: &Value, size: &Value) -> CanvasNode {
-        let mut fields = card.as_object().cloned().unwrap_or_default();
-        fields.insert("id".to_owned(), json!("n"));
-        fields.insert("x".to_owned(), json!(0));
-        fields.insert("y".to_owned(), json!(0));
-        fields.insert("width".to_owned(), size["width"].clone());
-        fields.insert("height".to_owned(), size["height"].clone());
-        serde_json::from_value(Value::Object(fields)).expect("la scheda del vettore")
-    }
-
-    /// La misura della scheda si calcola come nel client: gli stessi vettori
-    /// di `inkFit` (`apps/client/src/__fixtures__/canvas-ink-fit/`).
-    #[test]
-    fn the_fit_follows_the_client_vectors() {
-        let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../apps/client/src/__fixtures__/canvas-ink-fit");
-        let mut seen = 0;
-        for entry in std::fs::read_dir(folder).expect("la cartella dei vettori") {
-            let path = entry.expect("una voce").path();
-            let text = std::fs::read_to_string(&path).expect("il file");
-            let vector: Value = serde_json::from_str(&text).expect("JSON");
-            let name = vector["name"].as_str().unwrap_or_default();
-            let node = fit_card(&vector["card"], &vector["size"]);
-            let width = vector["ref"]["width"].as_f64().expect("ref.width");
-            let height = vector["ref"]["height"].as_f64().expect("ref.height");
-            let expect = &vector["expect"];
-            assert_eq!(scales(&node), expect["mode"] == "scale", "{name}: il modo");
-            let fit = ink_fit(&node, width, height, None);
-            same_fit(name, fit, expect);
-            seen += 1;
-        }
-        assert!(seen >= 20, "troppo pochi vettori: {seen}");
-    }
-
-    /// `s`, `x`, `y` e i punti di un vettore (`expect`).
-    fn same_fit(name: &str, fit: Fit, expect: &Value) {
-        for (key, got) in [("s", fit.s), ("x", fit.x), ("y", fit.y)] {
-            let want = expect[key].as_f64().expect("un numero");
-            assert!(
-                (got - want).abs() < 1e-9,
-                "{name}: {key} = {got}, non {want}"
-            );
-        }
-        for point in expect["points"].as_array().into_iter().flatten() {
-            let coordinate = |field: &str, at: usize| point[field][at].as_f64().expect("un numero");
-            let got = (
-                fit.x + fit.s * coordinate("from", 0),
-                fit.y + fit.s * coordinate("from", 1),
-            );
-            let want = (coordinate("to", 0), coordinate("to", 1));
-            assert!(
-                (got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9,
-                "{name}: il punto va in {got:?}, non in {want:?}"
-            );
-        }
-    }
-
-    /// Con la proporzione del contenuto (T39, T98) la misura si calcola come
-    /// nel client: i vettori di `inkFit` con `aspect`
-    /// (`apps/client/src/__fixtures__/canvas-ink-fit-aspect/`).
-    #[test]
-    fn the_fit_with_the_content_aspect_follows_the_client_vectors() {
-        let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../apps/client/src/__fixtures__/canvas-ink-fit-aspect");
-        let mut seen = 0;
-        for entry in std::fs::read_dir(folder).expect("la cartella dei vettori") {
-            let path = entry.expect("una voce").path();
-            let text = std::fs::read_to_string(&path).expect("il file");
-            let vector: Value = serde_json::from_str(&text).expect("JSON");
-            let name = vector["name"].as_str().unwrap_or_default();
-            let node = fit_card(&vector["card"], &vector["size"]);
-            let width = vector["ref"]["width"].as_f64().expect("ref.width");
-            let height = vector["ref"]["height"].as_f64().expect("ref.height");
-            let aspect = vector["aspect"].as_f64();
-            let expect = &vector["expect"];
-            assert_eq!(scales(&node), expect["mode"] == "scale", "{name}: il modo");
-            same_fit(name, ink_fit(&node, width, height, aspect), expect);
-            seen += 1;
-        }
-        assert!(seen >= 7, "troppo pochi vettori: {seen}");
-    }
-
-    /// Una proporzione che non vale (zero, negativa, non finita) dà la
-    /// regola senza proporzione, e non cambia mai una scheda `fixed`.
-    #[test]
-    fn a_content_aspect_that_is_not_valid_gives_the_rule_without_it() {
-        let image = fit_card(
-            &json!({ "type": "file", "file": "Foto/lavagna.png" }),
-            &json!({ "width": 600, "height": 200 }),
-        );
-        let plain = ink_fit(&image, 300.0, 300.0, None);
-        for aspect in [0.0, -2.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            assert_eq!(
-                ink_fit(&image, 300.0, 300.0, Some(aspect)),
-                plain,
-                "{aspect}"
-            );
-        }
-        assert_ne!(ink_fit(&image, 300.0, 300.0, Some(2.0)), plain);
-        let note = fit_card(
-            &json!({ "type": "text", "text": "" }),
-            &json!({ "width": 600, "height": 200 }),
-        );
-        assert_eq!(ink_fit(&note, 300.0, 300.0, Some(2.0)), Fit::IDENTITY);
-        // La scheda di misura zero: il tratto non si vede, mai `NaN`.
-        let flat = fit_card(
-            &json!({ "type": "file", "file": "Foto/lavagna.png" }),
-            &json!({ "width": 0, "height": 200 }),
-        );
-        let fit = ink_fit(&flat, 300.0, 300.0, Some(2.0));
-        assert!(
-            fit.s == 0.0 && fit.x.is_finite() && fit.y.is_finite(),
-            "{fit:?}"
-        );
-    }
 
     #[test]
     fn a_shift_by_whole_units_changes_only_the_first_sample() {

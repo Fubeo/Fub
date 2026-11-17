@@ -16,6 +16,7 @@ import { taskChecked } from "../../../../rules/mirrored";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
+import { withLineBreaks } from "../../line-breaks";
 import { smartLists } from "../../smart-lists";
 import { addProperty, moveProperty } from "./properties";
 import { frontmatterRange } from "./render";
@@ -91,7 +92,8 @@ function toggleWrap(open: string, close: string = open): StateCommand {
             // `**parola **` non è grassetto, e `* parola*` a inizio riga è una
             // voce di lista. Una selezione di soli spazi non ha niente da
             // formattare e riceve la coppia vuota alla fine.
-            const text = state.sliceDoc(from, to);
+            // Il testo con "\n": le sue lunghezze sono posizioni del documento.
+            const text = state.doc.sliceString(from, to);
             const lead = text.length - text.trimStart().length;
             const trail = text.length - text.trimEnd().length;
             if (lead === text.length) {
@@ -303,7 +305,7 @@ export const closeFenceEnter: StateCommand = ({ state, dispatch }) => {
   const indent = found[1]!;
   const fence = found[2]![0]!.repeat(found[2]!.length);
   dispatch(state.update({
-    changes: { from: line.to, insert: `\n${indent}\n${indent}${fence}` },
+    changes: { from: line.to, insert: withLineBreaks(state, `\n${indent}\n${indent}${fence}`) },
     selection: { anchor: line.to + 1 + indent.length },
     scrollIntoView: true,
     userEvent: "input",
@@ -870,7 +872,7 @@ function headerDelimiters(doc: Text): Set<number> {
 
 /// Alt-↑/↓ porterebbe una riga dentro la testata o fuori da essa, oppure
 /// sposterebbe una delle sue due righe `---`.
-function movesHeader(state: EditorState, dir: -1 | 1): boolean {
+export function movesHeader(state: EditorState, dir: -1 | 1): boolean {
   const delimiters = headerDelimiters(state.doc);
   if (delimiters.size === 0) return false;
   return selectedLines(state).some((line) => delimiters.has(line.number) || delimiters.has(line.number + dir));
@@ -886,7 +888,7 @@ function copiesHeader(state: EditorState): boolean {
 /// Un comando del testo che la testata non deve subire: se la mossa la
 /// toccherebbe non fa niente, e il tasto si ferma lì, come le voci di proprietà
 /// ai bordi del frontmatter.
-function keepingHeader(run: (view: EditorView) => boolean, touches: (state: EditorState) => boolean): (view: EditorView) => boolean {
+export function keepingHeader(run: (view: EditorView) => boolean, touches: (state: EditorState) => boolean): (view: EditorView) => boolean {
   return (view) => (!view.state.readOnly && touches(view.state) ? true : run(view));
 }
 

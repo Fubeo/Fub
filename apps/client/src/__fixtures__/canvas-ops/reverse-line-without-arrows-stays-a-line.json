@@ -1,0 +1,74 @@
+{
+  "about": "reverse di una linea senza punte (toEnd none): all'inizio nessuna punta è quella di serie e non si scrive; alla fine nessuna punta non è quella di serie, e toEnd none resta scritto. La linea resta una linea, come nella GUI.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "b"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "fromNode": "a",
+        "toNode": "b",
+        "toEnd": "none"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "reverse",
+      "ids": [
+        "e1"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "a"
+        },
+        {
+          "id": "b",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "b"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "fromNode": "b",
+          "toNode": "a",
+          "toEnd": "none"
+        }
+      ]
+    }
+  }
+}

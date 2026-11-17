@@ -78,11 +78,27 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 
-# Il gancio della raccolta forzata del banco della memoria (`bench_gc.rs`)
-# dice a WebKitGTK dove sta l'estensione; è la stessa versione che wry porta.
-# Solo con la feature `bench-gc`.
+# Il limite a 60 Hz di WebKitGTK si spegne da `frame_rate.rs` sulle
+# `WebKitSettings` della webview: è la stessa versione che wry già porta (il
+# tipo di `PlatformWebview::inner`), quindi il lock non cresce. Le funzioni
+# delle feature (2.42) non sono nel crate e si cercano a runtime. Lo usa anche
+# il gancio della raccolta forzata del banco della memoria (`bench_gc.rs`, solo
+# con la feature `bench-gc`) per dire a WebKitGTK dove sta l'estensione; `v2_38`
+# è la feature che wry stesso accende.
 [target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = { version = "=2.0.2", features = ["v2_38"], optional = true }
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+# Il vblank emulato (`vblank.rs`): `dlsym`, `clock_nanosleep`, `fstat` e la
+# disposizione di `timespec` e `stat`. È la versione del workspace, già
+# nell'albero (tokio, mio, …): il lock non cresce.
+libc = { workspace = true }
+
+# La cartella di Windows chiesta al sistema (`GetSystemWindowsDirectoryW`,
+# `print.rs`) invece che a `SystemRoot`, che viene dall'ambiente di chi avvia
+# l'app: lì `explorer.exe` si cerca per percorso assoluto. È la versione del
+# workspace, già nell'albero con la stessa feature (la accende
+# `winapi-util`): il grafo non cresce, si aggiunge un nome.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_SystemInformation"] }
 
 [features]
 # Vuoto: le feature di `fub-app` servono al banco, non all'app che si usa.
@@ -91,8 +107,9 @@ default = []
 # l'app carica l'estensione web che `FUB_BENCH_GC` nomina. **Spento di serie**:
 # l'app che si distribuisce non sa caricare un'estensione da una cartella che
 # sceglie l'ambiente. Lo accende soltanto la build del banco WebView (job
-# `webview` di `ci.yml`, `misura.sh`).
-bench-gc = ["dep:webkit2gtk"]
+# `webview` di `ci.yml`, `misura.sh`). `webkit2gtk` su Linux c'è già per
+# `frame_rate.rs`: la feature non aggiunge dipendenze.
+bench-gc = []
 
 [dev-dependencies]
 # Le prove del registro delle sessioni live, con il tempo in pausa.

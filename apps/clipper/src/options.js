@@ -1,6 +1,7 @@
 /* Fub Clipper — options.js (classic script). Templates import/export,
- * selectors, and opt-in assistant settings. API keys live in extension
- * storage only (chrome.storage.local / browser.storage.local).
+ * selectors, and opt-in assistant settings. The remote API key goes through
+ * keystore.js: storage.session by default, storage.local only when the user
+ * turns on "Remember the key on this device".
  */
 (function () {
   "use strict";
@@ -15,6 +16,16 @@
       if (typeof FubI18n !== "undefined" && FubI18n.t) return FubI18n.t(key, en);
     } catch (e) { /* fall through */ }
     return en;
+  }
+
+  // Messages: one line in #status or in #error, the other one cleared.
+  function status(msg) {
+    $("error").textContent = "";
+    $("status").textContent = msg || "";
+  }
+  function error(msg) {
+    $("status").textContent = "";
+    $("error").textContent = msg || "";
   }
 
   function store() {
@@ -63,6 +74,40 @@
       $("imageOrigins").value = grants.images.join("\n");
       renderPermState(ai, grants);
     });
+    refreshKeyState();
+  }
+
+  // Key state: where the key is (never the key itself) and the remember
+  // choice. status() also migrates a key saved in storage.local by an older
+  // version: it stays remembered and the box shows as ticked.
+  function renderKeyState(st) {
+    $("aiKeyRemember").checked = st.remember;
+    var line;
+    if (!st.hasKey) line = t("options.key.none", "No key saved.");
+    else if (st.where === "local") line = t("options.key.local", "Key remembered on this device.");
+    else line = t("options.key.session", "Key kept until the browser closes.");
+    if (!st.sessionAvailable) line += " " + t("options.key.nosession", "This browser cannot keep the key only until it closes: to use a key, tick Remember.");
+    $("aiKeyState").textContent = line;
+  }
+  function refreshKeyState() {
+    return FubKeyStore.status(bn).then(renderKeyState, function (e) { error(String((e && e.message) || e)); });
+  }
+  function keyError(e) {
+    if (e && e.code === "no_session") return t("options.key.nosession", "This browser cannot keep the key only until it closes: to use a key, tick Remember.");
+    if (e && e.code === "bad_args") return t("options.key.invalid", "The key cannot contain spaces and must be at most 512 characters.");
+    return String((e && e.message) || e);
+  }
+
+  function toggleKeyVisibility() {
+    var input = $("aiKey");
+    var show = input.type === "password";
+    input.type = show ? "text" : "password";
+    var button = $("aiKeyToggle");
+    button.textContent = show ? t("options.key.hide", "Hide key") : t("options.key.show", "Show key");
+  }
+  function hideKey() {
+    var input = $("aiKey");
+    if (input.type !== "password") toggleKeyVisibility();
   }
 
   function saveTemplates() {
@@ -159,12 +204,21 @@
       images: parseOriginLines($("imageOrigins").value)
     });
     var obj = { "fub-ai": ai, "fub-origins": grants };
-    var key = $("aiKey").value.trim();
-    if (key) obj["fub-ai-key"] = key; // extension storage only
+    var key = $("aiKey").value;
+    var remember = $("aiKeyRemember").checked;
+    // Settings first, then the key: a key the browser cannot keep as asked
+    // is refused with its own message and the previous one stays where it was.
     set(obj).then(function () {
-      $("aiKey").value = "";
       renderPermState(ai, grants);
-      status(t("options.ai.saved", "Assistant settings saved."));
+      return FubKeyStore.save(bn, { key: key, remember: remember }).then(function (st) {
+        $("aiKey").value = "";
+        hideKey();
+        renderKeyState(st);
+        status(t("options.ai.saved", "Assistant settings saved."));
+      }, function (e) {
+        refreshKeyState();
+        error(keyError(e));
+      });
     }, function (e) { error(String(e.message || e)); });
   }
 
@@ -184,19 +238,17 @@
     }, function (e) { error(String(e.message || e)); });
   }
 
+  // Removes the key from storage.session and storage.local alike.
   function clearKey() {
-    var st = store();
-    if (st && st.remove) {
-      try {
-        var forgotten = function () { status(t("options.key.forgotten", "API key forgotten.")); };
-        var failed = function (e) { error(String(e.message || e)); };
-        var p = st.remove("fub-ai-key");
-        if (p && p.then) p.then(forgotten, failed);
-        else st.remove("fub-ai-key", forgotten);
-        return;
-      } catch (e) { error(String(e.message || e)); return; }
-    }
-    error(t("options.storage.none", "no extension storage in this context"));
+    $("aiKey").value = "";
+    hideKey();
+    FubKeyStore.forget(bn).then(function (st) {
+      renderKeyState(st);
+      status(t("options.key.forgotten", "API key forgotten."));
+    }, function (e) {
+      refreshKeyState();
+      error(e && e.code === "unavailable" ? t("options.storage.none", "no extension storage in this context") : String((e && e.message) || e));
+    });
   }
 
   function requestPerms() {
@@ -225,6 +277,7 @@
     $("saveSelectors").addEventListener("click", saveSelectors);
     $("saveAi").addEventListener("click", saveAi);
     $("clearKey").addEventListener("click", clearKey);
+    $("aiKeyToggle").addEventListener("click", toggleKeyVisibility);
     $("saveOrigins").addEventListener("click", saveOrigins);
     $("requestPerms").addEventListener("click", requestPerms);
     try { if (typeof FubI18n !== "undefined" && FubI18n.applyStatic) FubI18n.applyStatic(); } catch (e) { /* ignore */ }

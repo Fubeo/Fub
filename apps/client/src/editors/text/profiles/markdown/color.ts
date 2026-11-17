@@ -8,7 +8,7 @@
 // cursore, dopo i segni del blocco; in una riga vuota scrive la coppia vuota. Se quel testo è già avvolto da un tag di
 // colore, cambia la sua classe invece di avvolgerlo di nuovo; «Predefinito»
 // toglie la classe, e con l'ultima il tag.
-import { EditorSelection, type ChangeSpec, type EditorState, type StateCommand, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, type ChangeSpec, type EditorState, type StateCommand } from "@codemirror/state";
 import { CONTENT_COLORS } from "../../../../ui/sanitize";
 import { blockGesture } from "./block-gesture";
 import { liveStrings } from "./strings";
@@ -49,7 +49,9 @@ type Wrapper = { open: { from: number; to: number }; close: { from: number; to: 
 const OPEN_BEFORE = /<(span|mark)\s+class\s*=\s*(?:"([^"]*)"|'([^']*)')\s*>$/i;
 
 function wrapperOf(state: EditorState, from: number, to: number): Wrapper | null {
-  const before = state.sliceDoc(Math.max(0, from - 120), from);
+  // Con "\n" fra le righe: la lunghezza del tag andato a capo è in posizioni
+  // anche in una nota CRLF (#394).
+  const before = state.doc.sliceString(Math.max(0, from - 120), from);
   const open = OPEN_BEFORE.exec(before);
   if (!open) return null;
   const classes = colorClasses(open[2] ?? open[3] ?? "");
@@ -76,69 +78,78 @@ export function colorsAt(state: EditorState): { text: ContentColor | null; fill:
   return { text: pick("text"), fill: pick("fill") };
 }
 
-/// La modifica che dà il colore, o `null` se non c'è niente da fare. Non
-/// costruisce la transazione: la barra del formato chiede a ogni tasto se ogni
-/// colore si può dare (`canSetContentColor`), e una transazione per colore,
-/// con i filtri dell'editor vero, costava più del resto del fotogramma (#293).
-function colorSpec(state: EditorState, kind: ColorKind, color: ContentColor | null, at?: { from: number; to: number }): TransactionSpec | null {
+/// Ciò che «Colore» farebbe sul tratto: niente (`null`), la coppia vuota in
+/// una riga vuota, o il tag da cambiare, togliere o aggiungere con le sue
+/// classi. È la decisione senza la transazione: la barra chiede per ogni
+/// colore se il comando agirebbe, a ogni movimento del cursore e a ogni
+/// cambio di scheda, e costruire una transazione per saperlo costava quanto
+/// applicarla.
+type ColorPlan =
+  | { k: "empty" }
+  | { k: "change"; range: { from: number; to: number }; wrapper: Wrapper | null; classes: string | null };
+
+function colorPlan(state: EditorState, kind: ColorKind, color: ContentColor | null, at?: { from: number; to: number }): ColorPlan | null {
   if (state.readOnly) return null;
   const range = at ?? colorRange(state);
-  if (!range) {
-    // Una riga ancora vuota (il «/» appena scritto): la coppia vuota, col
-    // cursore dentro, perché il colore valga per ciò che si scrive dopo.
-    if (!color) return null;
-    const head = state.selection.main.head;
-    const open = `<${ELEMENT[kind]} class="${PREFIX[kind]}${color}">`;
-    return {
-      changes: { from: head, insert: `${open}</${ELEMENT[kind]}>` },
-      selection: EditorSelection.cursor(head + open.length),
-      userEvent: "input.format",
-    };
-  }
+  // Una riga ancora vuota: c'è da fare solo se c'è un colore da dare.
+  if (!range) return color ? { k: "empty" } : null;
   const wrapper = wrapperOf(state, range.from, range.to);
   const kept = (wrapper?.classes.split(" ") ?? []).filter((each) => !each.startsWith(PREFIX[kind]));
   const classes = colorClasses([...kept, ...(color ? [`${PREFIX[kind]}${color}`] : [])].join(" "));
-  let changes: ChangeSpec[];
-  let shift: number;
-  if (wrapper) {
-    if (wrapper.classes === (classes ?? "")) return null;
-    if (classes) {
-      const open = `<${wrapper.name} class="${classes}">`;
-      changes = [{ from: wrapper.open.from, to: wrapper.open.to, insert: open }];
-      shift = open.length - (wrapper.open.to - wrapper.open.from);
-    } else {
-      changes = [{ from: wrapper.open.from, to: wrapper.open.to }, { from: wrapper.close.from, to: wrapper.close.to }];
-      shift = -(wrapper.open.to - wrapper.open.from);
-    }
-  } else {
-    if (!classes) return null;
-    const name = ELEMENT[kind];
-    const open = `<${name} class="${classes}">`;
-    changes = [{ from: range.from, insert: open }, { from: range.to, insert: `</${name}>` }];
-    shift = open.length;
-  }
-  const main = state.selection.main;
-  const selection = at ? undefined : main.empty
-    ? EditorSelection.cursor(Math.max(range.from + shift, main.head + shift))
-    : EditorSelection.range(range.from + shift, range.to + shift);
-  const lead = { from: state.doc.lineAt(range.from).from, to: range.to };
-  const annotations = blockGesture.of({ kind: "color", lead, ...(color ? {} : { say: liveStrings.t("blocks.colored.none") }) });
-  return { changes, selection, userEvent: "input.format", scrollIntoView: true, annotations };
+  if (wrapper ? wrapper.classes === (classes ?? "") : !classes) return null;
+  return { k: "change", range, wrapper, classes };
+}
+
+/// Se `setContentColor` agirebbe qui, senza costruire la transazione.
+export function colorApplies(kind: ColorKind, color: ContentColor | null): (state: EditorState) => boolean {
+  return (state) => colorPlan(state, kind, color) !== null;
 }
 
 /// Dà al tratto il colore `color` del testo o del fondo; `null` lo toglie.
 /// `at` sceglie il tratto al posto della selezione (il menu del blocco).
 export function setContentColor(kind: ColorKind, color: ContentColor | null, at?: { from: number; to: number }): StateCommand {
   return ({ state, dispatch }) => {
-    const spec = colorSpec(state, kind, color, at);
-    if (!spec) return false;
-    dispatch(state.update(spec));
+    const plan = colorPlan(state, kind, color, at);
+    if (!plan) return false;
+    if (plan.k === "empty") {
+      // Una riga ancora vuota (il «/» appena scritto): la coppia vuota, col
+      // cursore dentro, perché il colore valga per ciò che si scrive dopo.
+      if (!color) return false;
+      const head = state.selection.main.head;
+      const open = `<${ELEMENT[kind]} class="${PREFIX[kind]}${color}">`;
+      dispatch(state.update({
+        changes: { from: head, insert: `${open}</${ELEMENT[kind]}>` },
+        selection: EditorSelection.cursor(head + open.length),
+        userEvent: "input.format",
+      }));
+      return true;
+    }
+    const { range, wrapper, classes } = plan;
+    let changes: ChangeSpec[];
+    let shift: number;
+    if (wrapper) {
+      if (classes) {
+        const open = `<${wrapper.name} class="${classes}">`;
+        changes = [{ from: wrapper.open.from, to: wrapper.open.to, insert: open }];
+        shift = open.length - (wrapper.open.to - wrapper.open.from);
+      } else {
+        changes = [{ from: wrapper.open.from, to: wrapper.open.to }, { from: wrapper.close.from, to: wrapper.close.to }];
+        shift = -(wrapper.open.to - wrapper.open.from);
+      }
+    } else {
+      if (!classes) return false;
+      const name = ELEMENT[kind];
+      const open = `<${name} class="${classes}">`;
+      changes = [{ from: range.from, insert: open }, { from: range.to, insert: `</${name}>` }];
+      shift = open.length;
+    }
+    const main = state.selection.main;
+    const selection = at ? undefined : main.empty
+      ? EditorSelection.cursor(Math.max(range.from + shift, main.head + shift))
+      : EditorSelection.range(range.from + shift, range.to + shift);
+    const lead = { from: state.doc.lineAt(range.from).from, to: range.to };
+    const annotations = blockGesture.of({ kind: "color", lead, ...(color ? {} : { say: liveStrings.t("blocks.colored.none") }) });
+    dispatch(state.update({ changes, selection, userEvent: "input.format", scrollIntoView: true, annotations }));
     return true;
   };
-}
-
-/// Se `setContentColor` farebbe qualcosa: la stessa decisione, senza la
-/// transazione.
-export function canSetContentColor(kind: ColorKind, color: ContentColor | null): (state: EditorState) => boolean {
-  return (state) => colorSpec(state, kind, color) !== null;
 }

@@ -1,0 +1,316 @@
+{
+  "about": "La gomma che taglia, scritta a mano: i pezzi che restano di un tratto dove passa il cammino della gomma (splitInk di ink/tools/split.ts, split_ink di fub-ink-codec) e il pennello dei pezzi (cutBrush, cut_brush). Li fanno girare crates/fub-ink-codec/tests/cut_vectors.rs e src/ink/tools/split-vectors.test.ts. I campioni sono in unità del tratto; expect è null se il cammino non tocca il tratto, [] se lo cancella tutto. I numeri dei pezzi si confrontano entro tolerance: il bordo si trova per bisezione. Dove il bordo cade su un passo esatto la bisezione lo trova esatto (45, 55, 15, 75, 25).",
+  "tolerance": 0.001,
+  "split": [
+    {
+      "name": "meta",
+      "about": "Un taglio a metà: due pezzi, col bordo dove passa il cerchio (45 e 55). La pressione si interpola, il tempo del secondo pezzo riparte da zero e offset dice da dove.",
+      "samples": [
+        { "x": 0, "y": 0, "p": 0, "t": 0 },
+        { "x": 10, "y": 0, "p": 0.1, "t": 10 },
+        { "x": 20, "y": 0, "p": 0.2, "t": 20 },
+        { "x": 30, "y": 0, "p": 0.3, "t": 30 },
+        { "x": 40, "y": 0, "p": 0.4, "t": 40 },
+        { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+        { "x": 60, "y": 0, "p": 0.6, "t": 60 },
+        { "x": 70, "y": 0, "p": 0.7, "t": 70 },
+        { "x": 80, "y": 0, "p": 0.8, "t": 80 },
+        { "x": 90, "y": 0, "p": 0.9, "t": 90 },
+        { "x": 100, "y": 0, "p": 1, "t": 100 }
+      ],
+      "path": [[50, -20], [50, 20]],
+      "radius": 5,
+      "expect": [
+        {
+          "cutStart": false, "cutEnd": true, "offset": 0,
+          "samples": [
+            { "x": 0, "y": 0, "p": 0, "t": 0 },
+            { "x": 10, "y": 0, "p": 0.1, "t": 10 },
+            { "x": 20, "y": 0, "p": 0.2, "t": 20 },
+            { "x": 30, "y": 0, "p": 0.3, "t": 30 },
+            { "x": 40, "y": 0, "p": 0.4, "t": 40 },
+            { "x": 45, "y": 0, "p": 0.45, "t": 45 }
+          ]
+        },
+        {
+          "cutStart": true, "cutEnd": false, "offset": 55,
+          "samples": [
+            { "x": 55, "y": 0, "p": 0.55, "t": 0 },
+            { "x": 60, "y": 0, "p": 0.6, "t": 5 },
+            { "x": 70, "y": 0, "p": 0.7, "t": 15 },
+            { "x": 80, "y": 0, "p": 0.8, "t": 25 },
+            { "x": 90, "y": 0, "p": 0.9, "t": 35 },
+            { "x": 100, "y": 0, "p": 1, "t": 45 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "inizio",
+      "about": "Un cerchio sul primo campione: resta un pezzo solo, che comincia sul taglio (15) e finisce col tratto.",
+      "samples": [
+        { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+        { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+        { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+        { "x": 30, "y": 0, "p": 0.5, "t": 30 },
+        { "x": 40, "y": 0, "p": 0.5, "t": 40 },
+        { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+        { "x": 60, "y": 0, "p": 0.5, "t": 60 },
+        { "x": 70, "y": 0, "p": 0.5, "t": 70 },
+        { "x": 80, "y": 0, "p": 0.5, "t": 80 },
+        { "x": 90, "y": 0, "p": 0.5, "t": 90 },
+        { "x": 100, "y": 0, "p": 0.5, "t": 100 }
+      ],
+      "path": [[0, 0]],
+      "radius": 15,
+      "expect": [
+        {
+          "cutStart": true, "cutEnd": false, "offset": 15,
+          "samples": [
+            { "x": 15, "y": 0, "p": 0.5, "t": 0 },
+            { "x": 20, "y": 0, "p": 0.5, "t": 5 },
+            { "x": 30, "y": 0, "p": 0.5, "t": 15 },
+            { "x": 40, "y": 0, "p": 0.5, "t": 25 },
+            { "x": 50, "y": 0, "p": 0.5, "t": 35 },
+            { "x": 60, "y": 0, "p": 0.5, "t": 45 },
+            { "x": 70, "y": 0, "p": 0.5, "t": 55 },
+            { "x": 80, "y": 0, "p": 0.5, "t": 65 },
+            { "x": 90, "y": 0, "p": 0.5, "t": 75 },
+            { "x": 100, "y": 0, "p": 0.5, "t": 85 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fine",
+      "about": "Un cerchio sull'ultimo campione: resta un pezzo solo, che comincia col tratto e finisce sul taglio (75).",
+      "samples": [
+        { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+        { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+        { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+        { "x": 30, "y": 0, "p": 0.5, "t": 30 },
+        { "x": 40, "y": 0, "p": 0.5, "t": 40 },
+        { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+        { "x": 60, "y": 0, "p": 0.5, "t": 60 },
+        { "x": 70, "y": 0, "p": 0.5, "t": 70 },
+        { "x": 80, "y": 0, "p": 0.5, "t": 80 },
+        { "x": 90, "y": 0, "p": 0.5, "t": 90 },
+        { "x": 100, "y": 0, "p": 0.5, "t": 100 }
+      ],
+      "path": [[100, 0]],
+      "radius": 25,
+      "expect": [
+        {
+          "cutStart": false, "cutEnd": true, "offset": 0,
+          "samples": [
+            { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+            { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+            { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+            { "x": 30, "y": 0, "p": 0.5, "t": 30 },
+            { "x": 40, "y": 0, "p": 0.5, "t": 40 },
+            { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+            { "x": 60, "y": 0, "p": 0.5, "t": 60 },
+            { "x": 70, "y": 0, "p": 0.5, "t": 70 },
+            { "x": 75, "y": 0, "p": 0.5, "t": 75 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "intero",
+      "about": "Il cammino copre tutto il tratto: non resta niente, e il tratto si toglie.",
+      "samples": [
+        { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+        { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+        { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+        { "x": 30, "y": 0, "p": 0.5, "t": 30 },
+        { "x": 40, "y": 0, "p": 0.5, "t": 40 },
+        { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+        { "x": 60, "y": 0, "p": 0.5, "t": 60 },
+        { "x": 70, "y": 0, "p": 0.5, "t": 70 },
+        { "x": 80, "y": 0, "p": 0.5, "t": 80 },
+        { "x": 90, "y": 0, "p": 0.5, "t": 90 },
+        { "x": 100, "y": 0, "p": 0.5, "t": 100 }
+      ],
+      "path": [[0, 0], [100, 0]],
+      "radius": 5,
+      "expect": []
+    },
+    {
+      "name": "nessun-tocco",
+      "about": "Il cammino passa 30 sopra il tratto, più lontano del raggio: il tratto resta com'è.",
+      "samples": [
+        { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+        { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+        { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+        { "x": 30, "y": 0, "p": 0.5, "t": 30 },
+        { "x": 40, "y": 0, "p": 0.5, "t": 40 },
+        { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+        { "x": 60, "y": 0, "p": 0.5, "t": 60 },
+        { "x": 70, "y": 0, "p": 0.5, "t": 70 },
+        { "x": 80, "y": 0, "p": 0.5, "t": 80 },
+        { "x": 90, "y": 0, "p": 0.5, "t": 90 },
+        { "x": 100, "y": 0, "p": 0.5, "t": 100 }
+      ],
+      "path": [[50, 30], [60, 30]],
+      "radius": 5,
+      "expect": null
+    },
+    {
+      "name": "tocco-cancellato",
+      "about": "Un tocco (un tratto di un campione solo) sotto il cerchio sparisce intero.",
+      "samples": [{ "x": 10, "y": 10, "t": 0 }],
+      "path": [[10, 12]],
+      "radius": 5,
+      "expect": []
+    },
+    {
+      "name": "tocco-lontano",
+      "about": "Un tocco lontano dal cerchio resta com'è.",
+      "samples": [{ "x": 10, "y": 10, "t": 0 }],
+      "path": [[30, 30]],
+      "radius": 5,
+      "expect": null
+    },
+    {
+      "name": "fra-campioni-lontani",
+      "about": "Due campioni a 100 di distanza e il cerchio in mezzo: il taglio cade fra i due (46 e 54), non su un campione, perché il cammino si prova a passi di metà raggio.",
+      "samples": [
+        { "x": 0, "y": 0, "t": 0 },
+        { "x": 100, "y": 0, "t": 100 }
+      ],
+      "path": [[50, 0]],
+      "radius": 4,
+      "expect": [
+        {
+          "cutStart": false, "cutEnd": true, "offset": 0,
+          "samples": [
+            { "x": 0, "y": 0, "t": 0 },
+            { "x": 46, "y": 0, "t": 46 }
+          ]
+        },
+        {
+          "cutStart": true, "cutEnd": false, "offset": 54,
+          "samples": [
+            { "x": 54, "y": 0, "t": 0 },
+            { "x": 100, "y": 0, "t": 46 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "inclinazione",
+      "about": "Il campione nuovo di un bordo prende inclinazione e azimut dal campione più vicino, senza interpolarli.",
+      "samples": [
+        { "x": 0, "y": 0, "t": 0, "a": 40, "z": 10 },
+        { "x": 100, "y": 0, "t": 100, "a": 60, "z": 90 }
+      ],
+      "path": [[30, 0]],
+      "radius": 5,
+      "expect": [
+        {
+          "cutStart": false, "cutEnd": true, "offset": 0,
+          "samples": [
+            { "x": 0, "y": 0, "t": 0, "a": 40, "z": 10 },
+            { "x": 25, "y": 0, "t": 25, "a": 40, "z": 10 }
+          ]
+        },
+        {
+          "cutStart": true, "cutEnd": false, "offset": 35,
+          "samples": [
+            { "x": 35, "y": 0, "t": 0, "a": 40, "z": 10 },
+            { "x": 100, "y": 0, "t": 65, "a": 60, "z": 90 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "due-tagli",
+      "about": "Il cammino scende a 25, va a destra 20 sopra il tratto (troppo lontano per toccarlo) e risale a 75: tre pezzi, quello di mezzo tagliato ai due capi.",
+      "samples": [
+        { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+        { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+        { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+        { "x": 30, "y": 0, "p": 0.5, "t": 30 },
+        { "x": 40, "y": 0, "p": 0.5, "t": 40 },
+        { "x": 50, "y": 0, "p": 0.5, "t": 50 },
+        { "x": 60, "y": 0, "p": 0.5, "t": 60 },
+        { "x": 70, "y": 0, "p": 0.5, "t": 70 },
+        { "x": 80, "y": 0, "p": 0.5, "t": 80 },
+        { "x": 90, "y": 0, "p": 0.5, "t": 90 },
+        { "x": 100, "y": 0, "p": 0.5, "t": 100 }
+      ],
+      "path": [[25, -20], [25, 20], [75, 20], [75, -20]],
+      "radius": 3,
+      "expect": [
+        {
+          "cutStart": false, "cutEnd": true, "offset": 0,
+          "samples": [
+            { "x": 0, "y": 0, "p": 0.5, "t": 0 },
+            { "x": 10, "y": 0, "p": 0.5, "t": 10 },
+            { "x": 20, "y": 0, "p": 0.5, "t": 20 },
+            { "x": 22, "y": 0, "p": 0.5, "t": 22 }
+          ]
+        },
+        {
+          "cutStart": true, "cutEnd": true, "offset": 28,
+          "samples": [
+            { "x": 28, "y": 0, "p": 0.5, "t": 0 },
+            { "x": 30, "y": 0, "p": 0.5, "t": 2 },
+            { "x": 40, "y": 0, "p": 0.5, "t": 12 },
+            { "x": 50, "y": 0, "p": 0.5, "t": 22 },
+            { "x": 60, "y": 0, "p": 0.5, "t": 32 },
+            { "x": 70, "y": 0, "p": 0.5, "t": 42 },
+            { "x": 72, "y": 0, "p": 0.5, "t": 44 }
+          ]
+        },
+        {
+          "cutStart": true, "cutEnd": false, "offset": 78,
+          "samples": [
+            { "x": 78, "y": 0, "p": 0.5, "t": 0 },
+            { "x": 80, "y": 0, "p": 0.5, "t": 2 },
+            { "x": 90, "y": 0, "p": 0.5, "t": 12 },
+            { "x": 100, "y": 0, "p": 0.5, "t": 22 }
+          ]
+        }
+      ]
+    }
+  ],
+  "brush": [
+    {
+      "name": "taglio-all-inizio",
+      "about": "Un pezzo che comincia su un taglio perde la rastremazione d'inizio; quella di fine e la penna restano.",
+      "brush": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=8 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=fountain",
+      "cutStart": true, "cutEnd": false,
+      "expect": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=fountain"
+    },
+    {
+      "name": "taglio-alla-fine",
+      "about": "Un pezzo che finisce su un taglio perde la rastremazione di fine.",
+      "brush": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=8 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=fountain",
+      "cutStart": false, "cutEnd": true,
+      "expect": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=8 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=fountain"
+    },
+    {
+      "name": "due-tagli",
+      "about": "Un pezzo di mezzo le perde tutte e due.",
+      "brush": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=8 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=fountain",
+      "cutStart": true, "cutEnd": true,
+      "expect": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=fountain"
+    },
+    {
+      "name": "nessun-taglio",
+      "about": "Un pezzo coi due capi del tratto tiene il pennello com'è.",
+      "brush": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=8 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=fountain",
+      "cutStart": false, "cutEnd": false,
+      "expect": "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=8 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=fountain"
+    },
+    {
+      "name": "punta-piatta",
+      "about": "La punta piatta (nib1) non ha rastremazioni: il pennello resta com'è anche ai tagli.",
+      "brush": "nib1 size=10 tip=2 angle=30 fixation=1 thinning=0 tilt=0 smoothing=0.5 streamline=0.5 sim=0 pen=calligraphy",
+      "cutStart": true, "cutEnd": true,
+      "expect": "nib1 size=10 tip=2 angle=30 fixation=1 thinning=0 tilt=0 smoothing=0.5 streamline=0.5 sim=0 pen=calligraphy"
+    }
+  ]
+}

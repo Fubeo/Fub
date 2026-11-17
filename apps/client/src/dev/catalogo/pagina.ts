@@ -506,6 +506,8 @@ function buildPage(lifetime: Lifetime): CatalogPage {
       // loro ancora sta dentro un dialogo (`aria-modal`), e il kit li alza sul
       // piano delle modali (`kit/popover.ts`, `kit/dialog.ts`).
       lifetime: life,
+      // La pagina scorre: la lingua dei menu (riga, tessera, etichetta) c'è.
+      menuLanguage: true,
       section(sectionTitle, _column, ...content) {
         const node = el("section", "sezione");
         const h = el("h3", undefined, sectionTitle);

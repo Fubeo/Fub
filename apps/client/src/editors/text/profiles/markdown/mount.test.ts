@@ -157,6 +157,17 @@ describe("montaggio Markdown condiviso", () => {
     expect(embedded).not.toHaveBeenCalled();
   });
 
+  it("ogni tabella sta in un involucro che scorre, ed è focalizzabile per farlo scorrere", () => {
+    const element = mount(renderMarkdown("| A | B |\n| - | - |\n| 1 | 2 |\n\n| C |\n| - |\n| 3 |\n").html);
+    const tables = [...element.querySelectorAll("table")];
+    expect(tables).toHaveLength(2);
+    for (const table of tables) {
+      expect(table.parentElement?.className).toBe("markdown-table-scroll");
+      expect(table.parentElement?.children).toHaveLength(1);
+      expect(table.tabIndex).toBe(0);
+    }
+    expect(element.querySelectorAll(".markdown-table-scroll")).toHaveLength(2);
+  });
   it("un clic su un'immagine del vault la apre nella lightbox, non la segue", () => {
     setReducedMotionPreference(true);
     try {
@@ -200,8 +211,14 @@ describe("montaggio Markdown condiviso", () => {
     expect(root.querySelectorAll("a")).toHaveLength(3);
     for (const index of [0, 1, 2]) expect(click(index).defaultPrevented).toBe(true);
     return Promise.resolve().then(() => {
-      expect(openPath).toHaveBeenCalledWith("docs/Manuale uno.html");
+      // Il percorso parte dalla nota della resa, col gesto del clic.
+      expect(openPath).toHaveBeenCalledWith("docs/Manuale uno.html", "Nota.md", "click");
       expect(opened.mock.calls.map((call) => call[0])).toEqual(["https://example.org", "mailto:a@b.c"]);
+      // Alt col clic su un documento del vault è la sbirciata.
+      root.querySelectorAll("a")[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, altKey: true }));
+      return Promise.resolve();
+    }).then(() => {
+      expect(openPath).toHaveBeenLastCalledWith("docs/Manuale uno.html", "Nota.md", "peek");
     });
   });
 

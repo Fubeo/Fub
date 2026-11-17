@@ -1,6 +1,9 @@
 // La selezione di blocchi (H7): Esc seleziona il blocco del cursore, Shift-↑/↓
 // allarga ai fratelli, ↑/↓ passano al blocco vicino, Canc e Backspace
-// eliminano, Mod-d duplica, Invio ed Esc tornano al testo. È della superficie,
+// eliminano, Invio ed Esc tornano al testo; Mod-d la duplica e Mod-a la fa di
+// tutti i blocchi (`keys.ts`, sopra la mappa del profilo). Esiste soltanto coi
+// blocchi accesi (`editor.blocks`): spegnerli toglie il campo, e ciò che era
+// scelto resta una selezione di testo. È della superficie,
 // come la selezione di testo: un altro riquadro sulla stessa nota non la vede.
 // Sotto c'è una selezione di CodeMirror che copre i blocchi interi, così
 // copiare, tagliare e incollare lavorano sul loro Markdown senza un ramo a
@@ -9,6 +12,7 @@ import {
   EditorSelection,
   type EditorState,
   type Extension,
+  Facet,
   Prec,
   StateEffect,
   StateField,
@@ -19,6 +23,7 @@ import { Decoration, type DecorationSet, EditorView, keymap, type KeyBinding } f
 import { getCM } from "@replit/codemirror-vim";
 import { liveStrings } from "../strings";
 import { blockGesture } from "../block-gesture";
+import { withLineBreaks } from "../../../line-breaks";
 import { blockModel, blockStartingAt, innermostAt, type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 import { modelOf } from "./transform";
@@ -132,14 +137,16 @@ export function duplicateRun(state: EditorState, blocks: readonly Block[], run: 
   const a = sibs.indexOf(run.first);
   const b = sibs.indexOf(run.last);
   const span = spanOf(blocks, run);
+  // Con "\n", come `sliceString`: le lunghezze sono posizioni del documento.
+  const doc = state.doc;
   const gap = b + 1 < sibs.length
-    ? state.sliceDoc(span.to, blocks[sibs[b + 1]!]!.from)
-    : a > 0 ? state.sliceDoc(blocks[sibs[a - 1]!]!.to, span.from) : blocks[run.first]!.parent >= 0 ? "\n" : "\n\n";
-  const text = state.sliceDoc(span.from, span.to);
+    ? doc.sliceString(span.to, blocks[sibs[b + 1]!]!.from)
+    : a > 0 ? doc.sliceString(blocks[sibs[a - 1]!]!.to, span.from) : blocks[run.first]!.parent >= 0 ? "\n" : "\n\n";
+  const text = doc.sliceString(span.from, span.to);
   const from = span.to + gap.length;
   const value: BlockSelection = { anchor: from, head: from + (blocks[run.last]!.from - span.from), depth: blocks[run.first]!.depth };
   return {
-    changes: { from: span.to, insert: gap + text },
+    changes: { from: span.to, insert: withLineBreaks(state, gap + text) },
     selection: EditorSelection.single(from, from + text.length),
     effects: setBlockSelection.of(value),
     annotations: blockGesture.of({ kind: "born", lead: { from, to: from + text.length } }),
@@ -201,14 +208,13 @@ const remove = whenSelected((view, blocks, selected) => {
   return true;
 });
 
-const duplicate = whenSelected((view, blocks, selected) => {
-  if (view.state.readOnly) return false;
-  view.dispatch(duplicateRun(view.state, blocks, selected));
-  return true;
-});
+/// Esc è dell'ospite dell'editor (`BlocksOptions.escapeLeaves`, una scheda
+/// della lavagna): sul testo non seleziona il blocco, così l'ospite lo riceve
+/// libero ed esce; una selezione di blocchi già fatta Esc la chiude ancora.
+export const escapeLeaves = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
 
 export const blockSelectionKeys: readonly KeyBinding[] = [
-  { key: "Escape", run: (view) => leave(view) || selectCursorBlock(view) },
+  { key: "Escape", run: (view) => leave(view) || (!view.state.facet(escapeLeaves) && selectCursorBlock(view)) },
   { key: "Enter", run: leave },
   { key: "ArrowUp", run: step(-1, false) },
   { key: "ArrowDown", run: step(1, false) },
@@ -216,7 +222,6 @@ export const blockSelectionKeys: readonly KeyBinding[] = [
   { key: "Shift-ArrowDown", run: step(1, true) },
   { key: "Delete", run: remove },
   { key: "Backspace", run: remove },
-  { key: "Mod-d", run: duplicate },
 ];
 
 const selectedLine = Decoration.line({ class: "cm-fub-block-selected" });

@@ -314,21 +314,6 @@ function templatesLauncher(): (() => void | Promise<void>) | null {
   return entry?.run && !entry.unavailable ? entry.run : null;
 }
 
-/// Chi apre il lanciatore dei modelli con la cartella dove la nota nascerà:
-/// il lanciatore dello Scrittoio, che la passa a `note.from_template`.
-/// Senza, «Nota da un modello…» apre il lanciatore com'è (la radice).
-export type TemplateOpener = (folder: string) => void;
-
-let templateOpener: TemplateOpener | null = null;
-
-/// Dice chi apre i modelli in una cartella; restituisce chi lo toglie.
-export function registerTemplateOpener(open: TemplateOpener): () => void {
-  templateOpener = open;
-  return () => {
-    if (templateOpener === open) templateOpener = null;
-  };
-}
-
 /// Il comando e l'editor del tipo ci sono ancora (K2)?
 function kindOn(each: NewKindSpec): boolean {
   if (each.kind === "template") return hasKernelCommand(NOTE_FROM_TEMPLATE);
@@ -419,11 +404,16 @@ function startNew(each: NewKindSpec, folder: string | undefined): NewOutcome {
     return "started";
   }
   if (each.kind === "template") {
-    const opener = templateOpener;
+    // Da una cartella, la nota nasce lì: il modulo di `note.from_template`
+    // con la cartella già scritta. Altrimenti il comando «Nuova nota da un
+    // modello» della cornice, come dalla palette.
+    if (folder !== undefined && folder !== "") {
+      return launchCommand(NOTE_FROM_TEMPLATE, { folder }) ? "started" : "unreachable";
+    }
     const launch = templatesLauncher();
-    if (opener === null && launch === null) return "unreachable";
+    if (launch === null) return "unreachable";
     void Promise.resolve()
-      .then(() => (opener ? opener(folder ?? "") : launch!()))
+      .then(() => launch())
       .catch((error: unknown) => notify(t("new.kind.failed", { kind: t(each.label), reason: errorText(error) }), "guasto"));
     return "started";
   }
@@ -583,15 +573,37 @@ export function commandOfKeybindingKey(key: string): string | null {
   return name === "" ? null : `${ns}:${name}`;
 }
 
+/// Le letture partite, per sapere quale è l'ultima: una lettura vecchia che
+/// risponde tardi non rimette gli accordi di prima sopra quelli nuovi.
+let overrideReads = 0;
+
+/// Chi vuole sapere quando la mappa degli accordi è stata riletta (la riga dei
+/// suggerimenti, che scrive i tasti della persona).
+const overrideListeners = new Set<() => void>();
+
+/// Avvisa dopo ogni lettura degli accordi che è arrivata in tempo, cioè quando
+/// `allCommands()` dice già i tasti nuovi. Restituisce il disabbonamento.
+export function onKeyOverridesLoaded(listener: () => void): () => void {
+  overrideListeners.add(listener);
+  return () => {
+    overrideListeners.delete(listener);
+  };
+}
+
 export async function loadKeyOverrides(): Promise<void> {
+  const read = ++overrideReads;
+  let next: Map<string, string>;
   try {
-    overrides = chordMap(await settings());
+    next = chordMap(await settings());
   } catch {
     // Un vault che non sa dire come è configurato non è un motivo per lasciare
     // la tastiera muta: restano gli accordi dichiarati, che sono quelli con cui
     // la shell è nata.
-    overrides = new Map();
+    next = new Map();
   }
+  if (read !== overrideReads) return;
+  overrides = next;
+  for (const listener of [...overrideListeners]) listener();
 }
 
 /// Le righe di impostazione che sono accordi, come mappa. Pura, per il banco.

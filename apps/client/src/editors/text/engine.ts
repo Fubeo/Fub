@@ -75,6 +75,7 @@ import { liveGuide, liveReveal, revealPolicyOf, type RevealPolicy } from "./live
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
 import { softCursor } from "./soft-cursor";
+import { pageNonce } from "../../ui/stylesheets";
 import {
   operationFromText,
   tryApplyOperation,
@@ -196,7 +197,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   cursorBlink: false,
   softCursor: false,
   rtl: false,
-  properties: "source",
+  properties: "visible",
   reveal: "mai",
   guide: true,
 };
@@ -975,7 +976,13 @@ export class TextEngine {
 
   private extensions(convertLineBreaks: string | null = null): Extension {
     return [
-      ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
+      ...(convertLineBreaks === null ? [] : [
+        EditorState.lineSeparator.of(convertLineBreaks),
+        // CodeMirror divide il testo incollato o lasciato cadere solo sul
+        // separatore: gli a capo degli appunti diventano quelli della nota,
+        // così un "\n" nudo non resta dentro la riga (#394).
+        EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?|\n/g, convertLineBreaks)),
+      ]),
       this.profile.of(this.profileExtensions()),
       this.phrasesCompartment.of(editorPhrases()),
       this.vimCompartment.of(this.vimEnabled ? vim() : []),
@@ -984,6 +991,9 @@ export class TextEngine {
         dir: "auto",
       })),
       EditorView.perLineTextDirection.of(true),
+      // I fogli di CodeMirror vanno in un `<style>`: senza il nonce della
+      // pagina la CSP li rifiuterebbe (`ui/stylesheets.ts`).
+      EditorView.cspNonce.of(pageNonce() ?? ""),
       EditorView.domEventHandlers({
         compositionend: () => {
           if (!this.pendingInput) return;

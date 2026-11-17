@@ -146,11 +146,11 @@ export const SCENE = onPage("shell", [
   // gruppi e il piede che invita a scrivere.
   ...[
     ["menu-testo", "Il tasto destro su un paragrafo della nota, in Live", (page) =>
-      page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } })],
+      page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } })],
     ["menu-link", "Il tasto destro su un link a una nota, in Live", (page) =>
-      page.click(".pane.focus .cm-content >> text=Sintassi di Fub", { button: "right" })],
+      page.click(".pane.focus .pane-editor .cm-content >> text=Sintassi di Fub", { button: "right" })],
     ["menu-titolo", "Il tasto destro su un titolo della nota, in Live", (page) =>
-      page.click(".pane.focus .cm-content >> text=Benvenuto in Fub", { button: "right" })],
+      page.click(".pane.focus .pane-editor .cm-content >> text=Benvenuto in Fub", { button: "right" })],
     ["menu-albero-nota", "Il tasto destro su una nota dell'albero", async (page) => {
       await openFolder(page, "Guida");
       await page.click('#file-list li[data-path="Guida/Frammenti di codice.md"] > .tree-row', { button: "right" });
@@ -190,7 +190,7 @@ export const SCENE = onPage("shell", [
       await page.keyboard.press("ArrowRight");
     }],
     ["menu-sottomenu", "Il menu del testo col primo sottomenu aperto dalla tastiera", async (page) => {
-      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } });
+      await page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } });
       await page.waitForSelector("#context-menu .menu-foot");
       await page.keyboard.press("ArrowDown");
       await pressUntil(page, "ArrowDown", () => document.activeElement?.getAttribute("aria-haspopup") === "menu");
@@ -411,7 +411,9 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
       await chooseMode(page, "reading");
-      await page.waitForSelector(".pane-preview h1, .markdown-preview h1");
+      // Il primo `# titolo` uguale al nome è nascosto sotto la testata: si
+      // aspetta il reso, non che quel titolo si veda.
+      await page.waitForSelector(".pane-preview h1, .markdown-preview h1", { state: "attached" });
     },
   },
   {
@@ -421,7 +423,7 @@ export const SCENE = onPage("shell", [
       // Una battuta non salvata, poi il file cambia da fuori: la nota va in
       // conflitto. In Lettura il reso è il buffer, e la fascia lo dice (R03).
       // È la nota che il banco apre per prima, come nello stato S33.
-      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
+      await page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
       await page.keyboard.press("Home");
       await page.keyboard.type("Scritto qui e non ancora salvato. ");
       await page.evaluate(async () => {
@@ -440,7 +442,7 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await openNote(page, "Guida/Frammenti di codice.md");
       await chooseMode(page, "source");
-      await page.waitForSelector(".cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
     },
   },
   {
@@ -473,7 +475,7 @@ export const SCENE = onPage("shell", [
     title: "Il foglio a fuoco e la cornice Darwin",
     query: "platform=darwin",
     prepare: async (page) => {
-      await page.click(".pane .cm-content");
+      await page.click(".pane .pane-editor .cm-content");
       await page.waitForSelector(".pane.focus");
       await page.waitForSelector(".titlebar--darwin #titlebar-left .window-controls");
     },
@@ -505,6 +507,162 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await page.click("#onboarding-create");
       await page.waitForSelector('#onboarding-profile .components-profile[aria-pressed="true"]');
+    },
+  },
+  // **La barra della Base** (T15), su `Opere.base` di `bench/base-fixture.ts`:
+  // le linguette delle viste, gli attrezzi, le etichette del filtro, i tre
+  // pannelli e le righe che un gesto ha scritto nel file.
+  {
+    id: "base-barra",
+    title: "Base: le viste come linguette, gli attrezzi e l'etichetta del filtro",
+    query: "base=1",
+    prepare: openBase,
+  },
+  {
+    id: "base-filtro",
+    title: "Base: il filtro composto a vista, con la stessa riga come ricerca",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-filter");
+      await page.waitForSelector(".base-popover .base-filter-row");
+    },
+  },
+  {
+    id: "base-ordina",
+    title: "Base: Ordina aperto, per consegna dalla più vicina",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-sort");
+      await page.waitForSelector(".base-popover .base-sort-row");
+    },
+  },
+  {
+    id: "base-proprieta",
+    title: "Base: Proprietà aperto, le colonne da mostrare e il loro ordine",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-columns");
+      await page.waitForSelector(".base-popover .base-column");
+    },
+  },
+  {
+    id: "base-scritto",
+    title: "Base: «Nel file .base» dopo aver tolto l'etichetta del filtro",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-chip button");
+      await page.waitForSelector(".pane.focus .base-written:not([hidden])");
+      // Resta l'etichetta dell'ordinamento.
+      await page.waitForFunction(() => document.querySelectorAll(".pane.focus .base-chip").length === 1
+        && document.querySelector(".pane.focus .base-bar")?.getAttribute("aria-busy") !== "true");
+      await page.click(".pane.focus .base-written summary");
+      await page.waitForSelector(".pane.focus .base-written[open] .base-written-removed");
+    },
+  },
+  {
+    id: "base-sola-lettura",
+    title: "Base: in sola lettura, gli attrezzi che scrivono spenti e il perché",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.evaluate(async () => {
+        const { freezeDocumentSurfaces } = await import("/src/state/document-controller.ts");
+        freezeDocumentSurfaces(true);
+      });
+      await page.waitForSelector(".pane.focus .base-note:not([hidden])");
+    },
+  },
+  // **Viste, colonne e riepiloghi** (T16), sulla stessa Base: «+», il menu
+  // della colonna, il piede coi riepiloghi del core e venti viste.
+  {
+    id: "base-nuova-vista",
+    title: "Base: «+» aperto, i tipi di vista da aggiungere al file",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-new-view");
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  },
+  {
+    id: "base-colonna",
+    title: "Base: il menu della colonna «valore», con Ordina, Raggruppa, Riepilogo, Rinomina, Tipo e Nascondi",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click('.pane.focus th[data-column="valore"] .base-head');
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  },
+  {
+    id: "base-piede",
+    title: "Base: il piede con la somma dei valori e l'ultima consegna, scelte dal menu della colonna",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await chooseBaseSummary(page, "valore", "Somma");
+      await chooseBaseSummary(page, "consegna", "L'ultima");
+    },
+  },
+  {
+    id: "base-venti",
+    title: "Base: venti viste, le linguette che non stanno restano figure",
+    query: "base=venti",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.waitForSelector(".pane.focus .base-tabs.compact");
+    },
+  },
+  // **Il calendario** (T17), su `?base=calendario`: agosto 2026, il mese
+  // dell'orologio del banco, con cinque consegne il 12 («+2»), una con l'ora
+  // il 20 e una il 3 settembre fra i giorni fuori dal mese.
+  {
+    id: "base-calendario",
+    title: "Base: il calendario di agosto, le consegne nei loro giorni e «+2»",
+    query: "base=calendario",
+    prepare: openCalendar,
+  },
+  {
+    id: "base-calendario-stretto",
+    title: "Base: il calendario nella finestra minima, 800 px",
+    query: "base=calendario",
+    viewport: NOTE_NARROW,
+    prepare: openCalendar,
+  },
+  {
+    id: "base-calendario-trascina",
+    title: "Base: una consegna trascinata sopra un altro giorno, che si accende",
+    query: "base=calendario",
+    prepare: async (page) => {
+      await openCalendar(page);
+      // Il trascinamento del browser a metà: la nota presa, il giorno sotto
+      // acceso. Playwright non tiene un drag HTML5 fermo a metà.
+      await page.evaluate(() => {
+        const pane = document.querySelector(".pane.focus");
+        const note = pane.querySelector('.base-cal-event[data-doc="Opere/Ritratto di signora.md"]');
+        const target = pane.querySelector('.base-cal-day[data-day="2026-08-06"]');
+        const transfer = new DataTransfer();
+        note.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }));
+        target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      });
+      await page.waitForSelector('.pane.focus .base-cal-day[data-day="2026-08-06"][data-over="true"]');
+    },
+  },
+  {
+    id: "base-calendario-fuoco",
+    title: "Base: il fuoco sui giorni dalla tastiera, e «+2» aperto",
+    query: "base=calendario",
+    prepare: async (page) => {
+      await openCalendar(page);
+      await page.click('.pane.focus .base-cal-day[data-day="2026-08-12"] .base-cal-more');
+      await page.waitForFunction(() => document.querySelectorAll('.pane.focus .base-cal-day[data-day="2026-08-12"] .base-cal-event').length === 5);
+      await page.focus('.pane.focus .base-cal-day[data-day="2026-08-12"]');
+      await page.keyboard.press("ArrowRight");
+      await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
     },
   },
   {
@@ -624,6 +782,13 @@ export const SCENE = onPage("shell", [
       await openRibbon(page, 700);
       await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
       await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+      // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+      // di timer vero, e la foto lo prenderebbe o no (#459).
+      await page.mouse.move(0, 0);
+      // Il fuoco passa al menu «Generale», con l'anello di focus-visible, e
+      // la sua didascalia «Formato numero» arriva dopo 500 ms di timer vero:
+      // la si aspetta, perché è lo stato vero del fuoco (#467).
+      await page.waitForSelector(".shell-tooltip:not([hidden])");
     },
   },
   {
@@ -888,8 +1053,8 @@ export const SCENE = onPage("shell", [
       await chooseMode(page, "live_preview");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
       await chooseMode(page, "reading");
-      await page.waitForSelector('.pane[data-mode="source"] .cm-content');
-      await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
+      await page.waitForSelector('.pane[data-mode="source"] .pane-editor .cm-content');
+      await page.waitForSelector('.pane[data-mode="live_preview"] .pane-editor .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
@@ -902,7 +1067,7 @@ export const SCENE = onPage("shell", [
     id: "banda-modalita",
     title: "La nota col menu delle modalità aperto dalla banda",
     prepare: async (page) => {
-      await page.waitForSelector(".pane.focus .cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
       await page.click("#status-mode");
       await page.waitForSelector('#context-menu [role="menuitemradio"][aria-checked="true"]');
       await page.waitForSelector('#status-mode[aria-expanded="true"]');
@@ -914,7 +1079,7 @@ export const SCENE = onPage("shell", [
     viewport: NOTE_NARROW,
     prepare: async (page) => {
       await page.waitForSelector("#layout.layout-compact");
-      await page.waitForSelector(".pane.focus .cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
     },
   },
   ...[
@@ -931,7 +1096,7 @@ export const SCENE = onPage("shell", [
       // Il cursore nella prima voce dell'elenco, come il prototipo: la barra
       // dice premuto «Elenco puntato». La barra si monta coi comandi, che
       // arrivano dopo la nota: la scena aspetta i suoi pulsanti e lo stato.
-      await page.click('.pane.focus .cm-content .cm-line:has-text("Un elenco corto")');
+      await page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Un elenco corto")');
       await page.keyboard.press("End");
       await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
       await page.waitForSelector('.pane.focus .format-bar .kit-bar-button[aria-pressed="true"]');
@@ -996,8 +1161,83 @@ export const SCENE = onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
   })),
-  // I Blocchi: la stessa nota, con la maniglia del blocco sotto il puntatore e
-  // quella del blocco del cursore; poi la selezione di blocchi e il menu.
+  // Scrittura a riposo (T3, E1, passo 1 del prototipo): la pagina mostra solo
+  // ciò che si legge. Prima della foto la scena prova i livelli di presenza:
+  // al passaggio maniglie e strumenti della testata compaiono senza spostare
+  // il testo; a foglio fermo nessun elemento `data-presence` e nessun pulsante
+  // che non sia contenuto si vede. Se no, la scena è rossa.
+  {
+    id: "scrittura-a-riposo",
+    title: "Scrittura a riposo: testata, proprietà e testo, senza maniglie né pulsanti sul foglio",
+    query: "live=pagina",
+    prepare: (page) => writingAtRest(page),
+  },
+  // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
+  // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
+  // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.
+  // La riga cambia dopo una pausa: il banco aspetta il contesto, non un tempo.
+  ...[
+    ["riga-dei-suggerimenti", "La riga dei suggerimenti con una parola scelta: grassetto, corsivo, collega", "selection"],
+    ["riga-dei-suggerimenti-stretta", "La riga dei suggerimenti coi blocchi scelti, nella finestra minima: le voci che non ci stanno se ne vanno intere", "blocks", NOTE_NARROW],
+  ].map(([id, title, context, viewport]) => ({
+    id,
+    title,
+    query: "live=riga-attiva",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector('#status-hints[data-context="text"]');
+      if (context === "selection") {
+        for (let i = 0; i < 5; i++) await page.keyboard.press("Shift+ArrowRight");
+      } else {
+        await page.keyboard.press("Escape");
+        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+      }
+      await page.waitForSelector(`#status-hints[data-context="${context}"] .status-hints-item`);
+    },
+  })),
+  // La testata in Scrittura e in Lettura (T6, E3, riga «La testata» del
+  // prototipo): copertina, icona, titolo, quattro proprietà in evidenza,
+  // «Altre 2», «Aggiungi una proprietà» e la riga dei dati; la stessa in
+  // Lettura, a 700 px e sul telefono; poi i casi che non vanno lisci.
+  ...[
+    ["testata-01-scrittura", "testata", "La testata in Scrittura: copertina, icona, titolo, proprietà in evidenza", "live_preview"],
+    ["testata-02-lettura", "testata", "La stessa testata in Lettura: senza strumenti né «Aggiungi»", "reading"],
+    ["testata-03-lettura-stretta", "testata", "La testata in Lettura nella finestra minima, 800 px", "reading", { width: 800, height: 800 }],
+    ["testata-04-altre", "testata", "La testata con «Altre 2 proprietà» aperto", "live_preview", null, "more"],
+    ["testata-05-vuota", "testata-vuota", "La testata di una nota senza frontmatter: il titolo e «Aggiungi una proprietà»", "live_preview"],
+    ["testata-06-illeggibile", "testata-illeggibile", "La testata col frontmatter illeggibile: lo dice, e lo YAML resta sotto", "live_preview"],
+    ["testata-07-senza-immagine", "testata-senza-immagine", "La testata con la copertina che non si trova", "reading"],
+  ].map(([id, live, title, mode, viewport, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openHeader(page, mode, gesture),
+  })),
+  // Gli editor dei tipi della testata (T8, E5, riga «Le proprietà» del
+  // prototipo): le righe con la figura del tipo, poi ogni editor aperto, da
+  // tastiera (il fuoco sul valore e Invio) o col puntatore; poi a 800 px.
+  ...[
+    ["proprieta-01-righe", "Le proprietà coi loro tipi: testo, stato, data, persone"],
+    ["proprieta-02-testo", "Il testo si scrive al posto del valore (da tastiera)", "text"],
+    ["proprieta-03-data", "Il riquadro della data, aperto da tastiera", "date"],
+    ["proprieta-04-persone", "Il riquadro delle persone, aperto col puntatore", "people"],
+    ["proprieta-05-elenco", "Il riquadro di un elenco, aperto col puntatore, con «Altre» aperto", "list"],
+    ["proprieta-06-menu", "Il menu della proprietà, aperto dal nome", "menu"],
+    ["proprieta-07-tipo", "Il menu «Tipo» della proprietà", "type"],
+    ["proprieta-08-data-stretta", "Il riquadro della data nella finestra minima, 800 px", "date", { width: 800, height: 800 }],
+    ["proprieta-09-persone-stretta", "Il riquadro delle persone nella finestra minima, 800 px", "people", { width: 800, height: 800 }],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=proprieta",
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openPropertyEditor(page, gesture),
+  })),
+  // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
+  // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
+  // menu.
   ...[
     ["blocchi-01-passaggio", "riga-attiva", "I Blocchi col puntatore su un titolo: «+» e maniglia accanto", "hover"],
     ["blocchi-02-selezione", "riga-attiva", "I Blocchi con due blocchi selezionati (Esc, Shift+↓)", "select"],
@@ -1012,13 +1252,18 @@ export const SCENE = onPage("shell", [
     query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
-      await openLive(page, [], "top", "blocks");
-      await page.waitForSelector(".pane.focus .cm-fub-block-handles");
+      await openLive(page, [], "top");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles");
       // La testata della pagina arriva dopo che il cursore è stato portato in
       // vista: secondo chi vince, la nota resta in cima o scende di 78 px. Il
       // banco aspetta la testata e riparte dalla cima, ogni volta.
-      await page.waitForSelector(".pane.focus .cm-fub-page-title");
-      await page.evaluate(() => { document.querySelector(".pane.focus .cm-scroller").scrollTop = 0; });
+      await page.waitForSelector(".pane.focus .pane-editor .cm-fub-page-title");
+      // Scrittura si apre già coi Blocchi, senza passare dal menu della banda:
+      // il moto d'apertura della nota può essere ancora in corsa, e un gesto
+      // di Playwright su un riquadro che si muove lo fa scorrere per portarlo
+      // in vista. Si parte a scena ferma, come per il «/».
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      await page.evaluate(() => { document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0; });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (gesture === "hover") return;
       if (gesture === "page") {
@@ -1029,9 +1274,9 @@ export const SCENE = onPage("shell", [
       if (gesture === "select") {
         await page.keyboard.press("Escape");
         await page.keyboard.press("Shift+ArrowDown");
-        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-selected");
       } else {
-        await page.click(".pane.focus .cm-fub-block-grip");
+        await page.click(".pane.focus .pane-editor .cm-fub-block-grip");
         await page.waitForSelector("#context-menu");
       }
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -1039,10 +1284,28 @@ export const SCENE = onPage("shell", [
     // Il puntatore è l'ultimo gesto: `prepareScene` lo porta via prima.
     ...(gesture === "hover" ? {
       hover: async (page) => {
-        await page.hover(".pane.focus .cm-content .cm-line:has-text('Cose da fare')");
-        await page.waitForSelector(".pane.focus .cm-fub-block-handles[data-active=\"true\"]");
+        await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
       },
     } : {}),
+  })),
+  // I commenti (T22): il segno nel margine con le iniziali e il numero dei
+  // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
+  // segno nel testo nella finestra minima, la Lettura e il pannello «Commenti».
+  ...[
+    ["commenti-01-margine", "commenti", "I commenti in Scrittura: il segno nel margine, l'archivio in fondo non si vede", "live_preview"],
+    ["commenti-02-discussione", "commenti", "La discussione aperta dal segno: citazione, messaggi, risposta, Risolvi, Elimina", "live_preview", null, "open"],
+    ["commenti-03-primo", "commenti-scelta", "Il primo messaggio: la citazione, il nome che si chiede e l'avviso che finisce nel file", "live_preview", null, "compose"],
+    ["commenti-04-stretta", "commenti", "Nella finestra minima, 800 px (il foglio di 700 del prototipo): il segno sta nel testo", "live_preview", NOTE_NARROW],
+    ["commenti-05-stretta-discussione", "commenti", "Nella finestra minima la discussione aperta dal segno nel testo", "live_preview", NOTE_NARROW, "open"],
+    ["commenti-06-lettura", "commenti", "I commenti in Lettura: il segno nel margine, l'archivio non occupa posto", "reading"],
+    ["commenti-07-pannello", "commenti", "Il pannello «Commenti»: gli aperti, poi i risolti con «Svuota i risolti»", "live_preview", null, "panel"],
+  ].map(([id, live, title, mode, viewport, gesture]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openComments(page, mode, gesture),
   })),
   // Il menu «/» (N12) su una riga vuota della Live, coi comandi veri di
   // `fub.formatting`: aperto, filtrato, un comando rapido, niente trovato, i
@@ -1188,12 +1451,44 @@ export const SCENE = onPage("shell", [
   },
   {
     id: "launcher-search",
-    title: "Il lanciatore: la ricerca nel testo",
+    title: "Il lanciatore: la ricerca nel testo, come gruppo di Tutto",
     prepare: async (page) => {
+      // Tutto non ha prefisso: scrivere e basta cerca anche nel testo, e i
+      // riscontri stanno nell'elenco di Tutto. Prima il gruppo dei nomi («Nota
+      // lunga»), poi quello «Nel testo», dove sta la nota che si aspetta.
       await page.click("#pill");
       await page.waitForSelector(".launcher-input:focus");
-      await page.fill(".launcher-input", `?${SEARCH}`);
+      await page.fill(".launcher-input", SEARCH);
+      await page.waitForSelector(".launcher-group");
       await page.waitForSelector('.launcher-row:has-text("Il banco che vede")');
+    },
+  },
+  {
+    id: "launcher-actions",
+    title: "Il lanciatore: le azioni della nota (Tab), con l'anteprima che resta",
+    prepare: async (page) => {
+      // La riga da agire è quella della nota che il banco sa rendere per
+      // intero: le frecce la portano lì, poi Tab mostra le azioni.
+      await page.click("#pill");
+      await page.waitForSelector(".launcher-input:focus");
+      await page.fill(".launcher-input", "fub");
+      const row = '.launcher-row:has-text("Sintassi di Fub")';
+      await page.waitForSelector(row);
+      while (!(await page.$eval(row, (each) => each.getAttribute("aria-selected") === "true"))) {
+        await page.keyboard.press("ArrowDown");
+      }
+      await previewShowsActiveRow(page);
+      await page.keyboard.press("Tab");
+      await page.waitForSelector('.launcher-group:has-text("Azioni su")');
+      await page.waitForSelector('.launcher-row:has-text("Apri a lato")');
+      // Con le azioni aperte la riga attiva è un'azione: l'anteprima resta
+      // sulla nota che si agisce, e aspetta la sua resa.
+      await page.waitForFunction(() => {
+        const preview = document.querySelector(".launcher-preview");
+        if (!preview || preview.hidden) return true;
+        const shown = preview.querySelector(".launcher-preview-page")?.textContent ?? "";
+        return !preview.hasAttribute("data-waiting") && shown.includes("Sintassi di Fub");
+      });
     },
   },
   {
@@ -1322,6 +1617,20 @@ export const SCENE = onPage("shell", [
       prepare: async () => {},
     },
     {
+      id: "kit-lingua",
+      title: "Il kit: la lingua dei menu, righe, tessere ed etichette nei loro stati",
+      query: "lingua",
+      viewport: KIT_WINDOW,
+      prepare: async (page) => {
+        // La sezione sta in fondo alla colonna di destra: la si porta in cima.
+        await page.evaluate(() => {
+          const heading = [...document.querySelectorAll("h2")].find((node) => node.textContent === "La lingua dei menu");
+          if (!heading) throw new Error("manca la sezione «La lingua dei menu»");
+          heading.closest("section").scrollIntoView({ block: "start" });
+        });
+      },
+    },
+    {
       id: "kit-popover",
       title: "Il kit: il popover che porta un menu, col fuoco sulla prima voce",
       prepare: async (page) => {
@@ -1363,6 +1672,31 @@ export const SCENE = onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // La testata della pagina (T6) sul telefono: la copertina bassa, le
+    // colonne delle proprietà strette.
+    {
+      id: "mobile-testata",
+      title: "Il telefono: la testata in Scrittura, con la copertina bassa e le colonne strette",
+      query: "live=testata",
+      viewport: PHONE,
+      prepare: (page) => openHeader(page, "live_preview"),
+    },
+    // I commenti (T22) sul telefono: il segno sta nel testo, e la discussione
+    // si apre larga quanto la vista.
+    {
+      id: "mobile-commenti",
+      title: "Il telefono: i commenti con il segno nel testo",
+      query: "live=commenti",
+      viewport: PHONE,
+      prepare: (page) => openComments(page, "live_preview"),
+    },
+    {
+      id: "mobile-commenti-discussione",
+      title: "Il telefono: la discussione di un commento",
+      query: "live=commenti",
+      viewport: PHONE,
+      prepare: (page) => openComments(page, "live_preview", "open"),
+    },
     {
       id: "mobile-startup",
       title: "Il telefono: il foglio, la barra del titolo ridotta, la barra inferiore",
@@ -1511,6 +1845,10 @@ export const SCENE = onPage("shell", [
           const offset = parseFloat(style.outlineOffset);
           return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
         }, null, { timeout: 5_000 });
+        // Col fuoco della tastiera la didascalia del bottone arriva dopo 500 ms
+        // di timer vero (`ui/tooltip.ts`): la si aspetta, perché è lo stato
+        // vero del fuoco e una foto scattata prima la prenderebbe o no (#461).
+        await page.waitForSelector(".shell-tooltip:not([hidden])");
       },
     },
     {
@@ -1524,6 +1862,15 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#inspector-scrim:not([hidden])");
         await page.waitForSelector(".rich-side-comments .rich-side-comment");
       },
+    },
+    // Il calendario della Base in piedi (T17): una colonna di giorni, col nome
+    // del giorno accanto al numero.
+    {
+      id: "mobile-base-calendario",
+      title: "Il telefono: il calendario della Base in una colonna di giorni",
+      query: "base=calendario",
+      viewport: PHONE,
+      prepare: openCalendar,
     },
     // La barra dei fogli in piedi: la Home in tre colonne di due foglietti
     // chiusi, e uno di loro aperto sul posto.
@@ -1543,6 +1890,9 @@ export const SCENE = onPage("shell", [
         await openRibbon(page, "phone");
         await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
         await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
+        // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+        // di timer vero, e la foto lo prenderebbe o no (#459).
+        await page.mouse.move(0, 0);
       },
     },
     {
@@ -1559,7 +1909,7 @@ export const SCENE = onPage("shell", [
       title: "Il telefono: la tastiera su, la barra di formattazione sopra i tasti",
       viewport: PHONE,
       prepare: async (page) => {
-        await page.click(".pane.focus .cm-content");
+        await page.click(".pane.focus .pane-editor .cm-content");
         // La tastiera a schermo non esiste in un browser senza schermo: ciò
         // che la shell ne sa è che il viewport visivo si accorcia.
         await page.evaluate(() => {
@@ -1703,12 +2053,15 @@ async function chooseFromViewMenu(page, label) {
 /// resa parte dopo una sosta (`PREVIEW_DELAY_MS`) e fino ad allora resta quella
 /// di prima, o il vuoto: una foto scattata prima sarebbe di un'altra riga.
 async function previewShowsActiveRow(page) {
+  // In una finestra stretta l'anteprima non c'è (`previewFits`): basta la riga
+  // attiva. Aspettare una resa che non arriverà fermerebbe la scena.
   await page.waitForFunction(() => {
     const input = document.querySelector(".launcher-input");
     const id = input?.getAttribute("aria-activedescendant");
     const title = id ? document.getElementById(id)?.querySelector(".launcher-row-title")?.textContent?.trim() : "";
     const preview = document.querySelector(".launcher-preview");
-    const shown = preview?.querySelector(".launcher-preview-page")?.textContent ?? "";
+    if (!preview || preview.hidden) return Boolean(title);
+    const shown = preview.querySelector(".launcher-preview-page")?.textContent ?? "";
     return Boolean(title) && !preview.hasAttribute("data-waiting") && shown.includes(title);
   });
 }
@@ -1737,7 +2090,7 @@ async function runCommand(page, title) {
 }
 
 /// Il nome delle modalità nel menu, in italiano come il banco.
-const MODE_LABELS = { live_preview: "Live", blocks: "Blocchi", source: "Sorgente", reading: "Lettura" };
+const MODE_LABELS = { live_preview: "Scrittura", source: "Sorgente", reading: "Lettura" };
 
 /// Sceglie la modalità del riquadro a fuoco come la persona (Scrittoio 2, T3):
 /// dalla voce della banda, e dove la banda non c'è (il telefono) dal tondo del
@@ -1787,18 +2140,14 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     await page.waitForSelector("#sidebar-scrim:not([hidden])");
   }
   await openNote(page, doc);
-  if (compact && await page.isVisible("#sidebar-scrim")) {
-    const scrim = await page.locator("#sidebar-scrim").boundingBox();
-    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
-  }
+  if (compact) await closeSidebarDrawer(page);
   await chooseMode(page, mode);
-  await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
+  await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .pane-editor .cm-content`);
   await page.evaluate(async (bottom) => {
     // La vista si prende dal modulo del pacchetto testuale, lo stesso che la
     // shell ha già caricato: il banco non tocca CodeMirror da sé.
     const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
-    const pane = document.querySelector(".pane.focus .cm-editor")?.parentElement;
+    const pane = document.querySelector(".pane.focus .pane-editor .cm-editor")?.parentElement;
     if (!pane) throw new Error("il riquadro non ha l'editor");
     const view = findTextEditorOrThrow(pane);
     const cursor = globalThis.__fubLiveBench.cursor;
@@ -1819,6 +2168,170 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
   await settleLive(page, scroll === "bottom");
 }
 
+/// La nota dei commenti (T22) in `mode`, poi il gesto: `open` apre la
+/// discussione del primo segno, `compose` il primo messaggio sulla selezione
+/// del caso (Ctrl Alt M), `panel` il pannello «Commenti» dell'ispettore.
+async function openComments(page, mode, gesture) {
+  const compose = gesture === "compose";
+  await openLive(page, [], "top", mode === "reading" ? "live_preview" : mode);
+  if (mode === "reading") await chooseMode(page, "reading");
+  const where = mode === "reading" ? '.pane.focus[data-mode="reading"] .markdown-rendered' : ".pane.focus .cm-editor";
+  if (!compose) {
+    await page.waitForSelector(`${where} :is(.cm-fub-comment-bubble, .cm-fub-comment-sign)`);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+  }
+  if (gesture === "open") {
+    await page.click(`${where} :is(.cm-fub-comment-bubble, .cm-fub-comment-sign) >> nth=0`);
+    await page.waitForSelector(".cm-fub-comment-popover .cm-fub-comment-message");
+  } else if (compose) {
+    await page.keyboard.press("Control+Alt+m");
+    await page.waitForSelector(".cm-fub-comment-popover .cm-fub-comment-composer");
+  } else if (gesture === "panel") {
+    const panel = '.surface-panel[data-view-id="markdown.comments"]';
+    await page.waitForSelector(panel, { state: "attached" });
+    if (!(await page.isVisible(panel))) {
+      await page.evaluate(async () => {
+        const { selectInspectorTab } = await import("/src/ui/views.ts");
+        selectInspectorTab("markdown.comments");
+      });
+    }
+    await page.waitForSelector(`${panel} .cm-fub-comments-card`);
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// La testata (T6) a riposo, in `mode`: la nota dall'alto, nessun fuoco, il
+/// puntatore fuori. `more` apre prima «Altre N proprietà».
+async function openHeader(page, mode, gesture) {
+  await openLive(page, [], "top");
+  // Sul telefono, chiuso il cassetto dei file, l'ispettore sale dal basso
+  // finché il fuoco non entra nel foglio: la testata a riposo non ha fuoco,
+  // e il cassetto si chiude dal suo velo.
+  if (await page.isVisible("#inspector-scrim")) {
+    const scrim = await page.locator("#inspector-scrim").boundingBox();
+    await page.click("#inspector-scrim", { position: { x: scrim.width - 8, y: 8 } });
+    await page.waitForSelector("#inspector-scrim", { state: "hidden" });
+  }
+  if (mode === "reading") await chooseMode(page, "reading");
+  const pane = mode === "reading" ? '.pane.focus[data-mode="reading"] .pane-editor .markdown-rendered' : ".pane.focus .pane-editor .cm-content";
+  await page.waitForSelector(`${pane} .cm-fub-page .cm-fub-page-title`);
+  if (gesture === "more") {
+    await page.click(`${pane} .cm-fub-page-props-more`);
+    await page.waitForSelector(`${pane} .cm-fub-page-props-more[aria-expanded="true"]`);
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    for (const scroller of document.querySelectorAll(".pane.focus .pane-editor .cm-scroller, .pane.focus .pane-editor .markdown-rendered")) scroller.scrollTop = 0;
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// Gli editor dei tipi (T8): apre la testata a riposo, poi l'editor della
+/// voce che il gesto dice, come lo apre chi usa Fub. Il puntatore resta
+/// sull'editor aperto solo quando è il puntatore ad aprirlo.
+async function openPropertyEditor(page, gesture) {
+  await openHeader(page, "live_preview", gesture === "list" ? "more" : undefined);
+  if (!gesture) return;
+  const row = (key) => `.pane.focus .cm-fub-page-prop[data-key="${key}"]`;
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (gesture === "text" || gesture === "date") {
+    const key = gesture === "text" ? "tipo" : "scadenza";
+    await page.focus(`${row(key)} .cm-fub-page-prop-value`);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(gesture === "text" ? `${row(key)} .cm-fub-prop-input` : ".cm-fub-prop-date");
+  } else if (gesture === "people" || gesture === "list") {
+    await page.click(`${row(gesture === "people" ? "persone" : "luoghi")} .cm-fub-page-prop-value`);
+    await page.waitForSelector(gesture === "people" ? ".cm-fub-prop-people [role=option]" : ".cm-fub-prop-list");
+  } else {
+    await page.click(`${row("stato")} .cm-fub-page-prop-key`);
+    await page.waitForSelector(".cm-fub-prop-menu");
+    if (gesture === "type") {
+      await page.locator(".cm-fub-prop-menu [role^=menuitem]", { hasText: "Tipo" }).first().click();
+      await page.waitForSelector(".cm-fub-prop-menu [role=menuitemradio]");
+    }
+  }
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await frames();
+}
+
+/// Scrittura a riposo (T3): apre la nota con la testata, prova che ciò che
+/// compare al passaggio non sposta il testo, poi ferma il foglio (puntatore
+/// fuori, nessun fuoco) e pretende che non si veda niente di ciò che compare
+/// al passaggio o a richiesta (`data-presence`), né un pulsante che non sia
+/// contenuto. Lancia, con l'elenco di ciò che si vede, se una delle due
+/// regole cade.
+async function writingAtRest(page) {
+  await openLive(page, [], "top");
+  await page.waitForSelector(".pane.focus .pane-editor .cm-fub-page-title");
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Le posizioni del testo rispetto al contenuto, non alla finestra: il
+  // passaggio può far scorrere la nota, e lo scorrimento non è uno spostamento.
+  const textBoxes = () => page.evaluate(() => {
+    const content = document.querySelector(".pane.focus .pane-editor .cm-scroller > .cm-content");
+    const origin = content.getBoundingClientRect();
+    return [...content.querySelectorAll(":scope > .cm-line, .cm-fub-page-title, .note-facts")].slice(0, 24).map((el) => {
+      const box = el.getBoundingClientRect();
+      return `${Math.round(box.left - origin.left)},${Math.round(box.top - origin.top)}`;
+    });
+  });
+  await frames();
+  const before = await textBoxes();
+  await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
+  await page.waitForSelector('.pane.focus .pane-editor .cm-fub-block-handles[data-active="true"]');
+  await page.hover(".pane.focus .pane-editor .cm-fub-page-title");
+  await page.waitForFunction(() => {
+    const tools = document.querySelector(".pane.focus .pane-editor .cm-fub-page-tools");
+    return tools !== null && Number(getComputedStyle(tools).opacity) > 0.95;
+  });
+  await frames();
+  const during = await textBoxes();
+  if (during.join(" ") !== before.join(" ")) {
+    throw new Error(`al passaggio il testo si è spostato: ${before.join(" ")} → ${during.join(" ")}`);
+  }
+  // Il foglio fermo: il puntatore fuori, nessun fuoco, la nota dall'alto.
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0;
+  });
+  // Una funzione sola, che il browser esegue per aspettare (`empty`) e poi per
+  // dire che cosa resta. Si passa come funzione, non come testo: un predicato
+  // scritto come stringa Playwright lo valuta con `eval`, e la CSP del banco
+  // (quella dell'app, senza `'unsafe-eval'`) lo rifiuta.
+  const seen = function visibleAtRest(empty) {
+    const shown = (el) => {
+      for (let node = el; node && node !== document.body; node = node.parentElement) {
+        if (node.hidden) return false;
+        const style = getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) < 0.05) return false;
+      }
+      const box = el.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    };
+    const sheet = document.querySelector(".pane.focus .pane-editor .cm-editor");
+    const name = (el) => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`;
+    // I pulsanti che sono contenuto, a riposo anche nel prototipo: l'icona
+    // della pagina, la riga dei dati e la testata di un blocco di codice
+    // (lingua, «A capo», «Copia»).
+    const content = ".cm-fub-page-icon, .cm-fub-page-props button, .cm-fub-page-props button *, .note-facts *, .cm-fub-code-header button";
+    const left = [
+      ...[...sheet.querySelectorAll("[data-presence]")].filter(shown).map((el) => `${name(el)}[${el.dataset.presence}]`),
+      ...[...sheet.querySelectorAll("button, [role=button]")].filter((el) => !el.closest("[data-presence]") && !el.matches(content) && shown(el)).map(name),
+    ];
+    return empty ? left.length === 0 : left;
+  };
+  try {
+    await page.waitForFunction(seen, true, { timeout: 5_000 });
+  } catch {
+    const left = await page.evaluate(seen, false);
+    throw new Error(`a riposo si vede ancora: ${left.join(", ")}`);
+  }
+  await frames();
+}
+
 /// La Live a riposo, prima della foto: due cose arrivavano dopo i due
 /// fotogrammi che bastavano prima, e secondo il carico finivano nella foto o no.
 ///
@@ -1836,14 +2349,14 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 ///   da tenere in vista.
 async function settleLive(page, bottom) {
   await page.waitForFunction(() => !["non_salvato", "in_corso"].includes(document.querySelector("#save-state")?.dataset.state ?? ""));
-  await page.waitForFunction(() => !document.querySelector('.pane.focus .cm-content [data-state="loading"]'));
+  await page.waitForFunction(() => !document.querySelector('.pane.focus .pane-editor .cm-content [data-state="loading"]'));
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   if (!bottom) {
     await page.evaluate(async () => {
       if (globalThis.__fubLiveBench.cursor === null) return;
       const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
-      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .cm-editor").parentElement);
+      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
       // Da capo: col cursore già in vista CodeMirror non scorrerebbe, e
       // resterebbe lo scorrimento calcolato sull'impaginazione di prima.
       view.scrollDOM.scrollTop = 0;
@@ -1873,13 +2386,7 @@ async function openFromTree(page, path, ready) {
   await openFolder(page, path.slice(0, path.lastIndexOf("/")));
   await page.click(`#file-list .tree-row[data-path="${path}"]`);
   await page.waitForSelector(ready);
-  if (compact && await page.isVisible("#sidebar-scrim")) {
-    // In alto a destra: in una finestra stretta il cassetto copre il centro,
-    // e su un telefono sale dal basso.
-    const scrim = await page.locator("#sidebar-scrim").boundingBox();
-    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
-  }
+  if (compact) await closeSidebarDrawer(page);
 }
 
 /// Apre la lavagna `path` dall'albero e dà il fuoco alla lavagna, come un clic
@@ -1905,11 +2412,7 @@ async function openDrawing(page) {
   }
   await page.click(`#file-list .tree-row[data-path="${fixture.doc}"]`);
   await page.waitForSelector(".draw-editor .draw-surface");
-  if (compact && await page.isVisible("#sidebar-scrim")) {
-    const scrim = await page.locator("#sidebar-scrim").boundingBox();
-    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
-  }
+  if (compact) await closeSidebarDrawer(page);
   const objects = fixture.shapes.length + fixture.connectors.length + fixture.labels.length;
   await page.waitForFunction(
     (painted) => (document.querySelector(".draw-editor .draw-surface")?.querySelectorAll("[data-scene-id]").length ?? 0) >= painted,
@@ -2016,12 +2519,15 @@ async function fromTreeDrawer(page, open) {
     await page.waitForSelector("#sidebar-scrim:not([hidden])");
   }
   await open();
-  if (compact && await page.isVisible("#sidebar-scrim")) {
+  if (!compact) return;
+  // Un documento scelto nell'albero chiude il cassetto da sé: il velo che sta
+  // uscendo non si clicca (`closeSidebarDrawer`).
+  if (await sidebarDrawerOpen(page)) {
     // Non sul bordo destro: lì il puntatore fa affacciare l'ispettore.
     const scrim = await page.locator("#sidebar-scrim").boundingBox();
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 80, y: 8 } });
-    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
+  await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
 }
 
 /// Le miniature che l'albero delle scene `albero-*` mostra: il RAW girato, i
@@ -2062,6 +2568,50 @@ async function openLentDocx(page) {
   });
   await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
   await page.mouse.move(0, 0);
+}
+
+/// Apre `Opere.base` delle scene `base-*` e aspetta la tabella con le sue
+/// righe e la barra ferma. Dalla porta della shell e non dall'albero: il
+/// finto elenca un `.base` come file, e l'albero non lo apre.
+async function openBase(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-table tbody tr").length ?? 0) > 0
+      && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
+/// Apre il calendario di `?base=calendario` e aspetta il mese con le sue note.
+async function openCalendar(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-cal-event").length ?? 0) > 0
+      && pane?.querySelector(".base-tab[aria-pressed='true']") !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  });
+}
+
+/// Sceglie dal menu della colonna `column` il riepilogo `label` e aspetta che
+/// il piede lo mostri.
+async function chooseBaseSummary(page, column, label) {
+  await page.click(`.pane.focus th[data-column="${column}"] .base-head`);
+  await page.waitForSelector("#context-menu .menu-head");
+  await page.hover('#context-menu button:has(.menu-label:text-is("Riepilogo"))');
+  await page.click(`.context-submenu button:has(.menu-label:text-is("${label}"))`);
+  await page.waitForFunction((column) => {
+    const pane = document.querySelector(".pane.focus");
+    return pane?.querySelector(`tfoot td[data-column="${column}"] .base-foot-value`) !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  }, column);
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
@@ -2205,7 +2755,7 @@ async function openFolder(page, path) {
 /// destro sopra la parola, o dalla tastiera (Maiusc+F10), che parte dalla
 /// prima voce.
 async function selectWordAndOpen(page, { keyboard = false } = {}) {
-  const word = page.locator(".pane.focus .cm-content .cm-line >> text=/Questa è la nota/").first();
+  const word = page.locator(".pane.focus .pane-editor .cm-content .cm-line >> text=/Questa è la nota/").first();
   await word.waitFor();
   const box = await word.boundingBox();
   // «Questa è la »: la parola «nota» sta dopo i primi dodici caratteri.
@@ -2252,6 +2802,62 @@ async function waitForGraphToSettle(page) {
     null,
     { polling: 250, timeout: 30_000 },
   );
+}
+
+/// Richiude il cassetto dell'albero con un clic sul velo, come la persona.
+///
+/// Il clic va in alto, perché su un telefono il cassetto sale dal basso, e
+/// fuori dal cassetto, che in una finestra stretta copre il lato sinistro. Ma
+/// non sul bordo destro: lì c'è la striscia da cui l'ispettore chiuso si
+/// affaccia (`frame/peek.ts`), e il puntatore che resta fermo su di lei dopo
+/// il clic lo fa comparire sopra la nota, come per chi ci sosta davvero. Il
+/// punto lo sceglie `scrimClickPoint`, lontano da tutti e due.
+///
+/// Un documento scelto nell'albero chiude il cassetto da sé
+/// (`dismissSidePanel`): allora il velo sta già uscendo, non prende più i clic
+/// e non va cliccato. Si aspetta solo che finisca.
+async function closeSidebarDrawer(page) {
+  if (await sidebarDrawerOpen(page)) await clickSidebarScrim(page);
+  await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+}
+
+/// Il cassetto dell'albero è aperto: lo dice la classe del layout, non il velo,
+/// che resta visibile per tutta la sua uscita.
+function sidebarDrawerOpen(page) {
+  return page.evaluate(() => document.getElementById("layout")?.classList.contains("drawer-sidebar-open") ?? false);
+}
+
+async function clickSidebarScrim(page) {
+  const scrim = await page.locator("#sidebar-scrim").boundingBox();
+  const avoid = await page.evaluate(() =>
+    [document.getElementById("sidebar"), ...document.querySelectorAll(".drawer-edge")]
+      .map((el) => el?.getBoundingClientRect())
+      .filter((box) => box && box.width > 0 && box.height > 0)
+      .map(({ x, y, width, height }) => ({ x, y, width, height })),
+  );
+  await page.click("#sidebar-scrim", { position: scrimClickPoint(scrim, avoid) });
+}
+
+/// Dove cliccare il velo, in coordinate del velo: sulla riga a `top` px
+/// dall'alto, al centro del tratto libero più largo fra le scatole da evitare
+/// che la attraversano. Lancia se la riga è tutta coperta: un clic a caso
+/// fotograferebbe un altro stato senza dirlo.
+export function scrimClickPoint(scrim, avoid, top = 8) {
+  const row = scrim.y + top;
+  const end = scrim.x + scrim.width;
+  const covered = avoid
+    .filter((box) => box.y <= row && row < box.y + box.height)
+    .map((box) => [Math.max(box.x, scrim.x), Math.min(box.x + box.width, end)])
+    .filter(([from, to]) => from < to)
+    .sort((a, b) => a[0] - b[0]);
+  let best = null;
+  let cursor = scrim.x;
+  for (const [from, to] of [...covered, [end, end]]) {
+    if (from > cursor && (best === null || from - cursor > best[1] - best[0])) best = [cursor, from];
+    cursor = Math.max(cursor, to);
+  }
+  if (best === null) throw new Error("il velo del cassetto è tutto coperto: non c'è dove cliccarlo");
+  return { x: Math.round((best[0] + best[1]) / 2 - scrim.x), y: top };
 }
 
 /// Il nome del file di una foto: scena e luce, che sono le due coordinate.

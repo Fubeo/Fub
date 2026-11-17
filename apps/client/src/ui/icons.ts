@@ -142,6 +142,26 @@ const SVG: Record<string, string> = {
   briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
   music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  // --- il tipo di una proprietà della testata ----------------------------
+  // Le figure di `.pk` nel prototipo dell'editor (`PLAN-ui/editor.html`,
+  // simboli `i-text`, `i-hash`, …), dalla griglia 16 a questa ×1,5. Stanno
+  // qui e non nella barra del formato, che le registrerebbe solo montata:
+  // la testata le disegna anche in Lettura e nella finestra di un documento.
+  "prop-text": '<path d="M5.25 6.75V4.5h13.5v2.25M12 4.5v15M9 19.5h6"/>',
+  "prop-number": '<path d="M9.3 3.75 7.2 20.25M17.1 3.75 15 20.25M4.5 9h15.75M3.75 15H19.5"/>',
+  "prop-select": '<circle cx="12" cy="12" r="8.25"/><path d="M8.7 10.8 12 14.1l3.3-3.3"/>',
+  // Il prototipo riempie la metà destra; il set non ha riempimenti (un tema
+  // ridisegna soltanto tracciati), quindi la metà piena è fatta di archi
+  // concentrici a un tratto di distanza, che a 16 px si leggono pieni.
+  "prop-status": '<circle cx="12" cy="12" r="8.25"/><path d="M12 3.75v16.5M12 5.35a6.65 6.65 0 0 1 0 13.3M12 6.95a5.05 5.05 0 0 1 0 10.1M12 8.55a3.45 3.45 0 0 1 0 6.9M12 10.15a1.85 1.85 0 0 1 0 3.7M12.6 11.4v1.2"/>',
+  "prop-date": '<rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.75h18M8.25 2.7v3.6M15.75 2.7v3.6"/>',
+  "prop-checkbox": '<rect x="3.75" y="3.75" width="16.5" height="16.5" rx="3.75"/><path d="M7.8 12.3l3 3 5.7-6.3"/>',
+  "prop-people": '<circle cx="12" cy="8.25" r="3.9"/><path d="M4.5 21c.9-4.2 3.9-6.45 7.5-6.45s6.6 2.25 7.5 6.45"/>',
+  "prop-url": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.3 3 14.7 0 18M12 3c-3 3.3-3 14.7 0 18"/>',
+  "prop-tags": '<path d="M3 3.75h8.25L21 13.5l-7.5 7.5-9.75-9.75z"/><circle cx="7.8" cy="8.55" r="1.35"/>',
+  // Elenco e data e ora non sono nel prototipo: l'elenco puntato della barra
+  // del formato e l'orologio del set.
+  "prop-list": '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
 };
 
 /// L'SVG di un'icona, come stringa HTML pronta per `innerHTML`.
@@ -164,6 +184,16 @@ const ALIASES: Record<string, string> = {
 
 /// Le icone registrate dai moduli della shell, sopra il set di serie.
 const REGISTERED = new Map<string, string>();
+
+/// Quante volte le figure disegnabili sono cambiate (una registrazione, il set
+/// del tema). Chi riusa elementi già disegnati senza rifarli (il
+/// riconciliatore di `ui/node.ts`) sa da qui se le loro figure valgono ancora.
+let revision = 0;
+
+/// La revisione delle figure: cambia a ogni registrazione e a ogni set del tema.
+export function iconsRevision(): number {
+  return revision;
+}
 
 /// Il set del tema in vigore, per nome canonico (un alias vale per il nome a
 /// cui punta): il corpo, costruito soltanto da tracciati che hanno passato la
@@ -211,8 +241,11 @@ export function registerIcon(name: string, paths: readonly string[]): Teardown {
   }
   const body = pathsBody(paths);
   REGISTERED.set(name, body);
+  revision += 1;
   return () => {
-    if (REGISTERED.get(name) === body) REGISTERED.delete(name);
+    if (REGISTERED.get(name) !== body) return;
+    REGISTERED.delete(name);
+    revision += 1;
   };
 }
 
@@ -259,6 +292,7 @@ export function replaceThemeIcons(set: Readonly<Record<string, readonly string[]
   }
   THEMED = next;
   THEMED_SOURCE = Object.fromEntries(entries.map(([name, paths]) => [name, [...paths]]));
+  if (changed.size > 0) revision += 1;
   redrawIcons(changed);
 }
 

@@ -47,6 +47,7 @@ import { notify } from "../../../ui/notify";
 import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../cards";
 import { excerptSections, sectionHeading, sectionLabel } from "../excerpt";
 import type { CanvasNode } from "../model";
+import { watchWholeLines, type WholeLines } from "../whole-lines";
 
 /// Ciò che la scheda di nota chiede alla shell.
 export interface NoteCardPort {
@@ -86,6 +87,8 @@ class NoteCard implements CardView {
   readonly #port: NoteCardPort;
   readonly #context: CardContext;
   readonly #root: HTMLElement;
+  /// Il taglio a riga intera della resa ferma (#411).
+  readonly #lines: WholeLines;
   #mode: CardMode;
   #state: NoteCardState = "placeholder";
   /// La resa mostrata e la sua vita, aperta solo mentre la scheda è viva.
@@ -117,6 +120,7 @@ class NoteCard implements CardView {
     this.#root.className = "canvas-card-note";
     this.#root.dataset.cardKind = "note";
     host.append(this.#root);
+    this.#lines = watchWholeLines(this.#root, context.lifetime);
     this.#unwatch = port.watch(context.path, () => this.#changed());
     context.lifetime.add(() => this.destroy());
     this.#showPlaceholder();
@@ -485,6 +489,8 @@ class NoteCard implements CardView {
     this.#state = state;
     this.#root.dataset.cardState = state;
     this.#root.replaceChildren(...children);
+    // Le righe nuove: il taglio si rifà (la radice non cambia misura).
+    this.#lines.refit();
   }
 
   /// Il segnaposto di oggi: la specie e il percorso. Una resa di prima resta.

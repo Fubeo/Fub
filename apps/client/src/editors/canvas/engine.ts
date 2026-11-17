@@ -1,6 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
-import { t, onLanguage, type Key } from "../../i18n/strings";
+import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
@@ -17,7 +17,7 @@ import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
-import { bornSize, dropLayout, markdownTable, spreadLayout, type DropItem } from "./drop-layout";
+import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
 import type { PdfPagesReader } from "./cards/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
@@ -44,7 +44,7 @@ import {
   type Rect,
 } from "./cards";
 import { textCardName } from "./card-name";
-import { boardReading, cardLabel, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
+import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
 import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
 import {
   cutInk,
@@ -61,6 +61,7 @@ import {
 } from "./ink-erase";
 import {
   CANVAS_ALIGN,
+  CANVAS_LAYOUTS,
   CANVAS_COLORS,
   CANVAS_TIPS,
   CANVAS_TOOL_KEYS,
@@ -75,6 +76,7 @@ import {
   type CanvasCommand,
   type CanvasCommandArgs,
   type CanvasCommandBehaviour,
+  type CanvasLayout,
   type CanvasNudge,
   type CanvasTip,
   type CanvasToolId,
@@ -83,6 +85,8 @@ import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, saveFingerWri
 import { openCanvasRadial, rememberRecent } from "./chrome/radial";
 import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
+import { checkProblemText, clipboardText, codeTextProblem, problemPhrase, readCodeList, summaryText, warningsText } from "./code-text";
+import { asCopies, asUpdates, codeClashes, placedAt, type CodeClashes } from "./code-paste";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
 import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
@@ -111,7 +115,9 @@ import {
 } from "./chrome/selection-bar";
 import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
 import { cardsTouched, edgesBetween, marqueeBox, marqueeMoved, sameIds, unionIds } from "./marquee";
-import type { OptionItem } from "../../kit/options-bar";
+import { createOptionsBar, type OptionItem, type OptionsBar } from "../../kit/options-bar";
+import { rovingToolbar, type RovingToolbar } from "../../kit/toolbar-keys";
+import { watchWholeLines } from "./whole-lines";
 import {
   canvasStatusItems,
   dropFolderOf,
@@ -124,7 +130,7 @@ import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups, 
 import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
 import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
-import { inkFitMode } from "./ink-fit";
+import { inkFitMode, validAspect } from "./ink-fit";
 import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
 import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
@@ -170,22 +176,16 @@ import {
   type InkStrokeRecord,
 } from "./ink-record";
 import {
-  addStrokePatch,
-  eraseStrokePatch,
-  eraseStrokePatches,
   moveStrokesOp,
   newNodeId,
-  removeEdgePatch,
   restyleStrokesOp,
   sameLayer,
-  removeNodePatch,
-  upsertEdgePatch,
   upsertNodePatch,
   type CanvasOperation,
   type CanvasPatch,
   type InkPatch,
 } from "./operation";
-import { edgeEnd, reversedEdge, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
+import { edgeEnd, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
 import {
   EDGE_SIDES,
   edgeAt,
@@ -205,7 +205,9 @@ import {
   canvasCoreReady,
   changedModel,
   openCoreNow,
+  type CanvasCheckReport,
   type CanvasCommitted,
+  type CanvasCompiled,
   type CanvasCore,
   type CanvasCoreErrorCode,
   type CanvasInkLayer,
@@ -214,6 +216,8 @@ import {
 } from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
+/** I bottoni di allineamento e di distribuzione: `align` coi sei lati, `distribute` con i due assi. */
+type CanvasArrange = CanvasAlign | "distribute-x" | "distribute-y";
 /** I pixel dello schermo fra i tratti scelti col Lazo e la loro cornice (T86). */
 const LASSO_FRAME_PAD = 6;
 /**
@@ -223,8 +227,6 @@ const LASSO_FRAME_PAD = 6;
 export const CANVAS_GRID_DOT_STEPS = 4;
 /** Sotto questi pixel fra due punti, sullo schermo, la griglia non si disegna (T71): sotto il 50%. */
 export const CANVAS_GRID_MIN_PX = 16;
-/** Il margine di un gruppo fatto con Raggruppa attorno alle sue schede (T51), valore di partenza. */
-const CANVAS_GROUP_MARGIN = 24;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 /** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
@@ -283,6 +285,29 @@ const MAX_CARD_TEXT_BYTES = 1_048_576;
 export const MEASURE_IMAGE_TIMEOUT_MS = 3_000;
 /** Quante immagini si misurano insieme quando ne arrivano tante. */
 const MEASURE_IMAGE_PARALLEL = 4;
+/**
+ * Oltre questi file trascinati i riquadri tratteggiati non si calcolano: la
+ * cornice del gruppo li direbbe, ma una compilazione di migliaia di schede a
+ * ogni entrata non vale un'anteprima.
+ */
+const MAX_DROP_GHOSTS = 1000;
+/**
+ * I punti al più del cammino di un `erase_along`: `MAX_ERASE_POINTS` del
+ * nucleo (`crates/fub-canvas-core/src/ops/erase.rs`), quanti campioni ha un
+ * tratto. Un cammino più lungo va in più operazioni.
+ */
+const ERASE_ALONG_MAX_POINTS = 10_000;
+/**
+ * Il lavoro che la tela concede a un `erase_along`: metà di `MAX_ERASE_WORK`
+ * del nucleo (50 000 000 distanze), perché la stima della tela
+ * (`eraseAlongSegments`) non sa i segmenti che il nucleo trova vicini.
+ */
+const ERASE_ALONG_WORK = 25_000_000;
+/**
+ * Le schede al più di una `move` con `contents`, quelle date più quelle dei
+ * gruppi: `MAX_MOVED` del nucleo (`crates/fub-canvas-core/src/ops/adjust.rs`).
+ */
+const MOVE_CONTENTS_MAX = 1_000;
 const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
@@ -399,6 +424,26 @@ interface CardEditor {
   grown: { readonly width: number; readonly height: number } | null;
 }
 
+/** L'ultimo incolla scritto: il testo, il punto sulla griglia e quante volte di fila lì. */
+interface LastPaste {
+  readonly raw: string;
+  readonly x: number;
+  readonly y: number;
+  readonly count: number;
+}
+
+/**
+ * Una scelta della finestra di «Incolla codice» (LIC T25): la lista così come
+ * si scrive, il riassunto in parole (`""` se non cambia niente o non si può)
+ * e il controllo del nucleo che lo dice.
+ */
+interface PasteChoice {
+  readonly id: "paste" | "update" | "copies";
+  readonly ops: readonly unknown[];
+  readonly said: string;
+  readonly report: CanvasCheckReport;
+}
+
 /**
  * Un passo d'annulla (o di ripeti). Due vie per farlo: se il testo è ancora
  * quello che il passo ha lasciato (`version`), si rimette il tratto `removed`
@@ -439,6 +484,36 @@ interface InkChain {
  * comincia. Con `"piece"` (T22) anche il cammino fatto, in coordinate della
  * lavagna, e il taglio di adesso di ogni tratto toccato, per chiave.
  */
+/**
+ * Il trascinamento delle schede in corso: le schede scelte (`ids`), ognuna
+ * col suo posto di partenza in `origin` insieme a ciò che i gruppi scelti
+ * portano, e lo spostamento di adesso (`dx`, `dy`, in unità intere della
+ * lavagna), lo stesso per tutte: al rilascio è una `move` (T24).
+ */
+interface CardDrag {
+  readonly pointerId: number;
+  startX: number;
+  startY: number;
+  readonly ids: readonly string[];
+  readonly origin: Map<string, { x: number; y: number }>;
+  moved: boolean;
+  dx: number;
+  dy: number;
+}
+
+/**
+ * I riquadri tratteggiati di un trascinamento di file (T24): quanti file,
+ * il punto agganciato in cui il nucleo li ha disposti, le schede e il gruppo
+ * oltre i dodici, in coordinate della lavagna.
+ */
+interface DropGhost {
+  readonly count: number;
+  readonly x: number;
+  readonly y: number;
+  readonly cards: readonly Rect[];
+  readonly group: Rect | null;
+}
+
 interface InkErase {
   readonly id: number;
   readonly sweep: EraseSweep<ErasableInk>;
@@ -446,6 +521,8 @@ interface InkErase {
   readonly mode: InkEraserMode;
   readonly path: Spot[];
   readonly cuts: Map<string, InkErasing>;
+  /** Il raggio della gomma in unità della lavagna, allo zoom dell'ultimo passo: `erase_along` lo scrive. */
+  radius: number;
 }
 
 /** Un tratto che la gomma «Solo il pezzo» sta tagliando. */
@@ -554,9 +631,11 @@ function keysAfter(chosen: ReadonlySet<string>, patches: readonly CanvasPatch[])
   return keys;
 }
 
-/** Un seme per gli id nuovi del nucleo: un intero sicuro a caso. */
-function compileSeed(): number {
-  return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+/** Un seme per gli id nuovi del nucleo: 64 bit a caso. */
+function randomSeed(): bigint {
+  const word = new BigUint64Array(1);
+  crypto.getRandomValues(word);
+  return word[0]!;
 }
 
 interface InkTarget {
@@ -797,6 +876,20 @@ export interface CanvasEngineOptions {
    * test ne passano una che conta le chiamate.
    */
   readonly findNotes?: FindNotesPort;
+  /**
+   * Il seme degli id che il nucleo dà alle schede, ai fili e ai tratti nati
+   * da un'azione (`compile`, `docs/reference/canvas-code.md` § «Gli id
+   * nuovi»): uno nuovo per ogni azione. Di serie un numero a caso
+   * (`crypto.getRandomValues`); i test lo fissano, così l'azione della tela
+   * dà la stessa lavagna della sua forma in codice.
+   */
+  readonly seed?: () => bigint;
+  /**
+   * L'id di una scheda che un gesto fa nascere e che altre operazioni della
+   * stessa lista nominano (il rilascio di file, Collega nel vuoto, Ctrl+Invio
+   * in una scheda): di serie `newNodeId()`. Le prove lo fissano, come `seed`.
+   */
+  readonly newId?: () => string;
 }
 
 /**
@@ -887,6 +980,12 @@ interface CardEntry {
   missingFor: string | null;
   /** Il nome per il lettore di schermo scritto adesso su `article` (T61); `null` se non ancora. */
   label: string | null;
+  /**
+   * La scheda e il giro della lingua con cui la testata ha scritto i suoi nomi (il
+   * titolo, quello da lontano, quello di →); `null` se non ancora. Uguali, la resa
+   * non li ricalcola.
+   */
+  titled: { readonly node: CanvasNode; readonly round: number } | null;
 }
 
 interface Viewport {
@@ -1050,6 +1149,19 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
 function overlaps(node: Rect, view: Rect): boolean {
   return node.x < view.x + view.width && node.x + node.width > view.x
     && node.y < view.y + view.height && node.y + node.height > view.y;
+}
+
+/**
+ * Le schede libere, come le sceglie `layout` senza `ids` (`loose_cards` di
+ * `ops/layout.rs`): non gruppi, e non dentro un gruppo (tutto il rettangolo
+ * nel suo, bordi compresi).
+ */
+export function looseCards(nodes: readonly CanvasNode[]): CanvasNode[] {
+  const groups = nodes.filter((node) => node.type === "group");
+  const inside = (card: CanvasNode, group: CanvasNode): boolean =>
+    card.id !== group.id && card.x >= group.x && card.y >= group.y
+    && card.x + card.width <= group.x + group.width && card.y + card.height <= group.y + group.height;
+  return nodes.filter((node) => node.type !== "group" && !groups.some((group) => inside(node, group)));
 }
 
 function snap(value: number): number {
@@ -1418,9 +1530,51 @@ function externalUrl(value: string): string | null {
   }
 }
 
+/**
+ * Quanti segmenti al più ha il cammino di un `erase_along` sui tratti `units`
+ * (i punti in coordinate della lavagna) con la gomma di raggio `radius`:
+ * sotto `MAX_ERASE_POINTS` del nucleo, e sotto metà del suo `MAX_ERASE_WORK`.
+ * Il lavoro del nucleo (`split_work` in `crates/fub-ink-codec/src/cut.rs`) è,
+ * per ogni segmento del cammino vicino a un tratto, uno più un passo per
+ * coppia di campioni più la lunghezza del tratto diviso metà della portata
+ * (raggio più metà dello spessore): la stima prende il raggio da solo, e
+ * conta ogni segmento vicino a ogni tratto. In unità della lavagna la scala
+ * della scheda si semplifica.
+ */
+export function eraseAlongSegments(units: readonly { readonly points: readonly number[] }[], radius: number): number {
+  let work = 0;
+  for (const { points } of units) {
+    let length = 0;
+    for (let i = 2; i + 1 < points.length; i += 2) {
+      length += Math.hypot(points[i]! - points[i - 2]!, points[i + 1]! - points[i - 1]!);
+    }
+    work += 1 + points.length / 2 + (2 * length) / radius;
+  }
+  const perSegment = Number.isFinite(work) && work > 0 ? work : 1;
+  return Math.max(1, Math.min(ERASE_ALONG_MAX_POINTS - 1, Math.floor(ERASE_ALONG_WORK / perSegment)));
+}
+
+/**
+ * Il cammino `path` in pezzi di fila di al più `segments` segmenti: l'ultimo
+ * punto di un pezzo è il primo del seguente, così nessun tratto fra due punti
+ * resta senza gomma. Un cammino corto è un pezzo solo.
+ */
+export function erasePathPieces(path: readonly Spot[], segments: number): Spot[][] {
+  const step = Math.max(1, Math.floor(segments));
+  if (path.length <= step + 1) return [path.slice()];
+  const pieces: Spot[][] = [];
+  for (let start = 0; start < path.length - 1; start += step) {
+    pieces.push(path.slice(start, Math.min(path.length, start + step + 1)));
+  }
+  return pieces;
+}
+
 export class CanvasEngine {
   readonly #root: HTMLElement;
   readonly #toolbar: HTMLElement;
+  /** La barra dei comandi sulla barra delle opzioni del kit: ciò che non ci sta va in «…» (#411). */
+  readonly #toolbarBar: OptionsBar;
+  readonly #toolbarKeys: RovingToolbar;
   readonly #viewport: HTMLElement;
   readonly #stage: HTMLElement;
   /** I fili, primo figlio dello stage (T91, rotta 4): un gruppo gli sta sotto, le schede sopra. */
@@ -1526,6 +1680,14 @@ export class CanvasEngine {
   #pointerSeen: { x: number; y: number } | null = null;
   /** I rettangoli tratteggiati di un trascinamento in corso sopra la vista. */
   #dropGhosts: HTMLElement | null = null;
+  /** I riquadri del trascinamento di file in corso, calcolati all'entrata (T24). */
+  #dropGhost: DropGhost | null = null;
+  /**
+   * Per quanti file sono stati calcolati i riquadri: con `#dropGhost` a `null`
+   * vuol dire «nessun riquadro» (troppi file, il nucleo li rifiuta), e non si
+   * ricompila a ogni movimento finché il numero resta quello.
+   */
+  #dropGhostCount: number | null = null;
   /** La griglia (T71): i punti sotto le schede, nella vista; `null` prima del montaggio. */
   #grid: HTMLElement | null = null;
   /** Le guide del gesto in corso (T71): un solo elemento sopra le schede; `null` a gesto fermo. */
@@ -1535,7 +1697,8 @@ export class CanvasEngine {
   #snapSetting = DEFAULT_PREFERENCES.snap;
   /** Ctrl+' per questa lavagna (T71): `null` segue `canvas.grid`; si ricorda con la vista. */
   #gridOverride: boolean | null = null;
-  #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
+  /** Il trascinamento delle schede in corso (`CardDrag`). */
+  #drag: CardDrag | null = null;
   /**
    * Il ridimensionamento in corso (T66): la maniglia `corner`, la cornice di
    * partenza `box` (la scheda, o la cornice della scelta) e le schede che
@@ -1827,7 +1990,7 @@ export class CanvasEngine {
   /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
   #clipboardCommand: "copy" | "cut" | null = null;
   /** L'ultimo incolla delle schede di Fub: lo stesso testo nello stesso punto si sfalsa di nuovo. */
-  #lastPaste: { readonly raw: string; readonly x: number; readonly y: number; readonly count: number } | null = null;
+  #lastPaste: LastPaste | null = null;
   /** L'ultimo Ctrl+D: le schede di partenza e le copie, nello stesso ordine; il prossimo ne ripete lo spostamento. */
   #lastDuplicate: { readonly sources: readonly string[]; readonly copies: readonly string[] } | null = null;
   /**
@@ -1968,10 +2131,23 @@ export class CanvasEngine {
     }, () => undefined);
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
-    this.#toolbar = document.createElement("div");
-    this.#toolbar.className = "canvas-toolbar";
-    this.#toolbar.setAttribute("role", "toolbar");
-    this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
+    // La barra dei comandi è la barra delle opzioni del kit, come la riga
+    // sopra: una riga sola, e ciò che non ci sta va in «…» invece di scorrere
+    // di lato senza segno (#411). Le frecce passano fra i controlli che si
+    // vedono, «…» compreso.
+    this.#toolbarBar = createOptionsBar({
+      label: t("canvas.surface"),
+      moreLabel: t("canvas.toolbar.more"),
+      lifetime: this.#life,
+      onFit: () => this.#toolbarKeys?.refresh(),
+    });
+    this.#toolbar = this.#toolbarBar.element;
+    this.#toolbar.classList.add("canvas-toolbar");
+    const toolbarRow = this.#toolbar.querySelector<HTMLElement>(".kit-options-row")!;
+    const toolbarMore = this.#toolbar.querySelector<HTMLElement>(".kit-options-more")!;
+    this.#toolbarKeys = rovingToolbar(this.#toolbar, {
+      controls: () => [...toolbarRow.querySelectorAll<HTMLElement>("button, select, input"), toolbarMore],
+    }, this.#life);
     this.#viewport = document.createElement("div");
     this.#viewport.className = "canvas-viewport";
     this.#viewport.tabIndex = 0;
@@ -2187,6 +2363,7 @@ export class CanvasEngine {
       this.#scheduleLabels();
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
+      this.#toolbar.querySelector(".kit-options-more")?.setAttribute("aria-label", t("canvas.toolbar.more"));
       this.#drawToolbar();
       this.#rail.relabel();
       this.#empty.relabel();
@@ -2939,7 +3116,11 @@ export class CanvasEngine {
       if (code === true && inkOnly) this.#paintInk();
       return code;
     }
-    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    // Il testo esatto del passo torna anche su una scena troppo grande: un
+    // passo locale che l'ha portata oltre il limite (un «Incolla codice» di
+    // migliaia di schede) si annulla e si ripete, e la lavagna torna
+    // interattiva (LIC T25).
+    if (this.#destroyed || !this.#doc || this.#readOnly) return "rejected";
     const core = this.#core;
     if (!core) return "trap";
     const after = before.slice(0, step.start) + step.removed + before.slice(end);
@@ -3026,12 +3207,19 @@ export class CanvasEngine {
       const current = doc.nodes.find((node) => node.id === pending.card.id);
       if (current) pending.card = current;
       const next = withPending(pending.card, pending);
-      const patch = upsertNodePatch(doc, next);
-      if (!patch) {
+      // Il campo scrive con le operazioni (T23): `set` dei campi cambiati, o
+      // la scheda intera se intanto è sparita.
+      const op = current ? setOp(current, next) : { op: "add_card", node: next };
+      const compiled = op ? this.#compileField(op) : { patches: [] };
+      if (typeof compiled === "string") {
+        code = compiled;
+        break;
+      }
+      if (compiled.patches.length === 0) {
         this.#setPending(null);
         return true;
       }
-      code = this.#commitLocal([patch], "input", (step) => {
+      code = this.#commitLocal(compiled.patches, "input", (step) => {
         this.#setPending(null);
         this.#pushUndo(step, true);
       });
@@ -3049,6 +3237,36 @@ export class CanvasEngine {
         ? "canvas.card_too_long" : "canvas.card_invalid"));
     }
     return false;
+  }
+
+  /**
+   * Compila l'operazione del campo di una scheda, senza registrare il testo
+   * in sospeso (è lui che si registra): le toppe, o il codice del rifiuto.
+   * Un'operazione che il nucleo non accetta vale come una scheda che il
+   * formato non accetta (`invalid`): l'avviso del campo lo dice.
+   */
+  #compileField(op: CanvasIntentOp): CanvasCompiled | CanvasCoreErrorCode {
+    const core = this.#core;
+    if (!core) return "trap";
+    if (this.#isSceneOversized()) return "rejected";
+    try {
+      return core.compile([op], this.#seed());
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      if (error instanceof CanvasCoreError) return error.code === "op" ? "invalid" : error.code;
+      throw error;
+    }
+  }
+
+  /** La `set` del testo `text` nella scheda di testo `id`, come la registra il suo campo. */
+  #textOps(id: string, text: string): CanvasIntentOp[] | null {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node) return null;
+    const op = setOp(node, { ...node, text });
+    return op ? [op] : null;
   }
 
   /**
@@ -3574,6 +3792,7 @@ export class CanvasEngine {
       mode: this.#penChoice.eraser,
       path: [],
       cuts: new Map(),
+      radius: 0,
     };
   }
 
@@ -3594,6 +3813,7 @@ export class CanvasEngine {
       return;
     }
     const radius = erase.sweep.radius / zoom;
+    erase.radius = radius;
     const last = erase.path[erase.path.length - 1];
     let loX = last ? last[0] : Infinity;
     let loY = last ? last[1] : Infinity;
@@ -3641,7 +3861,7 @@ export class CanvasEngine {
     if (erase.mode === "stroke" ? erase.sweep.size === 0 : erase.cuts.size === 0) return;
     let done = false;
     try {
-      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase));
+      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase), erase.path, erase.radius);
     } finally {
       if (!done) this.#restoreErase(erase);
     }
@@ -3744,7 +3964,7 @@ export class CanvasEngine {
   #eraseCommit(marked: readonly ErasableInk[]): boolean {
     const start = this.#inkEditStart();
     if (!start) return false;
-    const { doc, layers } = start;
+    const { layers } = start;
     const present = new Set<string>();
     for (const state of this.#inkStateList()) {
       for (const entry of state.strokes) present.add(inkKey(state.layer, entry.id));
@@ -3760,12 +3980,14 @@ export class CanvasEngine {
       }
       entry.ids.push(unit.id);
     }
-    const patches: InkPatch[] = [];
+    // Una `erase_strokes` per livello, nell'ordine in cui la gomma li ha presi (T24).
+    const ops: CanvasIntentOp[] = [];
     for (const { layer, ids } of groups.values()) {
-      const made = eraseStrokePatches(doc, layers, layer, ids);
-      if (made) patches.push(...made);
+      if (foreignInkLayer(layers, layer)) continue;
+      ops.push({ op: "erase_strokes", layer: layer === "board" ? "board" : { node: layer.node }, ids: [...ids] });
     }
-    return this.#commitInkEdit(patches);
+    const patches = ops.length > 0 ? this.#compileOps(ops) : null;
+    return patches !== null && this.#commitInkEdit(inkPatches(patches));
   }
 
   /**
@@ -3775,7 +3997,7 @@ export class CanvasEngine {
    * frattempo non c'è più, o è cambiato, si lascia; un livello diventato
    * estraneo non si tocca. `true` se il commit è riuscito.
    */
-  #cutCommit(cuts: readonly InkErasing[]): boolean {
+  #cutCommit(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): boolean {
     const start = this.#inkEditStart();
     if (!start) return false;
     const { doc, layers } = start;
@@ -3795,12 +4017,94 @@ export class CanvasEngine {
       }
       entry.cuts.push({ id: unit.id, pieces: pieceRecords(now, pieces) });
     }
+    const along = this.#eraseAlongOps(cuts, path, radius);
+    if (along !== null) {
+      const patches = along.length > 0 ? this.#compileOps(along) : null;
+      return patches !== null && this.#commitInkEdit(inkPatches(patches));
+    }
     const patches: InkPatch[] = [];
     for (const { layer, cuts: layerCuts } of groups.values()) {
       const made = cutStrokePatches(doc, layers, layer, layerCuts);
       if (made) patches.push(...made);
     }
     return this.#commitInkEdit(patches);
+  }
+
+  /**
+   * La gomma «Solo il pezzo» come `erase_along` (T24): un'operazione per
+   * posto toccato, col cammino fatto e la sua larghezza: nelle coordinate
+   * della lavagna per i tratti liberi (`on: "board"`), in quelle della scheda
+   * per i suoi (`on` col suo id, con la proporzione del contenuto che
+   * mostra), in punti della pagina mostrata per quelli di un PDF
+   * (`on: {card, page, page_size}`) e in pixel del foglio dall'angolo della
+   * cella per quelli di una cella (`on: {card, sheet, cell}`). `null` se la
+   * scheda non dice più dove mostra la pagina o la cella di un tratto tagliato
+   * (allora la tela scrive i pezzi che ha tagliato lei).
+   */
+  #eraseAlongOps(cuts: readonly InkErasing[], path: readonly Spot[], radius: number): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc || path.length === 0 || !(radius > 0)) return null;
+    // Dove taglia ogni operazione: la radice, una scheda, una sua pagina o una
+    // sua cella, con l'angolo e la scala con cui la scheda la mostra (come
+    // `erasableInk`): il cammino ci torna con `(punto − angolo) / scala`.
+    const targets = new Map<string, { readonly on: unknown; readonly x: number; readonly y: number; readonly s: number; readonly aspect?: number }>();
+    for (const { unit } of cuts) {
+      const { page, cell } = unit.stroke;
+      if (unit.node === null) {
+        targets.set("board", { on: "board", x: 0, y: 0, s: 1 });
+        continue;
+      }
+      const node = doc.nodes.find((one) => one.id === unit.node);
+      if (!node) return null;
+      if (cell !== null) {
+        const box = this.#cellRectOf(node.id, cell.sheet, cell.cell);
+        if (!box || !(box.zoom > 0) || !Number.isFinite(box.rect.x) || !Number.isFinite(box.rect.y)) return null;
+        targets.set(`cell\u0000${node.id}\u0000${cell.sheet}\u0000${cell.cell}`, {
+          on: { card: node.id, sheet: cell.sheet, cell: cell.cell },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s: box.zoom,
+        });
+      } else if (page !== null) {
+        const box = this.#pageBoxOf(node.id);
+        if (!box || box.page !== page) return null;
+        // `pageFit`: il fattore minore, dall'angolo del rettangolo.
+        const s = Math.min(box.rect.width / box.size.width, box.rect.height / box.size.height);
+        if (!(s > 0) || !Number.isFinite(s)) return null;
+        targets.set(`page\u0000${node.id}\u0000${page}`, {
+          on: { card: node.id, page, page_size: [box.size.width, box.size.height] },
+          x: node.x + box.rect.x,
+          y: node.y + box.rect.y,
+          s,
+        });
+      } else if (!targets.has(`card\u0000${node.id}`)) {
+        const aspect = this.#layerAspect({ node: node.id });
+        targets.set(`card\u0000${node.id}`, {
+          on: node.id,
+          x: node.x,
+          y: node.y,
+          s: 1,
+          ...(validAspect(aspect) ? { aspect } : {}),
+        });
+      }
+    }
+    // Un cammino lungo va in pezzi di fila che si toccano in un estremo: ogni
+    // pezzo resta sotto i tetti del nucleo (punti e lavoro), e la lista
+    // resta una, cioè un passo d'annulla.
+    const pieces = erasePathPieces(path, eraseAlongSegments(cuts.map(({ unit }) => unit), radius));
+    const ops: CanvasIntentOp[] = [];
+    for (const target of targets.values()) {
+      for (const piece of pieces) {
+        ops.push({
+          op: "erase_along",
+          points: piece.map(([x, y]) => [(x - target.x) / target.s, (y - target.y) / target.s]),
+          size: (radius * 2) / target.s,
+          on: target.on,
+          ...(target.aspect === undefined ? {} : { aspect: target.aspect }),
+        });
+      }
+    }
+    return ops;
   }
 
   /**
@@ -3929,13 +4233,15 @@ export class CanvasEngine {
       if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
       return;
     }
-    const patch = addStrokePatch(doc, layers, ref, made.record);
-    if (!patch) {
-      this.#showNotice(t("canvas.ink.refused"));
-      return;
-    }
+    // Il tratto entra con `add_strokes` (T24): la codifica dei punti è della
+    // tela (N4), il livello, l'ordine dei campi e l'id li dà il nucleo.
+    const { id: _id, ...fields } = made.record as unknown as Record<string, unknown>;
+    const compiled = this.#compileIntent([{ op: "add_strokes", layer: ref === "board" ? "board" : { node: ref.node }, strokes: [fields] }], "canvas.ink.refused");
+    const added = compiled?.patches.find((patch): patch is InkPatch => patch.kind === "ink" && patch.after !== null);
+    if (!compiled || !added?.after) return;
+    const record = added.after as unknown as InkStrokeRecord;
     const before = this.#source;
-    const code = this.#commitLocal([patch], "input", (step) => this.#pushInkStep(step, chain), false);
+    const code = this.#commitLocal(compiled.patches, "input", (step) => this.#pushInkStep(step, chain), false);
     if (code !== true) {
       // Una trappola la dice il nucleo che si riapre.
       if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
@@ -3943,12 +4249,12 @@ export class CanvasEngine {
     }
     const top = this.#undo[this.#undo.length - 1];
     if (stroke.split && top) this.#inkChain = { step: top, before: chain?.before ?? before };
-    const dry = toDry(made.record, this.#inkPaths);
+    const dry = toDry(record, this.#inkPaths);
     if (dry) this.#paintStroke(holder, dry);
     if (this.#intakeError) this.#showNotice("");
     // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
     if (!stroke.split) this.#sayInkHolder(holder);
-    if (shape !== null) this.#writeShape(stroke, shape, made.record, ref, holder, page ?? cell);
+    if (shape !== null) this.#writeShape(stroke, shape, record, ref, holder, page ?? cell);
   }
 
   /**
@@ -3977,9 +4283,14 @@ export class CanvasEngine {
     const after: Record<string, unknown> = { ...made.record, id: written.id };
     if (written.at === undefined) delete after.at;
     else after.at = written.at;
-    const gone = eraseStrokePatch(start.doc, start.layers, ref, written.id);
-    if (!gone) return;
-    this.#commitInkEdit([{ ...gone, after: after as unknown as InkStrokeRecord }]);
+    // Il tratto appena scritto è l'ultimo del suo livello: toglierlo e
+    // rimettere la forma con lo stesso id la lascia al suo posto (T24).
+    const layer = ref === "board" ? "board" : { node: ref.node };
+    const patches = this.#compileOps([
+      { op: "erase_strokes", layer, ids: [written.id] },
+      { op: "add_strokes", layer, strokes: [after] },
+    ]);
+    if (patches) this.#commitInkEdit(inkPatches(patches));
   }
 
   /**
@@ -4842,22 +5153,68 @@ export class CanvasEngine {
 
   /** Le toppe delle operazioni d'intento `ops` sul modello di adesso; `null` se il nucleo le rifiuta (lo dice l'avviso). */
   #compileOps(ops: readonly CanvasIntentOp[]): CanvasPatch[] | null {
+    return this.#compileIntent(ops, "canvas.ink.refused")?.patches ?? null;
+  }
+
+  /** Il seme degli id nuovi di un'azione: quello delle opzioni, o uno a caso. */
+  #seed(): bigint {
+    return this.#options.seed?.() ?? randomSeed();
+  }
+
+  /**
+   * Compila le operazioni d'intento `ops` sul modello di adesso, dopo aver
+   * registrato il testo in sospeso. `null` se la tela non scrive (sola
+   * lettura, troppo grande, il nucleo non ancora pronto) o se il nucleo le
+   * rifiuta: allora l'avviso `refused` lo dice (nessun avviso con `null`:
+   * lo dà chi chiama).
+   */
+  #compileIntent(ops: readonly CanvasIntentOp[], refused: Key | null, seed?: bigint): CanvasCompiled | null {
     const core = this.#core;
     if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
     this.#recordPending();
     try {
-      return core.compile(ops, compileSeed()).patches;
+      return core.compile(ops, seed ?? this.#seed());
     } catch (error) {
       if (lostCore(error)) {
         this.#lose();
         return null;
       }
       if (error instanceof CanvasCoreError) {
-        this.#showNotice(t("canvas.ink.refused"));
+        if (refused !== null) this.#showNotice(t(refused));
         return null;
       }
       throw error;
     }
+  }
+
+  /**
+   * Un'azione del menu, della barra, di un campo o di un tasto (T23): le sue
+   * operazioni d'intento, compilate dal nucleo e scritte in un passo
+   * d'annulla, come le scrive `canvas.apply`. Torna gli id nati (schede, poi
+   * fili, come `created`), o `null` se non ha scritto niente: nessuna
+   * operazione, nessuna toppa, la tela che non scrive, o il nucleo che le
+   * rifiuta (lo dice l'avviso `refused`, o nessuno con `null`, quando lo dà
+   * chi chiama). Se il nucleo rifiuta la compilazione o il commit (un limite),
+   * i campi della barra tornano al valore del modello. `seed` è quello di un
+   * controllo già fatto («Incolla codice»), così gli id nati sono i suoi.
+   */
+  #writeOps(
+    ops: readonly CanvasIntentOp[] | null,
+    refused: Key | null = "canvas.change_refused",
+    seed?: bigint,
+  ): readonly string[] | null {
+    if (!ops || ops.length === 0) return null;
+    const compiled = this.#compileIntent(ops, refused, seed);
+    if (!compiled) {
+      if (!this.#destroyed) this.#drawToolbar();
+      return null;
+    }
+    if (compiled.patches.length === 0) return null;
+    if (!this.#commit(compiled.patches, "input")) {
+      if (!this.#destroyed) this.#drawToolbar();
+      return null;
+    }
+    return compiled.created;
   }
 
   /**
@@ -5575,16 +5932,16 @@ export class CanvasEngine {
   // --- toolbar ----------------------------------------------------------------
 
   #drawToolbar(): void {
-    const bar = this.#toolbar;
     // La barra di N4 si rifà da capo, salvo l'interruttore «Scrivi col
     // mouse», che resta lo stesso elemento in testa: il fuoco non si perde.
     // Ciò che è passato nella riga delle opzioni (T50: il menu della penna,
     // davanti e dietro, allinea e distribuisci, la Vista) non c'è più; il
     // resto aspetta i suoi task (la barra della selezione T51, i fili e il
-    // colore esatto T47 e T59, la lavagna vuota T62).
+    // colore esatto T47 e T59, la lavagna vuota T62). I controlli nascono in
+    // `bar`, staccata, e passano alla barra del kit (`#toolbarBar`), che
+    // lascia al suo posto chi c'è già e manda in «…» ciò che non ci sta.
+    const bar = document.createElement("div");
     const inkMouse = this.#inkMouseButton;
-    for (const child of [...bar.children]) if (child !== inkMouse) child.remove();
-    if (bar.firstElementChild !== inkMouse) bar.prepend(inkMouse);
     this.#penMenu.sync();
     // La colonna e la riga delle opzioni: lo strumento, la scelta e la sola
     // lettura di adesso.
@@ -5649,7 +6006,10 @@ export class CanvasEngine {
         this.#selection = [];
         this.#options.onSelectionChange();
         this.#displaySelection();
-        this.#toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]')?.focus();
+        // Il campo del nome, se si vede; se è finito in «…», il fuoco va lì.
+        const label = this.#toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]');
+        if (label && !label.closest("[hidden]")) label.focus();
+        else this.#toolbar.querySelector<HTMLElement>(".kit-options-more:not([hidden])")?.focus();
       });
       bar.append(picker);
     }
@@ -5659,6 +6019,7 @@ export class CanvasEngine {
     // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
     // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
     // Una scena oltre il limite ha già il suo, nella tela.
+    const head: HTMLElement[] = [];
     const notice = this.#intakeError
       || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
     if (notice) {
@@ -5666,18 +6027,19 @@ export class CanvasEngine {
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
       error.textContent = notice;
-      bar.prepend(error);
+      head.push(error);
     }
-    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto:
-    // una notizia e non un guasto, con «Annulla» accanto.
+    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto
+    // e dopo «Scrivi col mouse»: una notizia e non un guasto, con «Annulla»
+    // accanto.
+    const told: HTMLElement[] = [];
     const removal = this.#removal;
     if (removal) {
       const said = document.createElement("output");
       said.setAttribute("role", "status");
       said.className = "canvas-removal";
       said.textContent = removal.text;
-      const place = bar.querySelector(".canvas-intake-error")?.nextSibling ?? inkMouse.nextSibling;
-      bar.insertBefore(said, place);
+      told.push(said);
       if (removal.undo && removal.step !== undefined) {
         const undo = document.createElement("button");
         undo.type = "button";
@@ -5686,7 +6048,7 @@ export class CanvasEngine {
         undo.title = t(removal.free ? "canvas.ink.moved_undo" : "canvas.card.removed_undo");
         // Il pulsante si rifà con la barra: l'ascolto se ne va con lui.
         undo.addEventListener("click", () => this.#undoRemoval());
-        bar.insertBefore(undo, said.nextSibling);
+        told.push(undo);
         // I tratti passati a una scheda col Lazo (T86): «Rendilo libero».
         if (removal.free) {
           const free = document.createElement("button");
@@ -5695,10 +6057,23 @@ export class CanvasEngine {
           free.textContent = t("canvas.ink.make_free");
           free.title = t("canvas.ink.make_free_hint");
           free.addEventListener("click", () => this.#freeMovedInk());
-          bar.insertBefore(free, undo.nextSibling);
+          told.push(free);
         }
       }
     }
+    // Gli avvisi e i loro pulsanti restano nella riga più a lungo dei comandi
+    // (priorità 1): si leggono senza aprire «…».
+    const notices = new Set<HTMLElement>([...head, ...told]);
+    const controls: HTMLElement[] = [...head, inkMouse, ...told, ...(bar.children as HTMLCollectionOf<HTMLElement>)];
+    this.#toolbarBar.setItems(controls.map((element, index) => {
+      element.classList.add("canvas-toolbar-item");
+      return {
+        id: element.dataset.canvasAction ?? element.dataset.canvasField ?? `${element.className}-${index}`,
+        element,
+        priority: notices.has(element) ? 1 : 0,
+      };
+    }));
+    this.#toolbarKeys.refresh();
   }
 
   #showIntakeError(error: unknown): void {
@@ -5707,48 +6082,69 @@ export class CanvasEngine {
     this.#drawToolbar();
   }
 
-  #layoutSelection(axis: "left" | "center" | "right" | "top" | "middle" | "bottom" | "distribute-x" | "distribute-y"): void {
-    const nodes = this.#selectedNodes();
-    if (this.#readOnly || !this.#doc || nodes.length < (axis.startsWith("distribute") ? 3 : 2)) return;
-    const horizontal = axis === "distribute-x";
-    const ordered = axis.startsWith("distribute")
-      ? [...nodes].sort((a, b) => (horizontal ? a.x + a.width / 2 - b.x - b.width / 2 : a.y + a.height / 2 - b.y - b.height / 2))
-      : nodes;
-    const minX = Math.min(...nodes.map((node) => node.x));
-    const maxX = Math.max(...nodes.map((node) => node.x + node.width));
-    const minY = Math.min(...nodes.map((node) => node.y));
-    const maxY = Math.max(...nodes.map((node) => node.y + node.height));
-    const first = ordered[0];
-    const last = ordered[ordered.length - 1];
-    const start = horizontal ? first.x + first.width / 2 : first.y + first.height / 2;
-    const end = horizontal ? last.x + last.width / 2 : last.y + last.height / 2;
-    const patches: CanvasPatch[] = [];
-    ordered.forEach((node, index) => {
-      const target = { ...node };
-      switch (axis) {
-        case "left": target.x = snap(minX); break;
-        case "center": target.x = snap((minX + maxX - node.width) / 2); break;
-        case "right": target.x = snap(maxX - node.width); break;
-        case "top": target.y = snap(minY); break;
-        case "middle": target.y = snap((minY + maxY - node.height) / 2); break;
-        case "bottom": target.y = snap(maxY - node.height); break;
-        case "distribute-x":
-          if (index && index < ordered.length - 1) target.x = snap(start + (end - start) * index / (ordered.length - 1) - node.width / 2);
-          break;
-        case "distribute-y":
-          if (index && index < ordered.length - 1) target.y = snap(start + (end - start) * index / (ordered.length - 1) - node.height / 2);
-          break;
-      }
-      const patch = upsertNodePatch(this.#doc!, target);
-      if (patch) patches.push(patch);
-    });
-    this.#commit(patches, "input");
+  #layoutSelection(axis: CanvasArrange): void {
+    if (this.#readOnly || !this.#doc) return;
+    this.#writeOps(this.#arrangeOps(axis));
+  }
+
+  /**
+   * `align` o `distribute` delle schede scelte: i lati e i passi li decide il
+   * nucleo (`layout::arrange`). `null` con meno di due schede (tre per
+   * distribuire), come i bottoni spenti.
+   */
+  #arrangeOps(axis: CanvasArrange): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (axis === "distribute-x" || axis === "distribute-y") {
+      return ids.length >= 3 ? [{ op: "distribute", ids, axis: axis === "distribute-x" ? "x" : "y" }] : null;
+    }
+    return ids.length >= 2 ? [{ op: "align", ids, to: axis }] : null;
+  }
+
+  /**
+   * «Disponi» (LIC T25): `layout` delle schede scelte, o, senza selezione,
+   * delle schede libere (il nucleo le sceglie se mancano gli `ids`). `null`
+   * con meno di due, come la voce spenta.
+   */
+  #layoutOps(kind: CanvasLayout): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (ids.length >= 2) return [{ op: "layout", ids, kind }];
+    if (ids.length === 0 && this.#doc && looseCards(this.#doc.nodes).length >= 2) return [{ op: "layout", kind }];
+    return null;
+  }
+
+  /**
+   * Perché «Disponi» è spento: una scheda sola scelta o, senza selezione,
+   * meno di due schede libere (quelle che il nucleo dispone: non gruppi, e
+   * non dentro un gruppo).
+   */
+  #layoutWhy(): string | null {
+    const chosen = this.#selectedNodes().length;
+    if (chosen === 1) return t("canvas.commands.why.two");
+    if (chosen >= 2) return null;
+    if (!this.#doc?.nodes.length) return t("canvas.commands.why.empty");
+    return looseCards(this.#doc.nodes).length >= 2 ? null : t("canvas.commands.why.two");
+  }
+
+  /** «Disponi»: scrive il `layout`; se le schede sono già disposte così lo dice, mai il silenzio. */
+  #arrangeLayout(kind: CanvasLayout): void {
+    if (this.#readOnly || this.#isSceneOversized()) return;
+    const ops = this.#layoutOps(kind);
+    if (!ops) return;
+    const compiled = this.#compileIntent(ops, "canvas.change_refused");
+    if (!compiled) return;
+    if (compiled.patches.length === 0) {
+      this.#showNotice(t("canvas.layout.nothing"));
+      return;
+    }
+    this.#commit(compiled.patches, "input");
   }
 
   #drawEdgeInspector(bar: HTMLElement): void {
     const id = this.#edgeSelection[0];
     const edge = this.#doc?.edges.find((entry) => entry.id === id);
     if (!edge) return;
+    // Un campo del filo scrive la sua `set` (T23); un valore che il nucleo
+    // rifiuta non scrive, e la barra torna al valore del modello.
     const change = (values: Partial<CanvasEdge>): void => {
       const current = this.#doc?.edges.find((entry) => entry.id === id);
       if (!current || !this.#doc) return;
@@ -5756,8 +6152,8 @@ export class CanvasEngine {
       for (const [key, value] of Object.entries(values)) {
         if (value === undefined) delete next[key];
       }
-      const patch = upsertEdgePatch(this.#doc, next);
-      if (patch) this.#commit([patch], "input");
+      const op = setOp(current, next);
+      if (op) this.#writeOps([op]);
     };
     const label = document.createElement("input");
     label.type = "text";
@@ -5859,40 +6255,23 @@ export class CanvasEngine {
       if (stale()) return;
       const unique = [...new Set(paths)].filter(isVaultPath);
       if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
-      const patches: CanvasPatch[] = [];
+      const ops: CanvasIntentOp[] = [];
       // Una nota sola rilasciata dal vault, senza Alt: dopo il commit si apre
       // il selettore delle sezioni (T74). Un file depositato dal computer non
       // è ancora nell'indice: lo si sceglie dopo, con «Parti…».
       const single = drop && !files.length && unique.length === 1 && !(event as DragEvent).altKey ? unique[0]! : null;
       const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
-      // Su una scheda di file il primo file ne prende il posto (A-8).
+      // Su una scheda di file il primo file ne prende il posto (A-8): una `set`.
       if (file && unique.length) {
         const path = unique.shift()!;
-        const patch = upsertNodePatch(this.#doc!, { ...file, file: path, subpath: undefined });
-        if (patch) patches.push(patch);
+        const op = setOp(file, { ...file, file: path, subpath: undefined });
+        if (op) ops.push(op);
         bear(path, file.id);
       }
       if (unique.length) {
         const items = await this.#bornItems(unique);
         if (stale()) return;
-        const layout = dropLayout(items, point);
-        if (layout.group) {
-          // Il gruppo prima delle schede, così sta sotto di loro.
-          const patch = upsertNodePatch(this.#doc!, {
-            id: newNodeId("n"), type: "group", ...layout.group,
-            label: t("canvas.intake.group", { count: String(layout.cards.length) }),
-          });
-          if (patch) patches.push(patch);
-        }
-        for (const card of layout.cards) {
-          const id = newNodeId("n");
-          const patch = upsertNodePatch(this.#doc!, {
-            id, type: "file", file: card.path,
-            x: card.x, y: card.y, width: card.width, height: card.height,
-          });
-          if (patch) patches.push(patch);
-          bear(card.path, id);
-        }
+        ops.push(...this.#dropOps(items, point, bear));
       }
       // Gli appunti diventano testo solo se non c'era un file da depositare:
       // un file rifiutato non si trasforma in una scheda di testo (T15b).
@@ -5900,16 +6279,11 @@ export class CanvasEngine {
         const table = await this.#pastedTable(data, text);
         if (stale()) return;
         const url = table === null ? externalUrl(text.trim()) : null;
-        const node: CanvasNode = {
-          id: newNodeId("n"), type: url ? "link" : "text",
-          x: snap(point.x), y: snap(point.y), width: 320, height: 160,
-          ...(url ? { url } : { text: table ?? text }),
-        };
-        const patch = upsertNodePatch(this.#doc!, node);
-        if (patch) patches.push(patch);
+        // La forma breve di `add_card` (T9): la misura la dà il nucleo.
+        ops.push({ op: "add_card", ...(url ? { url } : { text: table ?? text }), x: snap(point.x), y: snap(point.y) });
       }
-      // Un commit solo: un annulla toglie tutto ciò che è nato.
-      const committed = this.#commit(patches, "input");
+      // Una lista sola: un annulla toglie tutto ciò che è nato.
+      const committed = this.#writeOps(ops) !== null;
       const card = single === null ? undefined : born.get(single)?.[0];
       if (committed && card !== undefined && this.#partsPickerSetting) void this.#openParts(card, "drop");
     } finally {
@@ -5931,20 +6305,18 @@ export class CanvasEngine {
       repoint: (changes) => {
         if (!live()) return 0;
         const doc = this.#doc!;
-        const patches: CanvasPatch[] = [];
+        const ops: CanvasIntentOp[] = [];
         const touched = new Set<string>();
         for (const { from, to } of changes) {
           if (!isVaultPath(to)) continue;
           for (const id of born.get(from) ?? []) {
             const node = doc.nodes.find((candidate) => candidate.id === id);
             if (!node || touched.has(id) || node.type !== "file" || node.file !== from) continue;
-            const patch = upsertNodePatch(doc, { ...node, file: to });
-            if (patch) patches.push(patch);
+            ops.push({ op: "set", id, fields: { file: to } });
             touched.add(id);
           }
         }
-        if (patches.length) this.#commit(patches, "input");
-        return patches.length;
+        return ops.length > 0 && this.#writeOps(ops) !== null ? ops.length : 0;
       },
     };
   }
@@ -5954,36 +6326,75 @@ export class CanvasEngine {
    * per un incolla, l'ultimo punto in cui il puntatore è stato visto sulla
    * vista, sennò il centro della vista.
    */
-  #intakePoint(event: DragEvent | ClipboardEvent, drop: boolean): { x: number; y: number } {
-    if (drop && "clientX" in event) return this.#screenToWorld(event.clientX, event.clientY);
+  #intakePoint(event: DragEvent | ClipboardEvent | null, drop: boolean): { x: number; y: number } {
+    if (drop && event && "clientX" in event) return this.#screenToWorld(event.clientX, event.clientY);
     if (this.#pointerSeen) return this.#screenToWorld(this.#pointerSeen.x, this.#pointerSeen.y);
     const rect = this.#viewport.getBoundingClientRect();
     return this.#screenToWorld(rect.left + this.#viewport.clientWidth / 2, rect.top + this.#viewport.clientHeight / 2);
   }
 
   /**
-   * I file con la specie e la misura di nascita. Le immagini chiedono la loro
-   * misura alla porta, poche alla volta; una misura che non c'è, fallisce o
-   * non arriva in tempo lascia quella di serie.
+   * I file lasciati cadere, ognuno con le dimensioni del suo contenuto quando
+   * si sanno: le immagini chiedono i loro pixel alla porta, poche alla volta;
+   * una misura che non c'è, fallisce o non arriva in tempo non si dà, e il
+   * nucleo prende la misura di serie della specie.
    */
-  async #bornItems(paths: readonly string[]): Promise<DropItem[]> {
-    const items: DropItem[] = paths.map((path) => {
-      const kind = cardKindOf({ id: "", type: "file", file: path, x: 0, y: 0, width: 0, height: 0 }) ?? "file";
-      return { path, kind, size: bornSize(kind) };
-    });
+  async #bornItems(paths: readonly string[]): Promise<DropFile[]> {
+    const items: DropFile[] = paths.map((path) => ({ path }));
     const measure = this.#options.measureImage;
     if (!measure) return items;
-    const images = items.map((item, index) => ({ item, index })).filter(({ item }) => item.kind === "image");
+    const images = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => cardKindOf({ id: "", type: "file", file: item.path, x: 0, y: 0, width: 0, height: 0 }) === "image");
     let next = 0;
     const worker = async (): Promise<void> => {
       while (next < images.length && !this.#destroyed) {
         const { item, index } = images[next++]!;
         const size = await measuredImage(measure, item.path);
-        if (size) items[index] = { ...item, size: bornSize("image", size) };
+        if (size) items[index] = { ...item, contentSize: [size.width, size.height] };
       }
     };
     await Promise.all(Array.from({ length: Math.min(MEASURE_IMAGE_PARALLEL, images.length) }, worker));
     return items;
+  }
+
+  /**
+   * Le operazioni dei file lasciati cadere in `at` (T24): la tela li ordina
+   * per nome (`sortedDrop`), poi un `add_card` per file, con il suo `id` e
+   * `content_size` quando la misura si sa; con più file la griglia del
+   * nucleo (`layout` `grid`) dal punto del rilascio, agganciato a 8, e oltre
+   * `DROP_GROUP_THRESHOLD` il gruppo che li tiene (`group`). Un file solo
+   * nasce già lì: la griglia di una scheda è il suo angolo agganciato.
+   * `bear` riceve ogni scheda che nasce, col suo percorso; `newId` dà gli id.
+   */
+  #dropOps(
+    items: readonly DropFile[],
+    at: { readonly x: number; readonly y: number },
+    bear: (path: string, id: string) => void,
+    newId: () => string = () => this.#newId(),
+  ): CanvasIntentOp[] {
+    const x = snap(at.x);
+    const y = snap(at.y);
+    const sorted = sortedDrop(items);
+    const ops: CanvasIntentOp[] = [];
+    const ids: string[] = [];
+    for (const item of sorted) {
+      const id = newId();
+      ids.push(id);
+      bear(item.path, id);
+      ops.push({
+        op: "add_card",
+        id,
+        file: item.path,
+        ...(item.contentSize ? { content_size: [...item.contentSize] } : {}),
+        ...(sorted.length === 1 ? { x, y } : {}),
+      });
+    }
+    if (sorted.length > 1) ops.push({ op: "layout", ids, kind: "grid", x, y });
+    if (sorted.length > DROP_GROUP_THRESHOLD) {
+      ops.push({ op: "group", ids, label: t("canvas.intake.group", { count: String(sorted.length) }) });
+    }
+    return ops;
   }
 
   /**
@@ -6020,11 +6431,22 @@ export class CanvasEngine {
       return;
     }
     const count = Math.max(1, [...(data.items ?? [])].filter((item) => item.kind === "file").length);
-    // Nomi che tengono l'ordine dato: la griglia è quella del rilascio.
-    const items: DropItem[] = Array.from({ length: count }, (_, index) => ({
-      path: String(index).padStart(8, "0"), kind: "file", size: bornSize("file"),
-    }));
-    const layout = dropLayout(items, this.#screenToWorld(event.clientX, event.clientY));
+    const pointer = this.#screenToWorld(event.clientX, event.clientY);
+    // I riquadri si calcolano una volta, all'entrata (o quando cambia il
+    // numero dei file): poi seguono il puntatore sulla griglia, senza
+    // chiamare il nucleo a ogni movimento.
+    if (this.#dropGhostCount !== count) {
+      this.#dropGhost = this.#dropGhostShape(count, pointer);
+      this.#dropGhostCount = count;
+    }
+    const ghost = this.#dropGhost;
+    if (!ghost) {
+      this.#dropGhosts?.remove();
+      this.#dropGhosts = null;
+      return;
+    }
+    const shiftX = snap(pointer.x) - ghost.x;
+    const shiftY = snap(pointer.y) - ghost.y;
     let layer = this.#dropGhosts;
     if (!layer) {
       layer = document.createElement("div");
@@ -6038,8 +6460,8 @@ export class CanvasEngine {
     layer.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
     // Oltre i dodici (prototipo T25), la cornice del gruppo che li terrà col
     // numero in mezzo: mentre si trascina si sa quanti sono, non come si chiamano.
-    const rects = layout.group ? [layout.group] : layout.cards;
-    const grouped = layout.group !== null;
+    const rects = ghost.group ? [ghost.group] : ghost.cards;
+    const grouped = ghost.group !== null;
     while (layer.children.length > rects.length) layer.lastElementChild!.remove();
     rects.forEach((card, index) => {
       let ghost = layer.children[index] as HTMLElement | undefined;
@@ -6061,15 +6483,55 @@ export class CanvasEngine {
       } else {
         ghost.replaceChildren();
       }
-      ghost.style.transform = `translate(${card.x}px, ${card.y}px)`;
+      ghost.style.transform = `translate(${card.x + shiftX}px, ${card.y + shiftY}px)`;
       ghost.style.width = `${card.width}px`;
       ghost.style.height = `${card.height}px`;
     });
   }
 
+  /**
+   * I riquadri di `count` file che nascerebbero in `at`: le operazioni del
+   * rilascio (`#dropOps`, con nomi che tengono l'ordine dato e la misura di
+   * serie di un file) compilate dal nucleo senza scrivere niente, così la
+   * griglia e il gruppo sono quelli che il rilascio farà. `null` se il nucleo
+   * non c'è o le rifiuta (una lavagna piena): allora nessun riquadro.
+   */
+  #dropGhostShape(count: number, at: { readonly x: number; readonly y: number }): DropGhost | null {
+    const core = this.#core;
+    if (!core || this.#destroyed || count > MAX_DROP_GHOSTS) return null;
+    const items = Array.from({ length: count }, (_, index) => ({ path: String(index).padStart(8, "0") }));
+    // Gli id dei riquadri sono suoi: non consumano quelli di `newId`.
+    const ids: string[] = [];
+    const ops = this.#dropOps(items, at, (_path, id) => ids.push(id), () => `drop-ghost-${ids.length}`);
+    let compiled: CanvasCompiled;
+    try {
+      compiled = core.compile(ops, this.#seed());
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
+    const placed = new Map<string, Rect>();
+    for (const patch of compiled.patches) {
+      if (patch.kind === "upsert-node") {
+        const { x, y, width, height } = patch.after;
+        placed.set(patch.after.id, { x, y, width, height });
+      }
+    }
+    const cards = ids.flatMap((id) => placed.get(id) ?? []);
+    const groupId = count > DROP_GROUP_THRESHOLD ? compiled.created[compiled.created.length - 1] : undefined;
+    const group = groupId === undefined ? null : placed.get(groupId) ?? null;
+    return { count, x: snap(at.x), y: snap(at.y), cards, group };
+  }
+
   #hideDropGhosts(): void {
     this.#dropGhosts?.remove();
     this.#dropGhosts = null;
+    this.#dropGhost = null;
+    this.#dropGhostCount = null;
   }
 
   // --- la griglia e le guide (T71) -------------------------------------------
@@ -6203,10 +6665,10 @@ export class CanvasEngine {
       if (!this.#destroyed) notify(t("canvas.extract.stale", { name: shown }), "info", open);
       return;
     }
-    const next: CanvasNode = { ...current, type: "file", file: path };
-    delete next.text;
-    const patch = upsertNodePatch(this.#doc, next);
-    if (!patch || !this.#commit([patch], "input")) {
+    // La nota c'è: la scheda diventa sua con `convert` (id, posto, fili e
+    // inchiostro restano). Se il nucleo la rifiuta l'avviso è uno solo,
+    // `canvas.extract.stale`: dice che la nota c'è e la apre.
+    if (!this.#writeOps([{ op: "convert", id, file: path }], null)) {
       notify(t("canvas.extract.stale", { name: shown }), "info", open);
       return;
     }
@@ -6294,17 +6756,30 @@ export class CanvasEngine {
       this.#showNotice(t("canvas.card_too_long"));
       return;
     }
-    const { view } = this.#viewRect();
-    const height = Math.max(TEXT_CARD_HEIGHT, Math.min(source.height, Math.floor(view.height)));
-    const spot = freeSpot(this.#doc.nodes, { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height });
-    const card: CanvasNode = { id: newNodeId("n"), type: "text", ...spot, text };
-    const patch = upsertNodePatch(this.#doc, card);
-    if (!patch || !this.#commit([patch], "input")) return;
-    this.#selection = [card.id];
+    const card = this.#writeOps(this.#copyNoteTextOps(source, text))?.[0];
+    if (card === undefined) return;
+    this.#selection = [card];
     this.#edgeSelection = [];
     this.#options.onSelectionChange();
     this.#displaySelection();
     this.#statusSettle();
+  }
+
+  /**
+   * L'`add_card` di «Copia il testo qui»: il testo `text` accanto alla scheda
+   * della nota `source`, al primo posto libero di `freeSpot` (a
+   * `NEXT_CARD_GAP` e scendendo sotto una scheda che c'è già, come la scheda
+   * dopo, T44); larga come lei, alta come lei ma non più della vista. Il posto
+   * è scritto: `near` del nucleo lascia 48 a destra e scivola con la misura di
+   * nascita (rapporto di T23).
+   */
+  #copyNoteTextOps(source: CanvasNode, text: string): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const { view } = this.#viewRect();
+    const height = Math.max(TEXT_CARD_HEIGHT, Math.min(source.height, Math.floor(view.height)));
+    const spot = freeSpot(doc.nodes, { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height });
+    return [{ op: "add_card", text, ...spot }];
   }
 
   /**
@@ -6324,11 +6799,16 @@ export class CanvasEngine {
     if (!isVaultPath(chosen) || this.#destroyed || this.#readOnly || !this.#doc) return;
     const current = this.#doc.nodes.find((one) => one.id === id);
     if (current?.type !== "file" || current.file === chosen) return;
-    const next: CanvasNode = { ...current, file: chosen };
+    if (this.#writeOps(this.#replaceFileOps(current, chosen))) this.#statusSettle();
+  }
+
+  /** La `set` che punta la scheda di file `node` a `file`, togliendo la sezione o la pagina e le parti di prima. */
+  #replaceFileOps(node: CanvasNode, file: string): CanvasIntentOp[] | null {
+    const next: CanvasNode = { ...node, file };
     delete next.subpath;
     delete next[PARTS_KEY];
-    const patch = upsertNodePatch(this.#doc, next);
-    if (patch && this.#commit([patch], "input")) this.#statusSettle();
+    const op = setOp(node, next);
+    return op ? [op] : null;
   }
 
   async #addFileNode(at?: { x: number; y: number }): Promise<void> {
@@ -6346,6 +6826,17 @@ export class CanvasEngine {
    *  una card file vuole il suo `file`. Torna la card messa, o `null`. */
   #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }, link?: CardLink): CanvasNode | null {
     if (!this.#doc || this.#readOnly || (type === "file" && !file)) return null;
+    if (!link) {
+      // Dal menu, dalla barra o dallo strumento Testo: la sua `add_card` (T23).
+      const id = this.#writeOps(this.#addOps(type, file, at))?.[0];
+      const node = id === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === id);
+      if (!node) return null;
+      this.#selection = [node.id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+      return node;
+    }
+    // Collegata (T67): la scheda nasce col filo dal gesto di Collega (T24).
     const rect = this.#viewport.getBoundingClientRect();
     const width = type === "group" ? 480 : 320;
     const height = type === "group" ? 320 : type === "link" ? 120 : 160;
@@ -6361,7 +6852,7 @@ export class CanvasEngine {
       ? { x: at.x + 160, y: at.y + 80 }
       : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
     const born: CanvasNode = {
-      id: newNodeId("n"),
+      id: this.#newId(),
       type,
       x: snap(center.x - 160),
       y: snap(center.y - 80),
@@ -6375,48 +6866,88 @@ export class CanvasEngine {
     // Una scheda dello strumento Testo nasce con la misura e l'allineamento
     // scelti nella sua riga (T92).
     const node = (type === "text" && this.#tool === "text" ? withTextStyle(born, this.#textNext) : null) ?? born;
-    const patches: CanvasPatch[] = [];
-    const patch = upsertNodePatch(this.#doc, node);
-    if (patch) patches.push(patch);
-    if (patch && source && facing) {
+    // La scheda con il suo `id`, poi il filo verso di lei, in una lista sola
+    // (T24): un passo d'annulla.
+    const ops: CanvasIntentOp[] = [{ op: "add_card", node: { ...node } }];
+    if (source && facing) {
       const fromSide = link?.fromSide ?? nearestSides(node, source, facing.side).toSide;
-      const edgePatch = upsertEdgePatch(this.#doc, {
-        id: newNodeId("e"), fromNode: source.id, toNode: node.id, fromSide, toSide: facing.side, ...this.#tipEnds(),
-      });
-      if (edgePatch) patches.push(edgePatch);
+      const edge = this.#connectOps(source.id, node.id, { from: fromSide, to: facing.side }, node.id);
+      if (edge) ops.push(...edge);
     }
-    if (patches.length && this.#commit(patches, "input")) {
-      this.#selection = [node.id];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      return node;
+    const id = this.#writeOps(ops)?.[0];
+    const placed = id === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === id);
+    if (!placed) return null;
+    this.#selection = [placed.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    return placed;
+  }
+
+  /**
+   * L'id di una scheda che un gesto fa nascere e che le operazioni della
+   * stessa lista nominano (il filo verso di lei, la griglia del rilascio):
+   * quello di `newId` delle opzioni, o uno a caso (T24).
+   */
+  #newId(): string {
+    return this.#options.newId?.() ?? newNodeId("n");
+  }
+
+  /**
+   * La `add_card` di una scheda nuova dal menu, dalla barra o dallo strumento
+   * Testo: al centro della vista, o in `at` (coordinate del mondo), con la
+   * misura di sempre della GUI per il tipo (scritta, così non cambia con la
+   * specie del file). Una scheda dello strumento Testo nasce con la misura e
+   * l'allineamento scelti nella sua riga (T92): allora la forma intera, che
+   * porta `fub:text`. `null` senza una lavagna, o un file senza percorso.
+   */
+  #addOps(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): CanvasIntentOp[] | null {
+    if (!this.#doc || (type === "file" && !file)) return null;
+    const rect = this.#viewport.getBoundingClientRect();
+    const width = type === "group" ? 480 : 320;
+    const height = type === "group" ? 320 : type === "link" ? 120 : 160;
+    const center = at
+      ? { x: at.x + 160, y: at.y + 80 }
+      : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
+    const place = { x: snap(center.x - 160), y: snap(center.y - 80), width, height };
+    if (type === "text" && this.#tool === "text") {
+      const styled = withTextStyle({ id: "", type, ...place, text: "" }, this.#textNext);
+      if (styled) {
+        const { id: _id, ...node } = styled;
+        return [{ op: "add_card", node }];
+      }
     }
-    return null;
+    switch (type) {
+      case "text": return [{ op: "add_card", text: "", ...place }];
+      case "file": return [{ op: "add_card", file, ...place }];
+      case "link": return [{ op: "add_card", url: "https://", ...place }];
+      case "group": return [{ op: "add_card", label: "", ...place }];
+    }
   }
 
   #duplicateSelection(): void {
     if (!this.#doc || this.#readOnly) return;
     const nodes = this.#selectedNodes();
-    if (!nodes.length) return;
-    // Le copie dell'ultimo Ctrl+D ripetono il suo spostamento (T68).
+    const created = this.#writeOps(this.#duplicateOps());
+    if (!created) return;
+    // Le schede copiate vengono prima dei fili fra loro (`created`).
+    const copies = created.slice(0, nodes.length);
+    this.#lastDuplicate = { sources: nodes.map((node) => node.id), copies };
+    this.#selection = copies;
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+  }
+
+  /**
+   * `duplicate` delle schede scelte, con i fili fra loro (D1). Le copie
+   * dell'ultimo Ctrl+D ripetono il suo spostamento (T68); se no lo
+   * spostamento di serie del nucleo, 32 e 32 agganciato a 8.
+   */
+  #duplicateOps(): CanvasIntentOp[] | null {
+    const nodes = this.#selectedNodes();
+    if (nodes.length === 0) return null;
+    const ids = nodes.map((node) => node.id);
     const repeat = this.#repeatedOffset(nodes);
-    const idMap = new Map<string, string>();
-    for (const node of nodes) idMap.set(node.id, newNodeId("n"));
-    const patches: CanvasPatch[] = [];
-    for (const node of nodes) {
-      const copy: CanvasNode = JSON.parse(JSON.stringify(node)) as CanvasNode;
-      copy.id = idMap.get(node.id)!;
-      copy.x = repeat ? node.x + repeat.x : snap(node.x + CANVAS_PASTE_STEP);
-      copy.y = repeat ? node.y + repeat.y : snap(node.y + CANVAS_PASTE_STEP);
-      const patch = upsertNodePatch(this.#doc, copy);
-      if (patch) patches.push(patch);
-    }
-    if (patches.length && this.#commit(patches, "input")) {
-      this.#lastDuplicate = { sources: nodes.map((node) => node.id), copies: nodes.map((node) => idMap.get(node.id)!) };
-      this.#selection = [...idMap.values()];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-    }
+    return [repeat ? { op: "duplicate", ids, dx: repeat.x, dy: repeat.y } : { op: "duplicate", ids }];
   }
 
   // --- copia e incolla le schede (T68) --------------------------------------------
@@ -6531,50 +7062,65 @@ export class CanvasEngine {
       this.#showNotice(t("canvas.clipboard.refused"));
       return true;
     }
-    const point = this.#intakePoint(event, false);
-    const x = snap(point.x);
-    const y = snap(point.y);
-    const last = this.#lastPaste;
-    const count = last && last.raw === raw && last.x === x && last.y === y ? last.count + 1 : 0;
-    const step = count * CANVAS_PASTE_STEP;
-    if (!this.#commitPasted(read.clipboard, { x: x + step, y: y + step })) {
+    const spot = this.#pasteSpot(raw);
+    if (!this.#commitPasted(read.clipboard, spot.at)) {
       this.#showNotice(t("canvas.clipboard.refused"));
       return true;
     }
-    this.#lastPaste = { raw, x, y, count };
+    this.#lastPaste = spot.last;
     this.#showNotice("");
     return true;
   }
 
   /**
+   * Dove cade un incolla (Ctrl+V, «Aggiungi come copie» di «Incolla codice»):
+   * l'angolo del blocco sul puntatore (o al centro della vista), sulla
+   * griglia; lo stesso testo incollato di nuovo nello stesso punto scende di
+   * `CANVAS_PASTE_STEP` ogni volta. `last` va in `#lastPaste` solo se
+   * l'incolla scrive.
+   */
+  #pasteSpot(raw: string): { readonly at: { x: number; y: number }; readonly last: LastPaste } {
+    const point = this.#intakePoint(null, false);
+    const x = snap(point.x);
+    const y = snap(point.y);
+    const last = this.#lastPaste;
+    const count = last && last.raw === raw && last.x === x && last.y === y ? last.count + 1 : 0;
+    const step = count * CANVAS_PASTE_STEP;
+    return { at: { x: x + step, y: y + step }, last: { raw, x, y, count } };
+  }
+
+  /**
    * Le schede e i tratti liberi di `clipboard` con l'angolo del loro
    * riquadro in `at`, in un commit solo, poi scelti (i tratti solo col Lazo,
-   * l'unico che li tiene scelti). I tratti entrano nel livello della radice
-   * con id nuovi e lo spostamento delle schede, compilati dal nucleo
-   * (`add_strokes`, `move_strokes`). `false` se il nucleo rifiuta qualcosa:
-   * allora non entra niente.
+   * l'unico che li tiene scelti). Le schede e i fili entrano con `insert`
+   * (il frammento di N6 T68, con id nuovi dal nucleo), i tratti nel livello
+   * della radice con `add_strokes` e `move_strokes` (T24), tutto in una
+   * compilazione. `false` se il nucleo rifiuta qualcosa (un filo senza una
+   * delle sue schede, un tratto che non vale): allora non entra niente.
    */
   #commitPasted(clipboard: CanvasClipboard, at: { readonly x: number; readonly y: number }): boolean {
     const doc = this.#doc;
     if (!doc || this.#readOnly) return false;
+    // Lo spostamento del blocco e gli id nuovi dei tratti: le schede si
+    // spostano quanto i tratti, così restano dove erano gli uni per gli altri.
     const placed = placedSelection(clipboard, at, newNodeId);
-    const patches: CanvasPatch[] = [];
-    for (const node of placed.nodes) {
-      const patch = upsertNodePatch(doc, node);
-      if (patch) patches.push(patch);
+    const ops: CanvasIntentOp[] = [];
+    if (clipboard.nodes.length > 0) {
+      let left = Infinity;
+      let top = Infinity;
+      for (const node of clipboard.nodes) {
+        left = Math.min(left, node.x);
+        top = Math.min(top, node.y);
+      }
+      const fragment = { version: clipboard.version, nodes: clipboard.nodes, edges: clipboard.edges };
+      ops.push({ op: "insert", fragment: JSON.parse(JSON.stringify(fragment)) as Record<string, unknown>, x: left + placed.dx, y: top + placed.dy });
     }
-    for (const edge of placed.edges) {
-      const patch = upsertEdgePatch(doc, edge);
-      if (patch) patches.push(patch);
-    }
-    const ops = pastedInkOps(placed);
-    if (ops.length > 0) {
-      const ink = this.#compilePasted(ops);
-      if (!ink) return false;
-      patches.push(...ink);
-    }
-    if (!this.#commit(patches, "input")) return false;
-    this.#selection = placed.nodes.map((node) => node.id);
+    ops.push(...pastedInkOps(placed));
+    const compiled = this.#compileIntent(ops, null);
+    if (!compiled) return false;
+    const patches = joinedInkPatches(compiled.patches);
+    if (patches.length === 0 || !this.#commit(patches, "input")) return false;
+    this.#selection = compiled.created.slice(0, clipboard.nodes.length);
     this.#edgeSelection = [];
     this.#strokeSelection = this.#tool === "lasso"
       ? new Set(placed.strokes.map((stroke) => inkKey("board", stroke.id)))
@@ -6582,28 +7128,6 @@ export class CanvasEngine {
     this.#options.onSelectionChange();
     this.#displaySelection();
     return true;
-  }
-
-  /**
-   * Le toppe dei tratti incollati, compilate dal nucleo sul modello di
-   * adesso, una per tratto (`joinedInkPatches`). `null` se il nucleo le
-   * rifiuta (un tratto che non vale, uno spostamento fuori dai numeri
-   * dell'inchiostro, il livello della radice estraneo): l'avviso lo dice chi
-   * chiama.
-   */
-  #compilePasted(ops: readonly CanvasIntentOp[]): CanvasPatch[] | null {
-    const core = this.#core;
-    if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
-    try {
-      return joinedInkPatches(core.compile(ops, compileSeed()).patches);
-    } catch (error) {
-      if (lostCore(error)) {
-        this.#lose();
-        return null;
-      }
-      if (error instanceof CanvasCoreError) return null;
-      throw error;
-    }
   }
 
   /**
@@ -6795,8 +7319,8 @@ export class CanvasEngine {
    * «Spargi le pagine…» (T72): una scheda per pagina del PDF scelto, in riga
    * accanto alla sua, a capo ogni 10 e in gruppo oltre 12. Chiede le pagine (di
    * serie tutte), chiede conferma oltre `SPREAD_CONFIRM_ABOVE`, misura ogni
-   * pagina come nasce un PDF (T29) e mette tutto in un commit solo: un annulla
-   * le toglie. Il file non si cambia.
+   * pagina come nasce un PDF (T29) e scrive tutto con `spread_pages` (T23), in
+   * un passo solo: un annulla le toglie. Il file non si cambia.
    */
   async #spreadPages(): Promise<void> {
     const pages = this.#options.cards?.pdfPages;
@@ -6824,25 +7348,31 @@ export class CanvasEngine {
     if (!alive()) return;
     const measured = await pages.sizes(path, wanted);
     if (!alive()) return;
-    const doc = this.#doc;
-    const beside = doc?.nodes.find((node) => node.id === id);
-    if (!doc || !beside) return;
-    const layout = spreadLayout(wanted.map((_, index) => bornSize("pdf", measured[index] ?? undefined)), beside);
-    const patches: CanvasPatch[] = [];
-    if (layout.group) {
-      const patch = upsertNodePatch(doc, {
-        id: newNodeId("n"), type: "group", ...layout.group,
-        label: t("canvas.spread.group", { count: String(wanted.length) }),
-      });
-      if (patch) patches.push(patch);
-    }
+    this.#writeOps(this.#spreadOps(id, wanted, count, measured));
+  }
+
+  /**
+   * La forma in codice di «Spargi le pagine» (T23): `page_sizes` va per numero
+   * di pagina, e una pagina non misurata ha `[0, 0]`, che il nucleo fa nascere
+   * come la GUI senza misura. L'etichetta del gruppo è quella della lingua.
+   */
+  #spreadOps(
+    id: string,
+    wanted: readonly number[],
+    count: number,
+    measured: readonly ({ readonly width: number; readonly height: number } | null | undefined)[] = [],
+  ): CanvasIntentOp[] {
+    const last = Math.max(0, ...wanted);
+    const sizes: number[][] = Array.from({ length: last }, () => [0, 0]);
     wanted.forEach((page, index) => {
-      const patch = upsertNodePatch(doc, {
-        id: newNodeId("n"), type: "file", file: path, subpath: `#page=${page}`, ...layout.rects[index]!,
-      });
-      if (patch) patches.push(patch);
+      const size = measured[index];
+      if (size) sizes[page - 1] = [size.width, size.height];
     });
-    if (patches.length) this.#commit(patches, "input");
+    return [{
+      op: "spread_pages", id, pages: [...wanted], page_count: count,
+      ...(measured.some(Boolean) ? { page_sizes: sizes } : {}),
+      label: t("canvas.spread.group", { count: String(wanted.length) }),
+    }];
   }
 
   /**
@@ -6916,6 +7446,252 @@ export class CanvasEngine {
     });
   }
 
+  /**
+   * Che cosa copia «Copia come codice»: senza niente di scelto la lavagna
+   * intera (`null`); se no le schede scelte (con gli archi fra loro e il loro
+   * inchiostro) e i tratti liberi scelti col Lazo. Un arco o un tratto di
+   * scheda scelti senza le loro schede non si copiano da soli: allora
+   * `"partial"`, e la voce è spenta col perché.
+   */
+  #codeSelection(): { readonly cards: readonly string[]; readonly free: readonly string[] } | null | "partial" {
+    const cards = this.#selectedNodes().map((node) => node.id);
+    const strokes = this.#chosenStrokes();
+    if (cards.length === 0 && this.#edgeSelection.length === 0 && strokes.length === 0) return null;
+    const chosen = new Set(cards);
+    const edges = this.#doc?.edges ?? [];
+    const lonely = this.#edgeSelection.some((id) => {
+      const edge = edges.find((one) => one.id === id);
+      return !edge || !chosen.has(edge.fromNode) || !chosen.has(edge.toNode);
+    });
+    if (lonely || strokes.some((unit) => unit.node !== null)) return "partial";
+    return { cards, free: strokes.map((unit) => unit.id) };
+  }
+
+  /** Perché «Copia come codice» è spento: la lavagna vuota, o una scelta che non si copia. */
+  #copyCodeWhy(): string | null {
+    if (!this.#doc || isEmptyBoard(this.#doc)) return t("canvas.commands.why.empty");
+    return this.#codeSelection() === "partial" ? t("canvas.copy_code.why") : null;
+  }
+
+  /**
+   * «Copia come codice» (LIC T25): ciò che è scelto, o la lavagna intera
+   * senza selezione, come la lista di operazioni che lo rifà, negli appunti
+   * come testo. Le schede le scrive il nucleo (`canvas_describe`); i tratti
+   * liberi scelti seguono in una `add_strokes` della radice, com'è nel file
+   * (la stessa forma di `describe`). Non scrive la lavagna.
+   */
+  #copyCode(): void {
+    const core = this.#core;
+    const doc = this.#doc;
+    if (this.#destroyed || !core || !doc || this.#copyCodeWhy() !== null) return;
+    this.#recordPending();
+    const chosen = this.#codeSelection();
+    if (chosen === "partial") return;
+    let text: string;
+    try {
+      if (chosen === null) text = core.describe();
+      else {
+        const ops = chosen.cards.length > 0 ? JSON.parse(core.describe(chosen.cards)) as unknown[] : [];
+        const free = copiedSelection(doc, [], chosen.free)?.[INK_KEY]?.strokes ?? [];
+        if (free.length > 0) ops.push({ op: "add_strokes", layer: "board", strokes: free });
+        text = JSON.stringify(ops, null, 2);
+      }
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#showNotice(t("editor_menu.copy_failed"));
+        return;
+      }
+      throw error;
+    }
+    writeClipboardText(text).catch(() => {
+      if (!this.#destroyed) this.#showNotice(t("editor_menu.copy_failed"));
+    });
+  }
+
+  /** Un avviso di «Incolla codice» senza finestra: il fuoco torna alla tela, dove si era. */
+  #pasteNotice(text: string): void {
+    this.#showNotice(text);
+    if (!this.#destroyed) this.#viewport.focus({ preventScroll: true });
+  }
+
+  /** Il controllo del nucleo, o `null` se il nucleo è morto (allora la tela si riapre) o rifiuta la chiamata. */
+  #checkCode(ops: readonly unknown[], seed: bigint): CanvasCheckReport | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.check(ops, seed);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#pasteNotice(t("canvas.change_refused"));
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * «Incolla codice» (LIC T25): legge il testo degli appunti una volta come
+   * lista (`readCodeList`), e dà lo stesso valore al controllo del nucleo
+   * (`canvas_check`) e poi alla scrittura, con lo stesso seme: gli id nati
+   * sono quelli del riassunto. Se la lista nomina schede, archi o tratti che
+   * la lavagna ha già, la finestra offre «Aggiorna le schede» e «Aggiungi
+   * come copie» (`code-paste.ts`); se no «Incolla». Un passo d'annulla in
+   * ogni caso. Un problema, appunti vuoti o una lista che non cambia niente
+   * li dice l'avviso, senza finestra; Esc o «Annulla» non scrivono.
+   */
+  async #pasteCode(): Promise<void> {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    // L'avviso di un incolla di prima non resta dietro la finestra di questo.
+    if (this.#intakeError) this.#showNotice("");
+    let text: string;
+    try {
+      text = await clipboardText();
+    } catch {
+      if (!this.#destroyed) this.#pasteNotice(t("editor_menu.paste_failed"));
+      return;
+    }
+    if (this.#destroyed || this.#readOnly || !this.#core || !this.#doc || this.#isSceneOversized()) return;
+    const read = readCodeList(text);
+    if (!read.ok) {
+      this.#pasteNotice(codeTextProblem(read.problem));
+      return;
+    }
+    this.#recordPending();
+    const doc = this.#doc;
+    const clashes = codeClashes(doc, read.ops);
+    if (!clashes.ok) {
+      const { index, id, kind } = clashes.kind;
+      this.#pasteNotice(t("canvas.paste_code.kind", {
+        n: String(index + 1), id, kind: t(`canvas.paste_code.kind.${kind}` as Key),
+      }));
+      return;
+    }
+    const seed = this.#seed();
+    const source = this.#source;
+    // Le copie cadono come un Ctrl+V: il punto si prende ora, dov'era il puntatore.
+    const spot = this.#pasteSpot(text);
+    const choices: PasteChoice[] = [];
+    if (!clashes.clashes) {
+      const report = this.#checkCode(read.ops, seed);
+      if (!report) return;
+      if (!report.ok || !report.summary) {
+        this.#pasteNotice(checkProblemText(report.problems[0]));
+        return;
+      }
+      const said = summaryText(report.summary);
+      if (said === "") {
+        this.#pasteNotice(t("canvas.paste_code.nothing"));
+        return;
+      }
+      choices.push({ id: "paste", ops: read.ops, said, report });
+    } else {
+      const update = asUpdates(doc, read.ops);
+      const copies = asCopies(doc, read.ops, seed, placedAt(spot.at));
+      for (const [id, ops, updated] of [["update", update.ops, update.updated], ["copies", copies, new Set<string>()]] as const) {
+        const report = this.#checkCode(ops, seed);
+        if (!report) return;
+        const said = report.ok && report.summary ? summaryText(report.summary, updated) : "";
+        choices.push({ id, ops, said, report });
+      }
+      if (choices.every((choice) => choice.said === "")) {
+        const refused = choices.find((choice) => !choice.report.ok);
+        this.#pasteNotice(refused ? checkProblemText(refused.report.problems[0]) : t("canvas.paste_code.nothing"));
+        return;
+      }
+    }
+    const chosen = await this.#confirmPaste(choices, clashes.clashes);
+    if (!chosen || this.#destroyed) return;
+    // Intanto la lavagna può essere cambiata (un altro riquadro, il disco), o
+    // diventata di sola lettura o troppo grande: il riassunto non dice più il
+    // vero, e non si scrive. Mai il silenzio.
+    if (this.#readOnly || this.#isSceneOversized() || !this.#doc) {
+      this.#pasteNotice(t("canvas.paste_code.locked"));
+      return;
+    }
+    if (this.#source !== source) {
+      this.#pasteNotice(t("canvas.paste_code.changed"));
+      return;
+    }
+    const created = this.#writeOps(chosen.ops as CanvasIntentOp[], "canvas.change_refused", seed);
+    if (!created || this.#destroyed || !this.#doc) return;
+    if (chosen.id === "copies") this.#lastPaste = spot.last;
+    const born = new Set(this.#doc.nodes.map((node) => node.id));
+    const cards = created.filter((id) => born.has(id));
+    if (cards.length > 0) {
+      this.#selection = cards;
+      this.#edgeSelection = [];
+      this.#displaySelection();
+      this.#options.onSelectionChange();
+    }
+  }
+
+  /**
+   * La conferma di «Incolla codice»: il riassunto di ogni scelta e gli
+   * avvisi. Senza id presi una scelta, «Incolla»; con id presi «Aggiorna le
+   * schede» (proposta) e «Aggiungi come copie», ognuna col suo riassunto, o
+   * col suo problema e senza bottone se non si può. «Annulla» di serie, Esc
+   * come «Annulla».
+   */
+  #confirmPaste(choices: readonly PasteChoice[], clashes: CodeClashes | null): Promise<PasteChoice | null> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const sentences: string[] = [];
+    const usable = choices.filter((choice) => choice.said !== "");
+    if (!clashes) sentences.push(t("canvas.paste_code.description", { summary: choices[0]!.said }));
+    else {
+      const named = [
+        [clashes.cards.length, "cards"], [clashes.edges.length, "edges"], [clashes.strokes, "strokes"],
+      ] as const;
+      const list = named.filter(([count]) => count > 0)
+        .map(([count, what]) => plural(count, `canvas.paste_code.count.${what}.one` as Key, `canvas.paste_code.count.${what}` as Key));
+      sentences.push(t("canvas.paste_code.clash", { list: list.join(", ") }));
+      for (const choice of choices) {
+        const problem = choice.report.ok ? null : choice.report.problems[0];
+        const summary = problem
+          ? t("canvas.paste_code.option_refused", { n: String((problem.index ?? 0) + 1), problem: problemPhrase(problem) })
+          : choice.said || t("canvas.paste_code.option_nothing");
+        sentences.push(t(choice.id === "update" ? "canvas.paste_code.as_update" : "canvas.paste_code.as_copies", { summary }));
+      }
+    }
+    // Gli avvisi della scelta proposta (la prima che si può).
+    const first = usable[0];
+    const warnings = first ? warningsText(first.report.warnings, first.report.warnings_omitted) : "";
+    if (warnings !== "") sentences.push(warnings);
+    const labels: Readonly<Record<PasteChoice["id"], Key>> = {
+      paste: "canvas.paste_code.action",
+      update: "canvas.paste_code.update",
+      copies: "canvas.paste_code.copies",
+    };
+    const handle = openDialog<PasteChoice | null>({
+      title: t("canvas.paste_code.title"),
+      description: sentences.join(" "),
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: null, autofocus: true },
+        // Prima le copie, poi la proposta, che è il bottone pieno in fondo.
+        ...[...usable].reverse().map((choice, index, all) => ({
+          id: choice.id,
+          label: t(labels[choice.id]),
+          value: choice,
+          ...(index === all.length - 1 ? { kind: "primary" as const } : {}),
+        })),
+      ],
+      dismissValue: null,
+      lifetime: own,
+    });
+    return handle.result.then((chosen) => {
+      own.close();
+      return chosen;
+    });
+  }
+
   /** Un PDF che non si apre: «Spargi le pagine» si spegne, finché il file non cambia (T72). */
   #markBroken(path: string): void {
     if (this.#destroyed || this.#pdfBroken.has(path)) return;
@@ -6939,37 +7715,37 @@ export class CanvasEngine {
    */
   #removeNodes(nodes: readonly string[], edges: readonly string[], strokes: readonly string[] = []): boolean {
     if (!this.#doc) return false;
-    const patches: CanvasPatch[] = [];
-    if (strokes.length > 0) {
-      const layers = this.#inkLayersNow();
-      const erased = layers ? eraseStrokePatches(this.#doc, layers, "board", strokes) : null;
-      if (!erased) return false;
-      patches.push(...erased);
-    }
-    const selected = new Set(nodes);
-    const removed = new Set(edges);
-    for (const edge of this.#doc.edges) {
-      if (selected.has(edge.fromNode) || selected.has(edge.toNode)) removed.add(edge.id);
-    }
-    for (const id of removed) {
-      const patch = removeEdgePatch(this.#doc, id);
-      if (patch) patches.push(patch);
-    }
-    for (const id of selected) {
-      const patch = removeNodePatch(this.#doc, id);
-      if (patch) patches.push(patch);
-    }
-    return patches.length > 0 && this.#commit(patches, "input");
+    if (strokes.length === 0) return this.#writeOps(this.#removeOps(nodes, edges)) !== null;
+    // Il taglia del Lazo, coi tratti liberi: un gesto degli appunti (T24),
+    // con `erase_strokes` e `remove` in una lista sola.
+    const ops: CanvasIntentOp[] = [{ op: "erase_strokes", layer: "board", ids: [...strokes] }];
+    ops.push(...(this.#removeOps(nodes, edges) ?? []));
+    return this.#writeOps(ops, null) !== null;
+  }
+
+  /**
+   * `remove` delle schede `nodes` e dei fili `edges` che ci sono (i fili che
+   * toccano una scheda tolta li toglie il nucleo); `null` se nessuno c'è.
+   */
+  #removeOps(nodes: readonly string[], edges: readonly string[]): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const cards = new Set(doc.nodes.map((node) => node.id));
+    const wires = new Set(doc.edges.map((edge) => edge.id));
+    const ids = [...new Set([...nodes.filter((id) => cards.has(id)), ...edges.filter((id) => wires.has(id))])];
+    return ids.length > 0 ? [{ op: "remove", ids }] : null;
   }
 
   #reorderSelection(where: "front" | "back"): void {
-    if (!this.#doc || this.#readOnly || !this.#selection.length) return;
-    const ids = this.#doc.nodes.map((n) => n.id);
-    const selected = new Set(this.#selection);
-    const rest = ids.filter((id) => !selected.has(id));
-    const after = where === "front" ? [...rest, ...this.#selection] : [...this.#selection, ...rest];
-    if (JSON.stringify(ids) === JSON.stringify(after)) return;
-    this.#commit([{ kind: "reorder", before: ids, after }], "input");
+    if (!this.#doc || this.#readOnly) return;
+    this.#writeOps(this.#reorderOps(where));
+  }
+
+  /** `reorder` delle schede scelte, nell'ordine in cui sono state scelte. */
+  #reorderOps(where: "front" | "back"): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    if (ids.length === 0) return null;
+    return [where === "front" ? { op: "reorder", ids } : { op: "reorder", ids, to: "back" }];
   }
 
   // --- i comandi (T48) --------------------------------------------------------------
@@ -7165,6 +7941,7 @@ export class CanvasEngine {
     const world = (args?: CanvasCommandArgs) => (args?.at ? this.#screenToWorld(args.at.x, args.at.y) : undefined);
     const add = (type: CanvasNode["type"]): CanvasCommandBehaviour => ({
       disabled: writable,
+      op: (input) => this.#addOps(type, undefined, world(input)),
       run: (args) => this.#addNode(type, undefined, world(args)),
     });
     if (id.startsWith("canvas.color.")) {
@@ -7174,6 +7951,12 @@ export class CanvasEngine {
       if (!(CANVAS_COLORS as readonly string[]).includes(choice)) return null;
       return {
         disabled: () => writable() ?? (this.#selectedNodes().length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
+        // «Altro…» scrive il colore che il selettore dà (`value`).
+        op: (input) => {
+          const value = colorValueOf(choice);
+          if (value === null) return input?.value === undefined ? null : this.#colorOps(input.value, input.edge);
+          return this.#colorOps(value, input?.edge);
+        },
         run: (args) => {
           const value = colorValueOf(choice);
           if (value === null) this.#openColorPicker(args?.edge);
@@ -7181,11 +7964,23 @@ export class CanvasEngine {
         },
       };
     }
+    if (id.startsWith("canvas.layout.")) {
+      // «Disponi» (LIC T25): `layout` sulle schede scelte, o su tutte quelle
+      // fuori dai gruppi; le posizioni le decide il nucleo.
+      const kind = id.slice("canvas.layout.".length) as CanvasLayout;
+      if (!(CANVAS_LAYOUTS as readonly string[]).includes(kind)) return null;
+      return {
+        disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : this.#layoutWhy()),
+        op: () => this.#layoutOps(kind),
+        run: () => this.#arrangeLayout(kind),
+      };
+    }
     if (id.startsWith("canvas.align.")) {
       const axis = id.slice("canvas.align.".length) as CanvasAlign;
       if (!(CANVAS_ALIGN as readonly string[]).includes(axis)) return null;
       return {
         disabled: () => writable() ?? (this.#selectedNodes().length >= 2 ? null : t("canvas.commands.why.two")),
+        op: () => this.#arrangeOps(axis),
         run: () => this.#layoutSelection(axis),
       };
     }
@@ -7200,6 +7995,8 @@ export class CanvasEngine {
         disabled: () => writable()
           ?? (this.#isSceneOversized() ? t("canvas.too_large") : null)
           ?? (this.#tool === "text" || this.#chosenTextNodes().length > 0 ? null : t("canvas.commands.why.no_text_card")),
+        // Le prossime schede del Testo non sono nel file: scrivono solo le scelte.
+        op: () => this.#styleTextOps(change),
         run: () => this.#styleText(change),
       };
     }
@@ -7219,12 +8016,21 @@ export class CanvasEngine {
       const step = far === "far" ? CANVAS_SNAP * 4 : far === "fine" ? 1 : CANVAS_SNAP;
       const dx = way === "left" ? -step : way === "right" ? step : 0;
       const dy = way === "up" ? -step : way === "down" ? step : 0;
-      return { disabled: withNodes, run: () => this.#nudge(dx, dy, way === "down" || way === "right") };
+      return {
+        disabled: withNodes,
+        // In sola lettura le frecce scelgono la scheda vicina: non scrivono.
+        op: () => (this.#readOnly ? null : this.#nudgeOps(dx, dy)),
+        run: () => this.#nudge(dx, dy, way === "down" || way === "right"),
+      };
     }
     const tool = toolOfCommand(id);
     if (tool !== null) {
+      // C con due schede scelte le collega: la sola volta che uno strumento
+      // scrive. Con un filo scelto C non collega (`run` sotto), e così `op`.
+      const pair = tool === "connect" ? { op: () => (this.#edgeSelection.length > 0 ? null : this.#connectPairOps()) } : {};
       return {
         disabled: () => (CANVAS_WRITING_TOOLS.has(tool) ? writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null) : null),
+        ...pair,
         run: () => {
           // C con una scheda scelta comincia il filo da lei, come «Collega…»
           // (T17); con due le collega (T67, D-19 (a)); senza, sceglie lo
@@ -7264,6 +8070,10 @@ export class CanvasEngine {
           const one = only();
           return one && noteExcerptOf(one) ? null : t("canvas.commands.why.one_excerpt");
         },
+        op: () => {
+          const one = only();
+          return one ? this.#wholeFileOps(one.id) : null;
+        },
         run: () => {
           const one = only();
           if (one) this.#showWholeFile(one.id);
@@ -7294,6 +8104,11 @@ export class CanvasEngine {
       if (id === "canvas.extract_note") {
         return {
           disabled: () => writable() ?? (only()?.type === "text" ? null : t("canvas.commands.why.one_text")),
+          // `value` è il percorso della nota appena nata: la crea la shell, prima.
+          op: (input) => {
+            const one = only();
+            return one?.type === "text" && input?.value ? [{ op: "convert", id: one.id, file: input.value }] : null;
+          },
           run: () => {
             const one = only();
             if (one?.type === "text") void this.#extractNote(one.id).catch((error: unknown) => this.#showIntakeError(error));
@@ -7304,6 +8119,11 @@ export class CanvasEngine {
         disabled: () => {
           const one = only();
           return writable() ?? (one && cardKindOf(one) === "note" ? null : t("canvas.commands.why.one_note"));
+        },
+        // `value` è il testo letto dalla nota (o dalle sezioni dell'estratto).
+        op: (input) => {
+          const one = only();
+          return one && cardKindOf(one) === "note" && input?.value !== undefined ? this.#copyNoteTextOps(one, input.value) : null;
         },
         run: () => {
           const one = only();
@@ -7319,6 +8139,11 @@ export class CanvasEngine {
             if (why !== null) return why;
             if (!this.#options.onPickFile) return t("canvas.commands.why.no_file_picker");
             return only()?.type === "file" ? null : t("canvas.commands.why.one_file");
+          },
+          // `value` è il file scelto nel selettore.
+          op: (input) => {
+            const one = only();
+            return one?.type === "file" && input?.value ? this.#replaceFileOps(one, input.value) : null;
           },
           run: () => {
             const one = only();
@@ -7358,15 +8183,22 @@ export class CanvasEngine {
       case "canvas.add.file":
         return {
           disabled: () => writable() ?? (this.#options.onPickFile ? null : t("canvas.commands.why.no_file_picker")),
+          // `value` è il file scelto nel selettore.
+          op: (input) => (input?.value ? this.#addOps("file", input.value, world(input)) : null),
           run: (args) => void this.#addFileNode(world(args)).catch((error: unknown) => this.#showIntakeError(error)),
         };
       case "canvas.duplicate":
-        return { disabled: withSelection, run: () => this.#duplicateSelection() };
+        return { disabled: withSelection, op: () => this.#duplicateOps(), run: () => this.#duplicateSelection() };
       case "canvas.select_all":
         return { disabled: withNodes, run: () => this.#selectAll() };
       case "canvas.enter":
         return {
           disabled: () => (this.#selectionFocus() ? null : t("canvas.commands.why.no_selection")),
+          // Su una scheda di testo apre il campo: `value` è il testo che vi si registra.
+          op: (input) => {
+            const focus = this.#selectionFocus();
+            return focus?.type === "text" && !this.#readOnly && input?.value !== undefined ? this.#textOps(focus.id, input.value) : null;
+          },
           run: () => {
             const focus = this.#selectionFocus();
             if (focus) this.#enterOrEdit(focus);
@@ -7375,6 +8207,11 @@ export class CanvasEngine {
       case "canvas.edit":
         return {
           disabled: () => writable() ?? (only()?.type === "text" ? null : t("canvas.commands.why.one_text")),
+          // Apre il campo della scheda: `value` è il testo che vi si registra.
+          op: (input) => {
+            const one = only();
+            return one?.type === "text" && input?.value !== undefined ? this.#textOps(one.id, input.value) : null;
+          },
           run: () => {
             const one = only();
             if (one?.type === "text") this.#beginCardEdit(one);
@@ -7477,6 +8314,8 @@ export class CanvasEngine {
             const count = this.#selectedNodes().length;
             return count === 1 || count === 2 ? null : t("canvas.commands.why.one_or_two");
           },
+          // Con una scheda sola il filo si tira col gesto: scrive solo con due.
+          op: () => this.#connectPairOps(),
           run: () => {
             const chosen = this.#selectedNodes();
             if (chosen.length === 2) this.#connectPair(chosen[0]!, chosen[1]!);
@@ -7486,6 +8325,7 @@ export class CanvasEngine {
       case "canvas.group":
         return {
           disabled: () => withSelection() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          op: () => this.#groupOps(),
           run: () => this.#groupSelection(),
         };
       case "canvas.trash_file":
@@ -7498,6 +8338,8 @@ export class CanvasEngine {
               ? null
               : t("canvas.commands.why.no_file_card");
           },
+          // Il cestino è della shell (`onTrashPath`); poi le schede se ne vanno.
+          op: () => this.#removeOps(this.#selectedNodes().map((node) => node.id), []),
           run: () => void this.#trashSelectedFiles().catch((error: unknown) => this.#showIntakeError(error)),
         };
       case "canvas.spread_pages":
@@ -7510,28 +8352,58 @@ export class CanvasEngine {
             if (!this.#options.cards?.pdfPages) return t("canvas.commands.why.no_pdf_reader");
             return this.#pdfBroken.has(cardTarget(one).path) ? t("canvas.commands.why.pdf_unreadable") : null;
           },
+          // `value` sono le pagine scritte nel campo; il conto e le misure le
+          // legge `canvas.apply` dal PDF, come qui li legge la tela. Quante
+          // pagine nasceranno lo sa solo il conto: l'etichetta del gruppo
+          // resta quella di serie del nucleo.
+          op: (input) => {
+            const one = only();
+            return one && input?.value ? [{ op: "spread_pages", id: one.id, pages: input.value }] : null;
+          },
           run: () => void this.#spreadPages().catch((error: unknown) => this.#showIntakeError(error)),
         };
       case "canvas.edge.reverse":
         return {
           disabled: () => writable() ?? (this.#edgeSelection.length ? null : t("canvas.commands.why.no_edge")),
+          op: (input) => this.#reverseOps(input?.edge ?? this.#edgeSelection[0]),
           run: (args) => this.#reverseEdge(args?.edge ?? this.#edgeSelection[0]),
         };
       case "canvas.delete":
         return {
           disabled: () => writable() ?? (this.#selection.length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
+          op: () => this.#removeOps(this.#selection, this.#edgeSelection),
           run: () => this.#deleteSelection(),
         };
       case "canvas.bring_front":
-        return { disabled: withSelection, run: () => this.#reorderSelection("front") };
+        return { disabled: withSelection, op: () => this.#reorderOps("front"), run: () => this.#reorderSelection("front") };
       case "canvas.send_back":
-        return { disabled: withSelection, run: () => this.#reorderSelection("back") };
+        return { disabled: withSelection, op: () => this.#reorderOps("back"), run: () => this.#reorderSelection("back") };
+      // La lavagna come codice (LIC T25). Copiare non scrive: vale anche in
+      // sola lettura. Incollare legge gli appunti, controlla e chiede.
+      case "canvas.copy_code":
+        return {
+          disabled: () => this.#copyCodeWhy(),
+          run: () => this.#copyCode(),
+        };
+      case "canvas.paste_code":
+        return {
+          disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          // `value` è il testo degli appunti: la lista che scriverebbe, se è una lista.
+          op: (input) => {
+            const read = input?.value === undefined ? null : readCodeList(input.value);
+            return read?.ok ? (read.ops as CanvasIntentOp[]) : null;
+          },
+          run: () => void this.#pasteCode(),
+        };
       case "canvas.distribute_x":
-      case "canvas.distribute_y":
+      case "canvas.distribute_y": {
+        const axis = id === "canvas.distribute_x" ? "distribute-x" : "distribute-y";
         return {
           disabled: () => writable() ?? (this.#selectedNodes().length >= 3 ? null : t("canvas.commands.why.three")),
-          run: () => this.#layoutSelection(id === "canvas.distribute_x" ? "distribute-x" : "distribute-y"),
+          op: () => this.#arrangeOps(axis),
+          run: () => this.#layoutSelection(axis),
         };
+      }
       // I menu della riga delle opzioni (T50).
       case "canvas.pen_menu":
         return {
@@ -7636,17 +8508,22 @@ export class CanvasEngine {
   #styleText(change: Partial<TextStyle>): void {
     if (this.#readOnly || this.#destroyed) return;
     this.#textNext = { ...this.#textNext, ...change };
-    const doc = this.#doc;
-    const patches: CanvasPatch[] = [];
-    if (doc) {
-      for (const node of this.#chosenTextNodes()) {
-        const next = withTextStyle(node, { ...textStyle(node), ...change });
-        const patch = next ? upsertNodePatch(doc, next) : null;
-        if (patch) patches.push(patch);
-      }
-    }
-    if (patches.length) this.#commit(patches, "input");
+    this.#writeOps(this.#styleTextOps(change));
     this.#canvasOptions.sync();
+  }
+
+  /**
+   * La `set` di `fub:text` di ogni scheda di testo scelta che con `change` si
+   * mostra diversa; `null` se nessuna cambia.
+   */
+  #styleTextOps(change: Partial<TextStyle>): CanvasIntentOp[] | null {
+    const ops: CanvasIntentOp[] = [];
+    for (const node of this.#chosenTextNodes()) {
+      const next = withTextStyle(node, { ...textStyle(node), ...change });
+      const op = next ? setOp(node, next) : null;
+      if (op) ops.push(op);
+    }
+    return ops.length > 0 ? ops : null;
   }
 
   /** Il colore delle schede scelte: `undefined` quello di serie, `null` se sono diversi. */
@@ -7739,25 +8616,19 @@ export class CanvasEngine {
    * scelto lui. Un passo d'annulla solo.
    */
   #groupSelection(): void {
-    const doc = this.#doc;
-    const nodes = this.#selectedNodes();
-    if (!doc || this.#readOnly || this.#isSceneOversized() || nodes.length === 0) return;
-    const left = snap(Math.min(...nodes.map((node) => node.x)) - CANVAS_GROUP_MARGIN);
-    const top = snap(Math.min(...nodes.map((node) => node.y)) - CANVAS_GROUP_MARGIN);
-    const right = snap(Math.max(...nodes.map((node) => node.x + node.width)) + CANVAS_GROUP_MARGIN);
-    const bottom = snap(Math.max(...nodes.map((node) => node.y + node.height)) + CANVAS_GROUP_MARGIN);
-    const group: CanvasNode = { id: newNodeId("n"), type: "group", x: left, y: top, width: right - left, height: bottom - top, label: "" };
-    const patch = upsertNodePatch(doc, group);
-    if (!patch) return;
-    const ids = doc.nodes.map((node) => node.id);
-    const chosen = new Set(nodes.map((node) => node.id));
-    const first = ids.findIndex((id) => chosen.has(id));
-    const after = [...ids.slice(0, first), group.id, ...ids.slice(first)];
-    if (!this.#commit([patch, { kind: "reorder", before: [...ids, group.id], after }], "input")) return;
-    this.#selection = [group.id];
+    if (!this.#doc || this.#readOnly || this.#isSceneOversized()) return;
+    const group = this.#writeOps(this.#groupOps())?.[0];
+    if (group === undefined) return;
+    this.#selection = [group];
     this.#edgeSelection = [];
     this.#options.onSelectionChange();
     this.#render();
+  }
+
+  /** `group` delle schede scelte: il rettangolo, il margine e il posto nella pila li dà il nucleo. */
+  #groupOps(): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    return ids.length > 0 ? [{ op: "group", ids }] : null;
   }
 
   /** La prima scheda scelta, a cui vanno le frecce e Invio. */
@@ -7783,15 +8654,7 @@ export class CanvasEngine {
     if (!this.#doc) return;
     const focus = this.#selectionFocus();
     if (focus && !this.#readOnly) {
-      const patches: CanvasPatch[] = [];
-      for (const id of this.#selection) {
-        const node = this.#doc.nodes.find((n) => n.id === id);
-        if (node) {
-          const patch = upsertNodePatch(this.#doc, { ...node, x: node.x + dx, y: node.y + dy });
-          if (patch) patches.push(patch);
-        }
-      }
-      this.#commit(patches, "input");
+      this.#writeOps(this.#nudgeOps(dx, dy));
     } else if (focus) {
       const index = this.#doc.nodes.indexOf(focus);
       const next = this.#doc.nodes[index + (forward ? 1 : -1)];
@@ -7810,24 +8673,27 @@ export class CanvasEngine {
   /** Il colore `color` (`undefined`: quello di serie) al filo `edge`, o alle schede scelte, o ai fili scelti. */
   #colorSelection(color: string | undefined, edge?: string): void {
     if (!this.#doc || this.#readOnly) return;
-    const paint = <T extends { color?: string }>(current: T): T => {
-      const next = { ...current };
-      if (color === undefined) delete next.color;
-      else next.color = color;
-      return next;
-    };
-    const nodes = edge === undefined ? this.#selectedNodes() : [];
-    if (nodes.length) {
-      const patches = nodes.map((current) => upsertNodePatch(this.#doc!, paint(current)));
-      this.#commit(patches.filter((patch): patch is NonNullable<typeof patch> => patch !== null), "input");
-      return;
-    }
-    const ids = edge === undefined ? this.#edgeSelection : [edge];
-    const patches = this.#doc.edges
-      .filter((one) => ids.includes(one.id))
-      .map((current) => upsertEdgePatch(this.#doc!, paint(current)))
-      .filter((patch): patch is NonNullable<typeof patch> => patch !== null);
-    if (patches.length) this.#commit(patches, "input");
+    this.#writeOps(this.#colorOps(color, edge));
+  }
+
+  /**
+   * `color` di ciò che il menu colora: il filo `edge`, o le schede scelte, o
+   * i fili scelti (nell'ordine della lavagna). `undefined` toglie il colore.
+   * `null` se non c'è niente da colorare.
+   */
+  #colorOps(color: string | undefined, edge?: string): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const nodes = edge === undefined ? this.#selectedNodes().map((node) => node.id) : [];
+    const wires = edge === undefined ? this.#edgeSelection : [edge];
+    const ids = nodes.length > 0 ? nodes : doc.edges.filter((one) => wires.includes(one.id)).map((one) => one.id);
+    return ids.length > 0 ? [{ op: "color", ids, color: color ?? null }] : null;
+  }
+
+  /** `move` delle schede scelte di `dx`, `dy` (le frecce): un gruppo si sposta da solo. */
+  #nudgeOps(dx: number, dy: number): CanvasIntentOp[] | null {
+    const ids = this.#selectedNodes().map((node) => node.id);
+    return ids.length > 0 && (dx !== 0 || dy !== 0) ? [{ op: "move", ids, dx, dy }] : null;
   }
 
   // --- i colori (T47) ---------------------------------------------------------
@@ -7916,12 +8782,18 @@ export class CanvasEngine {
 
   /** Il filo `edge` va nell'altro verso: estremi, lati e punte si scambiano. */
   #reverseEdge(edge: string | undefined): void {
-    if (!this.#doc || this.#readOnly || edge === undefined) return;
-    const current = this.#doc.edges.find((one) => one.id === edge);
-    if (!current) return;
-    const next = reversedEdge(current);
-    const patch = upsertEdgePatch(this.#doc, next);
-    if (patch) this.#commit([patch], "input");
+    if (!this.#doc || this.#readOnly) return;
+    this.#writeOps(this.#reverseOps(edge));
+  }
+
+  /**
+   * L'inversione del filo `edge`: `reverse` del nucleo, che scambia estremi e
+   * lati e tiene le punte sulla scheda a cui stavano, come `reversedEdge` di
+   * `model.ts` (#353). `null` se il filo non c'è.
+   */
+  #reverseOps(edge: string | undefined): CanvasIntentOp[] | null {
+    const current = edge === undefined ? undefined : this.#doc?.edges.find((one) => one.id === edge);
+    return current ? [{ op: "reverse", ids: [current.id] }] : null;
   }
 
   /**
@@ -8051,8 +8923,9 @@ export class CanvasEngine {
       if (written.subpath !== null) next.subpath = written.subpath;
       if (written.parts !== null) next[PARTS_KEY] = written.parts;
     }
-    const patch = upsertNodePatch(doc, next);
-    if (patch) this.#commit([patch], "input");
+    // I campi cambiati della scheda, con una `set` (T24).
+    const op = setOp(node, next);
+    if (op) this.#writeOps([op]);
   }
 
   /**
@@ -8061,14 +8934,19 @@ export class CanvasEngine {
    * l'estratto. Una scheda che non è un estratto non cambia.
    */
   #showWholeFile(id: string): void {
-    const doc = this.#doc;
-    const node = doc?.nodes.find((one) => one.id === id);
-    if (!doc || !node || !noteExcerptOf(node) || this.#readOnly || this.#destroyed || this.#isSceneOversized()) return;
+    if (this.#readOnly || this.#destroyed || this.#isSceneOversized()) return;
+    this.#writeOps(this.#wholeFileOps(id));
+  }
+
+  /** La `set` che toglie `subpath` e `fub:parts` alla scheda-estratto `id`; `null` se non è un estratto. */
+  #wholeFileOps(id: string): CanvasIntentOp[] | null {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node || !noteExcerptOf(node)) return null;
     const next: CanvasNode = { ...node };
     delete next.subpath;
     delete next[PARTS_KEY];
-    const patch = upsertNodePatch(doc, next);
-    if (patch) this.#commit([patch], "input");
+    const op = setOp(node, next);
+    return op ? [op] : null;
   }
 
   /**
@@ -8346,7 +9224,7 @@ export class CanvasEngine {
     const entry = this.#cards.get(crop.node);
     const doc = this.#doc;
     const node = doc?.nodes.find((one) => one.id === crop.node);
-    let patch: CanvasPatch | null = null;
+    let op: CanvasIntentOp | null = null;
     if (how !== null && doc && node && entry && node.type === "file" && cardTarget(node).path === crop.path && !this.#readOnly) {
       const chosen = how === "remove" ? WHOLE_ZONE : zone ?? editor?.zone() ?? WHOLE_ZONE;
       const next: CanvasNode = { ...node };
@@ -8367,13 +9245,13 @@ export class CanvasEngine {
       }
       const natural = editor?.natural() ?? null;
       if (ok && natural) next.height = this.#cropHeightFor(entry, zoneRatio(chosen, natural));
-      patch = ok ? upsertNodePatch(doc, next) : null;
+      op = ok ? setOp(node, next) : null;
     }
     const focused = editor !== null && entry !== undefined && entry.article.contains(document.activeElement);
     this.#crop = null;
     editor?.close();
     if (entry) delete entry.article.dataset.cardCropping;
-    if (patch) this.#commit([patch], "input");
+    if (op) this.#writeOps([op]);
     // Senza commit (Esc, niente di cambiato) la scheda torna com'era: la sua
     // altezza e, se aveva una zona, la sua vista.
     const now = this.#doc?.nodes.find((one) => one.id === crop.node);
@@ -8547,6 +9425,16 @@ export class CanvasEngine {
             entry("canvas.add.group", here),
           ],
         },
+        // «Disponi ›» senza selezione (LIC T25): tutte le schede fuori dai gruppi.
+        {
+          id: "canvas.arrange",
+          label: t("canvas_menu.arrange"),
+          enabled: writable,
+          items: CANVAS_LAYOUTS.map((kind) => entry(`canvas.layout.${kind}`)),
+        },
+        entry("canvas.copy_code"),
+        entry("canvas.paste_code", undefined, false),
+        MENU_RULE,
         entry("canvas.fit", undefined, false),
         ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
         // Nascondi o Mostra il navigatore (T55), quella che c'è.
@@ -8644,9 +9532,15 @@ export class CanvasEngine {
             ...state(readOnly ?? three),
             items: [entry("canvas.distribute_x"), entry("canvas.distribute_y")],
           },
+          // «Disponi» col nucleo (LIC T25): griglia, riga, colonna, albero.
+          MENU_RULE,
+          ...CANVAS_LAYOUTS.map((kind) => entry(`canvas.layout.${kind}`)),
         ],
       },
       entry("canvas.duplicate"),
+      // La lavagna come codice (LIC T25): «Incolla codice» apre la conferma, che prende il fuoco.
+      entry("canvas.copy_code"),
+      entry("canvas.paste_code", undefined, false),
       MENU_RULE,
       entry("canvas.delete"),
     );
@@ -9086,7 +9980,8 @@ export class CanvasEngine {
         }
       }
     }
-    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
+    const ids = this.#selection.filter((id) => origin.has(id));
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0 };
     this.#viewport.setPointerCapture?.(event.pointerId);
     event.preventDefault();
   }
@@ -9834,7 +10729,7 @@ export class CanvasEngine {
   #fitToContent(ids: readonly string[]): void {
     const doc = this.#doc;
     if (!doc || this.#readOnly || this.#isSceneOversized()) return;
-    let changed = false;
+    const ops: CanvasIntentOp[] = [];
     for (const id of ids) {
       const node = doc.nodes.find((entry) => entry.id === id);
       const entry = this.#cards.get(id);
@@ -9843,11 +10738,11 @@ export class CanvasEngine {
       // La misura del contenuto è di nuovo quella che la scheda prende da sé (T44).
       if (size) this.#sizedByHand.delete(id);
       if (!size || (size.width === node.width && size.height === node.height)) continue;
-      node.width = size.width;
-      node.height = size.height;
-      changed = true;
+      // La misura la prende la tela dal DOM (il testo come si vede, il corpo
+      // senza testata): il nucleo la scrive con `resize` (T24).
+      ops.push({ op: "resize", id, width: Math.round(size.width), height: Math.round(size.height) });
     }
-    if (changed) this.#commitFromSource("input");
+    this.#writeOps(ops);
   }
 
   /** La misura del contenuto della scheda `node`; `null` se non c'è o non si sa. */
@@ -9937,24 +10832,30 @@ export class CanvasEngine {
       drag.moved = true;
     }
     const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
-    // Alt tenuto, o `canvas.snap` spento: la scheda va dove la porta il puntatore,
-    // in unità intere. Altrimenti le guide (T71) vincono sulla griglia, su ogni asse.
+    // Alt tenuto, o `canvas.snap` spento: le schede vanno dove le porta il
+    // puntatore, in unità intere. Altrimenti le guide (T71) vincono sulla
+    // griglia, su ogni asse. Lo spostamento è uno per tutte (una `move`, T24):
+    // la griglia aggancia l'angolo in alto a sinistra del loro riquadro, come
+    // le guide, e le schede tengono le loro distanze.
     const free = at.altKey || !this.#snapSetting;
     const guide = drag.moved && !free ? this.#dragGuide(drag.origin, byId, dx, dy) : null;
     if (guide === null) this.#hideGuides();
+    let left = Infinity;
+    let top = Infinity;
+    for (const origin of drag.origin.values()) {
+      left = Math.min(left, origin.x);
+      top = Math.min(top, origin.y);
+    }
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    const along = (start: number, delta: number, guided: boolean, pull: number): number =>
+      free || guided ? Math.round(delta + pull) : snap(start + delta) - start;
+    drag.dx = along(left, dx, guide?.guidedX ?? false, guide?.dx ?? 0);
+    drag.dy = along(top, dy, guide?.guidedY ?? false, guide?.dy ?? 0);
     for (const [id, origin] of drag.origin) {
       const node = byId.get(id);
       if (!node) continue;
-      if (free) {
-        node.x = Math.round(origin.x + dx);
-        node.y = Math.round(origin.y + dy);
-      } else if (guide) {
-        node.x = guide.guidedX ? Math.round(origin.x + dx + guide.dx) : snap(origin.x + dx);
-        node.y = guide.guidedY ? Math.round(origin.y + dy + guide.dy) : snap(origin.y + dy);
-      } else {
-        node.x = snap(origin.x + dx);
-        node.y = snap(origin.y + dy);
-      }
+      node.x = origin.x + drag.dx;
+      node.y = origin.y + drag.dy;
     }
     this.#renderLive();
   }
@@ -10054,14 +10955,14 @@ export class CanvasEngine {
       this.#handleTap = resize.moved ? null : [...resize.origin.keys()];
       // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
       if (resize.moved) for (const id of resize.origin.keys()) this.#sizedByHand.add(id);
-      this.#commitFromSource("input");
+      this.#writeGesture(resize.moved ? this.#resizeOps(resize.origin) : null);
       return;
     }
     if (this.#drag && event.pointerId === this.#drag.pointerId) {
       const drag = this.#drag;
       this.#drag = null;
       this.#hideGuides();
-      if (drag.moved) this.#commitFromSource("input");
+      if (drag.moved) this.#writeGesture(this.#dragOps(drag));
       return;
     }
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
@@ -10207,21 +11108,21 @@ export class CanvasEngine {
       if (!other) return false;
       const otherSide = movesFrom ? existing.toSide ?? "left" : existing.fromSide ?? "right";
       const side = nearestSides(other, target, otherSide, other.id === target.id).toSide;
-      const edge: CanvasEdge = movesFrom
-        ? { ...existing, fromNode: target.id, fromSide: side }
-        : { ...existing, toNode: target.id, toSide: side };
-      const patch = upsertEdgePatch(doc, edge);
-      if (patch) this.#commit([patch], "input");
+      // L'estremità riattaccata è una `set` dell'arco (T24): la scheda e il lato.
+      const fields = movesFrom ? { fromNode: target.id, fromSide: side } : { toNode: target.id, toSide: side };
+      this.#writeOps([{ op: "set", id: existing.id, fields }]);
       return false;
     }
     const source = doc.nodes.find((node) => node.id === connect.from);
     if (!source) return false;
     if (target) {
-      const sides = nearestSides(source, target, connect.fromSide);
-      const patch = upsertEdgePatch(doc, {
-        id: newNodeId("e"), fromNode: source.id, toNode: target.id, ...sides, ...this.#tipEnds(),
-      });
-      if (patch) this.#commit([patch], "input");
+      // Il filo lasciato sul corpo di una scheda va ai lati più vicini
+      // (`sides: "auto"`); partito da un lato (un punto della scheda, T67),
+      // tiene quello, e l'arrivo è il lato più vicino a lui (T24).
+      const sides = connect.fromSide === undefined
+        ? "auto"
+        : { from: connect.fromSide, to: nearestSides(source, target, connect.fromSide).toSide };
+      this.#writeOps(this.#connectOps(source.id, target.id, sides));
       return false;
     }
     // Nel vuoto, solo dopo un vero tiro e dentro la vista (non sulla
@@ -10234,10 +11135,45 @@ export class CanvasEngine {
   /** C con due schede scelte (D-19 (a)): un filo dalla prima alla seconda, coi lati di `edges.ts`. */
   #connectPair(from: CanvasNode, to: CanvasNode): void {
     if (!this.#doc || this.#readOnly) return;
-    const patch = upsertEdgePatch(this.#doc, {
-      id: newNodeId("e"), fromNode: from.id, toNode: to.id, ...nearestSides(from, to), ...this.#tipEnds(),
-    });
-    if (patch) this.#commit([patch], "input");
+    this.#writeOps(this.#connectOps(from.id, to.id));
+  }
+
+  /**
+   * La `connect` delle due schede scelte («Collega…», e C senza fili scelti);
+   * `null` se non sono due.
+   */
+  #connectPairOps(): CanvasIntentOp[] | null {
+    const chosen = this.#selectedNodes();
+    return chosen.length === 2 ? this.#connectOps(chosen[0]!.id, chosen[1]!.id) : null;
+  }
+
+  /**
+   * La `connect` da `from` a `to`, coi lati più vicini (`sides: "auto"`, la
+   * regola di `nearestSides` di `edges.ts`) o coi lati dati, e le punte scelte
+   * nella riga di Collega (T50): `arrow` di serie, `none`, o la sola punta
+   * all'inizio, che la forma breve non ha (allora l'arco intero, coi lati di
+   * `nearestSides`). `born` è l'id di una scheda che nasce nella stessa lista
+   * (Collega nel vuoto, Ctrl+Maiusc+Invio): allora può non esserci ancora.
+   * `null` se una delle due non c'è.
+   */
+  #connectOps(
+    from: string,
+    to: string,
+    sides: "auto" | { readonly from: EdgeSide; readonly to: EdgeSide } = "auto",
+    born?: string,
+  ): CanvasIntentOp[] | null {
+    const a = this.#doc?.nodes.find((node) => node.id === from);
+    const b = this.#doc?.nodes.find((node) => node.id === to);
+    if (!a && from !== born) return null;
+    if (!b && to !== born) return null;
+    if (this.#tips === "start") {
+      const pair = sides === "auto" && a && b ? nearestSides(a, b) : null;
+      const fromSide = pair ? pair.fromSide : sides === "auto" ? undefined : sides.from;
+      const toSide = pair ? pair.toSide : sides === "auto" ? undefined : sides.to;
+      return [{ op: "connect", edge: { fromNode: from, toNode: to, fromSide, toSide, ...this.#tipEnds() } }];
+    }
+    const short = { op: "connect", from, to, sides: sides === "auto" ? sides : { ...sides } };
+    return [this.#tips === "none" ? { ...short, ends: "none" } : short];
   }
 
   /** I fili con i loro capi sulla lavagna, per cercare quello sotto il puntatore. */
@@ -10364,47 +11300,55 @@ export class CanvasEngine {
     this.#statusSettle();
   }
 
-  #commitFromSource(origin: EditorChangeOrigin): void {
-    if (!this.#doc) return;
-    // Ricostruisce le patch confrontando live vs nucleo: preimmagini vere,
-    // mai snap del live come before.
-    const before = this.#coreModel();
-    if (!before) {
-      this.#render();
-      return;
+  /**
+   * La fine di un gesto che ha mosso il modello in mano (un trascinamento, un
+   * ridimensionamento): il modello torna quello del nucleo, poi le operazioni
+   * del gesto vanno nel file in un passo d'annulla (T24). Senza operazioni, o
+   * se il nucleo le rifiuta, la lavagna si ridisegna com'era.
+   */
+  #writeGesture(ops: readonly CanvasIntentOp[] | null): void {
+    const model = this.#coreModel();
+    if (model) this.#doc = model;
+    if (this.#writeOps(ops) === null && !this.#destroyed) this.#render();
+  }
+
+  /**
+   * La `move` di un trascinamento (T24): le schede scelte dello spostamento
+   * del gesto; un gruppo porta le schede che ci stanno dentro (`contents`,
+   * T10), come le ha portate la vista. Oltre `MOVE_CONTENTS_MAX` schede
+   * portate il nucleo rifiuta `contents`: allora la `move` dice tutte le
+   * schede che la vista ha portato, una per una. `null` se non si è mosso
+   * niente.
+   */
+  #dragOps(drag: CardDrag): CanvasIntentOp[] | null {
+    if (drag.ids.length === 0 || (drag.dx === 0 && drag.dy === 0)) return null;
+    const groups = drag.ids.some((id) => this.#doc?.nodes.find((node) => node.id === id)?.type === "group");
+    if (groups && drag.origin.size > MOVE_CONTENTS_MAX) {
+      return [{ op: "move", ids: [...drag.origin.keys()], dx: drag.dx, dy: drag.dy }];
     }
-    const patches: CanvasPatch[] = [];
-    const beforeNodes = new Map(before.nodes.map((n) => [n.id, n]));
-    const liveNodes = new Map(this.#doc.nodes.map((n) => [n.id, n]));
-    for (const [id, live] of liveNodes) {
-      const prev = beforeNodes.get(id);
-      if (!prev || JSON.stringify(prev) !== JSON.stringify(live)) {
-        patches.push({
-          kind: "upsert-node",
-          before: prev ? JSON.parse(JSON.stringify(prev)) as CanvasNode : null,
-          after: JSON.parse(JSON.stringify(live)) as CanvasNode,
-        });
+    return [{ op: "move", ids: [...drag.ids], dx: drag.dx, dy: drag.dy, ...(groups ? { contents: true } : {}) }];
+  }
+
+  /**
+   * Le operazioni di un ridimensionamento (T24), scheda per scheda: una
+   * `move` se l'angolo in alto a sinistra è cambiato (le maniglie a sinistra o
+   * in alto, Alt, la scelta che scala), una `resize` con le misure del gesto se
+   * è cambiata la misura. Le misure sono già in unità intere della lavagna, a
+   * ogni zoom. `null` se niente è cambiato.
+   */
+  #resizeOps(origin: ReadonlyMap<string, ResizeBox>): CanvasIntentOp[] | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const ops: CanvasIntentOp[] = [];
+    for (const [id, start] of origin) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (!node) continue;
+      if (node.x !== start.x || node.y !== start.y) ops.push({ op: "move", ids: [id], dx: node.x - start.x, dy: node.y - start.y });
+      if (node.width !== start.width || node.height !== start.height) {
+        ops.push({ op: "resize", id, width: node.width, height: node.height });
       }
     }
-    for (const [id, prev] of beforeNodes) {
-      if (!liveNodes.has(id)) {
-        patches.push({
-          kind: "remove-node",
-          before: JSON.parse(JSON.stringify(prev)) as CanvasNode,
-          at: before.nodes.findIndex((node) => node.id === id),
-          after: null,
-        });
-      }
-    }
-    const beforeOrder = before.nodes.map((n) => n.id);
-    const liveOrder = this.#doc.nodes.map((n) => n.id);
-    if (JSON.stringify(beforeOrder) !== JSON.stringify(liveOrder)
-      && JSON.stringify([...liveOrder].sort()) === JSON.stringify([...beforeOrder].sort())) {
-      patches.push({ kind: "reorder", before: beforeOrder, after: liveOrder });
-    }
-    this.#doc = before;
-    if (patches.length) this.#commit(patches, origin);
-    else this.#render();
+    return ops.length > 0 ? ops : null;
   }
 
   #wheel(event: WheelEvent): void {
@@ -10514,6 +11458,13 @@ export class CanvasEngine {
     if (event.key === "Escape" && this.#connect) {
       event.preventDefault();
       this.#cancelConnect();
+      return;
+    }
+    // Esc mentre si trascina o si ridimensiona una scheda ferma il gesto: le
+    // schede tornano dov'erano e il file non cambia (T24).
+    if (event.key === "Escape" && (this.#drag !== null || this.#resize !== null)) {
+      event.preventDefault();
+      this.#cancelGestures();
       return;
     }
     // Esc mentre si trascina il rettangolo lo annulla, e la scelta torna com'era (N6 T20b).
@@ -11530,7 +12481,7 @@ export class CanvasEngine {
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
       bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
-      far, detail: null, find: null, label: null,
+      far, detail: null, find: null, label: null, titled: null,
     };
     el.addEventListener("focus", () => {
       // Col fuoco il nome dev'essere quello di adesso, anche prima del giro
@@ -11603,11 +12554,17 @@ export class CanvasEngine {
     // Il nome per il lettore di schermo (T61) lo scrive `#scheduleLabels`, solo
     // quando il documento cambia: non qui, a ogni resa.
     el.classList.toggle("selected", this.#selection.includes(node.id));
-    const title = nodeTitle(node);
-    if (entry.title.textContent !== title) entry.title.textContent = title;
-    const far = farTitle(node);
-    if (entry.far.textContent !== far) entry.far.textContent = far;
-    entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    // I nomi della testata dipendono solo dalla scheda e dalla lingua.
+    if (entry.titled?.node !== node || entry.titled.round !== this.#languageRound) {
+      entry.titled = { node, round: this.#languageRound };
+      const title = nodeTitle(node);
+      if (entry.title.textContent !== title) entry.title.textContent = title;
+      const far = farTitle(node);
+      if (entry.far.textContent !== far) entry.far.textContent = far;
+      // Il nome di → è quello del lettore di schermo: la specie e il nome della scheda.
+      const connectLabel = t("canvas.connect", { card: cardTitle(node) });
+      if (entry.connect.getAttribute("aria-label") !== connectLabel) entry.connect.setAttribute("aria-label", connectLabel);
+    }
     // «↩ N» e «×N» dopo il titolo, e la luce delle gemelle (T22).
     this.#syncHead(entry);
     // La testata dell'estratto (T75): le parti e ↗, prima di →.
@@ -11853,8 +12810,8 @@ export class CanvasEngine {
     if (this.#cards.get(id)?.missingFor !== expected) return;
     const now = this.#doc.nodes.find((candidate) => candidate.id === id);
     if (!now) return;
-    const patch = upsertNodePatch(this.#doc, { ...now, file: relinkedFile(now, chosen) });
-    if (patch) this.#commit([patch], "input");
+    const op = setOp(now, { ...now, file: relinkedFile(now, chosen) });
+    if (op) this.#writeOps([op]);
   }
 
   /** «Togli dalla lavagna» di una scheda mancante: come Canc, per quella scheda sola. */
@@ -11954,6 +12911,15 @@ export class CanvasEngine {
           });
           body.append(convert);
         }
+        // Un testo che non ci sta si ferma sotto l'ultima riga intera (#411),
+        // «Estrai in una nota…» compreso: mai una riga tagliata a metà.
+        const lines = openLifetime();
+        watchWholeLines(body, lines);
+        const unmount = entry.teardown;
+        entry.teardown = () => {
+          lines.close();
+          unmount?.();
+        };
         break;
       }
       case "file": {
@@ -12046,7 +13012,7 @@ export class CanvasEngine {
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
     input.value = node[field] ?? "";
-    input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
+    input.setAttribute("aria-label", t("canvas.edit_text", { card: cardTitle(node) }));
     const lifetime = new AbortController();
     const editor: CardEditor = {
       id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false,
@@ -12190,18 +13156,18 @@ export class CanvasEngine {
     const spot = freeSpot(doc.nodes, beside
       ? { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height: TEXT_CARD_HEIGHT }
       : { x: source.x, y: source.y + source.height + NEXT_CARD_GAP, width: source.width, height: TEXT_CARD_HEIGHT });
-    const node: CanvasNode = { id: newNodeId("n"), type: "text", ...spot, text: "" };
-    const patches: CanvasPatch[] = [];
-    const patch = upsertNodePatch(doc, node);
-    if (!patch) return null;
-    patches.push(patch);
+    // Il posto lo sceglie la tela (`freeSpot`, larga come la scheda di
+    // partenza): la scheda nasce con `add_card` e il suo `id`, il filo con
+    // `connect`, in una lista sola (T24).
+    const id = this.#newId();
+    const ops: CanvasIntentOp[] = [{ op: "add_card", id, text: "", ...spot }];
     if (beside) {
-      const edge = upsertEdgePatch(doc, {
-        id: newNodeId("e"), fromNode: source.id, toNode: node.id, fromSide: "right", toSide: "left", ...this.#tipEnds(),
-      });
-      if (edge) patches.push(edge);
+      const edge = this.#connectOps(source.id, id, { from: "right", to: "left" }, id);
+      if (edge) ops.push(...edge);
     }
-    if (!this.#commit(patches, "input")) return null;
+    const written = this.#writeOps(ops)?.[0];
+    const node = written === undefined ? undefined : this.#doc?.nodes.find((one) => one.id === written);
+    if (!node) return null;
     this.#selection = [node.id];
     this.#edgeSelection = [];
     this.#options.onSelectionChange();
@@ -12360,6 +13326,25 @@ export class CanvasEngine {
 }
 
 /**
+ * La `set` che porta la scheda o il filo `before` a `after` (lo stesso id):
+ * i campi cambiati col valore nuovo, quelli tolti a `null`. `null` se non
+ * cambia niente. Un valore uguale scritto con le chiavi in un altro ordine
+ * entra lo stesso: il nucleo lo trova uguale, e non ne fa una toppa.
+ */
+function setOp<T extends { readonly id: string }>(before: T, after: T): CanvasIntentOp | null {
+  const was = before as unknown as Record<string, unknown>;
+  const now = after as unknown as Record<string, unknown>;
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(now)) {
+    if (key !== "id" && JSON.stringify(was[key]) !== JSON.stringify(value)) fields[key] = value === undefined ? null : value;
+  }
+  for (const key of Object.keys(was)) {
+    if (!(key in now) && key !== "id") fields[key] = null;
+  }
+  return Object.keys(fields).length > 0 ? { op: "set", id: before.id, fields } : null;
+}
+
+/**
  * La scheda `card` col testo in sospeso dentro, e la misura a cui è cresciuta
  * scrivendo (T44): mai più piccola di com'è adesso.
  */
@@ -12371,6 +13356,11 @@ function withPending(card: CanvasNode, pending: PendingText): CanvasNode {
     next.height = Math.max(next.height, pending.size.height);
   }
   return next;
+}
+
+/** Le toppe dei tratti fra quelle compilate: le operazioni d'inchiostro danno solo quelle. */
+function inkPatches(patches: readonly CanvasPatch[]): InkPatch[] {
+  return patches.filter((patch): patch is InkPatch => patch.kind === "ink");
 }
 
 /** Una copia delle toppe, che chi le ha date può ancora cambiare. */
@@ -12530,17 +13520,33 @@ function writingName(node: CanvasNode): string {
   return base.replace(/\.(md|markdown)$/i, "");
 }
 
+/** Quanto è lungo, al più, il nome di un testo nella testata della scheda. */
+const TITLE_TEXT_MAX = 48;
+
+/**
+ * Il titolo nella testata di una scheda e nell'elenco del filo: il file, l'indirizzo,
+ * il nome di un testo (`textCardName`: la prima riga non vuota senza i segni del
+ * Markdown), l'etichetta di un gruppo. Una scheda che non ha ancora niente da dire
+ * (un testo appena nato, mentre si scrive) dice la sua specie a parole, «Scheda di
+ * testo»: mai l'id interno, che una persona non deve vedere né sentire.
+ */
 function nodeTitle(node: CanvasNode): string {
+  let title = "";
   switch (node.type) {
     case "text":
-      return (node.text ?? "").split("\n", 1)[0]?.slice(0, 48) || node.id;
+      title = textCardName(typeof node.text === "string" ? node.text : "").slice(0, TITLE_TEXT_MAX);
+      break;
     case "file":
-      return node.file ?? node.id;
+      title = node.file ?? "";
+      break;
     case "link":
-      return node.url ?? node.id;
+      title = node.url ?? "";
+      break;
     case "group":
-      return node.label || node.id;
+      title = (node.label ?? "").trim();
+      break;
   }
+  return title || cardTitle(node, "");
 }
 
 function nodeText(node: CanvasNode): string {

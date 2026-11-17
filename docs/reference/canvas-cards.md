@@ -4,8 +4,9 @@
 > scheda di file: le specie, le misure con cui nascono, i due modi di una
 > scheda, le regole che scelgono le schede vive e le immagini ferme.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/cards.ts` e le prove
-> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita,
-> `apps/client/src/editors/canvas/drop-layout.ts` e le sue prove; per le
+> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita
+> e la griglia, `crates/fub-canvas-core/src/layout.rs`; per l'ordine dei file
+> lasciati cadere, `apps/client/src/editors/canvas/drop-layout.ts`; per le
 > estensioni, `apps/client/src/ui/format-kind.ts` e
 > `apps/client/src/editors/media/media-types.ts`.
 
@@ -76,45 +77,40 @@ scheda non diventa mai il disegno vivo. Una specie senza renderer registrato
 
 ## Le misure di nascita
 
-Una scheda portata sulla lavagna nasce con la misura della sua specie. Le
-misure stanno in `drop-layout.ts`, con `bornSize` e `dropLayout`:
+Una scheda portata sulla lavagna nasce con la misura della sua specie, che dà
+il nucleo (`born_size`) quando la tela scrive `add_card` senza misura:
 
 | Specie | Misura di nascita |
 |---|---|
 | `note`, `document` | 320×240 |
-| `sheet` | 480×300 |
+| `sheet` | 480×304 |
 | `pdf` | 360 di larghezza, con le proporzioni della prima pagina; 360×480 finché la prima pagina non si sa |
 | `image` | il lato lungo 480, con le proporzioni dell'immagine; 480×360 finché la misura non si sa |
 | `web` | 320×120 |
 | `file`, `craft` | 320×160 |
 
-«Spargi le pagine…» (T72) dà a ogni pagina la misura della sua: la stessa
-`bornSize`, con le proporzioni di quella pagina. La disposizione delle schede
-(`spreadLayout`, righe di dieci, gruppo oltre dodici) sta in `drop-layout.ts`.
+La misura del contenuto va in `content_size`; «Spargi le pagine…» è `spread_pages`.
 
-Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
-all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
-della tela. Così un'immagine 16:9 nasce 480×270, esatta. Un'immagine molto
-stretta, come 1×4000, ha il lato corto a 40 px: lì la proporzione non si
-tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima
+Le misure di nascita non si agganciano a 8 px: si arrotondano all'intero, con
+nessun lato sotto 40 px (un'immagine 16:9 nasce 480×270; una 1×4000 ha il lato
+corto a 40 e perde la proporzione). Ridimensionare a mano aggancia a 8 px
 (salvo con Maiusc, che tiene le proporzioni).
 
-Quando si lasciano insieme più schede, si dispongono in griglia: `ceil(sqrt(n))`
-colonne, riempite per righe nell'ordine del nome del file. Le posizioni si
-agganciano a 8 px. La colonna o la riga dopo parte al primo multiplo di 8 che
-lascia almeno 24 px dopo il bordo della precedente, cioè dopo la sua scheda più
-larga o la più alta della riga. Dopo un foglio alto 300 la riga sotto parte
-328 px più in basso, con 28 px di spazio. Oltre 12 schede, un gruppo le
-raccoglie con 24 px di margine per lato.
+Più schede lasciate insieme si dispongono con `layout` `grid`: `ceil(sqrt(n))`
+colonne, riempite per righe per nome del file (`sortedDrop`, «foto 2» prima di
+«foto 10»), agganciate a 8 px con almeno 24 px fra una e l'altra
+([La lavagna come codice](canvas-code.md)). Oltre 12, `group` le raccoglie.
 
 ### Il rilascio e l'incolla
 
-La tela (`#intake` in `engine.ts`) usa queste regole quando arrivano file
-trascinati dal computer o dall'albero, o incollati:
+La tela (`#intake` in `engine.ts`) scrive i file trascinati o incollati con
+una lista di operazioni: un `add_card` per file, col suo `id` (opzione `newId`
+della tela, di serie `newNodeId()`) e `content_size` se si sa; con più file
+`layout {ids, kind: "grid", x, y}`, oltre 12 `group`. Un file solo nasce in
+`x`, `y`; un file già in una scheda ne fa nascere un'altra.
 
-- la griglia parte dal punto del rilascio. Un incolla parte dall'ultimo
-  punto in cui il puntatore è stato visto sulla vista. Se il puntatore ne è
-  uscito, parte dal centro della vista;
+- la griglia parte dal punto del rilascio, agganciato a 8; un incolla
+  dall'ultimo punto del puntatore sulla vista, o dal centro se ne è uscito;
 - la misura di un'immagine viene dalla porta `measureImage` (in
   `editors/core/bootstrap.ts`: i byte dalla `ResourceTransport`, la misura
   da `decodeImage` o dall'immagine decodificata). Se la porta manca,
@@ -125,17 +121,21 @@ trascinati dal computer o dall'albero, o incollati:
   cioè sotto di loro;
 - le schede, il gruppo e il file cambiato di una scheda (sotto) entrano in
   un commit solo, che un annulla toglie tutto insieme;
-- lasciato su una scheda di file, il primo file ne prende il posto e gli
-  altri nascono in griglia;
+- lasciato su una scheda di file, il primo file ne prende il posto (una
+  `set` del suo `file`, senza `subpath`) e gli altri nascono in griglia;
 - le celle copiate diventano una scheda di testo con una tabella Markdown:
   l'HTML con una tabella passa dalla porta `clipboardMarkdown` (la
   conversione dell'incolla dell'editor Markdown), il testo a tabulazioni su
-  più righe da `parseTsv` e `markdownTable`; una riga sola resta testo;
+  più righe da `parseTsv` e `markdownTable`; una riga sola resta testo. Un
+  testo incollato è `add_card` nella forma breve (`text` o `url`, `x`, `y`):
+  la misura la dà il nucleo;
 - mentre si trascinano file o voci dell'albero, rettangoli tratteggiati
   (`canvas-drop-ghost`) mostrano dove nasceranno le schede, uno per file in
   `dataTransfer.items`, o uno solo se non si sa (le voci dell'albero, WebKit
   che non dice i tipi); oltre dodici, la cornice del gruppo col numero
-  (`canvas-drop-ghost-group`). Spariscono all'uscita e al rilascio.
+  (`canvas-drop-ghost-group`). Si compilano una volta all'entrata, senza
+  scrivere (al più 1000 file), poi seguono il puntatore agganciato a 8;
+  spariscono all'uscita, senza scrivere niente, e al rilascio.
 
 Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
 file che l'host rifiuta, con un `CanvasDepositError` che porta i percorsi
@@ -324,8 +324,8 @@ nessuna resa ne monta altre.
 
 Oltre `MAX_INTERACTIVE_NODES` (2000 schede) la scena mostra il messaggio
 della lavagna troppo grande e nessuna vista; tornati sotto, le schede
-rinascono. L'inchiostro si ridisegna dopo ogni resa; un tratto scritto
-aggiorna solo il suo livello.
+rinascono. Ogni passo locale che l'ha portata oltre si annulla e si ripete lo
+stesso. L'inchiostro si ridisegna dopo ogni resa; un tratto, solo il suo livello.
 
 ## Il file che manca
 
@@ -455,9 +455,9 @@ Chi scrive dentro una scheda usa l'editor vero del file, sulla stessa
 `DocumentSession` di un riquadro: stesse bozze, conflitti e salvataggio. La
 tela non importa nessun editor (il confine di CodeMirror): riceve
 `CardEditorPort` (`editors/canvas/cards.ts`), che la shell costruisce in
-`state/card-editors.ts` con le sessioni e il registro delle superfici della
-finestra e passa con `canvasCards.editors` e `surface.ts` (`CardEditing`).
-Senza porta le schede restano in lettura.
+`state/card-editors.ts` (al primo uso, con un `import()`) con le sessioni e
+il registro delle superfici della finestra e passa con `canvasCards.editors`
+e `surface.ts` (`CardEditing`). Senza porta le schede restano in lettura.
 
 `open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
 porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
@@ -467,8 +467,8 @@ porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
 - prenota la sessione (`retain`) e la tiene finché l'editor vive, anche
   dopo una rinomina (`renamed()` la riprende sul nome nuovo); fuori dal
   controllore una sessione si lascia solo con `releaseSession`
-  (`shell-layout.ts`, `document-bridge.ts`), che la lascia aperta se una
-  scheda ci scrive: un riquadro chiuso non la chiude sotto la scheda;
+  (`card-writes.ts`: `shell-layout.ts`, `document-bridge.ts`), che la lascia
+  aperta se ci scrive una scheda: un riquadro chiuso non la chiude sotto di lei;
 - legge il file con `readForSurface` e chiede la superficie al registro per
   `format_id` e `source_kind`, come un riquadro, nella sua modalità
   predefinita; la monta in `host` e la attacca (`attachSurface`);

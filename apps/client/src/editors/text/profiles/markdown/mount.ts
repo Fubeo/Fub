@@ -25,12 +25,19 @@ import { pngOf } from "../../../core/png";
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { routeHref } from "./link-syntax";
+import { renderedLinkGesture, type WikilinkGesture } from "./link-gesture";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
   readonly resources?: MarkdownResources;
-  readonly openWikilink?: (page: string, heading?: string, block?: string) => void | Promise<void>;
-  readonly openPath?: (path: string, from?: string) => void | Promise<void>;
+  /**
+   * The click on a wikilink. `gesture` is the click read with the rule of
+   * `open-link.ts` (Alt asks for the peek, any other click is the opening
+   * click): the host decides what it means.
+   */
+  readonly openWikilink?: (page: string, heading?: string, block?: string, gesture?: WikilinkGesture) => void | Promise<void>;
+  /** The click on a link to a vault document (`[text](note.md)`), like `openWikilink`. */
+  readonly openPath?: (path: string, from?: string, gesture?: WikilinkGesture) => void | Promise<void>;
   /**
    * Opens the document a figure shows (a Craft file, a PDF) with the gesture.
    * Unlike `openWikilink` it never creates a note: a file that is gone is a
@@ -79,6 +86,8 @@ export interface MarkdownMountOptions {
 
 const MAX_EMBED_DEPTH = 5;
 const mounts = new WeakMap<HTMLElement, Teardown>();
+/// L'involucro che scorre attorno a ogni tabella resa (`skin/document.css`).
+const TABLE_SCROLL = "markdown-table-scroll";
 
 
 function hydrateAllowedHtml(container: HTMLElement): void {
@@ -141,7 +150,17 @@ export function sourceElementAt(container: HTMLElement, offset: number): HTMLEle
 
 function wireContent(container: HTMLElement, options: MarkdownMountOptions, life: Lifetime): void {
   for (const table of container.querySelectorAll<HTMLTableElement>("table")) {
-    if (!table.closest("[data-ui-slot]")) table.tabIndex = 0;
+    if (table.closest("[data-ui-slot]")) continue;
+    table.tabIndex = 0;
+    // La tabella è larga quanto la colonna del testo e non va a capo nelle
+    // celle: l'involucro scorre in orizzontale quando il contenuto non ci sta.
+    // La tabella resta focalizzabile, così le frecce lo fanno scorrere.
+    if (!table.parentElement?.classList.contains(TABLE_SCROLL)) {
+      const scroll = document.createElement("div");
+      scroll.className = TABLE_SCROLL;
+      table.replaceWith(scroll);
+      scroll.append(table);
+    }
   }
   const codeLabels: { pre: HTMLElement; button: HTMLButtonElement | null }[] = [];
   for (const pre of container.querySelectorAll<HTMLElement>("pre")) {
@@ -238,8 +257,9 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
       return;
     }
     if (!link) return;
+    const gesture = renderedLinkGesture(event);
     const openPath = (path: string): void => {
-      if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path)).catch((error: unknown) => {
+      if (options.openPath) void Promise.resolve().then(() => options.openPath?.(path, options.documentId, gesture)).catch((error: unknown) => {
         if (life.closed) return;
         link.classList.add("unresolved");
         notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
@@ -253,7 +273,7 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     if (link.classList.contains("wikilink") && options.openWikilink) {
       event.preventDefault();
       const page = link.dataset.wikilinkPage ?? "";
-      void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock))
+      void Promise.resolve().then(() => options.openWikilink?.(page, link.dataset.wikilinkHeading, link.dataset.wikilinkBlock, gesture))
         .catch((error: unknown) => {
           if (life.closed) return;
           link.classList.add("unresolved");
@@ -565,6 +585,10 @@ export function mountMarkdown(
     contentLife?.close();
     const mountedLife = contentLife = openLifetime();
     const mountedRace = contentRace = new Race();
+    // Chi ospita la resa ci mette in cima cose sue (la testata della Lettura,
+    // `data-md-pinned`): una resa rifatta da sé le rimette dov'erano, con i
+    // loro ascoltatori. Non sono della resa, e i passi qui sotto non le vedono.
+    const pinned = [...container.querySelectorAll<HTMLElement>(":scope > [data-md-pinned]")];
     setSanitizedHtml(container, html);
     hydrateAllowedHtml(container);
     if (firstFrom === null) {
@@ -617,6 +641,7 @@ export function mountMarkdown(
         if (!mountedLife.closed) notify(t("preview.embed_failed", { reason: errorText(error) }), "guasto");
       });
     }
+    container.prepend(...pinned);
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
   }
 

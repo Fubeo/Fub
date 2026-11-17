@@ -9,6 +9,7 @@ import {
   insertColumns,
   insertRows,
   isWrapped,
+  moveColumns,
   moveRows,
   parseTable,
   parseTsv,
@@ -155,6 +156,17 @@ describe("righe e colonne", () => {
   it("gli spostamenti restano nel corpo", () => {
     expect(moveRows(data, 1, 1, 1).rows).toEqual([["h1", "h2"], ["c", "d"], ["a", "b"]]);
     expect(moveRows(data, 1, 1, -1)).toBe(data);
+  });
+
+  it("le intestazioni trascinate spostano di più posti in un passo, sempre dentro la tabella", () => {
+    const four: TableData = { rows: [["h"], ["a"], ["b"], ["c"]], aligns: [null] };
+    expect(moveRows(four, 3, 3, -2).rows).toEqual([["h"], ["c"], ["a"], ["b"]]);
+    expect(moveRows(four, 1, 2, 1).rows).toEqual([["h"], ["c"], ["a"], ["b"]]);
+    expect(moveRows(four, 3, 3, -3)).toBe(four);
+    expect(moveRows(four, 1, 1, 0)).toBe(four);
+    const wide: TableData = { rows: [["x", "y", "z"]], aligns: ["left", null, "right"] };
+    expect(moveColumns(wide, 0, 0, 2)).toEqual({ rows: [["y", "z", "x"]], aligns: [null, "right", "left"] });
+    expect(moveColumns(wide, 0, 0, 3)).toBe(wide);
   });
 
   it("l'ordinamento legge i numeri come numeri e tiene l'intestazione", () => {

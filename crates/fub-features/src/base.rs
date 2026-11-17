@@ -9,7 +9,7 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{EditRequest, Revision};
 use fub_abi::error::PluginError;
-use fub_abi::model::{LinkTarget, PropertyDate, PropertyScalar, PropertyValue};
+use fub_abi::model::{DateFormats, LinkTarget, PropertyDate, PropertyScalar, PropertyValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
@@ -19,7 +19,9 @@ use fub_abi::{DocId, DocumentModel};
 use fub_format_base::formula::{BaseValue, EvalBudget, Formula, FormulaErrorCode, RowContext};
 use fub_format_base::model::{BaseError, FilterOp, BASE_FORMAT_ID};
 use fub_format_base::patch::{self, BaseChange, PatchError, Place, ViewKey};
-use fub_format_base::{AggregateKind, BaseDefinition, BaseViewDef, FilterDef, ViewType};
+use fub_format_base::{
+    AggregateKind, BaseDefinition, BaseViewDef, FilterDef, SummaryDef, ViewType,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -619,19 +621,84 @@ fn compare_filter(left: &BaseValue, right: &BaseValue) -> Option<Ordering> {
         _ => None,
     }
 }
+/// Il valore di una condizione letto nella specie della proprietà che
+/// confronta. Il file `.base` scritto a mano, o da un'altra app, dice spesso
+/// `value: "2026-03-01"` o `value: "3000"` fra virgolette: una data ISO si
+/// confronta con una data e un numero scritto come testo con un numero,
+/// invece di non trovare niente. Solo la forma canonica: la data ISO-8601 e il
+/// numero col punto (`3000.5`); la lingua dell'interfaccia la traduce la
+/// barra prima di scrivere. Un testo che non si legge resta testo.
+fn aligned(left: &BaseValue, right: BaseValue) -> BaseValue {
+    let BaseValue::Text(text) = &right else {
+        return right;
+    };
+    let text = text.trim();
+    let read = match left {
+        BaseValue::Date(_) => {
+            match PropertyValue::normalize(&Value::String(text.into()), &DateFormats::ISO) {
+                PropertyValue::Date(date) => date_ms(date).map(BaseValue::Date),
+                _ => None,
+            }
+        }
+        BaseValue::Number(_) => text
+            .parse::<f64>()
+            .ok()
+            .filter(|number| number.is_finite())
+            .map(BaseValue::Number),
+        _ => None,
+    };
+    read.unwrap_or(right)
+}
+/// `contains` come quello della ricerca (`fub_abi::rules::properties`):
+/// elenco → appartenenza, testo → sottostringa senza distinguere le
+/// maiuscole, il resto → uguaglianza. Le stesse parole nella barra di ricerca
+/// e nel filtro della Base dicono la stessa cosa.
 fn contains(left: &BaseValue, right: &BaseValue) -> bool {
     match (left, right) {
-        (BaseValue::Text(text), BaseValue::Text(needle)) => text.contains(needle),
+        (BaseValue::Text(text), BaseValue::Text(needle)) => {
+            text.to_lowercase().contains(needle.to_lowercase().as_str())
+        }
         (BaseValue::List(items), wanted) => items.contains(wanted),
         _ => left == right,
     }
 }
-fn matches_filter(filter: &FilterDef, ctx: &RowContext) -> bool {
+/// Il giorno civile di ogni proprietà data che ha anche un orario, come
+/// epoch-ms della mezzanotte di quel giorno: `2026-03-18T01:00+02:00` è il 18,
+/// anche se in UTC è ancora il 17. Serve a [`matches_filter`] per confrontare
+/// una data senza orario con il giorno, non con l'istante.
+fn civil_days(props: &BTreeMap<String, PropertyValue>) -> BTreeMap<String, i64> {
+    props
+        .iter()
+        .filter_map(|(key, value)| match value {
+            PropertyValue::Date(date) if date.time.is_some() => date_ms(PropertyDate {
+                time: None,
+                ..*date
+            })
+            .map(|day| (key.clone(), day)),
+            _ => None,
+        })
+        .collect()
+}
+/// Il valore di una condizione è una data senza orario (`2026-03-18`)?
+fn bare_date(value: &BaseValue) -> bool {
+    let BaseValue::Text(text) = value else {
+        return false;
+    };
+    matches!(
+        PropertyValue::normalize(&Value::String(text.trim().into()), &DateFormats::ISO),
+        PropertyValue::Date(PropertyDate { time: None, .. })
+    )
+}
+/// Una riga passa il filtro? Una data senza orario nel filtro dice un giorno:
+/// «è 2026-03-18» trova anche `2026-03-18T09:30+01:00`, «dopo» parte dal 19,
+/// «prima» si ferma al 17. È la regola della barra, che a vista mostra e
+/// scrive le date senza orario.
+fn matches_filter(filter: &FilterDef, ctx: &RowContext, days: &BTreeMap<String, i64>) -> bool {
     match filter {
         FilterDef::All => true,
-        FilterDef::And(parts) => parts.iter().all(|part| matches_filter(part, ctx)),
-        FilterDef::Or(parts) => parts.iter().any(|part| matches_filter(part, ctx)),
-        FilterDef::Not(part) => !matches_filter(part, ctx),
+        FilterDef::And(parts) => parts.iter().all(|part| matches_filter(part, ctx, days)),
+        FilterDef::Or(parts) => parts.iter().any(|part| matches_filter(part, ctx, days)),
+        FilterDef::Not(part) => !matches_filter(part, ctx, days),
         FilterDef::Condition {
             property,
             file,
@@ -654,13 +721,23 @@ fn matches_filter(filter: &FilterDef, ctx: &RowContext) -> bool {
             } else {
                 return false;
             };
-            if matches!(left, BaseValue::Error(_)) {
-                return false;
-            }
             let right = tag
                 .as_ref()
                 .map(|s| BaseValue::Text(s.clone()))
                 .unwrap_or_else(|| json_value(value));
+            // Il giorno anche per un orario senza fuso, che come istante non
+            // si legge (e resta un errore per ogni altro confronto).
+            let left = match property {
+                Some(name) if tag.is_none() && bare_date(&right) => days
+                    .get(name.strip_prefix("prop.").unwrap_or(name))
+                    .map(|day| BaseValue::Date(*day))
+                    .unwrap_or(left),
+                _ => left,
+            };
+            if matches!(left, BaseValue::Error(_)) {
+                return false;
+            }
+            let right = aligned(&left, right);
             match op {
                 FilterOp::Is => left == right,
                 FilterOp::IsNot => left != right,
@@ -790,6 +867,34 @@ fn row_time(plan: &Planned<'_>, props: &BTreeMap<String, PropertyValue>) -> Opti
         _ => None,
     }
 }
+/// Il nome con cui un riepilogo esce da `derive`: il suo `name`, o la chiave
+/// col tipo di aggregato (`score:sum`, `stato:countfilled`). Il piano lo dice
+/// accanto a ogni riepilogo, perché la superficie metta il valore sotto la
+/// sua colonna senza rifare la regola.
+fn summary_label(summary: &SummaryDef) -> String {
+    summary
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("{}:{:?}", summary.key, summary.aggregate).to_lowercase())
+}
+
+/// I riepiloghi scritti nella vista, come il modello li legge, ognuno col
+/// nome con cui `derive` ne dà il valore (`label`).
+fn summary_plan(view: &BaseViewDef) -> Vec<Value> {
+    view.summaries
+        .iter()
+        .map(|summary| {
+            json!({
+                "key": summary.key,
+                "aggregate": summary.aggregate,
+                "expression": summary.expression,
+                "name": summary.name,
+                "label": summary_label(summary),
+            })
+        })
+        .collect()
+}
+
 fn aggregate(kind: AggregateKind, values: &[BaseValue]) -> BaseValue {
     let filled: Vec<&BaseValue> = values.iter().filter(|value| !value.is_empty()).collect();
     match kind {
@@ -900,6 +1005,7 @@ fn derive(
     let mut result = Vec::new();
     for input in rows {
         let time = row_time(plan, &input.props);
+        let days = civil_days(&input.props);
         let mut ctx = RowContext {
             props: input
                 .props
@@ -922,8 +1028,8 @@ fn derive(
         for value in ctx.formulas.values() {
             check_intermediate(value)?;
         }
-        if !matches_filter(&plan.definition.filters, &ctx)
-            || !matches_filter(&plan.view.filters, &ctx)
+        if !matches_filter(&plan.definition.filters, &ctx, &days)
+            || !matches_filter(&plan.view.filters, &ctx, &days)
         {
             continue;
         }
@@ -952,10 +1058,7 @@ fn derive(
             .as_ref()
             .map(|source| Formula::parse(source));
         if let Some(Err(error)) = &expression {
-            let label = summary.name.clone().unwrap_or_else(|| {
-                format!("{}:{:?}", summary.key, summary.aggregate).to_lowercase()
-            });
-            summaries.insert(label, BaseValue::Error(error.code()));
+            summaries.insert(summary_label(summary), BaseValue::Error(error.code()));
             continue;
         }
         let values = result
@@ -967,12 +1070,8 @@ fn derive(
             })
             .collect::<Vec<_>>();
         let error = values.iter().find(|v| matches!(v, BaseValue::Error(_)));
-        let label = summary
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("{}:{:?}", summary.key, summary.aggregate).to_lowercase());
         summaries.insert(
-            label,
+            summary_label(summary),
             error
                 .cloned()
                 .unwrap_or_else(|| aggregate(summary.aggregate, &values)),
@@ -1053,9 +1152,12 @@ fn respond(query: Value) -> Result<Value, PluginError> {
     let definition =
         BaseDefinition::parse(&request.source).map_err(|error| bad(format!("base: {error}")))?;
     match request.op.as_str() {
-        "parse" => {
-            Ok(json!({"views": definition.views.iter().map(|v| &v.name).collect::<Vec<_>>()}))
-        }
+        // Con i nomi, il tipo di ogni vista nello stesso ordine: le linguette
+        // della Base ne disegnano la figura anche quando non sono scelte.
+        "parse" => Ok(json!({
+            "views": definition.views.iter().map(|v| &v.name).collect::<Vec<_>>(),
+            "types": definition.views.iter().map(|v| v.view_type).collect::<Vec<_>>(),
+        })),
         "plan" => {
             let plan = planned(&definition, request.view.as_deref())?;
             let required_props = required(&plan)?;
@@ -1075,8 +1177,13 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                         .map(|name| (&property.key, name))
                 })
                 .collect();
+            // Il filtro, l'ordinamento, le colonne scritte e i riepiloghi
+            // della vista, come il modello li legge: la superficie li mostra
+            // a vista e li riscrive con `base.view.set`, senza leggere il
+            // YAML da sé. `order` è vuoto quando le colonne le deduce
+            // `columns`.
             Ok(
-                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
+                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"filters":plan.view.filters,"sort":plan.view.sort,"order":plan.view.order,"summaries":summary_plan(plan.view),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
             )
         }
         "derive" => derive(
@@ -1091,6 +1198,11 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                 return Err(bad("base: troppe mutazioni"));
             }
             let writable_columns = columns(&plan);
+            // La data del calendario (e inizio e fine della linea del tempo)
+            // si scrive anche se non è una colonna: trascinare una nota su un
+            // giorno riscrive quella proprietà.
+            let (date, start, end) = time_keys(plan.view);
+            let time_keys = [date, start, end];
             let mut mutations = Vec::with_capacity(request.edits.len());
             for edit in request.edits {
                 if edit.doc.is_empty()
@@ -1098,7 +1210,8 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                     || edit.key.starts_with("file.")
                     || edit.key.starts_with("formula.")
                     || (!writable_columns.contains(&edit.key)
-                        && plan.view.group.as_ref().is_none_or(|g| g.key != edit.key))
+                        && plan.view.group.as_ref().is_none_or(|g| g.key != edit.key)
+                        && !time_keys.contains(&Some(edit.key.as_str())))
                 {
                     return Err(bad("base: colonna non scrivibile"));
                 }
@@ -1862,6 +1975,73 @@ mod tests {
     }
 
     #[test]
+    fn plan_says_each_summary_with_the_name_derive_gives_it() {
+        let source = "views:\n  - name: T\n    type: table\n    summaries:\n      - {key: score, aggregate: sum}\n      - {key: stato, aggregate: count_filled}\n      - {name: Totale, key: score, aggregate: average, expression: 'prop.score * 2'}\n";
+        let plan = respond(json!({"version":1,"op":"plan","source":source,"view":"T"})).unwrap();
+        assert_eq!(
+            plan["summaries"],
+            json!([
+                {"key":"score","aggregate":"sum","expression":null,"name":null,"label":"score:sum"},
+                {"key":"stato","aggregate":"count_filled","expression":null,"name":null,"label":"stato:countfilled"},
+                {"key":"score","aggregate":"average","expression":"prop.score * 2","name":"Totale","label":"Totale"}
+            ])
+        );
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":[
+            {"doc":"a.md","props":{"score":{"kind":"number","value":2},"stato":{"kind":"text","value":"x"}}}
+        ]}))
+        .unwrap();
+        for summary in plan["summaries"].as_array().unwrap() {
+            let label = summary["label"].as_str().unwrap();
+            assert!(
+                derived["summaries"].get(label).is_some(),
+                "{label} manca in derive"
+            );
+        }
+        let bare = respond(
+            json!({"version":1,"op":"plan","source":"views:\n  - name: N\n    type: table\n"}),
+        )
+        .unwrap();
+        assert_eq!(bare["summaries"], json!([]));
+    }
+
+    #[test]
+    fn plan_says_the_written_filter_sort_and_order() {
+        let source = "views:\n  - name: T\n    type: table\n    order:\n      - file.name\n      - prop.stato\n    filters:\n      and:\n        - condition:\n            property: stato\n            op: is\n            value: Arrivata\n    sort:\n      - key: prop.stato\n        descending: true\n";
+        let plan = respond(json!({"version":1,"op":"plan","source":source,"view":"T"})).unwrap();
+        assert_eq!(plan["order"], json!(["file.name", "prop.stato"]));
+        assert_eq!(
+            plan["sort"],
+            json!([{"key":"prop.stato","descending":true}])
+        );
+        let condition = &plan["filters"]["and"][0]["condition"];
+        assert_eq!(condition["property"], "stato");
+        assert_eq!(condition["op"], "is");
+        assert_eq!(condition["value"], "Arrivata");
+        // Una vista senza le tre chiavi: nessun filtro, nessun ordine, colonne
+        // dedotte.
+        let bare = respond(
+            json!({"version":1,"op":"plan","source":"views:\n  - name: N\n    type: table\n"}),
+        )
+        .unwrap();
+        assert_eq!(bare["filters"], json!("all"));
+        assert_eq!(bare["sort"], json!([]));
+        assert_eq!(bare["order"], json!([]));
+    }
+
+    #[test]
+    fn parse_says_each_view_type_in_order() {
+        let parsed = respond(json!({"version":1,"op":"parse","source":TIME_SOURCE})).unwrap();
+        assert_eq!(
+            parsed["views"].as_array().unwrap().len(),
+            parsed["types"].as_array().unwrap().len()
+        );
+        let source = "views:\n  - name: A\n    type: kanban\n    group:\n      key: s\n  - name: B\n    type: table\n";
+        let parsed = respond(json!({"version":1,"op":"parse","source":source})).unwrap();
+        assert_eq!(parsed["views"], json!(["A", "B"]));
+        assert_eq!(parsed["types"], json!(["kanban", "table"]));
+    }
+
+    #[test]
     fn typed_rows_sort_and_summarize_before_view_limit() {
         let source = SOURCE.replace("    sort:", "    limit: 1\n    sort:");
         let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"Board","now_ms":0,"rows":[
@@ -1890,16 +2070,141 @@ mod tests {
     }
     #[test]
     fn heterogeneous_comparisons_do_not_turn_numbers_into_text() {
-        let source = "filters:\n  condition: {property: score, op: greater_than, value: '2'}\nviews:\n  - {name: Filtered, type: table, order: [score]}\n";
+        let source = "filters:\n  condition: {property: score, op: greater_than, value: '9'}\nviews:\n  - {name: Filtered, type: table, order: [score]}\n";
         let derived = respond(
             json!({"version":1,"op":"derive","source":source,"view":"Filtered","now_ms":0,"rows":[
                 {"doc":"number.md","props":{"score":{"kind":"number","value":10}}},
-                {"doc":"text.md","props":{"score":{"kind":"text","value":"3"}}}
+                {"doc":"text.md","props":{"score":{"kind":"text","value":"x"}}}
             ]}),
         )
         .unwrap();
-        assert_eq!(derived["rows"].as_array().unwrap().len(), 1);
-        assert_eq!(derived["rows"][0]["doc"], "text.md");
+        // Il numero non diventa testo: `10 > '9'` vale come numeri, mentre
+        // come testo «10» verrebbe prima di «9». Il testo resta testo.
+        let docs: Vec<_> = derived["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["doc"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(docs, ["number.md", "text.md"]);
+    }
+
+    /// Le righe che un filtro della vista lascia, su opere con una data, un
+    /// numero e uno stato.
+    fn kept(filter: &str) -> Vec<String> {
+        let source = format!(
+            "views:\n  - name: T\n    type: table\n    filters:\n      condition: {filter}\n"
+        );
+        let date = |m: u8, d: u8| json!({"kind":"date","value":{"year":2026,"month":m,"day":d,"time":null}});
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":[
+            {"doc":"A.md","props":{"consegna":date(2,24),"valore":{"kind":"number","value":2600.0},"stato":{"kind":"text","value":"Arrivata"}}},
+            {"doc":"B.md","props":{"consegna":date(3,18),"valore":{"kind":"number","value":7300.5},"stato":{"kind":"text","value":"In viaggio"}}}
+        ]}))
+        .unwrap();
+        derived["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["doc"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn una_data_e_un_numero_scritti_come_testo_si_confrontano_per_quello_che_sono() {
+        assert_eq!(
+            kept("{property: consegna, op: greater_than, value: '2026-03-01'}"),
+            ["B.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: less_than, value: '2026-03-01'}"),
+            ["A.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: is, value: '2026-03-18'}"),
+            ["B.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: is_not, value: '2026-03-18'}"),
+            ["A.md"]
+        );
+        assert_eq!(
+            kept("{property: valore, op: greater_than, value: '3000.5'}"),
+            ["B.md"]
+        );
+        assert_eq!(kept("{property: valore, op: is, value: '2600'}"), ["A.md"]);
+        assert_eq!(
+            kept("{property: valore, op: contains, value: 2600}"),
+            ["A.md"]
+        );
+        // La forma della lingua non è del file: «3000,5» resta un testo, e un
+        // testo non si ordina con un numero.
+        assert!(kept("{property: valore, op: greater_than, value: '3000,5'}").is_empty());
+        // Una data che non si legge resta testo, e non trova niente.
+        assert!(kept("{property: consegna, op: greater_than, value: 'marzo'}").is_empty());
+    }
+
+    /// Una data con l'orario e una data senza orario nel filtro: si confronta
+    /// il giorno civile, come lo mostra e lo scrive la barra.
+    #[test]
+    fn una_data_senza_orario_nel_filtro_confronta_il_giorno() {
+        let kept = |filter: &str| -> Vec<String> {
+            let source = format!(
+                "views:\n  - name: T\n    type: table\n    filters:\n      condition: {filter}\n"
+            );
+            let at = |d: u8, hour: u8, offset: Value| json!({"kind":"date","value":{"year":2026,"month":3,"day":d,"time":{"hour":hour,"minute":30,"second":0,"offset_minutes":offset}}});
+            let derived = respond(
+                json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":[
+                    // Il 18 all'una e mezza a +02:00: in UTC è ancora il 17.
+                    {"doc":"presto.md","props":{"consegna":at(18, 1, json!(120))}},
+                    {"doc":"sera.md","props":{"consegna":at(18, 21, json!(0))}},
+                    // Un orario senza fuso: l'istante non si sa, il giorno sì.
+                    {"doc":"locale.md","props":{"consegna":at(18, 9, Value::Null)}},
+                    {"doc":"dopo.md","props":{"consegna":at(19, 0, json!(0))}},
+                    {"doc":"prima.md","props":{"consegna":at(17, 23, json!(0))}}
+                ]}),
+            )
+            .unwrap();
+            derived["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["doc"].as_str().unwrap().to_owned())
+                .collect()
+        };
+        assert_eq!(
+            kept("{property: consegna, op: is, value: '2026-03-18'}"),
+            ["locale.md", "presto.md", "sera.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: greater_than, value: '2026-03-18'}"),
+            ["dopo.md"]
+        );
+        assert_eq!(
+            kept("{property: consegna, op: less_than, value: '2026-03-18'}"),
+            ["prima.md"]
+        );
+        // Con l'orario nel filtro si confronta l'istante: l'orario senza fuso
+        // non ne ha uno, e non passa.
+        assert_eq!(
+            kept("{property: consegna, op: greater_than, value: '2026-03-18T12:00:00Z'}"),
+            ["dopo.md", "sera.md"]
+        );
+    }
+
+    #[test]
+    fn contiene_non_distingue_le_maiuscole_come_la_ricerca() {
+        assert_eq!(
+            kept("{property: stato, op: contains, value: arrivata}"),
+            ["A.md"]
+        );
+        assert_eq!(
+            kept("{property: stato, op: contains, value: VIAGGIO}"),
+            ["B.md"]
+        );
+        assert_eq!(
+            kept("{property: stato, op: not_contains, value: VIAGGIO}"),
+            ["A.md"]
+        );
     }
 
     #[test]
@@ -2032,6 +2337,30 @@ mod tests {
             derived["rows"][3]["time"],
             json!({"start":null,"end":"2026-11-10","inverted":false})
         );
+    }
+
+    /// Trascinare una nota su un giorno riscrive la data del calendario, che
+    /// non è una colonna della vista; un'altra proprietà resta non scrivibile.
+    #[test]
+    fn il_calendario_scrive_la_sua_data_anche_se_non_e_una_colonna() {
+        let edit = |key: &str| {
+            respond(
+                json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Cal","edits":[
+                    {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"2026-11-15"}
+                ]}),
+            )
+        };
+        let written = edit("scadenza").unwrap();
+        assert_eq!(written["mutations"][0]["command"], "note.property.set");
+        assert_eq!(written["mutations"][0]["args"]["key"], "scadenza");
+        assert!(edit("altro").is_err());
+        // La linea del tempo: inizio e fine.
+        let timeline = respond(
+            json!({"version":1,"op":"mutate","source":TIME_SOURCE,"view":"Lin","edits":[
+                {"doc":"a.md","key":"fine","expected":{"kind":"absent"},"value":"2026-11-15"}
+            ]}),
+        );
+        assert!(timeline.is_ok());
     }
 
     /// Le viste che non sono di tempo non portano il campo `time`.

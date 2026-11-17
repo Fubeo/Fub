@@ -13,3 +13,7 @@ crates/fub-wasm-host/wit-legacy/
 
 # i dizionari e le tabelle dei motori in vendor/ (il codice resta cercabile)
 vendor/*/assets/
+
+# la tabella delle entità HTML: la copia della specifica e la tabella generata
+vendor/whatwg-entities/entities.json
+apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts

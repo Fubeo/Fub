@@ -35,7 +35,7 @@ prova sono nella tabella qui sotto.
 | la lavagna | `crates/fub-canvas-core/` | il modello di una `.canvas` e la sua lettura, puro: lo usano il formato, i comandi e la WebView | `cargo test -p fub-canvas-core` |
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
-| il codec dei tratti | `crates/fub-ink-codec/` | `fub:ink` e `fub:brush`, i tratti quantizzati e i pennelli: lo usano i disegni e la lavagna | `cargo test -p fub-ink-codec` |
+| il codec dei tratti | `crates/fub-ink-codec/` | `fub:ink` e `fub:brush`, i tratti quantizzati e i pennelli, e le penne e la tavolozza copiate dalla GUI (`pens.rs`, con lo specchio `ink-pens.json`): lo usano i disegni e la lavagna | `cargo test -p fub-ink-codec` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
 | il motore del disegno | `crates/fub-disegno/` | l'adattatore di VectorCraft, l'unico crate che lo nomina: apertura, mappa, sincronia, differenza, gesti, comandi, perdite | `cargo check -p fub-disegno` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
@@ -49,10 +49,11 @@ prova sono nella tabella qui sotto.
 | il client | `apps/client/src/` | shell Scrittoio, editor, stato, tema, inchiostro caldo | `npm run typecheck && npm test` |
 | il seam del client | `apps/client/src/host/` | i tipi del confine, l'unica cucitura Tauri, l'host finto | `npx vitest run src/host` |
 | l'estensione | `apps/clipper/` | il clipper del browser (MV3, Firefox, Safari) | `node apps/clipper/smoke-headless.mjs` |
-| i motori | `vendor/` | WordCraft e GridCraft copiati, patch numerate, `UPSTREAM.md` | `node tools/vendor-craft/vendor.mjs check` |
+| i motori e i dati di terzi | `vendor/` | WordCraft e GridCraft copiati, patch numerate, `UPSTREAM.md`; i dati a file singolo | `node tools/vendor-craft/vendor.mjs check`, `node tools/vendor-craft/provenienza.mjs check` |
 | le prove dei motori | `tools/motori-prova/` | le misure di K0: peso, RAM, tempi, librerie doppie | `node tools/motori-prova/misura.mjs --out DIR` |
 | la prova con Obsidian | `tools/prova-obsidian/` | una lavagna con l'inchiostro e lo script che confronta prima e dopo; i passi nel `README.md` | `node --test tools/prova-obsidian/confronta.test.mjs` |
 | i componenti WASM | `esempi/` | un esempio per cosa da dimostrare, fuori dal workspace | li compila il test di `fub-wasm-host` |
+| il Flatpak | `packaging/flatpak/` | manifest, `.desktop`, metainfo e il generatore delle sorgenti offline del pacchetto Linux | `desktop-file-validate packaging/flatpak/io.github.Fubeo.Fub.desktop` |
 | la CI | `.github/` | workflow e i guard Node dell'elenco `ci-required` | `node .github/scripts/<guard>.mjs` |
 | i dati di prova | `tests/fixtures/`, `apps/client/src/__fixtures__/` | vault e fixture; i generati si rigenerano con `UPDATE_MIRROR=1` | il test che li usa |
 
@@ -114,7 +115,12 @@ parse (`crates/fub-kernel/tests/write_atomicity.rs`).
 | PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove di K7 e K8 |
 | PdfCraft | `tools/motori-prova/pdf/` | le prove; il client usa pdf.js (`editors/media/pdf-view.ts`) |
 
-Le copie in `vendor/` sono derivati: upstream a un commit preciso più le
+Fuori dai motori, `vendor/whatwg-entities/` tiene la tabella delle entità
+nominate della specifica HTML (CC BY 4.0), da cui il client genera quella che
+scioglie le entità del Markdown. È un **dato**: un file singolo da un URL
+fisso, dichiarato con URL, licenza e sha256 in `tools/vendor-craft/dati.mjs`.
+
+Le copie dei motori in `vendor/` sono derivati: upstream a un commit preciso più le
 patch numerate di `patches/`, con `upstream.lock` che ne conserva le impronte.
 L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 

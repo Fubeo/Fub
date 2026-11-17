@@ -40,18 +40,13 @@ import sheetScuro from "./scrittoio/sheet-dark.css?raw";
 import sheetChiaro from "./scrittoio/sheet-light.css?raw";
 import skin from "./scrittoio/skin.css?raw";
 import fonts from "./scrittoio/fonts.css?raw";
-import { count, mount, mountMirroredTheme, mountPreferences, mountedTheme, type Layer } from "./loader";
+import { count, mount, mountedCss, mountedLayers, mountMirroredTheme, mountPreferences, mountedTheme } from "./loader";
 import { mountTheme } from "./theme";
-function mountedStyle(layer: Layer): HTMLStyleElement | null {
-  return document.head.querySelector(`style[data-fub="${layer}"]`);
-}
 
 /// L'ordine dei canali nel DOM, letto da chi c'è montato — non da `loader.ts`,
 /// che è ciò che il banco vuole provare senza importarne l'interno.
 function mountedOrder(): string[] {
-  return [...document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].map(
-    (el) => el.dataset.fub!,
-  );
+  return mountedLayers();
 }
 
 beforeEach(() => {
@@ -62,6 +57,7 @@ beforeEach(() => {
   // se il tema è invariato, e un residuo dal test precedente spegnerebbe il
   // montaggio del foglio senza dirlo.
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   localStorage.clear();
   delete document.documentElement.dataset.theme;
 });
@@ -73,7 +69,7 @@ describe("il caricatore monta per sostituzione", () => {
 
     expect(count("foglio"), "montare due volte non accatasta: un foglio solo").toBe(1);
     expect(
-      mountedStyle("foglio")?.textContent,
+      mountedCss("foglio"),
       "l'ultimo montato sostituisce il primo, non gli si appende",
     ).toBe("secondo");
   });
@@ -83,7 +79,7 @@ describe("il caricatore monta per sostituzione", () => {
     mount("pelle-b", "pelle");
 
     expect(count("pelle"), "la pelle sostituisce come il foglio").toBe(1);
-    expect(mountedStyle("pelle")?.textContent).toBe("pelle-b");
+    expect(mountedCss("pelle")).toBe("pelle-b");
   });
 
   it("foglio e pelle convivono: uno per ciascun canale", () => {
@@ -128,7 +124,7 @@ describe("il caricatore monta per sostituzione", () => {
     ].join("\n");
     mount(css, "foglio");
 
-    expect(mountedStyle("foglio")?.textContent, "il caricatore scrive, non interpreta").toBe(css);
+    expect(mountedCss("foglio"), "il caricatore scrive, non interpreta").toBe(css);
   });
   it("le preferenze stanno dopo la pelle e sostituiscono senza accatastare", () => {
     mount("pelle", "pelle");
@@ -137,7 +133,7 @@ describe("il caricatore monta per sostituzione", () => {
 
     expect(count("preferenze")).toBe(1);
     expect(mountedOrder()).toEqual(["pelle", "preferenze"]);
-    expect(mountedStyle("preferenze")?.textContent).toContain("--text-reading: 20px");
+    expect(mountedCss("preferenze")).toContain("--text-reading: 20px");
   });
 
   it("rifiuta token e valori fuori dal canale chiuso", () => {
@@ -162,11 +158,11 @@ describe("mountTheme monta il foglio della luce che vale", () => {
       "i caratteri si montano una volta, qualunque sia la luce",
     ).toBe(1);
     expect(
-      mountedStyle("caratteri")?.textContent,
+      mountedCss("caratteri"),
       "mountTheme passa al caricatore esattamente il `?raw` dei caratteri di serie",
     ).toBe(fonts);
     expect(
-      mountedStyle("foglio")?.textContent ?? "",
+      mountedCss("foglio") ?? "",
       "«light» monta il gemello chiaro, che dichiara color-scheme: light",
     ).toContain("color-scheme: light;");
     expect(document.documentElement.dataset.theme, "il segnale sulla radice segue il foglio").toBe(
@@ -185,7 +181,7 @@ describe("mountTheme monta il foglio della luce che vale", () => {
 
     expect(count("foglio")).toBe(1);
     expect(
-      mountedStyle("foglio")?.textContent ?? "",
+      mountedCss("foglio") ?? "",
       "senza scelta e con sistema chiaro, si monta il chiaro: color-scheme: light",
     ).toContain("color-scheme: light;");
     expect(document.documentElement.dataset.theme).toBe("light");
@@ -205,7 +201,7 @@ describe("mountTheme monta il foglio della luce che vale", () => {
 
     expect(count("foglio"), "il cambio sostituisce: ancora un foglio solo").toBe(1);
     expect(
-      mountedStyle("foglio")?.textContent ?? "",
+      mountedCss("foglio") ?? "",
       "il secondo mountTheme ha montato lo scuro, che dichiara color-scheme: dark",
     ).toContain("color-scheme: dark;");
     expect(document.documentElement.dataset.theme, "il segnale segue l'ultimo foglio").toBe("dark");
@@ -225,13 +221,13 @@ describe("mountTheme monta il foglio della luce che vale", () => {
     localStorage.setItem("fub.appearance.theme", "dark");
     mountTheme(openLifetime(), () => {});
 
-    expect(mountedStyle("foglio")?.textContent).toBe(sheetScuro);
+    expect(mountedCss("foglio")).toBe(sheetScuro);
 
     localStorage.clear();
     localStorage.setItem("fub.appearance.theme", "light");
     mountTheme(openLifetime(), () => {});
 
-    expect(mountedStyle("foglio")?.textContent).toBe(sheetChiaro);
+    expect(mountedCss("foglio")).toBe(sheetChiaro);
   });
 
   it("onChange riceve il tema effettivo al cambio", () => {
@@ -266,10 +262,10 @@ describe("mountTheme monta il foglio della luce che vale", () => {
 
     expect(count("foglio"), "la migrazione monta un foglio solo").toBe(1);
     expect(count("pelle"), "la pelle di serie si monta una volta sola").toBe(1);
-    expect(mountedStyle("foglio")?.textContent, "il foglio è lo scuro di serie, non un terzo").toBe(
+    expect(mountedCss("foglio"), "il foglio è lo scuro di serie, non un terzo").toBe(
       sheetScuro,
     );
-    expect(mountedStyle("pelle")?.textContent, "la pelle è quella di serie").toBe(skin);
+    expect(mountedCss("pelle"), "la pelle è quella di serie").toBe(skin);
     expect(document.documentElement.dataset.theme, "lime è scura: data-theme=dark").toBe("dark");
     expect(JSON.parse(localStorage.getItem("fub.appearance.theme") ?? "null")).toEqual({
       id: "fub.serie",

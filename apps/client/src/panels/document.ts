@@ -26,7 +26,7 @@ import { lentTo, unlend } from "../state/lend";
 import { saveStateKey } from "../state/saving";
 import type { CardNotices } from "../state/card-editors";
 import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
-import { openDocument as openRecreated } from "../state/document-controller";
+import { openDocument as openRecreated, peekSurfaceIn } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
 import {
   openIn,
@@ -61,11 +61,13 @@ import { t, type Key } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
+import { distinctiveTails } from "./tab-names";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
+import { blocksPreferred, setBlocksPreference } from "../state/editor-blocks";
 import { createStandingChip, type StandingChip } from "./standing";
 import { activeShell, platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
@@ -278,6 +280,8 @@ const view: PaneView = {
   focusedTab,
   recorderHost: (pane) => frameOf(pane).toolbarEl,
   drawFileOnly: (_pane, host, file) => drawFileOnly(host, file),
+  // La sbirciata sta nel riquadro, sotto le linguette (lo dice il tema).
+  peekHost: (pane) => pane.root,
 };
 
 /// La vita dei pulsanti dell'ultimo disegno di ciascun riquadro «solo come
@@ -521,12 +525,17 @@ function createPane(id: string): PaneElements {
   // I collegamenti entranti e uscenti non stanno sotto il testo: li mostra
   // la scheda Collegamenti dell'ispettore, che segue il documento a fuoco.
   contentEl.append(editorEl, viewEl);
+  // La sbirciata sopra il riquadro che ha la scrittura (T20) prende la barra,
+  // la bolla e il menu del testo: agiscono sulla nota sbirciata.
   const barHost = {
     surface: () => {
+      const peek = peekSurfaceIn(id);
+      if (peek) return peek;
       const pane = paneOf(id);
       return pane?.shown?.k === "doc" ? pane.surface : null;
     },
     writing: () => {
+      if (peekSurfaceIn(id)) return true;
       const pane = paneOf(id);
       return pane ? selectedMode(pane)?.presentation === "surface" : false;
     },
@@ -657,7 +666,10 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
   // Gli accordi sono gli stessi per ogni linguetta: si leggono una volta per
   // giro, non una per scheda (`allCommands` interroga ogni comando).
   const shortcuts = tabShortcuts();
-  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving, shortcuts));
+  // Dove si taglia ogni nome dipende dagli altri della striscia: due che
+  // cominciano uguali tengono a vista la parte che li distingue.
+  const tails = distinctiveTails(tabs.map(tabText));
+  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving, shortcuts, tails[index] ?? null));
   r.tabsShell.hidden = tabs.length === 0;
   r.contentEl.hidden = tabs.length === 0;
   drawEmptyPane(r, tabs.length === 0);
@@ -1012,21 +1024,41 @@ function wireTabDrag(r: PaneFrame, item: HTMLElement, index: number, target: Tab
   });
 }
 
+/// Il nome che una linguetta mostra: quello della scheda, la pila e la vista
+/// sorgente. La vista sorgente si dice a vista e al lettore di schermo: lo
+/// stesso documento in due riquadri, una volta disegnato e una volta come
+/// testo, darebbe due schede indistinguibili.
+function tabText(target: Tab): string {
+  const source = tabOverride(target) ? t("document.tab.source_view") : null;
+  return nameTab(target) + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
+}
+
 /// Ridipinge etichette e selezione senza ricreare i controlli. Il nome
 /// accessibile porta anche lo stato non salvato, non soltanto il colore.
-function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean, shortcuts: string): void {
+///
+/// `tail` è dove comincia la parte del nome che resta a vista quando la
+/// linguetta è stretta (`tab-names.ts`): la testa si accorcia con l'ellissi,
+/// la coda no. Senza, il nome si taglia alla fine.
+function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean, shortcuts: string, tail: number | null): void {
   const described = describeTab(target);
   tab.classList.toggle("dirty", described.dirty);
   tab.classList.toggle("tab-view", described.kind === "view");
   tab.classList.toggle("tab-pinned", target.pinned === true);
   tab.setAttribute("aria-selected", String(selected));
   tab.tabIndex = tabStop ? 0 : -1;
-  // La vista sorgente si dice a vista e al lettore di schermo: lo stesso
-  // documento in due riquadri, una volta disegnato e una volta come testo,
-  // darebbe due schede indistinguibili.
   const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
-  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
+  const text = tabText(target);
+  const head = document.createElement("span");
+  head.className = "tab-name-head";
+  head.textContent = tail === null ? text : text.slice(0, tail);
+  name.replaceChildren(head);
+  if (tail !== null) {
+    const end = document.createElement("span");
+    end.className = "tab-name-tail";
+    end.textContent = text.slice(tail);
+    name.append(end);
+  }
   // Il formato lo dice la linguetta, non la testata: ogni documento porta in
   // testa la figura del suo formato, anche la nota. Una nota con `icon:` nel
   // frontmatter porta invece la sua icona (K9), che dice di più.
@@ -1368,7 +1400,25 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       },
     }] : []),
   ];
+  // Le scelte di Scrittura, sulle note: per prima i blocchi (`editor.blocks`),
+  // la stessa chiave delle Impostazioni, che cambia senza riaprire la nota.
+  const blocksOn = blocksPreferred();
+  const writing: MenuItem[] = doc && surface?.family === "text" && surface.profile === "markdown" ? [{
+    label: t("pane.menu.blocks"),
+    description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
+    icon: "blocks",
+    group: t("pane.menu.writing"),
+    choice: "checkbox",
+    checked: blocksOn,
+    run: () => {
+      void setBlocksPreference(!blocksOn).then(
+        () => notify(t(blocksOn ? "pane.menu.blocks.turned_off" : "pane.menu.blocks.turned_on", { chord: displayBinding("Mod-a") }), "info"),
+        (error: unknown) => notify(t("pane.menu.blocks.failed", { reason: errorText(error) }), "guasto"),
+      );
+    },
+  }] : [];
   const items: MenuItem[] = [
+    ...writing,
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),
     ...offered("shell.pane.split.down", t("pane.menu.split_down")),
     ...(sourceView ? [{

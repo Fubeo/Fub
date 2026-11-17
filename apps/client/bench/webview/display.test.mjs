@@ -1,77 +1,13 @@
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-
-import { describe, expect, it } from "vitest";
-
-import { cookieFor, displayNumber, holdDisplay, parseXauthority, setupRequest, waylandProblem } from "./display.mjs";
-
-/// Una voce di `Xauthority` nel formato di `xauth`: campi big endian lunghi
-/// due byte, poi i byte.
-function entry(family, address, number, name, data) {
-  const field = (bytes) => {
-    const length = Buffer.alloc(2);
-    length.writeUInt16BE(bytes.length);
-    return Buffer.concat([length, bytes]);
-  };
-  const head = Buffer.alloc(2);
-  head.writeUInt16BE(family);
-  return Buffer.concat([head, field(Buffer.from(address)), field(Buffer.from(number)), field(Buffer.from(name)), field(data)]);
-}
-
-const COOKIE = Buffer.from("0123456789abcdef0123456789abcdef", "hex");
-
-describe("il display tenuto aperto del banco WebView (#287)", () => {
-  it("legge il numero del display solo da un socket locale", () => {
-    expect(displayNumber(":99")).toBe("99");
-    expect(displayNumber(":0.0")).toBe("0");
-    expect(displayNumber("unix:7")).toBe("7");
-    expect(displayNumber("localhost:10.0")).toBeNull();
-    expect(displayNumber("")).toBeNull();
-    expect(displayNumber(undefined)).toBeNull();
-  });
-
-  it("trova il cookie del display giusto in Xauthority, come lo scrive xvfb-run", () => {
-    const file = Buffer.concat([
-      entry(256, "altra-macchina", "99", "MIT-MAGIC-COOKIE-1", Buffer.from("aa", "hex")),
-      entry(256, "banco", "98", "MIT-MAGIC-COOKIE-1", Buffer.from("bb", "hex")),
-      entry(256, "banco", "99", "MIT-MAGIC-COOKIE-1", COOKIE),
-    ]);
-    const entries = parseXauthority(file);
-    expect(entries).toHaveLength(3);
-    expect(cookieFor(entries, "99", "banco")).toEqual(COOKIE);
-    expect(cookieFor(entries, "97", "banco")).toBeNull();
-    // Una voce jolly vale per ogni macchina.
-    expect(cookieFor(parseXauthority(entry(65535, "", "97", "MIT-MAGIC-COOKIE-1", COOKIE)), "97", "banco")).toEqual(COOKIE);
-  });
-
-  it("tiene le voci lette prima di una coda rovinata", () => {
-    const good = entry(256, "banco", "99", "MIT-MAGIC-COOKIE-1", COOKIE);
-    expect(parseXauthority(Buffer.concat([good, good.subarray(0, 7)]))).toHaveLength(1);
-  });
-
-  it("scrive la richiesta di connessione X11 con il cookie, allineata a quattro byte", () => {
-    const request = setupRequest(COOKIE);
-    expect(request.toString("latin1", 0, 1)).toBe("l");
-    expect(request.readUInt16LE(2)).toBe(11);
-    expect(request.readUInt16LE(6)).toBe(18);
-    expect(request.readUInt16LE(8)).toBe(16);
-    expect(request.length).toBe(12 + 20 + 16);
-    expect(request.toString("latin1", 12, 30)).toBe("MIT-MAGIC-COOKIE-1");
-    expect(request.subarray(32, 48)).toEqual(COOKIE);
-    expect(setupRequest(null)).toHaveLength(12);
-  });
-
-  it("senza un display X locale lo dice e non tiene niente", async () => {
-    const held = await holdDisplay({ DISPLAY: "" });
-    expect(held.skipped).toBeTruthy();
-    held.close();
-  });
-});
-
 // Il banco WebView con `WAYLAND_DISPLAY`: senza `--x11` né `--wayland` non parte
 // (la finestra andrebbe sullo schermo di chi misura, T46). La prova del
 // cablaggio lancia `run.mjs` e non deve avviare niente: esce con 2 prima di
 // scrivere le fixture e di cercare il driver.
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+import { GTK_FAILED, GtkFailed, gtkWatcher, openWithGtkRetry, waylandProblem, xvfbResetProblem } from "./display.mjs";
+
 const run = fileURLToPath(new URL("./run.mjs", import.meta.url));
 
 describe("il banco su una sessione Wayland", () => {
@@ -101,5 +37,103 @@ describe("il banco su una sessione Wayland", () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("--x11");
     expect(result.stderr).toContain("--wayland");
+  });
+});
+
+// #287: sotto un Xvfb che si rigenera quando esce il suo ultimo client, l'app
+// dello scenario dopo a volte non apre il display e muore con GTK_FAILED.
+describe("Xvfb senza -noreset", () => {
+  const xvfb = (...extra) => ["Xvfb", ":99", "-screen", "0", "1280x800x24", ...extra, "-auth", "/tmp/xvfb-run.x/Xauthority"];
+
+  it("lo dice per l'Xvfb che serve DISPLAY, e indica -noreset", () => {
+    const message = xvfbResetProblem({ DISPLAY: ":99" }, [["node", "run.mjs"], xvfb()]);
+    expect(message).toContain(":99");
+    expect(message).toContain("-noreset");
+    expect(xvfbResetProblem({ DISPLAY: ":99.0" }, [["/usr/bin/Xvfb", ":99"]])).toContain("-noreset");
+  });
+
+  it("tace con -noreset, su un altro display, senza Xvfb o senza DISPLAY", () => {
+    expect(xvfbResetProblem({ DISPLAY: ":99" }, [xvfb("-noreset")])).toBeNull();
+    expect(xvfbResetProblem({ DISPLAY: ":100" }, [xvfb()])).toBeNull();
+    expect(xvfbResetProblem({ DISPLAY: ":0" }, [["/usr/lib/xorg/Xorg", ":0"]])).toBeNull();
+    expect(xvfbResetProblem({}, [xvfb()])).toBeNull();
+  });
+});
+
+describe("GTK che non parte", () => {
+  const panic = `${GTK_FAILED}: BoolError { message: "Failed to initialize GTK" }`;
+
+  it("il lettore dello stderr trova la riga anche spezzata, e soltanto quella", () => {
+    const seen = [];
+    const feed = gtkWatcher((line) => seen.push(line));
+    feed("thread 'main' panicked at tao/event_loop.rs:217:53:\nFailed to ini");
+    feed("tialize gtk backend!: BoolError { … }\nError serving connection\n");
+    feed("(fub:1): dbind-WARNING **: AT-SPI\n");
+    expect(seen).toEqual(["Failed to initialize gtk backend!: BoolError { … }"]);
+  });
+
+  /// Un driver finto: `outcomes` dice, tentativo per tentativo, se l'app
+  /// muore con GTK (`"gtk"`), se la sessione si apre (`"ok"`) o se la
+  /// richiesta fallisce in altro modo (`"errore"`).
+  function fake(outcomes) {
+    const listeners = new Set();
+    const calls = { open: 0, restart: 0, aborted: 0, log: [] };
+    const options = {
+      open: (signal) => {
+        const outcome = outcomes[calls.open++];
+        if (outcome === "ok") return Promise.resolve({ id: calls.open });
+        if (outcome === "errore") return Promise.reject(new Error("fetch failed"));
+        // L'app muore e la richiesta resta appesa (WebKitWebDriver aspetterebbe
+        // cinque minuti): soltanto `signal` la chiude.
+        queueMicrotask(() => {
+          for (const listener of [...listeners]) listener(panic);
+        });
+        return new Promise((_, fail) => signal.addEventListener("abort", () => {
+          calls.aborted++;
+          fail(new Error("aborted"));
+        }));
+      },
+      watch: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      restart: async () => {
+        calls.restart++;
+      },
+      log: (text) => calls.log.push(text),
+    };
+    return { options, calls, listeners };
+  }
+
+  it("una volta: interrompe la richiesta, riavvia il driver, riprova e lo dice", async () => {
+    const { options, calls, listeners } = fake(["gtk", "ok"]);
+    await expect(openWithGtkRetry("C1", options)).resolves.toEqual({ id: 2 });
+    expect(calls).toMatchObject({ open: 2, restart: 1, aborted: 1 });
+    expect(calls.log).toHaveLength(1);
+    expect(calls.log[0]).toContain("C1");
+    expect(calls.log[0]).toContain(GTK_FAILED);
+    expect(listeners.size).toBe(0);
+  });
+
+  it("due volte: un solo nuovo tentativo, poi GtkFailed col driver di nuovo in piedi", async () => {
+    const { options, calls, listeners } = fake(["gtk", "gtk", "ok"]);
+    await expect(openWithGtkRetry("S1", options)).rejects.toBeInstanceOf(GtkFailed);
+    expect(calls).toMatchObject({ open: 2, restart: 2, aborted: 2 });
+    expect(calls.log).toHaveLength(1);
+    expect(listeners.size).toBe(0);
+  });
+
+  it("un altro errore passa com'è, senza nuovi tentativi né riavvii", async () => {
+    const { options, calls } = fake(["errore", "ok"]);
+    await expect(openWithGtkRetry("S2", options)).rejects.toThrow("fetch failed");
+    expect(calls).toMatchObject({ open: 1, restart: 0, aborted: 0 });
+    expect(calls.log).toHaveLength(0);
+  });
+
+  it("una sessione che si apre non riavvia niente e non scrive niente", async () => {
+    const { options, calls } = fake(["ok"]);
+    await expect(openWithGtkRetry("S3", options)).resolves.toEqual({ id: 1 });
+    expect(calls).toMatchObject({ open: 1, restart: 0, aborted: 0 });
+    expect(calls.log).toHaveLength(0);
   });
 });

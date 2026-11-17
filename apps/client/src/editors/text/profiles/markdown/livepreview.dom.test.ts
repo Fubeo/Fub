@@ -301,6 +301,40 @@ describe("tabelle in Live", () => {
     return { parent, engine, cell, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
 
+  it("un link in una cella segue la regola del clic: Mod segue editor.link-click, Alt sbircia", () => {
+    for (const rule of ["apri", "sbircia"] as const) {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const openWikilink = vi.fn();
+      const openPath = vi.fn();
+      const peekLink = vi.fn();
+      const engine = createTextEngine(parent, {
+        onChange() {},
+        onSelectionChange() {},
+        extensions: () => [
+          markdown({ base: markdownGrammar }),
+          livePreview({ openWikilink, openPath, peekLink, linkClick: () => rule, searchTag() {} }),
+        ],
+      });
+      try {
+        engine.setDoc("Testo\n\n| a | b |\n| --- | --- |\n| [[Nota]] | [testo](Carte/B.md) |\n");
+        const at = (selector: string) => parent.querySelector<HTMLElement>(`.tb-grid ${selector}`)!;
+        const down = (target: HTMLElement, init: MouseEventInit) =>
+          target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init }));
+        down(at("[data-wikilink-page]"), { altKey: true });
+        expect(peekLink).toHaveBeenLastCalledWith({ kind: "wiki", page: "Nota", heading: null, block: null });
+        down(at("[data-wikilink-page]"), { ctrlKey: true });
+        if (rule === "apri") expect(openWikilink).toHaveBeenLastCalledWith("Nota", null, null);
+        else expect(peekLink).toHaveBeenCalledTimes(2);
+        down(at("a.internal-path"), { altKey: true });
+        expect(peekLink).toHaveBeenLastCalledWith({ kind: "path", path: "Carte/B.md" });
+      } finally {
+        engine.destroy();
+        parent.remove();
+      }
+    }
+  });
+
   it("sono griglie anche col cursore dentro, e non tornano sorgente", () => {
     const { parent, engine, cell, cleanup } = editorWith(table);
     try {
@@ -342,6 +376,59 @@ describe("tabelle in Live", () => {
       expect(parent.querySelectorAll(".tb-grid tbody tr").length).toBe(3);
     } finally {
       cleanup();
+    }
+  });
+
+  // In una nota tutta CRLF la griglia scrive come in LF, con gli a capo
+  // della nota (#394): prima non trovava più la sua sorgente, e una riga
+  // aggiunta entrava con un "\n" nudo.
+  it("in una nota CRLF scrive celle e righe come in LF, e il file resta CRLF", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const cr = (text: string) => text.replace(/\n/g, nl);
+      const typed = editorWith(cr(table));
+      try {
+        const grid = typed.parent.querySelector<HTMLElement>(".tb-grid")!;
+        typed.cell(1, 0).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+        grid.dispatchEvent(new KeyboardEvent("keydown", { key: "u", bubbles: true, cancelable: true }));
+        const input = typed.cell(1, 0).querySelector("input")!;
+        input.value = "uno";
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+        expect(typed.engine.getDoc()).toBe(cr("Testo\n\n| a | b |\n| --- | --- |\n| uno | 2 |\n"));
+      } finally {
+        typed.cleanup();
+      }
+      const added = editorWith(cr("|a|b|\n|---|---|\n|1|2|\n\nFine"));
+      try {
+        added.parent.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!.click();
+        expect(added.engine.getDoc()).toBe(cr("| a   | b   |\n| --- | --- |\n| 1   | 2   |\n|     |     |\n\nFine"));
+        expect(added.parent.querySelectorAll(".tb-grid tbody tr").length).toBe(3);
+      } finally {
+        added.cleanup();
+      }
+    }
+  });
+
+  it("in una nota CRLF uscire da una tabella in cima o in fondo aggiunge una riga vera", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const cr = (text: string) => text.replace(/\n/g, nl);
+      const { parent, engine, cleanup } = editorWith(cr("| a | b |\n| --- | --- |\n| 1 | 2 |"));
+      try {
+        const key = (name: string) => parent.querySelector<HTMLElement>(".tb-grid")!
+          .dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+        const view = EditorView.findFromDOM(parent.querySelector(".cm-editor")!)!;
+        parent.querySelector<HTMLElement>('.tb-grid [data-row="0"][data-col="0"]')!
+          .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+        key("ArrowUp");
+        expect(engine.getDoc()).toBe(cr("\n| a | b |\n| --- | --- |\n| 1 | 2 |"));
+        expect(view.state.selection.main.head).toBe(0);
+        parent.querySelector<HTMLElement>('.tb-grid [data-row="1"][data-col="0"]')!
+          .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+        key("ArrowDown");
+        expect(engine.getDoc()).toBe(cr("\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"));
+        expect(view.state.selection.main.head).toBe(view.state.doc.length);
+      } finally {
+        cleanup();
+      }
     }
   });
 });
@@ -413,6 +500,21 @@ describe("un diagramma in Live", () => {
       openStyleMenu(parent);
       document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
       expect(engine.getDoc()).toBe(note);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("in una nota CRLF la direttiva entra come riga vera, come in LF (#394)", () => {
+    const { parent, engine, cleanup } = mountNote(false);
+    try {
+      engine.setDoc(note.replace(/\n/g, "\r\n"));
+      openStyleMenu(parent);
+      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      expect(engine.getDoc()).toBe("Testo\r\n\r\n```mermaid\r\n%% stile: armonia\r\nflowchart LR\r\nA-->B\r\n```\r\n\r\nFine");
+      openStyleMenu(parent);
+      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      expect(engine.getDoc()).toBe(note.replace(/\n/g, "\r\n"));
     } finally {
       cleanup();
     }

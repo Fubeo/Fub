@@ -1,5 +1,6 @@
 import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
+import { textLines } from "../../line-breaks";
 import { Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
@@ -7,8 +8,11 @@ import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../
 import { readClipboard } from "../../../../platform/clipboard";
 import { escapeLinkLabel, linkDestination } from "./link-syntax";
 import { AddressChoiceWidget, bareUrl } from "./link-card";
+import { carriedMarkdown } from "./comments/copy";
 
-const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
+// Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
+// una nota resta commento, invece di passare dall'HTML che non lo porta.
+const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`|\{>>[^\n]*?<<\}/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
 
 // Turndown serve solo a un incolla ricco, e stava nel chunk che le tre
@@ -391,6 +395,14 @@ const addressChoiceGestures = EditorView.domEventHandlers({
 const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (view.state.readOnly || view.compositionStarted || !event.clipboardData) return false;
+    // Il testo di un passo tagliato in Fub torna col suo commento
+    // (`comments/copy.ts`); nel codice entra il testo semplice.
+    const carried = carriedMarkdown(event.clipboardData);
+    if (carried !== null && !isStrictlyInsideCode(view.state, view.state.selection.main.from)) {
+      event.preventDefault();
+      view.dispatch(view.state.replaceSelection(carried), { userEvent: "input.paste" });
+      return true;
+    }
     const link = linkOverSelection(view, event.clipboardData);
     if (link !== null) {
       event.preventDefault();
@@ -415,8 +427,10 @@ const pasteHandler = EditorView.domEventHandlers({
     if (!view.state.facet(pasteHtml) || isStrictlyInsideCode(view.state, view.state.selection.main.from)) return false;
     const rich = richPaste(event.clipboardData);
     if (rich === null) return false;
+    // Il Markdown convertito va a capo con "\n", quello dichiarato come
+    // capita: entra a righe vere, anche in una nota CRLF (#394).
     const insert = (markdown: string) =>
-      view.dispatch(view.state.replaceSelection(markdown), { userEvent: "input.paste" });
+      view.dispatch(view.state.replaceSelection(textLines(markdown)), { userEvent: "input.paste" });
     if ("markdown" in rich) {
       event.preventDefault();
       insert(rich.markdown);
@@ -469,7 +483,7 @@ export const pastePlainText: Command = (view) => {
   void plainClipboardText().then((text) => {
     // Un editor smontato o diventato di sola lettura nel frattempo non riceve niente.
     if (!text || !view.dom.isConnected || view.state.readOnly) return;
-    view.dispatch(view.state.replaceSelection(text), { userEvent: "input.paste", scrollIntoView: true });
+    view.dispatch(view.state.replaceSelection(textLines(text)), { userEvent: "input.paste", scrollIntoView: true });
   });
   return true;
 };

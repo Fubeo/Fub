@@ -193,6 +193,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/base.rs::contains",
+            (
+                Family::ContextualCase,
+                "è `rules/properties.rs::contains` detta sul valore valutato di una Base \
+                 (`BaseValue`), che non è un `PropertyValue` e non passa da quella funzione: \
+                 piega i due capi allo stesso modo perché `[stato:arrivata]` nella ricerca e \
+                 «stato contiene arrivata» nel filtro di una Base trovino le stesse note.",
+            ),
+        ),
+        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
@@ -1168,10 +1178,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             "crates/fub-features/src/base.rs::derive",
             (
                 Family::ContextualCase,
-                "piega il filtro di ricerca della vista e le etichette diagnostiche dei riepiloghi \
-                 con `str::to_lowercase`: la query è testo libero dell'utente, non un vocabolario \
-                 chiuso. Diverge da `matches_case_insensitive` perché qui l'ago si piega una sola \
-                 volta per tutte le righe, mentre là si piega a ogni confronto.",
+                "piega il filtro di ricerca della vista con `str::to_lowercase`: la query è testo \
+                 libero dell'utente, non un vocabolario chiuso. Diverge da \
+                 `matches_case_insensitive` perché qui l'ago si piega una sola volta per tutte le \
+                 righe, mentre là si piega a ogni confronto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::summary_label",
+            (
+                Family::ContextualCase,
+                "piega con `str::to_lowercase` l'etichetta diagnostica di un riepilogo senza nome \
+                 (`chiave:aggregato`), che il piano e `derive` danno allo stesso modo perché il \
+                 piede della Base trovi il valore. Non confronta due nomi: produce una chiave \
+                 sola, letta per uguaglianza esatta dal client, quindi non è la regola di \
+                 `derive` né quella di `matches_case_insensitive`.",
             ),
         ),
         (
@@ -1879,17 +1900,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  nella shell, che i vettori di `canvas-parts/` tengono uguale.",
             ),
         ),
-        (
-            "crates/fub-canvas-core/src/ops.rs::scales",
-            (
-                Family::AsciiCase,
-                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro \
-                 scala con lei (le immagini e il PDF, `.png`, `.pdf`, …) quando `move_strokes` \
-                 porta i tratti da un livello all'altro: sono token di formato, ASCII per \
-                 definizione. Diverge da `parts.rs::of` perché la lista è un'altra, quella di \
-                 `inkFitMode` nella shell, che i vettori di `canvas-ink-fit/` tengono uguale.",
-            ),
-        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
@@ -1937,6 +1947,57 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
             ),
         ),
+        // -- CasoAscii: il nome più vicino di un'operazione o di un campo -------
+        (
+            "crates/fub-canvas-core/src/spec.rs::distance",
+            (
+                Family::AsciiCase,
+                "abbassa il nome che il modello ha scritto per dire quale nome gli somiglia \
+                 (`Add-Card` è vicino a `add_card`, `dX` a `dx`): i nomi delle operazioni e dei \
+                 campi sono ASCII. Non decide se un nome esiste: `validate` riconosce un nome solo \
+                 se è esatto, come serde, e la distanza serve al suggerimento e alla correzione. \
+                 Diverge da `kind_of_path` perché qui la piegatura non dice la specie di niente.",
+            ),
+        ),
+        // -- CasoAscii: la specie di una scheda della lavagna -------------------
+        (
+            "crates/fub-canvas-core/src/layout.rs::kind_of_path",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione di un file per dire la specie della sua scheda sulla lavagna \
+                 (`Foto.PNG` è un'immagine come `foto.png`), in minuscolo come `cardKindOf` della \
+                 GUI: la specie deve coincidere con la sua. Non riusa `mime_for_ext` di \
+                 `rules/media.rs`: `fub-canvas-core` dipende solo da serde, serde_json e thiserror \
+                 (`dependency_invariant`), e non può chiamare fub-abi. Diverge da `route_entry` e \
+                 `import_entry` perché l'estensione qui non sceglie un importatore: decide la misura \
+                 e la specie di una scheda, e non identifica né un nome né un path.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ink.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro scala \
+                 (`SCAN.PNG` scala come `scan.png`), in minuscolo come `extOf` di \
+                 `media-types.ts`, che la resa usa in `inkFitMode`: il modo deve coincidere col \
+                 suo, provato coi vettori di `canvas-ink-fit/`. Diverge da `kind_of_path` perché \
+                 la resa non taglia il nome al primo `#` (`foto#1.png` scala) e la specie della \
+                 scheda sì; non identifica né un nome né un path, decide solo dove si leggono i \
+                 punti.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ops/color.rs::parse_hex",
+            (
+                Family::AsciiCase,
+                "abbassa le cifre di un `#rrggbb` per scriverlo in minuscolo come nel file \
+                 (`#FF8800` diventa `#ff8800`). Le cifre sono già controllate con \
+                 `is_ascii_hexdigit`, quindi sono ASCII per costruzione: la corsia ASCII dà la \
+                 stessa risposta della contestuale. Non decide se il colore esiste: lo decide \
+                 `parse`, con la tavola dei nomi e questo controllo; un nome non è un esadecimale \
+                 e non passa di qui.",
+            ),
+        ),
         // -- CasoAscii: miscellanea (canali con la loro ragione) ---------------
         (
             "crates/fub-app/src/mobile.rs::classify",
@@ -1957,11 +2018,12 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-host/src/remote/bundle.rs::http_request",
+            "crates/fub-host/src/remote/mod.rs::request_path_is_clean",
             (
                 Family::AsciiCase,
-                "abbassa il path per rifiutare quelli che contengono `password=`: il nome del \
-                 parametro è ASCII e il travestimento di maiuscole non deve passare. Diverge da \
+                "abbassa il path per rifiutare quelli che contengono `password=`, per i due client \
+                 dei servizi (host e bundle sync): il nome del parametro è ASCII e il \
+                 travestimento di maiuscole non deve passare. Diverge da \
                  `is_safe_href` perché qui la perdita è una credenziale nel log di sincronizzazione, \
                  là un link pericoloso pubblicato.",
             ),

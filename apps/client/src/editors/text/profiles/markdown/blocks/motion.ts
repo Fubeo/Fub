@@ -16,9 +16,9 @@
 // Con «ridotto» non si sposta niente: resta la sola dissolvenza di chi nasce.
 //
 // Sopra le righe sta un livello (`layer()`) col velo della selezione di
-// blocchi; l'alone dell'atterraggio, le immagini di chi se ne va e quella
-// sollevata stanno nello scorrimento, fuori dal contenuto. Ogni gesto ha la
-// sua frase nella regione viva.
+// blocchi; le immagini di chi se ne va e il blocco in mano stanno nello
+// scorrimento, fuori dal contenuto. Ogni gesto ha la sua frase nella regione
+// viva. La posa di un blocco finisce lì: nessun alone, nessun colore dopo.
 import { type ChangeSet, type EditorState, type Extension, type Range, StateEffect, StateField, type Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, layer, type LayerMarker, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { animate, halt, liveState, motionLevel, prepareExit, springValue, stagger, STAGGER_MAX, type Ghost, type Motion, type Pose, type SpringValue } from "../../../../../moto";
@@ -27,7 +27,7 @@ import { softCursor } from "../../../soft-cursor";
 import { blockGesture, type BlockGesture } from "../block-gesture";
 import { liveStrings } from "../strings";
 import { blockModel, kindName, type Block } from "./model";
-import { siblingsOf } from "./move";
+import { sectionAt, siblingsOf } from "./move";
 import { blockSelection, runOfSelection } from "./selection";
 
 /// Oltre questo numero di righe in moto, sola dissolvenza: un gesto che
@@ -35,8 +35,12 @@ import { blockSelection, runOfSelection } from "./selection";
 export const MOVING_MAX = 60;
 /// Quanto oltre la vista (px) una riga si anima ancora.
 const MARGIN = 200;
-/// La scala del blocco sollevato.
+/// La scala del blocco in mano.
 export const LIFT_SCALE = 1.015;
+/// La posa e lo scambio (E2): in 340 ms il blocco scende al suo posto, e i
+/// vicini con la stessa curva, che supera l'arrivo di un soffio e torna.
+export const SETTLE_MS = 340;
+export const SETTLE_EASING = "cubic-bezier(0.22, 1.12, 0.36, 1)";
 /// Da dove scende chi nasce, e dove sale chi se ne va (px).
 const BORN_Y = -8;
 const GONE_Y = -4;
@@ -91,7 +95,7 @@ function textSize(el: HTMLElement): number {
 /// La testata della pagina (`page.ts`) sta sopra il primo blocco, alla sua
 /// stessa posizione, ma non è di nessun blocco: nessun gesto la solleva né la
 /// muove.
-function isPageHeader(el: Element): boolean {
+export function isPageHeader(el: Element): boolean {
   return el.classList.contains("cm-fub-page");
 }
 
@@ -249,12 +253,17 @@ export function inferGesture(update: ViewUpdate): BlockGesture | null {
   return { kind: "transform", lead: { from: now.from, to: now.to } };
 }
 
-/// Il posto di un blocco fra i fratelli, detto a parole: «il terzo».
-export function placeName(index: number): string {
-  const n = index + 1;
-  return n <= 10
-    ? liveStrings.t(`blocks.place.${n}` as "blocks.place.1")
-    : liveStrings.t("blocks.place.n", { n: String(n) });
+/// Dove sta un blocco, detto come il trascinamento: «Posizione 4 di 14, in
+/// «I conti»», con la sezione (il titolo prima di lui, lui escluso).
+export function placePhrase(state: EditorState, blocks: readonly Block[], index: number): string {
+  const sibs = siblingsOf(blocks, index);
+  const block = blocks[index]!;
+  const n = String(sibs.indexOf(index) + 1);
+  const total = String(sibs.length);
+  const section = sectionAt(state, blocks, block.from, { from: block.from, to: block.to });
+  return section === null
+    ? liveStrings.t("blocks.drag.place", { n, total })
+    : liveStrings.t("blocks.drag.place.in", { n, total, name: section });
 }
 
 /// La frase della regione viva per un gesto, nel documento nuovo.
@@ -267,8 +276,7 @@ export function gesturePhrase(state: EditorState, gesture: BlockGesture): string
     case "drop":
     case "swap": {
       if (!lead || !blocks) return liveStrings.t("blocks.moved");
-      const index = blocks.indexOf(lead);
-      return liveStrings.t("blocks.moved.at", { place: placeName(siblingsOf(blocks, index).indexOf(index)) });
+      return placePhrase(state, blocks, blocks.indexOf(lead));
     }
     case "transform":
       return lead ? liveStrings.t("blocks.transformed", { kind: kindName(lead) }) : null;
@@ -318,7 +326,8 @@ class BlockMotion {
   readonly life = openLifetime();
   /// La regione viva dei gesti.
   readonly live = document.createElement("div");
-  /// Ciò che sta sopra le righe senza essere un segno del livello: l'alone.
+  /// Ciò che sta sopra le righe senza essere un segno del livello: le
+  /// passate del colore.
   readonly float = document.createElement("div");
   /// Dove posano le immagini delle righe che se ne vanno: un contenuto finto,
   /// perché prendano la pelle delle righe vere.
@@ -346,10 +355,12 @@ class BlockMotion {
       this.live.remove();
       this.float.remove();
     });
-    view.requestMeasure({ read: () => null, write: () => this.arrive() });
   }
 
   /// La pagina che arriva: copertina, icona e titolo entrano uno dopo l'altro.
+  /// Soltanto col gesto che porta a Scrittura (`pageArrives`): una nota che si
+  /// apre, o una linguetta che torna, mostra la pagina ferma, e un gesto
+  /// invertito a metà non la fa ripartire da zero.
   arrive(): void {
     if (motionLevel() === "reduced") return;
     const parts = this.view.contentDOM.querySelectorAll(".cm-fub-page-cover, .cm-fub-page-icon, .cm-fub-page-title");
@@ -358,6 +369,9 @@ class BlockMotion {
 
   update(update: ViewUpdate): void {
     if (update.docChanged) this.lastEdit = Date.now();
+    if (update.transactions.some((tr) => tr.effects.some((effect) => effect.is(pageArrives)))) {
+      this.view.requestMeasure({ read: () => null, write: () => this.arrive() });
+    }
     // La selezione di blocchi che si spegne: il livello toglie i suoi
     // riquadri, e la loro immagine si spegne da dov'era, anche a metà entrata.
     if (update.startState.field(blockSelection, false) && !update.state.field(blockSelection, false)) {
@@ -468,7 +482,7 @@ class BlockMotion {
     const reduced = motionLevel() === "reduced";
     const matched = new Set<string>();
     const born: Box[] = [];
-    const moves: { box: Box; from: Pose; lead: boolean }[] = [];
+    const moves: { box: Box; from: Pose }[] = [];
     const pairs: { box: Box; was: Box; lead: boolean }[] = [];
     for (const box of after.boxes) {
       const origin = originOf(update, before.ranges, gesture, box.pos);
@@ -497,7 +511,10 @@ class BlockMotion {
       if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && scale === 1 && !live) continue;
       const handoff = handoffs.get(was.key);
       if (handoff) handoff.play({ layer: this.ghostLayer, to: { opacity: 0 }, duration: GONE_MS, easing: "ease-out" });
-      moves.push({ box, from: { x, y, ...(scale !== 1 ? { scale } : {}), ...(handoff ? { opacity: 0 } : {}) }, lead });
+      // Le righe di un blocco alto che il blocco in mano non mostrava (oltre
+      // il suo taglio) entrano in dissolvenza mentre scendono.
+      const clipped = lift?.clip !== undefined && was.top - leadTop >= lift.clip;
+      moves.push({ box, from: { x, y, ...(scale !== 1 ? { scale } : {}), ...(handoff || clipped ? { opacity: 0 } : {}) } });
     }
     const leaving = [...ghosts, ...handoffs].filter(([key]) => !matched.has(key)).map(([, ghost]) => ghost);
     const exit = gesture.kind === "fold" ? FOLD_MS : GONE_MS;
@@ -505,7 +522,8 @@ class BlockMotion {
     // Chi se ne va: in dissolvenza alzandosi, entro il tempo dell'uscita.
     for (const ghost of leaving) ghost.play({ layer: this.ghostLayer, to: { y: GONE_Y, opacity: 0 }, duration: exit, easing: "ease-out" });
     const rising = leaving.length > 0;
-    for (const { box, from, lead } of moves) {
+    const settles = gesture.kind === "drop" || gesture.kind === "swap";
+    for (const { box, from } of moves) {
       const live = after.live.get(box.el);
       if (crowd) {
         animate(box.el, { from: { opacity: 0.4 }, duration: CROWD_MS, easing: "ease-out" });
@@ -514,8 +532,11 @@ class BlockMotion {
       animate(box.el, {
         from,
         ...(live ? { velocity: live.velocity } : {}),
-        // Chi sale al posto di ciò che esce finisce col tempo dell'uscita.
-        ...(rising ? { delay: RISE_DELAY, duration: exit - RISE_DELAY, easing: "ease-out" } : { spring: lead && gesture.kind === "drop" ? "jelly" : "soft" }),
+        // Chi sale al posto di ciò che esce finisce col tempo dell'uscita; la
+        // posa e lo scambio hanno il loro tempo, lo stesso per tutte le righe.
+        ...(rising
+          ? { delay: RISE_DELAY, duration: exit - RISE_DELAY, easing: "ease-out" }
+          : settles ? { duration: SETTLE_MS, easing: SETTLE_EASING } : { spring: "soft" }),
       });
     }
     // Chi nasce scende di poco e appare; aprendo un ripiegabile, uno dopo
@@ -539,9 +560,6 @@ class BlockMotion {
   extras(gesture: BlockGesture, boxes: readonly Box[], before: Before): void {
     const leadBoxes = boxes.filter((box) => inside(gesture.lead, box.pos));
     switch (gesture.kind) {
-      case "drop":
-        this.halo(leadBoxes);
-        break;
       case "transform":
         // Il segno nuovo entra con un rimbalzo; il punto di una voce è un
         // segno disegnato, e si muove il suo pseudo-elemento.
@@ -589,18 +607,6 @@ class BlockMotion {
     el.style.height = `${rect.height}px`;
     this.float.append(el);
     return el;
-  }
-
-  /// L'alone d'accento che si spegne sul blocco appena posato.
-  halo(boxes: readonly Box[]): void {
-    if (boxes.length === 0) return;
-    const top = Math.min(...boxes.map((box) => box.top));
-    const bottom = Math.max(...boxes.map((box) => box.top + box.height));
-    const left = Math.min(...boxes.map((box) => box.left));
-    const right = Math.max(...boxes.map((box) => box.left + box.width));
-    const el = this.placed("cm-fub-block-halo", { left, top, width: right - left, height: bottom - top });
-    const motion = animate(el, { from: { opacity: 1 }, to: { opacity: 0 }, duration: 600, easing: "ease-out" });
-    this.removeAfter(el, motion);
   }
 
   /// Il fondo vecchio si ritira verso destra, sotto il nuovo che è già lì; il
@@ -667,23 +673,59 @@ class BlockMotion {
 
 export const blockMotion = ViewPlugin.fromClass(BlockMotion);
 
+/// Dice `text` nella regione viva dei gesti: il trascinamento annuncia lì
+/// ogni cambio di posto, senza una transazione.
+export function announceGesture(view: EditorView, text: string): void {
+  view.plugin(blockMotion)?.say(text);
+}
+
 /// Chiamato da CodeMirror a DOM aggiornato, nella stessa battuta del gesto.
 const flushMotion = EditorView.updateListener.of((update) => update.view.plugin(blockMotion)?.flush());
 
 // ── La posa del trascinamento ────────────────────────────────────────────────
 
-/// Ciò che il trascinamento tiene fermo finché dura: il posto vuoto del
-/// blocco sollevato e i fratelli scostati per fargli spazio. Sta nelle
-/// decorazioni perché CodeMirror riscrive gli attributi delle righe: una
-/// proprietà messa a mano non durerebbe.
+/// Ciò che il trascinamento tiene fermo finché dura: le righe del blocco in
+/// mano, invisibili al loro posto, e le righe scostate per aprire il posto.
+/// Sta nelle decorazioni perché CodeMirror riscrive gli attributi delle
+/// righe: una proprietà messa a mano non durerebbe.
 export interface DragPose {
-  /// Il blocco sollevato, che resta come posto vuoto.
+  /// Il blocco in mano, le cui righe restano invisibili.
   readonly lifted: { readonly from: number; readonly to: number } | null;
-  /// Le righe scostate e di quanto (px): soltanto quelle in vista.
-  readonly parted: { readonly from: number; readonly to: number; readonly dy: number } | null;
+  /// I tratti di righe scostate e di quanto (px), senza sovrapporsi; le
+  /// decorazioni li scrivono soltanto sulle righe in vista.
+  readonly parted: readonly PartedRun[] | null;
+}
+
+/// Un tratto di righe che scivola di `dy` px.
+export interface PartedRun {
+  readonly from: number;
+  readonly to: number;
+  readonly dy: number;
+}
+
+/// Di quanto si vede scostata, nella posa, la riga che comincia in `pos`.
+export function partedShift(parted: DragPose["parted"], pos: number): number {
+  if (!parted) return 0;
+  for (const run of parted) if (pos >= run.from && pos <= run.to) return run.dy;
+  return 0;
+}
+
+function sameParted(a: DragPose["parted"], b: DragPose["parted"]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((run, i) => run.from === b[i]!.from && run.to === b[i]!.to && run.dy === b[i]!.dy);
+}
+
+/// Due pose uguali: il trascinamento non ridice ciò che c'è già.
+export function samePose(a: DragPose, b: DragPose): boolean {
+  return a.lifted?.from === b.lifted?.from && a.lifted?.to === b.lifted?.to && sameParted(a.parted, b.parted);
 }
 
 export const setDragPose = StateEffect.define<DragPose | null>();
+
+/// Il gesto che porta la nota in Scrittura da un'altra modalità: la pagina
+/// arriva (`BlockMotion.arrive`). Lo manda la superficie dopo il cambio.
+export const pageArrives = StateEffect.define<null>();
 
 const STILL: DragPose = { lifted: null, parted: null };
 
@@ -708,17 +750,35 @@ function eachLine(doc: Text, from: number, to: number, deco: Decoration, out: Ra
   }
 }
 
-const poseDecorations = EditorView.decorations.compute([dragPose], (state): DecorationSet => {
+/// Le decorazioni della posa, soltanto sulle righe in vista: un tratto
+/// scostato può arrivare in fondo a una nota lunga, e le righe che entrano in
+/// vista scorrendo vanno scostate anche loro.
+function poseSet(view: EditorView): DecorationSet {
+  const state = view.state;
   const pose = state.field(dragPose);
   if (pose === STILL) return Decoration.none;
+  const { from: lo, to: hi } = view.viewport;
   const out: Range<Decoration>[] = [];
-  if (pose.lifted) eachLine(state.doc, pose.lifted.from, pose.lifted.to, LIFTED, out);
-  if (pose.parted) {
-    const parted = Decoration.line({ attributes: { style: `translate: 0 ${pose.parted.dy}px` } });
-    eachLine(state.doc, pose.parted.from, pose.parted.to, parted, out);
+  if (pose.lifted) eachLine(state.doc, Math.max(lo, pose.lifted.from), Math.min(hi, pose.lifted.to), LIFTED, out);
+  for (const run of pose.parted ?? []) {
+    if (run.dy === 0) continue;
+    const parted = Decoration.line({ attributes: { style: `translate: 0 ${run.dy}px` } });
+    eachLine(state.doc, Math.max(lo, run.from), Math.min(hi, run.to), parted, out);
   }
   return Decoration.set(out, true);
-});
+}
+
+const poseDecorations = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+  constructor(view: EditorView) {
+    this.decorations = poseSet(view);
+  }
+  update(update: ViewUpdate): void {
+    const was = update.startState.field(dragPose);
+    const now = update.state.field(dragPose);
+    if (was !== now || (now !== STILL && update.viewportChanged)) this.decorations = poseSet(update.view);
+  }
+}, { decorations: (plugin) => plugin.decorations });
 
 // ── La selezione di blocchi, sopra le righe ─────────────────────────────────
 
@@ -835,11 +895,10 @@ export const blockMotionExtension: Extension = [
       whiteSpace: "nowrap",
     },
     ".cm-fub-block-float": { position: "absolute", top: "0", left: "0", width: "0", height: "0", pointerEvents: "none", zIndex: "151" },
-    ".cm-fub-block-halo, .cm-fub-block-tint, .cm-fub-block-pass": { position: "absolute", pointerEvents: "none", borderRadius: "4px" },
+    ".cm-fub-block-tint, .cm-fub-block-pass": { position: "absolute", pointerEvents: "none", borderRadius: "4px" },
     ".cm-fub-block-tint": { transformOrigin: "100% 50%" },
-    ".cm-fub-block-halo, .cm-fub-block-pass": { opacity: "0" },
+    ".cm-fub-block-pass": { opacity: "0" },
     ".cm-fub-block-mark": { position: "absolute", pointerEvents: "none", borderRadius: "4px" },
     ".cm-fub-block-lifted": { opacity: "0" },
-    ".cm-fub-block-lift": { position: "absolute", zIndex: "152", pointerEvents: "none", scale: String(LIFT_SCALE), transformOrigin: "0 50%" },
   }),
 ];

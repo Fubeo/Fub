@@ -256,6 +256,14 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   persona resta, la nota dice che il file è cambiato sul disco, e il
   salvataggio successivo va in conflitto invece di coprire la versione
   ripristinata.
+- **La scrittura annunciata di un comando.** Chi lancia un comando che
+  riscrive un documento aperto (un gesto della barra di una Base con
+  `base.view.set`) lo annuncia prima con `expectWrite(id)`, e ritira
+  l'annuncio se il comando non scrive. Il primo evento dell'utente su quel
+  documento (non l'eco di un salvataggio in volo) lo consuma: a buffer pulito
+  la sessione ricarica e l'esito è `reloaded` con `quiet`, che il controller
+  non dice; a buffer sporco vale la regola di sempre. Un evento di un'altra
+  app o del kernel non lo consuma, e l'annuncio scade dopo dieci secondi.
 - **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
   dopo averlo messo in bozza: se la bozza non si scrive restituisce
   `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.

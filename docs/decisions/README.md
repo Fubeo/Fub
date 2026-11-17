@@ -74,3 +74,6 @@ Nuove decisioni usano il [template](template.md).
 | [0241 — L'inchiostro della lavagna sta nel `.canvas`, con la stringa dei disegni e la misura della scheda](0241-inchiostro-sulla-lavagna.md) | accolta | contratto | — |
 | [0242 — Gli estratti sono finestre: un campo `fub:parts` accanto al `subpath`](0242-gli-estratti-sono-finestre.md) | proposta | contratto | — |
 | [0243 — Le ancore di contenuto](0243-le-ancore-di-contenuto.md) | proposta | contratto | — |
+| [0244 — La lavagna si scrive in operazioni con la forma breve](0244-la-lavagna-si-scrive-in-operazioni.md) | accolta | contratto | — |
+| [0245 — macOS e iOS sono in pausa](0245-macos-e-ios-in-pausa.md) | accolta | host | — |
+| [0246 — Fub emula il vblank che il driver non dà a WebKitGTK](0246-vblank-emulato-per-webkitgtk.md) | accolta | host | — |

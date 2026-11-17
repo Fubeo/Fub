@@ -5,12 +5,11 @@
    (--avvio-*), non tocca i ruoli del tema e se ne va alla consegna
    (src/avvio/consegna.ts).
 
-   È un file e non un <style> in linea per la CSP: Tauri mette un nonce a ogni
-   <style> delle pagine e lo aggiunge a style-src, e con un nonce la WebView
-   ignora 'unsafe-inline'. Gli elementi <style> che CodeMirror e gli altri
-   moduli aggiungono a pagina avviata verrebbero rifiutati, e gli editor
-   resterebbero senza stile. src/avvio/pagine.test.ts tiene le pagine senza
-   <style>.
+   È un file e non un <style> in linea per la CSP: style-src è 'self', senza
+   'unsafe-inline'. Il solo <style> delle pagine è il portatore vuoto del
+   nonce (data-fub-nonce), che Tauri riempie servendo la pagina e CodeMirror
+   rilegge (src/ui/stylesheets.ts). src/avvio/pagine.test.ts tiene le pagine
+   così.
 
    Le famiglie hanno un nome loro, così non toccano quelle di
    theme/scrittoio/fonts.css; i file sono gli stessi, e la cache del browser

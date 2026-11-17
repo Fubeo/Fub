@@ -1,139 +1,20 @@
-// Il display X del banco tenuto aperto per tutta la corsa (#287).
+// Il display del banco.
 //
-// Xvfb, come ogni server X avviato senza `-noreset`, si azzera quando si
-// stacca il suo ultimo client: chiude le risorse, rilegge l'autorizzazione e
-// riparte. Nel banco l'ultimo client è l'app dello scenario appena chiuso, e
-// l'app dello scenario dopo parte meno di 100 ms più tardi: se si collega
-// mentre il server si sta azzerando, GTK non si inizializza («Failed to
-// initialize GTK») e lo scenario è rosso senza aver misurato niente.
-//
-// Un client che resta collegato dall'inizio alla fine toglie l'azzeramento
-// alla radice, comunque `xvfb-run` sia stato chiamato (la CI, `misura.sh`, chi
-// misura a mano). Il client è il minimo che il protocollo chiede: la richiesta
-// di connessione, con il cookie MIT-MAGIC-COOKIE-1 di `$XAUTHORITY` se c'è, e
-// poi niente; non apre finestre e non legge eventi.
-import { connect } from "node:net";
-import { readFileSync } from "node:fs";
-import { homedir, hostname } from "node:os";
-import { join } from "node:path";
-
-const COOKIE = "MIT-MAGIC-COOKIE-1";
-const FAMILY_LOCAL = 256;
-const FAMILY_WILD = 65535;
-
-/// Il numero del display da `DISPLAY` (`:99`, `:99.0`, `unix:99`); `null` per
-/// un display che non è un socket locale (TCP, Wayland, nessun display).
-export function displayNumber(display) {
-  const match = /^(?:unix)?:(\d+)(?:\.\d+)?$/.exec(display ?? "");
-  return match ? match[1] : null;
-}
-
-/// Le voci di un file `Xauthority`: famiglia, indirizzo, numero del display,
-/// nome e dati del cookie. Il formato è fisso: campi lunghi due byte (big
-/// endian) seguiti dai byte del campo.
-export function parseXauthority(bytes) {
-  const entries = [];
-  let at = 0;
-  const field = () => {
-    if (at + 2 > bytes.length) throw new RangeError("Xauthority troncato");
-    const length = bytes.readUInt16BE(at);
-    at += 2;
-    if (at + length > bytes.length) throw new RangeError("Xauthority troncato");
-    const value = bytes.subarray(at, at + length);
-    at += length;
-    return value;
-  };
-  try {
-    while (at < bytes.length) {
-      if (at + 2 > bytes.length) break;
-      const family = bytes.readUInt16BE(at);
-      at += 2;
-      const address = field().toString("latin1");
-      const number = field().toString("latin1");
-      const name = field().toString("latin1");
-      const data = Buffer.from(field());
-      entries.push({ family, address, number, name, data });
-    }
-  } catch {
-    // Una coda rovinata non toglie le voci lette prima.
-  }
-  return entries;
-}
-
-/// Il cookie per il display `number` di questa macchina, o `null` se il file
-/// non lo ha (il server senza autorizzazione accetta la richiesta vuota).
-export function cookieFor(entries, number, host = hostname()) {
-  const match = entries.find((entry) =>
-    entry.name === COOKIE &&
-    (entry.number === number || entry.number === "") &&
-    (entry.family === FAMILY_WILD || (entry.family === FAMILY_LOCAL && entry.address === host)));
-  return match?.data ?? null;
-}
-
-/// La richiesta di connessione X11, little endian, con l'autorizzazione data.
-export function setupRequest(cookie) {
-  const pad = (n) => (4 - (n % 4)) % 4;
-  const name = cookie ? Buffer.from(COOKIE, "latin1") : Buffer.alloc(0);
-  const data = cookie ?? Buffer.alloc(0);
-  const head = Buffer.alloc(12);
-  head.write("l", 0, "latin1");
-  head.writeUInt16LE(11, 2);
-  head.writeUInt16LE(0, 4);
-  head.writeUInt16LE(name.length, 6);
-  head.writeUInt16LE(data.length, 8);
-  return Buffer.concat([head, name, Buffer.alloc(pad(name.length)), data, Buffer.alloc(pad(data.length))]);
-}
-
-/// Si collega al display di `env.DISPLAY` e resta collegato. Torna
-/// `{ close() }` se il server ha accettato la connessione, oppure
-/// `{ close(), skipped }` con il motivo: senza un display X locale il banco va
-/// avanti come prima, e il referto lo dice.
-export async function holdDisplay(env = process.env, { timeoutMs = 5_000 } = {}) {
-  const none = (skipped) => ({ skipped, close() {} });
-  if (process.platform !== "linux") return none("non Linux");
-  const number = displayNumber(env.DISPLAY);
-  if (number === null) return none(`DISPLAY «${env.DISPLAY ?? ""}» non è un display X locale`);
-  let cookie = null;
-  try {
-    cookie = cookieFor(parseXauthority(readFileSync(env.XAUTHORITY || join(homedir(), ".Xauthority"))), number);
-  } catch {
-    // Nessun file: il server forse non chiede autorizzazione.
-  }
-  const socket = connect(`/tmp/.X11-unix/X${number}`);
-  try {
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("nessuna risposta dal server X")), timeoutMs);
-      let reply = Buffer.alloc(0);
-      socket.once("error", (error) => { clearTimeout(timer); reject(error); });
-      socket.once("connect", () => socket.write(setupRequest(cookie)));
-      socket.on("data", function first(chunk) {
-        reply = Buffer.concat([reply, chunk]);
-        if (reply.length < 8) return;
-        clearTimeout(timer);
-        socket.off("data", first);
-        // 1 è «Success»; 0 «Failed» e 2 «Authenticate» portano il motivo.
-        if (reply[0] === 1) resolve();
-        else reject(new Error(`il server X rifiuta la connessione: ${reply.subarray(8, 8 + reply[1]).toString("latin1") || `stato ${reply[0]}`}`));
-      });
-    });
-  } catch (error) {
-    socket.destroy();
-    return none(String(error?.message ?? error));
-  }
-  // Il server non manda eventi a chi non ne chiede, ma un byte che arriva si
-  // legge e si butta: il buffer del socket non si riempie mai.
-  socket.on("data", () => {});
-  socket.on("error", () => {});
-  socket.unref();
-  return { close: () => socket.destroy() };
-}
-
-// La finestra del banco su una sessione Wayland. Con `WAYLAND_DISPLAY` GTK apre
+// La finestra su una sessione Wayland. Con `WAYLAND_DISPLAY` GTK apre
 // la finestra in Wayland, cioè sullo schermo di chi misura, e non nel display di
 // Xvfb dove il driver muove il puntatore: S3 allora dà «move target out of
 // bounds» (misura del 13 novembre, T46). Il banco si ferma prima di avviare
 // l'app, a meno che non si scelga: `--x11` (sotto Xvfb, con la variabile tolta)
 // o `--wayland` (per lo schermo vero).
+//
+// Xvfb senza `-noreset` (#287). Un server X, per difetto, si rigenera quando
+// esce il suo ultimo client: sotto il banco l'ultimo client è l'app dello
+// scenario appena chiuso, e l'app nuova che si collega mentre il server si
+// rigenera non apre il display. GTK allora non parte e l'app muore con
+// `GTK_FAILED`. Misurato sul PC fisso con `xdpyinfo` lanciato 10.000 volte di
+// fila sotto `xvfb-run`: senza `-noreset` 21 aperture fallite, con `-noreset`
+// nessuna.
+import { readdirSync, readFileSync } from "node:fs";
 
 /// Il motivo per cui il banco non parte, o `null` se può partire.
 export function waylandProblem(env, args) {
@@ -142,7 +23,100 @@ export function waylandProblem(env, args) {
     "WAYLAND_DISPLAY è impostato: GTK aprirebbe la finestra del banco in Wayland,",
     "cioè sullo schermo di chi misura, e non in Xvfb. Il banco non parte.",
     "Per il banco sotto Xvfb aggiungi --x11 e togli la variabile al comando:",
-    "  xvfb-run -a env -u WAYLAND_DISPLAY npm run bench:webview -- … --x11",
+    '  xvfb-run -a -s "-screen 0 1280x800x24 -noreset" env -u WAYLAND_DISPLAY npm run bench:webview -- … --x11',
     "Per misurare sullo schermo vero, su questa sessione Wayland, aggiungi --wayland.",
   ].join("\n");
+}
+
+/// La riga con cui l'app muore quando GTK non si inizializza (tao,
+/// `platform_impl/linux/event_loop.rs`).
+export const GTK_FAILED = "Failed to initialize gtk backend!";
+
+/// Il motivo per cui il display di `env.DISPLAY` può sparire fra un'app e la
+/// successiva, o `null`. `commands` sono le righe di comando dei processi
+/// (`argv`, per esempio da `commandLines()`): conta l'Xvfb che serve quel
+/// display.
+export function xvfbResetProblem(env, commands) {
+  const number = /^:(\d+)(?:\.\d+)?$/.exec(env.DISPLAY ?? "")?.[1];
+  if (number === undefined) return null;
+  const xvfb = commands.find((argv) => /(^|\/)Xvfb$/.test(argv[0] ?? "") && argv.includes(`:${number}`));
+  if (!xvfb || xvfb.includes("-noreset")) return null;
+  return [
+    `Xvfb su :${number} gira senza -noreset: quando l'app di uno scenario si chiude il`,
+    "display si rigenera, e l'app dopo può non aprirlo («Failed to initialize gtk backend!», #287).",
+    "Aggiungi -noreset agli argomenti del server:",
+    '  xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048 -noreset" …',
+  ].join("\n");
+}
+
+/// Le righe di comando dei processi della macchina, da `/proc`. Soltanto
+/// Linux; altrove nessuna.
+export function commandLines() {
+  if (process.platform !== "linux") return [];
+  const commands = [];
+  for (const name of readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    try {
+      const argv = readFileSync(`/proc/${name}/cmdline`, "utf8").split("\0").filter(Boolean);
+      if (argv.length > 0) commands.push(argv);
+    } catch {
+      // Un processo già uscito.
+    }
+  }
+  return commands;
+}
+
+/// L'app è morta perché GTK non si è inizializzato.
+export class GtkFailed extends Error {
+  constructor(line) {
+    super(line.trim());
+    this.name = "GtkFailed";
+  }
+}
+
+/// Un lettore dello stderr del driver, che l'app eredita: chiama `onLine` per
+/// ogni riga che contiene `GTK_FAILED`, anche se arriva spezzata in due pezzi.
+export function gtkWatcher(onLine) {
+  let rest = "";
+  return (chunk) => {
+    const lines = (rest + chunk).split("\n");
+    rest = lines.pop() ?? "";
+    // Una riga senza fine non cresce senza limite: della coda basta quanto
+    // può ancora contenere l'inizio del messaggio.
+    if (rest.length > 64 * 1024) rest = rest.slice(-GTK_FAILED.length);
+    for (const line of lines) if (line.includes(GTK_FAILED)) onLine(line);
+  };
+}
+
+/// Apre una sessione. Se intanto l'app muore con `GTK_FAILED`, non aspetta il
+/// driver (WebKitWebDriver aspetterebbe cinque minuti un'app già morta):
+/// interrompe la richiesta, fa ripartire il driver e riprova **una volta**,
+/// con un avviso nel log. Al secondo fallimento rilancia `GtkFailed`, dopo aver
+/// rimesso in piedi il driver per lo scenario dopo. Ogni altro errore passa
+/// com'è, senza nuovi tentativi.
+///
+/// - `open(signal)`: la richiesta della sessione, che `signal` interrompe;
+/// - `watch(onLine)`: iscrive `onLine` alle righe con `GTK_FAILED` e torna la
+///   funzione che la disiscrive;
+/// - `restart()`: ferma il driver con ciò che ha avviato e lo rimette in ascolto;
+/// - `log(text)`: dove va l'avviso.
+export async function openWithGtkRetry(label, { open, watch, restart, log }) {
+  for (let attempt = 1; ; attempt++) {
+    const aborter = new AbortController();
+    let unwatch = () => {};
+    const died = new Promise((_, fail) => {
+      unwatch = watch((line) => fail(new GtkFailed(line)));
+    });
+    try {
+      return await Promise.race([open(aborter.signal), died]);
+    } catch (error) {
+      if (!(error instanceof GtkFailed)) throw error;
+      aborter.abort();
+      await restart();
+      if (attempt > 1) throw error;
+      log(`⚠ ${label}: l'app non ha inizializzato GTK (${error.message}); driver riavviato, un solo nuovo tentativo`);
+    } finally {
+      unwatch();
+    }
+  }
 }

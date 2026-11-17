@@ -84,7 +84,13 @@ export function rovingToolbar(element: HTMLElement, options: RovingToolbarOption
     const live = reachable();
     if (preferred && live.includes(preferred)) current = preferred;
     else if (!current || !live.includes(current)) current = live[0] ?? null;
-    for (const control of all) control.tabIndex = control === current ? 0 : -1;
+    // Solo dove cambia: una barra che segue il cursore si rinfresca a ogni
+    // battuta, e in WebKit anche un attributo riscritto uguale invalida lo
+    // stile e fa ridipingere (C6).
+    for (const control of all) {
+      const index = control === current ? 0 : -1;
+      if (control.tabIndex !== index) control.tabIndex = index;
+    }
     return current;
   }
 

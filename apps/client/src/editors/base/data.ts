@@ -4,13 +4,12 @@ import { EVERY_DOCUMENT, type DocumentMatch, type Excerpts, type IndexQuery, typ
 import type { Theme } from "../../theme/theme";
 import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
+import { parseFilter, type FilterDef } from "./filter";
+import { parseOrder, parseSort, type SortEntry } from "./sort";
 
-export const BASE_OWNER = "fub.shell.base";
-export const BASE_PROFILE = "base";
-export const BASE_FORMAT = "base";
-export const BASE_FAMILY = "structured" as const;
-export const BASE_QUERY_NS = "fub.base";
-export const BASE_RENDERER_NS = "fub:base";
+import { BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
+
+export { BASE_FAMILY, BASE_FORMAT, BASE_OWNER, BASE_PROFILE, BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
 export const BASE_MAP_ATTRIBUTION_FALLBACK = "Offline coordinates";
 export const BASE_STATE_KEY = "base.active-view";
 /** YAML is not a network grant. Only an explicit gesture plus a host-owned
@@ -30,12 +29,27 @@ export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", 
 
 export interface BaseSurfaceDeps {
   readonly queryIndex: (query: IndexQuery) => Promise<IndexResult>;
-  readonly invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) => Promise<{ notify?: string | null }>;
+  readonly invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) => Promise<{ notify?: string | null; effect?: unknown; undo?: { readonly label: string } | null }>;
   readonly viewState: <T>(key: string) => Promise<T | null>;
   readonly setViewState: (key: string, value: unknown) => Promise<void>;
 }
 
-export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map";
+/// Le scritture dei documenti aperti, come le vede una Base: la coda di
+/// salvataggio e l'annuncio di una scrittura di un comando
+/// (`DocumentSessionCollection.expectWrite`, `state/document-session.ts`).
+export interface BaseDocumentWrites {
+  /// Svuota la coda di salvataggio; torna i documenti rimasti non salvati.
+  flush(): Promise<readonly string[]>;
+  /// Annuncia che un comando sta per riscrivere `doc`; torna chi ritira
+  /// l'annuncio se il comando non scrive.
+  expect(doc: string): () => void;
+}
+
+export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map" | "calendar";
+/// I tipi di vista che la superficie disegna. La linea del tempo (`timeline`)
+/// il contratto la porta già (T17a), ma finché la superficie non la disegna
+/// (T34) si legge come un tipo sconosciuto.
+const DRAWN_VIEW_KINDS: readonly string[] = ["table", "cards", "list", "kanban", "map", "calendar"];
 export type BaseCellValue =
   | { kind: "empty" }
   | { kind: "number" | "date" | "duration"; value: number }
@@ -50,6 +64,10 @@ export interface BaseRow {
   readonly doc: string;
   readonly values: Record<string, BaseCellValue>;
   readonly properties: Record<string, unknown>;
+  /// Il giorno della nota in una vista di calendario (`2026-11-14`: il giorno
+  /// civile della proprietà data, che l'ora non sposta), `null` se la nota non
+  /// ha la data; assente nelle altre viste. Lo dice `derive`.
+  readonly day?: string | null;
 }
 export interface BaseMapConfig {
   readonly lat_key: string;
@@ -62,6 +80,9 @@ export interface BaseMapConfig {
     readonly attribution: string | null;
     readonly network: boolean;
   } | null;
+  /// La mappa come il piano la dà, chiavi in più comprese: chi la riscrive
+  /// cambia solo ciò che deve.
+  readonly raw?: Readonly<Record<string, unknown>>;
 }
 export interface BasePlan {
   readonly view: string;
@@ -74,6 +95,66 @@ export interface BasePlan {
   readonly limit: number | null;
   readonly map: BaseMapConfig | null;
   readonly createDefaults: Record<string, unknown>;
+  /// Il filtro della vista, come lo legge il modello (`"all"` se non c'è).
+  readonly filters: FilterDef;
+  /// L'ordinamento scritto nella vista, nell'ordine del file.
+  readonly sort: SortEntry[];
+  /// Le colonne scritte nella vista (`order`); vuota se il modello le deduce.
+  readonly order: string[];
+  /// I riepiloghi scritti nella vista, nell'ordine del file, ognuno col nome
+  /// con cui `derive` ne dà il valore.
+  readonly summaries: BaseSummaryDef[];
+  /// Le proprietà del calendario (`date`) e della linea del tempo (`start`,
+  /// `end`), scritte sotto `fub:`; `null` se la vista non le ha.
+  readonly dateKey: string | null;
+  readonly startKey: string | null;
+  readonly endKey: string | null;
+}
+/// Gli aggregati di un riepilogo (`AggregateKind` di `fub-format-base`).
+export type BaseAggregate =
+  | "count" | "count_filled" | "count_empty" | "count_unique"
+  | "sum" | "average" | "min" | "max" | "earliest" | "latest" | "checked" | "unchecked";
+const AGGREGATES: readonly BaseAggregate[] = ["count", "count_filled", "count_empty", "count_unique", "sum", "average", "min", "max", "earliest", "latest", "checked", "unchecked"];
+/// Un riepilogo della vista come lo legge il modello (`SummaryDef`), e
+/// `label`, la chiave del suo valore nei riepiloghi di `derive`.
+export interface BaseSummaryDef {
+  readonly key: string;
+  readonly aggregate: BaseAggregate;
+  readonly expression: string | null;
+  readonly name: string | null;
+  readonly label: string;
+}
+/// Quanti riepiloghi una vista porta al massimo (`MAX_SUMMARIES` del modello).
+const MAX_SUMMARIES = 32;
+/// I riepiloghi del piano, controllati. Un piano che non li dice (un host di
+/// prima) non ne ha.
+export function parseSummaries(raw: unknown): BaseSummaryDef[] {
+  if (raw === null || raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_SUMMARIES) throw new Error("base: riepiloghi malformati");
+  return raw.map((entry) => {
+    const each = object(entry, "riepilogo");
+    const optional = (value: unknown): string | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value !== "string") throw new Error("base: riepilogo malformato");
+      return value;
+    };
+    if (typeof each.key !== "string" || each.key === "" || typeof each.label !== "string" || !AGGREGATES.includes(each.aggregate as BaseAggregate)) throw new Error("base: riepilogo malformato");
+    return { key: each.key, aggregate: each.aggregate as BaseAggregate, expression: optional(each.expression), name: optional(each.name), label: each.label };
+  });
+}
+/// Il valore da scrivere per `summaries`, nella forma del modello: senza
+/// `label`, che il file non ha, e senza i campi vuoti; `null` toglie la
+/// chiave invece di lasciare un `summaries: []` che nessuno ha scritto.
+export function summariesValue(summaries: readonly BaseSummaryDef[]): Record<string, string>[] | null {
+  if (summaries.length === 0) return null;
+  return summaries.map((summary) => {
+    const out: Record<string, string> = {};
+    if (summary.name !== null) out.name = summary.name;
+    out.key = summary.key;
+    out.aggregate = summary.aggregate;
+    if (summary.expression !== null) out.expression = summary.expression;
+    return out;
+  });
 }
 export interface BaseDerived { readonly rows: BaseRow[]; readonly summaries: Record<string, BaseCellValue> }
 export interface BaseMutation {
@@ -97,16 +178,23 @@ async function baseQuery(deps: BaseSurfaceDeps, query: unknown): Promise<Record<
   return object(response.value, "risposta");
 }
 export async function parseBaseViews(deps: BaseSurfaceDeps, source: string): Promise<string[]> {
-  return strings((await baseQuery(deps, { version: 1, op: "parse", source })).views, "viste");
+  return (await listBaseViews(deps, source)).names;
+}
+/// Le viste del file: i nomi e, nello stesso ordine, il tipo di ognuna
+/// (`null` quando il core non lo dice), per le figure delle linguette.
+export interface BaseViewList { readonly names: string[]; readonly types: (string | null)[] }
+export async function listBaseViews(deps: BaseSurfaceDeps, source: string): Promise<BaseViewList> {
+  const raw = await baseQuery(deps, { version: 1, op: "parse", source });
+  const names = strings(raw.views, "viste");
+  const types = Array.isArray(raw.types) && raw.types.length === names.length
+    ? raw.types.map((type) => typeof type === "string" ? type : null)
+    : names.map(() => null);
+  return { names, types };
 }
 export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: string | null): Promise<BasePlan> {
   const raw = await baseQuery(deps, { version: 1, op: "plan", source, view });
   if (typeof raw.view !== "string") throw new Error("base: piano senza vista");
-  // calendar e timeline il contratto le porta già (T17a), ma la superficie non le
-  // disegna ancora: finché non le disegnano (T17 e T34) sono tipi che non si
-  // mostrano, come un tipo sconosciuto. T17 toglie questa riga e aggiunge i due
-  // tipi a BaseViewKind.
-  if (!["table", "cards", "list", "kanban", "map"].includes(String(raw.view_type))) throw new Error("base: tipo vista sconosciuto");
+  if (!DRAWN_VIEW_KINDS.includes(String(raw.view_type))) throw new Error("base: tipo vista sconosciuto");
   const columns = strings(raw.columns, "colonne");
   const requiredProps = strings(raw.required_props, "dipendenze");
   const columnLabels = object(raw.column_labels, "etichette");
@@ -134,10 +222,91 @@ export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: 
       provider = { kind: p.kind, url_template: p.url_template as string | null, attribution: p.attribution as string | null, network: p.network };
     }
     for (const key of ["label_key", "color_key"]) if (m[key] !== null && typeof m[key] !== "string") throw new Error(`base: ${key} malformato`);
-    map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider };
+    map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider, raw: { ...m } };
   }
   if (raw.view_type === "map" && !map) throw new Error("base: vista mappa senza coordinate");
-  return { view: raw.view, viewType: raw.view_type as BaseViewKind, columns, columnLabels: columnLabels as Record<string, string>, requiredProps, allProperties: raw.all_properties, group: optionalKey("group"), limit: limit as number | null, map, createDefaults };
+  return {
+    view: raw.view, viewType: raw.view_type as BaseViewKind, columns, columnLabels: columnLabels as Record<string, string>, requiredProps,
+    allProperties: raw.all_properties, group: optionalKey("group"), limit: limit as number | null, map, createDefaults,
+    filters: parseFilter(raw.filters), sort: parseSort(raw.sort), order: parseOrder(raw.order), summaries: parseSummaries(raw.summaries),
+    // Un host che non le dice (prima di T16) vale come una vista senza.
+    dateKey: raw.date_key === undefined ? null : optionalKey("date_key"),
+    startKey: raw.start_key === undefined ? null : optionalKey("start_key"),
+    endKey: raw.end_key === undefined ? null : optionalKey("end_key"),
+  };
+}
+
+/// Le chiavi di una vista che i gesti della barra, del menu della colonna e
+/// di «+» riscrivono.
+export type BaseViewKey = "filters" | "sort" | "order" | "group" | "summaries" | "map" | "date" | "start" | "end";
+/// I comandi di T15a che scrivono un `.base` (`fub-features/src/base.rs`).
+export const BASE_VIEW_SET = "base.view.set";
+export const BASE_VIEW_ADD = "base.view.add";
+export const BASE_VIEW_REMOVE = "base.view.remove";
+/// I tipi di vista che «+» crea: quelli che la Base disegna.
+export const NEW_VIEW_KINDS: readonly BaseViewKind[] = ["table", "cards", "list", "kanban", "map", "calendar"];
+
+/// Scrive la chiave `key` della vista `view` del file `doc` con
+/// `base.view.set`: `value` è il valore JSON, `null` toglie la chiave. Con
+/// `base` il comando scrive solo se il file è ancora quella revisione, e
+/// altrimenti risponde con un conflitto.
+export async function setBaseViewKey(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, key: BaseViewKey, value: unknown, base: string | null): Promise<BaseViewWrite> {
+  const args: Record<string, unknown> = { doc, view, key };
+  if (value !== null && value !== undefined) args.value = JSON.stringify(value);
+  return baseViewCommand(deps, BASE_VIEW_SET, args, base);
+}
+/// Aggiunge in fondo al file la vista `name` del tipo `type` con
+/// `base.view.add`; le altre chiavi si scrivono dopo, con `setBaseViewKey`.
+export async function addBaseView(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, name: string, type: BaseViewKind, base: string | null): Promise<BaseViewWrite> {
+  return baseViewCommand(deps, BASE_VIEW_ADD, { doc, name, type }, base);
+}
+/// Toglie la vista `view` con tutte le sue chiavi, con `base.view.remove`.
+export async function removeBaseView(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, base: string | null): Promise<BaseViewWrite> {
+  return baseViewCommand(deps, BASE_VIEW_REMOVE, { doc, view }, base);
+}
+/// Un comando che scrive il `.base`, con la revisione se c'è: torna la
+/// revisione scritta, la frase e l'annulla.
+async function baseViewCommand(deps: Pick<BaseSurfaceDeps, "invokeCommand">, command: string, args: Record<string, unknown>, base: string | null): Promise<BaseViewWrite> {
+  if (base !== null) args.base = base;
+  const outcome = await deps.invokeCommand(command, args);
+  const effect = outcome?.effect as { kind?: unknown; ns?: unknown; payload?: unknown } | undefined;
+  const revision = effect?.kind === "custom" && effect.ns === "fub.base" ? (effect.payload as { revision?: unknown } | null)?.revision : undefined;
+  const undo = outcome?.undo;
+  return {
+    revision: typeof revision === "string" ? revision : null,
+    notify: typeof outcome?.notify === "string" && outcome.notify !== "" ? outcome.notify : null,
+    undo: undo && typeof undo.label === "string" ? { label: undo.label } : null,
+  };
+}
+
+/// L'esito di `base.view.set`: la revisione scritta (`null` se il file non è
+/// cambiato, o se l'host non la dice), la frase da dire e, se il kernel sa
+/// disfarlo, la frase accanto ad «Annulla».
+export interface BaseViewWrite {
+  readonly revision: string | null;
+  readonly notify: string | null;
+  readonly undo: { readonly label: string } | null;
+}
+
+/// Le righe che un gesto ha scritto: il pezzo del testo nuovo che non c'era,
+/// fra le righe uguali in testa e in coda, e quante righe di prima ha preso il
+/// suo posto. È ciò che «Nel file .base» mostra.
+export interface BaseWritten {
+  /// Le righe di prima che non ci sono più.
+  readonly removed: string[];
+  /// Le righe nuove.
+  readonly added: string[];
+  /// Il numero (da 1) della prima riga cambiata nel testo nuovo.
+  readonly line: number;
+}
+export function writtenLines(before: string, after: string): BaseWritten | null {
+  if (before === after) return null;
+  const old = before.split(/\r?\n/), now = after.split(/\r?\n/);
+  let head = 0;
+  while (head < old.length && head < now.length && old[head] === now[head]) head++;
+  let tail = 0;
+  while (tail < old.length - head && tail < now.length - head && old[old.length - 1 - tail] === now[now.length - 1 - tail]) tail++;
+  return { removed: old.slice(head, old.length - tail), added: now.slice(head, now.length - tail), line: head + 1 };
 }
 export interface BaseSelection {
   readonly matching: QueryExpr;
@@ -208,7 +377,12 @@ export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view
     if (typeof record.doc !== "string" || !properties.has(record.doc)) throw new Error("base: documento derivato sconosciuto");
     const values = object(record.values, "valori");
     for (const [key, value] of Object.entries(values)) if (!isCell(value)) throw new Error(`base: cella malformata ${key}`);
-    return { doc: record.doc, values: values as Record<string, BaseCellValue>, properties: properties.get(record.doc)! };
+    const row: BaseRow = { doc: record.doc, values: values as Record<string, BaseCellValue>, properties: properties.get(record.doc)! };
+    if (record.time === undefined) return row;
+    const time = object(record.time, "tempo");
+    if (time.day === undefined) return row;
+    if (time.day !== null && (typeof time.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(time.day))) throw new Error("base: giorno malformato");
+    return { ...row, day: time.day };
   });
   const summaries = object(raw.summaries, "riepiloghi");
   for (const [key, value] of Object.entries(summaries)) if (!isCell(value)) throw new Error(`base: riepilogo malformato ${key}`);

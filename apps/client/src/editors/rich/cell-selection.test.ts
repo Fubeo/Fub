@@ -3,9 +3,10 @@
 // Le tabelle del documento nel modo «documento» della Tabella: Tab fra le
 // celle, Maiusc con le frecce oltre la cella per scegliere celle, e sulle
 // celle scelte i gesti del foglio, gli appunti e «Unisci celle».
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
-import { t } from "../../i18n/strings";
+import { resolvedLanguage, t } from "../../i18n/strings";
+import { todayText } from "../../tabella/series";
 import { recentNotices } from "../../ui/notify";
 import { RichEngine } from "./engine";
 import { cellAt, cellBoxes, cutCells, DOCUMENT_TABLE_CAPS, selectedCells } from "./cell-selection";
@@ -31,13 +32,17 @@ afterEach(() => {
 });
 
 const para = (x: string): Block => ({ t: "para", role: { kind: "body" }, c: x ? [{ t: "text", x }] : [] }) as Block;
-const cell = (x: string) => ({ k: `K${x}`, blocks: [para(x)] });
 
 function engine(rows: string[][]): RichEngine {
+  return engineOf(rows.map((row) => row.map((x) => [para(x)])));
+}
+
+/// Un documento con una tabella di celle coi blocchi `rows`, poi «dopo».
+function engineOf(rows: Block[][][]): RichEngine {
   const parent = document.createElement("div");
   document.body.append(parent);
   const made = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
-  const table: Block = { t: "table", k: "T", rows: rows.map((row, r) => ({ k: `R${r}`, cells: row.map(cell) })) } as Block;
+  const table: Block = { t: "table", k: "T", rows: rows.map((row, r) => ({ k: `R${r}`, cells: row.map((blocks, c) => ({ k: `K${r}-${c}`, blocks })) })) } as Block;
   made.setDoc(JSON.stringify({ format: "fub-rich", version: 1, blocks: [table, para("dopo")] }));
   engines.push(made);
   return made;
@@ -222,6 +227,64 @@ describe("le tabelle del documento", () => {
     expect(grid(e)).toEqual([["a", "b"], ["c", "d"]]);
   });
 
+  it("Ctrl+; con celle scelte: il testo semplice lascia il posto alla data, una cella ricca non perde niente", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-15T12:00:00"));
+    try {
+      const today = todayText(new Date(), resolvedLanguage());
+      const bold: Block = { t: "para", role: { kind: "body" }, c: [{ t: "text", x: "nero", m: ["b"] }] } as Block;
+      const e = engineOf([
+        [[para("a")], [para("b")]],
+        [[para("uno"), para("due")], [bold]],
+      ]);
+      const cellText = () => {
+        const table = parseProjection(e.getDoc()).blocks.find((b) => b.t === "table") as Table;
+        return table.rows.map((row) => row.cells.map((c) => c.blocks.map((b) => ((b as Para).c ?? []).map((i) => (i as TextInline).x).join("")).join("+")));
+      };
+      // Una cella di solo testo: la data al suo posto.
+      e.select(at(e, "a") + 1);
+      press("ArrowRight", { shiftKey: true });
+      press(";", { ctrlKey: true, code: "Semicolon" });
+      expect(cellText()[0]).toEqual([today, "b"]);
+      // Due paragrafi: la data in fondo al primo, il secondo resta.
+      e.select(at(e, "due") + 3);
+      press("ArrowRight", { shiftKey: true });
+      press(";", { ctrlKey: true, code: "Semicolon" });
+      expect(cellText()[1]![0]).toBe(`uno ${today}+due`);
+      // Un testo in grassetto resta in grassetto, e la data va dopo.
+      e.select(at(e, "nero"));
+      press("ArrowLeft", { shiftKey: true });
+      press(";", { ctrlKey: true, code: "Semicolon" });
+      const table = parseProjection(e.getDoc()).blocks.find((b) => b.t === "table") as Table;
+      const inlines = (table.rows[1]!.cells[1]!.blocks[0] as Para).c as TextInline[];
+      expect(inlines[0]).toMatchObject({ x: "nero", m: ["b"] });
+      expect(inlines.map((i) => i.x).join("")).toBe(`nero ${today}`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Ctrl+Alt con le frecce sposta righe e colonne col cambio di tabella comune: con celle unite le colonne restano", () => {
+    const e = engine([["a", "b", "c"], ["d", "e", "f"]]);
+    e.select(at(e, "e") + 1);
+    expect(e.run("markdown.table.column.right")).toBe(true);
+    expect(grid(e)).toEqual([["a", "c", "b"], ["d", "f", "e"]]);
+    expect(e.run("markdown.table.row.up")).toBe(true);
+    expect(grid(e)).toEqual([["d", "f", "e"], ["a", "c", "b"]]);
+    // Il cursore resta nel testo che si è spostato.
+    expect(e.state.selection.$from.parent.textContent).toBe("e");
+    e.select(at(e, "a") + 1);
+    press("ArrowRight", { shiftKey: true });
+    e.run("rich.table.merge");
+    e.select(at(e, "f") + 1);
+    expect(e.run("markdown.table.column.left")).toBe(false);
+    expect(e.run("markdown.table.column.right")).toBe(false);
+    expect(grid(e)).toEqual([["d", "f", "e"], ["a+c", "b"]]);
+    // Le righe si spostano anche con celle unite: ognuna resta intera.
+    expect(e.run("markdown.table.row.down")).toBe(true);
+    expect(grid(e)).toEqual([["a+c", "b"], ["d", "f", "e"]]);
+  });
+
   it("copia le celle scelte in TSV e in una tabella HTML", () => {
     const e = engine([["a", "b"], ["c", "d"]]);
     e.select(at(e, "a") + 1);
@@ -250,7 +313,7 @@ describe("la prova comune della Tabella, sul documento", () => {
   function key(e: RichEngine, name: string, init: KeyboardEventInit): void {
     if (press(name, init)) return;
     const step = ({ ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] } as Record<string, [number, number]>)[name];
-    if (!step || init.shiftKey || init.ctrlKey) return;
+    if (!step || init.shiftKey || init.ctrlKey || init.altKey) return;
     const found = cellAt(e.state.selection.$head);
     if (!found) return;
     const next = cellBoxes(found.table, found.tablePos).find((box) => box.row === found.box.row + step[0] && box.column === found.box.column + step[1]);
@@ -279,6 +342,9 @@ describe("la prova comune della Tabella, sul documento", () => {
       command: (id) => {
         if (!e.run(id)) refused.push(id);
       },
+      // Il documento non ha né la maniglia né le intestazioni: il gesto non
+      // trova dove farsi, e i casi che lo usano lì mancano col perché.
+      pointer: () => {},
       clipboard,
       cells: () => grid(e),
       active: () => here(e),
@@ -304,9 +370,20 @@ describe("la prova comune della Tabella, sul documento", () => {
     return e;
   }
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  /// L'orologio del caso, se ne ha uno.
+  const clock = (test: ConformanceCase) => {
+    if (!test.today) return;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(test.today));
+  };
+
   for (const test of TABLE_CONFORMANCE) {
     if (caseApplies(test, target)) {
       it(test.name, async () => {
+        clock(test);
         const seen = await playCase(test, driver(start(test)));
         const expected = expectedOf(test, target);
         expect(seenOf(seen, expected)).toEqual(expected);
@@ -316,6 +393,7 @@ describe("la prova comune della Tabella, sul documento", () => {
     const reason = caseAbsence(test, target);
     if (reason === null) continue;
     it(`${test.name}: assente (${reason})`, async () => {
+      clock(test);
       const e = start(test);
       const refused: string[] = [];
       const seen = await playCase(test, driver(e, refused));

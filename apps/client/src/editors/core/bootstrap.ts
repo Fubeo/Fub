@@ -1,6 +1,7 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
+import type { PeekLink } from "../text/profiles/markdown/link-gesture";
 import { api } from "../../host/ipc";
 import { on as onSignal, openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
@@ -16,8 +17,8 @@ import { notify } from "../../ui/notify";
 import { revealSidePanel } from "../../ui/side-panels";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
-import { mountBaseSurface } from "../base/surface";
-import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
+import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/ids";
+import type { BaseDocumentWrites } from "../base/data";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps, type PdfAnnotationsPort } from "../media/media-surface";
@@ -88,13 +89,20 @@ import {
 } from "./registry";
 
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
-  readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// Il clic su un wikilink: `from` è il documento che contiene il link,
+  /// da cui il nome si risolve (assente: il documento del riquadro col fuoco).
+  readonly onOpenWikilink: (page: string, heading: string | null, block: string | null, from?: string) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
   /// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
   /// documento col gesto e non crea mai una nota.
   readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
-  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null, from?: string) => void | Promise<void>;
+  /// La sbirciata (E11, T20) dai link delle note: Alt col clic, Alt-Invio,
+  /// «Sbircia» nel menu del link. `from` è la nota che contiene il link.
+  readonly onPeekLink?: (link: PeekLink, from: string) => void | Promise<void>;
+  /// Che cosa fa il clic che apre un link di una nota (`editor.link-click`).
+  readonly linkClick?: () => "apri" | "sbircia";
   /// «Apri a lato» dal menu di una scheda della lavagna: il file `path` (con
   /// il suo `#…`) in un riquadro accanto, come `onOpenPath`.
   readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
@@ -141,6 +149,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// La revisione dei byte da cui il testo della sessione di `doc` discende
   /// adesso: una cartella di Excel ci apre il suo giornale.
   readonly documentBase?: (doc: string) => string | null;
+  /// Le scritture dei documenti aperti, per i gesti della barra di una Base:
+  /// salvare prima, e annunciare la scrittura perché la ricarica non si dica.
+  readonly documentWrites?: BaseDocumentWrites;
   readonly media?: MediaSurfaceDeps;
   readonly canvasMedia?: CanvasMediaPort;
   readonly canvasAttachments?: CanvasAttachmentPort;
@@ -663,6 +674,8 @@ export function createDocumentSurfaceRegistry(
             onOpenPath: options.onOpenPath,
             ...(options.onOpenFigure ? { onOpenFigure: options.onOpenFigure } : {}),
             onOpenWikilinkBeside: options.onOpenWikilinkBeside,
+            ...(options.onPeekLink ? { onPeekLink: options.onPeekLink } : {}),
+            ...(options.linkClick ? { linkClick: options.linkClick } : {}),
             onOpenDocument: options.onOpenDocument,
             onShowFile: options.onShowFile,
             onImportRemoteImage: options.onImportRemoteImage,
@@ -723,17 +736,28 @@ export function createDocumentSurfaceRegistry(
     family: "structured",
     defaultProfile: BASE_PROFILE,
     formats: { [BASE_FORMAT]: BASE_PROFILE },
+    // La superficie, la barra e i dati arrivano col primo `.base` aperto, in
+    // un pezzo del bundle loro: non pesano sull'avvio né sul pezzo che la
+    // shell condivide con gli altri editor.
     factory: {
-      mount(profile, context) {
-        // Il vault in cui la superficie nasce (FUB-001).
-        const vault = openVaultRoot();
-        return mountBaseSurface(profile, context, {
-          queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
-          invokeCommand: api.invokeCommand,
-          viewState: api.viewState,
-          setViewState: api.setViewState,
-          onOpenDocument: options.onOpenDocument,
-        });
+      load: async () => {
+        const { mountBaseSurface } = await import("../base/surface");
+        return {
+          mount(profile, context) {
+            // Il vault in cui la superficie nasce (FUB-001).
+            const vault = openVaultRoot();
+            return mountBaseSurface(profile, context, {
+              queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
+              invokeCommand: api.invokeCommand,
+              viewState: api.viewState,
+              setViewState: api.setViewState,
+              onOpenDocument: options.onOpenDocument,
+              // La revisione del `.base` aperto, per i gesti della barra (CAS).
+              revision: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
+              documentWrites: options.documentWrites,
+            });
+          },
+        };
       },
     },
   });

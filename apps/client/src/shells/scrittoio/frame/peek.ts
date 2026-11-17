@@ -9,6 +9,8 @@
 // bottone — e a quel punto l'affaccio lascia il posto al cassetto vero.
 //
 // È un gesto del puntatore: dalla tastiera un cassetto si apre col suo comando.
+// E serve un movimento vero sul bordo: un bordo che compare sotto un puntatore
+// fermo (il velo di un cassetto che si chiude) non sveglia niente.
 import { animate, DURATION, type Motion } from "../../../moto";
 import { focusEditor } from "../../../state/document-controller";
 import type { Lifetime } from "../../../ui/lifetime";
@@ -146,6 +148,23 @@ export function mountDrawerPeek(lifetime: Lifetime): void {
     return pointer.pointerType !== "touch" && pointer.pointerType !== "pen";
   };
 
+  // Dov'era il puntatore prima del movimento che si sta consegnando. Il bordo
+  // si sveglia solo per un movimento vero: un velo che sparisce, o un pannello
+  // che si chiude, mette il bordo sotto un puntatore fermo, e il browser
+  // consegna `pointerover`/`pointerenter` (e a volte un `pointermove` nello
+  // stesso punto) senza che la persona abbia mosso niente.
+  let last: { x: number; y: number } | null = null;
+  let before: { x: number; y: number } | null = null;
+  lifetime.listen(view, "pointermove", (event) => {
+    const { clientX: x, clientY: y } = event as PointerEvent;
+    before = last;
+    last = { x, y };
+  }, { capture: true });
+  const moved = (event: Event): boolean => {
+    const { clientX: x, clientY: y } = event as PointerEvent;
+    return before === null || before.x !== x || before.y !== y;
+  };
+
   for (const side of ["sidebar", "inspector"] as const) {
     const panel = panelOf(side);
     if (!panel) continue;
@@ -173,6 +192,13 @@ export function mountDrawerPeek(lifetime: Lifetime): void {
     lifetime.listen(edge, "pointerenter", (event) => {
       // Un trascinamento che passa di qui non sta chiedendo un cassetto.
       if (!fine(event) || (event as PointerEvent).buttons !== 0) return;
+      hovered = true;
+      stay();
+    });
+    // La sosta parte dal primo movimento vero sul bordo, non dall'ingresso:
+    // l'ingresso può nascere da un cambio del DOM col puntatore fermo.
+    lifetime.listen(edge, "pointermove", (event) => {
+      if (!fine(event) || (event as PointerEvent).buttons !== 0 || !moved(event)) return;
       hovered = true;
       stay();
       if (peeking === side || dwell !== undefined) return;

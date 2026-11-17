@@ -224,7 +224,7 @@ function samples(): void {
     row.append(el("span", "didascalia", name));
     const paragraph = el("p", "misura", `${PROSE} ${PROSE}`);
     paragraph.style.margin = "0";
-    paragraph.setAttribute("style", `${paragraph.getAttribute("style") ?? ""};${style}`);
+    paragraph.style.cssText += `;${style}`;
     row.append(paragraph);
     s.append(row);
   }
@@ -240,11 +240,9 @@ function samples(): void {
   const readingRow = el("div", "riga-scala");
   readingRow.append(el("span", "didascalia", "content-width · leading-relaxed"));
   const readingParagraph = el("p", "misura", `${PROSE} ${PROSE} ${PROSE}`);
-  readingParagraph.setAttribute(
-    "style",
+  readingParagraph.style.cssText =
     "margin: 0; max-width: var(--content-width); font-family: var(--font-reading); " +
-      "font-size: var(--text-reading); line-height: var(--leading-relaxed);",
-  );
+      "font-size: var(--text-reading); line-height: var(--leading-relaxed);";
   readingRow.append(readingParagraph);
   reading.append(readingRow);
   root.append(reading);

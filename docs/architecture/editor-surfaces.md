@@ -31,7 +31,7 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece una `EditorSurface`.
+Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md).
 `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
@@ -70,10 +70,10 @@ accanto») la imposta nel riquadro nuovo di una divisione verso destra, o va al
 riquadro che la mostra già. Aprire e chiudere non sono mai disponibili
 insieme; stanno nella palette e nel menu del riquadro, senza accordo. Il
 cambio passa dalla via del cambio di scheda: il riquadro stacca e distrugge la
-superficie e ne monta un'altra sulla stessa `DocumentSession`, che restituisce
-testo e descrittore senza leggere il disco. Testo sporco, coda di salvataggio
-e bozza restano; la cronologia locale della superficie smontata si perde come
-a ogni cambio di scheda, quella degli altri riquadri no. Il fuoco va sulla
+superficie, senza metterla da parte, e ne monta un'altra sulla stessa
+`DocumentSession`, che restituisce testo e descrittore senza leggere il disco.
+Testo sporco, coda e bozza restano; la cronologia locale della superficie
+smontata si perde, quella degli altri riquadri no. Il fuoco va sulla
 superficie nuova. Se il riquadro ricorda una lettura per la famiglia della
 vista, l'apertura passa alla scrittura che sceglierebbe `Mod-E`, perché chi
 chiede il sorgente vuole il testo; accanto passa alla modalità di ruolo

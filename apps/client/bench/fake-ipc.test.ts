@@ -86,3 +86,33 @@ describe("le impostazioni d'Aspetto del finto", () => {
     expect(missing).toEqual([]);
   });
 });
+
+// `editor.blocks` di `crates/fub-host/src/settings.rs`: senza, la voce
+// «Blocchi» del menu «…» del riquadro scriverebbe una chiave che il finto non
+// conosce, e il banco non potrebbe mostrare i blocchi spenti.
+describe("i blocchi come preferenza nel finto", () => {
+  it("sono un interruttore della macchina, acceso di serie, nel gruppo Editor, coi testi dell'host anche in inglese", () => {
+    const blocks = entries.find((entry) => entry.spec.key === "editor.blocks");
+    expect(blocks?.spec).toMatchObject({
+      label: "Blocchi: maniglie e selezione",
+      group: "Editor",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    });
+    expect(blocks?.value).toBe(true);
+    expect(blocks?.source).toBe("default");
+    for (const text of [blocks!.spec.label, blocks!.spec.description]) {
+      expect(Object.prototype.hasOwnProperty.call(ENGLISH, text), text).toBe(true);
+    }
+  });
+
+  it("si spengono dal finto, e il finto lo dice", async () => {
+    const { api } = await import("./fake-ipc");
+    await api.setSetting("editor.blocks", false);
+    const result = await api.queryIndex({ kind: "settings" });
+    if (result.kind !== "settings") throw new Error(`risposta inattesa: ${result.kind}`);
+    expect(result.value.find((entry) => entry.spec.key === "editor.blocks")?.value).toBe(false);
+    await api.setSetting("editor.blocks", true);
+  });
+});

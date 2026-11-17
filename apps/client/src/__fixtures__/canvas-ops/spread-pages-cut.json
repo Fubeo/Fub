@@ -1,0 +1,74 @@
+{
+  "about": "Un intervallo oltre l'ultima pagina si taglia (e una nota lo dice): «3-20» di un PDF di 4 pagine fa le pagine 3 e 4.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "x": 560,
+        "y": 400,
+        "width": 360,
+        "height": 480,
+        "file": "Corsi/dispensa.pdf"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "spread_pages",
+      "id": "p",
+      "pages": "3-20",
+      "page_count": 4
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "x": 560,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf"
+        },
+        {
+          "id": "910a2dec89025cc1",
+          "type": "file",
+          "x": 944,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=3"
+        },
+        {
+          "id": "beeb8da1658eec67",
+          "type": "file",
+          "x": 1328,
+          "y": 400,
+          "width": 360,
+          "height": 480,
+          "file": "Corsi/dispensa.pdf",
+          "subpath": "#page=4"
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "910a2dec89025cc1",
+      "beeb8da1658eec67"
+    ],
+    "notes": [
+      {
+        "index": 0,
+        "code": "pages_cut",
+        "detail": "the PDF has 4 pages: the pages after page 4 are left out"
+      }
+    ]
+  }
+}

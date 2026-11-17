@@ -2,14 +2,27 @@
 // margine, che apre i livelli; sulla riga vuota del cursore un segnaposto che
 // dice che cosa scrivere. Nessuno dei due è nel file né in ciò che si copia, e
 // i lettori di schermo leggono la pastiglia come un pulsante, il segnaposto no.
+//
+// Lo stesso plugin dice alla riga dei suggerimenti della banda, attraverso la
+// porta di `editors/core/hints.ts`, che cosa si sta facendo: riga
+// qualunque, testo scelto, compito, link, blocchi scelti, titolo della pagina,
+// «/» aperto. A ogni transazione avvisa soltanto; il contesto lo legge la riga
+// dopo la pausa.
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Extension, type Line } from "@codemirror/state";
+import { type EditorState, type Extension, Facet, type Line } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { createList, openPopover, type PopoverHandle } from "../../../../kit";
 import { openLifetime } from "../../../../ui/lifetime";
+import { openHintSource, type HintContext, type HintItem, type HintSource } from "../../../core/hints";
 import { lineHeading, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { blockModel } from "./blocks/model";
+import { blockSelection, escapeLeaves } from "./blocks/selection";
+import { mainElements } from "./cursor-elements";
+import { isTaskLine } from "./dates";
 import { frontmatterRange } from "./render";
+import { openSlashMenu } from "./slash";
 import { liveStrings } from "./strings";
+import { markPresence } from "../../../core/presence";
 
 const OPAQUE = new Set(["FencedCode", "CodeBlock", "HTMLBlock", "CommentBlock"]);
 
@@ -52,12 +65,19 @@ class PlaceholderWidget extends WidgetType {
 
 const ATTR_LEVEL = "data-fub-level";
 
+/// Spegne la pastiglia del livello. La accendono i blocchi (`blocks/index.ts`):
+/// «+» e maniglia stanno nello stesso margine, sulla stessa riga, e la
+/// pastiglia ci finirebbe sotto; il livello si cambia da «Trasforma in» del
+/// menu del blocco e dalla barra di formato.
+export const headingPillOff = Facet.define<boolean, boolean>({ combine: (values) => values.some(Boolean) });
+
 class HeadingPillWidget extends WidgetType {
   constructor(readonly level: number) { super(); }
   eq(other: HeadingPillWidget): boolean { return other.level === this.level; }
   toDOM(): HTMLElement {
     const holder = document.createElement("span");
     holder.className = "cm-fub-heading-pill";
+    markPresence(holder, "hover");
     const button = document.createElement("button");
     button.type = "button";
     button.className = "cm-fub-heading-pill-button";
@@ -86,7 +106,7 @@ function decorate(view: EditorView, slash: () => boolean): DecorationSet {
   if (opaque(state, line)) return Decoration.none;
   const out = [];
   const level = lineHeading(state, line);
-  if (level > 0) out.push(Decoration.widget({ widget: new HeadingPillWidget(level), side: -1 }).range(line.from));
+  if (level > 0 && !state.facet(headingPillOff)) out.push(Decoration.widget({ widget: new HeadingPillWidget(level), side: -1 }).range(line.from));
   const hint = view.hasFocus ? placeholderFor(line.text, slash()) : null;
   if (hint) {
     const text = hint.key === "live.hint.heading"
@@ -97,6 +117,84 @@ function decorate(view: EditorView, slash: () => boolean): DecorationSet {
   return Decoration.set(out, true);
 }
 
+/// Dove sta il fuoco dell'editor, per la riga dei suggerimenti.
+export interface HintFocus {
+  /// Il testo dell'editor ha il fuoco.
+  readonly editor: boolean;
+  /// Il titolo della pagina (il campo della testata dei Blocchi) ha il fuoco.
+  readonly title: boolean;
+}
+
+type LiveKey = Parameters<typeof liveStrings.t>[0];
+const say = (key: LiveKey): string => liveStrings.t(key);
+
+/// Un comando di Markdown, con l'accordo con cui l'editor lo esegue da sé.
+const action = (id: string, key: LiveKey): HintItem => ({ command: id, chord: MARKDOWN_ACTIONS.get(id)?.chord ?? null, say: say(key) });
+const keys = (list: readonly string[], key: LiveKey): HintItem => ({ keys: list, say: say(key) });
+
+/// Ciò che la riga dei suggerimenti dice per questo stato: il contesto e le
+/// sue voci, o `null` se l'editor non ha il fuoco o non si scrive. `slash`
+/// dice se il «/» apre il menu (`editor.slash`).
+export function markdownHints(state: EditorState, focus: HintFocus, slash: boolean): HintContext | null {
+  if (state.readOnly) return null;
+  if (focus.title) {
+    return { id: "title", items: [
+      keys(["Enter"], "live.keys.title.rename"),
+      keys(["ArrowDown"], "live.keys.title.down"),
+      keys(["Escape"], "live.keys.title.cancel"),
+    ] };
+  }
+  if (!focus.editor) return null;
+  if (openSlashMenu(state)) {
+    return { id: "slash", items: [
+      keys(["ArrowUp", "ArrowDown"], "live.keys.slash.choose"),
+      keys(["Enter"], "live.keys.slash.enter"),
+      keys(["Tab"], "live.keys.slash.tab"),
+      keys(["Escape"], "live.keys.slash.escape"),
+      keys(["Mod-/"], "live.keys.slash.all"),
+    ] };
+  }
+  if (state.field(blockSelection, false)) {
+    return { id: "blocks", items: [
+      keys(["ArrowUp", "ArrowDown"], "live.keys.blocks.choose"),
+      keys(["Shift-ArrowUp", "Shift-ArrowDown"], "live.keys.blocks.extend"),
+      keys(["Mod-Shift-ArrowUp", "Mod-Shift-ArrowDown"], "live.keys.blocks.move"),
+      keys(["Mod-d"], "live.keys.blocks.duplicate"),
+      keys(["Delete"], "live.keys.blocks.delete"),
+      keys(["Enter"], "live.keys.blocks.write"),
+    ] };
+  }
+  const main = state.selection.main;
+  if (!main.empty) {
+    return { id: "selection", items: [
+      action("markdown.bold", "live.keys.bold"),
+      action("markdown.italic", "live.keys.italic"),
+      action("markdown.wikilink", "live.keys.link"),
+    ] };
+  }
+  const elements = mainElements(state);
+  if (elements.has("link") || elements.has("wikilink") || elements.has("embed")) {
+    return { id: "link", items: [
+      keys(["Mod"], "live.keys.link.preview"),
+      keys(["Alt-Enter"], "live.keys.link.open"),
+    ] };
+  }
+  if (isTaskLine(state.doc.lineAt(main.head).text)) {
+    return { id: "task", items: [
+      keys(["Mod-Enter"], "live.keys.check"),
+      keys(["@"], "live.keys.due"),
+      action("markdown.list.indent", "live.keys.indent"),
+    ] };
+  }
+  const blocks = state.field(blockModel, false) !== undefined;
+  return { id: "text", items: [
+    ...(slash ? [keys(["/"], "live.keys.insert")] : []),
+    keys(["@"], "live.keys.mention"),
+    { command: "shell.switcher", say: say("live.keys.launcher") },
+    ...(blocks && !state.facet(escapeLeaves) ? [keys(["Escape"], "live.keys.select_block")] : []),
+  ] };
+}
+
 /// La pastiglia del titolo e i segnaposto. `slash` dice se il menu «/» c'è.
 export function liveHints(slash: () => boolean = () => false): Extension {
   const plugin = ViewPlugin.fromClass(
@@ -104,9 +202,38 @@ export function liveHints(slash: () => boolean = () => false): Extension {
       decorations: DecorationSet;
       menu: PopoverHandle | null = null;
       readonly life = openLifetime();
-      constructor(readonly view: EditorView) { this.decorations = decorate(view, slash); }
+      /// Il titolo della pagina ha il fuoco: è un campo dentro l'editor, e
+      /// `view.hasFocus` non lo vede.
+      title = false;
+      readonly hints: HintSource;
+      constructor(readonly view: EditorView) {
+        this.decorations = decorate(view, slash);
+        this.hints = openHintSource(() => markdownHints(this.view.state, { editor: this.view.hasFocus, title: this.title }, slash()));
+        if (view.hasFocus) this.hints.changed(true);
+        // Il fuoco del titolo si ascolta su `view.dom` direttamente, non con
+        // gli `eventHandlers` del plugin: CodeMirror scarta gli eventi nati in
+        // un widget che li ignora (`ignoreEvent`), e la testata della pagina
+        // li ignora tutti, quindi lì `focusin` non arriverebbe mai.
+        const isTitle = (target: EventTarget | null): boolean =>
+          (target as Element | null)?.classList?.contains("cm-fub-page-title") === true;
+        this.life.listen(view.dom, "focusin", (event: FocusEvent) => {
+          if (!isTitle(event.target)) return;
+          this.title = true;
+          this.hints.changed(true);
+        });
+        this.life.listen(view.dom, "focusout", (event: FocusEvent) => {
+          if (!this.title || !isTitle(event.target)) return;
+          this.title = false;
+          this.hints.changed();
+        });
+      }
       update(update: ViewUpdate): void {
-        if (update.docChanged || update.selectionSet || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+        // Per la riga dei suggerimenti basta un avviso: il contesto si legge
+        // dopo la pausa, non qui.
+        if (update.focusChanged) this.hints.changed(update.view.hasFocus);
+        else if (update.transactions.length > 0) this.hints.changed();
+        if (update.docChanged || update.selectionSet || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)
+          || update.startState.facet(headingPillOff) !== update.state.facet(headingPillOff)) {
           this.decorations = decorate(update.view, slash);
         }
       }
@@ -153,7 +280,10 @@ export function liveHints(slash: () => boolean = () => false): Extension {
         button.setAttribute("aria-expanded", "true");
         this.menu = popover;
       }
-      destroy(): void { this.life.close(); }
+      destroy(): void {
+        this.hints.close();
+        this.life.close();
+      }
     },
     {
       decorations: (value) => value.decorations,

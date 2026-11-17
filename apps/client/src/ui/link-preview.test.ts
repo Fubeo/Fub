@@ -61,11 +61,16 @@ describe("il bersaglio di un wikilink", () => {
       document.querySelector('[contenteditable="false"] a'),
       document.querySelector("p"),
     ];
-    expect(linkTarget(reading!)?.target).toEqual({ page: "Nota", heading: "Sez", block: null, live: false });
-    expect(linkTarget(liveBlock!)?.target).toEqual({ page: "Altra", heading: null, block: "b1", live: true });
-    expect(linkTarget(liveHeading!)?.target).toEqual({ page: "Terza", heading: "Titolo", block: null, live: true });
-    expect(linkTarget(widget!)?.target).toEqual({ page: "Resa", heading: null, block: null, live: false });
+    expect(linkTarget(reading!)?.target).toEqual({ page: "Nota", heading: "Sez", block: null, live: false, from: null });
+    expect(linkTarget(liveBlock!)?.target).toEqual({ page: "Altra", heading: null, block: "b1", live: true, from: null });
+    expect(linkTarget(liveHeading!)?.target).toEqual({ page: "Terza", heading: "Titolo", block: null, live: true, from: null });
+    expect(linkTarget(widget!)?.target).toEqual({ page: "Resa", heading: null, block: null, live: false, from: null });
     expect(linkTarget(plain!)).toBeNull();
+  });
+
+  it("un contenitore che mostra un'altra nota (la sbirciata) dice da dove si risolve", () => {
+    document.body.innerHTML = '<aside data-link-source="Progetti/Mostra.md"><a data-wikilink-page="Allestimento">a</a></aside>';
+    expect(linkTarget(document.querySelector("a"))?.target.from).toBe("Progetti/Mostra.md");
   });
 });
 

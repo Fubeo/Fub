@@ -6,6 +6,7 @@ import type { CraftPreview, CraftPreviewSize, CraftRenderConsent } from "../host
 import type { FakeHost } from "../host/fake";
 import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
 import { appendToTextEditor, mountedTextEditors } from "../editors/text/test-support";
+import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -309,14 +310,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 3000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(3000);
 
 /// La shell vera col PDF e un Word nel vault, il consenso `consent`, e
 /// `craft_render` che risponde «in coda» come il backend.
@@ -1266,10 +1260,10 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     await settle();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     // L'ordine non si fissa: Scrittoio 2 (T2) lo cambia.
-    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Live", "Blocchi", "Sorgente", "Lettura"]));
+    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Scrittura", "Sorgente", "Lettura"]));
     const checked = radios().filter((item) => item.getAttribute("aria-checked") === "true");
-    expect(checked.map(labelOf)).toEqual(["Live"]);
-    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    expect(checked.map(labelOf)).toEqual(["Scrittura"]);
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Scrittura" }));
   });
 
   it("la voce scelta cambia la modalità del suo riquadro, non quella dell'altro", async () => {
@@ -1294,7 +1288,7 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(right!.dataset.mode).toBe("live_preview");
     expect(currentOf(left!).getAttribute("aria-expanded")).toBe("false");
     expect(currentOf(left!).textContent).toBe("Sorgente");
-    expect(currentOf(right!).textContent).toBe("Live");
+    expect(currentOf(right!).textContent).toBe("Scrittura");
   });
 
   it("il bottone della modalità ha la figura e il nome della modalità accesa, e il suggerimento (T2)", async () => {
@@ -1311,9 +1305,9 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     };
     const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
     expect(figure()).toBe(drawn("pen"));
-    expect(name()).toBe("Live");
-    expect(tooltip()).toBe("Live");
-    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    expect(name()).toBe("Scrittura");
+    expect(tooltip()).toBe("Scrittura");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Scrittura" }));
     const svg = current.querySelector(":scope > svg");
     // Ridisegnare la testata senza cambiare modalità non riscrive la figura.
     const { synchronize } = await import("./document");
@@ -1321,12 +1315,12 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(current.querySelector(":scope > svg")).toBe(svg);
     current.click();
     await settle();
-    radios().find((item) => labelOf(item) === "Blocchi")!.click();
-    await waitFor("la nota in Blocchi", () => panes()[0]!.dataset.mode === "blocks");
-    expect(figure()).toBe(drawn("blocks"));
-    expect(name()).toBe("Blocchi");
-    expect(tooltip()).toBe("Blocchi");
-    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await waitFor("la nota in Sorgente", () => panes()[0]!.dataset.mode === "source");
+    expect(figure()).toBe(drawn("code"));
+    expect(name()).toBe("Sorgente");
+    expect(tooltip()).toBe("Sorgente");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Sorgente" }));
   });
 
   it("il bottone della modalità sta nel foglio dopo la barra di formato, non nella testata (T3)", async () => {
@@ -1425,6 +1419,28 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(word.getAttribute("aria-label")).toBe(`Lettera · ${t("format.kind.word")}`);
   });
 
+  it("due note che cominciano uguali tengono a vista la parte che le distingue, e il nome intero resta (#411 B-03)", async () => {
+    await start("off", null, { "Diario/2026-08-18.md": "# 18\n", "Diario/2026-08-19.md": "# 19\n" });
+    await open("Diario/2026-08-18.md");
+    await open("Diario/2026-08-19.md");
+    await open(NOTA);
+    const tabOf = (doc: string) => [...document.querySelectorAll<HTMLElement>(".pane .tab")].find((tab) => tab.dataset.key?.includes(doc))!;
+    const parts = (tab: HTMLElement) =>
+      [...tab.querySelectorAll<HTMLElement>(".tab-name-head, .tab-name-tail")].map((part) => [part.className, part.textContent]);
+    const diary = tabOf("2026-08-19");
+    // La testa cede con l'ellissi, la coda resta: mese e giorno, non l'anno.
+    expect(parts(diary)).toEqual([["tab-name-head", "2026-"], ["tab-name-tail", "08-19"]]);
+    expect(parts(tabOf("2026-08-18"))).toEqual([["tab-name-head", "2026-"], ["tab-name-tail", "08-18"]]);
+    // Il nome intero, per chi ascolta e per chi passa col puntatore.
+    expect(diary.querySelector(".tab-name")!.textContent).toBe("2026-08-19");
+    expect(diary.getAttribute("aria-label")).toBe("2026-08-19");
+    // Una nota senza gemelle si taglia alla fine come sempre: niente coda.
+    expect(parts(tabOf(NOTA))).toEqual([["tab-name-head", "Diario"]]);
+    // Chiusa una delle due, l'altra torna a un nome solo.
+    document.querySelector<HTMLElement>(`#${CSS.escape(tabOf("2026-08-18").id)} + .tab-close`)!.click();
+    await vi.waitFor(() => expect(parts(tabOf("2026-08-19"))).toEqual([["tab-name-head", "2026-08-19"]]));
+  });
+
   it("il menu «…» di una nota ha le voci di oggi", async () => {
     await start("off", null, { [NOTA]: "# Diario\n" });
     await open(NOTA);
@@ -1440,6 +1456,7 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     menu.click();
     await settle();
     expect([...document.querySelectorAll("#context-menu .menu-label")].map((l) => l.textContent)).toEqual([
+      t("pane.menu.blocks"),
       t("pane.menu.split_right"),
       t("pane.menu.split_down"),
       t("pane.print"),

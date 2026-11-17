@@ -47,7 +47,7 @@ import {
   type SurfaceRequest,
   type SurfaceScrollLink,
 } from "../editors/core/registry";
-import { modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
+import { modeById, modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
@@ -74,6 +74,8 @@ import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
+import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
+import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
@@ -90,7 +92,8 @@ import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import { createCardEditorPort, type CardEditorHub, type CardNotices } from "./card-editors";
+import type { CardEditorHub, CardNotices } from "./card-editors";
+import { lazyCardEditorHub } from "./card-writes";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
@@ -142,7 +145,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "./layout";
-import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { createNote, folderOfNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { lendHeld, lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand, showComponent, type CommandEntry } from "../ui/commands";
@@ -272,6 +275,8 @@ export interface PaneView {
   /// disegna `file` dentro `host`, che sta già nel riquadro. Arriva di nuovo a
   /// ogni cambio (la dimensione letta, «Accendi …» in corso, un rifiuto).
   drawFileOnly(pane: Pane, host: HTMLElement, file: FileOnly): void;
+  /// Il foglio del riquadro, sopra la cui destra si apre la sbirciata (T20).
+  peekHost(pane: Pane): HTMLElement;
 }
 
 /// Ciò che il riquadro «solo come file» mostra e i suoi due gesti.
@@ -329,7 +334,52 @@ export interface Pane {
   /// RAW), e non dal suo testo. Quando l'elenco dei comandi cambia, un
   /// riquadro il cui documento ha cambiato legame coi byte si rimonta.
   bytes: boolean;
+  /// Le superfici delle schede di testo aperte ma non attive, dalla meno
+  /// recente: nascoste, non smontate (`parkSurface`). Tornare su una di quelle
+  /// la rimostra invece di ricostruire l'editor.
+  parked: ParkedSurface[];
 }
+
+/// La superficie di una scheda di testo che il riquadro tiene da parte mentre
+/// ne mostra un'altra.
+///
+/// Ricostruire l'editor a ogni cambio di scheda costava il montaggio di un
+/// `EditorView` nuovo, il testo rimesso da capo e, per una nota lunga, il
+/// parser rifatto per tutto il documento: la parte più grande del cambio
+/// scheda. Una superficie tenuta da parte è **staccata dalla sessione**
+/// (`detachSurface`, che prima registra ciò che teneva in sospeso) e sta
+/// dentro un contenitore suo, nascosto, che non si sposta mai:
+/// nascosto e non tolto dal documento perché è così che il motore del browser
+/// conserva lo scorrimento. Al ritorno si riattacca alla sessione e, se il
+/// testo nel frattempo è cambiato (un altro riquadro, il disco), lo riceve
+/// con `syncDoc`, come ogni aggiornamento venuto da fuori: cursore, scorrimento
+/// e cronologia locale restano quelli della scheda.
+///
+/// Ogni superficie ha il suo contenitore perché la superficie scrive sul suo
+/// genitore (la modalità, le interruzioni di riga) e ci ascolta eventi (copia,
+/// tasti): due superfici nello stesso genitore si pesterebbero. Il contenitore
+/// a riposo non porta la classe `pane-editor`, così chi cerca «la superficie
+/// del riquadro» (i fogli, il CSS, le prove) trova soltanto quella attiva.
+interface ParkedSurface {
+  readonly tab: Extract<Tab, { k: "doc" }>;
+  readonly surface: EditorSurface;
+  readonly host: HTMLElement;
+  readonly sourceView: SourceView | null;
+  /// Il tema che la superficie ha ricevuto per ultimo: al ritorno si rimette
+  /// soltanto se nel frattempo è cambiato.
+  theme: Theme | null;
+  /// Il documento si è salvato mentre era da parte: una lettura resa va
+  /// ridisegnata al ritorno (`redrawReading`).
+  redraw: boolean;
+}
+
+/// Quante superfici di testo un riquadro tiene da parte. Una nota di 5.000
+/// righe con il suo albero sintattico pesa qualche MB: oltre questo numero la
+/// meno recente si smonta, e tornarci la ricostruisce come prima.
+const MAX_PARKED = 4;
+
+/// La classe del contenitore di una superficie a riposo (vedi `ParkedSurface`).
+const PARKED_HOST = "pane-editor-riposo";
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
 export function describeTab(tab: Tab): { label: string; dirty: boolean; kind: "doc" | "view" } {
@@ -369,6 +419,7 @@ let view: PaneView = {
   focusedTab: () => null,
   recorderHost: unmounted,
   drawFileOnly: unmounted,
+  peekHost: unmounted,
 };
 let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
@@ -544,28 +595,117 @@ function watchCardFile(path: string, changed: () => void): () => void {
   };
 }
 
-/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
-/// stesso registro delle superfici dei riquadri di questa finestra, e la
-/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso: caricare il
-/// modulo non legge ancora la collezione delle sessioni.
-let cardEditorHub: CardEditorHub | null = null;
-function cardEditorsHub(): CardEditorHub {
-  cardEditorHub ??= createCardEditorPort({
-    sessions: documentSessions,
-    surfaces: () => surfaceRegistry ?? null,
-    held: heldReadOnly,
-    heldWhy,
-    shownInPane: isOpen,
-    theme: () => theme,
-    forms: syntaxForms,
-    toolbar: cardToolbar,
-    conflict: (box, path) => view.drawCardConflict(box, path),
-    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
-    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
-    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
-    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+/// La sbirciata della finestra (E11, T20): una sola, sopra il riquadro col
+/// fuoco, con l'editor della nota montato dalla porta delle schede. Nasce al
+/// primo uso.
+let notePeek: NotePeek | null = null;
+function notePeekPort(): NotePeek {
+  notePeek ??= createNotePeek({
+    // Dalla nota che contiene il link (una sbirciata dentro una sbirciata,
+    // una scheda della lavagna), non dal riquadro col fuoco.
+    resolve: async ({ link, from }) => {
+      const found = await resolvedReference(
+        link.kind === "wiki"
+          ? { kind: "wiki", value: { page: link.page, heading: link.heading, block: link.block } }
+          : { kind: "path", value: link.path },
+        from ?? activeDoc() ?? undefined,
+      );
+      if (!found) return { kind: "missing" };
+      return isNoteDoc(found.doc) ? { kind: "note", doc: found.doc } : { kind: "other", doc: found.doc };
+    },
+    editors: cardEditors,
+    host: () => {
+      const pane = panes.get(layout.focus);
+      return pane ? view.peekHost(pane) : null;
+    },
+    // Il riquadro prende la nota col cursore dove stava nella sbirciata.
+    openHere: async (doc, at) => {
+      await openDocument(doc, { gesture: true });
+      if (at) await reveal(doc, { span: at });
+    },
+    openBeside: async (doc, at) => {
+      await openDocumentBeside(doc, "row");
+      if (at) await reveal(doc, { span: at });
+    },
+    // Un PDF, un foglio: la sbirciata è per le note, il resto si apre a lato.
+    openOther: async (doc, target) => {
+      const page = linkedPdfPage(doc, target.link.kind === "wiki" ? target.link.heading : null);
+      await openDocumentBeside(doc, "row", page === null ? {} : { page });
+    },
+    // Il bersaglio com'è scritto, come `openWikilink`; la cartella delle note
+    // nuove (`files.new-note-folder` con `./`) è quella della nota del link.
+    create: async (page, from) => createNote(page, from ? await folderOfNote(from) : undefined),
+    onMoved: (listener) => onEvent("document_renamed", (event) => listener(event.from, event.to)),
+    // La barra di formato e il contesto seguono chi ha la scrittura.
+    ownerChanged: () => {
+      const pane = panes.get(layout.focus);
+      if (pane) view.drawToolbar(pane);
+      scheduleContext();
+    },
+    failed: (message) => notify(message, "guasto"),
   });
-  return cardEditorHub;
+  return notePeek;
+}
+
+/// La superficie della sbirciata sopra il riquadro `paneId` se ha lei la
+/// scrittura (il fuoco ci è entrato e non è tornato al testo del riquadro), o
+/// `null`. La barra di formato, il menu del testo e i comandi del documento
+/// agiscono su di lei.
+export function peekSurfaceIn(paneId: string): EditorSurface | null {
+  const pane = panes.get(paneId);
+  if (!pane || !notePeek?.isIn(view.peekHost(pane))) return null;
+  return notePeek.surface();
+}
+
+/// La superficie su cui agiscono i comandi dell'editor del riquadro col fuoco,
+/// col documento che mostra: la sbirciata se ha lei la scrittura, se no il
+/// riquadro.
+function commandTarget(): { doc: string; surface: EditorSurface } | null {
+  const peek = peekSurfaceIn(layout.focus);
+  const peekDoc = peek ? notePeek?.shown()?.doc : null;
+  if (peek && peekDoc) return { doc: peekDoc, surface: peek };
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc" || !r.surface) return null;
+  return { doc: r.shown.doc, surface: r.surface };
+}
+
+/// Il clic che apre un link: `editor.link-click`, letto all'avvio e a ogni
+/// cambio. Finché non è letto vale quello di serie.
+let linkClick: LinkClick = "apri";
+function watchLinkClick(lifetime: Lifetime): void {
+  let asked = 0;
+  const read = (): void => {
+    const mine = ++asked;
+    void settings().then((entries) => {
+      if (mine !== asked || lifetime.closed) return;
+      linkClick = linkClickOf(entries.find((entry) => entry.spec.key === LINK_CLICK_KEY)?.value);
+    }, () => {});
+  };
+  read();
+  lifetime.add(onEvent("setting_changed", (event) => {
+    if (event.key === LINK_CLICK_KEY) read();
+  }));
+  lifetime.add(onEvent("vault_opened", read));
+  lifetime.add(() => {
+    asked++;
+    linkClick = "apri";
+  });
+}
+
+/// Alt col clic, Alt-Invio o «Sbircia» su un link a una nota: la sbirciata.
+export function peekLink(target: PeekTarget): Promise<void> {
+  return notePeekPort().open(target);
+}
+
+/// Alt-Invio su una nota trovata con Ctrl O: la sbirciata del documento, già
+/// risolto (il nome del vault è il suo percorso).
+export function peekDocument(doc: string): Promise<void> {
+  return peekLink({ link: { kind: "path", path: `/${doc}` }, from: null });
+}
+
+/// La sbirciata, per chi la chiude o la guarda (i banchi, i comandi).
+export function notePeekState(): ReturnType<NotePeek["shown"]> {
+  return notePeek?.shown() ?? null;
 }
 
 /// I gruppi della barra di formato di una scheda (T41): tutti tranne la
@@ -588,17 +728,34 @@ function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
   life.add(() => bar.destroy());
   return bar.element;
 }
-const cardEditors: CardEditorHub = {
-  open: (path, host, options) => cardEditorsHub().open(path, host, options),
-  openText: (host, text, options) => cardEditorsHub().openText(host, text, options),
-  written: (surfaceId, change) => cardEditorHub?.written(surfaceId, change) ?? false,
-  failed: (surfaceId, error) => cardEditorHub?.failed(surfaceId, error) ?? false,
-  holds: (path) => cardEditorHub?.holds(path) ?? false,
-  renamed: () => cardEditorHub?.renamed(),
-  refreshReadOnly: () => cardEditorHub?.refreshReadOnly(),
-  setTheme: (next) => cardEditorHub?.setTheme(next),
-  destroyAll: () => cardEditorHub?.destroyAll(),
-};
+
+/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
+/// stesso registro delle superfici dei riquadri di questa finestra, e la
+/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso, e il suo modulo
+/// arriva allora con un `import()`: serve solo a una lavagna, che arriva anche
+/// lei così, e non pesa sull'avvio di nessuna finestra (`lazyCardEditorHub`).
+const cardEditors: CardEditorHub = lazyCardEditorHub(async () => {
+  const { createCardEditorPort } = await import("./card-editors");
+  return () => createCardEditorPort({
+    sessions: documentSessions,
+    surfaces: () => surfaceRegistry ?? null,
+    held: heldReadOnly,
+    heldWhy,
+    shownInPane: isOpen,
+    theme: () => theme,
+    forms: syntaxForms,
+    toolbar: cardToolbar,
+    conflict: (box, path) => view.drawCardConflict(box, path),
+    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
+    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
+    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
+    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+  });
+}, {
+  sessions: () => documentSessions,
+  shownInPane: isOpen,
+  unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+});
 
 /// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
 /// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le
@@ -835,22 +992,22 @@ async function vaultHeadings(text: string): Promise<{ doc: string; text: string;
   return outlines.flat();
 }
 
-/// La superficie del riquadro col fuoco che sa dire il punto sotto il cursore,
-/// col documento che mostra.
+/// La superficie del riquadro col fuoco (o della sua sbirciata) che sa dire
+/// il punto sotto il cursore, col documento che mostra.
 function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor | null } | null {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc" || !r.surface?.anchorHere) return null;
-  const surface = r.surface;
-  return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+  const target = commandTarget();
+  if (!target?.surface.anchorHere) return null;
+  const surface = target.surface;
+  return { doc: target.doc, anchorHere: () => surface.anchorHere?.() ?? null };
 }
 
 /// I comandi che la superficie del riquadro col fuoco aggiunge alla palette
 /// (i comandi del foglio), come voci della palette: nessuna se il riquadro
 /// non mostra un documento o la superficie non ne ha.
 export function focusedSurfaceCommands(): CommandEntry[] {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc" || !r.surface?.paletteCommands) return [];
-  return r.surface.paletteCommands().map((command): CommandEntry => ({
+  const surface = commandTarget()?.surface;
+  if (!surface?.paletteCommands) return [];
+  return surface.paletteCommands().map((command): CommandEntry => ({
     id: command.id,
     title: command.title,
     description: command.description,
@@ -867,9 +1024,7 @@ export function focusedSurfaceCommands(): CommandEntry[] {
 /// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
 /// superficie del riquadro col fuoco, se ne ha una nella modalità attuale.
 export function findInFocusedSurface(): boolean {
-  const r = panes.get(layout.focus);
-  if (r?.shown?.k !== "doc") return false;
-  return r.surface?.find?.() ?? false;
+  return commandTarget()?.surface.find?.() ?? false;
 }
 
 /// F6 dentro il riquadro col fuoco: la superficie passa alla sua zona seguente
@@ -1105,15 +1260,24 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     window.clearTimeout(contextTimer);
     contextTimer = undefined;
   });
-  // Gli editor dentro le schede muoiono con la shell, come i riquadri.
+  // Gli editor dentro le schede muoiono con la shell, come i riquadri; la
+  // sbirciata, che ne usa uno, prima di loro.
   lifetime.add(() => cardEditors.destroyAll());
+  // La finestra che se ne va non fa domande: la bozza di un salvataggio
+  // fallito resta, come per le schede (`destroyAll`).
+  lifetime.add(() => {
+    notePeek?.dismiss({ quiet: true });
+    notePeek = null;
+  });
+  mountNoteCards(lifetime);
+  watchLinkClick(lifetime);
   surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
     onChange: (paneId, change) => {
       if (!cardEditors.written(paneId, change)) written(paneId, change);
     },
     onSelectionChange: (paneId) => {
-      if (layout.focus === paneId) scheduleContext();
+      if (layout.focus === paneId || peekSurfaceIn(layout.focus)?.surfaceId === paneId) scheduleContext();
     },
     onFail: (paneId, error) => {
       if (cardEditors.failed(paneId, error)) return;
@@ -1121,10 +1285,17 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
     },
     // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
-    onOpenWikilink: (page, heading, block) =>
-      openWikilink(page, heading ?? undefined, block ?? undefined, undefined, { gesture: true }),
-    onOpenWikilinkBeside: async (page, heading, block) => {
-      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
+    // Il nome si risolve dalla nota che contiene il link (una sbirciata, una
+    // scheda della lavagna), non dal riquadro col fuoco.
+    onOpenWikilink: (page, heading, block, from) =>
+      openWikilink(page, heading ?? undefined, block ?? undefined, from, { gesture: true }),
+    onPeekLink: (link, from) =>
+      peekLink({ link, from }).catch((error: unknown) => {
+        notify(errorText(error), "guasto");
+      }),
+    linkClick: () => linkClick,
+    onOpenWikilinkBeside: async (page, heading, block, from) => {
+      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
       const pdfPage = linkedPdfPage(target.doc, heading);
       await openDocumentBeside(target.doc, "row", pdfPage === null ? {} : { page: pdfPage });
@@ -1244,7 +1415,17 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     linkCards: {
       view: linkCardView,
       request: requestLinkCard,
-      watch: (changed) => on("link-cards", changed),
+      // Il wikilink da solo in un paragrafo è la scheda della nota (T20).
+      note: noteCardView,
+      holdNote: holdNoteCard,
+      watch: (changed) => {
+        const web = on("link-cards", changed);
+        const notes = watchNoteCards(changed);
+        return () => {
+          web();
+          notes();
+        };
+      },
     },
     runShellCommand: (id) => deps.runCommand(id),
     ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
@@ -1326,6 +1507,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       const base = documentSessions.inspect(doc)?.base;
       return base?.kind === "descends_from" ? base.value : null;
     },
+    documentWrites: { flush: flushPendingSave, expect: (doc) => documentSessions.expectWrite(doc) },
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,
@@ -1380,6 +1562,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       view.releaseFrame(r);
     }
   });
@@ -1622,8 +1805,9 @@ function registerCommands(): void {
     available: () => offersContext(focusedModes(), "source"),
     run: () => void setContextMode("source"),
   });
-  // I Blocchi (N13) sono una modalità della nota con il ruolo della Live: il
-  // comando la nomina per id, e c'è soltanto dove la superficie la dichiara.
+  // I Blocchi (N13) sono dentro Scrittura: la nota dichiara `blocks` fra gli
+  // id di prima della sua Scrittura (`formerIds`), e il comando, che lo
+  // nomina, porta lì e c'è soltanto dove una superficie lo dichiara.
   registerShellCommand({
     id: "shell.mode.blocks",
     title: "commands.mode.blocks",
@@ -2241,10 +2425,14 @@ function enqueueDraw<T>(job: () => Promise<T>): Promise<T> {
 export function resetDocumentsForVault(): Promise<string[]> {
   return enqueueDraw(async () => {
     clearAllRemovedNotices();
+    // La sbirciata è del vault di prima: si chiude senza domande, chi chiama
+    // raccoglie ciò che resta sporco.
+    notePeek?.dismiss({ quiet: true });
     for (const [id, r] of panes) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
       view.removePane(r);
     }
     panes.clear();
@@ -2265,6 +2453,7 @@ async function render(): Promise<void> {
     const r = panes.get(id);
     const p = paneState(id);
     if (!r || !p) continue;
+    pruneParked(r, p.tabs);
     view.drawTabs(r, p.tabs, p.active);
     view.drawFocus(r, id === layout.focus);
     // Un riquadro che non riesce a mostrare la sua tab non ferma gli altri:
@@ -2316,6 +2505,9 @@ function buildStructure(): void {
       // abbonamento a una sessione che il riquadro non mostra più.
       detachSurface(r);
       destroySurface(r);
+      dropParked(r);
+      // La sbirciata sopra questo riquadro se ne va con lui.
+      if (notePeek?.isIn(r.root)) notePeek.dismiss();
       view.releaseFrame(r);
       view.removePane(r);
       panes.delete(id);
@@ -2347,6 +2539,7 @@ export function renderPane(id: string): Pane {
     disposeSurface: null,
     sourceView: null,
     bytes: false,
+    parked: [],
   };
   panes.set(id, r);
   return r;
@@ -2737,15 +2930,23 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
   // Sessione e superficie hanno ownership separate, ma terminano nello stesso
-  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza.
-  if (changed) {
+  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza. Una
+  // superficie di testo di una scheda che resta aperta va invece da parte
+  // (`parkSurface`), staccata allo stesso modo.
+  if (changed && !parkSurface(r)) {
     detachSurface(r);
     destroySurface(r);
+  }
+  if (changed) {
     r.sourceView = null;
     r.bytes = false;
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
+  // La linguetta è già della scheda nuova (`render` l'ha disegnata prima di
+  // chiamare qui): la testata la segue subito, senza aspettare che l'editor
+  // si carichi. Il ridisegno dopo `show` aggiunge ciò che dipende da lui.
+  if (changed) view.drawToolbar(r);
 
   if (tab?.k === "view") {
     await mountViewInPane(tab.view, r.id, r.viewEl, tab.params ?? null);
@@ -2757,6 +2958,12 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   }
   const gesture = takeGesture(r.id, tab.doc);
   const page = takeOpeningPage(r.id, tab.doc);
+  // La scheda era già aperta: la sua superficie torna com'era. Un'apertura con
+  // un gesto o una pagina chiede invece il montaggio che nasce da lei, e la
+  // superficie da parte si smonta.
+  const parked = takeParked(r, tab);
+  if (parked && (gesture || page !== null)) destroyParked(parked);
+  else if (parked && unparkSurface(r, tab, parked)) return;
 
   // Un file di un componente (una lavagna, un PDF, un documento di Word)
   // aspetta di sapere se il componente è acceso, invece di indovinare. Spento,
@@ -3043,6 +3250,9 @@ function editorDoc(r: Pane): string | null {
 /// Gira nella coda dei disegni, e chi la accoda ridisegna dopo.
 async function componentsChanged(next: Components): Promise<void> {
   if (next.root !== openVaultRoot()) return;
+  // Le forme sintattiche di una nota vengono dai componenti montati, e una
+  // superficie le legge al montaggio: quelle da parte si rimontano al ritorno.
+  for (const r of panes.values()) dropParked(r);
   const leaving = [...panes.values()].filter((r) => {
     const doc = editorDoc(r);
     return doc !== null && offFor(doc, next).length > 0;
@@ -3303,6 +3513,16 @@ function detachSurface(r: Pane): void {
 }
 
 function destroySurface(r: Pane): void {
+  releaseSurfaceExtras(r);
+  r.surface?.destroy();
+  r.surface = null;
+  r.editorEl.replaceChildren();
+}
+
+/// Ciò che il riquadro appende alla superficie che mostra — le classi della
+/// nota, il rilascio dei file, il registratore, le slide, la stampa — se ne va
+/// con lei, smontata o messa da parte.
+function releaseSurfaceExtras(r: Pane): void {
   r.noteClassGeneration++;
   applyNoteCssClasses(r.root, null);
   r.disposeAttachments?.();
@@ -3313,9 +3533,121 @@ function destroySurface(r: Pane): void {
   r.disposeSlides = null;
   r.disposePrint?.();
   r.disposePrint = null;
-  r.surface?.destroy();
+}
+
+// --- le superfici da parte (`ParkedSurface`) --------------------------------
+
+/// Mette da parte la superficie del riquadro, se è una superficie di testo
+/// montata di una scheda che resta aperta; `false` altrimenti, e chi chiama la
+/// smonta come prima. Va chiamata con `r.shown` ancora sulla scheda che si
+/// lascia.
+function parkSurface(r: Pane): boolean {
+  const surface = r.surface;
+  const tab = r.shown;
+  if (!surface || tab?.k !== "doc" || !r.disposeSurface || r.bytes) return false;
+  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
+  // Un file di un componente segue l'acceso e lo spento dei componenti, che
+  // smontano e rimontano da sé: resta fuori.
+  if (uisForFile(tab.doc).length > 0) return false;
+  // Una scheda chiusa o portata altrove non torna: la sua superficie si smonta.
+  const stays = paneState(r.id)?.tabs.some((each) => sameParked(each, tab)) ?? false;
+  if (!stays) return false;
+  // Staccata e nascosta: non riceve più il testo né input. La sola lettura
+  // non si cambia qui: commutarla costa un ridisegno dell'editor a ogni
+  // cambio, e al ritorno `attachSurface` la rimette comunque al valore giusto.
+  detachSurface(r);
+  releaseSurfaceExtras(r);
+  const host = r.editorEl;
+  host.classList.replace("pane-editor", PARKED_HOST);
+  host.hidden = true;
+  const next = document.createElement("div");
+  next.className = "pane-editor";
+  r.viewEl.before(next);
+  r.editorEl = next;
   r.surface = null;
-  r.editorEl.replaceChildren();
+  r.parked.push({ tab, surface, host, sourceView: r.sourceView, theme, redraw: false });
+  while (r.parked.length > MAX_PARKED) destroyParked(r.parked.shift()!);
+  return true;
+}
+
+/// Rimostra la superficie messa da parte per `tab` nel riquadro, che in quel
+/// momento non ne mostra nessuna. `false` se non si è potuto: la superficie da
+/// parte è già smontata, e chi chiama monta la scheda da capo.
+function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSurface): boolean {
+  const { surface } = entry;
+  const buffer = surface.buffer;
+  const text = documentSessions.text(tab.doc);
+  if (!buffer || text === undefined) {
+    destroyParked(entry);
+    return false;
+  }
+  // Il contenitore vuoto lasciato dalla scheda di prima se ne va; quello della
+  // superficie torna visibile dov'era, senza spostarsi.
+  r.editorEl.remove();
+  entry.host.classList.replace(PARKED_HOST, "pane-editor");
+  entry.host.hidden = false;
+  r.editorEl = entry.host;
+  r.surface = surface;
+  r.sourceView = entry.sourceView;
+  try {
+    if (theme && theme !== entry.theme) surface.setTheme?.(theme);
+    const mode = selectedMode(r);
+    if (!mode) throw new Error(`surface ${surface.surfaceId} declares no modes`);
+    surface.setMode(mode.id);
+    markMode(r, mode.id);
+    // Il testo cambiato mentre era da parte arriva come ogni aggiornamento
+    // venuto da fuori: non entra nella cronologia locale.
+    if (buffer.getDoc() !== text || (entry.redraw && mode.presentation === "rendered")) buffer.syncDoc(text);
+  } catch (error) {
+    console.error(error);
+    destroySurface(r);
+    return false;
+  }
+  attachSurface(r, tab.doc);
+  refreshNoteClasses(r, tab.doc);
+  mountDocumentAttachments(r, tab.doc);
+  return true;
+}
+
+/// La stessa scheda di una superficie da parte: lo stesso documento con la
+/// stessa scelta di superficie, come `show` decide se rimontare.
+function sameParked(tab: Tab, parked: Extract<Tab, { k: "doc" }>): boolean {
+  return tab.k === "doc" && tab.doc === parked.doc && sameOverride(tabOverride(tab), tabOverride(parked));
+}
+
+/// Toglie dal riquadro la superficie da parte per `tab`, se c'è, e la dà a chi
+/// chiama.
+function takeParked(r: Pane, tab: Tab): ParkedSurface | null {
+  const at = r.parked.findIndex((entry) => sameParked(tab, entry.tab));
+  return at < 0 ? null : r.parked.splice(at, 1)[0]!;
+}
+
+/// Smonta le superfici da parte di schede che il riquadro non ha più (chiuse,
+/// rinominate, con un'altra superficie scelta).
+function pruneParked(r: Pane, tabs: readonly Tab[]): void {
+  if (r.parked.length === 0) return;
+  const keep: ParkedSurface[] = [];
+  for (const entry of r.parked) {
+    if (tabs.some((tab) => sameParked(tab, entry.tab))) keep.push(entry);
+    else destroyParked(entry);
+  }
+  r.parked = keep;
+}
+
+/// Smonta tutte le superfici da parte del riquadro.
+function dropParked(r: Pane): void {
+  const all = r.parked;
+  r.parked = [];
+  for (const entry of all) destroyParked(entry);
+}
+
+function destroyParked(entry: ParkedSurface): void {
+  try {
+    entry.surface.destroy();
+  } catch (error) {
+    console.error(error);
+  }
+  entry.host.remove();
 }
 
 /// Applica alla superficie di questo riquadro il dato che la sessione ha
@@ -3351,6 +3683,10 @@ async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
 /// La sessione possiede il testo; questa notifica aggiorna soltanto la resa
 /// delle superfici già aperte, senza ricreare buffer o cronologia.
 function redrawReading(doc: string): void {
+  // Una superficie da parte si ridisegna quando torna, se mostra la lettura.
+  for (const r of panes.values()) {
+    for (const entry of r.parked) if (entry.tab.doc === doc) entry.redraw = true;
+  }
   for (const id of panesWithDoc(doc)) {
     const r = panes.get(id);
     if (!r || selectedMode(r)?.presentation !== "rendered" || activeDoc(id) !== doc) {
@@ -3363,14 +3699,15 @@ function redrawReading(doc: string): void {
   }
 }
 /// Il modo effettivo è quello che il riquadro ricorda per la famiglia della
-/// superficie, quando la superficie lo dichiara; altrimenti la sua predefinita,
-/// o la prima che supporta. Il fallback non riscrive il layout: tornando a
-/// quella famiglia, il riquadro ritrova la sua modalità.
+/// superficie, quando la superficie lo dichiara (anche come id di prima: un
+/// riquadro salvato nei Blocchi si apre in Scrittura); altrimenti la sua
+/// predefinita, o la prima che supporta. Il fallback non riscrive il layout:
+/// tornando a quella famiglia, il riquadro ritrova la sua modalità.
 export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
   if (!r?.surface) return undefined;
   const { family, modes, defaultMode } = r.surface;
   const requested = paneState(r.id)?.modes[family];
-  return modes.find((mode) => mode.id === requested)
+  return modeById(modes, requested)
     ?? modes.find((mode) => mode.id === defaultMode)
     ?? modes[0];
 }
@@ -3419,13 +3756,6 @@ export function focusedContextMode(): PaneMode | undefined {
   return selectedMode(r)?.contextMode;
 }
 
-/// L'id della modalità del riquadro col fuoco, dove ce n'è più d'una.
-export function focusedModeId(): string | undefined {
-  const r = panes.get(layout.focus);
-  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
-  return selectedMode(r)?.id;
-}
-
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
 function focusedModes(): readonly SurfaceMode[] {
   return panes.get(layout.focus)?.surface?.modes ?? [];
@@ -3436,14 +3766,12 @@ function focusedModes(): readonly SurfaceMode[] {
 /// scorciatoia. La barra non passa di qui: agisce sul proprio riquadro.
 /// L'azione c'è nella superficie del riquadro col fuoco, e si può eseguire.
 export function editorActionReady(action: string): boolean {
-  const r = panes.get(layout.focus);
-  const actions = r?.shown?.k === "doc" ? r.surface?.editorActions : undefined;
+  const actions = commandTarget()?.surface.editorActions;
   return !!actions?.has(action) && actions.editable();
 }
 
 export function runEditorAction(action: string, params: Readonly<Record<string, unknown>> = {}): "done" | "nothing" | "unavailable" {
-  const r = panes.get(layout.focus);
-  const surface = r?.shown?.k === "doc" ? r.surface : null;
+  const surface = commandTarget()?.surface;
   const actions = surface?.editorActions;
   if (!actions || !editorActionReady(action)) return "unavailable";
   if (!actions.run(action, params)) return "nothing";
@@ -3615,6 +3943,21 @@ export interface OpenOptions {
   /// prende la superficie che l'apertura monta (`SurfaceMountContext.page`)
   /// o, se il documento è già la scheda attiva, `EditorSurface.showPage`.
   readonly page?: number;
+  /// Un'apertura che la shell decide da sola, senza un gesto (la prima nota
+  /// di un vault senza schede, la nota d'avvio): il valore di
+  /// [`openingsSoFar`] quando l'ha decisa. Se intanto è stata chiesta
+  /// un'altra apertura, la decisione è vecchia: questa non parte, e non tocca
+  /// schede, riquadro, contesto né fuoco.
+  readonly unlessOpenedSince?: number;
+}
+
+/// Quante aperture sono state chieste finora, in tutto.
+let openingsAsked = 0;
+
+/// Il segno da passare come `unlessOpenedSince`: si prende quando si decide
+/// di aprire, prima delle attese che precedono la chiamata.
+export function openingsSoFar(): number {
+  return openingsAsked;
 }
 
 /// La pagina chiesta dall'apertura in corso per il documento del riquadro:
@@ -3645,7 +3988,38 @@ function takeGesture(pane: string, doc: string): boolean {
   return true;
 }
 
+/// Alla fine di un'apertura il fuoco va all'editor solo se nessuno l'ha
+/// portato altrove intanto. Un'apertura lunga (un documento da impaginare)
+/// finisce quando chi usa Fub è già passato oltre: se nel frattempo ha aperto
+/// il lanciatore, un dialogo o un campo, quello che scrive e il suo Invio
+/// restano lì e non finiscono nel documento. Il fuoco è ancora dell'apertura
+/// se sta dov'era al gesto (`asked`), se non sta da nessuna parte, o se sta in
+/// un riquadro (l'editor di prima, che l'apertura sostituisce).
+///
+/// Non lo è più se sta già dentro il documento aperto, nel riquadro col fuoco
+/// (#395): la superficie si monta prima che l'apertura finisca, e chi usa Fub
+/// può esserci entrato (il Tab dalla lavagna vuota al suo primo pulsante, un
+/// clic su una scheda). Riportarlo all'editor glielo toglierebbe di mano.
+/// `editorEl` tiene la superficie del solo documento mostrato: quella di prima
+/// si toglie (`detachSurface`) prima che la nuova si monti.
+function focusStillOpening(asked: Element | null, doc: string): boolean {
+  const now = document.activeElement;
+  if (now === null || now === document.body || now === document.documentElement) return true;
+  const target = panes.get(layout.focus);
+  if (target?.shown?.k === "doc" && target.shown.doc === doc && target.editorEl.contains(now)) return false;
+  if (now === asked) return true;
+  for (const r of panes.values()) if (r.root.contains(now)) return true;
+  return false;
+}
+
 export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
+  // Un'apertura decisa prima di un'altra chiesta intanto è superata: quella
+  // più nuova vince anche se arriva in fila prima (la regola delle gare in
+  // `docs/architecture/runtime-events-and-jobs.md`).
+  if (options.unlessOpenedSince !== undefined && options.unlessOpenedSince !== openingsAsked) return;
+  openingsAsked++;
+  // Dove sta il fuoco al gesto: alla fine si guarda se è ancora lì.
+  const asked = document.activeElement;
   // Reserve the target before entering the shared flush queue. Otherwise the
   // last-tab release can close the owner while this opening is still waiting
   // for that same queue.
@@ -3683,7 +4057,7 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered") focusEditor();
+      if (selectedMode(panes.get(layout.focus))?.presentation !== "rendered" && focusStillOpening(asked, id)) focusEditor();
     });
   } finally {
     releaseIntent();
@@ -3972,7 +4346,9 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
     drawPaneConflict(id);
   } else if (outcome.kind === "untracked") {
     return;
-  } else if (outcome.kind === "reloaded" && outcome.changed) {
+  } else if (outcome.kind === "reloaded" && outcome.changed && !outcome.quiet) {
+    // `quiet`: la scrittura di un gesto della barra di una Base, annunciata
+    // con `expectWrite`. Il file nuovo è quello che la persona ha chiesto.
     addSheetNotice(id, "reloaded");
     drawPaneConflict(id);
   }
@@ -4008,6 +4384,14 @@ async function reloadDocument(id: string): Promise<void> {
 /// invece è sempre quello vero — ed è ciò che serve a contare le parole
 /// selezionate o a mandarle a un comando.
 function paneContext(): ViewContext {
+  // La sbirciata che ha la scrittura è il documento dei comandi: le sue
+  // selezioni, la sua nota.
+  const peek = peekSurfaceIn(layout.focus);
+  const peekDoc = peek ? notePeek?.shown()?.doc ?? null : null;
+  if (peek && peekDoc) {
+    const dirty = documentSessions.isDirty(peekDoc);
+    return { pane: layout.focus, doc: peekDoc, selections: selectionSetOf(peek, dirty), mode: "live_preview" };
+  }
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const mode = selectedMode(r);
@@ -4089,10 +4473,7 @@ async function toggleReading(): Promise<void> {
 async function setContextMode(context: PaneMode): Promise<void> {
   const r = panes.get(layout.focus);
   if (!r?.surface) return;
-  // Dai Blocchi «Passa a Live» porta alla Live: hanno lo stesso ruolo, ma i
-  // Blocchi hanno un comando loro e la Live sarebbe altrimenti irraggiungibile.
-  const current = selectedMode(r)?.id;
-  const target = modeForContext(r.surface.modes.filter((mode) => mode.id !== "blocks" || current !== "blocks"), current === "blocks" ? undefined : current, context);
+  const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
   if (target) await setMode(target.id);
 }
 
@@ -4259,7 +4640,7 @@ async function saveNow(): Promise<void> {
 
 export async function setMode(next: string): Promise<void> {
   const r = panes.get(layout.focus);
-  const mode = r?.surface?.modes.find((candidate) => candidate.id === next);
+  const mode = r?.surface ? modeById(r.surface.modes, next) : undefined;
   if (!r?.surface || !mode) return;
   const doc = activeDoc();
   // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer

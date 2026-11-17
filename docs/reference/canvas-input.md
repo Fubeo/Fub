@@ -135,7 +135,10 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   mancante»; il testo resta nella bozza della sessione.
 - **Uscire.** Esc, un clic fuori o la scheda che si spegne: l'editor registra
   il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
-  testo nuovo. Con Esc la scheda resta scelta, col fuoco.
+  testo nuovo. Con Esc la scheda resta scelta, col fuoco. La shell monta
+  l'editor con `escapeLeaves` (`state/card-editors.ts`): in Scrittura Esc
+  sul testo non seleziona il blocco del cursore come in un riquadro, e una
+  selezione di blocchi già fatta si chiude col primo Esc.
 
 ## Scrivere in una scheda di testo
 
@@ -224,6 +227,8 @@ disegno: un comando spento si vede col perché; i cinque usati da poco in quella
 lavagna stanno in cima (stato di vista `canvas.commands:<documento>`; se non si
 scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
+Un comando che scrive ha `op`, le sue [operazioni d'intento](canvas-code.md#le-operazioni): menu, barra, campi e tasti le fanno compilare al nucleo (col seme di `seed`, se no a caso) e le scrivono in un passo d'annulla; se il nucleo rifiuta non cambia niente, la barra lo dice e il campo torna com'era. Il posto e la misura di sempre li sceglie la GUI e li scrive nell'operazione. Collega è `connect` con `sides: "auto"`, Inverti il filo è `reverse` (le punte restano sulla loro scheda), Raggruppa è `group`, e Ctrl+D è `duplicate`, che copia anche i fili fra le schede copiate. Le schede e i fili che nascono così, e quelli del doppio clic e dello strumento Testo, hanno l'id del seme, sedici cifre esadecimali ([gli id nuovi](canvas-code.md#gli-id-nuovi)), non più `n-…`. Anche i gesti scrivono con le operazioni (LIC T24), compilate dal nucleo e scritte in un passo d'annulla: trascinare schede è una `move` sola con lo spostamento del gesto (un gruppo con `contents: true`, così porta le schede che contiene; oltre 1000 schede portate, il tetto di `contents`, la `move` le nomina tutte); ridimensionare è `resize` con le misure del gesto, preceduta da una `move` se l'angolo in alto a sinistra si sposta; il filo lasciato sul corpo di una scheda è `connect` con `sides: "auto"`, lasciato da un punto ha i suoi lati, e riattaccato è una `set` dell'estremo; le schede incollate sono `insert` del frammento, il testo incollato `add_card` nella forma breve; i file lasciati cadere sono descritti in [Il rilascio e l'incolla](canvas-cards.md#il-rilascio-e-lincolla). L'inchiostro: la fine di un tratto è `add_strokes`, la forma che lo sostituisce `erase_strokes` e `add_strokes` con lo stesso id, la gomma `erase_strokes` o `erase_along` (sulla pagina di un PDF con `on: {card, page, page_size}` in punti della pagina mostrata, su una cella con `on: {card, sheet, cell}`; una passata oltre i tetti del nucleo va in più `erase_along` di fila nella stessa lista), il Lazo `move_strokes` e `restyle_strokes`. Le misure del gesto sono in unità della lavagna a ogni zoom. Mentre si trascina la tela mostra le posizioni da sé: è vista, e il file cambia solo al rilascio; Esc durante un trascinamento o un ridimensionamento rimette le schede dov'erano e il file non cambia. Le schede che un gesto fa nascere (i file lasciati, Collega nel vuoto, Ctrl+Invio) prendono l'id da `newId` delle opzioni della tela, di serie `newNodeId()`; quelle incollate li prendono dal nucleo.
+
 | Comandi | Tasti |
 |---|---|
 | `canvas.tool.select`, `.lasso`, `.hand`, `.pen`, `.highlighter`, `.eraser`, `.text`, `.connect` | `V`, `Q`, `H`, `P`, `Maiusc+P`, `E`, `T`, `C` |
@@ -236,7 +241,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.grid_toggle` (la griglia di questa lavagna), `canvas.bare` (l'interfaccia, [lo spazio di lavoro](canvas-view.md#lo-spazio-di-lavoro)): le mostrano e le nascondono | `Ctrl+'`; `Ctrl+.` |
-| `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
+| `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*`, `canvas.layout.*`, `canvas.copy_code`, `canvas.paste_code` ([la lavagna come codice](canvas-check.md#nella-lavagna)) | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.crop`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file`, `canvas.extract_note`, `canvas.copy_note_text`, `canvas.replace_file` ([convertire](canvas-convert.md)) (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)); `canvas.finger_writes` («Il dito scrive» della colonna, anche in sola lettura) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end`, `canvas.text_size.s`, `.m`, `.l`, `.xl`, `canvas.text_align.start`, `.center`, `.end` (la riga delle opzioni) | nessuno |
 
@@ -265,12 +270,8 @@ comandi del catalogo col loro nome e il loro tasto:
    per una pagina); Ritaglia e ruota, per un'immagine sola, non in sola
    lettura ([gli estratti](canvas-parts.md)); Apri a lato, per una scheda di file, se l'host la dà
    (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Estrai in una nota…, Copia il testo qui, Sostituisci il file… ([convertire](canvas-convert.md)); Collega… · `C`;
-2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
-   pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
-   del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti,
-   Porta dietro, Allinea ›, Distribuisci ›); Duplica;
-3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel
-   cestino, solo con schede di file e se l'host dà `onTrashPath`.
+2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti, Porta dietro, Allinea ›, Distribuisci ›; In griglia, In riga, In colonna, Ad albero: `layout`); Duplica; Copia come codice, Incolla codice ([la lavagna come codice](canvas-check.md#nella-lavagna));
+3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel cestino, solo con schede di file e se l'host dà `onTrashPath`.
 
 Con più schede non ci sono Apri né Collega…; in sola lettura le voci che
 cambiano la lavagna sono spente col perché, non nascoste.
@@ -282,7 +283,8 @@ cambiano la lavagna sono spente col perché, non nascoste.
   Oltre dodici schede nascono in un gruppo «N pagine». Un intervallo oltre
   l'ultima pagina si taglia, e il campo lo dice; un pezzo che non si legge lo
   dice e il dialogo resta aperto. Oltre 200 pagine chiedono conferma, e
-  «Annulla» non fa nulla. Il tutto è un solo commit, che «Annulla» riporta. Se
+  «Annulla» non fa nulla. Scrive `spread_pages` del nucleo, col conto e le
+  misure lette dal PDF, in un passo solo che «Annulla» riporta. Se
   il PDF non si apre, il comando lo dice e resta spento col perché finché il
   file non cambia; in sola lettura è spento col perché.
 - **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il
@@ -478,7 +480,8 @@ barra di formato della nota (T41) e della formula della cella (T42).
 
 La barra di sotto, quella di N4, tiene ciò che non è ancora passato altrove:
 «Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, i fili e
-il colore esatto (`#rrggbb`) delle schede.
+il colore (`#rrggbb`). È la fila del kit: ciò che non ci sta va in «…»
+(«Altri comandi»), gli avvisi per ultimi; un Tab, le frecce, Esc torna su «…».
 
 ## La barra della selezione
 

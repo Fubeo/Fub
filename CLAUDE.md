@@ -145,14 +145,22 @@ a test pass. Full list: [`docs/map/dove-sta-x.md`](docs/map/dove-sta-x.md).
 
 ## CI
 
-The checks live in `.github/workflows/ci.yml` (and `npm-supply-chain.yml`).
+The checks live in `.github/workflows/ci.yml` (and `npm-supply-chain.yml`;
+`baseline.yml` commits visual baselines).
 
 - A **draft** PR gets the short CI (Linux only, no benches); ready for review
-  runs the full CI, Windows and macOS included. `main` always runs everything.
+  runs the full CI, Windows included. `main` always runs everything. macOS
+  and iOS are paused (ADR 0245): no PR waits for them; `macos-in-pausa.yml`
+  checks them weekly (Sunday, or by hand) and is not a required check.
 - `gh pr edit` fails on this repository: update a PR body with
   `gh api -X PATCH repos/Fubeo/Fub/pulls/<n> -F body=@file`.
 - Ask for the deeper fuzz run (`fuzz_completo`) after larger changes to the
   Markdown provider, not on every push.
+- When a ready PR fails only on `banco visivo`, `baseline.yml` commits the
+  runner's photos to the branch and reruns CI with `riuso_di=<run>`; in that
+  run (`riuso`) the skipped jobs count as run N on the parent commit, the one
+  exception to "never merge with a required job skipped". Look at the bot's
+  photos (contact sheet) before merging; label `baseline-a-mano` opts out.
 
 How to read runs, logs and artifacts, flaky tests, cache, nextest and the
 release gate: [`docs/development/testing-and-quality.md`](docs/development/testing-and-quality.md#la-ci-in-breve).

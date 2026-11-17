@@ -15,14 +15,11 @@ banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è l
 
 ## Modalità
 
-Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
-
-- **sorgente**, con la sintassi esplicita;
-- **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
-- **[blocchi](editor-blocks.md)**, la Live con maniglie, menu e spostamenti per blocco;
-- **lettura**, che mostra la resa senza cursore di testo.
-
-La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
+Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre
+**Scrittura** (con i [blocchi](editor-blocks.md) dentro), **Sorgente** e
+**Lettura**: sono descritte in [Scrittura](editor-writing.md), coi livelli di
+presenza degli elementi sul foglio. Dove questa pagina dice «Live» intende
+Scrittura, la modalità `live_preview`. La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
 come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
 o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
 dell'host. L'anteprima si ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
@@ -30,7 +27,7 @@ l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
 `.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in fondo alla
 banda di stato, [sul telefono un tondo](../architecture/shell-behaviours.md);
 con una sola modalità non c'è, né i comandi di modalità, che trovano la
-modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
+modalità per ruolo (Scrittura, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
 riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
@@ -165,8 +162,9 @@ attenuati. `~x~` è pedice (ADR 0228); un rimando `[^nota]` definito è un apice
 definizione ha un ↩. La guida (`editor.live-guide`) dà lo stile al testo dopo un segno
 aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc la spegne, lo
 spazio chiude apice e pedice e Backspace lo annulla; un segno lasciato aperto è
-ondulato. Il titolo del cursore ha «H2» nel margine, che apre i livelli; la riga vuota
-un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
+ondulato. Senza i blocchi il titolo del cursore ha «H2» nel margine, che apre i livelli
+(coi blocchi quel margine è della maniglia, [Scrittura](editor-writing.md)); la riga
+vuota un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
@@ -231,6 +229,15 @@ Questa distinzione impedisce di creare due copie concorrenti dello stesso
 buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
 dell'altro. Il pannello collega e scollega le superfici visibili, ma non
 coordina il buffer, il salvataggio o il fan-out delle modifiche.
+
+Una nota che va a capo tutta CRLF (scritta su Windows, per esempio) resta
+tutta CRLF: l'editor la apre con quel separatore, e ogni a capo che scrive
+(Invio, le azioni della barra e del «/», le proprietà, la griglia delle
+tabelle, il completamento, l'incolla e il trascinamento) prende quello della
+nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi compone
+un inserimento lo fa con `"\n"` e conta le posizioni lì, perché un a capo vale
+una posizione qualunque sia il separatore; il testo prende gli a capo della
+nota solo all'ultimo (`editors/text/line-breaks.ts`).
 
 ## Undo, redo e selezione
 
@@ -342,6 +349,12 @@ sorgente, e la selezione va in coda a un template che non la colloca; le
 statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
 Contano il sorgente di una nota in prosa, e di un formato strutturato (canvas,
 base) il testo del modello; la view `stats.document` li dà a `fub-cli wordcount`.
+Un file che nessun formato rivendica si conta sul sorgente se è testo UTF-8;
+se non lo è (un PDF, un'immagine) il pannello dice che non ci sono parole da
+contare, senza errore: un MIME binario noto dall'estensione basta a deciderlo
+senza aprire il file, altrimenti decide la decodifica dei byte. Allo stesso
+modo il pannello proprietà, su un file senza formato, dice che non ha
+proprietà da mostrare, e `fub-cli wordcount` rifiuta il file come argomento.
 
 ## Barra di formattazione
 

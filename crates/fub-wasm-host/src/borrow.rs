@@ -26,7 +26,7 @@
 
 use fub_abi::traits::{HostApi, ReadApi};
 use fub_abi::PluginError;
-use wasmtime::{Store, StoreLimits};
+use wasmtime::Store;
 
 /// L'host prestato. `'static` per finta: la vita vera è quella della parentesi
 /// di [`with_guest`], e l'invariante che la sostituisce è scritta lì sopra.
@@ -49,7 +49,11 @@ pub(crate) struct State {
     /// ricordarsi di ciò che ha già concesso. Il dato dello store è questo
     /// tipo, quindi il tetto abita qui — accanto al prestito dell'host, con cui
     /// non ha niente da spartire se non l'indirizzo.
-    limits: StoreLimits,
+    limits: crate::limits::Limiter,
+    /// I byte di `wasi:random` che la chiamata in corso può ancora chiedere
+    /// (`crate::limits::RANDOM_BUDGET`): li rimette [`crate::limits::renew`]
+    /// all'inizio di ogni chiamata del contratto.
+    random_left: u64,
 }
 
 // SAFETY: i puntatori sono valorizzati solo durante una chiamata sincrona.
@@ -60,11 +64,32 @@ impl State {
         State {
             guest: None,
             limits: crate::limits::ceiling(),
+            random_left: crate::limits::RANDOM_BUDGET,
         }
     }
 
-    pub(crate) fn limits(&mut self) -> &mut StoreLimits {
+    pub(crate) fn limits(&mut self) -> &mut crate::limits::Limiter {
         &mut self.limits
+    }
+
+    /// Rimette il budget di `wasi:random` della chiamata che comincia.
+    pub(crate) fn refill_random(&mut self) {
+        self.random_left = crate::limits::RANDOM_BUDGET;
+    }
+
+    /// Toglie `len` byte dal budget di `wasi:random`, o rifiuta senza toccarlo
+    /// se non bastano: chi rifiuta qui ferma il guest con una trap.
+    pub(crate) fn take_random(&mut self, len: u64) -> Result<(), RandomBudgetSpent> {
+        match self.random_left.checked_sub(len) {
+            Some(left) => {
+                self.random_left = left;
+                Ok(())
+            }
+            None => Err(RandomBudgetSpent {
+                asked: len,
+                left: self.random_left,
+            }),
+        }
     }
 
     /// Capacità di lettura disponibili durante una chiamata.
@@ -129,6 +154,27 @@ pub(crate) fn with_guest<R>(
     let guard = Return { store, previous };
     f(&mut *guard.store)
 }
+
+/// Il budget di `wasi:random` della chiamata non basta per la richiesta.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RandomBudgetSpent {
+    pub(crate) asked: u64,
+    pub(crate) left: u64,
+}
+
+impl std::fmt::Display for RandomBudgetSpent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "wasi:random: {} byte richiesti, ne restano {} dei {} di questa chiamata",
+            self.asked,
+            self.left,
+            crate::limits::RANDOM_BUDGET
+        )
+    }
+}
+
+impl std::error::Error for RandomBudgetSpent {}
 
 struct Return<'s> {
     store: &'s mut Store<State>,

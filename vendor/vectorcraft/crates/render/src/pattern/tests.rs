@@ -248,22 +248,37 @@ fn kept_tiles_stay_within_the_budget() {
 /// A pattern whose art is an image that can't be decoded: every frame that draws the pattern
 /// counts the failure ([`crate::paint::decode_failures`]), from a new tile or from the
 /// tile kept.
+///
+/// Patch di Fub (`0005-test-paralleli`, issue #407): a tile whose art reads images is kept only
+/// while the fonts stay the same ([`Deps::current`] reads [`vectorcraft_text::FontDb::global`]),
+/// and other tests of this binary add fonts to it from their own threads (`bitmapglyphs`,
+/// `colrglyphs`, `fontchange`). One that did between two frames had the tile drawn again, rightly,
+/// and the count below came out 2. A count taken while the fonts changed is taken again, with a
+/// new document (its image is new, so its first frame draws a new tile).
 #[test]
 fn kept_tiles_count_the_images_they_could_not_decode() {
     use vectorcraft_doc::{ImageBlob, ImageObject};
-    let mut d = doc_with_pattern(TileType::Grid);
-    // A PNG signature with nothing after it.
-    d.images.insert("cut".into(), ImageBlob::new("image/png", b"\x89PNG\r\n\x1a\n".to_vec()));
-    let im = ImageObject { key: "cut".into(), width: 10, height: 10, xf: Affine::IDENTITY, link: None, placement: Default::default(), pixels: None };
-    d.patterns[0].art = vec![Arc::new(Node::new(NodeId(901), NodeKind::Image(Box::new(im))))];
-    let mut r = Renderer::new();
-    let start = tiles_rasterized();
-    for n in 0..3 {
-        let before = crate::paint::decode_failures();
-        frame(&mut r, &d, 1.0);
-        assert!(crate::paint::decode_failures() > before, "frame {n}");
+    let fonts = || vectorcraft_text::FontDb::global().generation();
+    for attempt in 1.. {
+        let mut d = doc_with_pattern(TileType::Grid);
+        // A PNG signature with nothing after it.
+        d.images.insert("cut".into(), ImageBlob::new("image/png", b"\x89PNG\r\n\x1a\n".to_vec()));
+        let im =
+            ImageObject { key: "cut".into(), width: 10, height: 10, xf: Affine::IDENTITY, link: None, placement: Default::default(), pixels: None };
+        d.patterns[0].art = vec![Arc::new(Node::new(NodeId(901), NodeKind::Image(Box::new(im))))];
+        let mut r = Renderer::new();
+        let (start, generation) = (tiles_rasterized(), fonts());
+        for n in 0..3 {
+            let before = crate::paint::decode_failures();
+            frame(&mut r, &d, 1.0);
+            assert!(crate::paint::decode_failures() > before, "frame {n}");
+        }
+        if fonts() != generation && attempt < 20 {
+            continue;
+        }
+        assert_eq!(tiles_rasterized() - start, 1, "the later frames draw from the tile kept (attempt {attempt})");
+        break;
     }
-    assert_eq!(tiles_rasterized() - start, 1, "the later frames draw from the tile kept");
 }
 
 #[test]

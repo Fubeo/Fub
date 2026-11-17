@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RADIUS_BUCKETS,
   radiusBucket,
+  atlasFor,
   atlasKey,
   drawNode,
   hexRgb,
@@ -18,6 +19,8 @@ import {
   type Atlas,
   type Tints,
 } from "./atlas";
+import { createPainter } from "./painter";
+import { defaultGraphicsConfig } from "../sim/types";
 
 describe("radiusBucket", () => {
   it("sceglie il primo bucket che copre il radius", () => {
@@ -244,5 +247,44 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
     expect(calls).toBe(2);
     expect(alphas[0]).toBeCloseTo(0.42, 10);
     expect(alphas[1]).toBe(1);
+  });
+});
+
+describe("atlasFor", () => {
+  const tints = (source: string): Tints => ({ node: "#aaa", active: "#bbb", hover: "#ccc", text: "#ddd", background: "#000", groups: [], source });
+
+  it("cuoce l'atlas una volta per colori: lo stesso torna, colori nuovi lo rifanno", () => {
+    const first = atlasFor(tints("uno"), RADIUS_BUCKETS);
+    const canvas = vi.spyOn(document, "createElement");
+    try {
+      expect(atlasFor(tints("uno"), RADIUS_BUCKETS)).toBe(first);
+      expect(canvas, "senza cuocere niente").not.toHaveBeenCalled();
+      const other = atlasFor(tints("due"), RADIUS_BUCKETS);
+      expect(other).not.toBe(first);
+      expect(other.source).toBe(atlasKey(tints("due"), RADIUS_BUCKETS));
+    } finally {
+      canvas.mockRestore();
+    }
+  });
+
+  it("il secondo pittore con gli stessi colori riprende l'atlas del primo", () => {
+    // Cuocere l'atlas è un terzo del primo montaggio del grafo: riaprirlo, o
+    // scaldarlo prima, non deve rifarlo.
+    const host = document.createElement("div");
+    document.body.append(host);
+    createPainter(host, defaultGraphicsConfig());
+    const made: string[] = [];
+    const create = document.createElement.bind(document);
+    const spy = vi.spyOn(document, "createElement").mockImplementation((tag: string, options?: ElementCreationOptions) => {
+      made.push(tag);
+      return create(tag, options);
+    });
+    try {
+      createPainter(host, defaultGraphicsConfig());
+      expect(made.filter((tag) => tag === "canvas"), "i due canvas del pittore, nessun atlas").toHaveLength(2);
+    } finally {
+      spy.mockRestore();
+      host.remove();
+    }
   });
 });

@@ -7,7 +7,7 @@
     <!-- Lo strato d'avvio, prima di ogni altro script: i caratteri del marchio,
          il suo foglio (luce e colori dal primo disegno, anche senza JS), quello
          per chi ha il JS spento e i due script classici di public/avvio/. È lo
-         stesso nelle tre pagine. Le pagine non hanno elementi style in linea:
+         stesso nelle tre pagine. Le pagine non hanno stili in linea:
          public/avvio/avvio.css dice perché. -->
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/newsreader-latin-opsz-italic.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/hanken-grotesk-latin-wght-normal.woff2" />
@@ -17,6 +17,9 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="stylesheet" id="avvio-stile" href="/avvio/avvio.css" />
     <noscript><link rel="stylesheet" href="/avvio/senza-js.css" /></noscript>
+    <!-- Vuoto: porta il nonce che Tauri scrive per questa pagina, e che
+         CodeMirror usa per i suoi stili (src/ui/stylesheets.ts). -->
+    <style data-fub-nonce></style>
     <script src="/avvio/luce.js"></script>
     <script defer src="/avvio/stati.js"></script>
   </head>

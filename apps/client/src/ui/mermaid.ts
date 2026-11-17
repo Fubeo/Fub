@@ -32,6 +32,7 @@ import {
   type TokenReader,
 } from "./mermaid-styles";
 import { notify } from "./notify";
+import { withPageNonce } from "./stylesheets";
 import { attributeValue, external, isAllowedLink } from "./sanitize";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -656,7 +657,9 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       staging.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;width:1200px";
       document.body.append(staging);
       try {
-        const result = await mermaid.render(identifier("fub-mermaid"), source, staging);
+        // Mermaid misura le etichette col foglio che mette in un `<style>`:
+        // con il nonce della pagina la CSP lo lascia valere.
+        const result = await withPageNonce(() => mermaid.render(identifier("fub-mermaid"), source, staging));
         const svgDocument = new DOMParser().parseFromString(result.svg, "image/svg+xml");
         const description = Array.from(svgDocument.querySelectorAll("title, desc"))
           .map((node) => node.textContent?.trim()).filter(Boolean).join(". ");

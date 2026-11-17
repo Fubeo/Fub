@@ -15,23 +15,45 @@
 // Il foglio non ha un bordo: i casi che contano sul bordo della tabella
 // (`bounded`) lì confrontano soltanto la cella attiva e le celle. Il foglio
 // esegue alcuni gesti coi comandi del suo catalogo: lì il caso controlla il
-// comando chiesto (`delegated`) invece delle celle.
+// comando chiesto (`delegated`) invece delle celle; un gesto che il foglio
+// non ha lo dice col perché (`workbookAbsent`), e così uno che lì fa
+// apposta un'altra cosa (`workbookDiffers`).
+//
+// Un gesto che scrive conta le scritture (`edits`): una scrittura è un passo
+// solo dell'annulla, e Ctrl+Z lo toglie tutto. Nel documento l'annulla è
+// vero, e lo provano le varianti «Ctrl+Z annulla in un passo».
 //
 // Qui non si importa il banco di prova: `playCase` ridà ciò che si è visto, e
 // il confronto lo fa il test con `expectedOf`.
 
+import { resolvedLanguage } from "../i18n/strings";
 import type { TableCaps } from "./adapter";
 import type { Cell, Range } from "./navigation";
+import { todayText } from "./series";
 
 export type ConformanceMode = "sheet" | "document";
 
 export type ConformanceStep =
   /// Un tasto, dove sta il fuoco adesso (la tabella o la cella aperta).
-  | { readonly key: string; readonly shift?: boolean; readonly mod?: boolean; readonly code?: string }
+  | { readonly key: string; readonly shift?: boolean; readonly mod?: boolean; readonly alt?: boolean; readonly code?: string }
   /// Un comando del catalogo, per id.
   | { readonly command: string }
   /// Un gesto degli appunti, con gli appunti finti della prova.
-  | { readonly clipboard: "cut" | "copy" | "paste" };
+  | { readonly clipboard: "cut" | "copy" | "paste" }
+  /// Un gesto del puntatore (`ConformancePointer`).
+  | { readonly pointer: ConformancePointer };
+
+/// I gesti del puntatore: la maniglia di riempimento tirata fino a una cella
+/// o cliccata due volte, un'intestazione cliccata (`index` è la colonna o la
+/// riga) o trascinata fino a un'altra (`to`).
+export type ConformancePointer =
+  | { readonly kind: "fill"; readonly to: Cell }
+  | { readonly kind: "fill-double" }
+  | { readonly kind: "header"; readonly axis: "column" | "row"; readonly index: number; readonly to?: number };
+
+/// Il posto della data di oggi nelle celle attese: `expectedOf` ci mette il
+/// giorno del caso (`today`) scritto nella lingua di Fub.
+export const TODAY = "\u0000oggi";
 
 export interface ConformanceCase {
   readonly name: string;
@@ -49,6 +71,15 @@ export interface ConformanceCase {
   readonly bounded?: boolean;
   /// Il comando del catalogo dei fogli che lo stesso gesto chiede al foglio.
   readonly delegated?: string;
+  /// Perché il foglio (l'adattatore che delega al suo catalogo) non ha il
+  /// gesto: lì la prova controlla che non chieda nessun comando.
+  readonly workbookAbsent?: string;
+  /// Perché nel foglio lo stesso gesto fa apposta un'altra cosa (il foglio
+  /// non ha una riga d'intestazione, per esempio): lì il caso non si prova,
+  /// e la prova del foglio lo elenca saltato col perché.
+  readonly workbookDiffers?: string;
+  /// Il giorno della prova (una data ISO): l'orologio del driver lo segna.
+  readonly today?: string;
   readonly steps: readonly ConformanceStep[];
   readonly cells?: readonly (readonly string[])[];
   readonly active?: Cell;
@@ -57,6 +88,8 @@ export interface ConformanceCase {
   readonly cut?: Range | null;
   /// Quanti intervalli sono scelti.
   readonly ranges?: number;
+  /// Quante scritture ha fatto il gesto: ognuna è un passo dell'annulla.
+  readonly edits?: number;
 }
 
 /// Gli appunti finti di una prova: ciò che taglia o copia scrive, l'incolla
@@ -68,8 +101,11 @@ export interface ConformanceClipboard {
 
 /// Ciò che un adattatore offre alla prova.
 export interface ConformanceDriver {
-  key(name: string, init: { readonly shiftKey: boolean; readonly ctrlKey: boolean; readonly code?: string }): void;
+  key(name: string, init: { readonly shiftKey: boolean; readonly ctrlKey: boolean; readonly altKey: boolean; readonly code?: string }): void;
   command(id: string): void;
+  /// Un gesto del puntatore: chi non ha la maniglia o le intestazioni non lo
+  /// offre, e i casi che lo usano lì mancano.
+  pointer?(gesture: ConformancePointer): void;
   /// Manda l'evento degli appunti dove sta il fuoco.
   clipboard?(kind: "cut" | "copy" | "paste", store: ConformanceClipboard): void;
   /// Lascia finire ciò che l'adattatore fa dopo (una promessa, un giro).
@@ -81,6 +117,8 @@ export interface ConformanceDriver {
   ranges?(): number;
   /// I comandi del catalogo che l'adattatore ha chiesto, in ordine.
   asked?(): readonly string[];
+  /// Quante scritture ha fatto l'adattatore, ognuna un passo dell'annulla.
+  edits?(): number;
 }
 
 /// Un adattatore come lo vede la prova.
@@ -100,12 +138,14 @@ export interface ConformanceResult {
   readonly cut?: Range | null;
   readonly ranges?: number;
   readonly asked?: readonly string[];
+  readonly edits?: number;
 }
 
 /// Se l'adattatore `target` può eseguire il caso.
 export function caseApplies(test: ConformanceCase, target: TableCaps | ConformanceTarget): boolean {
   const full: ConformanceTarget = "mode" in target ? target : { mode: "sheet", caps: target, bounded: true, delegates: false };
   if (!(test.modes ?? ALL_MODES).includes(full.mode) || test.absent?.[full.mode]) return false;
+  if (full.delegates && (test.workbookAbsent || test.workbookDiffers)) return false;
   if (full.delegates && test.delegated) return true;
   return (test.needs ?? []).every((need) => full.caps[need]);
 }
@@ -119,6 +159,7 @@ export function caseAbsence(test: ConformanceCase, target: ConformanceTarget): s
   if (!(test.modes ?? ALL_MODES).includes(target.mode)) return null;
   const reason = test.absent?.[target.mode];
   if (reason) return reason;
+  if (target.delegates && test.workbookAbsent) return test.workbookAbsent;
   if (target.delegates && test.delegated) return null;
   const missing = (test.needs ?? []).filter((need) => !target.caps[need]);
   return missing.length > 0 ? `il formato non ha la capacità ${missing.join(", ")}` : null;
@@ -128,12 +169,17 @@ export function caseAbsence(test: ConformanceCase, target: ConformanceTarget): s
 export function expectedOf(test: ConformanceCase, target: ConformanceTarget): Partial<ConformanceResult> {
   if (target.delegates && test.delegated) return { asked: [test.delegated] };
   const loose = test.bounded && !target.bounded;
+  const today = test.today ? todayText(new Date(test.today), resolvedLanguage()) : "";
   return {
-    ...(test.cells ? { cells: test.cells.map((row) => [...row]) } : {}),
+    ...(test.cells ? { cells: test.cells.map((row) => row.map((value) => value.replaceAll(TODAY, today))) } : {}),
     ...(test.active ? { active: test.active } : {}),
     ...(test.range && !loose ? { range: test.range } : {}),
     ...(test.cut !== undefined ? { cut: test.cut } : {}),
     ...(test.ranges !== undefined && !loose ? { ranges: test.ranges } : {}),
+    // Le scritture si contano dove una scrittura è un passo dell'annulla:
+    // la tabella delle note e la cornice. Il documento prova l'annulla vero
+    // (le varianti «Ctrl+Z»), il foglio scrive col suo giornale.
+    ...(test.edits !== undefined && target.mode === "sheet" && !target.delegates ? { edits: test.edits } : {}),
   };
 }
 
@@ -146,11 +192,14 @@ export async function playCase(test: ConformanceCase, driver: ConformanceDriver)
   const store: ConformanceClipboard = { text: "", html: "" };
   for (const step of test.steps) {
     if ("command" in step) driver.command(step.command);
-    else if ("clipboard" in step) {
+    else if ("pointer" in step) {
+      if (!driver.pointer) throw new Error(`l'adattatore non sa il gesto ${step.pointer.kind}`);
+      driver.pointer(step.pointer);
+    } else if ("clipboard" in step) {
       if (!driver.clipboard) throw new Error(`l'adattatore non sa ${step.clipboard}`);
       driver.clipboard(step.clipboard, store);
     } else {
-      driver.key(step.key, { shiftKey: step.shift ?? false, ctrlKey: step.mod ?? false, ...(step.code ? { code: step.code } : {}) });
+      driver.key(step.key, { shiftKey: step.shift ?? false, ctrlKey: step.mod ?? false, altKey: step.alt ?? false, ...(step.code ? { code: step.code } : {}) });
     }
     await driver.settle?.();
   }
@@ -161,6 +210,7 @@ export async function playCase(test: ConformanceCase, driver: ConformanceDriver)
     ...(driver.cut ? { cut: driver.cut() } : {}),
     ...(driver.ranges ? { ranges: driver.ranges() } : {}),
     ...(driver.asked ? { asked: [...driver.asked()] } : {}),
+    ...(driver.edits ? { edits: driver.edits() } : {}),
   };
 }
 
@@ -174,6 +224,25 @@ const HOLES = [["Nome", "Voto"], ["Ada", ""], ["", "9"], ["Cleo", "7"]] as const
 const WORD_JUMP = "nel testo Ctrl con una freccia salta di parola: nel documento non va al bordo dei dati";
 /// Nel documento non c'è una cella aperta.
 const IN_TEXT = "il cursore è già nel testo della cella: non c'è una cella da aprire, riscrivere o annullare";
+
+/// Una colonna di città, per il completamento.
+const CITIES = [["Città", "Note"], ["Roma", "a"], ["Milano", "b"], ["", ""]] as const;
+/// Una colonna di giorni, con la colonna accanto piena fino in fondo.
+const DAYS = [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["", "6"]] as const;
+/// Una tabella con una cella vuota sotto l'intestazione, per la data.
+const DATED = [["Data", "Nota"], ["", "x"]] as const;
+
+/// Il motore dei fogli resta fuori da T51: i gesti nuovi lì arrivano con un
+/// lavoro sul motore.
+const NOT_IN_ENGINE = "il motore dei fogli non ha ancora il gesto: resta fuori dai gesti nuovi della Tabella";
+/// Nel documento non c'è la maniglia di riempimento.
+const NO_HANDLE = "nel documento le celle non hanno la maniglia di riempimento";
+/// Nel documento non ci sono le lettere e i numeri delle intestazioni.
+const NO_HEADERS = "nel documento la tabella non ha le lettere delle colonne né i numeri delle righe";
+/// Il documento non completa, come Word.
+const NO_COMPLETION = "nel documento si scrive nel testo della cella, come in Word: niente completamento, Invio va a capo";
+/// Alt+= nel documento è di Word.
+const NO_SUM = "in Word Alt+= inserisce un'equazione: nel documento la Tabella non lo prende";
 
 export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   {
@@ -374,6 +443,235 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     cells: [["Voto", "Nome"], ["10", "Ada"], ["9", "Bea"]],
     active: { row: 0, column: 0 },
   },
+  // ── I gesti nuovi: il completamento, le serie, la somma, la data, le
+  // righe e colonne spostate, le intestazioni.
+  {
+    name: "il completamento propone il valore della colonna, e Invio lo accetta",
+    absent: { document: NO_COMPLETION },
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: CITIES,
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "M" }, { key: "Enter" }],
+    cells: [["Città", "Note"], ["Roma", "a"], ["Milano", "b"], ["Milano", ""]],
+    edits: 1,
+  },
+  {
+    // La cella prende il valore della colonna com'è scritto lì, come in
+    // Excel: «r» accettato è «Roma».
+    name: "il completamento si accetta anche con Tab, che va avanti, e scrive il valore della colonna",
+    absent: { document: NO_COMPLETION },
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: CITIES,
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "r" }, { key: "Tab" }],
+    cells: [["Città", "Note"], ["Roma", "a"], ["Milano", "b"], ["Roma", ""]],
+    active: { row: 3, column: 1 },
+  },
+  {
+    name: "Alt con una freccia nella cella aperta non conferma e non sposta",
+    modes: ["sheet"],
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: ROWS,
+    steps: [{ key: "ArrowDown" }, { key: "x" }, { key: "ArrowDown", alt: true }, { key: "ArrowRight", alt: true }, { key: "Escape" }],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
+    active: { row: 1, column: 0 },
+    edits: 0,
+  },
+  {
+    name: "il completamento tace nell'intestazione",
+    absent: { document: NO_COMPLETION },
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: CITIES,
+    steps: [{ key: "R" }, { key: "Enter" }],
+    cells: [["R", "Note"], ["Roma", "a"], ["Milano", "b"], ["", ""]],
+  },
+  {
+    name: "il completamento tace sui numeri",
+    absent: { document: NO_COMPLETION },
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: [["Voto", "Nota"], ["105", "a"], ["", ""]],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "1" }, { key: "Enter" }],
+    cells: [["Voto", "Nota"], ["105", "a"], ["1", ""]],
+  },
+  {
+    name: "la maniglia continua i giorni della settimana",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: DAYS,
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill", to: { row: 3, column: 0 } } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["mar", "7"], ["mer", "6"]],
+    range: { r0: 1, c0: 0, r1: 3, c1: 0 },
+    edits: 1,
+  },
+  {
+    name: "la maniglia continua i mesi in inglese",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: [["Month", "Hours"], ["January", "8"], ["", ""], ["", ""]],
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill", to: { row: 3, column: 0 } } }],
+    cells: [["Month", "Hours"], ["January", "8"], ["February", ""], ["March", ""]],
+    edits: 1,
+  },
+  {
+    name: "la maniglia continua i mesi, e dopo dicembre torna a gennaio",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: [["Mese", "Ore"], ["nov", "8"], ["", ""], ["", ""]],
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill", to: { row: 3, column: 0 } } }],
+    cells: [["Mese", "Ore"], ["nov", "8"], ["dic", ""], ["gen", ""]],
+    edits: 1,
+  },
+  {
+    name: "il doppio clic sulla maniglia riempie fino in fondo",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: DAYS,
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["mar", "7"], ["mer", "6"]],
+    edits: 1,
+  },
+  {
+    // Come Excel: la serie non scrive sopra una cella già piena.
+    name: "il doppio clic sulla maniglia si ferma prima di una cella piena",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["gio", "6"], ["", "5"]],
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["mar", "7"], ["gio", "6"], ["", "5"]],
+    edits: 1,
+  },
+  {
+    name: "il doppio clic sulla maniglia scende quanto la colonna accanto",
+    absent: { document: NO_HANDLE },
+    delegated: "edit.autoFill",
+    rows: [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["", ""], ["", ""]],
+    steps: [{ key: "ArrowDown" }, { pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["mar", "7"], ["", ""], ["", ""]],
+    edits: 1,
+  },
+  {
+    name: "il doppio clic sulla maniglia non porta l'intestazione nel corpo",
+    absent: { document: NO_HANDLE },
+    workbookDiffers: "nel foglio la prima riga non è un'intestazione: la maniglia la continua come le altre",
+    rows: DAYS,
+    steps: [{ pointer: { kind: "fill-double" } }],
+    cells: [["Giorno", "Ore"], ["lun", "8"], ["", "7"], ["", "6"]],
+    edits: 0,
+  },
+  {
+    // Sulla tastiera italiana «=» è Maiusc+0.
+    name: "Alt+= scrive la somma delle celle sopra, coi numeri all'italiana",
+    absent: { document: NO_SUM },
+    // Nel foglio la somma resta la formula di oggi.
+    delegated: "formulas.autoSum",
+    rows: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Trasporti", "860"], ["Totale", ""]],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { key: "=", alt: true, shift: true, code: "Digit0" }],
+    cells: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Trasporti", "860"], ["Totale", "2.100,5"]],
+    edits: 1,
+  },
+  {
+    // Il tasto che sulla tastiera inglese fa «=», su quella italiana scrive
+    // «ì»: Alt+ì non è la somma.
+    name: "Alt+= conta il carattere, non il tasto",
+    modes: ["sheet"],
+    workbookAbsent: "Alt+ì non è la somma: il foglio non chiede nessun comando",
+    rows: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Totale", ""]],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { key: "ì", alt: true, code: "Equal" }],
+    cells: [["Voce", "Importo"], ["Cornici", "1.240,5"], ["Totale", ""]],
+    edits: 0,
+  },
+  {
+    // Il segno dei decimali si legge dai soli numeri sommati: i numeri
+    // all'inglese sopra il blocco («3.5», «0.25») non fanno leggere «1.240»
+    // come uno virgola ventiquattro. Nel blocco nessun numero lo dice, e
+    // decide la lingua (l'italiano della prova).
+    name: "Alt+= legge i decimali dai soli numeri sommati",
+    absent: { document: NO_SUM },
+    delegated: "formulas.autoSum",
+    rows: [["Voce", "Importo"], ["Tasso", "3.5"], ["Sconto", "0.25"], ["Spese", "-"], ["Cornici", "1.240"], ["Trasporti", "860"], ["Totale", ""]],
+    steps: [
+      { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" },
+      { key: "ArrowRight" }, { key: "=", alt: true, code: "Equal" },
+    ],
+    cells: [["Voce", "Importo"], ["Tasso", "3.5"], ["Sconto", "0.25"], ["Spese", "-"], ["Cornici", "1.240"], ["Trasporti", "860"], ["Totale", "2.100"]],
+    edits: 1,
+  },
+  {
+    name: "Alt+= scrive la somma delle celle sopra, coi numeri all'inglese",
+    absent: { document: NO_SUM },
+    delegated: "formulas.autoSum",
+    rows: [["Item", "Cost"], ["Frames", "1,240.5"], ["Shipping", "860"], ["Total", ""]],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { key: "=", alt: true, code: "Equal" }],
+    cells: [["Item", "Cost"], ["Frames", "1,240.5"], ["Shipping", "860"], ["Total", "2,100.5"]],
+    edits: 1,
+  },
+  {
+    name: "Ctrl+; scrive la data di oggi",
+    workbookAbsent: NOT_IN_ENGINE,
+    today: "2026-11-15T12:00:00",
+    rows: DATED,
+    steps: [{ key: "ArrowDown" }, { key: ";", mod: true, code: "Semicolon" }],
+    cells: [["Data", "Nota"], [TODAY, "x"]],
+    edits: 1,
+  },
+  {
+    // Nel documento Alt con una freccia vale con le celle scelte: senza, la
+    // freccia resta del testo (su macOS Alt salta di parola).
+    name: "Alt+freccia giù sposta le righe scelte",
+    needs: ["moveRows"],
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: ROWS,
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { key: "ArrowDown", alt: true }],
+    cells: [["Nome", "Voto"], ["Bea", "9"], ["Ada", "10"]],
+    range: { r0: 2, c0: 0, r1: 2, c1: 1 },
+    edits: 1,
+  },
+  {
+    name: "Alt+freccia a destra sposta le colonne scelte",
+    needs: ["moveColumns"],
+    workbookAbsent: NOT_IN_ENGINE,
+    rows: ROWS,
+    steps: [{ key: "ArrowDown", shift: true }, { key: "ArrowDown", shift: true }, { key: "ArrowRight", alt: true }],
+    cells: [["Voto", "Nome"], ["10", "Ada"], ["9", "Bea"]],
+    range: { r0: 0, c0: 1, r1: 2, c1: 1 },
+    edits: 1,
+  },
+  {
+    name: "un clic sulla lettera sceglie la colonna",
+    absent: { document: NO_HEADERS },
+    rows: ROWS,
+    steps: [{ pointer: { kind: "header", axis: "column", index: 1 } }, { key: "Delete" }],
+    cells: [["Nome", ""], ["Ada", ""], ["Bea", ""]],
+  },
+  {
+    name: "un clic sul numero sceglie la riga",
+    absent: { document: NO_HEADERS },
+    bounded: true,
+    rows: WIDE,
+    steps: [{ pointer: { kind: "header", axis: "row", index: 2 } }, { key: "Delete" }],
+    cells: [["Nome", "Voto", "Nota"], ["Ada", "10", "bene"], ["", "", ""]],
+    range: { r0: 2, c0: 0, r1: 2, c1: 2 },
+  },
+  {
+    name: "una lettera scelta si trascina e sposta la colonna",
+    needs: ["moveColumns"],
+    absent: { document: NO_HEADERS },
+    workbookAbsent: "nel foglio trascinare le lettere allarga la scelta, come in Excel; spostarle è un lavoro sul motore",
+    rows: ROWS,
+    steps: [{ pointer: { kind: "header", axis: "column", index: 0 } }, { pointer: { kind: "header", axis: "column", index: 0, to: 1 } }],
+    cells: [["Voto", "Nome"], ["10", "Ada"], ["9", "Bea"]],
+    range: { r0: 0, c0: 1, r1: 2, c1: 1 },
+    edits: 1,
+  },
+  {
+    name: "un numero scelto si trascina e sposta la riga, mai sopra l'intestazione",
+    needs: ["moveRows"],
+    absent: { document: NO_HEADERS },
+    workbookAbsent: "nel foglio trascinare i numeri allarga la scelta, come in Excel; spostarli è un lavoro sul motore",
+    rows: WIDE,
+    steps: [{ pointer: { kind: "header", axis: "row", index: 2 } }, { pointer: { kind: "header", axis: "row", index: 2, to: 0 } }],
+    cells: [["Nome", "Voto", "Nota"], ["Bea", "9", "ok"], ["Ada", "10", "bene"]],
+    range: { r0: 1, c0: 0, r1: 1, c1: 2 },
+    edits: 1,
+  },
   // ── Le varianti del modo «documento»: le frecce restano del testo finché
   // non escono dalla cella, e Ctrl+Z annulla un gesto in un passo.
   {
@@ -432,5 +730,28 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
       { key: "ArrowDown" }, { clipboard: "paste" }, { key: "z", mod: true, code: "KeyZ" },
     ],
     cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
+  },
+  {
+    name: "documento: Ctrl+Z annulla in un passo le righe spostate con Alt",
+    modes: ["document"],
+    rows: ROWS,
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { key: "ArrowDown", alt: true }, { key: "z", mod: true, code: "KeyZ" }],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
+  },
+  {
+    name: "documento: Ctrl+; scrive la data dove sta il cursore",
+    modes: ["document"],
+    today: "2026-11-15T12:00:00",
+    rows: [["Data", "Nota"], ["Visto il ", "x"]],
+    steps: [{ key: "ArrowDown" }, { key: ";", mod: true, code: "Semicolon" }],
+    cells: [["Data", "Nota"], [`Visto il ${TODAY}`, "x"]],
+  },
+  {
+    name: "documento: Ctrl+Z annulla in un passo la data di oggi",
+    modes: ["document"],
+    today: "2026-11-15T12:00:00",
+    rows: DATED,
+    steps: [{ key: "ArrowDown" }, { key: ";", mod: true, code: "Semicolon" }, { key: "z", mod: true, code: "KeyZ" }],
+    cells: [["Data", "Nota"], ["", "x"]],
   },
 ];

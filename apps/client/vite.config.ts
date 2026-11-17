@@ -2,33 +2,11 @@ import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
+import { minifySkin } from "./build/skin-minify.mjs";
 
 const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
-
-/// Il CSS senza i commenti; un `/*` dentro una stringa resta. Le regole sono
-/// le stesse: il sanitizer e il browser i commenti li saltano comunque.
-function withoutComments(css: string): string {
-  let out = "";
-  let i = 0;
-  while (i < css.length) {
-    const c = css[i]!;
-    if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < css.length && css[j] !== c) j += css[j] === "\\" ? 2 : 1;
-      out += css.slice(i, j + 1);
-      i = j + 1;
-    } else if (c === "/" && css[i + 1] === "*") {
-      const end = css.indexOf("*/", i + 2);
-      i = end === -1 ? css.length : end + 2;
-    } else {
-      out += c;
-      i++;
-    }
-  }
-  return out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
-}
 
 /// Il file del build con i chunk che ogni pagina carica all'avvio: sta in
 /// `dist/`, accanto a ciò che descrive, e non nel repository.
@@ -46,11 +24,30 @@ const SWITCHABLE_FILE = "switchable-chunks.json";
 const NOT_AT_STARTUP: readonly { readonly what: string; readonly chunk?: RegExp; readonly module?: RegExp }[] = [
   { what: "pdfjs", module: /\/node_modules\/pdfjs-dist\// },
   { what: "editors/canvas", module: /\/src\/editors\/canvas\// },
+  // La porta per scrivere nelle schede della lavagna: serve solo a lei, e
+  // `document-controller.ts` la carica con un `import()` al primo uso.
+  { what: "state/card-editors", module: /\/src\/state\/card-editors\.ts$/ },
   { what: "drawing-*", chunk: /^drawing-/ },
   { what: "editors/spatial", module: /\/src\/editors\/spatial\// },
   { what: "editors/rich", module: /\/src\/editors\/rich\// },
   { what: "editors/grid", module: /\/src\/editors\/grid\// },
 ];
+
+/// I chunk che la resa delle note (`markdown-render`) e il renderer delle
+/// viste (`ui-views`) possono importare: i runtime e le grammatiche sotto di
+/// loro, i chunk condivisi che Rollup nomina dal primo modulo (`icons`,
+/// `strings`, `menu`) e loro due.
+const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
+  "editor-runtime",
+  "markdown-grammar",
+  "text-engine",
+  "icons",
+  "strings",
+  "menu",
+  "markdown-render",
+  "html-entities",
+  "ui-views",
+]);
 
 /// Un id di modulo detto a partire dal client: `src/...` o `node_modules/...`.
 function shortId(id: string): string {
@@ -134,16 +131,17 @@ export default defineConfig({
     canvasWasm(),
     {
     // La pelle composta arriva come testo (`?raw`), e Vite non minimizza il
-    // testo: un terzo erano commenti, che documentano i pezzi ma nel bundle
-    // pesano come regole. Nella build si tolgono; in sviluppo e al banco la
-    // pelle resta quella scritta.
-    name: "skin-without-comments",
+    // testo: commenti e rientri, che documentano i pezzi, nel bundle pesavano
+    // come regole. Nella build si tolgono con gli spazi che non contano
+    // (`build/skin-minify.mjs`, con le regole identiche provate dal suo test);
+    // in sviluppo e al banco la pelle resta quella scritta.
+    name: "skin-minify",
     apply: "build",
     transform(code, id) {
       if (!/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return null;
       const match = /^export default (".*");?\s*$/s.exec(code);
       if (!match) this.error(`${id}: il testo della pelle non ha più la forma di \`?raw\``);
-      return { code: `export default ${JSON.stringify(withoutComments(JSON.parse(match[1]!) as string))};`, map: null };
+      return { code: `export default ${JSON.stringify(minifySkin(JSON.parse(match[1]!) as string))};`, map: null };
     },
   }, {
     name: "bundle-size-budgets",
@@ -195,6 +193,21 @@ export default defineConfig({
           // quello del codice.
           if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
             this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
+          }
+          // La resa delle note e il renderer delle viste stanno sotto il
+          // ponte dei documenti e importano soltanto i chunk sotto di loro.
+          // Un chunk nuovo fra i loro import vuol dire un modulo che importano
+          // e che la loro regola in `manualChunks` non nomina: Rollup lo ha
+          // estratto a parte (all'avvio, un file in più) o lo ha lasciato nel
+          // ponte (un ciclo). Va aggiunto alla regola. Se invece un chunk
+          // condiviso ha soltanto cambiato nome, va cambiato qui.
+          if (chunk.name === "markdown-render" || chunk.name === "ui-views") {
+            const strays = chunk.imports
+              .map((file) => bundle[file])
+              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !UNDER_THE_RENDER.has(next.name));
+            if (strays.length) {
+              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...UNDER_THE_RENDER].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
+            }
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
           const bytes = Buffer.byteLength(chunk.code, "utf8");
@@ -276,6 +289,11 @@ export default defineConfig({
           // coi gesti delle tabelle, non con l'editor che la monta, e da sola
           // non pesa sul chunk dei documenti.
           if (/\/src\/tabella\//.test(id)) return "tabella";
+          // Il pannello delle impostazioni, con la pagina dei componenti, le
+          // informazioni e la rinomina del vault: cambia con le impostazioni,
+          // non con l'editor o la ricerca, e da solo non pesa sul chunk che
+          // questi condividono.
+          if (/\/src\/panels\/(settings[^/]*|components-page|about|vault-rename)\.ts$/.test(id)) return "settings-panel";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache
@@ -382,6 +400,35 @@ export default defineConfig({
           ) {
             return "text-engine";
           }
+          // La tabella delle entità nominate di HTML, che `link-syntax` usa
+          // per sciogliere `&nome;` senza DOM: dati generati da una copia
+          // della specifica, che cambiano soltanto quando la si riscarica.
+          // Da sola resta in cache quando cambia la resa.
+          if (/\/src\/editors\/text\/profiles\/markdown\/html-entities\.generated\.ts$/.test(id)) return "html-entities";
+          // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
+          // righe, con la grammatica che legge (note a piè di pagina, link,
+          // ripiegabili, indice, testate dei callout, commenti CriticMarkup),
+          // la sintassi del vault,
+          // il sanificatore dell'HTML e le stringhe del profilo. La usano la
+          // Live, la stampa, la copia in HTML e le anteprime; cambia con la
+          // resa, non con i gesti dell'editor, e da sola non pesa sul chunk
+          // del ponte dei documenti.
+          // L'elenco è chiuso verso il basso: ogni modulo che questi importano
+          // e che starebbe nel ponte sta qui. Uno lasciato fuori, con
+          // `onlyExplicitManualChunks`, finirebbe in un chunk estratto a parte
+          // o farebbe un ciclo fra questo chunk e il ponte: il plugin
+          // `bundle-size-budgets` ferma la build in tutti e due i casi
+          // (`UNDER_THE_RENDER`).
+          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
+            return "markdown-render";
+          }
+          // Il renderer delle viste dichiarative (`UiNode`) con il suo
+          // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
+          // importa: la specie di un file, i tipi dei trascinamenti, i tasti
+          // delle linguette, le icone delle pagine. Lo montano la shell, i
+          // pannelli e la resa delle note; cambia col protocollo delle viste,
+          // non con l'editor. Chiuso verso il basso come la resa.
+          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {

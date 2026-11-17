@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { EditorSelection, EditorState } from "@codemirror/state";
-import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
-import { canSetContentColor, colorsAt, CONTENT_COLORS, setContentColor, type ColorKind, type ContentColor } from "./color";
+import { EditorSelection, EditorState, type TransactionSpec } from "@codemirror/state";
+import { colorsAt, setContentColor, type ColorKind, type ContentColor } from "./color";
 import { colorClasses, renderInline } from "./render-inline";
+import { MARKDOWN_ACTIONS } from "./actions";
 
 // I colori del contenuto (K1): classi fisse, un tag che avvolge, una classe
 // che cambia al posto di un secondo tag.
@@ -68,6 +68,16 @@ describe("dare un colore", () => {
     expect(color(at("niente", 0, 6), "text", null).ran).toBe(false);
   });
 
+  it("in una nota CRLF il tag andato a capo si toglie intero, come in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const doc = `a <span${nl}class="fub-color-red">due</span> b`;
+      const state = EditorState.create({ doc, extensions: nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)] });
+      // Posizioni del documento: l'a capo vale una posizione.
+      const inside = doc.replace(/\r\n/g, "\n").indexOf("due");
+      expect(color(state, "text", null, { from: inside, to: inside + 3 }).doc, JSON.stringify(nl)).toBe("a due b");
+    }
+  });
+
   it("in una riga vuota scrive la coppia vuota col cursore dentro", () => {
     const result = color(at("", 0), "text", "purple");
     expect(result.doc).toBe('<span class="fub-color-purple"></span>');
@@ -88,46 +98,34 @@ describe("dare un colore", () => {
   });
 });
 
-describe("se un colore si può dare (#293)", () => {
-  const cases: [string, number, number][] = [
-    ["uno due tre", 4, 7],
-    ['uno <span class="fub-color-red">due</span> tre', 32, 35],
-    ['<mark class="fub-bg-blue">due</mark>', 26, 29],
-    ['<span class="fub-color-red fub-bg-blue">x</span>', 40, 41],
-    ["- [ ] compito", 13, 13],
-    ["", 0, 0],
+describe("se il colore agirebbe", () => {
+  // La barra chiede per ogni colore se è acceso, a ogni movimento del cursore
+  // e a ogni cambio di scheda: la risposta è quella del comando, ma senza
+  // costruire la transazione.
+  const cases: [string, EditorState][] = [
+    ["selezione", at("uno due tre", 4, 7)],
+    ["già rosso", at('uno <span class="fub-color-red">due</span> tre', 32, 35)],
+    ["riga del cursore", at("- [ ] da fare", 8)],
+    ["riga vuota", at("", 0)],
+    ["sola lettura", EditorState.create({ doc: "uno", extensions: EditorState.readOnly.of(true) })],
   ];
-  const values: (ContentColor | null)[] = [null, "red", "blue", "gray"];
+  const kinds: ColorKind[] = ["text", "fill"];
+  const values: (ContentColor | null)[] = [null, "red", "blue"];
 
-  it("decide come il comando, per ogni colore e ogni tratto", () => {
-    for (const [doc, anchor, head] of cases) {
-      for (const kind of ["text", "fill"] as const) {
+  it("dice sì esattamente quando il comando agirebbe, e non costruisce transazioni", () => {
+    for (const [name, state] of cases) {
+      for (const kind of kinds) {
         for (const value of values) {
-          const state = at(doc, anchor, head);
-          expect(canSetContentColor(kind, value)(state), `${doc} ${kind} ${value}`).toBe(color(state, kind, value).ran);
+          const expected = color(state, kind, value).ran;
+          const action = MARKDOWN_ACTIONS.get(`markdown.${kind === "text" ? "color" : "background"}.${value ?? "default"}`)!;
+          let built = 0;
+          const update = state.update.bind(state);
+          Object.defineProperty(state, "update", { configurable: true, value: (...specs: TransactionSpec[]) => (built++, update(...specs)) });
+          expect(action.applicable!(state), `${name} ${kind} ${value}`).toBe(expected);
+          expect(built, `${name} ${kind} ${value}`).toBe(0);
+          delete (state as unknown as { update?: unknown }).update;
         }
       }
     }
-    const readOnly = EditorState.create({ doc: "x", extensions: EditorState.readOnly.of(true), selection: EditorSelection.single(0, 1) });
-    expect(canSetContentColor("text", "red")(readOnly)).toBe(false);
-  });
-
-  it("non costruisce transazioni: la barra del formato lo chiede a ogni tasto", () => {
-    let built = 0;
-    const state = EditorState.create({
-      doc: "uno due tre",
-      selection: EditorSelection.single(4, 7),
-      extensions: EditorState.transactionFilter.of((tr) => {
-        built++;
-        return tr;
-      }),
-    });
-    for (const kind of ["text", "fill"] as const) {
-      for (const value of [null, ...CONTENT_COLORS]) canSetContentColor(kind, value)(state);
-    }
-    for (const [id, action] of MARKDOWN_ACTIONS) {
-      if (id.startsWith("markdown.color.") || id.startsWith("markdown.background.")) markdownActionState(action, state);
-    }
-    expect(built).toBe(0);
   });
 });

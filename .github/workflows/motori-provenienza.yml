@@ -1,0 +1,203 @@
+name: Motori provenienza
+
+# La provenienza delle copie in `vendor/`. Due specie: i motori Craft di
+# `tools/vendor-craft/motori.mjs` e i dati di `tools/vendor-craft/dati.mjs`
+# (un file singolo da un URL fisso). Ogni cartella di `vendor/` deve essere
+# l'una o l'altra (`provenienza.mjs elenco`), altrimenti è rosso.
+#
+# I motori: `vendor.mjs check` in `ci.yml` confronta la copia soltanto con il
+# suo `upstream.lock`, nello stesso checkout: una PR che riscrive insieme i file
+# e il lock passa di lì. Qui `verify-upstream` riscarica dall'upstream la
+# revisione del lock e ne confronta le impronte, prima e dopo le patch (audit
+# del 2026-10-30, M17).
+#
+# I dati: `provenienza.mjs check` in `ci.yml` confronta il file soltanto con lo
+# sha256 di `dati.mjs`, nello stesso checkout. Qui `provenienza.mjs <dato>
+# verify-upstream` riscarica l'URL e confronta lo sha256 con quello del file
+# nel checkout. Sul cron settimanale un'impronta diversa vuol dire che
+# l'upstream è cambiato: il messaggio dice come aggiornare la copia.
+#
+# Sulle PR lo strumento (`tools/vendor-craft/`, con i percorsi gestiti di
+# `motori.mjs` e gli URL di `dati.mjs`), il repository dell'upstream e il
+# mirror vengono dalla **base**, non dalla PR: una PR che riscrive insieme
+# copia, lock e strumento non si verifica da sola. Una PR che cambia
+# repository o mirror di un motore, o l'URL di un dato, fallisce qui, perché
+# cambiare da dove viene una copia è una decisione da guardare a parte. Una
+# copia nuova, che nella base non c'è, si verifica con lo strumento della PR,
+# e lo dice con un avviso.
+#
+# Solo lettura, nessun segreto e nessuna credenziale nel checkout.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 2"
+  pull_request:
+    paths:
+      - "vendor/**"
+      - "tools/vendor-craft/**"
+      - ".github/workflows/motori-provenienza.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motori-provenienza-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  motori:
+    name: i motori di vendor
+    runs-on: ubuntu-latest
+    outputs:
+      elenco: ${{ steps.elenco.outputs.elenco }}
+      dati: ${{ steps.elenco.outputs.dati }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      # Gli elenchi vengono da `motori.mjs` e `dati.mjs`, gli stessi di
+      # `vendor.mjs check` e `provenienza.mjs check`: una copia nuova entra qui
+      # senza toccare questo file. Su una PR sono l'unione con quelli della
+      # base, così togliere una voce dall'elenco non la toglie dalla verifica;
+      # e ogni cartella di `vendor/` deve essere un motore o un dato.
+      - name: elenco da motori.mjs e dati.mjs
+        id: elenco
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          argomenti=(--motori tools/vendor-craft/motori.mjs --dati tools/vendor-craft/dati.mjs)
+          if [ "$EVENTO" = pull_request ]; then
+            git fetch --quiet --no-tags --depth=1 origin "$BASE"
+            if git show "$BASE:tools/vendor-craft/motori.mjs" > "$RUNNER_TEMP/motori-base.mjs" 2>/dev/null; then
+              argomenti+=(--motori "$RUNNER_TEMP/motori-base.mjs")
+            fi
+            if git show "$BASE:tools/vendor-craft/dati.mjs" > "$RUNNER_TEMP/dati-base.mjs" 2>/dev/null; then
+              argomenti+=(--dati "$RUNNER_TEMP/dati-base.mjs")
+            fi
+          fi
+          uscita=$(node tools/vendor-craft/provenienza.mjs elenco "${argomenti[@]}")
+          elenco=$(printf '%s' "$uscita" | node -e 'let t = ""; process.stdin.on("data", (c) => (t += c)).on("end", () => console.log(JSON.stringify(JSON.parse(t).motori)))')
+          dati=$(printf '%s' "$uscita" | node -e 'let t = ""; process.stdin.on("data", (c) => (t += c)).on("end", () => console.log(JSON.stringify(JSON.parse(t).dati)))')
+          echo "elenco=$elenco" >> "$GITHUB_OUTPUT"
+          echo "dati=$dati" >> "$GITHUB_OUTPUT"
+          echo "motori: $elenco"
+          echo "dati: $dati"
+
+  verifica:
+    name: provenienza di ${{ matrix.motore }}
+    needs: motori
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        motore: ${{ fromJSON(needs.motori.outputs.elenco) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      - name: verify-upstream
+        env:
+          MOTORE: ${{ matrix.motore }}
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          lock="vendor/$MOTORE/upstream.lock"
+          campo() { sed -n "s/^$1 = \"\(.*\)\"$/\1/p"; }
+          # Un errore di rete non è una provenienza sbagliata: un secondo
+          # tentativo, poi rosso. Un'impronta diversa fallisce tutte e due.
+          verifica() {
+            node tools/vendor-craft/vendor.mjs "$MOTORE" verify-upstream "$@" && return 0
+            echo "::warning::verify-upstream di $MOTORE non è riuscito, un secondo tentativo fra 30 s"
+            sleep 30
+            node tools/vendor-craft/vendor.mjs "$MOTORE" verify-upstream "$@"
+          }
+          if [ "$EVENTO" != pull_request ]; then
+            verifica
+            exit 0
+          fi
+          if [ ! -f "$lock" ]; then
+            echo "$MOTORE non c'è più nella PR: niente da verificare"
+            exit 0
+          fi
+          git fetch --quiet --no-tags --depth=1 origin "$BASE"
+          if ! base=$(git show "$BASE:$lock" 2>/dev/null); then
+            echo "::warning::$MOTORE non c'è nella base: si verifica con lo strumento e il lock della PR"
+            verifica
+            exit 0
+          fi
+          # Lo strumento e i percorsi gestiti della base, sulla copia e sul lock
+          # della PR.
+          rm -rf tools/vendor-craft
+          git checkout "$BASE" -- tools/vendor-craft
+          repo=$(printf '%s\n' "$base" | campo repository)
+          mirror=$(printf '%s\n' "$base" | campo mirror)
+          if [ "$(campo repository < "$lock")" != "$repo" ] || [ "$(campo mirror < "$lock")" != "$mirror" ]; then
+            echo "::error file=$lock::la PR cambia repository o mirror di $MOTORE: la provenienza si verifica contro la base ($repo, $mirror)"
+            exit 1
+          fi
+          verifica --source "$repo"
+          if [ -n "$mirror" ]; then verifica --source "$mirror"; fi
+
+  dati:
+    name: provenienza del dato ${{ matrix.dato }}
+    needs: motori
+    # Una matrice vuota è un errore di GitHub, non una verifica.
+    if: needs.motori.outputs.dati != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        dato: ${{ fromJSON(needs.motori.outputs.dati) }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      # Il secondo tentativo su un errore di rete è dentro lo script (uscita
+      # 2 se fallisce anche quello); un'impronta diversa è rossa subito.
+      - name: verify-upstream
+        env:
+          DATO: ${{ matrix.dato }}
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          url() { node --input-type=module -e "import { DATI } from '$1'; console.log(DATI[process.argv[1]]?.url ?? '')" "$DATO"; }
+          if [ "$EVENTO" = pull_request ]; then
+            if [ ! -d "vendor/$DATO" ]; then
+              echo "$DATO non c'è più nella PR: niente da verificare"
+              exit 0
+            fi
+            git fetch --quiet --no-tags --depth=1 origin "$BASE"
+            base=""
+            if git show "$BASE:tools/vendor-craft/dati.mjs" > "$RUNNER_TEMP/dati-base.mjs" 2>/dev/null \
+              && git cat-file -e "$BASE:tools/vendor-craft/provenienza.mjs" 2>/dev/null; then
+              base=$(url "$RUNNER_TEMP/dati-base.mjs")
+            fi
+            if [ -z "$base" ]; then
+              echo "::warning::$DATO non c'è nella base: si verifica con lo strumento e l'elenco della PR"
+            else
+              if [ "$(url "$PWD/tools/vendor-craft/dati.mjs")" != "$base" ]; then
+                echo "::error file=tools/vendor-craft/dati.mjs::la PR cambia l'URL di $DATO: la provenienza si verifica contro la base ($base)"
+                exit 1
+              fi
+              # Lo strumento e l'URL della base, sulla copia della PR.
+              rm -rf tools/vendor-craft
+              git checkout "$BASE" -- tools/vendor-craft
+            fi
+          fi
+          node tools/vendor-craft/provenienza.mjs "$DATO" verify-upstream

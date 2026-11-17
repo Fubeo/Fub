@@ -18,6 +18,10 @@ import {
 import { RecentCommands } from "./command-search";
 import { colorCommandLabel, colorMenuLabel, type CanvasColorChoice } from "../colors";
 import { t } from "../../../i18n/strings";
+import boardFile from "../../../__fixtures__/canvas-parity/board.json";
+import mainFile from "../../../__fixtures__/canvas-parity/main.json";
+import n4File from "../../../__fixtures__/canvas-parity/n4.json";
+import n6File from "../../../__fixtures__/canvas-parity/n6.json";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -48,6 +52,8 @@ const STABLE_IDS = [
   "canvas.group", "canvas.bring_front", "canvas.send_back",
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
+  "canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree",
+  "canvas.copy_code", "canvas.paste_code",
   "canvas.fit", "canvas.fit_selection", "canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.grid_toggle",
   "canvas.navigator.hide", "canvas.navigator.show", "canvas.bare", "canvas.radial", "canvas.finger_writes",
   "canvas.pen_menu", "canvas.color_menu", "canvas.align_menu",
@@ -226,8 +232,10 @@ describe("la tela legge il catalogo", () => {
     // Il menu della scheda (T17): Disponi › con Allinea › e Distribuisci ›.
     const arrange = { "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
       { "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom"] },
-      { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }] };
-    const tail = ["—", colors, arrange, "canvas.duplicate", "—", "canvas.delete"];
+      { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }, "—",
+      "canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree"] };
+    // La lavagna come codice (LIC T25) dopo Duplica.
+    const tail = ["—", colors, arrange, "canvas.duplicate", "canvas.copy_code", "canvas.paste_code", "—", "canvas.delete"];
     const menus: Array<[readonly SurfaceMenuEntry[], unknown[]]> = [
       [menuOn(card("t")), ["canvas.edit", "canvas.connect", ...tail]],
       // Una scheda d'immagine si apre nel visore.
@@ -236,7 +244,9 @@ describe("la tela legge il catalogo", () => {
       // Un gruppo ha il menu di prima.
       [menuOn(card("g")), [colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
       [menuOn(host.querySelector('.canvas-edge-hit[data-edge="e1"]')), [colors, "canvas.edge.reverse", "canvas.delete"]],
-      [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] }, "canvas.fit", "canvas.zoom_in", "canvas.zoom_out", "canvas.navigator.hide", "canvas.radial"]],
+      [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] },
+        { "canvas.arrange": ["canvas.layout.grid", "canvas.layout.row", "canvas.layout.column", "canvas.layout.tree"] },
+        "canvas.copy_code", "canvas.paste_code", "—", "canvas.fit", "canvas.zoom_in", "canvas.zoom_out", "canvas.navigator.hide", "canvas.radial"]],
     ];
     // Tutte le schede scelte: niente Apri né Collega….
     pointing.mockRestore();
@@ -330,6 +340,50 @@ describe("la tela legge il catalogo", () => {
     expect(duplicate.description).toBe("La lavagna è in sola lettura.");
     expect(duplicate.chord).toBe("Mod-d");
     engine.destroy();
+  });
+
+  it("ogni comando di una voce in codice che scrive il file ha le sue operazioni (T23)", () => {
+    interface Voice {
+      readonly id: string;
+      readonly source: string;
+      readonly state: string;
+      readonly writes: string;
+      readonly gui: ReadonlyArray<Readonly<Record<string, string>>>;
+    }
+    const voices = ([...mainFile.entries, ...n4File.entries, ...n6File.entries] as unknown as readonly Voice[]).filter(
+      (voice) => boardFile.merged.includes(voice.source)
+        && voice.writes === "file"
+        && (voice.state === "code" || voice.state === "composed"),
+    );
+    const commands = mountedCommands();
+    const found: string[] = [];
+    const missing: string[] = [];
+    for (const voice of voices) {
+      for (const gui of voice.gui) {
+        let command: CanvasCommand | null | undefined;
+        if (gui.menu !== undefined) {
+          // Un sottomenu («Colore», «Ordine») non è un comando: le sue voci sì.
+          command = commands.find((one) => one.id === gui.menu);
+        } else if (gui.key !== undefined) {
+          const spec = /^((?:Mod\+|Shift\+)*)(.+)$/.exec(gui.key)!;
+          const name = spec[2]!;
+          const shiftKey = spec[1]!.includes("Shift+");
+          command = commandForKey(commands, {
+            key: shiftKey || name.length > 1 ? name : name.toLowerCase(),
+            ctrlKey: spec[1]!.includes("Mod+"),
+            metaKey: false,
+            shiftKey,
+            altKey: false,
+          }, { writing: false, onBoard: true });
+        }
+        if (!command) continue;
+        found.push(command.id);
+        if (!command.op) missing.push(`\`${voice.id}\`: ${command.id} scrive il file senza op`);
+      }
+    }
+    expect(missing).toEqual([]);
+    // Il confronto vede davvero i comandi: menu e tasti delle voci ne trovano molti.
+    expect(new Set(found).size).toBeGreaterThan(30);
   });
 
   it("«Il dito scrive» è un comando, anche in sola lettura: cambia l'interruttore della colonna", () => {

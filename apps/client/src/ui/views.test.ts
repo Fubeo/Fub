@@ -24,7 +24,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import html from "../../index.html?raw";
 import generatedEnums from "../host/enums.generated?raw";
-import type { UiNode, ViewSpec, ViewUpdate } from "../host/contract";
+import type { ActionRef, UiNode, ViewSpec, ViewUpdate } from "../host/contract";
 import { openLifetime } from "./lifetime";
 
 function emptyTree(title: string): UiNode {
@@ -203,6 +203,71 @@ describe("le superfici che questa shell ospita da sé", () => {
     ).toBe("tags");
   });
 });
+describe("le righe che nominano un posto di un documento (T2b)", () => {
+  function item(label: string, action: ActionRef | null, children: UiNode[] = []): UiNode {
+    return { node: "tree_item", label, expanded: true, action, selected: false, children };
+  }
+  const reveal = (doc: string, start: number, end: number) => ({ action: "reveal", payload: { doc, base: "x", start, end } });
+  // Le view del test si montano senza un vault aperto.
+  const NOTE = { documentId: "nota.md", vault: undefined };
+
+  it("le offre come posti dove far cadere un blocco, con la parte che si vede e l'acceso", async () => {
+    renderView.mockResolvedValueOnce({
+      node: "tree",
+      roots: [
+        item("Primo", reveal("nota.md", 0, 8), [item("Dentro", reveal("nota.md", 10, 20))]),
+        item("Senza posto", null),
+        item("Altrove", reveal("altra.md", 0, 5)),
+      ],
+    } as UiNode);
+    listViews.mockResolvedValueOnce([spec("outline", "left_sidebar")]);
+    const views = await loadViews();
+    const registry = await import("../editors/core/registry");
+    const changed = vi.fn();
+    const unwatch = registry.watchDropOffers(changed);
+    await views.mountDeclaredViews();
+    unwatch();
+    expect(changed, "le righe disegnate lo dicono: chi tiene posti di prima li rimisura").toHaveBeenCalled();
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("#views-left .ui-tree-label"));
+    expect(rows.map((row) => row.dataset.placeDoc ?? null)).toEqual(["nota.md", "nota.md", null, "altra.md"]);
+    expect(rows[1]!.dataset.placeStart).toBe("10");
+    expect(rows[1]!.dataset.placeEnd).toBe("20");
+
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const i = rows.indexOf(this);
+      const top = i * 28;
+      return (i < 0 ? { left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000 } : { left: 10, top, right: 200, bottom: top + 28, width: 190, height: 28 }) as DOMRect;
+    });
+    try {
+      const { dropOffers } = await import("../editors/core/registry");
+      const offers = dropOffers(NOTE);
+      expect(offers.map((offer) => [offer.title, offer.span.start, offer.span.end, offer.rect.top])).toEqual([
+        ["Primo", 0, 8, 0],
+        ["Dentro", 10, 20, 28],
+      ]);
+      offers[1]!.hover(true);
+      expect(rows[1]!.dataset.dropHot).toBe("true");
+      offers[1]!.hover(false);
+      expect(rows[1]!.dataset.dropHot).toBeUndefined();
+      expect(dropOffers({ documentId: "nessuna.md", vault: undefined })).toEqual([]);
+      // Lo stesso percorso in un altro vault è un'altra nota.
+      expect(dropOffers({ documentId: "nota.md", vault: "/altro-vault" })).toEqual([]);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("una riga nascosta non è un posto", async () => {
+    renderView.mockResolvedValueOnce({ node: "tree", roots: [item("Primo", reveal("nota.md", 0, 8))] } as UiNode);
+    listViews.mockResolvedValueOnce([spec("outline", "left_sidebar")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    const { dropOffers } = await import("../editors/core/registry");
+    // Senza un layout ogni rettangolo è vuoto: niente si vede.
+    expect(dropOffers(NOTE)).toEqual([]);
+  });
+});
+
 describe("l'inspector a tab", () => {
   it("lega tab e pannelli e muove il fuoco con frecce/Home/Fine", async () => {
     listViews.mockResolvedValueOnce([

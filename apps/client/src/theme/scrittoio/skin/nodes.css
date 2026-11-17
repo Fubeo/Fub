@@ -203,6 +203,37 @@ h6.ui-heading {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* La riga in coda a un elenco lungo: le voci oltre la soglia si chiedono da
+   qui (`ui/node.ts`, `LIST_PAGE`). È un «di più», non un'azione: niente fondo
+   a riposo, inchiostro sommesso e il triangolo in giù delle sezioni, sulla
+   verticale delle icone delle voci (il «Altre N proprietà» del prototipo). */
+.ui-list-more {
+  display: flex;
+  padding-top: var(--space-1);
+}
+.ui-list-more > .ui-button {
+  justify-content: flex-start;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background: transparent;
+  color: var(--muted);
+}
+.ui-list-more > .ui-button::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transform: rotate(90deg);
+}
+.ui-list-more > .ui-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-list-more > .ui-button:active {
+  background: var(--overlay-active);
+}
 
 .ui-tree-label {
   gap: var(--space-3);
@@ -281,6 +312,15 @@ h6.ui-heading {
 :where(.ui-list) .ui-list-item[aria-current="true"].clickable:hover {
   position: relative;
   background: transparent;
+}
+/* **Il bersaglio di un blocco in mano** (E2, «Fuori dalla colonna»): la riga
+   che nomina un posto della nota, col cartellino dei Blocchi sopra, si accende
+   col filo e il velo d'accento; vince sul passaggio e sulla voce corrente. */
+.ui-tree-label[data-drop-hot],
+.ui-tree-label.clickable[data-drop-hot]:hover,
+.ui-tree-item[aria-selected="true"] > .ui-tree-label[data-drop-hot] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-veil);
 }
 :where(.ui-tree) .ui-tree-item[aria-selected="true"] > .ui-tree-label::after,
 :where(.ui-list) .ui-list-item[aria-current="true"]::after {

@@ -98,13 +98,33 @@ fn deliver<E: std::fmt::Display>(
     Ok(())
 }
 
+/// Il PNG di un SVG che un altro crate ha scritto (l'anteprima di una lavagna),
+/// alla misura che l'SVG dichiara. È il rasterizzatore dei disegni, con gli
+/// stessi caratteri: quelli di Fub incorporati, mai quelli di sistema, così la
+/// stessa immagine dà gli stessi pixel su ogni macchina.
+pub(crate) fn svg_png(svg: &str, title: &str) -> Result<Vec<u8>, String> {
+    let options = usvg::Options {
+        font_family: SANS.to_string(),
+        fontdb: Arc::clone(fub_fonts()),
+        ..usvg::Options::default()
+    };
+    let tree = Tree::from_str(svg, &options).map_err(|error| error.to_string())?;
+    let size = tree.size().to_int_size();
+    let mut pixmap = Pixmap::new(size.width(), size.height())
+        .ok_or_else(|| "the image has no pixels".to_string())?;
+    resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
+    let mut bytes = Vec::new();
+    encode_png(&pixmap, 1.0, title, &mut bytes).map_err(|error| error.to_string())?;
+    Ok(bytes)
+}
+
 /// Scrive il PNG a righe, dritto nel sink: la pixmap è già in memoria, una
-/// seconda copia compressa non serve.
-fn encode_png(
+/// seconda copia compressa non serve. Il sink è quello di un export o un buffer.
+fn encode_png<W: Write>(
     pixmap: &Pixmap,
     scale: f32,
     title: &str,
-    sink: &mut SinkWriter<'_>,
+    sink: W,
 ) -> Result<(), png::EncodingError> {
     let buffered = BufWriter::with_capacity(CHUNK, sink);
     let mut encoder = png::Encoder::new(buffered, pixmap.width(), pixmap.height());

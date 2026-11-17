@@ -12,9 +12,10 @@ export class WebDriverError extends Error {
   }
 }
 
-async function call(base, method, path, body) {
+async function call(base, method, path, body, signal) {
   const response = await fetch(`${base}${path}`, {
     method,
+    signal,
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -24,11 +25,13 @@ async function call(base, method, path, body) {
 }
 
 /// Una sessione: un'app avviata da `tauri-driver`, chiusa con `close()`.
-export async function openSession(base, application, { timeoutMs = 120_000 } = {}) {
+/// `signal` interrompe la richiesta della sessione: un'app già morta non si
+/// aspetta (`openWithGtkRetry` in `display.mjs`).
+export async function openSession(base, application, { timeoutMs = 120_000, signal } = {}) {
   const started = performance.now();
   const value = await call(base, "POST", "/session", {
     capabilities: { alwaysMatch: { "tauri:options": { application } } },
-  });
+  }, signal);
   const id = value.sessionId;
   const session = `/session/${id}`;
   await call(base, "POST", `${session}/timeouts`, { script: timeoutMs, implicit: 0, pageLoad: timeoutMs });

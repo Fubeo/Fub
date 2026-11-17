@@ -257,9 +257,13 @@ export function mountHeadingThread(lifetime: Lifetime): void {
     thread.nav.remove();
   };
 
-  /// Un foglio tolto dal layout non ha più filo.
+  /// Un foglio tolto dal layout non ha più filo, e nemmeno quello di una
+  /// scheda messa da parte: il suo contenitore resta nel riquadro, nascosto e
+  /// senza la classe `pane-editor` (vedi `ParkedSurface`).
   const prune = (): void => {
-    for (const thread of [...threads.values()]) if (!thread.editor.isConnected) drop(thread);
+    for (const thread of [...threads.values()]) {
+      if (!thread.editor.isConnected || !thread.editor.matches(".pane-editor")) drop(thread);
+    }
   };
 
   const follow = (editor: HTMLElement): void => {

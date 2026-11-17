@@ -118,12 +118,12 @@ Il contratto operativo per cardinalità è:
 - tier 2, `401..2000`: Barnes–Hut con costo atteso `O(n log n)` e collisioni;
 - tier 3, `> 2000`: Barnes–Hut atteso, collisioni saltate.
 
-Il tier della fisica dipende solo dalla cardinalità, a ogni refresh dello
-schermo. Il tier della resa parte dallo stesso valore e scende di un gradino
-quando il frame time medio supera 1,3 volte il budget. Risale sotto 1,1 volte,
-dopo almeno 5 s. Il budget è il periodo del tetto `appearance.frame-rate`, mai
-sotto 1000/60 ms. Il gradino più economico nasconde soltanto le etichette di
-grado basso.
+Il tier della fisica dipende solo dalla cardinalità, a ogni refresh. Il tier
+della resa parte da lì e scende di un gradino quando il frame time medio supera
+1,3 volte il budget; risale sotto 1,1 volte, dopo almeno 5 s. Il budget è il
+periodo del tetto `appearance.frame-rate`, mai sotto 1000/60 ms. Il gradino
+economico nasconde le etichette di grado basso, e solo nel moto: il grafo fermo
+si disegna al tier della cardinalità e la media dei frame riparte da 1000/60 ms.
 
 Un quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
 `O(n²)`. Il risultato a 10k è quindi soltanto quello della fixture deterministica
@@ -340,7 +340,7 @@ in riga (al più otto righe lette, contro tutto il tratto visibile),
 `details-live.test.ts` e `note-facts.test.ts` per i ripiegabili e la riga dei
 fatti (al più sei nodi, contro 1.200 e 600), e `blocks/model.test.ts` per il
 modello dei Blocchi. Dopo ogni modifica a caso il risultato è quello di una
-lettura da capo dello stesso albero.
+lettura da capo dello stesso albero. Il disegno nell'app vera: [WebView](performance-webview.md).
 
 ### L'apertura di una nota grande
 
@@ -435,13 +435,13 @@ WebView è WebKitGTK 2.54 con la GPU, sullo schermo vero, quattro corse per
 parte. Zero vuol dire nessun compito oltre 50 ms. La pagina com'è sta sotto
 un fotogramma o due, quindi la cifra va a scatti di 16 ms.
 
-Ciò che resta, a pagina quattro volte più lenta, è soprattutto la vista
-dell'editor: ogni cambio di scheda smonta la superficie e ne monta una nuova
-(circa 17 ms), le dà il testo (`setDoc`, circa 11 ms) e la dispone la prima
-volta (circa 17 ms di stile e layout, al fuoco), più la misura di CodeMirror
-nel fotogramma dopo (circa 9 ms). Toglierla vuol dire tenere vive le
-superfici delle schede recenti, o riusare la vista del riquadro: una scelta
-sul ciclo di vita della superficie, non ancora fatta.
+Il costo più grande era la vista dell'editor rifatta a ogni cambio: tornando
+su una scheda di testo già aperta la superficie resta
+[da parte](../architecture/parked-surfaces.md), e la barra di formato non si
+rifà. Nella WebView vera il cambio fra tre schede, con la nota lunga, è
+passato da 100 a 29 ms di thread bloccato (mediana) e da 96 a 28 ms dal tasto
+al fotogramma ([la misura](../misure/2026-11-16-linux-webkitgtk-cambio-scheda.md)):
+ancora sopra un fotogramma. Aprire una nota senza scheda monta da capo.
 
 Il banco non sta nella CI. La guardia in CI è il test del cambio in
 `panels/document.test.ts` (un'apertura dipinge ogni linguetta una volta e
