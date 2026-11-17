@@ -398,7 +398,9 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
       await chooseMode(page, "reading");
-      await page.waitForSelector(".pane-preview h1, .markdown-preview h1");
+      // Il primo `# titolo` uguale al nome è nascosto sotto la testata: si
+      // aspetta il reso, non che quel titolo si veda.
+      await page.waitForSelector(".pane-preview h1, .markdown-preview h1", { state: "attached" });
     },
   },
   {

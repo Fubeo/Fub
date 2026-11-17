@@ -1479,7 +1479,7 @@ button.cm-fub-page-icon:focus-visible {
   flex: 1;
 }
 .cm-fub-prop-menu-hint {
-  color: var(--doc-ghost);
+  color: var(--doc-gutter-fg);
 }
 /* Il frontmatter che YAML non legge: la testata lo dice, sopra lo YAML. */
 .cm-fub-page-unreadable {

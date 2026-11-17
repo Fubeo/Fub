@@ -77,8 +77,11 @@ export function openPropertyMenu(entry: PropertyEntry, kind: RowKind, anchor: HT
     key: (item) => item.id,
     render: (item, row) => {
       if (item.role === "heading") {
+        // Un menu ammette solo voci, gruppi e separatori: la testata è una
+        // voce spenta (`disabled` qui sotto), che il lettore di schermo dice
+        // e le frecce saltano.
         row.className += " cm-fub-prop-menu-head";
-        row.setAttribute("role", "presentation");
+        row.setAttribute("role", "menuitem");
         row.textContent = item.label;
         return;
       }
