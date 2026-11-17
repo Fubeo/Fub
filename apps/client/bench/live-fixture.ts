@@ -249,6 +249,17 @@ const DIAGRAM_CASES = [
 ].join("\n");
 
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
+/// I tipi di nota del vault delle scene `tipo-*` (E5): uno con le proprietà
+/// coi loro tipi e una cartella, uno con un'icona emoji, uno senza icona; due
+/// note che li nominano, per i conteggi del cassetto.
+const TYPE_FILES: Readonly<Record<string, string>> = {
+  "Tipi/Libro.md": "---\nicon: book\nproperties:\n  autore: testo\n  letto: casella\n  generi: elenco\nfeatured: [autore, letto]\nfolder: Biblioteca\n---\n# {{title}}\n\nNote di lettura.\n",
+  "Tipi/Progetto.md": "---\nicon: 🌱\nproperties:\n  stato: stato\n  scadenza: data\n  persone: persone\nfeatured: [stato, scadenza, persone]\nfolder: Progetti\n---\n## Obiettivo\n\n## Prossimi passi\n",
+  "Tipi/Riunione.md": "---\nproperties:\n  data: data\n  presenti: persone\n---\n## Ordine del giorno\n",
+  "Biblioteca/Dune.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Frank Herbert\n---\nIl deserto.\n",
+  "Progetti/Mostra di primavera.md": "---\ntipo: \"[[Tipi/Progetto]]\"\nstato: In corso\n---\nLe sale e le opere.\n",
+};
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
@@ -315,6 +326,20 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   proprieta: {
     text: "---\nicon: 📚\ntipo: Progetto\nstato: In corso\nscadenza: 2027-03-20\npersone: [\"[[Anna Bianchi]]\", \"[[Luca Ferri]]\"]\nluogo: Biblioteca civica\nbudget: 4800\nfatto: false\nluoghi: [Torino, Lisbona, Porto]\n---\n" + NOTE,
     cursor: null,
+  },
+  // I tipi di nota (T33, E5): tre tipi nella cartella `Tipi`, due note che
+  // li usano; la nota della Live è un libro, poi una nota il cui tipo non
+  // c'è più. Con `?live=tipo` anche «Nuova nota» chiede il tipo, e il
+  // cassetto ha la sezione «Tipi».
+  tipo: {
+    text: "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Frank Herbert\nletto: true\ngeneri: [fantascienza, classici]\npagine: 412\neditore: Chilton\n---\n" + NOTE,
+    cursor: null,
+    files: TYPE_FILES,
+  },
+  "tipo-mancante": {
+    text: "---\ntipo: \"[[Tipi/Romanzo]]\"\nautore: Frank Herbert\nletto: true\n---\n" + NOTE,
+    cursor: null,
+    files: TYPE_FILES,
   },
   "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
   "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },

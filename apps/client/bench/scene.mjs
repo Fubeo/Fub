@@ -1516,6 +1516,24 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openPropertyEditor(page, gesture),
   })),
+  // I tipi di nota (T33, E5; il prototipo `newNote()` e la sezione «Tipi» del
+  // cassetto): «Nuova nota» che chiede il tipo, la testata di una nota con un
+  // tipo, quella di una nota il cui tipo non c'è, e «Scegli il tipo»; poi a
+  // 800 px.
+  ...[
+    ["tipi-01-nuova", "tipo", "«Nuova nota» chiede il tipo: la nota semplice in cima, poi i tipi; nel cassetto la sezione «Tipi»", "new"],
+    ["tipi-02-testata", "tipo", "La testata di una nota con un tipo: l'icona del tipo, «tipo» e le proprietà in evidenza del tipo", "typed"],
+    ["tipi-03-mancante", "tipo-mancante", "La testata di una nota il cui tipo non c'è: lo dice, con «Scegli il tipo»", "missing"],
+    ["tipi-04-scegli", "tipo-mancante", "«Scegli il tipo» aperto dalla testata, da tastiera", "choose"],
+    ["tipi-05-nuova-stretta", "tipo", "«Nuova nota» chiede il tipo nella finestra minima, 800 px", "new", { width: 800, height: 800 }],
+    ["tipi-06-mancante-stretta", "tipo-mancante", "Il tipo che non c'è nella finestra minima, 800 px", "missing", { width: 800, height: 800 }],
+  ].map(([id, live, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openNoteTypes(page, gesture),
+  })),
   // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
   // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
   // menu.
@@ -2219,6 +2237,22 @@ export const SCENE = touchLast(onPage("shell", [
       query: "live=testata",
       viewport: PHONE,
       prepare: (page) => openHeader(page, "live_preview"),
+    },
+    // I tipi di nota (T33) sul telefono: «Nuova nota» dal cassetto chiede il
+    // tipo dentro lo schermo; l'avviso del tipo che non c'è va a capo.
+    {
+      id: "mobile-tipi-nuova",
+      title: "Il telefono: «Nuova nota» chiede il tipo, il menu dentro lo schermo",
+      query: "live=tipo",
+      viewport: PHONE,
+      prepare: (page) => openNoteTypes(page, "new"),
+    },
+    {
+      id: "mobile-tipi-mancante",
+      title: "Il telefono: la testata di una nota il cui tipo non c'è, con «Scegli il tipo»",
+      query: "live=tipo-mancante",
+      viewport: PHONE,
+      prepare: (page) => openNoteTypes(page, "missing"),
     },
     // I commenti (T22) sul telefono: il segno sta nel testo, e la discussione
     // si apre larga quanto la vista.
@@ -2933,6 +2967,35 @@ async function openHeader(page, mode, gesture) {
     for (const scroller of document.querySelectorAll(".pane.focus .pane-editor .cm-scroller, .pane.focus .pane-editor .markdown-rendered")) scroller.scrollTop = 0;
   });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// I tipi di nota (T33): la nota della Live a riposo, poi il gesto. `new`
+/// apre «Nuova nota» (dal cassetto, che in una finestra stretta si apre
+/// prima); `typed` e `missing` aspettano che la testata sappia il tipo;
+/// `choose` apre «Scegli il tipo» da tastiera.
+async function openNoteTypes(page, gesture) {
+  await openHeader(page, "live_preview");
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (gesture === "typed") await page.waitForSelector(".pane.focus .cm-fub-page-icon[data-from-type]");
+  if (gesture === "missing" || gesture === "choose") await page.waitForSelector(".pane.focus .cm-fub-page-type-notice");
+  if (gesture === "new") {
+    const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+    if (compact) {
+      await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+      await page.waitForSelector("#sidebar-scrim:not([hidden])");
+    }
+    await page.waitForSelector("#types-list:not([hidden]) .type-row");
+    await page.click("#new-note");
+    await page.waitForSelector(".note-type-popover .note-type-menu-item");
+  }
+  if (gesture === "choose") {
+    await page.focus(".pane.focus .cm-fub-page-type-action");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".note-type-popover .note-type-menu-item");
+  }
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await frames();
 }
 
 /// Gli editor dei tipi (T8): apre la testata a riposo, poi l'editor della
