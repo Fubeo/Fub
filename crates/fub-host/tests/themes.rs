@@ -1525,7 +1525,7 @@ fn an_icon_accepts_only_path_data() {
     icons_refused("{ non è json", "is not a JSON object");
 }
 
-/// Al massimo 512 nomi, 8 tracciati e 4 KB per nome, 256 KB in tutto.
+/// Al massimo 1024 nomi, 8 tracciati e 4 KB per nome, 256 KB in tutto.
 #[test]
 fn the_icon_set_limits_hold_at_their_edges() {
     let accepted = |set: &str| {
@@ -1535,8 +1535,8 @@ fn the_icon_set_limits_hold_at_their_edges() {
         fub_host::theme::install_theme(&config, &root).expect("at the edge installs");
     };
 
-    accepted(&icon_set(512, 1, "M0 0h1"));
-    icons_refused(&icon_set(513, 1, "M0 0h1"), "at most 512 are allowed");
+    accepted(&icon_set(1024, 1, "M0 0h1"));
+    icons_refused(&icon_set(1025, 1, "M0 0h1"), "at most 1024 are allowed");
 
     accepted(&icon_set(1, 8, "M0 0h1"));
     icons_refused(&icon_set(1, 9, "M0 0h1"), "must have 1 to 8 paths");

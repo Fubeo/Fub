@@ -239,7 +239,7 @@ sempre.
 
 In cima ai Blocchi stanno la copertina, l'icona e il titolo della pagina, con
 le proprietà subito sotto; la Lettura mostra la stessa testata (ordine,
-proprietà e tastiera in [Scrittura](editor-writing.md#la-testata)). Icona,
+proprietà e tastiera in [Scrittura](editor-header.md)). Icona,
 copertina e classi sono righe del frontmatter, scritte come le altre
 proprietà, e in Sorgente si vedono così:
 

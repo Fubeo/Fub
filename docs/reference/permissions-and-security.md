@@ -132,7 +132,7 @@ manifest): il nome di un asset JSON accanto al manifest (`<nome>.json`, in
 minuscolo, mai `manifest.json`), `{ "<nome>": ["<d>", …] }`. Un tema porta
 soltanto i `d` dei tracciati, mai markup: ogni `d` ammette solo i comandi e i
 numeri di un tracciato SVG e gli spazi ASCII, quindi niente `<`, virgolette,
-`url(` o riferimenti. Al massimo 512 nomi, 8 tracciati e 4 KiB di tracciati per
+`url(` o riferimenti. Al massimo 1024 nomi, 8 tracciati e 4 KiB di tracciati per
 nome, 256 KiB per il file. La regola sta in `fub_abi::rules::theme_icons` e la
 applica l'host (all'installazione, all'inventario e alla lettura del tema) come
 il loader della shell, con lo stesso mirror delle regole; la stessa regola dei

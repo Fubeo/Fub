@@ -666,7 +666,7 @@
   "theme_icon_limit": [
     {
       "name": "icons",
-      "out": 512
+      "out": 1024
     },
     {
       "name": "paths",

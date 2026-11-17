@@ -58,7 +58,6 @@ import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
 import { BASE_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
-import { api } from "../../../../host/ipc";
 import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";

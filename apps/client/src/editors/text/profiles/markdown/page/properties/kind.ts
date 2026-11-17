@@ -163,7 +163,9 @@ function fits(entry: PropertyEntry, type: PropertyType): boolean {
     case "date_time": return !entry.items && (DATE_TIME.test(value) || DATE.test(value)) && validDate(value.slice(0, 10));
     // Un testo solo è un elenco di una voce, come lo legge il core.
     case "list":
-    case "tags": return true;
+    case "tags":
+    // Una Relazione è un link o un elenco di link (T35a).
+    case "relation": return true;
     default: return !entry.items;
   }
 }
@@ -183,6 +185,9 @@ export function rowKind(entry: PropertyEntry, types: PropertyTypes): RowKind {
   if (!fits(entry, declared)) return { kind: "text", declared, mismatch: declared };
   if (declared === "list") return { kind: entry.items && entry.items.length > 0 && inferred(entry) === "people" ? "people" : "list", declared, mismatch: null };
   if (declared === "select" || declared === "status") return { kind: "text", declared, mismatch: null };
+  // La Relazione ha il suo editor con T35: intanto i suoi link si scrivono
+  // come un elenco.
+  if (declared === "relation") return { kind: "list", declared, mismatch: null };
   return { kind: declared, declared, mismatch: null };
 }
 
@@ -205,6 +210,7 @@ export const KIND_ICONS: Readonly<Record<PropertyKind, string>> = {
 export function typeIcon(type: PropertyType): string {
   if (type === "select") return "prop-select";
   if (type === "status") return "prop-status";
+  if (type === "relation") return "backlink";
   return KIND_ICONS[type];
 }
 

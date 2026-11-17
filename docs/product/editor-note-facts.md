@@ -11,7 +11,7 @@ note la citano e quali etichette porta: «Modificata 07:30 · 3 collegamenti ·
 #tema #banco». Il tempo è quello dell'ora relativa della shell («adesso», «2
 min fa», l'ora, la data). In Live sta dopo la riga del primo titolo (senza
 titolo, in cima al testo, dopo il frontmatter), nei Blocchi e in Lettura in
-fondo alla [testata della pagina](editor-writing.md#la-testata), dopo le
+fondo alla [testata della pagina](editor-header.md), dopo le
 proprietà; in Sorgente non c'è. Non è testo della nota: non si scrive, non si seleziona col testo, le
 frecce la saltano e copiare non la copia. Il clic su «3 collegamenti» apre la
 scheda Collegamenti dell'ispettore, il clic su un'etichetta la cerca come un

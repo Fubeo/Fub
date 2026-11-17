@@ -59,7 +59,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 - Il file: `<nome>.json` accanto al manifest, in minuscolo, mai `manifest.json`.
 - Un tracciato porta solo comandi e numeri di un tracciato SVG (`M`, `L`, `C`, `A`, `Z`…, cifre, `.`, `,`, segni e spazi). Niente markup, virgolette, `url(` o riferimenti: il set è rifiutato per intero.
 - Il disegno sta nella griglia 24×24; tratto, angoli e colore (`currentColor`) restano quelli della shell e il tema non li cambia.
-- Al massimo 512 nomi, 8 tracciati e 4 KiB di tracciati per nome, 256 KiB per il file.
+- Al massimo 1024 nomi, 8 tracciati e 4 KiB di tracciati per nome, 256 KiB per il file.
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
@@ -141,7 +141,7 @@ view warning
 - Ogni foglio CSS e `skin.css`: massimo 4 MiB.
 - Asset: massimo 1.024 file, 64 MiB per file e 256 MiB complessivi.
 - Caratteri: massimo 8 voci in `fonts`, 2 MiB per file e 6 MiB complessivi.
-- Icone: massimo 512 nomi, 8 tracciati e 4 KiB per nome, 256 KiB per il file del set.
+- Icone: massimo 1024 nomi, 8 tracciati e 4 KiB per nome, 256 KiB per il file del set.
 - Link simbolici, traversal e file non regolari sono rifiutati.
 - L'installazione copia in `<config>/themes/.tmp-…` e pubblica con rename atomico; un id già presente è una collisione e non viene sovrascritto.
 
