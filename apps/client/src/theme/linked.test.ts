@@ -51,6 +51,7 @@ const { createFakeHost, developerModeSetting, extendingTheme } = await import(".
 const { currentThemeId, linkedTheme, mountTheme, reloadThemeCatalog, themeCatalog, themeFolderChanged } =
   await import("./theme");
 const { openLifetime } = await import("../ui/lifetime");
+const { mountedCss } = await import("./loader");
 const { linkedDiagnosis } = await import("../panels/theme-folder");
 
 const FOLDER = "/temi/carta";
@@ -101,13 +102,15 @@ function start(folders: Folders, linked: string | null = FOLDER) {
   return lifetime;
 }
 
-const skin = () => document.head.querySelector('style[data-fub="pelle-tema"]')?.textContent ?? "";
+// Gli strati del tema sono fogli costruiti (`loader.ts`, per la CSP).
+const skin = () => mountedCss("pelle-tema") ?? "";
 const settle = () => vi.waitFor(() => expect(linkedTheme()?.goodAt ?? null).not.toBeNull());
 
 beforeEach(() => {
   vi.clearAllMocks();
   box.slowNext = null;
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   document.documentElement.dataset.theme = "light";
   localStorage.clear();
 });
@@ -183,7 +186,7 @@ describe("il tema collegato si rimonta a ogni salvataggio", () => {
     await vi.waitFor(() =>
       expect(box.notify).toHaveBeenCalledWith(expect.stringContaining(FOLDER), "guasto"),
     );
-    expect(document.head.querySelector('style[data-fub="foglio"]')).not.toBeNull();
+    expect(mountedCss("foglio")).not.toBeNull();
     lifetime.close();
   });
 
