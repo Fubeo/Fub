@@ -655,6 +655,22 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
     if (highlight === 0) highlightNode = -1;
 
+    // L'ultimo fotogramma prima che il loop dorma è quello che resta a
+    // schermo, e un grafo fermo non ha un ritmo da difendere: si disegna al
+    // livello del grafo. Il gradino economico serve a tenere fluido il moto;
+    // tenuto qui, pochi frame lenti all'apertura (il motore da caricare, un
+    // riscaldamento, una macchina carica) lasciavano un grafo di sei note
+    // senza le etichette minori finché non lo si toccava. Anche la media dei
+    // frame riparte: la lentezza di un moto finito non è quella del prossimo.
+    if (!active()) {
+      const base = baseTier(s.n);
+      if (tier !== base) {
+        tier = base;
+        tierSince = t;
+      }
+      emaFrameMs = 1000 / 60;
+    }
+
     const state: DrawState = {
       s,
       camera: cam,
