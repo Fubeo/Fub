@@ -443,11 +443,7 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 - `apps/client/src/editors/grid/`: `engine.ts`, `engine-geometry.ts`,
   `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `workbook.ts`, `objects.ts`,
-  `comment-card.ts`, `menu-comandi.ts`, `risultato.ts`, `motivi.ts`
-- `apps/client/src/editors/grid/ribbon/`: `ribbon.ts`, `tabs.ts` (le schede in
-  `tabs/`)
-- `apps/client/src/editors/grid/dialogs/`: `host.ts`, `catalog.ts`, `page.ts`,
-  `notes.ts`, `protect.ts`
-- `apps/client/src/editors/grid/palette/`: `commands.ts`, `form.ts`
-- `apps/client/src/kit/ribbon/`: `ribbon.ts`, `ribbon-motion.ts`
-- `crates/fub-format-xlsx/src/`: `grid.rs`, `export.rs`, `objects.rs`
+  `comment-card.ts`, `menu-comandi.ts`, `risultato.ts`, `motivi.ts`, e le
+  cartelle `ribbon/` (schede in `tabs/`), `dialogs/` e `palette/`
+- `apps/client/src/kit/ribbon/`; `crates/fub-format-xlsx/src/`: `grid.rs`,
+  `export.rs`, `objects.rs`
