@@ -1343,6 +1343,14 @@ export const SCENE = onPage("shell", [
     // blocco le radici, la somma e il sigma.
     ["formula-04-simboli", "formula-toccata", "La barra rovesciata e le prime lettere: le proposte dei simboli, disegnati e col nome, sotto la formula", "symbols"],
     ["formula-05-simboli-blocco", "formula-toccata", "Le proposte dei simboli sotto il blocco $$ toccato", "symbols-block"],
+    // La tavolozza (T62): «Tutti» aperto sui sette gruppi; la ricerca a
+    // parole, con e senza risultati; il blocco; la fila dei pezzi da
+    // tastiera, col nome in fondo.
+    ["formula-06-tavolozza", "formula-toccata", "La tavolozza sotto la formula: gli otto pezzi, «Tutti» aperto sui sette gruppi e la griglia della struttura", "palette"],
+    ["formula-07-ricerca", "formula-toccata", "La ricerca a parole nella tavolozza: «freccia» dà le frecce, poi il vettore", "search"],
+    ["formula-08-ricerca-vuota", "formula-toccata", "Una ricerca senza risultati: la frase che dice come cercare", "search-empty"],
+    ["formula-09-tavolozza-blocco", "formula-toccata", "La tavolozza sotto il blocco $$ toccato, in una scheda, con «Tutti» aperto", "palette-block"],
+    ["formula-10-tavolozza-tastiera", "formula-toccata", "Alt ↓ porta alla fila dei pezzi: il pezzo col fuoco e il suo nome in fondo", "palette-keys"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -1977,6 +1985,15 @@ export const SCENE = onPage("shell", [
       viewport: PHONE,
       prepare: (page) => touchFormula(page, "inline"),
     },
+    // La tavolozza (T62) sul telefono: sotto la formula, a tutta larghezza,
+    // la griglia a otto colonne.
+    {
+      id: "mobile-formula-tavolozza",
+      title: "Il telefono: la tavolozza della formula a tutta larghezza, con «Tutti» aperto",
+      query: "live=formula-toccata",
+      viewport: PHONE,
+      prepare: (page) => touchFormula(page, "palette"),
+    },
     // La testata della pagina (T6) sul telefono: la copertina bassa, le
     // colonne delle proprietà strette.
     {
@@ -2514,7 +2531,40 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 async function touchFormula(page, gesture) {
   const ready = ".cm-fub-mx-surface[data-state=\"ready\"]";
   const said = () => page.evaluate(() => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "");
-  if (gesture === "symbols" || gesture === "symbols-block") {
+  if (gesture.startsWith("palette") || gesture.startsWith("search")) {
+    // La tavolozza (T62): la formula in riga aperta (o il blocco), «Tutti» e,
+    // per la ricerca, una parola nel campo; da tastiera Alt ↓ e una freccia.
+    if (gesture === "palette-block") {
+      await openLive(page, [], "top");
+      const box = await page.locator(".cm-content .math-block").first().boundingBox();
+      if (!box) throw new Error("manca il blocco $$");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    } else {
+      await openLive(page, ["@ArrowRight"], "top");
+      await page.waitForSelector(`.cm-fub-mx-popover ${ready}`);
+    }
+    await page.waitForSelector(".cm-fub-mx-quick .cm-fub-mx-tile .katex");
+    if (gesture === "palette-keys") {
+      await page.keyboard.press("Alt+ArrowDown");
+      await page.keyboard.press("ArrowRight");
+      const focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
+      const tip = await page.locator(".cm-fub-mx-tip").textContent();
+      if (focused !== "Potenza" || tip !== "Potenza") throw new Error(`Alt ↓ e → non portano a «Potenza»: ${focused}, ${tip}`);
+    } else {
+      await page.click(".cm-fub-mx-all");
+      await page.waitForSelector(".cm-fub-mx-grid .cm-fub-mx-tile .katex");
+      if (gesture.startsWith("search")) {
+        await page.click(".cm-fub-mx-find-input");
+        await page.keyboard.type(gesture === "search" ? "freccia" : "zzz");
+        await page.waitForSelector(gesture === "search" ? ".cm-fub-mx-searching .cm-fub-mx-grid .cm-fub-mx-tile" : ".cm-fub-mx-none");
+        if (gesture === "search") {
+          const first = await page.locator(".cm-fub-mx-grid .cm-fub-mx-tile").first().getAttribute("aria-label");
+          if (first !== "Freccia a destra") throw new Error(`«freccia» non dà prima le frecce: ${first}`);
+        }
+      }
+    }
+  } else if (gesture === "symbols" || gesture === "symbols-block") {
     // Le proposte dei simboli (T61): in fondo alla formula, `+` e il nome.
     if (gesture === "symbols") {
       await openLive(page, ["@ArrowRight"], "top");

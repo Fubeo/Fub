@@ -199,6 +199,22 @@ export const VISTE = {
     },
     app: { scena: "formula-04-simboli" },
   },
+  /// La tavolozza (T62): la formula in riga aperta e «Tutti» aperto, col
+  /// puntatore fuori. Il prototipo al passo «La formula si tocca»; l'app dalla
+  /// scena del banco.
+  "formula-tavolozza": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La formula si tocca");
+        await page.waitForSelector("#win .mx");
+        await page.click("#win .mx-all");
+        await page.waitForSelector("#win .mx-full:not([hidden]) .mx-grid .mx-s");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-06-tavolozza" },
+  },
   /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
   /// puntatore sul blocco e non sulle maniglie.
   maniglie: {
@@ -675,6 +691,97 @@ export const PEZZI = [
     prototipo: ".mx-ac button.act .g",
     app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-glyph',
     proprieta: ["width", "font", "color", ...ALLINEAMENTO],
+  },
+  // ── la tavolozza della formula (T62) ──────────────────────────────────────
+  {
+    id: "formula.tavolozza",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-pal",
+    app: ".cm-fub-mx-popover .cm-fub-mx-palette",
+    proprieta: ["border", "padding", "background"],
+  },
+  {
+    id: "formula.pezzi",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-quick",
+    app: ".cm-fub-mx-popover .cm-fub-mx-quick",
+    proprieta: ["padding", "gap", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.pezzo",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-quick .mx-s",
+    app: ".cm-fub-mx-popover .cm-fub-mx-quick .cm-fub-mx-tile",
+    proprieta: [...DIMENSIONI, "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.tutti",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-all",
+    app: ".cm-fub-mx-popover .cm-fub-mx-all",
+    // Non il margine a sinistra: spinge «Tutti» in fondo alla fila, e la fila
+    // è larga quanto il riquadro, 392 px nell'app e 380 nel prototipo (T60).
+    proprieta: ["padding", "font", "color", "background", "border-radius", "height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.tutti-aperto",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-full",
+    app: ".cm-fub-mx-popover .cm-fub-mx-full",
+    proprieta: ["padding"],
+  },
+  {
+    id: "formula.cerca",
+    vista: "formula-tavolozza",
+    // La scatola del prototipo è l'etichetta; nell'app è il campo, che ha il
+    // fuoco e il suo anello (la lente gli sta sopra).
+    prototipo: ".mx-find",
+    app: ".cm-fub-mx-popover .cm-fub-mx-find-input",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "formula.cerca-spazio",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-find",
+    app: ".cm-fub-mx-popover .cm-fub-mx-find",
+    proprieta: ["margin-bottom"],
+  },
+  {
+    id: "formula.gruppo-scelto",
+    vista: "formula-tavolozza",
+    prototipo: '.mx-tabs button[aria-selected="true"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-group[aria-selected="true"]',
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.gruppo",
+    vista: "formula-tavolozza",
+    prototipo: '.mx-tabs button[aria-selected="false"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-group[aria-selected="false"]',
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.griglia",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-grid",
+    app: ".cm-fub-mx-popover .cm-fub-mx-grid",
+    // Le colonne sono dieci dai due lati; la loro misura segue la larghezza
+    // del riquadro (392 px contro 380, T60), e non si confronta.
+    proprieta: ["gap", "min-height"],
+  },
+  {
+    id: "formula.simbolo",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-grid .mx-s",
+    app: ".cm-fub-mx-popover .cm-fub-mx-grid .cm-fub-mx-tile",
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.nome",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-tip",
+    app: ".cm-fub-mx-popover .cm-fub-mx-tip",
+    proprieta: ["height", "padding", "font", "color"],
   },
   // Le maniglie: «+» e la presa a due occhi.
   {
