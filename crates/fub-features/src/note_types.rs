@@ -39,7 +39,7 @@ use fub_abi::rules::path_policy::{check as check_name, Naming};
 use fub_abi::settings::SettingValue;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    Excerpts, IndexQuery, PropertyFilter, PropertySelect, PropertyTest, ReadApi,
+    DocumentMatch, Excerpts, IndexQuery, PropertyFilter, PropertySelect, PropertyTest, ReadApi,
 };
 
 /// La chiave con cui una nota dice il suo tipo.
@@ -568,44 +568,18 @@ pub(crate) struct TypeCount {
 }
 
 /// I tipi del vault con quante note ha ognuno, in ordine di percorso. Le
-/// note si contano con una domanda sola all'indice (`tipo` presente, con il
-/// suo valore); un valore che non porta a un tipo solo non conta per nessuno.
+/// note si contano con [`typed_notes`]: un valore che non porta a un tipo
+/// solo non conta per nessuno.
 pub(crate) fn counts(host: &dyn ReadApi) -> Result<Vec<TypeCount>, PluginError> {
     let types = type_refs(host)?;
     if types.is_empty() {
         return Ok(Vec::new());
     }
     let folder = types_folder(host);
-    let typed = host
-        .query_index(IndexQuery::Documents {
-            matching: QueryExpr::of(QueryPredicate::Property {
-                filter: PropertyFilter {
-                    key: TYPE_KEY.to_string(),
-                    test: PropertyTest::Exists,
-                },
-            }),
-            sort: None,
-            select: PropertySelect::keys(&[TYPE_KEY]),
-            page: None,
-            excerpts: Excerpts::Omit,
-        })?
-        .documents()?;
-    let mut notes = vec![0_u32; types.len()];
-    for row in &typed.items {
-        let Some(wanted) = row
-            .properties
-            .iter()
-            .find(|p| p.key == TYPE_KEY)
-            .and_then(|p| wanted_of_value(&p.value))
-        else {
-            continue;
-        };
-        if let Resolution::Found(found) = resolve(&types, folder.as_deref(), &wanted) {
-            if let Some(at) = types.iter().position(|t| t.doc == found.doc) {
-                notes[at] = notes[at].saturating_add(1);
-            }
-        }
-    }
+    let notes: Vec<u32> = typed_notes(host, &types, folder.as_deref(), &[])?
+        .iter()
+        .map(|rows| u32::try_from(rows.len()).unwrap_or(u32::MAX))
+        .collect();
     let mut out = Vec::with_capacity(types.len());
     for (reference, notes) in types.into_iter().zip(notes) {
         let (found, unreadable) = match load_type(host, reference.clone()) {
@@ -620,6 +594,58 @@ pub(crate) fn counts(host: &dyn ReadApi) -> Result<Vec<TypeCount>, PluginError> 
             unreadable,
             found,
         });
+    }
+    Ok(out)
+}
+
+/// Le note di ogni tipo di `types`, nello stesso ordine: una domanda sola
+/// all'indice (`tipo` presente, con il suo valore e le chiavi `extra`), poi
+/// la stessa risoluzione di [`state_of`]. Un valore che non porta a un tipo
+/// solo non va a nessuno. Dentro ogni tipo le note stanno in ordine di
+/// percorso.
+pub(crate) fn typed_notes(
+    host: &dyn ReadApi,
+    types: &[TypeRef],
+    folder: Option<&str>,
+    extra: &[&str],
+) -> Result<Vec<Vec<DocumentMatch>>, PluginError> {
+    let mut out: Vec<Vec<DocumentMatch>> = vec![Vec::new(); types.len()];
+    if types.is_empty() {
+        return Ok(out);
+    }
+    let mut keys = vec![TYPE_KEY];
+    keys.extend(extra.iter().copied().filter(|key| *key != TYPE_KEY));
+    let typed = host
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Property {
+                filter: PropertyFilter {
+                    key: TYPE_KEY.to_string(),
+                    test: PropertyTest::Exists,
+                },
+            }),
+            sort: None,
+            select: PropertySelect::keys(&keys),
+            page: None,
+            excerpts: Excerpts::Omit,
+        })?
+        .documents()?;
+    for row in typed.items {
+        let Some(wanted) = row
+            .properties
+            .iter()
+            .find(|p| p.key == TYPE_KEY)
+            .and_then(|p| wanted_of_value(&p.value))
+        else {
+            continue;
+        };
+        if let Resolution::Found(found) = resolve(types, folder, &wanted) {
+            if let Some(at) = types.iter().position(|t| t.doc == found.doc) {
+                out[at].push(row);
+            }
+        }
+    }
+    for rows in &mut out {
+        rows.sort_by(|a, b| a.doc.cmp(&b.doc));
     }
     Ok(out)
 }
