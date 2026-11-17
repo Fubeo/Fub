@@ -114,9 +114,36 @@ export function mountSplitter(options: SplitterOptions): SplitterHandle {
   const along = (info: { dx: number; dy: number }): number =>
     origin + sign * (vertical ? info.dx : info.dy);
 
-  lifetime.listen(handle, "pointerdown", (event) => {
-    if (event.isPrimary && event.button === 0) event.preventDefault();
-  });
+  // WebKitGTK comincia una selezione premendo sulla maniglia anche con
+  // `user-select: none`, e il gesto la allarga al testo accanto (IMP-017).
+  // Annullare la pressione non basta da solo: la selezione nasce dal
+  // `mousedown`, e finché il tasto è giù ogni `selectstart` del documento
+  // viene fermato.
+  let pressed: (() => void) | null = null;
+  const release = (): void => {
+    pressed?.();
+    pressed = null;
+  };
+  const press = (event: PointerEvent | MouseEvent): void => {
+    if (event.button !== 0 || ("isPrimary" in event && !event.isPrimary)) return;
+    event.preventDefault();
+    if (pressed) return;
+    const stop = (e: Event): void => e.preventDefault();
+    const end = (): void => release();
+    document.addEventListener("selectstart", stop, true);
+    document.addEventListener("pointerup", end, true);
+    document.addEventListener("pointercancel", end, true);
+    document.addEventListener("mouseup", end, true);
+    pressed = () => {
+      document.removeEventListener("selectstart", stop, true);
+      document.removeEventListener("pointerup", end, true);
+      document.removeEventListener("pointercancel", end, true);
+      document.removeEventListener("mouseup", end, true);
+    };
+  };
+  lifetime.listen(handle, "pointerdown", press);
+  lifetime.listen(handle, "mousedown", press);
+  lifetime.add(release);
   drag(handle, {
     onStart() {
       stopBack();

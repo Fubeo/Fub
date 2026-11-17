@@ -229,7 +229,17 @@ describe("il gesto", () => {
     const middle = pointer("pointerdown", { clientX: 500, button: 1 });
     handle.dispatchEvent(middle);
     expect(middle.defaultPrevented).toBe(false);
+    const mouse = new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true });
+    handle.dispatchEvent(mouse);
+    expect(mouse.defaultPrevented).toBe(true);
+    // Finché il tasto è giù nessuna selezione comincia, nemmeno altrove.
+    const during = new Event("selectstart", { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(during);
+    expect(during.defaultPrevented).toBe(true);
     send("pointerup", 500);
+    const after = new Event("selectstart", { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
   });
 
   it("propone la misura mentre dura, la segna sulla maniglia e la consegna alla fine", () => {
