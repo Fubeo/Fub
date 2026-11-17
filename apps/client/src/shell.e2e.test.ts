@@ -3234,6 +3234,54 @@ describe("i tasti del mouse sulla striscia delle schede", () => {
   });
 });
 
+describe("il fuoco dopo un gesto che toglie ciò che lo aveva", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const focusIn = (el: HTMLElement) => el.contains(document.activeElement);
+
+  it("chiusa con la × la scheda attiva, il fuoco resta nel riquadro (IMP-011)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    editorViews()[0]!.focus();
+    expect(focusIn(panes()[0]!)).toBe(true);
+    const close = document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] + .tab-close')!;
+    close.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    await waitFor("resta Benvenuto", () => editorTexts().join().includes("Il primo documento"));
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[0]!)).toBe(true);
+  });
+
+  it("dopo «Dividi a destra» il fuoco è nel riquadro nuovo", async () => {
+    await start(VAULT);
+    editorViews()[0]!.focus();
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[1]!)).toBe(true);
+    expect(panes()[1]!.classList.contains("focus")).toBe(true);
+  });
+
+  it("il divisore mosso con le frecce tiene il fuoco e continua a muoversi (IMP-016)", async () => {
+    await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    const divider = () => document.querySelector<HTMLElement>(".pane-divider")!;
+    divider().focus();
+    for (const expected of ["55", "60"]) {
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      await settle();
+      expect(document.activeElement).toBe(divider());
+      expect(divider().getAttribute("aria-valuenow")).toBe(expected);
+    }
+  });
+});
+
 describe("chiudere un riquadro", () => {
   const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
   const tabNames = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>(".tab .tab-name")].map((tab) => tab.textContent);

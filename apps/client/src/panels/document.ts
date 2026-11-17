@@ -362,14 +362,27 @@ function focusedTab(): { pane: string; index: number } | null {
 /// e si riappendono, i contenitori delle divisioni si rifanno.
 function layoutTree(tree: LayoutNode): void {
   const onboarding = document.getElementById("onboarding");
-  panesEl.replaceChildren(node(tree));
+  // I divisori si rifanno a ogni cambio dell'albero, anche quando cambiano solo
+  // le proporzioni: quello mosso con le frecce perdeva il fuoco alla prima, e
+  // la seconda non lo spostava più (IMP-016). Il fuoco passa al divisore nuovo
+  // nello stesso posto dell'albero.
+  const focused = document.activeElement;
+  const divider = focused instanceof HTMLElement && focused.matches(".pane-divider") && panesEl.contains(focused)
+    ? focused.dataset.divider
+    : undefined;
+  panesEl.replaceChildren(node(tree, "0"));
+  if (divider !== undefined) {
+    panesEl.querySelector<HTMLElement>(`.pane-divider[data-divider="${CSS.escape(divider)}"]`)?.focus({ preventScroll: true });
+  }
   // La schermata senza vault vive nell'HTML statico dentro #panes: il layout
   // la spazzerebbe via a ogni synchronize, quindi la si rimette in fondo —
   // `hidden` resta padrone della visibilità (A01, syncOnboarding in shell).
   if (onboarding) panesEl.append(onboarding);
 }
 
-function node(n: LayoutNode): HTMLElement {
+/// `path` è il posto del nodo nell'albero (gli indici dei figli dalla radice):
+/// nomina i divisori fra un disegno e l'altro.
+function node(n: LayoutNode, path: string): HTMLElement {
   if (n.k === "leaf") {
     // Un riquadro riusato può venire da una divisione: fuori da lì la sua
     // frazione non vale più, e un `flex-grow` rimasto lo stringerebbe.
@@ -379,11 +392,15 @@ function node(n: LayoutNode): HTMLElement {
   }
   const el = document.createElement("div");
   el.className = `pane-split ${n.dir}`;
-  const items = n.children.map(node);
+  const items = n.children.map((child, index) => node(child, `${path}.${index}`));
   const sizes = n.sizes ?? items.map(() => 1 / items.length);
   items.forEach((item, index) => {
     item.style.flexGrow = String(sizes[index]);
-    if (index > 0) el.append(splitDivider(n, index, el, items));
+    if (index > 0) {
+      const handle = splitDivider(n, index, el, items);
+      handle.dataset.divider = `${path}:${index}`;
+      el.append(handle);
+    }
     el.append(item);
   });
   return el;
