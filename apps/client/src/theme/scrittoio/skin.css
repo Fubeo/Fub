@@ -8579,7 +8579,9 @@ button.cm-fub-page-icon:focus-visible {
    pagina, all'altezza del passo; quando il margine non ha posto (la finestra
    stretta, il telefono) sta nel testo, subito dopo il commento. I colori delle
    persone sono quelli del prototipo, uguali nelle due luci: il pallino è
-   pieno e il testo bianco. */
+   pieno e il testo bianco. Ogni coppia sta sopra 4,5:1 (le iniziali sono a
+   9,5 px): lo slot 3 è un poco più scuro del `#b9662e` del prototipo, che col
+   bianco dava 4,2:1. */
 .cm-fub-comment-avatar {
   display: inline-grid;
   flex: none;
@@ -8595,11 +8597,18 @@ button.cm-fub-page-icon:focus-visible {
   background: var(--border-strong);
   color: var(--text);
 }
+:root[data-contrast="high"] .cm-fub-comment-avatar[data-slot="0"] {
+  /* Nell'alto contrasto `--border-strong` è scuro (giorno) o chiaro (notte) e
+     col testo darebbe 3,3:1 e 2,8:1: il pallino prende il fondo attivo e il
+     bordo forte resta come anello. */
+  background: var(--bg-active);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
 .cm-fub-comment-avatar[data-slot="2"] {
   background: #7a5bb0;
 }
 .cm-fub-comment-avatar[data-slot="3"] {
-  background: #b9662e;
+  background: #a85a26;
 }
 .cm-fub-comment-avatar[data-slot="4"] {
   background: #2f6aa8;
