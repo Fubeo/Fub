@@ -46,14 +46,22 @@
 //    (`.cm-layer`) dopo aver misurato l'editor dentro un riquadro scalato.
 // 3. **Solo proprietà ammesse.** Ogni corsa di `moto`, ogni animazione o
 //    transizione CSS partita col gesto, ogni proprietà in linea riscritta a
-//    ogni fotogramma tocca soltanto quelle cinque. Il referto dice di ogni
-//    estranea se è di sola pittura (un colore) o di geometria. Una View
-//    Transition avviata dal gesto è un'estranea anche lei.
+//    ogni fotogramma tocca soltanto quelle cinque. «A ogni fotogramma» vale
+//    due volte: mentre passa soltanto il tempo, e durante un gesto a più passi
+//    (un trascinamento), dove il puntatore si muove un passo per fotogramma
+//    (`frame`) e una proprietà cambiata in `FRAME_STREAK` fotogrammi di fila è
+//    scritta a ogni fotogramma. Il referto dice di ogni estranea se è di sola
+//    pittura (un colore) o di geometria. Una View Transition avviata dal gesto
+//    è un'estranea anche lei.
 // 4. **Interrompibile.** Si rifà il gesto, a metà corsa lo si inverte: si
 //    arriva allo scatto dell'andata e ritorno completa, e ciò che si stava
 //    muovendo prosegue da dov'era — lo stesso elemento o l'immagine che ne
 //    prende il posto, entro `CONTINUITY`. Una corsa che riparte dalla posa di
-//    partenza si vede come un salto all'istante del gesto.
+//    partenza si vede come un salto all'istante del gesto. «Dopo» è il primo
+//    fotogramma che il gesto contrario dipinge, non la fine del clic: chi
+//    rimanda il «da dove» a `requestAnimationFrame` (`tab-strip.ts`) lo fa in
+//    tempo per quel disegno, e uno stato che nessun fotogramma mostra non è un
+//    salto. Chi lo rimanda al fotogramma dopo, invece, sì.
 //
 // Il termine di paragone della regola 4 è l'andata e ritorno **completa**, non
 // lo scatto di prima del gesto: un gesto e il suo contrario lasciano il fuoco
@@ -77,7 +85,7 @@ import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { createServer } from "vite";
 import { SCENE, sceneUrl } from "./scene.mjs";
-import { openStage, prepareScene, stillShot, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
+import { openStage, prepareScene, stillShot, watchCsp, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
 import {
   CHOREOGRAPHIES,
   UNCOVERED,
@@ -88,6 +96,7 @@ import {
   jumps,
   longExits,
   midpoint,
+  perFrame,
   residue,
 } from "./motion-rules.mjs";
 
@@ -258,6 +267,54 @@ async function TOOLS() {
   const snapshot = () =>
     new Map([...document.querySelectorAll("[style]")].map((el) => [el, el.getAttribute("style") ?? ""]));
 
+  /// Le file di fotogrammi: per ogni proprietà in linea di ogni elemento,
+  /// quanti fotogrammi di fila l'hanno cambiata (`run`) e la fila più lunga
+  /// (`best`), quanti in tutto (`total`) e con quali valori (`values`). Un
+  /// cambio di stato è una fila di uno; ciò che un ciclo scrive a ogni
+  /// fotogramma fa file di due e più. Un elemento nuovo nasce col suo
+  /// stile: non è una riscrittura.
+  const tally = (into, before, after) => {
+    const touched = new Set();
+    for (const [el, text] of after) {
+      const was = before.get(el);
+      if (was === undefined || was === text) continue;
+      const old = declarations(was);
+      const fresh = declarations(text);
+      for (const name of new Set([...old.keys(), ...fresh.keys()])) {
+        if (old.get(name) === fresh.get(name)) continue;
+        const names = into.get(el) ?? new Map();
+        const entry = names.get(name) ?? { run: 0, best: 0, total: 0, values: new Set() };
+        entry.run += 1;
+        entry.total += 1;
+        entry.values.add(fresh.get(name) ?? "");
+        entry.best = Math.max(entry.best, entry.run);
+        names.set(name, entry);
+        into.set(el, names);
+        touched.add(entry);
+      }
+    }
+    for (const names of into.values()) {
+      for (const entry of names.values()) if (!touched.has(entry)) entry.run = 0;
+    }
+  };
+
+  /// I fotogrammi del gesto, puntatore compreso: lo stile in linea com'era
+  /// alla fine del fotogramma di prima e le sue file. A differenza di
+  /// `written`, che guarda il tempo che passa da solo, qui conta anche ciò che
+  /// un `pointermove` scrive fra un fotogramma e l'altro: è il costo di un
+  /// trascinamento, fotogramma per fotogramma.
+  let lastFrame = new Map();
+  let streaks = new Map();
+  const frameEnd = () => {
+    const now = snapshot();
+    tally(streaks, lastFrame, now);
+    lastFrame = now;
+  };
+  const framesFromHere = () => {
+    lastFrame = snapshot();
+    streaks = new Map();
+  };
+
   /// Il riquadro che si vede di un elemento, o di un suo pseudo-elemento
   /// posizionato: dove sta, quanto è grande, quanto è opaco.
   const boxOf = (el, pseudo) => {
@@ -310,6 +367,7 @@ async function TOOLS() {
       ambient = new Set(document.getAnimations());
       at = { waapi: log.waapi.length, css: log.css.length, plays: driver ? driver.plays.length : 0 };
       written = new Map();
+      framesFromHere();
       return ambient.size;
     },
     /// Prende il tempo in mano. Va fatto a corse ferme.
@@ -317,6 +375,21 @@ async function TOOLS() {
       driver = moto.createManualDriver();
       moto.setMotionDriver(driver);
       at.plays = 0;
+      framesFromHere();
+    },
+    /// Un fotogramma del gesto: col tempo in mano lo fa passare, nel tempo
+    /// vero ne aspetta uno. I gesti a più passi (un trascinamento) ne chiedono
+    /// uno dopo ogni passo del puntatore, come fa chi trascina davvero.
+    async frame() {
+      if (driver) {
+        // Il fotogramma del gesto conta per le file di `frameEnd`, non per
+        // `written`: lì sta ciò che cambia quando passa soltanto il tempo.
+        driver.advance(1000 / 60);
+        frameEnd();
+        return;
+      }
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      frameEnd();
     },
     state() {
       return { active: moto.activeMotions(), live: alive().map(describe) };
@@ -333,20 +406,9 @@ async function TOOLS() {
         left -= step;
         driver.advance(step);
         const after = snapshot();
-        for (const [el, text] of after) {
-          const was = before.get(el);
-          // Un elemento nuovo nasce col suo stile: non è una riscrittura.
-          if (was === undefined || was === text) continue;
-          const old = declarations(was);
-          const now = declarations(text);
-          for (const name of new Set([...old.keys(), ...now.keys()])) {
-            if (old.get(name) === now.get(name)) continue;
-            const names = written.get(el) ?? new Map();
-            names.set(name, (names.get(name) ?? 0) + 1);
-            written.set(el, names);
-          }
-        }
+        tally(written, before, after);
         before = after;
+        frameEnd();
       }
     },
     /// Segna il punto da cui `since` conta le corse.
@@ -381,10 +443,20 @@ async function TOOLS() {
       }));
       const rewritten = [];
       for (const [el, names] of written) {
-        for (const [property, frames] of names) {
-          // Una scrittura sola è un cambio di stato caduto in quel fotogramma.
-          if (frames >= 2) rewritten.push({ target: path(el), property, frames });
+        for (const [property, entry] of names) {
+          // Una fila di uno è un cambio di stato caduto in quel fotogramma
+          // (un ciclo che si spegne e toglie il suo strato, `will-change`).
+          // Senza file, tre scritture con tre valori diversi sono un ciclo che
+          // scrive un fotogramma sì e uno no (30 Hz): conta. Un interruttore
+          // acceso e spento a ogni corsa ha due valori soli, e non conta.
+          if (entry.best >= 2 || (entry.total >= 3 && entry.values.size >= 3)) {
+            rewritten.push({ target: path(el), property, frames: entry.total });
+          }
         }
+      }
+      const framed = [];
+      for (const [el, names] of streaks) {
+        for (const [property, entry] of names) framed.push({ target: path(el), property, frames: entry.best });
       }
       return {
         runs,
@@ -392,6 +464,7 @@ async function TOOLS() {
         css: log.css.slice(at.css),
         live: alive().map(describe),
         written: rewritten,
+        framed,
       };
     },
     /// Le proprietà del moto che stanno in linea, elemento per elemento.
@@ -431,6 +504,25 @@ async function TOOLS() {
       }
       return boxes;
     },
+    /// `moving` come lo dipinge il prossimo fotogramma: dopo tutte le sue
+    /// richiamate di `requestAnimationFrame`, comprese quelle chieste dal
+    /// gesto, e prima del disegno. Lì scatta un osservatore di misura, dopo il
+    /// layout. Letti subito dopo il clic, i riquadri dicevano uno stato che
+    /// nessun fotogramma mostra, e la regola 4 dipendeva da quanto il clic
+    /// era stato lento a tornare.
+    shown(track) {
+      return new Promise((resolve) => {
+        const probe = document.createElement("div");
+        probe.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
+        const observer = new ResizeObserver(() => {
+          observer.disconnect();
+          probe.remove();
+          resolve(window.__banco.moving(track, false));
+        });
+        document.body.append(probe);
+        observer.observe(probe);
+      });
+    },
   };
   return moto.motionLevel();
 }
@@ -450,6 +542,7 @@ async function openPage(browser, scene, reducedMotion) {
   });
   await context.addInitScript(CALENDAR, MOMENT.getTime());
   await context.addInitScript(RECORDER);
+  await watchCsp(context);
   const page = await context.newPage();
   return { context, page };
 }
@@ -640,7 +733,7 @@ async function reversal(stage, choreography, scene) {
     if (choreography.undo) {
       await choreography.undo(page);
       if (choreography.reversing) await until(page, choreography.reversing);
-      after = await inPage(page, "moving", track, false);
+      after = await inPage(page, "shown", track);
       const rest = await back();
       interrupted = { ...(await shot(page)), rest };
     } else {
@@ -709,6 +802,9 @@ function foreign(seen) {
     note(live.kind === "waapi" ? "corsa di moto" : `${live.kind} CSS`, live.target, live.pseudo, live.keys);
   }
   for (const entry of seen.written ?? []) note("scrittura in linea a ogni fotogramma", entry.target, "", [entry.property]);
+  for (const entry of perFrame(seen.framed ?? [])) {
+    note("scrittura in linea a ogni fotogramma del gesto", entry.target, "", [entry.property]);
+  }
   return [...found.values()];
 }
 
@@ -834,6 +930,8 @@ async function measure(stage, choreography, scene) {
     runs: turned?.seen.runs ?? moving.seen.waapi,
     css: [...moving.seen.css, ...(turned?.seen.css ?? [])],
     written: turned?.seen.written ?? [],
+    // Le file di fotogrammi del gesto, dove una proprietà ne ha almeno due.
+    framed: [...(moving.seen.framed ?? []), ...(turned?.seen.framed ?? [])].filter((entry) => entry.frames >= 2),
   };
 }
 

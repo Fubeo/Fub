@@ -1,11 +1,18 @@
 // Le righe delle preferenze, seguite da fuori.
 //
-// La vista (`panels/settings.ts`) riscrive il corpo a ogni scheda, ricerca e
-// valore: una riga di ieri non è la riga di oggi. Chi veste una riga tiene
-// quindi un nodo suo, sempre lo stesso, e lo rimette nella riga nuova ogni
-// volta che la vista ha finito; della riga legge soltanto ciò che la vista
-// promette (`data-setting-key`, `.setting-control`, il campo numerico o la
-// tendina col suo `change`).
+// La vista (`panels/settings.ts`) riscrive il corpo a ogni scheda e a ogni
+// ridisegno intero; a un valore cambiato aggiorna la riga sul posto,
+// sostituendo testo e campo e lasciando nel controllo i nodi che non sono suoi.
+// Chi veste una riga tiene quindi un nodo suo, sempre lo stesso, e lo rimette
+// nella riga ogni volta che la vista ha finito; della riga legge soltanto ciò
+// che la vista promette (`data-setting-key`, `.setting-control`, il campo
+// numerico o la tendina col suo `change`). Un campo nuovo vuol dire un valore
+// riletto.
+//
+// La veste si spegne quando si spegne il campo che pilota: lo fa solo una riga
+// che la vista blocca (una lista in volo, una cornice che il sistema non
+// offre). Una scrittura in volo di un valore intero lascia il campo acceso, e
+// la veste col fuoco lo tiene mentre la persona continua il gesto (A03).
 //
 // Il valore si scrive **attraverso la riga**: il campo della vista riceve il
 // valore e un `change`, e da lì parte la sua stessa scrittura
@@ -69,8 +76,8 @@ function unreachable(node: HTMLElement): boolean {
 /**
  * Ricorda quale nodo di `root` aveva il fuoco, e glielo ridà.
  *
- * La vista, scrivendo, spegne i controlli della riga e poi la sostituisce: il
- * fuoco cade sul documento senza che nessuno l'abbia spostato. `restore` lo
+ * Un ridisegno intero sostituisce la riga, e una riga bloccata spegne i suoi
+ * controlli: il fuoco cade sul documento senza che nessuno l'abbia spostato. `restore` lo
  * rimette dov'era, e solo in quel caso: se nel frattempo la persona è andata
  * altrove, il suo fuoco non si tocca.
  *

@@ -72,6 +72,9 @@ export interface BaseMapConfig {
     readonly attribution: string | null;
     readonly network: boolean;
   } | null;
+  /// La mappa come il piano la dà, chiavi in più comprese: chi la riscrive
+  /// cambia solo ciò che deve.
+  readonly raw?: Readonly<Record<string, unknown>>;
 }
 export interface BasePlan {
   readonly view: string;
@@ -90,6 +93,60 @@ export interface BasePlan {
   readonly sort: SortEntry[];
   /// Le colonne scritte nella vista (`order`); vuota se il modello le deduce.
   readonly order: string[];
+  /// I riepiloghi scritti nella vista, nell'ordine del file, ognuno col nome
+  /// con cui `derive` ne dà il valore.
+  readonly summaries: BaseSummaryDef[];
+  /// Le proprietà del calendario (`date`) e della linea del tempo (`start`,
+  /// `end`), scritte sotto `fub:`; `null` se la vista non le ha.
+  readonly dateKey: string | null;
+  readonly startKey: string | null;
+  readonly endKey: string | null;
+}
+/// Gli aggregati di un riepilogo (`AggregateKind` di `fub-format-base`).
+export type BaseAggregate =
+  | "count" | "count_filled" | "count_empty" | "count_unique"
+  | "sum" | "average" | "min" | "max" | "earliest" | "latest" | "checked" | "unchecked";
+const AGGREGATES: readonly BaseAggregate[] = ["count", "count_filled", "count_empty", "count_unique", "sum", "average", "min", "max", "earliest", "latest", "checked", "unchecked"];
+/// Un riepilogo della vista come lo legge il modello (`SummaryDef`), e
+/// `label`, la chiave del suo valore nei riepiloghi di `derive`.
+export interface BaseSummaryDef {
+  readonly key: string;
+  readonly aggregate: BaseAggregate;
+  readonly expression: string | null;
+  readonly name: string | null;
+  readonly label: string;
+}
+/// Quanti riepiloghi una vista porta al massimo (`MAX_SUMMARIES` del modello).
+const MAX_SUMMARIES = 32;
+/// I riepiloghi del piano, controllati. Un piano che non li dice (un host di
+/// prima) non ne ha.
+export function parseSummaries(raw: unknown): BaseSummaryDef[] {
+  if (raw === null || raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_SUMMARIES) throw new Error("base: riepiloghi malformati");
+  return raw.map((entry) => {
+    const each = object(entry, "riepilogo");
+    const optional = (value: unknown): string | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value !== "string") throw new Error("base: riepilogo malformato");
+      return value;
+    };
+    if (typeof each.key !== "string" || each.key === "" || typeof each.label !== "string" || !AGGREGATES.includes(each.aggregate as BaseAggregate)) throw new Error("base: riepilogo malformato");
+    return { key: each.key, aggregate: each.aggregate as BaseAggregate, expression: optional(each.expression), name: optional(each.name), label: each.label };
+  });
+}
+/// Il valore da scrivere per `summaries`, nella forma del modello: senza
+/// `label`, che il file non ha, e senza i campi vuoti; `null` toglie la
+/// chiave invece di lasciare un `summaries: []` che nessuno ha scritto.
+export function summariesValue(summaries: readonly BaseSummaryDef[]): Record<string, string>[] | null {
+  if (summaries.length === 0) return null;
+  return summaries.map((summary) => {
+    const out: Record<string, string> = {};
+    if (summary.name !== null) out.name = summary.name;
+    out.key = summary.key;
+    out.aggregate = summary.aggregate;
+    if (summary.expression !== null) out.expression = summary.expression;
+    return out;
+  });
 }
 export interface BaseDerived { readonly rows: BaseRow[]; readonly summaries: Record<string, BaseCellValue> }
 export interface BaseMutation {
@@ -161,20 +218,29 @@ export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: 
       provider = { kind: p.kind, url_template: p.url_template as string | null, attribution: p.attribution as string | null, network: p.network };
     }
     for (const key of ["label_key", "color_key"]) if (m[key] !== null && typeof m[key] !== "string") throw new Error(`base: ${key} malformato`);
-    map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider };
+    map = { lat_key: m.lat_key, lon_key: m.lon_key, label_key: m.label_key as string | null, color_key: m.color_key as string | null, provider, raw: { ...m } };
   }
   if (raw.view_type === "map" && !map) throw new Error("base: vista mappa senza coordinate");
   return {
     view: raw.view, viewType: raw.view_type as BaseViewKind, columns, columnLabels: columnLabels as Record<string, string>, requiredProps,
     allProperties: raw.all_properties, group: optionalKey("group"), limit: limit as number | null, map, createDefaults,
-    filters: parseFilter(raw.filters), sort: parseSort(raw.sort), order: parseOrder(raw.order),
+    filters: parseFilter(raw.filters), sort: parseSort(raw.sort), order: parseOrder(raw.order), summaries: parseSummaries(raw.summaries),
+    // Un host che non le dice (prima di T16) vale come una vista senza.
+    dateKey: raw.date_key === undefined ? null : optionalKey("date_key"),
+    startKey: raw.start_key === undefined ? null : optionalKey("start_key"),
+    endKey: raw.end_key === undefined ? null : optionalKey("end_key"),
   };
 }
 
-/// Le chiavi di una vista che i gesti della barra riscrivono.
-export type BaseViewKey = "filters" | "sort" | "order";
-/// Il comando di T15a che scrive una chiave di una vista (`fub-features`).
+/// Le chiavi di una vista che i gesti della barra, del menu della colonna e
+/// di «+» riscrivono.
+export type BaseViewKey = "filters" | "sort" | "order" | "group" | "summaries" | "map" | "date" | "start" | "end";
+/// I comandi di T15a che scrivono un `.base` (`fub-features/src/base.rs`).
 export const BASE_VIEW_SET = "base.view.set";
+export const BASE_VIEW_ADD = "base.view.add";
+export const BASE_VIEW_REMOVE = "base.view.remove";
+/// I tipi di vista che «+» crea: quelli che la Base disegna.
+export const NEW_VIEW_KINDS: readonly BaseViewKind[] = ["table", "cards", "list", "kanban", "map"];
 
 /// Scrive la chiave `key` della vista `view` del file `doc` con
 /// `base.view.set`: `value` è il valore JSON, `null` toglie la chiave. Con
@@ -183,8 +249,22 @@ export const BASE_VIEW_SET = "base.view.set";
 export async function setBaseViewKey(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, key: BaseViewKey, value: unknown, base: string | null): Promise<BaseViewWrite> {
   const args: Record<string, unknown> = { doc, view, key };
   if (value !== null && value !== undefined) args.value = JSON.stringify(value);
+  return baseViewCommand(deps, BASE_VIEW_SET, args, base);
+}
+/// Aggiunge in fondo al file la vista `name` del tipo `type` con
+/// `base.view.add`; le altre chiavi si scrivono dopo, con `setBaseViewKey`.
+export async function addBaseView(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, name: string, type: BaseViewKind, base: string | null): Promise<BaseViewWrite> {
+  return baseViewCommand(deps, BASE_VIEW_ADD, { doc, name, type }, base);
+}
+/// Toglie la vista `view` con tutte le sue chiavi, con `base.view.remove`.
+export async function removeBaseView(deps: Pick<BaseSurfaceDeps, "invokeCommand">, doc: string, view: string, base: string | null): Promise<BaseViewWrite> {
+  return baseViewCommand(deps, BASE_VIEW_REMOVE, { doc, view }, base);
+}
+/// Un comando che scrive il `.base`, con la revisione se c'è: torna la
+/// revisione scritta, la frase e l'annulla.
+async function baseViewCommand(deps: Pick<BaseSurfaceDeps, "invokeCommand">, command: string, args: Record<string, unknown>, base: string | null): Promise<BaseViewWrite> {
   if (base !== null) args.base = base;
-  const outcome = await deps.invokeCommand(BASE_VIEW_SET, args);
+  const outcome = await deps.invokeCommand(command, args);
   const effect = outcome?.effect as { kind?: unknown; ns?: unknown; payload?: unknown } | undefined;
   const revision = effect?.kind === "custom" && effect.ns === "fub.base" ? (effect.payload as { revision?: unknown } | null)?.revision : undefined;
   const undo = outcome?.undo;

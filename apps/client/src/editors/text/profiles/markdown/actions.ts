@@ -34,7 +34,7 @@ import {
 } from "./cursor-elements";
 import { pairElementsAt } from "./empty-pair";
 import { addProperty, canMoveProperty, moveProperty } from "./properties";
-import { colorsAt, CONTENT_COLORS, setContentColor } from "./color";
+import { colorApplies, colorsAt, CONTENT_COLORS, setContentColor } from "./color";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -1102,11 +1102,10 @@ function colorActions(): [string, MarkdownAction][] {
   const entries: [string, MarkdownAction][] = [];
   for (const [kind, prefix] of [["text", "markdown.color"], ["fill", "markdown.background"]] as const) {
     for (const color of [null, ...CONTENT_COLORS]) {
-      const run = setContentColor(kind, color);
       entries.push([`${prefix}.${color ?? "default"}`, {
-        run,
+        run: setContentColor(kind, color),
         active: (state) => colorsAt(state)[kind] === color,
-        applicable: wouldRun(run),
+        applicable: colorApplies(kind, color),
         prose: true,
       }]);
     }

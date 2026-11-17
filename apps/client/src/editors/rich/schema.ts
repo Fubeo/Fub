@@ -25,6 +25,7 @@ import { resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { fontStack } from "../../scrittura/fonts";
 import { lineOpacity, lineOutline } from "./ink-shape";
 import { colorValue, writingMarks } from "../../scrittura/marks";
+import { styledElement } from "../../ui/stylesheets";
 import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSpec, type MarkSpec } from "prosemirror-model";
 import {
   BODY,
@@ -609,11 +610,11 @@ const marks: Record<string, MarkSpec> = {
   ...pick(WRITING, ["b", "i", "u", "s", "h", "sup", "sub"]),
   caps: {
     parseDOM: [{ tag: "span[data-rich-caps]" }],
-    toDOM: () => ["span", { "data-rich-caps": "", style: "text-transform: uppercase" }, 0],
+    toDOM: () => styledElement("span", { "data-rich-caps": "" }, { "text-transform": "uppercase" }),
   },
   small_caps: {
     parseDOM: [{ tag: "span[data-rich-small-caps]" }],
-    toDOM: () => ["span", { "data-rich-small-caps": "", style: "font-variant-caps: small-caps" }, 0],
+    toDOM: () => styledElement("span", { "data-rich-small-caps": "" }, { "font-variant-caps": "small-caps" }),
   },
   /// L'aspetto dove differisce da quello del paragrafo: valori, non enfasi.
   ...pick(WRITING, ["font", "size", "color"]),

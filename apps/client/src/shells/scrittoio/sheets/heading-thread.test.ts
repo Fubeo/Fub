@@ -323,6 +323,32 @@ describe("il filo dei titoli: ciò che mostra", () => {
     expect(namesOf(first)).toHaveLength(4);
     expect(namesOf(second)).toEqual(["Altra"]);
   });
+
+  it("una scheda messa da parte perde il suo filo; la superficie che la sostituisce ne ha uno solo, del suo documento", async () => {
+    outlines.set("Altra.md", [heading(1, "Altra", 0)]);
+    const made = sheet("p1", "Guida/Sintassi.md");
+    mountHeadingThread(lifetime);
+    await settled();
+    expect(namesOf(made)).toHaveLength(4);
+
+    // Come fa il controller (`parkSurface`): il contenitore resta dov'è,
+    // nascosto e senza la classe; un altro `.pane-editor` gli si mette accanto.
+    made.editor.classList.replace("pane-editor", "pane-editor-riposo");
+    made.editor.hidden = true;
+    const next = made.editor.cloneNode(true) as HTMLElement;
+    next.className = "pane-editor";
+    next.hidden = false;
+    made.panel.append(next);
+    const content = next.querySelector<HTMLElement>(".cm-content")!;
+    box(content, 100, 772);
+    content.style.paddingRight = "32px";
+    world.docs.set("p1", "Altra.md");
+    emit("active-doc");
+    await settled();
+
+    expect(made.panel.querySelectorAll(".sheet-thread")).toHaveLength(1);
+    expect(namesOf(made)).toEqual(["Altra"]);
+  });
 });
 
 describe("il filo dei titoli: lo spazio", () => {

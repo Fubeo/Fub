@@ -133,11 +133,11 @@ export const SCENE = onPage("shell", [
   // gruppi e il piede che invita a scrivere.
   ...[
     ["menu-testo", "Il tasto destro su un paragrafo della nota, in Live", (page) =>
-      page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } })],
+      page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } })],
     ["menu-link", "Il tasto destro su un link a una nota, in Live", (page) =>
-      page.click(".pane.focus .cm-content >> text=Sintassi di Fub", { button: "right" })],
+      page.click(".pane.focus .pane-editor .cm-content >> text=Sintassi di Fub", { button: "right" })],
     ["menu-titolo", "Il tasto destro su un titolo della nota, in Live", (page) =>
-      page.click(".pane.focus .cm-content >> text=Benvenuto in Fub", { button: "right" })],
+      page.click(".pane.focus .pane-editor .cm-content >> text=Benvenuto in Fub", { button: "right" })],
     ["menu-albero-nota", "Il tasto destro su una nota dell'albero", async (page) => {
       await openFolder(page, "Guida");
       await page.click('#file-list li[data-path="Guida/Frammenti di codice.md"] > .tree-row', { button: "right" });
@@ -177,7 +177,7 @@ export const SCENE = onPage("shell", [
       await page.keyboard.press("ArrowRight");
     }],
     ["menu-sottomenu", "Il menu del testo col primo sottomenu aperto dalla tastiera", async (page) => {
-      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } });
+      await page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } });
       await page.waitForSelector("#context-menu .menu-foot");
       await page.keyboard.press("ArrowDown");
       await pressUntil(page, "ArrowDown", () => document.activeElement?.getAttribute("aria-haspopup") === "menu");
@@ -408,7 +408,7 @@ export const SCENE = onPage("shell", [
       // Una battuta non salvata, poi il file cambia da fuori: la nota va in
       // conflitto. In Lettura il reso è il buffer, e la fascia lo dice (R03).
       // È la nota che il banco apre per prima, come nello stato S33.
-      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
+      await page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
       await page.keyboard.press("Home");
       await page.keyboard.type("Scritto qui e non ancora salvato. ");
       await page.evaluate(async () => {
@@ -427,7 +427,7 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await openNote(page, "Guida/Frammenti di codice.md");
       await chooseMode(page, "source");
-      await page.waitForSelector(".cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
     },
   },
   {
@@ -460,7 +460,7 @@ export const SCENE = onPage("shell", [
     title: "Il foglio a fuoco e la cornice Darwin",
     query: "platform=darwin",
     prepare: async (page) => {
-      await page.click(".pane .cm-content");
+      await page.click(".pane .pane-editor .cm-content");
       await page.waitForSelector(".pane.focus");
       await page.waitForSelector(".titlebar--darwin #titlebar-left .window-controls");
     },
@@ -559,6 +559,47 @@ export const SCENE = onPage("shell", [
         freezeDocumentSurfaces(true);
       });
       await page.waitForSelector(".pane.focus .base-note:not([hidden])");
+    },
+  },
+  // **Viste, colonne e riepiloghi** (T16), sulla stessa Base: «+», il menu
+  // della colonna, il piede coi riepiloghi del core e venti viste.
+  {
+    id: "base-nuova-vista",
+    title: "Base: «+» aperto, i tipi di vista da aggiungere al file",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click(".pane.focus .base-tool-new-view");
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  },
+  {
+    id: "base-colonna",
+    title: "Base: il menu della colonna «valore», con Ordina, Raggruppa, Riepilogo, Rinomina, Tipo e Nascondi",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.click('.pane.focus th[data-column="valore"] .base-head');
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  },
+  {
+    id: "base-piede",
+    title: "Base: il piede con la somma dei valori e l'ultima consegna, scelte dal menu della colonna",
+    query: "base=1",
+    prepare: async (page) => {
+      await openBase(page);
+      await chooseBaseSummary(page, "valore", "Somma");
+      await chooseBaseSummary(page, "consegna", "L'ultima");
+    },
+  },
+  {
+    id: "base-venti",
+    title: "Base: venti viste, le linguette che non stanno restano figure",
+    query: "base=venti",
+    prepare: async (page) => {
+      await openBase(page);
+      await page.waitForSelector(".pane.focus .base-tabs.compact");
     },
   },
   {
@@ -678,6 +719,9 @@ export const SCENE = onPage("shell", [
       await openRibbon(page, 700);
       await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
       await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+      // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+      // di timer vero, e la foto lo prenderebbe o no (#459).
+      await page.mouse.move(0, 0);
     },
   },
   {
@@ -942,8 +986,8 @@ export const SCENE = onPage("shell", [
       await chooseMode(page, "live_preview");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
       await chooseMode(page, "reading");
-      await page.waitForSelector('.pane[data-mode="source"] .cm-content');
-      await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
+      await page.waitForSelector('.pane[data-mode="source"] .pane-editor .cm-content');
+      await page.waitForSelector('.pane[data-mode="live_preview"] .pane-editor .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
@@ -956,7 +1000,7 @@ export const SCENE = onPage("shell", [
     id: "banda-modalita",
     title: "La nota col menu delle modalità aperto dalla banda",
     prepare: async (page) => {
-      await page.waitForSelector(".pane.focus .cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
       await page.click("#status-mode");
       await page.waitForSelector('#context-menu [role="menuitemradio"][aria-checked="true"]');
       await page.waitForSelector('#status-mode[aria-expanded="true"]');
@@ -968,7 +1012,7 @@ export const SCENE = onPage("shell", [
     viewport: NOTE_NARROW,
     prepare: async (page) => {
       await page.waitForSelector("#layout.layout-compact");
-      await page.waitForSelector(".pane.focus .cm-content");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-content");
     },
   },
   ...[
@@ -985,7 +1029,7 @@ export const SCENE = onPage("shell", [
       // Il cursore nella prima voce dell'elenco, come il prototipo: la barra
       // dice premuto «Elenco puntato». La barra si monta coi comandi, che
       // arrivano dopo la nota: la scena aspetta i suoi pulsanti e lo stato.
-      await page.click('.pane.focus .cm-content .cm-line:has-text("Un elenco corto")');
+      await page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Un elenco corto")');
       await page.keyboard.press("End");
       await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
       await page.waitForSelector('.pane.focus .format-bar .kit-bar-button[aria-pressed="true"]');
@@ -1061,6 +1105,30 @@ export const SCENE = onPage("shell", [
     query: "live=pagina",
     prepare: (page) => writingAtRest(page),
   },
+  // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
+  // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
+  // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.
+  // La riga cambia dopo una pausa: il banco aspetta il contesto, non un tempo.
+  ...[
+    ["riga-dei-suggerimenti", "La riga dei suggerimenti con una parola scelta: grassetto, corsivo, collega", "selection"],
+    ["riga-dei-suggerimenti-stretta", "La riga dei suggerimenti coi blocchi scelti, nella finestra minima: le voci che non ci stanno se ne vanno intere", "blocks", NOTE_NARROW],
+  ].map(([id, title, context, viewport]) => ({
+    id,
+    title,
+    query: "live=riga-attiva",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector('#status-hints[data-context="text"]');
+      if (context === "selection") {
+        for (let i = 0; i < 5; i++) await page.keyboard.press("Shift+ArrowRight");
+      } else {
+        await page.keyboard.press("Escape");
+        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+      }
+      await page.waitForSelector(`#status-hints[data-context="${context}"] .status-hints-item`);
+    },
+  })),
   // La testata in Scrittura e in Lettura (T6, E3, riga «La testata» del
   // prototipo): copertina, icona, titolo, quattro proprietà in evidenza,
   // «Altre 2», «Aggiungi una proprietà» e la riga dei dati; la stessa in
@@ -1098,17 +1166,17 @@ export const SCENE = onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
-      await page.waitForSelector(".pane.focus .cm-fub-block-handles");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles");
       // La testata della pagina arriva dopo che il cursore è stato portato in
       // vista: secondo chi vince, la nota resta in cima o scende di 78 px. Il
       // banco aspetta la testata e riparte dalla cima, ogni volta.
-      await page.waitForSelector(".pane.focus .cm-fub-page-title");
+      await page.waitForSelector(".pane.focus .pane-editor .cm-fub-page-title");
       // Scrittura si apre già coi Blocchi, senza passare dal menu della banda:
       // il moto d'apertura della nota può essere ancora in corsa, e un gesto
       // di Playwright su un riquadro che si muove lo fa scorrere per portarlo
       // in vista. Si parte a scena ferma, come per il «/».
       await page.waitForFunction(() => document.getAnimations().length === 0);
-      await page.evaluate(() => { document.querySelector(".pane.focus .cm-scroller").scrollTop = 0; });
+      await page.evaluate(() => { document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0; });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (gesture === "hover") return;
       if (gesture === "page") {
@@ -1119,9 +1187,9 @@ export const SCENE = onPage("shell", [
       if (gesture === "select") {
         await page.keyboard.press("Escape");
         await page.keyboard.press("Shift+ArrowDown");
-        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-selected");
       } else {
-        await page.click(".pane.focus .cm-fub-block-grip");
+        await page.click(".pane.focus .pane-editor .cm-fub-block-grip");
         await page.waitForSelector("#context-menu");
       }
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -1129,8 +1197,8 @@ export const SCENE = onPage("shell", [
     // Il puntatore è l'ultimo gesto: `prepareScene` lo porta via prima.
     ...(gesture === "hover" ? {
       hover: async (page) => {
-        await page.hover(".pane.focus .cm-content .cm-line:has-text('Cose da fare')");
-        await page.waitForSelector(".pane.focus .cm-fub-block-handles[data-active=\"true\"]");
+        await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
+        await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles[data-active=\"true\"]");
       },
     } : {}),
   })),
@@ -1690,6 +1758,10 @@ export const SCENE = onPage("shell", [
           const offset = parseFloat(style.outlineOffset);
           return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
         }, null, { timeout: 5_000 });
+        // Col fuoco della tastiera la didascalia del bottone arriva dopo 500 ms
+        // di timer vero (`ui/tooltip.ts`): la si aspetta, perché è lo stato
+        // vero del fuoco e una foto scattata prima la prenderebbe o no (#461).
+        await page.waitForSelector(".shell-tooltip:not([hidden])");
       },
     },
     {
@@ -1722,6 +1794,9 @@ export const SCENE = onPage("shell", [
         await openRibbon(page, "phone");
         await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
         await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
+        // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+        // di timer vero, e la foto lo prenderebbe o no (#459).
+        await page.mouse.move(0, 0);
       },
     },
     {
@@ -1738,7 +1813,7 @@ export const SCENE = onPage("shell", [
       title: "Il telefono: la tastiera su, la barra di formattazione sopra i tasti",
       viewport: PHONE,
       prepare: async (page) => {
-        await page.click(".pane.focus .cm-content");
+        await page.click(".pane.focus .pane-editor .cm-content");
         // La tastiera a schermo non esiste in un browser senza schermo: ciò
         // che la shell ne sa è che il viewport visivo si accorcia.
         await page.evaluate(() => {
@@ -1971,12 +2046,12 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
   await openNote(page, doc);
   if (compact) await closeSidebarDrawer(page);
   await chooseMode(page, mode);
-  await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
+  await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .pane-editor .cm-content`);
   await page.evaluate(async (bottom) => {
     // La vista si prende dal modulo del pacchetto testuale, lo stesso che la
     // shell ha già caricato: il banco non tocca CodeMirror da sé.
     const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
-    const pane = document.querySelector(".pane.focus .cm-editor")?.parentElement;
+    const pane = document.querySelector(".pane.focus .pane-editor .cm-editor")?.parentElement;
     if (!pane) throw new Error("il riquadro non ha l'editor");
     const view = findTextEditorOrThrow(pane);
     const cursor = globalThis.__fubLiveBench.cursor;
@@ -2043,7 +2118,7 @@ async function openHeader(page, mode, gesture) {
     await page.waitForSelector("#inspector-scrim", { state: "hidden" });
   }
   if (mode === "reading") await chooseMode(page, "reading");
-  const pane = mode === "reading" ? '.pane.focus[data-mode="reading"] .markdown-rendered' : ".pane.focus .cm-content";
+  const pane = mode === "reading" ? '.pane.focus[data-mode="reading"] .pane-editor .markdown-rendered' : ".pane.focus .pane-editor .cm-content";
   await page.waitForSelector(`${pane} .cm-fub-page .cm-fub-page-title`);
   if (gesture === "more") {
     await page.click(`${pane} .cm-fub-page-props-more`);
@@ -2053,7 +2128,7 @@ async function openHeader(page, mode, gesture) {
   await page.mouse.move(0, 0);
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    for (const scroller of document.querySelectorAll(".pane.focus .cm-scroller, .pane.focus .markdown-rendered")) scroller.scrollTop = 0;
+    for (const scroller of document.querySelectorAll(".pane.focus .pane-editor .cm-scroller, .pane.focus .pane-editor .markdown-rendered")) scroller.scrollTop = 0;
   });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
@@ -2066,12 +2141,12 @@ async function openHeader(page, mode, gesture) {
 /// regole cade.
 async function writingAtRest(page) {
   await openLive(page, [], "top");
-  await page.waitForSelector(".pane.focus .cm-fub-page-title");
+  await page.waitForSelector(".pane.focus .pane-editor .cm-fub-page-title");
   const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   // Le posizioni del testo rispetto al contenuto, non alla finestra: il
   // passaggio può far scorrere la nota, e lo scorrimento non è uno spostamento.
   const textBoxes = () => page.evaluate(() => {
-    const content = document.querySelector(".pane.focus .cm-scroller > .cm-content");
+    const content = document.querySelector(".pane.focus .pane-editor .cm-scroller > .cm-content");
     const origin = content.getBoundingClientRect();
     return [...content.querySelectorAll(":scope > .cm-line, .cm-fub-page-title, .note-facts")].slice(0, 24).map((el) => {
       const box = el.getBoundingClientRect();
@@ -2080,11 +2155,11 @@ async function writingAtRest(page) {
   });
   await frames();
   const before = await textBoxes();
-  await page.hover(".pane.focus .cm-content .cm-line:has-text('Cose da fare')");
-  await page.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"]');
-  await page.hover(".pane.focus .cm-fub-page-title");
+  await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Cose da fare')");
+  await page.waitForSelector('.pane.focus .pane-editor .cm-fub-block-handles[data-active="true"]');
+  await page.hover(".pane.focus .pane-editor .cm-fub-page-title");
   await page.waitForFunction(() => {
-    const tools = document.querySelector(".pane.focus .cm-fub-page-tools");
+    const tools = document.querySelector(".pane.focus .pane-editor .cm-fub-page-tools");
     return tools !== null && Number(getComputedStyle(tools).opacity) > 0.95;
   });
   await frames();
@@ -2096,11 +2171,13 @@ async function writingAtRest(page) {
   await page.mouse.move(0, 0);
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    document.querySelector(".pane.focus .cm-scroller").scrollTop = 0;
+    document.querySelector(".pane.focus .pane-editor .cm-scroller").scrollTop = 0;
   });
-  // Una funzione sola, che il browser esegue per aspettare e poi per dire
-  // che cosa resta: Playwright ne manda il testo.
-  const seen = function visibleAtRest() {
+  // Una funzione sola, che il browser esegue per aspettare (`empty`) e poi per
+  // dire che cosa resta. Si passa come funzione, non come testo: un predicato
+  // scritto come stringa Playwright lo valuta con `eval`, e la CSP del banco
+  // (quella dell'app, senza `'unsafe-eval'`) lo rifiuta.
+  const seen = function visibleAtRest(empty) {
     const shown = (el) => {
       for (let node = el; node && node !== document.body; node = node.parentElement) {
         if (node.hidden) return false;
@@ -2110,21 +2187,22 @@ async function writingAtRest(page) {
       const box = el.getBoundingClientRect();
       return box.width > 0 && box.height > 0;
     };
-    const sheet = document.querySelector(".pane.focus .cm-editor");
+    const sheet = document.querySelector(".pane.focus .pane-editor .cm-editor");
     const name = (el) => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`;
     // I pulsanti che sono contenuto, a riposo anche nel prototipo: l'icona
     // della pagina, la riga dei dati e la testata di un blocco di codice
     // (lingua, «A capo», «Copia»).
     const content = ".cm-fub-page-icon, .cm-fub-page-props button, .cm-fub-page-props button *, .note-facts *, .cm-fub-code-header button";
-    return [
+    const left = [
       ...[...sheet.querySelectorAll("[data-presence]")].filter(shown).map((el) => `${name(el)}[${el.dataset.presence}]`),
       ...[...sheet.querySelectorAll("button, [role=button]")].filter((el) => !el.closest("[data-presence]") && !el.matches(content) && shown(el)).map(name),
     ];
+    return empty ? left.length === 0 : left;
   };
   try {
-    await page.waitForFunction(`(${seen})().length === 0`, null, { timeout: 5_000 });
+    await page.waitForFunction(seen, true, { timeout: 5_000 });
   } catch {
-    const left = await page.evaluate(seen);
+    const left = await page.evaluate(seen, false);
     throw new Error(`a riposo si vede ancora: ${left.join(", ")}`);
   }
   await frames();
@@ -2147,14 +2225,14 @@ async function writingAtRest(page) {
 ///   da tenere in vista.
 async function settleLive(page, bottom) {
   await page.waitForFunction(() => !["non_salvato", "in_corso"].includes(document.querySelector("#save-state")?.dataset.state ?? ""));
-  await page.waitForFunction(() => !document.querySelector('.pane.focus .cm-content [data-state="loading"]'));
+  await page.waitForFunction(() => !document.querySelector('.pane.focus .pane-editor .cm-content [data-state="loading"]'));
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   if (!bottom) {
     await page.evaluate(async () => {
       if (globalThis.__fubLiveBench.cursor === null) return;
       const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
-      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .cm-editor").parentElement);
+      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
       // Da capo: col cursore già in vista CodeMirror non scorrerebbe, e
       // resterebbe lo scorrimento calcolato sull'impaginazione di prima.
       view.scrollDOM.scrollTop = 0;
@@ -2384,6 +2462,20 @@ async function openBase(page) {
   });
 }
 
+/// Sceglie dal menu della colonna `column` il riepilogo `label` e aspetta che
+/// il piede lo mostri.
+async function chooseBaseSummary(page, column, label) {
+  await page.click(`.pane.focus th[data-column="${column}"] .base-head`);
+  await page.waitForSelector("#context-menu .menu-head");
+  await page.hover('#context-menu button:has(.menu-label:text-is("Riepilogo"))');
+  await page.click(`.context-submenu button:has(.menu-label:text-is("${label}"))`);
+  await page.waitForFunction((column) => {
+    const pane = document.querySelector(".pane.focus");
+    return pane?.querySelector(`tfoot td[data-column="${column}"] .base-foot-value`) !== null
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true";
+  }, column);
+}
+
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
 /// griglia v2 abbia disegnato le sue celle.
 async function openWorkbook(page) {
@@ -2525,7 +2617,7 @@ async function openFolder(page, path) {
 /// destro sopra la parola, o dalla tastiera (Maiusc+F10), che parte dalla
 /// prima voce.
 async function selectWordAndOpen(page, { keyboard = false } = {}) {
-  const word = page.locator(".pane.focus .cm-content .cm-line >> text=/Questa è la nota/").first();
+  const word = page.locator(".pane.focus .pane-editor .cm-content .cm-line >> text=/Questa è la nota/").first();
   await word.waitFor();
   const box = await word.boundingBox();
   // «Questa è la »: la parola «nota» sta dopo i primi dodici caratteri.

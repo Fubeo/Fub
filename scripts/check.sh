@@ -133,6 +133,7 @@ client_checks() { # client_checks completo|rapido
   run "confine ProseMirror" bash -c 'node .github/scripts/check-prosemirror-boundary.mjs --self-test && node .github/scripts/check-prosemirror-boundary.mjs'
   run "confine della Tabella" bash -c 'node .github/scripts/check-tabella-boundary.mjs --self-test && node .github/scripts/check-tabella-boundary.mjs'
   run "tema non scritto inline" bash -c 'node .github/scripts/check-inline-theme.mjs --self-test && node .github/scripts/check-inline-theme.mjs'
+  run "nessuno stile in linea (CSP)" bash -c 'node .github/scripts/check-inline-styles.mjs --self-test && node .github/scripts/check-inline-styles.mjs'
   run "ascoltatori con una Vita" node .github/scripts/check-listeners.mjs
   run "nessuna attesa nascosta" node .github/scripts/check-races.mjs
   run "pacchetti npm in copia unica" node .github/scripts/check-npm-copies.mjs
@@ -175,7 +176,7 @@ vendor_guards() {
 
 benches() {
   client_ready
-  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:fidelity" \
+  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:conformita" "bench:fidelity" \
            "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \

@@ -29,6 +29,7 @@ import benchSkin from "../../theme/author/sample/skin.css?raw";
 import {
   count,
   declareThemeProfile,
+  mountedCss,
   mountThemeBundle,
   themeProfile,
   validateThemeBundle,
@@ -45,6 +46,7 @@ function bundle(sheet: string, skinText?: string) {
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
 });
 
 describe("il cancello monta solo ciò che è valido", () => {
@@ -55,7 +57,7 @@ describe("il cancello monta solo ciò che è valido", () => {
     );
 
     expect(result.mounted).toBe(true);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(benchSheet);
+    expect(mountedCss("foglio")).toBe(benchSheet);
   });
 
   it("un tema valido monta foglio e pelle in una sola commit", () => {
@@ -64,8 +66,8 @@ describe("il cancello monta solo ciò che è valido", () => {
     expect(result.mounted).toBe(true);
     expect(count("foglio")).toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
-    expect(document.head.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(mountedCss("foglio")).toBe(sheetLight);
+    expect(mountedCss("pelle")).toBe(skin);
   });
 
   it("due mount consecutivi lasciano un solo foglio e una sola pelle", () => {
@@ -79,7 +81,7 @@ describe("il cancello monta solo ciò che è valido", () => {
 
     expect(count("foglio"), "il secondo mount sostituisce, non accatasta").toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetDark);
+    expect(mountedCss("foglio")).toBe(sheetDark);
   });
 
   it("la serie passa dal validatore in tutte e quattro le varianti", () => {
@@ -156,7 +158,7 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(result.mounted).toBe(false);
     expect(troubles[0].reasons.join("\n")).toContain("pelle: content-look");
     expect(troubles[0].reasons.join("\n")).toContain(".look-tema .rich-heading");
-    expect(document.head.querySelector('style[data-fub="pelle"]')).toBeNull();
+    expect(mountedCss("pelle")).toBeNull();
   });
 
   it("una pelle che veste le celle del foglio di calcolo rifiuta, e il tema precedente resta", () => {
@@ -168,7 +170,7 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(result.mounted).toBe(false);
     expect(troubles[0].reasons.join("\n")).toContain("pelle: content-look");
     expect(troubles[0].reasons.join("\n")).toContain(".look-tema .grid-cell");
-    expect(document.head.querySelector('style[data-fub="pelle"]')).toBeNull();
+    expect(mountedCss("pelle")).toBeNull();
   });
 
   it("un contrasto caduto sotto la soglia AA rifiuta nominando la coppia", () => {
@@ -195,8 +197,8 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(second.mounted).toBe(false);
     expect(count("foglio")).toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
-    expect(document.head.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(mountedCss("foglio")).toBe(sheetLight);
+    expect(mountedCss("pelle")).toBe(skin);
   });
 
   it("un rifiuto è un Trouble via notify, e non un console.warn", () => {
@@ -232,7 +234,7 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
     );
 
     expect(result.mounted).toBe(true);
-    const mounted = document.head.querySelector('style[data-fub="pelle"]')?.textContent ?? "";
+    const mounted = mountedCss("pelle") ?? "";
     expect(mounted).toContain("data:image/png;base64,AQID");
     expect(mounted).toContain(`content: "url(${asset})"`);
     expect(mounted).toContain(`/* url("${asset}") */`);
@@ -263,7 +265,7 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
     );
 
     expect(result.mounted).toBe(true);
-    const mounted = document.head.querySelector('style[data-fub="pelle"]')?.textContent ?? "";
+    const mounted = mountedCss("pelle") ?? "";
     expect(mounted).toContain(
       `background-image: image-set( "data:image/svg+xml;base64,AQID" 1x, u\\72 l( "data:image/png;base64,BAUG" ) 2x);`,
     );

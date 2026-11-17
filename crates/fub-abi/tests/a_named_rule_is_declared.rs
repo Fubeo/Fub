@@ -1178,10 +1178,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             "crates/fub-features/src/base.rs::derive",
             (
                 Family::ContextualCase,
-                "piega il filtro di ricerca della vista e le etichette diagnostiche dei riepiloghi \
-                 con `str::to_lowercase`: la query è testo libero dell'utente, non un vocabolario \
-                 chiuso. Diverge da `matches_case_insensitive` perché qui l'ago si piega una sola \
-                 volta per tutte le righe, mentre là si piega a ogni confronto.",
+                "piega il filtro di ricerca della vista con `str::to_lowercase`: la query è testo \
+                 libero dell'utente, non un vocabolario chiuso. Diverge da \
+                 `matches_case_insensitive` perché qui l'ago si piega una sola volta per tutte le \
+                 righe, mentre là si piega a ogni confronto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::summary_label",
+            (
+                Family::ContextualCase,
+                "piega con `str::to_lowercase` l'etichetta diagnostica di un riepilogo senza nome \
+                 (`chiave:aggregato`), che il piano e `derive` danno allo stesso modo perché il \
+                 piede della Base trovi il valore. Non confronta due nomi: produce una chiave \
+                 sola, letta per uguaglianza esatta dal client, quindi non è la regola di \
+                 `derive` né quella di `matches_case_insensitive`.",
             ),
         ),
         (

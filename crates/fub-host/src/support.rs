@@ -95,7 +95,29 @@ const SEED_NOTES: &[SeedNote] = &[
         path: "Guide/Scorciatoie.md",
         text: "# Scorciatoie\n\nLa demo ha gli stessi comandi dei tuoi vault: palette, ricerca, grafo.\n\nNiente di cio` che cambi qui esce da questa cartella.\n",
     },
+    // Il giro dell'editor (T14): dieci cose da provare, ciascuna un compito da
+    // spuntare. Niente finestre che coprono il lavoro: i tasti li dice la riga
+    // dei suggerimenti in fondo alla finestra.
+    SeedNote {
+        path: GIRO_DELL_EDITOR,
+        text: "# Il giro dell'editor\n\n\
+Dieci cose da provare, qui dentro. Guarda la riga in fondo alla finestra: dice i tasti utili per ciò che stai facendo, e cambia con te. Sul Mac, Ctrl è ⌘.\n\n\
+- [ ] Su una riga vuota scrivi «/»: si aprono i blocchi. Esc lo lascia come testo.\n\
+- [ ] Scrivi «@» e un nome, o «venerdì»: persone e date.\n\
+- [ ] Scegli una parola e premi Ctrl B per il grassetto, Ctrl I per il corsivo.\n\
+- [ ] Con una parola scelta, Ctrl K la collega a una nota.\n\
+- [ ] Metti il cursore su [[Benvenuto]] e premi Alt Invio: la nota si apre.\n\
+- [ ] Premi Esc nel testo: il blocco si seleziona, e con le frecce scegli gli altri.\n\
+- [ ] Con un blocco scelto, Ctrl Maiusc ↑ lo sposta su e Ctrl D lo duplica.\n\
+- [ ] Spunta questo compito con Ctrl Invio.\n\
+- [ ] Su un compito, Tab lo rientra sotto quello di prima.\n\
+- [ ] Ctrl O cerca una nota o esegue un comando.\n\n\
+La riga si spegne nelle Preferenze, alla voce «Riga dei suggerimenti».\n",
+    },
 ];
+
+/// Il nome della nota del giro dell'editor, nella demo.
+const GIRO_DELL_EDITOR: &str = "Il giro dell'editor.md";
 
 /// Crea la radice demo e scrive le note seme che mancano.
 ///
@@ -1126,6 +1148,36 @@ pub fn seed_note_paths() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **La demo ha «Il giro dell'editor»** (T14): una nota con dieci cose da
+    /// provare, ognuna un compito da spuntare, scritta dalla semina e lasciata
+    /// com'è alla semina dopo.
+    #[test]
+    fn the_demo_seeds_the_editor_tour_with_ten_things_to_try() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = Utf8Path::from_path(temp.path()).unwrap();
+        let root = ensure_seeded(Some(config)).unwrap();
+        assert!(seed_note_paths().contains(&GIRO_DELL_EDITOR));
+
+        let path = root.join(GIRO_DELL_EDITOR);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# Il giro dell'editor\n"), "{text}");
+        let tries: Vec<&str> = text
+            .lines()
+            .filter(|line| line.starts_with("- [ ] "))
+            .collect();
+        assert_eq!(tries.len(), 10, "ten things to try: {tries:?}");
+        assert!(
+            tries.iter().all(|line| line.len() > "- [ ] ".len() + 10),
+            "every try says what to do: {tries:?}"
+        );
+
+        // Una nota spuntata dalla persona resta com'è.
+        let mine = text.replacen("- [ ] ", "- [x] ", 1);
+        std::fs::write(&path, &mine).unwrap();
+        ensure_seeded(Some(config)).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), mine);
+    }
 
     /// Un nome seme che per `exists` «non c'è» ma è occupato — qui da un
     /// collegamento rotto — non si scrive attraverso: la demo non tocca niente

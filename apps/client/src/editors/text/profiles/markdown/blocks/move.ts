@@ -193,14 +193,19 @@ export function reindent(text: string, from: string, to: string): string {
 }
 
 /// Dove sparisce la tratta di fratelli, con le righe vuote che la staccavano
-/// dal vicino sopra, o da quello sotto se è la prima.
-function removalOf(blocks: readonly Block[], run: BlockRun): { from: number; to: number } {
+/// dal vicino sopra, o da quello sotto se è la prima. Se la tratta è tutte le
+/// sorelle (i soli figli di una voce) se ne va anche l'a capo prima di lei:
+/// la sua riga non resta lì vuota, a fare largo un elenco stretto.
+function removalOf(state: EditorState, blocks: readonly Block[], run: BlockRun): { from: number; to: number } {
   const sibs = siblingsOf(blocks, run.first);
   const a = sibs.indexOf(run.first);
   const b = sibs.indexOf(run.last);
   if (a > 0) return { from: blocks[sibs[a - 1]!]!.to, to: blocks[run.last]!.to };
-  const next = b + 1 < sibs.length ? blocks[sibs[b + 1]!]!.from : blocks[run.last]!.to;
-  return { from: blocks[run.first]!.from, to: Math.max(next, blocks[run.last]!.to) };
+  const start = blocks[run.first]!.from;
+  if (b + 1 >= sibs.length) {
+    return { from: start > 0 ? state.doc.lineAt(start - 1).to : start, to: blocks[run.last]!.to };
+  }
+  return { from: start, to: Math.max(blocks[sibs[b + 1]!]!.from, blocks[run.last]!.to) };
 }
 
 /// Una modifica sola che toglie `gone` e mette `insert` (righe divise da
@@ -249,7 +254,7 @@ export function outdentRun(state: EditorState, blocks: readonly Block[], run: Bl
 }
 
 function relocated(state: EditorState, blocks: readonly Block[], run: BlockRun, at: number, text: string): MoveSpec | null {
-  const done = relocate(state, removalOf(blocks, run), at, "\n" + text);
+  const done = relocate(state, removalOf(state, blocks, run), at, "\n" + text);
   if (!done) return null;
   // Un a capo è una posizione, qualunque sia il separatore della nota.
   const movedFrom = done.placed + 1;

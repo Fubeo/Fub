@@ -4,7 +4,9 @@
 > dice all'utente quando il driver è un problema e come la pagina supera i
 > 60 Hz dove WebKit lo permette?
 > **Fonti autorevoli:** `crates/fub-app/src/disegno.rs`,
-> `crates/fub-app/src/frame_rate.rs`, `crates/fub-app/src/lib.rs` (`run`),
+> `crates/fub-app/src/frame_rate.rs`, `crates/fub-app/src/vblank.rs`,
+> `crates/fub-app/src/main.rs`, `crates/fub-app/build.rs`,
+> `crates/fub-app/src/lib.rs` (`run`),
 > `crates/fub-host/src/settings.rs` (`appearance.rendering`),
 > `apps/client/src/ui/rendering-notice.ts`.
 
@@ -115,18 +117,135 @@ serie). I simboli si cercano a runtime con `dlsym`: un WebKitGTK più
 vecchio fa partire l'app lo stesso, e il log lo dice (`SenzaApi`). Il tipo
 della webview viene dal crate `webkit2gtk` nella versione che wry già porta.
 
-Conta solo dove WebKit si aggancia al vblank DRM del kernel. Dove il vblank
-non risponde (`nvidia-drm` 550, e sotto Xvfb) WebKit ripiega su un timer
-fisso a 60 Hz e il tetto resta quello.
+### Il tetto dei 60 Hz di WebKitGTK
+
+In WebKitGTK il ritmo della pagina lo dà un *display link* nel processo
+dell'app: i `requestAnimationFrame`, gli aggiornamenti di rendering e la
+composizione delle animazioni CSS partono tutti dai suoi tick. Su GTK il
+display link ha solo due sorgenti (WebKitGTK 2.54,
+`Source/WebKit/UIProcess/glib/DisplayVBlankMonitor.cpp`, righe 65–70):
+
+- **DRM**: `drmWaitVBlank` sul nodo primario della scheda
+  (`/dev/dri/card*`), con la frequenza del monitor GTK
+  (`DisplayVBlankMonitorDRM.cpp`, righe 92 e 236–242);
+- **timer**, se il DRM fallisce: `FullSpeedFramesPerSecond`, cioè 60, e un
+  sonno intero di `1000 / 60` = 16 ms (`DisplayVBlankMonitorTimer.cpp`,
+  righe 41 e 47). Il rAF va quindi a 62,5 Hz e non è agganciato allo
+  schermo.
+
+Nessuna sorgente legge i frame callback di Wayland né `wp_presentation`.
+`nvidia-drm` (550 e 595) risponde `EOPNOTSUPP` a `drmWaitVBlank` su ogni
+CRTC, e sotto Xvfb non c'è una scheda: lì WebKit usa sempre il timer. Il
+journal dice «drmWaitVBlank failed: Operation not permitted», ma il testo è
+sbagliato: WebKit stampa `strerror(-ret)` e libdrm restituisce sempre -1.
+
+Con il timer la frequenza nominale dello schermo per la pagina vale 60
+(`DisplayLinkGLib.cpp`, righe 47–48), e con 60
+`preferredFramesPerSecond` restituisce 60 senza guardare la preferenza
+(`Source/WebCore/platform/graphics/AnimationFrameRate.cpp`, righe 52–57).
+Quindi, su NVIDIA e sotto Xvfb, spegnere `PreferPageRenderingUpdatesNear60FPS`
+non cambia niente. Conta dove il DRM risponde (AMD e Intel col modesetting
+del kernel), e solo se la frequenza intera dello schermo è un multiplo della
+scelta: accesa, porta 180 Hz a 60 e 144 Hz a 72. WebKit tronca i millihertz
+di GTK, quindi uno schermo a 179,96 Hz vale 179; la preferenza sceglie 59 e
+179 / 59 non è intero, così `DisplayUpdate::relevantForUpdateFrequency`
+(`Source/WebCore/platform/graphics/DisplayUpdate.cpp`, righe 35–43) lascia
+passare ogni tick e la pagina va a 179 Hz anche con la preferenza accesa.
+
+WebKit non offre una leva per alzare il tetto:
+`WEBKIT_FORCE_VBLANK_TIMER` può solo forzare il timer,
+`WEBKIT_DISPLAY_REFRESH_THROTTLE_FPS` può solo abbassare la frequenza (e
+deve esserne un divisore), fra le 538 feature di
+`webkit_settings_get_all_features` nessun'altra tocca il display link, e
+`WEBKIT_DISABLE_DMABUF_RENDERER`, `WEBKIT_DISABLE_COMPOSITING_MODE` e X11
+non cambiano la sorgente. La correzione vera sta in WebKit: la
+[PR 78603](https://github.com/WebKit/WebKit/pull/78603) fa andare il timer
+alla frequenza del monitor GTK, con scadenze assolute. Finché non è in una
+release, Fub emula il vblank.
+
+### Il vblank emulato
+
+L'eseguibile `fub`, solo su Linux, esporta un suo `drmWaitVBlank`
+(`main.rs`), e il linker dinamico lo dà a WebKit al posto di quello di
+libdrm. Nella tabella dei simboli dinamici lo mette già GNU ld, perché
+`libwebkit2gtk-4.1` è collegata e lo usa; il build script lo chiede anche in
+modo esplicito (`-Wl,--export-dynamic-symbol=drmWaitVBlank`), solo lui. Vale solo per il processo
+dell'app, che è quello del display link; il processo web non è toccato. La
+logica sta in `vblank.rs` ([ADR 0246](../decisions/0246-vblank-emulato-per-webkitgtk.md)):
+
+- chiama sempre prima il `drmWaitVBlank` di libdrm (`dlsym(RTLD_NEXT)`) ed
+  emula solo se risponde `EOPNOTSUPP`; il fallimento si ricorda per
+  (scheda, CRTC), e dopo il primo non lo si richiama;
+- emula le richieste che WebKitGTK 2.54 fa
+  (`DisplayVBlankMonitorDRM.cpp`): relative, con `sequence` 0 per provare e
+  1 per aspettare, e i bit del CRTC (`DRM_VBLANK_SECONDARY`,
+  `DRM_VBLANK_HIGH_CRTC_MASK`); anche le assolute, col confronto a 32 bit
+  del kernel. Evento, segnale, flip e `NEXTONMISS` passano a libdrm come
+  sono;
+- la frequenza è quella della modalità del CRTC (`drmModeGetResources`,
+  `drmModeGetCrtc`, cercate nel processo con `dlsym`), arrotondata come la dà
+  GTK e riletta ogni secondo. Le scadenze sono assolute su `CLOCK_MONOTONIC`
+  (`clock_nanosleep` con `TIMER_ABSTIME`), quindi il ritmo non deriva; la
+  risposta ha il contatore a 32 bit e il tempo del vblank, come quella del
+  kernel;
+- fuori da 24–500 Hz, con il CRTC spento o con un'attesa oltre 3 s risponde
+  come il driver (`-1`, `EOPNOTSUPP`): WebKit resta sul timer, come prima;
+- `FUB_VBLANK_EMULATO=0` la spegne, e fuori dall'intervallo di WebKitGTK
+  scritto in `vblank::WEBKITGTK_DA` / `WEBKITGTK_FINO_A` (dalla 2.54.0,
+  aperto in alto) è spenta. La versione è quella della libreria caricata
+  (`tauri::webview_version`), letta prima che parta GTK.
+
+Il vblank emulato ha la frequenza dello schermo ma non la sua fase, come il
+timer della PR 78603. WebKit trova il CRTC confrontando la misura fisica
+del connettore con quella del monitor GTK: dove non coincide (lo schermo
+ruotato di questa macchina) resta sul timer, emulazione o no.
+
+Su X11 WebKit prende la stessa via (`findCrtc` con il monitor GDK), ma non è
+misurata. Windows e macOS non hanno niente di tutto questo.
+
+### Il trasporto dei fotogrammi su Debian
+
+Col renderer DMA-BUF il processo web disegna in buffer della scheda e li
+passa al processo dell'app. WebKitGTK sceglie il modo in
+`AcceleratedBackingStore::rendererBufferTransportMode`: «Hardware» se trova
+il dispositivo DRM principale e l'EGL di GTK importa i dma-buf, altrimenti
+«Shared Memory», dove ogni fotogramma viene letto dalla scheda, copiato in
+memoria condivisa e ricaricato nel processo dell'app.
+
+Su NVIDIA le condizioni ci sono tutte (EGL `EXT_image_dma_buf_import`,
+render node e nodo primario dal dispositivo EGL), ma il pacchetto Debian
+applica `debian/patches/disable-nvidia-dmabuf.patch` (WebKit bug 262607,
+Debian #1039720): se il `GL_VENDOR` contiene «NVIDIA» il modo resta «Shared
+Memory», salvo `WEBKIT_FORCE_DMABUF_RENDERER=1`. Il sorgente di WebKit non
+ha né questo controllo né la variabile; le distro che prendono il pacchetto
+da Debian probabilmente lo ereditano (non verificato). `webkit://gpu` lo mostra come
+«DMABuf (Supported buffers: Shared Memory)» e «Buffer format: Shared
+Memory».
+
+Fub non scrive `WEBKIT_FORCE_DMABUF_RENDERER`: il trasporto resta quello del
+pacchetto. Con la variabile i gesti continui passano da circa 54 a 60
+fotogrammi al secondo, ma si fermano lì (la finestra GTK disegna allora con
+EGL, con due attese di fotogramma per fotogramma), e lo sfarfallio non è
+stato guardato: numeri e condizioni in
+[Il vblank emulato su NVIDIA](../misure/2026-11-17-linux-vblank-emulato.md#la-proposta).
 
 ## Come si verifica
+
+- La riga `WebKitGTK emulated vblank` dice se l'emulazione è attiva o
+  perché no (`Spenta`, `VersioneFuori`, `VersioneIgnota`, `NonInterposta`);
+  `WebKitGTK emulated vblank for CRTC` dice, quando WebKit crea il monitor,
+  per quale CRTC e a che frequenza (`emulata_mhz`, 0 se resta il driver).
 
 - La riga del log `rendering path chosen before GTK` dice che cosa è stato
   scelto.
 - La riga `WebKitGTK 60 fps preference` dice se la feature è stata trovata e
   applicata.
 - `webkit://gpu` in una finestra di WebKitGTK mostra renderer, DMABuf e
-  vblank. Con il driver disallineato il renderer è llvmpipe.
+  vblank. Con il driver disallineato il renderer è llvmpipe. «VBlank type:
+  Timer» e «60Hz» vogliono dire il tetto dei 60 Hz; «DRM» con la frequenza
+  del monitor vuol dire che la pagina può seguire lo schermo. La pagina
+  descrive il monitor dove sta la finestra di prova: con più schermi va
+  spostata su quello veloce.
 - I test unitari di `disegno.rs` coprono la tabella con `/proc` e `/sys`
   finti: driver disallineato, 550, 555, 560, nessuna GPU, VM, portatile
   ibrido e variabili dell'utente.

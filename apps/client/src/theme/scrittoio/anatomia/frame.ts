@@ -62,6 +62,8 @@ export const FRAME: PartAnatomy = {
         "status-sum-part",
         "status-sum-value",
         "status-sum-dot",
+        "status-hints",
+        "status-hints-key",
         "views-status",
       ],
     },

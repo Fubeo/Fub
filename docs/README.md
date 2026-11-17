@@ -74,10 +74,9 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Frontend e IPC](architecture/frontend-and-ipc.md),
   [i comportamenti della shell](architecture/shell-behaviours.md) e
   [la cornice del telefono](architecture/phone-frame.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md), la
-  [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
-  e la [superficie dei fogli](architecture/grid-surface.md), con gli
-  [editor dei componenti](architecture/component-editors.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md) e [quelle da parte](architecture/parked-surfaces.md), la
+  [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md), la
+  [superficie dei fogli](architecture/grid-surface.md) e gli [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md),
   [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
   [il disegno sul motore](architecture/disegno.md)
@@ -98,7 +97,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md)
   (con il [contratto dei componenti](reference/components-contract.md)),
   [layout su disco](reference/on-disk-layout.md) e
-  [permessi e sicurezza](reference/permissions-and-security.md)
+  [permessi e sicurezza](reference/permissions-and-security.md) (con [gli stili e la CSP](reference/styles-and-csp.md))
 - [Il formato della scena](reference/scene-format.md) con le sue
   pagine di dettaglio, e le
   [operazioni sulla scena](reference/scene-operations.md)
