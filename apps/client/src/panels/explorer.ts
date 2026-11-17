@@ -92,6 +92,7 @@ import { mediaKindOfId } from "../editors/media/media-types";
 import type { ResourceKind } from "../host/contract";
 import { api } from "../host/ipc";
 import { engineExtension, engineWarmup, type EngineWarmup } from "./engine-warmup";
+import { primaryClicksOnly } from "../ui/primary-clicks";
 
 const fileListEl = $("#file-list");
 /// Il moto della cartella appena aperta o chiusa, finché l'albero non si
@@ -323,8 +324,9 @@ export function mountExplorer(lifetime: Lifetime): void {
   });
   treeArrows(lifetime);
   // Prima della scelta multipla, che ascolta i clic sullo stesso albero.
-  primaryClicksOnly(lifetime, fileListEl);
-  primaryClicksOnly(lifetime, pinnedListEl);
+  // Solo il sinistro apre, chiude e sceglie le righe (IMP-002).
+  lifetime.add(primaryClicksOnly(fileListEl));
+  lifetime.add(primaryClicksOnly(pinnedListEl));
   wireRootDropTarget(lifetime);
   wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
@@ -777,30 +779,6 @@ function roving(preferred?: string): void {
       if (li !== targetLi) li.tabIndex = -1;
     });
   targetLi.tabIndex = 0;
-}
-
-/// Solo il tasto sinistro apre, chiude e sceglie le righe (IMP-002).
-///
-/// WebKitGTK manda un `click` anche dopo il tasto centrale, e col `button` del
-/// sinistro: le righe, che ascoltano `click`, aprivano e chiudevano la cartella
-/// a ogni clic centrale. Chromium non lo manda. Il tasto di un clic si sa
-/// quindi dalla pressione che lo ha cominciato, e un clic cominciato da un altro
-/// tasto non arriva alle righe. Il centrale non fa niente: niente scorrimento
-/// automatico né incolla della selezione di X11 sopra l'albero.
-function primaryClicksOnly(lifetime: Lifetime, list: HTMLElement): void {
-  let pressed = 0;
-  lifetime.listen(list, "mousedown", (e) => {
-    pressed = e.button;
-    if (e.button === 1) e.preventDefault();
-  }, { capture: true });
-  const swallow = (e: MouseEvent): void => {
-    // `detail` 0: un clic dato da Invio o da `.click()`, che non ha tasti.
-    if (e.detail === 0 || (pressed === 0 && e.button === 0)) return;
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  lifetime.listen(list, "click", swallow, { capture: true });
-  lifetime.listen(list, "auxclick", swallow, { capture: true });
 }
 
 /// Le frecce dentro l'albero (§12.4).

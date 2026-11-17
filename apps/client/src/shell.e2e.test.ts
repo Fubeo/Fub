@@ -3168,6 +3168,157 @@ describe("chiudere linguette e superfici", () => {
   });
 });
 
+describe("i tasti del mouse sulla striscia delle schede", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const names = () => tabs().map((tab) => tab.querySelector(".tab-name")?.textContent);
+  const selected = () => document.querySelector('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Una pressione vera: giù e su col tasto, poi il `click` col `detail` della
+  /// serie. WebKitGTK lo manda anche dopo il centrale, col `button` del sinistro.
+  const press = (target: Element, button: number, detail = 1): void => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button, detail }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button, detail }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail }));
+  };
+
+  it("il centrale chiude la scheda e non la attiva, in WebKitGTK e in Chromium (IMP-012)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    expect(selected()).toBe("Spesa");
+
+    // WebKitGTK: un `click` dopo il centrale.
+    press(tabs()[0]!, 1);
+    await settle();
+    expect(names()).toEqual(["Riunione", "Spesa"]);
+    expect(selected()).toBe("Spesa");
+
+    // Chromium: un `auxclick` col centrale, e nient'altro. Una scheda sola.
+    const riunione = tabs()[0]!;
+    riunione.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 1 }));
+    riunione.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 1 }));
+    riunione.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1, detail: 1 }));
+    riunione.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+    await settle();
+    expect(names()).toEqual(["Spesa"]);
+  });
+
+  it("il doppio clic sulla × chiude una scheda sola: il secondo clic non tocca ciò che scorre sotto (IMP-013)", async () => {
+    const host = await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const files = Object.keys(host.files()).sort();
+
+    press(tabs()[2]!.parentElement!.querySelector(".tab-close")!, 0, 1);
+    await settle();
+    expect(names()).toEqual(["Benvenuto", "Riunione"]);
+    expect(selected()).toBe("Riunione");
+    // Il secondo clic della serie cade sulla vicina, sul «+» o sul vuoto, e
+    // non sceglie la parola che ha sotto.
+    const second = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 2 });
+    tabs()[0]!.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    press(tabs()[0]!, 0, 2);
+    const plus = document.querySelector(".pane .tab-new");
+    if (plus) press(plus, 0, 2);
+    const strip = document.querySelector(".pane .pane-tabs")!;
+    press(strip, 0, 2);
+    strip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 }));
+    await settle();
+    expect(names()).toEqual(["Benvenuto", "Riunione"]);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort()).toEqual(files);
+
+    // Un clic che comincia da capo sulla vicina la attiva, come sempre.
+    press(tabs()[0]!, 0, 1);
+    await settle();
+    expect(selected()).toBe("Benvenuto");
+  });
+});
+
+describe("il fuoco dopo un gesto che toglie ciò che lo aveva", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const focusIn = (el: HTMLElement) => el.contains(document.activeElement);
+
+  it("chiusa con la × la scheda attiva, il fuoco resta nel riquadro (IMP-011)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    editorViews()[0]!.focus();
+    expect(focusIn(panes()[0]!)).toBe(true);
+    const close = document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] + .tab-close')!;
+    close.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    await waitFor("resta Benvenuto", () => editorTexts().join().includes("Il primo documento"));
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[0]!)).toBe(true);
+  });
+
+  it("dopo «Dividi a destra» il fuoco è nel riquadro nuovo", async () => {
+    await start(VAULT);
+    editorViews()[0]!.focus();
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[1]!)).toBe(true);
+    expect(panes()[1]!.classList.contains("focus")).toBe(true);
+  });
+
+  it("il divisore mosso con le frecce tiene il fuoco e continua a muoversi (IMP-016)", async () => {
+    await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    const divider = () => document.querySelector<HTMLElement>(".pane-divider")!;
+    divider().focus();
+    for (const expected of ["55", "60"]) {
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      await settle();
+      expect(document.activeElement).toBe(divider());
+      expect(divider().getAttribute("aria-valuenow")).toBe(expected);
+    }
+  });
+});
+
+describe("chiudere un riquadro", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const tabNames = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>(".tab .tab-name")].map((tab) => tab.textContent);
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)?.run?.();
+  };
+
+  // La scheda unica di un riquadro chiuso col testo ancora da salvare: il
+  // testo arriva sul disco prima che la sessione si chiuda, e la scheda si
+  // riapre con Mod-Shift-t come una chiusa con la × (IMP-018).
+  it("la scheda unica non si perde: il testo va sul disco e Mod-Shift-t la riapre (IMP-018)", async () => {
+    const host = await start(VAULT);
+    await twoPanes();
+    // Nel secondo riquadro resta solo Riunione.
+    panes()[1]!.querySelector<HTMLElement>(".tab-entry .tab-close")!.click();
+    await waitFor("il secondo riquadro ha solo Riunione", () => tabNames(panes()[1]!).join() === "Riunione");
+    const right = editorViews()[1]!;
+    right.dispatch({ changes: { from: right.state.doc.length, insert: "testo del riquadro chiuso" } });
+    expect(host.files()["note/Riunione.md"]).not.toContain("testo del riquadro chiuso");
+
+    await run("shell.pane.close");
+    expect(panes()).toHaveLength(1);
+    expect(host.files()["note/Riunione.md"]).toContain("testo del riquadro chiuso");
+    expect(tabNames(panes()[0]!)).toEqual(["Benvenuto"]);
+
+    await run("shell.tab.reopen");
+    await waitFor("Riunione torna nel riquadro rimasto", () => tabNames(panes()[0]!).includes("Riunione"));
+    await waitFor("col testo scritto", () => editorViews()[0]?.state.doc.toString().includes("testo del riquadro chiuso") === true);
+  });
+});
+
 describe("spostare linguette dal registro dei comandi", () => {
   const press = (on: Element, key: string, mods: KeyboardEventInit): KeyboardEvent => {
     const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
