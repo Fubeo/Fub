@@ -183,7 +183,8 @@ pub(super) fn comparison(version: &[u8], current: &[u8]) -> UiNode {
 /// (ripristina, confronta, copia) stanno nell'anteprima della versione scelta.
 /// Con un bottone «Ripristina» per riga il pannello era una colonna di azioni
 /// distruttive uguali, e il gesto più pericoloso era il più facile da fare.
-/// La più recente è la versione attuale.
+/// La più recente fotografia del disco è la versione attuale; un testo
+/// conservato mostra la sua nota.
 ///
 /// La nota viaggia nel payload accanto all'istante, e non perché serva a chi
 /// agisce — `version.restore` la vuole, ma la si potrebbe rileggere —: serve a
@@ -197,7 +198,11 @@ pub(super) fn row(
     doc: &str,
 ) -> UiNode {
     let when = Text::message(WHEN, vec![Arg::timestamp(WHEN, v.ts)]);
-    let change = if current {
+    // Un testo conservato si riconosce dalla sua nota: è ciò che chi lo cerca
+    // ricorda («il testo del conflitto»), più di quanti byte sia cambiato.
+    let change = if let Some(note) = &v.note {
+        Text::from(note)
+    } else if current {
         Text::key(CURRENT)
     } else {
         match older {

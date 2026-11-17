@@ -66,7 +66,7 @@
 //!
 //! ```text
 //! versions.json                    indice: doc_id → versioni + tombstone
-//! <dir>/meta.json                  { doc_id, deleted_at, versions: [{ts, hash, size}] }
+//! <dir>/meta.json                  { doc_id, deleted_at, versions: [{ts, hash, size, note?}] }
 //! <dir>/<ts>.<ext>                 i byte originali di una versione
 //! ```
 //!
@@ -198,6 +198,28 @@ const S_INTERVAL: &str = "s.interval";
 const S_INTERVAL_DESC: &str = "s.interval.desc";
 const S_RETENTION: &str = "s.retention";
 const S_RETENTION_DESC: &str = "s.retention.desc";
+/// Il comando che conserva un testo nella cronologia, con una nota
+/// (`VersionStore::keep`), e le sue frasi.
+const KEEP_TITLE: &str = "version.keep.title";
+const KEEP_DESC: &str = "version.keep.desc";
+const KEEP_DOC_TITLE: &str = "version.keep.doc.title";
+const KEEP_DOC_DESC: &str = "version.keep.doc.desc";
+const KEEP_TEXT_TITLE: &str = "version.keep.text.title";
+const KEEP_TEXT_DESC: &str = "version.keep.text.desc";
+const KEEP_NOTE_TITLE: &str = "version.keep.note.title";
+const KEEP_NOTE_DESC: &str = "version.keep.note.desc";
+const PLAN_KEEP: &str = "plan.keep";
+const DONE_KEEP: &str = "done.keep";
+const KEEP_TOO_LARGE: &str = "keep.too_large";
+const E_NO_KEEP_DOC: &str = "err.no_keep_doc";
+const E_NO_TEXT_GIVEN: &str = "err.no_keep_text";
+const E_NO_NOTE_GIVEN: &str = "err.no_keep_note";
+const E_BAD_NOTE: &str = "err.bad_keep_note";
+/// Il pannello dopo un ripristino: che cosa è successo, e come disfarlo.
+const RESTORED: &str = "restored";
+const UNDO_LABEL: &str = "undo";
+/// La nota di una versione conservata, in testa alla sua anteprima.
+const KEPT_NOTE: &str = "kept.note";
 
 /// I nomi degli argomenti.
 const DOC: &str = "doc";
@@ -207,6 +229,8 @@ const REASON: &str = "reason";
 const LIMIT: &str = "limit";
 const VERSIONS: &str = "versions";
 const NOTES: &str = "notes";
+const TEXT: &str = "text";
+const NOTE: &str = "note";
 
 mod catalog;
 mod commands;
@@ -225,25 +249,25 @@ pub use handler::VersioningHandler;
 #[cfg(test)]
 use persist::fresh_dir;
 use persist::{
-    blob, cap_in_mib, entries, load_index, over_the_cap, prune, read_index, rebuild_from_store,
-    relocate, snapshot_name, sweep, unread_over_the_cap, write_index, Batch,
+    blob, cap_in_mib, entries, load_index, meta_names, over_the_cap, prune, read_index,
+    rebuild_from_store, relocate, snapshot_name, sweep, unread_over_the_cap, write_index, Batch,
 };
 #[cfg(test)]
 use store::BAND_DAILY;
 #[cfg(test)]
 use store::MS_MINUTE;
+use store::{
+    checked_note, Claim, DocVersions, Entry, Index, IndexToWrite, Inner, Meta, Plan, PlanDocs,
+    Retention, BAND_ALL, BAND_HOURLY, INDEX_FILE, METADATA_FILE, MS_DAY, MS_HOUR, SCHEMA_VERSION,
+};
 pub use store::{
     settings, VersionRef, VersionStore, MAX_VERSION_BYTES, VERSIONING_INTERVAL_KEY,
     VERSIONING_RETENTION_KEY,
 };
-use store::{
-    Claim, DocVersions, Entry, Index, IndexToWrite, Inner, Meta, Plan, PlanDocs, Retention,
-    BAND_ALL, BAND_HOURLY, INDEX_FILE, METADATA_FILE, MS_DAY, MS_HOUR, SCHEMA_VERSION,
-};
 #[cfg(test)]
 use view::tree;
 use view::{read_snapshot, version_source_doc, A_PREVIEW, TS};
-pub use view::{HistoryView, HISTORY_VIEW, VERSION_CLEAR, VERSION_RESTORE};
+pub use view::{HistoryView, HISTORY_VIEW, VERSION_CLEAR, VERSION_KEEP, VERSION_RESTORE};
 
 #[cfg(test)]
 mod tests;

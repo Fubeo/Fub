@@ -102,7 +102,10 @@ impl Retention {
 pub const MAX_VERSION_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Una versione salvata.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Non è più `Copy` da quando porta la [`nota`](VersionRef::note): una stringa
+/// non si copia per bit.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionRef {
     /// Istante dello snapshot (millisecondi UNIX): è anche la sua identità.
     /// Resta un numero sul confine JSON: i millisecondi non arrivano a 2⁵³ e
@@ -117,7 +120,32 @@ pub struct VersionRef {
     #[serde(with = "fub_abi::ipc::u64_string")]
     pub hash: u64,
     pub size: u64,
+    /// Perché questa versione è stata **conservata** a mano
+    /// ([`VersionStore::keep`]), detto a chi la ritrova: «Testo scartato nel
+    /// conflitto del …». Una versione con la nota non è una fotografia del
+    /// disco ma un testo messo in salvo, e per questo resta fuori dal dedup,
+    /// dalla potatura e dalla regola «l'ultima versione è il disco»
+    /// ([`DocVersions::latest_on_disk`]).
+    ///
+    /// Aggiunta compatibile: assente nelle versioni scritte prima, e assente
+    /// nei file anche adesso quando non c'è (`skip_serializing_if`), così i
+    /// byte di una cronologia senza note non cambiano. Una versione di Fub
+    /// precedente la ignora in lettura e la perde riscrivendo quel `meta.json`:
+    /// la versione resta, la nota no.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
+
+impl VersionRef {
+    /// È un testo conservato a mano, e non una fotografia del disco?
+    pub fn is_kept(&self) -> bool {
+        self.note.is_some()
+    }
+}
+
+/// Quanti caratteri può avere la nota di una versione conservata. È una frase
+/// che si legge in una riga del pannello, non un documento.
+pub(super) const NOTE_MAX_CHARS: usize = 200;
 
 /// Le versioni di un documento, più il suo eventuale tombstone.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -130,6 +158,21 @@ pub(super) struct DocVersions {
     pub(super) deleted_at: Option<u64>,
     /// Dalla più vecchia alla più recente.
     pub(super) versions: Vec<VersionRef>,
+}
+
+impl DocVersions {
+    /// La versione più recente **fotografata dal disco**: l'ultima senza nota.
+    ///
+    /// È lei, e non semplicemente l'ultima, a rappresentare lo stato del file.
+    /// Un testo conservato ([`VersionStore::keep`]) è più recente ma non è mai
+    /// stato sul disco: confrontarci il dedup farebbe rifotografare un disco
+    /// immutato, e chiamarlo «versione attuale» mentirebbe.
+    pub(super) fn latest_on_disk(&self) -> Option<&VersionRef> {
+        self.versions
+            .iter()
+            .rev()
+            .find(|version| !version.is_kept())
+    }
 }
 
 /// L'indice **come si legge**: possiede i suoi documenti, perché chi lo legge
@@ -453,7 +496,9 @@ impl VersionStore {
         let dir_doc = inner.dir_for(id, host)?;
 
         if let Some(doc) = inner.docs.get(id.as_str()) {
-            if doc.versions.last().is_some_and(|v| v.hash == hash) {
+            // Il confronto è con l'ultima fotografia del disco: un testo
+            // conservato non conta, né per farsi uguagliare né per coprirla.
+            if doc.latest_on_disk().is_some_and(|v| v.hash == hash) {
                 // Niente di nuovo da salvare — ma ci hanno chiesto di
                 // fotografare una nota VIVA: se portava un tombstone
                 // (cestinata e ripristinata con lo stesso identico contenuto)
@@ -475,10 +520,11 @@ impl VersionStore {
             ts,
             hash,
             size: source.len() as u64,
+            note: None,
         };
         let mut doc = inner.docs.get(id.as_str()).cloned().unwrap_or_default();
         doc.dir = dir_doc;
-        doc.versions.push(version);
+        doc.versions.push(version.clone());
         // Una nota che torna in vita non è più morta: il tombstone se ne va, o
         // "il vault al tempo T" la crederebbe cancellata per sempre.
         doc.deleted_at = None;
@@ -517,6 +563,69 @@ impl VersionStore {
         let inner = self.inner.lock().expect("mutex");
         let versions = inner.docs.values().map(|doc| doc.versions.len()).sum();
         (inner.docs.len(), versions)
+    }
+
+    /// **Conserva un testo** nella cronologia di `id`, con una nota che dice
+    /// perché: è la rete sotto «Usa la versione su disco», che altrimenti
+    /// scarterebbe il testo di chi scrive.
+    ///
+    /// Non è [`VersionStore::snapshot`] con un campo in più, e le differenze
+    /// sono il punto:
+    ///
+    /// - **niente dedup**: chi chiede di conservare un testo deve ritrovarlo
+    ///   con la sua nota, anche se è identico a una versione che c'è già;
+    /// - **niente tetto silenzioso**: un testo oltre [`MAX_VERSION_BYTES`] è un
+    ///   errore, perché chi chiama sta per scartarlo e un `None` gli direbbe
+    ///   che è al sicuro;
+    /// - **il tombstone non si tocca**: conservare un testo non dice che il
+    ///   file esiste.
+    ///
+    /// L'ordine della scrittura è quello di `snapshot` — il blob, poi il
+    /// `meta.json` e l'indice in [`Inner::apply`] — e la riuscita vuol dire
+    /// che `meta.json` e indice nominano la versione con la sua nota. Se
+    /// `apply` fallisce prima del `meta.json`, il blob appena scritto se ne
+    /// va: senza, una ricostruzione lo ritroverebbe come una fotografia del
+    /// disco, senza nota, e la prenderebbe per la versione attuale.
+    pub fn keep(
+        &self,
+        id: &DocId,
+        source: &[u8],
+        note: &str,
+        host: &mut dyn HostApi,
+    ) -> Result<VersionRef, PluginError> {
+        let note = checked_note(note)?;
+        if source.len() as u64 > MAX_VERSION_BYTES {
+            return Err(PluginError::Unserved(Text::message(
+                KEEP_TOO_LARGE,
+                vec![Arg::text(DOC, id.as_str()), cap_in_mib()],
+            )));
+        }
+        let mut inner = self.inner.lock().expect("mutex");
+        let dir_doc = inner.dir_for(id, host)?;
+        let ts = inner.free_ts(id, host);
+        let path = blob(&dir_doc, &snapshot_name(ts, id.as_str()));
+        host.data_write(&path, source)?;
+
+        let version = VersionRef {
+            ts,
+            hash: Fnv1a::hash(source),
+            size: source.len() as u64,
+            note: Some(note),
+        };
+        let mut doc = inner.docs.get(id.as_str()).cloned().unwrap_or_default();
+        doc.dir = dir_doc.clone();
+        doc.versions.push(version.clone());
+        // Le versioni con la nota non si potano, ma le altre sì: un `keep` è
+        // una versione nuova come le altre, e la potatura vale a ogni nascita.
+        let pruned = prune(&mut doc, id, host);
+        if let Err(error) = inner.apply(plan_of(id, doc), id, host) {
+            if !meta_names(&dir_doc, id, ts, host) {
+                sweep(&[path], host);
+            }
+            return Err(error);
+        }
+        sweep(&pruned, host);
+        Ok(version)
     }
 
     /// **Svuota la cronologia del vault intero**: versioni e tombstone di ogni
@@ -658,7 +767,7 @@ impl VersionStore {
         inner
             .docs
             .get(id.as_str())
-            .map(|d| d.versions.iter().rev().copied().collect())
+            .map(|d| d.versions.iter().rev().cloned().collect())
             .unwrap_or_default()
     }
 
@@ -681,7 +790,7 @@ impl VersionStore {
     /// il path.
     pub fn read(&self, id: &DocId, ts: u64, host: &dyn ReadApi) -> Result<String, PluginError> {
         let (path, version) = self.inner.lock().expect("mutex").path(id, ts)?;
-        let bytes = read_snapshot(&path, version, host)?;
+        let bytes = read_snapshot(&path, &version, host)?;
         String::from_utf8(bytes).map_err(|and| {
             PluginError::Internal(Text::message(
                 UNREADABLE,
@@ -718,4 +827,23 @@ impl VersionStore {
         let inner = self.inner.lock().expect("mutex");
         inner.docs.keys().map(DocId::new).collect()
     }
+}
+
+/// La nota di una versione conservata, ripulita e controllata.
+///
+/// Si legge in una riga del pannello: niente vuoto (una versione conservata
+/// senza perché non si distingue da una fotografia), niente caratteri di
+/// controllo, al più [`NOTE_MAX_CHARS`] caratteri.
+pub(super) fn checked_note(note: &str) -> Result<String, PluginError> {
+    let note = note.trim();
+    if note.is_empty() {
+        return Err(PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN)));
+    }
+    if note.chars().any(char::is_control) || note.chars().count() > NOTE_MAX_CHARS {
+        return Err(PluginError::BadArgs(Text::message(
+            E_BAD_NOTE,
+            vec![Arg::int(LIMIT, NOTE_MAX_CHARS as i64)],
+        )));
+    }
+    Ok(note.to_string())
 }
