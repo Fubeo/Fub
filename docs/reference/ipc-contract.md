@@ -425,6 +425,21 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
   cartella cambia soltanto dal giornale, con `write_document`.
 
+Annulla e ripeti sono del provider (`edit.undo`, `edit.redo`): celle e
+comandi nell'ordine in cui sono avvenuti, anche oltre un salvataggio. Ogni
+passo riscrive il giornale, e il salvataggio seguente lo porta nei byte. Un
+passo di celle si disfa riscrivendo le celle; un comando oltre un salvataggio
+con `fub.restore` (`{"state": "<32 cifre esadecimali>"}`), che vale soltanto
+come primo comando e porta la cartella a uno stato tenuto in memoria dal
+provider. Il giornale resta della versione 2: `fub.restore` è un id del
+catalogo aperto dei comandi, come `fub.pasteFrom`, e un giornale di prima si
+legge com'era. Uno stato che il processo non ha più (una bozza dopo un
+riavvio), o `fub.restore` non in testa, è `Conflict`: il giornale non si
+applica e il file resta com'era; un Fub di prima lo rifiuta allo stesso modo,
+perché non serve il comando. La cronologia tiene 100 passi e 128 MiB di stati
+oltre la cartella di adesso: oltre, esce il passo più vecchio, mai un dato.
+Riaprendo il programma ricomincia vuota.
+
 Nella finestra:
 
 - i valori sono quelli che il file ha salvato, comprese le celle versate

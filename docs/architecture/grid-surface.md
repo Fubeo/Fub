@@ -42,14 +42,13 @@ Editor in-cell e formula bar usano due istanze di `TextEngine` con
 nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
 controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
 con le celle da rileggere; le modifiche in coda partono una dopo l'altra.
-Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
-modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
-`edit.redo`) e, dopo il salvataggio, le celle scritte si annullano con le loro
-patch. Un giornale cambiato altrove (altro riquadro, salvataggio, ricarica)
-riapre la sessione e chiude la precedente; la bozza aperta resta, col cursore
-e il fuoco. Se la sua cella è cambiata sotto, un avviso chiede «Tieni la tua»
-o «Prendi quella nuova»; se il foglio non c'è più, la bozza si chiude e
-l'avviso lo dice. La cella aperta è testo [in
+Su una cartella annulla e ripeti sono del provider, celle e comandi in una pila
+anche oltre il salvataggio ([contratto](../reference/ipc-contract.md#cartelle-di-excel));
+senza provider l'undo è locale. Un giornale cambiato altrove (altro riquadro,
+salvataggio, ricarica) riapre la sessione e chiude la precedente; la bozza
+aperta resta, col cursore e il fuoco. Se la sua cella è cambiata sotto, un
+avviso chiede «Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più,
+la bozza si chiude e l'avviso lo dice. La cella aperta è testo [in
 sospeso](frontend-and-ipc.md#il-testo-in-sospeso): va nelle bozze, e si
 conferma prima di salvare, di chiudere o di un cambio da fuori (che diventa un
 conflitto). Se i byte di base del giornale non sono più sul disco, la griglia
@@ -289,7 +288,8 @@ che la finestra darebbe, o dall'esito di un comando che chiede una finestra
 finestra di un commento uno per ciò che è cambiato); un rifiuto resta scritto
 nella finestra aperta. Formato celle dà soltanto ciò che è cambiato, e
 l'esempio del formato lo calcola il provider con `TEXT`. Crea tabella dà
-l'area di dati della cella e dice che senza intestazioni i dati scendono.
+l'area di dati della cella e dice che senza intestazioni i dati scendono;
+ordinare da una cella sola allarga prima la selezione a quell'area.
 
 ## I comandi nella tavolozza
 

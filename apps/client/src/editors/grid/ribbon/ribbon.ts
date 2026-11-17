@@ -277,6 +277,20 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     },
   });
 
+  // Annulla e ripeti valgono anche col fuoco nella barra: aprire un gruppo
+  // raccolto ci porta il fuoco, e la cartella si annulla da lì come dalla
+  // griglia (IMP-035). Un campo della barra tiene il suo annulla del testo.
+  const keys = openLifetime();
+  keys.listen(ribbon.element, "keydown", (event) => {
+    const key = event.key.toLowerCase();
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || (key !== "z" && key !== "y")) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    engine.command(key === "y" || event.shiftKey ? "edit.redo" : "edit.undo");
+  });
+
   return {
     element: ribbon.element,
     refresh: ribbon.refresh,
@@ -284,6 +298,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     contextMenu: (target) => ribbon.contextMenu((view) => contextEntries(target, view)),
     mountMini: ribbon.mountMini,
     destroy() {
+      keys.close();
       ribbon.destroy();
       palette.destroy();
       releaseIcons();

@@ -40,6 +40,7 @@ use gridcraft_xlsx::{Format, ReadReport};
 pub mod catalogo;
 mod circular;
 mod commands;
+mod cronologia;
 pub mod export;
 // Le cartelle di prova dei test d'integrazione, anche per quelli interni.
 #[cfg(test)]
