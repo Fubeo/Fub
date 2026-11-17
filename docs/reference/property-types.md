@@ -81,7 +81,7 @@ Un valore di Selezione o di Stato è il testo dell'opzione, e la proiezione
 (`PropertyTypes::option_match`) dice se il testo è il nome di un'opzione o
 se è **fuori dalle opzioni**. Il confronto è esatto, carattere per carattere:
 `Fatto ` con lo spazio in fondo è fuori. Un valore fuori dalle opzioni resta
-testo, segnato. Nel pannello delle proprietà una Selezione o uno Stato dentro
+testo, segnato. Nel pannello laterale delle proprietà una Selezione o uno Stato dentro
 le opzioni è una tendina; fuori dalle opzioni resta un campo di testo.
 
 Un colore o un gruppo che questo Fub non conosce si legge lo stesso: si
@@ -89,6 +89,34 @@ mostra grigio, o Da fare, e la parola resta nel file se il registro si
 riscrive. Due opzioni con lo stesso nome, scritte a mano, si leggono: vale la
 prima. Un campo che questo Fub non conosce, invece, rende illeggibile tutto
 il registro.
+
+### Nella testata della nota
+
+Nelle proprietà in testa a una nota una Selezione o uno Stato si mostra come
+pastiglia del colore della sua opzione (lo Stato col pallino). Il clic, o
+Invio, apre l'elenco delle opzioni con una ricerca: lo Stato le divide in Da
+fare, In corso e Fatto. Scrivere un nome che non c'è offre «Crea «nome»»:
+l'opzione nasce nel registro con `property.option.set`, col primo colore
+che le opzioni della chiave non hanno già (lo Stato in Da fare), e poi il
+valore si scrive nella nota. Se il registro rifiuta (illeggibile, di una
+versione futura), l'elenco lo dice e la nota resta com'è. Un valore fuori
+dalle opzioni, anche dopo un'opzione rinominata nel registro, resta testo,
+sottolineato e segnato «Fuori dalle opzioni».
+
+Un Url che comincia con `http://` o `https://` è un link: il clic lo apre,
+la matita accanto (o F2) lo modifica. Ogni altro testo resta un campo.
+
+### Nella Bacheca di una Base
+
+Una Bacheca raggruppata per una Selezione o uno Stato ha una corsia per ogni
+opzione, anche vuota, nell'ordine del registro; lo Stato le mette nei tre
+gruppi, Da fare, In corso, Fatto. Dopo vengono i valori fuori dalle opzioni,
+come corsie di testo: solo queste si rinominano dalla Bacheca. Trascinare
+una scheda in un'altra corsia, o Alt ← e Alt → sulla scheda, scrive il
+valore nella nota con `note.property.set` e il valore letto come confronto:
+se la nota è cambiata nel frattempo non si scrive niente. Una corsia
+aggiunta dalla Bacheca è un'opzione nuova del registro. Il registro si
+rilegge quando cambia (`setting_changed` di `properties.types`).
 
 ## Le Relazioni
 

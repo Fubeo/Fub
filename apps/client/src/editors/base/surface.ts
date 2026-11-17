@@ -3,6 +3,7 @@
 import { currentTheme, type Theme } from "../../theme/theme";
 import { COMMANDS, EVERY_DOCUMENT } from "../../host/contract";
 import { api } from "../../host/ipc";
+import { settings } from "../../host/query";
 import type { CustomRenderContext } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t } from "../../i18n/strings";
@@ -18,7 +19,7 @@ import { uniformRowRange } from "../core/row-window";
 import { LOCAL_FETCH } from "../core/local-fetch";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
-  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
+  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
   type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
@@ -31,6 +32,7 @@ import { columnIcon, viewIcon } from "./icons";
 import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
 import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
 import { sameKey, sortedBy } from "./sort";
+import { freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
 import { writeClipboardText } from "../../platform/clipboard";
@@ -48,6 +50,10 @@ export interface BaseMountDeps extends BaseSurfaceDeps {
   /// perché la ricarica non si dica. Assente (una prova), il gesto scrive e
   /// basta.
   readonly documentWrites?: BaseDocumentWrites;
+  /// Il registro dei tipi delle proprietà del vault (`properties.types`), il
+  /// valore com'è nelle impostazioni: la Bacheca su una Selezione o uno Stato
+  /// ne prende le corsie. Assente (una prova), le corsie sono i valori.
+  readonly propertyTypes?: () => Promise<unknown>;
 }
 /// La cartella dei modelli, per «Nuova da un modello»: la convenzione di
 /// `note.from_template` (`fub-features/src/template.rs`).
@@ -83,6 +89,10 @@ interface WriteAttempt {
 /// I comandi del vault che il menu della colonna usa (`fub-features`).
 const PROPERTY_RENAME = "property.key.rename";
 const PROPERTY_TYPE_SET = "property.type.set";
+/// Il comando che aggiunge un'opzione di Selezione o di Stato al registro.
+const PROPERTY_OPTION_SET = "property.option.set";
+/// L'impostazione del registro dei tipi delle proprietà.
+const PROPERTY_TYPES_KEY = "properties.types";
 /// I nomi delle proprietà da cui una vista mappa nuova prende le coordinate,
 /// se le righe le hanno.
 const LATITUDE_KEYS = ["lat", "latitude", "latitudine"];
@@ -105,6 +115,12 @@ const FILE_COLUMN = NOTE_COLUMN;
 const NOTE_NAME = "file.name";
 /// Il titolo di una nota in tabella: il nome del file senza cartella e
 /// senza `.md`. Il percorso intero sta nel suggerimento.
+/// Il registro dei tipi delle proprietà com'è nelle impostazioni del vault
+/// aperto: la dipendenza `propertyTypes` della Base nell'app.
+export async function vaultPropertyTypes(): Promise<unknown> {
+  return (await settings()).find((entry) => entry.spec.key === PROPERTY_TYPES_KEY)?.value;
+}
+
 export function noteTitle(doc: string): string {
   return doc.slice(doc.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 }
@@ -190,6 +206,8 @@ export function mountBaseSurface(
 
   let destroyed = false;
   let readOnly = false;
+  /// Il registro dei tipi del vault, per le corsie di Selezione e Stato.
+  let propertyTypes: PropertyTypes = NO_TYPES;
   let source = "";
   let names: string[] = [];
   let viewTypes: (string | null)[] = [];
@@ -1291,9 +1309,22 @@ export function mountBaseSurface(
       groups.set(name, members);
     }
     for (const name of localLanes.get(view) ?? []) if (!groups.has(name)) groups.set(name, []);
+    // Una Selezione o uno Stato (T9): le corsie sono le opzioni del registro,
+    // anche vuote, nel loro ordine e (lo Stato) nei tre gruppi; poi i valori
+    // fuori dalle opzioni. Per ogni altro tipo, i valori come compaiono.
+    const property = columnProperty(key);
+    const choice = property === null ? null : choiceLanes(propertyTypes, property, [...groups.keys()]);
+    const lanes: { name: string; members: BaseRow[]; option: PropertyOption | null }[] = choice
+      ? choice.lanes.map((lane) => ({ name: lane.name, members: groups.get(lane.name) ?? [], option: lane.option }))
+      : [...groups].map(([name, members]) => ({ name, members, option: null }));
     const board = document.createElement("div");
     board.className = "base-kanban";
     const writable = !readOnly && !key.startsWith("formula.") && !key.startsWith("file.");
+    /// Sposta una scheda in una corsia: scrive il valore nella nota, con la
+    /// revisione letta (`editCell`).
+    const move = (row: BaseRow, name: string) => {
+      if (cellText(row.values[key]) !== name) void editCell(row, key, JSON.stringify(name));
+    };
     const remember = (name: string) => {
       let lanes = localLanes.get(view);
       if (!lanes) { lanes = new Set(); localLanes.set(view, lanes); }
@@ -1301,14 +1332,31 @@ export function mountBaseSurface(
       lanes.add(name);
       saveLanes(view);
     };
-    for (const [name, members] of groups) {
+    lanes.forEach(({ name, members, option }, index) => {
       const lane = document.createElement("section");
       lane.className = "base-kanban-column";
       lane.dataset.group = name;
       const heading = document.createElement("h3");
-      heading.textContent = `${name || "∅"} (${members.length})`;
+      if (option && choice) {
+        // L'opzione come pastiglia del suo colore, col pallino dello Stato
+        // (`.lane-h .opt` del prototipo), e quante schede ha.
+        lane.dataset.option = "";
+        if (choice.kind === "status") lane.dataset.statusGroup = option.group;
+        const pill = document.createElement("span");
+        pill.className = "cm-fub-prop-opt";
+        pill.dataset.color = option.color;
+        if (choice.kind === "status") pill.dataset.status = "";
+        pill.textContent = name;
+        heading.append(pill, ` ${members.length}`);
+      } else {
+        // Fuori dalle opzioni il valore resta testo, come nella nota.
+        if (choice) lane.dataset.outside = "";
+        heading.textContent = `${name || "∅"} (${members.length})`;
+      }
       lane.append(heading);
-      if (writable && name) {
+      // Un'opzione si rinomina nel registro, non qui: rinominare la corsia
+      // riscriverebbe le note con un valore fuori dalle opzioni.
+      if (writable && name && !option) {
         lane.append(button(t("base.lane.rename"), () => {
           const input = document.createElement("input");
           input.value = name;
@@ -1348,8 +1396,21 @@ export function mountBaseSurface(
         card.className = "base-kanban-card";
         card.dataset.doc = row.doc;
         card.draggable = writable;
-        card.append(button(row.doc, () => open(row.doc)));
-        if (writable) card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("application/x-fub-base-doc", row.doc));
+        const opener = button(row.doc, () => open(row.doc));
+        card.append(opener);
+        if (writable) {
+          card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("application/x-fub-base-doc", row.doc));
+          // Da tastiera: Alt ← e Alt → spostano la scheda nella corsia
+          // accanto, come il trascinamento.
+          opener.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight");
+          opener.addEventListener("keydown", (event) => {
+            if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+            const next = lanes[index + (event.key === "ArrowLeft" ? -1 : 1)];
+            if (!next) return;
+            event.preventDefault();
+            move(row, next.name);
+          });
+        }
         lane.append(card);
       }
       if (writable) {
@@ -1357,11 +1418,11 @@ export function mountBaseSurface(
         lane.addEventListener("drop", (event) => {
           event.preventDefault();
           const target = page.find((row) => row.doc === event.dataTransfer?.getData("application/x-fub-base-doc"));
-          if (target && cellText(target.values[key]) !== name) void editCell(target, key, JSON.stringify(name));
+          if (target) move(target, name);
         });
       }
       board.append(lane);
-    }
+    });
     if (writable) {
       const add = document.createElement("input");
       add.placeholder = t("base.lane.add_placeholder");
@@ -1369,13 +1430,42 @@ export function mountBaseSurface(
       add.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         const name = add.value.trim();
-        if (!name || name.length > 256 || groups.has(name)) { status.textContent = t("base.lane.taken"); return; }
+        if (!name || name.length > 256 || lanes.some((lane) => lane.name === name)) { status.textContent = t("base.lane.taken"); return; }
+        // Su una Selezione o uno Stato la corsia nuova è un'opzione nuova
+        // del registro (lo Stato in Da fare, con un colore libero).
+        if (choice && property !== null) {
+          void addLaneOption(property, name, choice.kind);
+          return;
+        }
         remember(name);
         draw();
       });
       board.append(add);
     }
     body.append(board);
+  };
+  /// Aggiunge un'opzione al registro dei tipi (`property.option.set`) e
+  /// rilegge il registro: la corsia nuova compare. Un registro che non si
+  /// scrive (illeggibile, di una versione futura) lo dice la barra.
+  const addLaneOption = async (property: string, name: string, kind: "select" | "status"): Promise<void> => {
+    try {
+      await deps.invokeCommand(PROPERTY_OPTION_SET, { key: property, option: name, color: freeColor(optionsOf(propertyTypes, property)), ...(kind === "status" ? { group: "todo" } : {}) });
+      await readPropertyTypes();
+    } catch (failure) {
+      if (!destroyed) status.textContent = errorText(failure);
+    }
+  };
+  /// Rilegge il registro dei tipi; se cambia, la Bacheca si ridisegna.
+  let typesRead = 0;
+  const readPropertyTypes = async (): Promise<void> => {
+    if (!deps.propertyTypes) return;
+    const mine = ++typesRead;
+    const raw = await deps.propertyTypes().catch(() => undefined);
+    if (destroyed || mine !== typesRead) return;
+    const next = parsePropertyTypes(raw);
+    if (sameTypes(next, propertyTypes)) return;
+    propertyTypes = next;
+    if (plan?.viewType === "kanban") draw();
   };
   const drawMap = (page: BaseRow[]): void => {
     const config = plan?.map;
@@ -1787,7 +1877,9 @@ export function mountBaseSurface(
       if (!destroyed) void reload(false);
     });
   };
+  void readPropertyTypes();
   const stopEvents = [
+    onEvent("setting_changed", (event) => { if (event.key === PROPERTY_TYPES_KEY) void readPropertyTypes(); }),
     onEvent("document_changed", (event) => { if (!event.changes || event.changes.aspects.length) memberChanged(); }),
     onEvent("document_removed", memberChanged),
     onEvent("document_renamed", memberChanged),
@@ -1960,6 +2052,7 @@ export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: Cus
     onOpenDocument,
     revision: () => revision,
     documentWrites,
+    propertyTypes: vaultPropertyTypes,
   }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
   // La scatola della Base dentro una nota sta in colonna col testo (la pelle).
   host.querySelector<HTMLElement>(":scope > .base-surface")?.setAttribute("data-embedded", "true");

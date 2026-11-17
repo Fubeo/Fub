@@ -6,6 +6,9 @@ import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
 import { parseFilter, type FilterDef } from "./filter";
 import { parseOrder, parseSort, type SortEntry } from "./sort";
+// Il registro dei tipi del vault (`properties.types`) si legge come lo legge
+// la testata delle note: una regola sola per tipi, opzioni e gruppi.
+import { declaredType, OPTION_GROUPS, optionsOf, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 
 import { BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
 
@@ -427,6 +430,30 @@ export function baseRowsToCsv(rows: BaseRow[], columns: string[]): string {
   const escape = (value: string): string => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
   return `${[columns.map(escape).join(","), ...rows.map((row) => columns.map((key) => escape(cellText(row.values[key]))).join(","))].join("\r\n")}\r\n`;
 }
+/// Una corsia della Bacheca su una Selezione o su uno Stato (T9): il valore e
+/// l'opzione del registro che gli dà colore e gruppo, o `null` se il valore è
+/// fuori dalle opzioni (un'opzione rinominata, un valore scritto a mano).
+export interface ChoiceLane {
+  readonly name: string;
+  readonly option: PropertyOption | null;
+}
+
+/// Le corsie di una Bacheca raggruppata per `key`, se il registro dei tipi la
+/// dichiara Selezione o Stato: prima tutte le opzioni, anche vuote, nel loro
+/// ordine (lo Stato nei tre gruppi, Da fare, In corso, Fatto); poi i valori
+/// `present` fuori dalle opzioni, nell'ordine in cui compaiono. Due opzioni
+/// con lo stesso nome sono una, la prima, come nel core. `null` per ogni
+/// altro tipo: le corsie restano quelle dei valori.
+export function choiceLanes(types: PropertyTypes, key: string, present: readonly string[]): { readonly kind: "select" | "status"; readonly lanes: ChoiceLane[] } | null {
+  const kind = declaredType(types, key);
+  if (kind !== "select" && kind !== "status") return null;
+  const seen = new Set<string>();
+  const options = optionsOf(types, key).filter((option) => !seen.has(option.name) && seen.add(option.name));
+  const ordered = kind === "status" ? OPTION_GROUPS.flatMap((group) => options.filter((option) => option.group === group)) : options;
+  const outside = [...new Set(present)].filter((name) => !seen.has(name));
+  return { kind, lanes: [...ordered.map((option) => ({ name: option.name, option })), ...outside.map((name) => ({ name, option: null }))] };
+}
+
 /// Le righe divise per il valore di `key`, nell'ordine in cui il primo di ogni
 /// gruppo compare: l'ordinamento della vista resta quello dentro ogni gruppo.
 /// L'ordine dei gruppi: quello delle righe, o per nome nei due versi.

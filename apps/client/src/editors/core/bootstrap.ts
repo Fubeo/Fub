@@ -745,7 +745,7 @@ export function createDocumentSurfaceRegistry(
     // shell condivide con gli altri editor.
     factory: {
       load: async () => {
-        const { mountBaseSurface } = await import("../base/surface");
+        const { mountBaseSurface, vaultPropertyTypes } = await import("../base/surface");
         return {
           mount(profile, context) {
             // Il vault in cui la superficie nasce (FUB-001).
@@ -759,6 +759,8 @@ export function createDocumentSurfaceRegistry(
               // La revisione del `.base` aperto, per i gesti della barra (CAS).
               revision: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
               documentWrites: options.documentWrites,
+              // Il registro dei tipi: le corsie della Bacheca su Selezione e Stato.
+              propertyTypes: vaultPropertyTypes,
             });
           },
         };
