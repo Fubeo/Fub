@@ -61,7 +61,9 @@ non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
 `transform` e `opacity`, un gesto invertito a metà torna allo stato di
 partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
 sua immagine che esce, e il referto dice com'era e com'è il riquadro che
-salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+salta; il «dopo» si legge al primo fotogramma che il gesto contrario dipinge,
+dopo le sue richiamate di `requestAnimationFrame` e prima del disegno, non
+appena torna il clic), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
 ha la sua coreografia. I confronti restano al pixel, e per questo il banco apre
 Chromium con `--disable-partial-raster` (`BROWSER_ARGS` in
