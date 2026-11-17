@@ -40,7 +40,8 @@ si annuncia una volta a chi usa un lettore di schermo. La barra ha un solo
 punto di tabulazione, e le frecce vi si muovono dentro. Nella finestra
 stretta ciò che non entra scende in «…», per ultimo il gruppo del blocco; al
 telefono la barra sta sopra la tastiera e i gesti si dicono con la figura.
-Al tocco (nessun puntatore che passi sopra le cose) il gruppo del blocco del
+Al tocco (nessun puntatore che passi sopra le cose; un tablet col mouse segue
+il mouse, anche collegato a nota aperta) il gruppo del blocco del
 cursore è il secondo livello di presenza: sta nella barra sopra la tastiera
 su un velo d'accento, e quando la riga non basta scendono in «…» prima i
 fissi, annulla e ripeti compresi; la scena `mobile-tocco-02-cursore` del
