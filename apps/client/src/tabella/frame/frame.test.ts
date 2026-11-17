@@ -140,6 +140,19 @@ describe("la cornice della Tabella", () => {
     expect(cell(1, 1).textContent).toBe("10");
   });
 
+  it("la griglia scorsa di lato lo dice con data-scrolled, e lo toglie tornata a inizio corsa", () => {
+    const { grid } = mount(ROWS);
+    const scroll = (left: number) => {
+      grid.scrollLeft = left;
+      grid.dispatchEvent(new Event("scroll"));
+    };
+    expect(grid.hasAttribute("data-scrolled")).toBe(false);
+    scroll(40);
+    expect(grid.hasAttribute("data-scrolled")).toBe(true);
+    scroll(0);
+    expect(grid.hasAttribute("data-scrolled")).toBe(false);
+  });
+
   it("il menu nasce dalle capacità: senza unire non ci sono le celle unite", () => {
     const { frame } = mount(ROWS);
     const ids = frame.menu().map((entry) => entry.id);
@@ -220,6 +233,21 @@ describe("la cornice della Tabella", () => {
     expect(frame.selection.focus).toEqual({ row: 0, column: 2 });
     frame.element.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!.click();
     expect(rows).toHaveLength(4);
+  });
+
+  it("i «+» sono pulsanti a icona col nome, fuori dal Tab", () => {
+    const { frame } = mount(ROWS);
+    const row = frame.element.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!;
+    const column = frame.element.querySelector<HTMLButtonElement>('.tb-add[data-add="column"]')!;
+    expect(row.getAttribute("aria-label")).toBe("Aggiungi una riga");
+    expect(column.getAttribute("aria-label")).toBe("Aggiungi una colonna");
+    for (const button of [row, column]) {
+      expect(button.type).toBe("button");
+      expect(button.tabIndex).toBe(-1);
+      // Il segno, non le parole: l'icona «plus» della shell o, qui dove la
+      // shell non l'ha registrata, il «+» scritto.
+      expect(button.querySelector('svg[data-icon="plus"]') !== null || button.textContent === "+").toBe(true);
+    }
   });
 
   it("smontata non lascia ascoltatori vivi", () => {
