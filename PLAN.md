@@ -1457,7 +1457,7 @@ nelle due luci, a 700 px e al telefono; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/comments; cargo nextest run -p fub-host
 settings
-Stato: [~] PR #464 (feat/commenti-margine @ 36a8b8031, 2026-11-17, CI completa in corso); 9 scene nuove, baseline dal runner (corsa 44033608394) guardate; scostamenti in DECISIONS (2026-11-17)
+Stato: [x] in main con #464 (2026-11-17; contrasto dei pallini e fuoco del primo commento corretti in PR); 9 scene nuove, baseline dal runner (corsa 44033608394) guardate; scostamenti in DECISIONS (2026-11-17)
 
 ## T23 · La battuta nei 4 ms
 
