@@ -44,7 +44,7 @@ import { FORMAT_ICON, formatKindOf, formatTagOf } from "../ui/format-kind";
 import { craftServed } from "../state/craft-previews";
 import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
-import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { closeContextMenu, pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
@@ -181,6 +181,13 @@ export function mountExplorer(lifetime: Lifetime): void {
   sortButtonEl.replaceChildren(iconEl("sort") ?? "");
   lifetime.listen(newNoteEl, "click", () => void newNote());
   lifetime.listen(sortButtonEl, "click", () => {
+    // Il secondo clic sul pulsante chiude il menu che ha aperto (IMP-006):
+    // riaprirlo chiudeva il vecchio, che rimetteva `aria-expanded` a «false»
+    // sopra un menu nuovo e aperto.
+    if (sortButtonEl.getAttribute("aria-expanded") === "true") {
+      closeContextMenu();
+      return;
+    }
     sortButtonEl.setAttribute("aria-expanded", "true");
     showContextMenu(sortButtonEl, sortItems(), {
       label: t("explorer.sort"),
@@ -308,6 +315,9 @@ export function mountExplorer(lifetime: Lifetime): void {
     run: () => setSort("modified-old"),
   });
   treeArrows(lifetime);
+  // Prima della scelta multipla, che ascolta i clic sullo stesso albero.
+  primaryClicksOnly(lifetime, fileListEl);
+  primaryClicksOnly(lifetime, pinnedListEl);
   wireRootDropTarget(lifetime);
   wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
@@ -332,8 +342,8 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
-  // «Tutte le note» sta subito sopra l'albero, sotto la barra della scelta
-  // multipla, che si è appena messa davanti all'albero.
+  // «Tutte le note» sta subito sopra l'albero; la barra della scelta multipla
+  // sta subito sotto.
   fileListEl.before(allTitleEl);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
@@ -359,8 +369,14 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(on("documents", () => filter?.stale()));
   lifetime.add(on("vault", () => filter?.hide()));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
-  // icone, pin e ordine non passano dal kernel.
-  lifetime.add(on("organization", renderFileList));
+  // icone, pin e ordine non passano dal kernel. Un'appuntata nuova sì: quali
+  // appuntate esistano lo dice il kernel (`view.existing`), e una nota appena
+  // appuntata non c'era nella domanda di prima, così la lista restava vuota fino
+  // al ridisegno dopo (IMP-009). Si chiede, e il giro ridisegna se è cambiato.
+  lifetime.add(on("organization", () => {
+    renderFileList();
+    if (state.meta.pinned.some((id) => !view.existing.has(id))) void refreshFromKernel();
+  }));
   lifetime.add(on("page-icons", renderFileList));
   lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
   lifetime.add(on("reveal-path", (path) => void revealPath(path, false)));
@@ -744,6 +760,30 @@ function roving(preferred?: string): void {
       if (li !== targetLi) li.tabIndex = -1;
     });
   targetLi.tabIndex = 0;
+}
+
+/// Solo il tasto sinistro apre, chiude e sceglie le righe (IMP-002).
+///
+/// WebKitGTK manda un `click` anche dopo il tasto centrale, e col `button` del
+/// sinistro: le righe, che ascoltano `click`, aprivano e chiudevano la cartella
+/// a ogni clic centrale. Chromium non lo manda. Il tasto di un clic si sa
+/// quindi dalla pressione che lo ha cominciato, e un clic cominciato da un altro
+/// tasto non arriva alle righe. Il centrale non fa niente: niente scorrimento
+/// automatico né incolla della selezione di X11 sopra l'albero.
+function primaryClicksOnly(lifetime: Lifetime, list: HTMLElement): void {
+  let pressed = 0;
+  lifetime.listen(list, "mousedown", (e) => {
+    pressed = e.button;
+    if (e.button === 1) e.preventDefault();
+  }, { capture: true });
+  const swallow = (e: MouseEvent): void => {
+    // `detail` 0: un clic dato da Invio o da `.click()`, che non ha tasti.
+    if (e.detail === 0 || (pressed === 0 && e.button === 0)) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  lifetime.listen(list, "click", swallow, { capture: true });
+  lifetime.listen(list, "auxclick", swallow, { capture: true });
 }
 
 /// Le frecce dentro l'albero (§12.4).

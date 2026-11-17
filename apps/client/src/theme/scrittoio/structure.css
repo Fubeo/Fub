@@ -323,6 +323,21 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* Le righe dell'albero e delle appuntate sono controlli, non testo: due o tre
+   clic aprono o rinominano, e il nome non resta evidenziato come una frase
+   scelta (IMP-004). WebKitGTK legge soltanto la proprietà col prefisso, e la
+   pelle non la può dare (il filtro dei temi la scarta): sta qui. Il campo della
+   rinomina, dentro la riga, resta un campo. */
+.tree-row {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tree-row input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 #titlebar-left,
 #titlebar-right {
   display: flex;

@@ -50,6 +50,19 @@ beforeEach(() => {
 afterEach(() => life.close());
 
 describe("scelta multipla dell'albero", () => {
+  it("la barra compare sotto l'albero: nessuna riga scappa da sotto il puntatore (IMP-010)", () => {
+    const bar = document.querySelector<HTMLElement>(".tree-selection")!;
+    // Prima di ogni riga non c'è niente che compaia: il primo Ctrl-clic non
+    // sposta la riga dopo, e il secondo Ctrl-clic la prende.
+    expect(list.previousElementSibling).toBeNull();
+    expect(list.nextElementSibling).toBe(bar);
+    click("b.md", { ctrlKey: true });
+    expect(bar.hidden).toBe(false);
+    click("c.md", { ctrlKey: true });
+    expect(sel.paths()).toEqual(["b.md", "c.md"]);
+    expect(bar.querySelector(".tree-selection-count")!.textContent).toBe("2 scelte");
+  });
+
   it("il tasto destro su una nota scelta con altre dà i gesti del gruppo, per tutte", async () => {
     expect(sel.menuFor("a.md"), "una nota sola ha il suo menu").toBeNull();
     click("a.md", { ctrlKey: true });

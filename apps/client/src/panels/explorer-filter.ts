@@ -129,7 +129,7 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
       if ("error" in read) {
         cached = null;
         const li = document.createElement("li");
-        li.className = "hit-path";
+        li.className = "muted";
         li.textContent = t("explorer.filter.failed", { reason: errorText(read.error) });
         list.replaceChildren(li);
         list.hidden = false;
@@ -140,7 +140,7 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
       const items: HTMLElement[] = hits.slice(0, shown).map(row);
       if (hits.length === 0) {
         const li = document.createElement("li");
-        li.className = "hit-path";
+        li.className = "muted";
         li.textContent = t("explorer.filter.none");
         items.push(li);
       } else if (hits.length > shown) {
