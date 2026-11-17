@@ -10,5 +10,6 @@ export const MATH: PartAnatomy = {
     { name: "math-symbols", states: [S("rest"), S("selected")], hooks: ["cm-fub-mx-symbols", "cm-fub-mx-symbol", "cm-fub-mx-symbol-glyph", "cm-fub-mx-symbol-name", "cm-fub-mx-symbol-code"] },
     { name: "math-palette", states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")], hooks: ["cm-fub-mx-palette", "cm-fub-mx-quick", "cm-fub-mx-tile", "cm-fub-mx-all", "cm-fub-mx-all-icon", "cm-fub-mx-full", "cm-fub-mx-find", "cm-fub-mx-find-icon", "cm-fub-mx-find-input", "cm-fub-mx-groups", "cm-fub-mx-group", "cm-fub-mx-searching", "cm-fub-mx-grid", "cm-fub-mx-none", "cm-fub-mx-tip", "cm-fub-mx-tip-name", "cm-fub-mx-tip-code", "cm-fub-mx-tip-quick"] },
     { name: "math-source", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["cm-fub-mx-row", "cm-fub-mx-more", "cm-fub-mx-palette-toggle", "cm-fub-mx-options", "cm-fub-mx-option", "cm-fub-mx-option-name", "cm-fub-mx-segments", "cm-fub-mx-segment"] },
+    { name: "math-error", states: [S("rest"), S("hover"), S("focused")], hooks: ["cm-fub-mx-error", "cm-fub-mx-error-text", "cm-fub-mx-error-fix"] },
   ],
 };
