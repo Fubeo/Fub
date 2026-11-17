@@ -3017,7 +3017,7 @@ KaTeX non spiega (una frase generica col punto); la lingua inglese.
 Fatto quando: un test per messaggio noto di KaTeX.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da de29166be di `integra/editor-1`, 2026-11-17)
 
 ## T65 · Formule: copia e incolla, Invio che allinea, le macro del vault
 
