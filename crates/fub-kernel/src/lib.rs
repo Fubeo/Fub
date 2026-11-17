@@ -137,4 +137,5 @@ pub use workspace::{
     PreparedDocumentBytesWrite, PreparedExplicitRename, PreparedExternalAssetRename,
     PreparedReadOnlyCommand, PreparedResourceOpen, PreparedResourceRead, PreparedTimerCursors,
     ReadsInFlight, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE,
+    UNDO_STALE_MANY, UNDO_STALE_ONE,
 };

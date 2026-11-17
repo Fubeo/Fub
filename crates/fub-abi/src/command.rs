@@ -1127,6 +1127,228 @@ impl PlannedEdit {
 }
 
 // ---------------------------------------------------------------------------
+// Il piano che si applica tutto o niente (A-10)
+// ---------------------------------------------------------------------------
+
+/// Un piano su **più documenti** da applicare **tutto o niente**.
+///
+/// È il fratello eseguibile di [`CommandPlan`]: quello si mostra a chi approva
+/// (ed è un record pubblicato della WIT, che non cresce), questo si consegna a
+/// [`WritePlan::apply`] perché lo scriva. Non attraversa né la WIT né l'IPC:
+/// vive dentro un comando, fra il calcolo delle modifiche e la loro scrittura.
+///
+/// Serve a chi scrive **due file con un annulla solo** — spostare un blocco in
+/// un'altra nota, sincronizzarlo, portarlo su una lavagna: una nota scritta e
+/// l'altra no è uno stato che nessuno ha chiesto. Le regole stanno in
+/// [`crate::rules::plan`]; in breve:
+///
+/// - prima di scrivere si controlla **tutto** (ogni revisione, ogni nome
+///   libero): se uno non passa non si scrive niente;
+/// - se una scrittura fallisce a metà, quelle già fatte si rimettono com'erano
+///   prima di tornare l'errore;
+/// - se anche il rimettere fallisce, la copia di prima va nei dati del plugin
+///   (sotto `.fub/`) e l'errore nomina i file e le copie.
+///
+/// Ogni documento compare **una volta sola**, con un'eccezione: dopo una
+/// [`Rename`](WriteStep::Rename) il nome nuovo si può modificare con una
+/// [`Edit`](WriteStep::Edit) che ha per base la revisione di prima (una
+/// rinomina non cambia i byte). Un documento creato nasce già col testo giusto:
+/// una modifica dopo una creazione è un piano scritto male, e si rifiuta.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WritePlan {
+    /// I passi, **nell'ordine in cui vanno scritti**.
+    pub steps: Vec<WriteStep>,
+}
+
+/// Un passo di un [`WritePlan`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum WriteStep {
+    /// Una modifica chirurgica, con la revisione su cui è stata calcolata.
+    Edit(PlannedEdit),
+    /// Un documento **nuovo**: se il nome è occupato non si scrive niente.
+    Create { doc: DocId, source: String },
+    /// Una rinomina, soltanto se `from` ha ancora la revisione `base` e `to`
+    /// è libero. Riscrive i link entranti come ogni rinomina del vault.
+    Rename {
+        from: DocId,
+        to: DocId,
+        base: crate::edit::Revision,
+    },
+}
+
+impl WritePlan {
+    pub fn new() -> Self {
+        WritePlan::default()
+    }
+
+    /// Un piano fatto solo di modifiche, per esempio gli `edits` di un
+    /// [`CommandPlan`] calcolato in simulazione.
+    pub fn of_edits(edits: Vec<PlannedEdit>) -> Self {
+        WritePlan {
+            steps: edits.into_iter().map(WriteStep::Edit).collect(),
+        }
+    }
+
+    pub fn edit(mut self, doc: DocId, edit: EditRequest) -> Self {
+        self.steps
+            .push(WriteStep::Edit(PlannedEdit::new(doc, edit)));
+        self
+    }
+
+    pub fn create(mut self, doc: DocId, source: impl Into<String>) -> Self {
+        self.steps.push(WriteStep::Create {
+            doc,
+            source: source.into(),
+        });
+        self
+    }
+
+    pub fn rename(mut self, from: DocId, to: DocId, base: crate::edit::Revision) -> Self {
+        self.steps.push(WriteStep::Rename { from, to, base });
+        self
+    }
+
+    /// I documenti che il piano nomina, in ordine e senza ripetizioni: è
+    /// l'elenco da mettere nel [`CommandPlan::docs`] della simulazione.
+    pub fn docs(&self) -> Vec<DocId> {
+        let mut docs: Vec<DocId> = Vec::new();
+        let mut push = |doc: &DocId| {
+            if !docs.contains(doc) {
+                docs.push(doc.clone());
+            }
+        };
+        for step in &self.steps {
+            match step {
+                WriteStep::Edit(planned) => push(&planned.doc),
+                WriteStep::Create { doc, .. } => push(doc),
+                WriteStep::Rename { from, to, .. } => {
+                    push(from);
+                    push(to);
+                }
+            }
+        }
+        docs
+    }
+
+    /// Scrive il piano tutto o niente. Vedi [`crate::rules::plan::apply`].
+    pub fn apply(
+        self,
+        host: &mut dyn crate::traits::HostApi,
+    ) -> Result<AppliedPlan, crate::rules::plan::PlanFailure> {
+        crate::rules::plan::apply(host, self)
+    }
+}
+
+/// Ciò che un [`WritePlan`] ha scritto, passo per passo e nello stesso ordine.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AppliedPlan {
+    pub steps: Vec<AppliedStep>,
+}
+
+/// Un passo scritto, con la revisione che il documento ha **adesso**.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AppliedStep {
+    Edited {
+        doc: DocId,
+        report: crate::edit::EditReport,
+    },
+    Created {
+        doc: DocId,
+        revision: crate::edit::Revision,
+    },
+    Renamed {
+        from: DocId,
+        to: DocId,
+        revision: crate::edit::Revision,
+    },
+}
+
+/// Un passo **strutturale** da disfare, che l'annullamento esprime con un
+/// comando: il contratto non ha un vocabolario di operazioni inverse
+/// ([`UndoStep`]), e gli id dei comandi li conosce chi li registra.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Reversal<'a> {
+    /// Il documento creato dal piano va nel cestino (mai distrutto).
+    Trash { doc: &'a DocId },
+    /// Il documento rinominato torna al nome di prima: `from` è il nome che ha
+    /// adesso, `to` quello che aveva.
+    Rename { from: &'a DocId, to: &'a DocId },
+}
+
+impl AppliedPlan {
+    /// Le modifiche fatte, documento per documento (per mettere il cursore o
+    /// dire quante sostituzioni).
+    pub fn edits(&self) -> impl Iterator<Item = (&DocId, &crate::edit::EditReport)> {
+        self.steps.iter().filter_map(|step| match step {
+            AppliedStep::Edited { doc, report } => Some((doc, report)),
+            _ => None,
+        })
+    }
+
+    /// L'annullamento del piano, **in un passo solo**.
+    ///
+    /// I passi vengono in quest'ordine, che non è un dettaglio:
+    ///
+    /// 1. per ogni documento una [`UndoStep::Edit`] — l'inverso della modifica,
+    ///    oppure una richiesta **senza edit** con la revisione che il piano ha
+    ///    lasciato a un documento creato o rinominato. Una richiesta vuota non
+    ///    scrive niente: è la guardia con cui l'annullamento si accorge che quel
+    ///    file è cambiato dopo;
+    /// 2. poi i passi strutturali, all'indietro, nella forma che `structural`
+    ///    sceglie (`notes.trash`, `notes.rename`…).
+    ///
+    /// Con le guardie davanti, il kernel controlla **ogni** revisione prima di
+    /// toccare un file ([`HostCommands::undo_last`](crate::traits::HostCommands::undo_last)):
+    /// se uno è cambiato dopo il piano, l'annullamento non fa niente e lo dice.
+    pub fn undo(
+        &self,
+        label: impl Into<Text>,
+        mut structural: impl FnMut(Reversal<'_>) -> UndoStep,
+    ) -> Undo {
+        let mut guards: Vec<UndoStep> = Vec::new();
+        let mut reversals: Vec<UndoStep> = Vec::new();
+        let mut edited: Vec<&DocId> = Vec::new();
+        for step in self.steps.iter().rev() {
+            if let AppliedStep::Edited { doc, report } = step {
+                edited.push(doc);
+                guards.push(UndoStep::Edit(PlannedEdit::new(
+                    doc.clone(),
+                    report.inverse(),
+                )));
+            }
+        }
+        for step in self.steps.iter().rev() {
+            match step {
+                AppliedStep::Edited { .. } => {}
+                AppliedStep::Created { doc, revision } => {
+                    guards.push(UndoStep::Edit(PlannedEdit::new(
+                        doc.clone(),
+                        EditRequest::new(revision.clone(), Vec::new()),
+                    )));
+                    reversals.push(structural(Reversal::Trash { doc }));
+                }
+                AppliedStep::Renamed { from, to, revision } => {
+                    // Un nome nuovo modificato dal piano ha già la sua guardia:
+                    // l'inverso della modifica porta la revisione di dopo.
+                    if !edited.contains(&to) {
+                        guards.push(UndoStep::Edit(PlannedEdit::new(
+                            to.clone(),
+                            EditRequest::new(revision.clone(), Vec::new()),
+                        )));
+                    }
+                    reversals.push(structural(Reversal::Rename { from: to, to: from }));
+                }
+            }
+        }
+        guards.extend(reversals);
+        Undo {
+            label: label.into(),
+            steps: guards,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Dove stanno i Text (§12.1)
 // ---------------------------------------------------------------------------
 
