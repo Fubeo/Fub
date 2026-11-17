@@ -480,10 +480,23 @@ fn removal(source: &str, start: usize, end: usize) -> (usize, usize) {
     (start, to)
 }
 
-/// La fine della sezione del titolo con lo slug `slug`: l'inizio del primo
+/// Il titolo che `asked` nomina: lo slug (è ciò che manda il dialogo), o il
+/// titolo com'è scritto, che dallo spazio comandi è ciò che una persona
+/// scrive. Il primo, se due titoli hanno lo stesso nome.
+fn heading_named(outline: &[Heading], asked: &str) -> Option<usize> {
+    outline
+        .iter()
+        .position(|heading| heading.slug == asked)
+        .or_else(|| {
+            let slug = heading_slug(asked);
+            outline.iter().position(|heading| heading.slug == slug)
+        })
+}
+
+/// La fine della sezione del titolo che `slug` nomina: l'inizio del primo
 /// titolo dopo di lui dello stesso livello o più alto, o la fine della nota.
 fn section_end(outline: &[Heading], slug: &str, len: usize) -> Option<(usize, usize)> {
-    let index = outline.iter().position(|heading| heading.slug == slug)?;
+    let index = heading_named(outline, slug)?;
     let level = outline[index].level;
     let end = outline[index + 1..]
         .iter()
@@ -712,12 +725,12 @@ fn plan_move(
     (start, end): (usize, usize),
 ) -> Result<Planned, PluginError> {
     let heading_text = |target: &Read| {
-        target
-            .model
-            .outline
-            .iter()
-            .find(|heading| Some(&heading.slug) == request.heading.as_ref())
-            .map(|heading| heading.text.clone())
+        let outline = &target.model.outline;
+        request
+            .heading
+            .as_deref()
+            .and_then(|asked| heading_named(outline, asked))
+            .map(|index| outline[index].text.clone())
             .unwrap_or_default()
     };
     if request.to == request.doc {

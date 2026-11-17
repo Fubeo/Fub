@@ -292,9 +292,10 @@ fn move_block_inside_the_same_note() {
 #[test]
 fn move_block_inside_the_same_note_under_an_earlier_heading() {
     let mut host = vault(&[("Progetto.md", DEST)]);
+    // Dallo spazio comandi si scrive il titolo com'è, non il suo slug.
     apply(
         &mut host,
-        json!({ "doc": "Progetto.md", "at": at(DEST, "Chiusa."), "to": "Progetto.md", "heading": "idee" }),
+        json!({ "doc": "Progetto.md", "at": at(DEST, "Chiusa."), "to": "Progetto.md", "heading": "Idee" }),
     );
     assert_eq!(
         text(&host, "Progetto.md"),
