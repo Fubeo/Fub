@@ -29,6 +29,13 @@ file in `src/` knows the bench exists, so keep it that way.
   and Enter can't accept a completion: pass `{ clock: false }` for that.
 - Don't edit files under `apps/client` while a bench runs: Vite reloads the
   page and the bench dies.
+- The bench serves the app's real CSP (from `crates/fub-app/tauri.conf.json`,
+  with a page nonce like Tauri's): no inline styles, no `eval`. `prepareScene`
+  fails on any `securitypolicyviolation` on an element of the page
+  (`window.__fubCsp` keeps them all). Pass Playwright predicates as functions,
+  not strings: a string predicate runs through `eval` and is refused. Add
+  probe CSS with a constructed sheet (`document.adoptedStyleSheets`), not
+  `addStyleTag`.
 - A UI ported from a plan prototype is also checked by numbers:
   `npm run bench:conformita` compares computed styles with the prototype's,
   piece by piece, through the map in `bench/conformita/` (how to add pieces and

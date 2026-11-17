@@ -13,6 +13,7 @@ import {
   mountPreferences,
   mountThemeBundle,
   validateThemeBundle,
+  mountedCss,
   declareThemeProfile,
   type ThemeBundle,
   type ThemeBundleManifest,
@@ -707,7 +708,7 @@ function loadCache(): void {
 export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void): void {
   if (lifetime.closed) return;
   const hadMountedTheme =
-    document.head.querySelector<HTMLStyleElement>('style[data-fub="foglio"]') !== null;
+    mountedCss("foglio") !== null;
   lifetime.add(() => {
     applyGeneration++;
     selectionGeneration++;

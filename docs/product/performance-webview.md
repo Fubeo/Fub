@@ -1,8 +1,8 @@
 # Il disegno nella WebView
 
 > **Ambito:** quanto costa a WebKit, nell'app vera, disegnare una battuta
-> nelle note Markdown: le regole che tengono il lavoro dentro il foglio e le
-> misure prima e dopo. Il lavoro di CodeMirror fino al layout sta in
+> nelle note Markdown e gli elenchi lunghi delle viste: le regole che tengono
+> il lavoro dentro il foglio e fuori dal DOM, e le misure prima e dopo. Il lavoro di CodeMirror fino al layout sta in
 > [La battuta](performance-budget.md#la-battuta).
 
 Il [banco della battuta](performance-budget.md#la-battuta) misura il lavoro
@@ -45,9 +45,14 @@ alto:
 | lunga | Live | 30 · 50, 35 · 47 (10–16) | 30 · 43, 26 · 51 (3–20) |
 | lunga | Blocchi | 48 · 80, 34 · 53 (9–12) | 29 · 41, 27 · 41 (7–12) |
 
-WebKitGTK disegna a 60 Hz anche su schermi più veloci, quindi un fotogramma
-dura almeno 16,7 ms. La prima marcatura del correttore (`proof.ts`) nel tratto
-appena visibile costa ancora un fotogramma da circa 60 ms.
+Lo schermo di questa misura va a 60 Hz, quindi un fotogramma dura almeno
+16,7 ms. Su NVIDIA anche uno schermo più veloce non accorcia molto il
+fotogramma: col vblank emulato il rAF segue lo schermo, ma WebKitGTK di
+Debian passa i fotogrammi in memoria condivisa e ne consegna al più 54 al
+secondo ([perché](../architecture/desktop-webview.md#il-tetto-dei-60-hz-di-webkitgtk),
+[misure](../misure/2026-11-17-linux-vblank-emulato.md)). La prima marcatura
+del correttore (`proof.ts`) nel tratto appena visibile costa ancora un
+fotogramma da circa 60 ms.
 
 ## Dopo il salvataggio
 
@@ -90,6 +95,48 @@ thread e fotogramma più lungo in ms, carico medio a un minuto fra parentesi:
 
 «Prima» è `2352d9b61`. Un blocco è un giro di `setTimeout(0)` in ritardo di
 oltre 40 ms; dopo il salvataggio non ne resta nessuno. La view dei
-collegamenti resta grande da disegnare la prima volta (una riga per rimando, in
-`crates/fub-features/src/backlinks.rs`): costa all'apertura, non a ogni
-salvataggio.
+collegamenti resta grande da calcolare e da mandare (una riga per rimando, in
+`crates/fub-features/src/backlinks.rs`); il disegno si ferma alle prime 200
+voci (vedi [Gli elenchi lunghi nelle viste](#gli-elenchi-lunghi-nelle-viste)).
+
+## Gli elenchi lunghi nelle viste
+
+Un elemento nel DOM costa anche quando non si vede: ogni ricalcolo di stile,
+ogni fuoco spostato e ogni misura lo attraversano. Sulla nota lunga del banco
+la view dei collegamenti in uscita ha 4756 voci, circa 33 000 elementi nel
+cassetto destro, e la view resta montata anche a cassetto chiuso. Con quella
+nota aperta aprire il cassetto costava circa 300 ms di lavoro sincrono più un
+fotogramma da 800 ms, chiuderlo un blocco da 600 ms, e la barra laterale, il
+menu contestuale e il binario 20–80 ms per gesto invece di 2–6.
+
+La regola: **un `list` di una view disegna al più 200 voci** (`LIST_PAGE` in
+`ui/node.ts`). Le altre restano nel nodo e non entrano nel DOM; in coda
+all'elenco una riga «Mostra altre N · T in tutto» (`.ui-list-more`, una voce
+dell'elenco per le tecnologie assistive) ne aggiunge altre 200 per clic. Le
+voci chieste restano mostrate quando la view si ridisegna (un salvataggio), la
+riga non si sposta e tiene il fuoco; quando le voci finiscono il fuoco passa
+alla prima voce nuova. La guardia è `node.test.ts` («un elenco lungo mostra
+una pagina di voci»). Il provider continua a mandare l'elenco intero: la
+soglia è del disegno, non del contratto.
+
+Misura con la sonda sull'ispettore remoto di WebKit nell'app vera,
+pc-debian-di-fub, 17 novembre 2026, «prima» = `c9a346bae`; nota lunga aperta
+(5000 righe con rimandi), finestra stretta (il cassetto destro è un
+cassetto); fotogramma più lungo e blocco massimo del thread in ms, carico
+medio a un minuto fra parentesi. La serie completa a giri alternati sta nella
+ricetta del ramo.
+
+| Gesto | Prima: fotogramma · blocco | Dopo: fotogramma · blocco |
+|---|---:|---:|
+| cassetto destro, tre aperture e chiusure | 835 · 651 (2,0) | 44 · 73 (3,5) |
+| cassetto destro, un'apertura e chiusura | 33 · 561 (2,1) | 42 · 53 (3,3) |
+| barra laterale ×6 | 82 · 75 (2,1) | 25 · 26 (3,1) |
+| menu contestuale ×5 | 84 · 81 (2,0) | 44 · 27 (3,5) |
+| binario, sei pannelli ×2 | 79 · 98 (2,0) | 22 · 21 (3,6) |
+
+WebKitGTK disegna a 60 Hz anche su uno schermo a 180 Hz, quindi un
+fotogramma dura almeno 16,7 ms. Restano, senza la nota lunga: la prima
+apertura del grafo nel binario (un blocco da circa 120 ms, una volta per
+sessione), l'apertura del lanciatore (circa 38 ms sincroni), quella di un
+menu (11–28 ms), e un fotogramma da 30–40 ms a ogni cambio di zoom o di
+accento, che ricalcolano lo stile di tutta la pagina.

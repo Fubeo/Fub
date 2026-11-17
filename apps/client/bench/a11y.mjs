@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { modalComboboxGap } from "./a11y-rules.mjs";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
-import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
+import { openStage, openPage, prepareScene, assertCsp, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
 /// ogni violazione fuori dal debito resta bloccante e viene riportata.
 const DEBT = [
@@ -125,9 +125,22 @@ async function aScene(page, scene, light, base, axeSource) {
   // Lo script resta nella pagina fra una scena e l'altra, ma non si usa mai
   // una configurazione precedente: ogni passata parte dal documento corrente.
   const hasAxe = await page.evaluate(() => Boolean(window.axe));
-  if (!hasAxe) await page.addScriptTag({ content: axeSource });
+  // Valutato come espressione e non con `addScriptTag`: un `<script>` in linea
+  // la CSP del banco (quella dell'app) lo rifiuta.
+  if (!hasAxe) await page.evaluate(axeSource);
 
   await paperUnderText(page);
+  // Anche ciò che il banco aggiunge per misurare passa dalla CSP: un rifiuto
+  // qui cambierebbe la misura senza dirlo.
+  try {
+    await assertCsp(page);
+  } catch (e) {
+    await removePaper(page);
+    row.outcome = OUTCOMES.unstable;
+    row.reason = e.message.replace(/:?\n\s*/g, " — ");
+    console.error(`✗ ${scene.id} (${light}): ${row.reason}`);
+    return row;
+  }
   // Nessuna selezione manuale: una nuova regola axe applicabile deve diventare
   // senza che questo file debba essere aggiornato a mano.
   const outcome = await page.evaluate(
@@ -140,10 +153,7 @@ async function aScene(page, scene, light, base, axeSource) {
       }),
   );
 
-  await page.evaluate(() => {
-    document.getElementById("bench-carta")?.remove();
-    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
-  });
+  await removePaper(page);
 
   const count = (group) => group.reduce((n, r) => n + r.nodes.length, 0);
   row.examined =
@@ -193,8 +203,8 @@ async function aScene(page, scene, light, base, axeSource) {
 /// sopra, col colore che ha davvero: ciò che si vede non cambia, e axe confronta
 /// il testo con la carta vera invece di arrendersi.
 async function paperUnderText(page) {
+  await removePaper(page);
   await page.evaluate(() => {
-    document.getElementById("bench-carta")?.remove();
     const rules = [".pane::before, .pane::after { background: transparent !important; }"];
     document.querySelectorAll(".pane").forEach((pane, index) => {
       const paper = getComputedStyle(pane, "::before").backgroundColor;
@@ -202,10 +212,25 @@ async function paperUnderText(page) {
       pane.dataset.benchCarta = String(index);
       rules.push(`.pane[data-bench-carta="${index}"] > :not(.pane-tabs) { background-color: ${paper} !important; }`);
     });
-    const style = document.createElement("style");
-    style.id = "bench-carta";
-    style.textContent = rules.join("\n");
-    document.head.append(style);
+    // Un foglio costruito, non un `<style>`: senza il nonce della pagina la
+    // CSP del banco lo rifiuterebbe in silenzio, e axe tornerebbe a vedere lo
+    // pseudo-elemento invece della carta (e a tacere sul contrasto del foglio).
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(rules.join("\n"));
+    Object.defineProperty(window, "__benchCarta", { value: sheet, configurable: true });
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  });
+}
+
+/// Toglie la carta messa da `paperUnderText`.
+async function removePaper(page) {
+  await page.evaluate(() => {
+    const sheet = window.__benchCarta;
+    if (sheet !== undefined) {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((existing) => existing !== sheet);
+      delete window.__benchCarta;
+    }
+    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
   });
 }
 

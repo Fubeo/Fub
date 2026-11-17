@@ -354,6 +354,13 @@ ricetta. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
 dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
+`theme/loader.ts` monta gli strati del tema (caratteri, foglio, pelli,
+preferenze, frammenti) come fogli costruiti in `document.adoptedStyleSheets`,
+non come elementi `<style>`, che la CSP rifiuterebbe: un foglio per canale,
+nell'ordine dichiarato, sostituiti tutti insieme; le `@font-face` diventano
+`FontFace` in `document.fonts`. Ordine, cascata e caratteri:
+[Gli stili e la CSP](../reference/styles-and-csp.md#il-caricatore-del-tema).
+
 ### Comportamenti della shell
 
 Avvisi, scrittura, menu delle modalità, tasto destro negli editor, ricerca,
@@ -418,6 +425,8 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - listener globali senza owner;
 - ruoli del tema scritti sull'elemento negli editor, oltre l'elenco delle eccezioni
   (`check-inline-theme.mjs`);
+- un `<style>` creato da uno script o uno `style` scritto come markup, che la
+  CSP rifiuterebbe (`check-inline-styles.mjs`);
 - attese concorrenti senza il primitivo di cancellazione;
 - mirror TypeScript non aggiornati;
 - parole del codice nei testi italiani dell'interfaccia: il glossario in
