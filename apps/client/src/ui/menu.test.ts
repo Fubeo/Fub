@@ -171,6 +171,31 @@ describe("tastiera e fuoco del menu", () => {
     expect(document.activeElement, "e la freccia su va all'ultima").toBe([...again.querySelectorAll("[role=menuitem]")][1]);
   });
 
+  it("aprendosi sposta il fuoco una volta sola, dal puntatore e dalla tastiera", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      // In WebKit ogni `focus()` ricalcola lo stile della pagina: la trappola
+      // metteva il fuoco sulla prima voce e il menu lo rimetteva subito dove
+      // voleva lui, due ricalcoli nel fotogramma del clic.
+      showContextMenu(clickEvent(), [{ label: "Prima", run: () => {} }, { label: "Seconda", run: () => {} }], { pointer: true });
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(document.getElementById("context-menu"));
+      closeContextMenu();
+      vi.runAllTimers();
+      expect(document.activeElement, "il fuoco torna da dove era partito").toBe(opener);
+
+      focus.mockClear();
+      showContextMenu(clickEvent(), [{ label: "Prima", run: () => {} }, { label: "Seconda", run: () => {} }], { pointer: false });
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(document.activeElement?.textContent).toContain("Prima");
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   it("attiva una sola volta e restituisce il fuoco anche chiudendo con Escape", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);

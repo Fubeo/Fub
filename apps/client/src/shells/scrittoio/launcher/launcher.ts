@@ -962,8 +962,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     document.body.append(layer);
     // La trappola è quella della shell, con la sua pila: Esc chiude solo la
     // superficie in cima, e un Tab partito da fuori rientra nel campo invece
-    // di camminare sulla pagina sotto il velo.
-    life.add(trapFocus(surface, close));
+    // di camminare sulla pagina sotto il velo. Il fuoco va nel campo, una
+    // volta sola, qui sotto.
+    life.add(trapFocus(surface, close, { moveFocus: false }));
     pill?.setAttribute("aria-expanded", "true");
     closeOpen = close;
     switchOpen = (next, asked) => {
