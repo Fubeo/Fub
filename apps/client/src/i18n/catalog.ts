@@ -2756,6 +2756,12 @@ export const IT = { // --- la scocca -------------------------------------------
 "views.list_more": "Mostra altre {count} · {total} in tutto",
 "views.action_failed":
   "L'azione «{action}» non è andata a buon fine ({reason}): quello che vedi è di prima.",
+// La riga di comandi di un riquadro della Scrivania (`ui/desk.ts`).
+"desk.grip": "Sposta «{title}»",
+"desk.grip.hint": "Trascina, o Ctrl Maiusc ↑↓",
+"desk.up": "Sposta «{title}» su",
+"desk.down": "Sposta «{title}» giù",
+"desk.hide": "Togli «{title}» dalla Scrivania",
 "commands.list_failed":
   "L'elenco dei comandi non è arrivato ({reason}): la palette è vuota e le scorciatoie dichiarate non rispondono.",
 "vault.partial":
@@ -6678,6 +6684,11 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "views.list_more": "Show {count} more · {total} in all",
 "views.action_failed":
   "The «{action}» action did not go through ({reason}): what you see is from before.",
+"desk.grip": "Move “{title}”",
+"desk.grip.hint": "Drag, or Ctrl Shift ↑↓",
+"desk.up": "Move “{title}” up",
+"desk.down": "Move “{title}” down",
+"desk.hide": "Remove “{title}” from the desk",
 "commands.list_failed":
   "The command list did not arrive ({reason}): the palette is empty and the declared shortcuts do not respond.",
 "vault.partial":

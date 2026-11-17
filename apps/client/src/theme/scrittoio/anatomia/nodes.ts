@@ -56,5 +56,9 @@ export const NODES: PartAnatomy = {
     },
     { name: "declarative-node-form", states: REST, hooks: ["ui-form"] },
     { name: "declarative-node-guest", states: REST, hooks: ["ui-html", "ui-custom", "ui-webview"] },
+    // La Scrivania nel riquadro: i riquadri, quello in mano e quello su cui cadrebbe.
+    { name: "desk", states: [S("rest"), S("dragging")], hooks: ["pane-view", "ui-stack", "ui-heading", "ui-custom", "ui-text"] },
+    // La riga di comandi di un riquadro (`ui/desk.ts`).
+    { name: "desk-commands", states: INTERACTIVE, hooks: ["desk-commands", "desk-grip", "desk-step", "desk-hide", "desk-down"] },
   ],
 };

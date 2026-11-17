@@ -455,6 +455,26 @@ export const SCENE = onPage("shell", [
       await waitForGraphToSettle(page);
     },
   },
+  // **La Scrivania** (T40), da `bench/desk-scene.ts`: i cinque riquadri, i
+  // riquadri senza niente da dire con la Base che non c'è più, e tutti tolti.
+  {
+    id: "scrivania",
+    title: "Scrivania: appuntate, recenti, compiti di oggi, una Base e il mese",
+    query: "scrivania=1&base=1",
+    prepare: openDesk,
+  },
+  {
+    id: "scrivania-vuota",
+    title: "Scrivania: nessuna appuntata, niente da fare, la Base che non c'è più",
+    query: "scrivania=vuota",
+    prepare: openDesk,
+  },
+  {
+    id: "scrivania-nessuno",
+    title: "Scrivania: tutti i riquadri tolti, e «Rimetti:»",
+    query: "scrivania=nessuno",
+    prepare: openDesk,
+  },
   {
     id: "focus",
     title: "Il foglio a fuoco e la cornice Darwin",
@@ -2659,6 +2679,13 @@ async function openLentDocx(page) {
     await page.waitForSelector('.pane.focus .sheet-notice[data-notice="lent"]');
   });
   await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
+  await page.mouse.move(0, 0);
+}
+
+/// Apre la Scrivania dal binario e aspetta i suoi riquadri (o il vuoto).
+async function openDesk(page) {
+  await page.click('#views-ribbon .rail-btn-main[data-panel="desk"]');
+  await page.waitForSelector('.pane-view[data-view-id="desk"] :is(.desk-commands, .ui-empty-state)');
   await page.mouse.move(0, 0);
 }
 

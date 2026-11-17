@@ -167,6 +167,39 @@ monta la vista attraverso `apps/client/src/ui/embedded-views.ts`; la pastiglia �
 in `task-due.ts` (con `query-block.ts` per la Lettura e `livepreview.ts` per la
 Live).
 
+## La Scrivania
+
+La **Scrivania** è una pagina dell'area principale che mette insieme ciò che
+serve per cominciare la giornata. Si apre dallo spazio dei comandi
+(«Scrivania»), dal menu Vista e dal suo bottone nel binario a sinistra. È fatta
+di riquadri:
+
+- **Appuntate**: le note appuntate, nello stesso ordine della barra laterale;
+- **Recenti**: le ultime note cambiate, la più recente in cima;
+- **Compiti di oggi**: i compiti aperti che scadono oggi (`📅` col giorno di
+  oggi, vedi «La scadenza nel testo»), con la nota da cui vengono. Li trova la
+  ricerca: con la ricerca spenta il riquadro lo dice, e gli altri funzionano;
+- **Base**: una Base scelta dalla tendina del riquadro, mostrata intera. Se la
+  Base scelta viene spostata o cancellata, il riquadro dice quale era e ne fa
+  scegliere un'altra;
+- **Il mese**: il mese di oggi, con le settimane che cominciano dal primo
+  giorno della lingua scelta. Un giorno apre la sua nota del giorno, e la crea
+  se non c'è, come il calendario.
+
+Ogni riquadro si toglie con la sua ×, e torna con i bottoni di «Rimetti:» in
+fondo alla pagina. Un riquadro si sposta trascinandolo per la maniglia (i sei
+punti in testa), oppure con **Ctrl Maiusc ↑** e **Ctrl Maiusc ↓** quando il
+fuoco è nel riquadro; al tocco, dove non si trascina, in testa ci sono le
+frecce su e giù. In una finestra stretta i riquadri stanno in colonna.
+
+L'ordine e i riquadri tolti sono un'impostazione **del vault**
+(`desk.tiles`), e così la Base scelta (`desk.base`): due vault hanno due
+Scrivanie. Si vedono anche nelle impostazioni, nel gruppo «Scrivania».
+
+La pagina è dichiarata da `crates/fub-features/src/dashboard/desk.rs`, con la
+sua prova in `crates/fub-features/tests/dashboard_e2e.rs`; la maniglia, il
+trascinamento e i tasti li disegna la shell in `apps/client/src/ui/desk.ts`.
+
 ## Il componente
 
 «Compiti» è un componente di Fub, con la sua riga nella pagina **Componenti**

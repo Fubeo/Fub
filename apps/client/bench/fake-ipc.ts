@@ -87,6 +87,7 @@ import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from 
 import { baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
+import { deskCase, deskScene } from "./desk-scene";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -614,6 +615,10 @@ function view(
   };
 }
 
+/// La Scrivania delle scene `scrivania-*` (T40): vedi `bench/desk-scene.ts`.
+const DESK_CASE = deskCase(params.get("scrivania"));
+const DESK = DESK_CASE === null ? null : deskScene(DESK_CASE);
+
 const VIEWS: ViewSpec[] = [
   view("outline", "Struttura", "right_sidebar", "struttura", 0),
   view("backlinks", "Collegamenti", "right_sidebar", "backlink", 1),
@@ -624,6 +629,9 @@ const VIEWS: ViewSpec[] = [
   view("tags", "Tag", "left_sidebar", "tag", 0),
   view("graph", "Grafo", "main", "graph", 0),
   view("trash", "Cestino", "left_sidebar", "trash", 1),
+  // La Scrivania solo nelle sue scene: nelle altre il binario resta quello
+  // delle loro foto.
+  ...(DESK === null ? [] : [view("desk", "Scrivania", "main", "dashboard", 1)]),
 ];
 
 /// Un `CommandSpec` di lettura, che è la forma della gran parte.
@@ -2107,6 +2115,7 @@ export const api: typeof host.module.api = {
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
   listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),
   renderView: (view, instance, params) => {
+    if (view === "desk" && DESK) return Promise.resolve(DESK.tree(instance ?? "main"));
     const tree = treeOf(view);
     return tree ? Promise.resolve(tree) : behind.renderView(view, instance, params);
   },
@@ -2117,6 +2126,7 @@ export const api: typeof host.module.api = {
   // segna scelto il titolo a cui si è andati, e il banco del moto vede la
   // sagoma della voce scelta scorrere.
   viewAction: (view, instance, params, action, payload, fields) => {
+    if (view === "desk" && DESK) return Promise.resolve({ kind: "replace" as const, root: DESK.act(instance ?? "main", action, payload) });
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
     const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
