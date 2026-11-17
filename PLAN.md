@@ -2090,7 +2090,7 @@ Fatto quando: test con `MemoryHost` coi fusi; il permesso spento non
 notifica; `cargo deny check` verde; la build senza la feature `tasks` verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features tasks;
 cargo nextest run -p fub-format-markdown; cargo deny check
-Stato: [~] in corso (coder, 2026-11-17)
+Stato: [~] fatto dal coder (41f23f172, 2026-11-17), in coda per `integra/editor-1`; notify-rust fermo a =4.18.0 per il tetto delle librerie doppie su Windows
 
 ## T36 · I promemoria nell'editor
 
@@ -2872,7 +2872,7 @@ Fatto quando: scene di un flusso per stile nelle due luci, confrontate a
 occhio con la riga 900 e descritte in `Stato`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/mermaid-styles.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da `integra/editor-1`, 2026-11-17)
 
 ## T60 · Formule: la formula che si modifica toccandola
 
