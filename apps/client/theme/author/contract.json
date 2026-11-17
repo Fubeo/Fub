@@ -1648,6 +1648,12 @@
     "ui-form",
     "ui-html",
     "ui-webview",
+    "pane-view",
+    "desk-commands",
+    "desk-grip",
+    "desk-step",
+    "desk-hide",
+    "desk-down",
     "tab-view",
     "graph-viewport",
     "graph-count",
@@ -3679,6 +3685,12 @@
     "ui-form": "cornice",
     "ui-html": "cornice",
     "ui-webview": "cornice",
+    "pane-view": "cornice",
+    "desk-commands": "cornice",
+    "desk-grip": "cornice",
+    "desk-step": "cornice",
+    "desk-hide": "cornice",
+    "desk-down": "cornice",
     "tab-view": "cornice",
     "graph-viewport": "cornice",
     "graph-count": "cornice",
@@ -8133,6 +8145,39 @@
       ]
     },
     {
+      "name": "desk",
+      "part": "nodes",
+      "hooks": [
+        "pane-view",
+        "ui-stack",
+        "ui-heading",
+        "ui-custom",
+        "ui-text"
+      ],
+      "states": [
+        "rest",
+        "dragging"
+      ]
+    },
+    {
+      "name": "desk-commands",
+      "part": "nodes",
+      "hooks": [
+        "desk-commands",
+        "desk-grip",
+        "desk-step",
+        "desk-hide",
+        "desk-down"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "pane-tabs",
       "part": "graph",
       "hooks": [
@@ -10785,10 +10830,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2029,
+    "hooks": 2035,
     "state_names": 7,
-    "assigned_states": 937,
-    "components": 276,
+    "assigned_states": 944,
+    "components": 278,
     "preference_tokens": 191
   }
 }

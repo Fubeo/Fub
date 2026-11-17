@@ -18437,6 +18437,155 @@ h6.ui-heading {
   }
 }
 
+/* ── La Scrivania ────────────────────────────────────────────────────────── */
+
+/* La Scrivania (E17) è una view dell'area principale fatta di riquadri: il
+   riquadro della finestra le dà tutta l'altezza, e lei scorre da sé. I
+   riquadri stanno in una pila in riga che va a capo: due colonne quando ci
+   stanno, una sola in una finestra stretta (700 px), e quello rimasto solo
+   in fondo prende la riga intera. */
+.pane-view[data-view-id="desk"] > .ui-stack {
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-7) var(--space-8);
+}
+.pane-view[data-view-id="desk"] [data-key="desk-board"] {
+  align-items: flex-start;
+}
+
+/* Un riquadro è un foglio sulla scrivania: il fondo del foglio, un filetto e
+   gli angoli dei fogli. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack {
+  flex: 1 1 22rem;
+  min-width: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  transition: box-shadow var(--duration-state) var(--ease), opacity var(--duration-state) var(--ease);
+}
+/* Una Base è una tabella: prende la riga intera, e le sue colonne ci stanno. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > [data-key="desk:base"] {
+  flex-basis: 100%;
+}
+/* In una finestra stretta i riquadri stanno in colonna, uno sotto l'altro,
+   anche quando due da 22rem ci starebbero a fatica. */
+@media (max-width: 760px) {
+  .pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack {
+    flex-basis: 100%;
+  }
+  .pane-view[data-view-id="desk"] > .ui-stack {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+}
+/* Il riquadro in mano si spegne; quello su cui cadrebbe prende l'accento. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack[data-desk-held] {
+  opacity: 0.5;
+}
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack[data-desk-drop] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* La testata: il titolo a sinistra, i comandi a destra, sulla stessa riga
+   anche quando il titolo è lungo. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack > .ui-stack[data-dir="row"] {
+  flex-wrap: nowrap;
+}
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack > .ui-stack[data-dir="row"] > .ui-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il riquadro «Base» porta una Base intera: niente margini doppi. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack > .ui-custom[data-ns="fub:base"] {
+  min-width: 0;
+}
+
+/* «Rimetti:» e i riquadri tolti, in fondo. */
+.pane-view[data-view-id="desk"] [data-key="desk-hidden"] > .ui-text {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+/* La riga di comandi di un riquadro (`ui/desk.ts`): la maniglia da
+   trascinare, sù e giù dove non c'è un puntatore, «Togli». Bottoni piccoli e
+   grigi, come quelli di una testata di cassetto; sotto il puntatore la
+   velatura. */
+.desk-commands {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.desk-grip,
+.desk-step,
+.desk-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+}
+.desk-commands svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.desk-grip {
+  cursor: grab;
+}
+.desk-grip:active {
+  cursor: grabbing;
+}
+.desk-grip:hover,
+.desk-step:hover:not(:disabled),
+.desk-hide:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+.desk-step:disabled {
+  opacity: 0.4;
+}
+.desk-down svg {
+  rotate: 180deg;
+}
+.desk-grip:focus-visible,
+.desk-step:focus-visible,
+.desk-hide:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* Con un puntatore si trascina, e sù e giù non servono; al tocco il
+   trascinamento non c'è, e ci sono loro. */
+.desk-step {
+  display: none;
+}
+@media (pointer: coarse) {
+  .desk-step {
+    display: inline-flex;
+  }
+  .desk-grip {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack[data-desk-drop] {
+    outline: 2px solid Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack {
+    transition: none;
+  }
+}
+
 /* ── skin/graph.css ─────────────────────────────────────────────────────── */
 
 /* Il grafo. */

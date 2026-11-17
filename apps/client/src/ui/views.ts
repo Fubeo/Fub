@@ -61,6 +61,11 @@ import { on } from "../state/store";
 import { pageName } from "../rules/mirrored";
 import { embeddedViewsDiscovered, setEmbeddedViewHost } from "./embedded-views";
 import { dropOffersChanged, offerDropTargets, type SurfaceDropDocument, type SurfaceDropOffer, type SurfaceRect } from "../editors/core/registry";
+import { registerDeskRenderer } from "./desk";
+
+// I riquadri della Scrivania si trascinano e si spostano da tastiera: la riga
+// di comandi che la view dichiara (`fub:desk-tile`) la disegna `ui/desk.ts`.
+registerDeskRenderer();
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -294,6 +299,10 @@ export async function mountViewInPane(
   const already = mounted.get(id);
   if (!already || already.container !== container) {
     if (already) unmountMounted(id, already);
+    // Quale view il contenitore mostra, come `.declared-view` nelle barre: la
+    // pelle ci appende ciò che una view sola vuole (lo scorrere e il margine
+    // della Scrivania).
+    container.dataset.viewId = view;
     // L'esemplare **è il riquadro**: è la stessa identità che il `ViewContext`
     // porta di là dal confine (`pane`), quindi lo stato di vista di una view
     // aperta in due riquadri si separa esattamente dove l'utente vede due cose.
@@ -331,6 +340,7 @@ export function unmountViewFromPane(view: string, pane: string): void {
   const mountedView = mounted.get(id);
   if (!mountedView) return;
   unmountMounted(id, mountedView);
+  if (mountedView.container.dataset.viewId === view) delete mountedView.container.dataset.viewId;
 }
 
 // Una view dell'area principale si monta anche dentro un documento (il recinto

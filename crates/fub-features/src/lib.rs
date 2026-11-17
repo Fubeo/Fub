@@ -86,6 +86,9 @@ pub mod componenti;
 pub mod dashboard;
 #[cfg(feature = "draw")]
 pub mod draw;
+// I compiti che scadono in un giorno: la pagina del giorno e la Scrivania.
+#[cfg(any(feature = "template", feature = "dashboard"))]
+mod due_tasks;
 // Ogni feature ne usa una parte, e una build parziale lascia spento il resto.
 #[allow(dead_code)]
 mod formats;
@@ -150,7 +153,10 @@ pub use commands::{
     VAULT_UNDO,
 };
 #[cfg(feature = "dashboard")]
-pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
+pub use dashboard::{
+    DashboardView, DASHBOARD_ID, DASHBOARD_VIEW, DESK_BASE_KEY, DESK_TILES_KEY, DESK_TILE_NS,
+    DESK_VIEW,
+};
 #[cfg(feature = "draw")]
 pub use draw::{
     AnnotatedPdfExport, DrawCommands, DrawioExport, ExcalidrawExport, JpegExport, PdfExport,
