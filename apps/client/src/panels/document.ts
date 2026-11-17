@@ -653,6 +653,9 @@ function sameControlForClickRuns(strip: HTMLElement): void {
   let first: Element = strip;
   strip.addEventListener("mousedown", (event) => {
     if (event.detail <= 1) first = controlOf(event.target);
+    // La seconda pressione su un altro controllo non sceglie nemmeno la
+    // parola che le capita sotto.
+    else if (controlOf(event.target) !== first) event.preventDefault();
   }, { capture: true });
   const guard = (event: MouseEvent): void => {
     if (event.detail <= 1 || controlOf(event.target) === first) return;

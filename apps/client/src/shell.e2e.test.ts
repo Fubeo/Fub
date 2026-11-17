@@ -3215,7 +3215,11 @@ describe("i tasti del mouse sulla striscia delle schede", () => {
     await settle();
     expect(names()).toEqual(["Benvenuto", "Riunione"]);
     expect(selected()).toBe("Riunione");
-    // Il secondo clic della serie cade sulla vicina, sul «+» o sul vuoto.
+    // Il secondo clic della serie cade sulla vicina, sul «+» o sul vuoto, e
+    // non sceglie la parola che ha sotto.
+    const second = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 2 });
+    tabs()[0]!.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
     press(tabs()[0]!, 0, 2);
     const plus = document.querySelector(".pane .tab-new");
     if (plus) press(plus, 0, 2);
