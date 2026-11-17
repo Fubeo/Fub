@@ -40,6 +40,9 @@ describe("il suggerimento della shell", () => {
     expect(tooltip?.textContent).toBe("Apri la palette");
     expect(tooltip?.hidden).toBe(false);
     expect(button.getAttribute("aria-describedby")).toBe(tooltip?.id);
+    // Il riquadro visibile resta fuori dall'albero dell'accessibilità: la
+    // descrizione passa da `aria-describedby`, non da un secondo contenuto.
+    expect(tooltip?.getAttribute("aria-hidden")).toBe("true");
     dispose();
   });
 
