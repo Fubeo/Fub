@@ -254,6 +254,19 @@ export const VISTE = {
     },
     app: { scena: "base-calendario" },
   },
+  /// La linea del tempo della Base: il prototipo allo stesso passo con la
+  /// vista Linea del tempo scelta, l'app dalla scena della linea del tempo.
+  tempo: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Bacheca e calendario");
+        await page.click('#win .bview[data-bv="tempo"]');
+        await page.waitForSelector("#win .tl .tl-b");
+      },
+    },
+    app: { scena: "base-tempo" },
+  },
   /// La riga dei suggerimenti al centro della banda, con dei tasti scritti:
   /// il prototipo al primo passo, «A riposo» (i tasti della riga
   /// qualunque), l'app con una parola scelta (grassetto, corsivo, collega).
@@ -889,6 +902,53 @@ export const PEZZI = [
     prototipo: ".cal .ev.k-green",
     app: ".base-cal-event",
     proprieta: [...BASE, "display", "white-space", "text-overflow"],
+  },
+
+  // ── la linea del tempo della Base (T34) ─────────────────────────────────
+  // Il prototipo mostra otto settimane da metà ottobre a dicembre in quattro
+  // colonne, l'app otto settimane in otto: il fondo della traccia (le righe
+  // delle colonne) non si confronta, i pezzi sì.
+  {
+    id: "tempo.griglia",
+    vista: "tempo",
+    prototipo: ".tl",
+    app: ".base-tl",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "tempo.scala",
+    vista: "tempo",
+    prototipo: ".tl-a",
+    app: ".base-tl-axis",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "tempo.oggi",
+    vista: "tempo",
+    prototipo: ".tl-s .now",
+    app: ".base-tl-now",
+    proprieta: [...BASE, "white-space"],
+  },
+  {
+    id: "tempo.riga",
+    vista: "tempo",
+    prototipo: ".tl-r",
+    app: ".base-tl-row",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "tempo.nome",
+    vista: "tempo",
+    prototipo: ".tl-r > span",
+    app: ".base-tl-name",
+    proprieta: [...BASE, "white-space", "text-overflow"],
+  },
+  {
+    id: "tempo.barra",
+    vista: "tempo",
+    prototipo: ".tl-b.k-green",
+    app: '.base-tl-bar:not([data-inverted="true"]):not([data-clip-start="true"]):not([data-clip-end="true"])',
+    proprieta: [...BASE, "height", "top", "white-space"],
   },
 
   // ── la riga dei suggerimenti (T14): #383 ─────────────────────────────────

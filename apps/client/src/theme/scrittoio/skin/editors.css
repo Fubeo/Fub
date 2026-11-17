@@ -4277,6 +4277,7 @@ input.canvas-toolbar-item {
 .base-tl {
   min-width: 600px;
   padding: 6px 12px 14px;
+  line-height: 1.4;
 }
 .base-tl-axis,
 .base-tl-row {
