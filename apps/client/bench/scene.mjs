@@ -1254,6 +1254,61 @@ export const SCENE = onPage("shell", [
       },
     } : {}),
   })),
+  // I diagrammi (E26): a riposo e al passaggio soltanto il disegno, nessun
+  // controllo dentro la cornice; il menu del tasto destro; i cinque stili;
+  // uno stile che non esiste e un errore. Se dentro un diagramma c'è un
+  // pulsante, la scena è rossa.
+  ...[
+    ["diagramma-01-riposo", "diagramma", "Un diagramma in Scrittura, a riposo: soltanto il disegno, sulla pagina"],
+    ["diagramma-02-passaggio", "diagramma", "Col puntatore sul diagramma: nessun controllo dentro la cornice", "hover"],
+    ["diagramma-03-menu", "diagramma", "Il menu del tasto destro: stile, «Vale per», orientamento, azioni", "menu"],
+    ["diagramma-04-menu-stretta", "diagramma", "Il menu del tasto destro nella finestra di 700 px", "menu", { width: 700, height: 800 }],
+    ["diagramma-05-stili", "diagramma-stili", "I cinque stili, uno per diagramma: Armonia sulla pagina, gli altri sulla loro carta"],
+    ["diagramma-06-casi", "diagramma-casi", "Uno stile che non esiste (vale quello generale) e un diagramma con un errore"],
+  ].map(([id, live, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => {
+        const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+        return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+      });
+      // Mermaid scrive `style="font-family: …"` sul `<div>` dove misura
+      // (`appendDivSvgG`), e la CSP lo rifiuta: succede a ogni disegno, da
+      // prima di queste scene, dentro il contenitore fuori vista che
+      // `ui/mermaid.ts` toglie subito. Quelle violazioni si tolgono dal conto;
+      // ogni altra resta.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      // Il sorgente di un diagramma disegnato è nascosto, col suo «Copia»:
+      // conta ciò che si vede. Con un errore il sorgente c'è, ed è suo.
+      const controls = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram:not([data-state='error']) :is(button, figcaption)")]
+        .filter((node) => node.getClientRects().length > 0).length);
+      if (controls > 0) throw new Error(`un diagramma ha ${controls} controlli dentro la cornice`);
+      if (gesture !== "menu") return;
+      const box = await page.locator(".pane.focus .pane-editor .mermaid-diagram img").first().boundingBox();
+      if (!box) throw new Error("il diagramma non ha un disegno");
+      await page.mouse.click(box.x + box.width / 2, box.y + 24, { button: "right" });
+      await page.waitForSelector(".diagram-menu");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+    },
+    ...(gesture === "hover" ? {
+      hover: async (page) => {
+        await page.hover(".pane.focus .pane-editor .mermaid-diagram img");
+        const controls = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram *")]
+          .filter((node) => node.matches("button, [role='button'], [role='toolbar']") && node.getClientRects().length > 0).length);
+        if (controls > 0) throw new Error(`al passaggio il diagramma mostra ${controls} controlli`);
+      },
+    } : {}),
+  })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
   // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
   // segno nel testo nella finestra minima, la Lettura e il pannello «Commenti».

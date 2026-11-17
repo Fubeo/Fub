@@ -94,7 +94,7 @@ import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { DiagramLiveWidget, fenceBody } from "./diagram-live";
+import { DiagramLiveWidget, diagramBlockKeys, fenceBody } from "./diagram-live";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
@@ -3200,5 +3200,6 @@ export function livePreview(
     commentEditing(forms), commentCopy(forms),
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
     noteHolds,
+    diagramBlockKeys,
   ];
 }

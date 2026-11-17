@@ -101,13 +101,13 @@ luce del tema: **Armonia** (predefinito, derivato dai token del tema),
 **Acquerello** (pastelli su carta calda), **Aurora** (colori vivi e profondi),
 **Blueprint** (tavola tecnica su griglia) e **Inchiostro** (tratto sottile su
 avorio, una nota rossa). Lo stile generale è l'impostazione di macchina
-`appearance.diagram-style` e si cambia anche dal menu dello stile nella barra
-del diagramma. In Live lo stesso menu scrive o toglie in cima al recinto il
-commento Mermaid `%% stile: <stile>`, che vale soltanto per quel diagramma e
-che GitHub ignora; a mano vale anche `style:` con `harmony`, `watercolor` o
-`ink`. I font dello stile sono incorporati nell'SVG, perché un'immagine non vede
-i webfont della pagina. La barra offre anche **Esporta** (SVG copiato o
-salvato, PNG a risoluzione doppia) e **Schermo intero**, nella lightbox. Una
+`appearance.diagram-style`. Il diagramma non ha barra né pulsanti: stile,
+orientamento, sorgente, schermo intero, copia ed esportazione stanno nel menu
+del tasto destro, descritto in [I diagrammi](editor-diagrams.md). Il commento
+Mermaid `%% stile: <stile>` in cima al recinto (dopo l'eventuale frontmatter)
+vale soltanto per quel diagramma, e GitHub lo ignora; a mano vale anche
+`style:` con `harmony`, `watercolor` o `ink`. I font dello stile sono
+incorporati nell'SVG, perché un'immagine non vede i webfont della pagina. Una
 resa con lo stesso sorgente, stile e luce si riusa senza ridisegnare.
 
 Dentro un recinto `mermaid` ancora vuoto (righe vuote e commenti `%%` non

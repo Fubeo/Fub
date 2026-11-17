@@ -146,6 +146,37 @@ const COMMENTS = [
   "",
 ].join("\n");
 
+/// Un diagramma di flusso piccolo: un nodo, una scelta e una pillola, come le
+/// miniature del menu.
+const FLOW = ["flowchart TD", "  A[Prenota il treno] --> B{Posti liberi?}", "  B -->|sì| C([Parti])", "  B -->|no| D[Cambia giorno]"];
+const fence = (...lines: string[]) => ["```mermaid", ...lines, "```"].join("\n");
+
+const DIAGRAM_NOTE = [
+  "# Il viaggio",
+  "",
+  "Come si decide la partenza:",
+  "",
+  fence("---", "title: La partenza", "---", ...FLOW),
+  "",
+  "Il resto del piano segue.",
+].join("\n");
+
+const DIAGRAM_STYLES = ["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
+  .map((style) => `## ${style}\n\n${fence(`%% stile: ${style}`, "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])")}`)
+  .join("\n\n");
+
+const DIAGRAM_CASES = [
+  "Un diagramma con un errore mostra il sorgente:",
+  "",
+  fence("flowchart TD", "  A[Uno] --> --> B"),
+  "",
+  "Uno stile che non esiste vale come lo stile generale:",
+  "",
+  fence("%% stile: nebbia", "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])"),
+  "",
+  "Fine.",
+].join("\n");
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
@@ -287,6 +318,12 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "",
     "§",
   ].join("\n")),
+  // I diagrammi (E26): uno a riposo col titolo nel frontmatter, poi i cinque
+  // stili, uno per diagramma, e i casi limite (uno stile che non esiste, un
+  // errore). Il cursore resta fuori: si vede il disegno, non il sorgente.
+  diagramma: { text: DIAGRAM_NOTE, cursor: null },
+  "diagramma-stili": { text: DIAGRAM_STYLES, cursor: null },
+  "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

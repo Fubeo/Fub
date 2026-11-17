@@ -335,8 +335,7 @@ const INCHIOSTRO: Record<DiagramLight, Written> = {
 // ---------------------------------------------------------------------------
 
 /// Legge un token del tema montato già risolto in esadecimale, o `null`.
-/// `ground` è il fondo della cornice dei diagrammi (`--doc-fill-soft` sopra
-/// `--doc-bg`).
+/// `ground` è il fondo sotto i diagrammi senza carta: la pagina (`--doc-bg`).
 export type TokenReader = (token: string) => string | null;
 
 export const ARMONIA_TOKENS = [
