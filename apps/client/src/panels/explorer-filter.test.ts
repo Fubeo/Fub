@@ -146,6 +146,8 @@ describe("il campo sopra l'albero", () => {
     await type("citta");
     expect(rows()).toEqual([]);
     expect(document.querySelector(".search-results")!.textContent).toBe("Niente corrisponde al filtro: prova con meno parole.");
+    // Una frase che va a capo, non un percorso tagliato coi puntini.
+    expect(document.querySelector(".search-results > li")!.className).toBe("muted");
   });
 
   it("i documenti cambiati si richiedono, e un rifiuto si dice nell'elenco", async () => {
