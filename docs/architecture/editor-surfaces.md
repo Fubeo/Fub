@@ -31,7 +31,8 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md).
+Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md);
+una trasclusione viva ne ha una su un solo tratto ([superficie su un tratto](range-surface.md)).
 `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
@@ -255,34 +256,6 @@ La distinzione è motivata da [0190](../decisions/0190-sessioni-documento-e-undo
 e il confine di sicurezza della history nativa è precisato in
 [0199](../decisions/0199-history-nativa-e-gate-di-overlap.md); 0199 completa
 0190 senza sostituirla.
-
-### La superficie su un tratto
-
-Una superficie può mostrare soltanto un tratto della sessione: la sezione di
-un titolo o il blocco di un id, che una trasclusione viva modifica dove sta.
-`RangeSurface` (`apps/client/src/editors/core/range-surface.ts`) si apre con
-un'àncora (`#Titolo` o `#^id`), letta sul testo di adesso da
-`editors/core/section-anchor.ts` con le regole di `section_of` e `block_of`
-del kernel; le righe vuote prima del titolo dopo restano fuori. Si sottoscrive
-alla `DocumentSession` come un riquadro, con la sua identità, e le porta le
-modifiche della vista locale come `TextOperation` sul documento intero:
-buffer, revisione, coda, salvataggio e bozza restano della sessione, e i
-terminatori del file restano i suoi. La vista locale è un `TextEngine` col
-solo testo del tratto, collegato con `connect`: cursore, selezione e annulla
-sono suoi, e le modifiche degli altri le arrivano con `syncDoc`, fuori dalla
-sua cronologia.
-
-Il tratto si ritrova a ogni dato della sessione: il vecchio inizio passa per
-la mappa di posizione dell'operazione, poi l'àncora si rilegge vicino a lui e
-dentro il tratto mappato, così un titolo uguale altrove non lo sostituisce.
-Una modifica della superficie stessa sposta soltanto la fine, senza rileggere:
-ciò che la persona scrive non sparisce sotto il cursore. Gli stati sono
-`live`; `unanchored`, quando l'àncora l'ha tolta la superficie stessa, che
-resta scrivibile e segue la sola mappa finché l'àncora torna; `lost`, quando
-un'altra superficie o il disco tolgono l'àncora o il tratto, e la superficie
-resta in sola lettura sull'ultimo testo, staccata; `closed`, quando la
-sessione chiude o la superficie è distrutta. `watchStatus` e il disposer di
-`connect` sono gli unici ascoltatori, e `destroy` stacca tutto.
 
 I profili condividono il motore e aggiungono soltanto semantica di dominio:
 
