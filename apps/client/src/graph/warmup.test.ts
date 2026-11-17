@@ -1,0 +1,62 @@
+// @vitest-environment happy-dom
+// Il grafo scaldato a riposo: due passi, l'atlas che il pittore vero riprende,
+// e niente che resti nella pagina.
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { RADIUS_BUCKETS, atlasFor, readTints } from "./render/atlas";
+import { warmGraph } from "./warmup";
+
+const frame = (run: () => void): void => void setTimeout(run, 0);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  document.body.innerHTML = "";
+});
+
+describe("warmGraph", () => {
+  it("cuoce l'atlas al primo passo e monta un grafico invisibile al secondo", async () => {
+    const seen: string[] = [];
+    const next = vi.fn(async () => {
+      const host = document.querySelector<HTMLElement>(".graph-warmup");
+      seen.push(host === null ? "senza host" : `host ${host.querySelectorAll("canvas").length} canvas`);
+    });
+    await warmGraph(next, { frame });
+    expect(seen).toEqual(["senza host", "host 0 canvas"]);
+    expect(document.querySelector(".graph-warmup"), "l'host se ne va").toBeNull();
+    expect(document.querySelectorAll("canvas")).toHaveLength(0);
+
+    // Il pittore vero, con i colori della pagina, non lo ricuoce.
+    const host = document.createElement("div");
+    document.body.append(host);
+    const create = vi.spyOn(document, "createElement");
+    atlasFor(readTints(host), RADIUS_BUCKETS);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("monta il grafico per qualche fotogramma, fuori vista e irraggiungibile", async () => {
+    let during: HTMLElement | null = null;
+    await warmGraph(async () => {}, {
+      frame: (run) => {
+        during ??= document.querySelector<HTMLElement>(".graph-warmup");
+        expect(during?.querySelectorAll("canvas").length).toBe(2);
+        setTimeout(run, 0);
+      },
+    });
+    const host = during as HTMLElement | null;
+    expect(host).not.toBeNull();
+    expect(host!.getAttribute("aria-hidden")).toBe("true");
+    expect(host!.inert).toBe(true);
+    expect(host!.style.opacity).toBe("0");
+    expect(host!.style.pointerEvents).toBe("none");
+  });
+
+  it("un passo che rifiuta lascia la pagina com'era", async () => {
+    let steps = 0;
+    await expect(
+      warmGraph(async () => {
+        steps += 1;
+        if (steps === 2) throw new Error("fermo");
+      }, { frame }),
+    ).rejects.toThrow("fermo");
+    expect(document.querySelector(".graph-warmup")).toBeNull();
+  });
+});

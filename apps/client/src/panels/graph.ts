@@ -36,6 +36,7 @@ import type { Lifetime } from "../ui/lifetime";
 import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
 import { setTooltip } from "../ui/tooltip";
+import { warmups } from "../ui/warmup";
 import { GROUP_TOKENS } from "../graph/render/atlas";
 import { nodeLabel } from "../graph/render/painter";
 import { notify } from "../ui/notify";
@@ -118,6 +119,15 @@ export function mountGraph(lifetime: Lifetime): void {
     if (doc) lastDocument = doc;
   }));
   registerCustomRenderer(GRAPH_NS, renderGraph);
+  // La prima apertura in una sessione costava ~140 ms di pagina ferma (il
+  // motore da caricare, l'atlas, le procedure di disegno della WebView da
+  // compilare): a riposo la si fa prima, su un grafo invisibile
+  // (`graph/warmup.ts`). Lo stesso modulo lazy che il renderer chiede dopo.
+  lifetime.add(warmups.register(async (next) => {
+    await next();
+    const engine: GraphEngine = await import("../graph/lazy");
+    await engine.warmGraph(next);
+  }));
 }
 
 /// I documenti aperti in un riquadro qualunque: sono i nodi che il grafo accende.

@@ -93,3 +93,59 @@ oltre 40 ms; dopo il salvataggio non ne resta nessuno. La view dei
 collegamenti resta grande da disegnare la prima volta (una riga per rimando, in
 `crates/fub-features/src/backlinks.rs`): costa all'apertura, non a ogni
 salvataggio.
+
+## Le prime volte
+
+Certe superfici costavano care solo la prima volta in una sessione, per ragioni
+che non erano di chi le apre. Tre regole le tolgono dal fotogramma del gesto:
+
+- **il fuoco si sposta una volta sola**: in WebKit ogni `focus()` ricalcola lo
+  stile della pagina, e cercare il primo elemento raggiungibile ne forza il
+  layout (`offsetParent`). `trapFocus` (`ui/a11y.ts`) metteva il fuoco sul
+  primo elemento e subito dopo il menu o il lanciatore lo rimettevano dove
+  volevano loro. Chi sa già dove va il fuoco passa `{ moveFocus: false }` e lo
+  mette lui, dentro la superficie: il menu contestuale e i suoi sottomenu, il
+  selettore di icona, il lanciatore. La trappola resta la stessa (Tab che non
+  esce, Escape, fuoco restituito alla chiusura). Le guardie sono `a11y.test.ts`,
+  `menu.test.ts` («aprendosi sposta il fuoco una volta sola») e
+  `launcher.test.ts` («aprendosi mette il fuoco nel campo una volta sola»);
+- **il lavoro che si può fare prima si fa a riposo**: `ui/warmup.ts` tiene una
+  coda di compiti che la shell fa partire a consegna finita
+  (`shells/scrittoio/bootstrap.ts`). Il primo aspetta 2 s, ogni passo aspetta
+  che puntatore, tastiera e rotella stiano fermi da 600 ms e poi un
+  fotogramma; uno alla volta, un errore non ferma gli altri, e la vita della
+  shell la chiude. I compiti sono due:
+  - i **caratteri** (`theme/font-warmup.ts`): le facce con
+    `font-display: swap` ancora da caricare si caricano una per passo. Prima il
+    Plex Mono degli accordi arrivava nel fotogramma in cui si apriva il primo
+    menu o il lanciatore, e la WebView ricalcolava lo stile di tutta la pagina;
+  - il **grafo** (`graph/warmup.ts`, registrato da `mountGraph`): l'atlas dei
+    nodi con i colori del tema, poi un grafico minuscolo montato per tre
+    fotogrammi su un host invisibile (`inert`, `aria-hidden`, opacità 0, senza
+    puntatore), che non salva niente. La WebView compila lì le sue procedure di
+    disegno del canvas (gradienti, `drawImage` dall'atlas, curve, testo), che
+    alla prima apertura vera costavano un fotogramma da ~50 ms di script e uno
+    da ~90 di pittura;
+- **l'atlas si cuoce una volta per colori**: `atlasFor` (`graph/render/atlas.ts`)
+  tiene l'ultimo atlas e il pittore lo riprende se i colori sono gli stessi; un
+  tema nuovo lo rifà. La guardia è `atlas.test.ts` («il secondo pittore con gli
+  stessi colori riprende l'atlas del primo»).
+
+Misura con una sonda sull'ispettore remoto di WebKit nell'app vera,
+pc-debian-di-fub, 17 novembre 2026, vault del banco; tempo sincrono del gesto
+(per il grafo il blocco più lungo del thread) in ms, carico medio a un minuto
+fra parentesi:
+
+| Gesto | Prima | Dopo |
+|---|---:|---:|
+| Prima apertura del grafo dalla rail (blocco) | 138–145 (0,5–1) | 50–52, preceduto da uno di 23–24 (1,1–2,3) |
+| Primo menu contestuale | 24–32 (0,2–0,3) | 11–21 (0,3) |
+| Secondo menu contestuale | 20–21 | 9–14 |
+| Primo lanciatore (Ctrl O) | 39–49 | 22–23 |
+| Secondo lanciatore | 10–16 | 5–9 |
+
+«Prima» è `a32ce1f6a`. Il riscaldamento costa, una volta per sessione e a
+riposo, tre blocchi di fila di 38–42, 55–57 e 30–32 ms (il grafo) e poi
+blocchi di 10–22 ms (i caratteri). Il menu e il lanciatore aperti prima che i
+caratteri siano caricati costano come prima per la parte dei caratteri, meno il
+fuoco doppio (primo menu 19).

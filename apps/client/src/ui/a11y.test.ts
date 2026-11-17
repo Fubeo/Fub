@@ -29,7 +29,7 @@
 // del checker sono strutturali (il ragionamento lungo sta in `a11y-check.ts`).
 // Il contrasto, che senza layout non si potrebbe decidere, ha il presidio suo
 // in `theme/contrast.test.ts`.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
@@ -230,6 +230,29 @@ describe("una modale non lascia uscire il fuoco", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(closed).toBe(1);
     expect(document.activeElement?.id, "e torna da dove era partito").toBe("fuori");
+  });
+
+  it("con `moveFocus: false` il fuoco lo mette il chiamante, una volta sola", () => {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="modale" tabindex="-1"><button id="primo">Primo</button><input id="campo"></div>`;
+    const outside = document.querySelector<HTMLElement>("#fuori")!;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    outside.focus();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    const releaseTrap = trapFocus(modal, () => releaseTrap(), { moveFocus: false });
+    try {
+      expect(focus, "la trappola non sposta il fuoco da sé").not.toHaveBeenCalled();
+      expect(document.activeElement?.id).toBe("fuori");
+      document.querySelector<HTMLElement>("#campo")!.focus();
+      expect(focus).toHaveBeenCalledTimes(1);
+      // Il resto della trappola è quello di sempre: Escape chiude e il fuoco
+      // torna da dove era partito.
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.activeElement?.id).toBe("fuori");
+    } finally {
+      focus.mockRestore();
+    }
   });
 
   it("Escape in una ricerca piena la svuota, e solo il secondo chiude", () => {
