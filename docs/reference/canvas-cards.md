@@ -344,6 +344,13 @@ pulsanti del kit sotto (`.canvas-card-missing`):
   linee, come Canc, per quella scheda sola, con lo stesso avviso e il suo
   «Annulla» ([il menu della scheda](canvas-input.md#il-menu-della-scheda)).
 
+Tutto sta dentro la scheda (IMP-045): ciò che non ci sta esce in basso, mai
+in alto (`justify-content: safe center`), e la scheda lo taglia. Il
+segnaposto è un contenitore (`container-type: size`): fino a 120 px di
+altezza (la misura di serie di un file è 200×100) il messaggio va su una
+riga coi puntini e i due pulsanti, più piccoli, si stringono accanto invece
+di andare a capo; il testo intero sta nel suggerimento (`title`).
+
 Le regole:
 
 - La tela ascolta il file con `watch` finché la scheda è mancante. Quando il
