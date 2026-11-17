@@ -2969,7 +2969,7 @@ Casi limite: una ricerca senza risultati; la finestra stretta; al telefono
 Fatto quando: test della ricerca; le scene nelle due luci.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [~] in corso (coder, da ba1bd3b80, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (b562eb386, 2026-11-17), PR bozza #472. Ricerca: prima i nomi poi le descrizioni, italiano e inglese; tastiera (Alt ↓ ai pezzi, frecce, Esc) oltre il prototipo; il «veloce: …» in fondo passa a T63. Resta: al telefono le tessere alte 44 px (regola mobile di tutti i bottoni).
 
 ## T63 · Formule: «Mostra il LaTeX», la scrittura veloce, le tre misure di aiuto
 
@@ -2997,7 +2997,7 @@ veloce con l'IME.
 Fatto quando: ogni tasto della tabella col suo annulla; le tre misure.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 0f4a7c9a1 di T62, 2026-11-17)
 
 ## T64 · Formule: gli errori in chiaro con la correzione
 
