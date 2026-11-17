@@ -1018,6 +1018,7 @@ fn extract_keeps_the_selection_when_the_template_does_not_place_it() {
 
 /// «Niente» al posto della selezione: la sorgente perde il testo, la nota nuova
 /// lo tiene, e un solo annullamento rimette le cose com'erano.
+#[cfg(all(feature = "properties", feature = "commands"))]
 #[test]
 fn extracting_with_nothing_in_its_place_leaves_no_link_and_undoes_in_one_step() {
     let vault = Vault::new();
