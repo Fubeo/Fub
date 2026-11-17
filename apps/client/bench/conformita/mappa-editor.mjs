@@ -401,6 +401,15 @@ export const PEZZI = [
     app: ".launcher-preview-page p",
     proprieta: ["font", "color"],
   },
+  {
+    // Il titolo di un gruppo («Recenti», «Note»): fermo in cima mentre
+    // l'elenco scorre (T82).
+    id: "lanciatore.gruppo",
+    vista: "lanciatore",
+    prototipo: ".k-g",
+    app: ".launcher-group",
+    proprieta: [...BASE, "position", "top"],
+  },
 
   // ── i menu dell'editor (T81) e le maniglie dei blocchi (T2a): #431 ───────
   // Il tasto destro su una selezione.
@@ -838,14 +847,6 @@ export const PEZZI = [
 /// I pezzi che hanno ancora differenze, e chi li corregge. Non si
 /// confrontano finché non passano in `PEZZI`.
 export const DA_COPRIRE = [
-  // ── il lanciatore: differenze trovate il 2026-11-16 dopo #429 ─────────────
-  {
-    id: "lanciatore.gruppo",
-    prototipo: ".k-g",
-    app: ".launcher-group",
-    perche: "lo stile dei titoli dei gruppi («Recenti», «Note») va a T82 (corpo di #429)",
-  },
-
   // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
   {
     id: "compiti.ispettore",

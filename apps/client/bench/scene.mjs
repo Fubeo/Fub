@@ -1354,12 +1354,54 @@ export const SCENE = onPage("shell", [
   },
   {
     id: "launcher-commands",
-    title: "Il lanciatore: i comandi, con descrizione, raggio e accordo",
+    title: "Il lanciatore: i comandi a una riga, con la scorciatoia, e l'anteprima di quello attivo",
     prepare: async (page) => {
       await page.click("#pill");
       await page.waitForSelector(".launcher-input:focus");
       await page.fill(".launcher-input", ">");
-      await page.waitForSelector(".launcher-row .launcher-key");
+      await page.waitForSelector(".launcher-row-meta[data-mono]");
+      await page.waitForSelector(".launcher-preview-card:not([hidden])");
+      await page.waitForSelector('.status-hints[data-context="launcher"]');
+    },
+  },
+  {
+    id: "launcher-recent",
+    title: "Il lanciatore a campo vuoto: le recenti e i comandi della nota, i tasti nella banda",
+    prepare: async (page) => {
+      // Aperto dalla pillola, che si allarga sul posto: niente da scrivere.
+      await page.click("#pill");
+      await page.waitForSelector(".launcher-input:focus");
+      await page.waitForSelector('.launcher-group:has-text("Recenti")');
+      await previewShowsActiveRow(page);
+      await page.waitForSelector('.status-hints[data-context="launcher"]');
+    },
+  },
+  {
+    id: "launcher-blocks",
+    title: "Il lanciatore sui blocchi: la sintassi a destra, e l'anteprima del blocco attivo",
+    // I blocchi sono quelli che il «/» della nota aperta sa inserire: serve una
+    // nota di testo in Scrittura, col cursore dentro, e le voci del «/» (`slash=1`).
+    query: "live=riga-attiva&slash=1",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.click("#pill");
+      await page.waitForSelector(".launcher-input:focus");
+      await page.fill(".launcher-input", "/tab");
+      await page.waitForSelector('.launcher-row:has-text("Tabella")');
+      await page.waitForSelector('.launcher-preview-card:not([hidden]) + .launcher-preview-meta .launcher-preview-key');
+      await page.waitForSelector('.status-hints[data-context="launcher"]');
+    },
+  },
+  {
+    id: "launcher-narrow",
+    title: "Il lanciatore a 700 px, con un prefisso: l'anteprima non c'è, l'elenco prende il posto",
+    viewport: { width: 700, height: 800 },
+    prepare: async (page) => {
+      await page.click("#pill");
+      await page.waitForSelector(".launcher-input:focus");
+      await page.fill(".launcher-input", ">pass");
+      await page.waitForSelector('.launcher-row:has-text("Passa a")');
+      await page.waitForSelector('.status-hints[data-context="launcher"]');
     },
   },
   {
@@ -1806,6 +1848,17 @@ export const SCENE = onPage("shell", [
       prepare: async (page) => {
         await page.click("#pill");
         await page.waitForSelector(".launcher-input:focus");
+      },
+    },
+    {
+      id: "mobile-launcher-commands",
+      title: "Il telefono: il lanciatore col prefisso dei comandi, la scorciatoia a destra e nessuna anteprima",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click("#pill");
+        await page.waitForSelector(".launcher-input:focus");
+        await page.fill(".launcher-input", ">");
+        await page.waitForSelector(".launcher-row-meta[data-mono]");
       },
     },
     {
