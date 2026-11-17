@@ -84,13 +84,15 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(cell(3, 1)?.textContent).toBe("680");
     expect(notice().textContent).toContain(" ");
 
-    // Annullare riporta i byte: il giornale si svuota.
+    // Annullare riporta i byte: il giornale si svuota. La cronologia è del
+    // provider, che dà il giornale di ogni passo.
     expect(engine.undo()).toBe(true);
+    await settle();
     expect(changes[changes.length - 1]?.origin).toBe("undo");
     expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }], commands: [] }));
     expect(engine.undo()).toBe(true);
-    expect(engine.getDoc()).toBe("");
     await settle();
+    expect(engine.getDoc()).toBe("");
     expect(grid.journal()).toBe("");
     expect(cell(1, 1)?.textContent).toBe("800");
     expect(engine.redo()).toBe(true);
@@ -172,11 +174,11 @@ describe("GridEngine con una cartella di Excel", () => {
     ]);
     expect(changes[changes.length - 1]?.text).toBe(grid.journal());
 
-    // Da qui annulla e ripeti sono del documento.
+    // Annullare la formula torna al giornale di celle di prima.
     expect(engine.undo()).toBe(true);
     await settle();
     expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
-    expect(parseGridJournal(engine.getDoc()).commands).toHaveLength(1);
+    expect(parseGridJournal(engine.getDoc())).toMatchObject({ commands: [], entries: [{ row: "r1", column: "c1", after: "7" }] });
     expect(engine.redo()).toBe(true);
     await settle();
     expect(parseGridJournal(engine.getDoc()).commands).toHaveLength(2);
@@ -260,7 +262,7 @@ describe("GridEngine con una cartella di Excel", () => {
     engine.destroy();
   });
 
-  it("finché il comando è in cima al giornale lo annulla il provider; dopo un'altra scrittura le patch (IMP-027)", async () => {
+  it("annulla e ripeti vanno al provider, prima e dopo il salvataggio (IMP-027)", async () => {
     const grid = workbookHost();
     const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
     go(8, 6);
@@ -282,7 +284,7 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(engine.undo()).toBe(true);
     await settle();
     await settle();
-    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
+    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo", "edit.undo"]);
     expect(cell(8, 6)?.textContent ?? "").toBe("");
     expect(engine.redo()).toBe(true);
     await settle();
@@ -590,7 +592,11 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(changes[changes.length - 1]?.text).toBe("");
     expect(notice().textContent).toContain("grid cell text is too long");
     expect(cell(1, 1)?.textContent).toBe("800");
-    expect(engine.undo()).toBe(false);
+    // Niente da annullare: il provider lo sa, e non è un errore da dire.
+    engine.undo();
+    await settle();
+    expect(engine.getDoc()).toBe("");
+    expect(notice().textContent).not.toContain("nothing to undo");
     engine.destroy();
   });
 

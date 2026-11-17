@@ -148,6 +148,20 @@ const SET_VALUES = "range.setValues";
 /// Copia o sposta un intervallo della cartella in un passo solo, con
 /// formule, formati e unioni (comando composto di `fub-format-xlsx`).
 const PASTE_FROM = "fub.pasteFrom";
+/// Gli ordinamenti rapidi: da una cella sola ordinano la sua zona.
+const SORTS: ReadonlySet<string> = new Set(["data.sortAscending", "data.sortDescending"]);
+
+/// L'intervallo che `selection.currentRegion` rende (`{"selection":"A1:B3"}`),
+/// se è uno solo.
+function regionOf(read: string | null): string | null {
+  if (!read) return null;
+  try {
+    const region = (JSON.parse(read) as { selection?: unknown }).selection;
+    return typeof region === "string" && parseRangeA1(region) ? region : null;
+  } catch {
+    return null;
+  }
+}
 
 /// Un intervallo copiato, o tagliato (`move`), dalla cartella.
 interface Copied {
@@ -718,11 +732,21 @@ export class GridEngine {
   }
 
   undo(): boolean {
+    if (this.#providerHistory()) return this.#documentHistory(UNDO);
     return this.#history(this.#undo, this.#redo, UNDO, (step) => this.#commit(inverseGridPatches(step.patches), "undo", false));
   }
 
   redo(): boolean {
+    if (this.#providerHistory()) return this.#documentHistory(REDO);
     return this.#history(this.#redo, this.#undo, REDO, (step) => this.#commit(step.patches, "redo", false));
+  }
+
+  /// Se annulla e ripeti sono del provider: una cartella il cui catalogo li
+  /// serve tiene la cronologia del documento, per celle e comandi insieme e
+  /// anche oltre i salvataggi. Le patch della history servono soltanto a una
+  /// sessione che non li ha.
+  #providerHistory(): boolean {
+    return this.#serves(UNDO) && this.#serves(REDO);
   }
 
   /// Un passo da `from` a `to`. Nella sessione a comandi, un passo ancora in
@@ -899,12 +923,37 @@ export class GridEngine {
   command(id: string, params = "{}"): boolean {
     const state = this.#commands.find((command) => command.id === id);
     if (!this.#bytes || !this.#allowed(id) || !state) return false;
+    // Annulla e ripeti dal menu sono Ctrl+Z e Ctrl+Y: il provider sa se c'è
+    // un passo, anche quando il catalogo letto prima non lo sa ancora.
+    if (id === UNDO) return this.undo();
+    if (id === REDO) return this.redo();
     if (!state.enabled) {
       if (state.reason) this.#refuse(t("grid.workbook.command_off", { reason: state.reason }));
       return false;
     }
+    if (SORTS.has(id) && this.#sortRegion(id, params)) return true;
     this.#finishEditing(true, "input", false);
     this.#give(id, params, false);
+    return true;
+  }
+
+  /// Ordinare da una cella sola ordina la sua zona, come in un foglio di
+  /// calcolo: la selezione si allarga prima, perché si veda che cosa si
+  /// ordina (IMP-036), poi il comando va sulla selezione nuova. Falso se la
+  /// selezione è già un intervallo, o se la cella non ha una zona.
+  #sortRegion(id: string, params: string): boolean {
+    const range = this.#selectedRange();
+    if (this.#others.length || range.rowStart !== range.rowEnd || range.columnStart !== range.columnEnd) return false;
+    if (!this.#serves("selection.currentRegion")) return false;
+    this.#finishEditing(true, "input", false);
+    const sheet = this.#sheet().id;
+    const active = cellA1(this.#active());
+    void this.query("selection.currentRegion").then((read) => {
+      if (this.#destroyed || !this.#bytes || this.#sheet().id !== sheet) return;
+      const region = regionOf(read);
+      if (region) this.#adoptSelection({ sheet, selection: region, active });
+      this.#give(id, params, false);
+    });
     return true;
   }
 
@@ -1061,7 +1110,9 @@ export class GridEngine {
 
   /// Annulla o ripeti del documento, nella sessione a comandi.
   #documentHistory(id: typeof UNDO | typeof REDO): boolean {
-    if (!this.#bytes || this.#readOnly || !this.#serves(id)) return false;
+    // Mentre la cartella si riapre (dopo un salvataggio) il passo va in coda,
+    // e arriva alla sessione nuova.
+    if ((!this.#bytes && !this.#bytesOpening) || this.#readOnly || !this.#serves(id)) return false;
     this.#finishEditing(false, "input", false);
     this.#give(id, "{}", true);
     return true;
@@ -1081,8 +1132,8 @@ export class GridEngine {
       this.#redo = [];
     }
     this.#pendingCommandMode += 1;
-    const epoch = this.#bytesEpoch;
-    const edits = this.#editEpoch;
+    const given = this.#bytesEpoch;
+    const givenEdits = this.#editEpoch;
     const ticket = ++this.#bytesTickets;
     let settled = false;
     const finish = (run: GridRun): void => {
@@ -1091,6 +1142,11 @@ export class GridEngine {
       done?.(run);
     };
     this.#enqueueProtocol(async () => {
+      // Annulla e ripeti valgono per la sessione che c'è quando arrivano al
+      // provider: anche quella riaperta dopo un salvataggio, che ritrova la
+      // cronologia del documento.
+      const epoch = history ? this.#bytesEpoch : given;
+      const edits = history ? this.#editEpoch : givenEdits;
       try {
         await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
       } finally {
@@ -1157,7 +1213,7 @@ export class GridEngine {
     this.#bytesMessage = null;
     this.#options.onCommands?.();
     const last = ticket === this.#bytesTickets;
-    if (last) this.#publishJournal(this.#confirmedJournal, "input");
+    if (last) this.#publishJournal(this.#confirmedJournal, command.id === UNDO ? "undo" : command.id === REDO ? "redo" : "input");
     if (last) this.#adoptSelection(outcome.selection);
     // Un oggetto appena inserito resta selezionato, come in Excel.
     const inserted = last && command.id.startsWith("insert.") ? insertedObject(outcome.result) : null;
@@ -1776,6 +1832,10 @@ export class GridEngine {
     // Il giornale ottimistico si corregge soltanto quando non resta niente in
     // coda: prima, la conferma non contiene ancora le modifiche che seguono.
     if (ticket === this.#bytesTickets) this.#publishJournal(this.#confirmedJournal, origin);
+    // Il passo nuovo si annulla, e niente si ripete più: annulla e ripeti
+    // del menu lo dicono dal catalogo riletto.
+    const stale = (id: string, enabled: boolean) => this.#commands.some((command) => command.id === id && command.enabled !== enabled);
+    if (this.#providerHistory() && (stale(UNDO, true) || stale(REDO, false))) void this.#loadCommands();
     await this.#refreshBytes(state, epoch);
   }
 

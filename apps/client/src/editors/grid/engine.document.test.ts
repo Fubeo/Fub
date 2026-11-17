@@ -20,8 +20,8 @@ afterEach(() => {
 
 /// La sessione del documento sopra il provider finto: leggere dà il giornale
 /// vuoto sulla revisione dei byte, scrivere mette il giornale nei byte.
-async function documentWithGrid() {
-  const grid = workbookHost();
+async function documentWithGrid(options: Parameters<typeof workbookHost>[0] = {}) {
+  const grid = workbookHost(options);
   const api: DocumentSessionApi = {
     readDocument: vi.fn(async (): Promise<DocumentSource> => ({
       text: "", revision: grid.base(), format_id: "xlsx", source_kind: "bytes", text_kind: "grid_journal",
@@ -124,6 +124,94 @@ describe("la griglia sulla sessione del documento", () => {
     await save();
     expect(grid.disk("s1", "r8", "c7")).toBe("=B2+1");
     expect(cell(8, 7)?.textContent).toBe("=B2+1");
+    engine.destroy();
+  });
+
+  // IMP-035, IMP-036 e area 9: la cronologia è del provider, per celle e
+  // comandi insieme; oltre un salvataggio un comando si annulla con lo stato
+  // di prima, e il salvataggio seguente lo scrive.
+  it.each([
+    ["home.deleteRows", "{}"],
+    ["data.sortAscending", "{}"],
+    ["home.bold", JSON.stringify({ on: true })],
+    ["home.numberFormat", JSON.stringify({ code: "0.00%" })],
+  ])("«%s» si annulla e si ripete dopo il salvataggio, anche sul disco", async (id, params) => {
+    const { grid, sessions, engine, viewport, go, save, drain } = await documentWithGrid({ region: "A1:C4" });
+    const key = (name: string) => viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, ctrlKey: true, bubbles: true, cancelable: true }));
+    go(1, 1);
+    expect(engine.command(id, params)).toBe(true);
+    await drain();
+    await save();
+    const done = grid.diskStyles();
+    expect(done.map((style) => style.split("@")[0])).toEqual([id]);
+    expect(sessions.inspect(DOC)).toMatchObject({ text: "", dirty: false });
+
+    key("z");
+    await drain();
+    expect(sessions.isDirty(DOC)).toBe(true);
+    await save();
+    expect(grid.diskStyles()).toEqual([]);
+
+    key("y");
+    await drain();
+    await save();
+    expect(grid.diskStyles()).toEqual(done);
+    engine.destroy();
+  });
+
+  it("celle e comandi si annullano nell'ordine in cui sono avvenuti, con i salvataggi in mezzo", async () => {
+    const { grid, engine, host, viewport, cell, go, save, drain } = await documentWithGrid();
+    const key = (name: string) => viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, ctrlKey: true, bubbles: true, cancelable: true }));
+    go(8, 6);
+    typeInActiveCell(host, viewport, "5");
+    await drain();
+    await save();
+    go(8, 6);
+    expect(engine.command("home.bold", JSON.stringify({ on: true }))).toBe(true);
+    await drain();
+    go(9, 6);
+    typeInActiveCell(host, viewport, "6");
+    await drain();
+    await save();
+    expect([grid.disk("s1", "r8", "c6"), grid.disk("s1", "r9", "c6")]).toEqual(["5", "6"]);
+    expect(grid.diskStyles()).toEqual(["home.bold@G9"]);
+
+    key("z");
+    await drain();
+    await save();
+    expect(grid.disk("s1", "r9", "c6")).toBe("");
+    expect(cell(9, 6)?.textContent ?? "").toBe("");
+    expect(grid.diskStyles()).toEqual(["home.bold@G9"]);
+    key("z");
+    await drain();
+    await save();
+    expect(grid.diskStyles()).toEqual([]);
+    expect(grid.disk("s1", "r8", "c6")).toBe("5");
+    key("z");
+    await drain();
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("");
+
+    // In avanti fino in fondo, con un salvataggio solo.
+    for (let step = 0; step < 3; step += 1) {
+      key("y");
+      await drain();
+    }
+    await save();
+    expect([grid.disk("s1", "r8", "c6"), grid.disk("s1", "r9", "c6")]).toEqual(["5", "6"]);
+    expect(grid.diskStyles()).toEqual(["home.bold@G9"]);
+    expect(cell(9, 6)?.textContent).toBe("6");
+    engine.destroy();
+  });
+
+  it("ordinare da una cella sola allarga prima la selezione alla sua zona, e ordina quella (IMP-036)", async () => {
+    const { grid, engine, go, drain } = await documentWithGrid({ region: "A1:C4" });
+    go(1, 1);
+    expect(engine.command("data.sortAscending", "{}")).toBe(true);
+    await drain();
+    const sort = grid.given.find((request) => request.command.id === "data.sortAscending");
+    expect(sort?.command).toMatchObject({ selection: "A1:C4", active: "B2" });
+    expect(engine.selectionRefs().range).toBe("A1:C4");
     engine.destroy();
   });
 
