@@ -1507,6 +1507,38 @@ export const SCENE = onPage("shell", [
       },
     } : {}),
   })),
+  // Il tracciato dei collegamenti (E26, T59): il flusso del prototipo, con un
+  // ritorno e le etichette, giù e poi a destra, in ognuno dei cinque stili;
+  // poi i casi limite (etichette lunghe, tratteggio, senza punta, sequenza).
+  // La finestra è alta perché i due orientamenti stiano in uno scatto.
+  ...[
+    ...["armonia", "acquerello", "aurora", "blueprint", "inchiostro"].map((style) => [
+      `diagramma-07-tracciato-${style}`,
+      `diagramma-tracciato-${style}`,
+      `Il tracciato in ${style[0].toUpperCase()}${style.slice(1)}: frecce che arrivano dritte, punte sottili, gomiti arrotondati, il ritorno di lato; giù e a destra`,
+    ]),
+    ["diagramma-08-tracciato-casi", "diagramma-tracciato-casi", "Il tracciato nei casi limite: un'etichetta lunga, un tratteggio, un collegamento senza punta, un diagramma di sequenza"],  ].map(([id, live, title]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    viewport: { width: 1280, height: 1500 },
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => {
+        const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+        return all.length > 0 && all.every((figure) => figure.dataset.state === "ready");
+      });
+      // Lo stile in linea del contenitore dove Mermaid misura (#473), come
+      // nelle scene qui sopra.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
   // messaggi, la discussione aperta, il primo messaggio che chiede il nome, il
   // segno nel testo nella finestra minima, la Lettura e il pannello «Commenti».

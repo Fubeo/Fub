@@ -165,6 +165,45 @@ const DIAGRAM_STYLES = ["armonia", "acquerello", "aurora", "blueprint", "inchios
   .map((style) => `## ${style}\n\n${fence(`%% stile: ${style}`, "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])")}`)
   .join("\n\n");
 
+/// Il tracciato (E26, T59): il flusso del prototipo (`DG0`), con un ritorno e
+/// le etichette sui collegamenti, giù e poi a destra, in uno stile.
+const TRACE_FLOW = [
+  "  A[Richiesta di prestito] --> B{Polizza consegnata?}",
+  "  B -->|sì| C[Ritiro delle opere]",
+  "  B -->|no| D[Sollecito al prestatore]",
+  "  D --> B",
+  "  C --> E[Allestimento in sala]",
+  "  E --> F([Apertura, 20 marzo])",
+];
+const diagramTrace = (style: string) => [
+  `Il flusso in ${style}, giù e poi a destra:`,
+  "",
+  fence("---", "title: Il percorso di un prestito", "---", `%% stile: ${style}`, "flowchart TD", ...TRACE_FLOW),
+  "",
+  fence(`%% stile: ${style}`, "flowchart LR", ...TRACE_FLOW),
+].join("\n");
+
+/// I casi limite del tracciato: etichette lunghe, un collegamento a tratti e
+/// uno senza punta, e un diagramma di sequenza.
+const DIAGRAM_TRACE_CASES = [
+  "Un'etichetta lunga, un tratteggio, un collegamento senza punta:",
+  "",
+  fence(
+    "flowchart TD",
+    "  A[Domanda] -->|una risposta lunga che non sta sul tratto corto| B[Esito]",
+    "  A -.->|forse| C[Rinvio]",
+    "  B --- D[Archivio]",
+    "  C --> D",
+  ),
+  "",
+  fence(
+    "sequenceDiagram",
+    "  Museo->>Prestatore: Richiesta di prestito",
+    "  Prestatore-->>Museo: Polizza",
+    "  Museo-)Corriere: Ritiro",
+  ),
+].join("\n");
+
 const DIAGRAM_CASES = [
   "Un diagramma con un errore mostra il sorgente:",
   "",
@@ -330,7 +369,9 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   diagramma: { text: DIAGRAM_NOTE, cursor: null },
   "diagramma-stili": { text: DIAGRAM_STYLES, cursor: null },
   "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
-  "battuta-50": typingNote(50),
+  ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
+    .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
+  "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },  "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),
 };

@@ -72,6 +72,52 @@ Cambiare stile sfuma i colori in 220 ms, dal disegno di prima al nuovo; la
 tavola cambia carta nello stesso tempo. Col movimento ridotto il cambio è
 immediato.
 
+## I collegamenti
+
+Il tracciato è lo stesso in tutti e cinque gli stili, nelle due luci; lo stile
+ne cambia soltanto il colore.
+
+- **Il tratto** è spesso 1,4 px (2 px con l'alto contrasto), con i capi e i
+  gomiti tondi. Il tratteggio (`-.->`, e le risposte delle sequenze) va a
+  passi di 4.
+- **I gomiti** sono arrotondati: Mermaid traccia tratti dritti fra i punti che
+  sceglie dagre e ne smussa gli angoli (curva `rounded`, raggio 5 px).
+- **La punta** è sottile, con l'incavo, e si ferma a un soffio dal nodo
+  (1,8 px dal bordo): è la punta del prototipo, messa al posto di quella piena
+  di Mermaid nei flussi (all'inizio e alla fine) e nelle sequenze. Le punte
+  che dicono qualcosa con la forma (classi, entità, stati, croci, cerchi)
+  restano quelle di Mermaid.
+- **Le etichette** sono nel colore attenuato dello stile, su un ritaglio pieno
+  della carta con gli angoli di 5 px, che copre il tratto sotto la parola.
+- **Le distanze** sono quelle del prototipo per un flusso dall'alto: 58 px fra
+  un livello e l'altro, 34 fra due nodi vicini. Valgono anche per un flusso da
+  sinistra, perché la configurazione di Mermaid non conosce l'orientamento.
+
+Ciò che Mermaid 11 non permette, e che quindi il disegno non fa:
+
+- un collegamento non è fatto solo di tratti verticali e orizzontali: dagre
+  sceglie punti anche in diagonale, e il tratto li segue. Arriva al nodo
+  dritto quando l'ultimo punto sta sopra il nodo (o, da sinistra, alla sua
+  altezza), altrimenti di sbieco; da un rombo parte da un lato obliquo;
+- l'etichetta sta nel punto che dagre le riserva, a metà fra due livelli,
+  spesso su un gomito, non sul tratto più lungo;
+- un ritorno (`D --> B`) torna indietro di fianco, ma rientra nel nodo di
+  sbieco, non con un tratto dritto;
+- il raggio dei gomiti è quello di Mermaid (5 px), non i 9 del prototipo, e
+  le etichette hanno la grandezza del testo dei nodi: rimpicciolirle col CSS
+  lascerebbe il ritaglio misurato sul testo grande.
+
+Un tracciato solo ortogonale chiederebbe il motore di disposizione ELK
+(`@mermaid-js/layout-elk`), che non è fra le dipendenze di Fub.
+
+Le variabili e il CSS del tracciato sono in
+`apps/client/src/ui/mermaid-drawing.ts` (`mermaidStyleConfig`, `themeCssFor`,
+le punte in `decorateSvg`); lo spessore in
+`apps/client/src/ui/mermaid-styles.ts` (`EDGE_STROKE`). Le scene del banco
+`diagramma-07-tracciato-*` mostrano il flusso del prototipo in ogni stile,
+dall'alto e da sinistra; `diagramma-08-tracciato-casi` un'etichetta lunga, un
+tratteggio, un collegamento senza punta e una sequenza.
+
 ## Dove sta
 
 - il disegno, il menu come dati e le modifiche al sorgente:
