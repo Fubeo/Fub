@@ -146,30 +146,43 @@ selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
 ## Il «/» nel testo
 
 Il **«/»** scritto a inizio riga o dopo uno spazio apre il pannello dei blocchi
-sotto la riga. Se sotto non ci sta intero si accorcia, e l'elenco o il passo
-scorrono dentro (con la scelta delle frecce, la rotella e il dito: il fuoco
-resta nell'editor), fino a 220 px; solo se sotto non c'è neanche quello si apre sopra la
-riga. Non esce mai dall'area del documento: testata, barra degli strumenti e
-barra della finestra restano scoperte (`slashPlacement` in
-`editors/text/profiles/markdown/slash.ts`). Sul telefono è un foglio in fondo
-alla finestra. Vale in ogni modalità di scrittura; il «+» della maniglia mette
-un blocco vuoto e ci apre il «/».
+sotto la riga: una colonna sola, larga 352 px, che copre poco testo. Se sotto
+non ci sta intero si accorcia, e l'elenco o il passo scorrono dentro (con la
+scelta delle frecce, la rotella e il dito: il fuoco resta nell'editor), fino a
+300 px (le tessere, un gruppo di tre righe e il disegno); solo se sotto non c'è
+neanche quello si apre sopra la riga. Segue il cursore mentre la nota scorre,
+e si chiude se il cursore esce dalla parola. Non esce mai dall'area del
+documento: testata, barra degli strumenti e barra della finestra restano
+scoperte (`slashPlacement` in `editors/text/profiles/markdown/slash.ts`). Sul
+telefono, sotto i 600 px o col dito, è un foglio a tutta larghezza in fondo
+alla finestra, sopra la tastiera, con righe da 44 px. Vale in ogni modalità di
+scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
 
-- **La testata** mostra ciò che si è scritto, il contesto («riga vuota:
-  diventa il blocco scelto», «dopo il testo: un blocco nuovo sotto») e il
-  conto dei risultati, letto dal lettore di schermo.
-- **Le sezioni** sono linguette: Suggeriti (guardano il blocco sopra),
-  Preferiti, Recenti, Testo, Elenchi, Blocchi, Codice e formule, Collegamenti
-  e media, Persone e date, Stile, Pagina, Dal vault. Tab salta di sezione.
-- **Le righe** hanno un'icona, il nome e a destra la sintassi Markdown come
-  un tasto, oppure «›» per le voci che aprono un passo. Una pillola d'accento
-  segue la scelta.
-- **L'anteprima** a destra mostra il blocco coi caratteri della nota, che
-  cosa fa e come scriverlo senza menu. La stella mette la voce fra i
+- **In alto, i sei più usati**, come tessere con l'icona e una parola. In un
+  vault nuovo: Attività, Titolo, Riquadro, Tabella, poi Punti e Codice (Base e
+  Scheda le aggiungono i loro lavori). L'uso li riordina: prima i Preferiti,
+  poi i blocchi scelti di recente, poi l'ordine scritto; una voce nascosta
+  lascia il posto alla seguente, e stili e comandi del vault non diventano
+  tessere (`byUse` in `panels/slash/rank.ts`). A menu appena aperto Invio mette
+  la prima; ← e → scorrono le tessere.
+- **Sotto, tutti i blocchi per gruppo**, una riga ciascuno: icona, nome e a
+  destra, in grigio, ciò che si scrive per farne a meno (`- [ ]`, `##`), o «›»
+  per le voci che aprono un passo. I gruppi sono Testo, Elenchi, Blocchi,
+  Codice e formule, Collegamenti e media, Persone e date, Stile, Pagina e Dal
+  vault; i loro titoli restano in cima mentre si scorre. Tab salta al gruppo
+  dopo (le tessere sono una tappa), Maiusc+Tab torna.
+- **In fondo, il disegno** della voce scelta: una miniatura della forma del
+  blocco, che cosa fa in una frase, come scriverlo senza menu e gli argomenti
+  rapidi («Scrivendo `##` · anche `/h2`»). La stella mette la voce fra i
   Preferiti; «Nascondi dal menu» la toglie dal «/», e resta un comando.
-- **Trovare.** Con due lettere valgono gli inizi di parola, dei nomi in
-  italiano e in inglese, e le iniziali («/ea» trova Elenco di attività); mai
-  lettere sparse. Da tre lettere conta anche l'interno delle parole, da
+- **I tasti** non stanno nel pannello: li dice la riga dei suggerimenti della
+  banda di stato (frecce, Invio, Tab per il gruppo dopo, Esc che lascia il
+  testo, Ctrl+/ per tutti i comandi).
+- **Trovare.** Scrivendo, l'elenco diventa uno solo, ordinato per
+  pertinenza, con la parte trovata in evidenza, e in fondo «Cerca fra tutti i
+  comandi». Con due lettere valgono gli inizi di parola, dei nomi in italiano
+  e in inglese e dei sinonimi, e le iniziali («/ea» trova Elenco di attività);
+  mai lettere sparse. Da tre lettere conta anche l'interno delle parole, da
   quattro si perdona un errore («/tabela» trova Tabella). Al massimo 12
   risultati. I comandi rapidi vanno in cima: «/tab 3x4», «/col 3», «/code
   py», «/h2», «/domani», «/venerdì», «/fra una settimana».
@@ -177,25 +190,25 @@ un blocco vuoto e ci apre il «/».
   dieci fondi, col nome), Data (i giorni vicini e il mese), Riquadro (la
   galleria dei tipi), Link a una nota e Incorpora (le note, poi una sezione),
   Blocco di codice (i linguaggi) e Diagramma (i modelli Mermaid) si scelgono
-  nello stesso riquadro; ⌫ o Esc tornano all'elenco. I venti colori non sono
-  più voci del «/»: stanno sotto «Colore ›» e si trovano scrivendo («/blu»).
-- **Niente trovato.** Il pannello resta aperto e lo dice; Invio o Ctrl+/
-  cercano fra tutti i comandi, Esc lascia il testo com'è.
-- **Con una selezione** il «/» apre «Trasforma»: solo ciò che cambia le righe
-  scelte, con il prima e il dopo.
+  nello stesso riquadro, sotto una testata col nome del passo; ⌫ o Esc tornano
+  all'elenco. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
+  si trovano scrivendo («/blu»).
+- **Niente trovato.** Il pannello resta aperto e lo dice («Nessun blocco per
+  «qwerty».»); la sola riga, accesa, cerca fra tutti i comandi, con Invio o
+  Ctrl+/. Esc lascia il testo com'è.
+- **Con una selezione** il «/» apre «Trasforma»: niente tessere, solo ciò che
+  cambia le righe scelte, e il disegno in fondo dice il dopo.
 
 Scegliere una voce toglie il «/…» e applica il blocco come una sola modifica:
 un Annulla fa tornare il testo scritto. «e/o», «24/09» e gli indirizzi non lo
-aprono, né dentro codice, link e formule. Sotto i 760 px di finestra resta
-solo l'elenco; sotto i 600 px, o col dito, il pannello è un foglio dal basso
-con righe da 44 px.
+aprono, né dentro codice, link e formule.
 
 Le impostazioni, in Editor: «Menu «/» nel testo» (`editor.slash`) lo spegne;
 `editor.slash.hidden` elenca gli id delle voci nascoste; `editor.slash.sections`
-ordina le sezioni dopo Suggeriti, Preferiti e Recenti. I blocchi sono
+ordina i gruppi (quelli non detti seguono nel loro ordine). I blocchi sono
 dichiarati da `fub.formatting`: spento il plugin, il «/» offre soltanto i
-comandi del vault. Ogni voce resta un comando del registro, con i suoi
-parametri (`markdown.table` con `rows` e `cols`).
+comandi del vault, senza tessere. Ogni voce resta un comando del registro, con
+i suoi parametri (`markdown.table` con `rows` e `cols`).
 
 ## Gli altri editor
 

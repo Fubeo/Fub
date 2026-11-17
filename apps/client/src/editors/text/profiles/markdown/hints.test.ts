@@ -117,6 +117,8 @@ describe("i contesti della Live", () => {
     const context = hints(view);
     expect(context?.id).toBe("slash");
     expect(named(context)).toEqual(["ArrowUp+ArrowDown", "Enter", "Tab", "Escape", "Mod-/"]);
+    // Il pannello non ha più un piede coi tasti: li dice la banda di stato.
+    expect(context?.items.map((item) => item.say)).toEqual(["scegli", "metti", "gruppo dopo", "lascia il testo", "tutti i comandi"]);
   });
 
   it("senza fuoco, o in sola lettura, l'editor non dice niente", () => {

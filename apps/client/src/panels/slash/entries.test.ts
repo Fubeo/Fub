@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLOR_ENTRY, SLASH_RECENT, SLASH_RESULTS, slashMenuEntries } from "./entries";
+import { COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -11,13 +11,13 @@ const today = new Date(2026, 9, 29);
 const use = (recent: string[] = [], favorites: string[] = []) => ({ recent, favorites, chord: () => null, today });
 
 describe("le voci del «/» nel testo", () => {
-  it("a menu aperto: le linguette nell'ordine, solo ciò che è offerto al «/» e che la superficie sa fare", () => {
+  it("a menu aperto: i gruppi nell'ordine, solo ciò che è offerto al «/» e che la superficie sa fare", () => {
     const { entries, sections, filtering } = slashMenuEntries(LIST, "", ALL);
     expect(filtering).toBe(false);
-    expect(sections).toEqual(["suggested", "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault"]);
+    expect(sections).toEqual(["text", "lists", "blocks", "code", "media", "people", "style", "page", "vault"]);
     expect(entries.some((entry) => entry.id === "markdown.bold")).toBe(false);
     expect(entries.find((entry) => entry.id === "note.daily")).toMatchObject({ section: "vault", action: false });
-    expect(entries.find((entry) => entry.id === "markdown.heading.2" && entry.section !== "suggested")).toMatchObject({ hint: "##", icon: "fmt-h2", section: "text" });
+    expect(entries.find((entry) => entry.id === "markdown.heading.2")).toMatchObject({ hint: "##", icon: "fmt-h2", section: "text" });
     expect(entries.find((entry) => entry.id === "markdown.table")).toMatchObject({ picker: "table", icon: "fmt-table", section: "blocks" });
   });
 
@@ -33,20 +33,35 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "fondo giallo", ALL).entries[0]!.id).toBe("markdown.background.yellow");
   });
 
-  it("i Suggeriti guardano il blocco sopra", () => {
-    const afterHeading = slashMenuEntries(LIST, "", ALL, { line: "empty", above: "heading", inList: false }).entries;
-    expect(afterHeading.filter((entry) => entry.section === "suggested").map((entry) => entry.id))
-      .toEqual(["markdown.paragraph", "markdown.list.task", "markdown.list.bullet"]);
-    const afterTask = slashMenuEntries(LIST, "", ALL, { line: "empty", above: "task", inList: true }).entries;
-    expect(afterTask[0]!.id).toBe("markdown.list.task");
+  it("le tessere: in un vault nuovo Attività, Titolo, Riquadro, Tabella, poi gli altri blocchi; mai stili né comandi", () => {
+    const { top } = slashMenuEntries(LIST, "", ALL);
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table", "markdown.list.bullet", "markdown.codeblock",
+    ]);
+    expect(top).toHaveLength(SLASH_TOP);
   });
 
-  it("preferiti e recenti in cima, i recenti al più cinque, e niente ripetuto fra loro", () => {
-    const { entries, sections } = slashMenuEntries(LIST, "", ALL, undefined, use(["note.daily", "markdown.table", "sparito", "markdown.rule"], ["markdown.rule"]));
-    expect(sections.slice(0, 3)).toEqual(["suggested", "favorites", "recent"]);
-    expect(entries.filter((entry) => entry.section === "favorites").map((entry) => entry.id)).toEqual(["markdown.rule"]);
-    expect(entries.filter((entry) => entry.section === "recent").map((entry) => entry.id)).toEqual(["note.daily", "markdown.table"]);
-    expect(SLASH_RECENT).toBe(5);
+  it("le tessere seguono l'uso: preferiti, poi recenti; un comando del vault o uno stile non diventano tessere", () => {
+    const { top, entries } = slashMenuEntries(LIST, "", ALL, undefined, use(["note.daily", "markdown.rule", COLOR_ENTRY, "markdown.table"], ["markdown.quote"]));
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.quote", "markdown.rule", "markdown.table", "markdown.list.task", "markdown.heading.2", "markdown.callout",
+    ]);
+    // Le righe restano tutte, nei loro gruppi, anche quelle che sono tessere.
+    expect(entries.find((entry) => entry.id === "markdown.quote")).toMatchObject({ section: "text" });
+  });
+
+  it("una tessera nascosta lascia il posto alla seguente; scrivendo, niente tessere", () => {
+    const { top } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), hidden: ["markdown.callout"] });
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.list.task", "markdown.heading.2", "markdown.table", "markdown.list.bullet", "markdown.codeblock", "markdown.quote",
+    ]);
+    expect(slashMenuEntries(LIST, "tab", ALL).top).toEqual([]);
+  });
+
+  it("spento `fub.formatting`, restano i comandi del vault e nessuna tessera", () => {
+    const { top, entries } = slashMenuEntries(LIST, "", () => false);
+    expect(top).toEqual([]);
+    expect(entries.map((entry) => entry.id)).toEqual(["note.daily"]);
   });
 
   it("filtrando: un elenco solo, al più dodici, con la parte trovata e in inglese", () => {
@@ -82,8 +97,9 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "rosso", ALL, undefined, hiding).entries.some((entry) => entry.id === "markdown.color.red")).toBe(false);
   });
 
-  it("le sezioni nell'ordine scelto; quelle non dette dopo, nel loro ordine; Suggeriti resta in cima", () => {
-    const { sections } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), sections: ["code", "nessuna", "lists"] });
-    expect(sections.slice(0, 4)).toEqual(["suggested", "code", "lists", "text"]);
+  it("i gruppi nell'ordine scelto (`editor.slash.sections`); quelli non detti dopo, nel loro ordine", () => {
+    const { sections, entries } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), sections: ["code", "nessuna", "lists"] });
+    expect(sections.slice(0, 3)).toEqual(["code", "lists", "text"]);
+    expect(entries[0]!.section).toBe("code");
   });
 });

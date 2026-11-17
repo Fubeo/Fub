@@ -248,6 +248,20 @@ export const VISTE = {
     },
     app: { scena: "riga-dei-suggerimenti" },
   },
+  /// Il «/» appena aperto su una riga vuota (T84): le sei tessere con la
+  /// prima accesa, le righe a gruppi e il disegno in fondo. Il prototipo al
+  /// passo «Il «/»» (lo scrive da sé sull'ultimo blocco), l'app dalla scena
+  /// del banco.
+  slash: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il «/»");
+        await page.waitForSelector("#win .pop.slash .sl-q.act");
+      },
+    },
+    app: { scena: "slash-01-aperto" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -832,6 +846,92 @@ export const PEZZI = [
     prototipo: ".hint kbd",
     app: "#status-hints .status-hints-key",
     proprieta: [...BASE, "white-space"],
+  },
+
+  // ── il «/» in una colonna (T84) ───────────────────────────────────────────
+  {
+    id: "slash.superficie",
+    vista: "slash",
+    prototipo: ".pop.slash",
+    app: ".cm-tooltip.slash-panel",
+    proprieta: [...BASE, "width"],
+  },
+  {
+    id: "slash.tessere",
+    vista: "slash",
+    prototipo: ".sl-quick",
+    app: ".slash-top",
+    proprieta: [...BASE, "display", "grid-template-columns"],
+  },
+  {
+    id: "slash.tessera-accesa",
+    vista: "slash",
+    prototipo: ".sl-q.act .ti",
+    app: ".slash-tile[data-lit] .kit-tile-icon",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "slash.tessera",
+    vista: "slash",
+    prototipo: ".sl-q:not(.act) .ti",
+    app: ".slash-tile:not([data-lit]) .kit-tile-icon",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "slash.elenco",
+    vista: "slash",
+    prototipo: ".sl-list",
+    app: ".slash-list",
+    proprieta: ["padding", "max-height"],
+  },
+  {
+    id: "slash.gruppo",
+    vista: "slash",
+    prototipo: ".sl-g",
+    app: ".slash-group-label",
+    proprieta: [...BASE, "position", "top"],
+  },
+  {
+    id: "slash.riga",
+    vista: "slash",
+    prototipo: ".sl-i:not(.act)",
+    app: ".slash-row:not([data-lit])",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "slash.sintassi",
+    vista: "slash",
+    prototipo: ".sl-i .sy",
+    app: ".slash-row .slash-syntax-note",
+    proprieta: ["font-family", "font-size", "color", "white-space"],
+  },
+  {
+    id: "slash.disegno",
+    vista: "slash",
+    prototipo: ".sl-det",
+    app: ".slash-detail",
+    proprieta: [...BASE, "display", "grid-template-columns", "min-height"],
+  },
+  {
+    id: "slash.miniatura",
+    vista: "slash",
+    prototipo: ".sl-th",
+    app: ".slash-thumb",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "slash.descrizione",
+    vista: "slash",
+    prototipo: ".sl-tx .d",
+    app: ".slash-description",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "slash.come-si-scrive",
+    vista: "slash",
+    prototipo: ".sl-tx .y",
+    app: ".slash-syntax",
+    proprieta: ["font", "color", "margin", "white-space", "text-overflow"],
   },
 ];
 
