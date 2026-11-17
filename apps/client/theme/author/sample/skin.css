@@ -4373,18 +4373,24 @@ kbd,
   margin-left: calc(var(--space-3) * -1);
 }
 
-/* **Più note scelte insieme.** La barra sta sopra l'albero e dice quante sono;
-   le righe scelte hanno il fondo della nota aperta ma non il suo peso, e un
-   segno a sinistra, così non si scambiano con «la nota che sto leggendo». */
+/* **Più note scelte insieme.** La barra sta sotto l'albero, ferma in fondo
+   alla colonna mentre l'albero scorre, e dice quante sono: comparendo non
+   sposta nessuna riga sotto il puntatore. Le righe scelte hanno il fondo della
+   nota aperta ma non il suo peso, e un segno a sinistra, così non si scambiano
+   con «la nota che sto leggendo». */
 .tree-selection {
+  position: sticky;
+  bottom: var(--space-2);
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin: 0 var(--space-3) var(--space-2);
+  margin: var(--space-2) var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--accent-wash);
+  box-shadow: var(--shadow-1);
   color: var(--text);
   font-size: var(--text-sm);
 }
