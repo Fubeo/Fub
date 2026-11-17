@@ -80,6 +80,7 @@ compila soltanto se la sua cargo feature è dichiarata in `[features]` di
 | `fub.tasks` | `tasks` | vista, sintassi, renderer | solo nativa |
 | `fub.properties` | `properties` | vista, comandi | sì |
 | `fub.template` | `template` | vista, comandi, impostazioni | sì |
+| `fub.recipes` | `recipes` | comandi, impostazioni | sì |
 | `fub.queries` | `queries` | vista, comandi | sì |
 | `fub.dashboard` | `dashboard` | vista | sì |
 | `fub.backup` | `backup` | vista, comandi, impostazioni | sì |

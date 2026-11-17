@@ -112,8 +112,8 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   scalette](reference/canvas-import.md), [il controllo](reference/canvas-check.md),
   [l'inchiostro](reference/canvas-ink.md) (`fub:ink`) con [le ancore di pagina e
   di cella](reference/canvas-ink-anchors.md), e [gli estratti](reference/canvas-parts.md) (`fub:parts`)
-- [Il server MCP](reference/mcp-server.md) e [il clipper del browser](reference/web-clipper.md)
-- [Il censimento delle porte](reference/censimento-delle-porte.md): che cosa un componente di terzi può rifare
+- [Il server MCP](reference/mcp-server.md), [il clipper del browser](reference/web-clipper.md),
+  [il censimento delle porte](reference/censimento-delle-porte.md) (che cosa rifà un componente di terzi) e [le ricette](reference/ricette.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)
 - [I tasti e i gesti della lavagna](reference/canvas-input.md), [la sua

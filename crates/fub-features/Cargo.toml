@@ -46,6 +46,7 @@ default = [
     "http-client",
     "lavagna",
     "craft",
+    "recipes",
 ]
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
@@ -72,6 +73,12 @@ stats = []
 # comandi. Dichiararla qui è il modo di non spedire quella build.
 trash = ["commands"]
 graph = []
+# Le ricette: note che compongono comandi del registro. Come per il cestino la
+# dipendenza da `commands` è di **funzionamento**: l'annullamento di
+# `recipes.new` è `note.trash`, e la riga d'inventario richiede `COMMANDS_ID`,
+# che esiste solo con `commands`. YAML, impronta e date servono a leggere,
+# riconoscere e provare il blocco `fub-recipe`.
+recipes = ["commands", "dep:serde_yaml_ng", "dep:sha2", "dep:jiff"]
 # `note.create` scrive le proprietà iniziali come frontmatter YAML.
 commands = ["dep:serde_yaml_ng"]
 blocks = []
