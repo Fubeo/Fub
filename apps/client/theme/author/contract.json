@@ -598,6 +598,7 @@
     "cm-fub-address-choice",
     "cm-fub-address-choice-link",
     "cm-fub-address-choice-card",
+    "cm-fub-address-choice-embed",
     "fub-color-gray",
     "fub-color-brown",
     "fub-color-orange",
@@ -1676,6 +1677,12 @@
     "media-recorder",
     "web-viewer-bar",
     "web-viewer-address",
+    "web-embed",
+    "web-embed-icon",
+    "web-embed-text",
+    "web-embed-name",
+    "web-embed-detail",
+    "web-embed-load",
     "slide-deck",
     "slide-status",
     "slide-stage",
@@ -2716,6 +2723,7 @@
     "cm-fub-address-choice": "contenuto",
     "cm-fub-address-choice-link": "contenuto",
     "cm-fub-address-choice-card": "contenuto",
+    "cm-fub-address-choice-embed": "contenuto",
     "fub-color-gray": "contenuto",
     "fub-color-brown": "contenuto",
     "fub-color-orange": "contenuto",
@@ -3794,6 +3802,12 @@
     "media-recorder": "cornice",
     "web-viewer-bar": "cornice",
     "web-viewer-address": "cornice",
+    "web-embed": "contenuto",
+    "web-embed-icon": "contenuto",
+    "web-embed-text": "contenuto",
+    "web-embed-name": "contenuto",
+    "web-embed-detail": "contenuto",
+    "web-embed-load": "contenuto",
     "slide-deck": "contenuto",
     "slide-status": "cornice",
     "slide-stage": "contenuto",
@@ -5930,7 +5944,8 @@
       "hooks": [
         "cm-fub-address-choice",
         "cm-fub-address-choice-link",
-        "cm-fub-address-choice-card"
+        "cm-fub-address-choice-card",
+        "cm-fub-address-choice-embed"
       ],
       "states": [
         "rest",
@@ -8197,6 +8212,25 @@
       "hooks": [
         "web-viewer-bar",
         "web-viewer-address"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "web-embed",
+      "part": "media",
+      "hooks": [
+        "web-embed",
+        "web-embed-icon",
+        "web-embed-text",
+        "web-embed-name",
+        "web-embed-detail",
+        "web-embed-load"
       ],
       "states": [
         "rest",
@@ -11129,10 +11163,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 68,
-    "hooks": 2116,
+    "hooks": 2123,
     "state_names": 7,
-    "assigned_states": 963,
-    "components": 282,
+    "assigned_states": 968,
+    "components": 283,
     "preference_tokens": 191
   }
 }

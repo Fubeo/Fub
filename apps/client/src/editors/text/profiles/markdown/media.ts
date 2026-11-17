@@ -29,6 +29,7 @@ import { parseWikilinkInner } from "../../../../rules/syntax";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
 import { REMOTE_SRC_ATTRIBUTE, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
+import { webEmbedOf, webEmbedPlaceholder, type WebEmbedOpener } from "./web-embed";
 
 /// Ciò che serve a idratare, iniettabile nei banchi.
 export interface MediaPort {
@@ -243,11 +244,36 @@ function showMissingImage(img: HTMLImageElement, path: string): void {
 /// gesto «Scarica nel vault». Nessuna richiesta parte da qui: `load` chiede
 /// l'immagine all'host e ne scrive il file, e la nota si ridisegna col link
 /// nuovo (L04). Senza `load` resta il segnaposto, che dice perché non si vede.
-export function showRemoteImages(container: HTMLElement, life: Lifetime, load?: (url: string) => Promise<void>): void {
+///
+/// L'embed di un indirizzo di un sito dell'elenco chiuso (`![](https://…)`,
+/// T37) non è un'immagine: è una pagina incorporata, e al suo posto va il
+/// segnaposto «Carica» di `web-embed.ts`, sia per l'`img` della Live sia per
+/// il `.embed[data-embed-url]` della resa dell'host (la Lettura). `open` è
+/// chi apre la pagina; di serie il visore web della finestra.
+export function showRemoteImages(
+  container: HTMLElement,
+  life: Lifetime,
+  load?: (url: string) => Promise<void>,
+  open?: WebEmbedOpener,
+): void {
+  for (const slot of container.querySelectorAll<HTMLElement>(".embed[data-embed-url]")) {
+    if (slot.dataset.webEmbed || slot.closest("[data-ui-slot]")) continue;
+    const embed = webEmbedOf(slot.dataset.embedUrl ?? "");
+    if (!embed) continue;
+    slot.dataset.webEmbed = "shown";
+    slot.classList.add("embed-media");
+    slot.replaceChildren(webEmbedPlaceholder(embed, life, open));
+  }
   for (const img of container.querySelectorAll<HTMLImageElement>(`img[${REMOTE_SRC_ATTRIBUTE}]`)) {
     if (img.dataset.remoteShown || img.closest("[data-ui-slot]")) continue;
     img.dataset.remoteShown = "true";
     const url = img.getAttribute(REMOTE_SRC_ATTRIBUTE)!;
+    const embed = webEmbedOf(url);
+    if (embed) {
+      img.hidden = true;
+      img.after(webEmbedPlaceholder(embed, life, open));
+      continue;
+    }
     const alt = img.getAttribute("alt")?.trim() ?? "";
     let site = url;
     try {
