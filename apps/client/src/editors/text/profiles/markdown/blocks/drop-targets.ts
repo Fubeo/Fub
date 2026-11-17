@@ -4,12 +4,14 @@
 // `editors/core/registry.ts` (`dropOffers`), che dice soltanto dove sta un
 // posto e come si chiama; che cosa fa il rilascio lì lo decide l'editor, qui.
 //
-// Oggi il solo bersaglio sono i titoli della Struttura della stessa nota:
-// «In fondo a …» porta il blocco in fondo alla sezione di quel titolo, in un
-// passo d'annullamento. Il cassetto (T32) e la lavagna a lato (T48) ne
-// aggiungono altri. Niente DOM: rettangoli e testo.
+// I titoli della Struttura della stessa nota: «In fondo a …» porta il blocco
+// in fondo alla sezione di quel titolo, in un passo d'annullamento. Le note
+// del cassetto (T32): «Sposta in «…»» porta il blocco in fondo a quella nota
+// con il comando del nucleo, due scritture e un annulla; al suo posto resta il
+// link. La lavagna a lato (T48) ne aggiungerà altri. Niente DOM: rettangoli e
+// testo.
 import type { EditorState } from "@codemirror/state";
-import type { SurfaceDropOffer, SurfaceRect } from "../../../../core/registry";
+import type { SurfaceDropDocument, SurfaceDropOffer, SurfacePlaceOffer, SurfaceRect } from "../../../../core/registry";
 import { byteToNormalizedCharIndices } from "../../../../../rules/offsets";
 import { liveStrings } from "../strings";
 import type { Block } from "./model";
@@ -23,8 +25,12 @@ export interface DropTarget {
   /// La shell mostra il bersaglio sotto il puntatore.
   hover(on: boolean): void;
   /// La transazione del rilascio sul documento di adesso; `null` se non
-  /// sposta niente.
+  /// sposta niente dentro questo documento.
   drop(state: EditorState, blocks: readonly Block[], run: BlockRun): MoveSpec | null;
+  /// Un'altra nota (o questa, intera): il rilascio non è una transazione
+  /// dell'editor ma «Sposta in…» verso di lei, in fondo, col link al posto del
+  /// blocco. Chi tiene il blocco chiede lo spostamento (`BlocksOptions.moveBlock`).
+  readonly note?: { readonly document: SurfaceDropDocument; readonly title: string };
 }
 
 /// Il titolo che un posto della Struttura nomina: quello che comincia dove
@@ -113,11 +119,11 @@ export function moveToSectionEnd(state: EditorState, blocks: readonly Block[], r
 /// niente (il titolo in mano, la sezione dove la tratta sta già in fondo).
 export function placeTargets(state: EditorState, blocks: readonly Block[], run: BlockRun, offers: readonly SurfaceDropOffer[]): DropTarget[] {
   const out: DropTarget[] = [];
-  if (offers.length === 0) return out;
+  const places = offers.filter((offer): offer is SurfacePlaceOffer => offer.kind === "place");
+  if (places.length === 0) return out;
   // Un passaggio solo sulla sorgente per tutti gli span.
-  const starts = byteToNormalizedCharIndices(state.sliceDoc(), offers.map((offer) => offer.span.start));
-  for (const [index, offer] of offers.entries()) {
-    if (offer.kind !== "place") continue;
+  const starts = byteToNormalizedCharIndices(state.sliceDoc(), places.map((offer) => offer.span.start));
+  for (const [index, offer] of places.entries()) {
     const rect = offer.rect;
     if (!(rect.right > rect.left && rect.bottom > rect.top)) continue;
     const heading = headingAt(state, blocks, starts[index]!, offer.title);
@@ -135,6 +141,26 @@ export function placeTargets(state: EditorState, blocks: readonly Block[], run: 
         if (found < 0 || headingText(now, nowBlocks[found]!) !== key.title) found = -1;
         return found < 0 ? null : moveToSectionEnd(now, nowBlocks, nowRun, found);
       },
+    });
+  }
+  return out;
+}
+
+/// I bersagli delle note che la shell offre (il cassetto): uno per nota,
+/// «Sposta in «Nome»». Il rilascio non tocca il documento: lo dice `note`.
+export function noteTargets(offers: readonly SurfaceDropOffer[]): DropTarget[] {
+  const out: DropTarget[] = [];
+  for (const offer of offers) {
+    if (offer.kind !== "note") continue;
+    const rect = offer.rect;
+    if (!(rect.right > rect.left && rect.bottom > rect.top)) continue;
+    const title = offer.title.trim() || offer.document.documentId;
+    out.push({
+      rect,
+      label: liveStrings.t("blocks.drag.note", { name: title }),
+      hover: (on) => offer.hover(on),
+      drop: () => null,
+      note: { document: offer.document, title },
     });
   }
   return out;

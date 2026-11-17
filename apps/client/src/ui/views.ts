@@ -192,7 +192,7 @@ function markPlaces(root: HTMLElement, node: UiNode): void {
 
 /// La parte di `el` che si vede: il suo rettangolo tagliato da ogni antenato
 /// che taglia ciò che sborda e dalla finestra. `null` se non se ne vede niente.
-function visibleRect(el: HTMLElement): SurfaceRect | null {
+export function visibleRect(el: HTMLElement): SurfaceRect | null {
   const rect = el.getBoundingClientRect();
   let left = rect.left;
   let top = rect.top;

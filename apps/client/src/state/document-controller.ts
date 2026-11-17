@@ -70,6 +70,7 @@ import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import { newSubpage, renamePage } from "./page-rename";
+import { moveBlock, moveHeadings, moveNotes } from "./move-block";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
 import { dailyDate, dailyPath, firstWeekday } from "./dates";
@@ -1398,6 +1399,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onSearchTag: (tag) => deps.searchTag(tag),
     onRenamePage: renamePage,
     onNewSubpage: newSubpage,
+    moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
     pageIcons: {
       icon: linkedPageIcon,
       isPerson: (page) => isPersonTarget(page),

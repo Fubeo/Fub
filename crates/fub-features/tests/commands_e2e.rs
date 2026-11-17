@@ -20,9 +20,9 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::session::{AnchoredSelection, AnchoredSelections, SelectionSet, ViewContext};
 use fub_abi::PluginError;
 use fub_features::{
-    CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_DUPLICATE, NOTES_RENAME, NOTES_TRASH,
-    SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
-    SETTINGS_SET, TRASH_EMPTY, VAULT_ARCHIVE, VAULT_REPLACE,
+    CoreCommands, COMMANDS_ID, NOTES_BLOCK_MOVE, NOTES_CREATE, NOTES_DUPLICATE, NOTES_RENAME,
+    NOTES_TRASH, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
+    SETTINGS_SET, TRASH_EMPTY, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -45,7 +45,14 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
+        let ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
+        with_commands(ws)
+    }
+}
+
+/// I comandi ufficiali registrati come in produzione, col loro catalogo.
+fn with_commands(mut ws: Workspace) -> Workspace {
+    {
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
         // **Col catalogo**, e non `register_core_feature`: da quando i comandi
@@ -62,8 +69,8 @@ impl Vault {
         ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
             .expect("registrato");
         ws.reindex().expect("reindex");
-        ws
     }
+    ws
 }
 
 #[test]
@@ -379,7 +386,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 20, "i venti comandi ufficiali");
+    assert_eq!(specs.len(), 21, "i ventuno comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
@@ -1397,4 +1404,293 @@ fn simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan() {
         matches!(error, PluginError::PermissionDenied(_)),
         "{error:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// «Sposta in…» (`note.block.move`, T32): due note, tutte e due o nessuna
+// ---------------------------------------------------------------------------
+
+const MOVE_FROM: &str = "Riunione.md";
+const MOVE_TO: &str = "Progetto.md";
+const MOVE_FROM_TEXT: &str = "# Riunione\n\nPrimo punto. ^abc123\n\nUltimo punto.\n";
+const MOVE_TO_TEXT: &str = "# Progetto\n\nIntro.\n";
+const MOVE_BLOCK: &str = "Primo punto. ^abc123";
+
+fn move_args() -> serde_json::Value {
+    let start = MOVE_FROM_TEXT.find(MOVE_BLOCK).expect("il blocco c'è");
+    serde_json::json!({
+        "doc": MOVE_FROM,
+        "at": [start, start + MOVE_BLOCK.len()],
+        "text": MOVE_BLOCK,
+        "to": MOVE_TO,
+    })
+}
+
+fn source(ws: &Workspace, id: &str) -> String {
+    ws.read_source(&DocId::new(id)).expect("legge")
+}
+
+#[test]
+fn moving_a_block_writes_both_notes_and_one_undo_puts_both_back() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let other = "Vedi [[Riunione#^abc123]].\n";
+    for (id, text) in [
+        (MOVE_FROM, MOVE_FROM_TEXT),
+        (MOVE_TO, MOVE_TO_TEXT),
+        ("Altro.md", other),
+    ] {
+        ws.write_document(&DocId::new(id), text, WriteBase::Dictated)
+            .expect("scrive");
+    }
+
+    let outcome = ws
+        .invoke_command(
+            NOTES_BLOCK_MOVE,
+            move_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("si sposta");
+    assert_eq!(
+        source(&ws, MOVE_TO),
+        "# Progetto\n\nIntro.\n\nPrimo punto. ^abc123\n"
+    );
+    assert_eq!(
+        source(&ws, MOVE_FROM),
+        "# Riunione\n\n[[Progetto#^abc123]]\n\nUltimo punto.\n",
+        "al suo posto il link, che nomina il blocco col suo id"
+    );
+    assert_eq!(
+        source(&ws, "Altro.md"),
+        "Vedi [[Progetto#^abc123]].\n",
+        "il link di un'altra nota segue il blocco: il grafo del kernel lo sa"
+    );
+    assert_eq!(
+        outcome.notify.expect("si racconta").to_string(),
+        "Spostato in fondo a «Progetto». Qui resta il link."
+    );
+
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("si annulla");
+    assert_eq!(source(&ws, MOVE_FROM), MOVE_FROM_TEXT, "un annulla solo…");
+    assert_eq!(source(&ws, MOVE_TO), MOVE_TO_TEXT, "…rimette tutte e due");
+    assert_eq!(
+        source(&ws, "Altro.md"),
+        other,
+        "e i link che avevano seguito"
+    );
+}
+
+#[test]
+fn a_block_whose_note_changed_moves_nothing() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new(MOVE_FROM), MOVE_FROM_TEXT, WriteBase::Dictated)
+        .expect("scrive");
+    ws.write_document(&DocId::new(MOVE_TO), MOVE_TO_TEXT, WriteBase::Dictated)
+        .expect("scrive");
+    // Il menu ha letto il blocco, poi la nota è cambiata da fuori.
+    let changed = "# Riunione\n\nAltro testo, scritto da fuori.\n";
+    ws.write_document(&DocId::new(MOVE_FROM), changed, WriteBase::Dictated)
+        .expect("scrive");
+    let error = ws
+        .invoke_command(
+            NOTES_BLOCK_MOVE,
+            move_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("il blocco non è più lì");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error:?}");
+    assert_eq!(source(&ws, MOVE_FROM), changed);
+    assert_eq!(source(&ws, MOVE_TO), MOVE_TO_TEXT);
+}
+
+#[test]
+fn undoing_a_move_after_the_target_changed_touches_neither_note() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new(MOVE_FROM), MOVE_FROM_TEXT, WriteBase::Dictated)
+        .expect("scrive");
+    ws.write_document(&DocId::new(MOVE_TO), MOVE_TO_TEXT, WriteBase::Dictated)
+        .expect("scrive");
+    ws.invoke_command(
+        NOTES_BLOCK_MOVE,
+        move_args(),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("si sposta");
+    let moved_from = source(&ws, MOVE_FROM);
+    let later = format!("{}Scritto dopo.\n", source(&ws, MOVE_TO));
+    ws.write_document(&DocId::new(MOVE_TO), &later, WriteBase::Dictated)
+        .expect("scrive");
+
+    let error = ws
+        .invoke_command(
+            VAULT_UNDO,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("l'arrivo è cambiato dopo");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error:?}");
+    assert_eq!(
+        source(&ws, MOVE_TO),
+        later,
+        "ciò che è stato scritto dopo resta"
+    );
+    assert_eq!(
+        source(&ws, MOVE_FROM),
+        moved_from,
+        "la partenza non torna indietro da sola"
+    );
+}
+
+/// Un supporto in memoria che su un file scelto dice «disco pieno»: la
+/// seconda scrittura del piano che non riesce, o un arrivo che non si scrive.
+mod refusing {
+    use std::sync::Mutex;
+
+    use camino::{Utf8Path, Utf8PathBuf};
+    use fub_kernel::storage::{ConditionalWrite, DirEntry, Merge, Stat};
+    use fub_kernel::{MemStorage, VaultStorage};
+
+    pub struct Storage {
+        pub inner: MemStorage,
+        pub refused: Mutex<Option<Utf8PathBuf>>,
+    }
+
+    impl Storage {
+        fn refuse(&self, path: &Utf8Path) -> std::io::Result<()> {
+            if self.refused.lock().unwrap().as_deref() == Some(path) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::StorageFull,
+                    "il disco è pieno",
+                ));
+            }
+            Ok(())
+        }
+    }
+
+    impl VaultStorage for Storage {
+        fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+            self.inner.read(path)
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+            self.refuse(path)?;
+            self.inner.write(path, bytes)
+        }
+        fn write_if_unchanged(
+            &self,
+            path: &Utf8Path,
+            expected: Option<&[u8]>,
+            bytes: &[u8],
+        ) -> std::io::Result<ConditionalWrite> {
+            self.refuse(path)?;
+            self.inner.write_if_unchanged(path, expected, bytes)
+        }
+        fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+            self.refuse(path)?;
+            self.inner.update(path, merge)
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.inner.append(path, bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.refuse(to)?;
+            self.inner.rename(from, to)
+        }
+        fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.refuse(to)?;
+            self.inner.rename_no_replace(from, to)
+        }
+        fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove(path)
+        }
+        fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+            self.inner.list(dir)
+        }
+        fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+            self.inner.stat(path)
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove_empty_dir(dir)
+        }
+    }
+}
+
+/// Le due note su un supporto che, da quando il vault è aperto, rifiuta ogni
+/// scrittura di `refused`.
+fn refusing_vault(refused: &str) -> Workspace {
+    use fub_kernel::{MachineSettings, MemStorage, VaultStorage};
+    use std::sync::{Arc, Mutex};
+    let root = Utf8PathBuf::from("/vault-sposta");
+    let inner = MemStorage::new();
+    inner
+        .write(&root.join(MOVE_FROM), MOVE_FROM_TEXT.as_bytes())
+        .unwrap();
+    inner
+        .write(&root.join(MOVE_TO), MOVE_TO_TEXT.as_bytes())
+        .unwrap();
+    let storage = Arc::new(refusing::Storage {
+        inner,
+        refused: Mutex::new(None),
+    });
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let ws = Workspace::on(
+        &root,
+        registry,
+        Arc::clone(&storage) as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    let ws = with_commands(ws);
+    *storage.refused.lock().unwrap() = Some(root.join(refused));
+    ws
+}
+
+#[test]
+fn a_read_only_target_leaves_both_notes_as_they_were() {
+    let mut ws = refusing_vault(MOVE_TO);
+    let error = ws
+        .invoke_command(
+            NOTES_BLOCK_MOVE,
+            move_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("l'arrivo non si scrive");
+    assert!(matches!(error, PluginError::Io(_)), "{error:?}");
+    assert_eq!(source(&ws, MOVE_TO), MOVE_TO_TEXT);
+    assert_eq!(source(&ws, MOVE_FROM), MOVE_FROM_TEXT);
+}
+
+#[test]
+fn a_failed_write_on_the_second_note_puts_the_first_back() {
+    let mut ws = refusing_vault(MOVE_FROM);
+    let error = ws
+        .invoke_command(
+            NOTES_BLOCK_MOVE,
+            move_args(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("la partenza non si scrive");
+    assert!(matches!(error, PluginError::Io(_)), "{error:?}");
+    assert_eq!(
+        source(&ws, MOVE_TO),
+        MOVE_TO_TEXT,
+        "l'arrivo era già scritto, e torna com'era"
+    );
+    assert_eq!(source(&ws, MOVE_FROM), MOVE_FROM_TEXT);
 }

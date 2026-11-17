@@ -49,6 +49,7 @@ import type {
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
+  Heading,
   IndexQuery,
   IndexResult,
   JobStatus,
@@ -1708,6 +1709,28 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   backlinks: (q) => {
     const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
     return { kind: "backlinks", value: { items: [], offset: 0, total } };
+  },
+  // I titoli `#` di una nota del corpus, coi byte del sorgente: quelli che
+  // «Sposta in…» offre come destinazione. Lo slug è quello semplice, minuscole
+  // e trattini; una nota fuori dal corpus non ha titoli.
+  outline: (q) => {
+    const source = q.kind === "outline" ? (CORPUS[q.doc] ?? "") : "";
+    const encoder = new TextEncoder();
+    const value: Heading[] = [];
+    let offset = 0;
+    let fence = false;
+    for (const line of source.split("\n")) {
+      if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+      const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+      if (found) {
+        const text = found[2]!;
+        const start = encoder.encode(source.slice(0, offset)).length;
+        const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
+        value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
+      }
+      offset += line.length + 1;
+    }
+    return { kind: "outline", value };
   },
   organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),

@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 520 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 521 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -118,7 +118,7 @@ gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-n
 gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph grip-eyes grip-eyes-held hash heading heart help
 history home image inbox info keyboard kit-eyedropper line-number media-dark-pages media-fit-width
 media-page-next media-page-previous media-show-annotations media-thumbnails media-two-pages minus
-monitor moon more music notes outline palette panel-left panel-right pen people pin plus
+monitor moon more move music notes outline palette panel-left panel-right pen people pin plus
 prop-checkbox prop-date prop-list prop-number prop-people prop-select prop-status prop-tags
 prop-text prop-url properties publish query rc-align-center rc-align-justify rc-align-left
 rc-align-right rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear

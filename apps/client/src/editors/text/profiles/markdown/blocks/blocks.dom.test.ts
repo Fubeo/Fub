@@ -958,6 +958,214 @@ describe("fuori dalla colonna (E2)", () => {
   });
 });
 
+// ── «Sposta in…» (E13, T32) ─────────────────────────────────────────────────
+//
+// Il menu del blocco e il blocco lasciato su una nota del cassetto: l'editor
+// non tocca il documento, chiede lo spostamento al comando del nucleo (qui una
+// porta finta) coi byte del blocco e il testo letto lì.
+
+describe("«Sposta in…» (E13)", () => {
+  const DOC = "Uno\n\n## I conti\n\nDue\n\n## Fine\n\nTre";
+  const NOTE = { documentId: "nota.md", vault: undefined };
+  const tag = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-block-lift-to");
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  function port() {
+    return {
+      notes: vi.fn(async () => [{ id: "nota.md", title: "nota" }, { id: "Progetto.md", title: "Progetto" }]),
+      headings: vi.fn(async (doc: string) => doc === "Progetto.md"
+        ? [{ slug: "idee", text: "Idee", level: 2, start: 10 }]
+        : [{ slug: "i-conti", text: "I conti", level: 2, start: 5 }]),
+      move: vi.fn(async () => null as string | null),
+    };
+  }
+
+  /// Il cassetto: la nota «Progetto» nella riga 0–240 × 300–328.
+  function drawer(hover = vi.fn()) {
+    const stop = offerDropTargets({
+      offers: (doc) => [{ kind: "note", document: { documentId: "Progetto.md", vault: doc.vault }, title: "Progetto", rect: { left: 0, top: 300, right: 240, bottom: 328 }, hover }],
+    });
+    return { hover, stop };
+  }
+
+  afterEach(() => closeContextMenu());
+
+  it("trascinato su una nota del cassetto, il cartellino la nomina e il rilascio la chiede al comando: in fondo, col link", async () => {
+    const { hover, stop } = drawer();
+    try {
+      const move = port();
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(314, 120);
+      expect(hand.lift()?.dataset.free, "fuori dalla colonna").toBe("true");
+      expect(tag(view)?.textContent).toBe("Sposta in «Progetto»");
+      expect(live(view)).toBe("Sposta in «Progetto»");
+      expect(hover).toHaveBeenLastCalledWith(true);
+      hand.up(314);
+      await settle();
+      expect(hover).toHaveBeenLastCalledWith(false);
+      expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [0, 3], text: "Uno", to: "Progetto.md", heading: null, leave: "link" });
+      expect(view.state.doc.toString(), "il documento lo cambia la ricarica dopo le due scritture").toBe(DOC);
+      expect(view.state.field(dragPose).lifted, "il blocco si è posato").toBeNull();
+    } finally {
+      stop();
+    }
+  });
+
+  it("senza chi sposta fra le note, le note del cassetto non sono bersagli", () => {
+    const { hover, stop } = drawer();
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(314, 120);
+      expect(tag(view)?.hidden).toBe(true);
+      expect(hover).not.toHaveBeenCalled();
+      hand.up(314);
+      hand.handles.returning?.land();
+      expect(view.state.doc.toString()).toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  it("un rifiuto del comando si dice, e il documento resta com'era", async () => {
+    const { stop } = drawer();
+    try {
+      const move = port();
+      move.move.mockResolvedValue("«Progetto» è cambiata");
+      const notify = vi.fn();
+      const view = mount(DOC, 0, notify, [], { document: () => NOTE, move });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(314, 120);
+      hand.up(314);
+      await settle();
+      expect(notify).toHaveBeenCalledWith("Il blocco non si è spostato: «Progetto» è cambiata", "guasto");
+      expect(view.state.doc.toString()).toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  /// Il menu della maniglia del blocco `at`, aperto col tasto destro.
+  function openMenu(view: EditorView, at: number): void {
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[at]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 3, clientY: 3 }));
+  }
+  const item = (label: string) => [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem]")]
+    .find((each) => each.querySelector(".menu-label")?.textContent === label);
+
+  it("dal menu del blocco: la nota, poi dove e che cosa resta; il comando riceve i byte del blocco", async () => {
+    const move = port();
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+    openMenu(view, 4);
+    const labels = [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem] .menu-label")].map((label) => label.textContent);
+    expect(labels, "dopo Duplica, come nel prototipo").toEqual(["Trasforma in", "Colore", "Duplica", "Sposta in…", "Copia il link al blocco", "Elimina"]);
+    item("Sposta in…")!.click();
+    await settle();
+    // La nota: l'elenco filtrabile, col percorso; la nota stessa lo dice.
+    const dialog = document.querySelector<HTMLElement>(".modale[role=dialog]")!;
+    expect(dialog.querySelector(".palette-heading")?.textContent).toBe("Sposta in…");
+    expect(dialog.querySelector<HTMLInputElement>(".palette-input")?.placeholder).toBe("Cerca una nota…");
+    const options = [...dialog.querySelectorAll<HTMLElement>("[role=option]")];
+    expect(options.map((option) => option.textContent), "la nota stessa per ultima").toEqual(["ProgettoProgetto.md", "notaquesta nota · nota.md"]);
+    options[0]!.click();
+    await settle();
+    // Dove e che cosa resta: in fondo e il link sono già scelti.
+    const form = document.querySelector<HTMLFormElement>(".modale .palette-form")!;
+    expect(document.querySelector(".modale .palette-heading")?.textContent).toBe("Sposta in «Progetto»");
+    const where = form.querySelector<HTMLSelectElement>("select[name=where]")!;
+    const leave = form.querySelector<HTMLSelectElement>("select[name=leave]")!;
+    expect(document.activeElement, "il fuoco sulla prima domanda").toBe(where);
+    expect([...where.options].map((option) => option.text)).toEqual(["In fondo alla nota", " In fondo a «Idee»"]);
+    expect([...leave.options].map((option) => option.text)).toEqual(["Un link alla nota", "Niente", "Una trasclusione del blocco"]);
+    where.value = "idee";
+    leave.value = "embed";
+    form.requestSubmit();
+    await settle();
+    const tre = DOC.indexOf("Tre");
+    expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [tre, tre + 3], text: "Tre", to: "Progetto.md", heading: "idee", leave: "embed" });
+    expect(document.querySelector(".modale"), "le finestre si sono chiuse").toBeNull();
+  });
+
+  it("nella stessa nota non chiede che cosa resta, e non offre i titoli dentro ciò che si sposta", async () => {
+    const move = port();
+    move.headings.mockResolvedValue([{ slug: "i-conti", text: "I conti", level: 2, start: DOC.indexOf("## I conti") }, { slug: "fine", text: "Fine", level: 2, start: DOC.indexOf("## Fine") }]);
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+    openMenu(view, 1);
+    item("Sposta in…")!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>(".modale [role=option]")][1]!.click();
+    await settle();
+    const form = document.querySelector<HTMLFormElement>(".modale .palette-form")!;
+    const where = form.querySelector<HTMLSelectElement>("select[name=where]")!;
+    expect([...where.options].map((option) => option.text), "il titolo in mano non è una destinazione").toEqual(["In fondo alla nota", " In fondo a «Fine»"]);
+    expect(form.querySelector<HTMLSelectElement>("select[name=leave]")!.closest("label")!.hidden).toBe(true);
+    form.requestSubmit();
+    await settle();
+    const start = new TextEncoder().encode(DOC.slice(0, DOC.indexOf("## I conti"))).length;
+    // Un titolo è un blocco solo: la sua riga (la sezione resta dov'è).
+    expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [start, start + "## I conti".length], text: "## I conti", to: "nota.md", heading: null, leave: "none" });
+  });
+
+  it("una tratta di più blocchi si sposta intera, e non offre la trasclusione", async () => {
+    const move = port();
+    const view = mount("Uno\n\nDue\n\nTre", 1, vi.fn(), [], { document: () => NOTE, move });
+    press(view, "Escape");
+    press(view, "ArrowDown", { shiftKey: true });
+    openMenu(view, 0);
+    item("Sposta in…")!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>(".modale [role=option]")][0]!.click();
+    await settle();
+    const form = document.querySelector<HTMLFormElement>(".modale .palette-form")!;
+    expect([...form.querySelector<HTMLSelectElement>("select[name=leave]")!.options].map((option) => option.value)).toEqual(["link", "none"]);
+    form.requestSubmit();
+    await settle();
+    expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [0, 8], text: "Uno\n\nDue", to: "Progetto.md", heading: null, leave: "link" });
+  });
+
+  it("il testo cambiato mentre si sceglie: non si sposta niente, e lo dice", async () => {
+    const move = port();
+    const notify = vi.fn();
+    const view = mount(DOC, 0, notify, [], { document: () => NOTE, move });
+    openMenu(view, 0);
+    item("Sposta in…")!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>(".modale [role=option]")][0]!.click();
+    await settle();
+    view.dispatch({ changes: { from: 0, insert: "Prima\n\n" } });
+    document.querySelector<HTMLFormElement>(".modale .palette-form")!.requestSubmit();
+    await settle();
+    expect(move.move).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("La nota è cambiata mentre sceglievi: non si è spostato niente.", "guasto");
+  });
+
+  it("chiusa la scelta della nota, non si sposta niente", async () => {
+    const move = port();
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+    openMenu(view, 0);
+    item("Sposta in…")!.click();
+    await settle();
+    document.querySelector<HTMLElement>(".modale")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle();
+    expect(document.querySelector(".modale")).toBeNull();
+    expect(move.headings).not.toHaveBeenCalled();
+    expect(move.move).not.toHaveBeenCalled();
+  });
+});
+
 // ── I gesti ai bordi (E2, T2) ───────────────────────────────────────────────
 //
 // Ogni caso limite di E2 coi gesti che spostano un blocco: il trascinamento

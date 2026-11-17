@@ -22,7 +22,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::model::{DocId, LinkTarget, PropertyScalar, PropertyValue, Span};
+use fub_abi::model::{DocId, PropertyScalar, PropertyValue, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
 };
@@ -334,7 +334,7 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
     // La parola resta quella che si leggeva: si collega, non si riscrive. Il
     // riferimento è il più corto che porta davvero alla nota, e se la parola
     // è scritta altrimenti (un alias) resta come testo del link.
-    let reference = link_reference(host, &DocId::new(target))?;
+    let reference = crate::formats::link_reference(host, &DocId::new(target))?;
     let link = crate::formats::link_text(
         host,
         &doc,
@@ -348,40 +348,6 @@ fn convert_to_link(action: &UiAction, host: &mut dyn HostApi) -> Result<ViewUpda
         ),
     )?;
     Ok(ViewUpdate::None)
-}
-
-/// Il testo del wikilink che porta a `target`: il nome pagina se la
-/// risoluzione del vault lo manda lì, poi il nome con la sua estensione, poi
-/// il percorso senza estensione, e solo in ultimo il percorso intero. Chiede al
-/// kernel invece di indovinare la regola: due note omonime in cartelle diverse,
-/// o nella stessa cartella con formati diversi, sono esattamente il caso in cui
-/// il nome da solo porterebbe altrove.
-fn link_reference(host: &dyn ReadApi, target: &DocId) -> Result<String, PluginError> {
-    let path = target.as_str();
-    let file_name = path.rsplit('/').next().filter(|name| *name != path);
-    let without_extension = path
-        .rsplit_once('.')
-        .map(|(stem, _)| stem)
-        .filter(|stem| !stem.is_empty() && !stem.ends_with('/'));
-    for candidate in [Some(target.page_name()), file_name, without_extension]
-        .into_iter()
-        .flatten()
-    {
-        let resolved = match host.query_index(IndexQuery::Resolve {
-            target: LinkTarget::wiki(candidate),
-            from: None,
-        }) {
-            Ok(resolved) => resolved,
-            // Un host che non sa risolvere non ferma il gesto: il percorso
-            // intero porta sempre alla nota, com'era prima.
-            Err(PluginError::Unserved(_)) => break,
-            Err(error) => return Err(error),
-        };
-        if matches!(resolved, IndexResult::Resolved(Some(ref found)) if found.doc == *target) {
-            return Ok(candidate.to_string());
-        }
-    }
-    Ok(path.to_string())
 }
 
 /// Il segnaposto (nessun backlink / nessuna nota aperta). Ora è ciò che dice di

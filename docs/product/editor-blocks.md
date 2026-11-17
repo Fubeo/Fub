@@ -53,8 +53,8 @@ nome del blocco e il piede dei tasti ([Tasto destro](editor-menus.md)). Ha:
   prende più righe le unisce con uno spazio, e le sottovoci restano blocchi
   sotto. Una tabella non si trasforma;
 - **Colore ▸**, il testo e il fondo coi nove colori dei Blocchi;
-- **Duplica** e, per ultimo, **Elimina**; **Sposta su**, **Sposta giù** e
-  **Affianca in colonne** si trovano scrivendo;
+- **Duplica**, **Sposta in…** ([in un'altra nota](editor-move-to.md)) e, per
+  ultimo, **Elimina**; **Sposta su**, **Sposta giù** e **Affianca in colonne** si trovano scrivendo;
 - **Copia il link al blocco**: scrive negli appunti `[[Nota#Titolo]]` per un
   titolo e `[[Nota#^id]]` per il resto. Se il blocco non ha un id, ne riceve uno
   di sei caratteri: in coda all'ultima riga per paragrafi, titoli e voci, su una

@@ -46,7 +46,8 @@ import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnai
 import { iconEl } from "../ui/icons";
 import { closeContextMenu, pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
-import { selectInspectorTab } from "../ui/views";
+import { selectInspectorTab, visibleRect } from "../ui/views";
+import { dropOffersChanged, offerDropTargets, type SurfaceDropDocument, type SurfaceDropOffer } from "../editors/core/registry";
 import {
   newKinds,
   canImportDrawing,
@@ -168,6 +169,10 @@ let lastSignature = "";
 export function mountExplorer(lifetime: Lifetime): void {
   treeLife = lifetime;
   thumbnails = mountTreeThumbnails(lifetime);
+  // Le note del cassetto sono bersagli di un blocco in mano (E13, «Sposta
+  // in…»): la porta di T2b, che dice soltanto dove sta la riga e come si
+  // chiama; che cosa fa il rilascio lo decide l'editor.
+  lifetime.add(offerDropTargets({ offers: noteOffers }));
   lifetime.add(() => {
     treeLife = null;
     treeMotion = null;
@@ -629,6 +634,8 @@ function renderFileList(only: string | null = null): void {
   treeMotion?.settle();
   treeMotion = null;
   paintThumbnails();
+  // Righe ridisegnate: un blocco già fuori dalla colonna rimisura le note.
+  dropOffersChanged();
   if (toRestore !== undefined) {
     const row = entry(toRestore);
     const control = onChevron
@@ -1018,6 +1025,33 @@ let entryCount = 0;
 
 /// La scelta multipla dell'albero, viva finché il pannello è montato.
 let selection: TreeSelection | null = null;
+
+/// Le note Markdown che il cassetto mostra adesso, come bersagli per un
+/// blocco della nota `document`: soltanto se è del vault aperto (FUB-001),
+/// perché un blocco va in una nota del suo vault. Le appuntate e l'albero
+/// sono due righe della stessa nota: vale quella che si vede.
+function noteOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  if (document.vault !== undefined && document.vault !== openVaultRoot()) return [];
+  const out: SurfaceDropOffer[] = [];
+  const rows = [...pinnedListEl.querySelectorAll<HTMLElement>(".tree-row.note[data-path]"), ...fileListEl.querySelectorAll<HTMLElement>(".tree-row.note[data-path]")];
+  for (const row of rows) {
+    const id = row.dataset.path!;
+    if (formatKindOf(id) !== "note" || !/\.(md|markdown)$/i.test(id)) continue;
+    const rect = visibleRect(row);
+    if (!rect) continue;
+    out.push({
+      kind: "note",
+      document: { documentId: id, vault: document.vault },
+      title: pageName(id),
+      rect,
+      hover: (on) => {
+        if (on) row.dataset.dropHot = "true";
+        else delete row.dataset.dropHot;
+      },
+    });
+  }
+  return out;
+}
 
 /// La riga di una nota, usata sia nell'albero sia tra le appuntate (dove il
 /// drag non ha senso: l'ordine delle appuntate è l'ordine in cui si appunta).
