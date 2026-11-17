@@ -5,6 +5,8 @@ import { canvasWasm } from "./build/canvas-wasm.mjs";
 import { SKIN_GROUP_TARGET, skinGroups } from "./build/skin-split.mjs";
 
 const CHUNK_BUDGET = 500_000;
+// Il parser upstream arriva già precompilato: resta separato e solo lazy.
+const MERMAID_PARSER_BUDGET = 700_000;
 
 /// I moduli virtuali dei gruppi della pelle: come si importano e come li
 /// nomina Rollup una volta risolti.
@@ -14,8 +16,6 @@ const SKIN_GROUP_RESOLVED = /^\0virtual:fub-skin-group\/(\d+)$/;
 /// I gruppi dell'ultima pelle trasformata, che `load` serve ai moduli
 /// virtuali. Il modulo della pelle è uno solo per build.
 let skinGroupTexts: string[] = [];
-// Il parser upstream arriva già precompilato: resta separato e solo lazy.
-const MERMAID_PARSER_BUDGET = 700_000;
 
 /// Il file del build con i chunk che ogni pagina carica all'avvio: sta in
 /// `dist/`, accanto a ciò che descrive, e non nel repository.
