@@ -474,10 +474,18 @@ export function vaultBlockSource(port: VaultBlockPort, pause = VAULT_BLOCK_PAUSE
     if (!match || vaultBlockQuery(match.query) === null) return null;
     const ticket = ++latest;
     const current = () => ticket === latest && !ctx.aborted;
-    await new Promise((resolve) => setTimeout(resolve, pause));
+    // La pausa finisce prima se CodeMirror lascia la domanda (un'altra
+    // battuta, il menu chiuso): il timer non le sopravvive.
+    const paused = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(true), pause);
+      ctx.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
     // Durante una composizione (IME) le lettere non sono ancora parole: si
     // cerca alla fine, che è un'altra battuta.
-    if (!current() || ctx.view?.composing) return null;
+    if (!paused || !current() || ctx.view?.composing) return null;
     vaultBlocksModule ??= import("./blocks/vault-blocks").catch((error: unknown) => {
       vaultBlocksModule = undefined;
       throw error;

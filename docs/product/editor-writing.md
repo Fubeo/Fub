@@ -363,9 +363,8 @@ blocco sincronizzato: [La trasclusione viva](editor-transclusion.md).
 
 `[[^^parole` cerca un blocco in tutto il vault (la foglia `block:` dell'indice, dopo una pausa
 breve) e ne propone al più 50, col testo e la nota. La scelta scrive `[[Nota#^id]]` e dà l'id al
-blocco che non l'ha (`note.block.sync`, con la revisione); se l'id non entra il link nemmeno, e
-lo si dice; da una nota in sola lettura si offre il link alla sezione. Nella nota stessa id e
-`[[#^id]]` sono un passo, con un annulla (`markdown/blocks/vault-blocks.ts`, `state/vault-blocks.ts`).
+blocco che non l'ha (`note.block.sync`); se l'id non entra il link nemmeno, e lo si dice; da una
+nota in sola lettura si offre il link alla sezione. Nella nota stessa id e `[[#^id]]` sono un passo.
 
 ## La concentrazione
 
