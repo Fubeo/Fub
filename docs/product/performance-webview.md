@@ -160,7 +160,9 @@ che non erano di chi le apre. Tre regole le tolgono dal fotogramma del gesto:
   (`shells/scrittoio/bootstrap.ts`). Il primo aspetta 2 s, ogni passo aspetta
   che puntatore, tastiera e rotella stiano fermi da 600 ms e poi un
   fotogramma; uno alla volta, un errore non ferma gli altri, e la vita della
-  shell la chiude. I compiti sono due:
+  shell la chiude. `warmups.pending()` dice se c'è ancora un compito in coda o
+  in corso: il banco del moto lo aspetta vuoto prima di ogni coreografia. I
+  compiti sono due:
   - i **caratteri** (`theme/font-warmup.ts`): le facce con
     `font-display: swap` ancora da caricare si caricano una per passo. Prima il
     Plex Mono degli accordi arrivava nel fotogramma in cui si apriva il primo
