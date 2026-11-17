@@ -719,6 +719,42 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("la formula si copia con «Copia come»: LaTeX, immagine dove gli appunti prendono un PNG, equazione", async () => {
+    const texts: string[] = [];
+    let png = true;
+    const undeclare = declareClipboard(async (text) => void texts.push(text), {
+      write: async () => {},
+      read: async () => [],
+      supports: (type) => type !== "image/png" || png,
+    });
+    try {
+      const { ed, view } = editor();
+      ed.setMode("source");
+      const doc = "Vale $a+b$ qui\n";
+      const menu = at(ed, view, doc, doc.indexOf("a+b") + 1);
+      expect(menu?.target).toMatchObject({ kind: "block", name: "a+b" });
+      // Le tre voci separate di prima non ci sono più: restano Modifica e il posto.
+      expect(contextLabels(menu)).toEqual([liveStrings.t("live.math.menu.edit"), "—", liveStrings.t("live.math.menu.to_block")]);
+      const copyAs = menu?.clipboard?.copyAs ?? [];
+      expect(copyAs.map((item) => [item.label, item.icon])).toEqual([
+        [liveStrings.t("live.math.copy_as.latex"), "copy-latex"],
+        [liveStrings.t("live.math.copy_as.image"), "copy-image"],
+        [liveStrings.t("live.math.copy_as.equation"), "copy-equation"],
+      ]);
+      // Nessun gesto «Copia»: Ctrl C copia la selezione, non la formula.
+      expect(menu?.clipboard?.offers).toEqual({});
+      copyAs[0]!.run!();
+      await vi.waitFor(() => expect(texts).toEqual(["a+b"]));
+
+      png = false;
+      const plain = at(ed, view, doc, doc.indexOf("a+b") + 1);
+      expect(plain?.clipboard?.copyAs?.map((item) => item.icon), "senza PNG negli appunti, niente immagine").toEqual(["copy-latex", "copy-equation"]);
+      ed.destroy();
+    } finally {
+      undeclare();
+    }
+  });
+
   it("nel testo semplice ci sono il blocco da inserire e «Trasforma il blocco», in Lettura «Modifica qui»", () => {
     const { ed, view } = editor();
     ed.setMode("source");

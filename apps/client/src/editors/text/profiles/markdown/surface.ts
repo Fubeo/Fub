@@ -111,7 +111,7 @@ import {
 } from "./menu";
 import { loadKatex, readOptions } from "./math";
 import { editFormulaAt, placeFormulaAt } from "./math-live";
-import { mathmlHtml, wordMathml } from "./math/paste";
+import { mathmlHtml, equationMathml } from "./math/paste";
 import { toBlock, toInline } from "./math/place";
 import { MENU_RULE, type SurfaceMenuClipboard } from "../../../core/editor-menu";
 import { linkDialogOpener } from "./link-dialog";
@@ -1830,7 +1830,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     };
   };
 
-  /// Le voci di una formula (T65): Modifica, le tre copie, il posto. Al
+  /// Le voci di una formula (T65): Modifica, «Copia come ▸», il posto. Al
   /// passaggio del puntatore non compare niente: soltanto il tasto destro.
   const mathMenu = (formula: FormulaAt, pos: number, element: Element | null): SurfaceMenu => {
     const writable = editable();
@@ -1853,7 +1853,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     };
     const copyEquation = (): void => {
       const mathml = loadKatex().then((library) => {
-        const made = wordMathml(library.renderToString(formula.tex, { ...readOptions(display, formula.tex), output: "mathml" }));
+        const made = equationMathml(library.renderToString(formula.tex, { ...readOptions(display, formula.tex), output: "mathml" }));
         if (made === null) throw new Error(s("live.math.menu.copy_failed", { reason: "MathML" }));
         return made;
       });
@@ -1872,16 +1872,24 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       context: [
         ...(writable ? [{ id: "markdown.math.edit", label: s("live.math.menu.edit"), icon: "pen", run: () => void engine.runViewCommand((view) => editFormulaAt(view, pos)) }] : []),
         MENU_RULE,
-        ...(clipboardSupports("image/png") ? [{ id: "markdown.math.copy_image", label: s("live.math.menu.image"), icon: "image", run: copyImage }] : []),
-        { id: "markdown.math.copy_equation", label: s("live.math.menu.equation"), run: copyEquation },
-        { id: "markdown.math.copy_latex", label: s("live.math.menu.latex"), icon: "copy", run: () => copyText(formula.tex, s("live.math.menu.copied_latex")) },
-        MENU_RULE,
         ...(writable && toPlace !== null ? [{
           id: formula.block ? "markdown.math.to_inline" : "markdown.math.to_block",
           label: s(formula.block ? "live.math.menu.to_inline" : "live.math.menu.to_block"),
           run: () => void engine.runViewCommand((view) => placeFormulaAt(view, pos, !formula.block)),
         }] : []),
       ],
+      // «Copia come ▸» come nel testo: prima il sorgente, poi l'immagine
+      // (dove gli appunti prendono un PNG) e l'equazione. Nessun gesto
+      // «Copia»: Ctrl C copia la selezione, non la formula toccata.
+      clipboard: {
+        offers: {},
+        run: () => undefined,
+        copyAs: [
+          { id: "markdown.math.copy_latex", label: s("live.math.copy_as.latex"), icon: "copy-latex", run: () => copyText(formula.tex, s("live.math.menu.copied_latex")) },
+          ...(clipboardSupports("image/png") ? [{ id: "markdown.math.copy_image", label: s("live.math.copy_as.image"), icon: "copy-image", run: copyImage }] : []),
+          { id: "markdown.math.copy_equation", label: s("live.math.copy_as.equation"), icon: "copy-equation", run: copyEquation },
+        ],
+      },
       note: { kind: "note", id: docId() },
     };
   };

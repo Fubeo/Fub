@@ -173,11 +173,11 @@ function convertProse(text: string): string {
   return out;
 }
 
-/// Il MathML di KaTeX (`output: "mathml"`) come lo vuole Word: il solo
-/// elemento `<math>`, con lo spazio dei nomi, senza `<semantics>` e senza
-/// l'annotazione col TeX, che Word scriverebbe come testo. `null` se dentro
+/// Il MathML di KaTeX (`output: "mathml"`) come lo vogliono i programmi di
+/// scrittura: il solo elemento `<math>`, con lo spazio dei nomi, senza
+/// `<semantics>` e senza l'annotazione col TeX, che scriverebbero come testo. `null` se dentro
 /// non c'è un `<math>`.
-export function wordMathml(katexMathml: string): string | null {
+export function equationMathml(katexMathml: string): string | null {
   const start = katexMathml.indexOf("<math");
   const end = katexMathml.lastIndexOf("</math>");
   if (start < 0 || end < start) return null;

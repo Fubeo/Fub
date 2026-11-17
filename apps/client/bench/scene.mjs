@@ -1448,7 +1448,7 @@ export const SCENE = touchLast(onPage("shell", [
     ["formula-18-latex-piu-correzioni", "formula-toccata&mathsource=1&mathhelp=spente", "Un nome con più simboli vicini: la frase li elenca, senza pulsante", "source-guesses"],
     // Il tasto destro e Invio a blocco (T65): il menu della formula, con le
     // copie e il posto; Invio nel blocco va a capo e allinea gli uguali.
-    ["formula-19-menu", "formula-toccata", "Il tasto destro su una formula: Modifica, le tre copie e «Da riga a blocco»", "menu"],
+    ["formula-19-menu", "formula-toccata", "Il tasto destro su una formula: Modifica, «Copia come» in riga e «Da riga a blocco»", "menu"],
     ["formula-20-allinea", "formula-toccata", "Invio in un blocco $$: un aligned con gli uguali allineati e la riga nuova", "align"],
   ].map(([id, live, title, gesture]) => ({
     id,
@@ -2966,8 +2966,10 @@ async function touchFormula(page, gesture) {
     await openLive(page, [], "top");
     await page.click(".cm-content .cm-fub-math", { button: "right" });
     await page.waitForSelector("#context-menu .menu-head");
-    const items = await page.locator("#context-menu [role=menuitem]").allTextContents();
-    for (const label of ["Modifica", "Copia come immagine", "Copia come equazione", "Copia il LaTeX", "Da riga a blocco"]) {
+    // I riquadri di «Copia come» non hanno testo: si leggono dal nome.
+    const items = await page.locator("#context-menu [role=menuitem]").evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("aria-label") || node.textContent || ""));
+    for (const label of ["Modifica", "Copia come LaTeX", "Copia come immagine", "Copia come equazione", "Da riga a blocco"]) {
       if (!items.some((item) => item.includes(label))) throw new Error(`nel menu della formula manca «${label}»: ${items.join(" · ")}`);
     }
     await page.mouse.move(0, 0);
