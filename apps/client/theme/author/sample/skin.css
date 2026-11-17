@@ -10111,6 +10111,11 @@ button.cm-fub-page-icon:focus-visible {
 .cm-editor .cm-content .tb-frame:has(+ .cm-markdown-gap-lead) .tb-adders {
   bottom: calc(19px - var(--text-reading) * var(--leading-relaxed) / 2);
 }
+/* Col puntatore sulla tabella la barra «Aggiungi una riga» compare sopra
+   quella riga: il segnaposto le lascia il posto. */
+.cm-editor .cm-content .tb-frame:hover + .cm-markdown-gap-lead .cm-fub-placeholder {
+  visibility: hidden;
+}
 .cm-editor .cm-content .tb-add {
   position: absolute;
   display: grid;

@@ -6535,6 +6535,7 @@
         "cm-editor",
         "cm-content",
         "cm-markdown-gap-lead",
+        "cm-fub-placeholder",
         "tb-frame",
         "tb-grid",
         "tb-corner",
