@@ -390,9 +390,8 @@ nell'`expression`, col nome («Somma di pagine»): spento se la chiave ha spazi.
 Gli altri scritti a mano restano. La colonna della nota ha solo Ordina e
 Copia; le colonne `file.*` e le formule non si rinominano e non hanno un tipo.
 In sola lettura e in una Base dentro una nota le voci che scrivono il `.base`
-sono spente col perché; in una Base dentro una nota anche Rinomina e Tipo:
-rinominare in tutto il vault lascerebbe il blocco della nota sulla chiave
-vecchia, e la voce dice di farlo dal file `.base`.
+sono spente col perché; in una Base dentro una nota anche Rinomina e Tipo (il
+blocco resterebbe sulla chiave vecchia): la voce dice di farlo dal `.base`.
 
 Rinominare tocca solo questo file `.base`, le chiavi della mappa e delle date
 comprese: **le formule e le altre Basi del vault che nominano la proprietà non
