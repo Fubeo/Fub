@@ -302,8 +302,15 @@ export function workbookHost(options: {
   /// giornale che li dà sui byte `base`, e le celle che mostrano. Un punto
   /// salvato da un'altra base si raggiunge con `fub.restore`.
   type State = { cells: Map<string, string>; styles: string[] };
-  const points: Array<{ journal: string; base: string } & State> = [];
+  type Point = { journal: string; base: string } & State;
+  let points: Point[] = [];
   let cursor = 0;
+  /// Come il provider, la cronologia di ogni giornale si copia quando cambia:
+  /// il salvataggio ritrova quella del giornale che scrive, anche se una
+  /// sessione vecchia, nel frattempo, è andata avanti per conto suo.
+  const lines = new Map<string, { points: Point[]; cursor: number }>();
+  let savedLine: { points: Point[]; cursor: number } | null = null;
+  const publish = (text: string) => lines.set(text, { points: points.map((point) => ({ ...point })), cursor });
   const states = new Map<string, State>();
   const restoredOf = (parsed: GridJournal): State | undefined => parsed.commands[0]?.id === RESTORE
     ? states.get((JSON.parse(parsed.commands[0].params) as { state: string }).state)
@@ -339,6 +346,7 @@ export function workbookHost(options: {
     points.splice(cursor + 1);
     points.push({ journal: text, base: savedRevision, ...stateOf(text) });
     cursor = points.length - 1;
+    publish(text);
   };
   const sessionFor = (text: string): GridBytesSession => {
     if (text === xlsx.conflict.journal) return structuredClone(xlsx.conflict.session) as GridBytesSession;
@@ -366,6 +374,11 @@ export function workbookHost(options: {
       calls.push(`open ${surface} ${doc} ${text === "" ? "∅" : "journal"} ${revision === xlsx.document_revision ? "base" : revision}`);
       if (revision !== base()) throw { kind: "conflict", message: "grid source changed" } satisfies PluginError;
       journal = text;
+      if (savedLine && text === "") {
+        points = savedLine.points;
+        cursor = savedLine.cursor;
+      }
+      savedLine = null;
       // L'istanza nuova ritrova la cronologia: il punto di adesso è il
       // giornale aperto sui byte di adesso.
       const here = { journal: text, base: savedRevision, ...stateOf(text) };
@@ -435,10 +448,12 @@ export function workbookHost(options: {
       calls.push("commands");
       return catalog();
     },
-    gridBytesCommand: async (_surface, _instance, request) => {
+    gridBytesCommand: async (_surface, instance, request) => {
       calls.push(`command ${request.command.id}`);
       given.push(structuredClone(request));
       if (hold) await new Promise<void>((resolve) => answers.push(resolve));
+      // Come l'host: un'istanza chiusa nel frattempo non c'è più.
+      if (closed.includes(instance)) throw { kind: "not_found", message: "grid instance closed" } satisfies PluginError;
       if (request.revision !== revisionOf(journal)) throw { kind: "conflict", message: "stale grid revision" } satisfies PluginError;
       if (!catalog().some((command) => command.id === request.command.id)) {
         throw { kind: "bad_args", message: `grid command \`${request.command.id}\` is not served` } satisfies PluginError;
@@ -472,6 +487,7 @@ export function workbookHost(options: {
         }
         cursor = to;
         journal = target.journal;
+        publish(journal);
       } else {
         const commands = [
           ...current.entries.map((entry) => {
@@ -524,6 +540,8 @@ export function workbookHost(options: {
     /// celle che scrive (voci o `range.setValues`) vanno sul disco, e la
     /// revisione cambia.
     save: (text: string) => {
+      const line = lines.get(text);
+      savedLine = line ? { points: line.points.map((point) => ({ ...point })), cursor: line.cursor } : null;
       const written = visible(text);
       savedStyles = styled(text);
       saved.clear();

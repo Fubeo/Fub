@@ -394,6 +394,28 @@ fn l_annulla_di_celle_resta_un_innesto_che_non_tocca_il_resto_del_file() {
 }
 
 #[test]
+fn dopo_un_salvataggio_annulla_ripeti_annulla_e_poi_un_comando_nuovo() {
+    let mut doc = Documento::new(one_sheet(BODY));
+    doc.write("E7", "R1");
+    doc.write("E8", "R2");
+    doc.write("E9", "R3");
+    doc.save();
+    doc.give("home.deleteRows", "{}", "E8");
+    assert_eq!(doc.shown("E8"), "R3");
+    doc.undo();
+    assert_eq!(doc.shown("E8"), "R2");
+    doc.redo();
+    assert_eq!(doc.shown("E8"), "R3");
+    doc.undo();
+    assert_eq!(doc.shown("E8"), "R2");
+    doc.give("home.bold", r#"{"on":true}"#, "E7");
+    doc.undo();
+    assert_eq!(doc.shown("E8"), "R2");
+    doc.undo();
+    assert_eq!(doc.shown("E9"), "");
+}
+
+#[test]
 fn prima_del_salvataggio_annullare_toglie_il_comando_dal_giornale() {
     let mut doc = Documento::new(one_sheet(BODY));
     doc.give("home.bold", r#"{"on":true}"#, "A1");

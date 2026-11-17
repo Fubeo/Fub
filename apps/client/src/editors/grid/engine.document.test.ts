@@ -159,6 +159,31 @@ describe("la griglia sulla sessione del documento", () => {
     engine.destroy();
   });
 
+  it("un Ctrl+Z in volo mentre il salvataggio riapre la cartella arriva alla sessione nuova", async () => {
+    const { grid, sessions, engine, viewport, go, save, drain } = await documentWithGrid();
+    const key = (name: string) => viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, ctrlKey: true, bubbles: true, cancelable: true }));
+    go(1, 1);
+    expect(engine.command("home.bold", JSON.stringify({ on: true }))).toBe(true);
+    await drain();
+    expect(sessions.isDirty(DOC)).toBe(true);
+
+    // Il salvataggio automatico parte con il grassetto, e riapre la cartella
+    // mentre il provider risponde ancora all'annulla.
+    grid.hold(true);
+    key("z");
+    await drain();
+    await save();
+    grid.hold(false);
+    grid.release();
+    await drain();
+    await drain();
+    expect(grid.diskStyles().map((style) => style.split("@")[0])).toEqual(["home.bold"]);
+    expect(sessions.isDirty(DOC)).toBe(true);
+    await save();
+    expect(grid.diskStyles()).toEqual([]);
+    engine.destroy();
+  });
+
   it("celle e comandi si annullano nell'ordine in cui sono avvenuti, con i salvataggi in mezzo", async () => {
     const { grid, engine, host, viewport, cell, go, save, drain } = await documentWithGrid();
     const key = (name: string) => viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, ctrlKey: true, bubbles: true, cancelable: true }));

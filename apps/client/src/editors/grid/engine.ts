@@ -192,6 +192,9 @@ const QUERIES: ReadonlySet<string> = new Set([
 const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup", "selection.currentRegion"]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
+/// Quante volte un annulla o un ripeti torna alla sessione riaperta da un
+/// salvataggio arrivato mentre era in volo.
+const HISTORY_RETRIES = 2;
 /// Perché una cella non si modifica, per codice di blocco.
 const LOCK_KEYS: Readonly<Record<string, Key>> = {
   array: "grid.workbook.lock.array",
@@ -1120,7 +1123,7 @@ export class GridEngine {
 
   /// Mette in coda il comando `id`: da qui annulla e ripeti sono del
   /// provider, anche prima che risponda.
-  #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void): void {
+  #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void, retries = HISTORY_RETRIES): void {
     const selection = this.#commandSelection();
     const command: GridCommand = { id, params, ...selection };
     // Un comando cambia la cartella sotto ciò che si è copiato.
@@ -1147,16 +1150,25 @@ export class GridEngine {
       // cronologia del documento.
       const epoch = history ? this.#bytesEpoch : given;
       const edits = history ? this.#editEpoch : givenEdits;
+      let reached = true;
       try {
-        await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
+        reached = await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
       } finally {
         if (epoch === this.#bytesEpoch) this.#pendingCommandMode = Math.max(0, this.#pendingCommandMode - 1);
         finish({ ok: false, error: null });
       }
+      // Un salvataggio ha riaperto la cartella mentre il passo era in volo:
+      // la sessione vecchia è chiusa con la sua risposta, e quella nuova ha
+      // la cronologia di prima del passo. Il passo va a lei, una volta.
+      if (history && !reached && retries > 0 && !this.#destroyed && epoch !== this.#bytesEpoch && edits === this.#editEpoch) {
+        this.#give(id, params, true, undefined, retries - 1);
+      }
     });
   }
 
-  /// Con `done`, il rifiuto va a chi aspetta invece che nell'avviso.
+  /// Con `done`, il rifiuto va a chi aspetta invece che nell'avviso. Torna
+  /// `false` se la risposta non vale più per la sessione di adesso (riaperta,
+  /// o con celle scritte nel frattempo) e non si è applicata.
   async #giveNow(
     command: GridCommand,
     history: boolean,
@@ -1164,16 +1176,16 @@ export class GridEngine {
     edits: number,
     ticket: number,
     done?: (run: GridRun) => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const host = this.#options.grid;
     const state = this.#bytes;
     const current = () => !this.#destroyed && epoch === this.#bytesEpoch && edits === this.#editEpoch && this.#bytes === state;
-    if (!host || !state || !current()) return;
+    if (!host || !state || !current()) return false;
     let outcome: GridCommandOutcome;
     let session: GridBytesSession;
     try {
       outcome = await host.gridBytesCommand(state.surface, state.instance, { revision: state.session.revision, command });
-      if (!current()) return;
+      if (!current()) return false;
       if (this.#readOnly && !emptyEdit(outcome.commit.edit)) {
         // Un comando che doveva soltanto leggere ha cambiato la cartella del
         // provider: in sola lettura non si applica. Il provider riparte dal
@@ -1181,7 +1193,7 @@ export class GridEngine {
         console.warn(`grid: «${command.id}» ha portato modifiche in sola lettura, scartate`);
         this.#openWorkbook(this.#confirmedJournal, false);
         done?.({ ok: false, error: null });
-        return;
+        return true;
       }
       session = {
         ...state.session,
@@ -1195,17 +1207,17 @@ export class GridEngine {
       validateBytesSession(session);
       this.#confirm(applySourceEdit(this.#confirmedJournal, outcome.commit.edit));
     } catch (error) {
-      if (!current()) return;
+      if (!current()) return false;
       // Niente da annullare o da ripetere non è un errore da dire.
-      if (history && isErrorKind(error, "bad_args")) return;
+      if (history && isErrorKind(error, "bad_args")) return true;
       if (done) {
         done({ ok: false, error: errorText(error) });
-        return;
+        return true;
       }
       this.#refuse(t("grid.workbook.command_failed", { error: errorText(error) }));
       // La transazione del provider non ha cambiato niente: le celle
       // mostrate in anticipo dalle modifiche in coda restano le sue.
-      return;
+      return true;
     }
     state.session = session;
     this.#shownSession = session;
@@ -1221,10 +1233,11 @@ export class GridEngine {
     if (outcome.dialog) this.#options.onDialog?.(outcome.dialog);
     if (emptyEdit(outcome.commit.edit)) {
       this.#showView(this.#sheet().id, false);
-      return;
+      return true;
     }
     await this.#refreshBytes(state, epoch);
     if (inserted && current() && this.#objectByKey(inserted)) this.#selectObject(inserted);
+    return true;
   }
 
   /// La selezione che un comando ha lasciato: il foglio, l'intervallo che
