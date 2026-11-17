@@ -1209,7 +1209,7 @@ Fatto quando: un test che il file e l'embed nascono insieme e che un errore
 di creazione lascia la nota com'era; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/slash.test.ts src/panels/slash
-Stato: [~] in corso (coder, dal gruppo integra/editor-1, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (166c7aed9, 2026-11-17), PR bozza #472. «Base» è un'azione della superficie (`markdown.base`), offerta solo con `base.view.add`; il nome si controlla in tutto il vault. Resta: la Base incorporata arriva con `source` e `editors/base` la tiene «blocco nella nota» (la barra non scrive): la modifica a vista dentro la nota è fuori da T18, da dare a chi tocca `editors/base`.
 
 ## T19a · Il provider dei compiti
 
@@ -1628,7 +1628,7 @@ Fatto quando: le scene al tocco nelle due luci; un test che col tocco la
 maniglia segue il cursore.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks src/panels/format-bar.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder, da 166c7aed9, 2026-11-17)
 
 ## T26 · Il giro della scrittura sul banco
 
