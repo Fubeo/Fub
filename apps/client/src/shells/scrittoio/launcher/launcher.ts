@@ -549,6 +549,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
             explained(row.entry.description);
             typed(displayBinding(row.entry.binding));
           }
+          // Il raggio di un comando del nucleo lo mostra l'anteprima; chi
+          // ascolta lo sente con la riga, come la descrizione.
+          if (row.entry.spec) explained(scopeLabel(row.entry.spec));
           break;
         case "block":
           named(row.entry.title);

@@ -3924,7 +3924,7 @@ describe("la palette flussa prima di un comando che scrive", () => {
       [...document.querySelectorAll<HTMLElement>(".launcher-row")].find(
         (each) =>
           each.querySelector(".launcher-row-title")?.textContent === spec.title &&
-          (each.querySelector(".launcher-row-meta")?.textContent ?? "").includes(scopeLabel(spec)),
+          (each.querySelector(".launcher-row-main")?.textContent ?? "").includes(scopeLabel(spec)),
       );
     await waitFor(`il lanciatore offre «${spec.title}» del kernel`, () => row() !== undefined);
     row()!.click();

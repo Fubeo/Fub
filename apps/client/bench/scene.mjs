@@ -1394,8 +1394,8 @@ export const SCENE = onPage("shell", [
   },
   {
     id: "launcher-narrow",
-    title: "Il lanciatore a 700 px, con un prefisso: l'anteprima non c'è, l'elenco prende il posto",
-    viewport: { width: 700, height: 800 },
+    title: "Il lanciatore nella finestra minima, 800 px (i 700 del prototipo), con un prefisso: l'anteprima non c'è, l'elenco prende il posto",
+    viewport: NOTE_NARROW,
     prepare: async (page) => {
       await page.click("#pill");
       await page.waitForSelector(".launcher-input:focus");
