@@ -29,7 +29,12 @@ partendo piano (`ease-in-out`), dal bordo se prima non si vedevano. Un clic
 chiude il suggerimento della riga, come quello di ogni controllo, e non torna
 finché il puntatore resta fermo: non copre le voci appena aperte. Righe e
 appuntate rispondono soltanto al tasto sinistro: il centrale non apre né chiude
-una cartella e non apre una nota.
+una cartella e non apre una nota. Ctrl-clic (Cmd-clic sul Mac) aggiunge o
+toglie una nota dalla scelta, Maiusc-clic sceglie le note fra l'ultima toccata
+e questa, Ctrl-Spazio fa il Ctrl-clic da tastiera. La barra della scelta sta
+sotto l'albero, ferma in fondo alla colonna, così comparendo non sposta le
+righe sotto il puntatore: dice quante note sono scelte e offre «Sposta in…»,
+«In una cartella nuova», «Sposta nel cestino» e «Deseleziona»; Esc la azzera.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.

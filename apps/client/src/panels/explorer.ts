@@ -342,8 +342,8 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
-  // «Tutte le note» sta subito sopra l'albero, sotto la barra della scelta
-  // multipla, che si è appena messa davanti all'albero.
+  // «Tutte le note» sta subito sopra l'albero; la barra della scelta multipla
+  // sta subito sotto.
   fileListEl.before(allTitleEl);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
