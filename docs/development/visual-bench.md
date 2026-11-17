@@ -66,7 +66,12 @@ partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
 sua immagine che esce, e il referto dice com'era e com'è il riquadro che
 salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
-ha la sua coreografia. I confronti restano al pixel, e per questo il banco apre
+ha la sua coreografia, e ogni gesto del trascinamento dei
+[Blocchi](../product/editor-blocks.md) la sua (`blocchi-*`: la presa di un
+blocco basso e di uno alto, il passaggio oltre un blocco alto, «Accanto»,
+annidare e staccare, il cartellino, lo scorrimento al bordo, il rilascio, Esc,
+Mod+Maiusc+↑/↓); i loro casi ai bordi hanno un test ciascuno in
+`blocks/blocks.dom.test.ts`. I confronti restano al pixel, e per questo il banco apre
 Chromium con `--disable-partial-raster` (`BROWSER_ARGS` in
 `bench/motion-rules.mjs`): col raster parziale lo stesso stato raggiunto per
 due strade dava ogni tanto un pixel di antialiasing diverso. Anche il budget d'interazione (`npm run bench:interaction`) apre

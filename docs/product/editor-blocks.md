@@ -225,15 +225,6 @@ posto appare senza scivolare e il blocco in mano si posa senza volo.
 Ogni gesto si dice anche nella regione viva dei Blocchi («Posizione 3 di 5, in
 «I conti»» dopo uno spostamento, «Ora è Titolo 2», «Aperto»).
 
-Ogni voce del trascinamento ha la sua coreografia nel banco del moto
-(`blocchi-*` in `apps/client/bench/motion-rules.mjs`: la presa di un blocco
-basso e di uno alto, il passaggio oltre un blocco alto, «Accanto», annidare e
-staccare, il cartellino, lo scorrimento al bordo, il rilascio, Esc e
-Mod+Maiusc+↑/↓), col moto pieno e col moto ridotto; i casi ai bordi (primo e
-ultimo blocco, frontmatter, voci annidate, colonne, codice, tabella, riquadro,
-Vim, composizione, blocchi spenti, due riquadri, scheda della lavagna) hanno
-un test ciascuno in `blocks/blocks.dom.test.ts`.
-
 **Cursore morbido** (`editor.soft-cursor`, spento di norma) fa scivolare il
 cursore fra le righe quando ci si muove senza scrivere; vale soltanto in
 Scrittura, e mai col moto ridotto.
