@@ -164,12 +164,16 @@ export function indexAt(layout: AxisLayout, offset: number): number {
 /// Le righe (o le colonne) da disegnare attorno a ciò che si vede, da
 /// `start` per `length` px: un riquadro intero di margine prima e uno dopo.
 /// Lo scorrimento veloce arriva prima del disegno, e trova le righe già lì.
+/// Mai meno di `GRID_OVERSCAN` righe attorno alla prima: un riquadro non
+/// ancora impaginato (misura zero, una scheda appena montata) mostra lo
+/// stesso le prime celle.
 export function marginWindow(layout: AxisLayout, start: number, length: number) {
   if (!layout.sizes.length) return { start: 0, end: -1 };
   const span = Math.max(0, length);
+  const first = indexAt(layout, Math.max(0, start));
   return {
-    start: indexAt(layout, Math.max(0, start - span)),
-    end: indexAt(layout, Math.max(0, start + 2 * span)),
+    start: Math.min(indexAt(layout, Math.max(0, start - span)), Math.max(0, first - GRID_OVERSCAN)),
+    end: Math.max(indexAt(layout, Math.max(0, start + 2 * span)), Math.min(layout.sizes.length - 1, first + GRID_OVERSCAN)),
   };
 }
 /// La misura più comune dell'asse, la «di serie» su cui la carta ripete i
