@@ -2225,7 +2225,7 @@ Casi limite: nessuna nota appuntata; la Base scelta cancellata; finestra a
 Fatto quando: un test della vista e dell'ordine; le foto del banco.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 dashboard
-Stato: [~] in corso (coder, da `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (1999e82d8, 2026-11-17), PR bozza #472. Le impostazioni `desk.tiles`/`desk.base` le dichiara la feature (inventory), non `settings.rs`; nodo `fub:desk-tile` col ripiego Sposta su/giù/Togli, niente WIT; i compiti in scadenza in `crate::due_tasks`, una funzione sola con la pagina del giorno. Resta: appuntare o aprire una nota non manda eventi, una Scrivania aperta si aggiorna al prossimo evento; il mese non segna i giorni con la nota del giorno.
 
 ## T41a · L'ospite delle schede passa in `editors/core`
 
