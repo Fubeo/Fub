@@ -5673,7 +5673,7 @@ Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate && np
   nome, e che il codice resta `MIT OR Apache-2.0`; il `README.md` e
   `THIRD_PARTY_NOTICES.md` lo nominano in una riga; `cargo deny` e lo SBOM
   non cambiano (il logo non è una dipendenza).
-Stato: [x] fatto (2026-11-09, sul ramo del piano; le baseline delle scene col marchio vengono dal runner con la consegna 4) · differenze: i colori forzati in `structure.css` (la pelle vieta `forced-color-adjust`); pezzi nuovi dell'anatomia `logo` e `about-version`; anche `mobile.html`; una copia di `marcuzzo.svg` in `ui/marcuzzo.ts` con un test di guardia; `icon.png` a 512 come `cargo tauri icon` (il vecchio `icon.icns` era un PNG); le icone Android non arrivano ancora in `gen/android` (`install-mobile.sh`), la simbolica di Linux aspetta T51
+Stato: [x] fatto (PR #474 unita in main, 488188d9f, 2026-11-17): Marcuzzo è il logo dell'app, delle icone e dell'avvio; baseline dal runner guardate.
 
 ## T50 · La firma degli installer
 
