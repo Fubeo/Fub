@@ -187,6 +187,114 @@ describe("GridEngine con una cartella di Excel", () => {
     engine.destroy();
   });
 
+  // IMP-027: il salvataggio mette il giornale di comandi nei byte, e la
+  // sessione del provider che si riapre non ha più la sua history. Una
+  // formula scritta (o cancellata) resta da annullare con l'input di prima.
+  it("una formula scritta si annulla e si ripete anche dopo che il salvataggio l'ha messa nei byte (IMP-027)", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
+    const save = async () => {
+      grid.save(engine.getDoc());
+      // La sessione del documento, salvato, dà il giornale vuoto sui byte nuovi.
+      engine.syncDoc("");
+      await settle();
+      await settle();
+    };
+    go(8, 6);
+    typeInActiveCell(host, viewport, "=B2*2");
+    await settle();
+    expect(parseGridJournal(engine.getDoc()).commands.map((command) => command.selection)).toEqual(["G9"]);
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("=B2*2");
+    expect(engine.getDoc()).toBe("");
+
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 6)?.textContent ?? "").toBe("");
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("");
+
+    expect(engine.redo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 6)?.textContent).toBe("=B2*2");
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("=B2*2");
+    engine.destroy();
+  });
+
+  it("Canc su una formula salvata si annulla: la formula torna nella cella e sul disco (IMP-027)", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
+    const save = async () => {
+      grid.save(engine.getDoc());
+      engine.syncDoc("");
+      await settle();
+      await settle();
+    };
+    go(8, 7);
+    typeInActiveCell(host, viewport, "=B2+1");
+    await settle();
+    await save();
+    go(8, 7);
+    // Prima che il salvataggio arrivi: la cancellazione entra come comando.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    await settle();
+    expect(cell(8, 7)?.textContent ?? "").toBe("");
+    await save();
+    expect(grid.disk("s1", "r8", "c7")).toBe("");
+
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 7)?.textContent).toBe("=B2+1");
+    await save();
+    expect(grid.disk("s1", "r8", "c7")).toBe("=B2+1");
+    // E il passo prima, la formula scritta, si annulla ancora.
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    await save();
+    expect(grid.disk("s1", "r8", "c7")).toBe("");
+    engine.destroy();
+  });
+
+  it("finché il comando è in cima al giornale lo annulla il provider; dopo un'altra scrittura le patch (IMP-027)", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
+    go(8, 6);
+    typeInActiveCell(host, viewport, "=B2*2");
+    await settle();
+    go(9, 6);
+    typeInActiveCell(host, viewport, "=B2*3");
+    await settle();
+    expect(engine.undo()).toBe(true);
+    await settle();
+    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
+    expect(cell(9, 6)?.textContent ?? "").toBe("");
+    // Salvato, il primo passo si annulla con l'input di prima, e quello
+    // annullato si ripete con il suo.
+    grid.save(engine.getDoc());
+    engine.syncDoc("");
+    await settle();
+    await settle();
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
+    expect(cell(8, 6)?.textContent ?? "").toBe("");
+    expect(engine.redo()).toBe(true);
+    await settle();
+    await settle();
+    expect(engine.redo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 6)?.textContent).toBe("=B2*2");
+    expect(cell(9, 6)?.textContent).toBe("=B2*3");
+    engine.destroy();
+  });
+
   it("un comando del catalogo va al provider sulla selezione, e la griglia adotta l'esito", async () => {
     const grid = workbookHost({ dialog: (command) => command.id === "home.formatCells" ? { id: "formatCells", params: "{}" } : null });
     const dialogs: GridDialog[] = [];
