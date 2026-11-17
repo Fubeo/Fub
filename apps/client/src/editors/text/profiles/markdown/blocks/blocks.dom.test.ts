@@ -3,21 +3,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
-import { EditorSelection, EditorState, Prec } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec, Transaction } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
-import { vim } from "@replit/codemirror-vim";
+import { getCM, Vim, vim } from "@replit/codemirror-vim";
 import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { liveReveal } from "../../../live-reveal";
 import { blockIdMarks } from "../block-id";
-import { blocksMode, type BlocksOptions } from "./index";
+import { blocksMode, plainMode, type BlocksOptions } from "./index";
 import { blockSelection, selectCursorBlock } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
 import { dragPose, LIFT_SCALE } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
+import { createManualDriver, liveState, setMotionDriver } from "../../../../../moto";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
 import { dropOffersChanged, offerDropTargets } from "../../../../core/registry";
@@ -930,5 +931,466 @@ describe("fuori dalla colonna (E2)", () => {
     } finally {
       stop();
     }
+  });
+});
+
+// ── I gesti ai bordi (E2, T2) ───────────────────────────────────────────────
+//
+// Ogni caso limite di E2 coi gesti che spostano un blocco: il trascinamento
+// (presa, posto, rilascio, Esc) e Mod-Shift-↑/↓. Il testo che resta è quello
+// di prima, a meno delle righe vuote fra i blocchi.
+
+describe("i gesti ai bordi (E2): primo e ultimo blocco", () => {
+  const PLAIN = "Uno\n\nDue\n\nTre";
+  const FRONT = "---\nicon: 🌿\n---\nUno\n\nDue\n\nTre";
+  const texts = (view: EditorView) => view.state.field(blockModel).blocks.map((block) => view.state.sliceDoc(block.from, block.to));
+
+  it("senza frontmatter: il primo va in fondo, l'ultimo in cima, ognuno in un passo d'annullamento", () => {
+    const view = mount(PLAIN, 0);
+    rowsOf20(view);
+    let hand = grab(view, 0, 10);
+    hand.move(200);
+    hand.up(200);
+    expect(view.state.doc.toString()).toBe("Due\n\nTre\n\nUno");
+    undo(view);
+    expect(view.state.doc.toString()).toBe(PLAIN);
+    hand = grab(view, 2, 90);
+    hand.move(-40);
+    hand.up(-40);
+    expect(view.state.doc.toString()).toBe("Tre\n\nUno\n\nDue");
+    undo(view);
+    expect(view.state.doc.toString()).toBe(PLAIN);
+  });
+
+  it("senza frontmatter: Mod-Shift-↑ sul primo e Mod-Shift-↓ sull'ultimo non cambiano niente, e il tasto si ferma lì", () => {
+    const view = mount(PLAIN, 1);
+    expect(press(view, "ArrowUp", { ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(view.state.doc.toString()).toBe(PLAIN);
+    view.dispatch({ selection: { anchor: PLAIN.length } });
+    expect(press(view, "ArrowDown", { ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(view.state.doc.toString()).toBe(PLAIN);
+    // L'ultimo sale, col suo cursore.
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("Uno\n\nTre\n\nDue");
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe("Tre");
+  });
+
+  it("senza frontmatter: il primo e l'ultimo, lasciati al loro posto o con Esc, tornano dov'erano senza un passo d'annullamento", () => {
+    const view = mount(PLAIN, 0);
+    rowsOf20(view);
+    for (const [index, y] of [[0, 10], [2, 90]] as const) {
+      const hand = grab(view, index, y);
+      hand.move(y + 6);
+      expect(hand.slot()?.dataset.home, "il posto è l'origine").toBe("true");
+      hand.up(y + 6);
+      hand.handles.returning?.land();
+      const again = grab(view, index, y);
+      again.move(index === 0 ? y + 100 : y - 100);
+      expect(again.slot()?.dataset.home, "il posto si è spostato").toBeUndefined();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      again.handles.returning?.land();
+      again.up(y + 100);
+    }
+    expect(view.state.doc.toString()).toBe(PLAIN);
+    expect(undo(view), "niente da annullare").toBe(false);
+  });
+
+  it("con frontmatter: l'ultimo sale fin sotto il frontmatter, il primo testo scende in fondo", () => {
+    const view = mount(FRONT, FRONT.length, undefined, propertiesDisplay.of("visible"));
+    rowsOf20(view);
+    // Il frontmatter (0–60), Uno (60–80), Due (100–120), Tre (140–160).
+    let hand = grab(view, 3, 150);
+    hand.move(-40);
+    hand.up(-40);
+    expect(texts(view)).toEqual(["---\nicon: 🌿\n---", "Tre", "Uno", "Due"]);
+    undo(view);
+    expect(view.state.doc.toString()).toBe(FRONT);
+    hand = grab(view, 1, 70);
+    hand.move(300);
+    hand.up(300);
+    expect(texts(view)).toEqual(["---\nicon: 🌿\n---", "Due", "Tre", "Uno"]);
+    undo(view);
+    expect(view.state.doc.toString()).toBe(FRONT);
+  });
+
+  it("con frontmatter: Mod-Shift-↓ sull'ultimo non cambia niente, Mod-Shift-↑ lo porta fin sotto il frontmatter e non oltre", () => {
+    const view = mount(FRONT, FRONT.length, undefined, propertiesDisplay.of("visible"));
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe(FRONT);
+    for (let step = 0; step < 4; step += 1) press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(texts(view)).toEqual(["---\nicon: 🌿\n---", "Tre", "Uno", "Due"]);
+  });
+});
+
+describe("i gesti ai bordi (E2): una nota di un blocco solo", () => {
+  it("la presa non trova un altro posto: il rilascio non cambia niente, i tasti nemmeno, Esc lo sceglie", () => {
+    const view = mount("Solo", 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    for (const y of [60, -60, 10]) {
+      hand.move(y);
+      expect(hand.slot()?.dataset.home, `a ${y} px il posto è l'origine`).toBe("true");
+    }
+    hand.up(10);
+    hand.handles.returning?.land();
+    expect(view.state.doc.toString()).toBe("Solo");
+    expect(undo(view)).toBe(false);
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("Solo");
+    press(view, "Escape");
+    expect(view.state.field(blockSelection)).not.toBeNull();
+  });
+});
+
+describe("i gesti ai bordi (E2): la voce annidata", () => {
+  // - a (0–20), - b (20–40), - c (40–60).
+  it("24 px a destra annidano la voce sotto quella sopra, e lo dicono", () => {
+    const view = mount("- a\n- b\n- c", 0);
+    rowsOf20(view);
+    const hand = grab(view, 2, 50);
+    hand.move(50, 23);
+    expect(hand.slot()?.dataset.home, "23 px non bastano").toBe("true");
+    hand.move(50, 24);
+    expect(hand.slot()?.dataset.home, "con 24 il posto si sposta di un rientro").toBeUndefined();
+    expect(view.dom.querySelector(".cm-fub-block-live")?.textContent).toContain("b");
+    hand.up(50);
+    expect(view.state.doc.toString()).toBe("- a\n- b\n  - c");
+    undo(view);
+    expect(view.state.doc.toString()).toBe("- a\n- b\n- c");
+  });
+
+  it("24 px a sinistra portano fuori la voce annidata, subito dopo la sua", () => {
+    const view = mount("- a\n  - b\n- c", 0);
+    rowsOf20(view);
+    const hand = grab(view, 1, 30);
+    hand.move(30, -24);
+    hand.up(30);
+    expect(view.state.doc.toString()).toBe("- a\n- b\n- c");
+  });
+
+  it("la voce annidata si sposta fra le sue sorelle, e col trascinamento verticale non esce dal suo elenco", () => {
+    const doc = "- a\n  - b\n  - c\n- d";
+    const view = mount(doc, doc.indexOf("c"));
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("- a\n  - c\n  - b\n- d");
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "la prima sorella non sale oltre la sua voce").toBe("- a\n  - c\n  - b\n- d");
+    undo(view);
+    expect(view.state.doc.toString()).toBe(doc);
+    rowsOf20(view);
+    // b (20–40) portata giù fin oltre «d»: resta l'ultima sorella di «a».
+    const hand = grab(view, 1, 30);
+    hand.move(200);
+    hand.up(200);
+    expect(view.state.doc.toString()).toBe("- a\n  - c\n  - b\n- d");
+  });
+
+  it("una voce col suo sottoalbero si sposta tutta, in fondo all'elenco", () => {
+    const view = mount("- a\n  - a1\n- b", 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(200);
+    hand.up(200);
+    expect(view.state.doc.toString()).toBe("- b\n- a\n  - a1");
+  });
+});
+
+describe("i gesti ai bordi (E2): dentro e fuori dalle colonne", () => {
+  const COLUMNS = "> [!columns]\n> > [!column]\n> > Sinistra\n>\n> > [!column]\n> > Destra";
+  /// La colonna del testo larga 400 px: «Accanto» sta sull'ultimo ottavo, da 350.
+  const wide = (view: EditorView) =>
+    vi.spyOn(view.contentDOM, "getBoundingClientRect").mockReturnValue({ left: 0, right: 400, top: 0, bottom: 400, width: 400, height: 400, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
+  const bar = (view: EditorView) => view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-drop")!;
+
+  it("lasciato sul bordo destro di un vicino, un blocco ci fa le colonne", () => {
+    const view = mount("Uno\n\nDue", 0);
+    rowsOf20(view);
+    wide(view);
+    const hand = grab(view, 1, 50);
+    hand.move(10, 360);
+    expect(bar(view).hidden, "la barra verticale di «Accanto»").toBe(false);
+    expect(bar(view).dataset.beside).toBe("true");
+    expect(hand.slot()?.hidden, "al posto della barra, niente posto").toBe(true);
+    hand.up(10);
+    expect(view.state.doc.toString()).toBe("> [!columns]\n> > [!column]\n> > Uno\n>\n> > [!column]\n> > Due");
+    undo(view);
+    expect(view.state.doc.toString()).toBe("Uno\n\nDue");
+  });
+
+  it("delle colonne sono un blocco solo: si prendono, si spostano e si lasciano intere", () => {
+    const doc = `${COLUMNS}\n\nDopo`;
+    const view = mount(doc, doc.length);
+    rowsOf20(view);
+    expect(view.state.field(blockModel).blocks.map((block) => block.kind)).toEqual(["callout", "paragraph"]);
+    const hand = grab(view, 0, 10);
+    hand.move(300);
+    hand.up(300);
+    expect(view.state.doc.toString()).toBe(`Dopo\n\n${COLUMNS}`);
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it("un blocco lasciato accanto alle colonne ne aggiunge una; delle colonne non vanno accanto a un blocco", () => {
+    const doc = `${COLUMNS}\n\nTerza`;
+    const view = mount(doc, 0);
+    rowsOf20(view);
+    wide(view);
+    // «Terza» (riga 8, 140–160) sul bordo destro delle colonne (0–120).
+    let hand = grab(view, 1, 150);
+    hand.move(30, 360);
+    expect(bar(view).hidden).toBe(false);
+    hand.up(30);
+    expect(view.state.doc.toString()).toBe(`${COLUMNS}\n>\n> > [!column]\n> > Terza`);
+    undo(view);
+    expect(view.state.doc.toString()).toBe(doc);
+    // Le colonne sul bordo di «Terza»: nessuna barra, il posto fra i vicini.
+    hand = grab(view, 0, 10);
+    hand.move(150, 360);
+    expect(bar(view).hidden).toBe(true);
+    hand.handles.endDrag(false);
+    hand.handles.returning?.land();
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+});
+
+describe("i gesti ai bordi (E2): codice, tabella e riquadro", () => {
+  const CODE = "```js\nconst a = 1;\n\nconst b = 2;\n```";
+  const TABLE = "| a | b |\n| - | - |\n| 1 | 2 |";
+  const CALLOUT = "> [!note] Titolo\n> testo\n>\n> altro";
+
+  for (const [name, block] of [["il codice", CODE], ["la tabella", TABLE], ["il riquadro", CALLOUT]] as const) {
+    it(`${name} va in fondo e torna su coi suoi byte, anche con righe vuote dentro; Esc lo sceglie intero`, () => {
+      const doc = `${block}\n\nDopo`;
+      const view = mount(doc, doc.length);
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(400);
+      hand.up(400);
+      expect(view.state.doc.toString()).toBe(`Dopo\n\n${block}`);
+      // Il rilascio dà il fuoco all'editor: happy-dom manda allora la
+      // `selectionchange` dentro l'aggiornamento, cosa che un browser non fa.
+      view.contentDOM.blur();
+      // Mod-Shift-↑ col cursore dentro il blocco lo riporta su.
+      view.dispatch({ selection: { anchor: view.state.doc.length - 2 } });
+      press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+      expect(view.state.doc.toString()).toBe(doc);
+      press(view, "Escape");
+      expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe(block);
+    });
+  }
+
+  it("fra un codice e una tabella il blocco ritrova le righe vuote che il Markdown vuole", () => {
+    const doc = `Uno\n\n${CODE}\n\n${TABLE}`;
+    const view = mount(doc, 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    // Fra il codice (righe 3–7, 40–140) e la tabella (righe 9–11, 160–220).
+    hand.move(150);
+    hand.up(150);
+    expect(view.state.doc.toString()).toBe(`${CODE}\n\nUno\n\n${TABLE}`);
+  });
+});
+
+describe("i gesti ai bordi (E2): Vim e composizione", () => {
+  it("con Vim nel modo normale il trascinamento c'è ancora, e Esc a metà gesto rimette il blocco senza arrivare a Vim", () => {
+    const view = mount("Uno\n\nDue", 0, vi.fn(), vim());
+    rowsOf20(view);
+    const seen = vi.fn();
+    view.contentDOM.addEventListener("keydown", seen);
+    let hand = grab(view, 0, 10);
+    hand.move(100);
+    view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(seen, "Esc è del gesto").not.toHaveBeenCalled();
+    hand.handles.returning?.land();
+    hand.up(100);
+    expect(view.state.doc.toString()).toBe("Uno\n\nDue");
+    hand = grab(view, 0, 10);
+    hand.move(100);
+    hand.up(100);
+    expect(view.state.doc.toString()).toBe("Due\n\nUno");
+    view.contentDOM.removeEventListener("keydown", seen);
+  });
+
+  it("con Vim nel modo inserimento i tasti dei Blocchi tornano, ma Esc resta di Vim", () => {
+    const view = mount("Uno\n\nDue", 6, vi.fn(), vim());
+    Vim.handleKey(getCM(view)!, "i", "test");
+    expect((getCM(view)!.state as { vim?: { insertMode?: boolean } }).vim?.insertMode).toBe(true);
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("Due\n\nUno");
+    expect(press(view, "Escape")).toBe(false);
+    expect(view.state.field(blockSelection)).toBeNull();
+  });
+
+  it("durante una composizione ogni tasto dei Blocchi si fa da parte", () => {
+    const doc = "Uno\n\n```\nx\n```\n\nDue";
+    const view = mount(doc, doc.indexOf("Due"));
+    Object.defineProperty(view, "composing", { configurable: true, get: () => true });
+    for (const [key, extra] of [
+      ["ArrowUp", { ctrlKey: true, shiftKey: true }],
+      ["ArrowDown", { ctrlKey: true, shiftKey: true }],
+      ["a", { ctrlKey: true }],
+      ["d", { ctrlKey: true }],
+      ["Backspace", {}],
+      ["Escape", {}],
+    ] as const) {
+      expect(press(view, key, extra), key).toBe(false);
+    }
+    view.dispatch({ selection: { anchor: doc.indexOf("x") } });
+    expect(press(view, "Tab"), "Tab nel codice").toBe(false);
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(view.state.field(blockSelection)).toBeNull();
+  });
+});
+
+describe("i gesti ai bordi (E2): blocchi spenti", () => {
+  function plain(doc: string, anchor = 0): EditorView {
+    const view = new EditorView({
+      parent: document.body,
+      state: EditorState.create({
+        doc,
+        selection: { anchor },
+        extensions: [history(), markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), plainMode({ page: () => "Nota" })],
+      }),
+    });
+    views.push(view);
+    return view;
+  }
+
+  it("niente maniglie da prendere, e Mod-Shift-↑/↓ spostano la riga, fermi sulla prima e sull'ultima", () => {
+    const view = plain("Uno\nDue\nTre", 0);
+    expect(view.scrollDOM.querySelector(".cm-fub-block-grip")).toBeNull();
+    expect(view.plugin(handlesView)).toBeNull();
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "la prima riga non sale").toBe("Uno\nDue\nTre");
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe("Due\nUno\nTre");
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "l'ultima riga non scende").toBe("Due\nUno\nTre");
+  });
+
+  it("con frontmatter la prima riga del corpo non sale nella testata, e Esc non sceglie blocchi", () => {
+    const doc = "---\na: 1\n---\nUno\nDue";
+    const view = plain(doc, doc.indexOf("Uno"));
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(press(view, "Escape")).toBe(false);
+  });
+});
+
+describe("i gesti ai bordi (E2): due riquadri sulla stessa nota", () => {
+  it("il trascinamento in uno non tocca l'altro finché dura; al rilascio l'altro riceve il testo nuovo, una volta", () => {
+    const doc = "Uno\n\nDue\n\nTre";
+    const other = mount(doc, 0);
+    const received = vi.fn();
+    const view = new EditorView({
+      parent: document.body,
+      state: EditorState.create({
+        doc,
+        extensions: [history(), markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), blocksMode({ page: () => "Nota" })],
+      }),
+      // La sessione del documento: ogni cambio del testo arriva all'altro
+      // riquadro come cambio sincronizzato, non come una sua battuta.
+      dispatchTransactions: (trs, self) => {
+        self.update(trs);
+        for (const tr of trs) {
+          if (!tr.docChanged) continue;
+          received();
+          other.dispatch({ changes: tr.changes, annotations: Transaction.remote.of(true) });
+        }
+      },
+    });
+    views.push(view);
+    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
+    view.dispatch({});
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(60);
+    hand.move(200);
+    expect(received, "durante il gesto il testo non cambia").not.toHaveBeenCalled();
+    expect(other.state.doc.toString()).toBe(doc);
+    expect(other.scrollDOM.querySelector(".cm-fub-block-lift, .cm-fub-block-slot"), "l'altro riquadro non mostra il gesto").toBeNull();
+    hand.up(200);
+    expect(received).toHaveBeenCalledTimes(1);
+    expect(other.state.doc.toString()).toBe("Due\n\nTre\n\nUno");
+    expect(view.state.doc.toString()).toBe("Due\n\nTre\n\nUno");
+  });
+});
+
+describe("i gesti ai bordi (E2): dentro una scheda di nota della lavagna (A-6, regola 3)", () => {
+  it("con lo zoom il gesto si conta in px suoi; Esc a metà gesto rimette il blocco e non esce dalla scheda", () => {
+    const view = mount("Uno\n\nDue\n\nTre", 0, vi.fn(), [], { escapeLeaves: true });
+    rowsOf20(view);
+    Object.defineProperty(view, "scaleX", { value: 0.5, configurable: true });
+    Object.defineProperty(view, "scaleY", { value: 0.5, configurable: true });
+    const host = vi.fn();
+    view.dom.addEventListener("keydown", host);
+    let hand = grab(view, 0, 5);
+    hand.move(60);
+    view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(host, "l'ospite non vede l'Esc del gesto").not.toHaveBeenCalled();
+    hand.handles.returning?.land();
+    hand.up(60);
+    expect(view.state.doc.toString()).toBe("Uno\n\nDue\n\nTre");
+    // A 60 px di schermo, 120 di CodeMirror: in fondo.
+    hand = grab(view, 0, 5);
+    hand.move(60);
+    hand.up(60);
+    expect(view.state.doc.toString()).toBe("Due\n\nTre\n\nUno");
+    // Fuori dal gesto Esc è di nuovo dell'ospite.
+    expect(press(view, "Escape")).toBe(false);
+    view.dom.removeEventListener("keydown", host);
+  });
+});
+
+describe("i gesti ai bordi (E2): il posto interrotto a metà corsa", () => {
+  afterEach(() => setMotionDriver(null));
+
+  it("il posto che torna indietro mentre scivola riparte da dove lo si vede, senza salti", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    // Uno (0–20), Due (40–60), Tre (80–100), Quattro (120–140).
+    const view = mount("Uno\n\nDue\n\nTre\n\nQuattro", 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(14);
+    // Oltre Due e Tre: il posto scivola giù.
+    hand.move(95);
+    const slot = hand.slot()!;
+    expect(slot.dataset.home).toBeUndefined();
+    driver.advance(80);
+    const seen = () => parseFloat(slot.style.top) + (liveState(slot)?.pose.y ?? 0);
+    const before = seen();
+    const top = slot.style.top;
+    // Di nuovo verso l'origine, a metà corsa.
+    hand.move(14);
+    expect(slot.style.top, "il posto è cambiato").not.toBe(top);
+    expect(Math.abs(seen() - before), "il posto prosegue da dov'era").toBeLessThan(0.5);
+    hand.handles.endDrag(false);
+  });
+
+  it("il cartellino che torna nel testo mentre ancora rimpicciolisce riparte dalla grandezza che si vede", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    const view = mount("Uno\n\nDue\n\nTre", 0);
+    rowsOf20(view);
+    const hand = grab(view, 0, 10);
+    hand.move(14);
+    const card = view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift-card")!;
+    driver.advance(400);
+    // Fuori dal testo: il cartellino cala dalla grandezza di presa alla sua.
+    hand.move(14, 200);
+    const lift = hand.lift()!;
+    expect(lift.dataset.free).toBe("true");
+    const free = Number(lift.style.getPropertyValue("--fub-block-free-scale"));
+    driver.advance(80);
+    const before = free * (liveState(card)?.pose.scaleX ?? 1);
+    // Di nuovo nel testo, a metà corsa.
+    hand.move(14, 0);
+    expect(lift.dataset.free).toBeUndefined();
+    const after = LIFT_SCALE * (liveState(card)?.pose.scaleX ?? 1);
+    expect(Math.abs(after - before), "la carta prosegue dalla grandezza di adesso").toBeLessThan(0.005);
+    hand.handles.endDrag(false);
   });
 });

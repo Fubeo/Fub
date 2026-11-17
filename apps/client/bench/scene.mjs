@@ -719,6 +719,9 @@ export const SCENE = onPage("shell", [
       await openRibbon(page, 700);
       await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
       await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+      // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+      // di timer vero, e la foto lo prenderebbe o no (#459).
+      await page.mouse.move(0, 0);
     },
   },
   {
@@ -1721,6 +1724,10 @@ export const SCENE = onPage("shell", [
           const offset = parseFloat(style.outlineOffset);
           return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
         }, null, { timeout: 5_000 });
+        // Col fuoco della tastiera la didascalia del bottone arriva dopo 500 ms
+        // di timer vero (`ui/tooltip.ts`): la si aspetta, perché è lo stato
+        // vero del fuoco e una foto scattata prima la prenderebbe o no (#461).
+        await page.waitForSelector(".shell-tooltip:not([hidden])");
       },
     },
     {
@@ -1753,6 +1760,9 @@ export const SCENE = onPage("shell", [
         await openRibbon(page, "phone");
         await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
         await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
+        // Il puntatore lascia l'interruttore: il suo tooltip arriva dopo 500 ms
+        // di timer vero, e la foto lo prenderebbe o no (#459).
+        await page.mouse.move(0, 0);
       },
     },
     {

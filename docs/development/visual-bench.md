@@ -68,14 +68,23 @@ del banco visivo, dopo le scene.
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
-`transform` e `opacity`, un gesto invertito a metà torna allo stato di
+`transform` e `opacity` (e così lo stile in linea riscritto a ogni
+fotogramma, anche durante un trascinamento, dove il puntatore avanza di un
+passo per fotogramma e una proprietà estranea cambiata in due fotogrammi di
+fila è un errore; mentre passa soltanto il tempo lo è anche una proprietà
+scritta in tre fotogrammi con tre valori diversi, di fila o no), un gesto invertito a metà torna allo stato di
 partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
 sua immagine che esce, e il referto dice com'era e com'è il riquadro che
 salta; il «dopo» si legge al primo fotogramma che il gesto contrario dipinge,
 dopo le sue richiamate di `requestAnimationFrame` e prima del disegno, non
 appena torna il clic), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
-ha la sua coreografia. I confronti restano al pixel, e per questo il banco apre
+ha la sua coreografia, e ogni gesto del trascinamento dei
+[Blocchi](../product/editor-blocks.md) la sua (`blocchi-*`: la presa di un
+blocco basso e di uno alto, il passaggio oltre un blocco alto, «Accanto»,
+annidare e staccare, il cartellino, lo scorrimento al bordo, il rilascio, Esc,
+Mod+Maiusc+↑/↓); i loro casi ai bordi hanno un test ciascuno in
+`blocks/blocks.dom.test.ts`. I confronti restano al pixel, e per questo il banco apre
 Chromium con `--disable-partial-raster` (`BROWSER_ARGS` in
 `bench/motion-rules.mjs`): col raster parziale lo stesso stato raggiunto per
 due strade dava ogni tanto un pixel di antialiasing diverso. Anche il budget d'interazione (`npm run bench:interaction`) apre
