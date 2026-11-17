@@ -355,12 +355,17 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   l'indice cambia si richiedono solo le schede tenute, e la Scrittura ridisegna
   soltanto quelle davvero cambiate.
 
-## La trasclusione viva
+## Blocchi di altre note
 
-Una sezione o un blocco di un'altra nota riportati con `![[Nota#Sezione]]` si
-scrivono dove stanno, con **Modifica qui**; lo stesso blocco in più note
-(`![[Nota#^id]]`) è il blocco sincronizzato: [La trasclusione
-viva](editor-transclusion.md).
+Una sezione o un blocco di un'altra nota riportati con `![[Nota#Sezione]]` si scrivono
+dove stanno, con **Modifica qui**; lo stesso blocco in più note (`![[Nota#^id]]`) è il
+blocco sincronizzato: [La trasclusione viva](editor-transclusion.md).
+
+`[[^^parole` cerca un blocco in tutto il vault (la foglia `block:` dell'indice, dopo una pausa
+breve) e ne propone al più 50, col testo e la nota. La scelta scrive `[[Nota#^id]]` e dà l'id al
+blocco che non l'ha (`note.block.sync`, con la revisione); se l'id non entra il link nemmeno, e
+lo si dice; da una nota in sola lettura si offre il link alla sezione. Nella nota stessa id e
+`[[#^id]]` sono un passo, con un annulla (`markdown/blocks/vault-blocks.ts`, `state/vault-blocks.ts`).
 
 ## La concentrazione
 
@@ -404,8 +409,7 @@ foglio, in ogni editor di testo che non sia un campo:
   coi blocchi accesi (`blockKeysExtension`) e spenti (`plainKeysExtension`);
 - `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`;
   `apps/client/src/panels/document.ts`: la voce del menu «…»;
-- `apps/client/src/editors/core/surface-modes.ts`: `modeById`, che riconosce
-  anche gli id di prima (`formerIds` di `SurfaceMode`);
+- `apps/client/src/editors/core/surface-modes.ts`: `modeById`, anche con gli id di prima (`formerIds`);
 - `apps/client/src/state/document-controller.ts` e `state/mode-menu.ts`: la
   modalità del riquadro, i comandi `shell.mode.*` e il commutatore della banda;
 - `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
