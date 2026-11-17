@@ -25,9 +25,10 @@
 //! la vista non mostra niente.
 
 use super::super::*;
-use fub_abi::model::{Block, DocumentModel, PropertyScalar, PropertyValue};
+use crate::due_tasks::due_on;
+use fub_abi::model::{PropertyScalar, PropertyValue};
 use fub_abi::query::{DueBound, QueryExpr, QueryPredicate};
-use fub_abi::rules::tasks::{civil_day, task_due, task_text};
+use fub_abi::rules::tasks::civil_day;
 use fub_abi::traits::{EntryKind, Excerpts, Page, PropertySelect};
 
 /// La vista: un esemplare per giornaliera aperta, dentro la nota.
@@ -170,61 +171,6 @@ fn open(doc: &DocId) -> Option<ActionRef> {
 // ---------------------------------------------------------------------------
 // Compiti di oggi
 // ---------------------------------------------------------------------------
-
-/// Un compito aperto che scade quel giorno: il testo e la nota.
-#[derive(Debug, PartialEq, Eq)]
-pub(in crate::template) struct DueTask {
-    pub(in crate::template) doc: DocId,
-    pub(in crate::template) at: usize,
-    pub(in crate::template) text: String,
-}
-
-/// I compiti aperti di un modello che scadono il giorno `day` (giorni
-/// dall'epoca), in qualunque punto dell'albero: liste annidate, citazioni e
-/// blocchi custom, come li cammina la ricerca.
-pub(in crate::template) fn due_on(model: &DocumentModel, doc: &DocId, day: i64) -> Vec<DueTask> {
-    let mut found = Vec::new();
-    let mut pending: Vec<&Block> = model.body.iter().rev().collect();
-    while let Some(block) = pending.pop() {
-        match block {
-            Block::List { items, .. } => {
-                for item in items.iter().rev() {
-                    pending.extend(item.blocks.iter().rev());
-                }
-                for item in items {
-                    let Some(marker) = item.task else { continue };
-                    if marker.checked() {
-                        continue;
-                    }
-                    let text = task_text(&item.blocks);
-                    let Some(due) = task_due(&text) else { continue };
-                    if due.day != Some(day) {
-                        continue;
-                    }
-                    // Il testo senza la scadenza: il gruppo dice già il giorno.
-                    let before = text[..due.from].trim_end();
-                    let after = text[due.to..].trim_start();
-                    let label = match (before.is_empty(), after.is_empty()) {
-                        (_, true) => before.to_string(),
-                        (true, false) => after.to_string(),
-                        (false, false) => format!("{before} {after}"),
-                    };
-                    found.push(DueTask {
-                        doc: doc.clone(),
-                        at: marker.span.start,
-                        text: label,
-                    });
-                }
-            }
-            Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
-                pending.extend(blocks.iter().rev())
-            }
-            _ => {}
-        }
-    }
-    found.sort_by_key(|task| task.at);
-    found
-}
 
 fn tasks_group(host: &dyn ReadApi, date: &str, is_today: bool) -> Result<UiNode, PluginError> {
     let (title_key, bare_key) = if is_today {
@@ -555,7 +501,7 @@ mod tests {
     const DAILY: &str = "Daily/2023-11-14.md";
     const DAY: &str = "2023-11-14";
 
-    fn model(id: &str, source: &str) -> DocumentModel {
+    fn model(id: &str, source: &str) -> fub_abi::model::DocumentModel {
         fub_format_markdown::MarkdownProvider::new()
             .parse(&source.into(), &ParseContext::obsidian(id))
             .unwrap()

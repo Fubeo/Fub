@@ -26,11 +26,11 @@
 //! all'apertura, a ogni evento dell'indice e quando cambia un'impostazione:
 //! mai per battuta.
 
+use crate::due_tasks::due_on;
 use fub_abi::error::PluginError;
 use fub_abi::locale::{civil_from_days, days_from_civil, days_in_month};
-use fub_abi::model::{Block, DocumentModel};
 use fub_abi::query::{DueBound, QueryExpr, QueryPredicate};
-use fub_abi::rules::tasks::{iso_day, task_due, task_text};
+use fub_abi::rules::tasks::iso_day;
 use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{
@@ -659,61 +659,6 @@ fn recent(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
 }
 
 // --- Compiti di oggi --------------------------------------------------------------
-
-/// Un compito aperto che scade oggi.
-#[derive(Debug, PartialEq, Eq)]
-pub struct DueTask {
-    pub doc: DocId,
-    pub at: usize,
-    pub text: String,
-}
-
-/// I compiti aperti di un modello che scadono il giorno `day` (giorni
-/// dall'epoca), ovunque nell'albero: liste annidate, citazioni, blocchi
-/// custom. La scadenza la legge la regola del contratto ([`task_due`]).
-pub fn due_on(model: &DocumentModel, doc: &DocId, day: i64) -> Vec<DueTask> {
-    let mut found = Vec::new();
-    let mut pending: Vec<&Block> = model.body.iter().rev().collect();
-    while let Some(block) = pending.pop() {
-        match block {
-            Block::List { items, .. } => {
-                for item in items.iter().rev() {
-                    pending.extend(item.blocks.iter().rev());
-                }
-                for item in items {
-                    let Some(marker) = item.task else { continue };
-                    if marker.checked() {
-                        continue;
-                    }
-                    let text = task_text(&item.blocks);
-                    let Some(due) = task_due(&text) else { continue };
-                    if due.day != Some(day) {
-                        continue;
-                    }
-                    // Il testo senza la scadenza: il riquadro dice già il giorno.
-                    let before = text[..due.from].trim_end();
-                    let after = text[due.to..].trim_start();
-                    let label = match (before.is_empty(), after.is_empty()) {
-                        (_, true) => before.to_string(),
-                        (true, false) => after.to_string(),
-                        (false, false) => format!("{before} {after}"),
-                    };
-                    found.push(DueTask {
-                        doc: doc.clone(),
-                        at: marker.span.start,
-                        text: label,
-                    });
-                }
-            }
-            Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
-                pending.extend(blocks.iter().rev())
-            }
-            _ => {}
-        }
-    }
-    found.sort_by_key(|task| task.at);
-    found
-}
 
 fn tasks(host: &dyn ReadApi, today: i64) -> Vec<UiNode> {
     let bound = DueBound {
