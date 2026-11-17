@@ -32,6 +32,14 @@ export interface PropertyEntry {
   readonly to: number;
   /// Il numero della riga della chiave.
   readonly line: number;
+  /// Le voci, se il valore è un elenco (`[a, b]` o una per riga), senza
+  /// virgolette; `null` per un valore che non è un elenco.
+  readonly items: readonly string[] | null;
+  /// Il rientro delle voci di un elenco scritto una per riga (`""` o `"  "`):
+  /// chi lo riscrive tiene la forma. `null` per ogni altro valore.
+  readonly blockIndent: string | null;
+  /// Il valore è uno scalare fra virgolette: `"true"` è un testo, non un sì.
+  readonly quoted: boolean;
 }
 
 export interface PropertyBlock {
@@ -139,7 +147,9 @@ function readValue(head: string, rest: readonly string[]): ValueReading {
     const joined = [value, ...lines].join("\n");
     const end = quotedEnd(joined);
     if (end < 0 || !onlyComments(joined.slice(end))) return { unreadable: true, simple: false };
-    return { unreadable: false, simple: !props && end === value.length && lines.every((line) => line === "") };
+    // Una sequenza che la lettura non sa rendere non si riscrive.
+    const faithful = !value.startsWith("\"") || decodeDouble(value.slice(1, end - 1)) !== null;
+    return { unreadable: false, simple: !props && faithful && end === value.length && lines.every((line) => line === "") };
   }
   if (value.startsWith("[") || value.startsWith("{")) {
     const joined = [value, ...lines].join("\n");
@@ -156,9 +166,50 @@ function readValue(head: string, rest: readonly string[]): ValueReading {
   return { unreadable: false, simple: !props && !comments && lines.every((line) => line === "") && withoutComment(value) === value };
 }
 
+/// Le sequenze di YAML fra virgolette doppie che si leggono in un carattere.
+const ESCAPES: Readonly<Record<string, string>> = {
+  "0": "\0", a: "\u0007", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v", f: "\f", r: "\r", e: "\u001b",
+  " ": " ", "\"": "\"", "/": "/", "\\": "\\", N: "\u0085", _: " ", L: " ", P: " ",
+};
+
+/// Il testo di uno scalare fra virgolette doppie, senza le virgolette, come
+/// lo legge YAML: `\t` è una tabulazione, `è` una «è». `null` se una
+/// sequenza non è di YAML (la lettura non sarebbe fedele: chi la cambia
+/// apre lo YAML).
+function decodeDouble(inner: string): string | null {
+  let out = "";
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i]!;
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+    const next = inner[i + 1];
+    if (next === undefined) return null;
+    const width = next === "x" ? 2 : next === "u" ? 4 : next === "U" ? 8 : 0;
+    if (width > 0) {
+      const hex = inner.slice(i + 2, i + 2 + width);
+      if (!new RegExp(`^[0-9a-fA-F]{${width}}$`).test(hex)) return null;
+      const code = parseInt(hex, 16);
+      if (code > 0x10ffff) return null;
+      out += String.fromCodePoint(code);
+      i += 1 + width;
+      continue;
+    }
+    const decoded = ESCAPES[next];
+    if (decoded === undefined) return null;
+    out += decoded;
+    i += 1;
+  }
+  return out;
+}
+
 function unquote(text: string): string {
   const value = text.trim();
-  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) return value.slice(1, -1).replace(/\\"/g, "\"");
+  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+    const inner = value.slice(1, -1);
+    return decodeDouble(inner) ?? inner;
+  }
   if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'");
   return value;
 }
@@ -193,6 +244,44 @@ function display(head: string, rest: readonly string[]): string {
     return unquote(end > 0 ? value.slice(0, end) : value);
   }
   return [value, ...lines].map(withoutComment).filter(Boolean).join(" ");
+}
+
+/// Le voci di un elenco in riga, senza le parentesi: si divide alle virgole
+/// fuori dalle virgolette e dalle parentesi annidate.
+function flowItems(inner: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i]!;
+    if ((char === "\"" || char === "'") && /[\s[{,]/.test(inner[i - 1] ?? " ")) {
+      const end = quotedEnd(inner.slice(i));
+      if (end < 0) break;
+      i += end - 1;
+    } else if (char === "[" || char === "{") depth++;
+    else if (char === "]" || char === "}") depth--;
+    else if (char === "," && depth === 0) {
+      out.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(inner.slice(start));
+  return out.map(item).filter(Boolean);
+}
+
+/// Le voci di un elenco, e il rientro se è scritto una per riga; `null` per
+/// un valore che non è un elenco.
+function listOf(head: string, rest: readonly string[]): { items: string[]; indent: string | null } | null {
+  const value = withoutProps(head.trim());
+  if (value === "") {
+    const lines = rest.filter((line) => line.trim() !== "" && !line.trim().startsWith("#"));
+    if (lines.length === 0 || !lines.every((line) => /^\s*-(?:\s|$)/.test(line))) return null;
+    const indent = /^\s*/.exec(lines[0]!)![0];
+    return { items: lines.map((line) => item(line.trim().slice(1))).filter(Boolean), indent };
+  }
+  if (!value.startsWith("[")) return null;
+  const end = flowEnd(value);
+  return { items: flowItems(end > 0 ? value.slice(1, end - 1) : value.slice(1)), indent: null };
 }
 
 /// L'ultima voce con quella chiave: con due voci uguali YAML (e il modello)
@@ -235,6 +324,8 @@ export function propertyBlock(state: EditorState): PropertyBlock | null {
     if (current) {
       const reading = readValue(current.head, current.rest);
       if (reading.unreadable) unreadable = true;
+      const list = listOf(current.head, current.rest);
+      const head = withoutProps(current.head.trim());
       entries.push({
         key: current.key,
         value: display(current.head, current.rest),
@@ -242,6 +333,9 @@ export function propertyBlock(state: EditorState): PropertyBlock | null {
         from: current.from,
         to: current.to,
         line: current.line,
+        items: list?.items ?? null,
+        blockIndent: list?.indent ?? null,
+        quoted: head.startsWith("\"") || head.startsWith("'"),
       });
     }
     current = null;
@@ -507,12 +601,18 @@ function scalar(value: string, inList = false): string {
     && !(inList && /[,[\]{}]/.test(value))
     && !/: |\s#|:$/.test(value)
     && !CONTROL.test(value)
-    && !/^(?:true|false|yes|no|on|off|null|~|[-+]?\d[\d._]*)$/i.test(value);
+    && !RESOLVES_ELSEWHERE.test(value)
+    && !ISO_STAMP.test(value);
   if (plain) return value;
   const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
     .replace(CONTROLS, (char) => CONTROL_ESCAPES[char] ?? `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
   return `"${escaped}"`;
 }
+
+/// I testi che YAML (1.1 o 1.2, in ogni maiuscola) leggerebbe nudi come un
+/// altro tipo: sì/no, nullo, numeri interi, decimali, esponenziali,
+/// esadecimali, ottali, binari, infinito e non-numero.
+const RESOLVES_ELSEWHERE = /^(?:true|false|yes|no|y|n|on|off|null|~|[-+]?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:e[-+]?\d+)?|[-+]?\d[\d_]*(?::[0-5]?\d)+(?:\.[\d_]*)?|0x[\da-f_]+|0o?[0-7_]+|0b[01_]+|[-+]?\.(?:inf|nan))$/i;
 
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
@@ -520,32 +620,118 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
 const CONTROLS = /[\u0000-\u001f\u007f]/g;
 const CONTROL_ESCAPES: Readonly<Record<string, string>> = { "\n": "\\n", "\t": "\\t", "\r": "\\r" };
 
+/// Un valore che `setProperty` sa scrivere: un testo (vuoto, la chiave sola),
+/// un numero o un sì/no YAML nudi, un elenco.
+///
+/// `{ date }` è una data (`aaaa-mm-gg`) o una data e ora ISO, scritta nuda
+/// perché YAML la legga come data; ogni altro testo che YAML leggerebbe come
+/// un altro tipo (un numero, un sì/no, `null`, una data) va fra virgolette.
+export type PropertyWrite = string | number | boolean | readonly string[] | { readonly date: string };
+
+const ISO_STAMP = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
+
+/// La chiave come YAML la scrive: nuda se si legge uguale, se no fra
+/// virgolette doppie.
+function keyText(key: string): string {
+  const plain = /^[^\s#:"'\-[\]{},&*!|>%@`?][^:#]*$/.test(key) && key.trim() === key && !CONTROL.test(key);
+  return plain ? key : `"${key.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+}
+
 /// Scrive (o toglie, con `null`) la proprietà `key`, con tutte le righe della
-/// voce che c'era; un numero si scrive come numero YAML, non fra virgolette.
-/// Senza frontmatter lo crea in cima. È la modifica, da
-/// mandare con una transazione: chi chiama sceglie l'evento.
-export function setProperty(state: EditorState, key: string, value: string | number | readonly string[] | null): { from: number; to: number; insert: string } | null {
-  const text = value === null ? null
-    : typeof value === "number" ? `${key}: ${Number.isFinite(value) ? value : 0}`
-    : typeof value === "string" ? `${key}: ${scalar(value)}`
-    : `${key}: [${value.map((item) => scalar(item, true)).join(", ")}]`;
+/// voce che c'era; un numero e un sì/no si scrivono come YAML li legge, non
+/// fra virgolette; un testo vuoto lascia la chiave sola. Un elenco scritto una
+/// voce per riga resta così, col suo rientro. Senza frontmatter lo crea in
+/// cima. È la modifica, da mandare con una transazione: chi chiama sceglie
+/// l'evento.
+export function setProperty(state: EditorState, key: string, value: PropertyWrite | null): { from: number; to: number; insert: string } | null {
   const block = propertyBlock(state);
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  const first = entry ? state.doc.lineAt(entry.from).text : "";
+  const name = entry && keyLength(first) > 0 ? first.slice(0, keyLength(first)) : keyText(key);
+  const text = value === null ? null
+    : typeof value === "number" ? `${name}: ${Number.isFinite(value) ? value : 0}`
+    : typeof value === "boolean" ? `${name}: ${value}`
+    : typeof value === "string" ? (value === "" ? `${name}:` : `${name}: ${scalar(value)}`)
+    : "date" in value ? (value.date === "" ? `${name}:` : `${name}: ${ISO_STAMP.test(value.date) ? value.date : scalar(value.date)}`)
+    : entry?.blockIndent != null && value.length > 0
+      ? `${name}:${value.map((item) => `\n${entry.blockIndent}- ${scalar(item, true)}`).join("")}`
+      : `${name}: [${value.map((item) => scalar(item, true)).join(", ")}]`;
+  return setPropertyText(state, block, entry, text);
+}
+
+/// Quanto è lunga la chiave in testa alla riga `line`, fino ai due punti
+/// esclusi: la chiave resta scritta com'era (virgolette comprese).
+function keyLength(line: string): number {
+  if (!KEY_LINE.test(line)) return 0;
+  if (line.startsWith("\"") || line.startsWith("'")) return Math.max(0, quotedEnd(line));
+  return line.slice(0, line.indexOf(":")).trimEnd().length;
+}
+
+function setPropertyText(
+  state: EditorState,
+  block: PropertyBlock | null,
+  entry: PropertyEntry | undefined,
+  text: string | null,
+): { from: number; to: number; insert: string } | null {
   if (!block) {
     if (text === null) return null;
     const at = state.doc.sliceString(0, 1) === "\ufeff" ? 1 : 0;
     return { from: at, to: at, insert: withLineBreaks(state, `---\n${text}\n---\n`) };
   }
-  const entry = lastEntry(block.entries, key);
   if (entry) {
     if (text === null) {
       const to = entry.to < state.doc.length ? entry.to + 1 : entry.to;
       return { from: entry.from, to, insert: "" };
     }
-    return { from: entry.from, to: entry.to, insert: text };
+    return { from: entry.from, to: entry.to, insert: withLineBreaks(state, text) };
   }
   if (text === null) return null;
   const closing = state.doc.line(block.closing);
-  return { from: closing.from, to: closing.from, insert: `${text}${state.lineBreak}` };
+  return { from: closing.from, to: closing.from, insert: `${withLineBreaks(state, text)}${state.lineBreak}` };
+}
+
+/// Rinomina la chiave della voce `key` nel frontmatter, senza toccare il
+/// valore: la modifica, o `null` se la voce non c'è o il nome nuovo è vuoto.
+export function renamePropertyKey(state: EditorState, key: string, name: string): { from: number; to: number; insert: string } | null {
+  const block = propertyBlock(state);
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  const next = name.trim();
+  if (!entry || next === "" || next === key) return null;
+  const line = state.doc.lineAt(entry.from);
+  const length = keyLength(line.text);
+  if (length === 0) return null;
+  return { from: line.from, to: line.from + length, insert: keyText(next) };
+}
+
+/// Sposta la voce `key`, con tutte le sue righe, prima della voce `before`;
+/// con `null` in fondo, prima della chiusura. La modifica, o `null` se non
+/// cambia niente.
+/// Il frontmatter ha ancore (`&nome`) o alias (`*nome`): un alias vale solo
+/// dopo la sua ancora, e spostare righe può renderlo illeggibile. Chi sposta
+/// voci apre lo YAML, invece.
+export function hasAnchors(state: EditorState, block: PropertyBlock): boolean {
+  const lines = state.doc.sliceString(block.from, block.to).split("\n").slice(1, -1);
+  return lines.some((line) => /(?:^[^#]*?:\s+|^\s*-\s+|[[{,]\s*)(?:!\S*\s+)?[&*][^\s,[\]{}]/.test(line));
+}
+
+export function moveEntryBefore(state: EditorState, key: string, before: string | null): { from: number; to: number; insert: string }[] | null {
+  const block = propertyBlock(state);
+  if (!block) return null;
+  const entry = lastEntry(block.entries, key);
+  if (!entry) return null;
+  const target = before === null ? null : lastEntry(block.entries, before);
+  if (before !== null && !target) return null;
+  if (target === entry) return null;
+  const doc = state.doc;
+  const at = target ? target.from : doc.line(block.closing).from;
+  const end = entry.to < doc.length ? entry.to + 1 : entry.to;
+  // Già lì: la voce sta subito prima del posto (o è l'ultima).
+  if (end === at) return null;
+  const text = doc.sliceString(entry.from, entry.to) + state.lineBreak;
+  return [
+    { from: entry.from, to: end, insert: "" },
+    { from: at, to: at, insert: text },
+  ];
 }
 
 /// Le voci di una proprietà a elenco (`[a, b]` o una per riga), una per una.

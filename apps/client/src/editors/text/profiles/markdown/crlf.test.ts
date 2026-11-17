@@ -10,6 +10,7 @@ import { diagramTemplateSource } from "./completions";
 import { toggleFormat } from "./format-toggle";
 import { keepMarks } from "./keep-marks";
 import { addProperty, moveProperty, propertiesExtension, setProperty } from "./properties";
+import { retitled } from "./page/title";
 
 // Gli inserimenti dell'editor Markdown in una nota tutta CRLF (#394). L'editor
 // la apre col separatore `\r\n` (engine.ts), e CodeMirror divide il testo
@@ -156,6 +157,28 @@ describe("gli altri comandi in una nota CRLF", () => {
     const set = (key: string, value: string): Make => (state) => ({ changes: setProperty(state, key, value)! });
     expect(both("Testo|", set("title", "Nota"))).toBe("---\ntitle: Nota\n---\nTesto|");
     expect(both("---\ntitle: x\n---\nTesto|", set("tags", "a"))).toBe("---\ntitle: x\ntags: a\n---\nTesto|");
+  });
+
+  it("le proprietà scritte dalla testata: elenchi, date, valori su più righe sostituiti (revisione #421)", () => {
+    const set = (key: string, value: Parameters<typeof setProperty>[2]): Make => (state) => ({ changes: setProperty(state, key, value)! });
+    expect(both("---\ntags:\n  - a\n  - b\nx: 1\n---\nTesto|", set("tags", ["c", "d e"]))).toBe("---\ntags:\n  - c\n  - d e\nx: 1\n---\nTesto|");
+    expect(both("---\nd: 2026-03-02\n---\nTesto|", set("d", { date: "2026-03-20T10:30:45+01:00" }))).toBe("---\nd: 2026-03-20T10:30:45+01:00\n---\nTesto|");
+    expect(both("---\nnote: >\n  uno\n  due\n---\nTesto|", set("note", "1e3"))).toBe("---\nnote: \"1e3\"\n---\nTesto|");
+    expect(both("---\na: x\n---\nTesto|", set("a", "uno\ndue"))).toBe("---\na: \"uno\\ndue\"\n---\nTesto|");
+  });
+
+  it("la rinomina dal titolo riscrive l'H1 ripiegato senza toccare gli a capo (revisione #421)", () => {
+    const rename: Make = (state) => {
+      const change = retitled(state.doc, 0, "Mostra", "Mostra d'estate");
+      return change === null ? null : { changes: change };
+    };
+    expect(both("# Mostra\n\nTesto|", rename)).toBe("# Mostra d'estate\n\nTesto|");
+    const body: Make = (state) => {
+      const from = state.doc.line(4).from;
+      const change = retitled(state.doc, from, "Mostra", "Altro");
+      return change === null ? null : { changes: change };
+    };
+    expect(both("---\na: 1\n---\n# Mostra #\nTesto|", body)).toBe("---\na: 1\n---\n# Altro #\nTesto|");
   });
 
   it("Alt-↑/↓ sposta una proprietà su più righe, col cursore che la segue", () => {

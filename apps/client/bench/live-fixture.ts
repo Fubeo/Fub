@@ -277,6 +277,12 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     cursor: null,
   },
   "testata-vuota": { text: NOTE, cursor: null },
+  // Gli editor dei tipi (T8): una voce per tipo, le prime quattro come nella
+  // riga «Le proprietà» del prototipo.
+  proprieta: {
+    text: "---\nicon: 📚\ntipo: Progetto\nstato: In corso\nscadenza: 2027-03-20\npersone: [\"[[Anna Bianchi]]\", \"[[Luca Ferri]]\"]\nluogo: Biblioteca civica\nbudget: 4800\nfatto: false\nluoghi: [Torino, Lisbona, Porto]\n---\n" + NOTE,
+    cursor: null,
+  },
   "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
   "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },
   // I colori del contenuto (K1): i nove del testo e i nove del fondo, uno per
