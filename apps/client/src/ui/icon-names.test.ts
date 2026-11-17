@@ -21,6 +21,7 @@ import { useMediaIcons } from "../editors/media/icons";
 import { useBaseIcons } from "../editors/base/icons";
 import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
+import { commentIcons } from "../editors/text/profiles/markdown/comments/thread";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 
 /// I moduli che chiamano `registerIcon`, e la prova li monta tutti qui sopra.
@@ -33,6 +34,7 @@ const REGISTRARS = [
   "../editors/media/icons.ts",
   "../editors/base/icons.ts",
   "../editors/grid/ribbon/icons.ts",
+  "../editors/text/profiles/markdown/comments/thread.ts",
   "../panels/format-bar.ts",
   "../kit/color/picker.ts",
 ];
@@ -72,6 +74,7 @@ describe("i nomi che un tema può ridisegnare", () => {
     life.add(useBaseIcons());
     life.add(useRibbonIcons());
     life.add(registerFormatIcons());
+    commentIcons();
     createColorPicker({
       value: "#000000",
       text: TEXT,
