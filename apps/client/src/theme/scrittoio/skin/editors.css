@@ -4089,6 +4089,7 @@ input.canvas-toolbar-item {
   display: grid;
   grid-template-columns: repeat(7, minmax(72px, 1fr));
   min-width: 560px;
+  line-height: 1.4;
 }
 .base-cal-week {
   display: contents;
@@ -4152,7 +4153,9 @@ input.canvas-toolbar-item {
   padding: 2px 6px;
   overflow: hidden;
   border-radius: 5px;
+  font-size: inherit;
   font-weight: var(--weight-medium);
+  line-height: inherit;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;

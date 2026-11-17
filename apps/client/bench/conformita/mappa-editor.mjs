@@ -81,6 +81,11 @@ export const TRADUZIONE = {
   "--mark": ["--highlight"],
   "--hover": ["--overlay-hover"],
   "--danger": ["--danger"],
+  // I colori delle etichette (`.k-green`): `--c-<colore>` → `--doc-color-<colore>`
+  // e il suo fondo `--doc-tint-<colore>`, come dice la tabella del piano. Per
+  // ora il verde, l'unico che un pezzo usa (le note del calendario, T17).
+  "--c-green": ["--doc-color-green"],
+  "--c-green-b": ["--doc-tint-green"],
 };
 
 /// La traduzione dei pezzi dentro la pagina del documento (`contesto:
@@ -109,6 +114,8 @@ export const TRADUZIONE_DOCUMENTO = {
   "--mark": ["--doc-highlight"],
   "--hover": ["--doc-block-hover"],
   "--danger": ["--doc-danger"],
+  "--c-green": ["--doc-color-green"],
+  "--c-green-b": ["--doc-tint-green"],
 };
 
 /// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
@@ -233,6 +240,19 @@ export const VISTE = {
     stati: TUTTI,
     prototipo: { prepara: (page) => passo(page, "A riposo") },
     app: { scena: "proprieta-01-righe" },
+  },
+  /// Il calendario della Base: il prototipo al passo «Bacheca e calendario»
+  /// con la vista Calendario scelta, l'app dalla scena del calendario.
+  calendario: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Bacheca e calendario");
+        await page.click('#win .bview[data-bv="calendario"]');
+        await page.waitForSelector("#win .cal .today");
+      },
+    },
+    app: { scena: "base-calendario" },
   },
 };
 
@@ -842,6 +862,59 @@ export const PEZZI = [
     prototipo: ".props .more",
     app: ".cm-fub-page-props-more",
     proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  // ── il calendario della Base (T17) ──────────────────────────────────────
+  // Il prototipo mostra novembre 2026 (oggi il 9), l'app agosto 2026 (oggi il
+  // 19): i giorni si scelgono per colonna, un martedì dai due lati, perché
+  // l'ultima colonna non ha il filo a destra.
+  {
+    id: "calendario.griglia",
+    vista: "calendario",
+    prototipo: ".cal",
+    app: ".base-cal-grid",
+    proprieta: [...BASE, "display", "min-width"],
+  },
+  {
+    id: "calendario.nome-giorno",
+    vista: "calendario",
+    prototipo: ".cal > .dow",
+    app: ".base-cal-dow",
+    proprieta: [...BASE, "letter-spacing", "text-transform"],
+  },
+  {
+    id: "calendario.giorno",
+    vista: "calendario",
+    prototipo: '.cal > div[data-day="2026-11-03"]',
+    app: '.base-cal-day[data-day="2026-08-04"]',
+    proprieta: [...BASE, "min-height"],
+  },
+  {
+    id: "calendario.fuori",
+    vista: "calendario",
+    prototipo: ".cal > .out",
+    app: '.base-cal-day[data-out="true"]',
+    proprieta: [...BASE, "min-height"],
+  },
+  {
+    id: "calendario.numero",
+    vista: "calendario",
+    prototipo: '.cal > div[data-day="2026-11-03"] .d',
+    app: '.base-cal-day[data-day="2026-08-04"] .base-cal-num',
+    proprieta: [...BASE, "min-width", "height", "display"],
+  },
+  {
+    id: "calendario.oggi",
+    vista: "calendario",
+    prototipo: ".cal > .today .d",
+    app: '.base-cal-day[data-today="true"] .base-cal-num',
+    proprieta: [...BASE, "min-width", "height"],
+  },
+  {
+    id: "calendario.nota",
+    vista: "calendario",
+    prototipo: ".cal .ev.k-green",
+    app: ".base-cal-event",
+    proprieta: [...BASE, "display", "white-space", "text-overflow"],
   },
 ];
 
