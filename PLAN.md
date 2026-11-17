@@ -844,7 +844,7 @@ Fatto quando: un test della regola condivisa con le parole dell'artifact
 e i casi limite; un test DOM dell'editor.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/dates.test.ts src/editors/text/profiles/markdown/page
-Stato: [~] in corso (coder, da 9e69029ae di `integra/editor-1`, 2026-11-17)
+Stato: [~] integrato in `integra/editor-1` (1f95cc506, 2026-11-17), PR bozza #472. La regola è `saidDay` in `markdown/dates.ts`, la stessa di @. Giorno e mese senza anno vanno al prossimo che viene, anche «3/4», quindi @ ora propone anche l'anno dopo. «fra un mese» dal 31 gennaio dà l'ultimo del mese. Il campo capisce un'ora e «N giorni fa». «Aggiungi l'ora» su una Data la dichiara Data e ora con setType. Resta da fare: l'icona dell'orologio del prototipo su «Aggiungi l'ora», che è in `skin/document.css` fuori dal Tocca. Il frontmatter resta ISO.
 
 ## T11 · La barra che segue il blocco, «Inserisci», `editor.toolbar`
 
