@@ -545,6 +545,41 @@ const pickCell = async (page, row, column) => {
   await page.mouse.click(at.x, at.y);
   await page.waitForSelector(gridCell(row, column, ".active"));
 };
+/// La maniglia di fine del tocco lungo, quando si vede.
+const GRID_GRIP_B = '.pane.focus .grid-mark-touch[data-handle="b"]:not([hidden])';
+/// Il dito del CDP su una pagina, col tocco acceso: passa dal browser vero
+/// (`Input.dispatchTouchEvent`), dove `touch-action` decide chi scorre.
+const fingers = new WeakMap();
+async function finger(page) {
+  let cdp = fingers.get(page);
+  if (!cdp) {
+    cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    fingers.set(page, cdp);
+  }
+  return cdp;
+}
+const touch = async (page, type, points) =>
+  (await finger(page)).send("Input.dispatchTouchEvent", { type, touchPoints: points.map(({ x, y }) => ({ x, y, id: 1 })) });
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/// Un tocco lungo su una cella: giù più di `LONG_PRESS_MS` (450) della griglia.
+const longPressCell = async (page, row, column) => {
+  const at = await centre(page, gridCell(row, column));
+  await touch(page, "touchStart", [at]);
+  await wait(700);
+  await touch(page, "touchEnd", []);
+};
+/// La maniglia di fine del tocco lungo tirata col dito fino a una cella.
+const dragGrip = async (page, row, column) => {
+  const from = await centre(page, GRID_GRIP_B);
+  const to = await centre(page, gridCell(row, column));
+  await touch(page, "touchStart", [from]);
+  for (let step = 1; step <= 12; step += 1) {
+    await wait(16);
+    await touch(page, "touchMove", [{ x: from.x + ((to.x - from.x) * step) / 12, y: from.y + ((to.y - from.y) * step) / 12 }]);
+  }
+  await touch(page, "touchEnd", []);
+};
 /// Tira di `by` px il bordo destro dell'intestazione di colonna `label` e lo
 /// rilascia. Il bordo si legge dalla misura della colonna, non dal disegno:
 /// a metà di una corsa le colonne dopo sono ancora spostate.
@@ -1423,6 +1458,41 @@ export const CHOREOGRAPHIES = [
     undo: (page) => pickCell(page, 1, 1),
     returned: lacks(gridCell(3, 2, ".selected")),
     track: [GRID_EDGE],
+  },
+  // **Il dito** (griglia T7): le maniglie del tocco lungo sono pezzi dello
+  // stesso motore. Il tocco si accende nel `setup`, prima del primo scatto,
+  // perché accenderlo può cambiare ciò che la pagina mostra a un dito.
+  {
+    id: "griglia-tocco-lungo",
+    title: "Griglia: un tocco lungo, e le due maniglie crescono dal centro agli angoli della selezione",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await finger(page);
+      await pickCell(page, 1, 1);
+    },
+    act: (page) => longPressCell(page, 1, 1),
+    arrived: has(GRID_GRIP_B),
+    undo: (page) => pickCell(page, 1, 1),
+    returned: lacks(GRID_GRIP_B),
+    track: [GRID_GRIP_B],
+  },
+  {
+    id: "griglia-maniglia-tirata",
+    title: "Griglia: la maniglia del tocco tirata col dito, e il rettangolo la segue scivolando",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await finger(page);
+      await pickCell(page, 1, 1);
+      await longPressCell(page, 1, 1);
+      await page.waitForSelector(GRID_GRIP_B);
+    },
+    act: (page) => dragGrip(page, 3, 2),
+    arrived: has(gridCell(3, 2, ".selected")),
+    undo: (page) => dragGrip(page, 1, 1),
+    returned: lacks(gridCell(3, 2, ".selected")),
+    track: [GRID_EDGE, GRID_GRIP_B],
   },
   // **La cella aperta** (griglia T4): F2 su B4, la cui formula è più lunga
   // della cella. La cella aperta è subito al suo posto, cresciuta a colonne

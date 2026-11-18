@@ -1748,6 +1748,12 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   min-height: 0;
   overflow: auto;
 }
+/* Il dito scorre, e solo scorre: la selezione col dito la fa la griglia
+   (il tocco, il doppio tocco, il tocco lungo). La presa delle maniglie del
+   tocco lungo ferma lo scorrimento da sé (`touchstart`). */
+.grid-viewport {
+  touch-action: pan-x pan-y;
+}
 
 /* Il piano: grande quanto il foglio, a strati nella stessa cella di una
    griglia CSS (le righe del corpo, i livelli dei segni, la testa). Le fasce
@@ -2090,6 +2096,12 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 .grid-mark-handle {
   z-index: 4;
+}
+/* Le maniglie del tocco lungo: 14 × 14 px col centro sull'angolo dei fili.
+   Non prendono il puntatore: la presa è un cerchio attorno al loro angolo,
+   anche dove una fascia ferma ne copre metà. */
+.grid-mark-touch {
+  z-index: 3;
 }
 .grid-mark-freeze {
   z-index: 7;

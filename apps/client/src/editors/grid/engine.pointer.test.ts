@@ -436,4 +436,171 @@ describe("GridEngine con una cartella di Excel", () => {
       engine.destroy();
     });
   });
+
+  describe("il dito", () => {
+    const finger = (target: EventTarget, type: string, x: number, y: number, pointerId = 7) =>
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId, pointerType: "touch", button: 0, buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1, clientX: x, clientY: y }));
+    const inside = (element: HTMLElement) => {
+      const row = element.parentElement?.classList.contains("grid-row") ? parseFloat(element.parentElement.style.top) : 0;
+      return { x: parseFloat(element.style.left) + 8, y: row + parseFloat(element.style.top) + 8 };
+    };
+    const tap = (target: EventTarget, viewport: HTMLElement, point: { x: number; y: number }) => {
+      finger(target, "pointerdown", point.x, point.y);
+      finger(viewport, "pointerup", point.x, point.y);
+    };
+    const grips = (host: HTMLElement) => [...host.querySelectorAll<HTMLElement>(".grid-mark-touch:not([hidden])")];
+
+    it("trascinare scorre e basta: niente intervallo, la cella attiva resta", async () => {
+      const { engine, viewport, cell, go } = await workbookMounted(workbookHost());
+      go(1, 1);
+      const before = engine.selection();
+      const start = inside(cell(2, 2)!);
+      const down = finger(cell(2, 2)!, "pointerdown", start.x, start.y);
+      // Il browser deve poter scorrere: il dito giù non ferma niente.
+      expect(down).toBe(true);
+      finger(viewport, "pointermove", start.x, start.y + 40);
+      // Il browser si prende il dito per scorrere.
+      finger(viewport, "pointercancel", start.x, start.y + 40);
+      expect(engine.selection()).toEqual(before);
+      // Anche se arriva un `pointerup` dopo uno spostamento oltre `TAP_MOVE`.
+      finger(cell(2, 2)!, "pointerdown", start.x, start.y);
+      finger(viewport, "pointermove", start.x + 20, start.y);
+      finger(viewport, "pointerup", start.x + 20, start.y);
+      expect(engine.selection()).toEqual(before);
+      engine.destroy();
+    });
+
+    it("un tocco sceglie la cella, uno sull'intestazione la colonna, e il quadratino sparisce", async () => {
+      const { engine, viewport, cell, host } = await workbookMounted(workbookHost());
+      const point = inside(cell(3, 2)!);
+      tap(cell(3, 2)!, viewport, point);
+      expect(engine.selection()).toMatchObject({ anchor: { row: 3, column: 2 }, focus: { row: 3, column: 2 } });
+      await settle();
+      expect(host.querySelector(".grid-mark-handle:not([hidden])")).toBeNull();
+      tap(viewport, viewport, { x: point.x, y: 10 });
+      expect(engine.selection().focus).toEqual({ row: 0, column: 2 });
+      expect(engine.selection().anchor.row).toBeGreaterThan(3);
+      engine.destroy();
+    });
+
+    it("due tocchi sulla stessa cella la aprono; il doppio clic del browser non la riapre", async () => {
+      const { engine, viewport, cell, host } = await workbookMounted(workbookHost());
+      const point = inside(cell(1, 1)!);
+      tap(cell(1, 1)!, viewport, point);
+      expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+      tap(cell(1, 1)!, viewport, point);
+      expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(false);
+      engine.destroy();
+    });
+
+    it("due tocchi su celle diverse non aprono niente", async () => {
+      const { engine, viewport, cell, host } = await workbookMounted(workbookHost());
+      tap(cell(1, 1)!, viewport, inside(cell(1, 1)!));
+      tap(cell(2, 1)!, viewport, inside(cell(2, 1)!));
+      expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+      expect(engine.selection().focus).toEqual({ row: 2, column: 1 });
+      engine.destroy();
+    });
+
+    it("il tocco lungo mette due maniglie; tirata una, la selezione si allarga; un tocco altrove le toglie", async () => {
+      const { engine, viewport, cell, host } = await workbookMounted(workbookHost());
+      // I punti prima dell'orologio finto: i disegni aspettano un fotogramma.
+      const point = inside(cell(2, 2)!);
+      const pressed = cell(2, 2)!;
+      const target = inside(cell(4, 4)!);
+      const back = inside(cell(1, 1)!);
+      const away = cell(6, 1)!;
+      const awayPoint = inside(away);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        finger(pressed, "pointerdown", point.x, point.y);
+        vi.advanceTimersByTime(449);
+        expect(grips(host)).toHaveLength(0);
+        vi.advanceTimersByTime(1);
+        // Il menu del sistema e quello dell'editor non si aprono.
+        const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: point.x, clientY: point.y });
+        viewport.dispatchEvent(menu);
+        expect(menu.defaultPrevented).toBe(true);
+        finger(viewport, "pointerup", point.x, point.y);
+        expect(engine.selection()).toMatchObject({ anchor: { row: 2, column: 2 }, focus: { row: 2, column: 2 } });
+        const shown = grips(host);
+        expect(shown.map((grip) => grip.dataset.handle).sort()).toEqual(["a", "b"]);
+        expect(shown.every((grip) => grip.getAttribute("aria-hidden") === "true")).toBe(true);
+        // La maniglia di fine si prende al centro, sull'angolo dei fili.
+        const end = shown.find((grip) => grip.dataset.handle === "b")!;
+        const corner = { x: parseFloat(end.style.left) + 7, y: parseFloat(end.style.top) + 7 };
+        const touch = new Event("touchstart", { bubbles: true, cancelable: true });
+        Object.defineProperty(touch, "touches", { value: [{ clientX: corner.x, clientY: corner.y }] });
+        viewport.dispatchEvent(touch);
+        // Un dito sulla presa non fa scorrere il foglio.
+        expect(touch.defaultPrevented).toBe(true);
+        finger(viewport, "pointerdown", corner.x, corner.y);
+        finger(viewport, "pointermove", target.x, target.y);
+        finger(viewport, "pointerup", target.x, target.y);
+        expect(engine.selection()).toMatchObject({ anchor: { row: 2, column: 2 }, focus: { row: 4, column: 4 } });
+        // La maniglia d'inizio tirata indietro: l'angolo di fine resta.
+        await vi.advanceTimersByTimeAsync(0);
+        const start = grips(host).find((grip) => grip.dataset.handle === "a")!;
+        finger(viewport, "pointerdown", parseFloat(start.style.left) + 7, parseFloat(start.style.top) + 7);
+        finger(viewport, "pointermove", back.x, back.y);
+        finger(viewport, "pointerup", back.x, back.y);
+        expect(engine.selection()).toMatchObject({ anchor: { row: 4, column: 4 }, focus: { row: 1, column: 1 } });
+        // La cella attiva resta dentro.
+        expect(engine.selection().active ?? engine.selection().anchor).toEqual({ row: 2, column: 2 });
+        // Due dita (lo zoom del sistema) passano.
+        const two = new Event("touchstart", { bubbles: true, cancelable: true });
+        Object.defineProperty(two, "touches", { value: [{ clientX: corner.x, clientY: corner.y }, { clientX: 300, clientY: 300 }] });
+        viewport.dispatchEvent(two);
+        expect(two.defaultPrevented).toBe(false);
+        tap(away, viewport, awayPoint);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(grips(host)).toHaveLength(0);
+        engine.destroy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("lo scorrimento prima del tocco lungo non mette le maniglie, e il mouse rimette il quadratino", async () => {
+      const { engine, viewport, cell, host, go } = await workbookMounted(workbookHost());
+      go(2, 2);
+      const point = inside(cell(2, 2)!);
+      const pressed = cell(2, 2)!;
+      const other = cell(4, 4)!;
+      const mouse = inside(other);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        finger(pressed, "pointerdown", point.x, point.y);
+        finger(viewport, "pointermove", point.x, point.y + 30);
+        vi.advanceTimersByTime(1000);
+        expect(grips(host)).toHaveLength(0);
+        finger(viewport, "pointercancel", point.x, point.y + 30);
+        // Un menu col mouse si apre come sempre.
+        const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+        viewport.dispatchEvent(menu);
+        expect(menu.defaultPrevented).toBe(false);
+        other.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse", button: 0, buttons: 1, clientX: mouse.x, clientY: mouse.y }));
+        viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse", button: 0, buttons: 0, clientX: mouse.x, clientY: mouse.y }));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(host.querySelector(".grid-mark-handle:not([hidden])")).not.toBeNull();
+        engine.destroy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("smontata la griglia, un tocco lungo a metà non lascia niente", async () => {
+      const { engine, cell } = await workbookMounted(workbookHost());
+      const point = inside(cell(2, 2)!);
+      const pressed = cell(2, 2)!;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        finger(pressed, "pointerdown", point.x, point.y);
+        engine.destroy();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

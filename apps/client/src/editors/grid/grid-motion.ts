@@ -1,7 +1,8 @@
 // Il movimento dei segni della griglia: un motore solo.
 //
 // I segni che scivolano (i lati del rettangolo, l'anello della cella attiva,
-// il velo, le fasce delle intestazioni, il quadratino) si disegnano da dieci
+// il velo, le fasce delle intestazioni, il quadratino, le maniglie del tocco
+// lungo) si disegnano da dieci
 // numeri (`MarkGeometry` di `marks.ts`). Il motore tiene il bersaglio
 // (`want`) e ciò che si vede (`view`, coi numeri e la loro velocità in px al
 // secondo). Un evento (un tasto, il puntatore, un comando, lo scorrimento
@@ -214,7 +215,28 @@ export interface MarksMotion {
 interface Drawn {
   box: string;
   transform: string;
+  opacity: string;
 }
+
+/// La comparsa di una maniglia del tocco, da 0 a 1, e la sua velocità; `to`
+/// è dove va: 1 compare, 0 torna indietro (tolta mentre compariva).
+interface Pop {
+  x: number;
+  v: number;
+  to: 0 | 1;
+}
+
+/// Il rettangolo `image` visto alla comparsa `x`: cresce dal centro da
+/// `ENTER_SCALE`.
+function popped(image: Rect, x: number): Rect {
+  const k = ENTER_SCALE + (1 - ENTER_SCALE) * x;
+  return { x: image.x + (image.w * (1 - k)) / 2, y: image.y + (image.h * (1 - k)) / 2, w: image.w * k, h: image.h * k };
+}
+
+const popOpacity = (pop: Pop) => String(Math.min(1, Math.max(0, pop.x)));
+
+/// La comparsa finisce come `sampleSpring`: a un millesimo dall'arrivo.
+const POP_REST = 0.001;
 
 /// Il motore dei segni di una griglia.
 export function createMarksMotion(host: MarksHost): MarksMotion {
@@ -232,6 +254,15 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
   /// I nomi dei pezzi già nati in tutti i loro livelli.
   const born = new Set<string>();
   const owned = new WeakSet<Element>();
+  /// Le maniglie del tocco che stanno comparendo: avanzano nello stesso
+  /// fotogramma dei numeri, non per conto loro.
+  const pops = new Map<HTMLElement, Pop>();
+  /// Le maniglie tolte mentre comparivano: tornano indietro da dove sono
+  /// (al loro riposo `base`, viste in `image`), poi si nascondono. Una
+  /// maniglia che compare a metà e sparisce di colpo salterebbe.
+  const leaving = new Map<HTMLElement, { readonly base: Rect; readonly image: Rect }>();
+  /// L'ultimo rettangolo, senza la comparsa, dove si è vista ogni maniglia.
+  const images = new WeakMap<HTMLElement, Rect>();
 
   const instant = () => motionLevel() === "reduced" || motionDriver().instant;
 
@@ -255,8 +286,9 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
   };
 
   /// Porta `el`, messo nel rettangolo `base`, a vedersi nel rettangolo
-  /// `seen`. Scrive solo ciò che cambia.
-  const place = (el: HTMLElement, base: Rect, seen: Rect): void => {
+  /// `seen`, con l'opacità `opacity` (vuota: quella del foglio di stile).
+  /// Scrive solo ciò che cambia.
+  const place = (el: HTMLElement, base: Rect, seen: Rect, opacity = ""): void => {
     const sx = base.w > 0 ? seen.w / base.w : 1;
     const sy = base.h > 0 ? seen.h / base.h : 1;
     const tx = seen.x - base.x;
@@ -266,7 +298,7 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     const transform = same ? "" : `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
     let last = drawn.get(el);
     if (!last) {
-      last = { box: "", transform: "" };
+      last = { box: "", transform: "", opacity: "" };
       drawn.set(el, last);
     }
     if (last.box !== box) {
@@ -279,6 +311,10 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     if (last.transform !== transform) {
       el.style.transform = transform;
       last.transform = transform;
+    }
+    if (last.opacity !== opacity) {
+      el.style.opacity = opacity;
+      last.opacity = opacity;
     }
     if (el.hidden) el.hidden = false;
   };
@@ -343,14 +379,37 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
         } else if (el.dataset.dir !== undefined) {
           delete el.dataset.dir;
         }
+        if (part.grip) {
+          if (el.dataset.handle !== part.grip) el.dataset.handle = part.grip;
+        } else if (el.dataset.handle !== undefined) {
+          delete el.dataset.handle;
+        }
         const title = host.title?.(part.kind) ?? null;
         if (title !== null && el.title !== title) el.title = title;
         // Un segno d'angolo che arriva da un altro livello non ricompare.
-        const moved = Boolean(corner) && !was && ZONES.some((other) => other !== zone && shownRests.has(`${other}:${part.name}`));
-        if (!was && !moved && sameRect(image, base)) {
+        // Se stava comparendo, la comparsa continua nel livello nuovo.
+        // Una maniglia che tornava indietro e serve di nuovo riprende a
+        // crescere da dove è.
+        const back = leaving.delete(el);
+        if (back) pops.get(el)!.to = 1;
+        const from = Boolean(corner) && !was && !back
+          ? ZONES.find((other) => other !== zone && shownRests.has(`${other}:${part.name}`))
+          : undefined;
+        if (back) {
+          // niente: la comparsa continua
+        } else if (from !== undefined) {
+          const carried = pops.get(pool.get(`${from}:${part.name}`)!);
+          if (carried) pops.set(el, carried);
+        } else if (!was && part.pop && !instant()) {
+          // Una maniglia del tocco cresce dal centro con la molla `SLIDE`.
+          pops.set(el, { x: 0, v: 0, to: 1 });
+        } else if (!was && (part.pop || sameRect(image, base))) {
+          // Col movimento ridotto la maniglia si dissolve soltanto.
           animate(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade", lifetime: host.lifetime });
         }
-        place(el, base, image);
+        const pop = pops.get(el);
+        if (part.pop) images.set(el, image);
+        place(el, base, pop ? popped(image, pop.x) : image, pop ? popOpacity(pop) : "");
         // Se il posto dove sta è il suo arrivo (e non l'ultimo riposo di un
         // pezzo che esce): chi misura il moto (il banco) legge qui il bersaglio.
         const arriving = base === rest;
@@ -361,10 +420,46 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     for (const id of [...shownRests.keys()]) {
       if (next.has(id)) continue;
       const el = pool.get(id)!;
-      halt(el);
-      el.hidden = true;
+      const pop = pops.get(el);
+      const base = shownRests.get(id)!;
       shownRests.delete(id);
+      const image = images.get(el);
+      if (pop && image && !instant()) {
+        pop.to = 0;
+        leaving.set(el, { base, image });
+        continue;
+      }
+      halt(el);
+      pops.delete(el);
+      el.hidden = true;
     }
+    for (const [el, { base, image }] of leaving) place(el, base, popped(image, pops.get(el)!.x), popOpacity(pops.get(el)!));
+  };
+
+  /// Nasconde le maniglie che tornavano indietro.
+  const dropLeaving = (): void => {
+    for (const el of leaving.keys()) {
+      halt(el);
+      pops.delete(el);
+      el.hidden = true;
+    }
+    leaving.clear();
+  };
+
+  /// Un passo delle comparse; dice se sono finite tutte.
+  const stepPops = (seconds: number): boolean => {
+    const spring = springFor(SLIDE, motionLevel() === "calm");
+    for (const [el, pop] of pops) {
+      if (seconds > 0) advanceSpring(spring, pop, pop.to, seconds);
+      if (pop.to === 0 && pop.x <= 0) pop.x = 0;
+      if (!springAtRest(pop, pop.to, POP_REST)) continue;
+      pops.delete(el);
+      if (leaving.delete(el)) {
+        halt(el);
+        el.hidden = true;
+      }
+    }
+    return pops.size === 0;
   };
 
   const frame = (elapsed: number): void => {
@@ -375,9 +470,12 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     let arrived: boolean;
     if (instant()) {
       view = { x: want.geometry.slice(), v: want.geometry.map(() => 0) };
+      dropLeaving();
+      pops.clear();
       arrived = true;
     } else {
       arrived = stepMarks(want, view, elapsed / 1000);
+      arrived = stepPops(elapsed / 1000) && arrived;
     }
     draw();
     if (arrived) stop();
@@ -386,6 +484,8 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
   host.lifetime.add(() => {
     closed = true;
     stop();
+    leaving.clear();
+    pops.clear();
     for (const el of pool.values()) halt(el);
   });
 
@@ -406,7 +506,7 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
         followHandle(want, view);
       }
       draw();
-      if (marksAtTarget(want, view)) stop();
+      if (marksAtTarget(want, view) && pops.size === 0) stop();
       else if (!release) release = onFrame(frame);
     },
     shown: () => (view ? view.x.slice() : null),
@@ -414,6 +514,8 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       stop();
       want = null;
       view = null;
+      dropLeaving();
+      pops.clear();
       for (const id of shownRests.keys()) {
         const el = pool.get(id)!;
         halt(el);
