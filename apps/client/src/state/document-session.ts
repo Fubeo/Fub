@@ -1223,8 +1223,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
   readonly #openIntents = new Map<string, number>();
   /// Le bozze scritte per un file cancellato da fuori con testo non salvato,
   /// per vault e id: «Ricrea la nota» le toglie dopo la riscrittura
-  /// (`discardRemovedDraft`), aspettando che la loro scrittura sia finita.
-  readonly #removedDrafts = new Map<string, Promise<void>>();
+  /// (`discardRemovedDraft`), aspettando che la loro scrittura sia finita. Con
+  /// la scrittura, il testo che la bozza tiene.
+  readonly #removedDrafts = new Map<string, { readonly saving: Promise<void>; readonly text: string }>();
   /// Il vault in cui è nata ciascuna sessione (FUB-001), `null` se nessun vault
   /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
   /// quando l'host ha già aperto un altro vault.
@@ -1708,24 +1709,32 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const saving = this.#api.saveDraft(session.id, text, base, ...vaultArg(vault)).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
-    this.#removedDrafts.set(removedDraftKey(session.id, vault), saving);
+    this.#removedDrafts.set(removedDraftKey(session.id, vault), { saving, text });
     return { kind: "removed", dirty, text };
   }
 
   /**
-   * Il file cancellato da fuori è tornato con il testo della sua bozza
-   * («Ricrea la nota», riuscita): la bozza non ha più niente da dire, e
-   * lasciata lì alla riapertura farebbe un conflitto falso, perché la sua
-   * base è la revisione del file cancellato e non quella ricreata (IMP-047).
-   * Si aspetta che la sua scrittura sia finita, così non arriva dopo lo
-   * scarto. Una sessione nel frattempo riaperta sull'id tiene la sua bozza.
+   * Il file cancellato da fuori è tornato («Ricrea la nota», riuscita) con
+   * `written`. Se è il testo della bozza della rimozione, la bozza non ha più
+   * niente da dire: lasciata lì, alla riapertura farebbe un conflitto falso,
+   * perché la sua base è la revisione del file cancellato e non quella
+   * ricreata (IMP-047). Si aspetta che la sua scrittura sia finita, così non
+   * arriva dopo lo scarto.
+   *
+   * La bozza resta quando tiene un testo che il disco non ha: il file è
+   * tornato con un altro testo, oppure una sessione riaperta sull'id mostra
+   * un altro testo o ne ha uno suo non salvato (la sua bozza la scrive lei).
+   * Alla riapertura quel conflitto è vero, e la scelta è di chi legge.
    */
-  async discardRemovedDraft(id: string, vault: string | null | undefined): Promise<void> {
+  async discardRemovedDraft(id: string, vault: string | null | undefined, written: string): Promise<void> {
     const key = removedDraftKey(id, vault ?? null);
-    const saving = this.#removedDrafts.get(key);
+    const removed = this.#removedDrafts.get(key);
+    if (!removed) return;
     this.#removedDrafts.delete(key);
-    await saving;
-    if (this.#sessions.has(id)) return;
+    await removed.saving;
+    if (removed.text !== written) return;
+    const reopened = this.#sessions.get(id);
+    if (reopened && (reopened.dirty || reopened.hasPending() || reopened.text() !== written)) return;
     await this.#api.discardDraft(id, ...vaultArg(vault));
   }
   async release(id: string): Promise<CloseResult> {

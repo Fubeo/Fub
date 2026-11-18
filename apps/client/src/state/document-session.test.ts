@@ -837,7 +837,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     acceptText(sessions, "sparita.md", "lavoro ricreato");
     sessions.handleExternalRemoval("sparita.md");
 
-    const discarding = sessions.discardRemovedDraft("sparita.md", undefined);
+    const discarding = sessions.discardRemovedDraft("sparita.md", undefined, "lavoro ricreato");
     await Promise.resolve();
     expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
     finishDraft();
@@ -845,15 +845,118 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(vi.mocked(api.discardDraft)).toHaveBeenCalledWith("sparita.md");
   });
 
-  it("una sessione riaperta sull'id tiene la sua bozza", async () => {
+  it("una sessione riaperta sull'id col suo testo non salvato tiene la sua bozza", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("sparita.md");
     acceptText(sessions, "sparita.md", "lavoro ricreato");
     sessions.handleExternalRemoval("sparita.md");
     await sessions.read("sparita.md");
+    acceptText(sessions, "sparita.md", "lavoro ricreato e poi altro");
 
-    await sessions.discardRemovedDraft("sparita.md", undefined);
+    await sessions.discardRemovedDraft("sparita.md", undefined, "lavoro ricreato");
     expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
+  });
+
+  describe("«Ricrea la nota» e la riapertura (IMP-047)", () => {
+    // Le bozze sul disco del vault finto, e il file com'è adesso: la
+    // riapertura le ritrova come il recupero all'avvio (`recoverDrafts`).
+    let drafts: Map<string, { text: string; base: string | null }>;
+    let disk: { text: string; revision: string };
+
+    beforeEach(() => {
+      drafts = new Map();
+      disk = { text: "testo di prima", revision: "rev-cancellata" };
+      vi.mocked(api.saveDraft).mockImplementation(async (id, text, base) => {
+        drafts.set(id, { text, base });
+      });
+      vi.mocked(api.discardDraft).mockImplementation(async (id) => {
+        drafts.delete(id);
+      });
+      api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: disk.text, revision: disk.revision, format_id: "markdown", source_kind: "text", text_kind: "source" }));
+      vi.mocked(api.writeDocument).mockImplementation(async (_id, text, base) => {
+        if (base.kind === "descends_from" && base.value !== disk.revision) {
+          throw { kind: "conflict", message: "revisione superata" };
+        }
+        disk = { text, revision: `rev-${text.length}` };
+        return disk.revision;
+      });
+    });
+
+    /// Cancellata da fuori con «nuovo» non salvato: la bozza parte con la base
+    /// del file cancellato. Torna il testo da ricreare.
+    async function removeDirty(sessions: DocumentSessionCollection): Promise<string> {
+      await sessions.read("sparita.md");
+      acceptText(sessions, "sparita.md", "testo di prima e nuovo");
+      const outcome = sessions.handleExternalRemoval("sparita.md");
+      if (outcome.kind !== "removed" || outcome.text === undefined) throw new Error("nessun testo da ricreare");
+      await Promise.resolve();
+      expect(drafts.get("sparita.md")).toEqual({ text: "testo di prima e nuovo", base: "rev-cancellata" });
+      return outcome.text;
+    }
+
+    /// Ciò che il recupero fa alla riapertura: le bozze rimaste rientrano, e
+    /// la sessione prova a salvare. Torna l'esito di quel salvataggio.
+    async function reopen(sessions: DocumentSessionCollection): Promise<string | undefined> {
+      const found = [...drafts].map(([doc, draft]) => ({
+        doc,
+        at: 1,
+        base: draft.base,
+        exists: true,
+        current: disk.revision,
+        text: draft.text,
+      }));
+      for (const draft of sessions.rejoin(found)) await sessions.flush(draft.doc);
+      return sessions.inspect("sparita.md")?.saveState ?? undefined;
+    }
+
+    it("col testo della bozza la bozza se ne va, e alla riapertura non c'è conflitto", async () => {
+      const sessions = new DocumentSessionCollection(api);
+      const text = await removeDirty(sessions);
+      // «Ricrea la nota»: il file torna col testo, su una revisione nuova.
+      disk = { text, revision: "rev-ricreata" };
+      await sessions.discardRemovedDraft("sparita.md", undefined, text);
+      expect(drafts.has("sparita.md")).toBe(false);
+
+      const fresh = new DocumentSessionCollection(api);
+      expect(await reopen(fresh)).toBeUndefined();
+      expect(vi.mocked(api.writeDocument)).not.toHaveBeenCalled();
+    });
+
+    it("con la nota già riaperta, pulita sul testo ricreato, la bozza se ne va lo stesso", async () => {
+      const sessions = new DocumentSessionCollection(api);
+      const text = await removeDirty(sessions);
+      disk = { text, revision: "rev-ricreata" };
+      await sessions.read("sparita.md");
+      expect(sessions.inspect("sparita.md")).toMatchObject({ dirty: false, text });
+
+      await sessions.discardRemovedDraft("sparita.md", undefined, text);
+      expect(drafts.has("sparita.md")).toBe(false);
+    });
+
+    it("quando il file torna con un altro testo la bozza resta, e alla riapertura il conflitto è vero", async () => {
+      const sessions = new DocumentSessionCollection(api);
+      const text = await removeDirty(sessions);
+      // Il file è tornato, ma non col testo della bozza.
+      disk = { text: "testo di prima, rifatto da un'altra parte", revision: "rev-altra" };
+      await sessions.discardRemovedDraft("sparita.md", undefined, disk.text);
+      expect(drafts.get("sparita.md")).toEqual({ text, base: "rev-cancellata" });
+
+      const fresh = new DocumentSessionCollection(api);
+      expect(await reopen(fresh)).toBe("conflitto");
+      expect(fresh.inspect("sparita.md")).toMatchObject({ text, dirty: true });
+      // Niente è stato coperto: il disco ha ancora l'altro testo.
+      expect(disk.text).toBe("testo di prima, rifatto da un'altra parte");
+    });
+
+    it("con la nota riaperta su un altro testo la bozza resta", async () => {
+      const sessions = new DocumentSessionCollection(api);
+      const text = await removeDirty(sessions);
+      disk = { text: "un altro testo", revision: "rev-altra" };
+      await sessions.read("sparita.md");
+
+      await sessions.discardRemovedDraft("sparita.md", undefined, text);
+      expect(drafts.get("sparita.md")?.text).toBe(text);
+    });
   });
 
   it("riserva l'identità durante la cancellazione e non ricrea il buffer", async () => {
