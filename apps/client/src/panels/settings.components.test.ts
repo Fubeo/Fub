@@ -536,6 +536,49 @@ describe("settings profile boundary", () => {
     action("Importa il JSON incollato").click();
     await vi.waitFor(() => expect(imported).toHaveBeenCalledWith("machine", payload, undefined));
   });
+
+  it("mostra il profilo predefinito col nome della lingua, e sceglie ancora il suo id", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    vi.spyOn(host.module.api, "settingsProfiles").mockResolvedValue({ active: "Default", names: ["Default", "Lavoro"] });
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    expect(machine.textContent).toContain("Attivo: Predefinito");
+    expect(machine.textContent).not.toContain("Default");
+    const choice = machine.querySelector<HTMLSelectElement>('select[aria-label="Profilo"]')!;
+    expect([...choice.options].map((option) => [option.value, option.textContent])).toEqual([
+      ["Default", "Predefinito"],
+      ["Lavoro", "Lavoro"],
+    ]);
+  });
+
+  it("un cambio che l'host rifiuta dice che cosa non è riuscito, non il suo messaggio in inglese", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    vi.spyOn(host.module.api, "settingsProfiles").mockResolvedValue({ active: "Default", names: ["Default", "Lavoro"] });
+    vi.spyOn(host.module.api, "switchSettingsProfile").mockRejectedValue({ kind: "bad_args", message: "unknown profile `Lavoro`" });
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    [...machine.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Cambia profilo")!.click();
+    await vi.waitFor(() => expect(machine.querySelector('[role="status"]')?.textContent).toBe(
+      "Profilo non modificato: la richiesta non era valida",
+    ));
+  });
+
+  it("una lettura dei profili che fallisce dice perché, senza il messaggio del kernel", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    vi.spyOn(host.module.api, "settingsProfiles").mockRejectedValue({ kind: "internal", message: "il registro dei profili non si legge" });
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    await vi.waitFor(() => expect(machine.textContent).toContain(
+      "Profili non disponibili: si è verificato un problema imprevisto",
+    ));
+    expect(machine.textContent).not.toContain("registro");
+  });
 });
 
 describe("radiogroup del tema e della luce", () => {
