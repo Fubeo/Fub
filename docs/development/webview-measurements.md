@@ -95,32 +95,27 @@ scenario, col buco più lungo visto.
 
 **La misura della finestra.** L'app chiede una finestra di 1280 × 840
 (`crates/fub-app/tauri.conf.json`), ma la misura la decide il gestore di
-finestre: sotto Xvfb, senza gestore, è quella; un gestore a tessere (niri,
-sway) la cambia, per esempio in 800 × 1896 su una colonna di niri. Per
-questo il gesto di S3 e S9 si calcola sulla pagina vera
-(`bench/webview/gesture.mjs`, prova in `gesture.test.mjs`). Il gesto
-comincia sulla lavagna e può uscirne, perché la lavagna tiene il puntatore
-finché il pulsante è premuto, ma non può uscire dalla pagina: WebDriver
-rifiuta il punto. Il punto è il centro della parte visibile di
-`.canvas-viewport` e lo spostamento va ±400 px, come nella CI, se da lì ci
-sta nella pagina a 8 px dai bordi; altrimenti il punto è quello della vista
-più vicino al centro della pagina e lo spostamento va quanto ci sta (±391 px
-nella colonna di niri larga 800). Sotto i 100 px lo scenario fallisce col
-motivo: non sarebbe più una misura dello scorrimento. Il referto di ogni
-scenario dà la pagina e la misura chiesta (`window`), e il gesto di S3 e S9
-(`gesture`, con `reduced`); una pagina diversa da quella chiesta e un gesto
-ridotto finiscono anche fra le note stampate, perché un gesto più corto è
-più lento e una pagina più alta mostra più schede e più righe: quei numeri
-non si confrontano uno a uno con quelli della CI.
+finestre: sotto Xvfb è quella; un gestore a tessere (niri, sway) la cambia,
+per esempio in 800 × 1896 su una colonna di niri. Il gesto di S3 e S9 si
+calcola quindi sulla pagina vera (`bench/webview/gesture.mjs`, prova in
+`gesture.test.mjs`): può uscire dalla lavagna, che tiene il puntatore finché
+il pulsante è premuto, ma non dalla pagina, perché WebDriver rifiuta il
+punto. Parte dal centro della parte visibile di `.canvas-viewport` e va
+±400 px, come nella CI, se ci sta a 8 px dai bordi; altrimenti parte dal
+punto della vista più vicino al centro della pagina e va quanto ci sta
+(±391 px nella colonna di niri). Sotto i 100 px lo scenario fallisce col
+motivo. Il referto dà la pagina, la misura chiesta (`window`) e il gesto
+(`gesture`, con `reduced`); una pagina diversa o un gesto ridotto finiscono
+anche fra le note stampate: quei numeri non si confrontano uno a uno con
+quelli della CI.
 
 **Il selettore e l'indice.** Il primo avvio sul vault del banco indicizza
-diecimila note, e la shell risponde prima che abbia finito. Il riscaldamento
-aspetta l'indice (`vault_status`) prima di cercare «Lunga», e ogni ricerca
-per nome preme Invio solo quando la prima voce è un documento: nel selettore
-comune, finché l'indice non conosce ancora il documento, la prima voce è
-«Crea questa nota» col nome scritto, e Invio creava una `Lunga.md` vuota
-alla radice del vault. Il riscaldamento scadeva su quella nota vuota, e S1
-dopo di lui, perché il selettore metteva la nota vuota davanti alla vera.
+diecimila note, e la shell risponde prima di aver finito. Il riscaldamento
+aspetta l'indice (`vault_status`) prima di cercare «Lunga», e una ricerca per
+nome preme Invio solo quando la prima voce è un documento: finché l'indice
+non lo conosce, la prima voce del selettore comune è «Crea questa nota», e
+Invio creava una `Lunga.md` vuota alla radice, che il selettore metteva poi
+davanti alla vera (riscaldamento e S1 scaduti).
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto
