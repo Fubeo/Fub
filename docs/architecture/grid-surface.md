@@ -118,6 +118,25 @@ pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
 del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
 ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
 
+La cella aperta è la cella stessa. Il suo campo (`.grid-cell-editor`, un
+CodeMirror da campo) non sta dentro la cella ma in fondo al livello «lift»
+della zona della cella, sopra i segni, e si muove con lei quando la griglia
+scorre. Prende dalla cella la carta e l'inchiostro del file
+(`--file-fill`, `--file-color`), il carattere (`--field-font`, che il tema del
+campo dà a `.cm-content`; senza, il carattere del codice), la misura, il peso,
+l'allineamento e i margini, così il testo non si sposta quando si apre; in
+«Inserisci» parte da sinistra. La riga attiva non ha tinta e il margine del
+testo non c'è. La cornice (`.grid-cell-editor-frame`: due pixel di
+`--grid-mark` e l'ombra) è un pezzo a parte, che compare in `DURATION.state`
+(con il moto ridotto, una dissolvenza); la maniglia del riempimento intanto
+non c'è. La misura la sceglie la griglia a ogni cambio della bozza, senza
+IPC: la riga più larga, misurata col carattere della cella, decide quante
+colonne intere prende a destra (a sinistra se la cella è allineata a destra),
+fino al bordo del riquadro (`openSpan` in `engine-geometry.ts`). Se il testo
+non ci sta il campo va a capo (`wraps`) e cresce in giù a righe intere fino a
+metà del riquadro, mai oltre il suo fondo; poi il testo scorre dentro. La
+griglia non scorre aprendo la cella.
+
 Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
 il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
 una sintetica apre la cella col suo carattere (`typingOpens`). PagSu e PagGiù

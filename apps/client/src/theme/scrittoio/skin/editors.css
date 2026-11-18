@@ -441,6 +441,11 @@
 .grid-formula-editor .cm-editor .cm-content .cm-activeLine {
   background-color: transparent;
 }
+/* Nemmeno la cella aperta tinge la riga attiva: è la cella, non un
+   documento, e di notte la banda chiara sulla carta del file si vedrebbe. */
+.grid-cell-editor .cm-editor .cm-content .cm-activeLine {
+  background-color: transparent;
+}
 .grid-viewport {
   outline: none;
 }
@@ -707,10 +712,17 @@
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
-.grid-cell-editor {
-  border: 2px solid var(--accent);
-  background: var(--bg-elev);
+/* La cornice della cella aperta: 2 px del colore dei segni, sul filo della
+   cella e un pixel dentro, e l'ombra che la solleva. La carta e l'inchiostro
+   sono quelli della cella (`structure.css`), in ogni luce. */
+.grid-cell-editor-frame {
+  border: 2px solid var(--grid-mark, var(--accent));
   box-shadow: var(--shadow-2);
+}
+@media (forced-colors: active) {
+  .grid-cell-editor-frame {
+    border-color: Highlight;
+  }
 }
 /* Una cella di una cartella di Excel che legge una cella cambiata mostra
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini

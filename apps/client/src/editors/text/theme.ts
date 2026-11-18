@@ -183,9 +183,12 @@ const surfaces = EditorView.theme({
     color: "var(--doc-fg)",
     backgroundColor: "var(--doc-bg)",
   },
+  // Il carattere del contenuto è quello del codice; un campo che deve
+  // scrivere col carattere di chi lo ospita (la cella aperta della griglia)
+  // lo dice con `--field-font`. Per ogni altro editor non cambia niente.
   ".cm-content": {
     caretColor: "var(--doc-caret)",
-    fontFamily: "var(--font-mono)",
+    fontFamily: "var(--field-font, var(--font-mono))",
     fontSize: "var(--text-base)",
     lineHeight: "var(--leading-normal)",
   },

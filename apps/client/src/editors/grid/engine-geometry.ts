@@ -229,3 +229,55 @@ export function mergeCovers(merges: readonly GridMerge[], range: GridRange): boo
 export function samePosition(left: GridPosition, right: GridPosition): boolean {
   return left.row === right.row && left.column === right.column;
 }
+
+/// Da che parte cresce la cella aperta su un asse: dopo (a destra, in giù) o
+/// prima (a sinistra, in su).
+export type SpanSide = "after" | "before";
+
+/// I confini che la cella aperta prende su un asse, e se il testo ci sta.
+export interface OpenSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly fits: boolean;
+}
+
+/// Quanti confini interi la cella aperta prende su un asse (griglia T4): parte
+/// dai suoi (`start`, `end`) e cresce, una colonna o una riga intera alla
+/// volta, dalle parti di `order`, finché la misura (`edge(end) - edge(start)`,
+/// meno il filo) non arriva a `need`. `edge(k)` è il confine `k` sullo
+/// schermo, dall'angolo del riquadro. Cresce fin dove il confine si vede:
+/// dopo, fino a `high`, saltando i confini nascosti sotto una fascia ferma
+/// (sotto `low`); prima, fino a `low`, saltando quelli oltre `high`.
+export function openSpan(
+  edge: (index: number) => number,
+  count: number,
+  start: number,
+  end: number,
+  need: number,
+  low: number,
+  high: number,
+  order: readonly SpanSide[],
+): OpenSpan {
+  const fits = () => need <= edge(end) - edge(start) - 1;
+  if (fits()) return { start, end, fits: true };
+  for (const side of order) {
+    if (side === "after") {
+      for (let index = end + 1; index <= count; index += 1) {
+        const at = edge(index);
+        if (at < low) continue;
+        if (at > high) break;
+        end = index;
+        if (fits()) return { start, end, fits: true };
+      }
+    } else {
+      for (let index = start - 1; index >= 0; index -= 1) {
+        const at = edge(index);
+        if (at > high) continue;
+        if (at < low) break;
+        start = index;
+        if (fits()) return { start, end, fits: true };
+      }
+    }
+  }
+  return { start, end, fits: false };
+}

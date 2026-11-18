@@ -425,3 +425,11 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     moving: () => release !== null,
   };
 }
+
+/// La cornice della cella aperta compare (griglia T4): una dissolvenza in
+/// `DURATION.state`, che resta anche col movimento ridotto. Il resto della
+/// cella aperta (la carta, il testo, la misura) è già al suo posto, e lo stato
+/// finale è lo stesso con il movimento e senza.
+export function showEditorFrame(frame: HTMLElement, lifetime: Lifetime): void {
+  animate(frame, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade", lifetime });
+}

@@ -2020,6 +2020,16 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
   color: var(--file-color-a, var(--doc-fg, #14161a));
 }
+/* La cella aperta ha la carta e l'inchiostro della sua cella, in ogni luce:
+   la griglia le copia le proprietà del file (`--file-*`). */
+.look-file .grid-plane .grid-cell-editor {
+  background-color: var(--file-fill, var(--doc-bg, #ffffff));
+  color: var(--file-color, var(--doc-fg, #14161a));
+}
+.look-adattato .grid-plane .grid-cell-editor {
+  background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
+  color: var(--file-color-a, var(--doc-fg, #14161a));
+}
 /* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
    restano. */
 .look-file .no-gridlines .grid-cell,
@@ -2336,6 +2346,57 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .grid-cell-editor {
   z-index: 5;
   overflow: hidden;
+}
+
+/* La cella aperta (griglia T4) è la cella stessa: sta nel livello «lift»
+   della zona della sua cella, sopra i segni, e ne esce. Il testo sta dove
+   stava nella cella: lo stesso carattere (`--field-font`, che il tema del
+   campo dà a `.cm-content`), la stessa misura, lo stesso allineamento, gli
+   stessi margini (`--field-pad-*`, letti dalla cella), la stessa carta.
+   La cornice è un pezzo a parte attorno (`-frame`, nella pelle). La misura la
+   scrive la griglia: a colonne intere fin dove il testo ci sta, poi a capo
+   (`wraps`) e in giù; oltre metà del riquadro il testo scorre dentro. */
+.grid-plane .grid-cell-editor {
+  z-index: 1;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  overflow: visible;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+}
+.grid-cell-editor-frame {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+}
+.grid-cell-editor-text {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+.grid-plane .grid-cell-editor .cm-editor {
+  height: 100%;
+  background-color: transparent;
+  color: inherit;
+}
+.grid-plane .grid-cell-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.grid-plane .grid-cell-editor .cm-scroller {
+  line-height: inherit;
+}
+.grid-plane .grid-cell-editor .cm-content {
+  padding: var(--field-pad-top, 0px) var(--field-pad-right, 0px) 0 var(--field-pad-left, 0px);
+  font-size: inherit;
+  line-height: 1.3;
+}
+.grid-plane .grid-cell-editor .cm-line {
+  padding: 0;
+}
+/* Nella cella aperta niente margine: il segno di piega del testo
+   sposterebbe la prima lettera fuori dal posto che ha nella cella. */
+.grid-plane .grid-cell-editor .cm-gutters {
+  display: none;
 }
 
 .grid-notice { flex: none; margin: 0; }
@@ -4379,13 +4440,9 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   text-overflow: ellipsis;
   white-space: pre;
 }
-/* La cella in scrittura: l'editor della cella sta sopra la cella e sopra i
-   contorni dei riferimenti. */
-.canvas-card-sheet .grid-cell-editor {
-  z-index: 5;
-  min-width: 0;
-  overflow: hidden;
-}
+/* La cella in scrittura nella scheda: la cella aperta della griglia, che
+   sta già sopra la cella e sopra i contorni dei riferimenti; il suo testo
+   non mostra barre di scorrimento. */
 .canvas-card-sheet .grid-cell-editor .cm-scroller {
   overflow: hidden;
 }
