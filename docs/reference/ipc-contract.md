@@ -399,8 +399,9 @@ PDF aperti sotto una chiave si leggono e non segnano niente; senza la feature
 dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
 misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
 scritture di un documento lo tiene la `DocumentSession` della shell, che le
-accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
-`discard_draft`) restano sul thread principale, nell'ordine in cui arrivano.
+accoda, e una lettura superata la scarta. Anche le bozze (`save_draft`,
+`discard_draft`) girano fuori dal thread principale, senza il turno di scrittura,
+in fila nella coda delle bozze della sessione ([Bozze e salvataggio](../architecture/runtime-events-and-jobs.md#bozze-e-salvataggio)).
 
 La forma della proiezione (revisioni, commenti, pagina, oggetti, inchiostri e
 disegni, blocchi chiusi, versioni e schema dei dati opachi) è in

@@ -74,7 +74,7 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | snapshot globale | [`crates/fub-kernel/src/snapshot.rs:26`](../../crates/fub-kernel/src/snapshot.rs) | 1 | manifest autorevole, contenitore e record di recovery |
 | indice di ricerca | [`crates/fub-features/src/search.rs:154`](../../crates/fub-features/src/search.rs) | 10 | campi, opzioni e tokenizer dell'indice |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:178`](../../crates/fub-kernel/src/journal.rs) | 1 | mutazioni applicate al vault |
-| bozze | [`crates/fub-kernel/src/drafts.rs:110`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
+| bozze | [`crates/fub-kernel/src/drafts.rs:111`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:242`](../../crates/fub-kernel/src/maintenance.rs) | 1 | copia dei fatti raccolti per la diagnostica |
 | sidecar del cestino | [`crates/fub-kernel/src/vault.rs:173`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
 

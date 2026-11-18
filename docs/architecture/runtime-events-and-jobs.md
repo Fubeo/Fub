@@ -177,6 +177,31 @@ verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
 
+### Bozze e salvataggio
+
+La bozza di recupero esiste per coprire il tempo in cui il disco non ha ancora
+il testo, quindi non aspetta la scrittura del file che deve coprire (#485).
+
+- **Shell.** La `DocumentSession` ha due code: una per le scritture del file e
+  i comandi distruttivi, una per le bozze. Una bozza parte anche mentre una
+  scrittura lenta è in volo, e porta la revisione di base che quella scrittura
+  conosce ancora: un crash in quei secondi ritrova l'ultimo testo e sa da
+  quale versione del file parte. Nella coda delle bozze c'è una sola scrittura
+  o un solo scarto alla volta, nell'ordine in cui sono partiti, così una
+  risposta vecchia non passa sopra a una bozza più nuova. La cadenza resta
+  quella di sempre (`DRAFT_MS`): niente IPC per battuta.
+- **Fine del salvataggio.** La bozza si toglie solo se il testo della sessione
+  è quello appena scritto, e lo scarto si accoda dietro le bozze già partite.
+  Se nel frattempo è arrivato testo nuovo la bozza resta, e la cadenza la
+  riscrive sulla revisione nuova.
+- **Host.** `save_draft` e `discard_draft` girano fuori dal thread principale
+  e non prendono il turno di scrittura, che il salvataggio tiene per tutta la
+  sua durata: prendono la porta delle bozze (`Workspace::draft_port`) con un
+  prestito condiviso breve e scrivono dopo averlo lasciato. Le bozze non
+  toccano anagrafe, indici né eventi; un lucchetto interno a
+  `fub-kernel/src/drafts.rs` le tiene in fila con le migrazioni della
+  rinomina.
+
 ### Chi prende il turno per un comando
 
 Un comando di un provider (`Host::invoke_user_command` per l'utente,
