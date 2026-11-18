@@ -181,7 +181,7 @@ fn open_daily(host: &mut dyn HostApi, date: &str) -> Result<ViewUpdate, PluginEr
             E_DAILY,
             vec![
                 Arg::text("date", date),
-                Arg::text("reason", and.to_string()),
+                Arg::text("reason", and.message().to_string()),
             ],
         ),
     };
@@ -202,9 +202,12 @@ fn command_then_tree(
         Err(and) => Ok(ViewUpdate::Replace {
             root: tree(
                 host,
+                // Il motivo e basta: `to_string` dell'errore ci metteva
+                // davanti la sua variante («invalid arguments: …»), che è
+                // lessico del contratto e non una frase per chi usa Fub.
                 Some(Text::message(
                     FAILED,
-                    vec![Arg::text("reason", and.to_string())],
+                    vec![Arg::text("reason", and.message().to_string())],
                 )),
             )?,
         }),

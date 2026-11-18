@@ -877,6 +877,71 @@ describe("controlli statici e righe valide", () => {
     expect(host.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
   });
 
+  // IMP-108, IMP-112: «Aggiungi» delle proprietà e «Salva» delle query sono
+  // form i cui campi non hanno un'azione propria. Il form li manda tutti
+  // all'invio (`UiKind::Form`), quindi devono potersi scrivere: disabilitati,
+  // l'invio partiva sempre con chiave e nome vuoti.
+  const addForm = (extra: UiNode[] = []): UiNode =>
+    ({
+      node: "form",
+      submit_label: "Aggiungi",
+      submit: { action: "add", payload: null },
+      children: [
+        { node: "text_input", field: "new_key", label: "Chiave", value: "", placeholder: null, action: null },
+        {
+          node: "stack", dir: "row", gap: 4, children: [
+            { node: "text_area", field: "note", label: null, value: "", rows: 2, action: null },
+            { node: "radio", field: "r", label: null, value: null, options: [{ label: "A", value: "a" }], action: null },
+          ],
+        },
+        ...extra,
+      ],
+    }) as UiNode;
+
+  it("dentro un form un campo senza azione si può scrivere, anche annidato e dopo un ridisegno", () => {
+    const host = mount(addForm());
+    const controls = () => [...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")];
+    expect(controls()).toHaveLength(3);
+    for (const control of controls()) expect(control.disabled, control.outerHTML).toBe(false);
+    // Il riuso del riconciliatore passa da `applyField` e non deve rimettere `disabled`.
+    mountTree(host, addForm([
+      { node: "text_input", field: "new_value", label: "Valore", value: "", placeholder: null, action: null },
+    ] as UiNode[]), async () => {});
+    expect(controls()).toHaveLength(4);
+    for (const control of controls()) expect(control.disabled, control.outerHTML).toBe(false);
+  });
+
+  it("l'invio del form manda ciò che si è scritto nei suoi campi", async () => {
+    const seen: FieldValue[][] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, addForm(), async (_action, fields) => {
+      seen.push(fields);
+    });
+    const key = host.querySelector<HTMLInputElement>('[data-field="new_key"] input')!;
+    key.value = "stato";
+    host.querySelector<HTMLButtonElement>(".ui-submit")!.click();
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toContainEqual({ field: "new_key", value: { type: "text", value: "stato" } });
+  });
+
+  it("un campo patchato dentro un form resta scrivibile, uno patchato fuori resta disabilitato", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const field = (key: string): UiNode =>
+      ({ node: "text_input", field: key, label: null, value: "", placeholder: null, action: null, key }) as UiNode;
+    mountTree(host, {
+      node: "stack", dir: "column", gap: 0, children: [
+        { node: "form", submit_label: "Vai", submit: { action: "vai", payload: null }, children: [field("dentro")] },
+        field("fuori"),
+      ],
+    } as UiNode, async () => {});
+    expect(patchTree(host, "dentro", { ...field("dentro"), node: "text_area", rows: 2 } as UiNode)).toBe(true);
+    expect(patchTree(host, "fuori", field("fuori"))).toBe(true);
+    expect(host.querySelector<HTMLTextAreaElement>('[data-field="dentro"] textarea')!.disabled).toBe(false);
+    expect(host.querySelector<HTMLInputElement>('[data-field="fuori"] input')!.disabled).toBe(true);
+  });
+
   it("una riga senza celle resta una riga HTML valida", () => {
     const host = mount({ node: "row", cells: [], action: null } as UiNode);
     expect(host.querySelectorAll("tr > td")).toHaveLength(1);
