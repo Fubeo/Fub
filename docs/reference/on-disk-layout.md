@@ -150,9 +150,14 @@ storage, anche quando si trovano nella radice o nel cestino. Non sono contenuto
 utente né voci del cestino. Esistono solo mentre un'operazione li tiene: chi li
 tiene li toglie al rilascio, e quelli rimasti dopo un'uscita forzata o da una
 versione precedente di Fub, vuoti e non tenuti da nessuno, li tolgono
-l'apertura del vault e lo svuotamento del cestino. La forma riservata riguarda
-i file: `Cargo.lock`, i contenuti di directory con nomi simili e un
-`.<nome>.lock` non vuoto restano dati dell'utente.
+l'apertura del vault e lo svuotamento del cestino. L'apertura li cerca anche
+in `.fub/`, senza trattarla come contenuto; nello spazio di un plugin
+(`.fub/plugins/<id>/`) guarda solo `doc/` e `doc~trash/`, perché il resto può
+essere la cartella di un motore nativo con lock propri: `.tantivy-writer.lock`
+e `.tantivy-meta.lock` dell'indice di ricerca restano, stabili per
+costruzione. La forma riservata riguarda i file: `Cargo.lock`, i contenuti di
+directory con nomi simili e un `.<nome>.lock` non vuoto restano dati
+dell'utente.
 
 ## Stato del vault
 
