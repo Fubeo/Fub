@@ -5659,6 +5659,32 @@ impl Workspace {
         }
     }
 
+    /// Toglie i compagni di lock che nessuno tiene più: quelli di un'uscita
+    /// forzata in mezzo a un salvataggio, e quelli che le versioni di Fub che
+    /// il lock non lo toglievano hanno lasciato accanto a ogni file salvato o
+    /// spostato. Sono file nascosti di Fub nella cartella dell'utente, e chi la
+    /// sincronizza o la guarda con un altro programma li vede.
+    ///
+    /// Se un lock è rimasto indietro lo dice il supporto
+    /// ([`VaultStorage::remove_abandoned_lock`]): uno tenuto adesso da un
+    /// salvataggio — di questo processo o di un altro Fub sullo stesso vault —
+    /// resta. Un guasto non risale, come per i temporanei.
+    fn sweep_locks(&self, locks: &[Utf8PathBuf]) {
+        for path in locks {
+            match self.docs.vault.storage().remove_abandoned_lock(path) {
+                Ok(true) => tracing::info!(
+                    target: "fub.kernel",
+                    "lock rimasto indietro, tolto: {path}"
+                ),
+                Ok(false) => {}
+                Err(and) => tracing::warn!(
+                    target: "fub.kernel",
+                    "lock {path} non tolto: {and}"
+                ),
+            }
+        }
+    }
+
     /// **La prima fase dell'apertura** (§15.7): guarda cosa c'è, e basta.
     ///
     /// Al ritorno il vault è **utilizzabile** — l'anagrafe c'è, le cartelle ci
@@ -5679,6 +5705,7 @@ impl Workspace {
         let observed_at = crate::time::now_unix_millis();
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
+        self.sweep_locks(&scanned.locks_remaining_back);
 
         // La scansione raccoglie una fotografia completa ma non muta ancora il
         // core: durante `IndexProvider::up_to_date` i reader vedono l'ultimo stato

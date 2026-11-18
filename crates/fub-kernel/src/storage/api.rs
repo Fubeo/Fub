@@ -515,6 +515,24 @@ pub trait VaultStorage: Send + Sync {
         crate::time::now_unix_millis().saturating_sub(stat.mtime) >= TEMP_FILE_EXPIRY_MS
     }
 
+    /// Toglie il compagno di lock `path` (`.nota.md.lock`) se è **rimasto
+    /// indietro**: nessuno lo tiene. Risponde se l'ha tolto.
+    ///
+    /// Il compagno lo toglie chi lo tiene, al rilascio; resta solo quando il
+    /// processo muore con il lock in mano — un'uscita forzata durante un
+    /// salvataggio — o quando l'ha lasciato una versione di Fub che il lock non
+    /// lo toglieva. Il sistema rilascia il lock di un processo morto, quindi «è
+    /// rimasto indietro» si legge sul lock stesso e non sull'età o su un pid: se
+    /// si riesce a prenderlo senza aspettare non lo tiene nessuno, su questa
+    /// macchina o su un'altra che lo rispetta.
+    ///
+    /// Il default non toglie niente: è la risposta di un supporto i cui lock
+    /// non sono file del vault ([`MemStorage`]) o che segue il protocollo
+    /// stabile, in cui il file non si toglie mai ([`FsStorage`]).
+    fn remove_abandoned_lock(&self, _path: &Utf8Path) -> io::Result<bool> {
+        Ok(false)
+    }
+
     /// Toglie una cartella e tutto ciò che contiene.
     ///
     /// Ha un default composto dalle altre — si cammina e si toglie — perché

@@ -572,14 +572,37 @@ impl RootedFsStorage {
         // La creazione concorrente non esclusiva del lock nuovo può restituire
         // ENOENT su macOS. Si elegge invece un creatore con create_new: soltanto
         // AlreadyExists autorizza ad aprire il lock pubblicato dall'altro writer.
-        // Il file resta stabile: non si tronca, sostituisce o rimuove al rilascio.
-        // Nessun retry su NotFound o sugli altri errori del filesystem.
-        let lock = match self.dir.open_with(&lock_rel, &options) {
-            Ok(lock) => Ok(lock),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => self
-                .dir
-                .open_with(&lock_rel, OpenOptions::new().write(true)),
-            Err(error) => Err(error),
+        // Il file non si tronca e non si sostituisce; lo toglie chi lo tiene, al
+        // rilascio ([`HeldLock`]). Per questo il lock visto con AlreadyExists può
+        // sparire prima dell'apertura: NotFound in quel punto è un rilascio
+        // avvenuto nel frattempo, e si torna a creare. Su Windows un lock appena
+        // tolto ma ancora aperto da qualcuno («delete pending») risponde
+        // «accesso negato» finché l'ultimo handle non si chiude: si riprova, per
+        // un tempo limitato, perché un vero divieto non passa da sé.
+        let patience = std::time::Instant::now() + super::LOCK_RETRY_INTERVAL;
+        let lock = loop {
+            let attempt = match self.dir.open_with(&lock_rel, &options) {
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    match self
+                        .dir
+                        .open_with(&lock_rel, OpenOptions::new().write(true))
+                    {
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                        other => other,
+                    }
+                }
+                other => other,
+            };
+            match attempt {
+                Err(error)
+                    if cfg!(windows)
+                        && error.kind() == io::ErrorKind::PermissionDenied
+                        && std::time::Instant::now() < patience =>
+                {
+                    std::thread::sleep(super::RETRY_LOCK);
+                }
+                other => break other,
+            }
         }
         .inspect_err(|error| {
             tracing::error!(target: "fub.storage", %path, %error,
@@ -599,6 +622,63 @@ impl RootedFsStorage {
         })
     }
 
+    /// L'identità del file dietro un handle già aperto: su Unix dai suoi
+    /// metadati, su Windows dal suo handle, come [`Self::handle_link_count`].
+    fn handle_identity(file: &std::fs::File) -> io::Result<FileIdentity> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let metadata = file.metadata()?;
+            Ok(FileIdentity {
+                volume: metadata.dev(),
+                file: metadata.ino(),
+            })
+        }
+        #[cfg(windows)]
+        {
+            use std::mem::MaybeUninit;
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::{
+                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            };
+            let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+            // SAFETY: l'handle resta vivo per l'intera chiamata (lo tiene
+            // `file`, preso in prestito) e il puntatore indica storage valido.
+            let ok =
+                unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: un ritorno non-zero inizializza la struttura.
+            let info = unsafe { info.assume_init() };
+            Ok(FileIdentity {
+                volume: info.dwVolumeSerialNumber as u64,
+                file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+            })
+        }
+    }
+
+    /// Il nome `lock` porta ancora al file `held` appena acquisito?
+    ///
+    /// È la metà del protocollo che rende sicuro togliere il lock al rilascio.
+    /// Chi aspettava sull'handle di un lock che il detentore ha poi tolto
+    /// ottiene il lock di un file **senza nome**: un terzo writer ne crea uno
+    /// nuovo e lo prende subito, e i due starebbero insieme nella sezione
+    /// protetta. Chi si accorge che il nome non porta più al suo file lascia
+    /// l'handle e riparte da capo. Un nome sparito (o, su Windows, in
+    /// cancellazione) è la stessa risposta: il lock non è più quello.
+    fn still_names(&self, lock: &Utf8Path, held: &std::fs::File) -> io::Result<bool> {
+        let held = Self::handle_identity(held)?;
+        match self.identity(lock) {
+            Ok(named) => Ok(named == held),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) if cfg!(windows) && error.kind() == io::ErrorKind::PermissionDenied => {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn locked_operation<T>(path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
         // Il log distingue il guasto del lock da quello della transazione,
         // senza sostituire l'errore I/O né perdere kind e raw_os_error.
@@ -608,9 +688,24 @@ impl RootedFsStorage {
         })
     }
 
+    /// Prende il lock di `path` e lo rende come [`HeldLock`], che al rilascio
+    /// toglie il proprio file.
+    fn hold_lock(&self, path: &Utf8Path, create_parent: bool) -> io::Result<HeldLock<'_>> {
+        loop {
+            let (lock_path, lock) = self.open_lock(path, create_parent)?;
+            Self::acquire_lock(path, &lock)?;
+            if self.still_names(&lock_path, &lock)? {
+                return Ok(HeldLock {
+                    storage: self,
+                    names: vec![lock_path],
+                    file: lock,
+                });
+            }
+        }
+    }
+
     fn with_lock<T>(&self, path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
-        let (_, lock) = self.open_lock(path, true)?;
-        Self::acquire_lock(path, &lock)?;
+        let _held = self.hold_lock(path, true)?;
         Self::locked_operation(path, f)
     }
 
@@ -628,26 +723,98 @@ impl RootedFsStorage {
     /// diversi possono indicare lo stesso lock dove il caso non conta. In quel
     /// caso (`nota` → `Nota`) il lock si prende una volta sola: un secondo
     /// lock dello stesso processo sullo stesso file aspetterebbe sé stesso.
+    ///
+    /// Al rilascio si tolgono tutti e due i compagni: quello della sorgente
+    /// resterebbe altrimenti accanto a un file che non c'è più, ed è il lock
+    /// che il cestino lasciava nella cartella della nota.
     fn with_move_locks<T>(
         &self,
         from: &Utf8Path,
         to: &Utf8Path,
         f: impl FnOnce() -> io::Result<T>,
     ) -> io::Result<T> {
-        let (from_lock_path, from_lock) = self.open_lock(from, false)?;
-        let (to_lock_path, to_lock) = self.open_lock(to, true)?;
-        let from_identity = self.identity(&from_lock_path)?;
-        let to_identity = self.identity(&to_lock_path)?;
-        if from_identity == to_identity {
-            Self::acquire_lock(from, &from_lock)?;
-        } else if from_identity < to_identity {
-            Self::acquire_lock(from, &from_lock)?;
-            Self::acquire_lock(to, &to_lock)?;
-        } else {
-            Self::acquire_lock(to, &to_lock)?;
-            Self::acquire_lock(from, &from_lock)?;
-        }
+        let _held = loop {
+            let (from_lock_path, from_lock) = self.open_lock(from, false)?;
+            let (to_lock_path, to_lock) = self.open_lock(to, true)?;
+            let from_identity = Self::handle_identity(&from_lock)?;
+            let to_identity = Self::handle_identity(&to_lock)?;
+            if from_identity == to_identity {
+                Self::acquire_lock(from, &from_lock)?;
+                if self.still_names(&from_lock_path, &from_lock)?
+                    && self.still_names(&to_lock_path, &from_lock)?
+                {
+                    drop(to_lock);
+                    break vec![HeldLock {
+                        storage: self,
+                        names: vec![from_lock_path, to_lock_path],
+                        file: from_lock,
+                    }];
+                }
+                continue;
+            }
+            let (first, second) = if from_identity < to_identity {
+                (
+                    (from, from_lock_path, from_lock),
+                    (to, to_lock_path, to_lock),
+                )
+            } else {
+                (
+                    (to, to_lock_path, to_lock),
+                    (from, from_lock_path, from_lock),
+                )
+            };
+            Self::acquire_lock(first.0, &first.2)?;
+            Self::acquire_lock(second.0, &second.2)?;
+            let first_named = self.still_names(&first.1, &first.2)?;
+            let second_named = self.still_names(&second.1, &second.2)?;
+            if first_named && second_named {
+                // Il vettore si lascia cadere in ordine: il primo preso si
+                // rilascia per primo, e l'ordine non conta per chi aspetta.
+                break vec![
+                    HeldLock {
+                        storage: self,
+                        names: vec![first.1],
+                        file: first.2,
+                    },
+                    HeldLock {
+                        storage: self,
+                        names: vec![second.1],
+                        file: second.2,
+                    },
+                ];
+            }
+            // Un lock il cui nome porta ancora a lui torna libero senza
+            // toglierlo: chi lo aspetta lo troverà valido al prossimo giro.
+        };
         Self::locked_operation(to, f)
+    }
+
+    /// Toglie un compagno di lock **tenuto**: è l'ultima mossa del detentore,
+    /// prima di chiudere l'handle che lo tiene. Un lock che non è vuoto non è
+    /// nato qui — Fub non ci scrive mai — e non si toglie: è un file di
+    /// qualcun altro che porta lo stesso nome. Un errore resta nel log e non
+    /// cambia l'esito dell'operazione protetta, che è già avvenuta: il file
+    /// rimasto lo toglie la prossima apertura del vault
+    /// ([`VaultStorage::remove_abandoned_lock`]).
+    fn remove_held_lock(&self, lock: &Utf8Path, held: &std::fs::File) {
+        match held.metadata() {
+            Ok(metadata) if metadata.len() == 0 => {}
+            Ok(_) => return,
+            Err(error) => {
+                tracing::warn!(target: "fub.storage", %lock, %error,
+                    "lock non tolto: metadati illeggibili");
+                return;
+            }
+        }
+        let removed = self
+            .rel_buf(lock)
+            .and_then(|relative| self.dir.remove_file(relative));
+        match removed {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => tracing::warn!(target: "fub.storage", %lock, %error,
+                "lock non tolto al rilascio"),
+        }
     }
 
     fn current_bytes(&self, path: &Utf8Path) -> io::Result<Option<Vec<u8>>> {
@@ -727,6 +894,32 @@ impl RootedFsStorage {
 
         #[cfg(not(any(unix, windows)))]
         self.rename_no_replace_checked(from, to)
+    }
+}
+
+/// Un compagno di lock **tenuto**: i nomi che portano al file e l'handle che
+/// tiene il lock.
+///
+/// Il file si toglie al rilascio, e nell'ordine che rende la rimozione sicura:
+/// prima il nome, finché il lock è ancora tenuto, poi l'handle. Chi arriva dopo
+/// la rimozione non trova il nome e ne crea uno nuovo; chi aspettava
+/// sull'handle vecchio lo ottiene e si accorge, con
+/// [`still_names`](RootedFsStorage::still_names), che il nome non porta più a
+/// lui. Così nessun compagno resta nel vault dopo un'operazione finita — la
+/// cartella che si sincronizza con un altro programma non vede file nascosti
+/// di Fub — e l'esclusione fra i writer resta quella di prima.
+struct HeldLock<'a> {
+    storage: &'a RootedFsStorage,
+    names: Vec<Utf8PathBuf>,
+    file: std::fs::File,
+}
+
+impl Drop for HeldLock<'_> {
+    fn drop(&mut self) {
+        for name in &self.names {
+            self.storage.remove_held_lock(name, &self.file);
+        }
+        // `file` si chiude dopo questo corpo, e con lui si rilascia il lock.
     }
 }
 
@@ -1034,6 +1227,46 @@ impl VaultStorage for RootedFsStorage {
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {
         self.dir.remove_dir_all(self.rel(dir)?)?;
         self.sync_parents(dir, None)
+    }
+
+    /// Il lock si prende senza aspettare e si toglie solo se il nome porta
+    /// ancora al file preso, con lo stesso controllo del detentore
+    /// ([`still_names`](Self::still_names)): un writer che l'aveva aperto e non
+    /// ancora preso lo trova tolto e riparte da capo. Un collegamento, un file
+    /// non vuoto — Fub nel lock non scrive mai — o un supporto che il lock non
+    /// lo sa fare restano dove sono.
+    fn remove_abandoned_lock(&self, path: &Utf8Path) -> io::Result<bool> {
+        if !path.file_name().is_some_and(super::is_write_lock) {
+            return Ok(false);
+        }
+        let relative = self.rel_buf(path)?;
+        match self.dir.symlink_metadata(&relative) {
+            Ok(metadata) if metadata.is_file() && metadata.len() == 0 => {}
+            Ok(_) => return Ok(false),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error),
+        }
+        let lock = match self
+            .dir
+            .open_with(&relative, OpenOptions::new().write(true))
+        {
+            Ok(lock) => lock.into_std(),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => return Ok(false),
+            Err(std::fs::TryLockError::Error(error)) => return Err(error),
+        }
+        if lock.metadata()?.len() != 0 || !self.still_names(path, &lock)? {
+            return Ok(false);
+        }
+        match self.dir.remove_file(&relative) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {

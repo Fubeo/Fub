@@ -145,11 +145,14 @@ consenso e non ripiega mai sul vault privato.
 Un file sconosciuto esiste anche se nessun provider lo riconosce. Non viene
 eliminato né escluso da un backup senza una scelta esplicita.
 
-I file `.<nome>.lock` sono compagni persistenti del protocollo di coordinamento
-dello storage, anche quando si trovano nella radice o nel cestino. Non sono
-contenuto utente né voci da svuotare e non vengono rimossi al rilascio del lock.
-La forma riservata riguarda i file: `Cargo.lock` e i contenuti di directory con
-nomi simili restano dati dell'utente.
+I file `.<nome>.lock` sono i compagni del protocollo di coordinamento dello
+storage, anche quando si trovano nella radice o nel cestino. Non sono contenuto
+utente né voci del cestino. Esistono solo mentre un'operazione li tiene: chi li
+tiene li toglie al rilascio, e quelli rimasti dopo un'uscita forzata o da una
+versione precedente di Fub, vuoti e non tenuti da nessuno, li tolgono
+l'apertura del vault e lo svuotamento del cestino. La forma riservata riguarda
+i file: `Cargo.lock`, i contenuti di directory con nomi simili e un
+`.<nome>.lock` non vuoto restano dati dell'utente.
 
 ## Stato del vault
 

@@ -344,6 +344,15 @@ pub struct Scan {
     /// chi decide di togliere qualcosa dal vault di qualcuno è chi ha chiesto
     /// la scansione, non chi cammina.
     pub temporary_remaining_back: Vec<Utf8PathBuf>,
+    /// I compagni di lock (`.nota.md.lock`) che la camminata ha attraversato,
+    /// in path assoluto e in ordine.
+    ///
+    /// Sono **candidati**, non residui: un lock si toglie da sé al rilascio, e
+    /// uno che c'è ancora può essere tenuto adesso da un salvataggio in corso.
+    /// Se è rimasto indietro lo decide il supporto, che il lock lo sa provare
+    /// ([`VaultStorage::remove_abandoned_lock`]); per la stessa ragione dei
+    /// temporanei li toglie chi ha chiesto la scansione.
+    pub locks_remaining_back: Vec<Utf8PathBuf>,
 }
 /// Valutazione owned del filtro di un path del watcher.
 ///
@@ -988,6 +997,7 @@ impl Vault {
             files: Vec::new(),
             folders: Vec::new(),
             temporary_remaining_back: Vec::new(),
+            locks_remaining_back: Vec::new(),
         };
         // La politica si risolve **una volta per scansione** e non per voce di
         // directory: leggerla è prendere un lock e costruire un elenco, e una
@@ -1001,6 +1011,7 @@ impl Vault {
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
         out.temporary_remaining_back.sort();
+        out.locks_remaining_back.sort();
         Ok(out)
     }
 
@@ -1020,6 +1031,7 @@ impl Vault {
             files: Vec::new(),
             folders: Vec::new(),
             temporary_remaining_back: Vec::new(),
+            locks_remaining_back: Vec::new(),
         };
         let Ok(rel) = dir.strip_prefix(&self.root) else {
             return Ok(out);
@@ -1056,6 +1068,7 @@ impl Vault {
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
         out.temporary_remaining_back.sort();
+        out.locks_remaining_back.sort();
         Ok(out)
     }
 
@@ -1089,6 +1102,12 @@ impl Vault {
                     && self.storage.is_left_behind(&entry.stat)
                 {
                     out.temporary_remaining_back.push(entry.path.clone());
+                }
+                // Lo stesso per un compagno di lock che un'uscita forzata ha
+                // lasciato a terra: la politica lo nasconde, e la camminata è
+                // il solo posto da cui si vede.
+                if kind == Kind::File && crate::storage::is_write_lock(name) {
+                    out.locks_remaining_back.push(entry.path.clone());
                 }
                 continue;
             }
@@ -1836,10 +1855,14 @@ impl Vault {
     /// sidecar valido può quindi essere una cestinatura ancora in corso in
     /// un'altra finestra. Quella voce resta dov'è; il sidecar è il marcatore che
     /// rende distruttibile la sola fotografia già completata.
+    ///
+    /// I compagni di lock non sono voci: finiscono in `locks`, perché chi
+    /// svuota provi a togliere quelli che nessuno tiene più.
     fn trash_entries_with_sidecars(
         &self,
         dir: &Utf8Path,
         out: &mut Vec<CensusEntry>,
+        locks: &mut Vec<Utf8PathBuf>,
     ) -> Result<()> {
         let entries = self.storage.list(dir).map_err(|source| KernelError::Io {
             path: dir.to_owned(),
@@ -1847,7 +1870,7 @@ impl Vault {
         })?;
         for entry in entries {
             if entry.stat.is_dir() {
-                self.trash_entries_with_sidecars(&entry.path, out)?;
+                self.trash_entries_with_sidecars(&entry.path, out, locks)?;
                 continue;
             }
             if entry
@@ -1855,6 +1878,7 @@ impl Vault {
                 .file_name()
                 .is_some_and(crate::storage::is_write_lock)
             {
+                locks.push(entry.path);
                 continue;
             }
             let id = self.doc_id_for_path(&entry.path)?;
@@ -1906,8 +1930,19 @@ impl Vault {
     pub fn empty_trash(&self) -> Result<usize> {
         let dir = self.root.join(TRASH_DIR);
         let mut cataloged = Vec::new();
+        let mut locks = Vec::new();
         if self.has_trash(&dir)? {
-            self.trash_entries_with_sidecars(&dir, &mut cataloged)?;
+            self.trash_entries_with_sidecars(&dir, &mut cataloged, &mut locks)?;
+        }
+        // Un compagno di lock nel cestino non è una voce e non si conta; se
+        // nessuno lo tiene più — l'ha lasciato una versione di Fub che non lo
+        // toglieva, o un'uscita forzata — se ne va con il resto. Un guasto non
+        // risale: non è una voce che l'utente ha chiesto di distruggere.
+        for lock in &locks {
+            if let Err(error) = self.storage.remove_abandoned_lock(lock) {
+                tracing::warn!(target: "fub.kernel", %lock, %error,
+                    "lock del cestino non tolto");
+            }
         }
         let mut count = 0;
         for CensusEntry {
