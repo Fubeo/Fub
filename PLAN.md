@@ -891,7 +891,7 @@ ricetta buona (0) e su una con un passo sconosciuto (1, con il codice) e
 `fub_recipe_try` senza scritture; le tre ricette di `esempi/ricette/` passano
 `controlla` in un test; i guardiani dei documenti verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · cee51f67e, 0fc044102 · check --rapido 25/25 verde; fub-cli --test recipes 12 test. Differenze: plan con context_at(adesso, Locale::default()) (date UTC); controlla dice anche cartella, in_folder e componente; prova con --args JSON e --doc facoltativo; uscita JSON con valid e kind invalid; MCP fub_recipe_check con problemi = valid:false, fub_recipe_try = isError e vuole tutto il vault fra le radici; argomenti MCP recipe, doc, args; esempio «Riunione» senza la parola vietata in docs/.
 
 ## T12 · La sezione «Ricette», l'avviso e la finestra di adozione
 
