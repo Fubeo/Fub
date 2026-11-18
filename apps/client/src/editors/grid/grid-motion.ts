@@ -49,7 +49,12 @@ import {
 /// I segni: al 90 % in circa 105 ms, fermi in circa 250.
 export const GLIDE: Spring = { stiffness: 1400, damping: 75 };
 /// Le colonne che scivolano e le maniglie del tocco: al 90 % in circa 150 ms.
+/// È anche la selezione «Morbida» (`editor.grid.selection-speed`).
 export const SLIDE: Spring = { stiffness: 700, damping: 53 };
+/// La selezione «Svelta» (`editor.grid.selection-speed`, griglia T9): radici
+/// 50 e 56 al secondo, appena sovrasmorzata come `GLIDE`. I suoi tempi li
+/// misura `grid-motion.test.ts`.
+export const GLIDE_QUICK: Spring = { stiffness: 2800, damping: 106 };
 /// Le maniglie del tocco lungo crescono da qui, come una sezione della barra.
 export const ENTER_SCALE = 0.96;
 /// Un passo delle formiche, il periodo del loro tratteggio.
@@ -59,6 +64,43 @@ export const ANTS_MS = 320;
 /// Un numero è fermo a meno di un decimo di pixel dal bersaglio e sotto i
 /// 2 px al secondo (`springAtRest` con questa precisione).
 export const REST_PX = 0.1;
+
+// Le due preferenze della griglia (griglia T9), dichiarate dall'host in
+// `crates/fub-host/src/settings.rs`. Le legge `engine.ts` e le rilegge quando
+// cambiano; un valore che non si conosce (una preferenza scritta a mano) vale
+// quello di serie. Il movimento ridotto (`appearance.motion`) resta di tutta
+// l'app e vince su ogni scelta: lo guarda il motore, non la preferenza.
+/// Il segno di una copia: `dash-pulse` il tratteggio largo e il battito,
+/// `dash` soltanto il tratteggio, `pulse` soltanto il battito.
+export const COPY_MARK_KEY = "editor.grid.copy-mark";
+/// Come la selezione va alla cella nuova (`selectionMotion`).
+export const SELECTION_SPEED_KEY = "editor.grid.selection-speed";
+
+export type CopyMark = "dash-pulse" | "dash" | "pulse";
+export type SelectionSpeed = "quick" | "normal" | "soft" | "none";
+
+export function copyMarkOf(value: unknown): CopyMark {
+  return value === "dash" || value === "pulse" ? value : "dash-pulse";
+}
+
+export function selectionSpeedOf(value: unknown): SelectionSpeed {
+  return value === "quick" || value === "soft" || value === "none" ? value : "normal";
+}
+
+/// Come si muove la selezione (la cella attiva e il rettangolo, coi tasti,
+/// coi comandi e col puntatore) con la scelta `speed`: la molla, e se un
+/// bersaglio nuovo si vede subito (`snap`, «A scatti»). `override` è la molla
+/// che porta i segni insieme alle colonne che scivolano (`SLIDE`): vale con
+/// ogni scelta, perché i segni non si staccano dalle loro celle.
+export function selectionMotion(speed: SelectionSpeed, override: Spring | null = null): { readonly spring: Spring; readonly snap: boolean } {
+  if (override) return { spring: override, snap: false };
+  switch (speed) {
+    case "quick": return { spring: GLIDE_QUICK, snap: false };
+    case "soft": return { spring: SLIDE, snap: false };
+    case "none": return { spring: GLIDE, snap: true };
+    default: return { spring: GLIDE, snap: false };
+  }
+}
 
 /// La radice lenta della molla (1/s): sotto questa velocità per pixel che
 /// manca, una molla sovrasmorzata arriva senza passare il bersaglio. `GLIDE`
@@ -199,6 +241,11 @@ export interface MarksUpdate {
   /// Falso: i segni saltano al bersaglio (il cambio di foglio, una selezione
   /// rimessa dall'host).
   readonly glide?: boolean;
+  /// Vero («A scatti»): un bersaglio diverso da quello di prima si vede
+  /// subito, in ogni fotogramma la selezione scelta; lo stesso bersaglio lascia
+  /// finire ciò che stava scivolando, così una scelta cambiata a metà corsa
+  /// non fa saltare il segno.
+  readonly snap?: boolean;
   /// Vero: le formiche (i pezzi `ants`) camminano, perché il foglio non ha
   /// ancora risposto; altrimenti stanno ferme.
   readonly walk?: boolean;
@@ -627,11 +674,12 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       if (closed) return;
       if (next.geometry.length !== MARK_NUMBERS) throw new Error("i segni della griglia vogliono dieci numeri");
       const calm = motionLevel() === "calm";
+      const moved = !want || want.geometry.some((value, index) => value !== next.geometry[index]);
       want = { geometry: next.geometry.slice(), spring: springFor(next.spring ?? GLIDE, calm), fill: next.fill ?? false };
       parts = next.parts;
       still = next.still ?? [];
       walkWanted = next.walk ?? false;
-      if (next.glide === false || !view || instant()) {
+      if (next.glide === false || !view || instant() || (next.snap === true && moved)) {
         view = { x: want.geometry.slice(), v: want.geometry.map(() => 0) };
       } else {
         // Il quadratino segue subito il riempimento che comincia o finisce;

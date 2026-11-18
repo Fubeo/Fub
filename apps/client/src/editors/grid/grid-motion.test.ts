@@ -10,8 +10,12 @@ import {
   ANTS_STEP,
   containMarks,
   createMarksMotion,
+  copyMarkOf,
   enterValues,
   GLIDE,
+  GLIDE_QUICK,
+  selectionMotion,
+  selectionSpeedOf,
   slowRoot,
   SLIDE,
   stepMarks,
@@ -110,7 +114,7 @@ function checkStep(goal: readonly number[], before: readonly number[], after: Ma
 }
 
 describe("le regole del passo", () => {
-  for (const [name, spring] of [["GLIDE", GLIDE], ["SLIDE", SLIDE]] as const) {
+  for (const [name, spring] of [["GLIDE_QUICK", GLIDE_QUICK], ["GLIDE", GLIDE], ["SLIDE", SLIDE]] as const) {
     for (const irregular of [false, true]) {
       it(`${name}, fotogrammi ${irregular ? "irregolari" : "regolari"}: niente sorpasso, mai indietro, contenuti, e arrivano`, () => {
         for (let seed = 1; seed <= 40; seed += 1) {
@@ -633,4 +637,147 @@ describe("le formiche, il battito e i valori che entrano (griglia T6)", () => {
     expect(plays.every((play) => Number(play.keyframes[0]!.opacity) === 0)).toBe(true);
     life.close();
   });
+});
+
+/// Il tempo (ms) in cui un lato fermo arriva al 90 % di un salto di dieci
+/// colonne, a passi di un millisecondo.
+function ninetyPercent(spring: typeof GLIDE): number {
+  const from = geometryOf(0, 0, 0, 0, 0, 0);
+  const goal = geometryOf(0, 10, 0, 10, 0, 10);
+  const pose: MarksPose = { x: from.slice(), v: from.map(() => 0) };
+  const distance = goal[0]! - from[0]!;
+  for (let ms = 1; ms <= 1000; ms += 1) {
+    stepMarks({ geometry: goal, spring, fill: false }, pose, 0.001);
+    if (Math.abs(goal[0]! - pose.x[0]!) <= distance * 0.1) return ms;
+  }
+  return Infinity;
+}
+
+describe("le due preferenze della griglia (griglia T9)", () => {
+  it("un valore che non si conosce vale quello di serie", () => {
+    expect(copyMarkOf("dash")).toBe("dash");
+    expect(copyMarkOf("pulse")).toBe("pulse");
+    expect(copyMarkOf("dash-pulse")).toBe("dash-pulse");
+    for (const strange of ["zigzag", "", 3, true, null, undefined, ["dash"]]) {
+      expect(copyMarkOf(strange)).toBe("dash-pulse");
+      expect(selectionSpeedOf(strange)).toBe("normal");
+    }
+    expect(selectionSpeedOf("quick")).toBe("quick");
+    expect(selectionSpeedOf("soft")).toBe("soft");
+    expect(selectionSpeedOf("none")).toBe("none");
+  });
+
+  it("ogni velocità ha la sua molla; le colonne che scivolano tengono SLIDE con ogni scelta", () => {
+    expect(selectionMotion("quick")).toEqual({ spring: GLIDE_QUICK, snap: false });
+    expect(selectionMotion("normal")).toEqual({ spring: GLIDE, snap: false });
+    expect(selectionMotion("soft")).toEqual({ spring: SLIDE, snap: false });
+    expect(selectionMotion("none")).toEqual({ spring: GLIDE, snap: true });
+    for (const speed of ["quick", "normal", "soft", "none"] as const) {
+      expect(selectionMotion(speed, SLIDE)).toEqual({ spring: SLIDE, snap: false });
+    }
+  });
+
+  it("i tempi al 90 %: Svelta prima di Come di norma, Morbida dopo", () => {
+    expect(slowRoot(GLIDE_QUICK)).toBeCloseTo(50, 6);
+    const quick = ninetyPercent(GLIDE_QUICK);
+    const normal = ninetyPercent(GLIDE);
+    const soft = ninetyPercent(SLIDE);
+    // Misurati: 74, 105 e 148 ms.
+    expect(quick).toBeGreaterThanOrEqual(65);
+    expect(quick).toBeLessThanOrEqual(85);
+    expect(normal).toBeGreaterThanOrEqual(95);
+    expect(normal).toBeLessThanOrEqual(115);
+    expect(soft).toBeGreaterThanOrEqual(135);
+    expect(soft).toBeLessThanOrEqual(165);
+  });
+
+  it("A scatti: in ogni fotogramma la selezione scelta, senza iscriversi all'orologio, anche con eventi fitti", () => {
+    for (let seed = 1; seed <= 8; seed += 1) {
+      const random = seeded(seed);
+      const targets = gesture(random, 80);
+      const { host, life } = makeHost();
+      const marks = createMarksMotion(host);
+      const { spring, snap } = selectionMotion("none");
+      marks.update({ geometry: targets[0]!, parts: partsFor(false), glide: false });
+      for (let cursor = 1; cursor < targets.length;) {
+        const size = 1 + Math.floor(random() * 10);
+        for (const geometry of targets.slice(cursor, cursor + size)) {
+          marks.update({ geometry, parts: partsFor(false), spring, snap });
+          expect(marks.shown(), `seme ${seed}`).toEqual(geometry);
+        }
+        cursor += size;
+        expect(marks.moving(), `seme ${seed}`).toBe(false);
+        driver.advance(FRAME);
+        expect(marks.shown(), `seme ${seed}`).toEqual(targets[Math.min(cursor, targets.length) - 1]);
+      }
+      expect(frameListeners()).toBe(0);
+      life.close();
+    }
+  });
+
+  it("A scatti scelto a metà corsa: il segno che scivola finisce la sua corsa, il gesto dopo salta", () => {
+    const { host, life } = makeHost();
+    const marks = createMarksMotion(host);
+    const a = geometryOf(0, 0, 0, 0, 0, 0);
+    const b = geometryOf(0, 6, 0, 6, 0, 6);
+    marks.update({ geometry: a, parts: partsFor(true), glide: false });
+    marks.update({ geometry: b, parts: partsFor(true), ...selectionMotion("normal") });
+    driver.advance(FRAME * 2);
+    const mid = marks.shown()!;
+    expect(mid[0]).toBeGreaterThan(a[0]!);
+    expect(mid[0]).toBeLessThan(b[0]!);
+    // Un ridisegno con lo stesso bersaglio (la risposta del foglio, uno
+    // scorrimento) e la scelta nuova: niente salto, la corsa continua.
+    marks.update({ geometry: b, parts: partsFor(true), ...selectionMotion("none") });
+    expect(marks.shown()).toEqual(mid);
+    expect(marks.moving()).toBe(true);
+    driver.advance(FRAME);
+    expect(marks.shown()![0]).toBeGreaterThan(mid[0]!);
+    expect(marks.shown()![0]).toBeLessThan(b[0]!);
+    // Il gesto dopo: subito sulla cella scelta.
+    const c = geometryOf(2, 1, 2, 1, 2, 1);
+    marks.update({ geometry: c, parts: partsFor(true), ...selectionMotion("none") });
+    expect(marks.shown()).toEqual(c);
+    expect(marks.moving()).toBe(false);
+    expect(frameListeners()).toBe(0);
+    life.close();
+  });
+
+  it("una molla cambiata a metà corsa riparte da dove si vede, senza salti", () => {
+    const { host, life } = makeHost();
+    const marks = createMarksMotion(host);
+    const a = geometryOf(0, 0, 0, 0, 0, 0);
+    const b = geometryOf(0, 8, 0, 8, 0, 8);
+    marks.update({ geometry: a, parts: partsFor(true), glide: false });
+    marks.update({ geometry: b, parts: partsFor(true), ...selectionMotion("quick") });
+    driver.advance(FRAME * 2);
+    const mid = marks.shown()!;
+    marks.update({ geometry: b, parts: partsFor(true), ...selectionMotion("soft") });
+    expect(marks.shown()).toEqual(mid);
+    let last = mid[0]!;
+    for (let frame = 0; frame < 60; frame += 1) {
+      driver.advance(FRAME);
+      const now = marks.shown()![0]!;
+      expect(now).toBeGreaterThanOrEqual(last);
+      expect(now).toBeLessThanOrEqual(b[0]!);
+      last = now;
+    }
+    expect(marks.shown()).toEqual(b);
+    life.close();
+  });
+
+  for (const speed of ["quick", "normal", "soft", "none"] as const) {
+    it(`con il moto ridotto la selezione si ferma subito anche con «${speed}»`, () => {
+      setMotionPreference("reduced");
+      const { host, life } = makeHost();
+      const marks = createMarksMotion(host);
+      marks.update({ geometry: geometryOf(0, 0, 0, 0, 0, 0), parts: partsFor(true), glide: false });
+      const b = geometryOf(4, 7, 4, 7, 4, 7);
+      marks.update({ geometry: b, parts: partsFor(true), ...selectionMotion(speed) });
+      expect(marks.shown()).toEqual(b);
+      expect(marks.moving()).toBe(false);
+      expect(frameListeners()).toBe(0);
+      life.close();
+    });
+  }
 });
