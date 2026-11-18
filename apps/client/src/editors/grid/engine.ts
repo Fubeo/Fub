@@ -665,6 +665,10 @@ export class GridEngine {
   #touchLast = false;
   /// Le due maniglie del tocco lungo, agli angoli della selezione.
   #grips = false;
+  /// La cella che dichiara sua la cella aperta (`aria-owns`), finché è aperta:
+  /// l'elemento disegnato e la sua posizione, perché ogni cella rifatta dal
+  /// disegno porti lo stesso attributo.
+  #editorOwner: { readonly cell: HTMLElement; readonly position: GridPosition } | null = null;
   /// L'ultimo tocco su una cella, per il doppio tocco che la apre.
   #lastTap: { readonly at: number; readonly position: GridPosition } | null = null;
   /// Gli altri intervalli di una selezione a più intervalli, sul foglio
@@ -819,6 +823,7 @@ export class GridEngine {
     this.#corner.className = "grid-corner";
     this.#cellEditorHost = document.createElement("div");
     this.#cellEditorHost.className = "grid-cell-editor";
+    this.#cellEditorHost.id = `grid-${this.#options.surfaceId}-editor`;
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
     this.#cellEditorFrame = part("grid-cell-editor-frame");
@@ -2726,6 +2731,7 @@ export class GridEngine {
         this.#editing = null;
         this.#cellEditorHost.hidden = true;
         this.#cellEditorHost.setAttribute("aria-hidden", "true");
+        this.#editorForReaders(null);
         this.#plane.append(this.#cellEditorHost);
         this.#pendingChanged();
       }
@@ -4042,6 +4048,8 @@ export class GridEngine {
     element.setAttribute("role", "gridcell");
     element.setAttribute("aria-rowindex", String(row + 2));
     element.setAttribute("aria-colindex", String(column + 2));
+    const owner = this.#editorOwner?.position;
+    if (owner && owner.row === row && owner.column === column) element.setAttribute("aria-owns", this.#cellEditorHost.id);
     if (merge) {
       element.classList.add("merged");
       element.setAttribute("aria-rowspan", String(merge.rows));
@@ -4933,6 +4941,7 @@ export class GridEngine {
     this.#detachCellEditor();
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
+    this.#editorForReaders(null);
     this.#options.onEditMode?.();
     if (commit && editing.draft !== editing.original) {
       this.#commitCells([{ position: editing.position, after: fileInput(editing.draft, this.#decimal) }], origin, true);
@@ -5010,7 +5019,29 @@ export class GridEngine {
     host.dataset.column = String(position.column);
     host.hidden = false;
     host.removeAttribute("aria-hidden");
+    this.#editorForReaders({ lift, cell, position });
     this.#dressEditor(position, cell);
+  }
+
+  /// La cella aperta per chi usa un lettore di schermo. I livelli «lift» non
+  /// si leggono, salvo quello che porta la cella aperta: un campo col fuoco
+  /// dentro un `aria-hidden` sparisce (axe `aria-hidden-focus`); ciò che il
+  /// livello porta oltre al campo (i segni d'angolo, gli oggetti) è
+  /// `aria-hidden` da sé. E il campo sta nel livello, non nella cella, ma una
+  /// griglia contiene solo righe e celle: la cella lo dichiara suo
+  /// (`aria-owns`), e chi legge lo trova dov'è la cella. `null` quando la
+  /// cella si chiude.
+  #editorForReaders(
+    open: { readonly lift: HTMLElement; readonly cell: HTMLElement; readonly position: GridPosition } | null,
+  ): void {
+    for (const lift of new Set(Object.values(this.#lifts))) {
+      if (lift === open?.lift) lift.removeAttribute("aria-hidden");
+      else lift.setAttribute("aria-hidden", "true");
+    }
+    const before = this.#editorOwner?.cell;
+    if (before && before !== open?.cell) before.removeAttribute("aria-owns");
+    this.#editorOwner = open ? { cell: open.cell, position: open.position } : null;
+    open?.cell.setAttribute("aria-owns", this.#cellEditorHost.id);
   }
 
   /// Veste la cella aperta come la cella `cell`: la carta e l'inchiostro del
