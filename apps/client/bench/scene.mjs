@@ -1357,7 +1357,10 @@ export const SCENE = touchLast(onPage("shell", [
     prepare: async (page) => {
       await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
       await selectWords(page, "Questa è la nota");
-      const box = await page.locator(".pane.focus .cm-selectionBackground").first().boundingBox();
+      // Il clic al centro del testo scelto: dello strato già ridisegnato, non
+      // di quello del tasto di prima (il menu cadeva 2 px più in qua o più in
+      // là secondo chi arrivava primo, #488).
+      const box = await selectionBox(page);
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
       await page.waitForSelector(".context-strip.context-strip-mini .mini-bar [data-command='markdown.bold']");
       await page.mouse.move(0, 0);
@@ -2916,6 +2919,27 @@ async function selectWords(page, line) {
   await page.keyboard.press("Home");
   for (let step = 0; step < 3; step++) await page.keyboard.press("Control+ArrowRight");
   for (let step = 0; step < 3; step++) await page.keyboard.press("Control+Shift+ArrowRight");
+}
+
+/// Il riquadro del testo scelto nella nota a fuoco, letto quando lo strato
+/// della selezione l'ha raggiunto. CodeMirror cambia la selezione del documento
+/// subito, al tasto, ma ridisegna lo strato al suo fotogramma di misura: letto
+/// prima, lo strato è ancora quello del tasto di prima (#488). Si aspetta che
+/// copra la selezione del documento e resti fermo per due fotogrammi.
+async function selectionBox(page) {
+  await page.evaluate(() => delete globalThis.__benchSelection);
+  const found = await page.waitForFunction(() => {
+    const layer = document.querySelector(".pane.focus .cm-selectionBackground")?.getBoundingClientRect();
+    const chosen = getSelection();
+    const range = chosen && chosen.rangeCount > 0 ? chosen.getRangeAt(0).getBoundingClientRect() : null;
+    const covers = layer && range && range.width > 0 && Math.abs(layer.left - range.left) < 1 && Math.abs(layer.right - range.right) < 1;
+    const at = covers ? `${layer.x} ${layer.y} ${layer.width} ${layer.height}` : null;
+    const seen = (globalThis.__benchSelection ??= { at: null, frames: 0 });
+    seen.frames = at !== null && seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 2 && { x: layer.x, y: layer.y, width: layer.width, height: layer.height };
+  }, null, { polling: "raf" });
+  return found.jsonValue();
 }
 
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
