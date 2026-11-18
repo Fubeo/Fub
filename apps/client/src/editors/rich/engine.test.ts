@@ -48,6 +48,25 @@ function at(doc: PmNode, needle: string, offset = 0): number {
 const blocksOf = (e: RichEngine) => parseProjection(e.getDoc()).blocks;
 
 describe("il motore ricco", () => {
+  it("con escapeLeaves Esc sale intatto a chi ospita la superficie; senza, ProseMirror lo prende (T44)", () => {
+    const escape = (): KeyboardEvent => new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true, cancelable: true });
+    engine(source([para("uno")]));
+    const plain = escape();
+    document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(true);
+    document.body.replaceChildren();
+
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const leaving = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {}, escapeLeaves: true });
+    leaving.setDoc(source([para("uno")]));
+    engines.push(leaving);
+    const seen: boolean[] = [];
+    parent.addEventListener("keydown", (event) => seen.push(event.defaultPrevented));
+    parent.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(escape());
+    expect(seen).toEqual([false]);
+  });
+
   it("il Tab si ferma sul foglio: Invio porta a scrivere, e dopo un Esc il Tab esce invece di scrivere", () => {
     const e = engine(source([para("uno")]));
     const page = document.querySelector<HTMLElement>(".rich-desk")!.parentElement!;

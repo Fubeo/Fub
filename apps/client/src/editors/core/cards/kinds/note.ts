@@ -1,5 +1,6 @@
-// La scheda di nota: una nota `.md` (e un documento `.docx` o `.odt`, D-14)
-// sulla lavagna si legge, non è un nome.
+// La scheda di nota: una nota `.md` sulla lavagna si legge, non è un nome.
+// Lo stesso corpo serve la scheda di documento (`document.ts`, T44), con la
+// sua «specie» (`TextCardFlavor`): un `.docx` o un `.odt` reso in continuo.
 //
 // La resa non la fa la scheda: arriva da una porta (`NoteCardPort.show`), che
 // nella shell è `renderEmbed` più la stessa montatura sicura delle schede di
@@ -10,8 +11,9 @@
 // T40 (`context.editors`) l'editor vero della nota, sulla stessa sessione di
 // un riquadro, e lo mette nel corpo al posto della resa; bozze, conflitti e
 // salvataggio sono della sessione, l'annulla dell'editor. `leave()` porta il
-// testo alla sessione, smonta l'editor e rifà la resa col testo nuovo. Un
-// documento Word o ODT (D-14 (a)) resta in lettura. La riga del titolo dice
+// testo alla sessione, smonta l'editor e rifà la resa col testo nuovo. Se e
+// come si scrive lo dice la specie: la nota col suo editor intero, il
+// documento con quello dei documenti, compatto (T44). La riga del titolo dice
 // lo stato della sessione con le parole di un riquadro (T96), e la sola
 // lettura col perché che dà la porta: è della nota, non della lavagna.
 //
@@ -73,18 +75,65 @@ export function noteHeadingOf(subpath: string | null): string | null {
   return subpath === null ? null : sectionHeading(subpath);
 }
 
-/// Il renderer delle schede di nota e di documento.
+/// Che cosa cambia fra le schede che mostrano un testo reso dal file: la nota
+/// (qui) e il documento di videoscrittura (`document.ts`, T44). Il resto (la
+/// resa, i modi, la scrittura sulla sessione, il file che manca) è lo stesso.
+export interface TextCardFlavor {
+  /// La specie, in `data-card-kind` della radice.
+  readonly kind: "note" | "document";
+  /// La classe della radice e del contenitore dell'editor, oltre a
+  /// `canvas-card-note`; la resa ha la stessa col suffisso `-content`.
+  readonly className?: string;
+  /// Se la scheda viva scrive nel file `path` con la porta (`edit()`).
+  writes(path: string): boolean;
+  /// Se la scheda rende le sezioni di un estratto (`fub:parts`, `#Titolo`).
+  /// No: la scheda mostra sempre il file intero, e la parte resta scritta.
+  readonly sections: boolean;
+  /// L'editor senza le sue barre (`CardEditorOptions.compact`).
+  readonly compact: boolean;
+  /// Prepara il contenitore dell'editor prima che la porta ci monti la
+  /// superficie (il documento: l'aspetto del tema).
+  prepareWriter?(writer: HTMLElement): void;
+  /// La resa `content` del file di `context` è arrivata: ciò che la specie le
+  /// mette accanto (il documento troncato: «Apri»), con gli ascoltatori su
+  /// `life`. Restituisce i nodi da mostrare dopo la resa.
+  after?(content: HTMLElement, life: Lifetime, context: CardContext): readonly Node[];
+}
+
+/// La nota: si scrive solo un `.md`, con l'editor intero; un estratto si
+/// legge e basta (T75).
+const NOTE_FLAVOR: TextCardFlavor = {
+  kind: "note",
+  writes: (path) => formatKindOf(path) === "note",
+  sections: true,
+  compact: false,
+};
+
+/// Il renderer delle schede di nota.
 export function noteCardRenderer(port: NoteCardPort): CardRenderer {
   return {
-    kinds: ["note", "document"],
+    kinds: ["note"],
     mount(_node: CanvasNode, host: HTMLElement, mode: CardMode, context: CardContext): CardView {
-      return new NoteCard(port, host, mode, context);
+      return new TextCard(port, host, mode, context, NOTE_FLAVOR);
     },
   };
 }
 
-class NoteCard implements CardView {
+/// Monta il corpo di una scheda di testo reso con la specie `flavor`: lo usa
+/// la scheda di documento (T44).
+export function mountTextCard(
+  port: NoteCardPort,
+  host: HTMLElement,
+  mode: CardMode,
+  context: CardContext,
+  flavor: TextCardFlavor,
+): CardView {
+  return new TextCard(port, host, mode, context, flavor);
+}
+
+class TextCard implements CardView {
   readonly #port: NoteCardPort;
+  readonly #flavor: TextCardFlavor;
   readonly #context: CardContext;
   readonly #root: HTMLElement;
   /// Il taglio a riga intera della resa ferma (#411).
@@ -93,6 +142,8 @@ class NoteCard implements CardView {
   #state: NoteCardState = "placeholder";
   /// La resa mostrata e la sua vita, aperta solo mentre la scheda è viva.
   #content: HTMLElement | null = null;
+  /// Ciò che la specie mostra dopo la resa (`TextCardFlavor.after`).
+  #extra: readonly Node[] = [];
   #contentLife: Lifetime | null = null;
   /// La resa in volo e la sua vita; vince solo quella della generazione corrente.
   #pendingLife: Lifetime | null = null;
@@ -111,14 +162,15 @@ class NoteCard implements CardView {
   /// L'uscita in corso: il testo va alla sessione prima di tornare alla resa.
   #leaving: Promise<void> | null = null;
 
-  constructor(port: NoteCardPort, host: HTMLElement, mode: CardMode, context: CardContext) {
+  constructor(port: NoteCardPort, host: HTMLElement, mode: CardMode, context: CardContext, flavor: TextCardFlavor) {
     this.#port = port;
+    this.#flavor = flavor;
     this.#context = context;
     this.#mode = mode;
     this.#host = host;
     this.#root = document.createElement("div");
-    this.#root.className = "canvas-card-note";
-    this.#root.dataset.cardKind = "note";
+    this.#root.className = this.#classes();
+    this.#root.dataset.cardKind = flavor.kind;
     host.append(this.#root);
     this.#lines = watchWholeLines(this.#root, context.lifetime);
     this.#unwatch = port.watch(context.path, () => this.#changed());
@@ -165,25 +217,27 @@ class NoteCard implements CardView {
     if (this.#editLife !== null) return true;
     const editors = this.#context.editors;
     if (this.#destroyed || this.#leaving !== null || this.#mode !== "live" || !editors) return false;
-    // Un documento Word o ODT si legge e basta (D-14 (a)); un estratto
-    // anche, in v1 (T75): si scrive aprendo la nota a lato.
-    if (formatKindOf(this.#context.path) !== "note") return false;
+    // La specie dice se si scrive (un documento sulla lavagna si legge e
+    // basta, D-14 (a)); un estratto si legge, in v1 (T75): si scrive aprendo
+    // la nota a lato.
+    if (!this.#flavor.writes(this.#context.path)) return false;
     if (this.#sections().length > 0) return false;
     if (this.#state !== "content" && this.#state !== "loading") return false;
     const life = openLifetime();
     this.#editLife = life;
     const writer = document.createElement("div");
-    writer.className = "canvas-card-note";
-    writer.dataset.cardKind = "note";
+    writer.className = this.#classes();
+    writer.dataset.cardKind = this.#flavor.kind;
     writer.dataset.cardState = "editing";
     // Nascosto finché l'editor non c'è: fino ad allora si vede la resa.
     writer.hidden = true;
+    this.#flavor.prepareWriter?.(writer);
     this.#writer = writer;
     this.#host.append(writer);
     let opened: Promise<CardEditor | null>;
     try {
       opened = editors.open(this.#context.path, writer, {
-        compact: false,
+        compact: this.#flavor.compact,
         readOnly: false,
         lifetime: life,
         heading: null,
@@ -327,9 +381,14 @@ class NoteCard implements CardView {
     if (this.#mode === "live") this.#render();
   }
 
-  /// Le sezioni che la scheda mostra; vuoto per la nota intera.
+  /// Le sezioni che la scheda mostra; vuoto per il file intero.
   #sections(): string[] {
+    if (!this.#flavor.sections) return [];
     return excerptSections(this.#context.parts ?? null, this.#context.subpath);
+  }
+
+  #classes(): string {
+    return this.#flavor.className ? `canvas-card-note ${this.#flavor.className}` : "canvas-card-note";
   }
 
   #render(): void {
@@ -338,7 +397,7 @@ class NoteCard implements CardView {
     const life = openLifetime();
     this.#pendingLife = life;
     const target = document.createElement("div");
-    target.className = "canvas-card-note-content";
+    target.className = this.#flavor.className ? `canvas-card-note-content ${this.#flavor.className}-content` : "canvas-card-note-content";
     // Una resa che c'è già resta, ferma, fino alla nuova: niente lampo di «Apro…».
     if (this.#content === null) this.#setState("loading", [this.#message(t("canvas.card.loading"), "canvas-card-loading")]);
     else this.#content.inert = true;
@@ -451,7 +510,14 @@ class NoteCard implements CardView {
     this.#contentLife?.close();
     this.#contentLife = life;
     this.#content = target;
-    this.#setState("content", [target]);
+    let extra: readonly Node[] = [];
+    try {
+      extra = this.#flavor.after?.(target, life, this.#context) ?? [];
+    } catch (error) {
+      console.warn(`canvas: la scheda di ${this.#context.path} non completa la resa`, error);
+    }
+    this.#extra = extra;
+    this.#setState("content", [target, ...extra]);
   }
 
   /// La resa non è arrivata: il file manca, o non si mostra.
@@ -462,6 +528,7 @@ class NoteCard implements CardView {
     this.#contentLife?.close();
     this.#contentLife = null;
     this.#content = null;
+    this.#extra = [];
     if (isErrorKind(error, "not_found")) {
       this.#showFileCard("missing");
       this.#context.missing();
@@ -497,7 +564,7 @@ class NoteCard implements CardView {
   #showPlaceholder(): void {
     if (this.#content !== null) {
       this.#content.inert = true;
-      this.#setState("content", [this.#content]);
+      this.#setState("content", [this.#content, ...this.#extra]);
       return;
     }
     this.#setState("placeholder", [this.#placeholder()]);

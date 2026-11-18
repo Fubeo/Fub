@@ -19397,6 +19397,224 @@
         }
       }
     },
+    "foglio-nella-nota.cella": {
+      "chiaro-1280": {
+        "prototipo": "#fx-sheet",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "12px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "padding-top": "0px",
+          "padding-right": "6px",
+          "padding-bottom": "0px",
+          "padding-left": "2px",
+          "max-width": "168px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": "#fx-sheet",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "12px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "padding-top": "0px",
+          "padding-right": "6px",
+          "padding-bottom": "0px",
+          "padding-left": "2px",
+          "max-width": "168px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      }
+    },
+    "foglio-nella-nota.lettere": {
+      "chiaro-1280": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(139, 150, 143)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(111, 122, 116)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(139, 150, 143)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(111, 122, 116)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      }
+    },
+    "scheda-documento.testo": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      }
+    },
+    "scheda-documento.paragrafo": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(52, 65, 58)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(199, 207, 202)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(52, 65, 58)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(199, 207, 202)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      }
+    },
     "schede.affiancate": {
       "chiaro-1280": {
         "prototipo": ".pair",

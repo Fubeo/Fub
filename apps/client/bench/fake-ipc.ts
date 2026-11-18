@@ -71,7 +71,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
-import { LIVE_DOC, liveCase } from "./live-fixture";
+import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import {
@@ -1860,6 +1860,17 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
         },
       };
     }
+    // Un documento di videoscrittura che un caso della Live incorpora (la
+    // scheda di documento, T44): il modello comune reso, dalla proiezione che
+    // il vault ha adesso. Il kernel non regge una sezione di un documento:
+    // con un titolo dà lo stesso il documento intero, come la scheda chiede.
+    const richFile = /\.(docx|odt)$/i.test(q.page)
+      ? Object.keys(LIVE?.files ?? {}).find((id) => id === q.page || id.endsWith(`/${q.page}`))
+      : undefined;
+    if (richFile !== undefined && !q.block) {
+      const projection = host.files()[richFile] ?? LIVE!.files![richFile]!;
+      return { kind: "render_embed", value: { doc_id: richFile, html: documentEmbedHtml(projection), parts: [] } };
+    }
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
     // Una nota che un caso della Live riporta (la trasclusione viva): la
     // sezione dal suo titolo al prossimo dello stesso livello, letta dal
@@ -2569,8 +2580,98 @@ async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Pr
   return result;
 }
 
+/// Le parti che le schede di foglio della nota chiedono (`fub.part`, T43),
+/// solo nella Live delle schede vive (`live=schede-vive`) e nella battuta con
+/// le schede (`live=battuta-schede-20`): la risposta che
+/// `fub-format-xlsx/src/parts.rs` darebbe per la cartella del banco, che non
+/// ricalcola e non scrive. Una parte sconosciuta è persa, con le parti che la
+/// cartella ha.
+const SHEET_PARTS: Readonly<Record<string, unknown>> | null = params.get("live") === "schede-vive" || params.get("live") === "battuta-schede-20"
+  ? {
+      "": { found: true, kind: "active", sheet: "s1", range: "A1:F6" },
+      "Conti!A1:C4": { found: true, kind: "range", sheet: "s1", range: "A1:C4" },
+    }
+  : null;
+const SHEET_PARTS_LOST = {
+  found: false,
+  parts: XLSX_GRID.session.sheets.map((sheet) => ({ kind: "sheet", name: sheet.name })),
+};
+/// `selection.set` della griglia che si apre scrivendo (la scheda porta la
+/// selezione alla prima cella della parte): il provider la sposta e basta.
+function sheetSelection(params: string): { sheet: string; selection: string; active: string } {
+  const { range = "A1" } = JSON.parse(params || "{}") as { range?: string };
+  const bang = range.lastIndexOf("!");
+  const name = bang < 0 ? null : range.slice(0, bang).replace(/^'|'$/g, "").replaceAll("''", "'");
+  const sheet = BENCH_SESSION.sheets.find((each) => each.name === name)?.id ?? BENCH_SESSION.active;
+  const at = range.slice(bang + 1);
+  return { sheet, selection: at, active: at.split(":")[0]! };
+}
+/// Il finto dà a ogni apertura la stessa sessione (`i1`): con più schede
+/// della stessa cartella, quella che chiude (la parte persa) chiuderebbe
+/// anche le altre. Come l'host, qui ogni apertura ha la sua istanza; sotto,
+/// la sessione del finto si chiude quando se ne va l'ultima.
+const sheetInstances = new Map<string, string>();
+const sheetOpenCount = new Map<string, number>();
+let sheetOpens = 0;
+function sheetInstance(instance: string): string {
+  return sheetInstances.get(instance) ?? instance;
+}
+function sheetPartOutcome(text: string | null, selection = { sheet: BENCH_SESSION.active, selection: "A1", active: "A1" }) {
+  return {
+    commit: {
+      revision: BENCH_SESSION.revision,
+      edit: { from: 0, to: 0, deleted: "", inserted: "" },
+      invalidation: { kind: "cells", cells: [] },
+    },
+    sheets: BENCH_SESSION.sheets,
+    hidden: BENCH_SESSION.hidden,
+    selection,
+    result: text === null ? null : JSON.stringify(SHEET_PARTS?.[text] ?? SHEET_PARTS_LOST),
+    dialog: null,
+    commands: BENCH_SESSION.commands,
+    book: BENCH_SESSION.book,
+  };
+}
+
 export const api: typeof host.module.api = {
   ...behind,
+  ...(SHEET_PARTS === null ? {} : {
+    openGridBytes: async (...args: Parameters<typeof behind.openGridBytes>) => {
+      const session = await behind.openGridBytes(...args);
+      const instance = `${session.instance}.${++sheetOpens}`;
+      sheetInstances.set(instance, session.instance);
+      sheetOpenCount.set(session.instance, (sheetOpenCount.get(session.instance) ?? 0) + 1);
+      return { ...session, instance };
+    },
+    gridBytesWindow: (surface: string, instance: string, request: Parameters<typeof behind.gridBytesWindow>[2]) =>
+      behind.gridBytesWindow(surface, sheetInstance(instance), request),
+    applyGridBytes: (surface: string, instance: string, request: Parameters<typeof behind.applyGridBytes>[2]) =>
+      behind.applyGridBytes(surface, sheetInstance(instance), request),
+    gridBytesCommands: (surface: string, instance: string, selection: Parameters<typeof behind.gridBytesCommands>[2]) =>
+      behind.gridBytesCommands(surface, sheetInstance(instance), selection),
+    closeGridBytes: async (surface: string, instance: string) => {
+      const real = sheetInstances.get(instance);
+      if (real === undefined) return behind.closeGridBytes(surface, instance);
+      sheetInstances.delete(instance);
+      const left = (sheetOpenCount.get(real) ?? 1) - 1;
+      if (left > 0) {
+        sheetOpenCount.set(real, left);
+        return;
+      }
+      sheetOpenCount.delete(real);
+      return behind.closeGridBytes(surface, real);
+    },
+    gridBytesCommand: (...args: Parameters<typeof behind.gridBytesCommand>) => {
+      args[1] = sheetInstance(args[1]);
+      const [, , request] = args;
+      if (request.command.id === "selection.set") {
+        return Promise.resolve(sheetPartOutcome(null, sheetSelection(request.command.params)) as Awaited<ReturnType<typeof behind.gridBytesCommand>>);
+      }
+      if (request.command.id !== "fub.part") return behind.gridBytesCommand(...args);
+      const asked = (JSON.parse(request.command.params || "{}") as { part?: string }).part ?? "";
+      return Promise.resolve(sheetPartOutcome(asked) as Awaited<ReturnType<typeof behind.gridBytesCommand>>);
+    },
+  }),
   invokeCommand: async (id, args, ...rest) => {
     // L'anteprima del RAW della scena: il finto non sa leggere un RAW.
     const doc = (args as { doc?: unknown } | null)?.doc;

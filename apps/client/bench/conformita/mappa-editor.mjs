@@ -459,6 +459,34 @@ export const VISTE = {
     },
     app: { scena: "trasclusione-viva-02-scrive" },
   },
+  /// Il foglio nella nota da attivo (T43): il prototipo al passo «Il foglio
+  /// nella nota» (`activateSheet(true)`, la cella C3 scelta), l'app dalla
+  /// scena col foglio attivo e la barra di formato, che aspetta la cella nel
+  /// gruppo «Foglio». A 700 px la cella del gruppo non c'è dai due lati
+  /// (riga 784 del prototipo), e i suoi pezzi stanno solo nei larghi.
+  "foglio-nella-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il foglio nella nota");
+        await page.waitForSelector("#win .scard.active");
+      },
+    },
+    app: { scena: "schede-vive-02-attiva" },
+  },
+  /// La scheda di documento a riposo (T44): il prototipo al passo «Ogni
+  /// formato è una scheda» (la lettera in `.docx` accanto al PDF, che il passo
+  /// attiva), l'app dalla scena del verbale a riposo.
+  "scheda-documento": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="doc"] .docp p');
+      },
+    },
+    app: { scena: "scheda-documento-01-riposo" },
+  },
   /// Le schede affiancate (T42): nel prototipo la coppia `.pair` del
   /// documento d'apertura (il contratto e la lettera), nell'app il
   /// `[!columns]` col contratto e i conti della scena `schede-misura`.
@@ -1648,6 +1676,25 @@ export const PEZZI = [
     app: ".transclusion-band",
     proprieta: ["padding", "margin", "gap", "border-radius", "background-color", "font", "color", ...ALLINEAMENTO],
   },
+  // ── il foglio nella nota (T43) ──────────────────────────────────────────
+  // La cella attiva e la sua formula nel gruppo «Foglio» della barra (`.fxr`).
+  {
+    id: "foglio-nella-nota.cella",
+    vista: "foglio-nella-nota",
+    stati: LARGHI,
+    prototipo: "#fx-sheet",
+    app: ".format-bar-context .format-bar-context-cell",
+    proprieta: ["font", "color", "padding", "max-width", "white-space"],
+  },
+  // Le lettere delle colonne, che a scheda attiva compaiono piccole e senza fondo.
+  {
+    id: "foglio-nella-nota.lettere",
+    vista: "foglio-nella-nota",
+    contesto: "documento",
+    prototipo: ".scard .gr-let",
+    app: '.live-card[data-card-active="true"] .canvas-card-sheet .grid-column-header',
+    proprieta: ["font-size", "font-weight", "color"],
+  },
   // ── il promemoria (T36) ───────────────────────────────────────────────────
   // Il colore, il fondo, la forma e il peso della `.rem`. La misura (12 px,
   // alta 21) no: nella pagina la pastiglia segue il testo in `em`, come la
@@ -1667,6 +1714,27 @@ export const PEZZI = [
     prototipo: ".rem svg",
     app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done) svg",
     proprieta: ["color"],
+  },
+  // ── la scheda di documento (T44) ──────────────────────────────────────────
+  // Il margine del testo (`.docw`) e l'inchiostro e lo spazio dei paragrafi
+  // (`.docp`). Il carattere no: il prototipo lo scrive con `var(--f-text)`,
+  // un token che non dichiara, e la regola `font` intera cade (il testo
+  // eredita quello della nota); l'app tiene la misura scritta, 14/1,6.
+  {
+    id: "scheda-documento.testo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docw',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content',
+    proprieta: ["padding"],
+  },
+  {
+    id: "scheda-documento.paragrafo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docp p:not(.r)',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content > p',
+    proprieta: ["margin", "color"],
   },
 ];
 

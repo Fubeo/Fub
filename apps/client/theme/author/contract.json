@@ -1554,6 +1554,13 @@
     "canvas-card-pdf-text",
     "markedContent",
     "canvas-card-pdf-message",
+    "canvas-card-lost",
+    "canvas-card-message",
+    "format-bar-context",
+    "format-bar-context-cell",
+    "canvas-card-document",
+    "canvas-card-document-content",
+    "canvas-card-document-more",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -1908,7 +1915,6 @@
     "format-bar-labelled",
     "format-bar-text",
     "format-bar-caret",
-    "format-bar-context",
     "format-bar-context-name",
     "format-bar-overflow",
     "format-bar-insert-group",
@@ -3782,6 +3788,13 @@
     "canvas-card-pdf-text": "contenuto",
     "markedContent": "contenuto",
     "canvas-card-pdf-message": "contenuto",
+    "canvas-card-lost": "cornice",
+    "canvas-card-message": "cornice",
+    "format-bar-context": "cornice",
+    "format-bar-context-cell": "cornice",
+    "canvas-card-document": "cornice",
+    "canvas-card-document-content": "cornice",
+    "canvas-card-document-more": "cornice",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -4136,7 +4149,6 @@
     "format-bar-labelled": "cornice",
     "format-bar-text": "cornice",
     "format-bar-caret": "cornice",
-    "format-bar-context": "cornice",
     "format-bar-context-name": "cornice",
     "format-bar-overflow": "cornice",
     "format-bar-insert-group": "cornice",
@@ -8285,6 +8297,50 @@
       ]
     },
     {
+      "name": "live-card-sheet",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-sheet",
+        "grid-header",
+        "grid-corner",
+        "selected",
+        "stale",
+        "canvas-card-lost",
+        "canvas-card-message",
+        "format-bar-context",
+        "format-bar-context-cell",
+        "grid-cell-name",
+        "grid-formula-editor",
+        "canvas-formula-text"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-document",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-document",
+        "canvas-card-document-content",
+        "canvas-card-document-more",
+        "rich-surface",
+        "rich-page",
+        "rich-content",
+        "rich-para",
+        "rich-heading",
+        "rich-list",
+        "look-tema"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11671,10 +11727,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2226,
+    "hooks": 2232,
     "state_names": 7,
-    "assigned_states": 1009,
-    "components": 299,
+    "assigned_states": 1015,
+    "components": 301,
     "preference_tokens": 196
   }
 }

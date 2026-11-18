@@ -44,7 +44,10 @@
 // pausa breve, quando la superficie avvisa che qualcosa è cambiato: mai a ogni
 // battuta, e mai mentre il fuoco è nella barra o in un suo menu, così il
 // gruppo non si perde andandoci. Cambiato il gruppo, il nome si annuncia una
-// volta.
+// volta. Un gruppo con `context` (la scheda di foglio attiva in una nota,
+// T43) mostra dopo il nome la cella attiva e la sua formula, con la barra
+// della formula della lavagna (`cardFormulaBar`): il testo cambia lì, senza
+// ridisegnare il gruppo.
 //
 // La forma la sceglie `editor.toolbar` (`form`): `compatta` tiene annulla,
 // ripeti, lo stile, grassetto, corsivo, link, elenco e compito, più i comandi
@@ -62,6 +65,7 @@
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import type { EditorSurface, SurfaceBlockGroup } from "../editors/core/registry";
 import { MENU_RULE, type SurfaceMenuEntry, type SurfaceMenuItem } from "../editors/core/editor-menu";
+import { cardFormulaBar, type CardFormulaBar } from "../editors/core/cards/formula-bar";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -619,6 +623,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let contextShown = false;
   let contextSignature = "";
   let contextGroup: SurfaceBlockGroup | null = null;
+  /// La cella del gruppo del blocco, se il gruppo ne ha una (T43).
+  let contextCell: CardFormulaBar | null = null;
   let announcer: HTMLElement | null = null;
   let blockTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1004,7 +1010,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       const item = surfaceItem(entry);
       return item ? [[entryId(entry), item]] : [];
     });
-    const shape = `${group.id}|${group.label}|` + items.map(([id, item]) =>
+    const cell = group.context === undefined ? "" : "cell|";
+    const shape = `${group.id}|${group.label}|${cell}` + items.map(([id, item]) =>
       `${id}=${item.label}=${item.icon ?? ""}=${item.checked ?? ""}=${item.disabled === true}=${item.items !== undefined}`
     ).join(";");
     return { items, shape: items.length === 0 ? "" : shape };
@@ -1014,13 +1021,18 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     const box = contextBox;
     if (!box) return;
     const { items, shape } = contextShape(group);
-    if (shape === contextSignature) return;
+    if (shape === contextSignature) {
+      // Lo stesso gruppo: cambia soltanto il testo della cella.
+      if (shape !== "" && group) showContextCell(group);
+      return;
+    }
     const before = contextGroup?.id ?? null;
     contextSignature = shape;
     contextGroup = shape === "" ? null : group;
     contextDrawn.close();
     contextDrawn = openLifetime();
     box.replaceChildren();
+    contextCell = null;
     contextShown = contextGroup !== null;
     box.hidden = !contextShown;
     if (contextGroup) {
@@ -1031,6 +1043,12 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       name.setAttribute("aria-hidden", "true");
       name.textContent = contextGroup.label;
       box.append(name);
+      if (contextGroup.context !== undefined) {
+        contextCell = cardFormulaBar();
+        contextCell.element.classList.add("format-bar-context-cell");
+        box.append(contextCell.element);
+        showContextCell(contextGroup);
+      }
       for (const [id, item] of items) {
         const menu = item.items !== undefined;
         const control = button("format-bar-button format-bar-labelled", item.label, null, contextDrawn);
@@ -1053,6 +1071,16 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     }
     keys.refresh();
     scheduleFit();
+  }
+
+  /// La cella attiva e la sua formula del gruppo; vuota (e nascosta) finché
+  /// non c'è.
+  function showContextCell(group: SurfaceBlockGroup): void {
+    const cell = contextCell;
+    if (!cell) return;
+    const context = group.context ?? null;
+    cell.element.hidden = context === null;
+    cell.show(context ?? { cell: "", formula: "" });
   }
 
   /// Fermo mentre il fuoco è nella barra o un suo menu è aperto: chi ci va

@@ -18,6 +18,15 @@
 //! (lo farà con `invoke_command` e un lavoro del core). Le misure e la scelta
 //! stanno nell'ADR.
 //!
+//! # Il profilo e la memoria
+//!
+//! Le regolazioni dell'esportazione stanno in due posti, fuori dalla nota:
+//! il [`profile`] (tema, colori, caratteri, pagina, contenuto: vale per ogni
+//! nota del vault) e la [`memory`] di ogni nota (lo stile dato a un solo
+//! diagramma e i blocchi lasciati fuori). Tutti e due vivono nello spazio
+//! dati [`SPAZIO_DATI`]; la forma dei file è in
+//! `docs/reference/pdf-export-format.md`.
+//!
 //! # Le unità
 //!
 //! Tutte le misure dell'elenco sono in pixel CSS, con l'origine in alto a
@@ -29,9 +38,16 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+mod aperta;
+pub mod memory;
+pub mod profile;
 mod prova;
 #[cfg(test)]
 mod tests;
+
+/// L'id dello spazio dati dell'esportazione: profili e memorie delle note
+/// stanno sotto `.fub/plugins/fub.esporta-pdf/`.
+pub const SPAZIO_DATI: &str = "fub.esporta-pdf";
 
 pub use prova::scrivi;
 

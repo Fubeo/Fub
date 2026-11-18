@@ -110,6 +110,62 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
+  it("dentro una scheda (compatta) è in Scrittura, senza barra né pulsante del pannello, e si scrive (T44)", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const onChange = vi.fn();
+    const surface = mountRichSurface(
+      RICH_PROFILE,
+      { paneId: "card-editor:1", documentId: "lettera.docx", parent, formatId: "docx", compact: true, escapeLeaves: true },
+      { onChange, onSelectionChange: vi.fn(), loadEngine: () => Promise.resolve(engineModule) },
+    );
+    expect(surface.defaultMode).toBe("writing");
+    await flush();
+    surface.setMode(surface.defaultMode!);
+    surface.buffer!.setDoc(SOURCE);
+    expect(parent.querySelector<HTMLElement>(".rich-surface")!.dataset.compact).toBe("true");
+    const host = parent.querySelector<HTMLElement>(".rich-ribbon-host")!;
+    expect(host.hidden).toBe(true);
+    expect(parent.querySelector(".rich-side-open")).toBeNull();
+    expect(surface.editorActions!.editable()).toBe(true);
+    expect(surface.paperFit!.offers()).toEqual([]);
+    // Cambiare modalità non riporta la barra: la scheda resta una colonna.
+    surface.setMode("reading");
+    surface.setMode("writing");
+    expect(host.hidden).toBe(true);
+    surface.destroy();
+  });
+
+  it("il fuoco chiesto prima del motore arriva al testo col motore, se nessuno l'ha portato altrove (T44)", async () => {
+    const mountAsked = (): { parent: HTMLElement; surface: ReturnType<typeof mountRichSurface> } => {
+      const parent = document.createElement("div");
+      parent.tabIndex = -1;
+      document.body.append(parent);
+      const surface = mountRichSurface(
+        RICH_PROFILE,
+        { paneId: "card-editor:2", documentId: "lettera.docx", parent, formatId: "docx", compact: true },
+        { onChange: vi.fn(), onSelectionChange: vi.fn(), loadEngine: () => Promise.resolve(engineModule) },
+      );
+      surface.buffer!.setDoc(SOURCE);
+      parent.focus();
+      surface.focus!();
+      return { parent, surface };
+    };
+    const first = mountAsked();
+    await flush();
+    expect(first.parent.querySelector(".rich-page")!.contains(document.activeElement)).toBe(true);
+    first.surface.destroy();
+
+    const second = mountAsked();
+    const elsewhere = document.createElement("input");
+    document.body.append(elsewhere);
+    elsewhere.focus();
+    await flush();
+    expect(document.activeElement).toBe(elsewhere);
+    second.surface.destroy();
+    elsewhere.remove();
+  });
+
   it("in Lettura la barra si ritira e il documento non si scrive; Esc chiede Pagina", async () => {
     const asked: string[] = [];
     const { parent, surface } = mount(() => Promise.resolve(engineModule), (mode) => asked.push(mode));

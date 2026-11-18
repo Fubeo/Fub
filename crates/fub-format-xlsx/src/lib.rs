@@ -56,6 +56,7 @@ mod model;
 pub mod motore;
 mod objects;
 mod package;
+pub mod parts;
 mod sheet_xml;
 
 /// L'id del formato.

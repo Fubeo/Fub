@@ -847,6 +847,19 @@
 .format-bar-follow.kit-bar > .format-bar-context::before {
   display: none;
 }
+/* Il cartoncino dei gruppi del kit ha una regola sua per il buio e per il
+   contrasto alto, più forte del vassoio qui sopra: senza queste, al buio ogni
+   gruppo tornava un foglietto col suo fondo e il suo filo (uno strato che il
+   prototipo non ha) e il gruppo del blocco perdeva il velo d'accento. */
+:root[data-theme="dark"] .format-bar-follow.kit-bar > .kit-bar-group,
+:root[data-contrast="high"] .format-bar-follow.kit-bar > .kit-bar-group {
+  background: transparent;
+  box-shadow: none;
+}
+:root[data-theme="dark"] .format-bar-follow.kit-bar > .format-bar-context,
+:root[data-contrast="high"] .format-bar-follow.kit-bar > .format-bar-context {
+  background: var(--accent-veil);
+}
 .format-bar-context-name {
   margin-right: var(--space-2);
   color: var(--accent-soft);
