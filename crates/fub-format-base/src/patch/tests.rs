@@ -533,3 +533,53 @@ fn cambiare_tipo_sull_ultima_riga_senza_a_capo_non_corrompe_il_file() {
         "views:\n  - name: C\n    type: table\n    fub:\n      view: calendar"
     );
 }
+
+#[test]
+fn il_bom_si_salta_e_resta_in_testa_al_file() {
+    // `text_policy`: il BOM si salta, non si toglie. Le modifiche cadono nelle
+    // coordinate del file, BOM compreso, e il BOM resta il primo carattere.
+    for (eol, source) in [
+        ("\n", "\u{feff}views:\n  - name: Tutte\n    type: table\n"),
+        (
+            "\r\n",
+            "\u{feff}views:\r\n  - name: Tutte\r\n    type: table\r\n",
+        ),
+    ] {
+        let out = edited(
+            source,
+            &BaseChange::AddView {
+                name: "Liste".into(),
+                view_type: ViewType::List,
+            },
+        );
+        assert_eq!(
+            out,
+            format!("\u{feff}views:{eol}  - name: Tutte{eol}    type: table{eol}  - name: Liste{eol}    type: list{eol}")
+        );
+        let out = edited(source, &set("Tutte", ViewKey::Limit, json!(2)));
+        assert_eq!(
+            out,
+            format!("\u{feff}views:{eol}  - name: Tutte{eol}    type: table{eol}    limit: 2{eol}")
+        );
+        let out = edited(
+            source,
+            &BaseChange::RemoveView {
+                view: "Tutte".into(),
+            },
+        );
+        assert_eq!(out, format!("\u{feff}views: []{eol}"));
+    }
+}
+
+#[test]
+fn la_prima_riga_dopo_il_bom_si_riscrive_e_il_bom_resta() {
+    // La toppa tocca la riga 1, quella che comincia subito dopo il BOM.
+    let out = edited(
+        "\u{feff}views: []\n",
+        &BaseChange::AddView {
+            name: "Tutte".into(),
+            view_type: ViewType::Table,
+        },
+    );
+    assert_eq!(out, "\u{feff}views:\n  - name: Tutte\n    type: table\n");
+}
