@@ -24889,10 +24889,13 @@ h6.ui-heading {
   font-size: var(--text-sm);
 }
 
+/* Il rosso del problema sul velo del tema (12–18%) sta a 4,3–4,4:1, sotto i 4,5 di
+ * un testo piccolo, nei due temi. Il fondo è il rosso all'8%: così il codice resta
+ * leggibile a 4,7:1 o più, e il rosso dice ancora che è un problema. */
 .recipe-problem-code {
   padding: 0 var(--space-3);
   border-radius: var(--radius-xs);
-  background: var(--danger-wash);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   color: var(--danger);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -25029,6 +25032,12 @@ h6.ui-heading {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-chip);
   background: var(--warning-wash);
+}
+
+/* Sul fondo d'attenzione l'etichetta grigia sta a 3,96:1 nel tema scuro: la riga che
+ * più conta la dice con l'inchiostro pieno. */
+.recipe-fact[data-reach="altre"] .recipe-fact-label {
+  color: var(--text);
 }
 
 .recipe-try-list {

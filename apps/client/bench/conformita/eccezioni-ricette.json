@@ -19,5 +19,17 @@
     "stati": ["chiaro-700", "scuro-700"],
     "motivo": "Come per le righe della sezione: a 700 px la pelle stringe la colonna a 16 px sotto i 900 px, e il prototipo a 700 px non rifà questa regola.",
     "riferimento": "PLAN.md, T12 (il blocco della pelle così com'è); skin/settings.css, @media (max-width: 900px)"
+  },
+  {
+    "pezzo": "riga.problema.codice",
+    "proprieta": "background-color",
+    "motivo": "Il fondo del codice di problema è il rosso all'8%, non il velo del tema (12% chiaro, 18% scuro): a quei veli il rosso del codice sta a 4,4:1 e 4,3:1, sotto i 4,5:1 di un testo piccolo. Il rosso resta nel testo.",
+    "riferimento": "PLAN.md, T13 (banco a11y verde sulle scene nuove); skin/settings.css, .recipe-problem-code"
+  },
+  {
+    "pezzo": "problemi.codice",
+    "proprieta": "background-color",
+    "motivo": "Stesso fondo del codice di problema della sezione: il rosso all'8%, per i 4,5:1 di un testo piccolo nei due temi.",
+    "riferimento": "PLAN.md, T13 (banco a11y verde sulle scene nuove); skin/settings.css, .recipe-problem-code"
   }
 ]
