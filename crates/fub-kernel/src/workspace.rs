@@ -5706,6 +5706,17 @@ impl Workspace {
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
         self.sweep_locks(&scanned.locks_remaining_back);
+        // `.fub/` non è contenuto e la scansione non ci entra: i suoi lock
+        // rimasti indietro si cercano a parte, con lo stesso criterio. Un
+        // guasto della camminata non ferma l'apertura, come quello della
+        // pulizia.
+        match self.docs.vault.service_locks() {
+            Ok(locks) => self.sweep_locks(&locks),
+            Err(and) => tracing::warn!(
+                target: "fub.kernel",
+                "lock di .fub non cercati: {and}"
+            ),
+        }
 
         // La scansione raccoglie una fotografia completa ma non muta ancora il
         // core: durante `IndexProvider::up_to_date` i reader vedono l'ultimo stato
