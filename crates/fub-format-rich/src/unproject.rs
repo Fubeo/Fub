@@ -63,6 +63,7 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         claimed: HashSet::new(),
         sections: Vec::new(),
         ink: false,
+        body_only: projection.body_only,
     };
     // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
     comments(projection, &mut document, &mut state)?;
@@ -220,6 +221,9 @@ struct State {
     /// Un inchiostro nuovo: il suo markup prende la forma che il codec gli dà
     /// soltanto dentro il documento ([`settle_ink`]).
     ink: bool,
+    /// Il documento si scrive soltanto nel corpo ([`Projection::body_only`]):
+    /// ciò che si aggiunge non tocca gli stili.
+    body_only: bool,
 }
 
 /// L'id provvisorio della nota nuova `index`: nessun documento ne ha tanti.
@@ -311,7 +315,10 @@ fn blocks(
                         let mut fresh =
                             wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
                         fresh.rows.clear();
-                        fresh.props.style = builtin_style(&mut document.styles, "TableGrid");
+                        fresh.props.style = table_grid(document, state.body_only);
+                        if fresh.props.style.is_none() {
+                            fresh.props.borders = table_grid_borders();
+                        }
                         fresh
                     }
                 };
@@ -1458,6 +1465,28 @@ fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
     };
     table.grid = grid;
     fit(table);
+}
+
+/// Lo stile di una tabella nuova: «Table Grid», come in Word, aggiunto agli
+/// stili se il documento non lo ha. Un documento che si scrive soltanto nel
+/// corpo (`body_only`) non cambia i suoi stili: la tabella nuova prende lo
+/// stile se c'è già, altrimenti nessuno, e i bordi di «Table Grid» le vanno
+/// come formattazione diretta ([`table_grid_borders`]).
+fn table_grid(document: &mut Document, body_only: bool) -> Option<String> {
+    const ID: &str = "TableGrid";
+    if body_only && document.styles.get(ID).is_none() {
+        return None;
+    }
+    builtin_style(&mut document.styles, ID)
+}
+
+/// I bordi di «Table Grid», per una tabella nuova che non ne prende lo stile
+/// ([`table_grid`]).
+fn table_grid_borders() -> Option<wordcraft_doc::props::Borders> {
+    StyleSheet::builtin()
+        .get("TableGrid")
+        .and_then(|style| style.table.as_ref())
+        .and_then(|table| table.borders.clone())
 }
 
 /// Ogni cella prende la larghezza delle colonne della griglia che copre.

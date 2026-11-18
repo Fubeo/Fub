@@ -401,6 +401,73 @@ fn i_documenti_del_corpus_si_salvano_per_innesto() {
     assert!(tried >= 10, "soltanto {tried} documenti modificabili");
 }
 
+/// IMP-133: in un documento che si scrive soltanto nel corpo (un blocco
+/// chiuso) una tabella nuova si innesta: gli stili non cambiano, la tabella
+/// prende i bordi di «Table Grid» come formattazione diretta, e il resto del
+/// file resta i suoi byte. Prima la tabella aggiungeva lo stile agli stili, e
+/// il salvataggio era rifiutato.
+#[test]
+fn una_tabella_nuova_in_un_documento_col_corpo_soltanto_si_innesta() {
+    use fub_format_rich::projection::{Cell, Layout, Role, Row, Table};
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/docx");
+    let file = std::fs::read(dir.join("scritture.docx")).unwrap();
+    let mut p = projection(&file);
+    assert!(p.body_only, "scritture.docx ha un blocco chiuso");
+    let empty = || Para {
+        role: Role::Body,
+        locked: false,
+        align: None,
+        k: None,
+        sect: None,
+        page: None,
+        header: None,
+        footer: None,
+        p: Layout::default(),
+        s: None,
+        f: Box::default(),
+        ins: None,
+        del: None,
+        c: Vec::new(),
+    };
+    let cell = || Cell {
+        k: None,
+        span: None,
+        blocks: vec![Block::Para(empty())],
+    };
+    let row = || Row {
+        k: None,
+        cells: vec![cell(), cell(), cell()],
+    };
+    p.blocks.push(Block::Table(Table {
+        locked: false,
+        k: None,
+        rows: vec![row(), row(), row()],
+    }));
+    p.blocks.push(Block::Para(empty()));
+    let out = saved(&file, &p);
+    // Le voci fuori dal documento principale restano i byte del file, gli
+    // stili compresi; nel corpo cambia soltanto ciò che si è aggiunto.
+    let rest = grafted(&file, &out);
+    assert_eq!(rest.len(), 2, "la tabella e il paragrafo dopo: {rest:#?}");
+    assert!(rest[1].starts_with("<w:p"), "{rest:#?}");
+    let table = rest
+        .iter()
+        .find(|child| child.starts_with("<w:tbl"))
+        .expect("la tabella nuova");
+    assert!(!table.contains("w:tblStyle"), "{table}");
+    assert!(table.contains("w:tblBorders"), "{table}");
+    let reopened = projection(&out);
+    let shape: Vec<Vec<usize>> = reopened
+        .blocks
+        .iter()
+        .filter_map(|block| match block {
+            Block::Table(table) => Some(table.rows.iter().map(|r| r.cells.len()).collect()),
+            Block::Para(_) => None,
+        })
+        .collect();
+    assert_eq!(shape, vec![vec![3, 3, 3]]);
+}
+
 /// Un elenco toccato tiene il suo `w:numId`, anche quando il file non conta
 /// gli elenchi da uno.
 #[test]
