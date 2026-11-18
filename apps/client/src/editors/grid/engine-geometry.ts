@@ -96,6 +96,51 @@ export interface ResizeDrag extends ResizeEdge {
   now: number;
 }
 
+/// Una misura tirata che il provider non ha ancora confermato (griglia T5):
+/// le linee da `first` a `last` del foglio `sheet` sono larghe (o alte)
+/// `size`, nell'unità delle misure lette (i pixel della cartella per
+/// `WORKBOOK_SCALE`). `ticket` la distingue da un altro gesto sullo stesso
+/// bordo.
+export interface SizePreview {
+  readonly ticket: number;
+  readonly sheet: string;
+  readonly axis: "column" | "row";
+  readonly first: number;
+  readonly last: number;
+  readonly size: number;
+}
+
+/// Le linee `entries` con le misure delle anteprime `previews` di quel
+/// verso, nell'ordine: la più nuova vince. Una linea nascosta resta nascosta.
+/// Senza anteprime è `entries` stessa.
+export function previewSizes<T extends { hidden: boolean; height?: number; width?: number }>(
+  entries: readonly T[],
+  dimension: "height" | "width",
+  previews: readonly SizePreview[],
+): readonly T[] {
+  if (!previews.length) return entries;
+  const out = entries.slice();
+  for (const preview of previews) {
+    for (let index = preview.first; index <= Math.min(preview.last, out.length - 1); index += 1) {
+      out[index] = { ...out[index], [dimension]: preview.size };
+    }
+  }
+  return out;
+}
+
+/// Lo spazio fra la guida di un bordo tirato e la sua misura, e fra la misura
+/// e il bordo del riquadro (px).
+export const RESIZE_LABEL_GAP = 6;
+
+/// Dove comincia la misura di un bordo tirato che sta a `edge` nel riquadro
+/// lungo `extent`, larga `size` nel verso del bordo: dopo il bordo, o prima
+/// quando dopo non c'è posto; mai fuori dal riquadro.
+export function resizeLabelAt(edge: number, size: number, extent: number): number {
+  let at = edge + RESIZE_LABEL_GAP;
+  if (at + size > extent - RESIZE_LABEL_GAP) at = edge - RESIZE_LABEL_GAP - size;
+  return Math.max(RESIZE_LABEL_GAP, Math.min(at, extent - RESIZE_LABEL_GAP - size));
+}
+
 /// Quanto vicino al bordo fra due intestazioni il puntatore lo prende.
 export const RESIZE_SLOP = 4;
 /// Quanto vicino al bordo della selezione il puntatore la prende per

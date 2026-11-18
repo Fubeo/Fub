@@ -20,7 +20,7 @@
 //
 // È il solo modulo della griglia che muove i segni; `engine.ts` gli dice dove
 // devono andare.
-import { animate, exitGhost, halt, motionDriver, motionLevel, onFrame } from "../../moto";
+import { animate, exitGhost, flip, halt, motionDriver, motionLevel, onFrame } from "../../moto";
 import { advanceSpring, DURATION, springAtRest, springFor, type Spring } from "../../moto/spring";
 import type { Lifetime, Teardown } from "../../ui/lifetime";
 import {
@@ -440,4 +440,28 @@ export function showEditorFrame(frame: HTMLElement, lifetime: Lifetime): void {
 export function hideEditorFrame(frame: HTMLElement): void {
   if (!frame.isConnected) return;
   exitGhost(frame, { to: { opacity: 0 }, duration: DURATION.state, easing: "ease-in", whenReduced: "fade" });
+}
+
+/// Il valore che il foglio dà a una cella scritta compare (griglia T5): il
+/// testo della cella, già al suo posto e nel suo stato finale, entra con una
+/// dissolvenza in `DURATION.state`, che resta anche col movimento ridotto.
+export function fadeInValue(text: HTMLElement, lifetime: Lifetime): void {
+  animate(text, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade", lifetime });
+}
+
+/// L'etichetta della misura di un bordo tirato se ne va al rilascio: ne
+/// resta un'immagine che sfuma in `DURATION.swap` da dov'era, mentre la
+/// griglia ha già tolto l'etichetta vera.
+export function fadeOutResizeLabel(label: HTMLElement): void {
+  if (!label.isConnected) return;
+  exitGhost(label, { to: { opacity: 0 }, duration: DURATION.swap, easing: "ease-out", whenReduced: "fade" });
+}
+
+/// Una misura tirata cambia le colonne (o le righe) dopo il bordo (griglia
+/// T5): `mutate` mette le misure nuove, e i pezzi `targets` scivolano dal
+/// posto di prima a quello nuovo con la molla `SLIDE`. Un pezzo ancora in
+/// volo (un no che torna, un altro bordo tirato) riparte da dove lo si vede,
+/// con la sua velocità. Col movimento ridotto tutto salta.
+export function slideLines(targets: readonly Element[], mutate: () => void, lifetime: Lifetime): void {
+  flip(targets, mutate, { spring: SLIDE, scale: false, lifetime });
 }

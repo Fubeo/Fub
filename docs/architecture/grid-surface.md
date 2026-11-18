@@ -9,8 +9,9 @@
 
 ## La griglia
 
-Il confine della pagina in una figura: i byte non lasciano il provider, e la
-shell parla soltanto col giornale e con le finestre.
+Il confine della pagina in una figura: i byte non lasciano il provider, la
+shell parla soltanto col giornale e con le finestre, e il salvataggio riparte
+dai byte del file, non dalla griglia (il giornale non è una copia).
 
 ```mermaid
 flowchart LR
@@ -22,9 +23,6 @@ flowchart LR
     PROVIDER --> SALVA["salvataggio: innesto o riscrittura misurata"]
     SALVA --> BYTE
 ```
-
-Il salvataggio riparte sempre dai byte del file, non dalla griglia: il
-giornale non è una copia della cartella.
 
 La famiglia `grid` ha un profilo, `workbook`, che apre una cartella di Excel
 con la versione 2 del protocollo: la sorgente a byte resta nell'host, e il
@@ -98,8 +96,8 @@ nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle fasce
 ferme), grande e ferma quanto il riquadro: fili delle righe sull'altezza di
 serie (`--grid-row`), un filo per colonna, celle opache, e la griglia vuota
 dove lo scorrimento precede il disegno. In G2 (quattro giri) la fascia
-uniforme più alta è 1 px (prima 424); gestore p90 6–9 ms, peggiore 17–20,
-fotogramma p90 11–13, peggiore 15–17 (prima 0,4 e 28–40, 16–20 e 23–26).
+uniforme più alta è 1 px; p90 (peggiore) del gestore 6–9 ms (17–20), del
+fotogramma 11–13 ms (15–17).
 
 ## Scrivere nelle celle
 
@@ -115,6 +113,9 @@ la barra della formula la bozza passa col fuoco. Sulla selezione Invio e Tab
 spostano la cella attiva senza aprirla, dentro l'intervallo. Dove andare sta
 in `apps/client/src/tabella/navigation.ts`, il riempimento in
 `tabella/selection.ts` (`fillRange`): regole di ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+Ciò che si conferma si vede prima della risposta (`writtenValue`): un numero
+semplice va a destra, una formula resta scritta e tenue (`.pending`) finché
+il valore compare in `DURATION.state`; vince la risposta, un no torna com'era.
 
 La cella aperta è la cella: il campo sta nel livello «lift» della sua zona,
 con carta, inchiostro, carattere (`--field-font`), allineamento e margini
@@ -156,13 +157,12 @@ in colori forzati `Highlight`; il quadratino si prende dove si vede (6 px). Il
 fuoco è la cella attiva (`aria-activedescendant`). Le intestazioni scelte
 hanno velo e filo d'accento, e dopo righe o colonne nascoste una tacca doppia.
 
-Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
-serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
-segue il puntatore con la misura nelle unità di Excel e in pixel del file, e
-al rilascio parte un solo comando. Il doppio clic sul bordo dà
-`home.autofitColumnWidth` (o `home.autofitRowHeight`). Se la colonna sta fra
-quelle scelte intere, la misura vale per tutte. Senza il comando servito il
-bordo non si prende.
+Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella serve
+`home.columnWidth` (o `home.rowHeight`): una guida segue il puntatore con la
+misura nel riquadro. Al rilascio parte un comando e la misura vale già
+(`SizePreview`): ciò che segue scivola con `SLIDE`, su un no torna e l'avviso
+lo dice, una risposta vecchia non toglie un gesto più nuovo. Il doppio clic dà
+`home.autofit…`; con una colonna fra le scelte intere la misura vale per tutte.
 
 Ctrl+clic e Ctrl+trascina aggiungono un intervallo a quelli scelti;
 Maiuscolo estende l'ultimo, un clic semplice ricomincia. Da tastiera
