@@ -9,7 +9,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts`,
-> `engine-cards.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
+> `engine-cards.test.ts`, `engine-collaudo.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
 > (il rettangolo, con `marquee.test.ts` per la geometria); per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
 > `rail.ts`, `options.ts`, `selection-bar.ts` e le loro prove; per la lavagna vuota,
@@ -259,6 +259,10 @@ diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
 Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
 con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
 `+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.
+I tasti dello zoom (`+`, `-`, `0`, e «Mostra tutto» con `Maiusc+1` o `Ctrl+0`)
+valgono anche col fuoco su un pulsante fuori dalla vista (la riga delle
+opzioni, la colonna, il navigatore), come i tasti degli strumenti sulla
+colonna; in un campo che scrive non valgono (IMP-040).
 
 ### Il menu della scheda
 

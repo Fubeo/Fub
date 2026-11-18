@@ -106,7 +106,8 @@ sono spenti.
   annullare.»). Due dita che si muovono sono il pizzico e non annullano.
 - **Il doppio tocco** di un dito nel vuoto (entro 300 ms e 24 px) mette lì
   una scheda di testo già in scrittura, come il doppio clic; sopra una
-  scheda, un filo o un controllo no.
+  scheda, un filo o un controllo no. Il doppio clic del mouse ha la stessa
+  regola: su una porta o su un filo non mette niente (IMP-053).
 - **Dalla tastiera** «Menu radiale» (`canvas.radial`, in fondo al menu del
   tasto destro nel vuoto: `Maiusc+F10`) lo apre al centro della vista, col
   fuoco sulla prima voce; col mouse nel punto del clic.
