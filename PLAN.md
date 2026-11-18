@@ -3170,7 +3170,7 @@ vuota.
 Fatto quando: ogni regola ha un test sul corpus, senza DOM.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export/paginate
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (c445e87e3, 2026-11-18), in attesa del pacchetto 2. Scostamenti: `probe.ts` resta; `rules.ts` dà le fasce di ogni scatola per pagina (T69b sposta il disegno misurato); le interruzioni scelte sono `BreakSettings` di `breaks.ts`, non un tipo del profilo di T68; misure del corpus calcolate dal CSS del prototipo, quelle vere con T69b.
 
 ## T69b · L'impaginatore sulla vista, a fette
 
