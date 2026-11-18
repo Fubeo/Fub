@@ -118,7 +118,16 @@ interface CellState {
   readonly cells: ChosenCells | null;
   /// Le celle tagliate in attesa di un incolla, nella tabella `tablePos`.
   readonly cut: (CutMark & { readonly tablePos: number }) | null;
+  /// Fino a quando (`Date.now()`) le celle scelte col trascinamento restano
+  /// anche se la selezione di testo cambia senza il puntatore: il browser
+  /// rilegge la sua selezione del trascinamento anche dopo il rilascio, e
+  /// a volte con un'àncora sua (IMP-134).
+  readonly hold?: number;
 }
+
+/// Quanto restano le celle del trascinamento dopo l'ultimo movimento o il
+/// rilascio, contro le selezioni che il browser rilegge in ritardo.
+const DRAG_HOLD_MS = 400;
 
 const cellKey = new PluginKey<CellState>("rich-cell-selection");
 const NONE: CellState = { cells: null, cut: null };
@@ -166,12 +175,12 @@ function tableSize(table: PmNode, boxes: readonly CellBox[]): { readonly rows: n
 /// Le celle scelte diventano `cells`, col cursore nella cella attiva (di
 /// solito l'àncora, come nei fogli di calcolo). Il segno del taglio resta,
 /// se `tr` non cambia il documento.
-function chooseCells(state: EditorState, cells: ChosenCells, tr: Transaction = state.tr): Transaction {
+function chooseCells(state: EditorState, cells: ChosenCells, tr: Transaction = state.tr, hold?: number): Transaction {
   const table = tr.doc.nodeAt(cells.tablePos)!;
   const active = cells.active ?? cells.anchor;
   const box = boxCovering(cellBoxes(table, cells.tablePos), active.row, active.column);
   const cut = tr.docChanged ? null : cellKey.getState(state)?.cut ?? null;
-  tr.setMeta(cellKey, { cells, cut } satisfies CellState);
+  tr.setMeta(cellKey, { cells, cut, ...(hold === undefined ? {} : { hold }) } satisfies CellState);
   if (box) tr.setSelection(TextSelection.near(tr.doc.resolve(box.pos + 1)));
   return tr;
 }
@@ -595,7 +604,7 @@ class CellDrag {
     const adding = (event.ctrlKey || event.metaKey) && before !== null && from !== null && before.tablePos === from.tablePos;
     // Un clic nuovo spegne le celle (non il segno del taglio): le selezioni
     // del puntatore dopo, no.
-    if (plugin.cells && !adding) view.dispatch(view.state.tr.setMeta(cellKey, { ...plugin, cells: null } satisfies CellState));
+    if (plugin.cells && !adding) view.dispatch(view.state.tr.setMeta(cellKey, { cells: null, cut: plugin.cut } satisfies CellState));
     if (!from) return;
     const others = adding ? withRange(before.others, before.range) : [];
     this.#drag?.close();
@@ -604,23 +613,46 @@ class CellDrag {
     const doc = view.dom.ownerDocument;
     const anchor = { row: from.box.row, column: from.box.column };
     let celled = false;
-    drag.listen(doc, "mousemove", (move) => {
-      const over = view.posAtCoords({ left: move.clientX, top: move.clientY });
+    let head = anchor;
+    /// La cella della stessa tabella sotto il puntatore, oltre la partenza.
+    const cellUnder = (event: MouseEvent): Cell | null => {
+      const over = view.posAtCoords({ left: event.clientX, top: event.clientY });
       const to = over ? cellAt(view.state.doc.resolve(over.pos)) : null;
-      if (!to || to.tablePos !== from.tablePos) return;
-      if (!celled && to.box.pos === from.box.pos && others.length === 0) return;
-      const head = { row: to.box.row, column: to.box.column };
+      if (!to || to.tablePos !== from.tablePos) return null;
+      if (!celled && to.box.pos === from.box.pos && others.length === 0) return null;
+      return { row: to.box.row, column: to.box.column };
+    };
+    // Le celle del trascinamento le decide il puntatore, dalla cella di
+    // partenza a quella sotto il puntatore: la selezione di testo che il
+    // browser intanto allarga, e che rilegge anche dopo il rilascio, non le
+    // cambia.
+    const choose = (hold: number) => view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head, others, adding: false }, undefined, hold));
+    drag.listen(doc, "mousemove", (move) => {
+      const to = cellUnder(move);
+      if (!to) return;
       const current = cellKey.getState(view.state)?.cells;
-      if (celled && current && current.head.row === head.row && current.head.column === head.column) return;
+      if (celled && current && current.head.row === to.row && current.head.column === to.column) return;
       celled = true;
-      view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head, others, adding: false }));
+      head = to;
+      choose(Date.now() + DRAG_HOLD_MS);
     });
-    drag.listen(doc, "mouseup", () => {
+    drag.listen(doc, "mouseup", (up) => {
       drag.close();
       if (this.#drag === drag) this.#drag = null;
+      // Il rilascio dice dove finisce, anche se nessun movimento è arrivato
+      // sopra quella cella.
+      const to = cellUnder(up);
+      if (to) {
+        celled = true;
+        head = to;
+      }
+      if (celled) {
+        choose(Date.now() + DRAG_HOLD_MS);
+        return;
+      }
       // Mod+clic su una cella sola, senza trascinare: la cella è un intervallo
       // in più, come nei fogli di calcolo.
-      if (adding && !celled) view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head: anchor, others, adding: false }));
+      if (adding) view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head: anchor, others, adding: false }));
     });
   }
 
@@ -641,7 +673,12 @@ export const cellSelectionPlugin = new Plugin<CellState>({
       // trascina il browser allarga la sua selezione di testo: le selezioni
       // del puntatore non spengono le celle, il clic dopo sì.
       if (tr.docChanged) return value === NONE ? value : NONE;
-      if (tr.selectionSet && !tr.getMeta("pointer") && value.cells) return { ...value, cells: null };
+      if (tr.selectionSet && !tr.getMeta("pointer") && value.cells) {
+        // Appena dopo il trascinamento la selezione che il browser rilegge
+        // non spegne le celle che il puntatore ha scelto.
+        if (value.hold !== undefined && Date.now() < value.hold) return value;
+        return { cells: null, cut: value.cut };
+      }
       return value;
     },
   },

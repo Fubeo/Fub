@@ -5,6 +5,7 @@
 // celle scelte i gesti del foglio, gli appunti e «Unisci celle».
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
 import { resolvedLanguage, t } from "../../i18n/strings";
 import { todayText } from "../../tabella/series";
 import { recentNotices } from "../../ui/notify";
@@ -348,6 +349,50 @@ describe("la forma della tabella resta", () => {
     const blocks = parseProjection(e.getDoc()).blocks;
     const after = blocks[blocks.length - 1] as Para;
     expect((after.c?.[0] as TextInline).x).toBe("po");
+  });
+
+  // IMP-134: il trascinamento su più righe sceglieva solo l'ultima riga, o
+  // niente. Il puntatore del test è quello vero di ProseMirror e della
+  // superficie (mousedown, mousemove, mouseup); la posizione sotto il
+  // puntatore la dà `posAtCoords`, che happy-dom non sa calcolare.
+  describe("col trascinamento", () => {
+    const drag = (e: RichEngine, path: string[], options: { late?: [string, string] } = {}) => {
+      const spot = (needle: string) => ({ clientX: 10 + path.indexOf(needle), clientY: 10 + path.indexOf(needle) });
+      const spy = vi.spyOn(EditorView.prototype, "posAtCoords").mockImplementation(({ left }) => {
+        const needle = path[left - 10];
+        return needle ? { pos: at(e, needle) + 1, inside: -1 } : null;
+      });
+      try {
+        const content = document.querySelector<HTMLElement>(".rich-content")!;
+        content.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...spot(path[0]!) }));
+        for (const needle of path.slice(1, -1)) {
+          document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, buttons: 1, ...spot(needle) }));
+        }
+        // Il browser rilegge la sua selezione del trascinamento, con
+        // un'àncora sua, senza il puntatore.
+        if (options.late) e.select(at(e, options.late[0]) + 1, at(e, options.late[1]) + 1);
+        document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, ...spot(path[path.length - 1]!) }));
+        if (options.late) e.select(at(e, options.late[0]) + 1, at(e, options.late[1]) + 1);
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    it("da A a I in diagonale sceglie tutto il rettangolo, anche se il browser rilegge solo l'ultima riga", () => {
+      const e = engine(NINE);
+      drag(e, ["aa", "ee", "hh", "ii"], { late: ["gg", "ii"] });
+      expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 0, r1: 2, c1: 2 });
+      expect(press("Delete", { keyCode: 46 })).toBe(true);
+      expect(grid(e)).toEqual([["", "", ""], ["", "", ""], ["", "", ""]]);
+    });
+
+    it("da B a H in verticale sceglie la colonna, anche senza movimenti sopra le celle", () => {
+      const e = engine(NINE);
+      drag(e, ["bb", "hh"]);
+      expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 1, r1: 2, c1: 1 });
+      expect(press("Backspace", { keyCode: 8 })).toBe(true);
+      expect(grid(e)).toEqual([["aa", "", "cc"], ["dd", "", "ff"], ["gg", "", "ii"]]);
+    });
   });
 
   it("nessuna transazione unisce due celle, e la cronologia e il disco passano", () => {
