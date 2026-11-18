@@ -1070,6 +1070,13 @@ describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () =
     for (let round = 0; round < count; round += 1) await settle();
   };
   const shown = (host: HTMLElement, selector: string) => host.querySelectorAll<HTMLElement>(`${selector}:not([hidden])`).length;
+  /// I pezzi che si vedono quando le uscite (una dissolvenza in
+  /// `DURATION.swap`) sono finite.
+  const faded = async (host: HTMLElement, selector: string) => {
+    driver.advance(DURATION.swap + FRAME * 2);
+    await settle();
+    return shown(host, selector);
+  };
   const walkingAnts = () => driver.plays.filter((play) => play.state === "running" && (play.el as HTMLElement).classList.contains("grid-ants"));
   async function mountedWithMotion(grid = workbookHost()) {
     driver = createManualDriver();
@@ -1177,7 +1184,7 @@ describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () =
     expect(shown(host, ".grid-mark-flash")).toBe(0);
     expect(shown(host, ".grid-mark-copy")).toBe(4);
     key("Escape");
-    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
     expect(shown(host, ".grid-mark-edge")).toBe(4);
 
     // Due copie: il segno segue l'ultima, e lascia la selezione di prima.
@@ -1191,7 +1198,7 @@ describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () =
     // Scrivere toglie il segno.
     go(8, 1);
     typeInActiveCell(host, viewport, "7");
-    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
     engine.destroy();
   });
 
@@ -1202,7 +1209,7 @@ describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () =
     const tabs = [...host.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
     tabs[1]!.click();
     await settle();
-    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
     tabs[0]!.click();
     await settle();
     expect(shown(host, ".grid-mark-copy")).toBe(4);
@@ -1218,7 +1225,7 @@ describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () =
     send("paste");
     // Dal primo disegno, prima della risposta.
     expect(cell(6, 2)!.textContent).toBe("800");
-    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
     grid.hold(false);
     grid.release();
     await rounds(8);
@@ -1246,7 +1253,7 @@ describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () =
     grid.hold(true);
     go(7, 1);
     send("paste");
-    expect(shown(host, ".grid-mark-cut")).toBe(0);
+    expect(await faded(host, ".grid-mark-cut")).toBe(0);
     expect(shown(host, ".grid-mark-ants")).toBe(4);
     expect(walkingAnts().length).toBe(4);
     // L'anteprima: il valore sulla destinazione, la sorgente vuota.

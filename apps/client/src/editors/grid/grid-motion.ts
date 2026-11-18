@@ -308,6 +308,17 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     if (el.hidden) el.hidden = false;
   };
 
+  /// Nasconde un pezzo, senza il `transform` che lo portava: nascosto non
+  /// porta niente, come quando il moto è ridotto e non ha mai corso.
+  const hide = (el: HTMLElement): void => {
+    el.hidden = true;
+    const last = drawn.get(el);
+    if (last?.transform) {
+      el.style.transform = "";
+      last.transform = "";
+    }
+  };
+
   const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
   /// Disegna ogni pezzo in ogni livello dove cade, dalla geometria che si
@@ -406,7 +417,7 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       }
       halt(el);
       leaving.delete(el);
-      el.hidden = true;
+      hide(el);
     }
     syncAnts();
   };
@@ -420,7 +431,7 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     const done = (): void => {
       if (leaving.get(el) !== ticket) return;
       leaving.delete(el);
-      el.hidden = true;
+      hide(el);
     };
     void animate(el, { to: { opacity: 0 }, duration: DURATION.swap, easing: "ease-out", whenReduced: "fade", lifetime: host.lifetime })
       .finished.then(done);
@@ -534,11 +545,11 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       for (const id of shownRests.keys()) {
         const el = pool.get(id)!;
         halt(el);
-        el.hidden = true;
+        hide(el);
       }
       for (const el of leaving.keys()) {
         halt(el);
-        el.hidden = true;
+        hide(el);
       }
       leaving.clear();
       shownRests.clear();

@@ -3166,7 +3166,7 @@ export class GridEngine {
       return box ? { L: box.left, T: box.top, R: box.left + box.width, B: box.top + box.height } : null;
     };
     const clipBox = clip ? outline(clip.range) : null;
-    if (clip && clipBox) still.push(...edgeParts("clip", clip.kind, clipBox, 2, { glide: false }));
+    if (clip && clipBox) still.push(...edgeParts("clip", clip.kind, clipBox, 2, { glide: false, fade: true }));
     const antsBox = ants ? outline(ants.range) : null;
     if (antsBox) still.push(...edgeParts("ants", "ants", antsBox, 2, { glide: false, fade: true }));
     this.#others.forEach((area, index) => {
