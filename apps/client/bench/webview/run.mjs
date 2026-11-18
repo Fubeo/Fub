@@ -45,6 +45,7 @@ import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
 import { S1_ROUNDS, S1_ROUND_GAP_MS, S1_TYPED, s1Note, s1Values } from "./typing.mjs";
 import { commandLines, gtkWatcher, openWithGtkRetry, waylandProblem, xvfbResetProblem } from "./display.mjs";
+import { panGesture, panNote, requestedWindow, windowNote } from "./gesture.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -172,6 +173,10 @@ async function indexed(session, timeoutMs = 300_000) {
 // Lo scenario va bene con tutti e due.
 const PICKER_INPUT = ".palette-input, .launcher-input";
 const PICKER_FIRST = ".palette-list [role=option], .launcher-list [role=option]";
+/// L'inizio dell'id della voce «Crea questa nota» del selettore comune:
+/// `stableIdentifier("quick-switcher-option", "create:<nome>")`, cioè i punti
+/// di codice di `create:` in esadecimale, uniti da trattini.
+const SWITCHER_CREATE_ID = `quick-switcher-option-${Array.from("create:", (c) => c.codePointAt(0).toString(16)).join("-")}-`;
 
 /// Apre un documento col selettore rapido (Ctrl+O), come chi lo cerca per
 /// nome, e aspetta che il riquadro a fuoco dica `text`.
@@ -193,8 +198,19 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
       await pause(1000);
     }
   }
-  // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
-  await session.waitFor(`return (document.querySelector(${JSON.stringify(PICKER_FIRST)})?.textContent ?? '').includes(arguments[0])`, [name], timeoutMs);
+  // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce,
+  // che sia un documento. Nel selettore comune, finché l'indice non conosce
+  // ancora il documento, la prima voce è «Crea questa nota» col nome scritto:
+  // contiene il nome, e Invio creerebbe una nota vuota alla radice del vault,
+  // che poi il selettore metterebbe davanti alla vera negli scenari dopo
+  // (il riscaldamento e S1 scaduti sulla «Lunga» vuota). La voce da creare si
+  // riconosce dall'id, `quick-switcher-option-` più il codice di `create:`
+  // (`entryKey` e `stableIdentifier`, `panels/quick-switcher.ts`).
+  await session.waitFor(`
+    const first = document.querySelector(${JSON.stringify(PICKER_FIRST)});
+    if (!first || !(first.textContent ?? '').includes(arguments[0])) return false;
+    return !first.id.startsWith(${JSON.stringify(SWITCHER_CREATE_ID)});
+  `, [name], timeoutMs);
   if (mark) {
     await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .pane-editor .cm-content", text]);
   }
@@ -285,20 +301,37 @@ const OPENING_SCRIPT = `
   return true;
 `;
 
+/// Il gesto di S3 e S9 sulla vista della lavagna com'è nella pagina vera
+/// (`panGesture` in `gesture.mjs`): il centro della vista e l'ampiezza
+/// `PAN_DX`, o meno se il gestore di finestre ha dato una finestra più
+/// stretta di quella chiesta. Torna il gesto, la pagina e la riga del
+/// referto se l'ampiezza è ridotta.
+async function boardGesture(session) {
+  const seen = await session.execute(`
+    const r = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+    return { page: { width: innerWidth, height: innerHeight }, view: r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null };
+  `);
+  if (!seen.view) throw new Error("la vista della lavagna non c'è");
+  const gesture = panGesture({ view: seen.view, page: seen.page });
+  return { gesture, page: seen.page, note: panNote(gesture, seen.page) };
+}
+
 /// I gesti misurati di S3, che S9 ripete uguali sulla sua lavagna: tre
-/// secondi di spostamento col pulsante di mezzo, avanti e indietro, e dieci
-/// scatti di rotella col Ctrl tenuto sul punto `at`, cinque avanti e cinque
+/// secondi di spostamento col pulsante di mezzo, avanti e indietro di
+/// `gesture.dx` px (`PAN_DX` se la pagina ha posto), e dieci scatti di
+/// rotella col Ctrl tenuto sul punto del gesto, cinque avanti e cinque
 /// indietro. Torna `false` se il driver non ha la rotella: resta lo
 /// spostamento, e il referto lo dice.
-async function moveAndZoom(session, at) {
+async function moveAndZoom(session, gesture) {
+  const at = { x: gesture.x, y: gesture.y };
   // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
   try {
-    await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
+    await session.actions(drag({ ...at, dx: gesture.dx, dy: 0, ms: 3_000, button: 1 }));
   } catch (error) {
-    // Il driver rifiuta un punto fuori dalla finestra: il referto dice dove
-    // stava il gesto e quanto è grande la pagina (`innerWidth`, `innerHeight`).
+    // `panGesture` tiene il gesto dentro la pagina letta prima: se il driver
+    // lo rifiuta lo stesso, il referto dice dove stava e com'è la pagina ora.
     const page = await session.execute("return [innerWidth, innerHeight];").catch(() => null);
-    throw new Error(`lo spostamento è rifiutato (${error.message}): il punto è ${at.x}, ${at.y} e il gesto va 400 px da una parte e dall'altra; la pagina è ${JSON.stringify(page)}`);
+    throw new Error(`lo spostamento è rifiutato (${error.message}): il punto è ${at.x}, ${at.y} e il gesto va ${gesture.dx} px da una parte e dall'altra; la pagina è ${JSON.stringify(page)}`);
   }
   await session.releaseActions();
   let zoomed = true;
@@ -816,14 +849,16 @@ const SCENARIOS = {
     if (!opening.still) {
       throw new Error(`la lavagna non si ferma: dopo ${OPENING_LIMIT_MS / 1000} s dalla prima scheda non ha ${OPENING_STILL_FRAMES} fotogrammi di fila sotto ${OPENING_GAP_MS} ms (buco più lungo ${opening.longestGap} ms)`);
     }
-    const at = await centerOf(session, ".pane.focus .canvas-viewport");
+    const { gesture, note } = await boardGesture(session);
     await start(session);
-    const zoomed = await moveAndZoom(session, at);
+    const zoomed = await moveAndZoom(session, gesture);
     const report = await stop(session);
     return {
       report,
       zoomed,
       opening,
+      gesture,
+      notes: note ? [note] : [],
       values: {
         "S3.frameGap.p95": report.frames.p95,
         "S3.frameGap.max": report.frames.max,
@@ -899,9 +934,10 @@ const SCENARIOS = {
     const settled = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
     if (!settled.still) notes.push(`coi fogli vivi la lavagna non si ferma entro ${OPENING_LIMIT_MS / 1000} s (buco più lungo ${settled.longestGap} ms): si misura lo stesso`);
     const liveCards = await count(session, LIVE_SHEETS);
-    const at = await centerOf(session, ".pane.focus .canvas-viewport");
+    const { gesture, note } = await boardGesture(session);
+    if (note) notes.push(note);
     await start(session);
-    const zoomed = await moveAndZoom(session, at);
+    const zoomed = await moveAndZoom(session, gesture);
     const report = await stop(session);
     notes.push(`fogli vivi dopo i gesti: ${await count(session, LIVE_SHEETS)}`);
     // Dopo la finestra dei fotogrammi: i tasti della nota non entrano nel
@@ -914,6 +950,7 @@ const SCENARIOS = {
       zoomed,
       zoom,
       opening,
+      gesture,
       notes,
       typing,
       values: {
@@ -1603,6 +1640,14 @@ function git(...command) {
 
 async function main() {
   const budgets = JSON.parse(readFileSync(join(here, "budgets.json"), "utf8"));
+  // La misura che l'app chiede alla sua finestra: ogni scenario la confronta
+  // con la pagina vera, che decide il gestore di finestre (`gesture.mjs`).
+  let requested = null;
+  try {
+    requested = requestedWindow(JSON.parse(readFileSync(join(here, "../../../../crates/fub-app/tauri.conf.json"), "utf8")));
+  } catch {
+    // Il banco fuori dal repository: la misura chiesta non si sa, e non si confronta.
+  }
   const limits = budgets[budgetsKind];
   if (!limits) throw new Error(`budgets.json non ha la sezione «${budgetsKind}»`);
   mkdirSync(out, { recursive: true });
@@ -1658,6 +1703,9 @@ async function main() {
     const warm = await launch("riscaldamento");
     try {
       await ready(warm);
+      // L'indice del primo avvio arrivato in fondo prima di cercare: la shell
+      // risponde prima, e il selettore non conosce ancora `S1/Lunga.md`.
+      await indexed(warm);
       await openByName(warm, "Lunga", "Una nota lunga", null, 300_000);
       console.log("· vault indicizzato");
     } catch (error) {
@@ -1709,8 +1757,17 @@ async function main() {
         if (id !== "S6") await ready(session);
         // I1 misura proprio l'indicizzazione dell'avvio: non la aspetta.
         if (id !== "S6" && id !== "I1") await indexed(session);
+        // La pagina com'è, prima dello scenario: un gestore a tessere può aver
+        // dato alla finestra un'altra misura, e il referto lo dice. S6 misura
+        // l'avvio, e niente gli passa davanti.
+        const page = id === "S6" ? null : await session.execute("return { width: innerWidth, height: innerHeight };");
         const loadBefore = loadavg()[0];
         const result = await SCENARIOS[id](session);
+        if (page) {
+          result.window = { page, requested };
+          const note = windowNote(page, requested);
+          if (note) result.notes = [note, ...(result.notes ?? [])];
+        }
         // Il carico della macchina: un numero alto dice che la misura è rumorosa.
         result.load = { before: Math.round(loadBefore * 10) / 10, after: Math.round(loadavg()[0] * 10) / 10 };
         // Zero campioni non è un tempo di zero: se la sonda non ha visto niente
