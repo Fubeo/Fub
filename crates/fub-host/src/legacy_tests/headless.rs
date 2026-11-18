@@ -945,7 +945,9 @@ fn an_event_of_the_vault_left_open_names_its_vault_not_the_current_one() {
     .expect("writes in A");
     let changes = sink.changed("Nota.md", &root_a);
     assert!(
-        changes.iter().all(|v| v.as_deref() == Some(root_a.as_str())),
+        changes
+            .iter()
+            .all(|v| v.as_deref() == Some(root_a.as_str())),
         "a change of A came out unnamed or as B's: {changes:?}"
     );
 
@@ -1003,7 +1005,9 @@ fn an_event_of_the_vault_left_open_names_its_vault_not_the_current_one() {
         })
         .collect();
     assert!(
-        closings.iter().all(|(root, v)| v.as_deref() == Some(root.as_str())),
+        closings
+            .iter()
+            .all(|(root, v)| v.as_deref() == Some(root.as_str())),
         "a closing came out under another vault's name: {closings:?}"
     );
 }
