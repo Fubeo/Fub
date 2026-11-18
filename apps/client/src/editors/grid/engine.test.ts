@@ -5,7 +5,8 @@ import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
 import { fillTarget, openSpan, typingOpens, type GridHost } from "./engine";
-import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, written } from "./test-support";
+import { previewSizes, resizeLabelAt } from "./engine-geometry";
+import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, workbookHost, workbookMounted, written } from "./test-support";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -894,5 +895,159 @@ describe("fillTarget", () => {
   });
   it("dentro la sorgente non riempie", () => {
     expect(fillTarget(source, { row: 2, column: 1 })).toBe(source);
+  });
+});
+
+// **Ciò che si scrive o si tira si vede subito** (griglia T5): sulla cartella
+// di Excel, col provider tenuto in volo (`hold`) per guardare l'anteprima.
+describe("GridEngine: l'anteprima di ciò che si scrive o si tira", () => {
+  const press = (target: EventTarget, type: string, x: number, y: number) =>
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: y }));
+  const headerOf = (host: HTMLElement, label: string) =>
+    [...host.querySelectorAll<HTMLElement>(".grid-column-header")].find((element) => element.textContent === label)!;
+  /// Tira il bordo destro dell'intestazione `label` di `by` px e lo rilascia.
+  const pull = (host: HTMLElement, viewport: HTMLElement, label: string, by: number) => {
+    const header = headerOf(host, label);
+    const edge = parseFloat(header.style.left) + parseFloat(header.style.width);
+    press(viewport, "pointermove", edge - 2, 10);
+    press(viewport, "pointerdown", edge - 2, 10);
+    press(viewport, "pointermove", edge - 2 + by, 10);
+    press(viewport, "pointerup", edge - 2 + by, 10);
+  };
+  const widthOf = (host: HTMLElement, label: string) => parseFloat(headerOf(host, label).style.width);
+  const rounds = async (count: number) => {
+    for (let round = 0; round < count; round += 1) await settle();
+  };
+
+  it("un numero va a destra appena lo si conferma, e la cella che il provider rilegge vince", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid);
+    grid.hold(true);
+    go(6, 1);
+    typeInActiveCell(host, viewport, "42");
+    expect(cell(6, 1)!.textContent).toBe("42");
+    expect(cell(6, 1)!.style.textAlign).toBe("end");
+    // Un testo resta a sinistra, e un numero con l'apostrofo è un testo.
+    go(7, 1);
+    typeInActiveCell(host, viewport, "abc");
+    go(8, 1);
+    typeInActiveCell(host, viewport, "'42");
+    expect(cell(7, 1)!.style.textAlign).not.toBe("end");
+    expect(cell(8, 1)!.textContent).toBe("42");
+    expect(cell(8, 1)!.style.textAlign).not.toBe("end");
+    // Il finto rilegge ogni input come testo: la sua risposta vince
+    // sull'anteprima del numero.
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(cell(6, 1)!.textContent).toBe("42");
+    expect(cell(6, 1)!.style.textAlign).not.toBe("end");
+    engine.destroy();
+  });
+
+  it("una formula resta com'è scritta, tenue, finché il foglio non risponde", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid);
+    grid.hold(true);
+    go(6, 1);
+    typeInActiveCell(host, viewport, "=B2+1");
+    expect(cell(6, 1)!.textContent).toBe("=B2+1");
+    expect(cell(6, 1)!.classList.contains("pending")).toBe(true);
+    // Tenue non è «legge celle cambiate»: niente `stale`.
+    expect(cell(6, 1)!.classList.contains("stale")).toBe(false);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(cell(6, 1)!.classList.contains("pending")).toBe(false);
+    engine.destroy();
+  });
+
+  it("una larghezza tirata vale subito, e resta quando il provider dice sì", async () => {
+    let wide: number | null = null;
+    const grid = workbookHost({
+      window: (window) => {
+        const column = window.columns.find((candidate) => candidate.index === 1);
+        if (column && wide !== null) column.width = wide;
+      },
+    });
+    const { engine, host, viewport } = await workbookMounted(grid);
+    const before = widthOf(host, "B");
+    const after = Math.round(Math.round((before + 28) / 1.4) * 1.4);
+    const left = parseFloat(headerOf(host, "C").style.left);
+    grid.hold(true);
+    pull(host, viewport, "B", 28);
+    // Dal primo disegno dopo il rilascio: la colonna è larga quanto al
+    // rilascio, e la C è già al posto nuovo.
+    expect(widthOf(host, "B")).toBe(after);
+    expect(parseFloat(headerOf(host, "C").style.left)).toBe(left + after - before);
+    await rounds(2);
+    expect(widthOf(host, "B")).toBe(after);
+    expect(grid.given.map((request) => request.command.id)).toEqual(["home.columnWidth"]);
+    wide = JSON.parse(grid.given[0].command.params).width;
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(widthOf(host, "B")).toBe(after);
+    engine.destroy();
+  });
+
+  it("un no torna com'era, e l'avviso dice perché", async () => {
+    const grid = workbookHost();
+    grid.host.gridBytesCommand = async () => {
+      throw { kind: "permission_denied", message: "il foglio è protetto" };
+    };
+    const { engine, host, viewport, notice } = await workbookMounted(grid);
+    const before = widthOf(host, "B");
+    pull(host, viewport, "B", 28);
+    expect(widthOf(host, "B")).toBeGreaterThan(before);
+    await rounds(6);
+    expect(widthOf(host, "B")).toBe(before);
+    expect(notice().hidden).toBe(false);
+    expect(notice().textContent).toContain("il foglio è protetto");
+    engine.destroy();
+  });
+
+  it("una risposta vecchia non annulla un gesto più nuovo sullo stesso bordo", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport } = await workbookMounted(grid);
+    const before = widthOf(host, "B");
+    grid.hold(true);
+    pull(host, viewport, "B", 28);
+    const first = widthOf(host, "B");
+    pull(host, viewport, "B", 42);
+    const second = widthOf(host, "B");
+    expect(second).toBeGreaterThan(first);
+    // Il primo comando risponde (il finto non cambia le larghezze): la sua
+    // anteprima esce, quella del secondo gesto resta e vince.
+    await rounds(2);
+    grid.release();
+    await rounds(16);
+    expect(grid.given.length).toBe(2);
+    expect(widthOf(host, "B")).toBe(second);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    // Tutti e due hanno risposto: restano le misure lette.
+    expect(widthOf(host, "B")).toBe(before);
+    engine.destroy();
+  });
+});
+
+describe("la misura di un bordo tirato e le anteprime delle misure", () => {
+  it("la misura sta dopo il bordo, o prima quando dopo non c'è posto, mai fuori dal riquadro", () => {
+    expect(resizeLabelAt(100, 150, 700)).toBe(106);
+    expect(resizeLabelAt(600, 150, 700)).toBe(444);
+    expect(resizeLabelAt(100, 150, 200)).toBe(6);
+    expect(resizeLabelAt(-40, 150, 700)).toBe(6);
+  });
+  it("la più nuova vince, e senza anteprime le linee restano quelle", () => {
+    const lines = [{ hidden: false, width: 10 }, { hidden: false }, { hidden: true, width: 5 }];
+    expect(previewSizes(lines, "width", [])).toBe(lines);
+    const previews = [
+      { ticket: 1, sheet: "s1", axis: "column" as const, first: 0, last: 1, size: 30 },
+      { ticket: 2, sheet: "s1", axis: "column" as const, first: 1, last: 1, size: 40 },
+    ];
+    expect(previewSizes(lines, "width", previews)).toEqual([{ hidden: false, width: 30 }, { hidden: false, width: 40 }, { hidden: true, width: 5 }]);
+    expect(lines[0].width).toBe(10);
   });
 });

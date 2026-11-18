@@ -2020,6 +2020,15 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
   color: var(--file-color-a, var(--doc-fg, #14161a));
 }
+/* Una formula appena scritta aspetta la risposta del foglio (griglia T5): si
+   vede come la si è scritta, più tenue sulla sua carta, finché il foglio non
+   dà il valore. */
+.look-file .grid-cell.pending {
+  color: color-mix(in srgb, var(--file-color, var(--doc-fg, #14161a)) 55%, var(--file-fill, var(--doc-bg, #ffffff)));
+}
+.look-adattato .grid-cell.pending {
+  color: color-mix(in srgb, var(--file-color-a, var(--doc-fg, #14161a)) 55%, var(--file-fill-a, var(--doc-bg, #ffffff)));
+}
 /* La cella aperta ha la carta e l'inchiostro della sua cella, in ogni luce:
    la griglia le copia le proprietà del file (`--file-*`). */
 .look-file .grid-plane .grid-cell-editor {
