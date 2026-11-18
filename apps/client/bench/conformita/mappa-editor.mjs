@@ -471,6 +471,17 @@ export const VISTE = {
     },
     app: { scena: "schede-misura-01-affiancate" },
   },
+  // La scheda PDF (T45): quella della coppia del prototipo, a riposo; nel
+  // banco il manuale del giro, dalla pagina 2.
+  "scheda-pdf": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .pair .scard[data-kind="pdf"] .pdfn');
+      },
+    },
+    app: { scena: "schede-pdf-01-riposo" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1531,6 +1542,42 @@ export const PEZZI = [
     prototipo: ".pair",
     app: '.pane.focus .pane-editor .fub-columns[data-live-cards="true"]',
     proprieta: ["column-gap", "margin-left", "margin-right", "align-items"],
+  },
+  // ── la scheda PDF (T45) ───────────────────────────────────────────────────
+  // Il vassoio con 16 px intorno alla pagina (sotto, la fascia di 40 px del
+  // numero è una riga della griglia, non un padding), la pagina con le sue
+  // ombre, il numero e le frecce di 24 px, velate a riposo.
+  {
+    id: "schede.pdf.vassoio",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfw',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf',
+    proprieta: ["background-color", "padding-top", "padding-left", "padding-right"],
+  },
+  {
+    id: "schede.pdf.pagina",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfp',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-page',
+    proprieta: ["border-radius", "box-shadow"],
+  },
+  {
+    id: "schede.pdf.numero",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfn > span',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-status',
+    proprieta: ["font", "color", "font-variant-numeric"],
+  },
+  {
+    id: "schede.pdf.freccia",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] #pdf-prev',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-previous',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "opacity"],
   },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {

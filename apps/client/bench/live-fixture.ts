@@ -357,6 +357,19 @@ const OPTIONS_TYPE_FILES: Readonly<Record<string, string>> = {
   "Tipi/Progetto.md": "---\nicon: 🌱\nproperties: [stato, sala, sito, fase]\nfeatured: [stato, sala, sito]\nfolder: Progetti\n---\n## Obiettivo\n",
 };
 
+/// La scheda PDF (T45): il manuale di quattro pagine del giro (`giro=editor`,
+/// `giro-fixture.ts`), un PDF vero col testo che pdf.js stende, mostrato dalla
+/// pagina 2 (`#page=2`).
+const LIVE_CARDS_PDF_NOTE = [
+  "# Imparare Fub",
+  "",
+  "Il manuale, dalla pagina sulle note:",
+  "",
+  "![[Manuale di Fub.pdf#page=2]]",
+  "",
+  "Da rileggere prima della riunione di giovedì.",
+].join("\n");
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
@@ -590,6 +603,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
   "schede-vive": { text: LIVE_CARDS_NOTE, cursor: null, files: { "Casa/foto-appartamento.zip": "" } },
   "schede-misura": { text: LIVE_CARDS_SIZE_NOTE, cursor: null },
+  "schede-pdf": { text: LIVE_CARDS_PDF_NOTE, cursor: null },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),
