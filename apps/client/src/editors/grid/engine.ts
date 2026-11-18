@@ -65,7 +65,7 @@ import {
   type GridRange,
 } from "./merges";
 import { attachCommentCards, commentDescription } from "./comment-card";
-import { createMarksMotion, showEditorFrame, type MarksMotion } from "./grid-motion";
+import { createMarksMotion, hideEditorFrame, showEditorFrame, type MarksMotion } from "./grid-motion";
 import {
   cornerSeen,
   edgeParts,
@@ -4491,6 +4491,9 @@ export class GridEngine {
     this.#editing = null;
     this.#pointing = null;
     this.#draftNotice.hidden = true;
+    // La cornice esce da dov'è (anche a metà della sua entrata); il campo
+    // sparisce subito, e la cella sotto ha già il valore.
+    if (editing.owner === "cell" && !this.#cellEditorHost.hidden) hideEditorFrame(this.#cellEditorFrame);
     this.#detachCellEditor();
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");

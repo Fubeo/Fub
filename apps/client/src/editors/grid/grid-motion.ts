@@ -20,7 +20,7 @@
 //
 // È il solo modulo della griglia che muove i segni; `engine.ts` gli dice dove
 // devono andare.
-import { animate, halt, motionDriver, motionLevel, onFrame } from "../../moto";
+import { animate, exitGhost, halt, motionDriver, motionLevel, onFrame } from "../../moto";
 import { advanceSpring, DURATION, springAtRest, springFor, type Spring } from "../../moto/spring";
 import type { Lifetime, Teardown } from "../../ui/lifetime";
 import {
@@ -432,4 +432,12 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
 /// finale è lo stesso con il movimento e senza.
 export function showEditorFrame(frame: HTMLElement, lifetime: Lifetime): void {
   animate(frame, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade", lifetime });
+}
+
+/// La cornice della cella aperta se ne va quando la cella si chiude: ne resta
+/// un'immagine che sfuma in `DURATION.state` da dov'era (anche a metà della
+/// sua entrata), mentre la cella aperta è già nascosta.
+export function hideEditorFrame(frame: HTMLElement): void {
+  if (!frame.isConnected) return;
+  exitGhost(frame, { to: { opacity: 0 }, duration: DURATION.state, easing: "ease-in", whenReduced: "fade" });
 }
