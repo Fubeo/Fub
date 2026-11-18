@@ -144,9 +144,31 @@ d'apertura raccoglie i compagni che attraversa e
 senza aspettare, vuoti e ancora con la stessa identità; lo svuotamento del
 cestino fa lo stesso dentro `.trash/`. Un compagno tenuto adesso, da questo
 processo o da un altro Fub, resta. Il criterio è il lock e non l'età o un pid,
-che su un vault condiviso fra macchine non dicono niente. `FsStorage`, usato
-fuori dal vault, segue ancora il protocollo del file stabile e non partecipa
-alla pulizia.
+che su un vault condiviso fra macchine non dicono niente.
+
+La scansione non entra in `.fub/`, che non è contenuto dell'utente, ma il
+supporto del vault vi prende i lock delle impostazioni, dell'anagrafe, delle
+bozze, dei sidecar del cestino e dello stato per documento dei plugin.
+All'apertura `Vault::service_locks` cerca lì soltanto i compagni, senza
+produrre voci né seguire collegamenti, e la stessa pulizia toglie quelli vuoti
+e liberi. Dello spazio di un plugin (`.fub/plugins/<id>/`) si guardano solo gli
+spazi per documento (`doc/`, `doc~trash/`), che scrive il kernel: il resto può
+essere la cartella che `Workspace::plugin_data_dir` consegna a un motore
+nativo. L'indice di ricerca vi tiene `.tantivy-writer.lock` e
+`.tantivy-meta.lock`, che hanno la stessa forma ma seguono il protocollo di
+tantivy: sono stabili per costruzione, e prenderne uno anche solo per un
+istante farebbe fallire l'apertura del suo writer.
+
+`FsStorage`, usato fuori dal vault, segue ancora il protocollo del file stabile
+e non partecipa alla pulizia. Il cestino del sistema sposta la nota fuori dal
+vault con `FsStorage` e non lascia niente accanto a lei: su Linux la mossa è
+`renameat2` con `RENAME_NOREPLACE`, senza lock, e il ripiego per i filesystem
+che non la offrono prende il lock della destinazione, nel cestino del sistema.
+Su Windows e su macOS il backend non c'è e la nota va nel cestino del vault,
+con il supporto del vault. Un backend nuovo che spostasse con `FsStorage` su
+Windows, dove la mossa serializza la sorgente con il file stabile, lascerebbe
+il compagno nella cartella della nota: il passo dentro il vault va fatto con il
+supporto del vault.
 
 Il lock viene acquisito prima della rilettura e resta detenuto durante il
 confronto e la sostituzione atomica. Un errore di apertura o acquisizione

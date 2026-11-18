@@ -289,3 +289,119 @@ fn removing_the_lock_keeps_writers_exclusive() {
     );
     no_locks(&fx, "la contesa");
 }
+
+/// **Anche `.fub/` si pulisce all'apertura.** Il supporto del vault vi prende i
+/// suoi lock come accanto a una nota — impostazioni, anagrafe, bozze, sidecar
+/// del cestino, stato per documento dei plugin — e un'uscita forzata in mezzo
+/// a una di quelle scritture lascia il compagno a terra. La scansione non entra
+/// in `.fub/`, perché non è contenuto dell'utente; la pulizia sì, con lo stesso
+/// criterio: vuoto e non tenuto da nessuno.
+///
+/// Restano un lock tenuto adesso, un file non vuoto che porta quel nome e ciò
+/// che sta nello spazio di un plugin fuori dagli spazi per documento: può
+/// essere la cartella di un motore nativo, e l'indice di ricerca vi tiene i
+/// lock di tantivy, stabili per costruzione.
+#[test]
+fn reopening_removes_the_locks_left_in_the_service_folder() {
+    let fx = Fixture::new();
+    fx.put("Nota.md", b"testo");
+    for left in [
+        ".fub/.settings.json.lock",
+        ".fub/.journal.jsonl.lock",
+        ".fub/data/.entries.json.lock",
+        ".fub/data/trash/.Nota.2026-01-01T00-00-00.md.json.lock",
+        ".fub/drafts/.bozza.json.lock",
+        ".fub/plugins/acme/doc/Nota.md/.annotazioni.json.lock",
+        ".fub/plugins/acme/doc~trash/Vecchia.md/.annotazioni.json.lock",
+        ".fub/data/plugins/acme/.anteprima.json.lock",
+        ".fub/.altro-fub.json.lock",
+        ".fub/plugins/fub.search/index/.tantivy-writer.lock",
+        ".fub/plugins/fub.search/index/.tantivy-meta.lock",
+    ] {
+        fx.put(left, b"");
+    }
+    fx.put(".fub/.config.lock", b"di un altro programma");
+    let held = std::fs::OpenOptions::new()
+        .write(true)
+        .open(fx.root.join(".fub/.altro-fub.json.lock"))
+        .unwrap();
+    held.lock().expect("a live instance holds the lock");
+
+    let _ws = fx.workspace();
+
+    assert_eq!(
+        fx.locks(),
+        vec![
+            ".fub/.altro-fub.json.lock",
+            ".fub/.config.lock",
+            ".fub/plugins/fub.search/index/.tantivy-meta.lock",
+            ".fub/plugins/fub.search/index/.tantivy-writer.lock",
+        ]
+    );
+    drop(held);
+}
+
+/// Il cestino del sistema dove Fub non ne ha un backend: risponde
+/// `Unsupported`, come [`fub_kernel::FsStorage`] su Windows e su macOS.
+struct NoSystemTrash;
+
+impl fub_kernel::os_trash::OsTrashBackend for NoSystemTrash {
+    fn move_file_to_os_trash(&self, _: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "nessun cestino del sistema",
+        ))
+    }
+}
+
+fn trash_through_the_system(
+    ws: &mut Workspace,
+    doc: &DocId,
+    backend: &dyn fub_kernel::os_trash::OsTrashBackend,
+) -> fub_kernel::os_trash::OsTrashReceipt {
+    let completed = ws
+        .prepare_document_deletion(doc)
+        .expect("prepare")
+        .invoke_os(backend)
+        .expect("move");
+    let committed = ws
+        .commit_os_document_deletion(completed)
+        .unwrap_or_else(|_| panic!("commit"));
+    ws.finish_os_document_deletion(committed.invoke())
+        .unwrap_or_else(|_| panic!("finish"))
+}
+
+/// **Il cestino del sistema non lascia lock accanto alla nota.** Dove il
+/// backend non c'è la nota va nel cestino del vault, con il supporto del
+/// vault: è la strada di Windows, e qui si prova su ogni sistema.
+#[test]
+fn the_system_trash_fallback_leaves_no_lock() {
+    let fx = Fixture::new();
+    fx.put("Note/Nota.md", b"testo");
+    let mut ws = fx.workspace();
+
+    let receipt = trash_through_the_system(&mut ws, &DocId::new("Note/Nota.md"), &NoSystemTrash);
+
+    assert!(matches!(
+        receipt.via,
+        fub_kernel::os_trash::TrashVia::InternalFallback { .. }
+    ));
+    assert!(!fx.root.join("Note/Nota.md").exists());
+    no_locks(&fx, "il cestino del sistema, ripiegato su quello del vault");
+}
+
+/// La stessa prova con il backend vero, dove non sposta fuori dal vault: su
+/// Linux sposterebbe nel cestino dell'utente, e lì la presidia il test di
+/// `os_trash.rs` con una cartella temporanea.
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn the_system_trash_of_this_platform_leaves_no_lock() {
+    let fx = Fixture::new();
+    fx.put("Note/Nota.md", b"testo");
+    let mut ws = fx.workspace();
+
+    trash_through_the_system(&mut ws, &DocId::new("Note/Nota.md"), &fub_kernel::FsStorage);
+
+    assert!(!fx.root.join("Note/Nota.md").exists());
+    no_locks(&fx, "il cestino del sistema");
+}

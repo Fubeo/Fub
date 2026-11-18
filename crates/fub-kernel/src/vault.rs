@@ -1072,6 +1072,87 @@ impl Vault {
         Ok(out)
     }
 
+    /// I compagni di lock (`.settings.json.lock`) che stanno nella cartella di
+    /// servizio [`FUB_DIR`], in path assoluto e in ordine.
+    ///
+    /// La scansione non entra in `.fub/`, e deve restare così: lì non c'è
+    /// contenuto dell'utente. Ma il supporto del vault ci prende i suoi lock
+    /// come accanto a una nota — le impostazioni, l'anagrafe, le bozze, i
+    /// sidecar del cestino, lo stato per documento dei plugin — e un'uscita
+    /// forzata in mezzo a una di quelle scritture ne lascia uno a terra, come
+    /// le versioni di Fub che il lock non lo toglievano. Questa camminata cerca
+    /// **solo** quei nomi: non produce voci, non legge la politica di
+    /// esclusione e non segue i collegamenti. Sono candidati, come
+    /// [`Scan::locks_remaining_back`]: se uno è rimasto indietro lo decide
+    /// [`VaultStorage::remove_abandoned_lock`].
+    ///
+    /// Lo spazio di un plugin (`.fub/plugins/<id>/`) si cammina soltanto negli
+    /// spazi per documento ([`DOC_SPACE`](fub_abi::rules::doc_data::DOC_SPACE) e
+    /// [`PARKED_SPACE`](fub_abi::rules::doc_data::PARKED_SPACE)), che scrive e
+    /// sposta il kernel. Il resto può essere la cartella vera che
+    /// `Workspace::plugin_data_dir` consegna a un motore nativo, con un
+    /// protocollo di lock suo: l'indice di ricerca (tantivy) vi tiene
+    /// `.tantivy-writer.lock` e `.tantivy-meta.lock`, che hanno la stessa forma,
+    /// sono stabili per costruzione e non si provano nemmeno — prenderne uno
+    /// per un istante farebbe fallire l'apertura del suo writer.
+    pub fn service_locks(&self) -> Result<Vec<Utf8PathBuf>> {
+        let mut out = Vec::new();
+        self.walk_service_locks(&self.root.join(FUB_DIR), &mut out)?;
+        out.sort();
+        Ok(out)
+    }
+
+    fn walk_service_locks(&self, dir: &Utf8Path, out: &mut Vec<Utf8PathBuf>) -> Result<()> {
+        let entries = match self.storage.list(dir) {
+            Ok(entries) => entries,
+            // Un vault appena creato non ha ancora `.fub/`, e uno spazio di
+            // plugin non ha per forza gli spazi per documento.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(source) => {
+                return Err(KernelError::Io {
+                    path: dir.to_owned(),
+                    source,
+                })
+            }
+        };
+        let plugin_spaces = self
+            .root
+            .join(FUB_DIR)
+            .join(crate::documents::PLUGIN_DATA_DIR);
+        for entry in entries {
+            match entry.stat.kind {
+                EntryKind::Dir if dir == plugin_spaces => {
+                    for space in [
+                        fub_abi::rules::doc_data::DOC_SPACE,
+                        fub_abi::rules::doc_data::PARKED_SPACE,
+                    ] {
+                        let space = entry.path.join(space);
+                        // `list` segue un collegamento: lo spazio si cammina
+                        // solo se è una cartella vera.
+                        if self
+                            .storage
+                            .stat_no_follow(&space)
+                            .is_ok_and(|stat| stat.kind == EntryKind::Dir)
+                        {
+                            self.walk_service_locks(&space, out)?;
+                        }
+                    }
+                }
+                EntryKind::Dir => self.walk_service_locks(&entry.path, out)?,
+                EntryKind::File
+                    if entry
+                        .path
+                        .file_name()
+                        .is_some_and(crate::storage::is_write_lock) =>
+                {
+                    out.push(entry.path);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     fn walk(&self, dir: &Utf8Path, policy: &IgnorePolicy, out: &mut Scan) -> Result<()> {
         let entries = self.storage.list(dir).map_err(|and| KernelError::Io {
             path: dir.to_owned(),
