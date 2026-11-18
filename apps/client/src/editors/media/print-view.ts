@@ -105,6 +105,130 @@ export async function settlePrint(container: HTMLElement, ready: Promise<void>, 
   }
 }
 
+/// Ciò che dopo l'attesa non è arrivato, o non si è lasciato decodificare:
+/// i segnaposti ancora in caricamento e le immagini senza i loro pixel.
+function undrawnElements(container: HTMLElement): HTMLElement[] {
+  const pending = Array.from(container.querySelectorAll<HTMLElement>(PENDING));
+  const outer = pending.filter((element) => !pending.some((other) => other !== element && other.contains(element)));
+  const images = Array.from(container.querySelectorAll<HTMLImageElement>("img"))
+    .filter((image) => !outer.some((element) => element.contains(image)) && (!image.complete || image.naturalWidth === 0));
+  return [...outer, ...images];
+}
+
+/// Il nome che il riquadro di un contenuto non disegnato dice: il file o il
+/// testo alternativo di un'immagine, se no la specie del blocco.
+function undrawnName(element: HTMLElement): string {
+  const image = element instanceof HTMLImageElement ? element : element.querySelector("img");
+  const file = element.dataset.vaultId ?? image?.dataset.vaultId ?? image?.getAttribute("src") ?? "";
+  const alt = image?.getAttribute("alt")?.trim();
+  if (alt) return alt;
+  const base = file.split(/[?#]/u)[0].split("/").pop() ?? "";
+  if (base && !file.startsWith("blob:") && !file.startsWith("data:")) {
+    try {
+      return decodeURIComponent(base);
+    } catch {
+      return base;
+    }
+  }
+  if (element.closest(".mermaid-diagram") || element.matches("[data-declared-fence], .mermaid-diagram")) return t("print.undrawn.diagram");
+  if (element.matches(".math-block, .katex-display")) return t("print.undrawn.formula");
+  if (image || element.hasAttribute("data-vault-media")) return t("print.undrawn.image");
+  return t("print.undrawn.content");
+}
+
+/// Mette al posto di ogni diagramma, formula o immagine che non è arrivato
+/// entro l'attesa (`PRINT_WAIT_MS`) il suo riquadro: il nome e «non
+/// disegnato». Il blocco vero resta fuori dal documento: se arriva tardi, non
+/// cambia le misure di una pagina già impaginata. Torna quanti riquadri ha
+/// messo.
+export function markUndrawn(container: HTMLElement): number {
+  const elements = undrawnElements(container);
+  for (const element of elements) {
+    const name = undrawnName(element);
+    const box = document.createElement("div");
+    box.className = "print-undrawn";
+    box.setAttribute("role", "img");
+    box.setAttribute("aria-label", t("print.undrawn.label", { name }));
+    for (const attribute of ["data-md-from", "data-md-to"]) {
+      const value = element.getAttribute(attribute);
+      if (value !== null) box.setAttribute(attribute, value);
+    }
+    const label = document.createElement("span");
+    label.className = "print-undrawn-name";
+    label.textContent = name;
+    const state = document.createElement("span");
+    state.className = "print-undrawn-state";
+    state.textContent = t("print.undrawn");
+    box.append(label, state);
+    element.replaceWith(box);
+  }
+  return elements.length;
+}
+
+/// Il riquadro di ciò che non è arrivato: la forma, alta e larga il giusto per
+/// leggerlo, col colore del testo che lo circonda. I colori del tema li dà la
+/// pelle di chi mostra le pagine (lo spazio dell'esportazione, T70).
+const UNDRAWN_CSS = `
+  .print-undrawn {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+    margin: 0.66em 0;
+    padding: 0.9em 1em;
+    border: 1px dashed color-mix(in srgb, currentColor 45%, transparent);
+    border-radius: 6px;
+    font-size: 0.9em;
+    line-height: 1.4;
+  }
+  .print-undrawn-name { font-weight: 600; overflow-wrap: anywhere; }
+  .print-undrawn-state { opacity: 0.72; }`;
+
+/// Una resa per la stampa montata in un contenitore: il titolo e il corpo,
+/// idratati da `mount` se c'è. `settled` si risolve quando ciò che arriva
+/// dopo è arrivato, o l'attesa è finita e il resto ha il suo riquadro
+/// (`markUndrawn`), col numero dei riquadri.
+export interface PrintSurface {
+  readonly page: HTMLElement;
+  readonly body: HTMLElement;
+  readonly settled: Promise<number>;
+  dispose(): void;
+}
+
+/// Monta la resa per la stampa perché la si misuri (l'impaginatore
+/// dell'esportazione, `export/paginate/slices.ts`): la stessa pagina che
+/// `printRendered` manda alla stampa, senza stamparla.
+export function mountPrintSurface(
+  container: HTMLElement,
+  options: { title: string; rendered: RenderedDocument; mount?: PrintMount; limit?: number },
+): PrintSurface {
+  const { page, body } = printPage(options.title);
+  const sheet = adoptSheet(UNDRAWN_CSS);
+  container.append(page);
+  let mounted: ReturnType<PrintMount> | null = null;
+  try {
+    if (options.mount) mounted = options.mount(body, options.rendered);
+    else setSanitizedHtml(body, options.rendered.html);
+  } catch (error) {
+    page.remove();
+    sheet.dispose();
+    throw error;
+  }
+  let disposed = false;
+  const settled = settlePrint(body, mounted?.ready ?? Promise.resolve(), options.limit).then(() => (disposed ? 0 : markUndrawn(body)));
+  return {
+    page,
+    body,
+    settled,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      mounted?.dispose();
+      page.remove();
+      sheet.dispose();
+    },
+  };
+}
+
 /// Lo stile della stampa. A schermo la resa sta fuori dalla vista ma
 /// disposta, perché diagrammi e immagini si carichino; sulla carta resta solo
 /// lei. La carta ha una luce sola: inchiostro scuro su bianco con i colori

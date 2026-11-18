@@ -24,17 +24,21 @@ import {
   liveCardWidthPx,
   relinkEmbedAt,
   removeEmbedAt,
+  repartEmbedAt,
   showEmbedAt,
   sizeEmbedAt,
   type LiveCardKit,
   type LiveCardsPort,
 } from "./live-cards";
 import type { CardContext, CardKind, CardMode, CardRenderer, CardView } from "../../../core/cards/contract";
-import { blockAt, markdownBlockGroup, type BlockGroupHost } from "./block-groups";
+import { blockAt, markdownBlockGroup, sheetCardGroup, type BlockGroupHost } from "./block-groups";
 import { mountMarkdown } from "./mount";
 import { embedSize } from "./media";
 import { removeColumnAt } from "./callout";
 import { blockModel } from "./blocks/model";
+import { blocksMode } from "./blocks";
+import { blockSelection } from "./blocks/selection";
+import { mountMarkdownSurface } from "./surface";
 
 /// Una specie finta: ogni vista tiene il suo modo, ascolta il documento finché
 /// è montata (per contare chi resta) e scrive in un «file» suo.
@@ -149,6 +153,10 @@ function rig(text: string, options: {
   readonly editable?: boolean;
   readonly renderers?: readonly CardKind[];
   readonly pick?: LiveCardsPort["pick"];
+  readonly sheetChanged?: () => void;
+  readonly resolve?: LiveCardsPort["resolve"];
+  /// I Blocchi accesi, come nella Scrittura di serie: la scheda si sceglie.
+  readonly blocks?: boolean;
 } = {}): Rig {
   const species = new FakeSpecies();
   const parent = document.createElement("div");
@@ -165,7 +173,7 @@ function rig(text: string, options: {
   const files = options.files ?? "all";
   const port: LiveCardsPort = {
     load: async () => options.kit === false ? null : kit,
-    resolve: async (page) => files === "all" || files.has(page) ? `Archivio/${page}` : null,
+    resolve: options.resolve ?? (async (page) => files === "all" || files.has(page) ? `Archivio/${page}` : null),
     open: (path, subpath) => opened.push({ path, subpath }),
     ...(options.pick ? { pick: options.pick } : {}),
   };
@@ -181,6 +189,7 @@ function rig(text: string, options: {
       const state = editorView()?.state;
       return state && to <= state.doc.length ? state.sliceDoc(from, to) : null;
     },
+    ...(options.sheetChanged ? { sheetChanged: options.sheetChanged } : {}),
   });
   const engine = createTextEngine(parent, {
     onChange() {},
@@ -195,7 +204,7 @@ function rig(text: string, options: {
         ...actions,
         liveCard: (slot, life) => cards.hostSlot(slot, life),
       }),
-    })],
+    }), ...(options.blocks ? [blocksMode({ page: () => "Nota" })] : [])],
   });
   engine.setDoc(text);
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
@@ -246,6 +255,9 @@ describe("quali embed sono schede", () => {
   it("la testata dice la pagina, o la parte nominata", () => {
     expect(liveCardPart("#page=3")).toBe("p. 3");
     expect(liveCardPart("#Budget")).toBe("Budget");
+    expect(liveCardPart("#Budget!A1:E7")).toBe("Budget · A1:E7");
+    expect(liveCardPart("#'Conti 2024'!B2")).toBe("Conti 2024 · B2");
+    expect(liveCardPart("#A1:E7")).toBe("A1:E7");
     expect(liveCardPart(null)).toBeNull();
   });
 
@@ -370,6 +382,29 @@ describe("la scheda nella Live", () => {
     expect(opened).toEqual([{ path: "Archivio/Contratto.pdf", subpath: "#page=2" }]);
   });
 
+  it("«Apri» mentre la scheda si carica apre il file risolto, non il nome scritto", async () => {
+    const answers: ((path: string | null) => void)[] = [];
+    const { parent, opened } = rig("Testo\n\n![[Contratto.pdf#page=2]]\n\nFine\n", {
+      resolve: () => new Promise((done) => answers.push(done)),
+    });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardState).toBe("loading");
+    card.querySelector<HTMLButtonElement>(".live-card-open")!.click();
+    expect(opened).toEqual([]);
+    for (const answer of answers) answer("Archivio/Contratto.pdf");
+    await settle();
+    expect(opened).toEqual([{ path: "Archivio/Contratto.pdf", subpath: "#page=2" }]);
+  });
+
+  it("«Apri» su un file che manca apre il nome com'è", async () => {
+    const { parent, opened } = rig("Testo\n\n![[Sparito.pdf]]\n\nFine\n", { files: new Set() });
+    await settle();
+    cardsIn(parent)[0]!.querySelector<HTMLButtonElement>(".live-card-open")!.click();
+    await settle();
+    expect(opened).toEqual([{ path: "Sparito.pdf", subpath: null }]);
+  });
+
   it("20 schede: vive al più quante ne tiene la lavagna, e una battuta non le rimonta", async () => {
     const text = "Testo\n\n" + Array.from({ length: 20 }, (_, i) => `![[F${i}.pdf]]`).join("\n\n") + "\n\nFine\n";
     const { parent, view, species } = rig(text, { maxLive: 5 });
@@ -390,6 +425,120 @@ describe("la scheda nella Live", () => {
     expect(before.every((one) => !one.destroyed)).toBe(true);
     // La battuta non passa dalle schede: il budget della battuta della Live.
     expect(perKey).toBeLessThan(16);
+  });
+});
+
+describe("la scheda scelta è un oggetto", () => {
+  const ESC = (): KeyboardEvent => new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+
+  /// La Scrittura vera (la superficie Markdown, Blocchi accesi di serie) con
+  /// le schede: la bolla del testo scelto chiede a lei `selectionBox`.
+  function surface(text: string) {
+    const species = new FakeSpecies();
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const kit: LiveCardKit = {
+      registry: { rendererFor: () => species.renderer } as unknown as LiveCardKit["registry"],
+      snapshots: {} as LiveCardKit["snapshots"],
+      watch: () => () => {},
+      kindOf,
+      maxLive: 40,
+    };
+    const ed = mountMarkdownSurface({ paneId: "riquadro", documentId: "Note.md", parent }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+      liveCards: { load: async () => kit, resolve: async (page) => `Archivio/${page}`, open: () => {} },
+    });
+    ed.buffer.setDoc(text);
+    const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
+    rigs.push({
+      parent, view, species, opened: [],
+      engine: null as unknown as TextEngine,
+      cards: null as unknown as LiveCards,
+      destroy() {
+        ed.destroy();
+        parent.remove();
+      },
+    });
+    return { ed, parent, view, species };
+  }
+
+  it("scelta dalla testata o con Esc dall'interno, la bolla del testo non c'è; sul testo scelto sì", async () => {
+    // jsdom non impagina: ogni posizione ha un rettangolo finto, così la sola
+    // regola che resta è quella della superficie.
+    const coords = vi.spyOn(EditorView.prototype, "coordsAtPos").mockReturnValue({ left: 10, right: 20, top: 30, bottom: 40 });
+    try {
+      const { ed, parent, view } = surface("Prima riga\n\n![[Contratto.pdf]]\n\nDopo\n");
+      await settle();
+      const box = (): unknown => ed.editorActions.selectionBox?.() ?? null;
+      const card = cardsIn(parent)[0]!;
+      expect(card).toBeDefined();
+      expect(view.state.field(blockSelection, false)).not.toBeUndefined();
+      // Il testo scelto ha la bolla.
+      view.dispatch({ selection: { anchor: 0, head: 5 } });
+      expect(box()).not.toBeNull();
+      // Un clic sulla testata sceglie la scheda: è un oggetto, niente bolla.
+      card.querySelector<HTMLElement>(".live-card-head")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      expect(card.dataset.cardChosen).toBe("true");
+      expect(view.state.selection.main.empty).toBe(false);
+      expect(box()).toBeNull();
+      // Attiva e poi Esc: di nuovo scelta, e di nuovo senza bolla.
+      card.querySelector<HTMLElement>(".live-card-body")!.click();
+      expect(card.dataset.cardActive).toBe("true");
+      card.dispatchEvent(ESC());
+      expect(card.dataset.cardActive).toBeUndefined();
+      expect(card.dataset.cardChosen).toBe("true");
+      expect(box()).toBeNull();
+      // Un paragrafo scelto coi Blocchi resta testo: la bolla c'è.
+      view.dispatch({ selection: { anchor: 1 } });
+      view.contentDOM.dispatchEvent(ESC());
+      expect(view.state.field(blockSelection)).not.toBeNull();
+      expect(box()).not.toBeNull();
+    } finally {
+      coords.mockRestore();
+    }
+  });
+
+  it("Esc da una scheda attiva la lascia scelta; il secondo Esc torna al testo e la scheda resta scheda", async () => {
+    const { parent, view, cards, species } = rig("Prima\n\n![[Conti.xlsx]]\n\nDopo\n", { blocks: true });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    card.querySelector<HTMLElement>(".live-card-body")!.click();
+    expect(cards.activeCard()?.root).toBe(card);
+    card.dispatchEvent(ESC());
+    expect(cards.activeCard()).toBeNull();
+    expect(species.views[0]!.left).toBe(1);
+    expect(card.dataset.cardChosen).toBe("true");
+    expect(cards.objectsChosen(view)).toBe(true);
+    // Il secondo Esc: il cursore nella riga dopo la scheda, non nell'embed.
+    view.contentDOM.dispatchEvent(ESC());
+    expect(view.state.field(blockSelection)).toBeNull();
+    expect(view.state.selection.main.empty).toBe(true);
+    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(4);
+    expect(cardsIn(parent)).toEqual([card]);
+    expect(card.dataset.cardChosen).toBeUndefined();
+  });
+
+  it("Esc da un foglio attivo in una colonna sceglie le colonne, e le schede restano schede", async () => {
+    const doc = "Prima\n\n> [!columns]\n> > [!column]\n> > ![[Contratto.pdf]]\n>\n> > [!column]\n> > ![[Conti.xlsx]]\n\nDopo\n";
+    const { parent, view, cards } = rig(doc, { blocks: true });
+    await settle();
+    const sheet = parent.querySelector<HTMLElement>('.fub-column > .live-card[data-card-kind="sheet"]')!;
+    sheet.querySelector<HTMLElement>(".live-card-body")!.click();
+    expect(cards.activeCard()?.root).toBe(sheet);
+    sheet.dispatchEvent(ESC());
+    expect(cards.activeCard()).toBeNull();
+    expect(view.state.field(blockSelection)).not.toBeNull();
+    // Le colonne scelte restano rese: le due schede ci sono ancora, scelte.
+    const inColumns = [...parent.querySelectorAll<HTMLElement>(".fub-column > .live-card")];
+    expect(inColumns.map((one) => one.dataset.cardKind)).toEqual(["pdf", "sheet"]);
+    expect(inColumns.every((one) => one.dataset.cardChosen === "true")).toBe(true);
+    expect(cards.objectsChosen(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
   });
 });
 
@@ -463,6 +612,93 @@ describe("le transazioni sull'embed", () => {
   it("il menu del blocco ha il gruppo «Scheda»", () => {
     const state = EditorState.create({ doc: "Prima\n\n![[Conti.xlsx#Budget]]\n" });
     expect(blockAt(state, state.doc.line(3).from)).toMatchObject({ kind: "card", page: "Conti.xlsx", subpath: "#Budget" });
+  });
+});
+
+describe("la scheda di foglio nella nota (T43)", () => {
+  it("la specie sa di stare in una nota, e chiede l'altezza della sua parte", async () => {
+    const { parent, species } = rig("Testo\n\n![[Conti.xlsx#Budget!A1:E7]]\n\nFine\n");
+    await settle();
+    const context = species.views[0]!.context;
+    expect(context).toMatchObject({ host: "note", subpath: "#Budget!A1:E7" });
+    const card = cardsIn(parent)[0]!;
+    context.fitHeight!(218);
+    expect(card.dataset.cardFit).toBe("true");
+    expect(card.style.getPropertyValue("--live-card-fit")).toBe("218px");
+    context.fitHeight!(null);
+    expect(card.dataset.cardFit).toBeUndefined();
+    expect(card.style.getPropertyValue("--live-card-fit")).toBe("");
+  });
+
+  it("«Scegli di nuovo» riscrive la parte nell'embed, in un passo d'annullamento; in sola lettura non c'è", async () => {
+    const { view, species } = rig("Testo\n\n![[Conti.xlsx#Budget!A1:E7|conti]]\n\nFine\n");
+    await settle();
+    species.views[0]!.context.choosePart!("Totali");
+    expect(view.state.doc.line(3).text).toBe("![[Conti.xlsx#Totali|conti]]");
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.line(3).text).toBe("![[Conti.xlsx#Budget!A1:E7|conti]]");
+
+    const reading = rig("Testo\n\n![[Conti.xlsx#Sparito]]\n\nFine\n", { editable: false });
+    await settle();
+    expect(reading.species.views[0]!.context.choosePart).toBeUndefined();
+  });
+
+  it("la cella attiva della scheda di foglio attiva va alla superficie, e se ne va uscendo", async () => {
+    const changed = vi.fn();
+    const { parent, view, cards, species } = rig("Testo\n\n![[Conti.xlsx]]\n\nFine\n", { sheetChanged: changed });
+    await settle();
+    expect(cards.activeSheet()).toBeNull();
+    expect(cards.activateAt(view, view.state.doc.line(3).from)).toBe(true);
+    expect(cards.activeSheet()).toMatchObject({ context: null });
+    const calls = changed.mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    const fake = species.views[0]!;
+    fake.context.writing!({ toolbar: null, context: { cell: "C3", formula: "=B3*2" } });
+    expect(cards.activeSheet()!.context).toEqual({ cell: "C3", formula: "=B3*2" });
+    expect(changed.mock.calls.length).toBe(calls + 1);
+    // La stessa cella non avvisa di nuovo.
+    fake.context.writing!({ toolbar: null, context: { cell: "C3", formula: "=B3*2" } });
+    expect(changed.mock.calls.length).toBe(calls + 1);
+    // Un clic nella barra di formato non è «fuori»: la scheda resta attiva.
+    const bar = Object.assign(document.createElement("div"), { className: "format-bar" });
+    const button = document.createElement("button");
+    bar.append(button);
+    document.body.append(bar);
+    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(cards.activeCard()).not.toBeNull();
+    bar.remove();
+    // «Apri» del gruppo apre il file, alla sua parte.
+    cards.activeSheet()!.open();
+    cardsIn(parent)[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(cards.activeSheet()).toBeNull();
+  });
+
+  it("una scheda che non è un foglio non dà il gruppo «Foglio»", async () => {
+    const { view, cards } = rig("Testo\n\n![[A.pdf]]\n\nFine\n");
+    await settle();
+    expect(cards.activateAt(view, view.state.doc.line(3).from)).toBe(true);
+    expect(cards.activeSheet()).toBeNull();
+  });
+
+  it("il gruppo «Foglio» ha la cella attiva e «Apri»", () => {
+    const open = vi.fn();
+    const group = sheetCardGroup({ open, context: { cell: "C3", formula: "860" } });
+    expect(group).toMatchObject({ id: "sheet", label: "Foglio", context: { cell: "C3", formula: "860" } });
+    expect(group.items).toHaveLength(1);
+    const item = group.items[0] as { label: string; run: () => void };
+    expect(item.label).toBe("Apri");
+    item.run();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("riscrivere la parte (T43)", () => {
+  it("tiene il nome scritto e l'alias, e rifiuta ciò che romperebbe il collegamento", () => {
+    const state = EditorState.create({ doc: "![[Conti.xlsx#Budget!A1:E7|x]]" });
+    expect(state.update(repartEmbedAt(state, 0, " 'Conti 2024' ")!).state.doc.toString()).toBe("![[Conti.xlsx#'Conti 2024'|x]]");
+    for (const bad of ["", "a|b", "a]]b", "a#b", "a\nb", "^id"]) expect(repartEmbedAt(state, 0, bad)).toBeNull();
+    const plain = EditorState.create({ doc: "Testo" });
+    expect(repartEmbedAt(plain, 0, "Totali")).toBeNull();
   });
 });
 

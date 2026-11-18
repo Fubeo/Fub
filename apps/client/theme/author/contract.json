@@ -1551,6 +1551,10 @@
     "live-card-message",
     "live-card-hint",
     "live-card-actions",
+    "canvas-card-lost",
+    "canvas-card-message",
+    "format-bar-context",
+    "format-bar-context-cell",
     "canvas-card-document",
     "canvas-card-document-content",
     "canvas-card-document-more",
@@ -1915,7 +1919,6 @@
     "format-bar-labelled",
     "format-bar-text",
     "format-bar-caret",
-    "format-bar-context",
     "format-bar-context-name",
     "format-bar-overflow",
     "format-bar-insert-group",
@@ -3786,6 +3789,10 @@
     "live-card-message": "cornice",
     "live-card-hint": "cornice",
     "live-card-actions": "cornice",
+    "canvas-card-lost": "cornice",
+    "canvas-card-message": "cornice",
+    "format-bar-context": "cornice",
+    "format-bar-context-cell": "cornice",
     "canvas-card-document": "cornice",
     "canvas-card-document-content": "cornice",
     "canvas-card-document-more": "cornice",
@@ -4150,7 +4157,6 @@
     "format-bar-labelled": "cornice",
     "format-bar-text": "cornice",
     "format-bar-caret": "cornice",
-    "format-bar-context": "cornice",
     "format-bar-context-name": "cornice",
     "format-bar-overflow": "cornice",
     "format-bar-insert-group": "cornice",
@@ -8275,6 +8281,29 @@
       ]
     },
     {
+      "name": "live-card-sheet",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-sheet",
+        "grid-header",
+        "grid-corner",
+        "selected",
+        "stale",
+        "canvas-card-lost",
+        "canvas-card-message",
+        "format-bar-context",
+        "format-bar-context-cell",
+        "grid-cell-name",
+        "grid-formula-editor",
+        "canvas-formula-text"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
       "name": "live-card-document",
       "part": "live-cards",
       "hooks": [
@@ -11702,10 +11731,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2233,
+    "hooks": 2236,
     "state_names": 7,
-    "assigned_states": 1009,
-    "components": 300,
+    "assigned_states": 1012,
+    "components": 301,
     "preference_tokens": 196
   }
 }
