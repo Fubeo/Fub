@@ -145,6 +145,8 @@ function lazily(
   let text: string | null = null;
   let mode = "draw";
   let readOnly = false;
+  /// La scheda a tutta pagina (T46), per la superficie che arriva.
+  let fullPage = false;
   let reveal: SurfaceLocation | null = null;
   /// Chi segue le schede dell'ispettore: le tiene l'involucro, e passano alla
   /// superficie quando arriva.
@@ -183,6 +185,7 @@ function lazily(
     if (text !== null) mounted.buffer?.setDoc(text);
     if (mode !== "draw") mounted.setMode(mode);
     if (readOnly) mounted.setReadOnly?.(true);
+    if (fullPage) mounted.setFullPage?.(true);
     if (focused) mounted.focus?.();
     for (const listener of [...panelListeners]) listener();
     for (const listener of [...statusListeners]) listener();
@@ -284,6 +287,16 @@ function lazily(
       if (surface !== null) surface.setReadOnly?.(next);
       else readOnly = next;
     },
+    // In una scheda (T46) «A tutta pagina» passa alla superficie, o aspetta
+    // che arrivi.
+    ...(context.compact === true && profile === VECTOR_PROFILE
+      ? {
+          setFullPage: (full: boolean) => {
+            fullPage = full;
+            surface?.setFullPage?.(full);
+          },
+        }
+      : {}),
     destroy: () => {
       if (destroyed) return;
       destroyed = true;

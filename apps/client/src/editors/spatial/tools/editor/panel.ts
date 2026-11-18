@@ -286,7 +286,9 @@ export function installPanel(ctx: EditorContext): void {
       syncProperties();
       if (focus) panel.focus();
     }
-    if (remember && ctx.grid.panel !== open) ctx.changeGrid({ ...ctx.grid, panel: open });
+    // In una scheda (T46) il pannello si apre quando serve e basta: la scelta
+    // è del disegno aperto, non della scheda.
+    if (remember && ctx.options.compact !== true && ctx.grid.panel !== open) ctx.changeGrid({ ...ctx.grid, panel: open });
   }
   ctx.showPanel = showPanel;
 
@@ -309,6 +311,9 @@ export function installPanel(ctx: EditorContext): void {
     ctx.panelPending = false;
     // Nell'ispettore le schede le apre chi lo tiene.
     if (ctx.chrome.reveal !== undefined) return;
+    // In una scheda il foglio è piccolo: il pannello resta chiuso finché non
+    // serve.
+    if (ctx.options.compact === true) return;
     if (!has("properties") || !panel.element.hidden) return;
     if (ctx.grid.panel !== null) {
       if (ctx.grid.panel) showPanel(true, false, false);

@@ -44,6 +44,9 @@ const BORN_SIZE: Readonly<Record<CardKind, CardSize>> = {
   web: { width: 320, height: 120 },
   // Un file Craft è una scheda di file finché N7 non c'è (A-3).
   craft: { width: 320, height: 160 },
+  // Il disegno che si modifica è solo della nota (T46): sulla lavagna un SVG
+  // è un'immagine, e nasce come lei.
+  drawing: { width: 480, height: 360 },
   file: { width: 320, height: 160 },
 };
 

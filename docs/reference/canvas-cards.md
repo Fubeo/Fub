@@ -60,6 +60,7 @@ provider di un file senza chiederlo al backend.
 | `sheet` | ciò che `formatKindOf` dice `sheet` (`xlsx`, `xlsm`, `xltx`, `xltm`) |
 | `pdf` | ciò che `mediaKindOfId` dice `pdf` |
 | `image` | ciò che `mediaKindOfId` dice `image`, SVG compreso |
+| `drawing` | solo nella nota: `svg` (`noteCardKindOf`; [la scheda di disegno](../product/live-cards.md#la-scheda-di-disegno)) |
 | `craft` | `vectorcraft`, `figcraft`, `pcraft` ([la scheda dei file Craft](canvas-craft.md)) |
 | `file` | tutto il resto: CSV, `.canvas`, audio, video, ZIP, nomi senza estensione |
 
@@ -72,9 +73,8 @@ Regole dell'estensione:
   `Corsi.2026/leggimi` è un file;
 - un nome nascosto senza altro punto (`.md`) non ha estensione.
 
-L'SVG è un'immagine ferma anche se `formatKindOf` lo chiama disegno: nella
-scheda non diventa mai il disegno vivo. Una specie senza renderer registrato
-(senza la sua porta) si mostra come scheda di file con «Apri».
+Sulla lavagna l'SVG resta un'immagine ferma, mai il disegno vivo (ADR 0248).
+Una specie senza renderer (senza la sua porta) è una scheda di file con «Apri».
 
 ## Le misure di nascita
 

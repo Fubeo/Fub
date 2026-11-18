@@ -456,6 +456,46 @@ const OPTIONS_TYPE_FILES: Readonly<Record<string, string>> = {
   "Tipi/Progetto.md": "---\nicon: 🌱\nproperties: [stato, sala, sito, fase]\nfeatured: [stato, sala, sito]\nfolder: Progetti\n---\n## Obiettivo\n",
 };
 
+/// La scheda di disegno (T46): uno schizzo di Fub che si disegna sul posto e,
+/// più giù, un SVG fatto altrove, che resta un'immagine ferma.
+export const DRAWING_CARD_FILE = "Schizzi/Pianta del soggiorno.svg";
+const DRAWING_CARD_FOREIGN = "Schizzi/Logo della festa.svg";
+const DRAWING_CARD_NOTE = [
+  "# Il soggiorno nuovo",
+  "",
+  "La pianta come l'abbiamo pensata sabato: il divano sotto la finestra.",
+  "",
+  `![[${DRAWING_CARD_FILE}]]`,
+  "",
+  "Il logo della festa, arrivato dalla tipografia:",
+  "",
+  `![[${DRAWING_CARD_FOREIGN}]]`,
+  "",
+  "Da chiedere: le misure della porta.",
+].join("\n");
+const DRAWING_CARD_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 640 360" width="640" height="360">',
+  "  <title>Pianta del soggiorno</title>",
+  '  <g id="l0a1b2c3d" fub:role="layer" fub:name="Livello 1">',
+  '    <rect id="o1a2b3c4d" x="80" y="40" width="480" height="280" fill="none" stroke="#2f3a4a" stroke-width="4"/>',
+  '    <rect id="o2a2b3c4d" x="120" y="250" width="200" height="50" rx="10" fill="#cfe3f7" stroke="#2f3a4a" stroke-width="2"/>',
+  '    <ellipse id="o3a2b3c4d" cx="430" cy="170" rx="60" ry="40" fill="#f7e2b5" stroke="#2f3a4a" stroke-width="2"/>',
+  '    <line id="o4a2b3c4d" x1="250" y1="40" x2="390" y2="40" stroke="#7fb3e6" stroke-width="8"/>',
+  '    <path id="o5a2b3c4d" d="M 520 300 Q 545 250 560 300" fill="none" stroke="#2f3a4a" stroke-width="2"/>',
+  '    <text id="o6a2b3c4d" x="160" y="232" font-size="18" fill="#2f3a4a">divano</text>',
+  '    <text id="o7a2b3c4d" x="402" y="176" font-size="18" fill="#2f3a4a">tavolo</text>',
+  "  </g>",
+  "</svg>",
+  "",
+].join("\n");
+const DRAWING_CARD_FOREIGN_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" width="320" height="120">',
+  '  <rect width="320" height="120" rx="16" fill="#e8563f"/>',
+  '  <text x="160" y="74" font-size="40" text-anchor="middle" fill="#ffffff" font-family="sans-serif">FESTA</text>',
+  "</svg>",
+  "",
+].join("\n");
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
@@ -694,6 +734,13 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     files: { [DOCUMENT_CARD_FILE]: RICH_BENCH.odt, [DOCUMENT_CARD_LONG]: longDocument(100) },
   },
   "schede-misura": { text: LIVE_CARDS_SIZE_NOTE, cursor: null },
+  // La scheda di disegno (T46): il banco accende la feature `draw` perché fra
+  // i file c'è un `.svg` (`fake-ipc.ts`).
+  "scheda-disegno": {
+    text: DRAWING_CARD_NOTE,
+    cursor: null,
+    files: { [DRAWING_CARD_FILE]: DRAWING_CARD_SVG, [DRAWING_CARD_FOREIGN]: DRAWING_CARD_FOREIGN_SVG },
+  },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "battuta-schede-20": typingCardsNote(50, 20),

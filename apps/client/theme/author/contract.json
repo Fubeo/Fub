@@ -1558,9 +1558,17 @@
     "canvas-card-document",
     "canvas-card-document-content",
     "canvas-card-document-more",
+    "canvas-card-drawing",
+    "canvas-card-drawing-editor",
+    "canvas-card-image",
+    "draw-card-bar",
+    "draw-editor",
+    "draw-header",
+    "draw-rail",
+    "draw-body",
+    "draw-dock",
     "draw-export",
     "draw-export-text",
-    "draw-rail",
     "draw-group",
     "draw-button",
     "draw-zoom-level",
@@ -1669,7 +1677,6 @@
     "draw-radial-item",
     "draw-radial-center",
     "draw-radial-caption",
-    "draw-dock",
     "draw-properties",
     "draw-properties-header",
     "draw-properties-lead",
@@ -3789,9 +3796,17 @@
     "canvas-card-document": "cornice",
     "canvas-card-document-content": "cornice",
     "canvas-card-document-more": "cornice",
+    "canvas-card-drawing": "cornice",
+    "canvas-card-drawing-editor": "cornice",
+    "canvas-card-image": "cornice",
+    "draw-card-bar": "cornice",
+    "draw-editor": "cornice",
+    "draw-header": "cornice",
+    "draw-rail": "cornice",
+    "draw-body": "cornice",
+    "draw-dock": "cornice",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
-    "draw-rail": "cornice",
     "draw-group": "cornice",
     "draw-button": "cornice",
     "draw-zoom-level": "cornice",
@@ -3900,7 +3915,6 @@
     "draw-radial-item": "cornice",
     "draw-radial-center": "cornice",
     "draw-radial-caption": "cornice",
-    "draw-dock": "cornice",
     "draw-properties": "cornice",
     "draw-properties-header": "cornice",
     "draw-properties-lead": "cornice",
@@ -8311,6 +8325,26 @@
       ]
     },
     {
+      "name": "live-card-drawing",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-drawing",
+        "canvas-card-drawing-editor",
+        "canvas-card-image",
+        "draw-card-bar",
+        "draw-editor",
+        "draw-header",
+        "draw-rail",
+        "draw-body",
+        "draw-dock"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11697,10 +11731,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2229,
+    "hooks": 2236,
     "state_names": 7,
-    "assigned_states": 1009,
-    "components": 300,
+    "assigned_states": 1012,
+    "components": 301,
     "preference_tokens": 196
   }
 }

@@ -94,17 +94,19 @@ function extensionOf(page: string): string | null {
 /// Se il file `page` (senza `#…`) si mostra come scheda viva nella nota.
 ///
 /// No per ciò che la nota mostra già a modo suo: una nota (la trasclusione
-/// viva, T29), una Base, un'immagine, un suono, un video, un disegno SVG. No,
+/// viva, T29), una Base, un'immagine, un suono, un video. No,
 /// per ora, per la lavagna: la sua scheda nella nota è T47, e fino ad allora
 /// resta la resa di sempre. Il resto (un PDF, un foglio, un documento di
 /// Word o ODT, un file Craft, un formato che la nota non sa mostrare) è una
-/// scheda; quale specie lo dice l'ospite, quando arriva.
+/// scheda; quale specie lo dice l'ospite, quando arriva. Un SVG è una scheda
+/// (T46, ADR 0248): un disegno di Fub ci si disegna sul posto, un SVG
+/// qualunque resta un'immagine ferma dentro la scheda.
 export function isLiveCardFile(page: string): boolean {
   const extension = extensionOf(page);
   if (extension === null) return false;
   if (extension === "md" || extension === "markdown" || extension === "base" || extension === "canvas") return false;
   const media = mediaKindOfId(page);
-  if (media === "image" || media === "audio" || media === "video") return false;
+  if ((media === "image" && extension !== "svg") || media === "audio" || media === "video") return false;
   const format = formatKindOf(page);
   if (format === "note") return false;
   // L'XMP di LightCraft e le foto RAW sono dati di una foto, non una scheda.
@@ -383,6 +385,7 @@ const KIND_ICON: Readonly<Record<CardKind, string>> = {
   web: "prop-url",
   craft: "format-drawing",
   file: "archive",
+  drawing: "format-drawing",
 };
 
 /// Le figure che il set non ha: «Apri» (come quella della trasclusione) e «A
@@ -817,6 +820,7 @@ export class LiveCard {
       snapshots: kit.snapshots,
       size: () => ({ width: body.clientWidth || node.width, height: body.clientHeight || node.height }),
       zoom: () => NOTE_ZOOM,
+      fullPage: () => this.root.dataset.cardFull === "true",
       missing: () => {
         if (life.closed) return;
         if (mounting) {

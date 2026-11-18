@@ -1,6 +1,7 @@
 # Le schede vive nella nota
 
-> **Per chi:** chi mette in una nota un PDF, un foglio o un file Craft.
+> **Per chi:** chi mette in una nota un PDF, un foglio, un documento, un
+> disegno o un file Craft.
 > **Risultato:** sapere come si guarda e come si usa il file dentro la nota,
 > che cosa succede ai tasti e all'annulla, e che cosa si vede quando il file
 > manca.
@@ -16,8 +17,7 @@ parte) e **A tutta pagina** (la scheda alta quanto la vista; «Torna alla nota»
 la riporta com'era).
 
 Non sono schede le note (la [trasclusione viva](editor-transclusion.md)), le
-immagini, i suoni, i video, le Basi e i disegni SVG, che la nota mostra già a
-modo suo; per ora neanche le lavagne, che restano la resa di sempre. Un embed in mezzo a una frase resta un embed.
+immagini, i suoni, i video e le Basi, che la nota mostra già a modo suo; per ora neanche le lavagne, che restano la resa di sempre. Un embed in mezzo a una frase resta un embed.
 
 ## Tre stati
 
@@ -92,6 +92,39 @@ al documento, mai alla nota. La barra della scheda è quella dei documenti.
 
 La specie è `editors/core/cards/kinds/document.ts`, che riusa il corpo della
 scheda di nota (`kinds/note.ts`) con l'editor compatto dei documenti.
+
+## La scheda di disegno
+
+Un disegno (`.svg`) incorporato da solo nel paragrafo è una scheda
+([ADR 0248](../decisions/0248-il-disegno-nella-nota-si-modifica-sul-posto.md)).
+A riposo mostra il disegno fermo, intero e al centro, come un'immagine. Da
+attiva, se è un disegno fatto con Fub, si disegna **sul posto**: in una fila
+sopra il foglio la penna, l'evidenziatore, la gomma, le forme, il testo, la
+mano e la lente, con il menu, Annulla e Ripeti e le opzioni dello strumento;
+scegliendo degli oggetti compare la barra della selezione. Il pannello delle
+proprietà si apre sopra il foglio quando serve (un testo da scrivere). Si
+scrive nel `.svg`, sulla stessa sessione della sua linguetta, e il
+salvataggio va al disegno, mai alla nota.
+
+- **A tutta pagina** offre il resto degli strumenti: lo spazio Completo, con
+  la stessa fila.
+- Nella scheda lo spazio di lavoro e la colonna scelti per i disegni non
+  cambiano, «Esporta» non c'è e i pannelli non vanno nell'ispettore: per
+  quelli si apre il disegno con **Apri**.
+- Un SVG fatto altrove resta un'immagine ferma: si rende modificabile
+  aprendolo, perché adottarlo riscrive la sua radice.
+- Un disegno oltre 64 MiB resta un'immagine ferma che dice di essere troppo
+  grande; uno oltre 20 MiB si apre ma si guarda soltanto, come in un
+  riquadro.
+- Col componente dei disegni spento la scheda resta il disegno fermo.
+- Sulla lavagna un `.svg` resta una scheda d'immagine.
+- Da attiva, Esc annulla prima il gesto in corso o toglie la scelta, poi esce
+  dalla scheda.
+
+La specie è `editors/core/cards/kinds/drawing.ts`, che compone la scheda
+d'immagine (`kinds/image.ts`) con l'editor dei disegni compatto
+(`editors/spatial/surface.ts` con `compact`, la cromatura `cardChrome` di
+`editors/spatial/tools/editor/chrome/hosts.ts`).
 
 ## Il foglio nella nota
 

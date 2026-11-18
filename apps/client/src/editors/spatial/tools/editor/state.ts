@@ -37,7 +37,7 @@ import {
   WIDTHS,
   type Width,
 } from "../palette";
-import { featuresFor, startTool, toolsOf, toolSpec, type Feature, type ToolId, type ToolProfile, type ToolSpec } from "../registry";
+import { featuresFor, startTool, toolsOf, toolSpec, type Feature, type ToolId, type ToolProfile, type ToolSpec, type Workspace } from "../registry";
 import { browserMeasure, estimate, type Font, type Measure } from "../measure";
 import { TEXT_SIZE } from "../text";
 import type { DrawSheet } from "../editor";
@@ -51,6 +51,9 @@ export interface StateContext {
   profile: ToolProfile;
   folio: DrawSheet | undefined;
   features: ReadonlySet<Feature>;
+  /// Le parti che lo spazio `workspace` offre a questo editor: quelle del
+  /// registro e, in una scheda (`compact`), anche la barra della selezione.
+  featuresOf: (workspace: Workspace) => ReadonlySet<Feature>;
   tools: readonly ToolSpec[];
   has: (feature: Feature) => boolean;
   relabels: Array<() => void>;
@@ -176,7 +179,13 @@ export function installState(ctx: EditorContext): void {
   // Lo spazio di lavoro sceglie le parti; senza, è il Completo.
   ctx.workspace = options.workspace ?? "full";
   ctx.column = options.toolbar ?? [];
-  ctx.features = featuresFor(ctx.workspace, profile);
+  // In una scheda (T46) la barra della selezione c'è in ogni spazio: senza
+  // la barra in alto intera, è lei che dispone ciò che si sceglie.
+  ctx.featuresOf = (workspace) => {
+    const offered = featuresFor(workspace, profile);
+    return options.compact === true && profile === "vector" ? new Set<Feature>([...offered, "arrange"]) : offered;
+  };
+  ctx.features = ctx.featuresOf(ctx.workspace);
   ctx.tools = toolsOf(ctx.features);
   /// Vero se lo spazio di adesso offre `feature`.
   const has = (feature: Feature): boolean => ctx.features.has(feature);
