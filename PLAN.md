@@ -2378,7 +2378,7 @@ cella da due superfici; venti schede vive con la battuta nel budget, come il
 cancello di N6.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-xlsx; cd
 apps/client && npx vitest run src/editors/grid
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (8e553ea24, merge 33922c5b4, 2026-11-19), in attesa del main
 
 ## T44 · La scheda di documento
 
@@ -3199,7 +3199,7 @@ Fatto quando: i tempi su 5, 50 e 200 pagine misurati e scritti; un test delle
 fette; un test che il cambio di colore non rifà l'impaginazione.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export/paginate src/editors/media/print-view.test.ts
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (6b8d26076, merge 449255484, 2026-11-19), in attesa del main
 
 ## T70 · Lo spazio «Esporta in PDF»
 
@@ -3243,7 +3243,7 @@ Fatto quando: un e2e apre lo spazio, cambia vista e torna; le foto del banco
 nelle due luci, a 700 px e al telefono.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 449255484
 
 ## T71 · Temi e colori
 
