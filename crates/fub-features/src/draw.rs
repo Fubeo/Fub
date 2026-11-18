@@ -386,6 +386,22 @@ pub fn facce() -> &'static [&'static [u8]] {
     &embed::FACES
 }
 
+/// I pezzi dei caratteri che l'esportazione delle note in PDF prende da qui:
+/// decodificare un WOFF o un WOFF2, fissare un carattere variabile in un punto
+/// dei suoi assi, sapere se la licenza lascia incorporarlo. Sono gli stessi
+/// dell'export dei disegni, perché un carattere si legge in un modo solo.
+pub(crate) mod per_il_pdf {
+    #[cfg(test)]
+    pub(crate) use super::fonts::tests::with_fs_type;
+    pub(crate) use super::fonts::{decode, embeddable, instance, Coordinate};
+
+    /// I caratteri di serie di Fub (Inter, Literata, JetBrains Mono), per il
+    /// testo dentro un vettore: sono quelli dei diagrammi.
+    pub(crate) fn caratteri_di_serie() -> std::sync::Arc<resvg::usvg::fontdb::Database> {
+        std::sync::Arc::clone(super::embed::fub_fonts())
+    }
+}
+
 /// La famiglia di `serif` fra quelle di [`facce`].
 pub const FAMIGLIA_SERIF: &str = SERIF;
 /// La famiglia di `sans-serif` fra quelle di [`facce`].
