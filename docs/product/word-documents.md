@@ -244,10 +244,9 @@ Limiti attuali:
 - l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
   barra si sceglie soltanto un multiplo. La carta disegna carattere, misura,
   colore, rientri, spazi e interlinea che il file scrive sul paragrafo o sul
-  tratto; quelli che vengono dallo stile non si disegnano (valgono i
-  predefiniti di Word), e un campo vuoto della spaziatura non dice quanto
-  valgono; in una cella conta anche lo stile della tabella (come in Word).
-  I bordi delle tabelle del file non si disegnano;
+  tratto, e in una cella lo stile della tabella; quelli dello stile del
+  paragrafo no (valgono i predefiniti di Word), e un campo vuoto della
+  spaziatura non dice quanto valgono. I bordi delle tabelle non si disegnano;
 - un foglio il cui testo non ci sta si allunga e non si spezza, quindi le
   **Pagine** della banda di stato contano i fogli, non le pagine che Word
   stamperebbe. Una sezione che comincia a pagina pari o dispari apre un foglio
