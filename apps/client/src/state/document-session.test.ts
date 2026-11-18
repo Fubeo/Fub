@@ -1829,7 +1829,11 @@ describe("il vault delle sessioni (FUB-001)", () => {
     const outcome = sessions.handleExternalRemoval("nota.md");
 
     expect(outcome).toMatchObject({ kind: "removed", dirty: true, text: "lavoro non salvato" });
-    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "lavoro non salvato", "rev-1", A);
+    // La bozza passa dalla coda delle bozze della sessione (#485): parte al
+    // giro dopo, dietro quelle già in volo.
+    await vi.waitFor(() => {
+      expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "lavoro non salvato", "rev-1", A);
+    });
   });
 
   it("una bozza recuperata appartiene al vault corrente del recupero", async () => {
@@ -2279,6 +2283,152 @@ describe("la cadenza delle bozze", () => {
     release();
     await flushed;
     expect(api.saveDraft).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("la bozza non aspetta una scrittura lenta (#485)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /// Una scrittura del file che non finisce finché il test non la libera;
+  /// le seguenti finiscono subito, o mai con `stuckAfter`.
+  function slowWrite(api: DocumentSessionApi, stuckAfter = false): (revision: string) => void {
+    let release!: (revision: string) => void;
+    api.writeDocument = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<string>((resolve) => { release = resolve; }))
+      .mockImplementation(() => (stuckAfter ? new Promise<string>(() => {}) : Promise.resolve("rev-3")));
+    return (revision) => release(revision);
+  }
+
+  it("la bozza di una battuta arriva all'host mentre la scrittura è ancora in volo, con la base di quella scrittura", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    const release = slowWrite(api);
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "salvato");
+    void sessions.flush("nota.md");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
+
+    acceptText(sessions, "nota.md", "salvato e battuta nuova");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(api.saveDraft).toHaveBeenLastCalledWith("nota.md", "salvato e battuta nuova", "rev-1");
+    expect(api.discardDraft).not.toHaveBeenCalled();
+
+    // Dopo la scrittura lenta parte quella della battuta: solo quando il suo
+    // testo è sul disco la bozza se ne va.
+    release("rev-2");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.writeDocument).toHaveBeenCalledTimes(2);
+    expect(api.discardDraft).toHaveBeenCalledTimes(1);
+    expect(sessions.inspect("nota.md")).toMatchObject({ dirty: false, text: "salvato e battuta nuova" });
+  });
+
+  it("il salvataggio che finisce dopo una bozza più nuova non la toglie: la riscrive sulla base nuova", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    // La scrittura del testo nuovo resta in volo: il disco ha solo «vecchio».
+    const release = slowWrite(api, true);
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "vecchio");
+    void sessions.flush("nota.md");
+    await vi.advanceTimersByTimeAsync(0);
+    acceptText(sessions, "nota.md", "nuovo");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
+
+    release("rev-2");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.discardDraft).not.toHaveBeenCalled();
+    // La cadenza riscrive la stessa bozza sulla revisione appena scritta, e
+    // nessuno la toglie finché il suo testo non è sul disco.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    expect(api.saveDraft).toHaveBeenLastCalledWith("nota.md", "nuovo", "rev-2");
+    expect(api.discardDraft).not.toHaveBeenCalled();
+  });
+
+  it("una bozza ancora in volo quando il salvataggio finisce non passa sopra allo scarto, né lo scarto a lei", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    const release = slowWrite(api);
+    const order: string[] = [];
+    let finishDraft!: () => void;
+    api.saveDraft = vi.fn((_id: string, text: string) => {
+      order.push(`bozza:${text}`);
+      return new Promise<void>((resolve) => {
+        finishDraft = () => {
+          order.push(`bozza scritta:${text}`);
+          resolve();
+        };
+      });
+    });
+    api.discardDraft = vi.fn(async () => {
+      order.push("scarto");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo");
+    void sessions.flush("nota.md");
+    await vi.advanceTimersByTimeAsync(0);
+    acceptText(sessions, "nota.md", "testo in più");
+    await vi.advanceTimersByTimeAsync(1_000);
+    // Si torna al testo in salvataggio: alla fine della scrittura il buffer è
+    // pulito, e lo scarto parte solo dopo la bozza ancora in volo.
+    acceptText(sessions, "nota.md", "testo");
+    release("rev-2");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order).toEqual(["bozza:testo in più"]);
+    finishDraft();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order).toEqual(["bozza:testo in più", "bozza scritta:testo in più", "scarto"]);
+    expect(sessions.inspect("nota.md")).toMatchObject({ dirty: false });
+  });
+
+  it("il salvataggio che finisce col testo della bozza la toglie", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    const release = slowWrite(api);
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "lo stesso testo");
+    await vi.advanceTimersByTimeAsync(400);
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
+    // La bozza dello stesso testo parte mentre il file si scrive.
+    await vi.advanceTimersByTimeAsync(600);
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "lo stesso testo", "rev-1");
+    expect(api.discardDraft).not.toHaveBeenCalled();
+
+    release("rev-2");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.discardDraft).toHaveBeenCalledTimes(1);
+    expect(sessions.inspect("nota.md")).toMatchObject({ dirty: false });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("durante la scrittura lenta la bozza tiene la sua cadenza: niente chiamata per battuta", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    slowWrite(api);
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "a");
+    void sessions.flush("nota.md");
+    await vi.advanceTimersByTimeAsync(0);
+    let text = "a";
+    for (let key = 0; key < 30; key++) {
+      text += "b";
+      acceptText(sessions, "nota.md", text);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    const drafts = vi.mocked(api.saveDraft).mock.calls;
+    expect(drafts.map(([, draft]) => draft.length)).toEqual([11, 21, 31]);
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
   });
 });
 

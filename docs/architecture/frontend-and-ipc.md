@@ -149,6 +149,22 @@ un timer di un secondo (`DRAFT_MS`) che le battute successive non riarmano,
 così chi scrive senza pause perde al più un secondo se il processo muore. Il
 salvataggio resta un debounce sulla pausa.
 
+La bozza ha una coda sua, separata da quella delle scritture del file: una
+bozza parte anche mentre una scrittura lenta è in volo, e porta la revisione di
+base che quella scrittura conosce ancora, così un crash in quei secondi ritrova
+l'ultimo testo e sa da quale versione del file parte. Nella coda delle bozze
+c'è una sola scrittura o un solo scarto alla volta, nell'ordine in cui sono
+partiti: una risposta vecchia non passa sopra a una bozza più nuova. Quando la
+scrittura del file finisce, la bozza si toglie solo se il testo della sessione
+è quello appena scritto, e lo scarto si accoda dietro le bozze già partite; se
+nel frattempo è arrivato testo nuovo la bozza resta, e la cadenza la riscrive
+sulla revisione nuova. Nell'host `save_draft` e `discard_draft` girano fuori
+dal thread principale e non prendono il turno di scrittura del workspace (lo
+tiene il salvataggio per tutta la sua durata): prendono la porta delle bozze
+con un prestito condiviso breve e scrivono dopo averlo lasciato. Le mutazioni
+delle bozze restano in fila fra loro e con le migrazioni della rinomina, dentro
+`fub-kernel/src/drafts.rs`.
+
 ### Il testo in sospeso
 
 Una superficie può tenere testo che non è ancora nel buffer della sessione,
