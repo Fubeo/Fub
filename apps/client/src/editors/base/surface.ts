@@ -3,6 +3,7 @@
 import { currentTheme, type Theme } from "../../theme/theme";
 import { COMMANDS, EVERY_DOCUMENT } from "../../host/contract";
 import { api } from "../../host/ipc";
+import { settings } from "../../host/query";
 import type { CustomRenderContext } from "../../ui/custom";
 import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t } from "../../i18n/strings";
@@ -18,20 +19,24 @@ import { uniformRowRange } from "../core/row-window";
 import { LOCAL_FETCH } from "../core/local-fetch";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
-  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
-  fetchAllDocuments, listBaseViews, parseBaseEmbed, persistBaseView,
+  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
+  fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseDocumentWrites, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
+  type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BaseMutation, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
-import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
+import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSurfaceItems, relationColumn, renamedInView, valueShape, type ColumnEntry } from "./column-menu";
 import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
-import { calendarState, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
-import { sameKey, sortedBy } from "./sort";
+import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
+import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
+import { readOnlyColumn, sameKey, sortedBy } from "./sort";
+import { freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
+import { keyboardPlatform } from "../../ui/commands";
+import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField } from "../../ui/field-history";
 import { writeClipboardText } from "../../platform/clipboard";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
@@ -47,6 +52,10 @@ export interface BaseMountDeps extends BaseSurfaceDeps {
   /// perché la ricarica non si dica. Assente (una prova), il gesto scrive e
   /// basta.
   readonly documentWrites?: BaseDocumentWrites;
+  /// Il registro dei tipi delle proprietà del vault (`properties.types`), il
+  /// valore com'è nelle impostazioni: la Bacheca su una Selezione o uno Stato
+  /// ne prende le corsie. Assente (una prova), le corsie sono i valori.
+  readonly propertyTypes?: () => Promise<unknown>;
 }
 /// La cartella dei modelli, per «Nuova da un modello»: la convenzione di
 /// `note.from_template` (`fub-features/src/template.rs`).
@@ -82,6 +91,10 @@ interface WriteAttempt {
 /// I comandi del vault che il menu della colonna usa (`fub-features`).
 const PROPERTY_RENAME = "property.key.rename";
 const PROPERTY_TYPE_SET = "property.type.set";
+/// Il comando che aggiunge un'opzione di Selezione o di Stato al registro.
+const PROPERTY_OPTION_SET = "property.option.set";
+/// L'impostazione del registro dei tipi delle proprietà.
+const PROPERTY_TYPES_KEY = "properties.types";
 /// I nomi delle proprietà da cui una vista mappa nuova prende le coordinate,
 /// se le righe le hanno.
 const LATITUDE_KEYS = ["lat", "latitude", "latitudine"];
@@ -90,6 +103,11 @@ const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
 const TABLE_ROW_HEIGHT = 38;
 const TABLE_VIEWPORT_HEIGHT = 560;
+/// Una scrittura chiesta che non parte perché la Base è diventata in sola
+/// lettura nel frattempo: il gesto la mostra come ogni altro rifiuto.
+class BaseReadOnly extends Error {
+  constructor() { super(t("base.cell.read_only")); }
+}
 /// Un campo vuoto o corto della tabella resta largo almeno così (lettere).
 const CELL_MIN_CHARS = 6;
 /// Il bordo e il margine interno di un campo della tabella, ai due lati.
@@ -104,6 +122,12 @@ const FILE_COLUMN = NOTE_COLUMN;
 const NOTE_NAME = "file.name";
 /// Il titolo di una nota in tabella: il nome del file senza cartella e
 /// senza `.md`. Il percorso intero sta nel suggerimento.
+/// Il registro dei tipi delle proprietà com'è nelle impostazioni del vault
+/// aperto: la dipendenza `propertyTypes` della Base nell'app.
+export async function vaultPropertyTypes(): Promise<unknown> {
+  return (await settings()).find((entry) => entry.spec.key === PROPERTY_TYPES_KEY)?.value;
+}
+
 export function noteTitle(doc: string): string {
   return doc.slice(doc.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 }
@@ -142,6 +166,18 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
   return element;
 }
 
+/// Il posto del fuoco nella tabella, per ritrovarlo dopo un ridisegno: la cella
+/// (la nota e la colonna) o la griglia. Un fuoco fuori dalla tabella non ne ha.
+type TableFocus = { readonly doc: string; readonly column: string } | "grid";
+function tableFocusOf(target: Element | null): TableFocus | null {
+  if (target === null || target.closest(".base-table-viewport") === null) return null;
+  const cell = target.closest<HTMLTableCellElement>("tbody > tr[data-doc] > td[data-cell]");
+  const doc = cell?.parentElement?.dataset.doc;
+  if (cell === null || doc === undefined) return "grid";
+  const column = cell.dataset.cell === "0" ? FILE_COLUMN : cell.querySelector<HTMLElement>("[data-column]")?.dataset.column;
+  return column === undefined ? "grid" : { doc, column };
+}
+
 export function mountBaseSurface(
   profile: string, context: SurfaceMountContext, deps: BaseMountDeps,
   options: {
@@ -157,6 +193,10 @@ export function mountBaseSurface(
   root.className = "base-surface";
   root.dataset.format = BASE_FORMAT;
   root.dataset.theme = currentTheme();
+  // Un clic sulle parti che non si fermano (la riga di stato, un'etichetta) dà
+  // il fuoco al primo antenato focalizzabile, cioè alla Base: così Ctrl+Z ci
+  // arriva (IMP-124). Fuori dall'ordine dei Tab.
+  root.tabIndex = -1;
   // «Raggruppa»: una scelta della superficie, ricordata per vista come le
   // corsie della bacheca; il file `.base` non si riscrive. Sta in «Ordina».
   const groupControls = document.createElement("div");
@@ -189,6 +229,8 @@ export function mountBaseSurface(
 
   let destroyed = false;
   let readOnly = false;
+  /// Il registro dei tipi del vault, per le corsie di Selezione e Stato.
+  let propertyTypes: PropertyTypes = NO_TYPES;
   let source = "";
   let names: string[] = [];
   let viewTypes: (string | null)[] = [];
@@ -200,6 +242,13 @@ export function mountBaseSurface(
   let settleTimer = 0;
   // Gli annunci di «Annulla» che aspettano il loro evento (`UNDO_EVENT_GRACE_MS`).
   const undoGraces = new Map<number, () => void>();
+  // Le scritture di una cella che aspettano il passaggio del fuoco (il `change`
+  // in `editable` le consegna dopo): ciascuna col suo timer. `destroy` le fa
+  // partire subito, non le disdice (IMP-124).
+  const pendingWrites = new Map<number, () => void>();
+  // La scrittura della cella col fuoco, per ciascun campo: `destroy` la chiede
+  // se la modifica non è ancora consegnata (né Invio, né Tab, né clic).
+  const cellSaves = new WeakMap<HTMLInputElement, () => void>();
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
@@ -221,7 +270,6 @@ export function mountBaseSurface(
   let replanWanted = false;
   let pending: AbortController | null = null;
   let tileCleanup: (() => void) | null = null;
-  let writeEpoch = 0;
   let persistQueue = Promise.resolve();
   const localLanes = new Map<string, Set<string>>();
   // I gruppi chiusi di tabella, schede ed elenco, per vista: stato della
@@ -245,6 +293,9 @@ export function mountBaseSurface(
   // La vista è cambiata: il prossimo disegno non legge la tabella di prima,
   // che è ancora lì, e parte dall'alto.
   let scrollReset = false;
+  // Il fuoco nella tabella prima di un ridisegno (`draw`): la tabella nuova lo
+  // riprende, perché il ridisegno toglie il campo col fuoco (IMP-124).
+  let tableFocus: TableFocus | null = null;
   let picked: { anchor: Cell; focus: Cell } | null = null;
   let pickedKeys: { anchor: CellKey; focus: CellKey } | null = null;
   let picking = false;
@@ -505,7 +556,11 @@ export function mountBaseSurface(
       if (!nextPlan) throw new Error("base: piano assente");
       const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, nextPlan.allProperties ? { kind: "all" } : { kind: "keys", keys: nextPlan.requiredProps }, { offset: 0, limit: 256 }, request.signal);
       if (!valid(ticket)) return;
-      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container);
+      // Le note legate dai riepiloghi di Relazione (T35): nessuna domanda in
+      // più se la vista non ne ha.
+      const linked = await linkedNotes(deps, nextPlan, found.rows, request.signal);
+      if (!valid(ticket)) return;
+      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked);
       if (!valid(ticket)) return;
       rows = result.rows;
       read = readProperties(found.rows);
@@ -524,25 +579,41 @@ export function mountBaseSurface(
     }
   };
   const open = (doc: string): void => { void Promise.resolve(deps.onOpenDocument(doc)).catch(presentError); };
+  // ---- Le scritture che l'utente ha chiesto ------------------------------
+  // Una scrittura chiesta (una cella, una scheda o una colonna della Bacheca,
+  // un giorno del calendario, una barra della linea del tempo) va fino in
+  // fondo, oppure chi l'ha chiesta sa che non è passata (#484). Un evento del
+  // vault, una ricarica, una vista ridisegnata o la Base chiusa non la
+  // fermano: la mutazione preparata è già quella chiesta (nota, proprietà,
+  // valore letto e valore nuovo, li controlla `prepareBaseMutations`), e il
+  // conflitto vero lo dice la revisione attesa del comando, che il gesto
+  // mostra. La ferma soltanto una Base diventata in sola lettura, con un
+  // errore che il gesto mostra come ogni altro rifiuto.
+  const writeProperty = (mutation: BaseMutation): ReturnType<BaseSurfaceDeps["invokeCommand"]> => {
+    if (readOnly) return Promise.reject(new BaseReadOnly());
+    return deps.invokeCommand(mutation.command, mutation.args);
+  };
+  // Un gesto che non ha scritto lo dice dove si vede: nella Base aperta a modo
+  // suo (`onScreen`), a Base chiusa con un avviso.
+  const unwritten = (message: string, onScreen: () => void): void => {
+    if (destroyed) notify(message, "guasto");
+    else onScreen();
+  };
   const editCell = async (row: BaseRow, column: string, value: string | null): Promise<void> => {
-    if (readOnly || !plan || column.startsWith("formula.") || column.startsWith("file.")) return;
+    if (!plan || readOnlyColumn(column)) return;
     const expected = expectedProperty(row, column);
     const view = plan.view;
-    const epoch = writeEpoch;
     const definition = source;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
-      if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
-      for (const mutation of mutations) {
-        if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
-        await deps.invokeCommand(mutation.command, mutation.args);
-      }
+      for (const mutation of mutations) await writeProperty(mutation);
       if (!destroyed) await reload(true);
     } catch (failure) {
-      if (destroyed) return;
+      const message = t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) });
       // No optimistic overwrite. The original observation stays on screen and
       // the next explicit reload will fetch the conflicting authoritative note.
-      if (isErrorKind(failure, "conflict")) {
+      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      else if (isErrorKind(failure, "conflict")) {
         draw();
         status.textContent = errorText(failure);
       } else presentError(failure);
@@ -587,6 +658,22 @@ export function mountBaseSurface(
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
     }
   };
+  // Ctrl+Z fuori da un campo di testo chiede lo stesso «Annulla» del vault,
+  // anche quando non c'è niente da disfare: il tasto è della Base (IMP-124).
+  // Dentro un campo resta del campo (`ui/field-history.ts`), tranne la cella
+  // della tabella che non si è ancora scritta: il suo campo non ha niente da
+  // disfare. Ctrl+Maiusc+Z e Ctrl+Y non passano di qui: il vault non ha un
+  // «rifai» da chiamare.
+  const undoKey = (event: KeyboardEvent): void => {
+    if (readOnly || event.defaultPrevented || event.isComposing) return;
+    if (fieldHistoryStep(event, keyboardPlatform(navigator.platform)) !== "undo") return;
+    const untouched = event.target instanceof HTMLElement && event.target.dataset.untouched === "true";
+    if (isPlainTextField(event.target, TEXT_INPUT_TYPES) && !untouched) return;
+    if (event.target instanceof HTMLElement && event.target.isContentEditable) return;
+    event.preventDefault();
+    void undoWrite();
+  };
+  root.addEventListener("keydown", undoKey);
   // Un gesto che scrive il `.base` con un comando (`invoke`, che riceve la
   // revisione da confrontare). Torna quando la barra si riaccende: `true` se
   // il file è stato scritto. `quiet` tace la frase del comando (un passo di
@@ -727,10 +814,19 @@ export function mountBaseSurface(
   // La data di un calendario nuovo: quella della vista aperta, o la prima
   // proprietà data delle righe.
   const calendarDate = (): string | null => plan?.dateKey ?? dateProperties()[0] ?? null;
+  // Inizio e fine di una linea del tempo nuova: quelli della vista aperta, o
+  // le prime due proprietà data delle righe (con una sola, ogni nota è un
+  // punto).
+  const timelineDates = (): { start: string; end: string | null } | null => {
+    const start = plan?.startKey ?? calendarDate();
+    if (start === null) return null;
+    const end = plan?.startKey ? plan.endKey : dateProperties().find((key) => key !== start) ?? null;
+    return { start, end };
+  };
   const newViewItems = (): MenuItem[] => NEW_VIEW_KINDS.map((type): MenuItem => {
     const missing = type === "kanban" && lanes() === null ? t("base.view.needs_lanes")
       : type === "map" && coordinates() === null ? t("base.view.needs_coordinates")
-        : type === "calendar" && calendarDate() === null ? t("base.view.needs_date") : null;
+        : (type === "calendar" || type === "timeline") && calendarDate() === null ? t("base.view.needs_date") : null;
     return {
       label: t(`base.view.kind.${type}`), icon: viewIcon(type),
       ...(missing === null ? { run: () => void addView(type) } : { disabled: true, description: missing }),
@@ -753,6 +849,10 @@ export function mountBaseSurface(
     if (type === "kanban") { const key = lanes(); if (key) keys.push(["group", { key }]); }
     if (type === "map") { const map = coordinates(); if (map) keys.push(["map", map]); }
     if (type === "calendar") { const date = calendarDate(); if (date) keys.push(["date", date]); }
+    if (type === "timeline") {
+      const dates = timelineDates();
+      if (dates) { keys.push(["start", dates.start]); if (dates.end) keys.push(["end", dates.end]); }
+    }
     const start = source;
     sequencing++;
     try {
@@ -801,6 +901,7 @@ export function mountBaseSurface(
     return columnMenu({
       plan, column, label: labelOf(column), kind: column === NOTE_COLUMN ? "text" : columnKind(rows, column),
       grouping: grouping(), regroupable: regroupable(), lock: lock(), busy: busy || sequencing > 0, readOnly,
+      relation: column === NOTE_COLUMN ? null : relationColumn(propertyTypes, column),
     }, {
       write: (key, value) => { if (current()) void writeView(key, value); },
       rename: (key) => { if (current()) startRename(key); },
@@ -940,7 +1041,7 @@ export function mountBaseSurface(
     field.className = "base-cell";
     field.dataset.column = column;
     const value = row.values[column];
-    const writable = !readOnly && !column.startsWith("formula.") && !column.startsWith("file.") && value?.kind !== "error";
+    const writable = !readOnly && !readOnlyColumn(column) && value?.kind !== "error";
     if (value?.kind === "bool") {
       const control = document.createElement("input");
       control.type = "checkbox";
@@ -956,7 +1057,35 @@ export function mountBaseSurface(
       // Il valore di partenza: Esc ci torna senza scrivere niente.
       control.defaultValue = control.value;
       control.setAttribute("aria-label", `${row.doc} ${column}`);
-      control.addEventListener("change", () => void editCell(row, column, control.value === "" ? null : JSON.stringify(control.value)));
+      // Una cella non ancora scritta non ha niente da disfare: lì Ctrl+Z è della
+      // Base (`undoKey`), finché non si scrive nel campo.
+      control.dataset.untouched = "true";
+      control.addEventListener("input", () => { delete control.dataset.untouched; }, { once: true });
+      // Invio chiude la modifica: il fuoco passa alla griglia, e la scrittura
+      // parte col `change` che il campo manda perdendo il fuoco. Il fuoco non
+      // cade così sul corpo della pagina, e Ctrl+Z arriva alla Base (IMP-124).
+      control.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.isComposing) control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
+      });
+      // La scrittura della cella. Il `change` arriva mentre il browser sposta il
+      // fuoco (Tab, un clic): la consegna dopo quel passaggio, così il ridisegno
+      // che la chiude non cade sulla cella verso cui il fuoco va (IMP-124).
+      // Chiudendo la Base parte subito (`destroy`), e il `change` che il browser
+      // mandasse dopo non la ripete.
+      let closing = false;
+      const save = (now: boolean): void => {
+        const next = control.value === "" ? null : JSON.stringify(control.value);
+        const write = (): void => { void editCell(row, column, next); };
+        if (now) { write(); return; }
+        const timer = window.setTimeout(() => { pendingWrites.delete(timer); write(); }, 0);
+        pendingWrites.set(timer, write);
+      };
+      cellSaves.set(control, () => {
+        if (control.value === control.defaultValue) return;
+        closing = true;
+        save(true);
+      });
+      control.addEventListener("change", () => { if (!closing) save(false); });
       // Un numero si legge coi separatori della lingua; col fuoco il campo
       // torna al valore com'è, quello che si scrive.
       const shown = shownText(value, resolvedLanguage());
@@ -1059,13 +1188,37 @@ export function mountBaseSurface(
     // «Nuova nota» in fondo alle righe: la stessa cosa di «Nuova» nella barra,
     // che non c'è in sola lettura.
     const addRow = readOnly ? null : newNoteRow(columns);
+    // Il fuoco torna dov'era dopo un ridisegno: sulla cella della stessa nota e
+    // colonna, se la tabella ne ha ancora una, altrimenti sulla griglia (che
+    // resta nella tabella, e lì Ctrl+Z arriva alla Base).
+    const focusKept = (wanted: TableFocus | null): void => {
+      if (wanted === null) return;
+      if (wanted !== "grid") {
+        const row = [...tableBody.querySelectorAll<HTMLTableRowElement>("tr[data-doc]")].find((each) => each.dataset.doc === wanted.doc);
+        const at = wanted.column === FILE_COLUMN ? 0 : gridColumns().indexOf(wanted.column) + 1;
+        const cell = at > 0 || wanted.column === FILE_COLUMN ? row?.querySelector(`td[data-cell="${at}"]`) : null;
+        const control = cell?.querySelector<HTMLElement>("input, button");
+        if (control) {
+          control.focus({ preventScroll: true });
+          if (document.activeElement === control) return;
+        }
+      }
+      viewport.focus({ preventScroll: true });
+    };
     const renderWindow = (top = viewport.scrollTop) => {
       // La finestra è alta quanto il suo contenuto fino al tetto: al primo
       // disegno la tabella è ancora vuota e `clientHeight` ne direbbe solo
       // l'intestazione, così le righe sotto le prime non comparirebbero mai
       // senza uno scorrimento. Le righe da disegnare sono quelle del tetto.
       const range = uniformRowRange(items.length, top, Math.max(viewport.clientHeight, TABLE_VIEWPORT_HEIGHT), TABLE_ROW_HEIGHT);
-      if (!range) { tableBody.replaceChildren(...(addRow ? [addRow] : [])); return; }
+      // Il ridisegno delle righe toglie il campo col fuoco: il fuoco torna su
+      // di lui (la stessa cella), come dopo un ridisegno della tabella intera.
+      const kept = tableFocusOf(document.activeElement);
+      const swap = (...nodes: Node[]): void => {
+        tableBody.replaceChildren(...nodes);
+        if (kept !== null && kept !== "grid") focusKept(kept);
+      };
+      if (!range) { swap(...(addRow ? [addRow] : [])); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
       for (let index = range.start; index <= range.end; index++) {
@@ -1102,7 +1255,7 @@ export function mountBaseSurface(
       }
       if (range.end + 1 < items.length) fragment.append(spacer((items.length - range.end - 1) * TABLE_ROW_HEIGHT));
       if (addRow) fragment.append(addRow);
-      tableBody.replaceChildren(fragment);
+      swap(fragment);
       paint();
     };
     // Le celle scelte si segnano solo fra le righe disegnate: con ventimila
@@ -1230,6 +1383,10 @@ export function mountBaseSurface(
     renderWindow(top);
     viewport.scrollTop = top;
     viewport.scrollLeft = left;
+    // Il fuoco che la tabella di prima aveva torna qui, sulla stessa cella.
+    const wanted = tableFocus;
+    tableFocus = null;
+    focusKept(wanted);
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
     const key = grouping();
@@ -1277,9 +1434,22 @@ export function mountBaseSurface(
       groups.set(name, members);
     }
     for (const name of localLanes.get(view) ?? []) if (!groups.has(name)) groups.set(name, []);
+    // Una Selezione o uno Stato (T9): le corsie sono le opzioni del registro,
+    // anche vuote, nel loro ordine e (lo Stato) nei tre gruppi; poi i valori
+    // fuori dalle opzioni. Per ogni altro tipo, i valori come compaiono.
+    const property = columnProperty(key);
+    const choice = property === null ? null : choiceLanes(propertyTypes, property, [...groups.keys()]);
+    const lanes: { name: string; members: BaseRow[]; option: PropertyOption | null }[] = choice
+      ? choice.lanes.map((lane) => ({ name: lane.name, members: groups.get(lane.name) ?? [], option: lane.option }))
+      : [...groups].map(([name, members]) => ({ name, members, option: null }));
     const board = document.createElement("div");
     board.className = "base-kanban";
-    const writable = !readOnly && !key.startsWith("formula.") && !key.startsWith("file.");
+    const writable = !readOnly && !readOnlyColumn(key);
+    /// Sposta una scheda in una corsia: scrive il valore nella nota, con la
+    /// revisione letta (`editCell`).
+    const move = (row: BaseRow, name: string) => {
+      if (cellText(row.values[key]) !== name) void editCell(row, key, JSON.stringify(name));
+    };
     const remember = (name: string) => {
       let lanes = localLanes.get(view);
       if (!lanes) { lanes = new Set(); localLanes.set(view, lanes); }
@@ -1287,14 +1457,34 @@ export function mountBaseSurface(
       lanes.add(name);
       saveLanes(view);
     };
-    for (const [name, members] of groups) {
+    lanes.forEach(({ name, members, option }, index) => {
       const lane = document.createElement("section");
       lane.className = "base-kanban-column";
       lane.dataset.group = name;
       const heading = document.createElement("h3");
-      heading.textContent = `${name || "∅"} (${members.length})`;
+      // Sotto il titolo della scheda (h1) la Base non ha un h2: la corsia è
+      // il secondo livello per chi legge i titoli.
+      heading.setAttribute("aria-level", "2");
+      if (option && choice) {
+        // L'opzione come pastiglia del suo colore, col pallino dello Stato
+        // (`.lane-h .opt` del prototipo), e quante schede ha.
+        lane.dataset.option = "";
+        if (choice.kind === "status") lane.dataset.statusGroup = option.group;
+        const pill = document.createElement("span");
+        pill.className = "cm-fub-prop-opt";
+        pill.dataset.color = option.color;
+        if (choice.kind === "status") pill.dataset.status = "";
+        pill.textContent = name;
+        heading.append(pill, ` ${members.length}`);
+      } else {
+        // Fuori dalle opzioni il valore resta testo, come nella nota.
+        if (choice) lane.dataset.outside = "";
+        heading.textContent = `${name || "∅"} (${members.length})`;
+      }
       lane.append(heading);
-      if (writable && name) {
+      // Un'opzione si rinomina nel registro, non qui: rinominare la corsia
+      // riscriverebbe le note con un valore fuori dalle opzioni.
+      if (writable && name && !option) {
         lane.append(button(t("base.lane.rename"), () => {
           const input = document.createElement("input");
           input.value = name;
@@ -1312,16 +1502,22 @@ export function mountBaseSurface(
             remember(next);
             localLanes.get(view)?.delete(name);
             saveLanes(view);
+            // Le schede e il file di quando la colonna è stata rinominata:
+            // ognuna si scrive col valore che si vedeva (`writeProperty`).
+            const members = rows.filter((row) => cellText(row.values[key]) === name);
+            const definition = source;
             void (async () => {
               try {
                 await persistQueue;
-                for (const member of rows.filter((row) => cellText(row.values[key]) === name)) {
-                  const [mutation] = await prepareBaseMutations(deps, source, view, [{ doc: member.doc, key, expected: expectedProperty(member, key), value: JSON.stringify(next) }]);
-                  if (destroyed || readOnly || !mutation) return;
-                  await deps.invokeCommand(mutation.command, mutation.args);
+                for (const member of members) {
+                  const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: member.doc, key, expected: expectedProperty(member, key), value: JSON.stringify(next) }]);
+                  for (const mutation of mutations) await writeProperty(mutation);
                 }
-                await reload(true);
-              } catch (failure) { if (!destroyed) { status.textContent = errorText(failure); void reload(true); } }
+                if (!destroyed) await reload(true);
+              } catch (failure) {
+                const message = t("base.lane.rename_failed", { name, next, reason: errorText(failure) });
+                unwritten(message, () => { notice = message; status.textContent = message; void reload(true); });
+              }
             })();
           };
           input.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
@@ -1334,8 +1530,21 @@ export function mountBaseSurface(
         card.className = "base-kanban-card";
         card.dataset.doc = row.doc;
         card.draggable = writable;
-        card.append(button(row.doc, () => open(row.doc)));
-        if (writable) card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("application/x-fub-base-doc", row.doc));
+        const opener = button(row.doc, () => open(row.doc));
+        card.append(opener);
+        if (writable) {
+          card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("application/x-fub-base-doc", row.doc));
+          // Da tastiera: Alt ← e Alt → spostano la scheda nella corsia
+          // accanto, come il trascinamento.
+          opener.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight");
+          opener.addEventListener("keydown", (event) => {
+            if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+            const next = lanes[index + (event.key === "ArrowLeft" ? -1 : 1)];
+            if (!next) return;
+            event.preventDefault();
+            move(row, next.name);
+          });
+        }
         lane.append(card);
       }
       if (writable) {
@@ -1343,11 +1552,11 @@ export function mountBaseSurface(
         lane.addEventListener("drop", (event) => {
           event.preventDefault();
           const target = page.find((row) => row.doc === event.dataTransfer?.getData("application/x-fub-base-doc"));
-          if (target && cellText(target.values[key]) !== name) void editCell(target, key, JSON.stringify(name));
+          if (target) move(target, name);
         });
       }
       board.append(lane);
-    }
+    });
     if (writable) {
       const add = document.createElement("input");
       add.placeholder = t("base.lane.add_placeholder");
@@ -1355,13 +1564,42 @@ export function mountBaseSurface(
       add.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         const name = add.value.trim();
-        if (!name || name.length > 256 || groups.has(name)) { status.textContent = t("base.lane.taken"); return; }
+        if (!name || name.length > 256 || lanes.some((lane) => lane.name === name)) { status.textContent = t("base.lane.taken"); return; }
+        // Su una Selezione o uno Stato la corsia nuova è un'opzione nuova
+        // del registro (lo Stato in Da fare, con un colore libero).
+        if (choice && property !== null) {
+          void addLaneOption(property, name, choice.kind);
+          return;
+        }
         remember(name);
         draw();
       });
       board.append(add);
     }
     body.append(board);
+  };
+  /// Aggiunge un'opzione al registro dei tipi (`property.option.set`) e
+  /// rilegge il registro: la corsia nuova compare. Un registro che non si
+  /// scrive (illeggibile, di una versione futura) lo dice la barra.
+  const addLaneOption = async (property: string, name: string, kind: "select" | "status"): Promise<void> => {
+    try {
+      await deps.invokeCommand(PROPERTY_OPTION_SET, { key: property, option: name, color: freeColor(optionsOf(propertyTypes, property)), ...(kind === "status" ? { group: "todo" } : {}) });
+      await readPropertyTypes();
+    } catch (failure) {
+      if (!destroyed) status.textContent = errorText(failure);
+    }
+  };
+  /// Rilegge il registro dei tipi; se cambia, la Bacheca si ridisegna.
+  let typesRead = 0;
+  const readPropertyTypes = async (): Promise<void> => {
+    if (!deps.propertyTypes) return;
+    const mine = ++typesRead;
+    const raw = await deps.propertyTypes().catch(() => undefined);
+    if (destroyed || mine !== typesRead) return;
+    const next = parsePropertyTypes(raw);
+    if (sameTypes(next, propertyTypes)) return;
+    propertyTypes = next;
+    if (plan?.viewType === "kanban") draw();
   };
   const drawMap = (page: BaseRow[]): void => {
     const config = plan?.map;
@@ -1509,7 +1747,7 @@ export function mountBaseSurface(
   // offre l'annulla del vault.
   const moveNote = async (row: BaseRow, day: IsoDay): Promise<void> => {
     const key = plan?.dateKey;
-    if (!plan || !key || readOnly || moving || destroyed) return;
+    if (!plan || !key || moving || destroyed) return;
     const value = movedDateValue(row.properties[key], day);
     if (value === null) return;
     const view = plan.view;
@@ -1519,29 +1757,39 @@ export function mountBaseSurface(
     notice = null;
     draw();
     try {
-      const [mutation] = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
-      if (destroyed || readOnly || !mutation || source !== definition || plan?.view !== view) return;
-      const outcome = await deps.invokeCommand(mutation.command, mutation.args);
-      if (destroyed) return;
+      const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
+      let outcome: Awaited<ReturnType<typeof writeProperty>> | undefined;
+      for (const mutation of mutations) outcome = await writeProperty(mutation);
+      // L'avviso è della shell: lo spostamento e il suo annulla si dicono
+      // anche a Base chiusa.
       const undo = outcome?.undo;
       notify(t("base.calendar.moved", { note: name, date: dateFormat(day) }), "info", undo
         ? { label: t("app.undo"), hint: typeof undo.label === "string" ? undo.label : undefined, run: () => void undoNoteMove() }
         : undefined);
     } catch (failure) {
-      if (destroyed) return;
       // Niente è stato scritto: la nota resta dov'era, e il calendario la
-      // rilegge com'è ora.
-      notice = isErrorKind(failure, "conflict") ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
-      if (calendar && row.day) calendar.focus = row.day;
+      // rilegge com'è ora. A Base chiusa non c'è un calendario che la
+      // mostri: l'avviso dice il motivo.
+      const message = isErrorKind(failure, "conflict") && !destroyed ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
+      unwritten(message, () => {
+        notice = message;
+        if (calendar && row.day) calendar.focus = row.day;
+      });
     } finally {
       moving = false;
       if (!destroyed) await reload(false);
     }
   };
-  const undoNoteMove = async (): Promise<void> => {
+  // «Annulla» di uno spostamento: l'annulla del vault, una volta per ogni
+  // proprietà scritta (le due date di una barra sono due scritture).
+  const undoNoteMove = async (count = 1, quiet = false): Promise<void> => {
     try {
-      const outcome = await deps.invokeCommand(COMMANDS.undo);
-      if (outcome?.notify) notify(outcome.notify, "info");
+      let said: string | null = null;
+      for (let index = 0; index < count; index++) {
+        const outcome = await deps.invokeCommand(COMMANDS.undo);
+        if (typeof outcome?.notify === "string" && outcome.notify !== "") said = outcome.notify;
+      }
+      if (said && !quiet) notify(said, "info");
     } catch (failure) {
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
     }
@@ -1550,7 +1798,7 @@ export function mountBaseSurface(
     const today = localDay();
     calendar ??= calendarState(today);
     const key = plan?.dateKey ?? null;
-    const writableKey = key !== null && !key.startsWith("file.") && !key.startsWith("formula.");
+    const writableKey = key !== null && !readOnlyColumn(key);
     body.append(renderCalendar({
       rows: page, state: calendar, locale: resolvedLanguage(), today, dateKey: key,
       title: noteTitle,
@@ -1560,6 +1808,90 @@ export function mountBaseSurface(
       chooseDateKey: (date) => void writeView("date", date),
       open,
       move: (row, day) => void moveNote(row, day),
+      redraw: () => draw(),
+    }));
+  };
+  // ---- La linea del tempo -----------------------------------------------
+  // La scala, i giorni mostrati e la riga col fuoco restano fra un ridisegno
+  // e l'altro; nascono col primo disegno, con oggi nella seconda colonna.
+  let timeline: TimelineState | null = null;
+  // Le date di una barra spostata: una `note.property.set` per proprietà,
+  // ognuna col valore letto come confronto e la data nella sua forma. Se la
+  // seconda non passa, la prima si disfa: la barra non resta a metà. Una
+  // sola «Annulla» disfa tutte e due.
+  const moveSpan = async (row: TimelineRow, dates: { start?: IsoDay; end?: IsoDay }): Promise<void> => {
+    if (!plan || moving || destroyed) return;
+    const keys = { start: plan.startKey, end: plan.endKey };
+    const edits: { doc: string; key: string; expected: BaseExpected; value: string }[] = [];
+    for (const edge of ["start", "end"] as const) {
+      const day = dates[edge];
+      const key = keys[edge];
+      if (day === undefined) continue;
+      if (!key) return;
+      // Inizio e fine sulla stessa proprietà: una data sola.
+      if (edits.some((edit) => edit.key === key)) continue;
+      const value = movedDateValue(row.properties[key], day);
+      if (value === null) return;
+      edits.push({ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) });
+    }
+    if (edits.length === 0) return;
+    const view = plan.view;
+    const definition = source;
+    const name = noteTitle(row.doc);
+    const both = row.span.start !== null && row.span.end !== null;
+    const start = dates.start ?? row.span.start, end = dates.end ?? row.span.end;
+    const said = !both ? t("base.timeline.moved_point", { note: name, date: dateFormat((dates.start ?? dates.end)!) })
+      : dates.start !== undefined && dates.end !== undefined ? t("base.timeline.moved_span", { note: name, start: dateFormat(start!), end: dateFormat(end!) })
+        : dates.start !== undefined ? t("base.timeline.moved_start", { note: name, date: dateFormat(start!) })
+          : t("base.timeline.moved_end", { note: name, date: dateFormat(end!) });
+    moving = true;
+    notice = null;
+    draw();
+    let written = 0;
+    let undoable = true;
+    let hint: string | undefined;
+    try {
+      const mutations = await prepareBaseMutations(deps, definition, view, edits);
+      for (const mutation of mutations) {
+        const outcome = await writeProperty(mutation);
+        written++;
+        if (!outcome?.undo) undoable = false;
+        else if (typeof outcome.undo.label === "string") hint ??= outcome.undo.label;
+      }
+      // L'avviso è della shell: lo spostamento e il suo annulla si dicono
+      // anche a Base chiusa.
+      const count = written;
+      notify(said, "info", undoable
+        ? { label: t("app.undo"), hint, run: () => void undoNoteMove(count) }
+        : undefined);
+    } catch (failure) {
+      // Ciò che è già scritto si disfa, anche a Base chiusa, perché la barra
+      // non resti a metà; poi la linea del tempo rilegge la nota com'è.
+      if (written > 0) await undoNoteMove(written, true);
+      const message = isErrorKind(failure, "conflict") && !destroyed ? t("base.timeline.conflict", { note: name }) : t("base.timeline.failed", { note: name, reason: errorText(failure) });
+      unwritten(message, () => { notice = message; });
+    } finally {
+      moving = false;
+      if (!destroyed) await reload(false);
+    }
+  };
+  const drawTimeline = (page: BaseRow[], undated: number): void => {
+    const today = localDay();
+    timeline ??= timelineState(today, firstWeekday(resolvedLanguage()));
+    const startKey = plan?.startKey ?? null, endKey = plan?.endKey ?? null;
+    const writableKey = (key: string | null): key is string => key !== null && !readOnlyColumn(key);
+    body.append(renderTimeline({
+      rows: page, undated, state: timeline, locale: resolvedLanguage(), today, startKey, endKey,
+      title: noteTitle,
+      writable: (row, edge) => {
+        const key = edge === "start" ? startKey : endKey;
+        return writableKey(key) && !readOnly && /\.md$/i.test(row.doc) && movedDateValue(row.properties[key], today) !== null;
+      },
+      busy: moving || busy,
+      dateChoices: lock() === null ? dateProperties() : null,
+      chooseStartKey: (key) => void writeView("start", key),
+      open,
+      move: (row, dates) => void moveSpan(row, dates),
       redraw: () => draw(),
     }));
   };
@@ -1579,10 +1911,18 @@ export function mountBaseSurface(
       if (note !== undefined) calendar.chosen = note;
       calendar.refocus ??= note !== undefined ? "note" : "day";
     }
+    // E nella linea del tempo, sulla riga.
+    if (timeline && active instanceof HTMLElement && body.querySelector(".base-timeline")?.contains(active)) {
+      const doc = active.closest<HTMLElement>(".base-tl-row")?.dataset.doc;
+      if (doc !== undefined) { timeline.focus = doc; timeline.refocus = true; }
+    }
     const shown = body.querySelector<HTMLElement>(".base-table-viewport");
     if (scrollReset) tableScroll = { top: 0, left: 0 };
     else if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
     scrollReset = false;
+    // Il fuoco nella tabella (una cella, o la griglia) lo perde la tabella che
+    // si disegna: `drawTable` lo riprende dov'era.
+    tableFocus = tableFocusOf(document.activeElement);
     body.replaceChildren();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
@@ -1605,15 +1945,19 @@ export function mountBaseSurface(
     // La tabella ha la sua finestra di righe e il calendario mostra un mese:
     // tutte e due prendono tutte le righe, le altre viste cento per volta.
     const whole = plan?.viewType === "table" || plan?.viewType === "calendar";
-    const page = whole ? matches : matches.slice(0, displayed);
+    // La linea del tempo mostra cento note con le date per volta; quelle
+    // senza date le conta in testa.
+    const pool = plan?.viewType === "timeline" ? matches.filter((row) => row.span && (row.span.start !== null || row.span.end !== null)) : matches;
+    const page = whole ? pool : pool.slice(0, displayed);
     try {
       if (plan?.viewType === "table") drawTable(page);
       else if (plan?.viewType === "calendar") drawCalendar(page);
+      else if (plan?.viewType === "timeline") drawTimeline(page, matches.length - pool.length);
       else if (plan?.viewType === "cards") drawCards(page, false);
       else if (plan?.viewType === "list") drawCards(page, true);
       else if (plan?.viewType === "kanban") drawKanban(page);
       else if (plan?.viewType === "map") drawMap(page);
-      if (!whole && displayed < matches.length) body.append(button(t("search.more", { shown: Math.min(displayed, matches.length), total: matches.length }), () => { displayed += VISIBLE_STEP; draw(); }));
+      if (!whole && displayed < pool.length) body.append(button(t("search.more", { shown: Math.min(displayed, pool.length), total: pool.length }), () => { displayed += VISIBLE_STEP; draw(); }));
       if (plan && plan.viewType !== "table") {
         body.append(listFooter({ columns: plan.columns, summaries: plan.summaries, values: summaries, count: matches.length, total: rows.length, searching: search.value.trim() !== "", locale: resolvedLanguage(), labelOf }));
       }
@@ -1664,7 +2008,6 @@ export function mountBaseSurface(
   // generation/AbortController discard stale in-flight derivations.
   let refreshQueued = false;
   const memberChanged = () => {
-    writeEpoch++;
     if (destroyed || !source || refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(() => {
@@ -1672,7 +2015,9 @@ export function mountBaseSurface(
       if (!destroyed) void reload(false);
     });
   };
+  void readPropertyTypes();
   const stopEvents = [
+    onEvent("setting_changed", (event) => { if (event.key === PROPERTY_TYPES_KEY) void readPropertyTypes(); }),
     onEvent("document_changed", (event) => { if (!event.changes || event.changes.aspects.length) memberChanged(); }),
     onEvent("document_removed", memberChanged),
     onEvent("document_renamed", memberChanged),
@@ -1766,7 +2111,7 @@ export function mountBaseSurface(
     const column = under.closest<HTMLElement>(".base-cell[data-column]")?.dataset.column;
     if (column !== undefined) {
       const value = cellText(row.values[column]);
-      const writable = !readOnly && !column.startsWith("formula.") && !column.startsWith("file.") && row.values[column]?.kind !== "error";
+      const writable = !readOnly && !readOnlyColumn(column) && row.values[column]?.kind !== "error";
       items.unshift(
         { id: "base.cell.copy", label: t("base_menu.cell.copy"), enabled: value !== "", run: () => copy(value) },
         { id: "base.cell.search", label: t("base_menu.cell.search"), enabled: value !== "", run: () => searchFor(value) },
@@ -1797,7 +2142,7 @@ export function mountBaseSurface(
     cellSelection,
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
-      if (next) { writeEpoch++; toolbar.closePopover(); }
+      if (next) toolbar.closePopover();
       readOnly = next;
       root.dataset.readOnly = String(next);
       pushModel();
@@ -1805,6 +2150,14 @@ export function mountBaseSurface(
     },
     setTheme(theme: Theme) { root.dataset.theme = theme; },
     destroy() {
+      // Chiudere la Base non butta una scrittura: la cella col fuoco con una
+      // modifica non ancora consegnata parte ora, e partono ora anche quelle
+      // che aspettavano il passaggio del fuoco. Prima di smontare qualsiasi
+      // cosa, perché la scrittura non dipende dal DOM (IMP-124).
+      const focused = document.activeElement;
+      if (focused instanceof HTMLInputElement) cellSaves.get(focused)?.();
+      for (const [timer, write] of pendingWrites) { window.clearTimeout(timer); write(); }
+      pendingWrites.clear();
       closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       window.clearTimeout(settleTimer);
@@ -1814,7 +2167,7 @@ export function mountBaseSurface(
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }
       downloads.clear();
-      stopLanguage(); root.remove();
+      stopLanguage(); root.removeEventListener("keydown", undoKey); root.remove();
     },
   };
 }
@@ -1845,6 +2198,7 @@ export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: Cus
     onOpenDocument,
     revision: () => revision,
     documentWrites,
+    propertyTypes: vaultPropertyTypes,
   }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
   // La scatola della Base dentro una nota sta in colonna col testo (la pelle).
   host.querySelector<HTMLElement>(":scope > .base-surface")?.setAttribute("data-embedded", "true");

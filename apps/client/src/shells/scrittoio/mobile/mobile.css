@@ -200,6 +200,18 @@
 :root[data-client-shell="mobile"] .pane > .format-bar.kit-bar > .kit-bar-group:last-of-type {
   background-image: none;
 }
+/* Il gruppo del blocco del cursore (E18, «Al tocco») tiene il suo velo
+   d'accento anche qui, e non porta il filo: è il velo a staccarlo. Il velo
+   è alto quanto quello del computer; i pulsanti dentro restano alti un dito
+   e ne escono sopra e sotto. */
+:root[data-client-shell="mobile"] .pane > .format-bar.kit-bar > .format-bar-context {
+  align-self: center;
+  height: 32px;
+  margin-right: var(--space-3);
+  padding: 0 0 0 var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--accent-veil);
+}
 
 /* Il segno del livello («H1») vive nel margine sinistro, che al telefono è
    più stretto di lui: si vedrebbe tagliato contro il bordo. Il livello si
@@ -233,12 +245,6 @@
 
   :root[data-client-shell="mobile"] #topbar .pill-title {
     display: block;
-  }
-
-  /* Nel piede del lanciatore gli accordi sono di chi ha una tastiera fisica:
-     sul telefono resta il conto dei risultati. */
-  :root[data-client-shell="mobile"] .launcher-hints {
-    display: none;
   }
 
   /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
@@ -275,10 +281,8 @@
     transform: translate(-50%, -50%);
   }
 
-  /* Niente tasti sul telefono: i bottoni del piede («Azioni», «Crea la nota»,
-     «Apri nel pannello») dicono solo la parola. «Apri nel pannello» sparisce
-     quando non c'è una domanda da portare, così non sembra un comando spento. */
-  :root[data-client-shell="mobile"] .launcher-panel .launcher-key,
+  /* «Apri nel pannello», nel piede, sparisce quando non c'è una domanda da
+     portare, così non sembra un comando spento. */
   :root[data-client-shell="mobile"] .launcher-panel:disabled {
     display: none;
   }

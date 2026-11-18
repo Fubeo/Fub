@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { closeTooltip } from "../../../../ui/tooltip";
 import { mountMathBlocks } from "./math";
 
 const releases: Array<() => void> = [];
@@ -10,6 +11,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const release of releases.splice(0)) release();
   document.body.replaceChildren();
+  closeTooltip();
+  vi.unstubAllGlobals();
   Reflect.deleteProperty(document, "compatMode");
 });
 
@@ -48,5 +51,40 @@ describe("KaTeX Markdown hydration", () => {
     const formula = root.querySelector<HTMLElement>(".math-inline")!;
     await vi.waitFor(() => expect(formula.dataset.state).toBe("error"));
     expect(formula.textContent).toBe("\\notARealCommand{x}");
+  });
+});
+
+/// Il suggerimento come lo vede chi passa sulla formula: dopo il ritardo, nel
+/// riquadro del suggerimento (`[role="tooltip"]`).
+async function tooltipOf(formula: HTMLElement): Promise<string | null> {
+  formula.dispatchEvent(new MouseEvent("mouseenter", { clientX: 4, clientY: 4 }));
+  const tip = () => document.querySelector<HTMLElement>('[role="tooltip"]');
+  await vi.waitFor(() => expect(tip()?.hidden).toBe(false));
+  return tip()?.textContent ?? null;
+}
+
+describe("la formula rotta dice l'errore in parole, non il messaggio di KaTeX", () => {
+  it("il nome e il suggerimento hanno la frase di `explain`", async () => {
+    const root = mount('<span class="math-inline" data-tex="\\frac{a}">\\frac{a}</span>');
+    const formula = root.querySelector<HTMLElement>(".math-inline")!;
+    await vi.waitFor(() => expect(formula.dataset.state).toBe("error"));
+    expect(formula.getAttribute("aria-label")).toBe("Formula non disponibile: A \\frac manca un pezzo.");
+    expect(await tooltipOf(formula)).toBe("Formula non disponibile: A \\frac manca un pezzo.");
+  });
+
+  it("in inglese la stessa frase, nella lingua di chi guarda", async () => {
+    vi.stubGlobal("navigator", { language: "en-US" });
+    const root = mount('<span class="math-inline" data-tex="\\frac{a}">\\frac{a}</span>');
+    const formula = root.querySelector<HTMLElement>(".math-inline")!;
+    await vi.waitFor(() => expect(formula.dataset.state).toBe("error"));
+    expect(formula.getAttribute("aria-label")).toBe("Formula unavailable: \\frac is missing a piece.");
+    expect(await tooltipOf(formula)).toBe("Formula unavailable: \\frac is missing a piece.");
+  });
+
+  it("un errore che non è di KaTeX (la formula troppo lunga) dice il suo limite, come prima", async () => {
+    const root = mount(`<span class="math-inline" data-tex="${"a".repeat(20_001)}">x</span>`);
+    const formula = root.querySelector<HTMLElement>(".math-inline")!;
+    expect(formula.dataset.state).toBe("error");
+    expect(formula.getAttribute("aria-label")).toBe("Formula non disponibile: La formula supera il limite di 20000 caratteri.");
   });
 });

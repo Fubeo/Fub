@@ -189,13 +189,25 @@ fn grafted(original: &[u8], out: &[u8]) -> Vec<String> {
             None => rest.push(child.clone()),
         }
     }
-    libreoffice_agrees(original, out, rest.len());
+    // LibreOffice scrive in testo una riga per paragrafo e una per ogni riga
+    // di una tabella: un figlio toccato conta per le righe che diventa.
+    let touched = rest
+        .iter()
+        .map(|child| {
+            if child.starts_with("<w:tbl") {
+                child.matches("<w:tr>").count() + child.matches("<w:tr ").count()
+            } else {
+                1
+            }
+        })
+        .sum();
+    libreoffice_agrees(original, out, touched);
     rest
 }
 
 /// Con `FUB_SOFFICE`, il percorso di `soffice`, LibreOffice legge il file
-/// innestato come il file di partenza, salvo al più `touched` paragrafi
-/// consecutivi, e mostra il testo cambiato. Senza, non fa niente: la CI
+/// innestato come il file di partenza, salvo al più `touched` righe di testo
+/// consecutive (paragrafi e righe di tabella), e mostra il testo cambiato. Senza, non fa niente: la CI
 /// principale non ha LibreOffice.
 fn libreoffice_agrees(original: &[u8], out: &[u8], touched: usize) {
     let Some(soffice) = std::env::var_os("FUB_SOFFICE") else {
@@ -399,6 +411,73 @@ fn i_documenti_del_corpus_si_salvano_per_innesto() {
         tried += 1;
     }
     assert!(tried >= 10, "soltanto {tried} documenti modificabili");
+}
+
+/// IMP-133: in un documento che si scrive soltanto nel corpo (un blocco
+/// chiuso) una tabella nuova si innesta: gli stili non cambiano, la tabella
+/// prende i bordi di «Table Grid» come formattazione diretta, e il resto del
+/// file resta i suoi byte. Prima la tabella aggiungeva lo stile agli stili, e
+/// il salvataggio era rifiutato.
+#[test]
+fn una_tabella_nuova_in_un_documento_col_corpo_soltanto_si_innesta() {
+    use fub_format_rich::projection::{Cell, Layout, Role, Row, Table};
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/docx");
+    let file = std::fs::read(dir.join("scritture.docx")).unwrap();
+    let mut p = projection(&file);
+    assert!(p.body_only, "scritture.docx ha un blocco chiuso");
+    let empty = || Para {
+        role: Role::Body,
+        locked: false,
+        align: None,
+        k: None,
+        sect: None,
+        page: None,
+        header: None,
+        footer: None,
+        p: Layout::default(),
+        s: None,
+        f: Box::default(),
+        ins: None,
+        del: None,
+        c: Vec::new(),
+    };
+    let cell = || Cell {
+        k: None,
+        span: None,
+        blocks: vec![Block::Para(empty())],
+    };
+    let row = || Row {
+        k: None,
+        cells: vec![cell(), cell(), cell()],
+    };
+    p.blocks.push(Block::Table(Table {
+        locked: false,
+        k: None,
+        rows: vec![row(), row(), row()],
+    }));
+    p.blocks.push(Block::Para(empty()));
+    let out = saved(&file, &p);
+    // Le voci fuori dal documento principale restano i byte del file, gli
+    // stili compresi; nel corpo cambia soltanto ciò che si è aggiunto.
+    let rest = grafted(&file, &out);
+    assert_eq!(rest.len(), 2, "la tabella e il paragrafo dopo: {rest:#?}");
+    assert!(rest[1].starts_with("<w:p"), "{rest:#?}");
+    let table = rest
+        .iter()
+        .find(|child| child.starts_with("<w:tbl"))
+        .expect("la tabella nuova");
+    assert!(!table.contains("w:tblStyle"), "{table}");
+    assert!(table.contains("w:tblBorders"), "{table}");
+    let reopened = projection(&out);
+    let shape: Vec<Vec<usize>> = reopened
+        .blocks
+        .iter()
+        .filter_map(|block| match block {
+            Block::Table(table) => Some(table.rows.iter().map(|r| r.cells.len()).collect()),
+            Block::Para(_) => None,
+        })
+        .collect();
+    assert_eq!(shape, vec![vec![3, 3, 3]]);
 }
 
 /// Un elenco toccato tiene il suo `w:numId`, anche quando il file non conta
@@ -872,4 +951,161 @@ fn il_paragrafo_dopo_la_tabella_finale_si_scrive_soltanto_se_si_tocca() {
     assert_eq!(rest.len(), 1, "{rest:#?}");
     assert!(rest[0].contains("In fondo, cambiato"), "{rest:#?}");
     assert_eq!(texts(&projection(&out)), texts(&last));
+}
+
+/// Mette `href` sui testi che contengono `needle` (`None` lo toglie); quanti.
+fn set_href(projection: &mut Projection, needle: &str, value: Option<&str>) -> usize {
+    let mut count = 0;
+    for block in &mut projection.blocks {
+        let Block::Para(para) = block else { continue };
+        for inline in &mut para.c {
+            if let Inline::Text { x, href, .. } = inline {
+                if x.contains(needle) {
+                    *href = value.map(str::to_string);
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// Le relazioni di tipo link del documento principale.
+fn hyperlink_rels(bytes: &[u8]) -> usize {
+    let rels = String::from_utf8(entries(bytes).remove(MAIN_RELS).unwrap()).unwrap();
+    rels.matches("/relationships/hyperlink\"").count()
+}
+
+/// Il testo e i link di una proiezione, per confrontare la pagina con il file
+/// riaperto.
+fn linked_texts(projection: &Projection) -> Vec<(String, Option<String>)> {
+    let mut out: Vec<(String, Option<String>)> = Vec::new();
+    for block in &projection.blocks {
+        let Block::Para(para) = block else { continue };
+        for inline in &para.c {
+            if let Inline::Text { x, href, .. } = inline {
+                match out.last_mut() {
+                    Some((text, last)) if last == href => text.push_str(x),
+                    _ => out.push((x.clone(), href.clone())),
+                }
+            }
+        }
+        out.push(("¶".into(), None));
+    }
+    out
+}
+
+/// IMP-135: un link messo da qui e poi tolto se ne va dal file con la sua
+/// relazione, il testo resta con la sua enfasi, e il file riaperto è la
+/// pagina. Il codec scrive i link con `w:history`, che la proiezione non
+/// mostra: togliendo il link se ne va con lui, e non è una perdita.
+#[test]
+fn un_link_tolto_se_ne_va_dal_file_con_la_sua_relazione() {
+    let file = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/corpus/docx/senza-perdite.docx"
+    ))
+    .unwrap();
+    let mut p = projection(&file);
+    let phrase = "Un paragrafo di corpo";
+    assert_eq!(
+        set_href(&mut p, phrase, Some("https://esempio.test/i6g")),
+        1
+    );
+    let linked = saved(&file, &p);
+    assert_eq!(main_part(&linked).matches("<w:hyperlink ").count(), 1);
+    assert_eq!(hyperlink_rels(&linked), 1);
+
+    let mut p = projection(&linked);
+    let before = linked_texts(&p);
+    assert_eq!(set_href(&mut p, phrase, None), 1);
+    let out = saved(&linked, &p);
+    let xml = main_part(&out);
+    assert_eq!(xml.matches("<w:hyperlink").count(), 0, "{xml}");
+    assert_eq!(hyperlink_rels(&out), 0, "la relazione orfana resta");
+    let reopened = projection(&out);
+    assert_eq!(linked_texts(&reopened), linked_texts(&p));
+    assert_ne!(linked_texts(&reopened), before);
+    // L'innesto: il resto del file è quello di prima.
+    assert_eq!(grafted(&linked, &out).len(), 1);
+}
+
+/// Due link allo stesso indirizzo condividono la relazione: togliere il primo
+/// la lascia al secondo, togliere anche il secondo la toglie. La
+/// sottolineatura che lo stile «Hyperlink» dava resta sul testo, come la
+/// pagina la mostra.
+#[test]
+fn una_relazione_condivisa_resta_finché_un_link_la_usa() {
+    let file = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/corpus/docx/senza-perdite.docx"
+    ))
+    .unwrap();
+    let url = Some("https://esempio.test/stesso");
+    let mut p = projection(&file);
+    assert_eq!(set_href(&mut p, "Un paragrafo di corpo", url), 1);
+    let one = saved(&file, &p);
+    let mut p = projection(&one);
+    // Un altro paragrafo aperto, con testo e senza link.
+    let second = p
+        .blocks
+        .iter()
+        .position(|block| match block {
+            Block::Para(para) => {
+                !para.locked
+                    && para.c.iter().any(
+                        |inline| matches!(inline, Inline::Text { x, .. } if x.trim().len() > 2),
+                    )
+                    && para.c.iter().all(|inline| match inline {
+                        Inline::Text { href, .. } => href.is_none(),
+                        Inline::Atom { .. } => true,
+                    })
+            }
+            Block::Table(_) => false,
+        })
+        .expect("un altro paragrafo con testo");
+    for inline in &mut para_mut(&mut p, second).c {
+        if let Inline::Text { href, .. } = inline {
+            *href = url.map(str::to_string);
+        }
+    }
+    let two = saved(&one, &p);
+    assert_eq!(main_part(&two).matches("<w:hyperlink ").count(), 2);
+    assert_eq!(hyperlink_rels(&two), 1);
+
+    let mut p = projection(&two);
+    assert_eq!(set_href(&mut p, "Un paragrafo di corpo", None), 1);
+    let first_gone = saved(&two, &p);
+    assert_eq!(main_part(&first_gone).matches("<w:hyperlink ").count(), 1);
+    assert_eq!(hyperlink_rels(&first_gone), 1, "la relazione serve ancora");
+    let reopened = projection(&first_gone);
+    assert_eq!(linked_texts(&reopened), linked_texts(&p));
+    let marks = |projection: &Projection| {
+        projection
+            .blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Para(para) => Some(para.c.iter().filter_map(|inline| match inline {
+                    Inline::Text { x, m, .. } if x.contains("Un paragrafo di corpo") => {
+                        Some(m.clone())
+                    }
+                    _ => None,
+                })),
+                Block::Table(_) => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(marks(&reopened), marks(&p));
+
+    let mut p = reopened;
+    for inline in &mut para_mut(&mut p, second).c {
+        if let Inline::Text { href, .. } = inline {
+            *href = None;
+        }
+    }
+    let none = saved(&first_gone, &p);
+    assert_eq!(main_part(&none).matches("<w:hyperlink").count(), 0);
+    assert_eq!(hyperlink_rels(&none), 0);
+    assert_eq!(linked_texts(&projection(&none)), linked_texts(&p));
 }

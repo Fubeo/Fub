@@ -4,7 +4,7 @@
 import type { Role } from "../../scene/analysis";
 import { BoundsBuilder, type Bounds } from "../../scene/geometry";
 import { compose, IDENTITY, type Matrix, type Point } from "../../scene/matrix";
-import type { ContainerNode, ElementPart, LeafNode } from "../../scene/model";
+import { tagName, type ContainerNode, type ElementPart, type LeafNode } from "../../scene/model";
 import type { Target } from "../../scene/ops";
 import type { PaintNode } from "../../painter/paint";
 import { scaleOf, transformedBounds } from "../clips";
@@ -22,19 +22,55 @@ import {
   visibleInside,
 } from "./geometry";
 
-/// Un blocco estraneo fuori dagli oggetti, con le forme che se ne stimano.
+/// Un blocco estraneo, con le forme che se ne stimano: un elemento che il
+/// formato dei disegni non sa riscrivere, e che si conserva com'è. Non si
+/// sceglie, ma la gomma lo toglie intero (`SceneIndex.along`).
 export class ForeignBlock {
+  /// Il riquadro nella scena delle forme stimate; `null` se non ne ha.
+  readonly bounds: Bounds | null;
+
   constructor(
     /// Il percorso nel documento.
     readonly path: readonly number[],
     private readonly parts: readonly Part[],
-  ) {}
+    /// L'elemento.
+    readonly node: LeafNode,
+  ) {
+    const out = new BoundsBuilder();
+    for (const part of parts) {
+      const box = transformedBounds(part.segments, part.matrix);
+      if (box !== null) includeSeen(out, part, box, part.radius * scaleOf(part.matrix), "scene");
+    }
+    this.bounds = out.finish();
+  }
+
+  /// La chiave per la gomma: l'id, o il percorso come per un oggetto che
+  /// non ne ha.
+  get key(): string {
+    return this.node.facts.id ?? `@${this.path.join(".")}`;
+  }
+
+  /// Come lo indirizza un'operazione: l'id, o il percorso col tag (formato
+  /// della scena, bersaglio).
+  get target(): Target {
+    return this.node.facts.id ?? { path: this.path, tag: tagName(this.node) };
+  }
 
   /// Vero se il blocco si vede nel punto `p` della scena, entro `tolerance`.
   covers(p: Point, tolerance: number): boolean {
     return this.parts.some((part) => partSample(part, p, tolerance) !== null);
   }
+
+  /// Vero se il segmento da `a` a `b` tocca il blocco, come
+  /// [`Unit.touches`].
+  touches(a: Point, b: Point, tolerance: number): boolean {
+    if (!near(this.bounds, a, b, tolerance)) return false;
+    return this.parts.some((part) => partTouches(part, a, b, tolerance));
+  }
 }
+
+/// Ciò che la gomma toglie: un oggetto, o un blocco estraneo intero.
+export type Erasable = Unit | ForeignBlock;
 
 /// Un oggetto della scena.
 export class Unit {
@@ -226,6 +262,10 @@ export interface Nested {
   resolve(key: string): Unit | null;
   /// Gli oggetti che si scelgono fra i figli di `container`.
   childrenOf(container: ContainerNode): Unit[];
+  /// I blocchi estranei fra i figli di `container`, se è un gruppo o un
+  /// collegamento dove si sceglie, in ordine di documento: sempre gli stessi
+  /// per lo stesso indice.
+  foreignOf(container: ContainerNode): readonly ForeignBlock[];
   /// Il contenitore isolato come oggetto; `null` senza, o se lì non si
   /// sceglie.
   scopeUnit(): Unit | null;

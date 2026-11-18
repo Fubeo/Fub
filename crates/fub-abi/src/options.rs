@@ -502,8 +502,21 @@ pub mod permission {
     /// resto del vault no»*. Un pannello di recupero è la seconda frase, ed è
     /// il solo cliente che questa domanda abbia mai avuto.
     pub const READ_DRAFTS: &str = "fub:read-drafts";
+    /// Mostrare una **notifica del sistema**, fuori dalla finestra di Fub: oggi
+    /// il promemoria di un compito che arriva all'ora scritta.
+    ///
+    /// Non è un permesso dei plugin di terzi — nessuna capacità WASM lo
+    /// consuma, e la WIT non ha un modo di notificare — ma del componente dei
+    /// compiti, che lo dichiara nel proprio manifest. Sta qui perché è qui che
+    /// un permesso diventa **negabile**: l'interruttore nelle Impostazioni
+    /// nasce da questo elenco e dal manifest, come per ogni altro. Spento, il
+    /// promemoria resta nella nota e nell'elenco dei promemoria passati, e
+    /// nessuna notifica esce dalla finestra.
+    ///
+    /// Senza parametro: una notifica dice *se*, non *dove*.
+    pub const NOTIFICATIONS: &str = "fub:notifications";
 
-    /// **Tutti e quattordici** [conta: permessi-dichiarabili], in ordine di
+    /// **Tutti e quindici** [conta: permessi-dichiarabili], in ordine di
     /// dichiarazione: l'elenco che questo host sa nominare.
     ///
     /// Serve a chi deve *mostrarli* — un pannello, una CLI, il momento in cui
@@ -527,7 +540,7 @@ pub mod permission {
     /// **tenerli non basta: bisogna anche tenerli della grana giusta**, perché
     /// la grana di un nome si può correggere gratis solo finché nessun manifest
     /// l'ha scritto (0144).
-    pub const ALL: [&str; 14] = [
+    pub const ALL: [&str; 15] = [
         READ_VAULT,
         WRITE_VAULT,
         NETWORK,
@@ -542,6 +555,7 @@ pub mod permission {
         READ_SESSION,
         READ_SELECTION,
         READ_DRAFTS,
+        NOTIFICATIONS,
     ];
 
     /// Il nome di un permesso senza il suo namespace: `fub:network` →

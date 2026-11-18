@@ -287,6 +287,71 @@ fn rename_does_not_hijack_links_to_a_homonym() {
     );
 }
 
+/// IMP-101: un wikilink col path parziale (`Progetti/Alpha` per
+/// `Note/Progetti/Alpha`) è un backlink, e la rinomina lo riscrive come un
+/// link per path; uno che punta a un omonimo più vicino alla radice no.
+#[test]
+fn rename_rewrites_a_partial_path_link() {
+    let dir = TempDir::new("rename-partial-path");
+    let mut ws = workspace(&dir.0);
+    ws.write_document(
+        &DocId::new("Note/Progetti/Alpha.lnk"),
+        "",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &DocId::new("Note/index.lnk"),
+        "Progetti/Alpha\nAltraCosa",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    assert_eq!(
+        ws.backlinks(&DocId::new("Note/Progetti/Alpha.lnk"))[0].source,
+        DocId::new("Note/index.lnk")
+    );
+
+    ws.rename_document(
+        &DocId::new("Note/Progetti/Alpha.lnk"),
+        &DocId::new("Note/Progetti/Beta.lnk"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        ws.read_source(&DocId::new("Note/index.lnk")).unwrap(),
+        "Beta\nAltraCosa"
+    );
+    let bl = ws.backlinks(&DocId::new("Note/Progetti/Beta.lnk"));
+    assert_eq!(bl.len(), 1);
+    assert_eq!(bl[0].source, DocId::new("Note/index.lnk"));
+
+    // Con `Progetti/Beta` anche alla radice, il link va a quello: rinominare
+    // l'altro non lo tocca.
+    ws.write_document(&DocId::new("Progetti/Gamma.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(
+        &DocId::new("Note/altra.lnk"),
+        "Progetti/Gamma",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &DocId::new("Note/Progetti/Gamma.lnk"),
+        "",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.rename_document(
+        &DocId::new("Note/Progetti/Gamma.lnk"),
+        &DocId::new("Note/Progetti/Delta.lnk"),
+    )
+    .unwrap();
+    assert_eq!(
+        ws.read_source(&DocId::new("Note/altra.lnk")).unwrap(),
+        "Progetti/Gamma"
+    );
+}
+
 #[test]
 fn rename_to_contended_name_rewrites_by_path() {
     let dir = TempDir::new("rename-ambiguous");

@@ -59,10 +59,14 @@ const SVG: Record<string, string> = {
   // --- i segni dei formati: le scelte in riga di «Copia come» -------------
   // Disegnati apposta, senza parole, perché i tastini restino stretti in ogni
   // lingua: la M con la freccia in giù, le parentesi angolari con la barra,
-  // il foglio di sole righe.
+  // il foglio di sole righe; per la formula le graffe col rovescio del
+  // LaTeX, il quadro col monte dell'immagine, la sigma dell'equazione.
   "copy-markdown": '<path d="M2.7 17.25v-10.5l4.35 5.1 4.35-5.1v10.5"/><path d="M18.3 6.75v9.9M15 13.5l3.3 3.6 3.3-3.6"/>',
   "copy-html": '<path d="M6.9 6.9 2.4 12l4.5 5.1M17.1 6.9l4.5 5.1-4.5 5.1M13.95 4.8l-3.9 14.4"/>',
   "copy-text": '<rect x="3.75" y="3" width="16.5" height="18" rx="3"/><path d="M7.95 8.4h8.1M7.95 12h8.1M7.95 15.6h4.5"/>',
+  "copy-latex": '<path d="M7.5 4.8h-.9a1.8 1.8 0 0 0-1.8 1.8v3.6L3 12l1.8 1.8v3.6a1.8 1.8 0 0 0 1.8 1.8h.9M16.5 4.8h.9a1.8 1.8 0 0 1 1.8 1.8v3.6L21 12l-1.8 1.8v3.6a1.8 1.8 0 0 1-1.8 1.8h-.9M10.2 7.8l3.6 8.4"/>',
+  "copy-image": '<rect x="3" y="3.75" width="18" height="16.5" rx="3"/><circle cx="8.7" cy="9.15" r="1.65"/><path d="M3.3 17.4l5.1-4.65 3.45 3.15 3.9-3.9 5.1 5.1"/>',
+  "copy-equation": '<path d="M18 7.35v-2.55H6l6.3 7.2-6.3 7.2h12v-2.55"/>',
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
   // --- le view di sincronizzazione e pubblicazione (fub-host) -------------
   sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',

@@ -5,8 +5,8 @@ use super::*;
 /// Le stringhe del pannello e dei comandi. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
 pub fn catalog() -> Vec<StringCatalog> {
-    crate::formats::speaking(vec![
-        options_it(StringCatalog::new("it"))
+    crate::note_types::speaking(crate::formats::speaking(vec![
+        super::type_page::type_page_strings_it(options_it(StringCatalog::new("it")))
             .with(VIEW_TITLE, "Proprietà")
             .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
             .with(EMPTY_NO_PROPS, "Questa nota non ha proprietà.")
@@ -18,7 +18,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(ADD_VALUE_LABEL, "Valore")
             .with(ADD_SUBMIT, "Aggiungi")
             .with(REMOVE_LABEL, "Rimuovi")
-            .with(E_EMPTY_KEY, "La chiave è vuota.")
+            .with(E_EMPTY_KEY, "Manca il nome della proprietà.")
             .with(AND_NO_NOTES, "Nessuna nota su cui scrivere la proprietà.")
             .with(E_YAML, "Non ho potuto scrivere il frontmatter: {reason}")
             .with(P_SET, "Proprietà «{key}» in {doc}")
@@ -143,7 +143,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.type.set.type.title", "Tipo")
             .with(
                 "property.type.set.type.desc",
-                "text, list, number, checkbox, date, date_time, tags, select, status o url.",
+                "text, list, number, checkbox, date, date_time, tags, select, status, url o relation.",
             )
             .with("property.key.rename.title", "Rinomina proprietà nel vault")
             .with(
@@ -184,12 +184,54 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "note.properties.clear.desc",
                 "Toglie tutto il frontmatter della nota, con anteprima e annullo.",
             )
+            .with(E_NOTE_CHANGED, "{doc} è cambiata mentre sceglievi: riprova.")
+            .with(
+                P_NOTE_TYPE,
+                "Tipo «{type}» per {doc} · proprietà aggiunte: {count}",
+            )
+            .with(P_TYPE_SAME, "{doc} è già di tipo «{type}»")
+            .with(U_NOTE_TYPE, "Annulla: tipo «{type}» per {doc}")
+            .with("note.type.set.title", "Cambia il tipo della nota")
+            .with(
+                "note.type.set.desc",
+                "Dà un tipo alla nota: aggiunge le proprietà del tipo che mancano e non toglie niente.",
+            )
+            .with("note.type.set.doc.title", "Nota")
+            .with(
+                "note.type.set.doc.desc",
+                "La nota; se manca, quella attiva.",
+            )
+            .with("note.type.set.type.title", "Tipo")
+            .with(
+                "note.type.set.type.desc",
+                "Il tipo: un link come [[Tipi/Libro]], un percorso o un nome.",
+            )
+            .with("note.type.set.expected_revision.title", "Revisione della nota")
+            .with(
+                "note.type.set.expected_revision.desc",
+                "La revisione della nota letta: se è cambiata, non si scrive niente.",
+            )
+            .with("note.type.list.title", "Elenca i tipi di nota")
+            .with(
+                "note.type.list.desc",
+                "I tipi della cartella dei tipi, con quante note ha ognuno.",
+            )
+            .with("note.type.get.title", "Leggi un tipo di nota")
+            .with(
+                "note.type.get.desc",
+                "Il tipo che un nome nomina: icona e proprietà, o che cosa non va.",
+            )
+            .with("note.type.get.type.title", "Tipo")
+            .with(
+                "note.type.get.type.desc",
+                "Il tipo: un link come [[Tipi/Libro]], un percorso o un nome.",
+            )
             .with("note.properties.clear.doc.title", "Nota")
             .with(
                 "note.properties.clear.doc.desc",
                 "La nota; se manca, quella attiva.",
             ),
-        options_en(StringCatalog::new("en"))
+        super::type_page::type_page_strings_en(options_en(StringCatalog::new("en")))
             .with(VIEW_TITLE, "Properties")
             .with(EMPTY_NO_NOTES, "No note open.")
             .with(EMPTY_NO_PROPS, "This note has no properties.")
@@ -201,7 +243,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(ADD_VALUE_LABEL, "Value")
             .with(ADD_SUBMIT, "Add")
             .with(REMOVE_LABEL, "Remove")
-            .with(E_EMPTY_KEY, "The key is empty.")
+            .with(E_EMPTY_KEY, "The property needs a name.")
             .with(AND_NO_NOTES, "No note to write the property on.")
             .with(E_YAML, "Could not write the frontmatter: {reason}")
             .with(P_SET, "Property «{key}» in {doc}")
@@ -323,7 +365,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.type.set.type.title", "Type")
             .with(
                 "property.type.set.type.desc",
-                "text, list, number, checkbox, date, date_time, tags, select, status or url.",
+                "text, list, number, checkbox, date, date_time, tags, select, status, url or relation.",
             )
             .with("property.key.rename.title", "Rename vault property")
             .with(
@@ -362,8 +404,50 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 "note.properties.clear.doc.desc",
                 "The note; the active one if omitted.",
+            )
+            .with(E_NOTE_CHANGED, "{doc} changed while you were choosing: try again.")
+            .with(
+                P_NOTE_TYPE,
+                "Type «{type}» for {doc} · properties added: {count}",
+            )
+            .with(P_TYPE_SAME, "{doc} is already of type «{type}»")
+            .with(U_NOTE_TYPE, "Undo: type «{type}» for {doc}")
+            .with("note.type.set.title", "Change note type")
+            .with(
+                "note.type.set.desc",
+                "Gives the note a type: adds the type's missing properties and removes nothing.",
+            )
+            .with("note.type.set.doc.title", "Note")
+            .with(
+                "note.type.set.doc.desc",
+                "The note; the active one if omitted.",
+            )
+            .with("note.type.set.type.title", "Type")
+            .with(
+                "note.type.set.type.desc",
+                "The type: a link like [[Tipi/Libro]], a path or a name.",
+            )
+            .with("note.type.set.expected_revision.title", "Note revision")
+            .with(
+                "note.type.set.expected_revision.desc",
+                "The revision of the note that was read: if it changed, nothing is written.",
+            )
+            .with("note.type.list.title", "List note types")
+            .with(
+                "note.type.list.desc",
+                "The types in the types folder, with how many notes each one has.",
+            )
+            .with("note.type.get.title", "Read a note type")
+            .with(
+                "note.type.get.desc",
+                "The type a name points to: icon and properties, or what is wrong.",
+            )
+            .with("note.type.get.type.title", "Type")
+            .with(
+                "note.type.get.type.desc",
+                "The type: a link like [[Tipi/Libro]], a path or a name.",
             ),
-    ])
+    ]))
 }
 
 /// I nove colori e i tre gruppi, coi nomi dei colori dei Blocchi
@@ -486,6 +570,42 @@ fn options_it(catalog: StringCatalog) -> StringCatalog {
             "property.types.restore.expected.desc",
             "Il testo che il registro deve avere perché si rimetta quello di prima.",
         )
+        .with(P_TARGET_SET, "Le note di «{key}» si scelgono fra «{target}»")
+        .with(P_TARGET_CLEAR, "Le note di «{key}» si scelgono fra tutte")
+        .with(P_TARGET_SAME, "Il bersaglio di «{key}» è già così")
+        .with(U_TARGET, "Annulla il cambio del bersaglio di «{key}»")
+        .with(
+            E_NOT_RELATION,
+            "«{key}» non è una Relazione: il bersaglio vale solo per le Relazioni.",
+        )
+        .with(
+            E_TARGET,
+            "«{value}» non è un bersaglio: scrivi un tipo come [[Tipi/Libro]] o una cartella del vault come Libri.",
+        )
+        .with(
+            E_LINKED_FROM,
+            "Non ho potuto leggere le note che legano questa: l'indice ha dato una risposta inattesa ({kind}). Riprova; se succede ancora, ricostruisci l'indice.",
+        )
+        .with("property.target.set.title", "Scegli il bersaglio di una Relazione")
+        .with(
+            "property.target.set.desc",
+            "Dice fra quali note si sceglie il valore di una Relazione: le note di un tipo o di una cartella. Senza bersaglio, tutte. Le note non cambiano.",
+        )
+        .with("property.target.set.key.title", "Proprietà")
+        .with(
+            "property.target.set.key.desc",
+            "La chiave dichiarata Relazione.",
+        )
+        .with("property.target.set.target.title", "Bersaglio")
+        .with(
+            "property.target.set.target.desc",
+            "Un tipo, come [[Tipi/Libro]], o una cartella, come Libri. Vuoto o assente toglie il bersaglio.",
+        )
+        .with("property.target.set.expected.title", "Registro letto")
+        .with(
+            "property.target.set.expected.desc",
+            "Il testo del registro che si è letto: se nel frattempo è cambiato, non si scrive.",
+        )
 }
 
 fn options_en(catalog: StringCatalog) -> StringCatalog {
@@ -558,5 +678,41 @@ fn options_en(catalog: StringCatalog) -> StringCatalog {
         .with(
             "property.types.restore.expected.desc",
             "The text the registry must have for the earlier one to be put back.",
+        )
+        .with(P_TARGET_SET, "Notes for «{key}» are picked from «{target}»")
+        .with(P_TARGET_CLEAR, "Notes for «{key}» are picked from all notes")
+        .with(P_TARGET_SAME, "The target of «{key}» is already like that")
+        .with(U_TARGET, "Undo the change to the target of «{key}»")
+        .with(
+            E_NOT_RELATION,
+            "«{key}» is not a Relation: a target only applies to Relations.",
+        )
+        .with(
+            E_TARGET,
+            "«{value}» is not a target: write a type like [[Types/Book]] or a vault folder like Books.",
+        )
+        .with(
+            E_LINKED_FROM,
+            "Could not read the notes that link here: the index gave an unexpected answer ({kind}). Try again; if it happens again, rebuild the index.",
+        )
+        .with("property.target.set.title", "Choose the target of a Relation")
+        .with(
+            "property.target.set.desc",
+            "Says which notes a Relation picks its value from: the notes of a type or of a folder. Without a target, all of them. Notes do not change.",
+        )
+        .with("property.target.set.key.title", "Property")
+        .with(
+            "property.target.set.key.desc",
+            "The key declared as a Relation.",
+        )
+        .with("property.target.set.target.title", "Target")
+        .with(
+            "property.target.set.target.desc",
+            "A type, like [[Types/Book]], or a folder, like Books. Empty or missing removes the target.",
+        )
+        .with("property.target.set.expected.title", "Registry read")
+        .with(
+            "property.target.set.expected.desc",
+            "The registry text that was read: if it changed in the meantime, nothing is written.",
         )
 }

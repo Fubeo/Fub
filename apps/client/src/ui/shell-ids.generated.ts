@@ -20,6 +20,8 @@ export const SETTINGS_WITH_THEIR_OWN_GESTURE: readonly string[] = [
   "chrome.rail.hidden",
   "properties.types",
   "appearance.theme-id",
+  "chrome.formatbar.visible",
+  "developer.theme-folder",
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export.

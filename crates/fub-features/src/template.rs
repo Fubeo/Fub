@@ -44,6 +44,10 @@ pub const TEMPLATE_VIEW: &str = "templates";
 /// per bottone.
 pub const CALENDAR_VIEW: &str = "calendar";
 pub const NOTES_FROM_TEMPLATE: &str = "note.from_template";
+/// Crea una nota da un tipo di nota (E5): le proprietà del tipo, il suo testo
+/// come modello, nella sua cartella. Il tipo è una nota della cartella
+/// `files.types-folder` (vedi `note_types`).
+pub const NOTES_FROM_TYPE: &str = "note.from_type";
 pub const NOTES_DAILY: &str = "note.daily";
 /// Crea una nota con un nome univoco (`name`, poi `name 1`, `name 2`, …)
 /// oppure ne sceglie uno casuale (`random`), senza mai sovrascrivere.
@@ -115,6 +119,9 @@ const TRASH: &str = "note.trash";
 /// dello YAML): una chiave assente nel target si scrive con un `run_command`,
 /// mai con uno splice fatto a mano. Id letterale per la stessa ragione di sopra.
 const PROP_SET: &str = "note.property.set";
+/// Il registro dei tipi di proprietà del vault (chiave del core, la stessa che
+/// leggono le proprietà): dice con che valore nasce una proprietà di un tipo.
+const PROPERTY_TYPES_KEY: &str = "properties.types";
 
 const USE: &str = "use";
 const TEMPLATE: &str = "template";
@@ -132,6 +139,11 @@ const INTO: &str = "into";
 const MODE: &str = "mode";
 const TRASH_PARAM: &str = "trash";
 const SEPARATOR: &str = "separator";
+/// Il tipo di `note.from_type`: un link (`[[Tipi/Libro]]`), un percorso o un
+/// nome.
+const TYPE: &str = "type";
+/// La revisione del file del tipo che chi chiede ha letto.
+const EXPECTED_REVISION: &str = "expected_revision";
 
 const VIEW_TITLE: &str = "view_title";
 const EMPTY: &str = "empty";
@@ -168,6 +180,9 @@ const E_BAD_FRONTMATTER_MAP: &str = "e_bad_frontmatter_map";
 const P_FROM: &str = "p_from";
 const D_FROM: &str = "d_from";
 const U_FROM: &str = "u_from";
+const P_FROM_TYPE: &str = "p_from_type";
+const D_FROM_TYPE: &str = "d_from_type";
+const U_FROM_TYPE: &str = "u_from_type";
 const P_DAILY: &str = "p_daily";
 const D_DAILY: &str = "d_daily";
 const U_DAILY: &str = "u_daily";
@@ -196,7 +211,7 @@ const A_FAILED: &str = "failed";
 const A_VALUE: &str = "value";
 
 pub fn catalog() -> Vec<StringCatalog> {
-    crate::formats::speaking(vec![catalog_it(), catalog_en()])
+    crate::note_types::speaking(crate::formats::speaking(vec![catalog_it(), catalog_en()]))
 }
 
 mod create;
@@ -218,7 +233,8 @@ use crate::vocabulary::{
 #[cfg(test)]
 use create::valid_date;
 use create::{
-    created, daily, expand_full, file_name, from_template, plan, today, valid_time, with_extension,
+    created, daily, expand_full, file_name, from_template, from_type, plan, today, valid_time,
+    with_extension,
 };
 use extract::{check_relative_assets, extract};
 #[cfg(test)]

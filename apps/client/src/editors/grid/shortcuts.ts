@@ -89,6 +89,24 @@ const CONTROL_SHIFT_DIALOGS: Readonly<Record<string, ShortcutDialog>> = {
   KeyP: dialog("formatCells", { tab: "font" }),
 };
 
+/// I tasti con nome che WebKitGTK può dare come `Unidentified`: Maiusc+Tab
+/// arriva da GTK come `ISO_Left_Tab`, e la WebView lo passa con
+/// `key === "Unidentified"` e `code === "Tab"` (IMP-029). Per questi il tasto
+/// fisico dice quale è.
+const NAMED_BY_CODE: Readonly<Record<string, string>> = {
+  Tab: "Tab",
+  Enter: "Enter",
+  NumpadEnter: "Enter",
+  Escape: "Escape",
+};
+
+/// Il nome del tasto di `event`, con `Unidentified` riletto dal tasto
+/// fisico quando è uno di quelli con nome che la griglia usa.
+export function namedKey(event: KeyboardEvent): string {
+  if (event.key !== "Unidentified") return event.key;
+  return NAMED_BY_CODE[event.code] ?? event.key;
+}
+
 /// La finestra della scorciatoia di `event`, o `null`. Ctrl+«+» e Ctrl+«-»
 /// su un intervallo che non prende righe o colonne intere chiedono come
 /// spostare le celle, come in Excel.

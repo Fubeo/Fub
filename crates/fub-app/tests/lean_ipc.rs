@@ -322,6 +322,24 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_bundles", Why::AppSurface),
     ("list_themes", Why::AppSurface),
     ("read_theme", Why::AppSurface),
+    // Installare un tema da una cartella scelta dalla persona nella finestra
+    // nativa (la webview non passa path): prima la si legge senza scrivere (i
+    // cancelli CSS sono della shell), poi si scrive nella configurazione della
+    // macchina coi byte controllati (un permesso che vale una volta, e che
+    // `discard_theme_folder` scarta dopo un «no»); solo dalla shell
+    // principale, e le prime due con `developer.mode` acceso (la regola è
+    // dell'host).
+    ("check_theme_folder", Why::AppSurface),
+    ("install_theme_from_folder", Why::AppSurface),
+    ("discard_theme_folder", Why::AppSurface),
+    // Collegare la cartella di un tema in sviluppo, scelta nella finestra
+    // nativa come sopra: l'host la legge al suo posto e la guarda, e a ogni
+    // salvataggio la shell riceve `fub://theme-changed`. Scollegare, e lo stato
+    // del collegamento per Aspetto; solo dalla shell principale, collegare
+    // con `developer.mode` acceso.
+    ("link_theme_folder", Why::AppSurface),
+    ("unlink_theme_folder", Why::AppSurface),
+    ("theme_link", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
     // Il ciclo di vita dei motori, che sono del processo e non di un vault:
     // scaldare quello di un'estensione prima della prima apertura, e lasciare

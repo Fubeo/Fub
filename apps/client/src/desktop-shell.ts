@@ -25,7 +25,15 @@ import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
 import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
-import { FORMATBAR_EVENT } from "./panels/selection-bubble";
+import {
+  currentToolbarForm,
+  DEFAULT_TOOLBAR_FORM,
+  FORMATBAR_EVENT,
+  TOOLBAR_SETTING,
+  toggledToolbarForm,
+  toolbarFormOf,
+  type ToolbarForm,
+} from "./panels/format-bar";
 import { MINIBAR_SETTING, miniBarModeOf } from "./panels/mini-bar";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
 import { listenForRenderingNotices } from "./ui/rendering-notice";
@@ -33,13 +41,12 @@ import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
-  canCreateDrawing,
   canImportDrawing,
   displayBinding,
   loadKeyOverrides,
   mountKeyOverrides,
   NEW_DRAWING,
-  newDrawing,
+  newEntries,
   pickDrawingImport,
   registerCommandForm,
   registerCommandStarter,
@@ -77,7 +84,8 @@ import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
-import { focusedContextMode, openingsSoFar } from "./state/document-controller";
+import { focusedContextMode, focusEditor, openingsSoFar } from "./state/document-controller";
+import { escapeLeavesConcentration, setConcentrating } from "./state/concentration";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
@@ -163,14 +171,10 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     document.getElementById("app")?.toggleAttribute("data-status-off", valid && values.get("chrome.status.visible") === false);
     toolbarVisible = !valid || values.get("chrome.toolbar.visible") !== false;
     applyToolbar();
-    // La barra di formattazione spenta lascia i suoi gesti alla bolla di
-    // selezione: lo dice l'attributo (per la resa) e l'evento (per la bolla).
-    const formatbarOff = valid && values.get("chrome.formatbar.visible") === false;
+    // La forma della barra di formato (`editor.toolbar`, o la barra spenta
+    // di un Fub di prima).
+    applyToolbarForm(toolbarFormOf(entries));
     const app = document.getElementById("app");
-    if (app && app.hasAttribute("data-formatbar-off") !== formatbarOff) {
-      app.toggleAttribute("data-formatbar-off", formatbarOff);
-      window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
-    }
     // Il menu «/» nel testo: spento, il «/» è testo.
     if (app) app.dataset["slash"] = values.get("editor.slash") === false ? "off" : "on";
     // La mini-barra: quando c'è, col tasto destro e sul testo scelto.
@@ -200,10 +204,36 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
   // giro sul canale dati in più per ogni gesto.
   lifetime.add(onEvent("setting_changed", ({ key }) => {
     if (settingTouches(key, (changed) => (changed.startsWith("chrome.") && !SIDE_KEYS.has(changed))
-      || changed === MINIBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
+      || changed === MINIBAR_SETTING || changed === TOOLBAR_SETTING || changed.startsWith("editor.slash"))) void reread();
   }));
   await reread();
 }
+/// L'ultima forma visibile della barra di formato: dove la riporta il comando
+/// del menu Vista quando è nascosta.
+let lastVisibleToolbar: ToolbarForm = DEFAULT_TOOLBAR_FORM;
+
+/// Mette la forma della barra sulla finestra: `data-toolbar` per le barre dei
+/// riquadri e per la bolla della selezione (`bubbleWanted`), `data-formatbar-off`
+/// per la resa. L'evento lo dice a tutte, una volta.
+function applyToolbarForm(form: ToolbarForm): void {
+  const app = document.getElementById("app");
+  if (!app) return;
+  if (form !== "nascosta") lastVisibleToolbar = form;
+  if (app.dataset["toolbar"] === form) return;
+  app.dataset["toolbar"] = form;
+  app.toggleAttribute("data-formatbar-off", form === "nascosta");
+  window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
+}
+
+/// Il comando del menu Vista: la barra cambia subito, e la scelta si scrive
+/// in `editor.toolbar`. Non riuscita la scrittura, la barra resta com'è ora e
+/// lo si dice: alla prossima lettura torna quella scritta.
+function toggleToolbar(): void {
+  const next = toggledToolbarForm(currentToolbarForm(), lastVisibleToolbar);
+  applyToolbarForm(next);
+  void writeChrome(TOOLBAR_SETTING, next).catch(() => notify(t("commands.toolbar.not_remembered"), "info"));
+}
+
 /// Schermata senza vault e layout adattivo: la shell possiede l'apertura,
 /// l'onboarding possiede demo, supporto e recupero. Le due vite si chiudono
 /// insieme; il picker di cartella resta registrato soltanto qui.
@@ -1084,6 +1114,14 @@ async function init(): Promise<Teardown> {
     layer: "global",
     run: () => toggleFocusMode(),
   });
+  registerShellCommand({
+    id: "shell.toolbar.toggle",
+    title: "commands.toolbar.toggle",
+    description: "commands.toolbar.toggle.desc",
+    layer: "global",
+    run: () => toggleToolbar(),
+  });
+  mountConcentration(pageWindowLifetime);
 
   // La menubar applicativa (§Fase 2): cinque voci che invocano i comandi
   // di shell già registrati. Il menu non registra niente: legge il
@@ -1111,12 +1149,10 @@ async function init(): Promise<Teardown> {
       label: t("palette.open_view", { title: spec.title }),
       run: () => openPrimaryView(spec.id),
     })),
-    // «Nuovo disegno…» e «Importa disegno…» accanto a «Nuova nota», se il
-    // kernel ha il comando.
-    creations: () => [
-      ...(canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : []),
-      ...(canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
-    ],
+    // «Nuovo ▸»: l'elenco del «+» dell'albero (S34), dove nasce col gesto diretto.
+    creations: () => newEntries().map((entry) => (entry.kind === "note" ? { ...entry, echoes: true } : entry)),
+    // «Importa disegno…» dopo «Nuovo ▸», se il kernel ha il comando.
+    imports: () => (canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
     vault: vaultGestures,
   }));
   refreshTitlebarShortcuts();
@@ -1372,17 +1408,60 @@ export function vaultGestures(): { label: string; run(): void }[] {
 /// stessa istruzione.
 let focusHinted = false;
 
-/// La scrittura senza cornice: rail, barra laterale, ispettore e divisori
-/// escono di scena; lo stesso comando (o Esc) li rimette.
+/// La scrittura senza cornice: rail, cassetti, ispettore, linguette e barra di
+/// formato escono di scena, la barra del titolo si attenua e torna al
+/// passaggio; lo stesso comando, Esc o «Esci dalla concentrazione» nella banda
+/// li rimettono. Lo stato lo legge anche chi sta sotto la shell
+/// (`state/concentration.ts`); la pelle legge `data-focus-mode`.
 function toggleFocusMode(force?: boolean): void {
   const app = document.getElementById("app");
   if (!app) return;
   const on = force ?? !app.hasAttribute("data-focus-mode");
   app.toggleAttribute("data-focus-mode", on);
+  setConcentrating(on);
+  const exit = document.getElementById(FOCUS_EXIT_ID);
+  if (exit) {
+    // Il bottone che sparisce non si porta via il fuoco: torna al testo.
+    if (!on && exit === document.activeElement) focusEditor();
+    exit.hidden = !on;
+  }
   if (on && !focusHinted) {
     focusHinted = true;
     notify(t("shell.focus_on"), "info");
   }
+}
+
+const FOCUS_EXIT_ID = "status-focus-exit";
+
+/// «Esci dalla concentrazione», in testa alla parte destra della banda, e Esc.
+/// Esc esce soltanto se nessuno l'ha già preso: un menu, un dialogo, la
+/// sbirciata, un completamento o il «/» lo chiudono in cattura o nell'editor
+/// con `preventDefault`, e la concentrazione aspetta il prossimo. Con Vim
+/// acceso Esc resta di Vim, che lo prende sempre. Il tasto Esc dei Blocchi
+/// in concentrazione non seleziona il blocco (`blocks/selection.ts`).
+function mountConcentration(lifetime: Lifetime): void {
+  const end = document.getElementById("status-end");
+  if (end) {
+    const exit = document.createElement("button");
+    exit.type = "button";
+    exit.id = FOCUS_EXIT_ID;
+    exit.className = "status-item status-item--button status-focus-exit";
+    exit.hidden = !document.getElementById("app")?.hasAttribute("data-focus-mode");
+    const label = (): void => {
+      exit.textContent = t("shell.focus_exit");
+    };
+    label();
+    lifetime.add(onLanguage(label));
+    lifetime.listen(exit, "click", () => toggleFocusMode(false));
+    end.prepend(exit);
+    lifetime.add(() => exit.remove());
+  }
+  lifetime.listen(document, "keydown", (event: KeyboardEvent) => {
+    if (!escapeLeavesConcentration(event)) return;
+    event.preventDefault();
+    toggleFocusMode(false);
+  });
+  lifetime.add(() => setConcentrating(false));
 }
 
 async function pickVault(): Promise<void> {

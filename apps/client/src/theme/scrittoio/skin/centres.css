@@ -375,6 +375,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Il nome di un lavoro in corso, o di un file da salvare, va a capo invece di
+   accorciarsi: «Esportazione di «Bando di gara.pdf» come PDF redatto» dice
+   quale delle due esportazioni sta girando solo per intero. Gli esiti dei
+   lavori finiti (`data-tone`) restano su una riga: un motivo lungo lo ridice
+   il suggerimento. */
+.activity-row:not([data-tone]) > .activity-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .activity-row > .muted {
   grid-column: 2;
   grid-row: 1;
@@ -389,6 +398,17 @@
 .activity-row > .link-button {
   grid-column: 3;
   grid-row: 1;
+  margin-right: calc(-1 * var(--space-3));
+}
+/* Le azioni di un file esportato («Salva…», «Stampa…»): un gruppo in fila nel
+   posto delle azioni, uno accanto all'altro anche quando il centro è stretto;
+   il nome del file si accorcia, i pulsanti no. */
+.activity-actions {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   margin-right: calc(-1 * var(--space-3));
 }
 .activity-row > span[role="status"] {

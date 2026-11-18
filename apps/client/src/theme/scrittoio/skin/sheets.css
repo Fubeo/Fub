@@ -343,12 +343,21 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-/* Dove la striscia continua sotto l'elenco, le linguette ci arrivano sfumando;
-   a destra l'elenco copre anche il margine della striscia, dove altrimenti
-   spunterebbe un pezzo del «+». */
+/* Dove la striscia continua sotto il «+» e l'elenco, le linguette ci arrivano
+   sfumando: la sfumatura è del «+», che sta a sinistra e copre anche il
+   passo fino all'elenco; l'elenco copre a destra il margine della striscia. */
+.pane-tabs[data-scrolled="end"] > .tab-new,
+.pane-tabs[data-scrolled="both"] > .tab-new {
+  background: var(--bg);
+  box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
+}
+.pane-tabs[data-scrolled="end"] > .tab-new:hover,
+.pane-tabs[data-scrolled="both"] > .tab-new:hover {
+  background: var(--bg-hover);
+}
 .pane-tabs[data-scrolled="end"] > [data-tab-menu],
 .pane-tabs[data-scrolled="both"] > [data-tab-menu] {
-  box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
+  box-shadow: var(--space-2) 0 0 var(--bg);
 }
 
 /* ── La testata: solo il percorso, «Salvato» e «…» ──────────────────────── */
@@ -403,9 +412,12 @@
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
 }
+/* Cedere non vuol dire sparire: una cartella si stringe fino all'iniziale con
+   l'ellissi, non a zero. Larga zero lasciava le sole barre, «/ / Il banco…»,
+   quando accanto lo stato è lungo («Salvataggio fallito»). */
 .sheet-title [data-folder] {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 1.75em;
   max-width: max-content;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -744,17 +756,8 @@
   text-overflow: ellipsis;
 }
 
-/* La bolla di selezione è un rialzo come un menu: carta di menu, ombra, raggio.
-   La sua barra non porta il filo sotto, che separa dal testo una testata. */
-.selection-bubble {
-  border-radius: var(--radius-menu);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-3);
-}
-.selection-bubble .format-bar {
-  padding: 0 var(--space-3);
-  box-shadow: none;
-}
+/* La bolla di selezione porta la mini-barra, che ha il suo rialzo
+   (`menus.css`): la bolla è solo il posto. */
 .selection-bubble[hidden] {
   display: none;
 }
@@ -771,6 +774,11 @@
 .pane-preview.markdown-preview {
   width: min(100%, var(--content-width));
   margin-inline: auto;
+}
+/* Il riquadro di lettura riempie la carta, che taglia ciò che sborda: col
+   fuoco l'anello sta dentro, come sulle altre superfici a tutta carta. */
+.pane-preview:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
 }
 
 /* Il riquadro vuoto: una frase nel carattere del testo e i gesti per

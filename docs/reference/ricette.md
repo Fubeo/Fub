@@ -32,9 +32,10 @@ Comandi, e spento lui le note della cartella restano note come le altre.
 
 Questa pagina dice dove vive una ricetta, com'è fatto il blocco, i suoi campi
 e i limiti, i segnaposto, i controlli con i loro codici, come gira, si annulla
-e si prova, come la persona la accende su questa macchina, e che cosa fa
-`recipes.new`. Una ricetta scritta in un vault compare fra i comandi soltanto
-dopo che la persona l'ha accesa (vedi «Accendere e spegnere»).
+e si prova, come la persona la accende su questa macchina, le porte IPC
+dell'app e che cosa fa `recipes.new`. Una ricetta scritta in un vault compare
+fra i comandi soltanto dopo che la persona l'ha accesa (vedi «Accendere e
+spegnere»).
 
 ## Dove vive
 
@@ -302,6 +303,42 @@ né per la CLI o il server MCP: un programma non si dà il consenso da solo.
 Controllare e provare, invece, si fanno anche da fuori, con `fub-cli ricette`
 e gli strumenti MCP `fub_recipe_check` e `fub_recipe_try`: vedi
 [Costruire su Fub con un'AI](../development/costruire-con-ai.md).
+
+## Le porte
+
+L'app parla con le ricette del vault da quattro porte IPC dedicate in
+`allow-shell`, solo per la finestra principale. Ognuna delega a un metodo di
+`Host` e gira fuori dal thread principale, perché ogni chiamata rilegge la cartella delle ricette (è anche la riconciliazione) e con
+duecento note la finestra smetterebbe di presentare fotogrammi.
+
+| Porta | Argomenti | Risposta |
+|---|---|---|
+| `recipes_list` | `vault?` | `RecipeList { recipes, problems }` |
+| `recipe_adopt` | `id`, `fingerprint`, `vault?` | niente |
+| `recipe_discard` | `id`, `vault?` | niente |
+| `recipe_simulate` | `id`, `args?` (di serie `{}`), `vault?` | `CommandPlan` |
+
+- `RecipeInfo` porta `id`, `title`, `description`, `doc`, `status`
+  (`proposta` · `adottata` · `cambiata` · `problemi`), `fingerprint` (opaca:
+  lo SHA-256 del blocco in esadecimale, da rimandare tale e quale a
+  `recipe_adopt`), `problems`, `steps` (con titolo, portata e annullabilità
+  del comando, `null` se il registro non lo conosce), `command`,
+  `keybinding`, `surfaces`, `mounted` e `allowed`. I problemi del vault intero
+  (`troppe`) stanno in `RecipeList.problems`. Le frasi arrivano già nella
+  lingua di chi guarda.
+- Gli errori sono `PluginError` tipizzati: `not_found` per un vault chiuso o
+  un id che non c'è (e per `recipe_discard` di una ricetta mai accesa),
+  `conflict` se l'impronta non è più quella della nota (la ricetta è cambiata
+  mentre la persona la guardava), `bad_args` per una ricetta con problemi (il
+  messaggio è il primo problema) o per argomenti della prova che il comando
+  della ricetta rifiuterebbe.
+- Non sono comandi del registro né porte del canale di controllo: accendere è
+  il consenso della persona davanti allo schermo, e lo stato «accesa» sta nel
+  registro dei vault di questa macchina, che nessun `IndexQuery` di un vault
+  legge.
+- L'host finto (`apps/client/src/host/fake.ts`, opzione `recipes`) tiene le
+  ricette in memoria con le stesse regole viste da fuori;
+  `recipeChangedFromOutside` simula la nota riscritta da un altro programma.
 
 ## `recipes.new`
 

@@ -40,6 +40,7 @@ const WORKSPACE = "canvas.workspace";
 const TOOLBAR = "canvas.toolbar";
 const GRID = "canvas.grid";
 const SNAP = "canvas.snap";
+const SNAP_STEP = "canvas.snap_step";
 const PARTS_PICKER = "canvas.parts_picker";
 const DROP_FOLDER = "canvas.drop_folder";
 const DROP_FOLDER_PATH = "canvas.drop_folder_path";
@@ -59,6 +60,7 @@ const SERIE = {
   toolbar: [] as string[],
   grid: true,
   snap: true,
+  snapStep: "8",
   partsPicker: true,
   dropFolder: "notes",
   dropFolderPath: "Allegati",
@@ -85,7 +87,7 @@ function lavagnaEntry(key: string, value: unknown, scope: Scope = "machine"): Se
   } as SettingEntry;
 }
 
-/// Le tredici righe della lavagna col valore di serie, nell'ordine del pannello.
+/// Le quattordici righe della lavagna col valore di serie, nell'ordine del pannello.
 function serieEntries(): SettingEntry[] {
   return [
     lavagnaEntry(REMEMBER, false),
@@ -98,6 +100,7 @@ function serieEntries(): SettingEntry[] {
     lavagnaEntry(TOOLBAR, [], "vault"),
     lavagnaEntry(GRID, true, "vault"),
     lavagnaEntry(SNAP, true, "vault"),
+    lavagnaEntry(SNAP_STEP, "8", "vault"),
     lavagnaEntry(PARTS_PICKER, true, "vault"),
     lavagnaEntry(DROP_FOLDER, "notes", "vault"),
     lavagnaEntry(DROP_FOLDER_PATH, "Allegati", "vault"),
@@ -170,6 +173,7 @@ describe("le impostazioni della lavagna", () => {
         lavagnaEntry(TOOLBAR, ["pen", "text"], "vault"),
         lavagnaEntry(GRID, false, "vault"),
         lavagnaEntry(SNAP, false, "vault"),
+        lavagnaEntry(SNAP_STEP, "32", "vault"),
         lavagnaEntry(PARTS_PICKER, false, "vault"),
         lavagnaEntry(DROP_FOLDER, "folder", "vault"),
         lavagnaEntry(DROP_FOLDER_PATH, "Materiali", "vault"),
@@ -188,6 +192,7 @@ describe("le impostazioni della lavagna", () => {
       toolbar: ["pen", "text"],
       grid: false,
       snap: false,
+      snapStep: "32",
       partsPicker: false,
       dropFolder: "folder",
       dropFolderPath: "Materiali",
@@ -218,6 +223,7 @@ describe("le impostazioni della lavagna", () => {
       lavagnaEntry(TOOLBAR, "pen", "vault"),
       lavagnaEntry(GRID, "no", "vault"),
       lavagnaEntry(SNAP, 0, "vault"),
+      lavagnaEntry(SNAP_STEP, "12", "vault"),
       lavagnaEntry(PARTS_PICKER, null, "vault"),
       lavagnaEntry(DROP_FOLDER, "cestino", "vault"),
       lavagnaEntry(DROP_FOLDER_PATH, 5, "vault"),
@@ -255,7 +261,7 @@ describe("le impostazioni della lavagna", () => {
     await settle();
     expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(1);
 
-    // Ciascuna delle tredici, cambiata, si rilegge: la scrittura dell'host è la
+    // Ciascuna delle quattordici, cambiata, si rilegge: la scrittura dell'host è la
     // stessa da qualunque finestra arrivi, e il backend emette `setting_changed`
     // a tutte.
     const changes: [string, SettingValue, Partial<typeof SERIE>][] = [
@@ -271,6 +277,8 @@ describe("le impostazioni della lavagna", () => {
       [TOOLBAR, ["pen"], { toolbar: ["pen"] }],
       [GRID, false, { grid: false }],
       [SNAP, false, { snap: false }],
+      [SNAP_STEP, "16", { snapStep: "16" }],
+      [SNAP_STEP, "none", { snapStep: "none" }],
       [PARTS_PICKER, false, { partsPicker: false }],
       [DROP_FOLDER, "board", { dropFolder: "board" }],
       [DROP_FOLDER_PATH, "Foto/2026", { dropFolderPath: "Foto/2026" }],

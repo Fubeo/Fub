@@ -1,6 +1,7 @@
 // Le proprietà della testata (E3): quali stanno in evidenza e come si
-// disegnano. Senza tipo, le prime quattro del frontmatter; le altre stanno
-// dietro «Altre N proprietà». Le chiavi che la testata mostra a modo suo
+// disegnano. Senza tipo, le prime quattro del frontmatter; con un tipo (E5),
+// `tipo` e quelle che il tipo mette in evidenza, nel suo ordine. Le altre
+// stanno dietro «Altre N proprietà». Le chiavi che la testata mostra a modo suo
 // (icona, copertina, classi della pagina) non sono righe, e nemmeno le
 // etichette quando le mostra la riga dei dati, come nel prototipo. Il valore
 // si disegna secondo il tipo, e un clic apre l'editor del tipo; un clic sul
@@ -8,10 +9,12 @@
 import { t } from "../../../../../i18n/strings";
 import { iconEl } from "../../../../../ui/icons";
 import type { Lifetime } from "../../../../../ui/lifetime";
+import type { NoteType } from "../../../../../state/note-types";
 import type { PropertyEntry } from "../properties";
 import { liveStrings } from "../strings";
 import type { PropertyTypes } from "./properties/kind";
 import { propertyRow, type PropertyRowHost } from "./properties/row";
+import { TYPE_KEY } from "./note-type";
 
 /// Quante proprietà stanno in evidenza in una nota senza tipo.
 export const FEATURED_LIMIT = 4;
@@ -33,18 +36,25 @@ export interface FeaturedSplit {
 /// valore dell'ultima, come la legge YAML. Le etichette restano fuori solo
 /// se la riga dei dati le mostra (`factTags`): finché l'indice non risponde,
 /// o senza riga dei dati, `tags:` è una proprietà come le altre.
-export function featuredProperties(entries: readonly PropertyEntry[], factTags = true): FeaturedSplit {
-  const featured: PropertyEntry[] = [];
-  const rest: PropertyEntry[] = [];
+///
+/// Con le proprietà in evidenza di un tipo (`typeFeatured`) stanno in
+/// evidenza `tipo` e quelle, nell'ordine del tipo; le altre nell'ordine del
+/// file. Una chiave del tipo che la nota non ha non è una riga.
+export function featuredProperties(entries: readonly PropertyEntry[], factTags = true, typeFeatured: readonly string[] | null = null): FeaturedSplit {
+  const shown: PropertyEntry[] = [];
   const last = new Map<string, PropertyEntry>();
   for (const entry of entries) last.set(entry.key, entry);
   for (const entry of entries) {
     if (last.get(entry.key) !== entry) continue;
     if (PAGE_KEYS.has(entry.key) || (factTags && FACT_KEYS.has(entry.key))) continue;
-    if (featured.length < FEATURED_LIMIT) featured.push(entry);
-    else rest.push(entry);
+    shown.push(entry);
   }
-  return { featured, rest };
+  if (typeFeatured !== null) {
+    const order = [TYPE_KEY, ...typeFeatured.filter((key) => key !== TYPE_KEY)];
+    const featured = order.flatMap((key) => shown.filter((entry) => entry.key === key));
+    return { featured, rest: shown.filter((entry) => !featured.includes(entry)) };
+  }
+  return { featured: shown.slice(0, FEATURED_LIMIT), rest: shown.slice(FEATURED_LIMIT) };
 }
 
 /// Le proprietà come la testata le mostra.
@@ -61,12 +71,15 @@ export interface PageProperties {
   readonly open: boolean;
   /// Il registro dei tipi del vault, con cui le righe scelgono l'editor.
   readonly types: PropertyTypes;
+  /// Il tipo della nota, se ne ha uno che si legge: «In evidenza» scrive lì.
+  readonly type: NoteType | null;
 }
 
 export function samePageProperties(a: PageProperties | null, b: PageProperties | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.display === b.display && a.unreadable === b.unreadable && a.open === b.open && a.types === b.types
+    && JSON.stringify(a.type) === JSON.stringify(b.type)
     && sameEntries(a.featured, b.featured) && sameEntries(a.rest, b.rest);
 }
 
@@ -115,7 +128,13 @@ export function propertiesElement(model: PageProperties, host: PropertiesHost, l
       ? [...model.featured, ...(more ? model.rest : [])]
       : more ? [...model.featured, ...model.rest] : [];
     const hidden = model.display === "visible" ? model.rest.length : total;
-    const children: HTMLElement[] = rows.map((entry) => propertyRow(entry, host, life, model.rest.length > 0 ? model.featured.includes(entry) : null));
+    // «In evidenza» c'è quando c'è una scelta: in una nota senza tipo se le
+    // proprietà sono più di quelle in evidenza; con un tipo sempre (scrive
+    // nel tipo), tranne che su `tipo`, che ci sta sempre.
+    const featuredFlag = (entry: PropertyEntry): boolean | null => model.type !== null
+      ? entry.key === TYPE_KEY ? null : model.featured.includes(entry)
+      : model.rest.length > 0 ? model.featured.includes(entry) : null;
+    const children: HTMLElement[] = rows.map((entry) => propertyRow(entry, host, life, featuredFlag(entry)));
     if (hidden > 0) {
       const toggle = document.createElement("button");
       toggle.type = "button";

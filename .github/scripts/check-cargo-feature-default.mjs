@@ -63,6 +63,12 @@ const FUORI_DAL_DEFAULT = new Map([
     "job test, passo «l'export dei disegni, con la feature `draw` delle feature»; " +
       "clippy nel job fmt",
   ],
+  // Il gancio della raccolta forzata del banco della memoria (R1, #284): l'app
+  // che si distribuisce non deve saper caricare un'estensione web.
+  [
+    "crates/fub-app/Cargo.toml#bench-gc",
+    "job webview, passo «l'app di release con la shell dentro e il gancio della raccolta (bench-gc)»",
+  ],
   // La riga del Motore del disegno nella mappa dei componenti: accende
   // `draw`, quindi sta fuori dal default per la stessa ragione. Il motore lo
   // porta `fub-host/engine-drawing`, nel default dell'host.

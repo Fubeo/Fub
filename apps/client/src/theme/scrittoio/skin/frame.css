@@ -852,3 +852,24 @@
   background: color-mix(in oklab, black 9%, transparent);
   transition: opacity var(--duration-slow) var(--ease);
 }
+
+/* La barra del titolo si attenua e torna al passaggio (la regola sta in
+   `structure.css`): qui la durata, la stessa del velo. */
+.titlebar {
+  transition: opacity var(--duration-slow) var(--ease);
+}
+
+/* «Esci dalla concentrazione», in testa alla parte destra della banda: il
+   gesto che si cerca, nella tinta dell'accento e in grassetto, come nel
+   prototipo. */
+.status-item--button.status-focus-exit {
+  min-height: 24px;
+  padding: 0 9px;
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+  font-weight: var(--weight-bold);
+}
+.status-item--button.status-focus-exit:hover {
+  background: var(--accent-wash);
+  color: var(--text);
+}

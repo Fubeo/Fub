@@ -116,10 +116,10 @@ impl Codec {
 
     fn descriptor(self) -> FormatDescriptor {
         let name = match self {
-            Codec::Docx => "Word",
+            Codec::Docx => "DOCX",
             Codec::Odt => "OpenDocument",
             Codec::Rtf => "RTF",
-            Codec::Doc => "Word 97-2003",
+            Codec::Doc => "DOC 97-2003",
         };
         FormatDescriptor {
             id: self.format_id().to_string(),

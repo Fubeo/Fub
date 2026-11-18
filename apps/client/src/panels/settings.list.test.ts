@@ -29,7 +29,7 @@ vi.mock("../host/ipc", () => ({
 
 vi.mock("../host/query", () => ({ settings: async () => fake.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, newKinds: () => ["note"], registerComponentRow: () => () => {}, hasKernelCommand: () => false }));
+vi.mock("../ui/commands", () => ({ allCommands: () => [], commandOfKeybindingKey: () => null, keybindingKey: (id: string) => id, newKinds: () => ["note"], newKindLabel: () => "Nota", registerComponentRow: () => () => {}, hasKernelCommand: () => false }));
 vi.mock("../ui/permissions", () => ({
   TRUST_LABELS: {},
   isPermissionKey: () => false,
@@ -642,7 +642,7 @@ describe("la bozza di un campo sopravvive al ridisegno (#401)", () => {
       entry(OTHER, { kind: "toggle", default: false }, false),
     ]);
     const number = control(SIZE);
-    expect(number.type).toBe("number");
+    expect(number.classList.contains("setting-number")).toBe(true);
     number.focus();
     type(number, "22");
     redrawAll();

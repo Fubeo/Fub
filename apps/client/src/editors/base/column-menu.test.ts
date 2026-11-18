@@ -7,8 +7,9 @@ import type { MenuItem } from "../../ui/menu";
 import type { BasePlan, BaseRow, BaseSummaryDef } from "./data";
 import {
   NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, columnSummary, columnSurfaceItems,
-  renamedInView, summariesWith, summaryChoices, type ColumnEntry, type ColumnMenuModel,
+  relationColumn, renamedInView, rollupExpression, rollupOf, summariesWith, summaryChoices, type ColumnEntry, type ColumnMenuModel,
 } from "./column-menu";
+import { parsePropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 
 const summary = (key: string, aggregate: BaseSummaryDef["aggregate"], extra: Partial<BaseSummaryDef> = {}): BaseSummaryDef =>
   ({ key, aggregate, expression: null, name: null, label: `${key}:${aggregate.replace(/_/g, "")}`, ...extra });
@@ -17,6 +18,7 @@ const plan = (extra: Partial<BasePlan> = {}): BasePlan => ({
   view: "Tabella", viewType: "table", columns: ["stato", "valore", "consegna"], columnLabels: {},
   requiredProps: [], allProperties: false, group: null, limit: null, map: null, createDefaults: {},
   filters: "all", sort: [], order: ["stato", "valore", "consegna"], summaries: [], dateKey: null, startKey: null, endKey: null,
+  relations: [], linkedProps: [],
   ...extra,
 });
 
@@ -141,6 +143,13 @@ describe("le voci del menu della colonna scrivono la chiave giusta", () => {
     expect(ids).not.toContain("base.column.type");
   });
 
+  it("le colonne `container.*` si comportano come `file.*`: né proprietà, né rinomina, né tipo", () => {
+    expect(columnProperty("container.folder")).toBeNull();
+    const ids = columnMenu(model("container.folder"), actions()).map((entry) => entry.id);
+    expect(ids).not.toContain("base.column.rename");
+    expect(ids).not.toContain("base.column.type");
+  });
+
   it("in sola lettura e in una Base dentro una nota le voci che scrivono sono spente col perché", () => {
     for (const lock of ["read_only", "embedded"] as const) {
       const entries = columnMenu(model("valore", { lock, readOnly: lock === "read_only" }), actions());
@@ -237,5 +246,54 @@ describe("i conti puri del menu", () => {
     expect(renamedInView(timeline, "fine", "termine")).toEqual([["end", "termine"]]);
     const calendar = plan({ order: [], dateKey: "consegna" });
     expect(renamedInView(calendar, "consegna", "scadenza")).toEqual([["date", "scadenza"]]);
+  });
+});
+
+describe("i riepiloghi di una Relazione (T35)", () => {
+  const types = parsePropertyTypes(JSON.stringify({ version: 1, types: { libri: "relation", pagine: "number", letto: "date", stato: "select" } }));
+  const relation = relationColumn(types, "libri");
+
+  it("solo una Relazione dichiarata li offre, con le proprietà numero e data del registro", () => {
+    expect(relation).toEqual({ numbers: ["pagine"], dates: ["letto"] });
+    expect(relationColumn(types, "stato")).toBeNull();
+    const plain = columnMenu(model("stato"), actions());
+    expect(() => find(plain, "base.column.rollup.count")).toThrow();
+  });
+
+  it("«Somma delle note legate › pagine» scrive un riepilogo con l'espressione rollup sotto la colonna", () => {
+    const act = actions();
+    const entries = columnMenu(model("libri", { kind: "text", relation }), act);
+    const sum = find(entries, "base.column.rollup.sum");
+    expect(sum.items!.map((item) => item.label)).toEqual(["pagine"]);
+    sum.items![0]!.run!();
+    expect(act.write).toHaveBeenLastCalledWith("summaries", [
+      { key: "libri", aggregate: "sum", expression: 'rollup(prop.libri, "sum", "pagine")', name: "Somma di pagine" },
+    ]);
+    expect(find(entries, "base.column.rollup.max").items!.map((item) => item.label)).toEqual(["pagine", "letto"]);
+  });
+
+  it("il riepilogo scelto si riconosce, «Note legate» lo sostituisce e «Nessuno» lo toglie", () => {
+    const chosen = summary("libri", "sum", { expression: 'rollup(prop.libri, "sum", "pagine")', name: "Somma di pagine" });
+    const other = summary("valore", "sum");
+    const act = actions();
+    const entries = columnMenu(model("libri", { kind: "text", relation, plan: plan({ summaries: [chosen, other] }) }), act);
+    expect(find(entries, "base.column.rollup.sum").items![0]!.checked).toBe(true);
+    expect(find(entries, "base.column.summary.none").checked).toBe(false);
+    find(entries, "base.column.rollup.count").run!();
+    const written = act.write.mock.lastCall![1] as { key: string; expression?: string }[];
+    expect(written.map((each) => [each.key, each.expression ?? null])).toEqual([["libri", 'rollup(prop.libri, "count")'], ["valore", null]]);
+    find(entries, "base.column.summary.none").run!();
+    expect((act.write.mock.lastCall![1] as { key: string }[]).map((each) => each.key)).toEqual(["valore"]);
+  });
+
+  it("una Relazione che una formula non legge ha i riepiloghi spenti col perché", () => {
+    const spaced = parsePropertyTypes(JSON.stringify({ version: 1, types: { "i libri": "relation", pagine: "number" } }));
+    const entries = columnMenu(model("i libri", { kind: "text", relation: relationColumn(spaced, "i libri") }), actions());
+    const count = find(entries, "base.column.rollup.count");
+    expect(count.enabled).toBe(false);
+    expect(count.description).toContain("«i libri»");
+    expect(rollupExpression("i libri", { aggregate: "count", property: null })).toBeNull();
+    expect(rollupOf('rollup(prop.libri, "average", "pagine")', "libri")).toEqual({ aggregate: "average", property: "pagine" });
+    expect(rollupOf('rollup(prop.libri, "sum")', "libri")).toBeNull();
   });
 });

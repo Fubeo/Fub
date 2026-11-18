@@ -5,6 +5,7 @@
 // celle scelte i gesti del foglio, gli appunti e «Unisci celle».
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
 import { resolvedLanguage, t } from "../../i18n/strings";
 import { todayText } from "../../tabella/series";
 import { recentNotices } from "../../ui/notify";
@@ -295,6 +296,170 @@ describe("le tabelle del documento", () => {
     document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
     expect(data.get("text/plain")).toBe("a\nc\n");
     expect(data.get("text/html")).toContain("<table");
+  });
+});
+
+// IMP-132: il trascinamento del browser lascia una selezione di testo da una
+// cella all'altra; Canc e Backspace su di lei toglievano una cella dalla riga.
+describe("la forma della tabella resta", () => {
+  const NINE = [["aa", "bb", "cc"], ["dd", "ee", "ff"], ["gg", "hh", "ii"]];
+  const keyCode = (key: string) => (key === "Backspace" ? 8 : 46);
+
+  for (const key of ["Delete", "Backspace"]) {
+    it(`${key} su una selezione di testo da una cella all'altra svuota le celle, in ogni riga`, () => {
+      const e = engine(NINE);
+      // Due celle della prima riga, come il trascinamento della scheda.
+      e.select(at(e, "aa") + 1, at(e, "bb") + 1);
+      expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 0, r1: 0, c1: 1 });
+      expect(press(key, { keyCode: keyCode(key) })).toBe(true);
+      expect(grid(e)).toEqual([["", "", "cc"], ["dd", "ee", "ff"], ["gg", "hh", "ii"]]);
+      // Le due celle dell'ultima riga, la colonna di mezzo.
+      e.select(at(e, "hh") + 1, at(e, "ii") + 1);
+      press(key, { keyCode: keyCode(key) });
+      e.select(at(e, "ee"), at(e, "ff") + 2);
+      press(key, { keyCode: keyCode(key) });
+      expect(grid(e)).toEqual([["", "", "cc"], ["dd", "", ""], ["gg", "", ""]]);
+      expect(press("z", { ctrlKey: true })).toBe(true);
+      expect(press("z", { ctrlKey: true })).toBe(true);
+      expect(press("z", { ctrlKey: true })).toBe(true);
+      expect(grid(e)).toEqual(NINE);
+    });
+
+    it(`${key} su una selezione che esce dalla tabella toglie il testo e svuota le celle, senza unirle`, () => {
+      const e = engine(NINE);
+      e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+      expect(selectedCells(e.state)).toBeNull();
+      expect(press(key, { keyCode: keyCode(key) })).toBe(true);
+      expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e", ""], ["", "", ""]]);
+      const blocks = parseProjection(e.getDoc()).blocks;
+      const after = blocks[blocks.length - 1] as Para;
+      expect((after.c?.[0] as TextInline).x).toBe("po");
+    });
+  }
+
+  it("una lettera su una selezione che esce dalla tabella va al posto del testo scelto", () => {
+    const e = engine([["aa", "bb"]]);
+    e.select(at(e, "bb") + 1, at(e, "dopo") + 2);
+    const editable = document.querySelector<HTMLElement>(".rich-content")!;
+    const keypress = new KeyboardEvent("keypress", { key: "x", bubbles: true, cancelable: true });
+    Object.defineProperty(keypress, "charCode", { value: 120 });
+    const typed = !editable.dispatchEvent(keypress);
+    expect(typed).toBe(true);
+    expect(grid(e)).toEqual([["aa", "bx"]]);
+    const blocks = parseProjection(e.getDoc()).blocks;
+    const after = blocks[blocks.length - 1] as Para;
+    expect((after.c?.[0] as TextInline).x).toBe("po");
+  });
+
+  // IMP-134: il trascinamento su più righe sceglieva solo l'ultima riga, o
+  // niente. Il puntatore del test è quello vero di ProseMirror e della
+  // superficie (mousedown, mousemove, mouseup); la posizione sotto il
+  // puntatore la dà `posAtCoords`, che happy-dom non sa calcolare.
+  describe("col trascinamento", () => {
+    const drag = (e: RichEngine, path: string[], options: { late?: [string, string] } = {}) => {
+      const spot = (needle: string) => ({ clientX: 10 + path.indexOf(needle), clientY: 10 + path.indexOf(needle) });
+      const spy = vi.spyOn(EditorView.prototype, "posAtCoords").mockImplementation(({ left }) => {
+        const needle = path[left - 10];
+        return needle ? { pos: at(e, needle) + 1, inside: -1 } : null;
+      });
+      try {
+        const content = document.querySelector<HTMLElement>(".rich-content")!;
+        content.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...spot(path[0]!) }));
+        for (const needle of path.slice(1, -1)) {
+          document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, buttons: 1, ...spot(needle) }));
+        }
+        // Il browser rilegge la sua selezione del trascinamento, con
+        // un'àncora sua, senza il puntatore.
+        if (options.late) e.select(at(e, options.late[0]) + 1, at(e, options.late[1]) + 1);
+        document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, ...spot(path[path.length - 1]!) }));
+        if (options.late) e.select(at(e, options.late[0]) + 1, at(e, options.late[1]) + 1);
+      } finally {
+        spy.mockRestore();
+      }
+    };
+
+    it("da A a I in diagonale sceglie tutto il rettangolo, anche se il browser rilegge solo l'ultima riga", () => {
+      const e = engine(NINE);
+      drag(e, ["aa", "ee", "hh", "ii"], { late: ["gg", "ii"] });
+      expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 0, r1: 2, c1: 2 });
+      expect(press("Delete", { keyCode: 46 })).toBe(true);
+      expect(grid(e)).toEqual([["", "", ""], ["", "", ""], ["", "", ""]]);
+    });
+
+    it("da B a H in verticale sceglie la colonna, anche senza movimenti sopra le celle", () => {
+      const e = engine(NINE);
+      drag(e, ["bb", "hh"]);
+      expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 1, r1: 2, c1: 1 });
+      expect(press("Backspace", { keyCode: 8 })).toBe(true);
+      expect(grid(e)).toEqual([["aa", "", "cc"], ["dd", "", "ff"], ["gg", "", "ii"]]);
+    });
+  });
+
+  // Taglia e Invio su una selezione che esce dalla tabella: prima copiavano
+  // soltanto, o non facevano niente, perché la guardia rifiuta l'unione.
+  it("Taglia su una selezione che esce dalla tabella copia e svuota come Canc, in un passo", () => {
+    const e = engine(NINE);
+    e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+    const data = new Map<string, string>();
+    const event = new Event("cut", { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, "clipboardData", {
+      value: { clearData: () => data.clear(), setData: (type: string, value: string) => void data.set(type, value) },
+    });
+    document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(data.get("text/plain")).toContain("ff");
+    expect(data.get("text/plain")).toContain("do");
+    expect(data.get("text/html")).toContain("gg");
+    expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e", ""], ["", "", ""]]);
+    const blocks = parseProjection(e.getDoc()).blocks;
+    expect(((blocks[blocks.length - 1] as Para).c?.[0] as TextInline).x).toBe("po");
+    expect(press("z", { ctrlKey: true })).toBe(true);
+    expect(grid(e)).toEqual(NINE);
+  });
+
+  it("Invio su una selezione che esce dalla tabella svuota come Canc e va a capo dove cominciava", () => {
+    const e = engine(NINE);
+    e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+    expect(press("Enter")).toBe(true);
+    // La cella dove cominciava ha due paragrafi, «e» e quello nuovo, col cursore.
+    expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e+", ""], ["", "", ""]]);
+    const here = cellAt(e.state.selection.$head);
+    expect(here && [here.box.row, here.box.column]).toEqual([1, 1]);
+    expect(e.state.selection.$head.parent.textContent).toBe("");
+    expect(e.state.selection.$head.index(e.state.selection.$head.depth - 1)).toBe(1);
+    const blocks = parseProjection(e.getDoc()).blocks;
+    expect(((blocks[blocks.length - 1] as Para).c?.[0] as TextInline).x).toBe("po");
+    // Un passo solo d'annullamento.
+    expect(press("z", { ctrlKey: true })).toBe(true);
+    expect(grid(e)).toEqual(NINE);
+  });
+
+  it("Maiusc+Invio su una selezione che esce dalla tabella svuota e va a capo nella cella", () => {
+    const e = engine(NINE);
+    e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+    expect(press("Enter", { shiftKey: true })).toBe(true);
+    expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e\n", ""], ["", "", ""]]);
+  });
+
+  it("nessuna transazione unisce due celle, e la cronologia e il disco passano", () => {
+    const e = engine(NINE);
+    // Una cancellazione grezza da una cella al paragrafo dopo la tabella.
+    e.select(at(e, "ii") + 1, at(e, "dopo") + 2);
+    const tr = e.state.tr.deleteSelection();
+    e.dispatch(tr);
+    expect(grid(e)).toEqual(NINE);
+    // Una cella in meno in una riga, da un comando che ne togliesse una.
+    const firstCell = cellBoxes(e.state.doc.nodeAt(0)!, 0)[0]!;
+    e.dispatch(e.state.tr.delete(firstCell.pos, firstCell.pos + firstCell.node.nodeSize));
+    expect(grid(e)[0]).toHaveLength(3);
+    // Il documento riletto dal disco vale com'è, anche con righe diverse.
+    const ragged: Block = { t: "table", k: "T", rows: [{ k: "R0", cells: [{ k: "K0", blocks: [para("x")] }] }, { k: "R1", cells: [{ k: "K1", blocks: [para("y")] }, { k: "K2", blocks: [para("z")] }] }] } as Block;
+    e.syncDoc(JSON.stringify({ format: "fub-rich", version: 1, blocks: [ragged, para("dopo")] }));
+    expect(grid(e)).toEqual([["x"], ["y", "z"]]);
+    // E una tabella che era già così si scrive.
+    e.select(at(e, "y") + 1);
+    e.dispatch(e.state.tr.insertText("!"));
+    expect(grid(e)).toEqual([["x"], ["y!", "z"]]);
   });
 });
 

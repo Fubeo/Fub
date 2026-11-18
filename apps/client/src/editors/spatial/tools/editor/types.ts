@@ -15,7 +15,7 @@ import type { GradientView, PaintChannel } from "../gradients";
 import { ConnectorPreview } from "../connectors";
 import type { Ruler, RulerEdge } from "../ruler";
 import type { Frame, Grip } from "../frame";
-import type { Unit } from "../hit";
+import type { Erasable, Unit } from "../hit";
 import type { StrokeCut } from "../erase-precise";
 import type { ShapeTool } from "../shapes";
 import type { Recognized } from "../recognize";
@@ -166,7 +166,7 @@ export interface SelectGesture extends GestureBase {
 export interface EraseGesture extends GestureBase {
   readonly kind: "erase";
   /// Il cammino della gomma e ciò che ha segnato (`ink/tools/sweep`).
-  readonly sweep: EraseSweep<Unit>;
+  readonly sweep: EraseSweep<Erasable>;
   /// Il cammino nella scena, per la gomma precisa.
   readonly path: Point[];
   /// Il raggio nella scena, dal primo punto.

@@ -12,7 +12,26 @@ export const MENUS: PartAnatomy = {
     { name: "menu-choices", states: [S("rest"), S("hover"), S("focused"), S("pressed")], hooks: ["menu-choices", "menu-choice", "menu-choice-set", "menu-choice-name"] },
     { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-text", "menu-foot-query", "menu-foot-caret", "menu-finding", "menu-path", "menu-foot-keys", "menu-foot-key"] },
     { name: "context-submenu", states: [S("rest")], hooks: ["context-submenu", "menu-more"] },
-    { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "format-bar"] },
+    { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "context-strip-mini"] },
+    // La mini-barra (T12): sul testo scelto e in testa al menu; «Colore» apre
+    // le due righe dei nove campioni.
+    {
+      name: "mini-bar",
+      states: [S("rest"), S("hover"), S("focused"), S("pressed"), S("disabled")],
+      hooks: ["mini-bar", "mini-bar-button", "mini-bar-named", "mini-bar-caret", "mini-bar-glyph", "is-bold", "is-italic", "is-underline", "is-strike", "mini-bar-color-mark", "mini-bar-rule"],
+    },
+    {
+      name: "mini-bar-colors",
+      states: [S("rest"), S("hover"), S("focused"), S("pressed"), S("disabled")],
+      hooks: ["mini-bar-colors", "mini-bar-colors-body", "mini-bar-colors-label", "mini-bar-swatches", "mini-bar-swatch"],
+    },
+    // La barra che segue il blocco (E8): lo stile, il gruppo del blocco,
+    // «+ Inserisci».
+    {
+      name: "format-bar-follow",
+      states: [S("rest"), S("hover"), S("focused"), S("pressed"), S("disabled")],
+      hooks: ["format-bar-follow", "kit-bar", "kit-bar-group", "kit-bar-button", "format-bar-labelled", "format-bar-text", "format-bar-caret", "format-bar-style", "format-bar-context", "format-bar-context-name", "format-bar-overflow", "format-bar-insert-group", "format-bar-insert"],
+    },
     {
       name: "menu-item",
       states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")],
@@ -20,19 +39,19 @@ export const MENUS: PartAnatomy = {
     },
     {
       name: "slash-panel",
-      layers: { "is-selected": "segno" },
+      layers: { "is-selected": "segno", "cm-editor": "contenuto" },
       states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")],
-      hooks: ["cm-tooltip", "is-selected", "slash-panel", "slash-head", "slash-query", "slash-context", "slash-count", "slash-crumb", "slash-tabs", "slash-body", "slash-list", "slash-group", "slash-section", "slash-row", "slash-icon", "slash-text", "slash-description", "slash-hint", "slash-pill", "slash-more", "slash-empty", "slash-foot", "is-step", "is-sheet", "is-narrow", "is-quick", "is-head", "is-empty"],
+      hooks: ["cm-tooltip", "pane-editor", "cm-editor", "is-selected", "slash-panel", "slash-head", "slash-crumb", "slash-context", "slash-count", "slash-body", "slash-choices", "slash-top", "slash-tile", "slash-list", "slash-group-label", "slash-row", "slash-syntax-note", "slash-found", "slash-swatch", "slash-none", "slash-all", "kit-row-icon", "kit-tile-icon", "is-sheet"],
     },
     {
-      name: "slash-preview",
+      name: "slash-detail",
       states: [S("rest")],
-      hooks: ["slash-preview", "slash-preview-head", "slash-preview-title", "slash-preview-tools", "slash-stage", "slash-tip", "slash-chip", "slash-sample", "slash-sample-columns", "slash-sample-command", "slash-sample-faint", "slash-sample-label", "slash-sample-palette", "slash-sample-properties", "slash-sample-rule", "slash-sample-table", "slash-sample-text", "slash-sample-toc", "slash-sample-transform"],
+      hooks: ["slash-detail", "slash-thumb", "slash-thumb-icon", "slash-thumb-line", "slash-thumb-ink", "slash-thumb-accent", "slash-thumb-wash", "slash-thumb-tray", "slash-thumb-stroke", "slash-thumb-stroke-accent", "slash-thumb-check", "slash-thumb-text", "slash-thumb-formula", "slash-detail-text", "slash-description", "slash-syntax", "slash-tools", "has-tools"],
     },
     {
       name: "slash-step",
       states: [S("rest"), S("hover"), S("selected")],
-      hooks: ["slash-step", "slash-step-calendar", "slash-step-cell", "slash-step-chips", "slash-step-empty", "slash-step-field", "slash-step-grid", "slash-step-label", "slash-step-lead", "slash-step-list", "slash-step-row", "is-table", "is-color", "is-gallery", "is-diagram", "is-on", "is-out", "is-today", "is-current"],
+      hooks: ["slash-step", "slash-step-calendar", "slash-step-cell", "slash-step-chips", "slash-step-empty", "slash-step-field", "slash-step-grid", "slash-step-label", "slash-step-lead", "slash-step-list", "slash-step-row", "is-table", "is-color", "is-gallery", "is-diagram", "is-on", "is-out", "is-today", "is-empty"],
     },
     { name: "menu-item-danger", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["danger"] },
   ],

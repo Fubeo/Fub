@@ -16,7 +16,61 @@ export const LIVE_DOC = "Guida/Live.md";
 /// Un caso: il testo della nota e dove sta il cursore (`null`: la nota si
 /// guarda senza fuoco, dall'alto).
 /// `head`, se c'è, fa del cursore una selezione da `cursor` a `head`.
-export type LiveCase = Readonly<{ text: string; cursor: number | null; head?: number }>;
+/// `files`, se c'è, mette nel vault altre note che il caso riporta (la
+/// trasclusione viva).
+export type LiveCase = Readonly<{ text: string; cursor: number | null; head?: number; files?: Readonly<Record<string, string>> }>;
+
+/// La trasclusione viva (T29): la nota riporta le «Decisioni» della riunione,
+/// che stanno in un'altra nota del vault e si scrivono da qui.
+export const TRANSCLUSION_ORIGIN = "Riunioni/2026-11-04.md";
+const TRANSCLUSION_NOTE = [
+  "# Mostra di primavera",
+  "",
+  "Le decisioni della riunione del 4 novembre, riportate qui come stanno:",
+  "",
+  "![[Riunioni/2026-11-04#Decisioni]]",
+  "",
+  "Il resto del lavoro si divide la settimana prossima.",
+].join("\n");
+const TRANSCLUSION_MEETING = [
+  "# Riunione del 4 novembre",
+  "",
+  "## Presenti",
+  "",
+  "Anna, Luca, Sara.",
+  "",
+  "## Decisioni",
+  "",
+  "- Le didascalie le scrive Anna, entro il 20 novembre.",
+  "- I prestiti passano tutti da Luca.",
+  "",
+  "## Prossima riunione",
+  "",
+  "Il 18 novembre.",
+  "",
+].join("\n");
+
+/// Il blocco sincronizzato (T30): la nota riporta un blocco della riunione
+/// col suo id, che si scrive dove sta, e uno il cui blocco non c'è più.
+const SYNCED_NOTE = [
+  "# Mostra di primavera",
+  "",
+  "Chi fa che cosa, come deciso alla riunione:",
+  "",
+  "![[Riunioni/2026-11-04#^didascalie]]",
+  "",
+  "Il resto del lavoro si divide la settimana prossima.",
+  "",
+  "![[Riunioni/2026-11-04#^sparito]]",
+].join("\n");
+const SYNCED_MEETING = [
+  "# Riunione del 4 novembre",
+  "",
+  "Le didascalie le scrive Anna, entro il 20 novembre; i prestiti passano tutti da Luca. ^didascalie",
+  "",
+  "Il 18 novembre la prossima.",
+  "",
+].join("\n");
 
 const FENCE = "```";
 
@@ -146,7 +200,88 @@ const COMMENTS = [
   "",
 ].join("\n");
 
+/// Un diagramma di flusso piccolo: un nodo, una scelta e una pillola, come le
+/// miniature del menu.
+const FLOW = ["flowchart TD", "  A[Prenota il treno] --> B{Posti liberi?}", "  B -->|sì| C([Parti])", "  B -->|no| D[Cambia giorno]"];
+const fence = (...lines: string[]) => ["```mermaid", ...lines, "```"].join("\n");
+
+const DIAGRAM_NOTE = [
+  "# Il viaggio",
+  "",
+  "Come si decide la partenza:",
+  "",
+  fence("---", "title: La partenza", "---", ...FLOW),
+  "",
+  "Il resto del piano segue.",
+].join("\n");
+
+const DIAGRAM_STYLES = ["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
+  .map((style) => `## ${style}\n\n${fence(`%% stile: ${style}`, "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])")}`)
+  .join("\n\n");
+
+/// Il tracciato (E26, T59): il flusso del prototipo (`DG0`), con un ritorno e
+/// le etichette sui collegamenti, giù e poi a destra, in uno stile.
+const TRACE_FLOW = [
+  "  A[Richiesta di prestito] --> B{Polizza consegnata?}",
+  "  B -->|sì| C[Ritiro delle opere]",
+  "  B -->|no| D[Sollecito al prestatore]",
+  "  D --> B",
+  "  C --> E[Allestimento in sala]",
+  "  E --> F([Apertura, 20 marzo])",
+];
+const diagramTrace = (style: string) => [
+  `Il flusso in ${style}, giù e poi a destra:`,
+  "",
+  fence("---", "title: Il percorso di un prestito", "---", `%% stile: ${style}`, "flowchart TD", ...TRACE_FLOW),
+  "",
+  fence(`%% stile: ${style}`, "flowchart LR", ...TRACE_FLOW),
+].join("\n");
+
+/// I casi limite del tracciato: etichette lunghe, un collegamento a tratti e
+/// uno senza punta, e un diagramma di sequenza.
+const DIAGRAM_TRACE_CASES = [
+  "Un'etichetta lunga, un tratteggio, un collegamento senza punta:",
+  "",
+  fence(
+    "flowchart TD",
+    "  A[Domanda] -->|una risposta lunga che non sta sul tratto corto| B[Esito]",
+    "  A -.->|forse| C[Rinvio]",
+    "  B --- D[Archivio]",
+    "  C --> D",
+  ),
+  "",
+  fence(
+    "sequenceDiagram",
+    "  Museo->>Prestatore: Richiesta di prestito",
+    "  Prestatore-->>Museo: Polizza",
+    "  Museo-)Corriere: Ritiro",
+  ),
+].join("\n");
+
+const DIAGRAM_CASES = [
+  "Un diagramma con un errore mostra il sorgente:",
+  "",
+  fence("flowchart TD", "  A[Uno] --> --> B"),
+  "",
+  "Uno stile che non esiste vale come lo stile generale:",
+  "",
+  fence("%% stile: nebbia", "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])"),
+  "",
+  "Fine.",
+].join("\n");
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
+/// I tipi di nota del vault delle scene `tipo-*` (E5): uno con le proprietà
+/// coi loro tipi e una cartella, uno con un'icona emoji, uno senza icona; due
+/// note che li nominano, per i conteggi del cassetto.
+const TYPE_FILES: Readonly<Record<string, string>> = {
+  "Tipi/Libro.md": "---\nicon: book\nproperties:\n  autore: testo\n  letto: casella\n  generi: elenco\nfeatured: [autore, letto]\nfolder: Biblioteca\n---\n# {{title}}\n\nNote di lettura.\n",
+  "Tipi/Progetto.md": "---\nicon: 🌱\nproperties:\n  stato: stato\n  scadenza: data\n  persone: persone\nfeatured: [stato, scadenza, persone]\nfolder: Progetti\n---\n## Obiettivo\n\n## Prossimi passi\n",
+  "Tipi/Riunione.md": "---\nproperties:\n  data: data\n  presenti: persone\n---\n## Ordine del giorno\n",
+  "Biblioteca/Dune.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Frank Herbert\n---\nIl deserto.\n",
+  "Progetti/Mostra di primavera.md": "---\ntipo: \"[[Tipi/Progetto]]\"\nstato: In corso\n---\nLe sale e le opere.\n",
+};
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
@@ -157,6 +292,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   panoramica: { text: NOTE, cursor: null },
   "riga-attiva": inNote("Il **treno**", 6),
   "titolo-attivo": inNote("## Cose da fare", 8),
+  "compito-attivo": inNote("- [ ] Prenotare", 15),
   "codice-attivo": inNote("const giorni", 6),
   "callout-attivo": inNote("> Il tram 28", 6),
   "elenco-attivo": inNote("1. Primo giorno", 5),
@@ -180,6 +316,19 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "Vedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani, §ok.\n\nVedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani.",
   ),
   "riga-vuota": at("# Nota nuova\n\n§"),
+  // La Base nella nota (T18, con `?base=nota`): una riga vuota fra due
+  // paragrafi per «/base», e la Base già incorporata, larga fino al margine.
+  "base-slash": at("# Letture\n\nI libri dell'anno, in una tabella.\n\n§\n\nSotto, il testo che segue."),
+  "base-incorporata": {
+    text: "# Letture\n\nI libri dell'anno, in una tabella.\n\n![[Opere.base#Tabella]]\n\nSotto, il testo che segue.",
+    cursor: null,
+  },
+  // La formula che si modifica toccandola (T60): una in riga col cursore
+  // davanti, un blocco `$$` da cliccare; poi una formula con un errore.
+  "formula-toccata": at(
+    "# Il moto\n\nLa velocità media è §$v = \\frac{s}{t}$, e lo spazio cresce con $t^{2}$.\n\n$$\n\\frac{a+b}{c} + x^{2} + \\sqrt{y}\n$$\n\nSotto, il testo che segue.",
+  ),
+  "formula-errore": at("# Il moto\n\nUna formula rotta: §$\\frac{a}$ da correggere.\n\nSotto, il testo che segue."),
   "immagine-selezionata": selected("Sopra, il testo.\n\n", "![Lo schema del viaggio|240](../Risorse/schema.png)", "\n\nSotto, il testo che segue."),
   // La testata della pagina dei Blocchi (H12, H13): icona, copertina e
   // proprietà; la seconda con la pagina a tutta larghezza.
@@ -199,6 +348,46 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   proprieta: {
     text: "---\nicon: 📚\ntipo: Progetto\nstato: In corso\nscadenza: 2027-03-20\npersone: [\"[[Anna Bianchi]]\", \"[[Luca Ferri]]\"]\nluogo: Biblioteca civica\nbudget: 4800\nfatto: false\nluoghi: [Torino, Lisbona, Porto]\n---\n" + NOTE,
     cursor: null,
+  },
+  // Selezione, Stato e Url (T9), col registro dei tipi di `?tipi=1`: uno
+  // Stato, una Selezione, un indirizzo e uno Stato fuori dalle sue opzioni.
+  opzioni: {
+    text: "---\nicon: 📚\ntipo: Progetto\nstato: In viaggio\nsala: Grande\nsito: https://example.org/mostra\nfase: Rivista\n---\n" + NOTE,
+    cursor: null,
+  },
+  // I tipi di nota (T33, E5): tre tipi nella cartella `Tipi`, due note che
+  // li usano; la nota della Live è un libro, poi una nota il cui tipo non
+  // c'è più. Con `?live=tipo` anche «Nuova nota» chiede il tipo, e il
+  // cassetto ha la sezione «Tipi».
+  tipo: {
+    text: "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Frank Herbert\nletto: true\ngeneri: [fantascienza, classici]\npagine: 412\neditore: Chilton\n---\n" + NOTE,
+    cursor: null,
+    files: TYPE_FILES,
+  },
+  // La pagina del tipo (T33): lo stesso vault; la scena apre `Tipi/Libro.md`.
+  "tipo-pagina": {
+    text: "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Frank Herbert\nletto: true\n---\n" + NOTE,
+    cursor: null,
+    files: TYPE_FILES,
+  },
+  "tipo-mancante": {
+    text: "---\ntipo: \"[[Tipi/Romanzo]]\"\nautore: Frank Herbert\nletto: true\n---\n" + NOTE,
+    cursor: null,
+    files: TYPE_FILES,
+  },
+  // La Relazione (T35, passo 4 del prototipo), col registro di `?tipi=1`
+  // (`libri` è una Relazione verso la cartella `Biblioteca`): il tipo come
+  // nome della nota, due libri legati, uno rotto; altri libri da legare.
+  relazioni: {
+    text: "---\nicon: 📚\ntipo: \"[[Tipi/Riunione]]\"\nlibri: [\"[[Biblioteca/Dune]]\", \"[[Biblioteca/Solaris]]\", \"[[Il libro perduto]]\"]\nluogo: Biblioteca civica\n---\n" + NOTE,
+    cursor: null,
+    files: {
+      ...TYPE_FILES,
+      "Tipi/Riunione.md": "---\nicon: 🗓️\nproperties:\n  libri: relazione\n  luogo: testo\nfeatured: [libri, luogo]\n---\n## Ordine del giorno\n",
+      "Biblioteca/Solaris.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Stanisław Lem\n---\nL'oceano.\n",
+      "Biblioteca/Ubik.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Philip K. Dick\n---\nIl tempo.\n",
+      "Biblioteca/La mano sinistra del buio.md": "---\ntipo: \"[[Tipi/Libro]]\"\nautore: Ursula K. Le Guin\n---\nIl ghiaccio.\n",
+    },
   },
   "testata-illeggibile": { text: "---\nicon: 🧳\nuna riga che non è una chiave\nstato: In corso\n---\n" + NOTE, cursor: null },
   "testata-senza-immagine": { text: "---\ncover: ../Risorse/non-c-e.png\nstato: In corso\n---\n" + NOTE, cursor: null },
@@ -293,6 +482,19 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "",
     "§",
   ].join("\n")),
+  // I diagrammi (E26): uno a riposo col titolo nel frontmatter, poi i cinque
+  // stili, uno per diagramma, e i casi limite (uno stile che non esiste, un
+  // errore). Il cursore resta fuori: si vede il disegno, non il sorgente.
+  diagramma: { text: DIAGRAM_NOTE, cursor: null },
+  "diagramma-stili": { text: DIAGRAM_STYLES, cursor: null },
+  "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
+  ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
+    .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
+  "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
+  // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
+  "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
+  trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
+  sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

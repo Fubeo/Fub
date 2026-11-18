@@ -99,29 +99,29 @@ Il provider estrae dalla sorgente l'intento del link:
 
 Il kernel risolve l'intento rispetto al vault e agli indici correnti. La
 sorgente conserva ciò che l'utente ha scritto; la risoluzione è un dato
-derivato.
-Wikilink e path seguono regole diverse: il primo risolve per path con slash,
-nome, nome con l'estensione (`[[board.canvas]]`) e alias con priorità
-deterministica fra omonimi; il secondo solo per path relativo al documento.
-Fra omonimi vince il più vicino alla radice, poi l'ordine dei path; fra
-formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il nome
-nudo porta prima al formato che dichiara un sorgente di prosa
-(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un
-path che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina
-quel file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
-Heading e blocchi condividono slug e ancore
-canoniche; un punto rinominato apre la nota senza inventare una destinazione.
-Completamento e cambio rapido propongono nomi per pertinenza senza riordinare
-nella shell, e la rinomina riscrive soltanto i wikilink che nominavano la nota,
-conservando l'estensione se l'autore l'aveva scritta.
-Il pannello mostra incoming, outgoing con contesto per riferimento, menzioni
-non collegate in entrata e in uscita con filtro, e la conversione esplicita
-della menzione in wikilink con revisione e span dichiarati. Il riferimento
-scritto è il più corto che la risoluzione del vault manda davvero alla nota
-(il nome, poi il nome con l'estensione, poi il percorso senza estensione, poi
-il percorso intero); se la
-parola trovata è scritta altrimenti, per esempio un alias, resta come testo del
-link (`[[Rossi|Mario]]`).
+derivato. Wikilink e path seguono regole diverse: il primo risolve per path con
+slash (dalla radice, poi come coda: `[[B/C]]` trova `A/B/C.md`), nome, nome con
+l'estensione (`[[board.canvas]]`) e alias; il secondo solo per path relativo al
+documento. Fra omonimi vince il più vicino alla radice, poi l'ordine dei path;
+fra formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il
+nome nudo porta prima al formato che dichiara un sorgente di prosa
+(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un path
+che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina quel
+file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
+Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
+la nota senza inventare una destinazione. Completamento e cambio rapido
+propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
+riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
+Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
+due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
+nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
+in una formula o nel frontmatter; disegni, fogli e documenti non ne offrono, e
+la sezione delle uscenti lo dice. La converte `mention.link`: rilegge la nota
+alla revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è
+più una menzione, e si annulla in un passo con «Annulla l'ultima operazione».
+Il riferimento scritto è il più corto che la risoluzione manda davvero alla
+nota (nome, con estensione, percorso senza o con estensione); un alias resta
+testo del link (`[[Rossi|Mario]]`).
 Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
 conteggio e selezione multipla per esemplare; click e selezione lanciano
 tramite RunSearch la stessa ricerca che si scriverebbe nella barra
@@ -142,8 +142,8 @@ tutto il vault: le note che la ricerca trova per quelle parole, di cui si
 propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
 percorso quando due note hanno lo stesso nome. Dopo `[[Nota#^` e `[[#^` si
 propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
-letti dalla sessione aperta se c'è, altrimenti dal file. La ricerca dei blocchi
-di tutto il vault (`[[^^`) non c'è.
+letti dalla sessione aperta se c'è, altrimenti dal file. `[[^^parole` cerca un
+blocco in tutto il vault: [Blocchi di altre note](editor-writing.md#blocchi-di-altre-note).
 
 Il pannello Struttura mostra i titoli della nota aperta come un albero. Il campo
 in cima lo filtra: restano i titoli che contengono il testo, con i titoli sopra
@@ -230,8 +230,8 @@ col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle
 menzioni sta in fondo, in una sezione chiusa finché non è attivo, e usa la
 sintassi della barra di ricerca (un filtro salvato come JSON vale ancora); un
 filtro che non si legge lo dice accanto al campo, col carattere a cui si ferma.
-La banda di stato dice quanti collegamenti entrano nella nota attiva
-(vista `backlinks.status`); senza una nota aperta resta vuota.
+Di un documento che non si apre le menzioni si cercano sul nome. La banda dei
+collegamenti in entrata è `backlinks.status`; senza una nota aperta è vuota.
 
 Il pannello Cronologia elenca le versioni della nota con l'istante e la
 variazione di dimensione rispetto alla precedente. Una versione si sceglie col
@@ -254,11 +254,11 @@ dichiara invece di inventare un grafo completo.
 
 Il provider ufficiale prepara un payload dichiarativo con nodi e archi. La
 shell possiede il renderer Canvas e l'interazione. Il kernel non conosce pixel,
-camera o animazioni. Il payload dichiara vista locale fino a tre passi, gruppi
-per cartella o primo tag, filtri per orfani e allegati e timestamp di modifica;
-assenti valgono il grafo globale. Gli allegati sono nascosti di default; il
-filtro li aggiunge come nodi con i loro archi. Quale nodo è un documento lo
-dice il registro dei formati. Posizione e animazione restano stato della
+camera o animazioni. Il payload dichiara vista locale fino a tre passi (di
+partenza nei due versi), gruppi per cartella o primo tag, filtri per orfani e
+allegati e timestamp di modifica; assenti valgono il grafo globale. Gli
+allegati sono nascosti di default; il filtro li aggiunge come nodi con i loro
+archi. Quale nodo è un documento lo dice il registro dei formati. Posizione e animazione restano stato della
 shell, in memoria e mai nel vault.
 
 Due altri filtri, spenti di default, aggiungono nodi che non sono file:
@@ -395,7 +395,7 @@ nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
 ## Proprietà nella nota
 
 L'impostazione di macchina `editor.properties` sceglie come la nota mostra il
-frontmatter, nella [testata](editor-writing.md#la-testata): **YAML** lo
+frontmatter, nella [testata](editor-header.md): **YAML** lo
 lascia testo, **Visibili** (il default) ne fa righe chiave–valore, **Nascoste**
 le mette dietro «Altre N proprietà». Le righe sono una lettura: lista `a, b`, un
 testo su più righe una riga; il valore resta quello del file. Un clic su una

@@ -49,8 +49,17 @@ copie divergenti delle regole.
 | tempo e random | quantità e disponibilità |
 | impostazioni | livello scrivibile e chiave dichiarata |
 | transfer | handle e contenuto, non path arbitrari |
+| notifiche | `fub:notifications` dichiarato e non spento |
 
 L'elenco esatto delle funzioni vive nel contratto.
+
+### Le notifiche del sistema
+
+`fub:notifications` non sta in `PluginPermissions::core()`: lo dichiara solo
+«Compiti» (`fub.tasks`), con l'interruttore `fub.tasks:permissions.notifications`
+in **Componenti**, acceso di serie. Senza funzione WIT nessun plugin WASM
+notifica: lo fa l'app (`fub-app/src/promemoria.rs`), dopo aver chiesto al `Guard`
+(`Host::component_allows`): se è spento, i promemoria restano nella nota.
 
 ## Elenco dei comandi
 
@@ -114,43 +123,17 @@ il foglio di serie della stessa luce e dello stesso contrasto, lascia la pelle
 di serie montata e aggiunge la skin del tema in un canale suo
 ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
-Da `theme-2` un tema può portare i suoi caratteri (`fonts` nel manifest): al
-massimo 8 voci, ognuna con `family` (lettere e cifre ASCII, `-` e spazi
-singoli, al massimo 64 caratteri, diversa dalle famiglie di serie e dalle
-parole chiave del CSS), `file` (`fonts/<nome>.woff2`, un asset del tema),
-`weight` da 100 a 900 e `style` `normal` o `italic`. L'host controlla che il
-file sia fra gli asset e cominci con la firma `wOF2`, al massimo 2 MiB l'uno e
-6 MiB in tutto. `@font-face` resta vietato nel CSS di un tema, perché un `src:`
-scritto a mano potrebbe chiamare la rete: le regole le scrive il loader, coi
-valori del manifest e l'URL `data:` dell'asset (la CSP ha `font-src data:`), nel
-canale `caratteri-tema`, e la pelle usa la famiglia per nome. Cambiato tema, il
-canale si svuota.
+Da `theme-2` un tema può portare i suoi caratteri, ridisegnare le icone della
+shell e dichiarare impostazioni: limiti e controlli dell'host e del loader sono
+in [Caratteri, icone e impostazioni di un tema](theme-assets.md). La
+pubblicazione avviene da staging con rename atomico e non sovrascrive un id
+esistente. I limiti correnti sono 64 KiB per il manifest, 4 MiB per ciascun
+foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
-Da `theme-2` un tema può ridisegnare per nome le icone della shell (`icons` nel
-manifest): il nome di un asset JSON accanto al manifest (`<nome>.json`, in
-minuscolo, mai `manifest.json`), `{ "<nome>": ["<d>", …] }`. Un tema porta
-soltanto i `d` dei tracciati, mai markup: ogni `d` ammette solo i comandi e i
-numeri di un tracciato SVG e gli spazi ASCII, quindi niente `<`, virgolette,
-`url(` o riferimenti. Al massimo 512 nomi, 8 tracciati e 4 KiB di tracciati per
-nome, 256 KiB per il file. La regola sta in `fub_abi::rules::theme_icons` e la
-applica l'host (all'installazione, all'inventario e alla lettura del tema) come
-il loader della shell, con lo stesso mirror delle regole; la stessa regola dei
-tracciati vale per le icone che i moduli della shell registrano. Il corpo di
-ogni `<svg>` la shell lo costruisce da sé, coi soli `d` validati, nel costrutto
-di tutte le icone (griglia 24, tratto, `currentColor`), e `ui/icons.ts`
-ripassa ogni voce dalla regola prima di disegnarla. Un tema non aggiunge nomi:
-un nome che nessuno disegna non rifiuta il tema ma non si vede. Cambiato tema,
-o annullata l'anteprima, il set si sostituisce e le icone già nella pagina si
-ridisegnano.
-
-Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
-`a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con
-minimo e massimo) e scelta. L'host le dichiara al registro delle impostazioni con chiave
-`<id>:<nome>`, a livello macchina e non scrivibili da programma; il tema non
-sceglie chiave né livello. Il client porta il valore corrente sulla radice del
-documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazione avviene da staging con rename atomico e non
-sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
-4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
+Un tema si installa anche da una cartella scelta dalla persona, o si collega da
+una cartella in sviluppo, solo in modalità sviluppatore e con la cartella scelta
+nella finestra nativa: permesso, porte, sostituzione di un id installato e tema
+collegato in [Temi da una cartella](theme-folder-security.md).
 
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
 un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
@@ -322,6 +305,11 @@ o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
 va al browser di sistema; ogni altro schema non si apre, con o senza visore
 montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
 incornicia soltanto un indirizzo `https:`.
+
+Una pagina incorporata in una nota (`![](https://…)` di un sito di `WEB_EMBED_SITES`,
+in `editors/text/profiles/markdown/web-embed.ts`) è un segnaposto che non chiede
+niente alla rete. «Carica» la apre soltanto nel visore, con lo stesso consenso,
+mai nel browser di sistema; nessun iframe entra nella shell.
 
 Le letture del client con `fetch` (asset del vault, file dell'app, tessere
 della mappa) non seguono redirect e non portano credenziali né referrer:

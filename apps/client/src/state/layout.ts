@@ -303,12 +303,22 @@ export function split(id: string, dir: "row" | "col", l: Layout = layout): strin
 /// Chiude un riquadro. L'ultimo non si chiude: una finestra senza riquadri non è
 /// uno stato che si possa disegnare, e «chiudi l'ultimo» vorrebbe dire «chiudi
 /// la finestra», che è un altro comando e di un altro modulo.
+///
+/// Chiudere un riquadro chiude le sue schede, e come ogni scheda chiusa vanno
+/// fra quelle che `Mod-Shift-t` riapre (IMP-018): la scheda attiva per ultima,
+/// così il primo ripensamento riporta quella che si stava guardando. Il loro
+/// riquadro non c'è più, quindi tornano in quello col fuoco.
 export function closePane(id: string, l: Layout = layout): boolean {
-  if (!l.panes[id]) return false;
+  const closing = l.panes[id];
+  if (!closing) return false;
   const orderedPanes = panes(l);
   if (orderedPanes.length <= 1) return false;
   const potato = removeNode(l.tree, id);
   if (!potato) return false;
+  closing.tabs.forEach((_, index) => {
+    if (index !== closing.active) rememberClosed(id, index, l);
+  });
+  rememberClosed(id, closing.active, l);
   l.tree = flatten(potato);
   delete l.panes[id];
   if (l.focus === id) l.focus = orderedPanes.find((pane) => pane !== id)!;

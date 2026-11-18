@@ -53,6 +53,13 @@ use jiff::Timestamp;
 /// deciso di poter leggere un orologio.
 pub(crate) struct Zone(TimeZone);
 
+/// Il nome è un fuso che il database conosce? È la stessa domanda che
+/// [`Zone::of`] si fa per far suonare una sveglia, fatta prima: un nome che qui
+/// non si risolve è un nome con cui nessuna sveglia suonerebbe.
+pub(crate) fn known_zone(name: &str) -> bool {
+    TimeZone::get(name).is_ok()
+}
+
 impl Zone {
     /// Il fuso di una sveglia: quello che dichiara, o quello della macchina.
     ///

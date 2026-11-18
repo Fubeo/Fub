@@ -1,5 +1,5 @@
-//! I comandi del versioning: ripristinare una versione e svuotare la
-//! cronologia (`VersioningCommands`).
+//! I comandi del versioning: ripristinare una versione, conservare un testo
+//! con una nota e svuotare la cronologia (`VersioningCommands`).
 
 use super::*;
 
@@ -15,7 +15,8 @@ use super::*;
 /// l'esemplare in memoria lo lascerebbe a nominare contenuti spariti, e il
 /// salvataggio dopo riscriverebbe l'indice vecchio — quindi
 /// [`VERSION_CLEAR`] c'è soltanto nei comandi costruiti con
-/// [`VersioningCommands::over`], cioè da chi ha aperto lo store.
+/// [`VersioningCommands::over`], cioè da chi ha aperto lo store. Lo stesso
+/// vale per [`VERSION_KEEP`], che aggiunge una versione all'esemplare vivo.
 #[derive(Clone, Default)]
 pub struct VersioningCommands {
     store: Option<VersionStore>,
@@ -53,6 +54,56 @@ impl VersioningCommands {
         let cleared = store.clear(host)?;
         Ok(CommandOutcome::notify(counted(DONE_CLEAR, cleared)))
     }
+
+    /// `version.keep`: mette in salvo un testo nella cronologia di una nota,
+    /// con una nota che dice perché.
+    ///
+    /// Chi lo chiama di solito sta per **scartare** quel testo («Usa la
+    /// versione su disco»), e scarta solo se qui risponde `Ok`: per questo il
+    /// documento si nomina sempre, senza ripiegare sulla nota attiva — un
+    /// testo conservato sotto la nota sbagliata è un testo perso — e ogni
+    /// rifiuto è un errore tipizzato, mai un esito vuoto.
+    ///
+    /// Non è annullabile, e non serve: aggiunge una versione e non cambia
+    /// nient'altro. Non passa dall'interruttore del versioning: con il
+    /// campionatore spento la cronologia c'è ancora, e chi scarta un testo ha
+    /// bisogno di metterlo lì comunque.
+    fn keep(
+        &self,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        let Some(store) = &self.store else {
+            return Err(PluginError::UnknownCommand(VERSION_KEEP.to_string().into()));
+        };
+        let args = Args::new(&args);
+        let doc = args
+            .document(DOC)
+            .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_KEEP_DOC)))?;
+        let text = args
+            .text(TEXT)
+            .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_TEXT_GIVEN)))?;
+        let note = args.text(NOTE).unwrap_or_default();
+        let sized = |key: &str| {
+            Text::message(
+                key,
+                vec![
+                    Arg::text(DOC, doc.as_str()),
+                    Arg::int("size", text.len() as i64),
+                ],
+            )
+        };
+        if mode.is_dry_run() {
+            // Il piano controlla ciò che si può controllare senza scrivere:
+            // una nota rifiutata qui sarebbe rifiutata anche dopo.
+            checked_note(note)?;
+            let plan = CommandPlan::of_edits(sized(PLAN_KEEP), Vec::new()).with_doc(doc.clone());
+            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
+        }
+        store.keep(&doc, text.as_bytes(), note, host)?;
+        Ok(CommandOutcome::notify(sized(DONE_KEEP)))
+    }
 }
 
 impl CommandProvider for VersioningCommands {
@@ -81,6 +132,28 @@ impl CommandProvider for VersioningCommands {
                     // rafforzata è la sua.
                     .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
             );
+            commands.push(
+                CommandSpec::new(VERSION_KEEP, Text::key(KEEP_TITLE))
+                    .describing(Text::key(KEEP_DESC))
+                    .with_param(
+                        ParamSpec::new(DOC, Text::key(KEEP_DOC_TITLE), ParamKind::Document)
+                            .describing(Text::key(KEEP_DOC_DESC))
+                            .required(),
+                    )
+                    .with_param(
+                        ParamSpec::new(TEXT, Text::key(KEEP_TEXT_TITLE), ParamKind::Text)
+                            .describing(Text::key(KEEP_TEXT_DESC))
+                            .required(),
+                    )
+                    .with_param(
+                        ParamSpec::new(NOTE, Text::key(KEEP_NOTE_TITLE), ParamKind::Text)
+                            .describing(Text::key(KEEP_NOTE_DESC))
+                            .required(),
+                    )
+                    // Scrive lo spazio dati della cronologia di una nota, e
+                    // non la nota: aggiunge, non toglie niente.
+                    .with_scope(CommandScope::writing(CommandReach::Document)),
+            );
         }
         commands
     }
@@ -94,6 +167,9 @@ impl CommandProvider for VersioningCommands {
     ) -> Result<CommandOutcome, PluginError> {
         if command == VERSION_CLEAR {
             return self.clear(mode, host);
+        }
+        if command == VERSION_KEEP {
+            return self.keep(args, mode, host);
         }
         if command != VERSION_RESTORE {
             return Err(PluginError::UnknownCommand(command.to_string().into()));
@@ -151,10 +227,13 @@ impl CommandProvider for VersioningCommands {
         // del risultato non è ancora stato creato, l'ultimo è la preimmagine.
         // Un errore di lettura qui non può trasformare una scrittura riuscita
         // in un fallimento: segnala il problema e non promette l'annullamento.
+        // La preimmagine è l'ultima fotografia del disco, non l'ultima versione:
+        // un testo conservato più recente non è mai stato il contenuto del file,
+        // e annullare verso di lui riscriverebbe la nota con un testo scartato.
         let before = match read_index(host) {
             Ok(history) => history
                 .get(doc.as_str())
-                .and_then(|entry| entry.versions.last())
+                .and_then(DocVersions::latest_on_disk)
                 .map(|version| version.ts),
             Err(error) => {
                 host.emit(Event::Trouble {

@@ -115,14 +115,14 @@ impl ExportProvider for XlsxExport {
                 chosen.push(doc);
             } else {
                 report.log.push(
-                    TransferNote::info("non è una cartella di Excel: resta fuori")
+                    TransferNote::info("non è una cartella .xlsx: resta fuori")
                         .about(doc.to_string()),
                 );
             }
         }
         if chosen.is_empty() {
             return Err(PluginError::BadArgs(
-                "nothing to export as PDF: no selected document is an Excel workbook".into(),
+                "nothing to export as PDF: no selected document is an .xlsx workbook".into(),
             ));
         }
         if chosen.len() > MAX_DOCUMENTS {
@@ -357,7 +357,7 @@ impl CommandProvider for XlsxCommands {
         let doc = DocId::new(args["doc"].as_str().unwrap_or_default());
         if !is_workbook(&*host, &doc) {
             return Err(PluginError::BadArgs(
-                format!("`{doc}` is not an Excel workbook").into(),
+                format!("`{doc}` is not an .xlsx workbook").into(),
             ));
         }
         let sheets = args
@@ -383,7 +383,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(T_TITLE, "Esporta in PDF")
             .with(
                 T_DESC,
-                "Stampa la cartella di Excel in un PDF con le impostazioni di pagina di ogni \
+                "Stampa la cartella .xlsx in un PDF con le impostazioni di pagina di ogni \
                  foglio, senza toccarla. Il PDF arriva nell'attività, da salvare dove vuoi, con \
                  l'elenco di ciò che la stampa non porta.",
             )
@@ -395,7 +395,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(T_TITLE, "Export to PDF")
             .with(
                 T_DESC,
-                "Prints the Excel workbook to a PDF with each sheet's page setup, without \
+                "Prints the .xlsx workbook to a PDF with each sheet's page setup, without \
                  touching it. The PDF appears in Activity, to save wherever you like, with the \
                  list of what printing does not carry.",
             )

@@ -258,7 +258,7 @@ describe("la barra nella lavagna", () => {
     expect(connect.getAttribute("aria-label")).toContain(t("canvas.commands.why.one_or_two"));
   });
 
-  it("sparisce mentre si sposta la vista e torna, al suo posto nuovo, a fine gesto", () => {
+  it("sparisce mentre si sposta la vista col trascinamento; con la rotella che ingrandisce segue la scheda (#411 C-06)", () => {
     vi.useFakeTimers();
     const { viewport, bar, card } = mounted();
     select(card("a"));
@@ -274,16 +274,17 @@ describe("la barra nella lavagna", () => {
     select(card("a"));
     expect(bar.hidden).toBe(false);
     const top = bar.style.top;
-    // La rotella con Ctrl: durante non c'è, a fine gesto torna.
+    // La rotella con Ctrl: la barra resta e segue la scheda, già durante (#411 C-06).
     const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 300 });
     Object.defineProperty(wheel, "ctrlKey", { value: true });
     Object.defineProperty(wheel, "clientX", { value: 400 });
     Object.defineProperty(wheel, "clientY", { value: 300 });
     viewport.dispatchEvent(wheel);
-    expect(bar.hidden).toBe(true);
+    expect(bar.hidden).toBe(false);
+    expect(parseFloat(bar.style.top)).toBeGreaterThan(parseFloat(top));
     vi.advanceTimersByTime(2000);
     expect(bar.hidden).toBe(false);
-    // Lo zoom cambiato: la barra si è rimessa sopra la scheda, più in basso.
+    // A fine gesto resta sopra la scheda, più in basso.
     expect(parseFloat(bar.style.top)).toBeGreaterThan(parseFloat(top));
   });
 

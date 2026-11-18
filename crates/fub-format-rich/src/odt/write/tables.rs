@@ -208,7 +208,7 @@ impl<'a> Writer<'a> {
                     },
                 };
                 let ck = respan(ck, cell.span.unwrap_or(1) as usize, key.rows)?;
-                let blocks = if bare_cell(&cell.blocks) {
+                let blocks = if bare_cell(cell) {
                     if ck.open.ends_with("/>") {
                         out.push_str(&ck.open);
                     } else {

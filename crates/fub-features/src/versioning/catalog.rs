@@ -132,8 +132,44 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 S_RETENTION_DESC,
                 "Giorni. Le versioni più vecchie se ne vanno quando la nota si salva \
-                 di nuovo; l'ultima versione resta sempre. 0 tiene tutto.",
-            ),
+                 di nuovo; l'ultima versione e i testi conservati restano sempre. \
+                 0 tiene tutto.",
+            )
+            .with(KEEP_TITLE, "Conserva un testo nella cronologia")
+            .with(
+                KEEP_DESC,
+                "Mette un testo nella cronologia della nota come versione, con una \
+                 nota che dice perché. Il file non cambia; la versione resta finché \
+                 non svuoti la cronologia.",
+            )
+            .with(KEEP_DOC_TITLE, "Nota")
+            .with(KEEP_DOC_DESC, "La nota nella cui cronologia conservare il testo.")
+            .with(KEEP_TEXT_TITLE, "Testo")
+            .with(KEEP_TEXT_DESC, "Il testo da conservare.")
+            .with(KEEP_NOTE_TITLE, "Perché")
+            .with(
+                KEEP_NOTE_DESC,
+                "Una frase che si legge accanto alla versione nella cronologia.",
+            )
+            .with(PLAN_KEEP, "Conserva {size} byte nella cronologia di {doc}")
+            .with(DONE_KEEP, "Testo conservato nella cronologia di {doc}")
+            .with(
+                KEEP_TOO_LARGE,
+                "Il testo supera {limit} MiB: la cronologia di {doc} non lo può conservare.",
+            )
+            .with(E_NO_KEEP_DOC, "Nessuna nota in cui conservare il testo.")
+            .with(E_NO_TEXT_GIVEN, "Nessun testo da conservare.")
+            .with(
+                E_NO_NOTE_GIVEN,
+                "Manca la nota che dice perché il testo si conserva.",
+            )
+            .with(
+                E_BAD_NOTE,
+                "La nota di una versione è una riga di al più {limit} caratteri.",
+            )
+            .with(RESTORED, "Ripristinata la versione del {when}.")
+            .with(UNDO_LABEL, "Annulla")
+            .with(KEPT_NOTE, "Conservata: {note}"),
         StringCatalog::new("en")
             .with(NO_VERSIONS, "No version of {doc}.")
             .with(NO_SUCH_VERSION, "There is no version of {doc} from {when}.")
@@ -254,7 +290,39 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 S_RETENTION_DESC,
                 "Days. Older versions go when the note is saved again; the latest \
-                 version always stays. 0 keeps everything.",
-            ),
+                 version and kept texts always stay. 0 keeps everything.",
+            )
+            .with(KEEP_TITLE, "Keep a text in the history")
+            .with(
+                KEEP_DESC,
+                "Puts a text in the note's history as a version, with a note that \
+                 says why. The file does not change; the version stays until you \
+                 clear the history.",
+            )
+            .with(KEEP_DOC_TITLE, "Note")
+            .with(KEEP_DOC_DESC, "The note whose history keeps the text.")
+            .with(KEEP_TEXT_TITLE, "Text")
+            .with(KEEP_TEXT_DESC, "The text to keep.")
+            .with(KEEP_NOTE_TITLE, "Why")
+            .with(
+                KEEP_NOTE_DESC,
+                "A sentence shown next to the version in the history.",
+            )
+            .with(PLAN_KEEP, "Keep {size} bytes in the history of {doc}")
+            .with(DONE_KEEP, "Text kept in the history of {doc}")
+            .with(
+                KEEP_TOO_LARGE,
+                "The text exceeds {limit} MiB: the history of {doc} cannot keep it.",
+            )
+            .with(E_NO_KEEP_DOC, "No note to keep the text in.")
+            .with(E_NO_TEXT_GIVEN, "No text to keep.")
+            .with(E_NO_NOTE_GIVEN, "The note saying why the text is kept is missing.")
+            .with(
+                E_BAD_NOTE,
+                "A version note is one line of at most {limit} characters.",
+            )
+            .with(RESTORED, "Version from {when} restored.")
+            .with(UNDO_LABEL, "Undo")
+            .with(KEPT_NOTE, "Kept: {note}"),
     ]
 }

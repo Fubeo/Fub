@@ -55,6 +55,86 @@ pub(super) fn from_template(
     ))
 }
 
+/// Una nota nuova da un tipo di nota: in testa `tipo` col link al tipo e le
+/// proprietà del tipo, vuote (falso per una casella, `[]` per un elenco);
+/// sotto, il testo del tipo con le variabili `{{…}}` sostituite. Nasce nella
+/// cartella `folder` se chi chiede ne dà una, se no in quella del tipo, se no
+/// alla radice; il nome, se manca, è «Senza titolo». Un tipo che manca, che è
+/// di più o che non si legge non crea niente. `expected_revision` è la
+/// revisione del file del tipo letta da chi chiede: se il tipo è cambiato, si
+/// ferma. L'annulla porta la nota nel cestino, come per un template.
+pub(super) fn from_type(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let raw = args.text(TYPE).unwrap_or_default();
+    let found = crate::note_types::find_type(host, raw)?;
+    crate::note_types::check_revision(host, &found, args.text(EXPECTED_REVISION))?;
+    let title = args
+        .text(NAME)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| super::names::untitled(host));
+    let folder = folder_arg(args.text(FOLDER))?.or_else(|| found.folder.clone());
+    // Come `note.from_template`: un nome con `/` nomina già la cartella.
+    let wanted = match (folder, title.contains('/')) {
+        (Some(folder), false) => format!("{folder}/{title}"),
+        _ => title,
+    };
+    let id = host.free_name(&DocId::new(with_extension(host, &wanted)?));
+    crate::formats::require(host, &id, syntax::FRONTMATTER)?;
+    let name = found.reference.name.clone();
+    let summary = Text::message(P_FROM_TYPE, vec![Arg::text(TYPE, &name)]);
+    if mode.is_dry_run() {
+        return Ok(plan(summary, id));
+    }
+    let ctx = context(host)?;
+    let body = expand_full(&found.template, &file_name(&id), &ctx, host)?;
+    let registry = registry(host);
+    let mut head = String::from("---\n");
+    head.push_str(&crate::note_types::frontmatter_line(
+        crate::note_types::TYPE_KEY,
+        &serde_json::Value::String(found.reference.wikilink()),
+    ));
+    head.push('\n');
+    for property in &found.properties {
+        if property.key == crate::note_types::TYPE_KEY {
+            continue;
+        }
+        head.push_str(&crate::note_types::frontmatter_line(
+            &property.key,
+            &property.empty_value(&registry),
+        ));
+        head.push('\n');
+    }
+    head.push_str("---\n");
+    host.create_document(&id, &format!("{head}{body}"))?;
+    Ok(created(
+        Text::message(
+            D_FROM_TYPE,
+            vec![Arg::text("doc", id.as_str()), Arg::text(TYPE, &name)],
+        ),
+        Text::message(
+            U_FROM_TYPE,
+            vec![Arg::text("doc", id.as_str()), Arg::text(TYPE, &name)],
+        ),
+        id,
+    ))
+}
+
+/// Il registro dei tipi di proprietà del vault, per scegliere con che valore
+/// nasce una proprietà. Illeggibile o assente vale vuoto: decide il tipo.
+fn registry(host: &dyn ReadApi) -> fub_abi::model::PropertyTypes {
+    match host.setting(PROPERTY_TYPES_KEY) {
+        Ok(fub_abi::settings::SettingValue::Text(raw)) => {
+            serde_json::from_str(&raw).unwrap_or_default()
+        }
+        _ => fub_abi::model::PropertyTypes::default(),
+    }
+}
+
 pub(super) fn daily(
     args: Args<'_>,
     mode: InvokeMode,

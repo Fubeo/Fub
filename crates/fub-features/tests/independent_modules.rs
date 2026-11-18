@@ -82,10 +82,14 @@ const ROOT: &[&str] = &["lib.rs", "inventory.rs"];
 ///   di chi usa Fub. Lo parlano i template e le ricette, e due copie della
 ///   stessa regola darebbero due «oggi» diversi alla stessa mezzanotte; non
 ///   nomina nessuna delle due.
+/// - `note_types` sono i tipi di nota (E5): com'è fatto un tipo, quale tipo ha
+///   una nota, quante note ha ogni tipo. Lo usano i modelli (creare una nota
+///   da un tipo) e le proprietà (cambiare tipo, dire che il tipo manca): una
+///   regola sola, che nessuna delle due possiede da sola.
 ///
 /// Un modulo condiviso resta sotto la stessa domanda degli altri: se nominasse
 /// una feature, l'accoppiamento passerebbe da lui.
-const SHARED: &[&str] = &["formats", "vocabulary"];
+const SHARED: &[&str] = &["formats", "note_types", "vocabulary"];
 
 /// La riga senza i nomi dei moduli condivisi, che sono vocabolario dichiarato.
 fn without_shared(row: &str) -> String {

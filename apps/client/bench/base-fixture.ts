@@ -7,6 +7,7 @@
 // dell'orologio fermo del banco: cinque consegne in un giorno («+2»), una con
 // l'ora, una nei giorni di settembre in fondo al mese, una senza data; e
 // `note.property.set`, perché trascinare una nota ne riscrive la data.
+// `?base=tempo` (T34) apre la linea del tempo dalla richiesta alla consegna.
 //
 // Il finto non ha `fub-format-base`: questa scenografia ne fa le veci per le
 // quattro domande che la superficie fa (`parse`, `plan`, `derive`) e per i
@@ -36,6 +37,9 @@ interface Work {
   readonly museo: string;
   readonly valore: number;
   consegna: string;
+  /// La richiesta, l'inizio della linea del tempo (`?base=tempo`); vuota o
+  /// assente, la nota non ha la proprietà.
+  richiesta?: string;
 }
 
 const WORKS: readonly Work[] = [
@@ -64,6 +68,22 @@ const CALENDAR_WORKS: readonly Work[] = [
   { name: "Ritratto di giovane", stato: "Prenotata", museo: "Brera", valore: 3900, consegna: "" },
 ];
 
+/// Le opere della linea del tempo, dalla richiesta alla consegna, attorno a
+/// oggi (il 19 agosto): una che comincia prima dei giorni mostrati, una con
+/// la consegna prima della richiesta, una senza consegna (un punto), una con
+/// l'ora, una a novembre (fuori, a destra) e una senza date.
+const TIMELINE_WORKS: readonly Work[] = [
+  { name: "Annunciazione", stato: "Arrivata", museo: "Uffizi", valore: 12000, richiesta: "2026-08-03", consegna: "2026-08-21" },
+  { name: "Ritratto di signora", stato: "In viaggio", museo: "Brera", valore: 4800, richiesta: "2026-08-12", consegna: "2026-08-28" },
+  { name: "Natura morta con limoni", stato: "Arrivata", museo: "Capodimonte", valore: 2600, richiesta: "2026-08-17", consegna: "2026-09-04" },
+  { name: "Veduta del porto", stato: "Prenotata", museo: "Correr", valore: 900, richiesta: "2026-08-24", consegna: "2026-09-18" },
+  { name: "La lettrice", stato: "In viaggio", museo: "Uffizi", valore: 7300, richiesta: "2026-09-02", consegna: "2026-08-26" },
+  { name: "Paesaggio con mulino", stato: "Arrivata", museo: "Brera", valore: 3100, richiesta: "2026-09-07", consegna: "" },
+  { name: "San Girolamo", stato: "Prenotata", museo: "Capodimonte", valore: 15500, richiesta: "2026-09-14T10:30", consegna: "2026-10-01T18:00" },
+  { name: "Il concerto", stato: "In viaggio", museo: "Correr", valore: 5200, richiesta: "2026-11-02", consegna: "2026-11-20" },
+  { name: "Madonna del cardellino", stato: "Prenotata", museo: "Uffizi", valore: 21000, richiesta: "", consegna: "" },
+];
+
 const docOf = (work: Work): string => `${FOLDER}${work.name}.md`;
 
 /// Le chiavi di una vista, nell'ordine in cui il file le scrive.
@@ -82,6 +102,14 @@ function initialViews(variant: BaseVariant): View[] {
     return [
       view([["name", "Calendario"], ["type", "table"], ["fub", { view: "calendar", date: "consegna" }]]),
       view([["name", "Tabella"], ["type", "table"], ["order", ["file.name", "stato", "museo", "valore", "consegna"]]]),
+    ];
+  }
+  if (variant === "tempo") {
+    // La linea del tempo nella forma che il modello scrive su disco, come il
+    // calendario: `type: table` e la vista vera sotto `fub`.
+    return [
+      view([["name", "Linea del tempo"], ["type", "table"], ["fub", { view: "timeline", start: "richiesta", end: "consegna" }]]),
+      view([["name", "Tabella"], ["type", "table"], ["order", ["file.name", "stato", "museo", "richiesta", "consegna"]]]),
     ];
   }
   if (variant === "venti") {
@@ -276,6 +304,22 @@ function dateKeyOf(entries: View): string | null {
   return typeof date === "string" ? date.replace(/^prop\./, "") : null;
 }
 
+/// L'inizio o la fine della linea del tempo (`fub.start`, `fub.end`).
+function spanKeyOf(entries: View, which: "start" | "end"): string | null {
+  const fub = entries.get("fub");
+  const key = fub !== null && typeof fub === "object" && !Array.isArray(fub) ? (fub as Record<string, Json>)[which] : undefined;
+  return typeof key === "string" ? key.replace(/^prop\./, "") : null;
+}
+
+/// Le proprietà data delle opere.
+const DATE_KEYS: ReadonlySet<string> = new Set(["consegna", "richiesta"]);
+
+/// Il giorno civile di una data dell'opera, `null` se non c'è.
+function civilOf(work: Work, key: string | null): string | null {
+  const value = key === null ? null : valueOf(work, key);
+  return typeof value === "string" && value !== "" && DATE_KEYS.has(key!) ? value.slice(0, 10) : null;
+}
+
 /// Una consegna come `PropertyValue` del contratto.
 function dateValue(value: string): Json {
   const [day, time] = value.split("T");
@@ -287,7 +331,7 @@ function dateValue(value: string): Json {
 function cell(work: Work, key: string): Json {
   const value = valueOf(work, key);
   if (value === null || value === "") return { kind: "empty" };
-  if (key === "consegna") return { kind: "date", value: instant(String(value)) };
+  if (DATE_KEYS.has(key)) return { kind: "date", value: instant(String(value)) };
   return typeof value === "number" ? { kind: "number", value } : { kind: "text", value };
 }
 
@@ -312,17 +356,17 @@ export interface BaseFixtureHost {
   readonly writeByCommand: (doc: string, text: string) => Promise<void>;
 }
 
-/// Quale Base: le tre viste delle scene (`1`), venti viste (`venti`), o il
-/// calendario di agosto (`calendario`).
-export type BaseVariant = "1" | "venti" | "calendario";
+/// Quale Base: le tre viste delle scene (`1`), venti viste (`venti`), il
+/// calendario di agosto (`calendario`) o la linea del tempo (`tempo`).
+export type BaseVariant = "1" | "venti" | "calendario" | "tempo";
 
 export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = "1"): BaseFixture {
   const views = initialViews(variant);
   const files: Record<string, string> = { [BASE_DOC]: serialize(views) };
-  // Copie: il calendario sposta le consegne.
-  const list: Work[] = (variant === "calendario" ? CALENDAR_WORKS : WORKS).map((work) => ({ ...work }));
+  // Copie: il calendario e la linea del tempo spostano le date.
+  const list: Work[] = (variant === "calendario" ? CALENDAR_WORKS : variant === "tempo" ? TIMELINE_WORKS : WORKS).map((work) => ({ ...work }));
   const noteText = (work: Work): string =>
-    `---\nstato: ${work.stato}\nmuseo: ${work.museo}\nvalore: ${work.valore}\n${work.consegna === "" ? "" : `consegna: ${work.consegna}\n`}---\n# ${work.name}\n`;
+    `---\nstato: ${work.stato}\nmuseo: ${work.museo}\nvalore: ${work.valore}\n${work.richiesta ? `richiesta: ${work.richiesta}\n` : ""}${work.consegna === "" ? "" : `consegna: ${work.consegna}\n`}---\n# ${work.name}\n`;
   for (const work of list) files[docOf(work)] = noteText(work);
   const named = (name: unknown): View | undefined =>
     typeof name === "string" ? views.find((entries) => entries.get("name") === name) : views[0];
@@ -331,6 +375,7 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
     { key: "stato", value: { kind: "text", value: work.stato } },
     { key: "museo", value: { kind: "text", value: work.museo } },
     { key: "valore", value: { kind: "number", value: work.valore } },
+    ...(work.richiesta ? [{ key: "richiesta", value: dateValue(work.richiesta) }] : []),
     ...(work.consegna === "" ? [] : [{ key: "consegna", value: dateValue(work.consegna) }]),
   ];
   return {
@@ -349,9 +394,9 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
           const columns = columnsOf(entries);
           const type = viewTypeOf(entries);
           return {
-            view: entries.get("name"), view_type: type, columns, date_key: dateKeyOf(entries), start_key: null, end_key: null,
+            view: entries.get("name"), view_type: type, columns, date_key: dateKeyOf(entries), start_key: spanKeyOf(entries, "start"), end_key: spanKeyOf(entries, "end"),
             column_labels: Object.fromEntries(columns.filter((key) => key in LABELS).map((key) => [key, LABELS[key]!])),
-            required_props: ["stato", "museo", "valore", "consegna"], all_properties: false,
+            required_props: ["stato", "museo", "valore", "consegna", ...(variant === "tempo" ? ["richiesta"] : [])], all_properties: false,
             group: groupOf(entries), limit: null, map: null, create_defaults: {},
             filters: entries.get("filters") ?? "all", sort: entries.get("sort") ?? [], order: entries.get("order") ?? [],
             summaries: summariesOf(entries).map((summary) => ({ key: summary.key, aggregate: summary.aggregate, expression: null, name: summary.name, label: summary.label })),
@@ -377,6 +422,11 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
               doc: docOf(work), values: Object.fromEntries(keys.map((key) => [key, cell(work, key)])),
               // Il giorno civile della data del calendario: l'ora non lo sposta.
               ...(viewTypeOf(entries) === "calendar" ? { time: { day: dateKeyOf(entries) === "consegna" && work.consegna !== "" ? work.consegna.slice(0, 10) : null } } : {}),
+              // Inizio e fine della linea del tempo, e se la fine viene prima.
+              ...(viewTypeOf(entries) === "timeline" ? (() => {
+                const start = civilOf(work, spanKeyOf(entries, "start")), end = civilOf(work, spanKeyOf(entries, "end"));
+                return { time: { start, end, inverted: start !== null && end !== null && end < start } };
+              })() : {}),
             })),
             summaries: Object.fromEntries(summariesOf(entries).map((summary) => [summary.label, aggregate(summary, chosen)])),
           };
@@ -395,15 +445,17 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
       }
     },
     invoke: (id, raw) => {
-      if (id === "note.property.set" && variant === "calendario") return (async () => {
-        // La consegna spostata dal calendario: il valore letto deve essere
-        // quello della nota, come il confronto del core.
+      if (id === "note.property.set" && (variant === "calendario" || variant === "tempo")) return (async () => {
+        // Una data spostata dal calendario o dalla linea del tempo: il valore
+        // letto deve essere quello della nota, come il confronto del core.
         const args = raw as { doc?: unknown; key?: unknown; expected?: unknown; value?: unknown };
         const work = typeof args.doc === "string" ? works.get(args.doc) : undefined;
-        if (!work || args.key !== "consegna" || typeof args.value !== "string" || typeof args.expected !== "string") throw { kind: "bad_args", message: "base finta: proprietà sconosciuta" };
-        const now = JSON.stringify(work.consegna === "" ? { kind: "absent" } : { kind: "value", value: dateValue(work.consegna) });
+        const key = args.key === "consegna" || (args.key === "richiesta" && variant === "tempo") ? args.key : null;
+        if (!work || key === null || typeof args.value !== "string" || typeof args.expected !== "string") throw { kind: "bad_args", message: "base finta: proprietà sconosciuta" };
+        const current = work[key] ?? "";
+        const now = JSON.stringify(current === "" ? { kind: "absent" } : { kind: "value", value: dateValue(current) });
         if (JSON.stringify(JSON.parse(args.expected)) !== now) throw { kind: "conflict", message: `conflict: «${args.doc as string}» è cambiata sotto` };
-        work.consegna = String(JSON.parse(args.value));
+        work[key] = String(JSON.parse(args.value));
         await host().writeByCommand(docOf(work), noteText(work));
         return { notify: null, effect: { kind: "none" }, undo: null, partial: null };
       })();

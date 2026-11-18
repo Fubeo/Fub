@@ -29,6 +29,7 @@ import { adapter, type Adapter, type Paper } from "../../theme/adapt";
 import type { Theme } from "../../theme/theme";
 import type { PdfEngineLoader } from "../media/pdf-view";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
+import { writeClipboardText } from "../../platform/clipboard";
 import { createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
@@ -42,6 +43,7 @@ import {
   coordinateAt,
   normalizedSelection,
   positionOf,
+  type GridCoordinate,
   type GridPosition,
   type GridSelection,
   type GridSheet,
@@ -67,7 +69,8 @@ import {
 import { attachCommentCards, commentDescription } from "./comment-card";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
-import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
+import { syncAttributes } from "./dom-sync";
+import { currencyFormat, namedKey, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
   cellKey,
   decimalSeparator,
@@ -147,6 +150,20 @@ const SET_VALUES = "range.setValues";
 /// Copia o sposta un intervallo della cartella in un passo solo, con
 /// formule, formati e unioni (comando composto di `fub-format-xlsx`).
 const PASTE_FROM = "fub.pasteFrom";
+/// Gli ordinamenti rapidi: da una cella sola ordinano la sua zona.
+const SORTS: ReadonlySet<string> = new Set(["data.sortAscending", "data.sortDescending"]);
+
+/// L'intervallo che `selection.currentRegion` rende (`{"selection":"A1:B3"}`),
+/// se è uno solo.
+function regionOf(read: string | null): string | null {
+  if (!read) return null;
+  try {
+    const region = (JSON.parse(read) as { selection?: unknown }).selection;
+    return typeof region === "string" && parseRangeA1(region) ? region : null;
+  } catch {
+    return null;
+  }
+}
 
 /// Un intervallo copiato, o tagliato (`move`), dalla cartella.
 interface Copied {
@@ -169,11 +186,17 @@ const QUERIES: ReadonlySet<string> = new Set([
   // L'anteprima e il PDF senza percorso leggono la cartella com'è adesso.
   "file.printPreview",
   "file.exportPdf",
+  // L'area di dati della cella attiva: sposta la selezione della facciata e
+  // basta, che il comando dopo rimette; «Crea tabella» la propone.
+  "selection.currentRegion",
 ]);
 /// I comandi di `QUERIES` che leggono soltanto senza parametri.
-const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup"]);
+const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup", "selection.currentRegion"]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
+/// Quante volte un annulla o un ripeti torna alla sessione riaperta da un
+/// salvataggio arrivato mentre era in volo.
+const HISTORY_RETRIES = 2;
 /// Perché una cella non si modifica, per codice di blocco.
 const LOCK_KEYS: Readonly<Record<string, Key>> = {
   array: "grid.workbook.lock.array",
@@ -235,6 +258,22 @@ const DRAG_SLOP = 3;
 /// Gli oggetti che l'elenco per chi non vede nomina, al più.
 const SUMMARY_OBJECTS = 50;
 
+/// Il valore che il motore dà a una formula su un riferimento circolare.
+const CIRCULAR = "#CIRC!";
+
+function isCircular(cell: GridBytesCell): boolean {
+  return cell.value.kind === "error" && cell.value.value === CIRCULAR;
+}
+
+/// Un passo della history delle celle: le patch che lo fanno, e se il suo
+/// comando è ancora in cima al giornale del provider (`journaled`), dove lo
+/// annulla `edit.undo`. Un passo che non lo è più (il giornale è finito nei
+/// byte, o un'altra scrittura gli è passata sopra) si annulla con le patch.
+interface HistoryStep {
+  readonly patches: readonly GridCellPatch[];
+  journaled: boolean;
+}
+
 interface EditingState {
   readonly position: GridPosition;
   /// L'input della cella quando si è aperta: confermare scrive soltanto se
@@ -249,6 +288,64 @@ interface EditingState {
   /// L'input che la cella ha preso sotto la bozza, da un salvataggio o da un
   /// altro riquadro, finché non si sceglie quale tenere.
   theirs: string | null;
+  /// La cella per id (foglio, riga, colonna): una riscrittura la ritrova anche
+  /// se la sua riga si è spostata, o dice che non c'è più.
+  readonly coordinate: GridCoordinate | undefined;
+}
+
+/// Il foglio come si mostrava quando una riscrittura da fuori è arrivata: le
+/// righe e le colonne per id, e l'input di ogni cella letta per id, così si
+/// dice quali celle sono cambiate davvero.
+interface ShownWindow {
+  readonly rowStart: number;
+  readonly columnStart: number;
+  readonly rows: readonly string[];
+  readonly columns: readonly string[];
+  readonly inputs: ReadonlyMap<string, string>;
+}
+
+const inputKey = (row: string, column: string): string => `${row}\u0000${column}`;
+
+/// Le finestre lette del foglio `sheet`, per il confronto dopo una riscrittura.
+function shownWindows(windows: readonly GridBytesWindow[], sheet: string): ShownWindow[] {
+  return windows.filter((window) => window.sheet === sheet).map((window) => ({
+    rowStart: window.row_start,
+    columnStart: window.column_start,
+    rows: window.rows.map((row) => row.id),
+    columns: window.columns.map((column) => column.id),
+    inputs: new Map(window.cells.map((cell) => [inputKey(cell.key.row, cell.key.column), cell.input] as const)),
+  }));
+}
+
+/// Vero se una cella letta prima e dopo ha un input diverso, salvo la cella
+/// `open` che si sta scrivendo: quella ha la sua bozza e il suo avviso.
+function changedElsewhere(before: readonly ShownWindow[], after: readonly ShownWindow[], open: GridCoordinate | undefined): boolean {
+  const isOpen = (row: string, column: string): boolean => open !== undefined && row === open.row && column === open.column;
+  for (const old of before) {
+    for (const next of after) {
+      const rowFrom = Math.max(old.rowStart, next.rowStart);
+      const rowTo = Math.min(old.rowStart + old.rows.length, next.rowStart + next.rows.length);
+      const columnFrom = Math.max(old.columnStart, next.columnStart);
+      const columnTo = Math.min(old.columnStart + old.columns.length, next.columnStart + next.columns.length);
+      for (let row = rowFrom; row < rowTo; row += 1) {
+        for (let column = columnFrom; column < columnTo; column += 1) {
+          const oldRow = old.rows[row - old.rowStart]!;
+          const oldColumn = old.columns[column - old.columnStart]!;
+          const newRow = next.rows[row - next.rowStart]!;
+          const newColumn = next.columns[column - next.columnStart]!;
+          if (isOpen(oldRow, oldColumn) || isOpen(newRow, newColumn)) continue;
+          const was = old.inputs.get(inputKey(oldRow, oldColumn)) ?? "";
+          if (was !== (next.inputs.get(inputKey(newRow, newColumn)) ?? "")) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/// Gli avvisi che stanno insieme su una riga, saltando quelli vuoti.
+function joinNotices(...parts: readonly (string | null)[]): string {
+  return parts.filter((part): part is string => Boolean(part)).join(" ");
 }
 
 /// Il modo della cella aperta, come lo dice la banda di stato.
@@ -270,16 +367,6 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
 
 /// Gli elementi che `#render` disegna direttamente nella griglia.
 const DRAWN = ".grid-row, .grid-freeze, .grid-object, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-cut-mark, .grid-resize-guide, .grid-resize-label, .grid-move-preview, .grid-formula-ref";
-
-/// Dà a `target` gli attributi di `source`, e toglie quelli che lui non ha.
-function syncAttributes(target: Element, source: Element): void {
-  for (const attribute of [...target.attributes]) {
-    if (!source.hasAttribute(attribute.name)) target.removeAttribute(attribute.name);
-  }
-  for (const attribute of source.attributes) {
-    if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
-  }
-}
 
 export class GridEngine {
   readonly #root: HTMLElement;
@@ -328,6 +415,10 @@ export class GridEngine {
   #rows: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #columns: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #editing: EditingState | null = null;
+  /// Chi vuole sapere se la cella aperta tiene testo non confermato (la
+  /// sessione, per la bozza di recupero), e l'ultima risposta data.
+  readonly #pendingWatchers = new Set<(pending: boolean) => void>();
+  #pendingSaid = false;
   #pointing: Pointing | null = null;
   /// Ciò che si è tagliato e non ancora incollato: le formiche attorno
   /// all'intervallo, e il testo che l'incolla riconosce per spostarlo.
@@ -350,8 +441,13 @@ export class GridEngine {
   #readOnlyDialogs: ReadonlySet<string> = new Set();
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
-  #undo: GridCellPatch[][] = [];
-  #redo: GridCellPatch[][] = [];
+  /// Annulla e ripeti dei gesti sulle celle. Un passo «nel giornale» è un
+  /// comando che il provider ha ancora in cima al suo giornale (una formula
+  /// scritta nella sessione a comandi): lo annulla il provider. Gli altri si
+  /// annullano scrivendo l'input di prima, anche dopo che un salvataggio ha
+  /// messo il giornale nei byte (IMP-027).
+  #undo: HistoryStep[] = [];
+  #redo: HistoryStep[] = [];
   /// Il gesto del puntatore sulle celle: una selezione che si allarga
   /// (celle, righe o colonne intere) o il quadratino di riempimento tirato.
   #drag: CellDrag | null = null;
@@ -630,6 +726,61 @@ export class GridEngine {
   }
 
   getDoc(): string { return this.#journal; }
+
+  /// Il giornale con dentro la cella aperta, come lo scriverebbe la sua
+  /// conferma; `null` se la cella non tiene niente di nuovo, o se la conferma
+  /// passa dal provider (una sessione a comandi, una formula): allora la
+  /// bozza tiene l'ultimo giornale accettato. Non cambia niente.
+  pendingText(): string | null {
+    const editing = this.#editing;
+    if (this.#destroyed || !editing || editing.draft === editing.original || this.#readOnly || !this.#view) return null;
+    if (this.#commandMode() || this.#writeRefusal(editing.position)) return null;
+    const coordinate = coordinateAt(this.#sheet(), editing.position);
+    if (!coordinate) return null;
+    const after = fileInput(editing.draft, this.#decimal);
+    const current = this.#workbookCell(editing.position)?.bytes.input ?? "";
+    try {
+      const journal = parseGridJournal(this.#journal);
+      if (after.startsWith("=") && gridJournalEntry(journal, coordinate)?.before !== after) return null;
+      return after === current ? this.#journal : gridJournalText(recordGridJournal(journal, coordinate, current, after));
+    } catch {
+      return null;
+    }
+  }
+
+  /// Conferma adesso la cella aperta, come Invio senza spostarsi. La
+  /// conferma arriva al giornale definitivo col suo turno della coda del
+  /// provider (subito in anticipo per un valore, soltanto allora per una
+  /// formula o in una sessione a comandi): la promessa dice quando, e chi
+  /// salva o chiude la sessione la aspetta.
+  commitPending(): Promise<void> | undefined {
+    if (this.#destroyed || !this.#pendingNow()) return undefined;
+    const ticket = this.#bytesTickets;
+    this.#finishEditing(true, "input", false);
+    return this.#bytesTickets !== ticket ? this.#providerCommitTail : undefined;
+  }
+
+  /// Avvisa a ogni cambio del testo della cella aperta, con `true` finché
+  /// ce n'è di non confermato. Il disposer ferma gli avvisi.
+  watchPending(listener: (pending: boolean) => void): () => void {
+    this.#pendingWatchers.add(listener);
+    return () => this.#pendingWatchers.delete(listener);
+  }
+
+  #pendingNow(): boolean {
+    const editing = this.#editing;
+    return editing !== null && editing.draft !== editing.original;
+  }
+
+  /// Ogni battuta conta (la sessione riarma la bozza su ogni cambio); quando
+  /// non resta niente lo si dice una volta.
+  #pendingChanged(): void {
+    const pending = this.#pendingNow();
+    if (!pending && !this.#pendingSaid) return;
+    this.#pendingSaid = pending;
+    for (const listener of [...this.#pendingWatchers]) listener(pending);
+  }
+
   selection(): GridSelection {
     const { anchor, focus, active } = this.#selection;
     return active
@@ -703,27 +854,64 @@ export class GridEngine {
   }
 
   undo(): boolean {
-    if (this.#commandMode()) return this.#documentHistory(UNDO);
-    const patches = this.#undo.pop();
-    if (!patches) return false;
-    if (!this.#commit(inverseGridPatches(patches), "undo", false)) {
-      this.#undo.push(patches);
-      return false;
-    }
-    this.#redo.push(patches);
-    return true;
+    if (this.#providerHistory()) return this.#documentHistory(UNDO);
+    if (this.#refuseStaleHistory()) return false;
+    return this.#history(this.#undo, this.#redo, UNDO, (step) => this.#commit(inverseGridPatches(step.patches), "undo", false));
   }
 
   redo(): boolean {
-    if (this.#commandMode()) return this.#documentHistory(REDO);
-    const patches = this.#redo.pop();
-    if (!patches) return false;
-    if (!this.#commit(patches, "redo", false)) {
-      this.#redo.push(patches);
+    if (this.#providerHistory()) return this.#documentHistory(REDO);
+    if (this.#refuseStaleHistory()) return false;
+    return this.#history(this.#redo, this.#undo, REDO, (step) => this.#commit(step.patches, "redo", false));
+  }
+
+  /// Se annulla e ripeti sono del provider: una cartella il cui catalogo li
+  /// serve tiene la cronologia del documento, per celle e comandi insieme e
+  /// anche oltre i salvataggi. Le patch della history servono soltanto a una
+  /// sessione che non li ha.
+  #providerHistory(): boolean {
+    return this.#serves(UNDO) && this.#serves(REDO);
+  }
+
+  /// Se un'altra mano ha cambiato una cella della history, la history si
+  /// svuota e l'avviso lo dice: un annulla non riporta i dati di prima. Vero
+  /// se si è svuotata, e allora annulla o ripeti non fanno niente.
+  #refuseStaleHistory(): boolean {
+    if (!this.#dropStaleHistory()) return false;
+    this.#addNotice(t("grid.external.undo"));
+    return true;
+  }
+
+  /// Un passo da `from` a `to`. Nella sessione a comandi, un passo ancora in
+  /// cima al giornale (o nessun passo delle celle: un comando della barra) va
+  /// al provider; altrimenti si scrivono le sue patch, e da lì nessun passo è
+  /// più in cima al giornale.
+  #history(from: HistoryStep[], to: HistoryStep[], id: typeof UNDO | typeof REDO, write: (step: HistoryStep) => boolean): boolean {
+    const step = from[from.length - 1];
+    if (this.#commandMode() && (!step || step.journaled)) {
+      if (!this.#documentHistory(id)) return false;
+      if (step) to.push(from.pop()!);
+      // Il provider ha annullato un comando che le celle non conoscono:
+      // ciò che si ripeterebbe da qui è soltanto suo.
+      else to.length = 0;
+      return true;
+    }
+    if (!step) return false;
+    from.pop();
+    if (!write(step)) {
+      from.push(step);
       return false;
     }
-    this.#undo.push(patches);
+    to.push(step);
+    this.#foldHistory();
     return true;
+  }
+
+  /// Nessun passo è più in cima al giornale del provider: si annullano tutti
+  /// con le loro patch.
+  #foldHistory(): void {
+    for (const step of this.#undo) step.journaled = false;
+    for (const step of this.#redo) step.journaled = false;
   }
 
   /// Il catalogo dei comandi sulla selezione: vuoto se la sessione non ne
@@ -868,12 +1056,37 @@ export class GridEngine {
   command(id: string, params = "{}"): boolean {
     const state = this.#commands.find((command) => command.id === id);
     if (!this.#bytes || !this.#allowed(id) || !state) return false;
+    // Annulla e ripeti dal menu sono Ctrl+Z e Ctrl+Y: il provider sa se c'è
+    // un passo, anche quando il catalogo letto prima non lo sa ancora.
+    if (id === UNDO) return this.undo();
+    if (id === REDO) return this.redo();
     if (!state.enabled) {
       if (state.reason) this.#refuse(t("grid.workbook.command_off", { reason: state.reason }));
       return false;
     }
+    if (SORTS.has(id) && this.#sortRegion(id, params)) return true;
     this.#finishEditing(true, "input", false);
     this.#give(id, params, false);
+    return true;
+  }
+
+  /// Ordinare da una cella sola ordina la sua zona, come in un foglio di
+  /// calcolo: la selezione si allarga prima, perché si veda che cosa si
+  /// ordina (IMP-036), poi il comando va sulla selezione nuova. Falso se la
+  /// selezione è già un intervallo, o se la cella non ha una zona.
+  #sortRegion(id: string, params: string): boolean {
+    const range = this.#selectedRange();
+    if (this.#others.length || range.rowStart !== range.rowEnd || range.columnStart !== range.columnEnd) return false;
+    if (!this.#serves("selection.currentRegion")) return false;
+    this.#finishEditing(true, "input", false);
+    const sheet = this.#sheet().id;
+    const active = cellA1(this.#active());
+    void this.query("selection.currentRegion").then((read) => {
+      if (this.#destroyed || !this.#bytes || this.#sheet().id !== sheet) return;
+      const region = regionOf(read);
+      if (region) this.#adoptSelection({ sheet, selection: region, active });
+      this.#give(id, params, false);
+    });
     return true;
   }
 
@@ -1030,7 +1243,9 @@ export class GridEngine {
 
   /// Annulla o ripeti del documento, nella sessione a comandi.
   #documentHistory(id: typeof UNDO | typeof REDO): boolean {
-    if (!this.#bytes || this.#readOnly || !this.#serves(id)) return false;
+    // Mentre la cartella si riapre (dopo un salvataggio) il passo va in coda,
+    // e arriva alla sessione nuova.
+    if ((!this.#bytes && !this.#bytesOpening) || this.#readOnly || !this.#serves(id)) return false;
     this.#finishEditing(false, "input", false);
     this.#give(id, "{}", true);
     return true;
@@ -1038,16 +1253,20 @@ export class GridEngine {
 
   /// Mette in coda il comando `id`: da qui annulla e ripeti sono del
   /// provider, anche prima che risponda.
-  #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void): void {
+  #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void, retries = HISTORY_RETRIES): void {
     const selection = this.#commandSelection();
     const command: GridCommand = { id, params, ...selection };
     // Un comando cambia la cartella sotto ciò che si è copiato.
     if (id !== PASTE_FROM) this.#copied = null;
-    this.#undo = [];
-    this.#redo = [];
+    // Un comando della barra lo annulla soltanto il provider, finché è nel
+    // suo giornale; annulla e ripeti tengono la history (`#history`).
+    if (id !== UNDO && id !== REDO) {
+      this.#undo = [];
+      this.#redo = [];
+    }
     this.#pendingCommandMode += 1;
-    const epoch = this.#bytesEpoch;
-    const edits = this.#editEpoch;
+    const given = this.#bytesEpoch;
+    const givenEdits = this.#editEpoch;
     const ticket = ++this.#bytesTickets;
     let settled = false;
     const finish = (run: GridRun): void => {
@@ -1056,16 +1275,30 @@ export class GridEngine {
       done?.(run);
     };
     this.#enqueueProtocol(async () => {
+      // Annulla e ripeti valgono per la sessione che c'è quando arrivano al
+      // provider: anche quella riaperta dopo un salvataggio, che ritrova la
+      // cronologia del documento.
+      const epoch = history ? this.#bytesEpoch : given;
+      const edits = history ? this.#editEpoch : givenEdits;
+      let reached = true;
       try {
-        await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
+        reached = await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
       } finally {
         if (epoch === this.#bytesEpoch) this.#pendingCommandMode = Math.max(0, this.#pendingCommandMode - 1);
         finish({ ok: false, error: null });
       }
+      // Un salvataggio ha riaperto la cartella mentre il passo era in volo:
+      // la sessione vecchia è chiusa con la sua risposta, e quella nuova ha
+      // la cronologia di prima del passo. Il passo va a lei, una volta.
+      if (history && !reached && retries > 0 && !this.#destroyed && epoch !== this.#bytesEpoch && edits === this.#editEpoch) {
+        this.#give(id, params, true, undefined, retries - 1);
+      }
     });
   }
 
-  /// Con `done`, il rifiuto va a chi aspetta invece che nell'avviso.
+  /// Con `done`, il rifiuto va a chi aspetta invece che nell'avviso. Torna
+  /// `false` se la risposta non vale più per la sessione di adesso (riaperta,
+  /// o con celle scritte nel frattempo) e non si è applicata.
   async #giveNow(
     command: GridCommand,
     history: boolean,
@@ -1073,16 +1306,16 @@ export class GridEngine {
     edits: number,
     ticket: number,
     done?: (run: GridRun) => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const host = this.#options.grid;
     const state = this.#bytes;
     const current = () => !this.#destroyed && epoch === this.#bytesEpoch && edits === this.#editEpoch && this.#bytes === state;
-    if (!host || !state || !current()) return;
+    if (!host || !state || !current()) return false;
     let outcome: GridCommandOutcome;
     let session: GridBytesSession;
     try {
       outcome = await host.gridBytesCommand(state.surface, state.instance, { revision: state.session.revision, command });
-      if (!current()) return;
+      if (!current()) return false;
       if (this.#readOnly && !emptyEdit(outcome.commit.edit)) {
         // Un comando che doveva soltanto leggere ha cambiato la cartella del
         // provider: in sola lettura non si applica. Il provider riparte dal
@@ -1090,7 +1323,7 @@ export class GridEngine {
         console.warn(`grid: «${command.id}» ha portato modifiche in sola lettura, scartate`);
         this.#openWorkbook(this.#confirmedJournal, false);
         done?.({ ok: false, error: null });
-        return;
+        return true;
       }
       session = {
         ...state.session,
@@ -1104,17 +1337,17 @@ export class GridEngine {
       validateBytesSession(session);
       this.#confirm(applySourceEdit(this.#confirmedJournal, outcome.commit.edit));
     } catch (error) {
-      if (!current()) return;
+      if (!current()) return false;
       // Niente da annullare o da ripetere non è un errore da dire.
-      if (history && isErrorKind(error, "bad_args")) return;
+      if (history && isErrorKind(error, "bad_args")) return true;
       if (done) {
         done({ ok: false, error: errorText(error) });
-        return;
+        return true;
       }
       this.#refuse(t("grid.workbook.command_failed", { error: errorText(error) }));
       // La transazione del provider non ha cambiato niente: le celle
       // mostrate in anticipo dalle modifiche in coda restano le sue.
-      return;
+      return true;
     }
     state.session = session;
     this.#shownSession = session;
@@ -1122,7 +1355,7 @@ export class GridEngine {
     this.#bytesMessage = null;
     this.#options.onCommands?.();
     const last = ticket === this.#bytesTickets;
-    if (last) this.#publishJournal(this.#confirmedJournal, "input");
+    if (last) this.#publishJournal(this.#confirmedJournal, command.id === UNDO ? "undo" : command.id === REDO ? "redo" : "input");
     if (last) this.#adoptSelection(outcome.selection);
     // Un oggetto appena inserito resta selezionato, come in Excel.
     const inserted = last && command.id.startsWith("insert.") ? insertedObject(outcome.result) : null;
@@ -1130,17 +1363,26 @@ export class GridEngine {
     if (outcome.dialog) this.#options.onDialog?.(outcome.dialog);
     if (emptyEdit(outcome.commit.edit)) {
       this.#showView(this.#sheet().id, false);
-      return;
+      return true;
     }
     await this.#refreshBytes(state, epoch);
     if (inserted && current() && this.#objectByKey(inserted)) this.#selectObject(inserted);
+    return true;
   }
 
   /// La selezione che un comando ha lasciato: il foglio, l'intervallo che
   /// contiene la cella attiva e la cella attiva, che è l'àncora quando è un
   /// angolo dell'intervallo.
   #adoptSelection(selection: GridCommandSelection): void {
-    const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    const indexOf = () => this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    let index = indexOf();
+    // Un comando che ha aggiunto il foglio (Inserisci foglio) lo lascia
+    // attivo: la cartella mostrata lo conosce dopo essersi riletta dalla
+    // sessione del provider, che lo ha già.
+    if (index < 0 && this.#shownSession?.sheets.some((sheet) => sheet.id === selection.sheet)) {
+      this.#showView(this.#sheet().id, false);
+      index = indexOf();
+    }
     const active = parseCellA1(selection.active);
     if (index < 0 || !active) return;
     const areas = selection.selection.split(",").map(parseRangeA1).filter((area): area is GridRange => area !== null);
@@ -1255,6 +1497,9 @@ export class GridEngine {
   /// quelle scritte mentre si apre partono dopo di lei.
   #openWorkbook(journal: string, reset: boolean): void {
     const epoch = ++this.#bytesEpoch;
+    // Con una cella aperta, il foglio come si vede adesso: la riapertura dice
+    // se le sue celle sono cambiate, oltre a quella che si scrive.
+    const shown = !reset && this.#editing ? shownWindows(this.#windows, this.#sheet().id) : null;
     this.#journal = journal;
     this.#bytesOpening = true;
     this.#root.dataset.gridProfile = "workbook";
@@ -1266,10 +1511,14 @@ export class GridEngine {
       this.#undo = [];
       this.#redo = [];
     }
-    this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch));
+    // Una sessione nuova del provider non ha la history di quella di prima:
+    // i passi si annullano con le loro patch (un salvataggio ha messo il
+    // giornale nei byte, o un altro riquadro l'ha cambiato).
+    this.#foldHistory();
+    this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch, shown));
   }
 
-  async #openBytes(journal: string, reset: boolean, epoch: number): Promise<void> {
+  async #openBytes(journal: string, reset: boolean, epoch: number, shown: readonly ShownWindow[] | null): Promise<void> {
     if (this.#destroyed || epoch !== this.#bytesEpoch) return;
     const host = this.#options.grid;
     const doc = this.#options.documentId;
@@ -1287,7 +1536,19 @@ export class GridEngine {
         if (!this.#destroyed && epoch === this.#bytesEpoch) this.#openFailed(journal, t("grid.workbook.unavailable"));
         return;
       }
-      const session = await host.openGridBytes(surface.id, doc, journal, base);
+      let session: GridBytesSession;
+      try {
+        session = await host.openGridBytes(surface.id, doc, journal, base);
+      } catch (error) {
+        // I byte da cui il giornale discende non sono più sul disco: il file
+        // è cambiato fuori (un conflitto, una bozza ritrovata dopo). Il
+        // giornale si apre sui byte di adesso, come li scriverebbe «Tieni il
+        // mio testo»: la cartella si legge invece di restare bianca, e la
+        // scelta resta alla sessione.
+        const disk = isErrorKind(error, "conflict") ? await this.#options.diskRevision?.().catch(() => null) : null;
+        if (!disk || disk === base || this.#destroyed || epoch !== this.#bytesEpoch) throw error;
+        session = await host.openGridBytes(surface.id, doc, journal, disk);
+      }
       opened = { surface: surface.id, instance: session.instance };
       validateBytesSession(session);
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
@@ -1318,7 +1579,7 @@ export class GridEngine {
       this.#bytesMessage = null;
       this.#root.dataset.gridProtocol = "v2";
       this.#showView(sheet.id, top);
-      this.#checkDraft(top);
+      this.#afterRewrite(top, shown);
       this.#followMedia();
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
@@ -1598,7 +1859,8 @@ export class GridEngine {
     const written: CellWrite[] = [];
     // Su una sessione a comandi il giornale lo scrive il provider: la griglia
     // mostra subito le celle e pubblica il giornale che lui conferma.
-    let commanding = this.#commandMode();
+    const wasCommanding = this.#commandMode();
+    let commanding = wasCommanding;
     for (const write of writes) {
       const refusal = this.#writeRefusal(write.position);
       if (refusal) {
@@ -1634,12 +1896,13 @@ export class GridEngine {
     if (!request.length) return false;
     for (const write of written) this.#showWritten(write.position, write.after);
     if (commanding) {
-      // Annulla e ripeti sono del documento, cioè del provider.
-      this.#undo = [];
-      this.#redo = [];
+      // Entrando nei comandi il provider porta le voci del giornale di celle
+      // nel suo, una per cella: i passi di prima non sono suoi.
+      if (!wasCommanding) this.#foldHistory();
       this.#pendingCommandMode += 1;
-    } else if (recordHistory) {
-      this.#undo.push(history);
+    }
+    if (recordHistory) {
+      this.#undo.push({ patches: history, journaled: commanding });
       this.#redo = [];
     }
     this.#bytesMessage = null;
@@ -1735,6 +1998,10 @@ export class GridEngine {
     // Il giornale ottimistico si corregge soltanto quando non resta niente in
     // coda: prima, la conferma non contiene ancora le modifiche che seguono.
     if (ticket === this.#bytesTickets) this.#publishJournal(this.#confirmedJournal, origin);
+    // Il passo nuovo si annulla, e niente si ripete più: annulla e ripeti
+    // del menu lo dicono dal catalogo riletto.
+    const stale = (id: string, enabled: boolean) => this.#commands.some((command) => command.id === id && command.enabled !== enabled);
+    if (this.#providerHistory() && (stale(UNDO, true) || stale(REDO, false))) void this.#loadCommands();
     await this.#refreshBytes(state, epoch);
   }
 
@@ -1752,6 +2019,8 @@ export class GridEngine {
         case "macros": lines.push(t("grid.workbook.macros")); break;
         case "external-links": lines.push(t("grid.workbook.external_links")); break;
         case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
+        // Detto dalle celle qui sotto, con le formule scritte adesso.
+        case "circular": break;
         case "incomplete": lines.push(plural(notice.count, "grid.workbook.incomplete_one", "grid.workbook.incomplete")); break;
         default: other = true;
       }
@@ -1764,6 +2033,16 @@ export class GridEngine {
     if (this.#bytesConflicts) lines.push(plural(this.#bytesConflicts, "grid.workbook.conflicts_one", "grid.workbook.conflicts"));
     if (this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => cell.bytes.stale))) {
       lines.push(t("grid.workbook.stale"));
+    }
+    // Un riferimento circolare, come lo dice un foglio di calcolo: le celle
+    // del giro mostrano `#CIRC!`, e la riga lo spiega (IMP-028). Il provider
+    // lo conta all'apertura, anche fuori dalle finestre lette; le formule
+    // scritte dopo le dicono le loro celle.
+    if (
+      this.#view?.notices.some((notice) => notice.code === "circular")
+      || this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => isCircular(cell.bytes)))
+    ) {
+      lines.push(t("grid.workbook.circular"));
     }
     if (this.#bytesMessage) lines.push(this.#bytesMessage);
     this.#notice.textContent = lines.join(" ");
@@ -2027,6 +2306,7 @@ export class GridEngine {
         this.#cellEditorHost.hidden = true;
         this.#cellEditorHost.setAttribute("aria-hidden", "true");
         this.#canvas.append(this.#cellEditorHost);
+        this.#pendingChanged();
       }
     }
     const active = this.#active();
@@ -2518,7 +2798,7 @@ export class GridEngine {
     const object = this.#objectByKey(this.#selectedObject);
     if (!object) return false;
     const kind = MOVABLE[object.kind];
-    switch (event.key) {
+    switch (namedKey(event)) {
       case "Escape":
         this.#selectObject(null);
         return true;
@@ -3228,7 +3508,7 @@ export class GridEngine {
       return;
     }
     const extend = event.shiftKey;
-    switch (event.key) {
+    switch (namedKey(event)) {
       case "ArrowUp": this.#move(-1, 0, extend); break;
       case "ArrowDown": this.#move(1, 0, extend); break;
       case "ArrowLeft": this.#move(0, -1, extend); break;
@@ -3322,7 +3602,15 @@ export class GridEngine {
     if (this.#editing && (!samePosition(this.#editing.position, position) || this.#editing.owner !== owner)) {
       this.#finishEditing(true, "input", false);
     }
-    this.#editing = { position, original: current, draft: initial ?? current, owner, mode, theirs: null };
+    this.#editing = {
+      position,
+      original: current,
+      draft: initial ?? current,
+      owner,
+      mode,
+      theirs: null,
+      coordinate: coordinateAt(this.#sheet(), position),
+    };
     if (owner === "cell") {
       const cell = this.#findCell(position);
       if (!cell) {
@@ -3341,6 +3629,7 @@ export class GridEngine {
       this.#formulaEditor.setDoc(this.#editing.draft);
     }
     this.#options.onEditMode?.();
+    this.#pendingChanged();
   }
 
   /// Lo scorrimento chiede un disegno: uno per fotogramma.
@@ -3445,6 +3734,7 @@ export class GridEngine {
     // I contorni dei riferimenti seguono la formula.
     const formula = draft.startsWith("=") || editing.draft.startsWith("=");
     editing.draft = draft;
+    this.#pendingChanged();
     if (formula) this.#scheduleRender();
   }
 
@@ -3583,6 +3873,7 @@ export class GridEngine {
     if (commit && editing.draft !== editing.original) {
       this.#commitCells([{ position: editing.position, after: fileInput(editing.draft, this.#decimal) }], origin, true);
     }
+    this.#pendingChanged();
     this.#syncFormulaBar();
     this.#render();
     // Il fuoco torna alla griglia, se nel frattempo non si è aperta un'altra
@@ -3610,6 +3901,7 @@ export class GridEngine {
       editing.original = now;
       editing.theirs = null;
       this.#draftNotice.hidden = true;
+      this.#pendingChanged();
       return;
     }
     editing.theirs = now;
@@ -3624,6 +3916,7 @@ export class GridEngine {
     editing.original = editing.theirs;
     editing.theirs = null;
     this.#draftNotice.hidden = true;
+    this.#pendingChanged();
     (editing.owner === "cell" ? this.#cellEditor : this.#formulaEditor).focus();
   }
 
@@ -3631,6 +3924,105 @@ export class GridEngine {
   #takeTheirs(): void {
     if (this.#editing?.theirs === null) return;
     this.#finishEditing(false, "input");
+  }
+
+  /// Dopo una riscrittura da fuori (un altro riquadro, un salvataggio, una
+  /// ricarica): la bozza si tiene, o si chiude se la sua riga non c'è più; la
+  /// storia dell'annulla si svuota se una sua cella è cambiata; e un avviso lo
+  /// dice. `before` è il foglio com'era quando una cella era aperta.
+  #afterRewrite(top: boolean, before: readonly ShownWindow[] | null): void {
+    const editing = this.#editing;
+    const closed = editing !== null && !top && this.#followEditing(editing);
+    this.#checkDraft(top);
+    const notes: string[] = [];
+    const open = this.#editing;
+    if (open && !closed && !top && before
+      && changedElsewhere(before, shownWindows(this.#windows, this.#sheet().id), open.coordinate)) {
+      notes.push(t("grid.external.writing"));
+    }
+    if (this.#dropStaleHistory()) notes.push(t("grid.external.undo"));
+    if (notes.length) this.#addNotice(...notes);
+  }
+
+  /// La cella aperta segue la sua riga, anche se questa si è spostata. Se la
+  /// riga non c'è più, la cella si chiude e la bozza va negli appunti. Vero se
+  /// la cella si è chiusa.
+  #followEditing(editing: EditingState): boolean {
+    if (!editing.coordinate) return false;
+    const at = positionOf(this.#sheet(), editing.coordinate);
+    if (!at) {
+      this.#finishEditing(false, "input", false);
+      if (editing.draft !== editing.original) this.#copyDraft(editing.draft);
+      return true;
+    }
+    if (!samePosition(at, editing.position)) {
+      this.#editing = { ...editing, position: at };
+      this.#render();
+    }
+    return false;
+  }
+
+  /// La bozza che la riga ha portato via va negli appunti. Se gli appunti
+  /// rifiutano, il testo resta scritto nell'avviso: non si perde in silenzio.
+  #copyDraft(draft: string): void {
+    writeClipboardText(draft).then(
+      () => this.#addNotice(t("grid.draft.row_gone", { draft })),
+      () => this.#addNotice(t("grid.draft.row_gone_lost", { draft })),
+    );
+  }
+
+  /// Un avviso in più, dietro quelli che la griglia mostra già: è il canale di
+  /// `#refuse`.
+  #addNotice(...texts: readonly string[]): void {
+    if (this.#destroyed) return;
+    this.#refuse(joinNotices(this.#bytesMessage, ...texts));
+  }
+
+  /// Se una cella della storia non è più quella che la storia ha lasciata
+  /// (un'altra mano l'ha cambiata), la storia si svuota: un annulla non riporta
+  /// i dati di prima. Vero se si è svuotata.
+  /// Con annulla e ripeti del provider la history delle celle non si usa: il
+  /// provider controlla da sé le preimmagini, e non c'è niente da svuotare.
+  #dropStaleHistory(): boolean {
+    if (!this.#undo.length && !this.#redo.length) return false;
+    if (this.#providerHistory()) return false;
+    const moved = this.#staleIn(this.#undo, (patch) => patch.after?.input ?? "")
+      || this.#staleIn(this.#redo, (patch) => patch.before?.input ?? "");
+    if (!moved) return false;
+    this.#undo = [];
+    this.#redo = [];
+    return true;
+  }
+
+  /// Vero se una cella di `stack` letta adesso non ha più l'input che la voce
+  /// più recente che la tocca ha lasciato (`expect`): le voci più vecchie di
+  /// una stessa cella vengono dopo, e il loro valore non conta. Una cella non
+  /// letta, o di un altro foglio, non si può dire: si dirà quando sarà letta.
+  #staleIn(stack: readonly HistoryStep[], expect: (patch: GridCellPatch) => string): boolean {
+    const sheet = this.#sheet();
+    // Le posizioni per id una volta sola: `positionOf` scorrerebbe il foglio a
+    // ogni cella, e questo controllo gira a ogni riapertura.
+    const rows = new Map<string, number>();
+    sheet.rows.forEach((row, index) => { if (!rows.has(row.id)) rows.set(row.id, index); });
+    const columns = new Map<string, number>();
+    sheet.columns.forEach((column, index) => { if (!columns.has(column.id)) columns.set(column.id, index); });
+    const seen = new Set<string>();
+    for (let index = stack.length - 1; index >= 0; index -= 1) {
+      for (const patch of stack[index]!.patches) {
+        const { coordinate } = patch;
+        const key = `${coordinate.sheet}\u0000${coordinate.row}\u0000${coordinate.column}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (coordinate.sheet !== sheet.id) continue;
+        const row = rows.get(coordinate.row);
+        const column = columns.get(coordinate.column);
+        if (row === undefined || column === undefined) continue;
+        const position = { row, column };
+        if (!this.#windowAt(position)) continue;
+        if ((this.#workbookCell(position)?.bytes.input ?? "") !== expect(patch)) return true;
+      }
+    }
+    return false;
   }
 
   #positionEditor(position: GridPosition): void {

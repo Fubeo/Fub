@@ -1,14 +1,17 @@
 //! Le proprietà del frontmatter: tipi dichiarati, opzioni di Selezione e
-//! Stato, valori, date e ore, e i formati di data.
+//! Stato, bersagli delle Relazioni, valori, date e ore, e i formati di data.
 
 use super::*;
 
 /// The vault's declared interpretation of a frontmatter key. The JSON source
 /// remains authoritative even when its value cannot be interpreted as this type.
 ///
-/// `Select`, `Status` e `Url` stanno in coda (additivi). Il valore resta un
-/// testo del frontmatter: Selezione e Stato lo confrontano con le opzioni del
-/// registro ([`PropertyTypes::option_match`]), Url lo tiene così com'è.
+/// `Select`, `Status`, `Url` e `Relation` stanno in coda (additivi). Il valore
+/// di Selezione, Stato e Url resta un testo del frontmatter: Selezione e Stato
+/// lo confrontano con le opzioni del registro ([`PropertyTypes::option_match`]),
+/// Url lo tiene così com'è. Il valore di una Relazione è una lista di link a
+/// note (`["[[Libro]]", "[[Altro]]"]`); il registro può dirne il bersaglio
+/// ([`PropertyTypes::target`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyType {
@@ -25,6 +28,9 @@ pub enum PropertyType {
     Status,
     /// Un indirizzo: un testo, che chi lo mostra apre come link.
     Url,
+    /// Una lista di link ad altre note, ristretta, se il registro lo dice, a
+    /// un tipo o a una cartella ([`RelationTarget`]).
+    Relation,
 }
 
 impl PropertyType {
@@ -167,6 +173,65 @@ impl PropertyOption {
     }
 }
 
+/// Il bersaglio di una Relazione: fra quali note se ne sceglie il valore.
+///
+/// Nel registro è **una parola sola**, scritta com'è
+/// ([`PropertyTypes::targets`]): `[[Tipi/Libro]]` è un tipo, ogni altra cosa
+/// è una cartella del vault (`Libri`, `Libri/`). Senza bersaglio, o con uno
+/// che non si legge (vuoto, `[[]]`, una cartella con `..`), vale ogni nota:
+/// il bersaglio restringe la scelta, non cambia il valore, e un link a una
+/// nota fuori dal bersaglio resta un link.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RelationTarget {
+    /// Le note di un tipo: la pagina del tipo com'è scritta nel link
+    /// (`Tipi/Libro` per `[[Tipi/Libro]]`). Quali note sono di quel tipo lo
+    /// dice la loro proprietà del tipo, non questo registro.
+    Type(String),
+    /// Le note di una cartella e delle sue sottocartelle: path relativo al
+    /// vault, senza `/` in testa né in coda.
+    Folder(String),
+}
+
+impl RelationTarget {
+    /// La parola del registro letta come bersaglio, o `None` (ogni nota).
+    pub fn parse(raw: &str) -> Option<RelationTarget> {
+        let raw = raw.trim();
+        if let Some(inner) = raw.strip_prefix("[[").and_then(|r| r.strip_suffix("]]")) {
+            return match parse_wikilink_inner(inner).target {
+                LinkTarget::Wiki { page, .. } if !page.trim().is_empty() => {
+                    Some(RelationTarget::Type(page.trim().to_string()))
+                }
+                _ => None,
+            };
+        }
+        // La cartella con la regola delle cartelle del vault (gli slash ai
+        // capi sono cortesia) e il recinto dei path: un `..` non esce dal
+        // vault nemmeno per restringere una scelta.
+        let folder = crate::rules::folders::normalized(raw);
+        if crate::rules::path_policy::fenced(folder).is_err() {
+            return None;
+        }
+        Some(RelationTarget::Folder(folder.to_string()))
+    }
+
+    /// La parola con cui il registro scrive questo bersaglio.
+    pub fn as_key(&self) -> String {
+        match self {
+            RelationTarget::Type(page) => format!("[[{page}]]"),
+            RelationTarget::Folder(folder) => folder.clone(),
+        }
+    }
+
+    /// Il documento `path` sta nella cartella del bersaglio? `None` per un
+    /// tipo: l'appartenenza a un tipo non si legge dal path.
+    pub fn contains_path(&self, path: &str) -> Option<bool> {
+        match self {
+            RelationTarget::Folder(folder) => Some(crate::rules::folders::contains(folder, path)),
+            RelationTarget::Type(_) => None,
+        }
+    }
+}
+
 /// Dove cade un valore di Selezione o di Stato rispetto alle opzioni.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionMatch<'a> {
@@ -180,15 +245,22 @@ pub enum OptionMatch<'a> {
 /// Versioned, per-vault property declarations. Unrecognized schema versions
 /// cannot be silently interpreted as the current schema.
 ///
-/// `options` (per chiave, le opzioni di Selezione e Stato nel loro ordine) è
-/// facoltativo e non si scrive quando è vuoto: un registro senza opzioni si
-/// serializza byte per byte come prima che il campo esistesse.
+/// `options` (per chiave, le opzioni di Selezione e Stato nel loro ordine) e
+/// `targets` (per chiave, il bersaglio di una Relazione, [`RelationTarget`])
+/// sono facoltativi e non si scrivono quando sono vuoti: un registro senza
+/// opzioni né bersagli si serializza byte per byte come prima che i campi
+/// esistessero.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct PropertyTypes {
     pub version: u32,
     pub types: std::collections::BTreeMap<String, PropertyType>,
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub options: std::collections::BTreeMap<String, Vec<PropertyOption>>,
+    /// Il bersaglio di ogni Relazione, **com'è scritto**: una parola che
+    /// questo Fub non sa leggere resta nel file se il registro si riscrive, e
+    /// vale ogni nota ([`PropertyTypes::target`]).
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub targets: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for PropertyTypes {
@@ -197,6 +269,7 @@ impl Default for PropertyTypes {
             version: Self::VERSION,
             types: Default::default(),
             options: Default::default(),
+            targets: Default::default(),
         }
     }
 }
@@ -210,6 +283,8 @@ impl<'de> Deserialize<'de> for PropertyTypes {
             types: std::collections::BTreeMap<String, PropertyType>,
             #[serde(default)]
             options: std::collections::BTreeMap<String, Vec<PropertyOption>>,
+            #[serde(default)]
+            targets: std::collections::BTreeMap<String, String>,
         }
         let wire = Wire::deserialize(deserializer)?;
         if wire.version != PropertyTypes::VERSION {
@@ -221,6 +296,7 @@ impl<'de> Deserialize<'de> for PropertyTypes {
             version: wire.version,
             types: wire.types,
             options: wire.options,
+            targets: wire.targets,
         })
     }
 }
@@ -246,6 +322,26 @@ impl PropertyTypes {
     /// scritto a mano ne porta due con lo stesso nome.
     pub fn option(&self, key: &str, name: &str) -> Option<&PropertyOption> {
         self.options(key).iter().find(|option| option.name == name)
+    }
+
+    /// Il bersaglio della Relazione `key`, o `None` (ogni nota): quando `key`
+    /// non è una Relazione, quando il registro non ne dice il bersaglio o
+    /// quando la parola scritta non si legge ([`RelationTarget::parse`]).
+    pub fn target(&self, key: &str) -> Option<RelationTarget> {
+        if self.resolve(key) != Some(PropertyType::Relation) {
+            return None;
+        }
+        self.targets
+            .get(key)
+            .and_then(|raw| RelationTarget::parse(raw))
+    }
+
+    /// Le chiavi dichiarate Relazione, in ordine.
+    pub fn relations(&self) -> impl Iterator<Item = &str> {
+        self.types
+            .iter()
+            .filter(|(_, kind)| **kind == PropertyType::Relation)
+            .map(|(key, _)| key.as_str())
     }
 
     /// La proiezione di un valore di Selezione o di Stato sulle opzioni.
@@ -572,6 +668,23 @@ impl PropertyValue {
                 J::String(s) => PropertyValue::List(vec![PropertyScalar::Text(s.clone())]),
                 _ => PropertyValue::Unknown(v.clone()),
             },
+            // Una Relazione è una lista di link: un link solo è una lista di
+            // uno. Una voce che non è un `[[link]]` resta testo (un link rotto
+            // a parole, che chi lo mostra segna) e non diventa mai una data;
+            // una voce che non è un testo resta JSON.
+            Some(T::Relation) => match v {
+                J::Array(items) => PropertyValue::List(
+                    items
+                        .iter()
+                        .map(|item| match item {
+                            J::String(s) => PropertyScalar::relation_item(s),
+                            _ => PropertyScalar::Unknown(item.clone()),
+                        })
+                        .collect(),
+                ),
+                J::String(s) => PropertyValue::List(vec![PropertyScalar::relation_item(s)]),
+                _ => PropertyValue::Unknown(v.clone()),
+            },
             Some(T::Tags) => match v {
                 J::Array(items) => PropertyValue::List(
                     items
@@ -606,6 +719,15 @@ impl PropertyScalar {
             serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
                 PropertyScalar::Unknown(v.clone())
             }
+        }
+    }
+
+    /// Una voce di Relazione: il wikilink, o il testo com'è.
+    fn relation_item(s: &str) -> PropertyScalar {
+        let t = s.trim();
+        match t.strip_prefix("[[").and_then(|r| r.strip_suffix("]]")) {
+            Some(inner) => PropertyScalar::Link(parse_wikilink_inner(inner).target),
+            None => PropertyScalar::Text(s.to_string()),
         }
     }
 

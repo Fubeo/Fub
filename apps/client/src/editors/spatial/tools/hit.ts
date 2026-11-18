@@ -64,6 +64,7 @@
 export { FLATNESS, MAX_INSTANCE_PARTS } from "./hit/base";
 export type { Holder, LayerInfo, Sampled, TextLook } from "./hit/base";
 export { ForeignBlock, Unit } from "./hit/unit";
+export type { Erasable } from "./hit/unit";
 export { elemBounds, geometryBox, shapeSegments } from "./hit/shapes";
 export { SceneIndex } from "./hit/scene-index";
 export { SceneIndexer } from "./hit/indexer";

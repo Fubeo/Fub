@@ -462,3 +462,207 @@ fn every_command_declares_what_it_does_and_how_far_it_reaches() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Una nota da un tipo di nota (E5)
+// ---------------------------------------------------------------------------
+
+mod from_a_type {
+    use super::*;
+    use crate::note_types::{vault, with_types_folder, LIBRO};
+    use fub_abi::command::{CommandEffect, InvokeMode, UndoStep};
+    use fub_abi::traits::{CommandProvider, VaultRead};
+
+    fn from_type(
+        host: &mut MemoryHost,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> Result<fub_abi::command::CommandOutcome, PluginError> {
+        TemplateCommands.invoke(NOTES_FROM_TYPE, args, mode, host)
+    }
+
+    fn key(err: &PluginError) -> String {
+        match err {
+            PluginError::BadArgs(Text::Message(m)) | PluginError::Conflict(Text::Message(m)) => {
+                m.key.clone()
+            }
+            other => format!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_note_is_born_with_the_type_its_properties_its_text_and_its_folder() {
+        let mut host = vault(&[("Tipi/Libro.md", LIBRO)]);
+        let outcome = from_type(
+            &mut host,
+            serde_json::json!({ "type": "[[Tipi/Libro]]", "name": "Dune" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        let born = DocId::new("Biblioteca/Dune.md");
+        assert_eq!(
+            outcome.effect,
+            CommandEffect::Navigate { doc: born.clone() }
+        );
+        assert_eq!(
+            host.read_document(&born).unwrap(),
+            "---\ntipo: \"[[Tipi/Libro]]\"\nautore:\nletto: false\ngeneri: []\n---\n# Dune\n\nNote di lettura.\n"
+        );
+        // L'annulla porta la nota nel cestino, come per un template.
+        let undo = outcome.undo.expect("annullabile");
+        assert!(matches!(&undo.steps[..], [UndoStep::Command { command, .. }] if command == TRASH));
+        // La nota nata si legge come una nota di quel tipo.
+        let model = crate::note_types::parsed(born.as_str(), &host.read_document(&born).unwrap());
+        assert_eq!(
+            model.frontmatter.get("letto"),
+            Some(&serde_json::json!(false))
+        );
+        assert_eq!(
+            crate::note_types::wanted_of_json(model.frontmatter.get("tipo").unwrap()).as_deref(),
+            Some("Tipi/Libro")
+        );
+    }
+
+    #[test]
+    fn the_folder_asked_wins_and_a_type_without_one_writes_at_the_root() {
+        let mut host = vault(&[
+            ("Tipi/Libro.md", LIBRO),
+            ("Tipi/Idea.md", "---\nproperties: [stato]\n---\n"),
+        ]);
+        from_type(
+            &mut host,
+            serde_json::json!({ "type": "Libro", "name": "Emma", "folder": "Prestiti" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert!(host.read_document(&DocId::new("Prestiti/Emma.md")).is_ok());
+        let outcome = from_type(
+            &mut host,
+            serde_json::json!({ "type": "Idea" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        // Senza nome: «Senza titolo», alla radice, col corpo vuoto del tipo.
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("apre la nota nuova")
+        };
+        assert_eq!(doc.as_str(), "Senza titolo.md");
+        assert_eq!(
+            host.read_document(&doc).unwrap(),
+            "---\ntipo: \"[[Tipi/Idea]]\"\nstato:\n---\n"
+        );
+        // Una seconda nello stesso posto non schiaccia la prima.
+        let again = from_type(
+            &mut host,
+            serde_json::json!({ "type": "Idea" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert_eq!(
+            again.effect,
+            CommandEffect::Navigate {
+                doc: DocId::new("Senza titolo 1.md")
+            }
+        );
+    }
+
+    #[test]
+    fn the_dry_run_names_the_note_and_writes_nothing() {
+        let mut host = vault(&[("Tipi/Libro.md", LIBRO)]);
+        let outcome = from_type(
+            &mut host,
+            serde_json::json!({ "type": "Libro", "name": "Dune" }),
+            InvokeMode::DryRun,
+        )
+        .unwrap();
+        let CommandEffect::Plan(plan) = outcome.effect else {
+            panic!("un piano")
+        };
+        assert_eq!(plan.docs, [DocId::new("Biblioteca/Dune.md")]);
+        assert!(host
+            .read_document(&DocId::new("Biblioteca/Dune.md"))
+            .is_err());
+    }
+
+    #[test]
+    fn a_broken_type_creates_nothing_and_says_why() {
+        let mut host = vault(&[
+            ("Tipi/Rotto.md", "---\nproperties: [a\n---\n"),
+            ("Tipi/Casa/Progetto.md", "---\n---\n"),
+            ("Tipi/Lavoro/Progetto.md", "---\n---\n"),
+        ]);
+        for (wanted, why) in [
+            ("Rotto", "note_type.e_yaml"),
+            ("Film", "note_type.e_missing"),
+            ("Progetto", "note_type.e_ambiguous"),
+            ("", "note_type.e_none"),
+        ] {
+            let err = from_type(
+                &mut host,
+                serde_json::json!({ "type": wanted, "name": "X" }),
+                InvokeMode::Apply,
+            )
+            .unwrap_err();
+            assert_eq!(key(&err), why, "{wanted}");
+        }
+        assert!(
+            host.read_document(&DocId::new("X.md")).is_err(),
+            "niente di nuovo nel vault"
+        );
+    }
+
+    #[test]
+    fn a_type_changed_after_it_was_read_creates_nothing() {
+        let mut host = vault(&[("Tipi/Libro.md", LIBRO)]);
+        let err = from_type(
+            &mut host,
+            serde_json::json!({ "type": "Libro", "name": "Dune", "expected_revision": "vecchia" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_err();
+        assert_eq!(key(&err), "note_type.e_changed");
+        let read = host
+            .document_revision(&DocId::new("Tipi/Libro.md"))
+            .unwrap();
+        from_type(
+            &mut host,
+            serde_json::json!({ "type": "Libro", "name": "Dune", "expected_revision": read.as_str() }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_types_folder_moved_in_the_settings_is_where_types_are_looked_for() {
+        let mut host = with_types_folder(
+            vault(&[
+                ("Tipi/Libro.md", LIBRO),
+                ("Modelli/Film.md", "---\nproperties: [regista]\n---\n"),
+            ]),
+            "Modelli",
+        );
+        let err = from_type(
+            &mut host,
+            serde_json::json!({ "type": "Libro" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_err();
+        assert_eq!(key(&err), "note_type.e_missing");
+        let outcome = from_type(
+            &mut host,
+            serde_json::json!({ "type": "Film", "name": "Alien" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert_eq!(
+            outcome.effect,
+            CommandEffect::Navigate {
+                doc: DocId::new("Alien.md")
+            }
+        );
+        assert_eq!(
+            host.read_document(&DocId::new("Alien.md")).unwrap(),
+            "---\ntipo: \"[[Modelli/Film]]\"\nregista:\n---\n"
+        );
+    }
+}

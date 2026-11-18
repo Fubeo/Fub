@@ -1,14 +1,138 @@
 /* Le superfici dei formati: canvas, base, foglio di calcolo. */
 
 /* Prima di loro l'editor di testo, che sta sotto a tutte: il margine, il
-   cursore, la selezione, i pannelli che CodeMirror apre sopra il foglio. Le
-   regole di CodeMirror pesano (0,2,0) o più e arrivano dopo la pelle: qui ogni
-   selettore ne porta almeno una in più, e nessuno ha bisogno di `!important`.
+   cursore, la selezione, la sintassi, i pannelli che CodeMirror apre sopra il
+   foglio. Le regole di CodeMirror pesano (0,2,0) o più: qui ogni selettore
+   che le deve battere ne porta almeno una classe in più, e nessuno ha bisogno
+   di `!important`. Un tema le ritocca con la sua pelle, che arriva dopo
+   questa.
 
    Niente di ciò che sta in un foglio ha un fondo suo: la carta è del foglio, e
    ne segue gli angoli. Le superfici dichiarano inchiostro, fili e rilievi. */
 
 /* ── L'editor di testo ───────────────────────────────────────────────────── */
+
+/* I colori di serie dell'editor di testo. Valgono per ogni editor CodeMirror
+   di Fub — il foglio, la finestra documento, la barra della formula, la cella —
+   e le regole più precise che seguono, qui o negli altri pezzi, li ritoccano.
+   Prima stavano nel tema di CodeMirror (`editors/text/theme.ts`), fuori dalla
+   pelle: adesso un tema li veste come veste il resto.
+
+   CodeMirror monta i suoi stili in testa al documento, prima della pelle: a
+   parità di peso vince la pelle. Ogni regola qui pesa quanto quella che
+   sostituisce, così batte gli stili di base di CodeMirror e cede a quelli di
+   un profilo che pesano di più. */
+.cm-editor {
+  background-color: var(--doc-bg);
+  color: var(--doc-fg);
+}
+/* Il carattere di serie è il monospazio. Pesa una classe sola: un profilo che
+   scrive prosa mette il suo con il proprio tema dell'editor, che pesa di più. */
+.cm-content {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-content {
+  caret-color: var(--doc-caret);
+}
+.cm-editor.cm-focused .cm-matchingBracket,
+.cm-editor.cm-focused .cm-nonmatchingBracket {
+  outline: 1px solid var(--doc-rule-soft);
+  background-color: var(--doc-fill);
+}
+.cm-editor .cm-tooltip {
+  border: 1px solid var(--border);
+  background-color: var(--doc-tooltip-bg);
+}
+.cm-editor .cm-tooltip .cm-tooltip-arrow::before {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+.cm-editor .cm-tooltip .cm-tooltip-arrow::after {
+  border-top-color: var(--doc-tooltip-bg);
+  border-bottom-color: var(--doc-tooltip-bg);
+}
+/* La riga su cui cadrà l'Invio, col fondo della palette: quello della riga
+   attiva sul fondo del suggerimento non si distingueva. */
+.cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: var(--bg-active);
+  color: var(--doc-fg);
+}
+
+/* La sintassi: una classe per gruppo di tag, nell'ordine di
+   `editors/text/theme.ts`. Un pezzo di testo può averne più d'una (un
+   collegamento dentro un titolo) e vince la regola che viene dopo: l'ordine
+   qui sotto è quello là, e non si cambia da un lato solo. Pesano una classe,
+   come le regole che CodeMirror generava: ogni regola più precisa della pelle
+   o di un profilo le batte. */
+.fub-syn-keyword {
+  color: var(--syn-keyword);
+}
+.fub-syn-name {
+  color: var(--syn-name);
+}
+.fub-syn-function {
+  color: var(--syn-function);
+}
+.fub-syn-constant {
+  color: var(--syn-literal);
+}
+.fub-syn-definition {
+  color: var(--doc-fg);
+}
+.fub-syn-type {
+  color: var(--syn-type);
+}
+.fub-syn-operator {
+  color: var(--syn-operator);
+}
+.fub-syn-comment {
+  color: var(--syn-comment);
+}
+.fub-syn-strong {
+  font-weight: bold;
+}
+.fub-syn-monospace {
+  background-color: var(--doc-fill);
+  color: var(--doc-fg);
+  font-family: var(--font-mono);
+}
+.fub-syn-emphasis {
+  font-style: italic;
+}
+.fub-syn-strikethrough {
+  text-decoration: line-through;
+}
+.fub-syn-link {
+  color: var(--doc-link);
+  text-decoration: underline;
+}
+.fub-syn-heading {
+  color: var(--doc-heading);
+  font-weight: bold;
+}
+.fub-syn-atom {
+  color: var(--syn-literal);
+}
+.fub-syn-string {
+  color: var(--syn-string);
+}
+.fub-syn-invalid {
+  color: var(--syn-invalid);
+}
+
+/* I segni della Live che non hanno una regola nel documento: il pallino di
+   una voce, l'ondina del correttore. */
+.cm-editor .cm-fub-bullet::before {
+  color: var(--muted);
+}
+.cm-editor .cm-lintRange.cm-fub-proof-spelling {
+  text-decoration: underline wavy var(--danger) 1px;
+}
+.cm-editor .cm-lintRange.cm-fub-proof-grammar {
+  text-decoration: underline wavy var(--warning) 1px;
+}
 
 /* Dove si scrive lo dicono il cursore e il rialzo del foglio: l'anello
    tratteggiato di CodeMirror intorno a tutta la carta è rumore. */
@@ -91,6 +215,20 @@
 }
 [data-markdown-mode="live_preview"] .cm-content .cm-activeLine,
 [data-markdown-mode="blocks"] .cm-content .cm-activeLine {
+  background-color: transparent;
+}
+/* In concentrazione i blocchi lontani dal cursore si attenuano e il blocco
+   del cursore resta acceso (la regola sta in `structure.css`): il passaggio
+   è morbido, e il movimento ridotto lo toglie. */
+.pane-editor .cm-content > * {
+  transition: opacity var(--duration-state) var(--ease);
+}
+/* La riga attiva si spegne dove c'è una selezione (`editors/text/engine.ts`
+   mette `cm-fub-no-active-line` sulle righe selezionate): la banda coprirebbe
+   il rettangolo della selezione, che CodeMirror disegna sotto il testo. Pesa
+   quanto la riga attiva e viene dopo; il fondo di un blocco, che pesa di più,
+   resta. */
+.cm-editor .cm-fub-no-active-line.cm-activeLine {
   background-color: transparent;
 }
 .pane-editor[data-markdown-mode="source"] .cm-content > .cm-line {
@@ -677,6 +815,18 @@
   border: 2px solid var(--accent);
   background: var(--bg-elev);
   box-shadow: var(--shadow-2);
+}
+/* I segni della griglia sulla carta del file prendono l'accento della carta
+   (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
+   modifica e il testo di un oggetto hanno il fondo della carta, sotto
+   l'inchiostro della carta, non quello dei pannelli, e il quadratino del
+   riempimento il bordo della carta. */
+.look-file .grid-cell-editor,
+.look-file .grid-object-text-editor {
+  background: var(--doc-bg);
+}
+.look-file .grid-fill-handle {
+  border-color: var(--doc-bg);
 }
 /* Una cella di una cartella di Excel che legge una cella cambiata mostra
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
@@ -2534,6 +2684,25 @@ input.canvas-toolbar-item {
   margin: 0;
   color: var(--text);
 }
+/* La scheda piccola (IMP-045): il messaggio e i pulsanti più stretti, così
+   stanno tutti e due dentro i 100 px di una scheda di serie. */
+@container (max-height: 120px) {
+  .canvas-card-missing {
+    gap: var(--space-3);
+  }
+  .canvas-card-missing > .canvas-media-placeholder {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-xs);
+  }
+  .canvas-card-missing-actions {
+    gap: var(--space-2);
+  }
+  .canvas-card-missing-actions > button {
+    min-height: calc(var(--control-h) - var(--space-3));
+    padding: 0 var(--space-4);
+    font-size: var(--text-xs);
+  }
+}
 /* Il fantasma del rilascio (T15): dove andranno i file, prima di lasciarli. */
 .canvas-drop-ghost {
   border: calc(1.5px / var(--canvas-zoom, 1)) dashed var(--accent);
@@ -3290,6 +3459,34 @@ input.canvas-toolbar-item {
   max-height: none;
   margin: var(--space-3) 0;
 }
+/* Dentro la pagina (E12, E19) la Base si allarga oltre la colonna del testo,
+   fino al margine: 64 dei 96 px di destra, come le schede larghe. Nella
+   finestra stretta (sotto i 940 px, dove il margine scende a 48) e in un
+   foglio stretto resta nella colonna. */
+.cm-content .base-surface[data-embedded="true"],
+.markdown-rendered .base-surface[data-embedded="true"] {
+  margin-right: -64px;
+}
+@media (max-width: 940px) {
+  .cm-content .base-surface[data-embedded="true"],
+  .markdown-rendered .base-surface[data-embedded="true"] {
+    margin-right: 0;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-content .base-surface[data-embedded="true"],
+  .markdown-rendered .base-surface[data-embedded="true"] {
+    margin-right: 0;
+  }
+}
+/* Un `![[Nome.base#Vista]]` è la Base, non una nota riportata: niente filo
+   a sinistra né rientro, come un'immagine incorporata. L'embed (la pelle del
+   documento) si riconosce dal suo `data-embed-page`. */
+[data-embed-page]:has(> .ui-slot > .ui-custom > .base-surface[data-embedded="true"]) {
+  padding: 0;
+  border-left: 0;
+  font-size: 1em;
+}
 /* La barra (T15): le viste come linguette a sinistra, gli strumenti a destra,
    «Nuova» in accento in fondo. Sotto, la riga di «Cerca» e le etichette del
    filtro e dell'ordinamento; in fondo alla Base, «Nel file .base». Il
@@ -4032,10 +4229,12 @@ input.canvas-toolbar-item {
    `.today`, `.over`, `.ev`), fino ai bordi della scatola. Sopra, la testa
    col mese, i due passi e «Oggi»; la griglia scorre di lato sotto i 560 px
    del prototipo, la testa no. */
-.base-body:has(> .base-calendar) {
+.base-body:has(> .base-calendar),
+.base-body:has(> .base-timeline) {
   padding: 0;
 }
-.base-cal-head {
+.base-cal-head,
+.base-tl-head {
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -4043,7 +4242,8 @@ input.canvas-toolbar-item {
   padding: 6px 10px 6px 6px;
   border-bottom: 1px solid var(--border);
 }
-.base-cal-title {
+.base-cal-title,
+.base-tl-title {
   margin: 0;
   padding: 0 var(--space-2);
   color: var(--text);
@@ -4051,7 +4251,8 @@ input.canvas-toolbar-item {
   font-weight: var(--weight-bold);
   white-space: nowrap;
 }
-.base-cal-nav {
+.base-cal-nav,
+.base-tl-nav {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -4063,17 +4264,21 @@ input.canvas-toolbar-item {
   color: var(--muted);
   white-space: nowrap;
 }
-.base-cal-prev > svg {
+.base-cal-prev > svg,
+.base-tl-prev > svg {
   transform: scaleX(-1);
 }
-.base-cal-today {
+.base-cal-today,
+.base-tl-today {
   margin-left: var(--space-2);
 }
-.base-cal-nav:hover {
+.base-cal-nav:hover,
+.base-tl-nav:hover {
   background: var(--overlay-hover);
   color: var(--text);
 }
-.base-cal-undated {
+.base-cal-undated,
+.base-tl-undated {
   margin-left: auto;
   padding-left: var(--space-4);
   overflow: hidden;
@@ -4229,6 +4434,269 @@ input.canvas-toolbar-item {
   }
   .base-cal-undated {
     display: none;
+  }
+}
+/* La linea del tempo (T34): le righe del prototipo (`.tl`, `.tl-a`, `.tl-s`,
+   `.tl-r`, `.tl-t`, `.tl-b`). La testa è quella del calendario, con la scala
+   (settimane, mesi, anni) e a capo quando non ci sta. Le colonne hanno tutte
+   la stessa larghezza: i fili le dividono in ogni riga, come le quarte del
+   prototipo, e il filo d'accento è oggi. */
+.base-tl-head {
+  flex-wrap: wrap;
+}
+.base-tl-zoom {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+  margin-left: var(--space-2);
+}
+.base-tl-zoom-option {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.base-tl-zoom-option:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-tl-zoom-option[aria-pressed="true"] {
+  background: var(--sheet-2);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.base-tl-scroll {
+  overflow-x: auto;
+}
+.base-tl {
+  min-width: 600px;
+  padding: 6px 12px 14px;
+  line-height: 1.4;
+}
+.base-tl-axis,
+.base-tl-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.base-tl-axis {
+  height: 28px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.base-tl-axis-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-tl-scale {
+  position: relative;
+  height: 100%;
+}
+.base-tl-tick,
+.base-tl-now {
+  position: absolute;
+  top: 7px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.base-tl-now {
+  left: var(--tl-now);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.base-tl-row {
+  height: 34px;
+}
+.base-tl-name {
+  overflow: hidden;
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.base-tl-track {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(100% / var(--tl-columns) - 1px), var(--border) calc(100% / var(--tl-columns) - 1px) calc(100% / var(--tl-columns)));
+}
+.base-tl-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--tl-now);
+  width: 1.5px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.base-tl[data-now-out="true"] .base-tl-track::after {
+  display: none;
+}
+.base-tl-track:focus-visible {
+  outline-offset: -2px;
+}
+.base-tl-bar {
+  position: absolute;
+  top: 7px;
+  left: var(--tl-left);
+  width: var(--tl-width);
+  min-width: 10px;
+  height: 20px;
+  padding: 0 7px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Una barra che continua oltre i giorni mostrati ha il lato tagliato dritto. */
+.base-tl-bar[data-clip-start="true"] {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.base-tl-bar[data-clip-end="true"] {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.base-tl-bar[data-grip="move"],
+.base-tl-point[data-grip="move"] {
+  cursor: grab;
+}
+.base-tl-bar[data-dragging="true"],
+.base-tl-point[data-dragging="true"] {
+  cursor: grabbing;
+  box-shadow: var(--shadow-raise);
+}
+/* I due bordi che si prendono per cambiare una data sola. */
+.base-tl-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+.base-tl-edge[data-grip="low"] {
+  left: 0;
+}
+.base-tl-edge[data-grip="high"] {
+  right: 0;
+}
+/* La fine prima dell'inizio: la barra si vede, tratteggiata nel rosso. */
+.base-tl-bar[data-inverted="true"] {
+  outline: 1px dashed var(--danger);
+  outline-offset: -1px;
+  background: transparent;
+  color: var(--danger);
+}
+/* Una data sola: un punto, con la data accanto (prima, verso la fine della
+   riga). */
+.base-tl-point {
+  position: absolute;
+  top: 7px;
+  left: var(--tl-left);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  transform: translateX(-5px);
+  cursor: pointer;
+}
+.base-tl-point::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--doc-color-green);
+}
+.base-tl-point[data-flip="true"] {
+  flex-direction: row-reverse;
+  transform: translateX(calc(-100% + 5px));
+}
+/* Una nota tutta prima o tutta dopo i giorni mostrati: la sua data al bordo,
+   che porta lì. */
+.base-tl-off {
+  position: absolute;
+  top: 7px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.base-tl-off[data-side="before"] {
+  left: 0;
+}
+.base-tl-off[data-side="after"] {
+  right: 0;
+}
+.base-tl-off:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-tl-none {
+  margin: var(--space-4) 0 0;
+  color: var(--muted);
+}
+.base-timeline ~ .base-summaries:not(:empty) {
+  margin-top: 0;
+  padding: var(--space-4) var(--space-7);
+  border-top: 0;
+}
+.base-timeline ~ button {
+  margin-left: var(--space-7);
+}
+/* La linea del tempo senza la sua proprietà d'inizio. */
+.base-tl-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-7);
+  color: var(--muted);
+}
+.base-tl-empty > p {
+  margin: 0;
+}
+.base-tl-empty > p:first-child {
+  color: var(--text);
+}
+/* Al telefono il nome sta sopra la sua barra, e la riga della scala non ha
+   la colonna dei nomi. */
+@container sheet (max-width: 560px) {
+  .base-tl {
+    min-width: 0;
+    padding: 6px 10px 14px;
+  }
+  .base-tl-axis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .base-tl-axis-label,
+  .base-tl-undated {
+    display: none;
+  }
+  .base-tl-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    height: auto;
+    padding-top: var(--space-2);
+  }
+  .base-tl-track {
+    height: 34px;
   }
 }
 .base-map-atlas {
@@ -4860,9 +5328,11 @@ input.canvas-toolbar-item {
   cursor: pointer;
 }
 .rich-side-open:hover { background: var(--bg-hover); }
+/* L'anello sta dentro la pillola, sul suo fondo: fuori, sulla carta bianca,
+   al buio starebbe a 2,2:1. L'ombra della pillola resta. */
 .rich-side-open:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring);
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring), var(--shadow-2);
 }
 .rich-find {
   background-color: var(--doc-find, var(--doc-highlight));
@@ -5066,6 +5536,84 @@ input.canvas-toolbar-item {
   color: var(--doc-link);
   text-decoration: underline;
 }
+/* La pagina del giorno (T39, E17): in fondo alla giornaliera, dopo l'ultima
+   riga, resa e non scritta. Un filo la separa dal testo; sotto, i tre gruppi
+   della vista `day_page` coi nodi di ogni vista dichiarata, vestiti della
+   carta: il titolo del gruppo in grafite col carattere dell'interfaccia, una
+   riga per nota col nome nel carattere del testo e, a destra, in piccolo, la
+   proprietà o l'ora. Non è testo: non si seleziona e il cursore non ci entra. */
+.cm-editor .cm-content .cm-day-page {
+  margin: var(--space-9) 0 var(--space-5);
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  cursor: default;
+  user-select: none;
+}
+.cm-editor .cm-content .cm-day-page[hidden] {
+  display: none;
+}
+.cm-day-page .cm-day-page-note,
+.cm-day-page .ui-text,
+.cm-day-page .ui-empty-title {
+  margin: 0;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+.cm-day-page .ui-section > summary {
+  padding: 0 var(--space-2);
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-sm);
+}
+.cm-day-page .ui-section > summary:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-day-page .ui-section > .ui-children {
+  padding: 0 0 var(--space-3) var(--space-6);
+}
+.cm-day-page .ui-section .ui-empty-state,
+.cm-day-page .ui-section > .ui-children > .ui-text {
+  padding: var(--space-2);
+}
+.cm-day-page .ui-list-item {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--doc-fg);
+  cursor: pointer;
+}
+.cm-day-page .ui-list-item:hover {
+  background: var(--doc-block-hover);
+}
+/* Il testo di un compito si legge intero: va a capo invece di tagliarsi. */
+.cm-day-page .ui-list-item-title {
+  min-width: 0;
+  overflow: visible;
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cm-day-page .ui-list-item-subtitle {
+  flex: none;
+  max-width: 40%;
+  margin: 0 0 0 auto;
+  text-align: right;
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-xs);
+}
 /* I commenti nel testo (T21): in Scrittura e in Lettura il passo commentato
    ha un fondo giallo leggero, più pieno col cursore dentro; i segni e i
    messaggi non si vedono. In Sorgente il commento intero, segni compresi, ha
@@ -5092,4 +5640,199 @@ input.canvas-toolbar-item {
   border-radius: 3px;
   background: var(--doc-tint-orange);
   color: var(--doc-color-orange);
+}
+
+/* ── La trasclusione viva ────────────────────────────────────────────────── */
+
+/* Una sezione o un blocco di un'altra nota, riportati nella Scrittura (T29,
+   il prototipo `.tx`): un vassoio col filo d'accento a sinistra, al posto del
+   filo della citazione. In testata la provenienza, «Modifica qui» e «Apri»,
+   che si vedono al passaggio, col fuoco e mentre si scrive. Sta nella
+   pagina, e ne prende la tavolozza: il vassoio è il `--tray` del prototipo
+   (`--doc-fill-soft`), il grigio `--doc-gutter-fg`, l'inchiostro `--doc-fg`,
+   il passaggio `--doc-block-hover`, il foglio `--doc-bg`. */
+.embed.transclusion {
+  position: relative;
+  padding: 4px var(--space-6) 10px 18px;
+  border-left: 0;
+  border-radius: var(--radius-menu);
+  background: color-mix(in srgb, var(--doc-fill-soft) 55%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  font-size: inherit;
+  transition: box-shadow 0.15s, background-color 0.15s;
+}
+.transclusion-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 30px;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1;
+}
+.transclusion-head > svg,
+.transclusion-head button > svg,
+.transclusion-band > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.transclusion-source {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transclusion-spacer {
+  flex: 1;
+}
+.transclusion-self {
+  flex: none;
+  font-style: italic;
+}
+.transclusion-head button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.transclusion:hover .transclusion-head button,
+.transclusion:focus-within .transclusion-head button,
+.transclusion-editing .transclusion-head button {
+  opacity: 1;
+}
+.transclusion-head button:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.transclusion-head button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.transclusion-head button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+/* La fascia di chi scrive: dove va il testo, e che Esc esce. */
+.transclusion-band {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 2px 0 var(--space-4);
+  padding: var(--space-3) 10px;
+  border-radius: var(--radius-control);
+  background: var(--accent-wash);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+/* Un avviso (l'àncora sparita, la sola lettura, l'origine chiusa) e la
+   scelta di un conflitto stanno sotto la testata, nella lingua della UI. */
+.transclusion-notice {
+  margin: 2px 0 var(--space-4);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.transclusion-conflict {
+  margin: 2px 0 var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+/* Il vassoio finisce col suo padding, non col margine dell'ultimo blocco. */
+.transclusion-body > :last-child {
+  margin-bottom: 0;
+}
+/* Mentre si scrive il vassoio diventa un foglio, col bordo d'accento. */
+.embed.transclusion-editing {
+  background: var(--doc-bg);
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 6px 20px -12px rgb(0 0 0 / 30%);
+}
+/* La provenienza la dice la testata: la didascalia della figura (il nome
+   del link) sarebbe la stessa cosa due volte. */
+.markdown-rendered figure > .embed.transclusion + figcaption {
+  display: none;
+}
+/* L'editor del tratto sta nella colonna del vassoio: niente margini della
+   pagina, che il foglio dà al suo `.cm-content`. */
+.pane-editor[data-markdown-mode] .transclusion-editor .cm-content {
+  max-width: none;
+  margin-inline: 0;
+  padding: 2px 0;
+}
+.transclusion-editor .cm-editor {
+  background: transparent;
+}
+.transclusion-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+/* ── Il blocco sincronizzato ─────────────────────────────────────────────── */
+
+/* La trasclusione di un blocco (`![[Nota#^id]]`, T30) sta nella nota come un
+   suo blocco: niente vassoio, un filo d'accento discreto a sinistra (lo
+   stesso `inset` della trasclusione, più sottile e più chiaro). La
+   provenienza è una targhetta sopra il blocco, a destra, che si vede al
+   passaggio e col fuoco; si scrive con un clic, senza «Modifica qui». */
+.embed.transclusion-synced {
+  padding: 0 0 0 14px;
+  background: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.transclusion-synced[data-transclusion-direct] .transclusion-body {
+  cursor: text;
+}
+.transclusion-synced:hover {
+  background: var(--doc-block-hover);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.transclusion-synced:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.transclusion-synced > .transclusion-head {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 100%;
+  max-width: calc(100% - var(--space-6));
+  height: 24px;
+  padding: 0 2px 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.transclusion-synced:hover > .transclusion-head,
+.transclusion-synced:focus-within > .transclusion-head,
+.transclusion-synced:focus-visible > .transclusion-head {
+  opacity: 1;
+  pointer-events: auto;
+}
+.transclusion-synced .transclusion-head button {
+  height: 20px;
+  padding: 0 var(--space-3);
+  opacity: 1;
+}
+/* Mentre si scrive resta un blocco della nota: il filo pieno, nessun foglio. */
+.embed.transclusion-synced.transclusion-editing {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* Il testo non si sposta quando l'editor prende il posto della resa. */
+.pane-editor[data-markdown-mode] .transclusion-synced .transclusion-editor .cm-content {
+  padding: 0;
 }

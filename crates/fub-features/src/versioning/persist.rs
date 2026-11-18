@@ -71,7 +71,10 @@ impl Inner {
                 vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
             ))
         })?;
-        Ok((blob(&doc.dir, &snapshot_name(ts, id.as_str())), *version))
+        Ok((
+            blob(&doc.dir, &snapshot_name(ts, id.as_str())),
+            version.clone(),
+        ))
     }
 
     /// La cartella del documento nello spazio dati del plugin.
@@ -208,8 +211,38 @@ impl Inner {
                 }
             }
         }
+        // Dentro un lotto l'invito lo manda [`VersionStore::in_batch`], una
+        // volta sola in fondo: uno per nota riempirebbe la coda degli handler
+        // di una passata intera.
+        if !self.batch {
+            history_changed(host);
+        }
         Ok(())
     }
+}
+
+/// **La cronologia sul disco è cambiata: il pannello si ridisegni.**
+///
+/// Il pannello rilegge l'indice a ogni disegno, ma qualcuno deve dirgli
+/// quando. La sua maschera ([`HistoryView`]) non basta, per due ragioni che il
+/// collaudo di IMP-136 ha visto entrambe:
+///
+/// - `version.keep` scrive lo spazio dati e non la nota: nessun
+///   `document-changed`, e un lotto senza documenti non chiude con un
+///   `batch-ended`;
+/// - una fotografia nasce nell'handler, **dopo** che il `document-changed`
+///   che l'ha causata è già arrivato alla shell: il ridisegno chiesto da
+///   quell'evento può leggere l'indice di prima.
+///
+/// Si chiama a scrittura riuscita, quindi l'invito parte quando ciò che il
+/// pannello rileggerà è già sul disco. Non afferma niente: è un
+/// `view-invalidated`, accodato come ogni evento, e un invito di troppo costa
+/// un ridisegno (la shell ne fa uno per giro).
+pub(super) fn history_changed(host: &mut dyn HostApi) {
+    host.emit(Event::ViewInvalidated {
+        view: HISTORY_VIEW.to_string(),
+        instance: None,
+    });
 }
 
 /// Il lotto aperto: finché vive, l'indice non si riscrive a ogni fotografia.
@@ -251,7 +284,7 @@ fn register_in_meta(
         .versions
         .iter()
         .filter(|version| !known.contains(&version.ts))
-        .copied()
+        .cloned()
         .collect();
     if missing.is_empty() {
         return Ok(());
@@ -324,12 +357,23 @@ pub(super) fn prune(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Ve
     let policy = Retention::read(host);
     let mut kept: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
     let mut fasce_seen: Vec<(u8, u64)> = Vec::new();
+    let mut disk_seen = false;
     // Dalla più recente: dentro ogni fascia vince la più recente.
-    for (the, v) in doc.versions.iter().rev().enumerate() {
+    for v in doc.versions.iter().rev() {
+        // Un testo conservato a mano (`VersionStore::keep`) non si pota mai,
+        // e non occupa il posto di nessuna fascia: non è una fotografia del
+        // disco, è ciò che qualcuno ha scelto di non perdere. Lo toglie solo
+        // chi svuota la cronologia, con la sua conferma.
+        if v.is_kept() {
+            kept.push(v.clone());
+            continue;
+        }
         let eta = now.saturating_sub(v.ts);
-        // La più recente non si pota mai: è la versione che rappresenta lo
-        // stato attuale della nota, anche se la nota è ferma da un anno.
-        let key = if the == 0 {
+        // La più recente fotografia del disco non si pota mai: è la versione
+        // che rappresenta lo stato attuale della nota, anche se la nota è
+        // ferma da un anno.
+        let key = if !disk_seen {
+            disk_seen = true;
             None
         } else if policy.horizon.is_some_and(|horizon| eta >= horizon) {
             continue; // oltre l'orizzonte: non si conserva
@@ -346,7 +390,7 @@ pub(super) fn prune(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Ve
             }
             fasce_seen.push(key);
         }
-        kept.push(*v);
+        kept.push(v.clone());
     }
     kept.reverse();
     if kept.len() == doc.versions.len() {
@@ -423,15 +467,20 @@ pub(super) fn relocate(
     let mut candidate: Vec<(String, VersionRef)> = doc
         .versions
         .iter()
-        .map(|v| (blob(&doc.dir, &snapshot_name(v.ts, from.as_str())), *v))
+        .map(|v| {
+            (
+                blob(&doc.dir, &snapshot_name(v.ts, from.as_str())),
+                v.clone(),
+            )
+        })
         .collect();
     if let Some(existing) = existing {
-        candidate.extend(
-            existing
-                .versions
-                .iter()
-                .map(|v| (blob(&existing.dir, &snapshot_name(v.ts, to.as_str())), *v)),
-        );
+        candidate.extend(existing.versions.iter().map(|v| {
+            (
+                blob(&existing.dir, &snapshot_name(v.ts, to.as_str())),
+                v.clone(),
+            )
+        }));
     }
     // Ordinamento stabile: a parità di istante la storia che arriva viene
     // prima, ed è quella che si tiene il suo `ts`.
@@ -442,10 +491,14 @@ pub(super) fn relocate(
     let mut merged: Vec<(String, VersionRef)> = Vec::with_capacity(candidate.len());
     let mut to_remove: Vec<String> = Vec::new();
     for (origin, mut v) in candidate {
-        match merged.last() {
+        match merged.last_mut() {
             // Stesso istante e stesso contenuto: è la stessa fotografia
-            // arrivata da due storie, non due versioni.
+            // arrivata da due storie, non due versioni. Se una delle due porta
+            // la nota di un testo conservato, la nota resta.
             Some((_, u)) if u.ts == v.ts && u.hash == v.hash => {
+                if u.note.is_none() {
+                    u.note = v.note.take();
+                }
                 to_remove.push(origin);
                 continue;
             }
@@ -614,6 +667,18 @@ pub(super) fn read_index(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersi
     }
 }
 
+/// Il `meta.json` di `dir` è di `id` e nomina la versione `ts`? Una lettura
+/// che non riesce dice di no: chi chiede vuole sapere se un blob è
+/// rivendicato, e nel dubbio non lo è.
+pub(super) fn meta_names(dir: &str, id: &DocId, ts: u64, host: &dyn ReadApi) -> bool {
+    match claim_of(dir, host) {
+        Ok(Claim::Owned(metadata)) => {
+            metadata.doc_id == id.as_str() && metadata.versions.iter().any(|v| v.ts == ts)
+        }
+        _ => false,
+    }
+}
+
 fn claim_of(dir: &str, host: &dyn ReadApi) -> Result<Claim, PluginError> {
     let Some(raw) = host.data_read(&blob(dir, METADATA_FILE))? else {
         return Ok(Claim::None);
@@ -678,8 +743,11 @@ pub(super) fn rebuild_from_store(
                 continue;
             }
         };
-        let registered: BTreeMap<u64, VersionRef> =
-            metadata.versions.iter().map(|v| (v.ts, *v)).collect();
+        let registered: BTreeMap<u64, VersionRef> = metadata
+            .versions
+            .iter()
+            .map(|v| (v.ts, v.clone()))
+            .collect();
         let mut versions = Vec::new();
         for name in names {
             let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
@@ -691,7 +759,7 @@ pub(super) fn rebuild_from_store(
             // `read_snapshot` lo vedrà. Il blob nemmeno si apre — l'elenco
             // dello store dice già che c'è.
             if let Some(version) = registered.get(&ts) {
-                versions.push(*version);
+                versions.push(version.clone());
                 continue;
             }
             // Una versione che `meta.json` non nomina: o la cartella è di
@@ -701,10 +769,13 @@ pub(super) fn rebuild_from_store(
             let Some(bytes) = host.data_read(&blob(dir, name))? else {
                 continue;
             };
+            // Senza nota: chi la portava l'ha scritta nel `meta.json`, e
+            // questa il `meta.json` non la nomina.
             versions.push(VersionRef {
                 ts,
                 hash: Fnv1a::hash(&bytes),
                 size: bytes.len() as u64,
+                note: None,
             });
         }
         versions.sort_by_key(|v| v.ts);

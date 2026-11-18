@@ -581,8 +581,11 @@ pub trait HostCommands: Send + Sync {
     /// - **Un annullamento può fallire come qualunque scrittura**, e il caso che
     ///   conta è [`PluginError::Conflict`]: il documento è cambiato da quando
     ///   l'operazione lo aveva toccato, quindi tornare indietro cancellerebbe il
-    ///   lavoro di qualcun altro. Fallire lì è il comportamento giusto, e la
-    ///   voce resta consumata — riprovare vorrebbe dire riprovare a cancellarlo.
+    ///   lavoro di qualcun altro. Fallire lì è il comportamento giusto. Le
+    ///   modifiche in testa alla voce (fino al primo passo di comando) si
+    ///   controllano **tutte prima del primo passo**: se un file è cambiato,
+    ///   non si tocca niente, l'errore nomina i file cambiati e la voce resta
+    ///   in pila (A-10, [`AppliedPlan::undo`](crate::command::AppliedPlan::undo)).
     ///
     /// # Una voce non è un passo, ed è ciò che questa firma diceva male (§23.14)
     ///

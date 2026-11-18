@@ -15,17 +15,33 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 
 - **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
   «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
-  centro attività tiene lo storico dei lavori. Cestinare più note insieme non
+  centro attività tiene lo storico dei lavori. Ogni lavoro ha un nome nella
+  lingua dell'interfaccia: lo dà chi l'ha chiesto, appena l'esito del comando
+  porta l'id del job (`fub.transfer.queued`), come «Esportazione di «Rossi»
+  come PDF» o «Importazione di «Diario.enex»»; un nome che arriva dopo la fine
+  del lavoro ridice l'esito ricordato. Il job dei trasferimenti senza un nome
+  dato si chiama «Importazione o esportazione» e non scrive frasi
+  d'avanzamento, che non saprebbe in che lingua dire; gli altri job si
+  chiamano con la loro frase d'avanzamento, o col loro entry point. Cestinare più note insieme non
   ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
   le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
   «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
   Finché un menu è aperto la pila dei toast si fa da parte (`structure.css`)
   e torna quando si chiude: un menu non sta mai sotto un avviso, nemmeno quello
-  della modalità che si apre dalla banda dove scende la pila. Un vault senza rilevamento delle modifiche esterne lo dice in testa al
+  della modalità che si apre dalla banda dove scende la pila. Un avviso che
+  parla di uno **stato** di una nota (non si salva, la bozza non si scrive, è
+  cambiata da fuori, è in conflitto) è uno per nota, la nomina col titolo e si ritira quando lo stato
+  finisce; lo storico lo tiene. Il cambio da fuori e il conflitto lo dicono
+  la riga del foglio e la barra del conflitto: l'avviso a galla c'è solo se la
+  nota non si vede, e se ne va quando la si apre. Un vault senza rilevamento delle modifiche esterne lo dice in testa al
   centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
   vault nell'host e lo riapre.
-- **Scrittura.** Con la barra di formattazione spenta
-  (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
+- **Scrittura.** La barra di formato ha tre forme (`editor.toolbar`:
+  `compatta`, `completa`, `nascosta`; `chrome.formatbar.visible` spento da
+  un Fub di prima vale `nascosta` finché quella non c'è). La shell la mette
+  su `#app[data-toolbar]` e, nascosta, `data-formatbar-off`; il comando
+  `shell.toolbar.toggle` alterna `nascosta` e l'ultima forma visibile. Sul testo
+  scelto compare la mini-barra, tranne con la barra `completa`;
   l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
   compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
   dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato
@@ -99,8 +115,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
   fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
   Una linguetta non scende sotto `--tab-min` (132 px, una decina di lettere
-  oltre figura e chiusura): quelle che non ci stanno scorrono, e l'elenco in
-  fondo alla striscia le nomina tutte. Un nome troppo lungo si taglia alla
+  oltre figura e chiusura): quelle che non ci stanno scorrono sotto il «+»,
+  che si ferma accanto all'elenco e resta sempre a vista, e l'elenco in
+  fondo alla striscia le nomina tutte. Il tasto centrale chiude la scheda,
+  sulla linguetta come sulla ×, e non la attiva; gli altri tasti che non sono
+  il sinistro non fanno niente (`ui/primary-clicks.ts`, lo stesso aiuto
+  dell'albero: WebKitGTK manda un `click` anche dopo il centrale). Il secondo
+  clic di un doppio clic vale solo sul controllo del primo: la vicina che
+  scorre sotto la × appena premuta non si attiva, e il «+» non crea una nota.
+  Chiudere un riquadro chiude le sue schede, e Ctrl+Maiusc+T le riapre nel
+  riquadro col fuoco, prima quella che si guardava; il testo non salvato va
+  sul disco prima che la sessione si chiuda, o si chiede. Un nome troppo lungo si taglia alla
   fine; se due nomi della striscia cominciano uguali (le note del diario,
   due omonime con la cartella in coda) la vista lo divide in testa e coda
   (`panels/tab-names.ts`) e a cedere con l'ellissi è la testa, così resta a
@@ -112,6 +137,32 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   ridotto il passo è uno scatto unico (`shells/scrittoio/sheets/tab-strip.ts`).
   Le prime schede di un foglio nuovo arrivano col foglio, e lì non scorre
   niente.
+- **Fuoco dopo un ridisegno.** Se un giro di disegno dei riquadri toglie o
+  riappende ciò che aveva il fuoco (la superficie della scheda chiusa con la
+  ×, l'editor che una divisione sposta), il fuoco torna nel riquadro col
+  fuoco: all'elemento di prima se è ancora lì, altrimenti alla superficie
+  della scheda attiva, alla linguetta attiva o al riquadro vuoto
+  (`keepFocusInPanes` in `state/document-controller.ts`). Un fuoco andato
+  altrove intanto non si tocca. Il divisore fra riquadri mosso con le
+  frecce si rifà a ogni passo e il fuoco passa a quello nuovo nello stesso
+  posto (`layoutTree`). Il lanciatore, aprendosi, chiude il menu aperto
+  sotto: un Esc lo chiude, e il fuoco torna a chi aveva aperto il menu.
+- **Fuoco dopo un cambio di scheda da tastiera.** Un comando che cambia la
+  scheda attiva (Ctrl+W, Ctrl+Tab e Ctrl+Maiusc+Tab, Ctrl+PagGiù/PagSu,
+  Ctrl+1…9, Ctrl+Maiusc+T, Ctrl+\ e «Dividi sotto», Ctrl+Maiusc+W,
+  Alt+←/→ fra le schede), dalla tastiera, dalla palette o da un menu, porta a
+  giro di disegno finito il fuoco nella superficie della scheda che diventa
+  attiva: il testo col suo cursore, il foglio di un disegno, la pagina in
+  Lettura. Se la superficie non lo prende va sulla linguetta attiva, mai sul
+  `body` (`focusShownAfter` e `focusPaneSurface` in
+  `state/document-controller.ts`). Vale anche se il fuoco era sulla
+  linguetta o nell'albero; un fuoco andato intanto altrove fuori dai riquadri
+  (un dialogo, il lanciatore) non si tocca. Un clic su una linguetta lascia
+  invece il fuoco sulla linguetta, da cui le frecce della striscia
+  continuano. WebKitGTK passa Maiusc+Tab come `Unidentified` col tasto
+  fisico in `code`: la tastiera dell'app rilegge dal tasto fisico Tab, Invio
+  ed Esc (`namedKey` in `ui/commands.ts`), e Ctrl+Maiusc+Tab arriva al suo
+  comando.
 - **Fuoco dopo un'apertura.** Quando `openDocument` finisce, il fuoco va
   all'editor del documento aperto, ma solo se nel frattempo nessuno l'ha
   portato altrove: se sta ancora dov'era al gesto, da nessuna parte o in un
@@ -120,6 +171,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Doppio clic nei pannelli.** In ogni albero dichiarativo (le view dei
+  pannelli) il secondo clic di un doppio clic vale solo sulla voce del primo,
+  con la stessa azione (`guardClickRuns` in `ui/node.ts`): la voce che
+  scorre sotto il puntatore quando il primo clic apre una nota e il pannello
+  si ridisegna non si apre, e la seconda pressione non sposta il fuoco, che
+  resta nell'editor della nota aperta. Il clic da tastiera non cambia.
 - **Cassetti sopra i fogli.** Sotto i 960 px l'albero, e sotto i 1200
   l'ispettore, sono cassetti col velo (`desktop-shell.ts`), e il velo è
   modale: la tastiera non arriva a ciò che copre. Scegliere un documento
@@ -181,4 +238,5 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
   salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
   rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
-  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude.
+  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude;
+  ricreata la nota, la bozza di quel testo se ne va.

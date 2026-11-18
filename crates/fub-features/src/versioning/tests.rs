@@ -11,5 +11,6 @@ fn id(s: &str) -> DocId {
 }
 
 mod history;
+mod kept;
 mod recovery;
 mod retention;

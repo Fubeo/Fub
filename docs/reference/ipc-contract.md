@@ -127,40 +127,17 @@ rimontaggio e lo scenario dell'host finto sono nel
 
 ## Ricette
 
-Le ricette del vault ([il formato e gli stati](ricette.md)) hanno quattro
-porte dedicate in `allow-shell`, solo per la finestra principale. Ognuna
-delega a un metodo di `Host` e gira fuori dal thread principale, perché ogni
-chiamata rilegge la cartella delle ricette (è anche la riconciliazione) e con
-duecento note la finestra smetterebbe di presentare fotogrammi.
+Le ricette del vault hanno quattro porte loro in `allow-shell`, solo per la
+finestra principale: `recipes_list`, `recipe_adopt`, `recipe_discard` e
+`recipe_simulate`. Argomenti, risposte, errori tipati e host finto sono nelle
+[porte delle ricette](ricette.md#le-porte).
 
-| Porta | Argomenti | Risposta |
-|---|---|---|
-| `recipes_list` | `vault?` | `RecipeList { recipes, problems }` |
-| `recipe_adopt` | `id`, `fingerprint`, `vault?` | niente |
-| `recipe_discard` | `id`, `vault?` | niente |
-| `recipe_simulate` | `id`, `args?` (di serie `{}`), `vault?` | `CommandPlan` |
+## Temi
 
-- `RecipeInfo` porta `id`, `title`, `description`, `doc`, `status`
-  (`proposta` · `adottata` · `cambiata` · `problemi`), `fingerprint` (opaca:
-  lo SHA-256 del blocco in esadecimale, da rimandare tale e quale a
-  `recipe_adopt`), `problems`, `steps` (con titolo, portata e annullabilità
-  del comando, `null` se il registro non lo conosce), `command`,
-  `keybinding`, `surfaces`, `mounted` e `allowed`. I problemi del vault intero
-  (`troppe`) stanno in `RecipeList.problems`. Le frasi arrivano già nella
-  lingua di chi guarda.
-- Gli errori sono `PluginError` tipizzati: `not_found` per un vault chiuso o
-  un id che non c'è (e per `recipe_discard` di una ricetta mai accesa),
-  `conflict` se l'impronta non è più quella della nota (la ricetta è cambiata
-  mentre la persona la guardava), `bad_args` per una ricetta con problemi (il
-  messaggio è il primo problema) o per argomenti della prova che il comando
-  della ricetta rifiuterebbe.
-- Non sono comandi del registro né porte del canale di controllo: accendere è
-  il consenso della persona davanti allo schermo, e lo stato «accesa» sta nel
-  registro dei vault di questa macchina, che nessun `IndexQuery` di un vault
-  legge.
-- L'host finto (`apps/client/src/host/fake.ts`, opzione `recipes`) tiene le
-  ricette in memoria con le stesse regole viste da fuori;
-  `recipeChangedFromOutside` simula la nota riscritta da un altro programma.
+I temi passano da porte loro: `list_themes` e `read_theme` per leggerli,
+l'installazione da una cartella, la cartella collegata in modalità
+sviluppatore con l'evento `fub://theme-changed`, e il catalogo firmato. Forme,
+esiti e limiti sono nelle [porte dei temi](theme-ipc.md).
 
 ## Apri con e anteprime Craft
 
@@ -258,8 +235,11 @@ una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
 I comandi e le view escono già localizzati. Un comando IPC che porta alla shell
 l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
-non una frase. Un errore nuovo destinato all'utente usa una chiave del
-catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
+non una frase. L'errore di un indice esterno lo risolve il kernel col
+catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
+Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
+specie (`error.kind.*`), mai «[object Object]». Un errore nuovo destinato
+all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
 letterali per crate e ne impedisce la crescita.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
@@ -466,6 +446,21 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
   cartella cambia soltanto dal giornale, con `write_document`.
 
+Annulla e ripeti sono del provider (`edit.undo`, `edit.redo`): celle e
+comandi nell'ordine in cui sono avvenuti, anche oltre un salvataggio. Ogni
+passo riscrive il giornale, e il salvataggio seguente lo porta nei byte. Un
+passo di celle si disfa riscrivendo le celle; un comando oltre un salvataggio
+con `fub.restore` (`{"state": "<32 cifre esadecimali>"}`), che vale soltanto
+come primo comando e porta la cartella a uno stato tenuto in memoria dal
+provider. Il giornale resta della versione 2: `fub.restore` è un id del
+catalogo aperto dei comandi, come `fub.pasteFrom`, e un giornale di prima si
+legge com'era. Uno stato che il processo non ha più (una bozza dopo un
+riavvio), o `fub.restore` non in testa, è `Conflict`: il giornale non si
+applica e il file resta com'era; un Fub di prima lo rifiuta allo stesso modo,
+perché non serve il comando. La cronologia tiene 100 passi e 128 MiB di stati
+oltre la cartella di adesso: oltre, esce il passo più vecchio, mai un dato.
+Riaprendo il programma ricomincia vuota.
+
 Nella finestra:
 
 - i valori sono quelli che il file ha salvato, comprese le celle versate
@@ -485,8 +480,10 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
-(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+lettura ha lasciato indietro qualcosa), `not-shown-slicers`, `uncomputed`
+(formule senza valore salvato) e `circular` (formule su un riferimento
+circolare, salvate con `0`: la finestra le dà come `#CIRC!`), ciascuno con il
+suo conteggio. Le unioni, le
 note, la formattazione condizionale e gli oggetti (grafici, grafici
 sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
 

@@ -2,7 +2,8 @@ import { api } from "../host/ipc";
 import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "../ui/lifetime";
-import { sanitizeUserCss } from "../ui/sanitize-css";
+import { t } from "../i18n/strings";
+import { ThemeCssError, describeCssViolations, sanitizeUserCss } from "../ui/sanitize-css";
 import { mountUserSnippets, themeProfile, unmount } from "./loader";
 
 export const CSS_SNIPPETS_KEY = "appearance.css-snippets";
@@ -38,21 +39,30 @@ export interface CssSnippetStatus {
   readonly error?: string;
 }
 
+/// Legge il documento dei frammenti. Se non si legge, il motivo è nella lingua
+/// dell'interfaccia: finisce nella riga delle impostazioni.
 export function parseCssSnippets(raw: string): CssSnippetDocument {
-  const value: unknown = JSON.parse(raw);
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("CSS snippet document must be an object");
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    // Il messaggio del motore JSON è nella lingua del motore, non in quella
+    // di chi legge.
+    throw new Error(t("css.snippets.json"));
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(t("css.snippets.not_object"));
   const doc = value as Record<string, unknown>;
-  if (doc.version !== 1) throw new Error("unsupported CSS snippet document version");
-  if (!Array.isArray(doc.snippets) || doc.snippets.length > 32) throw new Error("invalid CSS snippet list");
+  if (doc.version !== 1) throw new Error(t("css.snippets.version"));
+  if (!Array.isArray(doc.snippets) || doc.snippets.length > 32) throw new Error(t("css.snippets.list"));
   const ids = new Set<string>();
   for (const item of doc.snippets) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("invalid CSS snippet");
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(t("css.snippets.item"));
     const snippet = item as Record<string, unknown>;
     if (typeof snippet.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(snippet.id) || ids.has(snippet.id)) {
-      throw new Error("invalid or duplicate CSS snippet id");
+      throw new Error(t("css.snippets.id"));
     }
     if (typeof snippet.css !== "string" || typeof snippet.enabled !== "boolean") {
-      throw new Error(`invalid CSS snippet ${snippet.id}`);
+      throw new Error(t("css.snippets.fields", { id: snippet.id }));
     }
     ids.add(snippet.id);
   }
@@ -87,7 +97,11 @@ function compile(raw: string, rejectInvalid: boolean): { css: string; statuses: 
       try {
         chunks.push(sanitizeUserCss(snippet.css, allowedHooks(), themeProfile().gate));
       } catch (reason) {
-        error = reason instanceof Error ? reason.message : String(reason);
+        // Le parole per chi ha scritto il frammento, non il rapporto tecnico
+        // del controllo dei temi (IMP-023).
+        error = reason instanceof ThemeCssError
+          ? describeCssViolations(reason.violations)
+          : reason instanceof Error ? reason.message : String(reason);
         if (rejectInvalid) throw new Error(`${snippet.id}: ${error}`);
       }
     }

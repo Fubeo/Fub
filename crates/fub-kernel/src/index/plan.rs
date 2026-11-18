@@ -87,6 +87,9 @@ trait QuerySource {
         query: IndexQuery,
     ) -> Option<Result<IndexResult, PluginError>>;
     fn core(&self) -> &dyn QueryCore;
+    /// Il nome di chi sta dietro `target`: il plugin del cui catalogo è il
+    /// testo dei suoi errori.
+    fn name_of(&self, target: Target) -> String;
 }
 
 impl QueryCore for Indexes {
@@ -129,6 +132,10 @@ impl QuerySource for Indexes {
     fn core(&self) -> &dyn QueryCore {
         self
     }
+
+    fn name_of(&self, target: Target) -> String {
+        Indexes::name_of(self, target)
+    }
 }
 
 struct DetachedSource<'a> {
@@ -159,19 +166,104 @@ impl QuerySource for DetachedSource<'_> {
     fn core(&self) -> &dyn QueryCore {
         self.core
     }
+
+    fn name_of(&self, target: Target) -> String {
+        match target {
+            Target::Core => super::CORE_ID.to_string(),
+            Target::Provider(at) => self
+                .prepared
+                .providers
+                .get(at)
+                .map(|(id, _)| id.clone())
+                .unwrap_or_else(|| "?".to_string()),
+        }
+    }
+}
+
+/// Una domanda al canale dati fallita, con **chi** ha fallito per ultimo.
+///
+/// L'errore di un indice può essere una chiave del **suo** catalogo (§12.2), e
+/// chi lo porta fuori dal kernel lo risolve con quel catalogo: deve sapere di
+/// chi è. Il pianificatore non ha i cataloghi, il `Workspace` sì, e questa
+/// coppia è ciò che passa dall'uno all'altro
+/// ([`Workspace::localized_query_failure`](crate::Workspace::localized_query_failure)).
+/// Senza, la chiave usciva nuda e sul filo JSON era un oggetto: `[object
+/// Object]` sotto la casella di ricerca.
+#[derive(Debug)]
+pub struct QueryFailure {
+    /// Il plugin dell'ultimo bersaglio che ha risposto con un errore; `None`
+    /// quando nessun bersaglio ha fallito e l'errore è del pianificatore, che
+    /// scrive prosa e non chiavi.
+    pub owner: Option<String>,
+    pub error: PluginError,
+}
+
+impl From<QueryFailure> for PluginError {
+    /// L'errore com'è, per chi non ha un catalogo da applicargli.
+    fn from(failure: QueryFailure) -> Self {
+        failure.error
+    }
+}
+
+/// La sorgente che ricorda chi ha fallito per ultimo.
+struct Recording<'a> {
+    inner: &'a dyn QuerySource,
+    failed: RefCell<Option<String>>,
+}
+
+impl QuerySource for Recording<'_> {
+    fn routes(&self) -> &RouteTable {
+        self.inner.routes()
+    }
+
+    fn query_at(
+        &self,
+        target: Target,
+        query: IndexQuery,
+    ) -> Option<Result<IndexResult, PluginError>> {
+        let answer = self.inner.query_at(target, query);
+        if matches!(answer, Some(Err(_))) {
+            *self.failed.borrow_mut() = Some(self.inner.name_of(target));
+        }
+        answer
+    }
+
+    fn core(&self) -> &dyn QueryCore {
+        self.inner.core()
+    }
+
+    fn name_of(&self, target: Target) -> String {
+        self.inner.name_of(target)
+    }
 }
 
 /// Il percorso di dispatch, che è **uno**.
-pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, PluginError> {
-    run_source(indexes, query)
+pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, QueryFailure> {
+    recorded(indexes, query)
 }
 
 pub(super) fn run_detached(
     prepared: &PreparedIndexQuery,
     core: &dyn QueryCore,
     query: IndexQuery,
-) -> Result<IndexResult, PluginError> {
-    run_source(&DetachedSource { prepared, core }, query)
+) -> Result<IndexResult, QueryFailure> {
+    recorded(&DetachedSource { prepared, core }, query)
+}
+
+/// [`run_source`] con il nome di chi ha fallito. L'errore che arriva al
+/// chiamante è quello dell'ultimo bersaglio fallito: uno precedente che il
+/// pianificatore ha assorbito non esce, e quello che esce non è più vecchio
+/// dell'ultimo. Se dopo fallisce il pianificatore stesso, il suo errore è
+/// prosa, e nessun catalogo la tocca.
+fn recorded(source: &dyn QuerySource, query: IndexQuery) -> Result<IndexResult, QueryFailure> {
+    let recording = Recording {
+        inner: source,
+        failed: RefCell::new(None),
+    };
+    run_source(&recording, query).map_err(|error| QueryFailure {
+        owner: recording.failed.take(),
+        error,
+    })
 }
 
 fn run_source(source: &dyn QuerySource, query: IndexQuery) -> Result<IndexResult, PluginError> {

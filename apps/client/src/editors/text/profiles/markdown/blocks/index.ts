@@ -13,7 +13,10 @@ import { headingPillOff } from "../hints";
 export type { BlocksOptions } from "./handles";
 export { pageArrives } from "./motion";
 
-export function blocksMode(options: BlocksOptions = {}): Extension {
+/// `page` dice se il testo è una pagina: senza (`false`, la scheda di testo
+/// della lavagna) niente testata — titolo, proprietà, icona, copertina,
+/// sottopagine —, solo il corpo.
+export function blocksMode(options: BlocksOptions = {}, page = true): Extension {
   return [
     // Il modello prima di chi lo legge nei propri campi.
     blockModel,
@@ -24,7 +27,7 @@ export function blocksMode(options: BlocksOptions = {}): Extension {
     blockHandles,
     // La maniglia prende il margine del titolo: niente pastiglia «H1» lì.
     headingPillOff.of(true),
-    pageHeaderExtension,
+    page ? pageHeaderExtension : [],
     // Il blocco vivo (N13): i gesti si vedono accadere.
     blockMotionExtension,
   ];
@@ -34,6 +37,6 @@ export function blocksMode(options: BlocksOptions = {}): Extension {
 /// Niente maniglie, «+», selezione di blocchi né moto dei blocchi; i tasti
 /// sono quelli del testo (`plainKeys`). La testata della pagina resta: non è
 /// un blocco.
-export function plainMode(options: BlocksOptions = {}): Extension {
-  return [blocksOptions.of(options), plainKeysExtension, pageHeaderExtension];
+export function plainMode(options: BlocksOptions = {}, page = true): Extension {
+  return [blocksOptions.of(options), plainKeysExtension, page ? pageHeaderExtension : []];
 }

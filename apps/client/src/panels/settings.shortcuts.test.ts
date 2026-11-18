@@ -36,6 +36,7 @@ vi.mock("../ui/motion", () => ({
 vi.mock("../ui/tooltip", () => ({ setTooltip: () => {}, attachTooltip: () => () => {} }));
 vi.mock("../ui/notify", () => ({ notify: vi.fn() }));
 
+import { api } from "../host/ipc";
 import { mountSettings } from "./settings";
 
 function command(id: string, binding: string): CommandEntry {
@@ -90,5 +91,34 @@ describe("la riga di una scorciatoia che non torna", () => {
     input.dispatchEvent(new Event("input"));
     expect(diagnostic.textContent).toBe("");
     expect(row.hasAttribute("data-issue")).toBe(false);
+  });
+});
+
+describe("una scorciatoia fra le righe sciolte (IMP-026)", () => {
+  it("«xx» non si salva: la riga dice perché, come la scheda delle scorciatoie", async () => {
+    // Nessun comando la porta, quindi la riga sta nella configurazione, fra le
+    // sciolte: è la chiave a dire che è una scorciatoia.
+    fake.commands = [];
+    fake.entries = [keyEntry("shell.pane.focus.left", "Mod-Alt-ArrowLeft")];
+    document.body.innerHTML = `
+      <button id="open-settings"></button>
+      <section id="settings-panel" hidden>
+        <div id="settings-tabs"><button data-tab="settings"></button><button data-tab="shortcuts"></button></div>
+        <button id="settings-close"></button>
+        <div id="settings-body"></div>
+      </section>`;
+    mountSettings({ openVault: async () => {}, reloadProvider: async () => {} });
+    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+    const selector = '#settings-body .setting-row[data-setting-key="keys.shell.pane.focus.left"]';
+    await vi.waitFor(() => expect(document.querySelector(selector)).not.toBeNull());
+    const input = document.querySelector<HTMLInputElement>(`${selector} input[type=text]`)!;
+    input.value = "xx";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector(`${selector} .setting-error`)).not.toBeNull());
+    expect(vi.mocked(api.setSetting)).not.toHaveBeenCalled();
+    expect(document.querySelector(`${selector} .setting-error-message`)?.textContent).toContain("combinazione non riconosciuta");
+    expect(document.querySelector(`${selector} .setting-attempted`)?.textContent).toBe("xx");
+    expect(document.querySelector<HTMLInputElement>(`${selector} input[type=text]`)!.value).toBe("Mod-Alt-ArrowLeft");
   });
 });

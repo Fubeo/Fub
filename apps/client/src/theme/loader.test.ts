@@ -40,7 +40,7 @@ import sheetScuro from "./scrittoio/sheet-dark.css?raw";
 import sheetChiaro from "./scrittoio/sheet-light.css?raw";
 import skin from "./scrittoio/skin.css?raw";
 import fonts from "./scrittoio/fonts.css?raw";
-import { count, mount, mountedCss, mountedLayers, mountPreferences } from "./loader";
+import { count, mount, mountedCss, mountedLayers, mountMirroredTheme, mountPreferences, mountedTheme } from "./loader";
 import { mountTheme } from "./theme";
 
 /// L'ordine dei canali nel DOM, letto da chi c'è montato — non da `loader.ts`,
@@ -271,5 +271,29 @@ describe("mountTheme monta il foglio della luce che vale", () => {
       id: "fub.serie",
       light: "dark",
     });
+  });
+});
+
+describe("la finestra di un documento rispecchia il vassoio delle barre", () => {
+  it("«marcate» passa alla finestra figlia, e «chiare» non lascia l'attributo", () => {
+    // Le finestre dei documenti non leggono le impostazioni: il vassoio arriva
+    // dalla radice della principale, come la luce. Senza l'attributo lì, un
+    // documento aperto con «marcate» mostrerebbe il vassoio chiaro.
+    document.documentElement.dataset.theme = "light";
+    document.documentElement.dataset.contrast = "normal";
+    document.documentElement.dataset.bars = "marked";
+    const marked = mountedTheme();
+    expect(marked.bars).toBe("marked");
+
+    delete document.documentElement.dataset.bars;
+    const light = mountedTheme();
+    expect(light).not.toHaveProperty("bars");
+
+    mountMirroredTheme(marked);
+    expect(document.documentElement.dataset.bars).toBe("marked");
+    mountMirroredTheme(light);
+    expect(document.documentElement.dataset.bars).toBeUndefined();
+    mountMirroredTheme({ ...marked, bars: undefined });
+    expect(document.documentElement.dataset.bars).toBeUndefined();
   });
 });

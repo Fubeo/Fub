@@ -40,7 +40,7 @@ vi.mock("../../../state/kernel", () => ({
     };
   },
 }));
-vi.mock("../../../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, registerComponentRow: () => () => {}, hasKernelCommand: () => false }));
+vi.mock("../../../ui/commands", () => ({ allCommands: () => [], commandOfKeybindingKey: () => null, keybindingKey: (id: string) => id, registerComponentRow: () => () => {}, hasKernelCommand: () => false }));
 vi.mock("../../../ui/permissions", () => ({ TRUST_LABELS: {}, isPermissionKey: () => false, rows: () => [] }));
 vi.mock("../../../ui/a11y", () => ({ trapFocus: () => () => {} }));
 vi.mock("../../../ui/motion", () => ({

@@ -95,6 +95,12 @@ pub const NOTES_FOLDER_PAGE: &str = "note.folder_page";
 pub const NOTES_SUBPAGE: &str = "note.subpage";
 /// Spunta (o de-spunta) un task.
 pub const NOTES_TASK_TOGGLE: &str = "note.task.toggle";
+/// «Sposta in…»: un blocco in fondo a un'altra nota o a una sua sezione, con
+/// niente, un link o una trasclusione al suo posto (E13).
+pub const NOTES_BLOCK_MOVE: &str = "note.block.move";
+/// Il blocco sincronizzato: dà l'id al blocco se manca e scrive la sua
+/// trasclusione in fondo a un'altra nota, tutte e due o nessuna (E14).
+pub const NOTES_BLOCK_SYNC: &str = "note.block.sync";
 /// Cambia un'impostazione (§11.1).
 pub const SETTINGS_SET: &str = "settings.set";
 /// Riporta un'impostazione a ciò che valeva prima che qualcuno decidesse.
@@ -313,19 +319,23 @@ const A_DONE: &str = "done";
 
 mod catalog;
 mod folders;
+mod move_block;
 mod notes;
 mod provider;
 mod rewrite;
+mod sync_block;
 mod tasks;
 
 pub use catalog::catalog;
 use folders::{folder_rename, folder_trash};
+use move_block::notes_block_move;
 use notes::{
     notes_create, notes_duplicate, notes_folder_page, notes_rename, notes_subpage, notes_trash,
     plan, skipped_key, trash_empty, trash_restore, vault_undo, why,
 };
 pub use provider::CoreCommands;
 use rewrite::{selection_wikilink, vault_replace};
+use sync_block::notes_block_sync;
 use tasks::notes_task_toggle;
 pub use tasks::occurrences;
 

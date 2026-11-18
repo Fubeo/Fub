@@ -33,7 +33,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LIGHTS as lights, SCENE as scene, photoFilename as foto, sceneUrl, scrimClickPoint } from "./scene.mjs";
-import { SAMPLES } from "./samples";
+import { SAMPLES } from "../src/dev/catalogo/samples";
 import sourceNode from "../src/ui/node.ts?raw";
 
 /// Le baseline in repo, per nome. Il valore non interessa (sono PNG): interessa
@@ -132,6 +132,14 @@ describe("l'elenco delle scene", () => {
       expect(short, s.id).toBeLessThan(600);
       expect(long, s.id).toBeLessThanOrEqual(960);
     }
+  });
+
+  it("mette in fondo le scene che accendono il tocco", () => {
+    // Acceso, il tocco emulato lascia `(hover: none)` alla pagina per sempre:
+    // una scena col puntatore dopo di lui vedrebbe un telefono.
+    const first = scene.findIndex((s) => s.touch === true);
+    expect(first).toBeGreaterThan(0);
+    expect(scene.slice(first).every((s) => s.touch === true)).toBe(true);
   });
 });
 

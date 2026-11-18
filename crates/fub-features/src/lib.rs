@@ -86,6 +86,9 @@ pub mod componenti;
 pub mod dashboard;
 #[cfg(feature = "draw")]
 pub mod draw;
+// I compiti che scadono in un giorno: la pagina del giorno e la Scrivania.
+#[cfg(any(feature = "template", feature = "dashboard"))]
+mod due_tasks;
 // Ogni feature ne usa una parte, e una build parziale lascia spento il resto.
 #[allow(dead_code)]
 mod formats;
@@ -96,6 +99,11 @@ pub mod graph;
 pub mod inventory;
 #[cfg(feature = "lavagna")]
 pub mod lavagna;
+// I tipi di nota: i modelli ne creano le note, le proprietà ne cambiano il
+// tipo e dicono quando manca. Ognuna ne usa una parte.
+#[cfg(any(feature = "template", feature = "properties"))]
+#[allow(dead_code)]
+mod note_types;
 #[cfg(feature = "outline")]
 pub mod outline;
 #[cfg(feature = "proof")]
@@ -126,7 +134,8 @@ pub mod vocabulary;
 
 #[cfg(feature = "backlinks")]
 pub use backlinks::{
-    build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_STATUS_VIEW, BACKLINKS_VIEW,
+    build_backlinks_view, BacklinksView, MentionCommands, BACKLINKS_ID, BACKLINKS_STATUS_VIEW,
+    BACKLINKS_VIEW, MENTION_LINK,
 };
 #[cfg(feature = "backup")]
 pub use backup::{
@@ -143,14 +152,17 @@ pub use blocks::{
 };
 #[cfg(feature = "commands")]
 pub use commands::{
-    occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_CREATE,
-    NOTES_DUPLICATE, NOTES_FOLDER_PAGE, NOTES_RENAME, NOTES_SUBPAGE, NOTES_TASK_TOGGLE,
-    NOTES_TRASH, SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS,
-    SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
-    VAULT_UNDO,
+    occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_BLOCK_MOVE,
+    NOTES_BLOCK_SYNC, NOTES_CREATE, NOTES_DUPLICATE, NOTES_FOLDER_PAGE, NOTES_RENAME,
+    NOTES_SUBPAGE, NOTES_TASK_TOGGLE, NOTES_TRASH, SEARCH_OPEN, SELECTION_WIKILINK,
+    SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
+    TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 #[cfg(feature = "dashboard")]
-pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
+pub use dashboard::{
+    DashboardView, DASHBOARD_ID, DASHBOARD_VIEW, DESK_BASE_KEY, DESK_TILES_KEY, DESK_TILE_NS,
+    DESK_VIEW,
+};
 #[cfg(feature = "draw")]
 pub use draw::{
     AnnotatedPdfExport, DrawCommands, DrawioExport, ExcalidrawExport, JpegExport, PdfExport,
@@ -176,9 +188,11 @@ pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_R
 #[cfg(feature = "properties")]
 pub use properties::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
-    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
+    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, NOTES_TYPE_GET,
+    NOTES_TYPE_LIST, NOTES_TYPE_SET, NOTE_TYPES_NS, NOTE_TYPE_PAGE_VIEW, PROPERTIES_ID,
     PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TYPES_RESTORE, PROPERTY_TYPE_SET,
+    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TARGET_SET, PROPERTY_TYPES_RESTORE,
+    PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{
@@ -202,8 +216,8 @@ pub use tasks::{TasksView, TASKS_ID, TASKS_QUERY_VIEW, TASKS_VIEW};
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,
     DAILY_FOLDER_KEY, DAILY_TEMPLATE_KEY, DATE_FORMAT_KEY, ISO_DATE, NOTES_DAILY, NOTES_EXTRACT,
-    NOTES_FROM_TEMPLATE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE, NOTES_MERGE, NOTES_RANDOM,
-    NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
+    NOTES_FROM_TEMPLATE, NOTES_FROM_TYPE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE,
+    NOTES_MERGE, NOTES_RANDOM, NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
 };
 #[cfg(feature = "trash")]
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};

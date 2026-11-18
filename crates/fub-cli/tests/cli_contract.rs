@@ -1,5 +1,7 @@
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Output, Stdio};
+#[cfg(unix)]
+use std::process::Stdio;
+use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 
 fn cli(args: &[&str]) -> Output {

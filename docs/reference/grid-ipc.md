@@ -67,8 +67,9 @@ finestra mostra all'apertura e che la shell non legge da sé (la regola di
 convalida della cella attiva per `dataValidation`). Un comando che il provider non
 serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
 cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
-`edit.undo` ed `edit.redo` del documento
-([ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+`edit.undo` ed `edit.redo` del documento, per celle e comandi e anche oltre
+il salvataggio ([cartelle di Excel](ipc-contract.md#cartelle-di-excel);
+[ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
 in proposta); su una cartella che la riscrittura perderebbe i comandi che la
 cambiano sono spenti, e darne uno è `PermissionDenied` con `xlsx.rewrite.loses`.
 

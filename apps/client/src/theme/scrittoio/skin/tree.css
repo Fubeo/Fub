@@ -366,6 +366,15 @@
   background: var(--accent-wash);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+/* **Una nota sotto un blocco in mano** (E13, «Sposta in…»): come il titolo
+   della Struttura, il filo e il velo d'accento, col cartellino dei Blocchi
+   sopra; vince sul passaggio e sulla nota aperta. */
+.tree-row[data-drop-hot],
+.tree-row[data-drop-hot]:hover,
+[role="treeitem"][aria-selected="true"] > .tree-row[data-drop-hot] {
+  background: var(--accent-veil);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
 /* **Colori forzati.** Fondi, ombre e sfumature sono del sistema o spariscono:
    ciò che qui era detto con quelli torna a dirsi con contorni e caratteri. */
 @media (forced-colors: active) {
@@ -393,7 +402,8 @@
   .tree-row.drop-after {
     border-bottom: 2px solid Highlight;
   }
-  .tree-row.drop-into {
+  .tree-row.drop-into,
+  .tree-row[data-drop-hot] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
@@ -419,18 +429,24 @@
   margin-left: calc(var(--space-3) * -1);
 }
 
-/* **Più note scelte insieme.** La barra sta sopra l'albero e dice quante sono;
-   le righe scelte hanno il fondo della nota aperta ma non il suo peso, e un
-   segno a sinistra, così non si scambiano con «la nota che sto leggendo». */
+/* **Più note scelte insieme.** La barra sta sotto l'albero, ferma in fondo
+   alla colonna mentre l'albero scorre, e dice quante sono: comparendo non
+   sposta nessuna riga sotto il puntatore. Le righe scelte hanno il fondo della
+   nota aperta ma non il suo peso, e un segno a sinistra, così non si scambiano
+   con «la nota che sto leggendo». */
 .tree-selection {
+  position: sticky;
+  bottom: var(--space-2);
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin: 0 var(--space-3) var(--space-2);
+  margin: var(--space-2) var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--accent-wash);
+  box-shadow: var(--shadow-1);
   color: var(--text);
   font-size: var(--text-sm);
 }

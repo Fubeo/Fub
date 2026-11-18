@@ -53,8 +53,8 @@ nome del blocco e il piede dei tasti ([Tasto destro](editor-menus.md)). Ha:
   prende più righe le unisce con uno spazio, e le sottovoci restano blocchi
   sotto. Una tabella non si trasforma;
 - **Colore ▸**, il testo e il fondo coi nove colori dei Blocchi;
-- **Duplica** e, per ultimo, **Elimina**; **Sposta su**, **Sposta giù** e
-  **Affianca in colonne** si trovano scrivendo;
+- **Duplica**, **Sposta in…** ([in un'altra nota](editor-move-to.md)) e, per
+  ultimo, **Elimina**; **Sposta su**, **Sposta giù** e **Affianca in colonne** si trovano scrivendo;
 - **Copia il link al blocco**: scrive negli appunti `[[Nota#Titolo]]` per un
   titolo e `[[Nota#^id]]` per il resto. Se il blocco non ha un id, ne riceve uno
   di sei caratteri: in coda all'ultima riga per paragrafi, titoli e voci, su una
@@ -239,12 +239,12 @@ sempre.
 
 In cima ai Blocchi stanno la copertina, l'icona e il titolo della pagina, con
 le proprietà subito sotto; la Lettura mostra la stessa testata (ordine,
-proprietà e tastiera in [Scrittura](editor-writing.md#la-testata)). Icona,
+proprietà e tastiera in [Scrittura](editor-header.md)). Icona,
 copertina e classi sono righe del frontmatter, scritte come le altre
 proprietà, e in Sorgente si vedono così:
 
 ```yaml
-icon: 🧳            # o una figura: icon: fub:book
+icon: 🧳            # o una figura: icon: fub:book (o book)
 cover: ../Risorse/mare.png
 cover-y: 30         # dove sta la copertina, da 0 (in cima) a 100
 cssclasses: [wide, sans]
@@ -256,16 +256,16 @@ cssclasses: [wide, sans]
   il file, o la cartella, con i collegamenti; Esc torna al nome di prima. Un
   nome che non si può usare o che c'è già non rinomina niente e lo dice. Invio
   dal titolo porta al testo; ↑ e ↓ passano per le proprietà della testata.
-- **Icona.** Un'emoji, scelta cercandola per nome in italiano o in inglese, o
-  una delle figure monocrome dell'esplora, che stanno prima delle emoji e si
-  scrivono `icon: fub:book`. Una figura prende il colore del testo; un `fub:`
-  con un nome che questa versione non conosce non si mostra, e la testata
-  offre di nuovo «Aggiungi un'icona». Si vede anche fuori dalla pagina, quando l'indice ha letto la nota salvata:
-  nella sua riga dell'esplora (e in quella della cartella di cui è la pagina,
-  se l'esplora non le ha dato un'icona sua), nella sua scheda e prima dei
-  `[[wikilink]]` che la nominano in Live e in Blocchi. Due note omonime con
-  icone diverse non la danno a `[[Nome]]`. Un valore che non è un testo breve,
-  come il path di un'immagine messo da un'altra app, non si mostra.
+- **Icona.** Un'emoji, cercata per nome in italiano o in inglese, o una delle
+  figure monocrome dell'esplora, prima delle emoji, scritte `icon: fub:book`;
+  si legge, senza riscriverlo, anche il nome nudo dei [tipi di
+  nota](../reference/note-conventions.md#i-tipi-di-nota), `icon: book`. Una
+  figura prende il colore del testo. Un nome sconosciuto o un testo che non è
+  un carattere solo (una parola, un path) non si mostra, e torna «Aggiungi
+  un'icona». L'icona si vede anche fuori dalla pagina, quando l'indice ha
+  letto la nota salvata: nella sua riga dell'esplora (e della cartella di cui
+  è la pagina, se non ne ha una sua), nella scheda e prima dei `[[wikilink]]`
+  che la nominano in Live e in Blocchi, se due omonime non ne hanno diverse.
 - **Copertina.** Un'immagine del vault, con lo stesso path di un'immagine nel
   testo, un indirizzo, o un colore pieno (`cover: "#a3c4f3"`); per
   un'immagine «Riposiziona» ne sceglie la parte che si vede.
@@ -384,13 +384,13 @@ wikilink.
 
 ## Le date
 
-`@` propone anche i giorni: il giorno stesso, «domani», «ieri», un giorno della
-settimana («venerdì», il prossimo con quel nome), «prossimo venerdì» (quello
-della settimana dopo, che comincia dal giorno scelto in
-`locale.first-day-of-week` o da quello del sistema), «4 novembre», «nov 4» e
-`2026-11-04`, in italiano e in inglese. Una parola a metà basta. Il giorno
-diventa il link alla sua giornaliera, nella cartella e col formato di
-`daily.folder` e `daily.format`, con il giorno per esteso come testo:
+`@` propone anche i giorni: il giorno stesso, «domani», «ieri», «venerdì»
+(il prossimo), «prossimo venerdì» (nella settimana dopo, dal giorno di
+`locale.first-day-of-week` o del sistema), «4 novembre», «nov 4», `2026-11-04`
+e, con la regola del campo della data nelle proprietà (`saidDay`), «fra due
+settimane» e «3/4»; in italiano e in inglese, e una parola a metà basta. Il
+giorno diventa il link alla sua giornaliera (`daily.folder`, `daily.format`),
+col giorno per esteso come testo:
 
 ```markdown
 Consegna [[Daily/2026-11-04|4 novembre 2026]].

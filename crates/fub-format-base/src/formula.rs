@@ -7,8 +7,14 @@
 //! Namespace: `prop.<nome>` (proprietà della nota), `file.<campo>`
 //! (metadati del file), `container.<campo>` (metadati del documento ospite),
 //! `formula.<nome>` (altre formule della stessa base).
+//!
+//! Il riepilogo di una Relazione, `rollup(prop.libri, "sum", "pagine")`, legge
+//! le proprietà delle note legate che il chiamante ha messo nel contesto
+//! ([`RowContext::linked`]): un livello solo, mai le formule né i riepiloghi di
+//! quelle note, quindi un giro di relazioni non gira.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -214,6 +220,24 @@ impl EvalBudget {
     }
 }
 
+/// Una nota legata da una Relazione, con le sue proprietà normalizzate.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LinkedNote {
+    /// Il documento a cui il link risolve: due link scritti in modo diverso
+    /// (`[[Dune]]`, `[[Libri/Dune]]`) che risolvono allo stesso documento sono
+    /// la stessa nota legata.
+    pub doc: String,
+    pub props: BTreeMap<String, BaseValue>,
+}
+
+/// Le note legate, per pagina del link com'è scritta (`Dune` per `[[Dune]]`):
+/// la risoluzione la fa chi chiama, con le regole del vault. Una pagina che non
+/// c'è è un link rotto.
+pub type LinkedNotes = BTreeMap<String, LinkedNote>;
+
+/// I cinque riepiloghi di una Relazione, coi nomi che `rollup` accetta.
+pub const ROLLUP_AGGREGATES: [&str; 5] = ["count", "sum", "average", "min", "max"];
+
 /// Contesto di una riga: proprietà normalizzate, metadati file, formule già
 /// valutate (il chiamante risolve l'ordine e i cicli).
 #[derive(Clone, Debug, Default)]
@@ -225,6 +249,9 @@ pub struct RowContext {
     pub formulas: BTreeMap<String, BaseValue>,
     /// Millisecondi epoch "adesso" (iniettati dall'host, mai orologio qui).
     pub now_ms: i64,
+    /// Le note legate dalle Relazioni delle righe, condivise da tutte le righe
+    /// di una derivazione: le legge solo `rollup`.
+    pub linked: Arc<LinkedNotes>,
 }
 
 /// AST della formula (non seriale: resta nel formato, al confine solo testo).
@@ -286,6 +313,11 @@ pub struct Formula {
     pub file_deps: Vec<String>,
     /// Chiavi `container.<x>` referenziate (metadati del documento ospite).
     pub container_deps: Vec<String>,
+    /// Le Relazioni riepilogate da `rollup` (il primo argomento): il
+    /// chiamante ne risolve i link e mette le note legate nel contesto.
+    pub relation_deps: Vec<String>,
+    /// Le proprietà delle note legate che `rollup` legge (il terzo argomento).
+    pub linked_deps: Vec<String>,
 }
 
 impl Formula {
@@ -309,6 +341,13 @@ impl Formula {
         file_deps.dedup();
         container_deps.sort();
         container_deps.dedup();
+        let mut relation_deps = Vec::new();
+        let mut linked_deps = Vec::new();
+        collect_rollups(&ast, &mut relation_deps, &mut linked_deps).map_err(EvalError::Parse)?;
+        relation_deps.sort();
+        relation_deps.dedup();
+        linked_deps.sort();
+        linked_deps.dedup();
         Ok(Self {
             source: source.to_string(),
             ast,
@@ -316,6 +355,8 @@ impl Formula {
             prop_deps,
             file_deps,
             container_deps,
+            relation_deps,
+            linked_deps,
         })
     }
 
@@ -383,8 +424,174 @@ fn collect_prop_file_deps(
     }
 }
 
+/// Le chiamate a `rollup`, controllate quando la formula si legge: la
+/// Relazione è una proprietà scritta (`prop.libri` o `libri`), il riepilogo e
+/// la proprietà delle note legate sono testi scritti. Così il piano sa, prima
+/// di leggere una riga, quali link risolvere e quali proprietà chiedere.
+fn collect_rollups(
+    ast: &FormulaAst,
+    relations: &mut Vec<String>,
+    linked: &mut Vec<String>,
+) -> Result<(), String> {
+    match ast {
+        FormulaAst::Call(name, args) if name == "rollup" => {
+            if !(2..=3).contains(&args.len()) {
+                return Err("rollup vuole 2..3 argomenti".into());
+            }
+            let Some(FormulaAst::Ref(FormulaRef::Prop(relation))) = args.first() else {
+                return Err("rollup: il primo argomento è una proprietà (prop.<nome>)".into());
+            };
+            let aggregate = match args.get(1) {
+                Some(FormulaAst::Text(aggregate))
+                    if ROLLUP_AGGREGATES.contains(&aggregate.as_str()) =>
+                {
+                    aggregate
+                }
+                _ => {
+                    return Err(format!(
+                        "rollup: il secondo argomento è uno fra {}",
+                        ROLLUP_AGGREGATES.join(", ")
+                    ))
+                }
+            };
+            match (args.get(2), aggregate.as_str()) {
+                (Some(FormulaAst::Text(property)), _) if !property.is_empty() => {
+                    linked.push(property.clone());
+                }
+                (None, "count") => {}
+                _ => {
+                    return Err(
+                        "rollup: il terzo argomento è il nome scritto di una proprietà".into(),
+                    )
+                }
+            }
+            relations.push(relation.clone());
+            Ok(())
+        }
+        FormulaAst::Unary(_, inner) => collect_rollups(inner, relations, linked),
+        FormulaAst::Binary(_, l, r) => {
+            collect_rollups(l, relations, linked)?;
+            collect_rollups(r, relations, linked)
+        }
+        FormulaAst::Call(_, args) | FormulaAst::List(args) => args
+            .iter()
+            .try_for_each(|arg| collect_rollups(arg, relations, linked)),
+        FormulaAst::Field(base, _) => collect_rollups(base, relations, linked),
+        _ => Ok(()),
+    }
+}
+
+/// Il riepilogo di una Relazione sulle note legate.
+///
+/// Conta le note legate **trovate**: un link rotto (una pagina che il
+/// chiamante non ha risolto) e una voce che non è un link non contano e non
+/// danno valori; due link alla stessa nota sono una nota. Una nota che lega sé
+/// stessa conta come le altre. Somma e media vogliono numeri, minimo e
+/// massimo numeri o date della stessa specie: un valore pieno di un'altra
+/// specie è `#VALUE!`, come nei riepiloghi della vista. Senza valori pieni il
+/// risultato è vuoto; il conteggio è zero.
+fn rollup(args: &[BaseValue], ctx: &RowContext) -> Result<BaseValue, EvalError> {
+    let aggregate = string_arg(&args[1], "rollup")?;
+    let items: &[BaseValue] = match &args[0] {
+        BaseValue::List(items) => items,
+        BaseValue::Empty => &[],
+        single => std::slice::from_ref(single),
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let mut notes = Vec::new();
+    for item in items {
+        let BaseValue::Link { target, .. } = item else {
+            continue;
+        };
+        // `Dune#Trama` è la nota `Dune`: il riepilogo è della nota.
+        let page = target.split('#').next().unwrap_or(target);
+        if let Some(note) = ctx.linked.get(page) {
+            if seen.insert(note.doc.as_str()) {
+                notes.push(note);
+            }
+        }
+    }
+    if aggregate == "count" {
+        return Ok(BaseValue::Number(notes.len() as f64));
+    }
+    let property = match args.get(2) {
+        Some(property) => string_arg(property, "rollup")?,
+        None => return Err(EvalError::Value("rollup: manca la proprietà".into())),
+    };
+    let filled: Vec<&BaseValue> = notes
+        .iter()
+        .filter_map(|note| note.props.get(&property))
+        .filter(|value| !value.is_empty())
+        .collect();
+    let wrong = |found: &BaseValue| {
+        EvalError::Value(format!(
+            "rollup {aggregate} su {} di una nota legata",
+            found.type_name()
+        ))
+    };
+    match aggregate.as_str() {
+        "sum" | "average" => {
+            let mut numbers = Vec::with_capacity(filled.len());
+            for value in &filled {
+                match value {
+                    BaseValue::Number(n) => numbers.push(*n),
+                    other => return Err(wrong(other)),
+                }
+            }
+            if numbers.is_empty() {
+                return Ok(BaseValue::Empty);
+            }
+            let sum = numbers.iter().sum::<f64>();
+            if !sum.is_finite() {
+                return Err(EvalError::Value("rollup: somma fuori misura".into()));
+            }
+            Ok(BaseValue::Number(if aggregate == "sum" {
+                sum
+            } else {
+                sum / numbers.len() as f64
+            }))
+        }
+        "min" | "max" => {
+            let mut numbers = Vec::new();
+            let mut dates = Vec::new();
+            for value in &filled {
+                match value {
+                    BaseValue::Number(n) => numbers.push(*n),
+                    BaseValue::Date(ms) => dates.push(*ms),
+                    other => return Err(wrong(other)),
+                }
+            }
+            let min = aggregate == "min";
+            match (numbers.is_empty(), dates.is_empty()) {
+                (true, true) => Ok(BaseValue::Empty),
+                (false, true) => Ok(BaseValue::Number(
+                    numbers
+                        .into_iter()
+                        .reduce(if min { f64::min } else { f64::max })
+                        .unwrap_or_default(),
+                )),
+                (true, false) => Ok(BaseValue::Date(
+                    if min {
+                        dates.into_iter().min()
+                    } else {
+                        dates.into_iter().max()
+                    }
+                    .unwrap_or_default(),
+                )),
+                (false, false) => Err(EvalError::Value(format!(
+                    "rollup {aggregate} su numeri e date insieme"
+                ))),
+            }
+        }
+        other => Err(EvalError::Value(format!(
+            "rollup: riepilogo sconosciuto `{other}`"
+        ))),
+    }
+}
+
 fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<BaseValue, EvalError> {
     match name {
+        "rollup" => rollup(&args, ctx),
         "if" => {
             let cond = truthy(&args[0]);
             Ok(if cond {
@@ -753,6 +960,7 @@ mod tests {
             container: BTreeMap::from([("folder".into(), BaseValue::Text("Projects".into()))]),
             formulas: BTreeMap::new(),
             now_ms: 0,
+            linked: Arc::default(),
         }
     }
 
@@ -1039,5 +1247,164 @@ mod tests {
             formula.evaluate(&ctx(), &mut budget),
             BaseValue::Error(FormulaErrorCode::Budget)
         );
+    }
+
+    fn link(target: &str) -> BaseValue {
+        BaseValue::Link {
+            target: target.into(),
+            label: None,
+        }
+    }
+
+    /// Una riga che lega quattro note, con un link rotto, uno a sé stessa e
+    /// due scritture della stessa nota.
+    fn rollup_ctx() -> RowContext {
+        let note = |doc: &str, props: Vec<(&str, BaseValue)>| LinkedNote {
+            doc: doc.into(),
+            props: props
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value))
+                .collect(),
+        };
+        let dune = note(
+            "Libri/Dune.md",
+            vec![
+                ("pagine", BaseValue::Number(600.0)),
+                ("uscita", BaseValue::Date(1_000)),
+            ],
+        );
+        let mut ctx = ctx();
+        ctx.props.insert(
+            "libri".into(),
+            BaseValue::List(vec![
+                link("Dune"),
+                link("Libri/Dune#Trama"),
+                link("Fondazione"),
+                link("Rotto"),
+                link("Io"),
+                BaseValue::Text("Solo testo".into()),
+            ]),
+        );
+        ctx.props.insert("uno".into(), link("Fondazione"));
+        ctx.linked = Arc::new(LinkedNotes::from([
+            ("Dune".to_string(), dune.clone()),
+            ("Libri/Dune".to_string(), dune),
+            (
+                "Fondazione".to_string(),
+                note(
+                    "Libri/Fondazione.md",
+                    vec![
+                        ("pagine", BaseValue::Number(250.0)),
+                        ("uscita", BaseValue::Date(3_000)),
+                        ("titolo", BaseValue::Text("Fondazione".into())),
+                    ],
+                ),
+            ),
+            (
+                "Io".to_string(),
+                note(
+                    "Io.md",
+                    vec![
+                        ("pagine", BaseValue::Empty),
+                        ("libri", BaseValue::List(vec![link("Dune")])),
+                    ],
+                ),
+            ),
+        ]));
+        ctx
+    }
+
+    fn rollup_of(source: &str) -> BaseValue {
+        Formula::parse(source)
+            .unwrap()
+            .evaluate(&rollup_ctx(), &mut EvalBudget::new(MAX_FORMULA_STEPS))
+    }
+
+    /// I cinque riepiloghi su una Relazione: il link rotto e la voce di testo
+    /// non contano, la stessa nota scritta due volte conta una, la nota che
+    /// lega sé stessa conta come le altre.
+    #[test]
+    fn il_riepilogo_di_una_relazione_legge_le_note_legate() {
+        assert_eq!(
+            rollup_of(r#"rollup(prop.libri, "count")"#),
+            BaseValue::Number(3.0)
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "sum", "pagine")"#),
+            BaseValue::Number(850.0)
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "average", "pagine")"#),
+            BaseValue::Number(425.0)
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "min", "pagine")"#),
+            BaseValue::Number(250.0)
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "max", "uscita")"#),
+            BaseValue::Date(3_000)
+        );
+        // Un link solo è una relazione di uno.
+        assert_eq!(
+            rollup_of(r#"rollup(uno, "sum", "pagine")"#),
+            BaseValue::Number(250.0)
+        );
+        // Nessuna nota legata, o nessun valore pieno: zero e vuoto.
+        assert_eq!(
+            rollup_of(r#"rollup(manca, "count")"#),
+            BaseValue::Number(0.0)
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(manca, "sum", "pagine")"#),
+            BaseValue::Empty
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "max", "assente")"#),
+            BaseValue::Empty
+        );
+        // Un testo da sommare è un errore, non un numero inventato.
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "sum", "titolo")"#),
+            BaseValue::Error(FormulaErrorCode::Value)
+        );
+        // Un giro di relazioni: la proprietà legata è letta com'è, un livello
+        // solo; contarla non scende nelle note di quella nota.
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "sum", "libri")"#),
+            BaseValue::Error(FormulaErrorCode::Value)
+        );
+        assert_eq!(
+            rollup_of(r#"rollup(libri, "count") + 1"#),
+            BaseValue::Number(4.0)
+        );
+    }
+
+    /// Il piano sa prima di leggere una riga quali Relazioni risolvere e
+    /// quali proprietà chiedere; una chiamata che non lo dice non si legge.
+    #[test]
+    fn il_riepilogo_si_controlla_quando_la_formula_si_legge() {
+        let formula =
+            Formula::parse(r#"rollup(prop.libri, "sum", "pagine") + rollup(autori, "count")"#)
+                .unwrap();
+        assert_eq!(formula.relation_deps, ["autori", "libri"]);
+        assert_eq!(formula.linked_deps, ["pagine"]);
+        assert_eq!(formula.prop_deps, ["autori", "libri"]);
+        let plain = Formula::parse("prop.rating * 2").unwrap();
+        assert!(plain.relation_deps.is_empty() && plain.linked_deps.is_empty());
+        for broken in [
+            r#"rollup(file.name, "count")"#,
+            r#"rollup(formula.x, "count")"#,
+            r#"rollup(libri, "median", "pagine")"#,
+            r#"rollup(libri, prop.quale, "pagine")"#,
+            r#"rollup(libri, "sum")"#,
+            r#"rollup(libri, "sum", prop.pagine)"#,
+            r#"rollup(libri, "sum", "")"#,
+            r#"rollup(libri)"#,
+            r#"rollup(libri, "sum", "pagine", "altro")"#,
+            r#"if(true, rollup(libri, "media", "pagine"), 0)"#,
+        ] {
+            assert!(Formula::parse(broken).is_err(), "{broken}");
+        }
     }
 }

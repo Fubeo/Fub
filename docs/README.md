@@ -43,12 +43,12 @@ flowchart LR
 | [Operazioni sul vault](product/vault-operazioni.md) | note, cartelle, cattura, import/export |
 | [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
-| [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
+| [Editor e anteprima](product/editor-and-preview.md) e [le formule in Live](product/editor-math.md) | le superfici di scrittura; la formula che si modifica toccandola |
 | [Scrittura](product/editor-writing.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi; il passo commentato |
-| [Blocchi](product/editor-blocks.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; i gesti delle tabelle in note, documenti e fogli |
-| [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
-| [Basi (file `.base`)](product/bases.md) e [il loro calendario](product/bases-calendar.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; il mese e le note trascinate fra i giorni |
-| [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |
+| [Blocchi](product/editor-blocks.md), [Sposta in…](product/editor-move-to.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; un blocco in un'altra nota; i gesti delle tabelle in note, documenti e fogli |
+| [Tasto destro, mini-barra e «/»](product/editor-menus.md) e [i diagrammi](product/editor-diagrams.md) | i menu degli editor; il disegno Mermaid, il suo menu e i tasti del blocco |
+| [Basi (file `.base`)](product/bases.md), [il loro calendario](product/bases-calendar.md) e [la loro linea del tempo](product/bases-timeline.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; il mese e le note trascinate fra i giorni; le barre fra due date |
+| [La testata](product/editor-header.md), [la riga dei dati](product/editor-note-facts.md) e [la trasclusione viva](product/editor-transclusion.md); [i tipi di nota](product/editor-note-types.md) | titolo, proprietà e copertina in cima alla nota; modifica, collegamenti ed etichette sotto il titolo; la sezione di un'altra nota che si scrive dove è riportata |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
@@ -72,9 +72,10 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md),
-  [i comportamenti della shell](architecture/shell-behaviours.md) e
+  [i comportamenti della shell](architecture/shell-behaviours.md), [i valori delle impostazioni](architecture/setting-values.md) e
   [la cornice del telefono](architecture/phone-frame.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md) e [quelle da parte](architecture/parked-surfaces.md), la
+- [Superfici dell'editor](architecture/editor-surfaces.md), [quelle da parte](architecture/parked-surfaces.md),
+  [quella su un tratto](architecture/range-surface.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md), la
   [superficie dei fogli](architecture/grid-surface.md) e gli [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md),
@@ -85,9 +86,8 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 
 ## Sviluppare
 
-- [Workflow](development/workflow.md), [test e qualità](development/testing-and-quality.md) e [il banco visivo](development/visual-bench.md)
-- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
-- [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
+- [Workflow](development/workflow.md), [test e qualità](development/testing-and-quality.md) e [il banco visivo](development/visual-bench.md); prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
+- [Le misure nella WebView](development/webview-measurements.md), [la memoria (R1)](development/webview-memory.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md) e [costruire su Fub con un'AI](development/costruire-con-ai.md): le porte, ricetta o componente, la CLI e l'MCP delle ricette
 - [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
@@ -104,7 +104,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
-- Le porte del [disegno](reference/drawing-ipc.md) e della [griglia](reference/grid-ipc.md): l'IPC dei loro motori
+- Le porte del [disegno](reference/drawing-ipc.md), della [griglia](reference/grid-ipc.md) e dei [temi](reference/theme-ipc.md): l'IPC dei loro motori
 - [Il formato della lavagna](reference/canvas-format.md) (`fub-canvas-core`),
   le [toppe](reference/canvas-operations.md) con la loro inversa,
   [la lavagna come codice](reference/canvas-code.md) (letture, misure, operazioni

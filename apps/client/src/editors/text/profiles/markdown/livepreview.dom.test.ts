@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { cursorCharLeft, cursorCharRight, undo } from "@codemirror/commands";
@@ -10,6 +10,11 @@ import { createTextEngine } from "../../engine";
 import { livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { closeContextMenu } from "../../../../ui/menu";
+import { loadLazyParts } from "../../../../ui/lazy-part";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // I diagrammi del test non passano da Mermaid: basta un'immagine qualsiasi.
 vi.mock("mermaid", () => ({
@@ -481,24 +486,36 @@ describe("un diagramma in Live", () => {
     return { parent, engine, cleanup: () => { closeContextMenu(); engine.destroy(); parent.remove(); } };
   }
 
-  function openStyleMenu(parent: HTMLElement): void {
-    parent.querySelector<HTMLButtonElement>(".mermaid-diagram .mermaid-action")!.click();
+  /// Il tasto destro sul diagramma: il menu E26.
+  function openMenu(parent: HTMLElement): HTMLElement {
+    parent.querySelector<HTMLElement>(".mermaid-diagram")!
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 40 }));
+    return document.querySelector<HTMLElement>(".diagram-menu")!;
   }
+  const scope = (menu: HTMLElement, value: "this" | "all") =>
+    menu.querySelector<HTMLButtonElement>(`.diagram-menu-segment[data-value="${value}"]`)!;
+  const style = (menu: HTMLElement, id: string) =>
+    menu.querySelector<HTMLButtonElement>(`[role="radio"][data-diagram-style="${id}"]`)!;
 
-  it("«Solo per questo diagramma» scrive la direttiva in cima al recinto, e la toglie", () => {
+  it("«Questo» scrive la direttiva in cima al recinto, e «Tutti» la toglie", () => {
     const { parent, engine, cleanup } = mountNote(false);
     try {
       expect(parent.querySelector(".mermaid-diagram")).not.toBeNull();
-      openStyleMenu(parent);
-      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      let menu = openMenu(parent);
+      expect(scope(menu, "this").getAttribute("aria-pressed")).toBe("false");
+      scope(menu, "this").click();
+      style(menu, "armonia").click();
       expect(engine.getDoc()).toBe("Testo\n\n```mermaid\n%% stile: armonia\nflowchart LR\nA-->B\n```\n\nFine");
-      // Il widget rinasce dal nuovo sorgente: adesso lo stile è suo.
-      openStyleMenu(parent);
-      const radios = [...document.querySelectorAll<HTMLButtonElement>('#context-menu [role="menuitemradio"]')];
-      radios[2]!.click();
+      expect(document.querySelector(".diagram-menu")).toBeNull();
+      // Il widget rinasce dal nuovo sorgente: adesso lo stile è suo, e il
+      // menu parte da «Questo».
+      menu = openMenu(parent);
+      expect(scope(menu, "this").getAttribute("aria-pressed")).toBe("true");
+      style(menu, "aurora").click();
       expect(engine.getDoc()).toBe("Testo\n\n```mermaid\n%% stile: aurora\nflowchart LR\nA-->B\n```\n\nFine");
-      openStyleMenu(parent);
-      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      menu = openMenu(parent);
+      scope(menu, "all").click();
+      style(menu, "aurora").click();
       expect(engine.getDoc()).toBe(note);
     } finally {
       cleanup();
@@ -509,12 +526,25 @@ describe("un diagramma in Live", () => {
     const { parent, engine, cleanup } = mountNote(false);
     try {
       engine.setDoc(note.replace(/\n/g, "\r\n"));
-      openStyleMenu(parent);
-      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      let menu = openMenu(parent);
+      scope(menu, "this").click();
+      style(menu, "armonia").click();
       expect(engine.getDoc()).toBe("Testo\r\n\r\n```mermaid\r\n%% stile: armonia\r\nflowchart LR\r\nA-->B\r\n```\r\n\r\nFine");
-      openStyleMenu(parent);
-      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      menu = openMenu(parent);
+      scope(menu, "all").click();
+      style(menu, "armonia").click();
       expect(engine.getDoc()).toBe(note.replace(/\n/g, "\r\n"));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("l'orientamento riscrive soltanto la direzione", () => {
+    const { parent, engine, cleanup } = mountNote(false);
+    try {
+      const menu = openMenu(parent);
+      menu.querySelector<HTMLButtonElement>('.diagram-menu-segment[data-value="TD"]')!.click();
+      expect(engine.getDoc()).toBe(note.replace("flowchart LR", "flowchart TD"));
     } finally {
       cleanup();
     }
@@ -523,8 +553,9 @@ describe("un diagramma in Live", () => {
   it("in sola lettura il sorgente non si scrive", () => {
     const { parent, engine, cleanup } = mountNote(true);
     try {
-      openStyleMenu(parent);
-      expect(document.querySelector('#context-menu [role="menuitemcheckbox"]')).toBeNull();
+      const menu = openMenu(parent);
+      expect(scope(menu, "this").disabled).toBe(true);
+      expect(menu.querySelector<HTMLButtonElement>('.diagram-menu-segment[data-value="TD"]')!.disabled).toBe(true);
       expect(engine.getDoc()).toBe(note);
     } finally {
       cleanup();

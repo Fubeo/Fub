@@ -78,3 +78,15 @@ if (typeof document !== "undefined") {
     return true;
   };
 }
+
+// Le pagine di Fub hanno il doctype, quindi il loro documento è in modo
+// standard (`CSS1Compat`). happy-dom non ha `document.compatMode`. KaTeX lo
+// legge quando il suo modulo si carica: senza il valore giusto crede di stare
+// in modo quirks, scrive un avviso su stderr e spegne `render`. L'avviso arriva
+// quando KaTeX si carica in ritardo, a volte dopo la fine del file, e allora
+// Vitest lo conta come errore («Closing rpc while "onUserConsoleLog" was
+// pending», CI della PR #474). Qui il documento dei test dice ciò che dice
+// quello vero.
+if (typeof document !== "undefined" && !("compatMode" in document)) {
+  Object.defineProperty(Object.getPrototypeOf(document), "compatMode", { configurable: true, get: () => "CSS1Compat" });
+}

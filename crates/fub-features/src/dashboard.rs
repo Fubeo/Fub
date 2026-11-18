@@ -7,6 +7,9 @@
 //! Sta in sidebar e non su `Main`: una view principale si vede soltanto quando
 //! qualcuno la apre in un riquadro (dalla palette o con `OpenView`), mentre la
 //! dashboard è una sintesi da tenere sott'occhio accanto alle note.
+//!
+//! Accanto, nello stesso componente, la **Scrivania** ([`desk`]): quella sì
+//! una vista dell'area principale, fatta di riquadri che si ordinano.
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
@@ -18,6 +21,10 @@ use fub_abi::traits::{
     ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiNode, ViewUpdate};
+
+pub mod desk;
+
+pub use desk::{settings, DESK_BASE_KEY, DESK_TILES_KEY, DESK_TILE_NS, DESK_VIEW};
 
 /// Id del componente (spazio dati/registrazione).
 pub const DASHBOARD_ID: &str = "fub.dashboard";
@@ -32,9 +39,19 @@ const FILES: &str = "files";
 const BROKEN: &str = "broken";
 const NO_BROKEN: &str = "no_broken";
 
-/// Le stringhe del pannello.
+/// Le stringhe del pannello e della Scrivania.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    let with_desk = |catalog: StringCatalog, language: &str| {
+        desk::strings(language)
+            .into_iter()
+            .fold(catalog, |catalog, (key, text)| catalog.with(key, text))
+    };
+    let [it, en] = panel_catalog();
+    vec![with_desk(it, "it"), with_desk(en, "en")]
+}
+
+fn panel_catalog() -> [StringCatalog; 2] {
+    [
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Dashboard")
             .with(NOTES, "{n} note")
@@ -56,37 +73,57 @@ pub fn catalog() -> Vec<StringCatalog> {
 pub struct DashboardView;
 
 impl ViewProvider for DashboardView {
-    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+    fn interests(&self, instance: &ViewInstance) -> ViewInterests {
+        // La Scrivania mostra anche due impostazioni sue: cambiate da un'altra
+        // parte (le Impostazioni, un'altra Scrivania aperta), si ridisegna.
+        let refresh = if instance.view == DESK_VIEW {
+            EventMask::of([
+                EventKind::IndexUpdated,
+                EventKind::BatchEnded,
+                EventKind::SettingChanged,
+            ])
+        } else {
+            EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded])
+        };
         ViewInterests {
-            refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
+            refresh,
             follows: ContextMask::default(),
         }
     }
 
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec::new(
-            DASHBOARD_VIEW,
-            Text::key(VIEW_TITLE),
-            ViewSurface::RightSidebar,
-        )
-        .with_icon("dashboard")
-        .ordered(6)]
+        vec![
+            ViewSpec::new(
+                DASHBOARD_VIEW,
+                Text::key(VIEW_TITLE),
+                ViewSurface::RightSidebar,
+            )
+            .with_icon("dashboard")
+            .ordered(6),
+            desk::spec(),
+        ]
     }
 
     fn render_view(
         &self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
+        if instance.view == DESK_VIEW {
+            return desk::render(instance, host);
+        }
         tree(host)
     }
 
     fn on_action(
         &mut self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         action: UiAction,
-        _host: &mut dyn HostApi,
+        host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        if instance.view == DESK_VIEW {
+            return desk::action(instance, action, host);
+        }
         match action.action.0.as_str() {
             OPEN => {
                 let Some(doc) = action.payload.get("doc").and_then(|v| v.as_str()) else {

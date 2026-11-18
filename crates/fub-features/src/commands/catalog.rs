@@ -480,6 +480,19 @@ fn catalog_it() -> StringCatalog {
              {attempted} · Fermato da: {failed}",
         )
         .with(D_NOTHING_TO_UNDO, "Niente da annullare")
+        // Il rifiuto lo scrive il kernel (`fub_kernel::UNDO_STALE_ONE`/`_MANY`)
+        // quando un file è cambiato dopo l'operazione: niente è stato toccato.
+        .with(
+            "vault.undo.stale_one",
+            "Annullamento non fatto: «{doc}» è cambiato dopo l'operazione, e \
+             tornare indietro cancellerebbe quelle modifiche.",
+        )
+        .with(
+            "vault.undo.stale_many",
+            "Annullamento non fatto: questi file sono cambiati dopo \
+             l'operazione, e tornare indietro cancellerebbe quelle modifiche: \
+             {docs}.",
+        )
         .with(U_WIKILINK, "il riferimento a «{text}»")
         .with(U_WIKILINK_MANY, "i {count} riferimenti")
         .with(
@@ -494,6 +507,208 @@ fn catalog_it() -> StringCatalog {
         .with(U_FOLDER_RENAME, "lo spostamento di «{folder}» in «{to}»")
         .with(U_FOLDER_TRASH, "il cestino di «{folder}» · Voci: {count}")
         .with(U_TASK, "la task spuntata in {doc}")
+        // --- note.block.move («Sposta in…», E13) ---------------------------
+        .with("note.block.move.title", "Sposta in…")
+        .with(
+            "note.block.move.desc",
+            "Sposta il blocco in fondo a un'altra nota, o in fondo a una sua \
+             sezione. Al suo posto resta un link, una trasclusione o niente. \
+             Le due note si scrivono insieme, e un annullamento le rimette \
+             tutte e due; i link al blocco seguono la nota nuova.",
+        )
+        .with("note.block.move.to.title", "Nota")
+        .with("note.block.move.to.desc", "La nota in cui va il blocco.")
+        .with("note.block.move.heading.title", "Sotto il titolo")
+        .with(
+            "note.block.move.heading.desc",
+            "Lo slug di un titolo della nota d'arrivo: il blocco va in fondo \
+             alla sua sezione. Vuoto: in fondo alla nota.",
+        )
+        .with("note.block.move.leave.title", "Al suo posto")
+        .with(
+            "note.block.move.leave.desc",
+            "Che cosa resta dove stava il blocco.",
+        )
+        .with("note.block.move.leave.link", "Un link")
+        .with("note.block.move.leave.none", "Niente")
+        .with("note.block.move.leave.embed", "Una trasclusione")
+        .with("note.block.move.doc.title", "Nota di partenza")
+        .with(
+            "note.block.move.doc.desc",
+            "Vuoto: la nota aperta.",
+        )
+        .with("note.block.move.at.title", "Byte del blocco")
+        .with(
+            "note.block.move.at.desc",
+            "Inizio e fine del blocco in byte. Vuoto: il blocco del cursore.",
+        )
+        .with("note.block.move.text.title", "Testo del blocco")
+        .with(
+            "note.block.move.text.desc",
+            "Il testo letto fra quei byte: se la nota è cambiata, non si \
+             sposta niente.",
+        )
+        .with(
+            move_block::E_BLOCK_NO_CARET,
+            "Non c'è un cursore in questa nota: mettilo nel blocco da spostare.",
+        )
+        .with(
+            move_block::E_BLOCK_DIRTY,
+            "La nota ha modifiche non salvate: salvala, poi sposta il blocco.",
+        )
+        .with(
+            move_block::E_BLOCK_NOT_FOUND,
+            "Il cursore non sta in un blocco: mettilo nel blocco da spostare.",
+        )
+        .with(
+            move_block::E_BLOCK_RANGE,
+            "Quei byte non sono un blocco intero: il blocco va preso dall'inizio \
+             della prima riga alla fine dell'ultima.",
+        )
+        .with(
+            move_block::E_BLOCK_CHANGED,
+            "«{doc}» è cambiata e il blocco non è più lì: non si è mosso niente. \
+             Riprova.",
+        )
+        .with(
+            move_block::E_BLOCK_HEADING,
+            "In «{to}» non c'è più il titolo «{heading}»: scegli di nuovo dove \
+             mettere il blocco.",
+        )
+        .with(
+            move_block::E_BLOCK_INSIDE,
+            "Il titolo scelto sta dentro ciò che sposti: scegline un altro.",
+        )
+        .with(
+            move_block::E_BLOCK_THERE,
+            "Il blocco è già lì: non c'è niente da spostare.",
+        )
+        .with(
+            move_block::E_BLOCK_EMBED_MANY,
+            "Una trasclusione porta un blocco solo: per più blocchi lascia un \
+             link, o niente.",
+        )
+        .with(
+            move_block::E_BLOCK_LEAVE,
+            "«{value}» non è una scelta: al posto del blocco resta «link», \
+             «embed» o «none».",
+        )
+        .with(
+            move_block::E_BLOCK_NO_ID,
+            "Non si è trovato un id libero per il blocco: riprova.",
+        )
+        .with(move_block::P_BLOCK_MOVE, "Sposta il blocco in «{to}»")
+        .with(move_block::U_BLOCK_MOVE, "lo spostamento del blocco in «{to}»")
+        .with(
+            "done.block_move.end.link",
+            "Spostato in fondo a «{to}». Qui resta il link.",
+        )
+        .with(
+            "done.block_move.end.embed",
+            "Spostato in fondo a «{to}». Qui resta la trasclusione.",
+        )
+        .with("done.block_move.end.none", "Spostato in fondo a «{to}».")
+        .with(
+            "done.block_move.under.link",
+            "Spostato in «{to}», in fondo a «{heading}». Qui resta il link.",
+        )
+        .with(
+            "done.block_move.under.embed",
+            "Spostato in «{to}», in fondo a «{heading}». Qui resta la \
+             trasclusione.",
+        )
+        .with(
+            "done.block_move.under.none",
+            "Spostato in «{to}», in fondo a «{heading}».",
+        )
+        .with("done.block_move.here.end", "Spostato in fondo alla nota.")
+        .with(
+            "done.block_move.here.under",
+            "Spostato in fondo a «{heading}».",
+        )
+        // --- note.block.sync (il blocco sincronizzato, E14) ---------------
+        .with("note.block.sync.title", "Sincronizza in un'altra nota")
+        .with(
+            "note.block.sync.desc",
+            "Mette lo stesso blocco in fondo a un'altra nota, come \
+             trasclusione: da lì si scrive da tutte e due le parti. Il blocco \
+             riceve un id se non ce l'ha. Le due note si scrivono insieme, e \
+             un annullamento le rimette tutte e due.",
+        )
+        .with("note.block.sync.to.title", "Nota")
+        .with(
+            "note.block.sync.to.desc",
+            "La nota che riceve il blocco. Vuoto: il blocco riceve soltanto \
+             l'id.",
+        )
+        .with("note.block.sync.doc.title", "Nota del blocco")
+        .with("note.block.sync.doc.desc", "Vuoto: la nota aperta.")
+        .with("note.block.sync.at.title", "Byte del blocco")
+        .with(
+            "note.block.sync.at.desc",
+            "Inizio e fine del blocco in byte. Vuoto: il blocco del cursore.",
+        )
+        .with("note.block.sync.text.title", "Testo del blocco")
+        .with(
+            "note.block.sync.text.desc",
+            "Il testo letto fra quei byte: se la nota è cambiata, non si \
+             scrive niente.",
+        )
+        .with("note.block.sync.id.title", "Id del blocco")
+        .with(
+            "note.block.sync.id.desc",
+            "L'id da dare al blocco se non ne ha uno. Vuoto: lo sceglie Fub.",
+        )
+        .with(
+            sync_block::E_SYNC_NO_CARET,
+            "Non c'è un cursore in questa nota: mettilo nel blocco da \
+             sincronizzare.",
+        )
+        .with(
+            sync_block::E_SYNC_DIRTY,
+            "La nota ha modifiche non salvate: salvala, poi sincronizza il \
+             blocco.",
+        )
+        .with(
+            sync_block::E_SYNC_NOT_FOUND,
+            "Il cursore non sta in un blocco: mettilo nel blocco da \
+             sincronizzare.",
+        )
+        .with(
+            sync_block::E_SYNC_CHANGED,
+            "«{doc}» è cambiata e il blocco non è più lì: non si è scritto \
+             niente. Riprova.",
+        )
+        .with(
+            sync_block::E_SYNC_SAME,
+            "Il blocco è già in questa nota: scegline un'altra.",
+        )
+        .with(
+            sync_block::E_SYNC_MANY,
+            "Si sincronizza un blocco alla volta: scegline uno solo.",
+        )
+        .with(
+            sync_block::E_SYNC_ID,
+            "«{id}» non è un id di blocco: usa lettere, cifre e trattini.",
+        )
+        .with(
+            sync_block::E_SYNC_ID_TAKEN,
+            "In «{doc}» un altro blocco ha già l'id ^{id}: non si è scritto \
+             niente. Riprova.",
+        )
+        .with(
+            sync_block::E_SYNC_OTHER_ID,
+            "In «{doc}» il blocco ha già l'id ^{id}, ed è cambiato: non si è \
+             scritto niente. Riprova.",
+        )
+        .with(sync_block::P_BLOCK_SYNC, "Sincronizza il blocco in «{to}»")
+        .with(sync_block::U_BLOCK_SYNC, "il blocco sincronizzato in «{to}»")
+        .with(sync_block::U_BLOCK_ID, "l'id dato al blocco in «{doc}»")
+        .with(
+            sync_block::D_BLOCK_SYNC,
+            "Sincronizzato in fondo a «{to}»: si scrive da tutte e due le parti.",
+        )
+        .with(sync_block::D_BLOCK_ID, "Il blocco ha l'id ^{id}.")
 }
 
 fn catalog_en() -> StringCatalog {
@@ -942,6 +1157,16 @@ fn catalog_en() -> StringCatalog {
              Stopped by: {failed}",
         )
         .with(D_NOTHING_TO_UNDO, "Nothing to undo")
+        .with(
+            "vault.undo.stale_one",
+            "Nothing was undone: “{doc}” changed after the operation, and going \
+             back would erase those changes.",
+        )
+        .with(
+            "vault.undo.stale_many",
+            "Nothing was undone: these files changed after the operation, and \
+             going back would erase those changes: {docs}.",
+        )
         .with(U_WIKILINK, "the reference to “{text}”")
         .with(U_WIKILINK_MANY, "the {count} references")
         .with(
@@ -956,4 +1181,198 @@ fn catalog_en() -> StringCatalog {
         .with(U_FOLDER_RENAME, "moving “{folder}” to “{to}”")
         .with(U_FOLDER_TRASH, "trashing “{folder}” · Entries: {count}")
         .with(U_TASK, "the task ticked in {doc}")
+        // --- note.block.move ("Move to…", E13) ------------------------------
+        .with("note.block.move.title", "Move to…")
+        .with(
+            "note.block.move.desc",
+            "Moves the block to the end of another note, or to the end of one \
+             of its sections. A link, an embed or nothing stays in its place. \
+             Both notes are written together, and one undo puts both back; \
+             links to the block follow it to the new note.",
+        )
+        .with("note.block.move.to.title", "Note")
+        .with("note.block.move.to.desc", "The note the block goes to.")
+        .with("note.block.move.heading.title", "Under the heading")
+        .with(
+            "note.block.move.heading.desc",
+            "The slug of a heading in the target note: the block goes to the \
+             end of its section. Empty: the end of the note.",
+        )
+        .with("note.block.move.leave.title", "In its place")
+        .with(
+            "note.block.move.leave.desc",
+            "What stays where the block was.",
+        )
+        .with("note.block.move.leave.link", "A link")
+        .with("note.block.move.leave.none", "Nothing")
+        .with("note.block.move.leave.embed", "An embed")
+        .with("note.block.move.doc.title", "From note")
+        .with("note.block.move.doc.desc", "Empty: the open note.")
+        .with("note.block.move.at.title", "Block bytes")
+        .with(
+            "note.block.move.at.desc",
+            "Start and end of the block in bytes. Empty: the block at the \
+             cursor.",
+        )
+        .with("note.block.move.text.title", "Block text")
+        .with(
+            "note.block.move.text.desc",
+            "The text read between those bytes: if the note changed, nothing \
+             moves.",
+        )
+        .with(
+            move_block::E_BLOCK_NO_CARET,
+            "There is no cursor in this note: put it in the block to move.",
+        )
+        .with(
+            move_block::E_BLOCK_DIRTY,
+            "The note has unsaved changes: save it, then move the block.",
+        )
+        .with(
+            move_block::E_BLOCK_NOT_FOUND,
+            "The cursor is not in a block: put it in the block to move.",
+        )
+        .with(
+            move_block::E_BLOCK_RANGE,
+            "Those bytes are not a whole block: take it from the start of its \
+             first line to the end of its last.",
+        )
+        .with(
+            move_block::E_BLOCK_CHANGED,
+            "“{doc}” changed and the block is no longer there: nothing moved. \
+             Try again.",
+        )
+        .with(
+            move_block::E_BLOCK_HEADING,
+            "“{to}” no longer has the heading “{heading}”: choose again where \
+             the block goes.",
+        )
+        .with(
+            move_block::E_BLOCK_INSIDE,
+            "The chosen heading is inside what you are moving: choose another.",
+        )
+        .with(
+            move_block::E_BLOCK_THERE,
+            "The block is already there: nothing to move.",
+        )
+        .with(
+            move_block::E_BLOCK_EMBED_MANY,
+            "An embed carries one block: for several blocks leave a link, or \
+             nothing.",
+        )
+        .with(
+            move_block::E_BLOCK_LEAVE,
+            "“{value}” is not a choice: the block leaves “link”, “embed” or \
+             “none”.",
+        )
+        .with(
+            move_block::E_BLOCK_NO_ID,
+            "No free id was found for the block: try again.",
+        )
+        .with(move_block::P_BLOCK_MOVE, "Move the block to “{to}”")
+        .with(move_block::U_BLOCK_MOVE, "moving the block to “{to}”")
+        .with(
+            "done.block_move.end.link",
+            "Moved to the end of “{to}”. A link stays here.",
+        )
+        .with(
+            "done.block_move.end.embed",
+            "Moved to the end of “{to}”. An embed stays here.",
+        )
+        .with("done.block_move.end.none", "Moved to the end of “{to}”.")
+        .with(
+            "done.block_move.under.link",
+            "Moved to “{to}”, at the end of “{heading}”. A link stays here.",
+        )
+        .with(
+            "done.block_move.under.embed",
+            "Moved to “{to}”, at the end of “{heading}”. An embed stays here.",
+        )
+        .with(
+            "done.block_move.under.none",
+            "Moved to “{to}”, at the end of “{heading}”.",
+        )
+        .with("done.block_move.here.end", "Moved to the end of the note.")
+        .with("done.block_move.here.under", "Moved to the end of “{heading}”.")
+        // --- note.block.sync (synced block, E14) ---------------------------
+        .with("note.block.sync.title", "Sync to another note")
+        .with(
+            "note.block.sync.desc",
+            "Puts the same block at the end of another note, as an embed: \
+             from then on it is written from both sides. The block gets an \
+             id if it has none. Both notes are written together, and one undo \
+             puts both back.",
+        )
+        .with("note.block.sync.to.title", "Note")
+        .with(
+            "note.block.sync.to.desc",
+            "The note that receives the block. Empty: the block only gets an \
+             id.",
+        )
+        .with("note.block.sync.doc.title", "Note of the block")
+        .with("note.block.sync.doc.desc", "Empty: the open note.")
+        .with("note.block.sync.at.title", "Block bytes")
+        .with(
+            "note.block.sync.at.desc",
+            "Start and end of the block in bytes. Empty: the block at the \
+             cursor.",
+        )
+        .with("note.block.sync.text.title", "Block text")
+        .with(
+            "note.block.sync.text.desc",
+            "The text read between those bytes: if the note changed, nothing \
+             is written.",
+        )
+        .with("note.block.sync.id.title", "Block id")
+        .with(
+            "note.block.sync.id.desc",
+            "The id to give the block if it has none. Empty: Fub picks one.",
+        )
+        .with(
+            sync_block::E_SYNC_NO_CARET,
+            "There is no cursor in this note: put it in the block to sync.",
+        )
+        .with(
+            sync_block::E_SYNC_DIRTY,
+            "The note has unsaved changes: save it, then sync the block.",
+        )
+        .with(
+            sync_block::E_SYNC_NOT_FOUND,
+            "The cursor is not in a block: put it in the block to sync.",
+        )
+        .with(
+            sync_block::E_SYNC_CHANGED,
+            "“{doc}” changed and the block is no longer there: nothing was \
+             written. Try again.",
+        )
+        .with(
+            sync_block::E_SYNC_SAME,
+            "The block is already in this note: pick another one.",
+        )
+        .with(
+            sync_block::E_SYNC_MANY,
+            "Blocks are synced one at a time: pick just one.",
+        )
+        .with(
+            sync_block::E_SYNC_ID,
+            "“{id}” is not a block id: use letters, numbers and hyphens.",
+        )
+        .with(
+            sync_block::E_SYNC_ID_TAKEN,
+            "In “{doc}” another block already has the id ^{id}: nothing was \
+             written. Try again.",
+        )
+        .with(
+            sync_block::E_SYNC_OTHER_ID,
+            "In “{doc}” the block already has the id ^{id}, and it changed: \
+             nothing was written. Try again.",
+        )
+        .with(sync_block::P_BLOCK_SYNC, "Sync the block to “{to}”")
+        .with(sync_block::U_BLOCK_SYNC, "the block synced to “{to}”")
+        .with(sync_block::U_BLOCK_ID, "the id given to the block in “{doc}”")
+        .with(
+            sync_block::D_BLOCK_SYNC,
+            "Synced at the end of “{to}”: it is written from both sides.",
+        )
+        .with(sync_block::D_BLOCK_ID, "The block has the id ^{id}.")
 }

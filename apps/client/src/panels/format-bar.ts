@@ -33,14 +33,35 @@
 // la barra apre in testa i tasti che sul vetro mancano: Tab, Invio e
 // «+ riga» (`drawTouch`). Tab e Invio arrivano all'editor come i tasti veri.
 //
+// # La barra che segue il blocco (E8)
+//
+// La barra di un riquadro (`blocks`) dice dove sta il cursore: lo stile del
+// blocco («Testo», «Titolo 2», «Compito») apre «Trasforma in», e accanto ai
+// pulsanti fissi compare il gruppo del blocco del cursore, col suo nome, che
+// dichiara la superficie (`EditorSurface.blockGroup`): la scadenza di un
+// compito, il linguaggio di un blocco di codice. A destra «+ Inserisci» apre
+// gli stessi blocchi del «/» in un menu coi nomi. Il gruppo si chiede dopo una
+// pausa breve, quando la superficie avvisa che qualcosa è cambiato: mai a ogni
+// battuta, e mai mentre il fuoco è nella barra o in un suo menu, così il
+// gruppo non si perde andandoci. Cambiato il gruppo, il nome si annuncia una
+// volta.
+//
+// La forma la sceglie `editor.toolbar` (`form`): `compatta` tiene annulla,
+// ripeti, lo stile, grassetto, corsivo, link, elenco e compito, più i comandi
+// dei plugin; `completa` è la fila intera; `nascosta` lascia i gesti alla
+// mini-barra. Una barra senza `form` (la bolla, la scheda) è intera.
+//
 // # Aspetto
 //
 // La barra di un riquadro veste la barra in una fila del kit: `kit-bar` sulla
 // radice (il vassoio), `kit-bar-group` sui gruppi, `kit-bar-button` sui
 // pulsanti. Le classi `format-bar*` restano per i test, la bolla della
-// selezione e `data-formatbar-off`. La bolla (`only`) non sta nel vassoio.
-import type { CommandSpec } from "../host/contract";
-import type { EditorSurface } from "../editors/core/registry";
+// selezione e `data-formatbar-off`. La bolla (`only`) non sta nel vassoio. La
+// barra che segue il blocco porta in più `format-bar-follow`: i gruppi divisi
+// da un filo, il gruppo del blocco sul velo d'accento (`skin/menus.css`).
+import type { CommandSpec, SettingEntry } from "../host/contract";
+import type { EditorSurface, SurfaceBlockGroup } from "../editors/core/registry";
+import { MENU_RULE, type SurfaceMenuEntry, type SurfaceMenuItem } from "../editors/core/editor-menu";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -51,8 +72,10 @@ import { ariaBinding, displayBinding } from "../ui/commands";
 import { rovingToolbar } from "../kit/toolbar-keys";
 import { iconEl, registerIcon } from "../ui/icons";
 import { openLifetime, type Teardown } from "../ui/lifetime";
-import { showContextMenu, type MenuItem } from "../ui/menu";
+import { showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { attachTooltip } from "../ui/tooltip";
+import { slashMenuEntries } from "./slash/entries";
+import { slashPrefs } from "./slash/prefs";
 
 /// I gruppi, nell'ordine in cui si incontrano: un gruppo nuovo comincia dove
 /// cambia quello del pulsante, quindi l'ordine resta del plugin.
@@ -171,6 +194,164 @@ export const ACTION_LOOKS: Readonly<Record<string, Look>> = {
   "markdown.table.sort.descending": { icon: "", group: "table", menu: true },
 };
 
+/// Le azioni che restano nella barra compatta, nell'ordine dei comandi: il
+/// resto sta nello stile del blocco, in «+ Inserisci», nella mini-barra e nel
+/// «/». Lo stile del paragrafo (il gruppo `block`) e i comandi dei plugin
+/// restano in ogni forma.
+const COMPACT_ACTIONS: ReadonlySet<string> = new Set([
+  "text.undo",
+  "text.redo",
+  "markdown.bold",
+  "markdown.italic",
+  "markdown.link",
+  "markdown.list.bullet",
+  "markdown.list.task",
+]);
+
+/// «Trasforma in»: i blocchi che lo stile del blocco offre, nell'ordine del
+/// prototipo; i titoli che si usano di rado stanno in «Altri titoli ▸».
+const TRANSFORMS: readonly string[] = [
+  "markdown.paragraph",
+  "markdown.heading.2",
+  "markdown.heading.3",
+  "markdown.quote",
+  "markdown.list.bullet",
+  "markdown.list.task",
+];
+const MORE_HEADINGS: readonly string[] = ["markdown.heading.1", "markdown.heading.4", "markdown.heading.5", "markdown.heading.6"];
+
+/// I nomi di «Trasforma in», quelli del prototipo: dicono il blocco che si
+/// ottiene, non il gesto del comando («Elenco di attività»).
+function transformLabel(id: string): string | null {
+  const level = /^markdown\.heading\.(\d)$/.exec(id)?.[1];
+  if (level) return t("format_bar.style.heading", { level: Number(level) });
+  switch (id) {
+    case "markdown.paragraph": return t("format_bar.style.text");
+    case "markdown.quote": return t("format_bar.style.quote");
+    case "markdown.list.bullet": return t("format_bar.style.bullet");
+    case "markdown.list.task": return t("format_bar.style.tasks");
+    default: return null;
+  }
+}
+
+/// Come lo stile dice il blocco del cursore, nell'ordine in cui lo cerca: un
+/// riquadro è anche una citazione, un compito anche un elenco.
+const BLOCK_NAMES: readonly (readonly [string, () => string])[] = [
+  ...[1, 2, 3, 4, 5, 6].map((level) => [`markdown.heading.${level}`, () => t("format_bar.style.heading", { level })] as const),
+  ["markdown.codeblock", () => t("format_bar.style.code")],
+  ["markdown.callout", () => t("format_bar.style.callout")],
+  ["markdown.list.task", () => t("format_bar.style.task")],
+  ["markdown.list.bullet", () => t("format_bar.style.bullet")],
+  ["markdown.list.ordered", () => t("format_bar.style.ordered")],
+  ["markdown.quote", () => t("format_bar.style.quote")],
+];
+
+/// Il comando del blocco del cursore, il primo acceso nell'ordine dello
+/// stile; `markdown.paragraph` quando non è niente di più. Una sola voce di
+/// «Trasforma in» è spuntata: un compito è anche un elenco, ma è un compito.
+function blockId(surface: SurfaceEditorActions | undefined): string {
+  if (surface?.editable()) {
+    for (const [id] of BLOCK_NAMES) {
+      if (surface.has(id) && surface.state(id).active === true) return id;
+    }
+  }
+  return "markdown.paragraph";
+}
+
+/// Le voci di «Trasforma in» per il blocco del cursore: lo stesso menu dallo
+/// stile del blocco della barra e da «Trasforma» della mini-barra
+/// (`mini-bar.ts`). `titles` sono i comandi dichiarati (un plugin spento
+/// toglie le sue voci); `run` esegue l'azione scelta.
+export function transformItems(
+  surface: SurfaceEditorActions,
+  titles: ReadonlyMap<string, string>,
+  run: (id: string) => void,
+): MenuItem[] {
+  const current = blockId(surface);
+  const item = (id: string): MenuItem | null => {
+    const title = titles.get(id);
+    if (title === undefined || !surface.has(id)) return null;
+    const state = surface.state(id);
+    return {
+      label: transformLabel(id) ?? title,
+      icon: ACTION_LOOKS[id]?.icon || undefined,
+      hint: displayBinding(surface.chord(id)) || undefined,
+      disabled: !state.enabled,
+      choice: "radio",
+      checked: id === current,
+      run: () => run(id),
+    };
+  };
+  const items = TRANSFORMS.flatMap((id) => item(id) ?? []);
+  const more = MORE_HEADINGS.flatMap((id) => item(id) ?? []);
+  if (more.length > 0) items.push({ label: t("format_bar.style.more_headings"), icon: "fmt-h1", items: more });
+  return items;
+}
+
+/// «Trasforma in» ha qualcosa da offrire su questa superficie, scrivibile o no.
+export function transformOffered(surface: SurfaceEditorActions | undefined, titles: ReadonlyMap<string, string>): boolean {
+  return surface !== undefined && TRANSFORMS.some((id) => titles.has(id) && surface.has(id));
+}
+
+/// «Trasforma in» ha qualcosa da offrire adesso.
+export function canTransform(surface: SurfaceEditorActions | undefined, titles: ReadonlyMap<string, string>): boolean {
+  return surface?.editable() === true && transformOffered(surface, titles);
+}
+
+/// Le sezioni del «/» che «+ Inserisci» non offre: i colori e lo stile del
+/// carattere non sono blocchi.
+const NOT_INSERTED: ReadonlySet<string> = new Set(["style"]);
+
+/// Quanto si aspetta, dopo l'ultimo avviso della superficie, prima di
+/// chiederle il gruppo del blocco: niente lavoro per battuta.
+export const BLOCK_GROUP_PAUSE_MS = 160;
+
+/// L'impostazione della forma della barra, e quella di un Fub di prima che la
+/// spegneva soltanto.
+export const TOOLBAR_SETTING = "editor.toolbar";
+export const LEGACY_FORMATBAR_SETTING = "chrome.formatbar.visible";
+
+export type ToolbarForm = "compatta" | "completa" | "nascosta";
+export const DEFAULT_TOOLBAR_FORM: ToolbarForm = "compatta";
+
+const FORMS: readonly ToolbarForm[] = ["compatta", "completa", "nascosta"];
+
+export function isToolbarForm(value: unknown): value is ToolbarForm {
+  return typeof value === "string" && (FORMS as readonly string[]).includes(value);
+}
+
+/// La forma della barra dalle impostazioni lette. Una sola fonte,
+/// `editor.toolbar`: finché nessuno l'ha scelta, `chrome.formatbar.visible`
+/// spento da un Fub di prima vale `nascosta` (senza riscriverlo); poi non conta
+/// più.
+export function toolbarFormOf(entries: readonly SettingEntry[]): ToolbarForm {
+  const values = new Map(entries.map((entry) => [entry.spec.key, entry]));
+  const toolbar = values.get(TOOLBAR_SETTING);
+  if (toolbar && toolbar.source !== "default" && isToolbarForm(toolbar.value)) return toolbar.value;
+  const valid = values.get("chrome.schema")?.value === 1;
+  if (valid && values.get(LEGACY_FORMATBAR_SETTING)?.value === false) return "nascosta";
+  return toolbar && isToolbarForm(toolbar.value) ? toolbar.value : DEFAULT_TOOLBAR_FORM;
+}
+
+/// La forma che la shell ha messo sulla finestra (`#app[data-toolbar]`); prima
+/// che le impostazioni arrivino, quella di serie.
+export function currentToolbarForm(): ToolbarForm {
+  const value = document.getElementById("app")?.dataset["toolbar"];
+  return isToolbarForm(value) ? value : DEFAULT_TOOLBAR_FORM;
+}
+
+/// Il comando del menu Vista: da una forma visibile a `nascosta`, e da
+/// `nascosta` all'ultima forma visibile.
+export function toggledToolbarForm(current: ToolbarForm, lastVisible: ToolbarForm): ToolbarForm {
+  if (current !== "nascosta") return "nascosta";
+  return lastVisible === "nascosta" ? DEFAULT_TOOLBAR_FORM : lastVisible;
+}
+
+/// L'evento con cui la shell dice che la barra ha cambiato forma: la barra di
+/// ogni riquadro si ridisegna, e la bolla della selezione si riaccende o si
+/// spegne.
+export const FORMATBAR_EVENT = "shell:formatbar";
+
 /// Le figure della barra, col costrutto del set (`ui/icons.ts`): soltanto
 /// tracciati in una griglia 24×24. Le registra chi monta le barre.
 const FORMAT_ICONS: Readonly<Record<string, readonly string[]>> = {
@@ -239,6 +420,11 @@ const FORMAT_ICONS: Readonly<Record<string, readonly string[]>> = {
   "fmt-star": ["M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"],
   "fmt-footnote": ["M5 18V6M5 6h6a3 3 0 0 1 0 6H5", "M16 5h3M17.5 3.5v3"],
   "fmt-hide": ["M2.5 12C4 9.2 7.6 6 12 6s8 3.2 9.5 6c-1.5 2.8-5.1 6-9.5 6s-8-3.2-9.5-6z", "M9.5 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0", "M4 4l16 16"],
+  // I gesti dei gruppi del blocco e «+ Inserisci».
+  "fmt-plus": ["M12 4.8v14.4M4.8 12h14.4"],
+  "fmt-expand": ["M14.25 3.75h6v6M20.25 3.75 13.5 10.5", "M9.75 20.25h-6v-6M3.75 20.25l6.75-6.75"],
+  "fmt-open": ["M13.5 4.5h6v6M19.5 4.5 12 12", "M17.25 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5V8.25a1.5 1.5 0 0 1 1.5-1.5h4.5"],
+  "fmt-sort": ["M7.5 4.5v15M3.75 15.75 7.5 19.5l3.75-3.75", "M16.5 19.5v-15M12.75 8.25 16.5 4.5l3.75 3.75"],
   "fmt-chevron-down": ["M6 9l6 6 6-6"],
   "fmt-more": ["M6 12h.01M12 12h.01M18 12h.01"],
 };
@@ -285,6 +471,11 @@ export interface FormatBarHost {
   readonly only?: readonly GroupId[];
   /// Se si scrive col dito. Assente = il puntatore grossolano del sistema.
   coarse?(): boolean;
+  /// La barra segue il blocco: lo stile dice il blocco del cursore e apre
+  /// «Trasforma in», accanto c'è il gruppo del blocco, a destra «+ Inserisci».
+  readonly blocks?: boolean;
+  /// La forma scelta (`editor.toolbar`). Assente = la fila intera.
+  form?(): ToolbarForm;
 }
 
 /// L'azione che dice se il cursore sta in una tabella, e che «+ riga» esegue.
@@ -328,9 +519,12 @@ interface Group {
   readonly menu: Entry[];
 }
 
-/// I gruppi da disegnare per questa superficie, nell'ordine dei comandi.
-export function toolbarGroups(specs: readonly CommandSpec[], actions: SurfaceEditorActions | undefined): Group[] {
+/// I gruppi da disegnare per questa superficie, nell'ordine dei comandi. La
+/// forma compatta tiene soltanto le azioni di `COMPACT_ACTIONS`, lo stile del
+/// paragrafo e i comandi che non sono azioni dell'editor.
+export function toolbarGroups(specs: readonly CommandSpec[], actions: SurfaceEditorActions | undefined, form: ToolbarForm = "completa"): Group[] {
   const groups: Group[] = [];
+  if (form === "nascosta") return groups;
   for (const spec of specs) {
     if (!spec.surfaces.includes("toolbar")) continue;
     const look = ACTION_LOOKS[spec.id];
@@ -341,6 +535,7 @@ export function toolbarGroups(specs: readonly CommandSpec[], actions: SurfaceEdi
       entry = { spec, action: spec.id, icon: look?.icon ?? "" };
       group = look?.group ?? "other";
       menu = look?.menu === true;
+      if (form === "compatta" && group !== "block" && !COMPACT_ACTIONS.has(spec.id)) continue;
     } else if (look) {
       // Un'azione che questa superficie non sa eseguire: niente pulsante.
       continue;
@@ -356,6 +551,21 @@ export function toolbarGroups(specs: readonly CommandSpec[], actions: SurfaceEdi
     (menu ? last.menu : last.inline).push(entry);
   }
   return groups;
+}
+
+/// La barra che segue il blocco ha un solo stile del blocco: i comandi dello
+/// stile sparsi fra altri (un plugin che ne dichiara uno dopo) stanno nel
+/// primo gruppo `block`.
+function oneStyle(groups: readonly Group[]): Group[] {
+  const first = groups.find((group) => group.id === "block");
+  if (!first) return [...groups];
+  const merged: Group = { id: "block", inline: [...first.inline], menu: [...first.menu] };
+  for (const group of groups) {
+    if (group.id !== "block" || group === first) continue;
+    merged.inline.push(...group.inline);
+    merged.menu.push(...group.menu);
+  }
+  return groups.flatMap((group) => (group === first ? [merged] : group.id === "block" ? [] : [group]));
 }
 
 function hintOf(actions: SurfaceEditorActions | undefined, entry: Entry): string | null {
@@ -382,6 +592,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let drawn = openLifetime();
   /// L'iscrizione alla superficie seguita: cambia con lei, senza ridisegnare.
   let following = openLifetime();
+  /// I suggerimenti del gruppo del blocco: cambiano col blocco.
+  let contextDrawn = openLifetime();
   let signature = "";
   let groups: Group[] = [];
   let observed: SurfaceEditorActions | null = null;
@@ -391,6 +603,20 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let overflowButton: HTMLButtonElement | null = null;
   let frame: number | null = null;
   let fitFrame: number | null = null;
+  /// I titoli dei comandi dell'ultimo `update`: le voci di un gruppo del
+  /// blocco che nominano un'azione prendono il suo nome.
+  let titles = new Map<string, string>();
+  let specList: readonly CommandSpec[] = [];
+  /// La barra che segue il blocco, nel disegno corrente.
+  let follows = false;
+  let contextBox: HTMLElement | null = null;
+  /// Il gruppo del blocco si vede (c'è un gruppo): `fit` lo nasconde soltanto
+  /// quando non entra.
+  let contextShown = false;
+  let contextSignature = "";
+  let contextGroup: SurfaceBlockGroup | null = null;
+  let announcer: HTMLElement | null = null;
+  let blockTimer: ReturnType<typeof setTimeout> | null = null;
 
   const actions = (): SurfaceEditorActions | undefined => host.surface()?.editorActions;
   const stateOf = (entry: Entry): EditorActionState => {
@@ -410,6 +636,15 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     refresh();
   }
 
+  /// Esegue un'azione dell'editor dal suo id: lo stile, «+ Inserisci».
+  function runAction(id: string): void {
+    host.focusPane();
+    host.surface()?.focus?.();
+    actions()?.run(id);
+    refresh();
+    scheduleBlockCheck();
+  }
+
   // Il puntatore non prende il fuoco: resta all'editor, con la sua selezione.
   life.listen(element, "mousedown", (event) => {
     if ((event.target as Element | null)?.closest("button")) event.preventDefault();
@@ -421,8 +656,11 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     controls: () => [...element.querySelectorAll<HTMLButtonElement>("button")],
     onEscape: () => host.surface()?.focus?.(),
   }, life);
+  // Il fuoco esce dalla barra: il gruppo del blocco, tenuto fermo mentre
+  // c'era, torna a seguire il cursore.
+  life.listen(element, "focusout", () => scheduleBlockCheck());
 
-  function button(className: string, label: string, hint: string | null): HTMLButtonElement {
+  function button(className: string, label: string, hint: string | null, tooltips = drawn): HTMLButtonElement {
     const control = document.createElement("button");
     control.type = "button";
     control.className = `${className} kit-bar-button`;
@@ -431,8 +669,23 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     const shown = displayBinding(hint);
     const aria = ariaBinding(hint);
     if (aria) control.setAttribute("aria-keyshortcuts", aria);
-    drawn.add(attachTooltip(control, shown ? `${label} (${shown})` : label));
+    tooltips.add(attachTooltip(control, shown ? `${label} (${shown})` : label));
     return control;
+  }
+
+  /// Un nome scritto accanto alla figura, che col dito si toglie.
+  function labelled(control: HTMLButtonElement, icon: string | undefined, label: string, chevron = false): void {
+    const figure = icon ? iconEl(icon) : null;
+    if (figure) control.append(figure);
+    const text = document.createElement("span");
+    text.className = "format-bar-text";
+    text.textContent = label;
+    control.append(text);
+    const caret = chevron ? iconEl("fmt-chevron-down") : null;
+    if (caret) {
+      caret.classList.add("format-bar-caret");
+      control.append(caret);
+    }
   }
 
   function drawInline(entry: Entry): HTMLButtonElement {
@@ -464,13 +717,19 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     });
   }
 
-  function openMenu(trigger: HTMLButtonElement, items: MenuItem[]): void {
+  function openMenu(trigger: HTMLButtonElement, items: readonly MenuItem[], options: Omit<ContextMenuOptions, "onClose"> = {}): void {
     const box = trigger.getBoundingClientRect();
     trigger.setAttribute("aria-expanded", "true");
     showContextMenu(
       new MouseEvent("click", { clientX: box.left, clientY: box.bottom }),
-      items,
-      { onClose: () => trigger.setAttribute("aria-expanded", "false") },
+      [...items],
+      {
+        ...options,
+        onClose: () => {
+          trigger.setAttribute("aria-expanded", "false");
+          scheduleBlockCheck();
+        },
+      },
     );
   }
 
@@ -498,6 +757,81 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       setAttr(trigger, "aria-label", active ? `${label}: ${active.spec.title}` : label);
     });
     return trigger;
+  }
+
+  /// Il nome del blocco del cursore, come lo stile lo dice: «Testo» quando
+  /// non è niente di più.
+  function blockName(surface: SurfaceEditorActions | undefined): string {
+    const id = blockId(surface);
+    return BLOCK_NAMES.find(([each]) => each === id)?.[1]() ?? t("format_bar.style.text");
+  }
+
+  /// Lo stile del blocco della barra che segue il blocco: dice dove sta il
+  /// cursore («Testo», «Titolo 2», «Compito») e apre «Trasforma in».
+  function drawStyle(): HTMLButtonElement {
+    const label = t("format_bar.style.label");
+    const trigger = button("format-bar-menu format-bar-style format-bar-labelled", label, null);
+    trigger.dataset.command = "format-bar.style";
+    trigger.setAttribute("aria-haspopup", "menu");
+    trigger.setAttribute("aria-expanded", "false");
+    labelled(trigger, undefined, t("format_bar.style.text"), true);
+    const text = trigger.querySelector<HTMLElement>(".format-bar-text")!;
+    trigger.addEventListener("click", () => {
+      const surface = actions();
+      if (!surface?.editable()) return;
+      openMenu(trigger, transformItems(surface, titles, runAction), { title: t("format_bar.style.menu"), label: t("format_bar.style.menu") });
+    });
+    refreshers.push(() => {
+      const surface = actions();
+      setDisabled(trigger, !canTransform(surface, titles));
+      const name = blockName(surface);
+      if (text.textContent !== name) text.textContent = name;
+      setAttr(trigger, "aria-label", `${label}: ${name}`);
+    });
+    return trigger;
+  }
+
+  /// «+ Inserisci»: gli stessi blocchi del «/», coi nomi scritti e divisi per
+  /// sezione, con un campo per cercarli. Si inseriscono sotto il blocco del
+  /// cursore, come col «/».
+  function drawInsert(): HTMLButtonElement {
+    const label = t("format_bar.insert");
+    const trigger = button("format-bar-menu format-bar-insert format-bar-labelled", t("format_bar.insert.hint"), "/");
+    trigger.dataset.command = "format-bar.insert";
+    trigger.setAttribute("aria-haspopup", "menu");
+    trigger.setAttribute("aria-expanded", "false");
+    labelled(trigger, "fmt-plus", label);
+    trigger.addEventListener("click", () => {
+      const items = insertItems();
+      if (items.length > 0) openMenu(trigger, items, { field: t("format_bar.insert.search"), label: t("format_bar.insert.menu") });
+    });
+    refreshers.push(() => {
+      const surface = actions();
+      setDisabled(trigger, !surface?.editable());
+    });
+    return trigger;
+  }
+
+  function insertItems(): MenuItem[] {
+    const surface = actions();
+    if (!surface?.editable()) return [];
+    const prefs = slashPrefs();
+    const { entries } = slashMenuEntries(specList, "", (id) => surface.has(id), undefined, {
+      recent: [],
+      favorites: [],
+      chord: (id) => surface.chord(id),
+      today: new Date(),
+      hidden: prefs.hidden,
+      sections: prefs.sections,
+    });
+    return entries.filter((entry) => !NOT_INSERTED.has(entry.section)).map((entry) => ({
+      label: entry.label,
+      icon: entry.icon || undefined,
+      hint: entry.hint ?? undefined,
+      description: entry.description || undefined,
+      group: t(`slash_menu.section.${entry.section}` as Key),
+      run: () => (entry.action ? runAction(entry.id) : host.runCommand(entry.id)),
+    }));
   }
 
   /// I tasti della tabella per il dito: col cursore in una tabella e senza
@@ -547,6 +881,208 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     refresh();
   }
 
+  // # Il gruppo del blocco
+  //
+  // Le voci le dichiara la superficie (`blockGroup`) come quelle del suo menu
+  // contestuale: un'azione per id, o una voce con nome, figura, sottomenu e
+  // gesto. Si disegnano come le ha dette; il gesto si cerca di nuovo quando si
+  // usa, perché il documento intanto può essere cambiato.
+
+  /// Una voce del gruppo come voce di menu, o niente se adesso non c'è: un
+  /// gesto spento senza un perché da leggere non resta grigio.
+  function surfaceItem(entry: SurfaceMenuEntry): MenuItem | null {
+    if (entry === MENU_RULE) return null;
+    const surface = actions();
+    if (typeof entry === "string") {
+      const title = titles.get(entry);
+      if (title === undefined || !surface?.has(entry)) return null;
+      const state = surface.editable() ? surface.state(entry) : ACTION_UNAVAILABLE;
+      if (!state.enabled) return null;
+      return {
+        label: title,
+        icon: ACTION_LOOKS[entry]?.icon || undefined,
+        hint: displayBinding(surface.chord(entry)) || undefined,
+        ...(state.active === null ? {} : { choice: "checkbox" as const, checked: state.active }),
+        run: () => runAction(entry),
+      };
+    }
+    // Il «/» e la ricerca nel vault passano dal menu dell'editor, non dalla
+    // barra.
+    if (entry.slash !== undefined || entry.find !== undefined) return null;
+    const action = entry.action !== undefined && surface?.has(entry.action) ? entry.action : null;
+    if (entry.action !== undefined && action === null) return null;
+    const state = action === null ? null : surface!.editable() ? surface!.state(action) : ACTION_UNAVAILABLE;
+    const checked = entry.checked ?? (entry.radio ? state?.active === true : undefined);
+    const disabled = entry.enabled === false || state?.enabled === false;
+    if (disabled && !entry.description) return null;
+    const base: MenuItem = {
+      label: entry.label,
+      icon: entry.icon,
+      hint: displayBinding(entry.chord ?? (action === null ? null : surface!.chord(action))) || undefined,
+      disabled,
+      danger: entry.danger,
+      ...(checked === undefined ? {} : { choice: entry.radio ? "radio" as const : "checkbox" as const, checked }),
+    };
+    if (entry.items !== undefined) {
+      const items = resolveAll(entry.items);
+      return items.length === 0 ? null : { ...base, items };
+    }
+    if (entry.load !== undefined) {
+      const load = entry.load;
+      return { ...base, submenu: true, items: async () => resolveAll(await load()) };
+    }
+    return { ...base, run: () => runItem(entry, action) };
+  }
+
+  function resolveAll(entries: readonly SurfaceMenuEntry[]): MenuItem[] {
+    const items: MenuItem[] = [];
+    let rule = false;
+    for (const child of entries) {
+      if (child === MENU_RULE) {
+        rule = items.length > 0;
+        continue;
+      }
+      const item = surfaceItem(child);
+      if (!item) continue;
+      items.push(rule ? { ...item, separator: true } : item);
+      rule = false;
+    }
+    return items;
+  }
+
+  function runItem(entry: SurfaceMenuItem, action: string | null): void {
+    host.focusPane();
+    host.surface()?.focus?.();
+    entry.run?.();
+    if (action !== null) actions()?.run(action);
+    if (entry.command !== undefined) host.runCommand(entry.command);
+    refresh();
+    scheduleBlockCheck();
+  }
+
+  /// La voce `id` del gruppo del blocco com'è adesso: il gesto lavora sul
+  /// documento di ora, non su quello di quando la barra l'ha disegnato.
+  function freshEntry(id: string): SurfaceMenuEntry | null {
+    const group = host.surface()?.blockGroup?.(null) ?? null;
+    if (!group || group.id !== contextGroup?.id) return null;
+    return group.items.find((entry) => (typeof entry === "string" ? entry : entry.id) === id) ?? null;
+  }
+
+  function useEntry(id: string, trigger: HTMLButtonElement): void {
+    const entry = freshEntry(id);
+    const item = entry === null ? null : surfaceItem(entry);
+    if (!item || item.disabled) {
+      // Il blocco è cambiato sotto la barra: il gruppo si rifà.
+      scheduleBlockCheck(0);
+      return;
+    }
+    if (item.items === undefined) {
+      item.run?.();
+      return;
+    }
+    const open = (items: readonly MenuItem[]) => {
+      if (!life.closed && trigger.isConnected && items.length > 0) openMenu(trigger, items, { label: item.label });
+    };
+    if (typeof item.items === "function") void item.items().then(open, () => undefined);
+    else open(item.items);
+  }
+
+  function entryId(entry: SurfaceMenuEntry): string {
+    return typeof entry === "string" ? entry : entry.id;
+  }
+
+  /// Il gruppo con le voci che adesso ci sono, e la sua impronta: si
+  /// ridisegna soltanto quando cambia.
+  function contextShape(group: SurfaceBlockGroup | null): { items: [string, MenuItem][]; shape: string } {
+    if (!group) return { items: [], shape: "" };
+    const items = group.items.flatMap((entry): [string, MenuItem][] => {
+      if (entry === MENU_RULE) return [];
+      const item = surfaceItem(entry);
+      return item ? [[entryId(entry), item]] : [];
+    });
+    const shape = `${group.id}|${group.label}|` + items.map(([id, item]) =>
+      `${id}=${item.label}=${item.icon ?? ""}=${item.checked ?? ""}=${item.disabled === true}=${item.items !== undefined}`
+    ).join(";");
+    return { items, shape: items.length === 0 ? "" : shape };
+  }
+
+  function drawContext(group: SurfaceBlockGroup | null, announce: boolean): void {
+    const box = contextBox;
+    if (!box) return;
+    const { items, shape } = contextShape(group);
+    if (shape === contextSignature) return;
+    const before = contextGroup?.id ?? null;
+    contextSignature = shape;
+    contextGroup = shape === "" ? null : group;
+    contextDrawn.close();
+    contextDrawn = openLifetime();
+    box.replaceChildren();
+    contextShown = contextGroup !== null;
+    box.hidden = !contextShown;
+    if (contextGroup) {
+      box.dataset.block = contextGroup.id;
+      box.setAttribute("aria-label", contextGroup.label);
+      const name = document.createElement("span");
+      name.className = "format-bar-context-name";
+      name.setAttribute("aria-hidden", "true");
+      name.textContent = contextGroup.label;
+      box.append(name);
+      for (const [id, item] of items) {
+        const menu = item.items !== undefined;
+        const control = button("format-bar-button format-bar-labelled", item.label, null, contextDrawn);
+        control.dataset.command = id;
+        labelled(control, item.icon, item.label, menu);
+        if (menu) {
+          control.setAttribute("aria-haspopup", "menu");
+          control.setAttribute("aria-expanded", "false");
+        } else if (item.choice === "checkbox" && item.checked !== undefined) {
+          control.setAttribute("aria-pressed", String(item.checked));
+        }
+        control.disabled = item.disabled === true;
+        control.addEventListener("click", () => useEntry(id, control));
+        box.append(control);
+      }
+      if (announce && announcer && contextGroup.id !== before) announcer.textContent = t("format_bar.context.announce", { name: contextGroup.label });
+    } else {
+      delete box.dataset.block;
+      box.removeAttribute("aria-label");
+    }
+    keys.refresh();
+    scheduleFit();
+  }
+
+  /// Fermo mentre il fuoco è nella barra o un suo menu è aperto: chi ci va
+  /// trova il gruppo del blocco da cui è partito.
+  function holding(): boolean {
+    return element.contains(document.activeElement) || element.querySelector("[aria-expanded='true']") !== null;
+  }
+
+  /// Il gruppo del blocco da capo, senza annunciarlo: una barra nuova, o
+  /// un'altra scheda seguita.
+  function redrawContext(): void {
+    contextSignature = "\u0000";
+    contextGroup = null;
+    drawContext(host.surface()?.blockGroup?.(null) ?? null, false);
+  }
+
+  function checkBlock(): void {
+    blockTimer = null;
+    if (!follows || life.closed || holding()) return;
+    drawContext(host.surface()?.blockGroup?.(null) ?? null, true);
+  }
+
+  /// Il gruppo si chiede dopo una pausa: a ogni avviso della superficie il
+  /// tempo riparte, e chi scrive di fila non fa lavoro per battuta.
+  function scheduleBlockCheck(delay = BLOCK_GROUP_PAUSE_MS): void {
+    if (!follows || life.closed) return;
+    if (blockTimer !== null) clearTimeout(blockTimer);
+    blockTimer = setTimeout(checkBlock, delay);
+  }
+  life.add(() => {
+    if (blockTimer !== null) clearTimeout(blockTimer);
+    contextDrawn.close();
+  });
+
   function drawOverflow(): HTMLButtonElement {
     const more = button("format-bar-menu format-bar-overflow", t("format_bar.overflow"), null);
     more.setAttribute("aria-haspopup", "menu");
@@ -562,21 +1098,40 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
         if (entries[0]) entries[0] = { ...entries[0], separator: items.length > 0 };
         items.push(...entries);
       });
+      // Il gruppo del blocco che non entra: le sue voci, col suo nome.
+      if (contextShown && contextBox?.hidden && contextGroup) {
+        const name = contextGroup.label;
+        items.push(...contextShape(contextGroup).items.map(([, item]) => ({ ...item, group: name })));
+      }
       openMenu(more, items);
     });
     return more;
   }
 
-  /// Quanti gruppi entrano in una riga: gli ultimi scendono nel menu «altri».
+  /// Quanti gruppi entrano in una riga: gli ultimi scendono nel menu «altri»,
+  /// poi il gruppo del blocco. Al tocco il gruppo del blocco del cursore è il
+  /// secondo livello di presenza (E18, «Al tocco»): prima di lui scende anche
+  /// il primo gruppo, annulla e ripeti, che restano nel menu.
   function fit(): void {
     if (element.hidden || !overflowButton) return;
     for (const group of groupEls) group.hidden = false;
+    if (contextBox) contextBox.hidden = !contextShown;
     overflowButton.hidden = true;
     if (element.scrollWidth <= element.clientWidth) return;
     overflowButton.hidden = false;
+    const wide = () => element.scrollWidth > element.clientWidth;
     for (let index = groupEls.length - 1; index > 0; index--) {
-      if (element.scrollWidth <= element.clientWidth) break;
+      if (!wide()) break;
       groupEls[index]!.hidden = true;
+    }
+    const first = groupEls[0];
+    if (contextBox && contextShown && wide()) {
+      if (first && follows && (host.coarse ?? coarsePointer)()) first.hidden = true;
+      if (wide()) {
+        contextBox.hidden = true;
+        // Il gruppo del blocco non entra comunque: il primo gruppo torna.
+        if (first) first.hidden = false;
+      }
     }
     keys.refresh();
   }
@@ -637,68 +1192,119 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     following = openLifetime();
     observed = surface ?? null;
     if (surface && groups.length > 0) {
-      const stopActions = surface.subscribe(scheduleRefresh);
+      const stopActions = surface.subscribe(() => {
+        scheduleRefresh();
+        scheduleBlockCheck();
+      });
       following.add(stopActions);
     }
   }
 
-  function rebuild(next: Group[], surface: SurfaceEditorActions | undefined, touch: boolean): void {
+  function group(id: GroupId | "context" | "insert", label: string): HTMLElement {
+    const box = document.createElement("div");
+    box.className = "format-bar-group kit-bar-group";
+    box.dataset.group = id;
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", label);
+    return box;
+  }
+
+  function rebuild(next: Group[], surface: SurfaceEditorActions | undefined, touch: boolean, blocks: boolean): void {
     drawn.close();
     drawn = openLifetime();
     groups = next;
     refreshers = [];
     groupEls = [];
+    follows = blocks;
+    contextBox = null;
+    contextShown = false;
+    contextSignature = "";
+    announcer = null;
     element.replaceChildren();
+    element.classList.toggle("format-bar-follow", blocks);
     element.setAttribute("aria-label", t("format_bar.label"));
     if (touch) element.append(drawTouch());
-    for (const group of groups) {
-      const box = document.createElement("div");
-      box.className = "format-bar-group kit-bar-group";
-      box.dataset.group = group.id;
-      box.setAttribute("role", "group");
-      box.setAttribute("aria-label", t(GROUP_LABELS[group.id]));
-      for (const entry of group.inline) box.append(drawInline(entry));
-      if (group.menu.length > 0) box.append(drawMenu(group));
+    for (const each of groups) {
+      const box = group(each.id, t(GROUP_LABELS[each.id]));
+      for (const entry of each.inline) box.append(drawInline(entry));
+      if (blocks && each.id === "block") box.append(drawStyle());
+      else if (each.menu.length > 0) box.append(drawMenu(each));
       groupEls.push(box);
       element.append(box);
     }
+    if (blocks) {
+      contextBox = group("context", "");
+      contextBox.classList.add("format-bar-context");
+      contextBox.hidden = true;
+      element.append(contextBox);
+    }
     overflowButton = drawOverflow();
     element.append(overflowButton);
+    if (blocks) {
+      const insert = group("insert", t("format_bar.insert.menu"));
+      insert.classList.add("format-bar-insert-group");
+      insert.append(drawInsert());
+      element.append(insert);
+      // Il nome del gruppo nuovo, detto una volta a chi ascolta.
+      announcer = document.createElement("span");
+      announcer.className = "sr-only";
+      announcer.setAttribute("role", "status");
+      announcer.setAttribute("aria-live", "polite");
+      element.append(announcer);
+    }
     follow(surface);
     refresh();
+    if (blocks) redrawContext();
   }
+
+  function update(specs: readonly CommandSpec[]): void {
+    if (life.closed) return;
+    const surface = host.surface()?.editorActions;
+    const only = host.only;
+    specList = specs;
+    titles = new Map(specs.map((spec) => [spec.id, spec.title]));
+    // Una superficie con la sua barra (il documento) non ne vuole una
+    // seconda sopra; la bolla della selezione (`only`) resta.
+    const own = !only && host.surface()?.ownBar === true;
+    // La forma è della barra del riquadro: la bolla e la mini-barra restano
+    // intere.
+    const form = only ? "completa" : host.form?.() ?? "completa";
+    const all = host.writing() && !own ? toolbarGroups(specs, surface, form) : [];
+    const followsBlock = !only && host.blocks === true;
+    const next = only ? all.filter((each) => only.includes(each.id)) : followsBlock ? oneStyle(all) : all;
+    const blocks = followsBlock && next.length > 0;
+    // La lingua fa parte della forma: gruppi ed etichette sono della shell.
+    // Anche le scorciatoie scritte nei suggerimenti e i tasti del dito: le
+    // dice la superficie. Il resto della superficie no, e tornare a una
+    // scheda dello stesso tipo non ridisegna i pulsanti, cambia chi seguono.
+    const entry = (e: Entry) => `${e.spec.id}=${e.spec.title}=${hintOf(surface, e) ?? ""}`;
+    const touch = !only && surface?.has(ROW_AFTER) === true && next.length > 0 && (host.coarse ?? coarsePointer)();
+    const shape = t("format_bar.label") + (touch ? "#touch#" : "#") + (blocks ? `${form}#` : "") + next.map((each) =>
+      `${each.id}:${each.inline.map(entry).join(",")}|${each.menu.map(entry).join(",")}`
+    ).join(";");
+    const empty = next.length === 0;
+    if (element.hidden !== empty) element.hidden = empty;
+    if (shape !== signature) {
+      signature = shape;
+      rebuild(next, surface, touch, blocks);
+    } else {
+      if (surface !== (observed ?? undefined)) {
+        follow(surface);
+        // Un'altra scheda dello stesso tipo: il suo blocco, subito.
+        if (follows) redrawContext();
+      }
+      refresh();
+    }
+    scheduleFit();
+  }
+
+  // La shell ha cambiato la forma della barra (`editor.toolbar`): si rifà coi
+  // comandi di prima.
+  if (host.form) life.listen(window, FORMATBAR_EVENT, () => update(specList));
 
   return {
     element,
-    update(specs) {
-      if (life.closed) return;
-      const surface = host.surface()?.editorActions;
-      const only = host.only;
-      // Una superficie con la sua barra (il documento) non ne vuole una
-      // seconda sopra; la bolla della selezione (`only`) resta.
-      const own = !only && host.surface()?.ownBar === true;
-      const all = host.writing() && !own ? toolbarGroups(specs, surface) : [];
-      const next = only ? all.filter((group) => only.includes(group.id)) : all;
-      // La lingua fa parte della forma: gruppi ed etichette sono della shell.
-      // Anche le scorciatoie scritte nei suggerimenti e i tasti del dito: le
-      // dice la superficie. Il resto della superficie no, e tornare a una
-      // scheda dello stesso tipo non ridisegna i pulsanti, cambia chi seguono.
-      const entry = (e: Entry) => `${e.spec.id}=${e.spec.title}=${hintOf(surface, e) ?? ""}`;
-      const touch = !only && surface?.has(ROW_AFTER) === true && next.length > 0 && (host.coarse ?? coarsePointer)();
-      const shape = t("format_bar.label") + (touch ? "#touch#" : "#") + next.map((group) =>
-        `${group.id}:${group.inline.map(entry).join(",")}|${group.menu.map(entry).join(",")}`
-      ).join(";");
-      const empty = next.length === 0;
-      if (element.hidden !== empty) element.hidden = empty;
-      if (shape !== signature) {
-        signature = shape;
-        rebuild(next, surface, touch);
-      } else {
-        if (surface !== (observed ?? undefined)) follow(surface);
-        refresh();
-      }
-      scheduleFit();
-    },
+    update,
     destroy() {
       following.close();
       drawn.close();

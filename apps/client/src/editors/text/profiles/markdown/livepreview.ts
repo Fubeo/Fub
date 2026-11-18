@@ -94,13 +94,15 @@ import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { DiagramLiveWidget, fenceBody } from "./diagram-live";
+import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
+import { dayPage, type DayPageSource } from "./day-page";
+import { typePage, type TypePageSource } from "./type-page";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
-import { blockTex, MathBlockLiveWidget, mathPopovers, type LiveFormula } from "./math-live";
+import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, type LiveFormula } from "./math-live";
 import { imageGestures } from "./image-live";
 import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code-block";
 import { blockPrefixes } from "./block-prefix";
@@ -159,6 +161,12 @@ export interface LivePreviewCallbacks {
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
+  /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
+  readonly dayPage?: DayPageSource;
+  /// La nota del tipo aperta, per la pagina del tipo dopo l'ultima riga (E5,
+  /// `./type-page`). Assente, o `null`, la pagina non c'è.
+  readonly typePage?: TypePageSource;
 }
 
 /// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
@@ -1803,12 +1811,11 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
   return false;
 }
 
-// Il tema del modulo: solo classi cm-fub-*, dentro l'estensione. I **valori**
-// dei colori vengono però dalle variabili della superficie del documento
-// (`--doc-*` in `theme/scrittoio/sheet-dark.css`): sono gli stessi che usa la modalità Lettura, e
-// tenerne due copie significherebbe che passare da Live a Lettura cambia i
-// colori della stessa nota. Le variabili hanno un fallback, così l'estensione
-// resta montabile anche senza il CSS della shell.
+// Il tema del modulo: solo classi cm-fub-*, dentro l'estensione, e solo la
+// forma. I colori sono della pelle (`theme/scrittoio/skin/document.css` ed
+// `editors.css`), con gli stessi ruoli della Lettura: una copia qui vorrebbe
+// dire che passare da Live a Lettura cambia i colori della stessa nota, e che
+// un tema non può vestire la Live (issue #242).
 const theme = EditorView.baseTheme({
   ".cm-markdown-gap": { height: "0", lineHeight: "0", fontSize: "0", padding: "0" },
   // La stessa scala della Lettura (`preview.css`): relativa al corpo, e
@@ -1820,11 +1827,11 @@ const theme = EditorView.baseTheme({
   ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
   ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
   ".cm-fub-heading-line": { paddingTop: "0.9em", paddingBottom: "0.2em" },
-  ".cm-fub-h1-line": { paddingTop: "1.2em", borderBottom: "1px solid var(--doc-rule-soft, rgba(135, 135, 135, 0.3))", paddingBottom: "0.3em", marginBottom: "0.4em" },
+  ".cm-fub-h1-line": { paddingTop: "1.2em", paddingBottom: "0.3em", marginBottom: "0.4em" },
   ".cm-fub-h2-line": { paddingTop: "1.1em" },
   ".cm-line:first-child.cm-fub-heading-line": { paddingTop: "0" },
   ".cm-fub-h1, .cm-fub-h2, .cm-fub-h3, .cm-fub-h4, .cm-fub-h5, .cm-fub-h6": {
-    color: "var(--doc-heading, var(--doc-fg))", lineHeight: "var(--leading-tight, 1.2)",
+    lineHeight: "var(--leading-tight, 1.2)",
   },
   ".cm-fub-h1 > span, .cm-fub-h2 > span, .cm-fub-h3 > span, .cm-fub-h4 > span, .cm-fub-h5 > span, .cm-fub-h6 > span": {
     color: "inherit",
@@ -1847,20 +1854,14 @@ const theme = EditorView.baseTheme({
     position: "absolute",
     left: "50%",
     transform: "translateX(-50%)",
-    color: "var(--muted, rgba(135, 135, 135, 0.9))",
   },
   ".cm-fub-bullet-task::before": { content: "none" },
   ".cm-fub-code": {
-    background: "var(--doc-fill, rgba(135, 135, 135, 0.16))",
     fontFamily: "var(--font-mono, monospace)",
     borderRadius: "3px",
     padding: "0 0.15em",
   },
-  ".cm-fub-codeblock": { background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.10))" },
-  ".cm-fub-quote": {
-    borderLeft: "3px solid var(--doc-rule, rgba(135, 135, 135, 0.45))",
-    paddingLeft: "0.6em",
-  },
+  ".cm-fub-quote": { paddingLeft: "0.6em" },
   ".cm-fub-quote-mark": { color: "rgba(135, 135, 135, 0.8)" },
   // La pastiglia di un collegamento: piccola, dopo il testo, non è testo.
   ".cm-fub-link-pill": {
@@ -1880,13 +1881,11 @@ const theme = EditorView.baseTheme({
     display: "inline-block",
     width: "100%",
     verticalAlign: "middle",
-    borderTop: "1px solid var(--doc-rule, rgba(135, 135, 135, 0.55))",
   },
   ".cm-fub-link, .cm-fub-wikilink": {
     cursor: "pointer",
     textDecoration: "underline",
     textUnderlineOffset: "2px",
-    color: "var(--doc-link)",
   },
   // L'icona della pagina nominata, fuori dal testo: il cursore non la vede.
   ".cm-fub-wikilink[data-page-icon]::before": {
@@ -1895,20 +1894,11 @@ const theme = EditorView.baseTheme({
     display: "inline-block",
     textDecoration: "none",
   },
-  ".cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
-  "&dark .cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
   ".cm-fub-tag": {
-    background: "var(--doc-fill, rgba(135, 135, 135, 0.18))",
     borderRadius: "1em",
     padding: "0 0.45em",
     fontSize: "0.95em",
     cursor: "pointer",
-    // Un solo colore per entrambe le luci: il valore vive nei token del
-    // foglio (`--doc-link`) e cambia con la luce. Prima c'erano due regole
-    // `&light`/`&dark` con fallback cablati (#2f6bd8, #82aaff) che non
-    // coincidevano coi token — una terza copia della stessa coppia, e una
-    // divergenza che si vedeva solo a tema non caricato.
-    color: "var(--doc-link)",
   },
   ".cm-fub-done": { textDecoration: "line-through", opacity: "0.55" },
   ".cm-fub-checkbox": {
@@ -1996,7 +1986,10 @@ function realignMounted(view: EditorView, root: HTMLElement): void {
 
 function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   if (!target) return false;
-  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], .tag[data-tag]")) return true;
+  // L'editor di una trasclusione viva (`transclusion.ts`) ha cursore e
+  // selezione suoi: la nota che ospita non sposta il suo. Il testo di un
+  // blocco sincronizzato (T30) apre quell'editor al clic.
+  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], [data-transclusion-editing], [data-transclusion-direct] > .transclusion-body, .tag[data-tag]")) return true;
   // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
   // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
   // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.
@@ -2253,6 +2246,11 @@ class MarkdownWidget extends WidgetType {
 }
 
 const GAP = Decoration.line({ class: "cm-markdown-gap" });
+/// La prima riga dopo un blocco reso quando il cursore sta su una delle sue
+/// righe vuote: la riga del cursore si vede, e lo stacco sotto il blocco (il
+/// suo padding, `cm-markdown-block` e `tb-frame` nella pelle) le cede il
+/// posto, così il testo che segue non si sposta (#411, A-01).
+const GAP_LEAD = Decoration.line({ class: "cm-markdown-gap-lead" });
 
 /// Se `position` cade in uno degli intervalli, ordinati e disgiunti, che un
 /// blocco reso copre.
@@ -2718,10 +2716,19 @@ export function livePreview(
       return { decision: `k${card.kind}`, ranges };
     }
     const block = movedBlock(mark.block, from + mark.offset);
-    if (!grid && touched(state, from, to)) {
-      // Un diagramma toccato si scrive come codice, e il disegno resta
-      // sotto (C5).
-      if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
+    if (!grid && block.kind === "math" && touched(state, from, to) && mathTouchable(state) && blockTexRange(state, from)) {
+      // Un blocco `$$` toccato si modifica sul posto, senza il suo LaTeX (T60).
+      ranges.push(Decoration.replace({ block: true, widget: new MathBlockEditWidget(from, blockTex(block.source)) }).range(from, to));
+      return { decision: "mx", ranges };
+    }
+    const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
+    // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
+    // scrive (E26).
+    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+      // Un diagramma toccato si scrive come codice, e il disegno gli sta
+      // accanto (C5, E26).
+      if (mermaid) {
+        ranges.push(...diagramSourceLines(state, from, to));
         ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
       } else if (block.kind === "math") {
         // Così anche un blocco `$$` (C6).
@@ -2736,18 +2743,24 @@ export function livePreview(
     const { source } = document;
     const after = source.indexOf("\n", to);
     let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
+    const first = lineFrom;
+    let open = false;
     while (lineFrom !== -1 && lineFrom < next) {
       const end = source.indexOf("\n", lineFrom);
       const lineTo = end === -1 ? source.length : end;
-      if (!/\S/.test(source.slice(lineFrom, lineTo)) && !touched(state, lineFrom, lineTo)) {
+      const blank = !/\S/.test(source.slice(lineFrom, lineTo));
+      if (blank && !touched(state, lineFrom, lineTo)) {
         ranges.push(GAP.range(lineFrom));
         decision += "g";
       } else {
-        decision += "-";
+        // Una riga vuota col cursore si vede e prende lo stacco del blocco.
+        if (blank) open = true;
+        decision += blank ? "o" : "-";
       }
       if (end === -1) break;
       lineFrom = end + 1;
     }
+    if (open) ranges.push(GAP_LEAD.range(first));
     return { decision, ranges };
   }
   /// Candidati e decorazioni di tutto il documento: quando la Live parte, e
@@ -3200,5 +3213,8 @@ export function livePreview(
     commentEditing(forms), commentCopy(forms),
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
     noteHolds,
+    diagramBlockKeys,
+    callbacks.dayPage ? dayPage(callbacks.dayPage) : [],
+    callbacks.typePage ? typePage(callbacks.typePage) : [],
   ];
 }

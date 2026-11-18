@@ -49,7 +49,8 @@ import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
-import { cellSelectionPlugin } from "./cell-selection";
+import { acrossCells, cellSelectionPlugin } from "./cell-selection";
+import { SHAPE_FREE, tableShapeGuard } from "./table-structure";
 import { GO_TO, lineBoxes, RichMotion, type Rect } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -58,7 +59,7 @@ import { setTint, tintPlugin } from "./tints";
 import type { Paper } from "../../theme/adapt";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, lookVariables, richSchema, toDoc } from "./schema";
-import { closedBlocks, keepsOutside } from "./closed";
+import { closedBlocks, keepsOutside, selectionInClosed } from "./closed";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
 export { mountRichRibbon } from "./ribbon";
@@ -73,6 +74,10 @@ export interface RichEngineOptions {
   readonly proof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   /// L'etichetta accessibile dell'area di scrittura, nella lingua corrente.
   readonly label: () => string;
+  /// Chi scrive ha provato a cambiare un blocco chiuso: una lettera dentro,
+  /// un a capo, una cancellazione che lo tocca. La battuta non entra; chi
+  /// mostra la superficie lo dice (una volta, non a ogni tasto).
+  readonly onClosedWrite?: () => void;
 }
 
 /// Ciò che il motore sa del testo che ha ricevuto.
@@ -103,6 +108,8 @@ export class RichEngine {
   /// L'ultima transazione dell'utente non è entrata: cambiava ciò che non si
   /// scrive.
   #refused = false;
+  /// Perché l'ultimo `#admitted` ha detto di no.
+  #refusal: "closed" | "outside" | null = null;
   #shellReadOnly = false;
   #destroyed = false;
   /// «Copia formato»: l'aspetto preso, che va sulla prossima selezione finita.
@@ -175,8 +182,16 @@ export class RichEngine {
           this.#paint();
           return false;
         },
-        keydown: (_view, event) => {
+        keydown: (view, event) => {
           if (event.key === "Shift") this.#shiftDown = true;
+          // Una lettera dentro un blocco chiuso non arriva a una transazione:
+          // il blocco non è modificabile nel DOM, e il browser la lascia
+          // cadere. Qui si vede, e si dice.
+          if (this.#typesIntoClosed(view, event)) {
+            event.preventDefault();
+            this.#options.onClosedWrite?.();
+            return true;
+          }
           return false;
         },
         keyup: (_view, event) => {
@@ -217,6 +232,7 @@ export class RichEngine {
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
       history(),
+      tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
       findPlugin,
@@ -244,8 +260,10 @@ export class RichEngine {
 
   #keys(): Record<string, (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean> {
     const keys: Record<string, (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean> = {
-      Enter: splitParagraph,
-      "Shift-Enter": insertBreak("\n"),
+      // Su una selezione che esce da una cella, prima lo svuotamento di Canc:
+      // la cancellazione di ProseMirror unirebbe le celle.
+      Enter: chainCommands(acrossCells(splitParagraph), splitParagraph),
+      "Shift-Enter": chainCommands(acrossCells(insertBreak("\n")), insertBreak("\n")),
       "Mod-Enter": insertBreak("\u000c"),
       Backspace: chainCommands(backspace, deleteChar(-1)),
       Delete: chainCommands(deleteForward, deleteChar(1)),
@@ -352,7 +370,7 @@ export class RichEngine {
       this.#notify();
       return;
     }
-    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true));
+    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true).setMeta(SHAPE_FREE, true));
     this.#notify();
   }
 
@@ -407,6 +425,7 @@ export class RichEngine {
     const blocks = user ? this.#admitted(before.doc, state.doc) : null;
     if (user && !blocks) {
       this.#refused = true;
+      if (this.#refusal === "closed") this.#options.onClosedWrite?.();
       this.#notify();
       return;
     }
@@ -461,9 +480,28 @@ export class RichEngine {
   #admitted(before: PmNode, after: PmNode): string[] | null {
     const closed: string[] = [];
     const blocks = this.#writer.write(after, closed);
-    if (closed.length !== this.#closed.length || closed.some((block, i) => block !== this.#closed[i])) return null;
-    if (this.bodyOnly() && !keepsOutside(before, after)) return null;
+    this.#refusal = null;
+    if (closed.length !== this.#closed.length || closed.some((block, i) => block !== this.#closed[i])) {
+      this.#refusal = "closed";
+      return null;
+    }
+    if (this.bodyOnly() && !keepsOutside(before, after)) {
+      this.#refusal = "outside";
+      return null;
+    }
     return blocks;
+  }
+
+  /// `event` scrive una lettera, e il cursore sta in un blocco chiuso: nello
+  /// stato del motore o, dove il browser lo ha messo col clic, nel DOM.
+  #typesIntoClosed(view: EditorView, event: KeyboardEvent): boolean {
+    if (!this.editable() || !this.hasClosed() || event.isComposing) return false;
+    if (event.ctrlKey || event.metaKey || [...event.key].length !== 1) return false;
+    if (selectionInClosed(view.state.selection)) return true;
+    const at = view.dom.ownerDocument.getSelection()?.anchorNode ?? null;
+    const element = at instanceof Element ? at : at?.parentElement ?? null;
+    const locked = element?.closest("[data-rich-locked]") ?? null;
+    return locked !== null && view.dom.contains(locked);
   }
 
   /// Il documento si scrive soltanto nel corpo: il formato non riscriverebbe

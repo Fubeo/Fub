@@ -12,9 +12,10 @@ import { currentHints, resetHintSources, type HintContext, type HintItem } from 
 import { blocksMode } from "./blocks";
 import { selectCursorBlock } from "./blocks/selection";
 import { markdownGrammar } from "./grammar";
-import { liveHints, markdownHints } from "./hints";
+import { liveHints, markdownHints, type HintFocus } from "./hints";
 import { livePreview } from "./livepreview";
 import { openSlashAt, openSlashMenu, slashMenuExtension, type SlashMenuSource } from "./slash";
+import { setConcentrating } from "../../../../state/concentration";
 
 const views: EditorView[] = [];
 afterEach(() => {
@@ -48,7 +49,7 @@ function mount(spec: string, extra: Extension = []): EditorView {
   return view;
 }
 
-const FOCUSED = { editor: true, title: false };
+const FOCUSED: HintFocus = { editor: true, title: false };
 const hints = (view: EditorView, focus = FOCUSED, slash = true): HintContext | null => markdownHints(view.state, focus, slash);
 /// Ciò che ogni voce nomina: il comando, o i tasti.
 const named = (context: HintContext | null): string[] =>
@@ -61,6 +62,19 @@ describe("i contesti della Live", () => {
     expect(context?.id).toBe("text");
     expect(named(context)).toEqual(["/", "@", "shell.switcher", "Escape"]);
     expect(context?.items.map((item) => item.say)).toEqual(["inserisce un blocco", "persone e date", "cerca o esegue", "seleziona il blocco"]);
+  });
+
+  it("in concentrazione Esc esce dalla concentrazione, e con Vim non si dice", () => {
+    const view = mount("prima\n|\ndopo", blocksMode({ page: () => "Nota" }));
+    setConcentrating(true);
+    try {
+      const context = hints(view);
+      expect(named(context)).toEqual(["/", "@", "shell.switcher", "Escape"]);
+      expect(context?.items[context.items.length - 1]?.say).toBe("esce dalla concentrazione");
+      expect(named(hints(view, { ...FOCUSED, vim: true }))).toEqual(["/", "@", "shell.switcher"]);
+    } finally {
+      setConcentrating(false);
+    }
   });
 
   it("senza il «/» nelle Preferenze e senza i Blocchi le due voci non ci sono", () => {
@@ -117,6 +131,8 @@ describe("i contesti della Live", () => {
     const context = hints(view);
     expect(context?.id).toBe("slash");
     expect(named(context)).toEqual(["ArrowUp+ArrowDown", "Enter", "Tab", "Escape", "Mod-/"]);
+    // Il pannello non ha più un piede coi tasti: li dice la banda di stato.
+    expect(context?.items.map((item) => item.say)).toEqual(["scegli", "metti", "gruppo dopo", "lascia il testo", "tutti i comandi"]);
   });
 
   it("senza fuoco, o in sola lettura, l'editor non dice niente", () => {

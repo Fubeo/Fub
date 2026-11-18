@@ -28,15 +28,24 @@ use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le diciannove famiglie di capacità [conta: guard-famiglie], come nomi su
+/// Le venti famiglie di capacità [conta: guard-famiglie], come nomi su
 /// cui una politica risponde.
 ///
-/// Sono i sedici trait di `fub_abi::traits` **più tre**, e non è una
+/// Sono i sedici trait di `fub_abi::traits` **più tre**, più una famiglia che
+/// nessun trait porta ([`Capability::Notifications`]), e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono coprire le stesse cose, e il presidio è
 /// che [`Guard`] non compila se un trait non è coperto.
 ///
-/// # Perché diciannove e non quattordici
+/// [`Capability::Notifications`] è l'eccezione che va detta: non c'è un
+/// metodo dell'host che notifichi, perché a notificare è l'app, fuori dal
+/// contratto dei componenti. Il componente dei compiti dichiara il permesso,
+/// l'utente lo nega dalle Impostazioni come ogni altro, e chi sta per
+/// mostrare una notifica chiede alla politica di quel componente se la
+/// famiglia è concessa. Il cancello è questo stesso `Policy::denies`, non una
+/// seconda lettura dell'impostazione.
+///
+/// # Perché più famiglie che trait
 ///
 /// Per tredici trait su sedici la corrispondenza è uno a uno, ed era vera
 /// per tutti e quattordici fino alla
@@ -144,6 +153,15 @@ pub enum Capability {
     /// una politica deve poterla negare (il safe mode la nega come tutto il
     /// resto), e senza un nome non ci sarebbe niente da negare.
     Transfer,
+    /// **Mostrare una notifica del sistema**, fuori dalla finestra: il
+    /// promemoria di un compito all'ora scritta.
+    ///
+    /// Nessun metodo dell'host la porta: la notifica la mostra l'app, che
+    /// prima chiede alla politica del componente dei compiti se questa famiglia
+    /// è concessa. Così negare `fub:notifications` dalle Impostazioni spegne le
+    /// notifiche alla domanda successiva, con lo stesso cancello che nega ogni
+    /// altro permesso.
+    Notifications,
 }
 
 impl Capability {
@@ -158,7 +176,7 @@ impl Capability {
     /// [`Granted::new`] e il presidio delle capacità simulate in
     /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
     /// sparirebbe da entrambi restando verde.
-    pub const ALL: [Capability; 19] = [
+    pub const ALL: [Capability; 20] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -178,6 +196,7 @@ impl Capability {
         Capability::ViewStateRead,
         Capability::ViewStateWrite,
         Capability::Transfer,
+        Capability::Notifications,
     ];
 
     /// Il permesso del core che governa questa famiglia, se ce n'è uno.
@@ -216,6 +235,7 @@ impl Capability {
             Capability::SessionSelection => Some(permission::READ_SELECTION),
             Capability::Services => Some(permission::CALL_SERVICE),
             Capability::Network => Some(permission::NETWORK),
+            Capability::Notifications => Some(permission::NOTIFICATIONS),
             Capability::SettingsWrite => Some(permission::WRITE_SETTINGS),
             // Leggere la configurazione non ha un permesso, e non è una
             // dimenticanza: uno schema è pubblico per costruzione — sta nel
@@ -277,14 +297,15 @@ impl Capability {
             | Capability::SettingsWrite
             | Capability::ViewStateRead
             | Capability::ViewStateWrite
-            | Capability::Transfer => false,
+            | Capability::Transfer
+            | Capability::Notifications => false,
         }
     }
 }
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a diciannove nomi [conta: guard-famiglie]
+/// Una politica è **piccola per costruzione**: risponde a venti nomi [conta: guard-famiglie]
 /// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
@@ -447,6 +468,10 @@ impl Policy for ReadOnly {
             // che disegnasse una view senza il suo scroll mostrerebbe una cosa
             // diversa da quella che l'utente ha davanti.
             | Capability::ViewStateRead
+            // Nessun metodo dell'host notifica: dentro una simulazione non c'è
+            // niente da negare. Chi notifica è l'app, che chiede la politica
+            // del componente (`Workspace::granted_policy`) e non simula mai.
+            | Capability::Notifications
             | Capability::Commands => None,
         }
     }
@@ -532,7 +557,7 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Diciotto bit in un `u32`, ed era un `u16` fino alla diciassettesima
+/// Venti bit in un `u32`, ed era un `u16` fino alla diciassettesima
 /// famiglia. Il numero sta scritto perché è il conto che ha già morso una
 /// volta: se qui e in [`Capability::ALL`] non dicono la stessa cosa, la riga da
 /// credere è `ALL`.
@@ -825,7 +850,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le diciannove famiglie [conta: guard-famiglie]
+/// Delega ciò che la politica concede e nega il resto. Le venti famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
@@ -2409,6 +2434,7 @@ mod tests {
             Capability::ViewStateRead => 16,
             Capability::ViewStateWrite => 17,
             Capability::Transfer => 18,
+            Capability::Notifications => 19,
         }
     }
 
@@ -2421,7 +2447,7 @@ mod tests {
     /// negata a tutti, che è il modo giusto di sbagliare, ma va visto»: la prima
     /// metà è vera per costruzione, la seconda non lo era da nessuna parte.
     ///
-    /// La lunghezza dichiarata (`[Capability; N]`, oggi diciotto) obbliga a **toccare**
+    /// La lunghezza dichiarata (`[Capability; N]`, oggi venti) obbliga a **toccare**
     /// l'elenco quando l'enum cresce, ma non a metterci dentro la variante
     /// giusta: chi ha fretta soddisfa il compilatore duplicando una riga già
     /// presente, e la famiglia nuova non viene iterata mai.
@@ -2436,7 +2462,7 @@ mod tests {
     fn the_discriminants_cover_every_family() {
         assert_eq!(
             Capability::ALL.len(),
-            last_declared_family(Capability::Transfer) as usize + 1,
+            last_declared_family(Capability::Notifications) as usize + 1,
             "`Capability::ALL` is shorter than the enum: there is a family that \
              the compiler knows and the list does not name. It is the case the \
              arithmetic below does not see."
@@ -3236,5 +3262,37 @@ mod tests {
         assert!(pair.denies_command("note.rename").is_none());
         assert!(pair.denies_command("note.trash").is_some());
         assert!(pair.denies_undo().is_some());
+    }
+
+    /// Le notifiche si concedono **solo** a chi dichiara `fub:notifications`:
+    /// il permesso dei componenti di casa non le porta con sé, e un manifest a
+    /// cui l'utente l'ha tolto (la sottrazione di `restrict`) torna negato.
+    #[test]
+    fn notifications_follow_their_own_permission() {
+        assert_eq!(
+            Capability::Notifications.permission(),
+            Some(permission::NOTIFICATIONS)
+        );
+        let core = Granted::new("fub.tasks", &PluginPermissions::core(), Trust::Core);
+        assert!(
+            core.denies(Capability::Notifications).is_some(),
+            "the core permissions do not include notifications"
+        );
+        let mut declared = PluginPermissions::core();
+        declared.granted.set(permission::NOTIFICATIONS, true);
+        let granted = Granted::new("fub.tasks", &declared, Trust::Core);
+        assert!(granted.denies(Capability::Notifications).is_none());
+        declared.granted.remove(permission::NOTIFICATIONS);
+        let revoked = Granted::new("fub.tasks", &declared, Trust::Core);
+        let why = revoked
+            .denies(Capability::Notifications)
+            .expect("taken away, it is denied again");
+        assert!(why.contains(permission::NOTIFICATIONS), "{why}");
+        assert!(
+            Granted::undeclared("fub.tasks")
+                .denies(Capability::Notifications)
+                .is_some(),
+            "a component that is not mounted does not notify"
+        );
     }
 }

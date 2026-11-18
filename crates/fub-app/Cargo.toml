@@ -72,6 +72,11 @@ tauri-plugin-deep-link = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Le notifiche dei promemoria (`promemoria.rs`): il clic sulla notifica apre
+# la nota sul compito, e un rifiuto del sistema torna come errore. Fermo a
+# 4.18.0: dalla 4.18.1 su Windows porta `windows` 0.62 accanto alla 0.61 che
+# c'è già, sei librerie doppie oltre il tetto di `docs/reference/budgets.json`.
+notify-rust = "=4.18.0"
 
 # Il limite a 60 Hz di WebKit su macOS si spegne da `frame_rate.rs`; è la
 # stessa versione che Tauri e wry già portano.
@@ -81,9 +86,12 @@ objc2 = "0.6"
 # Il limite a 60 Hz di WebKitGTK si spegne da `frame_rate.rs` sulle
 # `WebKitSettings` della webview: è la stessa versione che wry già porta (il
 # tipo di `PlatformWebview::inner`), quindi il lock non cresce. Le funzioni
-# delle feature (2.42) non sono nel crate e si cercano a runtime.
+# delle feature (2.42) non sono nel crate e si cercano a runtime. Lo usa anche
+# il gancio della raccolta forzata del banco della memoria (`bench_gc.rs`, solo
+# con la feature `bench-gc`) per dire a WebKitGTK dove sta l'estensione; `v2_38`
+# è la feature che wry stesso accende.
 [target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = "=2.0.2"
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 # Il vblank emulato (`vblank.rs`): `dlsym`, `clock_nanosleep`, `fstat` e la
 # disposizione di `timespec` e `stat`. È la versione del workspace, già
 # nell'albero (tokio, mio, …): il lock non cresce.
@@ -96,6 +104,17 @@ libc = { workspace = true }
 # `winapi-util`): il grafo non cresce, si aggiunge un nome.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_SystemInformation"] }
+
+[features]
+# Vuoto: le feature di `fub-app` servono al banco, non all'app che si usa.
+default = []
+# Il gancio della raccolta forzata per il banco della memoria (R1, #284):
+# l'app carica l'estensione web che `FUB_BENCH_GC` nomina. **Spento di serie**:
+# l'app che si distribuisce non sa caricare un'estensione da una cartella che
+# sceglie l'ambiente. Lo accende soltanto la build del banco WebView (job
+# `webview` di `ci.yml`, `misura.sh`). `webkit2gtk` su Linux c'è già per
+# `frame_rate.rs`: la feature non aggiunge dipendenze.
+bench-gc = []
 
 [dev-dependencies]
 # Le prove del registro delle sessioni live, con il tempo in pausa.

@@ -199,6 +199,36 @@ fn the_mounted_bundle_clears_the_history_even_when_turned_off() {
     );
 }
 
+/// `version.keep` is mounted on the live store, like `version.clear`, and
+/// keeps working with the sampler switched off: whoever discards a text in a
+/// conflict needs the history even then.
+#[test]
+fn a_text_is_kept_in_the_history_even_with_versioning_off() {
+    let v = Vault::new();
+    let host = headless();
+    host.open(&v.root).expect("opens");
+    let nota = DocId::new("Nota.md");
+    host.write_document(None, &nota, "# Nota\n\nuno\n", WriteBase::Dictated)
+        .expect("writes");
+    host.set_setting_for_user(None, "versioning.enabled", SettingValue::Toggle(false))
+        .expect("turned off");
+
+    let kept = host.invoke_user_command(
+        None,
+        fub_features::versioning::VERSION_KEEP,
+        serde_json::json!({ "doc": "Nota.md", "text": "scartato", "note": "Testo scartato" }),
+        InvokeMode::Apply,
+    );
+    assert!(kept.is_ok(), "keeping needs no photograph: {kept:?}");
+    let versions = host.list_versions(None, &nota).unwrap();
+    assert_eq!(versions[0].note.as_deref(), Some("Testo scartato"));
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Nota.md")).unwrap(),
+        "# Nota\n\nuno\n",
+        "the note itself is untouched"
+    );
+}
+
 #[test]
 fn a_component_off_not_is_mounts_at_all_and_is_turns_on_again() {
     let v = Vault::new();
@@ -324,6 +354,68 @@ fn a_permission_denied_survives_to_the_shutdown_and_to_the_reopening() {
     // Le **altre** non le ha toccate nessuno: si nega un permesso per volta, e
     // negarne uno non è spegnere il componente.
     assert!(granted(&host, "fub.stats", permission::READ_VAULT));
+}
+
+/// Le notifiche dei promemoria sono un permesso del componente dei compiti,
+/// stretto come gli altri: lo ha solo lui, si spegne con il suo interruttore,
+/// e spento i promemoria restano leggibili (la nota e l'elenco all'avvio).
+#[cfg(feature = "tasks")]
+#[test]
+fn the_reminder_notifications_are_a_permission_of_the_tasks_alone() {
+    use fub_abi::options::permission;
+    use fub_abi::settings::permission_key;
+    use fub_host::reminders::{ReminderList, RemindersQuery, TASKS_ID};
+    use fub_kernel::Capability;
+
+    let v = Vault::new();
+    std::fs::write(
+        v.root.join("Compiti.md"),
+        "- [ ] Chiamare Mario ⏰ 2026-11-13 09:30\n",
+    )
+    .unwrap();
+    let host = headless();
+    host.open(&v.root).expect("opens");
+    host.wait_indexed(None).expect("indexed");
+    let allows = |plugin: &str| {
+        host.component_allows(None, plugin, Capability::Notifications)
+            .expect("open")
+    };
+    assert!(allows(TASKS_ID), "declared by the tasks, on by default");
+    assert!(!allows("fub.stats"), "no other component has it");
+    assert!(!allows("fub.core"), "not even the core");
+
+    host.with_session(None, |s| {
+        s.workspace()
+            .write()
+            .unwrap()
+            .set_setting(
+                &permission_key(TASKS_ID, permission::NOTIFICATIONS),
+                SettingValue::Toggle(false),
+            )
+            .expect("the switch is declared")
+    })
+    .expect("open");
+    assert!(!allows(TASKS_ID), "switched off, no notification");
+
+    let reminders = host
+        .query_index(None, RemindersQuery::between(None, None).to_index_query())
+        .map(ReminderList::from_index_result)
+        .expect("the route answers")
+        .expect("reads");
+    assert_eq!(
+        reminders
+            .reminders
+            .iter()
+            .map(|r| (r.doc.as_str(), r.when.as_str(), r.text.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("Compiti.md", "2026-11-13 09:30", "Chiamare Mario")],
+        "the reminders stay in the index for the list at startup"
+    );
+
+    // Un componente spento non è dichiarato, e non notifica.
+    host.set_plugin_enabled(None, TASKS_ID, false)
+        .expect("disables");
+    assert!(!allows(TASKS_ID));
 }
 
 /// Questo componente ha ancora questa famiglia? Si chiede alla **politica**, che
@@ -747,6 +839,7 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         ("THEME_KEY", fub_host::settings::APPEARANCE_THEME),
         ("CONTRAST_KEY", fub_host::settings::APPEARANCE_CONTRAST),
         ("DENSITY_KEY", fub_host::settings::APPEARANCE_DENSITY),
+        ("BARS_KEY", fub_host::settings::APPEARANCE_BARS),
         ("BODY_KEY", fub_host::settings::APPEARANCE_BODY),
         (
             "LINE_HEIGHT_KEY",

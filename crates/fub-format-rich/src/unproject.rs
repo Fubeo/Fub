@@ -63,6 +63,7 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         claimed: HashSet::new(),
         sections: Vec::new(),
         ink: false,
+        body_only: projection.body_only,
     };
     // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
     comments(projection, &mut document, &mut state)?;
@@ -220,6 +221,9 @@ struct State {
     /// Un inchiostro nuovo: il suo markup prende la forma che il codec gli dà
     /// soltanto dentro il documento ([`settle_ink`]).
     ink: bool,
+    /// Il documento si scrive soltanto nel corpo ([`Projection::body_only`]):
+    /// ciò che si aggiunge non tocca gli stili.
+    body_only: bool,
 }
 
 /// L'id provvisorio della nota nuova `index`: nessun documento ne ha tanti.
@@ -311,7 +315,10 @@ fn blocks(
                         let mut fresh =
                             wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
                         fresh.rows.clear();
-                        fresh.props.style = builtin_style(&mut document.styles, "TableGrid");
+                        fresh.props.style = table_grid(document, state.body_only);
+                        if fresh.props.style.is_none() {
+                            fresh.props.borders = table_grid_borders();
+                        }
                         fresh
                     }
                 };
@@ -1066,16 +1073,31 @@ fn tracked(
     props
 }
 
+/// Il nome che il codec di Word scrive in `w:author` per una revisione
+/// senza autore: l'attributo è obbligatorio, e Word fa lo stesso.
+const UNKNOWN_AUTHOR: &str = "Unknown";
+
 /// L'indice della revisione `rev` nel documento: quella uguale che c'è già,
 /// o una nuova in fondo.
+///
+/// Una revisione **nuova** senza autore (la shell scrive senza un nome quando
+/// il documento registrava già le modifiche all'apertura) prende il nome che
+/// il codec scriverà nel file: altrimenti la rilettura dei byte nuovi
+/// troverebbe «Unknown» dove il voluto dice niente, e il salvataggio
+/// fallirebbe sempre per [`RichError::Fidelity`]. Una revisione senza autore
+/// che il file ha già resta com'è: è la stessa, e non c'è niente da scrivere.
 fn revision(document: &mut Document, kind: RevisionKind, rev: &Rev) -> u32 {
-    let wanted = Revision {
+    let mut wanted = Revision {
         kind,
         author: rev.by.clone(),
         date: rev.at.clone(),
         move_name: rev.mv.clone(),
     };
-    let index = match document.revisions.iter().position(|r| *r == wanted) {
+    let found = document.revisions.iter().position(|r| *r == wanted);
+    if found.is_none() && wanted.author.is_empty() {
+        wanted.author = UNKNOWN_AUTHOR.to_string();
+    }
+    let index = match found.or_else(|| document.revisions.iter().position(|r| *r == wanted)) {
         Some(index) => index,
         None => {
             document.revisions.push(wanted);
@@ -1445,6 +1467,28 @@ fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
     fit(table);
 }
 
+/// Lo stile di una tabella nuova: «Table Grid», come in Word, aggiunto agli
+/// stili se il documento non lo ha. Un documento che si scrive soltanto nel
+/// corpo (`body_only`) non cambia i suoi stili: la tabella nuova prende lo
+/// stile se c'è già, altrimenti nessuno, e i bordi di «Table Grid» le vanno
+/// come formattazione diretta ([`table_grid_borders`]).
+fn table_grid(document: &mut Document, body_only: bool) -> Option<String> {
+    const ID: &str = "TableGrid";
+    if body_only && document.styles.get(ID).is_none() {
+        return None;
+    }
+    builtin_style(&mut document.styles, ID)
+}
+
+/// I bordi di «Table Grid», per una tabella nuova che non ne prende lo stile
+/// ([`table_grid`]).
+fn table_grid_borders() -> Option<wordcraft_doc::props::Borders> {
+    StyleSheet::builtin()
+        .get("TableGrid")
+        .and_then(|style| style.table.as_ref())
+        .and_then(|table| table.borders)
+}
+
 /// Ogni cella prende la larghezza delle colonne della griglia che copre.
 fn fit(table: &mut wordcraft_doc::Table) {
     let grid = &table.grid;
@@ -1495,6 +1539,13 @@ fn with_marks(
     shown_style: Option<&str>,
     styles: &mut StyleSheet,
 ) -> CharProps {
+    // Un link tolto si toglie prima di confrontare l'enfasi: con lui se ne va
+    // lo stile «Hyperlink», e la sottolineatura che chi legge vedeva da quello
+    // stile, se la vuole ancora, diventa diretta. Il testo resta come la
+    // pagina lo mostra.
+    if href.is_none() && props.link.is_some() {
+        unlink(&mut props);
+    }
     let want: BTreeSet<Mark> = marks.iter().copied().collect();
     let shown: BTreeSet<Mark> = projection::marks(styles, shown_style, &props)
         .into_iter()
@@ -1526,15 +1577,23 @@ fn with_marks(
             props
         };
     }
-    if props.link.as_deref() != href {
-        props.link = href.map(str::to_string);
-        match href {
-            Some(_) if props.style.is_none() => props.style = builtin_style(styles, "Hyperlink"),
-            None if props.style.as_deref() == Some("Hyperlink") => props.style = None,
-            _ => {}
+    // Un link nuovo o cambiato prende lo stile «Hyperlink», come in Word, dopo
+    // l'enfasi: il suo aspetto è quello che il link aggiunge.
+    if let Some(href) = href.filter(|href| props.link.as_deref() != Some(href)) {
+        props.link = Some(href.to_string());
+        if props.style.is_none() {
+            props.style = builtin_style(styles, "Hyperlink");
         }
     }
     props
+}
+
+/// Toglie il link da un tratto, e con lui lo stile «Hyperlink».
+fn unlink(props: &mut CharProps) {
+    props.link = None;
+    if props.style.as_deref() == Some("Hyperlink") {
+        props.style = None;
+    }
 }
 
 /// Riporta sul tratto l'aspetto voluto con la stessa regola delle enfasi: un

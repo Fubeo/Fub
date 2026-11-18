@@ -626,6 +626,176 @@ fn select_and_status_project_on_their_options() {
     assert_eq!(matched("other"), None);
 }
 
+/// Un registro senza bersagli si riscrive byte per byte; coi bersagli, la
+/// parola scritta resta com'è anche quando non si legge.
+#[test]
+fn relation_targets_cross_the_registry_and_an_old_registry_stays_byte_for_byte() {
+    for raw in [
+        r#"{"version":1,"types":{}}"#,
+        r#"{"version":1,"types":{"libri":"relation"}}"#,
+        r#"{"version":1,"types":{"fase":"status"},"options":{"fase":[{"name":"Fatto"}]}}"#,
+    ] {
+        let registry: PropertyTypes = serde_json::from_str(raw).unwrap();
+        assert!(registry.targets.is_empty());
+        assert_eq!(serde_json::to_string(&registry).unwrap(), raw);
+    }
+    let raw = concat!(
+        r#"{"version":1,"types":{"autori":"relation","libri":"relation","#,
+        r#""rotto":"relation","testo":"text","vuoto":"relation"},"#,
+        r#""targets":{"autori":"[[Tipi/Persona]]","libri":"/Libri/","#,
+        r#""rotto":"../fuori","testo":"Libri","vuoto":"[[]]"}}"#
+    );
+    let registry: PropertyTypes = serde_json::from_str(raw).unwrap();
+    assert_eq!(registry.resolve("libri"), Some(PropertyType::Relation));
+    assert_eq!(
+        registry.target("autori"),
+        Some(RelationTarget::Type("Tipi/Persona".into()))
+    );
+    assert_eq!(
+        registry.target("libri"),
+        Some(RelationTarget::Folder("Libri".into()))
+    );
+    // Una parola che non si legge vale ogni nota, e resta nel file.
+    assert_eq!(registry.target("rotto"), None);
+    assert_eq!(registry.target("vuoto"), None);
+    // Un bersaglio conta solo per una Relazione; senza bersaglio, ogni nota.
+    assert_eq!(registry.target("testo"), None);
+    assert_eq!(registry.target("mancante"), None);
+    assert_eq!(
+        registry.relations().collect::<Vec<_>>(),
+        ["autori", "libri", "rotto", "vuoto"]
+    );
+    assert_eq!(serde_json::to_string(&registry).unwrap(), raw);
+    // Un registro futuro coi bersagli resta illeggibile, e così un campo che
+    // questo Fub non conosce accanto ai bersagli, o un bersaglio che non è
+    // una parola.
+    for unreadable in [
+        r#"{"version":2,"types":{"a":"relation"},"targets":{"a":"Libri"}}"#,
+        r#"{"version":1,"types":{"a":"relation"},"targets":{"a":"Libri"},"rollups":{}}"#,
+        r#"{"version":1,"types":{"a":"relation"},"targets":{"a":{"folder":"Libri"}}}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<PropertyTypes>(unreadable).is_err(),
+            "{unreadable}"
+        );
+    }
+}
+
+#[test]
+fn a_relation_target_is_a_type_or_a_folder() {
+    assert_eq!(
+        RelationTarget::parse(" [[Tipi/Libro|Libro]] "),
+        Some(RelationTarget::Type("Tipi/Libro".into()))
+    );
+    assert_eq!(
+        RelationTarget::parse("Libri/Romanzi/"),
+        Some(RelationTarget::Folder("Libri/Romanzi".into()))
+    );
+    for none in ["", "  ", "/", "[[]]", "[[ ]]", "a/../b", "./a", "a//b"] {
+        assert_eq!(RelationTarget::parse(none), None, "{none:?}");
+    }
+    for target in [
+        RelationTarget::Type("Tipi/Libro".into()),
+        RelationTarget::Folder("Libri".into()),
+    ] {
+        assert_eq!(RelationTarget::parse(&target.as_key()), Some(target));
+    }
+    let libri = RelationTarget::Folder("Libri".into());
+    assert_eq!(libri.contains_path("Libri/Dune.md"), Some(true));
+    assert_eq!(libri.contains_path("Libri/Saghe/Dune.md"), Some(true));
+    assert_eq!(libri.contains_path("Libri.md"), Some(false));
+    assert_eq!(libri.contains_path("Librini/Dune.md"), Some(false));
+    assert_eq!(
+        RelationTarget::Type("Tipi/Libro".into()).contains_path("Libri/Dune.md"),
+        None
+    );
+}
+
+/// La proiezione di una Relazione: sempre una lista di link, coi casi limite.
+#[test]
+fn a_relation_projects_as_a_list_of_links() {
+    let registry: PropertyTypes = serde_json::from_value(serde_json::json!({
+        "version": 1,
+        "types": {
+            "libri": "relation", "uno": "relation", "rotto": "relation",
+            "misto": "relation", "numero": "relation", "vuoto": "relation",
+            "sciolto": "relation"
+        }
+    }))
+    .unwrap();
+    let fm = Frontmatter(
+        serde_json::json!({
+            "libri": ["[[Dune]]", "[[Saghe/Fondazione|Fondazione]]", "[[Dune#Trama]]"],
+            "uno": "[[Dune]]",
+            "rotto": ["Dune", "2026-07-05"],
+            "misto": ["[[Dune]]", 3, ["[[X]]"]],
+            "numero": 3,
+            "vuoto": null,
+            "sciolto": []
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    );
+    let get = |key| {
+        fm.property_with_types(key, &DateFormats::ISO, &registry)
+            .unwrap()
+    };
+    assert_eq!(
+        get("libri"),
+        PropertyValue::List(vec![
+            PropertyScalar::Link(LinkTarget::wiki("Dune")),
+            PropertyScalar::Link(LinkTarget::wiki("Saghe/Fondazione")),
+            PropertyScalar::Link(LinkTarget::Wiki {
+                page: "Dune".into(),
+                heading: Some("Trama".into()),
+                block: None,
+            }),
+        ])
+    );
+    // Un link solo è una lista di uno.
+    assert_eq!(
+        get("uno"),
+        PropertyValue::List(vec![PropertyScalar::Link(LinkTarget::wiki("Dune"))])
+    );
+    // Una voce che non è un link resta testo, e non diventa una data.
+    assert_eq!(
+        get("rotto"),
+        PropertyValue::List(vec![
+            PropertyScalar::Text("Dune".into()),
+            PropertyScalar::Text("2026-07-05".into()),
+        ])
+    );
+    assert_eq!(
+        get("misto"),
+        PropertyValue::List(vec![
+            PropertyScalar::Link(LinkTarget::wiki("Dune")),
+            PropertyScalar::Unknown(serde_json::json!(3)),
+            PropertyScalar::Unknown(serde_json::json!(["[[X]]"])),
+        ])
+    );
+    assert_eq!(get("numero"), PropertyValue::Unknown(serde_json::json!(3)));
+    assert_eq!(get("vuoto"), PropertyValue::Empty);
+    assert_eq!(get("sciolto"), PropertyValue::List(Vec::new()));
+    // Senza dichiarazione, la stessa chiave si legge come oggi.
+    assert_eq!(
+        fm.property("uno", &DateFormats::ISO),
+        Some(PropertyValue::Link(LinkTarget::wiki("Dune")))
+    );
+    assert_eq!(
+        fm.property("rotto", &DateFormats::ISO),
+        Some(PropertyValue::List(vec![
+            PropertyScalar::Text("Dune".into()),
+            PropertyScalar::Date(PropertyDate {
+                year: 2026,
+                month: 7,
+                day: 5,
+                time: None
+            }),
+        ]))
+    );
+}
+
 #[test]
 fn declared_types_interpret_without_rewriting_incompatible_source() {
     let source = serde_json::json!({

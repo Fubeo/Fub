@@ -218,8 +218,8 @@ pub(crate) fn blank() -> Result<Vec<u8>, RichError> {
 }
 
 /// I blocchi come la shell potrebbe mandarli in forme diverse ma uguali: testi
-/// vuoti tolti, tratti uguali vicini uniti, la cella vuota senza il paragrafo
-/// che ProseMirror vi mette.
+/// vuoti tolti, tratti uguali vicini uniti, la cella vuota del file senza il
+/// paragrafo che ProseMirror vi mette ([`write::bare_cell`]).
 fn normalized(blocks: &[Block]) -> Vec<Block> {
     blocks
         .iter()
@@ -268,7 +268,7 @@ fn normalized(blocks: &[Block]) -> Vec<Block> {
                 let mut table = table.clone();
                 for row in &mut table.rows {
                     for cell in &mut row.cells {
-                        cell.blocks = if write::bare_cell(&cell.blocks) {
+                        cell.blocks = if write::bare_cell(cell) {
                             Vec::new()
                         } else {
                             normalized(&cell.blocks)

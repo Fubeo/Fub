@@ -7,7 +7,7 @@
 // cui un pannello nuovo non poteva averle senza copiarle.
 
 import { t } from "../i18n/strings";
-import { trapFocus } from "./a11y";
+import { focusReturnsInto, trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
@@ -291,7 +291,7 @@ const TAB_GLIDE_MS = 200;
 const SUB_SHIFT = 12;
 
 /// I segni dei formati che una scelta in riga sa disegnare (`icons.ts`).
-const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text"]);
+const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text", "copy-latex", "copy-image", "copy-equation"]);
 
 /// Accende o spegne una parte del menu: la classe `menu-lit`, che il banco del
 /// moto e le scene leggono, e lo stato del kit, che veste righe e tessere.
@@ -301,9 +301,9 @@ function light(el: HTMLElement, on: boolean): void {
 }
 
 /// Il segno di una scelta: la sua icona, se è uno dei segni dei formati, o
-/// quello del formato che il suo nome dice. Le superfici di oggi dichiarano
-/// «Copia come ▸» senza icone (`SurfaceMenuItem`), e i nomi dei formati sono
-/// quelli del catalogo.
+/// quello del formato che il suo nome dice: il testo dichiara «Copia come ▸»
+/// senza icone, coi nomi dei formati del catalogo; la formula dà il segno
+/// con l'icona di ogni scelta.
 function signOf(item: MenuItem): string | null {
   if (item.icon !== undefined && SIGNS.has(item.icon)) return item.icon;
   const named = new Map<string, string>([
@@ -1629,6 +1629,18 @@ function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly, grows = false):
   menu.style.top = `${top}px`;
   // Dal lato del pulsante: sotto cresce dal bordo alto, sopra dal basso.
   growFrom(menu, Math.max(margin, left), top, anchor.left, top > anchor.top ? anchor.bottom : anchor.top);
+}
+
+/// Chiude il menu contestuale se l'ha aperto qualcosa dentro `container` (il
+/// suo fuoco torna lì): chi cambia sotto il menu, come l'editor che passa alla
+/// Lettura, non lascia aperte voci che agirebbero su ciò che non si vede più.
+/// Vero se il menu aveva il fuoco, che adesso è tornato in `container`.
+export function closeContextMenuFrom(container: HTMLElement): boolean {
+  const menu = document.getElementById("context-menu");
+  if (!menuLifetime || !menu || !focusReturnsInto(menu, container)) return false;
+  const held = menu.contains(document.activeElement);
+  closeContextMenu();
+  return held;
 }
 
 export function closeContextMenu(): void {

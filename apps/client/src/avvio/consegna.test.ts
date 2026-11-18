@@ -157,6 +157,21 @@ describe("consegna senza marchio: l'avvio istantaneo", () => {
     expect(document.activeElement).toBe(scritto);
   });
 
+  it("i fogli prendono il fuoco senza anello, un campo o un bottone con l'anello (IMP-005)", async () => {
+    monta(desktop);
+    const panes = document.getElementById("panes")!;
+    const fogli = vi.spyOn(panes, "focus");
+    await consegna();
+    expect(fogli).toHaveBeenCalledWith({ preventScroll: true, focusVisible: false });
+
+    monta(desktop);
+    document.getElementById("onboarding")!.hidden = false;
+    const apri = document.getElementById("onboarding-open")!;
+    const bottone = vi.spyOn(apri, "focus");
+    await consegna();
+    expect(bottone).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
   it("un fuoco già dato dall'avvio resta dov'è", async () => {
     monta(desktop);
     const vault = document.getElementById("vault-chip")!;

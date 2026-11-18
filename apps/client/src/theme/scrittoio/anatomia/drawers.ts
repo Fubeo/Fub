@@ -29,11 +29,12 @@ export const DRAWERS: PartAnatomy = {
     { name: "divider", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["layout-divider"] },
     // `search-results`, `search-exclusions` e `drop-into` sono di altri pezzi:
     // qui dicono soltanto quale titolo è l'esito della ricerca e quale è
-    // bersaglio di un rilascio.
+    // bersaglio di un rilascio. `conflict-banner` e `sheet-notice` (di
+    // `sheets`) dicono quale azione sta sul velo di un avviso.
     {
       name: "panel-title",
       states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("dragging")],
-      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into"],
+      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into", "conflict-banner", "sheet-notice"],
     },
     // Le azioni a icona del titolo del cassetto («ordina», «nuova nota») e il
     // conto di un'etichetta di sezione («Tutte le note 18»).
@@ -53,6 +54,14 @@ export const DRAWERS: PartAnatomy = {
       name: "drawer-list",
       states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")],
       hooks: ["bookmarks-panel", "workspaces-panel", "search-result", "palette-row", "palette-title", "palette-desc"],
+    },
+    // «Nuova nota di tipo» e «Scegli il tipo» (E5): il menu dei tipi, col
+    // tassello dell'icona; `kit-popover` è del pezzo del kit.
+    {
+      name: "note-type-menu",
+      layer: "cornice",
+      states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")],
+      hooks: ["kit-popover", "note-type-popover", "note-type-menu", "note-type-menu-head", "note-type-menu-list", "note-type-menu-item", "note-type-menu-tile", "note-type-menu-label", "note-type-menu-name", "note-type-menu-sub", "note-type-menu-foot"],
     },
     { name: "icon-picker", states: INTERACTIVE, hooks: ["icon-picker", "icon-picker-title", "icon-grid", "icon-grid--figures", "icon-none"] },
     {

@@ -36,6 +36,9 @@ export interface Scene {
   ready?: () => boolean;
   /// Quanto `ready` può farsi aspettare (ms); di serie 30 s.
   readyTimeout?: number;
+  /// La scena accende il tocco emulato da Chromium, che non si spegne più per
+  /// la pagina: queste scene stanno in fondo a `SCENE`.
+  touch?: boolean;
   /// I gesti che portano la pagina davanti all'obiettivo. Riceve la pagina di
   /// Playwright, che da questo lato del confine non ha un tipo — i tipi di
   /// Playwright sono di Node, e Node qui non c'è.

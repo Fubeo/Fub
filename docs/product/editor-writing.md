@@ -3,8 +3,9 @@
 > **Per chi:** chi scrive nelle note Markdown e chi aggiunge qualcosa al foglio
 > dell'editor.
 > **Risultato:** sapere quali modalità ha una nota, che cosa fa Scrittura, quando
-> compare ciò che sta sul foglio, da dove si raggiunge una funzione e che cosa
-> succede quando si incolla un indirizzo.
+> compare ciò che sta sul foglio, da dove si raggiunge una funzione, che cosa
+> succede quando si incolla un indirizzo o si incorpora una pagina web e come
+> si scrive in tipografia italiana.
 
 ## Le modalità di una nota
 
@@ -96,148 +97,31 @@ foglio non deve restare visibile nessun elemento con `data-presence` e nessun
 pulsante, salvo quelli che sono contenuto (l'icona della pagina, la riga dei
 dati, la testata di un blocco di codice).
 
+### Al tocco
+
+Senza puntatore (`(any-hover: hover)` falso) «+» e maniglia stanno sul blocco
+del cursore finché la nota ha il fuoco, con 40 px di margine sul foglio
+stretto; il gruppo del blocco sta nella [barra sopra la tastiera](editor-toolbar.md).
+Regola: `touchMode` in `handles.ts`; scene `mobile-tocco-*`.
+
 ## La testata
 
-In cima alla nota, in Scrittura e in Lettura, sta la stessa testata, in
-quest'ordine: la copertina, l'icona, il titolo (il nome del file), le
-proprietà in evidenza, «Altre N proprietà», «Aggiungi una proprietà» e la
-[riga dei dati](editor-note-facts.md). Un filo la stacca dal testo. Che cosa
-sono icona, copertina, titolo e menu «⋯» lo dice la
-[pagina dei blocchi](editor-blocks.md#la-testata-della-pagina).
-
-- **Il titolo** è il nome del file (della cartella, per `_index.md`). In
-  Scrittura si scrive in riga: Invio o l'uscita dal campo rinominano il file
-  coi link, Esc torna al nome di prima; una rinomina che non riesce (un nome
-  preso, caratteri che il file system rifiuta) lo dice e il titolo torna. In
-  sola lettura non si modifica.
-- **Il primo H1.** Se la prima riga che si legge dopo il frontmatter (righe
-  vuote e commenti `%%` o `<!-- -->` a parte) è un H1 che, a parte maiuscole,
-  spazi, punteggiatura e formattazione, dice il nome (l'id di blocco `^x` e i
-  commenti in riga non contano, i simboli come `+` sì: `# C++` non è la nota
-  `C`), si ripiega nel titolo:
-  in Scrittura e in Lettura non si vede, in Sorgente sì, e il file non cambia.
-  Un H1 diverso, o non in cima, resta un titolo del testo. Una selezione che
-  ci entra (una ricerca) lo rivede; ciò che si scrive prima di lui scende
-  sotto, dove comincia il testo, e Backspace all'inizio del testo non lo
-  unisce al titolo. Rinominare dal titolo, quello della testata o quello del
-  foglio, riscrive anche l'H1 ripiegato col nome nuovo, nello stesso gesto e
-  con un passo d'annullamento della nota, e solo nella nota rinominata (non
-  nelle schede di una lavagna nello stesso riquadro); con un titolo che sposta
-  il file (`Archivio/Nuova`) l'H1 prende il nome, `Nuova`. Se la rinomina non
-  riesce l'H1 non cambia. Una rinomina che arriva da fuori non lo tocca: se l'H1 non dice più
-  il nome torna un titolo del testo.
-- **Le proprietà.** Senza un tipo, sono in evidenza le prime quattro voci del
-  frontmatter, nell'ordine del file; le altre stanno dietro «Altre N
-  proprietà», che si apre e si richiude e resta com'era finché l'editor è
-  aperto. Le voci che la testata mostra a modo suo (`icon`, `cover`,
-  `cover-y`, `cssclasses`) non sono righe, e nemmeno le etichette quando la
-  riga dei dati le mostra; finché l'indice non risponde, `tags` è una riga
-  come le altre. Una chiave scritta due volte è una riga sola, col valore
-  dell'ultima, come la legge YAML. Il nome lungo si taglia e si legge intero
-  al passaggio; il valore va a capo, senza il commento in coda. Un valore
-  vuoto si legge «Vuoto».
-- **Il tipo** di una riga lo dice la figura davanti al nome e decide come si
-  legge e si scrive il valore. Vince il registro dei tipi del vault
-  (`properties.types`, con `tags`, `aliases` e `cssclasses` convenzionali);
-  senza dichiarazione il tipo si legge dal valore: casella (`true`/`false`
-  nudi), numero, data (`aaaa-mm-gg` che esiste), data e ora, indirizzo,
-  elenco, persone (un elenco di soli `[[link]]`), testo. Un valore che non
-  torna col tipo dichiarato resta testo, sottolineato, e dice «Non è numero:
-  resta testo»; non si riscrive niente per farlo tornare. Selezione e Stato si
-  scrivono intanto come testo; un valore che è un'opzione del registro
-  (`options`) si legge come la pastiglia del suo colore, col pallino per lo
-  Stato, e uno fuori dalle opzioni resta testo. La data si legge per esteso nella lingua
-  dell'interfaccia; le persone hanno il tondo delle iniziali, le voci di un
-  elenco e le etichette sono pastiglie.
-- **`editor.properties`** decide quanto se ne vede: `visible` (il default) le
-  mostra come sopra, `hidden` le mette tutte dietro «Altre N», `source` lascia
-  lo YAML sotto il titolo, senza righe. In Lettura vale lo stesso, all'apertura.
-- **Scrivere.** In Scrittura il clic su un valore (o Invio col fuoco sopra)
-  apre l'editor del suo tipo. Testo, numero e indirizzo si scrivono al posto
-  del valore: Invio o l'uscita dal campo scrivono, Esc torna a prima; un
-  numero si accetta anche all'italiana (`12,5`) e ciò che non è un numero non
-  si scrive. La casella si spunta col clic. La data apre un riquadro con il
-  campo (ISO o `gg/mm/aaaa`, con l'ora), le scelte rapide (il giorno
-  stesso, l'indomani, fra una settimana, il venerdì), il mese da scorrere con le frecce e Pagina su/giù,
-  «Togli la data» e «Aggiungi l'ora». Elenco ed etichette aprono le voci con
-  la «×» e un campo: Invio aggiunge (più voci separate da virgola), Backspace
-  nel campo vuoto toglie l'ultima. Le persone aprono una ricerca fra le note
-  (la cartella delle persone, se c'è): chi è scelto sta in cima, un clic o
-  Invio mette o toglie, un nome che non si trova si aggiunge come link. Ogni
-  modifica è una scrittura sola nel frontmatter della nota, con un passo
-  d'annullamento suo; la voce tiene la sua chiave, la sua forma (in riga o una
-  voce per riga) e le virgolette dove YAML le vuole (un testo come `1e3`,
-  `yes` o `2026-03-20` resta un testo; la data del calendario resta una data,
-  con l'ora, i secondi e il fuso che aveva). Aprire un editor e uscire senza
-  cambiare niente non scrive. Se il valore cambia mentre l'editor è aperto (un
-  altro riquadro, il file da fuori) non si scrive: l'editor resta con ciò che
-  si scriveva e lo dice, e una seconda conferma (in Elenco e Persone anche
-  «Scrivi la mia») scrive. Con ancore o alias nel frontmatter «Metti in
-  evidenza» apre lo YAML invece di spostare righe. Una voce che un editor non saprebbe riscrivere senza
-  perdere niente (un commento, una mappa, un testo su più righe) apre lo YAML
-  sulla sua riga, come prima: la testata cede il posto alle righe del
-  frontmatter finché il cursore ci sta.
-- **Il menu della proprietà** si apre dal nome (o col menu contestuale, o
-  Shift+F10, sul valore) e dice nome e tipo: «Rinomina» cambia la chiave in
-  questa nota (un nome già preso lo dice); «Tipo» dichiara il tipo nel
-  registro del vault, per tutte le note, col comando `property.type.set`;
-  «Metti in evidenza» porta la voce fra le prime quattro, «Togli
-  dall'evidenza» in fondo al frontmatter (con quattro voci o meno sono tutte
-  in evidenza e il menu non lo offre); «Togli dalla nota» toglie la voce con
-  le sue righe. «Aggiungi una proprietà» apre una riga vuota prima
-  della chiusura (o crea il frontmatter); «Aggiungi una descrizione», fra gli
-  strumenti al passaggio, scrive `description: ` e ci porta il cursore. Gli
-  strumenti stanno in una riga sola, alta 28 px: quelli che non ci stanno si
-  nascondono dalla fine e il menu «⋯», sempre l'ultimo, li offre in cima. In
-  Lettura e in sola lettura le righe si leggono e basta, «Altre N» compreso,
-  senza editor, menu, strumenti né «Aggiungi».
-- **La copertina** è un'immagine del vault, un indirizzo o un colore
-  (`cover: "#a3c4f3"`); è alta 112 px (110 al telefono) ed esce dalla colonna
-  fino ai bordi della pagina. Al passaggio offre «Cambia copertina» e, per
-  un'immagine, «Riposiziona»: l'immagine si trascina in su e in giù, o si
-  sposta con ↑ ↓ (Shift per un passo fine, Home e Fine ai bordi); Invio o
-  «Salva la posizione» scrivono `cover-y:` (da 0 a 100, 50 il centro), Esc o
-  «Annulla» tornano dov'era, e il fuoco torna a «Riposiziona». Un'immagine che
-  non si trova lascia il segnaposto col suo path.
-- **La misura.** Il titolo è di 40 px su 46 in «Comoda» e 34 su 40 in
-  «Compatta» (31 su 37 al telefono); la colonna dei nomi è larga 150 px (124
-  con la finestra sotto i 940 px, 108 al telefono). La pagina ha 104 px di
-  margine a sinistra, dove stanno «+» e la maniglia del blocco, e 96 a destra;
-  con la finestra sotto i 940 px 64 e 48, sotto i 620 40 e 20; un foglio sotto
-  i 560 px (due affiancati) ha 40 e 20 anche in una finestra larga, al
-  telefono 18. I margini sono gli stessi in ogni modalità, così cambiarla non
-  sposta il testo.
-- **La tastiera.** ↓ dal titolo passa per i valori, «Altre N» e «Aggiungi una
-  proprietà», e dall'ultimo arriva alla prima riga del testo; ↑ sulla prima
-  riga del testo torna all'ultima voce della testata, e da lì su fino al
-  titolo.
-- **Un frontmatter che non si legge** (una riga di primo livello che non è una
-  chiave, un valore che YAML non accetta, un blocco che non è una mappa) non
-  diventa righe a metà: la testata lo dice, anche con `source`, e lo YAML
-  resta sotto il titolo com'è scritto, in Scrittura e in Lettura. Icona,
-  copertina, strumenti e «Aggiungi» tacciono: il modello lo conserva come
-  testo, e la testata non ci scrive. Quando non si legge lo decidono le
-  stesse regole nel client e nel modello, provate sugli stessi casi
-  (`apps/client/src/__fixtures__/frontmatter-readability.json`).
-
-La testata non scrive niente da sé: il file cambia solo per un gesto, con un
-passo d'annullamento suo, e le righe `---` del frontmatter restano protette
-dalle battute (anche l'a capo prima della chiusura). Un valore uguale a quello
-scritto non si riscrive; una voce con un commento, un'ancora, un alias o un
-testo a blocco non si riscrive, e il gesto apre lo YAML su di lei. Quando il
-frontmatter cambia da un altro riquadro la testata si rifà sul posto: il
-titolo che si sta scrivendo resta, e un riquadro aperto (l'icona, la
-copertina) resta aperto finché non si chiude. In Lettura la testata resta in
-cima anche quando la resa si rifà da sé (un embed arrivato). In sola lettura
-si guarda soltanto. La densità «Compatta» la stringe con il resto del foglio.
-Le scene `testata-*` e `mobile-testata` del banco la fotografano.
+In cima alla nota, in Scrittura e in Lettura, sta la testata: copertina, icona,
+titolo, proprietà e [riga dei dati](editor-note-facts.md). Che cosa fa ogni
+parte, come si scrivono le proprietà e come il titolo segue il primo H1 lo dice
+la [pagina della testata](editor-header.md); che cosa cambia in una nota con un
+tipo (Libro, Progetto) e che cosa chiede «Nuova nota» lo dicono i
+[tipi di nota](editor-note-types.md).
 
 ## Tre porte per ogni funzione
 
 Chi scrive non deve ricordarsi dove sta una funzione: ognuna si raggiunge dal
 «/» nel testo, dalla palette dei comandi e dal tasto destro o da un menu,
 con la scorciatoia scritta accanto quando c'è. Le funzioni dei blocchi hanno
-anche «+ Inserisci» nella barra di formato. Una funzione nuova del foglio entra
+anche «+ Inserisci» nella [barra di formato](editor-toolbar.md). Sul testo
+scelto la mini-barra raccoglie ciò che si fa a una selezione: Trasforma, i
+formati in riga, Collega, Colore e «Commenta»; ogni pulsante è la sua
+scorciatoia, con lo stesso annullamento. Una funzione nuova del foglio entra
 da tutte e tre le porte; i menu sono descritti in
 [Tasto destro, mini-barra e «/»](editor-menus.md).
 
@@ -294,6 +178,9 @@ l'indirizzo tra tonde. Che cosa succede dipende da dove cade.
   - **Scheda**: scrive l'indirizzo da solo sulla riga. Diventa il segnalibro web
     della pagina, con titolo, descrizione e sito; l'anteprima si chiede a parte,
     come nella [pagina dei blocchi](editor-blocks.md#i-segnalibri-web).
+  - **Incorpora**, solo per un sito dell'elenco chiuso: scrive la pagina
+    incorporata, `![](https://…)`, che si vede come un segnaposto «Carica»
+    (vedi [Incorporare una pagina web](#incorporare-una-pagina-web)).
 - **Dentro un testo** l'indirizzo entra com'è, come testo semplice.
 
 La scelta compare solo per un incolla, mai per un indirizzo scritto lettera per
@@ -303,9 +190,11 @@ che esce dalla riga la chiude senza cambiare nulla.
 Con la tastiera:
 
 - Tab, dall'editor, porta il fuoco sulla scelta, sul Link. La scelta è una barra
-  con un solo punto di tabulazione: ← e → passano da Link a Scheda.
+  con un solo punto di tabulazione: ← e → passano da Link a Scheda e, quando
+  c'è, a Incorpora.
 - Invio o Spazio applicano la voce col fuoco, come un clic: Link chiude la
-  scelta, Scheda scrive l'indirizzo da solo. Il fuoco torna nell'editor.
+  scelta, Scheda scrive l'indirizzo da solo, Incorpora scrive la pagina
+  incorporata. Il fuoco torna nell'editor.
 - Esc, Tab o Maiusc+Tab riportano il fuoco nell'editor tenendo Link.
 - Qualunque altro tasto tiene Link, chiude la scelta e va all'editor, dove fa
   il suo lavoro.
@@ -324,6 +213,76 @@ Non tutto diventa un link:
 - «Incolla senza formattazione» (Ctrl Maiusc V) incolla il testo così com'è,
   senza link e senza scelta;
 - durante una composizione (IME) l'incolla entra come testo.
+
+## La tipografia italiana
+
+Con «Tipografia italiana» accesa nelle Preferenze (`editor.typography`,
+spenta di serie, di questa macchina) la nota si scrive coi segni della
+tipografia italiana mentre si batte:
+
+- `"` diventa « dopo uno spazio, una parentesi o a inizio riga, » dopo una
+  parola; dentro una citazione già aperta diventa “ e ”;
+- `--` diventa —; un terzo `-` subito dopo rimette `---`;
+- `...` diventa …; l'apostrofo `'` diventa ’, anche a inizio parola (’90).
+
+Scatta sul tasto che chiude la forma. Un annulla o un Backspace subito dopo
+rimettono ciò che si era scritto. Non cambia mai:
+
+- il codice (in linea e a blocchi), le formule (`$…$`, `$$…$$`), i link e i
+  wikilink, l'HTML, i commenti e il frontmatter, anche mentre li si sta
+  ancora scrivendo;
+- una riga di soli trattini, barre e due punti: il separatore `---`, la
+  sottolineatura di un titolo, la riga di una tabella;
+- ciò che si incolla o si trascina, un testo che arriva in un colpo e la
+  composizione (IME); con Vim, i tasti del modo normale.
+
+Vale nelle note in italiano: la lingua dichiarata dalla nota (`lang: it`),
+altrimenti quella dell'app.
+
+## Incorporare una pagina web
+
+Un video, una mappa o un disegno di un sito dell'elenco chiuso si incorpora
+nella nota. Sul disco è `![](https://…)`, la forma che Obsidian incorpora a sua
+volta per i video; si scrive a mano o con «Incorpora» dopo un incolla.
+
+In Scrittura e in Lettura la pagina si vede come un **segnaposto**: l'icona
+della specie, il nome del sito, la specie e l'host, e il pulsante **Carica**.
+Aprire la nota non chiede niente alla rete: nessuna anteprima, nessuna icona
+del sito. Carica apre la pagina nel [visore web](../reference/permissions-and-security.md#visore-web),
+la finestra isolata, mai dentro la nota: un sito nuovo chiede il sì, come ogni
+pagina che il visore apre, e il sì resta in `viewer.hosts`.
+
+- **Rifiutato.** Se alla domanda si risponde di no, il segnaposto dice «Non
+  caricata: hai scelto di non aprire …» e Carica diventa «Chiedi di nuovo».
+- **Senza visore.** Dove il visore non c'è il segnaposto lo dice; la pagina non
+  va al browser di sistema.
+- **`http:`.** Un indirizzo `http` di un sito dell'elenco si apre in `https`,
+  l'unico che il visore apre. Credenziali nell'indirizzo o una porta diversa
+  da quella di sempre lo lasciano fuori dall'elenco.
+- **Tracciamento.** I parametri che seguono chi apre la pagina (`utm_…`,
+  `fbclid`, `gclid` e simili, `si` e `feature` di YouTube, `share` di Vimeo)
+  non entrano nell'indirizzo che Carica apre né in quello che Incorpora
+  scrive. Un indirizzo già scritto nella nota resta com'è sul disco.
+- **Fuori dall'elenco** un `![](https://…)` resta l'immagine remota, che si
+  scarica nel vault soltanto col gesto; un indirizzo da solo resta un link o
+  una scheda.
+- **Export.** L'HTML esportato scrive un link alla pagina, e il rapporto lo
+  conta fra le immagini remote: il file non carica niente da fuori.
+
+L'elenco sta in una costante sola, `WEB_EMBED_SITES` in
+`apps/client/src/editors/text/profiles/markdown/web-embed.ts`. Un sito vale
+per gli host esatti scritti lì, e soltanto per le pagine che mostrano un
+contenuto:
+
+| Sito | Specie | Pagine |
+|---|---|---|
+| YouTube (`youtube.com`, `www.`, `m.`, `www.youtube-nocookie.com`, `youtu.be`) | video | un video, un corto, una diretta, una playlist |
+| Vimeo (`vimeo.com`, `www.`, `player.`) | video | un video |
+| OpenStreetMap (`openstreetmap.org`, `www.`) | mappa | la mappa, un luogo, un percorso |
+| Google Maps (`www.google.com/maps`, `google.com/maps`, `maps.google.com/maps`) | mappa | la mappa |
+| Figma (`figma.com`, `www.`) | disegno | un file, una lavagna, un prototipo |
+| Excalidraw (`excalidraw.com`) | disegno | la lavagna |
+| tldraw (`tldraw.com`, `www.`) | disegno | una stanza o un file condiviso |
 
 ## La sbirciata
 
@@ -396,6 +355,51 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   l'indice cambia si richiedono solo le schede tenute, e la Scrittura ridisegna
   soltanto quelle davvero cambiate.
 
+## Blocchi di altre note
+
+Una sezione o un blocco di un'altra nota riportati con `![[Nota#Sezione]]` si scrivono
+dove stanno, con **Modifica qui**; lo stesso blocco in più note (`![[Nota#^id]]`) è il
+blocco sincronizzato: [La trasclusione viva](editor-transclusion.md).
+
+`[[^^parole` cerca un blocco in tutto il vault (la foglia `block:` dell'indice, dopo una pausa
+breve) e ne propone al più 50, col testo e la nota. La scelta scrive `[[Nota#^id]]` e dà l'id al
+blocco che non l'ha (`note.block.sync`); se l'id non entra il link nemmeno, e lo si dice; da una
+nota in sola lettura si offre il link alla sezione. Nella nota stessa id e `[[#^id]]` sono un passo.
+
+## La concentrazione
+
+La concentrazione (`shell.focus.toggle`, «Modalità concentrazione» nel menu
+Vista e in Ctrl O, «Concentrazione» nel menu «…» del riquadro di una nota)
+lascia il foglio e poco altro:
+
+- cassetti, linguette dei riquadri e barra di formato si ritirano; la barra del
+  titolo si attenua e torna piena al passaggio del puntatore o col fuoco;
+- nel foglio che ha il fuoco resta acceso il blocco del cursore (le righe fino
+  alla riga vuota prima e dopo, o tutte quelle che una scelta attraversa) e gli
+  altri si attenuano; la riga sotto il puntatore si riaccende. Vale in ogni
+  modalità e in ogni linguaggio, e segna soltanto le righe montate;
+- la banda resta, con «Esci dalla concentrazione»; la riga dei suggerimenti
+  dice che Esc esce;
+- Esc esce quando nessuno lo prende prima: un menu, un dialogo o la sbirciata
+  aperti si chiudono e basta; una selezione di blocchi si lascia, e il blocco
+  non si seleziona. Con Vim acceso Esc resta di Vim anche in modo normale, e si
+  esce con «Esci» o col comando.
+
+## La macchina da scrivere
+
+La preferenza della macchina `editor.typewriter` («Macchina da scrivere»,
+gruppo Editor delle Impostazioni; spenta di fabbrica) tiene la riga del cursore a metà altezza del
+foglio, in ogni editor di testo che non sia un campo:
+
+- scrivendo, con le frecce, con annulla e rifai la riga torna a metà; il clic,
+  il trascinamento e i cambi arrivati da un altro riquadro non fanno scorrere;
+- in cima a una nota corta il testo non scende oltre l'inizio; sotto l'ultima
+  riga c'è mezzo foglio vuoto, perché anche l'ultima possa stare a metà;
+- non costa niente per battuta: dove CodeMirror porterebbe già il cursore in
+  vista lo porta a metà, nello stesso passo di misura, e soltanto se il testo è
+  cambiato o il cursore si è mosso. Scrivere dentro una riga che sta già a metà
+  non fa scorrere.
+
 ## Dove sta nel codice
 
 - `apps/client/src/editors/text/profiles/markdown/surface.ts`: le tre modalità
@@ -404,8 +408,7 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   coi blocchi accesi (`blockKeysExtension`) e spenti (`plainKeysExtension`);
 - `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`;
   `apps/client/src/panels/document.ts`: la voce del menu «…»;
-- `apps/client/src/editors/core/surface-modes.ts`: `modeById`, che riconosce
-  anche gli id di prima (`formerIds` di `SurfaceMode`);
+- `apps/client/src/editors/core/surface-modes.ts`: `modeById`, anche con gli id di prima (`formerIds`);
 - `apps/client/src/state/document-controller.ts` e `state/mode-menu.ts`: la
   modalità del riquadro, i comandi `shell.mode.*` e il commutatore della banda;
 - `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
@@ -426,24 +429,21 @@ nome della nota. La copertina mostra il colore scritto in `cover:` (`#cfe7d6`,
   `followWikilink`, `followPath`);
 - `apps/client/src/editors/text/profiles/markdown/open-link.ts`: Alt-Invio e
   il link sotto il cursore;
+- `apps/client/src/editors/text/profiles/markdown/typography.ts`: la
+  tipografia italiana (`italianTypography`, montata da `profile.ts`);
+  `crates/fub-host/src/settings.rs`: `editor.typography`;
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts`
   (`NoteCardWidget`) e `apps/client/src/state/note-cards.ts`: la scheda della
   nota e le sue proprietà;
-- `apps/client/src/editors/text/profiles/markdown/page/title.ts`: la regola
-  del primo H1 (`sameTitle`, `firstHeading`, `retitled`) e chi tiene l'H1
-  allineato al titolo (`keepTitle`, `retitleIn`); `blocks/page.ts` lo
-  nasconde in Scrittura (`titleFold`) e lo riscrive con la rinomina
-  (`retitleView`), `page/header.ts` lo segna in Lettura e
-  `skin/document.css` lo nasconde; `shells/scrittoio/sheets/title-rename.ts`
-  lo riscrive dopo la rinomina dal titolo del foglio;
-- `apps/client/src/editors/text/profiles/markdown/page/properties/`: le
-  righe delle proprietà (`row.ts`), il tipo di una riga e il registro
-  (`kind.ts`), gli editor dei tipi (`editors.ts`), il menu della proprietà
-  (`menu.ts`) e ciò che li lega alla nota (`values.ts`, `PropertyRowHost`);
-  `markdown/properties.ts` legge e riscrive le voci del frontmatter
-  (`setProperty`, `renamePropertyKey`, `moveEntryBefore`), `blocks/page.ts`
-  le scrive con un passo d'annullamento e controlla l'impronta
-  (`writePropertyChecked`), `surface.ts` legge il registro e cabla «Tipo» e la
-  ricerca delle persone;
-- `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo` e
-  `riga-dei-suggerimenti`, e le scene `proprieta-*` (gli editor dei tipi).
+- `apps/client/src/desktop-shell.ts`: la concentrazione (`toggleFocusMode`,
+  «Esci» nella banda, Esc); `apps/client/src/state/concentration.ts`: lo stato
+  per chi sta sotto la shell e la regola di Esc;
+  `apps/client/src/editors/text/cursor-block.ts`: il blocco del cursore;
+  `apps/client/src/theme/scrittoio/structure.css`: che cosa si ritira e che
+  cosa si attenua;
+- `apps/client/src/editors/text/typewriter.ts`: la macchina da scrivere (la
+  faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
+  da `editor.typewriter` (`crates/fub-host/src/settings.rs`);
+- `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
+  `riga-dei-suggerimenti`, `concentration`, `concentration-writing`,
+  `typewriter`.

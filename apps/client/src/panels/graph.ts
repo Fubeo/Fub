@@ -183,7 +183,7 @@ function readData(payload: unknown): GraphData {
     ? {
       seed: rawLocal.seed,
       depth: typeof rawLocal.depth === "number" ? rawLocal.depth : 1,
-      direction: typeof rawLocal.direction === "string" ? rawLocal.direction : "outbound",
+      direction: typeof rawLocal.direction === "string" ? rawLocal.direction : "both",
     }
     : null;
   const rawFilter = (extra.filter ?? {}) as { show_orphans?: unknown; show_attachments?: unknown; show_tags?: unknown; show_missing?: unknown };

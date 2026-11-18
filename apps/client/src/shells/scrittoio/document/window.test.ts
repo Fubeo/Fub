@@ -40,6 +40,12 @@ const world = vi.hoisted(() => ({
     /// Che cosa risponde `dispose`: vero se non resta niente da consegnare.
     drained: boolean;
     sendFails: string | null;
+    /// Che cosa dice la finestra principale: se lo scarto conserva il testo,
+    /// e come va la conservazione (`null` = riuscita).
+    keeps: boolean;
+    keepFails: string | null;
+    /// Le conservazioni chieste, in ordine, ciascuna da risolvere a mano.
+    keeping: { settle: () => void }[];
   },
 }));
 
@@ -90,6 +96,7 @@ vi.mock("../../../state/document-bridge", () => ({
       request, apply, current, onState, onTheme,
       sent: [] as unknown[], navigated: [] as unknown[], resolved: [] as string[],
       disposed: 0, drained: true, sendFails: null as string | null,
+      keeps: false, keepFails: null as string | null, keeping: [] as { settle: () => void }[],
     };
     world.bridge = bridge;
     return {
@@ -99,6 +106,20 @@ vi.mock("../../../state/document-bridge", () => ({
       },
       navigate: (target: unknown) => bridge.navigated.push(target),
       resolveConflict: (choice: string) => bridge.resolved.push(choice),
+      discardKeeps: () => Promise.resolve(bridge.keeps),
+      // Come il ponte vero: scarta soltanto dopo la conservazione riuscita.
+      discardKeeping: () => new Promise<void>((resolve, reject) => {
+        bridge.keeping.push({
+          settle: () => {
+            if (bridge.keepFails) {
+              reject(new Error(bridge.keepFails));
+              return;
+            }
+            bridge.resolved.push("theirs");
+            resolve();
+          },
+        });
+      }),
       dispose: () => {
         bridge.disposed += 1;
         return bridge.drained;
@@ -359,12 +380,88 @@ describe("il ponte", () => {
     expect(el("document-window-conflict").hidden).toBe(false);
   });
 
-  it("le due scelte passano dal ponte", () => {
+  it("«Conserva» passa dal ponte subito", () => {
     page(query());
     bootDocumentWindow(SERIES);
     el("document-window-keep").click();
+    expect(bridge().resolved).toEqual(["mine"]);
+  });
+
+  /// Una finestra in sospeso, con le due scelte in vista.
+  function held(): void {
+    page(query());
+    bootDocumentWindow(SERIES);
+    bridge().apply("testo", null);
+    bridge().onState({ kind: "error", reason: "x" });
+  }
+  const settled = async (): Promise<void> => {
+    for (let n = 0; n < 6; n++) await Promise.resolve();
+  };
+
+  it("con la Cronologia «Scarta» lo chiede prima, poi conserva, e scarta solo dopo", async () => {
+    held();
+    bridge().keeps = true;
     el("document-window-discard").click();
-    expect(bridge().resolved).toEqual(["mine", "theirs"]);
+    await settled();
+    // La prima pressione non scarta: dice che il testo resta nella Cronologia.
+    expect(bridge().resolved).toEqual([]);
+    expect(bridge().keeping).toHaveLength(0);
+    expect(el("document-window-state").textContent).toBe("windows.discard.kept");
+    expect(el("document-window-discard").textContent).toBe("windows.discard_confirm");
+    el("document-window-discard").click();
+    await settled();
+    expect(bridge().keeping).toHaveLength(1);
+    expect(el("document-window-state").textContent).toBe("windows.discard.keeping");
+    // Mentre la finestra principale conserva, le scelte aspettano.
+    expect(el("document-window-keep").hasAttribute("disabled")).toBe(true);
+    el("document-window-keep").click();
+    expect(bridge().resolved).toEqual([]);
+    bridge().keeping[0]!.settle();
+    await settled();
+    expect(bridge().resolved).toEqual(["theirs"]);
+    expect(el("document-window-keep").hasAttribute("disabled")).toBe(false);
+    expect(el("document-window-discard").textContent).toBe("windows.discard_local");
+  });
+
+  it("se il testo non entra nella Cronologia non si scarta, e lo si dice", async () => {
+    held();
+    bridge().keeps = true;
+    bridge().keepFails = "spazio dati pieno";
+    el("document-window-discard").click();
+    await settled();
+    el("document-window-discard").click();
+    await settled();
+    bridge().keeping[0]!.settle();
+    await settled();
+    expect(bridge().resolved).toEqual([]);
+    expect(el("document-window-state").textContent)
+      .toBe('windows.discard.keep_failed {"reason":"spazio dati pieno"}');
+    expect(el("document-window-link").dataset.state).toBe("fallito");
+    expect(el("document-window-conflict").hidden).toBe(false);
+    expect(engine().text).toBe("testo");
+    // Si ricomincia dalla domanda.
+    expect(el("document-window-discard").textContent).toBe("windows.discard_local");
+  });
+
+  it("senza la Cronologia «Scarta» dice che il testo andrà perso, e al secondo sì scarta", async () => {
+    held();
+    el("document-window-discard").click();
+    await settled();
+    expect(el("document-window-state").textContent).toBe("windows.discard.lost");
+    expect(bridge().resolved).toEqual([]);
+    el("document-window-discard").click();
+    await settled();
+    expect(bridge().keeping).toHaveLength(0);
+    expect(bridge().resolved).toEqual(["theirs"]);
+  });
+
+  it("«Conserva» dopo la domanda la ritira e tiene il testo", async () => {
+    held();
+    el("document-window-discard").click();
+    await settled();
+    el("document-window-keep").click();
+    expect(bridge().resolved).toEqual(["mine"]);
+    expect(el("document-window-discard").textContent).toBe("windows.discard_local");
   });
 
   it("i collegamenti del testo si aprono nella finestra principale", () => {
