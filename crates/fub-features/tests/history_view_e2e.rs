@@ -1038,3 +1038,110 @@ fn a_write_after_the_restore_withdraws_the_undo() {
         "tre\n"
     );
 }
+
+/// Gli avvisi della cronologia arrivati sul bus, in ordine: `true` per un
+/// invito a ridisegnare il pannello, `false` per una scrittura del documento.
+fn history_notices(events: &fub_kernel::Subscription) -> Vec<bool> {
+    events
+        .try_iter()
+        .filter_map(|notice| match notice.event {
+            fub_abi::event::Event::ViewInvalidated { view, instance } if view == HISTORY_VIEW => {
+                assert!(instance.is_none(), "la storia cambia per ogni esemplare");
+                Some(true)
+            }
+            fub_abi::event::Event::DocumentChanged { .. } => Some(false),
+            _ => None,
+        })
+        .collect()
+}
+
+/// IMP-136: **il testo conservato da un conflitto si vede subito.**
+///
+/// `version.keep` scrive lo spazio dati della cronologia e non la nota: niente
+/// `document-changed`, e un lotto senza documenti non chiude con un
+/// `batch-ended`. Senza un invito esplicito il pannello già aperto restava
+/// fermo su «Nessuna versione.», e la voce compariva solo riaprendo la nota.
+#[test]
+fn a_kept_text_invites_the_open_panel_to_redraw() {
+    const NOTE: &str = "Testo scartato nel conflitto del 18 novembre 2026";
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "disco\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    let events = ws.bus().subscribe();
+
+    ws.invoke_command(
+        fub_features::versioning::VERSION_KEEP,
+        serde_json::json!({ "doc": "Uno.md", "text": "mio testo\n", "note": NOTE }),
+        fub_abi::command::InvokeMode::Apply,
+        fub_abi::event::Actor::User,
+    )
+    .expect("il testo si conserva");
+
+    assert_eq!(
+        history_notices(&events),
+        vec![true],
+        "il pannello è invitato a ridisegnarsi, senza fingere una scrittura della nota"
+    );
+    // E il ridisegno che segue l'invito trova la voce.
+    let listed = entries(&ws.render_view(&instance()).unwrap());
+    assert_eq!(listed[0].1.as_deref(), Some(NOTE), "{listed:?}");
+}
+
+/// Una fotografia nasce **dopo** che il `document-changed` è già sul bus: il
+/// bus consegna subito a chi ascolta, l'handler che fotografa gira dopo. Il
+/// ridisegno chiesto da quell'evento poteva leggere l'indice di prima: nel
+/// collaudo di IMP-136 nemmeno il file cambiato da fuori compariva. L'invito
+/// che segue la fotografia arriva quando l'indice è già sul disco.
+#[test]
+fn an_external_change_invites_the_redraw_after_the_snapshot() {
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "disco\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    let events = ws.bus().subscribe();
+
+    let path = vault.root.join("Uno.md");
+    std::fs::write(&path, "cambiato da fuori\n").expect("scrittura esterna");
+    assert!(ws.sync_path(&path).expect("il watcher la vede"));
+
+    let notices = history_notices(&events);
+    let changed = notices
+        .iter()
+        .position(|n| !n)
+        .unwrap_or_else(|| panic!("document-changed: {notices:?}"));
+    assert!(
+        notices[changed..].contains(&true),
+        "l'invito segue la scrittura: {notices:?}"
+    );
+    let listed = entries(&ws.render_view(&instance()).unwrap());
+    assert_eq!(listed.len(), 2, "{listed:?}");
+}
+
+/// Svuotare la cronologia non scrive nessuna nota: anche qui il pannello
+/// aperto è invitato a ridisegnarsi, o resterebbe sulla lista di prima.
+#[test]
+fn clearing_the_history_invites_the_redraw() {
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "disco\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    let events = ws.bus().subscribe();
+
+    ws.invoke_command(
+        fub_features::versioning::VERSION_CLEAR,
+        serde_json::json!({}),
+        fub_abi::command::InvokeMode::Apply,
+        fub_abi::event::Actor::User,
+    )
+    .expect("svuotata");
+
+    assert_eq!(history_notices(&events), vec![true]);
+    assert!(said(&ws.render_view(&instance()).unwrap()).contains("Nessuna versione"));
+}

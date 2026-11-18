@@ -99,6 +99,16 @@ resta e solo allora cancella i blob delle cartelle liberate, orfani compresi.
 Un'interruzione lascia al più una cronologia svuotata a metà, che la
 ricostruzione ritrova senza mescolare storie.
 
+Ogni scrittura riuscita della cronologia (una fotografia, un testo
+conservato, una rinomina, il cestino, lo svuotamento; una passata sul vault
+intero una volta sola, in fondo) emette un `view-invalidated` della view
+`history`, senza istanza. Il pannello rilegge l'indice a ogni disegno, ma la
+sua maschera di eventi non basta: `version.keep` e `version.clear` non
+scrivono nessuna nota, e una fotografia nasce nell'handler dopo che il
+`document-changed` che l'ha causata è già arrivato alla shell. L'invito parte
+quando l'indice è già sul disco, quindi il ridisegno che segue trova la voce
+nuova, anche in una scheda dell'ispettore chiusa che si apre dopo.
+
 Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
 prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:
 view e comandi possono ancora ricostruire e leggere la cronologia dai dati

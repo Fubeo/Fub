@@ -5,8 +5,11 @@ use super::*;
 
 /// Il campionatore: un [`EventHandler`] come quelli che scriveranno i plugin.
 ///
-/// Non scrive nel vault e non emette eventi — legge e basta — quindi non può
-/// innescare il ping-pong che il budget del dispatch è lì a troncare.
+/// Non scrive nel vault — legge e basta — e dei fatti emette solo il
+/// `trouble` di una fotografia mancata e il `view-invalidated` della
+/// cronologia ([`history_changed`]), che nessun handler trasforma in una
+/// scrittura: non può innescare il ping-pong che il budget del dispatch è lì a
+/// troncare.
 pub struct VersioningHandler {
     store: VersionStore,
 }

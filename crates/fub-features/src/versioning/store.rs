@@ -471,7 +471,12 @@ impl VersionStore {
         // salvataggio che entrasse qui scriverebbe il suo indice e poi questo ci
         // scriverebbe sopra il proprio, più vecchio di una versione.
         let inner = self.inner.lock().expect("mutex");
-        write_index(&inner.docs, inner.registered, host)?;
+        let index = write_index(&inner.docs, inner.registered, host);
+        drop(inner);
+        // L'invito parte anche se l'indice non si è scritto: senza indice chi
+        // legge ricostruisce dagli snapshot della passata, che ci sono.
+        history_changed(host);
+        index?;
         Ok(result)
     }
 
@@ -685,9 +690,14 @@ impl VersionStore {
             }
         }
         drop(inner);
+        // Anche a metà (una cartella che non si libera) la cronologia che si
+        // rilegge è cambiata: il pannello non deve restare sulla lista di prima.
+        if !released.is_empty() {
+            history_changed(host);
+        }
         tracing::info!(
             target: "fub.versioning",
-            "cronologia svuotata: {versions} version{} di {} document{}",
+            "cronologia svuotata:{versions} version{} di {} document{}",
             if versions == 1 { "e" } else { "i" },
             released.len(),
             if released.len() == 1 { "o" } else { "i" }
