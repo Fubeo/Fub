@@ -349,6 +349,16 @@ contorno) sta in `editors/rich/ink-shape.ts`. In un documento OpenDocument la
 sessione entra come `drawing`. Un inchiostro del file che non si legge resta
 opaco, e il chip dello stato lo dice in «Che cosa manca?».
 
+La sessione si chiude dopo una pausa di un secondo e mezzo, cambiando
+strumento o con Esc. Un tratto porta il fuoco sul velo, che sta nel riquadro:
+`Ctrl+Z` va al documento anche se prima il fuoco era sulla barra. Annulla e
+Ripeti con la sessione ancora aperta la fanno entrare prima del loro passo
+(`RichEngine.holdPending`): Annulla toglie l'ultimo tratto, entrato da solo
+come passo suo, e lascia gli altri della sessione; `Ctrl+Maiusc+Z` e `Ctrl+Y`
+lo rimettono. Nel `.docx` un tratto sono due elementi, come in Word:
+l'InkML in `mc:Choice` (`w:drawing`) e l'immagine di ripiego in `mc:Fallback`
+(`w:pict`).
+
 Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
 ([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
 Word lo conosce, e il suo nome in `fubPen`. Le penne salvate del disegno

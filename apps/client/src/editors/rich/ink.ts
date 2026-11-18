@@ -110,6 +110,12 @@ export class RichInk {
     this.#engine = engine;
     this.#options = options;
     this.#life.add(() => this.#cancelTimer());
+    // Annulla e Ripeti sono del documento: un tratto della sessione aperta
+    // entra prima del loro passo (IMP-138).
+    this.#life.add(engine.holdPending({
+      pending: () => this.#pending.length > 0,
+      settle: (step) => this.#settle(step),
+    }));
   }
 
   get tool(): RichInkTool {
@@ -287,6 +293,10 @@ export class RichInk {
         scale: () => this.#engine.zoom() / PT,
         onStart: (stroke) => {
           this.#cancelTimer();
+          // Il fuoco sul velo, come per la gomma e il lazo: Esc e Ctrl+Z dopo
+          // un tratto vanno al documento di questo riquadro, non al pulsante
+          // della barra o al menu della penna che l'aveva prima.
+          if (document.activeElement !== veil) veil.focus({ preventScroll: true });
           this.#placeLayer();
           this.#drawing = { samples: [], predicted: [], pressure: stroke.pressure };
         },
@@ -399,6 +409,18 @@ export class RichInk {
   #cancelTimer(): void {
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = null;
+  }
+
+  /// La sessione entra prima di un passo della storia. Per Annulla l'ultimo
+  /// tratto entra da solo, come passo suo: Annulla toglie quello, e Ripeti
+  /// lo rimette; i tratti prima di lui restano un oggetto insieme.
+  #settle(step: "undo" | "redo"): void {
+    if (step === "undo" && this.#pending.length > 1) {
+      const last = this.#pending.pop()!;
+      this.commit();
+      this.#pending = [last];
+    }
+    this.commit();
   }
 
   /// I tratti della sessione entrano nel documento come un oggetto, in un
