@@ -97,6 +97,18 @@ del vault la cancellazione non chiede conferma e offre «Annulla» nell'avviso;
 col cestino di sistema, da cui Fub non può ripristinare, chiede conferma.
 Svuotare il cestino interno resta un comando irreversibile separato.
 
+Il pannello Cestino chiede prima di svuotare: la domanda, col numero di voci
+che spariranno, prende il posto di «Svuota il cestino» con il sì e
+«Annulla». Se il nome d'origine di una voce è di nuovo occupato,
+«Ripristina» chiede con che nome rimetterla, sotto la voce stessa, con un
+nome libero già proposto nel campo. In entrambe Esc vale come «Annulla» e
+riporta il fuoco sul bottone che ha aperto la domanda. Le domande non si
+ricordano: al riavvio il cestino si riapre con i soli bottoni, e una domanda
+salvata da una versione di prima si ignora e si cancella. Lo stesso vale per
+il ripristino di una versione del server nel pannello «Versioni
+sincronizzate» e per «Ritira il sito» e «Torna a questa versione» nel pannello
+«Pubblicazione».
+
 Il meccanismo (coda, journal, lock) è in
 [storage-and-identity.md](../architecture/storage-and-identity.md#cancellazione);
 i byte del sidecar e di `.trash/` sono in

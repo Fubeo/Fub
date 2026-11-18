@@ -283,7 +283,8 @@ la domanda compare, preme il «no» con Esc e, quando la domanda sparisce, rende
 il fuoco al nodo con la sua stessa chiave (il bottone che l'ha aperta). Una
 shell che non conosce il `ns` disegna il solo `fallback`. Non è privilegiato.
 La domanda è stato del momento: il provider la tiene in memoria e non nello
-stato di vista, che sopravvive al riavvio.
+stato di vista, che sopravvive al riavvio. La usano Cronologia, Cestino,
+«Versioni sincronizzate» e «Pubblicazione».
 
 ## Barra di formattazione e azioni dell'editor
 
