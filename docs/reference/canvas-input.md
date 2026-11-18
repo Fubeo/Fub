@@ -106,7 +106,8 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   fuoco va nel testo, e la tela mette `data-card-editing` sulla scheda:
   l'anello pieno e «Esc per uscire» pieno d'accento (prototipo T27). Con
   `Nota#Titolo` si scrive la nota intera, vista dal titolo. Un documento
-  Word o ODT resta in lettura (D-14 (a)). La sola lettura è della nota, non
+  Word o ODT resta in lettura (D-14 (a)): `kinds/document.ts` lo scrive solo
+  [nella nota](../product/live-cards.md#la-scheda-di-documento). La sola lettura è della nota, non
   della lavagna (T96): una lavagna che non si riscrive (il pannello, la
   chiave doppia, il prestito) non toglie la scrittura di una nota che si
   scrive, che è un altro file con la sua sessione.

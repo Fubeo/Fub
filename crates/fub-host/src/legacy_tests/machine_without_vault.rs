@@ -272,7 +272,7 @@ fn a_write_without_vault_is_says_the_same() {
     #[derive(Default)]
     struct Recorder(Mutex<Vec<Notice>>);
     impl fub_host::EventSink for Recorder {
-        fn emit(&self, notice: &Notice) -> fub_host::Delivery {
+        fn emit(&self, notice: &Notice, _vault: Option<&str>) -> fub_host::Delivery {
             self.0.lock().unwrap().push(notice.clone());
             fub_host::Delivery::Done
         }

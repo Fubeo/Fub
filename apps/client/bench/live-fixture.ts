@@ -10,6 +10,8 @@
 // (`interaction.mjs --only=battuta`): `n` sezioni con un po' di tutto, da 18
 // righe l'una. Cinquanta sezioni fanno 901 righe, quattrocento 7.201.
 
+import RICH_BENCH from "../src/__fixtures__/rich-bench.json";
+
 /// Dove sta la nota nel vault del banco.
 export const LIVE_DOC = "Guida/Live.md";
 
@@ -50,6 +52,90 @@ const TRANSCLUSION_MEETING = [
   "",
 ].join("\n");
 
+/// La scheda di documento (T44): il verbale in ODT del banco, con la
+/// proiezione vera di `fub-format-rich` (`tests/ts_bench.rs`), incorporato da
+/// solo nel paragrafo; e un documento lungo, di cento pagine, che la scheda
+/// tronca con «Apri».
+export const DOCUMENT_CARD_FILE = "Riunioni/Verbale.odt";
+export const DOCUMENT_CARD_LONG = "Riunioni/Relazione annuale.docx";
+const DOCUMENT_CARD_NOTE = [
+  "# Riunione di ottobre",
+  "",
+  "Il verbale, così come l'ha scritto Bea:",
+  "",
+  "![[Verbale.odt]]",
+  "",
+  "La relazione dell'anno, da rileggere prima dell'assemblea:",
+  "",
+  "![[Relazione annuale.docx#Bilancio]]",
+  "",
+  "Da chiedere: chi porta le cartoline.",
+].join("\n");
+
+/// Il documento lungo: cento pagine, dieci paragrafi l'una, coi titoli dei
+/// capitoli. Una proiezione `fub-rich` come quella del codec, senza i pezzi
+/// opachi (un paragrafo nuovo non ne ha).
+function longDocument(pages: number): string {
+  const blocks: unknown[] = [];
+  for (let page = 1; page <= pages; page++) {
+    if (page % 10 === 1) {
+      blocks.push({ t: "para", role: { kind: "heading", level: 1 }, c: [{ t: "text", x: page === 1 ? "Bilancio" : `Capitolo ${Math.ceil(page / 10)}` }] });
+    }
+    for (let line = 1; line <= 10; line++) {
+      blocks.push({ t: "para", role: { kind: "body" }, c: [{ t: "text", x: `Pagina ${page}, paragrafo ${line}: le entrate e le uscite dell'anno, voce per voce, con le note del tesoriere.` }] });
+    }
+  }
+  return JSON.stringify({ format: "fub-rich", version: 4, blocks });
+}
+
+/// Come il kernel rende un documento incorporato (`render_embed`): il modello
+/// comune di `fub-format-rich` passato dalla resa del Markdown. Qui dalla
+/// proiezione: titoli, paragrafi, elenchi e tabelle, il testo dei pezzi.
+export function documentEmbedHtml(projection: string): string {
+  type Run = { readonly t: string; readonly x?: string; readonly m?: readonly string[] };
+  type Para = { readonly t: "para"; readonly role?: { readonly kind: string; readonly level?: number; readonly ordered?: boolean }; readonly c?: readonly Run[] };
+  type Table = { readonly t: "table"; readonly rows: readonly { readonly cells: readonly { readonly blocks: readonly Para[] }[] }[] };
+  const esc = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const runs = (para: Para): string => (para.c ?? []).map((run) => {
+    const text = esc(run.x ?? "");
+    return run.m?.includes("i") ? `<em>${text}</em>` : run.m?.includes("b") ? `<strong>${text}</strong>` : text;
+  }).join("");
+  const blocks = (JSON.parse(projection) as { blocks: readonly (Para | Table)[] }).blocks;
+  const out: string[] = [];
+  // L'elenco aperto: le voci consecutive dello stesso tipo ci entrano.
+  const open: { list: { readonly tag: string; readonly items: string[] } | null } = { list: null };
+  const flush = (): void => {
+    const list = open.list;
+    if (list) out.push(`<${list.tag}>${list.items.map((item) => `<li>${item}</li>`).join("")}</${list.tag}>`);
+    open.list = null;
+  };
+  for (const block of blocks) {
+    if (block.t === "table") {
+      flush();
+      const rows = block.rows.map((row) => `<tr>${row.cells.map((cell) => `<td>${cell.blocks.map(runs).join("<br>")}</td>`).join("")}</tr>`);
+      out.push(`<table><tbody>${rows.join("")}</tbody></table>`);
+      continue;
+    }
+    const role = block.role ?? { kind: "body" };
+    if (role.kind === "list") {
+      const tag = role.ordered ? "ol" : "ul";
+      if (open.list?.tag !== tag) flush();
+      open.list ??= { tag, items: [] };
+      open.list.items.push(runs(block));
+      continue;
+    }
+    flush();
+    if (role.kind === "heading") {
+      const level = Math.min(6, role.level ?? 1);
+      out.push(`<h${level}>${runs(block)}</h${level}>`);
+    } else {
+      out.push(`<p>${runs(block)}</p>`);
+    }
+  }
+  flush();
+  return out.join("\n");
+}
+
 /// Le schede vive (T41): il contratto in PDF e la cartella di Excel del banco
 /// (`pdf-scena`, `workbook=1`) incorporati da soli nel paragrafo, poi un
 /// file che non c'è più e un formato che la nota non sa mostrare.
@@ -75,6 +161,32 @@ const LIVE_CARDS_NOTE = [
   "Le foto dell'appartamento, in un archivio:",
   "",
   "![[foto-appartamento.zip]]",
+  "",
+  "Da chiedere all'agenzia: chi paga la caldaia.",
+].join("\n");
+
+/// La misura e il posto delle schede (T42): il contratto e i conti affiancati
+/// in un `[!columns]`, i conti a tutta pagina e bassi (`|900x260`), il
+/// contratto come riga (`|row`).
+const LIVE_CARDS_SIZE_NOTE = [
+  "# Affitto di via Roma",
+  "",
+  "Il contratto e i conti, uno accanto all'altro:",
+  "",
+  "> [!columns]",
+  "> > [!column]",
+  "> > ![[contratto-affitto.pdf]]",
+  ">",
+  "> > [!column]",
+  "> > ![[Conti.xlsx]]",
+  "",
+  "I conti a tutta pagina, bassi:",
+  "",
+  "![[Conti.xlsx|900x260]]",
+  "",
+  "Il contratto, solo come riga:",
+  "",
+  "![[contratto-affitto.pdf|row]]",
   "",
   "Da chiedere all'agenzia: chi paga la caldaia.",
 ].join("\n");
@@ -576,6 +688,12 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
   sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
   "schede-vive": { text: LIVE_CARDS_NOTE, cursor: null, files: { "Casa/foto-appartamento.zip": "" } },
+  "scheda-documento": {
+    text: DOCUMENT_CARD_NOTE,
+    cursor: null,
+    files: { [DOCUMENT_CARD_FILE]: RICH_BENCH.odt, [DOCUMENT_CARD_LONG]: longDocument(100) },
+  },
+  "schede-misura": { text: LIVE_CARDS_SIZE_NOTE, cursor: null },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "battuta-schede-20": typingCardsNote(50, 20),

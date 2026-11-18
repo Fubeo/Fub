@@ -454,3 +454,28 @@ fn a_restore_does_not_replace_what_it_cannot_photograph() {
         "la nota attuale resta com'era"
     );
 }
+
+/// Il campo «Documento» scritto a mano (#486): «Bilancio» è la sola nota che
+/// si chiama così, e il ripristino la trova.
+#[test]
+fn a_version_of_a_note_written_by_name_is_restored() {
+    let doc = id("Conti/Bilancio.md");
+    let mut host = MemoryHost::new().with_document(doc.as_str(), "nuovo");
+    let store = VersionStore::open(&mut host).unwrap();
+    let version = store
+        .snapshot(&doc, b"vecchio", &mut host)
+        .unwrap()
+        .unwrap();
+    VersioningCommands::default()
+        .invoke(
+            VERSION_RESTORE,
+            serde_json::json!({ DOC: "bilancio", TS: version.ts }),
+            InvokeMode::Apply,
+            &mut host,
+        )
+        .expect("il nome nomina la sola nota");
+    assert_eq!(
+        fub_abi::traits::VaultRead::read_document_bytes(&host, &doc).unwrap(),
+        b"vecchio"
+    );
+}

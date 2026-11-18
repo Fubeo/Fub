@@ -410,7 +410,7 @@ impl Collected {
 }
 
 impl EventSink for Collected {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
         self.notices.lock().unwrap().push(notice.clone());
         self.arrived.notify_all();
         Delivery::Done
@@ -703,7 +703,7 @@ impl Recorder {
 }
 
 impl EventSink for Recorder {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
         let name = serde_json::to_value(&notice.event)
             .ok()
             .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
@@ -852,5 +852,162 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
         still.unread.len(),
         1,
         "reopening an already open vault does not cancel what that open did not read"
+    );
+}
+
+/// Un'uscita che tiene, di ogni notice, **il vault con cui è uscito**.
+#[derive(Default)]
+struct Tagged {
+    seen: Mutex<Vec<(Notice, Option<String>)>>,
+    arrived: Condvar,
+}
+
+impl Tagged {
+    /// Aspetta il primo `document_changed` di `id` che esce **da `vault`**, e
+    /// rende tutti i `document_changed` di `id` visti fino a lì.
+    fn changed(&self, id: &str, vault: &str) -> Vec<Option<String>> {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut seen = self.seen.lock().unwrap();
+        let of = |seen: &[(Notice, Option<String>)]| -> Vec<Option<String>> {
+            seen.iter()
+                .filter(|(n, _)| matches!(&n.event, Event::DocumentChanged { id: d, .. } if d.as_str() == id))
+                .map(|(_, v)| v.clone())
+                .collect()
+        };
+        while !of(&seen).iter().any(|v| v.as_deref() == Some(vault)) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !left.is_zero(),
+                "in {SAFETY_CAP:?} no `document_changed {id}` came out of {vault}: {:?}",
+                of(&seen)
+            );
+            seen = self.arrived.wait_timeout(seen, left).unwrap().0;
+        }
+        of(&seen)
+    }
+}
+
+impl Tagged {
+    /// Aspetta che ciò che è uscito soddisfi `done`.
+    fn until(&self, what: &str, done: impl Fn(&[(Notice, Option<String>)]) -> bool) {
+        let deadline = Instant::now() + SAFETY_CAP;
+        let mut seen = self.seen.lock().unwrap();
+        while !done(&seen) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(!left.is_zero(), "in {SAFETY_CAP:?}: {what}");
+            seen = self.arrived.wait_timeout(seen, left).unwrap().0;
+        }
+    }
+}
+
+impl EventSink for Tagged {
+    fn emit(&self, notice: &Notice, vault: Option<&str>) -> Delivery {
+        self.seen
+            .lock()
+            .unwrap()
+            .push((notice.clone(), vault.map(String::from)));
+        self.arrived.notify_all();
+        Delivery::Done
+    }
+}
+
+/// **#216: un fatto del vault lasciato aperto dice di chi è.**
+///
+/// L'host tiene una sessione per vault aperto e il canale verso la shell è uno:
+/// con A e B aperti, B corrente, una scrittura in `Nota.md` di A usciva come un
+/// `document_changed "Nota.md"` qualunque, uguale a quello che B emetterebbe
+/// per la sua `Nota.md`. Adesso ogni notice del ponte porta la radice del
+/// vault della sessione — la stessa stringa di `VaultInfo::root` — e la forma
+/// che va alla shell (`ShellNotice`) la mette accanto all'evento.
+#[test]
+fn an_event_of_the_vault_left_open_names_its_vault_not_the_current_one() {
+    let a = Vault::new();
+    let b = Vault::new();
+    a.put("Nota.md", "# Nota\n\nin A\n");
+    b.put("Nota.md", "# Nota\n\nin B\n");
+
+    let sink = Arc::new(Tagged::default());
+    let host = Host::new()
+        .with_watcher(Box::new(NoWatcher))
+        .with_sink(sink.clone());
+    let root_a = host.open(&a.root).expect("A opens").root;
+    let root_b = host.open(&b.root).expect("B opens").root;
+    assert_ne!(root_a, root_b);
+    host.wait_indexed(None).expect("B indexes");
+
+    // B è il corrente; la scrittura va in A per nome.
+    host.write_document(
+        Some(root_a.as_str()),
+        &DocId::new("Nota.md"),
+        "# Nota\n\nscritta in A con B davanti\n",
+        WriteBase::Dictated,
+    )
+    .expect("writes in A");
+    let changes = sink.changed("Nota.md", &root_a);
+    assert!(
+        changes
+            .iter()
+            .all(|v| v.as_deref() == Some(root_a.as_str())),
+        "a change of A came out unnamed or as B's: {changes:?}"
+    );
+
+    // E la stessa nota in B esce col nome di B.
+    host.write_document(
+        Some(root_b.as_str()),
+        &DocId::new("Nota.md"),
+        "# Nota\n\nscritta in B\n",
+        WriteBase::Dictated,
+    )
+    .expect("writes in B");
+    sink.changed("Nota.md", &root_b);
+
+    // Ciò che la shell riceve: i campi del notice allo stesso livello, e il
+    // vault accanto; un fatto della macchina non ne porta.
+    let notice = Notice::of(Event::DocumentChanged {
+        id: DocId::new("Nota.md"),
+        changes: None,
+    });
+    let wire = serde_json::to_value(fub_host::ShellNotice {
+        notice: &notice,
+        vault: Some(&root_a),
+    })
+    .unwrap();
+    assert_eq!(wire["vault"], serde_json::Value::from(root_a.clone()));
+    assert_eq!(wire["event"]["type"], "document_changed");
+    assert_eq!(wire["origin"]["batch"], serde_json::Value::Null);
+    let machine = serde_json::to_value(fub_host::ShellNotice {
+        notice: &notice,
+        vault: None,
+    })
+    .unwrap();
+    assert!(machine.get("vault").is_none(), "{machine}");
+
+    // Chi spegne l'app con due vault aperti: ognuno chiude col suo nome, e
+    // nessuna chiusura esce col nome dell'altro.
+    let errors = host.close();
+    assert!(errors.is_empty(), "{errors:?}");
+    for root in [&root_a, &root_b] {
+        sink.until("both vaults say they closed", |seen| {
+            seen.iter().any(|(n, v)| {
+                matches!(&n.event, Event::VaultClosed { root: r } if r == root)
+                    && v.as_deref() == Some(root.as_str())
+            })
+        });
+    }
+    let closings: Vec<_> = sink
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|(n, v)| match &n.event {
+            Event::VaultClosed { root } => Some((root.clone(), v.clone())),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        closings
+            .iter()
+            .all(|(root, v)| v.as_deref() == Some(root.as_str())),
+        "a closing came out under another vault's name: {closings:?}"
     );
 }

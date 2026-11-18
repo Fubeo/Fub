@@ -425,7 +425,7 @@ struct Uscita(std::sync::Mutex<Vec<fub_abi::Event>>);
 
 #[cfg(feature = "lavagna")]
 impl fub_host::EventSink for Uscita {
-    fn emit(&self, notice: &fub_abi::Notice) -> fub_host::Delivery {
+    fn emit(&self, notice: &fub_abi::Notice, _vault: Option<&str>) -> fub_host::Delivery {
         self.0.lock().unwrap().push(notice.event.clone());
         fub_host::Delivery::Done
     }

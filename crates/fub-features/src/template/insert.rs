@@ -13,8 +13,7 @@ pub(super) fn insert_target(
     host: &dyn HostApi,
 ) -> Result<(DocId, usize), PluginError> {
     let context = host.active_context();
-    let doc = args
-        .document(DOC)
+    let doc = crate::formats::document_with(&args, DOC, host, fub_abi::options::source::PROSE)?
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
     // Ciò che si inserisce è testo di una nota: in un canvas o in un `.base`

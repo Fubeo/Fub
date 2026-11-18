@@ -829,3 +829,90 @@ fn a_new_archive_request_surfaces_an_earlier_conflict_before_starting() {
         Err(PluginError::NotFound(_))
     ));
 }
+
+// --- il campo «Documento» scritto per nome (#486) ---------------------------
+
+/// La chiave della frase di un errore `BadArgs`, e il suo testo in italiano.
+fn bad_args_key(error: PluginError) -> (String, String) {
+    let PluginError::BadArgs(text) = error else {
+        panic!("atteso BadArgs, arrivato {error:?}")
+    };
+    let key = text.as_message().map(|m| m.key.clone()).unwrap_or_default();
+    (key, rendered(&text))
+}
+
+#[test]
+fn a_note_written_by_name_is_renamed() {
+    let mut host = MemoryHost::new()
+        .with_document("Lavoro/Relazione.md", "testo")
+        .with_document("Altro.md", "altro");
+    invoke(
+        &mut host,
+        NOTES_RENAME,
+        json!({ "doc": "relazione", "to": "Resoconto" }),
+        InvokeMode::Apply,
+    )
+    .expect("il nome scritto nomina la sola nota che si chiama così");
+    assert_eq!(
+        host.read_document(&DocId::new("Resoconto.md")).unwrap(),
+        "testo"
+    );
+    assert!(host
+        .read_document(&DocId::new("Lavoro/Relazione.md"))
+        .is_err());
+}
+
+#[test]
+fn a_name_the_command_cannot_use_is_ignored_among_homonyms() {
+    // Una nota e una lavagna con lo stesso nome: spuntare un task vale solo
+    // per la prosa, quindi il nome non è ambiguo.
+    let mut host = with_task(None).with_document("Nota.canvas", "{}");
+    invoke(
+        &mut host,
+        NOTES_TASK_TOGGLE,
+        json!({ "doc": "nota", "at": [10] }),
+        InvokeMode::Apply,
+    )
+    .expect("la sola nota in prosa che si chiama così");
+    assert_eq!(
+        host.read_document(&DocId::new("nota.md")).unwrap(),
+        "- [x] fare la spesa\n  - [x] pane\n"
+    );
+}
+
+#[test]
+fn a_name_nobody_has_or_many_have_is_said_in_words() {
+    let mut host = MemoryHost::new()
+        .with_document("Bozze/Lettera.md", "uno")
+        .with_document("Inviate/Lettera.md", "due");
+    let (key, text) = bad_args_key(
+        invoke(
+            &mut host,
+            NOTES_TRASH,
+            json!({ "doc": "Preventivo" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(key, crate::formats::E_DOC_MISSING);
+    assert!(text.contains("«Preventivo»"), "{text}");
+    let (key, text) = bad_args_key(
+        invoke(
+            &mut host,
+            NOTES_TRASH,
+            json!({ "doc": "lettera" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(key, crate::formats::E_DOC_AMBIGUOUS);
+    assert!(
+        text.contains("Bozze/Lettera.md, Inviate/Lettera.md"),
+        "{text}"
+    );
+    // Niente è finito nel cestino.
+    assert!(host.read_document(&DocId::new("Bozze/Lettera.md")).is_ok());
+    assert!(host
+        .read_document(&DocId::new("Inviate/Lettera.md"))
+        .is_ok());
+}

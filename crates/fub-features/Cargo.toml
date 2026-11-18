@@ -98,7 +98,11 @@ formatting = []
 # paga niente di tutto questo; la regola è presidiata da
 # `.github/scripts/check-cargo-feature-default.mjs` e da
 # `tests/cargo_features.rs`. Con i disegni viene l'export delle annotazioni dei
-# PDF, che porta un lettore e scrittore di PDF e un rasterizzatore di PDF.
+# PDF, che porta un lettore e scrittore di PDF e un rasterizzatore di PDF. E
+# con i disegni viene la prova del motore del PDF delle note (`pdf_export`,
+# ADR 0247), che ne usa i caratteri, `svg2pdf`, `lopdf` e `hayro`, e aggiunge
+# lo scrittore dei PDF e il sotto-insieme dei caratteri che `svg2pdf` porta
+# già: nessun crate nuovo nel `Cargo.lock`.
 draw = [
     "dep:fub-format-svg",
     "dep:fub-scene",
@@ -116,6 +120,8 @@ draw = [
     "dep:write-fonts",
     "dep:kurbo",
     "dep:wuff",
+    "dep:pdf-writer",
+    "dep:subsetter",
 ]
 # Il Motore del disegno: solo la sua riga della mappa (`src/componenti.rs`); il
 # motore sta in `fub-disegno`, che porta `fub-host` con la sua feature omonima.
@@ -187,6 +193,10 @@ regex = { workspace = true, optional = true }
 # lo prova un test.
 resvg = { workspace = true, features = ["text", "raster-images"], optional = true }
 svg2pdf = { version = "0.13.0", optional = true }
+# Dietro `draw`, per `pdf_export`: lo scrittore dei PDF e il sotto-insieme dei caratteri,
+# alle stesse versioni che `svg2pdf` porta già.
+pdf-writer = { version = "0.12.1", optional = true }
+subsetter = { version = "0.2.6", optional = true }
 # L'encoder del PNG: quello di `tiny-skia` non scrive né la risoluzione
 # (`pHYs`) né il titolo (`iTXt`). È la stessa 0.18 che `image` porta già.
 png = { version = "0.18.1", optional = true }
@@ -281,3 +291,10 @@ flate2 = { workspace = true }
 [[example]]
 name = "search"
 required-features = ["search"]
+
+# La prova del motore del PDF (ADR 0247): scrive il PDF di un elenco di pagine
+# misurato dal banco (`apps/client/bench/pdf-prova.mjs`), lo ridisegna con
+# `hayro` e ne estrae il testo con `lopdf`.
+[[example]]
+name = "pdf_prova"
+required-features = ["draw"]

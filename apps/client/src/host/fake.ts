@@ -543,7 +543,10 @@ export interface FakeHost {
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
-  emit(event: KernelEvent): boolean;
+  ///
+  /// `vault` è il vault di cui è il fatto, come lo mette il ponte vero
+  /// (`KernelNotice.vault`); senza, il notice non ne nomina nessuno.
+  emit(event: KernelEvent, vault?: string): boolean;
   /// La cartella del tema collegato è cambiata (`fub://theme-changed`): manda
   /// a chi ascolta lo stato di adesso, coi file salvati. Chi prova modifica
   /// prima `themeFolders` (un fascio nuovo, un rifiuto, la cartella tolta).
@@ -1448,9 +1451,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (plugin.mounted) plugin.runtime_known = true;
   }
 
-  function emit(event: KernelEvent): boolean {
+  function emit(event: KernelEvent, vault?: string): boolean {
     if (!listener) return false;
-    listener({ event, origin: { actor: { kind: "user" }, batch: null } });
+    listener({ event, origin: { actor: { kind: "user" }, batch: null }, ...(vault === undefined ? {} : { vault }) });
     return true;
   }
 
@@ -2589,7 +2592,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         });
         answer
           .then(() => Promise.resolve())
-          .then(() => events.forEach(emit), () => undefined);
+          .then(() => events.forEach((event) => emit(event)), () => undefined);
         return answer;
       },
       listInstalledPlugins: (vault) =>
@@ -2965,7 +2968,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     componentsFromOutside: (azione, apply = true) => {
       if (root === null) throw new Error("host fake: no vault is open");
       const recorded = componentChoice(azione, apply);
-      componentEvents(recorded).forEach(emit);
+      componentEvents(recorded).forEach((event) => emit(event));
       return structuredClone(recorded.risposta);
     },
     fault: (name, reason) => {

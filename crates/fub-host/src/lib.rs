@@ -103,6 +103,7 @@ pub mod craft;
 /// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
 pub mod craft_render;
 mod custody;
+mod doc_names;
 /// I disegni aperti nel motore del disegno e le sei porte lato host (K5).
 mod drawing;
 mod engines;
@@ -200,7 +201,8 @@ pub use resources::{
 };
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{
-    doc_id, document_text, Delivery, DocumentText, EventSink, Host, SnapshotHostError, VaultSession,
+    doc_id, document_text, Delivery, DocumentText, EventSink, Host, ShellNotice, SnapshotHostError,
+    VaultSession,
 };
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use theme::{ThemeInfo, ThemePayload};

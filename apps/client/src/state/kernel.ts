@@ -83,7 +83,45 @@ export function onAnyEvent(handler: (n: KernelNotice) => void): () => void {
   };
 }
 
+/// I vault che questa finestra ha **lasciato** (#216).
+///
+/// L'host tiene una sessione per vault aperto, e un vault lasciato può restare
+/// aperto: la demo tiene quello di prima per tornarci, e il vault lasciato si
+/// chiude solo dopo che il nuovo è già aperto, con i suoi ultimi fatti ancora
+/// in viaggio sul canale. Il canale è uno, e ogni notice dice di quale vault è
+/// (`KernelNotice.vault`): ciò che viene da un vault lasciato non è di quello
+/// che la finestra mostra, anche quando nomina una nota con lo stesso id.
+///
+/// È un elenco di vault lasciati e non «il vault corrente» per l'ordine
+/// dell'apertura: i primi fatti del vault in cui si entra (il job
+/// dell'indice) partono prima che la risposta di `open_vault` dica alla shell
+/// la sua radice, e non devono cadere.
+const leftVaults = new Set<string>();
+
+/// La finestra lascia `root`: da qui i suoi fatti non arrivano agli
+/// ascoltatori, finché non ci si rientra.
+export function leaveVault(root: string): void {
+  if (root) leftVaults.add(root);
+}
+
+/// La finestra entra (o rientra) in `root`: i suoi fatti tornano a passare.
+/// Va chiamata **prima** di chiedere l'apertura all'host. Dice se `root` era
+/// fra i lasciati, perché un'apertura rifiutata ce lo rimetta.
+export function enterVault(root: string): boolean {
+  return leftVaults.delete(root);
+}
+
+/// Il notice è di questa finestra? Un fatto senza vault (della macchina)
+/// sempre; uno di un vault lasciato no — tranne l'apertura e la chiusura, che
+/// nominano la loro radice e servono proprio a chi segue un vault che se ne
+/// va (un import che aspetta il suo job, un controllo in corso).
+function belongsHere(n: KernelNotice): boolean {
+  if (n.vault === undefined || !leftVaults.has(n.vault)) return true;
+  return n.event.type === "vault_opened" || n.event.type === "vault_closed";
+}
+
 function dispatchNotice(n: KernelNotice): void {
+  if (!belongsHere(n)) return;
   // Prima i generici, poi i tipizzati. L'ordine conta per un motivo solo, ma
   // vero: le view dichiarative si ridisegnano da `refresh` qualunque sia
   // Copie: un ascoltatore può smontarsi mentre viene chiamato senza saltare il

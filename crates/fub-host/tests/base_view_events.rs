@@ -39,7 +39,7 @@ struct Recorder {
 }
 
 impl EventSink for Recorder {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
         self.notices.lock().unwrap().push(notice.clone());
         self.arrived.notify_all();
         Delivery::Done

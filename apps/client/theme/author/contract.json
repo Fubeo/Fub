@@ -1545,6 +1545,7 @@
     "live-card-open",
     "live-card-full",
     "live-card-label",
+    "live-card-resize",
     "live-card-missing",
     "live-card-unsupported",
     "live-card-message",
@@ -1554,6 +1555,9 @@
     "canvas-card-message",
     "format-bar-context",
     "format-bar-context-cell",
+    "canvas-card-document",
+    "canvas-card-document-content",
+    "canvas-card-document-more",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -3772,6 +3776,7 @@
     "live-card-open": "cornice",
     "live-card-full": "cornice",
     "live-card-label": "cornice",
+    "live-card-resize": "cornice",
     "live-card-missing": "cornice",
     "live-card-unsupported": "cornice",
     "live-card-message": "cornice",
@@ -3781,6 +3786,9 @@
     "canvas-card-message": "cornice",
     "format-bar-context": "cornice",
     "format-bar-context-cell": "cornice",
+    "canvas-card-document": "cornice",
+    "canvas-card-document-content": "cornice",
+    "canvas-card-document-more": "cornice",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -8217,6 +8225,31 @@
       ]
     },
     {
+      "name": "live-card-resize",
+      "part": "live-cards",
+      "hooks": [
+        "live-card-resize"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-columns",
+      "part": "live-cards",
+      "hooks": [
+        "markdown-rendered",
+        "fub-columns",
+        "fub-column"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "live-card-notice",
       "part": "live-cards",
       "hooks": [
@@ -8253,6 +8286,27 @@
       "states": [
         "rest",
         "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-document",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-document",
+        "canvas-card-document-content",
+        "canvas-card-document-more",
+        "rich-surface",
+        "rich-page",
+        "rich-content",
+        "rich-para",
+        "rich-heading",
+        "rich-list",
+        "look-tema"
+      ],
+      "states": [
+        "rest",
+        "selected",
         "focused"
       ]
     },
@@ -11643,10 +11697,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2225,
+    "hooks": 2229,
     "state_names": 7,
-    "assigned_states": 1001,
-    "components": 297,
+    "assigned_states": 1009,
+    "components": 300,
     "preference_tokens": 196
   }
 }

@@ -71,7 +71,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
-import { LIVE_DOC, liveCase } from "./live-fixture";
+import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import {
@@ -1859,6 +1859,17 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
           parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, view: q.heading ?? null, container: q.page.includes("/") ? q.page : BASE_DOC }, fallback: [] } }],
         },
       };
+    }
+    // Un documento di videoscrittura che un caso della Live incorpora (la
+    // scheda di documento, T44): il modello comune reso, dalla proiezione che
+    // il vault ha adesso. Il kernel non regge una sezione di un documento:
+    // con un titolo dà lo stesso il documento intero, come la scheda chiede.
+    const richFile = /\.(docx|odt)$/i.test(q.page)
+      ? Object.keys(LIVE?.files ?? {}).find((id) => id === q.page || id.endsWith(`/${q.page}`))
+      : undefined;
+    if (richFile !== undefined && !q.block) {
+      const projection = host.files()[richFile] ?? LIVE!.files![richFile]!;
+      return { kind: "render_embed", value: { doc_id: richFile, html: documentEmbedHtml(projection), parts: [] } };
     }
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
     // Una nota che un caso della Live riporta (la trasclusione viva): la

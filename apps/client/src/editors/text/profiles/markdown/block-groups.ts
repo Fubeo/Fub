@@ -25,7 +25,20 @@ import { parseImage, widthWritable, rewriteImage, openImageAt, type ImageSource 
 import { codeBlockAt, linkAt, tableRowAt, taskAt } from "./menu";
 import { REMINDER_ACTION } from "./slash";
 import { liveStrings } from "./strings";
-import { liveCardEmbed, removeEmbedAt } from "./live-cards";
+import {
+  besideCardAt,
+  columnWidthOf,
+  embedRangeAtLine,
+  liveCardDisplay,
+  liveCardEmbed,
+  liveCardSize,
+  liveCardWidthOf,
+  liveCardWidthPx,
+  removeEmbedAt,
+  showEmbedAt,
+  sizeEmbedAt,
+  type LiveCardWidth,
+} from "./live-cards";
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri si
 /// scrivono con «Altro…». Gli stessi nel menu del tasto destro e nella barra.
@@ -60,7 +73,7 @@ export type MarkdownBlock =
   | { readonly kind: "image"; readonly start: number; readonly from: number; readonly to: number; readonly image: ImageSource }
   | { readonly kind: "base"; readonly start: number; readonly page: string }
   | { readonly kind: "transclusion"; readonly start: number; readonly page: string; readonly heading: string | null; readonly block: string | null }
-  | { readonly kind: "card"; readonly start: number; readonly page: string; readonly subpath: string | null }
+  | { readonly kind: "card"; readonly start: number; readonly page: string; readonly subpath: string | null; readonly alias: string | null }
   | { readonly kind: "task"; readonly start: number; readonly end: number };
 
 export type BlockKind = MarkdownBlock["kind"];
@@ -96,7 +109,7 @@ export function blockAt(state: EditorState, pos: number): MarkdownBlock | null {
   if (EMBED_LINE.test(line.text)) {
     // Un file che si mostra come scheda viva (T41): il gruppo «Scheda».
     const card = liveCardEmbed(line.text);
-    if (card) return { kind: "card", start: line.from, page: card.page, subpath: card.subpath };
+    if (card) return { kind: "card", start: line.from, page: card.page, subpath: card.subpath, alias: card.alias };
     const link = linkAt(state, line.from + line.text.indexOf("!"));
     if (link?.kind === "wikilink" && link.embed && link.page !== "") {
       if (/\.base$/i.test(link.page)) return { kind: "base", start: line.from, page: link.page };
@@ -186,6 +199,84 @@ export function sheetCardGroup(sheet: {
   };
 }
 
+/// Le voci della misura e del posto di una scheda (T42): «Mostra come»
+/// (scheda, link, riga), la larghezza (colonna, larga, tutta la pagina),
+/// l'altezza della specie quando ce n'è una scritta, «Affianca». Ogni gesto
+/// rilegge l'embed quando si usa, e scrive un passo d'annullamento.
+function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: BlockGroupHost): SurfaceMenuEntry[] {
+  const display = liveCardDisplay(block.alias);
+  const size = liveCardSize(block.alias);
+  const column = (): number => {
+    let width = 0;
+    host.view((view) => {
+      width = Math.round(columnWidthOf(view));
+      return true;
+    });
+    return width;
+  };
+  const write = (change: (state: EditorState, range: NonNullable<ReturnType<typeof embedRangeAtLine>>) => TransactionSpec | null) =>
+    void host.write((state) => {
+      const range = embedRangeAtLine(state, Math.min(block.start, state.doc.length));
+      return range ? change(state, range) : null;
+    });
+  const show = (as: "card" | "link" | "row"): SurfaceMenuItem => ({
+    id: `markdown.card.show.${as}`,
+    label: liveStrings.t(`blockgroup.card.show.${as}`),
+    radio: true,
+    checked: as === display,
+    run: () => write((state, range) => showEmbedAt(state, range, as)),
+  });
+  const width = (choice: LiveCardWidth, now: LiveCardWidth, columnPx: number): SurfaceMenuItem => ({
+    id: `markdown.card.width.${choice}`,
+    label: liveStrings.t(`blockgroup.card.width.${choice}`),
+    radio: true,
+    checked: choice === now,
+    run: () => write((state, range) => sizeEmbedAt(state, range, {
+      // La colonna senza altezza non scrive niente: è la scheda di sempre.
+      width: choice === "column" && size.height === null ? null : liveCardWidthPx(choice, columnPx),
+      height: size.height,
+    }, columnPx)),
+  });
+  const beside = host.read((state) => besideCardAt(state, Math.min(block.start, state.doc.length)));
+  return [
+    {
+      id: "markdown.card.show",
+      label: liveStrings.t("blockgroup.card.show"),
+      icon: "eye",
+      items: [show("card"), show("link"), show("row")],
+    },
+    ...(display === "card" ? [{
+      id: "markdown.card.width",
+      label: liveStrings.t("blockgroup.card.width"),
+      // La colonna del testo si misura quando il menu si apre, come la
+      // larghezza di un'immagine.
+      load: async (): Promise<SurfaceMenuEntry[]> => {
+        const columnPx = column();
+        const now = liveCardWidthOf(size.width, columnPx);
+        return [width("column", now, columnPx), width("wide", now, columnPx), width("page", now, columnPx)];
+      },
+    }] : []),
+    ...(display === "card" && size.height !== null ? [{
+      id: "markdown.card.height",
+      label: liveStrings.t("blockgroup.card.height"),
+      run: () => write((state, range) => sizeEmbedAt(state, range, { width: size.width, height: null })),
+    }] : []),
+    {
+      id: "markdown.card.beside",
+      label: liveStrings.t("blockgroup.card.beside"),
+      icon: "fmt-columns",
+      ...(beside === null || beside === "full" ? {
+        enabled: false,
+        description: liveStrings.t(beside === "full" ? "blockgroup.card.beside.full" : "blockgroup.card.beside.none"),
+      } : {}),
+      run: () => void host.write((state) => {
+        const spec = besideCardAt(state, Math.min(block.start, state.doc.length));
+        return spec === null || spec === "full" ? null : spec;
+      }),
+    },
+  ];
+}
+
 /// I nomi dei gruppi, nella lingua dell'interfaccia.
 const LABELS = {
   task: "blockgroup.task",
@@ -269,7 +360,8 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
     }] : []),
   ],
   // La scheda viva (T41): «Apri» e «Attiva» come in testata, e «Togli dalla
-  // nota», che toglie l'embed e mai il file.
+  // nota», che toglie l'embed e mai il file. Chi scrive ha anche (T42)
+  // «Mostra come», la larghezza, l'altezza della specie e «Affianca».
   card: (block, host, writable) => [
     {
       id: "markdown.link.open",
@@ -282,6 +374,7 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
       label: liveStrings.t("blockgroup.card.activate"),
       run: () => void host.activateCard?.(block.start),
     }] : []),
+    ...(writable ? cardLayout(block, host) : []),
     ...(writable ? [{
       id: "markdown.card.remove",
       label: liveStrings.t("blockgroup.card.remove"),

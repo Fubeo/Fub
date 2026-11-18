@@ -474,6 +474,31 @@ export const VISTE = {
     },
     app: { scena: "schede-vive-02-attiva" },
   },
+  /// La scheda di documento a riposo (T44): il prototipo al passo «Ogni
+  /// formato è una scheda» (la lettera in `.docx` accanto al PDF, che il passo
+  /// attiva), l'app dalla scena del verbale a riposo.
+  "scheda-documento": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="doc"] .docp p');
+      },
+    },
+    app: { scena: "scheda-documento-01-riposo" },
+  },
+  /// Le schede affiancate (T42): nel prototipo la coppia `.pair` del
+  /// documento d'apertura (il contratto e la lettera), nell'app il
+  /// `[!columns]` col contratto e i conti della scena `schede-misura`.
+  "schede-affiancate": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector("#win .pair .scard");
+      },
+    },
+    app: { scena: "schede-misura-01-affiancate" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1525,6 +1550,16 @@ export const PEZZI = [
     app: '.pane.focus .base-surface[data-embedded="true"]',
     proprieta: ["margin-right"],
   },
+  // ── le schede affiancate (T42) ──────────────────────────────────────────
+  // Alla pari, 14 px fra l'una e l'altra, 64 px oltre il testo dai due lati
+  // a tutta larghezza e nella colonna a 700.
+  {
+    id: "schede.affiancate",
+    vista: "schede-affiancate",
+    prototipo: ".pair",
+    app: '.pane.focus .pane-editor .fub-columns[data-live-cards="true"]',
+    proprieta: ["column-gap", "margin-left", "margin-right", "align-items"],
+  },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {
     id: "mini-barra.superficie",
@@ -1632,6 +1667,27 @@ export const PEZZI = [
     prototipo: ".rem svg",
     app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done) svg",
     proprieta: ["color"],
+  },
+  // ── la scheda di documento (T44) ──────────────────────────────────────────
+  // Il margine del testo (`.docw`) e l'inchiostro e lo spazio dei paragrafi
+  // (`.docp`). Il carattere no: il prototipo lo scrive con `var(--f-text)`,
+  // un token che non dichiara, e la regola `font` intera cade (il testo
+  // eredita quello della nota); l'app tiene la misura scritta, 14/1,6.
+  {
+    id: "scheda-documento.testo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docw',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content',
+    proprieta: ["padding"],
+  },
+  {
+    id: "scheda-documento.paragrafo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docp p:not(.r)',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content > p',
+    proprieta: ["margin", "color"],
   },
 ];
 

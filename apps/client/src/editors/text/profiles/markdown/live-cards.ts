@@ -27,6 +27,15 @@
 // alla barra di formato (`activeSheet`, il gruppo «Foglio»), e «Scegli di
 // nuovo» riscrive la parte nell'embed (`repartEmbedAt`).
 //
+// La misura e il posto (T42) stanno nell'embed, come li scrive Obsidian:
+// `![[Conti.xlsx|640x300]]` (larghezza e altezza in px), `|640` (solo la
+// larghezza), `|row` (mostrata come riga: icona e nome). Una misura assurda
+// (`|0x0`) non conta. Il bordo in basso si trascina per l'altezza; il menu del
+// blocco (`block-groups.ts`) ha «Mostra come», la larghezza (colonna, larga,
+// tutta la pagina), «Altezza normale» e «Affianca», che mette la scheda in un
+// `[!columns]` con quella accanto (al più quattro colonne). Dentro le colonne
+// le schede le monta la resa del riquadro (`mount.ts`, opzione `liveCard`).
+//
 // Il provider Markdown non cambia: l'embed si legge e si scrive com'è, e il
 // codice dell'ospite arriva con un `import()` alla prima scheda (la shell lo
 // carica con `LiveCardsPort.load`), mai all'apertura dell'app.
@@ -54,6 +63,10 @@ import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { blockSelection, runOfSelection, selectBlocks, spanOf } from "./blocks/selection";
 import { innermostAt } from "./blocks/model";
 import { modelOf } from "./blocks/transform";
+import { columnCount, dropAsColumn, MAX_COLUMNS } from "./blocks/columns";
+import { siblingsOf } from "./blocks/move";
+import { removeColumnAt } from "./callout";
+import { embedSize, embedSizeText } from "./media";
 import { icon as iconMarkup, registerIcon } from "../../../../ui/icons";
 import { liveStrings } from "./strings";
 
@@ -82,10 +95,10 @@ function extensionOf(page: string): string | null {
 ///
 /// No per ciò che la nota mostra già a modo suo: una nota (la trasclusione
 /// viva, T29), una Base, un'immagine, un suono, un video, un disegno SVG. No,
-/// per ora, per i documenti di testo e per la lavagna: le loro schede nella
-/// nota sono T44 e T47, e fino ad allora restano la resa di sempre. Il resto
-/// (un PDF, un foglio, un file Craft, un formato che la nota non sa mostrare)
-/// è una scheda; quale specie lo dice l'ospite, quando arriva.
+/// per ora, per la lavagna: la sua scheda nella nota è T47, e fino ad allora
+/// resta la resa di sempre. Il resto (un PDF, un foglio, un documento di
+/// Word o ODT, un file Craft, un formato che la nota non sa mostrare) è una
+/// scheda; quale specie lo dice l'ospite, quando arriva.
 export function isLiveCardFile(page: string): boolean {
   const extension = extensionOf(page);
   if (extension === null) return false;
@@ -93,7 +106,7 @@ export function isLiveCardFile(page: string): boolean {
   const media = mediaKindOfId(page);
   if (media === "image" || media === "audio" || media === "video") return false;
   const format = formatKindOf(page);
-  if (format === "word" || format === "odt" || format === "note") return false;
+  if (format === "note") return false;
   // L'XMP di LightCraft e le foto RAW sono dati di una foto, non una scheda.
   if (format === "photo" && extension !== "pcraft") return false;
   return true;
@@ -120,6 +133,171 @@ export function liveCardPart(subpath: string | null): string | null {
   const range = /^(?:'((?:[^']|'')+)'|([^!'"\s][^!]*))!(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)$/.exec(text);
   if (range) return `${range[1]?.replaceAll("''", "'") ?? range[2]!} · ${range[3]!}`;
   return text === "" ? null : text;
+}
+
+// ── La misura e «Mostra come» (T42) ────────────────────────────────────────
+// La misura sta dopo la barra, come Obsidian la capisce per un embed:
+// `![[Conti.xlsx|640x300]]` (larghezza e altezza in pixel) o `|640` (solo la
+// larghezza). La larghezza è quella della scheda: meno della colonna la
+// stringe, di più la allarga oltre il testo, prima a destra (64 px, «Larga»,
+// come la Base) e poi anche a sinistra (altri 64, «Tutta la pagina»), finché la
+// finestra ha il margine per farlo. L'altezza è di tutta la scheda, testata
+// compresa; senza, è quella della specie. «Riga» si scrive `|row`, una parola
+// del formato come `[!columns]`: un altro programma la ignora e mostra l'embed.
+
+/// La parola dopo la barra che mostra la scheda come una riga (icona e nome).
+export const CARD_ROW = "row";
+/// La scheda più stretta e quella più bassa che una misura scritta fa.
+export const CARD_MIN_WIDTH = 160;
+export const CARD_MIN_HEIGHT = 120;
+/// La scheda più alta: una misura più grande si legge così.
+export const CARD_MAX_HEIGHT = 2400;
+/// Di quanto «Larga» e «Tutta la pagina» vanno oltre la colonna del testo.
+export const CARD_WIDE_PX = 64;
+export const CARD_PAGE_PX = 128;
+/// Quanto due larghezze possono differire e restare la stessa scelta.
+const WIDTH_SLACK = 16;
+
+/// La misura che l'embed scrive, già nei limiti: `null` dove non dice niente.
+export interface LiveCardSize {
+  readonly width: number | null;
+  readonly height: number | null;
+}
+
+/// La misura di un embed dal testo dopo la barra. `|0x0`, `|0` e una parola
+/// non sono misure: la scheda resta della sua specie. Fuori dai limiti la
+/// misura si porta dentro (`|20x9000` → 160 × 2400).
+export function liveCardSize(alias: string | null): LiveCardSize {
+  const size = embedSize(alias ?? undefined);
+  if (!size) return { width: null, height: null };
+  const width = Number(size.width);
+  const height = size.height === undefined ? 0 : Number(size.height);
+  return {
+    width: width > 0 ? Math.max(CARD_MIN_WIDTH, width) : null,
+    height: height > 0 ? Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, height)) : null,
+  };
+}
+
+/// Come l'embed chiede di mostrare il file: scheda, o riga.
+export function liveCardDisplay(alias: string | null): "card" | "row" {
+  return alias !== null && alias.trim().toLowerCase() === CARD_ROW ? "row" : "card";
+}
+
+/// Le tre larghezze del menu.
+export type LiveCardWidth = "column" | "wide" | "page";
+
+/// Quale delle tre larghezze è `width` per una colonna larga `column`.
+export function liveCardWidthOf(width: number | null, column: number): LiveCardWidth {
+  if (width === null || column <= 0 || width <= column + WIDTH_SLACK) return "column";
+  return width <= column + CARD_WIDE_PX + WIDTH_SLACK ? "wide" : "page";
+}
+
+/// La larghezza da scrivere per una delle tre, con la colonna di adesso.
+export function liveCardWidthPx(choice: LiveCardWidth, column: number): number {
+  return Math.round(column) + (choice === "wide" ? CARD_WIDE_PX : choice === "page" ? CARD_PAGE_PX : 0);
+}
+
+/// La colonna del testo della Scrittura, in pixel: la larghezza di
+/// `.cm-content` senza i suoi margini di lato.
+export function columnWidthOf(view: EditorView): number {
+  const content = view.contentDOM;
+  const style = content.ownerDocument.defaultView?.getComputedStyle(content);
+  const pad = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0) : 0;
+  return Math.max(0, content.clientWidth - pad);
+}
+
+/// Il testo `![[…]]` di un embed nella nota.
+export interface EmbedRange {
+  readonly from: number;
+  readonly to: number;
+}
+
+/// L'embed della riga `lineFrom`, se la riga è soltanto una scheda.
+export function embedRangeAtLine(state: EditorState, lineFrom: number): EmbedRange | null {
+  const line = state.doc.lineAt(lineFrom);
+  if (!liveCardEmbed(line.text)) return null;
+  const open = line.text.indexOf("![[");
+  const close = line.text.lastIndexOf("]]");
+  return open < 0 || close < open ? null : { from: line.from + open, to: line.from + close + 2 };
+}
+
+/// L'embed di `range`, se il testo lì è ancora la scheda.
+function embedOf(state: EditorState, range: EmbedRange): LiveCardEmbed | null {
+  if (range.from < 0 || range.to > state.doc.length || range.to <= range.from) return null;
+  const text = state.sliceDoc(range.from, range.to);
+  return text.startsWith("![[") && text.endsWith("]]") ? liveCardEmbed(text) : null;
+}
+
+/// Il dopo-barra che la nota ha scritto di suo: né una misura né `row`.
+function ownAlias(alias: string | null): string | null {
+  if (alias === null || embedSize(alias) || liveCardDisplay(alias) === "row") return null;
+  return alias;
+}
+
+function embedText(page: string, subpath: string | null, alias: string | null, bang: boolean): string {
+  return `${bang ? "!" : ""}[[${page}${subpath ?? ""}${alias === null ? "" : `|${alias}`}]]`;
+}
+
+/// La misura nuova dell'embed in `range`: `width` e `height` in pixel, o
+/// `null` per toglierle. Un'altezza senza larghezza prende `column`, perché
+/// Obsidian non sa leggere un'altezza sola. Un dopo-barra scritto a mano lascia
+/// il posto alla misura: dopo la barra ci sta una cosa sola.
+export function sizeEmbedAt(state: EditorState, range: EmbedRange, size: LiveCardSize, column = 0): TransactionSpec | null {
+  const embed = embedOf(state, range);
+  if (!embed) return null;
+  let width = size.width;
+  const height = size.height;
+  if (width === null && height !== null) {
+    // Senza una colonna misurata l'altezza non si scrive: andrebbe persa.
+    if (column <= 0) return null;
+    width = column;
+  }
+  const alias = width === null ? ownAlias(embed.alias) : embedSizeText(width, height);
+  const insert = embedText(embed.page, embed.subpath, alias, true);
+  if (insert === state.sliceDoc(range.from, range.to)) return null;
+  return { changes: { from: range.from, to: range.to, insert }, userEvent: "input" };
+}
+
+/// «Mostra come»: la scheda (`![[…]]`, con la sua misura), il link (`[[…]]`,
+/// senza misura) o la riga (`![[…|row]]`). Cambia solo l'embed nella nota.
+export function showEmbedAt(state: EditorState, range: EmbedRange, as: "card" | "link" | "row"): TransactionSpec | null {
+  const embed = embedOf(state, range);
+  if (!embed) return null;
+  const alias = as === "row" ? CARD_ROW
+    : as === "link" ? ownAlias(embed.alias)
+    : liveCardDisplay(embed.alias) === "row" ? null : embed.alias;
+  const insert = embedText(embed.page, embed.subpath, alias, as !== "link");
+  if (insert === state.sliceDoc(range.from, range.to)) return null;
+  return { changes: { from: range.from, to: range.to, insert }, userEvent: "input" };
+}
+
+/// Ciò che «Affianca» farebbe sulla scheda della riga `lineFrom`: la
+/// transazione, `"full"` se le colonne accanto sono già quattro, `null` se non
+/// c'è una scheda (o delle colonne) subito sotto o sopra.
+export function besideCardAt(state: EditorState, lineFrom: number): TransactionSpec | "full" | null {
+  if (!embedRangeAtLine(state, lineFrom)) return null;
+  const blocks = modelOf(state);
+  const index = innermostAt(blocks, lineFrom);
+  if (index < 0 || blocks[index]!.parent !== -1) return null;
+  const sibs = siblingsOf(blocks, index);
+  const at = sibs.indexOf(index);
+  // Prima la scheda sotto (questa va a sinistra), poi quella sopra.
+  const partners: [number | undefined, "left" | "right"][] = [[sibs[at + 1], "left"], [sibs[at - 1], "right"]];
+  let full = false;
+  for (const [target, side] of partners) {
+    if (target === undefined) continue;
+    const block = blocks[target]!;
+    const count = columnCount(state, block);
+    const card = count === null && embedRangeAtLine(state, block.from) !== null && block.to === state.doc.lineAt(block.from).to;
+    if (count === null && !card) continue;
+    if (count !== null && count >= MAX_COLUMNS) {
+      full = true;
+      continue;
+    }
+    const spec = dropAsColumn(state, blocks, { first: index, last: index }, target, side);
+    if (spec) return { ...spec, userEvent: "input.columns" };
+  }
+  return full ? "full" : null;
 }
 
 /// Le schede che devono essere vive: al più `limit`, le più vicine al centro
@@ -182,6 +360,9 @@ export interface LiveCardsHost {
   /// Ciò che `LiveCards.activeSheet` dà è cambiato (T43): la cella attiva,
   /// la scheda attiva. La superficie lo dice alla barra di formato.
   sheetChanged?(): void;
+  /// Il testo della nota fra `from` e `to`, adesso: le schede dentro le
+  /// colonne (T42) leggono da qui il loro embed. Senza, lì non ci sono schede.
+  text?(from: number, to: number): string | null;
 }
 
 /// L'icona della testata per ogni specie: le figure del set.
@@ -252,7 +433,13 @@ function escapeText(): HTMLElement {
   return line;
 }
 
-type CardState = "loading" | "view" | "missing" | "unsupported";
+type CardState = "loading" | "view" | "row" | "missing" | "unsupported";
+
+/// La Scrittura che contiene `element`, anche dentro un blocco reso.
+function editorOf(element: HTMLElement): EditorView | null {
+  const editor = element.closest<HTMLElement>(".cm-editor");
+  return editor ? EditorView.findFromDOM(editor) : null;
+}
 
 let nextCard = 0;
 
@@ -262,9 +449,11 @@ let nextCard = 0;
 export class LiveCard {
   readonly id = ++nextCard;
   readonly root: HTMLElement;
-  readonly embed: LiveCardEmbed;
+  #embed: LiveCardEmbed;
+  /// Dentro una colonna di `[!columns]` (T42): la scheda sta nella resa del
+  /// riquadro, e il suo embed lo dicono `data-md-from` e `data-md-to`.
+  readonly inColumn: boolean;
   readonly #owner: LiveCards;
-  readonly #view: EditorView;
   readonly #life: Lifetime;
   readonly #head: HTMLElement;
   readonly #name: HTMLElement;
@@ -280,15 +469,17 @@ export class LiveCard {
   #kind: CardKind | null = null;
   /// La cella attiva e la sua formula, mentre la specie scrive (un foglio).
   #cellContext: CardEditorContext | null = null;
+  #refreshResizable: () => void = () => {};
 
-  constructor(owner: LiveCards, view: EditorView, embed: LiveCardEmbed) {
+  constructor(owner: LiveCards, embed: LiveCardEmbed, inColumn = false) {
     this.#owner = owner;
-    this.#view = view;
-    this.embed = embed;
+    this.#embed = embed;
+    this.inColumn = inColumn;
     this.#life = openLifetime();
     const root = this.root = element("div", "live-card");
     root.dataset.liveCard = String(this.id);
     root.dataset.cardState = "loading";
+    if (inColumn) root.dataset.cardColumn = "true";
     root.tabIndex = -1;
     root.setAttribute("role", "group");
     root.setAttribute("aria-label", liveStrings.t("live_card.label", { name: fileName(embed.page) }));
@@ -313,9 +504,25 @@ export class LiveCard {
     this.#tools = element("div", "live-card-tools");
     this.#tools.hidden = true;
     this.#body = element("div", "live-card-body");
-    root.append(head, this.#tools, this.#body);
+    // Il bordo in basso cambia l'altezza (T42): si trascina, o col fuoco su di
+    // lui le frecce su e giù.
+    const resize = element("div", "live-card-resize");
+    resize.setAttribute("role", "separator");
+    resize.setAttribute("aria-orientation", "horizontal");
+    resize.setAttribute("aria-label", liveStrings.t("live_card.resize"));
+    resize.tabIndex = -1;
+    // Il tocco che trascina il bordo non scorre la pagina (la pelle non ha
+    // `touch-action`: lo scrive l'elemento).
+    resize.style.touchAction = "none";
+    root.append(head, this.#tools, this.#body, resize);
+    this.#applySize();
 
     const life = this.#life;
+    this.#resizeGestures(resize);
+    // Dentro un blocco reso (le colonne) la Scrittura non deve vedere il
+    // clic: porterebbe il cursore nel riquadro, e la resa con la scheda se ne
+    // andrebbe. Le schede di primo livello lo dicono con `ignoreEvent`.
+    if (inColumn) life.listen(root, "mousedown", (event: MouseEvent) => event.stopPropagation());
     life.listen(done, "click", (event: MouseEvent) => {
       event.stopPropagation();
       this.#owner.leave(this, { choose: true });
@@ -355,6 +562,124 @@ export class LiveCard {
     return this.#state;
   }
 
+  get embed(): LiveCardEmbed {
+    return this.#embed;
+  }
+
+  /// L'embed è cambiato solo dopo la barra (la misura): la scheda resta la
+  /// stessa, con la misura nuova.
+  update(embed: LiveCardEmbed): void {
+    this.#embed = embed;
+    this.#applySize();
+    this.#owner.requestMeasure(this);
+  }
+
+  /// Il testo `![[…]]` della scheda nella nota, adesso; `null` se non si sa.
+  range(): EmbedRange | null {
+    const view = editorOf(this.root);
+    if (!view) return null;
+    if (this.inColumn) {
+      const from = Number(this.root.dataset.mdFrom);
+      const to = Number(this.root.dataset.mdTo);
+      if (!Number.isInteger(from) || !Number.isInteger(to)) return null;
+      return embedOf(view.state, { from, to }) ? { from, to } : null;
+    }
+    const pos = positionOf(view, this.root);
+    return pos === null ? null : embedRangeAtLine(view.state, view.state.doc.lineAt(pos).from);
+  }
+
+  /// La misura dell'embed sulla scheda: la larghezza e l'altezza scritte, o
+  /// quelle della specie. Dentro una colonna la larghezza è della colonna.
+  #applySize(): void {
+    const display = liveCardDisplay(this.#embed.alias);
+    if (display === "row") this.root.dataset.cardDisplay = "row";
+    else delete this.root.dataset.cardDisplay;
+    const size = display === "row" ? { width: null, height: null } : liveCardSize(this.#embed.alias);
+    if (size.width !== null && !this.inColumn) {
+      this.root.dataset.cardWidth = "set";
+      this.root.style.setProperty("--live-card-width", `${size.width}px`);
+    } else {
+      delete this.root.dataset.cardWidth;
+      this.root.style.removeProperty("--live-card-width");
+    }
+    if (size.height !== null) {
+      this.root.dataset.cardHeight = "set";
+      this.root.style.setProperty("--live-card-height", `${size.height}px`);
+    } else {
+      delete this.root.dataset.cardHeight;
+      this.root.style.removeProperty("--live-card-height");
+    }
+  }
+
+  /// Trascinare il bordo in basso: la scheda segue il puntatore, e al rilascio
+  /// la nota scrive la misura (un passo d'annullamento). Esc o un rilascio
+  /// perso la riportano com'era.
+  #resizeGestures(handle: HTMLElement): void {
+    const life = this.#life;
+    let drag: Lifetime | null = null;
+    life.add(() => drag?.close());
+    const can = () => this.#owner.host.editable() && this.#state === "view" && liveCardDisplay(this.#embed.alias) === "card";
+    // Si ridimensiona dove si scrive: lo si rilegge quando la scheda cambia
+    // stato e quando il puntatore o il fuoco arrivano (la nota può essere
+    // passata in sola lettura nel frattempo).
+    this.#refreshResizable = () => {
+      if (can()) this.root.dataset.cardResizable = "true";
+      else delete this.root.dataset.cardResizable;
+      handle.tabIndex = can() ? 0 : -1;
+    };
+    life.listen(this.root, "pointerenter", () => this.#refreshResizable());
+    life.listen(this.root, "focusin", () => this.#refreshResizable());
+    const end = (height: number | null): void => {
+      drag?.close();
+      drag = null;
+      delete this.root.dataset.cardResizing;
+      if (height !== null && this.#owner.resize(this, height)) return;
+      this.#applySize();
+      this.#owner.requestMeasure(this);
+    };
+    life.listen(handle, "pointerdown", (event: PointerEvent) => {
+      if (event.button !== 0 || !can() || drag) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const start = event.clientY;
+      const from = this.root.getBoundingClientRect().height;
+      let height = from;
+      try {
+        handle.setPointerCapture(event.pointerId);
+      } catch {
+        // Un puntatore già andato: il gesto finisce al primo rilascio.
+      }
+      this.root.dataset.cardResizing = "true";
+      const gesture = drag = openLifetime();
+      gesture.listen(handle, "pointermove", (move: PointerEvent) => {
+        height = Math.round(Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, from + move.clientY - start)));
+        this.root.dataset.cardHeight = "set";
+        this.root.style.setProperty("--live-card-height", `${height}px`);
+        this.#owner.requestMeasure(this);
+      });
+      gesture.listen(handle, "pointerup", () => end(Math.abs(height - from) >= 1 ? height : null));
+      gesture.listen(handle, "pointercancel", () => end(null));
+      gesture.listen(handle, "lostpointercapture", () => {
+        if (drag === gesture) end(null);
+      });
+      gesture.listen(handle.ownerDocument, "keydown", (key: KeyboardEvent) => {
+        if (key.key !== "Escape") return;
+        key.preventDefault();
+        key.stopPropagation();
+        end(null);
+      }, { capture: true });
+    });
+    life.listen(handle, "keydown", (event: KeyboardEvent) => {
+      if ((event.key !== "ArrowUp" && event.key !== "ArrowDown") || !can()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const now = this.root.getBoundingClientRect().height;
+      const step = event.shiftKey ? 120 : 40;
+      const height = Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, Math.round(now + (event.key === "ArrowDown" ? step : -step))));
+      this.#owner.resize(this, height);
+    });
+  }
+
   get kind(): CardKind | null {
     return this.#kind;
   }
@@ -384,6 +709,7 @@ export class LiveCard {
   #setState(state: CardState): void {
     this.#state = state;
     this.root.dataset.cardState = state;
+    this.#refreshResizable();
   }
 
   #setKind(kind: CardKind): void {
@@ -419,6 +745,13 @@ export class LiveCard {
     this.#name.title = path;
     const kind = kit ? kit.kindOf(path) : null;
     if (kind) this.#setKind(kind);
+    // Mostrata come riga (T42): l'icona e il nome, senza la vista della specie.
+    if (liveCardDisplay(this.#embed.alias) === "row") {
+      this.#freshBody();
+      this.#setState("row");
+      delete this.root.dataset.cardMode;
+      return;
+    }
     const renderer = kit && kind ? kit.registry.rendererFor(kind) : null;
     if (!kit || !renderer) {
       this.#showUnsupported(path);
@@ -676,7 +1009,18 @@ export class LiveCard {
 
   /// «Apri»: il file nella sua linguetta.
   open(): void {
-    this.#owner.host.port.open(this.#path ?? this.embed.page, this.embed.subpath);
+    const { port } = this.#owner.host;
+    if (this.#path !== null) {
+      port.open(this.#path, this.embed.subpath);
+      return;
+    }
+    // La scheda si sta ancora caricando (o il file manca): il nome scritto
+    // nella nota non è un percorso del vault, e aperto così darebbe una
+    // linguetta vuota. «Apri» lo risolve da sé; se il file non c'è, apre il
+    // nome com'è e la linguetta lo dice.
+    void port.resolve(this.embed.page, this.#owner.host.hostDoc())
+      .catch(() => null)
+      .then((path) => port.open(path ?? this.embed.page, this.embed.subpath));
   }
 
   /// «A tutta pagina»: la scheda alta quanto la vista della nota, e ritorno.
@@ -684,7 +1028,7 @@ export class LiveCard {
     const full = this.root.dataset.cardFull !== "true";
     const button = this.#head.querySelector<HTMLButtonElement>(".live-card-full");
     if (full) {
-      const height = this.#view.scrollDOM.clientHeight;
+      const height = editorOf(this.root)?.scrollDOM.clientHeight ?? 0;
       if (height > 0) this.root.style.setProperty("--live-card-full", `${height}px`);
       this.root.dataset.cardFull = "true";
     } else {
@@ -734,8 +1078,18 @@ export class LiveCardWidget extends WidgetType {
       && other.embed.alias === this.embed.alias;
   }
 
-  toDOM(view: EditorView): HTMLElement {
-    return this.cards.mount(view, this.embed).root;
+  toDOM(): HTMLElement {
+    return this.cards.mount(this.embed).root;
+  }
+
+  /// Lo stesso file mostrato allo stesso modo, con un'altra misura (T42): la
+  /// scheda resta montata e prende la misura nuova, senza rifare la specie.
+  override updateDOM(dom: HTMLElement): boolean {
+    const card = this.cards.cardOf(dom);
+    if (!card || card.embed.page !== this.embed.page || card.embed.subpath !== this.embed.subpath
+      || liveCardDisplay(card.embed.alias) !== liveCardDisplay(this.embed.alias)) return false;
+    card.update(this.embed);
+    return true;
   }
 
   override destroy(dom: HTMLElement): void {
@@ -749,7 +1103,8 @@ export class LiveCardWidget extends WidgetType {
   }
 
   override get estimatedHeight(): number {
-    return 400;
+    if (liveCardDisplay(this.embed.alias) === "row") return 36;
+    return liveCardSize(this.embed.alias).height ?? 400;
   }
 }
 
@@ -771,14 +1126,67 @@ export class LiveCards {
     this.host = host;
   }
 
-  /// La scheda di un embed, montata per `view`.
-  mount(view: EditorView, embed: LiveCardEmbed): LiveCard {
-    const card = new LiveCard(this, view, embed);
+  /// La scheda di un embed. `inColumn`: dentro una colonna di `[!columns]`.
+  mount(embed: LiveCardEmbed, inColumn = false): LiveCard {
+    const card = new LiveCard(this, embed, inColumn);
     this.#cards.set(card.root, card);
     void this.host.port.load().then((kit) => {
       if (kit) this.#maxLive = kit.maxLive;
     }, () => {});
     return card;
+  }
+
+  /// La scheda montata il cui elemento è `dom`.
+  cardOf(dom: HTMLElement): LiveCard | null {
+    return this.#cards.get(dom) ?? null;
+  }
+
+  /// Le schede affiancate (T42): un embed da solo nel suo paragrafo dentro una
+  /// colonna di `[!columns]`, nella resa del riquadro (`mount.ts`, opzione
+  /// `liveCard`), diventa una scheda finché vive la resa. `false` se lì non
+  /// c'è una scheda: l'embed resta della resa.
+  hostSlot(slot: HTMLElement, life: Lifetime): boolean {
+    const paragraph = slot.parentElement;
+    if (this.#destroyed || paragraph?.localName !== "p" || !paragraph.parentElement?.classList.contains("fub-column")) return false;
+    // Da solo nel paragrafo: accanto ci sono soltanto spazi.
+    for (const node of paragraph.childNodes) {
+      if (node !== slot && (node.textContent ?? "").trim() !== "") return false;
+    }
+    const from = Number(slot.dataset.mdFrom);
+    const to = Number(slot.dataset.mdTo);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || to <= from) return false;
+    const text = this.host.text?.(from, to) ?? null;
+    const embed = text === null ? null : liveCardEmbed(text);
+    if (!embed) return false;
+    const card = this.mount(embed, true);
+    card.root.dataset.mdFrom = String(from);
+    card.root.dataset.mdTo = String(to);
+    paragraph.replaceWith(card.root);
+    const columns = card.root.closest<HTMLElement>(".fub-columns");
+    if (columns) columns.dataset.liveCards = "true";
+    life.add(() => this.unmount(card.root));
+    return true;
+  }
+
+  /// La Scrittura rimisura le altezze: la scheda ha cambiato misura.
+  requestMeasure(card: LiveCard): void {
+    const view = card.root.isConnected ? editorOf(card.root) : null;
+    view?.requestMeasure();
+    card.cardView?.resize?.();
+  }
+
+  /// La misura nuova dell'altezza, scritta nella nota: un passo
+  /// d'annullamento. `false` se non si scrive.
+  resize(card: LiveCard, height: number): boolean {
+    const view = editorOf(card.root);
+    const range = card.range();
+    if (!view || !range || !this.host.editable()) return false;
+    const size = liveCardSize(card.embed.alias);
+    const column = Math.round(columnWidthOf(view) || card.root.getBoundingClientRect().width);
+    const spec = sizeEmbedAt(view.state, range, { width: size.width, height }, column);
+    if (!spec) return false;
+    view.dispatch(spec);
+    return true;
   }
 
   unmount(dom: HTMLElement): void {
@@ -808,7 +1216,7 @@ export class LiveCards {
   /// La scheda del blocco che comincia alla riga di `lineFrom`.
   find(view: EditorView, lineFrom: number): LiveCard | null {
     for (const card of this.#cards.values()) {
-      if (!view.contentDOM.contains(card.root)) continue;
+      if (card.inColumn || !view.contentDOM.contains(card.root)) continue;
       const pos = positionOf(view, card.root);
       if (pos !== null && view.state.doc.lineAt(pos).from === lineFrom) return card;
     }
@@ -849,7 +1257,7 @@ export class LiveCards {
     this.#hints?.changed();
     this.sheetChanged();
     if (options.focus === false || card.destroyed) return;
-    const view = EditorView.findFromDOM(card.root);
+    const view = editorOf(card.root);
     if (!view) return;
     if (options.choose) this.#selectBlockOf(view, card);
     view.focus();
@@ -857,7 +1265,7 @@ export class LiveCards {
 
   /// Sceglie la scheda: il suo blocco selezionato coi Blocchi, se sono accesi.
   choose(card: LiveCard): void {
-    const view = EditorView.findFromDOM(card.root);
+    const view = editorOf(card.root);
     if (!view) return;
     this.#selectBlockOf(view, card);
     view.focus();
@@ -865,10 +1273,13 @@ export class LiveCards {
 
   #selectBlockOf(view: EditorView, card: LiveCard): void {
     if (view.state.field(blockSelection, false) === undefined) return;
-    const pos = positionOf(view, card.root);
+    const pos = card.range()?.from ?? positionOf(view, card.root);
     if (pos === null) return;
     const blocks = modelOf(view.state);
-    const index = innermostAt(blocks, pos);
+    let index = innermostAt(blocks, pos);
+    // Una scheda in una colonna sceglie le colonne intere: è il blocco che si
+    // sposta e si toglie.
+    while (card.inColumn && index >= 0 && blocks[index]!.parent !== -1) index = blocks[index]!.parent;
     if (index < 0) return;
     view.dispatch(selectBlocks(view.state, blocks, index, index));
   }
@@ -885,7 +1296,7 @@ export class LiveCards {
     }
     for (const card of this.#cards.values()) {
       if (!view.contentDOM.contains(card.root)) continue;
-      const pos = span ? positionOf(view, card.root) : null;
+      const pos = span ? card.range()?.from ?? positionOf(view, card.root) : null;
       if (span && pos !== null && pos >= span.from && pos <= span.to) card.root.dataset.cardChosen = "true";
       else delete card.root.dataset.cardChosen;
     }
@@ -900,11 +1311,12 @@ export class LiveCards {
   /// «Togli dalla nota»: l'embed va via dal testo, con le righe vuote che lo
   /// staccavano; il file resta dov'è. Un passo d'annullamento.
   remove(card: LiveCard): boolean {
-    const view = EditorView.findFromDOM(card.root);
+    const view = editorOf(card.root);
     if (!view || !this.host.editable()) return false;
-    const pos = positionOf(view, card.root);
-    if (pos === null) return false;
-    const spec = removeEmbedAt(view.state, view.state.doc.lineAt(pos).from);
+    const range = card.range();
+    if (range === null) return false;
+    // In una colonna se ne va la colonna (T42); altrimenti la riga.
+    const spec = card.inColumn ? removeColumnAt(view.state, range.from) : removeEmbedAt(view.state, view.state.doc.lineAt(range.from).from);
     if (!spec) return false;
     view.dispatch(spec);
     return true;
@@ -913,11 +1325,11 @@ export class LiveCards {
   /// «Ritrova…»: l'embed nomina il file scelto, con la sua parte e il suo
   /// alias. Un passo d'annullamento.
   relink(card: LiveCard, path: string): boolean {
-    const view = EditorView.findFromDOM(card.root);
+    const view = editorOf(card.root);
     if (!view || !this.host.editable()) return false;
-    const pos = positionOf(view, card.root);
-    if (pos === null) return false;
-    const spec = relinkEmbedAt(view.state, view.state.doc.lineAt(pos).from, path);
+    const range = card.range();
+    if (range === null) return false;
+    const spec = relinkEmbedIn(view.state, range, path);
     if (!spec) return false;
     view.dispatch(spec);
     return true;
@@ -1105,15 +1517,17 @@ export function repartEmbedAt(state: EditorState, lineFrom: number, part: string
 /// La transazione che fa nominare all'embed della riga `lineFrom` il file
 /// `path`, con la parte e l'alias di prima.
 export function relinkEmbedAt(state: EditorState, lineFrom: number, path: string): TransactionSpec | null {
-  const line = state.doc.lineAt(lineFrom);
-  const embed = liveCardEmbed(line.text);
+  const range = embedRangeAtLine(state, lineFrom);
+  return range ? relinkEmbedIn(state, range, path) : null;
+}
+
+/// Lo stesso, per l'embed in `range` (anche dentro una colonna).
+export function relinkEmbedIn(state: EditorState, range: EmbedRange, path: string): TransactionSpec | null {
+  const embed = embedOf(state, range);
   if (!embed) return null;
-  const open = line.text.indexOf("![[");
-  const close = line.text.lastIndexOf("]]");
-  if (open < 0 || close < open) return null;
   const inner = `${path}${embed.subpath ?? ""}${embed.alias === null ? "" : `|${embed.alias}`}`;
   return {
-    changes: { from: line.from + open + 3, to: line.from + close, insert: inner },
+    changes: { from: range.from + 3, to: range.to - 2, insert: inner },
     userEvent: "input",
   };
 }
