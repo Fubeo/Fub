@@ -31,6 +31,7 @@ class FakeSpecies {
   /// Gli ascolti aperti sul documento dalle viste ancora montate.
   listeners = 0;
   renderer: CardRenderer = {
+    kinds: ["pdf", "sheet"],
     mount: (node, host, mode, context) => {
       const view = new FakeView(this, node.file ?? "", host, mode, context);
       this.views.push(view);
