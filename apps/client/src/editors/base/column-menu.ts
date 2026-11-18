@@ -22,7 +22,7 @@ import type { BaseAggregate, BaseCellValue, BasePlan, BaseRow, BaseSummaryDef, B
 import { summariesValue } from "./data";
 import type { FilterDef } from "./filter";
 import type { ValueShape } from "./icons";
-import { sameKey, sortBy, sortValue, sortedBy, toggleColumn } from "./sort";
+import { readOnlyColumn, sameKey, sortBy, sortValue, sortedBy, toggleColumn } from "./sort";
 import { declaredType, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import type { BaseLock } from "./toolbar";
 
@@ -269,10 +269,10 @@ export interface ColumnMenuActions {
   readonly copy: (column: string) => void;
 }
 
-/// La proprietà di una colonna, se è una proprietà: `file.*` e le formule
-/// non si rinominano e non hanno un tipo.
+/// La proprietà di una colonna, se è una proprietà: `file.*`, `container.*` e
+/// le formule non si rinominano e non hanno un tipo.
 export function columnProperty(column: string): string | null {
-  if (column === NOTE_COLUMN || column.startsWith("file.") || column.startsWith("formula.")) return null;
+  if (column === NOTE_COLUMN || readOnlyColumn(column)) return null;
   return column.replace(/^prop\./, "");
 }
 

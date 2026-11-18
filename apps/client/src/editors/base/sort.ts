@@ -41,6 +41,13 @@ export function propertyName(key: string): string {
   return key.replace(/^prop\./, "");
 }
 
+/// Una colonna che non è una proprietà della nota: `file.*` (il file), `formula.*`
+/// (una formula della Base) e `container.*` (il file che ospita la Base). Si
+/// legge e non si scrive: la sua cella è testo, e una scrittura è rifiutata.
+export function readOnlyColumn(key: string): boolean {
+  return key.startsWith("file.") || key.startsWith("formula.") || key.startsWith("container.");
+}
+
 /// Due chiavi nominano la stessa proprietà? `prop.stato` e `stato` sì.
 export function sameKey(left: string, right: string): boolean {
   return propertyName(left) === propertyName(right);

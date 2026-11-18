@@ -978,3 +978,146 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     } finally { if (!closed) done(); }
   });
 });
+
+describe("il fuoco di una cella resta nella tabella (IMP-124)", () => {
+  // Il core finto: `plan` e `derive` come `fub-features`, `mutate` che riceve
+  // la chiave di colonna e `note.property.set` che riceve il nome della
+  // proprietà, con la CAS sul valore letto come il core.
+  interface Note { doc: string; stato: string; artista: string }
+  const props = (note: Note) => [
+    { key: "stato", value: { kind: "text", value: note.stato } },
+    { key: "artista", value: { kind: "text", value: note.artista } },
+  ];
+  const mount = () => {
+    const notes: Note[] = [
+      { doc: "Opere/Nebbia.md", stato: "Arrivata", artista: "Elena Sala" },
+      { doc: "Opere/Campo.md", stato: "In prestito", artista: "Pietro Neri" },
+    ];
+    const host = document.createElement("div");
+    document.body.append(host);
+    const queryIndex = vi.fn(async (request: IndexQuery): Promise<IndexResult> => {
+      if (request.kind === "documents") return { kind: "documents", value: { offset: 0, total: notes.length, items: notes.map((note) => ({ doc: note.doc, properties: props(note) })) } };
+      const query = request.kind === "custom" ? request.query as { op: string; edits?: { doc: string; key: string; expected: unknown; value?: string | null }[] } : null;
+      if (!query) throw new Error("unexpected query");
+      if (query.op === "parse") return { kind: "custom", value: { views: ["Tabella"], types: ["table"] } };
+      if (query.op === "plan") return { kind: "custom", value: {
+        view: "Tabella", view_type: "table", columns: ["stato", "artista"], column_labels: {}, required_props: [], all_properties: true,
+        group: null, limit: null, map: null, create_defaults: {}, filters: "all", sort: [], order: [],
+      } };
+      if (query.op === "derive") return { kind: "custom", value: { summaries: {}, rows: notes.map((note) => ({
+        doc: note.doc, values: Object.fromEntries(props(note).map(({ key, value }) => [key, value])),
+      })) } };
+      if (query.op === "mutate") return { kind: "custom", value: { mutations: query.edits!.map((edit) => ({
+        doc: edit.doc, key: edit.key, command: edit.value == null ? "note.property.remove" : "note.property.set",
+        args: { doc: edit.doc, key: edit.key.replace(/^prop\./, ""), expected: JSON.stringify(edit.expected), ...(edit.value == null ? {} : { value: edit.value }) },
+      })) } };
+      throw new Error(`unexpected Base operation ${query.op}`);
+    });
+    const invokeCommand = vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
+      if (command !== "note.property.set") return {};
+      const note = notes.find((each) => each.doc === args.doc)!;
+      const key = args.key as "stato" | "artista";
+      const expected = JSON.parse(args.expected as string) as { value?: { value?: unknown } };
+      if (expected.value?.value !== note[key]) throw { kind: "conflict", message: "La nota è cambiata: riprova." };
+      note[key] = JSON.parse(args.value as string) as string;
+      return {};
+    });
+    const surface = mountBaseSurface("base", { paneId: "base-fuoco", documentId: "Opere.base", parent: host }, {
+      queryIndex, invokeCommand, viewState: async () => null, setViewState: async () => {},
+      onOpenDocument: () => {}, revision: () => "r1",
+    });
+    surface.buffer.setDoc("views:\n  - {name: Tabella, type: table}\n");
+    return { host, notes, invokeCommand, done: () => { surface.destroy(); host.remove(); } };
+  };
+  const ready = (host: HTMLElement) => vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(2));
+  // La casella di una nota e di una colonna (1: stato, 2: artista).
+  const field = (host: HTMLElement, doc: string, column: number) => host.querySelector<HTMLInputElement>(`tr[data-doc="${doc}"] td[data-cell="${column}"] input`);
+  const grid = (host: HTMLElement) => host.querySelector(".base-table-viewport");
+  const type = (input: HTMLInputElement, text: string) => { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); };
+  const press = (target: Element, init: KeyboardEventInit): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const CTRL_Z: KeyboardEventInit = { key: "z", ctrlKey: true };
+
+  it("Invio scrive la cella e il fuoco va alla griglia: lì Ctrl+Z annulla la scrittura", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      press(stato, { key: "Enter" });
+      // Il campo che perde il fuoco con una modifica la manda come `change`.
+      stato.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      await vi.waitFor(() => expect(field(host, "Opere/Nebbia.md", 1)?.value).toBe("Confermata"));
+      expect(document.activeElement).toBe(grid(host));
+      expect(press(document.activeElement!, CTRL_Z).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo"));
+    } finally { done(); }
+  });
+
+  it("Tab sposta il fuoco sulla cella dopo, e lì Ctrl+Z è della Base finché non ci si scrive", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      // Il Tab porta il fuoco sulla cella seguente; il campo lasciato manda la modifica.
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      await vi.waitFor(() => expect(field(host, "Opere/Nebbia.md", 1)?.value).toBe("Confermata"));
+      const artista = field(host, "Opere/Nebbia.md", 2)!;
+      expect(document.activeElement).toBe(artista);
+      expect(press(artista, CTRL_Z).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo"));
+      // Una cella scritta ha il suo campo: Ctrl+Z disfa il testo, non la Base.
+      invokeCommand.mockClear();
+      type(artista, "Altro");
+      expect(press(artista, CTRL_Z).defaultPrevented).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalledWith("vault.undo");
+    } finally { done(); }
+  });
+
+  it("una finestra che si ridisegna (lo scorrimento) non toglie il fuoco alla sua cella", async () => {
+    const { host, done } = mount();
+    try {
+      await ready(host);
+      field(host, "Opere/Campo.md", 2)!.focus();
+      grid(host)!.dispatchEvent(new Event("scroll"));
+      expect(document.activeElement).toBe(field(host, "Opere/Campo.md", 2));
+    } finally { done(); }
+  });
+
+  it("Esc lascia la cella senza scriverla e porta il fuoco alla griglia, dove Ctrl+Z è della Base", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Scartata");
+      press(stato, { key: "Escape" });
+      expect(document.activeElement).toBe(grid(host));
+      expect(notes[0]!.stato).toBe("Arrivata");
+      expect(press(document.activeElement!, CTRL_Z).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo"));
+    } finally { done(); }
+  });
+
+  it("la Base è focalizzabile: un clic sulle sue parti che non si fermano (la riga di stato) le dà il fuoco", async () => {
+    // Il browser porta il fuoco al primo antenato focalizzabile del clic: la
+    // Base ha `tabindex="-1"`, così un clic sulla scritta «Results» non lascia
+    // il fuoco sul corpo della pagina (IMP-124, il resto). Il clic lo fa il
+    // browser, che questa prova non simula: il punto è che la Base sia
+    // focalizzabile.
+    const { host, done } = mount();
+    try {
+      await ready(host);
+      expect(host.querySelector(".base-surface")!.getAttribute("tabindex")).toBe("-1");
+    } finally { done(); }
+  });
+});

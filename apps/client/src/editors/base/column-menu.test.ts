@@ -143,6 +143,13 @@ describe("le voci del menu della colonna scrivono la chiave giusta", () => {
     expect(ids).not.toContain("base.column.type");
   });
 
+  it("le colonne `container.*` si comportano come `file.*`: né proprietà, né rinomina, né tipo", () => {
+    expect(columnProperty("container.folder")).toBeNull();
+    const ids = columnMenu(model("container.folder"), actions()).map((entry) => entry.id);
+    expect(ids).not.toContain("base.column.rename");
+    expect(ids).not.toContain("base.column.type");
+  });
+
   it("in sola lettura e in una Base dentro una nota le voci che scrivono sono spente col perché", () => {
     for (const lock of ["read_only", "embedded"] as const) {
       const entries = columnMenu(model("valore", { lock, readOnly: lock === "read_only" }), actions());

@@ -139,6 +139,21 @@ describe("Base contract", () => {
     await expect(prepareBaseMutations(echo, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: JSON.stringify("Confermata") }])).rejects.toThrow("mutazione diversa");
   });
 
+  it("le colonne container.* e file.* non sono proprietà: nessuna mutazione le scrive, neanche se il core la ripete", async () => {
+    // `container.folder` è la cartella del file che ospita la Base, non una
+    // proprietà della nota: il finto la ripete come `note.property.set`, e la
+    // mutazione va rifiutata prima che arrivi a un comando.
+    for (const key of ["container.folder", "file.mtime"]) {
+      const core = deps(async () => custom({ mutations: [{
+        doc: "a.md", key, command: "note.property.set",
+        args: { doc: "a.md", key, expected: '{"kind":"absent"}', value: '"x"' },
+      }] }));
+      await expect(prepareBaseMutations(core, source, "Board", [
+        { doc: "a.md", key, expected: { kind: "absent" }, value: '"x"' },
+      ])).rejects.toThrow("sola lettura");
+    }
+  });
+
   it("restores independent document view choices and quotes CSV content", async () => {
     const bridge = deps(async () => { throw new Error("no query"); });
     await persistBaseView(bridge, "a.base", "Cards");
