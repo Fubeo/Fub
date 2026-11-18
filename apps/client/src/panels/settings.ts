@@ -72,7 +72,7 @@ import {
 } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
-import { errorKindPhrase, errorText } from "../host/errors";
+import { errorText } from "../host/errors";
 import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, resolvedLanguage, t, type Key } from "../i18n/strings";
 import {
   MOTION_KEY,
@@ -1581,7 +1581,7 @@ function profileLabel(profile: string): string {
 /// in un riquadro che si apre.
 ///
 /// Un errore dell'host qui dice **che cosa** non è riuscito, con la frase della
-/// sua specie (`errorKindPhrase`): il suo messaggio è in inglese e lo scrive il
+/// sua specie (`errorText(e, "specie")`): il suo messaggio è in inglese e lo scrive il
 /// kernel per chi lo cerca nel registro, non per chi guarda il pannello.
 async function renderProfiles(index: number): Promise<HTMLElement> {
   const scopes: { scope: SettingScope; vault?: string }[] = [{ scope: "machine" }];
@@ -1610,7 +1610,7 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     parts.body.append(box);
     const result = results[position]!;
     if (result.status === "rejected") {
-      text.append(row("muted", t("settings.profiles.unavailable", { reason: errorKindPhrase(result.reason) })));
+      text.append(row("muted", t("settings.profiles.unavailable", { reason: errorText(result.reason, "specie") })));
       continue;
     }
     const { active, names } = result.value;
@@ -1663,7 +1663,7 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
           await render();
         }
       } catch (error) {
-        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorKindPhrase(error) });
+        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorText(error, "specie") });
       } finally {
         busy = false;
         for (const button of box.querySelectorAll<HTMLButtonElement>("button")) button.disabled = false;
@@ -1704,7 +1704,7 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
           title: t("settings.profiles.reset_title"), okLabel: t("settings.profiles.reset_ok"), danger: true,
         });
         if (accepted && box.isConnected) await perform(() => api.resetSettingsProfile(scope, choice.value, vault));
-      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorKindPhrase(error) }); });
+      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorText(error, "specie") }); });
     }, true);
     inside.append(duplicateRow, json, transfer, row("muted", t("settings.profiles.frame_hint")));
   }

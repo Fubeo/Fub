@@ -207,14 +207,9 @@ utile è sotto il limite esatto e la shell li usa con `Date`.
 
 ## Errori
 
-La forma conserva:
-
-```text
-kind + message
-```
-
-La shell decide il comportamento da `kind`. `message` è presentabile e può
-essere localizzato, ma non viene analizzato con sottostringhe.
+La forma conserva `kind + message`. La shell decide il comportamento da
+`kind`. `message` è presentabile e può essere localizzato, ma non viene
+analizzato con sottostringhe.
 
 `message` sul filo è sempre una stringa. Dentro l'host un errore può restare
 una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
@@ -229,26 +224,18 @@ impedisce la crescita.
 
 ### Un errore davanti a chi usa Fub
 
-Nel client la regola è una, in `host/errors.ts`: una riga d'errore dice
-**che cosa** non è riuscito e **perché** («Non ho potuto creare la sottopagina
-«Tappe»: esiste già qualcosa con lo stesso nome»).
-
-- **Il soggetto lo dà chi chiama**, con una sua chiave del catalogo col
-  segnaposto `{reason}`; un avviso col solo motivo non si manda.
-- **Il motivo lo dà `errorText(e, motivo)`**: `"messaggio"` (il default) per
-  comandi, view e servizi dei componenti, già tradotti dal kernel, e per i
-  nostri `Error`; `"specie"` per le primitive dell'host su un documento
-  (aprire, creare, rinominare, leggere modelli o tipi, ridisegnare, cercare) e
-  per il motore della webview (appunti, `import()`). Sceglie chi chiama, non
-  la specie: un `conflict` è un id da una primitiva, una frase da un comando.
-- Un messaggio non stringa (chiave non risolta) o un oggetto qualsiasi danno
-  la frase della specie, mai «[object Object]» né JSON. Ciò che va **solo nel
-  registro** tiene il messaggio intero e non passa di qui.
-
-Un documento che il provider di formato rifiuta (all'apertura o quando cambia
-sul disco) esce come `trouble` con `gate: "format_parse"`: la notifica dice
-che non si apre, col suo nome, senza la prosa del codec; la barra di stato
-dice lo stesso, una volta, e non parla di parole da contare.
+Nel client la regola è una (`host/errors.ts`): una riga d'errore dice **che
+cosa** non è riuscito e **perché**. Il soggetto lo dà chi chiama, con una sua
+chiave col segnaposto `{reason}`; il motivo lo dà `errorText(e, motivo)`:
+`"messaggio"` (default) per comandi, view e servizi dei componenti, già
+tradotti dal kernel, e per i nostri `Error`; `"specie"` per le primitive
+dell'host su un documento (aprire, creare, rinominare, leggere, ridisegnare,
+cercare) e per la webview. Sceglie chi chiama, non la specie. Una chiave non
+risolta o un oggetto qualsiasi danno la frase della specie, mai «[object
+Object]»; ciò che va solo nel registro tiene il messaggio intero. Un documento
+rifiutato dal provider di formato esce come `trouble` con
+`gate: "format_parse"`: notifica e barra di stato dicono che non si apre, col
+nome, senza la prosa del codec.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 
