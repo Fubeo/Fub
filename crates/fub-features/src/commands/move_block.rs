@@ -660,6 +660,69 @@ fn retarget(
     Ok(edits)
 }
 
+/// Il testo del blocco `[start, end)` di `doc` con i suoi link wiki pronti per
+/// la nota d'arrivo: chi nomina un titolo o un blocco della partenza che
+/// **resta** lì (`[[#Titolo]]`, `[[#^id]]`) riceve la pagina della partenza
+/// (`source_reference`), e chi nomina con la pagina della partenza ciò che si
+/// sposta col blocco (`[[Riunione#^id]]`) la pagina dell'arrivo, come fa
+/// [`retarget`] per i link fuori dal blocco. Un `[[#…]]` verso ciò che si
+/// sposta resta com'è: nell'arrivo nomina la stessa cosa. Si riscrive soltanto
+/// la pagina dentro `[[…]]`.
+fn carried_links(
+    host: &dyn HostApi,
+    doc: &DocId,
+    read: &Read,
+    (start, end): (usize, usize),
+    names: &Names,
+    source_reference: &str,
+    target_reference: &str,
+) -> Result<String, PluginError> {
+    let mut edits: Vec<(usize, usize, &str)> = Vec::new();
+    for link in &read.model.links {
+        if link.span.start < start || link.span.end > end {
+            continue;
+        }
+        let LinkTarget::Wiki {
+            page,
+            heading,
+            block,
+        } = &link.target
+        else {
+            continue;
+        };
+        if heading.is_none() && block.is_none() {
+            continue;
+        }
+        let moves = names.named(heading.as_deref(), block.as_deref());
+        let own_page = page.trim().is_empty();
+        let reference = match (own_page, moves) {
+            (true, false) => source_reference,
+            (false, true) if resolves_to(host, page, doc, doc)? => target_reference,
+            _ => continue,
+        };
+        let Some(written) = read.source.get(link.span.start..link.span.end) else {
+            continue;
+        };
+        let open = if written.starts_with("![[") {
+            3
+        } else if written.starts_with("[[") {
+            2
+        } else {
+            continue;
+        };
+        let inner = &written[open..];
+        let page_len = inner.find(['#', '|', ']']).unwrap_or(inner.len());
+        let at = link.span.start + open - start;
+        edits.push((at, at + page_len, reference));
+    }
+    let mut text = read.source[start..end].to_string();
+    edits.sort_by_key(|&(from, _, _)| std::cmp::Reverse(from));
+    for (from, to, reference) in edits {
+        text.replace_range(from..to, reference);
+    }
+    Ok(text)
+}
+
 /// Un id nuovo per il blocco, che non c'è né nella nota di partenza né in
 /// quella d'arrivo: sei caratteri in base 36, come quelli dell'editor.
 pub(super) fn fresh_id(host: &dyn HostApi, sources: &[&str]) -> Result<String, PluginError> {
@@ -743,7 +806,17 @@ fn plan_move(
 
     let (count, place) = blocks_in(&from.model.body, start, end);
     let names = Names::of(&from.model, start, end);
-    let mut body = moved_body(&from.source[start..end]);
+    let target_reference = reference(host, &request.to)?;
+    let carried = carried_links(
+        host,
+        &request.doc,
+        &from,
+        (start, end),
+        &names,
+        &reference(host, &request.doc)?,
+        &target_reference,
+    )?;
+    let mut body = moved_body(&carried);
     // Il link e la trasclusione nominano il blocco col suo id, se ne ha uno;
     // la trasclusione glielo dà se non ce l'ha.
     let own_id = (count == 1)
@@ -771,7 +844,6 @@ fn plan_move(
         }
         _ => own_id,
     };
-    let target_reference = reference(host, &request.to)?;
 
     // La nota d'arrivo: il blocco al suo posto, e i link che lei stessa aveva
     // verso ciò che arriva.
