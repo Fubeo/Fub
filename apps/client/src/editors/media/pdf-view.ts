@@ -174,7 +174,10 @@ export function makePdfJsLoader(
     let renderGeneration = 0;
     const thumbnails = new Set<{ cancel(): void }>();
     const texts = new Set<PdfJsTextLayer>();
-    const TextLayer = pdfjs.TextLayer;
+    // Si chiede se c'è prima di leggerlo: un modulo che non lo esporta (un
+    // pdf.js ridotto, il modulo finto di un test) lascia la pagina senza
+    // testo da scegliere, e la legge senza errori.
+    const TextLayer = "TextLayer" in pdfjs ? pdfjs.TextLayer : undefined;
     // La pagina di una destinazione: per nome o già scritta, il cui primo
     // elemento è il riferimento alla pagina. Una che non si risolve non porta
     // da nessuna parte, e la voce resta senza pagina.

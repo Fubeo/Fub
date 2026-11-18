@@ -536,6 +536,17 @@ describe("il testo della pagina da pdf.js (T45)", () => {
     const engine = await makePdfJsLoader(async () => pdfjs, "/pdf.worker.mjs")(new Uint8Array([1]));
     expect(engine.renderText).toBeUndefined();
     engine.destroy();
+    // Un modulo che lancia su un nome che non esporta (come quello finto di
+    // `vi.mock`) non si legge alla cieca: si chiede prima se c'è.
+    const strict = new Proxy(pdfjs, {
+      get(target, name) {
+        if (name !== "then" && !(name in target)) throw new Error(`nessun export «${String(name)}»`);
+        return Reflect.get(target, name);
+      },
+    });
+    const other = await makePdfJsLoader(async () => strict, "/pdf.worker.mjs")(new Uint8Array([1]));
+    expect(other.renderText).toBeUndefined();
+    other.destroy();
   });
 
   it("riconosce il PDF protetto da una password dal nome dell'errore", () => {
