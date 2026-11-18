@@ -156,6 +156,11 @@ import type {
   LiveStopReport,
   LiveView,
   LiveWriterStatus,
+  RecipeInfo,
+  RecipeList,
+  RecipeProblem,
+  RecipeStatus,
+  RecipeStepInfo,
   ResourceWriteReceipt,
 } from "./contract";
 import type {
@@ -1055,6 +1060,19 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     id: true, name: true, opens: true, installed: true, running: true,
   }),
   OpenedWith: keysOf<OpenedWith>({ editor: true, how: true }),
+  // Le ricette del vault (`fub_host::recipes`): ciò che `recipes_list`
+  // risponde. Il piano della prova è un `CommandPlan`, già nel mirror del
+  // contratto.
+  RecipeList: keysOf<RecipeList>({ recipes: true, problems: true }),
+  RecipeInfo: keysOf<RecipeInfo>({
+    id: true, title: true, description: true, doc: true, status: true, fingerprint: true,
+    problems: true, steps: true, command: true, keybinding: true, surfaces: true,
+    mounted: true, allowed: true,
+  }),
+  RecipeStepInfo: keysOf<RecipeStepInfo>({
+    run: true, title: true, args: true, writes: true, reach: true, reversible: true,
+  }),
+  RecipeProblem: keysOf<RecipeProblem>({ code: true, field: true, line: true, message: true }),
 };
 const APP_OPTIONAL_KEYS = {
   InstalledPluginInfo: {
@@ -1351,7 +1369,7 @@ describe("mirror TS↔Rust", () => {
     }
     for (const type of [
       "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
-      "ConfigFileKind", "ConfigStatus", "RecoverAction",
+      "ConfigFileKind", "ConfigStatus", "RecoverAction", "RecipeStatus",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
@@ -1817,6 +1835,33 @@ describe("mirror TS↔Rust", () => {
         for (const key of keys) expect(all, `${type}.${key} not in TS mirror`).toContain(key);
         for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
       }
+    }
+  });
+
+  it("le ricette della fixture hanno gli stati e le forme annidate del mirror", () => {
+    // Gli stati sono parole del contratto (`proposta`, `adottata`…): uno che
+    // Rust serializza e il mirror non nomina sarebbe una riga che la sezione
+    // «Ricette» non sa disegnare. Il `satisfies` tiene l'elenco esaustivo.
+    const states = {
+      proposta: true, adottata: true, cambiata: true, problemi: true,
+    } satisfies Record<RecipeStatus, true>;
+    const seen = appFixture.RecipeStatus as RecipeStatus[];
+    expect([...seen].sort()).toEqual(Object.keys(states).sort());
+    for (const list of appFixture.RecipeList as RecipeList[]) {
+      for (const problem of list.problems) expect(Object.keys(problem).sort()).toEqual(APP_RECORD_KEYS.RecipeProblem);
+      for (const recipe of list.recipes) {
+        expect(Object.keys(recipe).sort()).toEqual(APP_RECORD_KEYS.RecipeInfo);
+        expect(Object.keys(states)).toContain(recipe.status);
+        for (const step of recipe.steps) expect(Object.keys(step).sort()).toEqual(APP_RECORD_KEYS.RecipeStepInfo);
+        for (const problem of recipe.problems) expect(Object.keys(problem).sort()).toEqual(APP_RECORD_KEYS.RecipeProblem);
+      }
+    }
+    // L'impronta è una stringa opaca (lo SHA-256 del blocco, in esadecimale):
+    // si confronta e si rimanda indietro a `recipe_adopt`, mai si legge.
+    const fingerprints = (appFixture.RecipeInfo as RecipeInfo[]).map((recipe) => recipe.fingerprint);
+    expect(fingerprints).toContain(null);
+    for (const print of fingerprints) {
+      if (print !== null) expect(print).toMatch(/^[0-9a-f]{64}$/);
     }
   });
 
