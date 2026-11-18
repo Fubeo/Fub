@@ -25,7 +25,12 @@ modo suo; per ora neanche le lavagne, che restano la resa di sempre. Un embed in
   scheda; niente si calcola o si scrive da solo.
 - **Scelta**: un clic sulla testata, o le frecce coi Blocchi accesi, la
   scelgono come ogni blocco. **Invio** la attiva; **Canc** toglie l'embed
-  dalla nota, mai il file.
+  dalla nota, mai il file. Scelta è un oggetto, non testo: niente mini-barra
+  del testo sopra di lei (`objectsChosen` in `markdown/live-cards.ts`, letto
+  da `selectionBox` della superficie). Le colonne con dentro delle schede,
+  scelte, restano rese. Un secondo **Esc** torna al testo col cursore nella
+  riga dopo la scheda (o in quella prima, se è l'ultima), e la scheda resta
+  scheda.
 - **Attiva**: un clic dentro, Invio, o un tocco. Il bordo è d'accento e la
   testata dice «Esc per uscire» (al tocco c'è **Fine**). Tasti, rotella e
   selezione sono della scheda; la riga dei suggerimenti dice i suoi tasti.

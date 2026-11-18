@@ -1555,8 +1555,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       };
     },
     // La bolla di selezione compare solo dove si scrive con la resa accanto:
-    // nella lettura la selezione non ha niente da formattare.
-    selectionBox: () => (editable() ? engine.selectionBox() : null),
+    // nella lettura la selezione non ha niente da formattare. Una scheda viva
+    // scelta è un oggetto, non testo: la sua riga di contesto basta (T41).
+    selectionBox: () => {
+      if (!editable()) return null;
+      if (liveCards && engine.runViewCommand((view) => liveCards.objectsChosen(view))) return null;
+      return engine.selectionBox();
+    },
   };
 
 

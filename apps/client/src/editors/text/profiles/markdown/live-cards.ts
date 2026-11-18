@@ -39,7 +39,7 @@
 // Il provider Markdown non cambia: l'embed si legge e si scrive com'è, e il
 // codice dell'ospite arriva con un `import()` alla prima scheda (la shell lo
 // carica con `LiveCardsPort.load`), mai all'apertura dell'app.
-import { Prec, type EditorState, type Extension, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, Prec, type EditorState, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
 import type {
   CardContext,
@@ -60,7 +60,7 @@ import { t } from "../../../../i18n/strings";
 import { parseWikilinkInner } from "../../../../rules/syntax";
 import { formatKindOf } from "../../../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
-import { blockSelection, runOfSelection, selectBlocks, spanOf } from "./blocks/selection";
+import { blockSelection, runOfSelection, selectBlocks, setBlockSelection, spanOf } from "./blocks/selection";
 import { innermostAt } from "./blocks/model";
 import { modelOf } from "./blocks/transform";
 import { columnCount, dropAsColumn, MAX_COLUMNS } from "./blocks/columns";
@@ -121,6 +121,14 @@ export function liveCardEmbed(source: string): LiveCardEmbed | null {
   const link = parseWikilinkInner(match[1]!);
   if (link.page === "" || link.block !== null || !isLiveCardFile(link.page)) return null;
   return { page: link.page, subpath: link.heading === null ? null : `#${link.heading}`, alias: link.alias };
+}
+
+/// Un blocco reso (le colonne, una citazione) con dentro almeno una scheda:
+/// una sua riga, tolti i `>`, è un embed che diventa scheda. Scelto coi
+/// Blocchi resta reso, come la scheda da sola: si sceglie, non si scrive.
+export function holdsLiveCard(source: string): boolean {
+  if (source.length > 64 * 1024 || !source.includes("![[")) return false;
+  return source.split("\n").some((line) => liveCardEmbed(line.replace(/^(?:\s{0,3}>)+/, "")) !== null);
 }
 
 /// La parte che la testata dice: `p. 3` per una pagina, il `#…` per il resto.
@@ -1273,15 +1281,38 @@ export class LiveCards {
 
   #selectBlockOf(view: EditorView, card: LiveCard): void {
     if (view.state.field(blockSelection, false) === undefined) return;
-    const pos = card.range()?.from ?? positionOf(view, card.root);
-    if (pos === null) return;
     const blocks = modelOf(view.state);
-    let index = innermostAt(blocks, pos);
-    // Una scheda in una colonna sceglie le colonne intere: è il blocco che si
-    // sposta e si toglie.
-    while (card.inColumn && index >= 0 && blocks[index]!.parent !== -1) index = blocks[index]!.parent;
+    const index = this.#blockOf(view, card, blocks);
     if (index < 0) return;
     view.dispatch(selectBlocks(view.state, blocks, index, index));
+  }
+
+  /// Il blocco che scegliere la scheda sceglie, o -1: quello della scheda, o
+  /// per una scheda in una colonna le colonne intere (è il blocco che si
+  /// sposta e si toglie).
+  #blockOf(view: EditorView, card: LiveCard, blocks: ReturnType<typeof modelOf>): number {
+    const pos = card.range()?.from ?? positionOf(view, card.root);
+    if (pos === null) return -1;
+    let index = innermostAt(blocks, pos);
+    while (card.inColumn && index >= 0 && blocks[index]!.parent !== -1) index = blocks[index]!.parent;
+    return index;
+  }
+
+  /// La scelta dei Blocchi è fatta soltanto di schede: è un oggetto, non
+  /// testo. La bolla del testo scelto non si mostra (la scheda ha la sua riga
+  /// di contesto), anche se sotto la scelta c'è il testo dell'embed.
+  objectsChosen(view: EditorView): boolean {
+    const value = view.state.field(blockSelection, false) ?? null;
+    if (!value) return false;
+    const blocks = modelOf(view.state);
+    const run = runOfSelection(blocks, value);
+    if (!run) return false;
+    const cards = new Set<number>();
+    for (const card of this.#cards.values()) {
+      if (!card.destroyed && view.contentDOM.contains(card.root)) cards.add(this.#blockOf(view, card, blocks));
+    }
+    const chosen = siblingsOf(blocks, run.first).filter((index) => index >= run.first && index <= run.last);
+    return chosen.length > 0 && chosen.every((index) => cards.has(index));
   }
 
   /// Le schede dentro i blocchi scelti coi Blocchi portano il segno della
@@ -1300,6 +1331,30 @@ export class LiveCards {
       if (span && pos !== null && pos >= span.from && pos <= span.to) card.root.dataset.cardChosen = "true";
       else delete card.root.dataset.cardChosen;
     }
+  }
+
+  /// Il secondo Esc, sulla scheda scelta: si torna al testo col cursore nella
+  /// riga dopo la scheda (o in quella prima, se è l'ultima), e la scheda resta
+  /// scheda. Il cursore in fondo al blocco, come fanno i Blocchi, la
+  /// riaprirebbe come embed scritto. `false` se la scelta non è di sole schede
+  /// o non c'è una riga dove andare: allora decidono i Blocchi.
+  leaveChosen(view: EditorView): boolean {
+    if (!this.objectsChosen(view)) return false;
+    const value = view.state.field(blockSelection, false);
+    if (!value) return false;
+    const blocks = modelOf(view.state);
+    const run = runOfSelection(blocks, value);
+    if (!run) return false;
+    const { doc } = view.state;
+    const span = spanOf(blocks, run);
+    const last = doc.lineAt(span.to);
+    const first = doc.lineAt(span.from);
+    const target = last.number < doc.lines ? doc.line(last.number + 1).from
+      : first.number > 1 ? doc.line(first.number - 1).to
+        : null;
+    if (target === null) return false;
+    view.dispatch({ selection: EditorSelection.cursor(target), effects: setBlockSelection.of(null), scrollIntoView: true, userEvent: "select" });
+    return true;
   }
 
   /// Invio sul blocco scelto: se è una scheda, la attiva.
@@ -1412,12 +1467,15 @@ export class LiveCards {
     };
   }
 
-  /// Invio sul blocco scelto, e il conto delle schede vive quando la vista
-  /// della Scrittura scorre.
+  /// Invio ed Esc sul blocco scelto, e il conto delle schede vive quando la
+  /// vista della Scrittura scorre.
   extension(): Extension {
     const owner = this;
     return (this.#keys ??= [
       Prec.highest(keymap.of([{
+        key: "Escape",
+        run: (view) => owner.leaveChosen(view),
+      }, {
         key: "Enter",
         run: (view) => {
           if (!view.state.field(blockSelection, false)) return false;
