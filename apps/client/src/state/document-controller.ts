@@ -2987,9 +2987,13 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   if (event.kind === "saved") {
     deniedSaves.delete(event.id);
     // Il testo è su disco: ciò che l'avviso diceva di non ancora deciso è
-    // passato. La bozza ritrovata no: dice da dove viene il testo, e il
-    // salvataggio automatico che la scrive non lo cambia.
+    // passato. Anche la bozza ritrovata, che diceva «copia non salvata da
+    // recuperare», ma solo col buffer pulito: un salvataggio di un testo
+    // superato da battute nuove (o da una bozza rientrata intanto) non
+    // prova che il disco abbia il testo ritrovato (IMP-146). La bozza sul
+    // disco non è di qui: la toglie la sessione dopo la scrittura riuscita.
     for (const kind of ["changed_on_disk", "overwritten"] as const) dismissSheetNotice(event.id, kind);
+    if (!documentSessions.isDirty(event.id)) dismissSheetNotice(event.id, "recovered");
     drawPaneConflict(event.id);
     redrawReading(event.id);
   }
