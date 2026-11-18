@@ -237,9 +237,13 @@ export function mountBaseSurface(
   let settleTimer = 0;
   // Gli annunci di «Annulla» che aspettano il loro evento (`UNDO_EVENT_GRACE_MS`).
   const undoGraces = new Map<number, () => void>();
-  // Le scritture di una cella che aspettano che il fuoco sia arrivato (`change`
-  // in `editable`): `destroy` le disdice.
-  const pendingWrites = new Set<number>();
+  // Le scritture di una cella che aspettano il passaggio del fuoco (il `change`
+  // in `editable` le consegna dopo): ciascuna col suo timer. `destroy` le fa
+  // partire subito, non le disdice (IMP-124).
+  const pendingWrites = new Map<number, () => void>();
+  // La scrittura della cella col fuoco, per ciascun campo: `destroy` la chiede
+  // se la modifica non è ancora consegnata (né Invio, né Tab, né clic).
+  const cellSaves = new WeakMap<HTMLInputElement, () => void>();
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
@@ -577,16 +581,20 @@ export function mountBaseSurface(
     const view = plan.view;
     const epoch = writeEpoch;
     const definition = source;
+    // Una scrittura già chiesta va a fondo anche se la Base si chiude nel
+    // frattempo: `destroyed` salta solo ciò che si disegna, mai la scrittura.
+    const stale = (): boolean => readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
-      if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
+      if (stale()) return;
       for (const mutation of mutations) {
-        if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
+        if (stale()) return;
         await deps.invokeCommand(mutation.command, mutation.args);
       }
       if (!destroyed) await reload(true);
     } catch (failure) {
-      if (destroyed) return;
+      // Chiusa la Base non c'è dove mostrarlo: l'avviso dice quale modifica non è passata.
+      if (destroyed) { notify(t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) }), "guasto"); return; }
       // No optimistic overwrite. The original observation stays on screen and
       // the next explicit reload will fetch the conflicting authoritative note.
       if (isErrorKind(failure, "conflict")) {
@@ -1043,14 +1051,25 @@ export function mountBaseSurface(
       control.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.isComposing) control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
       });
-      // Il `change` arriva mentre il browser sposta il fuoco (Tab, un clic): la
-      // scrittura parte dopo quel passaggio, così il ridisegno che la chiude
-      // non cade sulla cella verso cui il fuoco sta andando (IMP-124).
-      control.addEventListener("change", () => {
+      // La scrittura della cella. Il `change` arriva mentre il browser sposta il
+      // fuoco (Tab, un clic): la consegna dopo quel passaggio, così il ridisegno
+      // che la chiude non cade sulla cella verso cui il fuoco va (IMP-124).
+      // Chiudendo la Base parte subito (`destroy`), e il `change` che il browser
+      // mandasse dopo non la ripete.
+      let closing = false;
+      const save = (now: boolean): void => {
         const next = control.value === "" ? null : JSON.stringify(control.value);
-        const timer = window.setTimeout(() => { pendingWrites.delete(timer); void editCell(row, column, next); }, 0);
-        pendingWrites.add(timer);
+        const write = (): void => { void editCell(row, column, next); };
+        if (now) { write(); return; }
+        const timer = window.setTimeout(() => { pendingWrites.delete(timer); write(); }, 0);
+        pendingWrites.set(timer, write);
+      };
+      cellSaves.set(control, () => {
+        if (control.value === control.defaultValue) return;
+        closing = true;
+        save(true);
       });
+      control.addEventListener("change", () => { if (!closing) save(false); });
       // Un numero si legge coi separatori della lingua; col fuoco il campo
       // torna al valore com'è, quello che si scrive.
       const shown = shownText(value, resolvedLanguage());
@@ -2108,13 +2127,19 @@ export function mountBaseSurface(
     },
     setTheme(theme: Theme) { root.dataset.theme = theme; },
     destroy() {
+      // Chiudere la Base non butta una scrittura: la cella col fuoco con una
+      // modifica non ancora consegnata parte ora, e partono ora anche quelle
+      // che aspettavano il passaggio del fuoco. Prima di smontare qualsiasi
+      // cosa, perché la scrittura non dipende dal DOM (IMP-124).
+      const focused = document.activeElement;
+      if (focused instanceof HTMLInputElement) cellSaves.get(focused)?.();
+      for (const [timer, write] of pendingWrites) { window.clearTimeout(timer); write(); }
+      pendingWrites.clear();
       closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       window.clearTimeout(settleTimer);
       for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
       undoGraces.clear();
-      for (const timer of pendingWrites) window.clearTimeout(timer);
-      pendingWrites.clear();
       toolbar.destroy();
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }

@@ -339,8 +339,7 @@ Il piano della vista (`op: "plan"` della query `fub.base`) porta per questo,
 oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`), le colonne
 scritte (`order`) e i riepiloghi (`summaries`, ognuno con `key`, `aggregate`,
 `expression`, `name` e la `label` con cui `derive` ne dà il valore) come il
-modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna
-(`types`).
+modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (`types`).
 
 ### Una vista nuova
 
@@ -414,6 +413,7 @@ l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
 com'è, e la ricerca, il CSV e le copie usano il valore. Le colonne `file.*`,
 `container.*` e le formule sono di sola lettura: la loro cella è testo. In fondo alle righe
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
+Chiusa la Base, una modifica di cella passa comunque; se la nota non la accetta, un avviso dice di quale nota.
 
 Ogni valore sta su una riga sola e le colonne prendono la misura del loro
 contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando

@@ -988,11 +988,17 @@ describe("il fuoco di una cella resta nella tabella (IMP-124)", () => {
     { key: "stato", value: { kind: "text", value: note.stato } },
     { key: "artista", value: { kind: "text", value: note.artista } },
   ];
-  const mount = () => {
+  const mount = (options: { holdMutate?: boolean; columns?: string[]; order?: string[] } = {}) => {
     const notes: Note[] = [
       { doc: "Opere/Nebbia.md", stato: "Arrivata", artista: "Elena Sala" },
       { doc: "Opere/Campo.md", stato: "In prestito", artista: "Pietro Neri" },
     ];
+    // La mutazione in volo: `mutating` dice che il core è stato chiesto, e
+    // `release` la lascia rispondere quando la prova lo decide.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = () => resolve(); });
+    let announce: () => void = () => {};
+    const mutating = new Promise<void>((resolve) => { announce = () => resolve(); });
     const host = document.createElement("div");
     document.body.append(host);
     const queryIndex = vi.fn(async (request: IndexQuery): Promise<IndexResult> => {
@@ -1001,12 +1007,16 @@ describe("il fuoco di una cella resta nella tabella (IMP-124)", () => {
       if (!query) throw new Error("unexpected query");
       if (query.op === "parse") return { kind: "custom", value: { views: ["Tabella"], types: ["table"] } };
       if (query.op === "plan") return { kind: "custom", value: {
-        view: "Tabella", view_type: "table", columns: ["stato", "artista"], column_labels: {}, required_props: [], all_properties: true,
-        group: null, limit: null, map: null, create_defaults: {}, filters: "all", sort: [], order: [],
+        view: "Tabella", view_type: "table", columns: options.columns ?? ["stato", "artista"], column_labels: {}, required_props: [], all_properties: true,
+        group: null, limit: null, map: null, create_defaults: {}, filters: "all", sort: [], order: options.order ?? [],
       } };
       if (query.op === "derive") return { kind: "custom", value: { summaries: {}, rows: notes.map((note) => ({
         doc: note.doc, values: Object.fromEntries(props(note).map(({ key, value }) => [key, value])),
       })) } };
+      if (query.op === "mutate") {
+        announce();
+        if (options.holdMutate) await held;
+      }
       if (query.op === "mutate") return { kind: "custom", value: { mutations: query.edits!.map((edit) => ({
         doc: edit.doc, key: edit.key, command: edit.value == null ? "note.property.remove" : "note.property.set",
         args: { doc: edit.doc, key: edit.key.replace(/^prop\./, ""), expected: JSON.stringify(edit.expected), ...(edit.value == null ? {} : { value: edit.value }) },
@@ -1027,7 +1037,7 @@ describe("il fuoco di una cella resta nella tabella (IMP-124)", () => {
       onOpenDocument: () => {}, revision: () => "r1",
     });
     surface.buffer.setDoc("views:\n  - {name: Tabella, type: table}\n");
-    return { host, notes, invokeCommand, done: () => { surface.destroy(); host.remove(); } };
+    return { host, notes, invokeCommand, release, mutating, done: () => { surface.destroy(); host.remove(); } };
   };
   const ready = (host: HTMLElement) => vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(2));
   // La casella di una nota e di una colonna (1: stato, 2: artista).
@@ -1118,6 +1128,102 @@ describe("il fuoco di una cella resta nella tabella (IMP-124)", () => {
     try {
       await ready(host);
       expect(host.querySelector(".base-surface")!.getAttribute("tabindex")).toBe("-1");
+    } finally { done(); }
+  });
+
+  it("chiudendo la Base una scrittura in attesa parte: il timer non la butta", async () => {
+    notified.length = 0;
+    const { host, notes, invokeCommand, done } = mount();
+    let closed = false;
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      // Il fuoco va alla cella seguente: la scrittura aspetta che il passaggio finisca.
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      // La Base si chiude prima che il timer scada.
+      done();
+      closed = true;
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Opere/Nebbia.md", key: "stato" }));
+      expect(notified.filter((each) => each.tone === "guasto")).toEqual([]);
+    } finally { if (!closed) done(); }
+  });
+
+  it("una scrittura già in volo arriva all'host anche se la Base si chiude nel frattempo", async () => {
+    notified.length = 0;
+    const { host, notes, invokeCommand, release, mutating, done } = mount({ holdMutate: true });
+    let closed = false;
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      // La richiesta di mutazione è partita e aspetta il core.
+      await mutating;
+      done();
+      closed = true;
+      release();
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Opere/Nebbia.md", key: "stato" }));
+      expect(notified.filter((each) => each.tone === "guasto")).toEqual([]);
+    } finally { if (!closed) done(); }
+  });
+
+  it("chiudendo la Base una cella scritta e non consegnata (senza Invio, Tab o clic) la scrive", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    let closed = false;
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      // Nessun `change`: il fuoco è ancora nella cella quando la Base si chiude.
+      done();
+      closed = true;
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Opere/Nebbia.md", key: "stato" }));
+    } finally { if (!closed) done(); }
+  });
+
+  it("un errore di scrittura dopo la chiusura della Base lo dice con un avviso", async () => {
+    notified.length = 0;
+    const { host, notes, done } = mount();
+    let closed = false;
+    try {
+      await ready(host);
+      // La nota è cambiata sotto la cella: la scrittura non passa (CAS del core).
+      notes[0]!.stato = "Altrove";
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      done();
+      closed = true;
+      await vi.waitFor(() => expect(notified.filter((each) => each.tone === "guasto")).toHaveLength(1));
+      // L'avviso dice di quale nota è la modifica che non è passata.
+      expect(notified.find((each) => each.tone === "guasto")!.message).toContain("Nebbia");
+      expect(notes[0]!.stato).toBe("Altrove");
+    } finally { if (!closed) done(); }
+  });
+
+  it("il filtro non offre `container.*` fra le proprietà; «Proprietà» la mostra ancora fra le nascoste", async () => {
+    const { host, done } = mount({ columns: ["stato", "container.folder"], order: ["stato"] });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      const pop = document.querySelector<HTMLElement>(".base-filter-popover")!;
+      [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Aggiungi una condizione")!.click();
+      const options = [...pop.querySelectorAll<HTMLOptionElement>(".base-filter-subject option")].map((option) => option.value);
+      expect(options).toContain("stato");
+      expect(options).not.toContain("container.folder");
+      host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
+      expect(document.querySelector('.base-columns-popover .base-column[data-column="container.folder"]')).not.toBeNull();
     } finally { done(); }
   });
 });

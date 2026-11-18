@@ -239,12 +239,18 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   };
 
   // ---- Filtro -------------------------------------------------------------
-  const subjects = (plan: BasePlan, extra: readonly (string | null)[]): string[] => {
+  // `forFilter`: il filtro non offre `container.*`, la cartella della Base, che
+  // non è una proprietà della nota. «Proprietà» la tiene fra le nascoste, e la
+  // condizione che la nomina già resta nel suo menu (`extra`).
+  const subjects = (plan: BasePlan, extra: readonly (string | null)[], forFilter = false): string[] => {
     const keys: string[] = [];
-    const add = (key: string) => { const name = plain(key); if (name && !name.startsWith("file.") && !name.startsWith("formula.") && !keys.includes(name)) keys.push(name); };
+    const add = (key: string, kept = false) => {
+      const name = plain(key);
+      if (name && !name.startsWith("file.") && !name.startsWith("formula.") && (kept || !forFilter || !name.startsWith("container.")) && !keys.includes(name)) keys.push(name);
+    };
     for (const column of plan.columns) add(column);
     for (const key of [...model.properties].sort((a, b) => a.localeCompare(b))) add(key);
-    for (const key of extra) if (key !== null) add(key);
+    for (const key of extra) if (key !== null) add(key, true);
     return keys;
   };
   const openFilter = (): void => {
@@ -256,7 +262,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     title.id = titleId;
     const rowsBox = element("div", "base-filter-rows");
     const visualNote = element("p", "base-pop-note");
-    const addButton = textButton({ label: t("base.filter.add"), onPress: () => { mode = "visual"; draft = [...(draft ?? []), { subject: subjects(plan, [])[0] ?? "", op: "is", value: "" }]; drawRows(); syncSearch(); } });
+    const addButton = textButton({ label: t("base.filter.add"), onPress: () => { mode = "visual"; draft = [...(draft ?? []), { subject: subjects(plan, [], true)[0] ?? "", op: "is", value: "" }]; drawRows(); syncSearch(); } });
     addButton.classList.add("base-filter-add");
     const searchTitle = element("label", "base-pop-title", t("base.filter.search"));
     const searchField = document.createElement("input");
@@ -286,7 +292,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     // Un nome che non c'è non ferma «Applica» (le righe lette non hanno tutte
     // le proprietà del vault): la nota avverte, perché un nome sbagliato non
     // diventi in silenzio un filtro che non trova niente.
-    const known = (key: string): boolean => subjects(plan, []).includes(plain(key));
+    const known = (key: string): boolean => subjects(plan, [], true).includes(plain(key));
     // Le due bozze. `mode` dice quale ha toccato per ultima chi usa la Base:
     // è quella che «Applica» scrive.
     let draft: VisualCondition[] | null = visualOf(plan.filters, typed);
@@ -306,7 +312,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       const row = element("div", "base-filter-row");
       const subject = element("select", "base-filter-subject");
       subject.setAttribute("aria-label", t("base.filter.subject"));
-      for (const key of subjects(plan, [condition.subject])) {
+      for (const key of subjects(plan, [condition.subject], true)) {
         subject.append(option(labelOf(plan, key), key, condition.subject === key));
       }
       subject.append(option(t("base.filter.folder"), FOLDER, condition.subject === null));
