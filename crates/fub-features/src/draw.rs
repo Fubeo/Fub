@@ -273,7 +273,9 @@ pub fn settings() -> Vec<SettingSpec> {
 /// dell'export i soli errori, perché le note del log sono testo semplice come
 /// quelle degli altri export.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    // Le frasi comuni dei formati: fra queste, quelle del documento scritto
+    // per nome nei campi «Da» di «Nuovo disegno» e «PDF» di «Annota il PDF».
+    crate::formats::speaking(vec![
         choice::in_italian(annotated::in_italian(annotate::in_italian(
             create::in_italian(StringCatalog::new("it")),
         )))
@@ -361,7 +363,7 @@ pub fn catalog() -> Vec<StringCatalog> {
              that moment. They also turn off from the «Don’t show tips again» box \
              that comes with each one, and apply to this machine.",
         ),
-    ]
+    ])
 }
 
 /// I provider del bundle: uno per formato dei disegni, e i due PDF delle

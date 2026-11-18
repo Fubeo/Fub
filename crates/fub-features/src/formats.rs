@@ -121,6 +121,76 @@ pub(crate) fn document_named_by(
     args.named_document(name, host, accepts, DOC_NAMES)
 }
 
+/// Come [`document_named_by`], per un testo già portato nella forma dei nomi
+/// del vault ([`path_policy::from_outside`](fub_abi::rules::path_policy::from_outside)):
+/// per i comandi che leggono il campo prima di risolverlo. La regola resta
+/// quella di [`Args::named_document`], id che c'è compreso. Un testo vuoto non
+/// nomina niente: `Ok(None)`.
+pub(crate) fn written_document_named_by(
+    written: &str,
+    host: &(impl VaultRead + ?Sized),
+    accepts: impl Fn(&DocId) -> bool,
+) -> Result<Option<DocId>, PluginError> {
+    if written.trim().is_empty() {
+        return Ok(None);
+    }
+    let field = serde_json::json!({ "doc": written });
+    Args::new(&field).named_document("doc", host, accepts, DOC_NAMES)
+}
+
+/// Come [`written_document_named_by`], fra **tutti i file** del vault e non
+/// soltanto i documenti: per i comandi che vogliono un allegato, come un PDF,
+/// che nessun formato serve e quindi non sta in
+/// [`list_documents`](VaultRead::list_documents). I candidati vengono
+/// dall'anagrafe ([`IndexQuery::Entries`]), filtrati da `accepts`; un id che
+/// c'è è quello che ha una revisione.
+pub(crate) fn written_file_named_by(
+    written: &str,
+    host: &(impl ReadApi + ?Sized),
+    accepts: impl Fn(&DocId) -> bool,
+) -> Result<Option<DocId>, PluginError> {
+    if written.trim().is_empty() {
+        return Ok(None);
+    }
+    fub_abi::command::resolve_document_name(
+        written,
+        |doc| host.document_revision(doc).is_ok(),
+        || match host.query_index(IndexQuery::Entries {
+            of_kind: None,
+            within: None,
+            page: None,
+        })? {
+            IndexResult::Entries(entries) => {
+                Ok(entries.items.into_iter().map(|entry| entry.id).collect())
+            }
+            _ => Ok(Vec::new()),
+        },
+        accepts,
+        DOC_NAMES,
+    )
+    .map(Some)
+}
+
+/// L'errore è la frase «nessun documento si chiama così» di questo modulo,
+/// per un testo che però nomina un file (un'estensione che un formato serve o
+/// di cui si conosce il tipo, come `Altro.pdf` o `foto.png`)? Chi ha scritto
+/// un percorso preciso merita la frase del comando su quel file («il PDF
+/// «Altro.pdf» non c'è nel vault», ««foto.png» non è un disegno»), più
+/// precisa di «nessun documento si chiama così». Un nome senza estensione
+/// («Relazione») resta la frase comune.
+pub(crate) fn missing_file(
+    error: &PluginError,
+    written: &str,
+    host: &(impl VaultRead + ?Sized),
+) -> bool {
+    let missing = matches!(
+        error,
+        PluginError::BadArgs(Text::Message(message)) if message.key == E_DOC_MISSING
+    );
+    let doc = DocId::new(written);
+    missing && (host.format_of(&doc).is_some() || fub_abi::rules::media::mime_of(&doc).is_some())
+}
+
 /// Le chiavi che [`speaking`] aggiunge, nell'ordine dei suoi testi.
 pub(crate) const SPOKEN: [&str; 4] = [
     E_FORMAT_UNSUPPORTED,
