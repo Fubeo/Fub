@@ -631,6 +631,30 @@
   background: var(--accent-veil);
   box-shadow: inset -2px 0 0 var(--accent);
 }
+/* Ciò che si è copiato: un tratteggio largo; tagliato: uno fitto. Le
+   formiche di un riempimento o di un taglio incollato hanno il periodo di un
+   loro passo (8 px), e il battito di una copia è un velo che svanisce. */
+.grid-mark-copy[data-dir="h"] {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 6px, transparent 6px 10px);
+}
+.grid-mark-copy[data-dir="v"] {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 6px, transparent 6px 10px);
+}
+.grid-mark-cut[data-dir="h"] {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 3px, transparent 3px 6px);
+}
+.grid-mark-cut[data-dir="v"] {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 3px, transparent 3px 6px);
+}
+.grid-mark-ants[data-dir="h"] > .grid-ants {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 4px, transparent 4px 8px);
+}
+.grid-mark-ants[data-dir="v"] > .grid-ants {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 4px, transparent 4px 8px);
+}
+.grid-mark-flash {
+  background: color-mix(in srgb, var(--grid-mark, var(--accent)) 30%, transparent);
+}
 @media (forced-colors: active) {
   .grid-mark-edge,
   .grid-mark-ring,
@@ -640,17 +664,21 @@
   }
   .grid-mark-veil,
   .grid-mark-band-col,
-  .grid-mark-band-row {
+  .grid-mark-band-row,
+  .grid-mark-flash {
     background: transparent;
+  }
+  /* I colori forzati tolgono i tratteggi dipinti: resta un bordo
+     tratteggiato. */
+  .grid-mark-copy,
+  .grid-mark-cut,
+  .grid-ants {
+    border: 1px dashed Highlight;
   }
 }
 /* Il contorno della selezione nella scheda di un foglio (`card.ts`). */
 .grid-selection {
   border: 2px solid var(--accent);
-}
-/* Il riempimento tirato a tratteggio come in Excel. */
-.grid-fill-preview {
-  border: 2px dashed var(--accent);
 }
 /* Dove andrà la selezione tirata per il bordo. */
 .grid-move-preview {
@@ -699,11 +727,6 @@
 .grid-cell-editor .cm-formula-ref-6,
 .grid-formula-editor .cm-formula-ref-6 {
   color: var(--doc-author-6);
-}
-/* Le formiche di un taglio: il tratteggio fitto dice «si sposta». Stanno
-   ferme: un moto che non finisce è ammesso solo per un lavoro in corso. */
-.grid-cut-mark {
-  border: 2px dashed var(--accent);
 }
 /* La guida di una misura tirata, e la misura accanto. */
 .grid-resize-guide {

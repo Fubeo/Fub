@@ -16,14 +16,17 @@
 // istante.
 //
 // Niente fotogrammi WAAPI per ciò che scivola: corse annullate e ripianificate
-// a ogni cella erano la causa dei salti. `animate` resta per la sola
-// dissolvenza di un pezzo che compare già al suo posto.
+// a ogni cella erano la causa dei salti. `animate` resta per ciò che non
+// segue i dieci numeri: la dissolvenza di un pezzo che compare già al suo
+// posto o che esce (il contorno di un riempimento), il battito di una copia e
+// i passi delle formiche, che camminano solo mentre il foglio non ha ancora
+// risposto (griglia T6).
 //
 // È il solo modulo della griglia che muove i segni; `engine.ts` gli dice dove
 // devono andare.
-import { animate, exitGhost, flip, halt, motionDriver, motionLevel, onFrame } from "../../moto";
+import { animate, exitGhost, flip, halt, motionDriver, motionLevel, onFrame, onMotionLevelChange, stagger } from "../../moto";
 import { advanceSpring, DURATION, springAtRest, springFor, type Spring } from "../../moto/spring";
-import type { Lifetime, Teardown } from "../../ui/lifetime";
+import { openLifetime, type Lifetime, type Teardown } from "../../ui/lifetime";
 import {
   clipRect,
   cornerZone,
@@ -196,6 +199,9 @@ export interface MarksUpdate {
   /// Falso: i segni saltano al bersaglio (il cambio di foglio, una selezione
   /// rimessa dall'host).
   readonly glide?: boolean;
+  /// Vero: le formiche (i pezzi `ants`) camminano, perché il foglio non ha
+  /// ancora risposto; altrimenti stanno ferme.
+  readonly walk?: boolean;
 }
 
 export interface MarksMotion {
@@ -210,6 +216,12 @@ export interface MarksMotion {
   owns(element: Element): boolean;
   /// Se c'è un ascoltatore di fotogramma iscritto.
   moving(): boolean;
+  /// Il battito di una copia: un velo su `rect` (coordinate del piano), in
+  /// ogni zona dove cade, che svanisce in `DURATION.swap`. È solo una
+  /// dissolvenza, quindi resta anche col movimento ridotto.
+  pulse(rect: Rect): void;
+  /// Se le formiche camminano adesso.
+  walking(): boolean;
 }
 
 interface Drawn {
@@ -263,6 +275,21 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
   const leaving = new Map<HTMLElement, { readonly base: Rect; readonly image: Rect }>();
   /// L'ultimo rettangolo, senza la comparsa, dove si è vista ogni maniglia.
   const images = new WeakMap<HTMLElement, Rect>();
+  /// I pezzi che escono con una dissolvenza (`fade`), e la corsa d'uscita di
+  /// quelli che stanno uscendo: un pezzo che torna prima della fine la ferma.
+  /// (`leaving` sono le maniglie del tocco che tornano indietro: un'altra
+  /// uscita, fatta dalla molla e non dalla dissolvenza.)
+  const fades = new Set<string>();
+  const fading = new Map<HTMLElement, number>();
+  let fadeTickets = 0;
+  /// Le formiche: se il bersaglio le vuole in cammino, la vita dell'attesa
+  /// finché camminano, e i pezzi che ci camminano dentro.
+  let walkWanted = false;
+  let walk: Lifetime | null = null;
+  let walkers = new WeakSet<HTMLElement>();
+  /// Il numero dell'ultimo battito: la fine di uno vecchio non nasconde il
+  /// velo di uno nuovo.
+  let pulses = 0;
 
   const instant = () => motionLevel() === "reduced" || motionDriver().instant;
 
@@ -319,6 +346,22 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     if (el.hidden) el.hidden = false;
   };
 
+  /// Nasconde un pezzo, senza il `transform` e l'opacità di una comparsa che
+  /// lo portavano: nascosto non porta niente, come quando il moto è ridotto e
+  /// non ha mai corso.
+  const hide = (el: HTMLElement): void => {
+    el.hidden = true;
+    const last = drawn.get(el);
+    if (last?.transform) {
+      el.style.transform = "";
+      last.transform = "";
+    }
+    if (last?.opacity) {
+      el.style.opacity = "";
+      last.opacity = "";
+    }
+  };
+
   const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
   /// Disegna ogni pezzo in ogni livello dove cade, dalla geometria che si
@@ -373,6 +416,19 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
         const el = element(id, zone, Boolean(corner));
         const className = `grid-mark grid-mark-${part.kind}`;
         if (el.className !== className) el.className = className;
+        // Le formiche sono un nastro tratteggiato dentro il lato, più lungo
+        // di un passo: camminando si sposta lui, e il lato lo taglia.
+        const strip = el.firstElementChild;
+        if (part.kind === "ants" && !strip) {
+          const ants = document.createElement("div");
+          ants.className = "grid-ants";
+          el.append(ants);
+        } else if (part.kind !== "ants" && strip) {
+          strip.remove();
+        }
+        if (part.fade) fades.add(id);
+        else fades.delete(id);
+        if (fading.delete(el)) halt(el);
         if (el.dataset.mark !== part.name) el.dataset.mark = part.name;
         if (part.dir) {
           if (el.dataset.dir !== part.dir) el.dataset.dir = part.dir;
@@ -429,11 +485,17 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
         leaving.set(el, { base, image });
         continue;
       }
+      if (fades.has(id) && !instant()) {
+        fadeOut(el);
+        continue;
+      }
       halt(el);
       pops.delete(el);
-      el.hidden = true;
+      fading.delete(el);
+      hide(el);
     }
     for (const [el, { base, image }] of leaving) place(el, base, popped(image, pops.get(el)!.x), popOpacity(pops.get(el)!));
+    syncAnts();
   };
 
   /// Nasconde le maniglie che tornavano indietro.
@@ -441,7 +503,7 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     for (const el of leaving.keys()) {
       halt(el);
       pops.delete(el);
-      el.hidden = true;
+      hide(el);
     }
     leaving.clear();
   };
@@ -456,10 +518,79 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       pops.delete(el);
       if (leaving.delete(el)) {
         halt(el);
-        el.hidden = true;
+        hide(el);
       }
     }
     return pops.size === 0;
+  };
+
+  /// Un pezzo che non serve più esce con una dissolvenza in `DURATION.swap`
+  /// e poi si nasconde, se nel frattempo non è tornato.
+  const fadeOut = (el: HTMLElement): void => {
+    if (fading.has(el)) return;
+    const ticket = ++fadeTickets;
+    fading.set(el, ticket);
+    const done = (): void => {
+      if (fading.get(el) !== ticket) return;
+      fading.delete(el);
+      hide(el);
+    };
+    void animate(el, { to: { opacity: 0 }, duration: DURATION.swap, easing: "ease-out", whenReduced: "fade", lifetime: host.lifetime })
+      .finished.then(done);
+  };
+
+  /// Le formiche camminano nei pezzi `ants` che si vedono finché il bersaglio
+  /// dice `walk`, mai col movimento ridotto. Ogni passo è una corsa lineare
+  /// di `ANTS_STEP` px in `ANTS_MS`, nella vita dell'attesa, che riparte
+  /// quando finisce (`moto` non ripete): il tratteggio ha il periodo di un
+  /// passo, quindi la fine di una corsa e l'inizio della dopo sono la stessa
+  /// immagine. La risposta del foglio, lo smontaggio e «ridotto» chiudono la
+  /// vita, e le corse si fermano.
+  const syncAnts = (): void => {
+    if (!walkWanted || instant() || closed) {
+      stopAnts();
+      return;
+    }
+    if (!walk) {
+      walk = openLifetime();
+      walkers = new WeakSet();
+      // «Ridotto» acceso mentre camminano le ferma subito.
+      walk.add(onMotionLevelChange(() => {
+        if (instant()) stopAnts();
+      }));
+    }
+    const life = walk;
+    for (const id of shownRests.keys()) {
+      const el = pool.get(id)!;
+      if (!el.classList.contains("grid-mark-ants") || walkers.has(el) || fading.has(el)) continue;
+      const strip = el.firstElementChild;
+      if (!strip) continue;
+      walkers.add(el);
+      // In senso orario: in alto verso destra, a destra in giù, in basso
+      // verso sinistra, a sinistra in su.
+      const name = el.dataset.mark ?? "";
+      const forward = name.endsWith("-top") || name.endsWith("-right");
+      const ahead = el.dataset.dir === "v" ? { y: ANTS_STEP } : { x: ANTS_STEP };
+      const step = (): void => {
+        if (life.closed || el.hidden || fading.has(el) || instant()) {
+          walkers.delete(el);
+          return;
+        }
+        void animate(strip, {
+          from: forward ? {} : ahead,
+          to: forward ? ahead : {},
+          duration: ANTS_MS,
+          easing: "linear",
+          lifetime: life,
+        }).finished.then(step);
+      };
+      step();
+    }
+  };
+
+  const stopAnts = (): void => {
+    walk?.close();
+    walk = null;
   };
 
   const frame = (elapsed: number): void => {
@@ -484,7 +615,9 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
   host.lifetime.add(() => {
     closed = true;
     stop();
+    stopAnts();
     leaving.clear();
+    fading.clear();
     pops.clear();
     for (const el of pool.values()) halt(el);
   });
@@ -497,6 +630,7 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       want = { geometry: next.geometry.slice(), spring: springFor(next.spring ?? GLIDE, calm), fill: next.fill ?? false };
       parts = next.parts;
       still = next.still ?? [];
+      walkWanted = next.walk ?? false;
       if (next.glide === false || !view || instant()) {
         view = { x: want.geometry.slice(), v: want.geometry.map(() => 0) };
       } else {
@@ -512,6 +646,8 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
     shown: () => (view ? view.x.slice() : null),
     clear() {
       stop();
+      stopAnts();
+      walkWanted = false;
       want = null;
       view = null;
       dropLeaving();
@@ -519,12 +655,44 @@ export function createMarksMotion(host: MarksHost): MarksMotion {
       for (const id of shownRests.keys()) {
         const el = pool.get(id)!;
         halt(el);
-        el.hidden = true;
+        hide(el);
       }
+      for (const el of fading.keys()) {
+        halt(el);
+        hide(el);
+      }
+      fading.clear();
       shownRests.clear();
     },
     owns: (el) => owned.has(el),
     moving: () => release !== null,
+    pulse(rect) {
+      if (closed) return;
+      const bands = host.bands();
+      const ticket = ++pulses;
+      for (const zone of ZONES) {
+        const piece = clipRect(zone, rect, bands);
+        const id = `${zone}:flash`;
+        const el = piece ? element(id, zone, false) : pool.get(id);
+        if (!el) continue;
+        halt(el);
+        if (!piece) {
+          el.hidden = true;
+          continue;
+        }
+        if (el.className !== "grid-mark grid-mark-flash") el.className = "grid-mark grid-mark-flash";
+        el.dataset.mark = "flash";
+        // A riposo il velo è trasparente: la dissolvenza lo porta da pieno a
+        // niente, e la sua fine è già il suo riposo.
+        place(el, piece.rect, piece.rect, "0");
+        const done = (): void => {
+          if (pulses === ticket) el.hidden = true;
+        };
+        void animate(el, { from: { opacity: 1 }, to: { opacity: 0 }, duration: DURATION.swap, easing: "ease-out", whenReduced: "fade", lifetime: host.lifetime })
+          .finished.then(done);
+      }
+    },
+    walking: () => walk !== null,
   };
 }
 
@@ -557,6 +725,16 @@ export function fadeInValue(text: HTMLElement, lifetime: Lifetime): void {
 export function fadeOutResizeLabel(label: HTMLElement): void {
   if (!label.isConnected) return;
   exitGhost(label, { to: { opacity: 0 }, duration: DURATION.swap, easing: "ease-out", whenReduced: "fade" });
+}
+
+/// I valori che il foglio dà a un riempimento entrano uno dopo l'altro
+/// (griglia T6): il testo di ogni cella, già al suo posto e nel suo stato
+/// finale, si dissolve dentro in `DURATION.state`, ognuno `STAGGER_MS` dopo
+/// il precedente e al più `STAGGER_MAX` sfalsati. Col movimento ridotto
+/// restano le dissolvenze, senza sfalsamento.
+export function enterValues(texts: readonly HTMLElement[], lifetime: Lifetime): void {
+  if (!texts.length) return;
+  stagger(texts, (text) => animate(text, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade", lifetime }));
 }
 
 /// Una misura tirata cambia le colonne (o le righe) dopo il bordo (griglia

@@ -128,7 +128,7 @@ describe("GridEngine con una cartella di Excel", () => {
       press(grip, "pointerdown", start.x, start.y);
       const end = at(cell, 4, 1);
       press(viewport, "pointermove", end.x, end.y);
-      const preview = host.querySelector<HTMLElement>(".grid-fill-preview")!;
+      const preview = host.querySelector<HTMLElement>(".grid-mark-ants:not([hidden])")!;
       expect(preview).not.toBeNull();
       expect(viewport.classList.contains("filling")).toBe(true);
       press(viewport, "pointerup", end.x, end.y);
@@ -165,7 +165,7 @@ describe("GridEngine con una cartella di Excel", () => {
       press(viewport, "pointercancel", end.x, end.y);
       await settle();
       expect(grid.given).toEqual([]);
-      expect(host.querySelector(".grid-fill-preview")).toBeNull();
+      expect(host.querySelector(".grid-mark-ants:not([hidden])")).toBeNull();
       engine.destroy();
     });
 
@@ -384,12 +384,12 @@ describe("GridEngine con una cartella di Excel", () => {
 
       go(1, 1);
       send("cut");
-      expect(host.querySelector(".grid-cut-mark")).not.toBeNull();
+      expect(host.querySelector(".grid-mark-cut:not([hidden])")).not.toBeNull();
       go(3, 2);
       send("paste");
       await settle();
       expect(JSON.parse(pastes()[2].command.params)).toMatchObject({ source: "B2", move: true });
-      expect(host.querySelector(".grid-cut-mark")).toBeNull();
+      expect(host.querySelector(".grid-mark-cut:not([hidden])")).toBeNull();
       // Il taglio è andato: un altro incolla scrive il testo, senza spostare.
       go(2, 0);
       send("paste");

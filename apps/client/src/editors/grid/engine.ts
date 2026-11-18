@@ -68,6 +68,7 @@ import {
 import { attachCommentCards, commentDescription } from "./comment-card";
 import {
   createMarksMotion,
+  enterValues,
   fadeInValue,
   fadeOutResizeLabel,
   hideEditorFrame,
@@ -215,6 +216,34 @@ interface Copied {
   readonly text: string;
   readonly move: boolean;
 }
+/// Un gesto che aspetta la risposta del foglio, con le formiche che
+/// camminano attorno a `range` sul suo foglio (griglia T6): un riempimento
+/// (`fill`, la sorgente in `source` se si sa) o un taglio incollato (`move`,
+/// attorno a ciò che si sposta).
+interface Waiting {
+  readonly kind: "fill" | "move";
+  readonly sheet: string;
+  readonly range: GridRange;
+  readonly source: GridRange | null;
+}
+/// Una cella mostrata come anteprima di un incolla (`#previewPaste`), con ciò
+/// che la finestra aveva prima, per rimetterlo se il foglio dice di no.
+interface PastePreview {
+  readonly window: GridBytesWindow;
+  readonly previous: GridBytesCell | undefined;
+  readonly shown: GridBytesCell;
+}
+/// I comandi del catalogo che riempiono: mentre il foglio risponde le
+/// formiche camminano attorno a ciò che riempiranno.
+const FILL_COMMANDS: ReadonlySet<string> = new Set([
+  "edit.autoFill",
+  "edit.fillDown",
+  "edit.fillRight",
+  "edit.fillUp",
+  "edit.fillLeft",
+  "edit.fillSeries",
+  "edit.flashFill",
+]);
 /// I comandi del catalogo che soltanto leggono, e che `query` può chiedere.
 const QUERIES: ReadonlySet<string> = new Set([
   "formulas.functions",
@@ -563,6 +592,13 @@ export class GridEngine {
   /// Ciò che copia o taglia hanno preso dalla cartella: l'incolla che trova
   /// lo stesso testo negli appunti lo rifà con `fub.pasteFrom`.
   #copied: Copied | null = null;
+  /// Ciò che si è copiato e non ancora incollato: il tratteggio largo attorno
+  /// all'intervallo, sul suo foglio, finché non si incolla, si scrive o si
+  /// preme Esc (griglia T6).
+  #copyMark: { readonly sheet: string; readonly range: GridRange } | null = null;
+  /// L'ultimo gesto che aspetta il foglio (un riempimento, un taglio
+  /// incollato): le formiche attorno camminano finché non risponde.
+  #waiting: Waiting | null = null;
   /// La colonna dove una serie di Tab è cominciata: Invio ci torna.
   #tabStart: number | null = null;
   /// Il disegno chiesto dallo scorrimento, uno per fotogramma.
@@ -1290,6 +1326,12 @@ export class GridEngine {
   /// Dà il comando `id` del catalogo sulla selezione, con i parametri come
   /// testo di un oggetto JSON. Falso se il catalogo non lo serve acceso.
   command(id: string, params = "{}"): boolean {
+    return this.#command(id, params);
+  }
+
+  /// `command`, con `after` che sa, quando il provider ha risposto e la
+  /// griglia ha riletto, se il comando ha cambiato la cartella.
+  #command(id: string, params: string, after?: (applied: boolean) => void): boolean {
     const state = this.#commands.find((command) => command.id === id);
     if (!this.#bytes || !this.#allowed(id) || !state) return false;
     // Annulla e ripeti dal menu sono Ctrl+Z e Ctrl+Y: il provider sa se c'è
@@ -1302,7 +1344,7 @@ export class GridEngine {
     }
     if (SORTS.has(id) && this.#sortRegion(id, params)) return true;
     this.#finishEditing(true, "input", false);
-    this.#give(id, params, false);
+    this.#give(id, params, false, undefined, HISTORY_RETRIES, after);
     return true;
   }
 
@@ -1489,11 +1531,27 @@ export class GridEngine {
 
   /// Mette in coda il comando `id`: da qui annulla e ripeti sono del
   /// provider, anche prima che risponda.
-  #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void, retries = HISTORY_RETRIES): void {
+  ///
+  /// Un riempimento mette le formiche attorno a ciò che riempirà, finché il
+  /// provider non ha risposto e la griglia non ha riletto (`#beginFill`).
+  /// `after`, se c'è, sa allora se il comando ha cambiato la cartella.
+  #give(
+    id: string,
+    params: string,
+    history: boolean,
+    done?: (run: GridRun) => void,
+    retries = HISTORY_RETRIES,
+    after?: (applied: boolean) => void,
+  ): void {
     const selection = this.#commandSelection();
     const command: GridCommand = { id, params, ...selection };
     // Un comando cambia la cartella sotto ciò che si è copiato.
-    if (id !== PASTE_FROM) this.#copied = null;
+    if (id !== PASTE_FROM) {
+      this.#copied = null;
+      this.#dropCopyMark();
+    }
+    const wait = after ? null : this.#beginFill(id, params);
+    const answered = after ?? (wait ? (applied: boolean) => this.#settleWait(wait, applied) : undefined);
     // Un comando della barra lo annulla soltanto il provider, finché è nel
     // suo giornale; annulla e ripeti tengono la history (`#history`).
     if (id !== UNDO && id !== REDO) {
@@ -1516,6 +1574,7 @@ export class GridEngine {
       // cronologia del documento.
       const epoch = history ? this.#bytesEpoch : given;
       const edits = history ? this.#editEpoch : givenEdits;
+      const revision = this.#bytes?.session.revision;
       let reached = true;
       try {
         reached = await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
@@ -1527,9 +1586,81 @@ export class GridEngine {
       // la sessione vecchia è chiusa con la sua risposta, e quella nuova ha
       // la cronologia di prima del passo. Il passo va a lei, una volta.
       if (history && !reached && retries > 0 && !this.#destroyed && epoch !== this.#bytesEpoch && edits === this.#editEpoch) {
-        this.#give(id, params, true, undefined, retries - 1);
+        this.#give(id, params, true, undefined, retries - 1, answered);
+        return;
       }
+      answered?.(!this.#destroyed && this.#bytes !== null && this.#bytes.session.revision !== revision);
     });
+  }
+
+  /// Un comando che riempie (`FILL_COMMANDS`): le formiche attorno a ciò che
+  /// riempirà, cioè il bersaglio di `edit.autoFill` o la selezione, finché il
+  /// foglio non risponde. La selezione resta dov'è: il provider la mette sul
+  /// riempimento quando risponde, e i segni ci scivolano.
+  #beginFill(id: string, params: string): Waiting | null {
+    if (!FILL_COMMANDS.has(id) || !this.#workbook) return null;
+    let range = this.#selectedRange();
+    let source: GridRange | null = null;
+    if (id === "edit.autoFill") {
+      try {
+        const asked = JSON.parse(params) as { source?: unknown; target?: unknown };
+        const target = typeof asked.target === "string" ? parseRangeA1(asked.target) : null;
+        source = typeof asked.source === "string" ? parseRangeA1(asked.source) : null;
+        if (target) range = target;
+      } catch {
+        // Parametri che non si leggono: le formiche stanno sulla selezione.
+      }
+    } else if (id === "edit.fillDown") {
+      source = { ...range, rowEnd: range.rowStart };
+    } else if (id === "edit.fillUp") {
+      source = { ...range, rowStart: range.rowEnd };
+    } else if (id === "edit.fillRight") {
+      source = { ...range, columnEnd: range.columnStart };
+    } else if (id === "edit.fillLeft") {
+      source = { ...range, columnStart: range.columnEnd };
+    }
+    const wait: Waiting = { kind: "fill", sheet: this.#sheet().id, range, source };
+    this.#waiting = wait;
+    this.#updateMarks(this.#selectedRange());
+    return wait;
+  }
+
+  /// Il foglio ha risposto al gesto `wait`, e la griglia ha riletto: le
+  /// formiche se ne vanno con una dissolvenza (se un gesto più nuovo non le ha
+  /// già prese) e, se il riempimento è entrato, i valori nuovi entrano uno
+  /// dopo l'altro dalla sorgente. Un no lo dice l'avviso, come per ogni
+  /// comando.
+  #settleWait(wait: Waiting, applied: boolean): void {
+    if (this.#destroyed) return;
+    const mine = this.#waiting === wait;
+    if (mine) this.#waiting = null;
+    if (!this.#workbook) return;
+    if (mine) this.#updateMarks(this.#selectedRange());
+    if (!applied || wait.kind !== "fill" || wait.sheet !== this.#sheet().id) return;
+    const { range, source } = wait;
+    const inside = (area: GridRange, row: number, column: number) =>
+      row >= area.rowStart && row <= area.rowEnd && column >= area.columnStart && column <= area.columnEnd;
+    // Quanto una cella sta lontana dalla sorgente: i valori arrivano da lì.
+    const from = (row: number, column: number) => source
+      ? Math.max(0, source.rowStart - row, row - source.rowEnd) + Math.max(0, source.columnStart - column, column - source.columnEnd)
+      : (row - range.rowStart) * (range.columnEnd - range.columnStart + 1) + column - range.columnStart;
+    const entering: { readonly text: HTMLElement; readonly order: number }[] = [];
+    for (const cell of this.#plane.querySelectorAll<HTMLElement>(".grid-cell")) {
+      const row = Number(cell.dataset.row);
+      const column = Number(cell.dataset.column);
+      if (!inside(range, row, column) || (source && inside(source, row, column))) continue;
+      const text = cell.querySelector<HTMLElement>(".grid-cell-text");
+      if (text?.textContent) entering.push({ text, order: from(row, column) });
+    }
+    entering.sort((a, b) => a.order - b.order);
+    enterValues(entering.map((item) => item.text), this.#life);
+  }
+
+  /// Toglie il tratteggio di ciò che si è copiato, se c'è.
+  #dropCopyMark(): void {
+    if (!this.#copyMark) return;
+    this.#copyMark = null;
+    if (this.#workbook) this.#updateMarks(this.#selectedRange());
   }
 
   /// Con `done`, il rifiuto va a chi aspetta invece che nell'avviso. Torna
@@ -1592,7 +1723,9 @@ export class GridEngine {
     this.#options.onCommands?.();
     const last = ticket === this.#bytesTickets;
     if (last) this.#publishJournal(this.#confirmedJournal, command.id === UNDO ? "undo" : command.id === REDO ? "redo" : "input");
-    if (last) this.#adoptSelection(outcome.selection);
+    // Il riempimento mette la selezione su ciò che ha riempito, e i segni ci
+    // scivolano dalla sorgente; ogni altra selezione rimessa dall'host salta.
+    if (last) this.#adoptSelection(outcome.selection, FILL_COMMANDS.has(command.id));
     // Un oggetto appena inserito resta selezionato, come in Excel.
     const inserted = last && command.id.startsWith("insert.") ? insertedObject(outcome.result) : null;
     done?.({ ok: true, result: outcome.result });
@@ -1608,8 +1741,9 @@ export class GridEngine {
 
   /// La selezione che un comando ha lasciato: il foglio, l'intervallo che
   /// contiene la cella attiva e la cella attiva, che è l'àncora quando è un
-  /// angolo dell'intervallo.
-  #adoptSelection(selection: GridCommandSelection): void {
+  /// angolo dell'intervallo. Di solito i segni ci saltano; con `glide` ci
+  /// scivolano.
+  #adoptSelection(selection: GridCommandSelection, glide = false): void {
     const indexOf = () => this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
     let index = indexOf();
     // Un comando che ha aggiunto il foglio (Inserisci foglio) lo lascia
@@ -1621,7 +1755,7 @@ export class GridEngine {
     }
     const active = parseCellA1(selection.active);
     if (index < 0 || !active) return;
-    this.#marksJump = true;
+    this.#marksJump = !glide;
     const areas = selection.selection.split(",").map(parseRangeA1).filter((area): area is GridRange => area !== null);
     const area = areas.find((candidate) =>
       active.row >= candidate.rowStart && active.row <= candidate.rowEnd
@@ -2048,11 +2182,12 @@ export class GridEngine {
   /// (griglia T5): un numero semplice subito a destra, come un numero; una
   /// formula com'è scritta, tenue (`pending`), finché il foglio non dà il
   /// valore. È un'anteprima: la cella che il provider rilegge prende il suo
-  /// posto e vince sempre (`#settleWritten`).
-  #showWritten(position: GridPosition, input: string): void {
+  /// posto e vince sempre (`#settleWritten`). Rende l'anteprima, con ciò che
+  /// la finestra aveva prima, o `null` se la cella non è in una finestra letta.
+  #showWritten(position: GridPosition, input: string): PastePreview | null {
     const window = this.#windowAt(position);
     const key = coordinateAt(this.#sheet(), position);
-    if (!window || !key) return;
+    if (!window || !key) return null;
     const same = (cell: GridBytesCell) => cell.key.row === key.row && cell.key.column === key.column;
     const previous = window.cells.find(same);
     const { value, display } = writtenValue(input, this.#decimal);
@@ -2079,6 +2214,7 @@ export class GridEngine {
     window.cells = [...window.cells.filter((cell) => !same(cell)), shown];
     if (input.startsWith("=")) this.#pendingCells.add(shown);
     this.#written.set(`${key.sheet}\u0000${position.row}\u0000${position.column}`, { sheet: key.sheet, position, shown });
+    return { window, previous, shown };
   }
 
   /// Le celle scritte che il provider ha riletto: la sua cella ha preso il
@@ -2109,10 +2245,11 @@ export class GridEngine {
   /// in coda, e la sua risposta corregge il giornale e la history.
   #commitCells(writes: readonly CellWrite[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
     if (!this.#view || this.#readOnly || !writes.length) return false;
-    // Scrivere toglie le formiche di un taglio e ciò che si è copiato, come
-    // nei fogli di calcolo.
+    // Scrivere toglie le formiche di un taglio, ciò che si è copiato e il suo
+    // tratteggio, come nei fogli di calcolo.
     this.#cutMark = null;
     this.#copied = null;
+    this.#copyMark = null;
     let journal: GridJournal;
     try {
       journal = parseGridJournal(this.#journal);
@@ -2522,8 +2659,6 @@ export class GridEngine {
     const drawing: Drawing = new Map();
     this.#objectElements(drawing);
     this.#updateMarks(range);
-    this.#fillPreview(drawing);
-    this.#cutMarks(drawing);
     this.#resizeMarks(drawing);
     this.#moveMarks(drawing);
     this.#referenceMarks(drawing);
@@ -3063,17 +3198,27 @@ export class GridEngine {
     const spring = this.#marksSpring;
     this.#marksSpring = null;
     const frame = this.#frame;
-    const cut = this.#cutMark;
+    const clip = this.#clipMark(sheet);
+    const ants = this.#antsMark(sheet);
     const look: SelectionLook = {
       lone: this.#lone(range) && !this.#others.length,
-      // Sulle formiche di un taglio il bordo pieno le coprirebbe.
-      edges: !(cut && cut.sheet === sheet && sameRange(cut.range, range)),
+      // Sul tratteggio di una copia o di un taglio, o sulle formiche, il
+      // bordo pieno li coprirebbe.
+      edges: !(clip && sameRange(clip.range, range)) && !(ants && sameRange(ants.range, range)),
       // Col dito il riempimento si fa dal menu: il quadratino non c'è.
       handle: this.#fillServed() && !this.#touchLast,
       grips: this.#grips,
       header: { width: frame.rowHeader, height: frame.columnHeader },
     };
     const still: MarkPart[] = [...this.#freezeParts()];
+    const outline = (area: GridRange) => {
+      const box = this.#rangeBox(area);
+      return box ? { L: box.left, T: box.top, R: box.left + box.width, B: box.top + box.height } : null;
+    };
+    const clipBox = clip ? outline(clip.range) : null;
+    if (clip && clipBox) still.push(...edgeParts("clip", clip.kind, clipBox, 2, { glide: false, fade: true }));
+    const antsBox = ants ? outline(ants.range) : null;
+    if (antsBox) still.push(...edgeParts("ants", "ants", antsBox, 2, { glide: false, fade: true }));
     this.#others.forEach((area, index) => {
       const box = this.#rangeBox(area);
       if (!box) return;
@@ -3087,8 +3232,27 @@ export class GridEngine {
       still,
       fill: this.#drag?.kind === "fill",
       glide,
+      walk: ants?.walk ?? false,
       ...(spring ? { spring } : {}),
     });
+  }
+
+  /// Il tratteggio di ciò che si è copiato (largo) o tagliato (fitto) sul
+  /// foglio `sheet`, o `null`.
+  #clipMark(sheet: string): { readonly kind: "copy" | "cut"; readonly range: GridRange } | null {
+    const cut = this.#cutMark;
+    if (cut) return cut.sheet === sheet ? { kind: "cut", range: cut.range } : null;
+    const copy = this.#copyMark;
+    return copy && copy.sheet === sheet ? { kind: "copy", range: copy.range } : null;
+  }
+
+  /// Le formiche sul foglio `sheet`: ferme attorno al riempimento che si
+  /// tira, in cammino attorno al gesto che aspetta il foglio; o `null`.
+  #antsMark(sheet: string): { readonly range: GridRange; readonly walk: boolean } | null {
+    const drag = this.#drag?.kind === "fill" ? this.#drag : null;
+    if (drag && !sameRange(drag.source, drag.target)) return { range: drag.target, walk: false };
+    const wait = this.#waiting;
+    return wait && wait.sheet === sheet ? { range: wait.range, walk: true } : null;
   }
 
   /// I dieci numeri dei segni (`MarkGeometry`): il rettangolo di `range`, la
@@ -3132,17 +3296,6 @@ export class GridEngine {
     const px = x - rect.left - this.#viewport.clientLeft;
     const py = y - rect.top - this.#viewport.clientTop;
     return Math.abs(px - (seen.x - 1)) <= FILL_SLOP && Math.abs(py - (seen.y - 1)) <= FILL_SLOP;
-  }
-
-  /// Mentre si tira il quadratino, il contorno di ciò che riempirà. Sono
-  /// gesti del puntatore: dalla tastiera gli stessi riempimenti sono Ctrl+D,
-  /// Ctrl+R e Serie.
-  #fillPreview(drawing: Drawing): void {
-    if (!this.#fillServed()) return;
-    const drag = this.#drag?.kind === "fill" ? this.#drag : null;
-    if (!drag || sameRange(drag.source, drag.target)) return;
-    const box = this.#rangeBox(drag.target);
-    if (box) this.#rectMark(drawing, "grid-fill-preview", box);
   }
 
   /// Mentre si tira il bordo di un'intestazione: la guida dove cadrà e la
@@ -3417,14 +3570,6 @@ export class GridEngine {
     this.#render();
     this.#selectionChanged();
     this.command(PASTE_FROM, JSON.stringify({ source: rangeA1(source), sourceSheet: sheet, move: !copy }));
-  }
-
-  /// Le formiche attorno a ciò che si è tagliato, sul suo foglio.
-  #cutMarks(drawing: Drawing): void {
-    const mark = this.#cutMark;
-    if (!mark || mark.sheet !== this.#sheet().id) return;
-    const box = this.#rangeBox(mark.range);
-    if (box) this.#rectMark(drawing, "grid-cut-mark", box);
   }
 
   /// Il rettangolo di `range` nel piano, come lo disegnano le celle: senza lo
@@ -4407,8 +4552,9 @@ export class GridEngine {
       case "Backspace": this.#clearSelection(); break;
       case "Escape":
         this.#copied = null;
-        if (!this.#cutMark && !this.#adding) return;
+        if (!this.#cutMark && !this.#copyMark && !this.#adding) return;
         this.#cutMark = null;
+        this.#copyMark = null;
         this.#adding = false;
         this.#render();
         break;
@@ -5000,33 +5146,44 @@ export class GridEngine {
   }
 
   /// Copia scrive il TSV degli input e una tabella HTML di ciò che si
-  /// vede, come i fogli di calcolo; toglie le formiche di un taglio.
+  /// vede, come i fogli di calcolo; toglie le formiche di un taglio. Attorno
+  /// a ciò che si è copiato restano un tratteggio largo e, una volta, un
+  /// battito (griglia T6), finché non si incolla, si scrive o si preme Esc.
   #copy(event: ClipboardEvent): void {
-    if (!event.clipboardData) return;
+    if (!this.#takeCopy(event)) return;
+    const range = this.#selectedRange();
+    this.#cutMark = null;
+    this.#copyMark = { sheet: this.#sheet().id, range };
+    this.#render();
+    const box = this.#rangeBox(range);
+    if (box) this.#marks.pulse({ x: box.left, y: box.top, w: box.width, h: box.height });
+  }
+
+  /// Mette negli appunti la selezione e la ricorda (`#copied`). Falso se non
+  /// si copia niente.
+  #takeCopy(event: ClipboardEvent): boolean {
+    if (!event.clipboardData) return false;
     event.preventDefault();
     // Come in Excel: più intervalli non si copiano insieme.
     if (this.#others.length) {
       this.#refuse(t("grid.multi.refused"));
-      return;
+      return false;
     }
     const { text, html } = this.#clipboard();
     event.clipboardData.setData("text/plain", text);
     event.clipboardData.setData("text/html", html);
     this.#copied = { sheet: this.#sheet().id, range: this.#selectedRange(), text, move: false };
-    if (this.#cutMark) {
-      this.#cutMark = null;
-      this.#render();
-    }
+    return true;
   }
 
-  /// Taglia non svuota subito: segna l'intervallo con le formiche, e
+  /// Taglia non svuota subito: segna l'intervallo con un tratteggio fitto, e
   /// l'incolla che segue lo sposta. Esc toglie il segno.
   #cut(event: ClipboardEvent): void {
     if (this.#readOnly || !event.clipboardData) return;
-    this.#copy(event);
-    if (this.#others.length) return;
+    if (!this.#takeCopy(event)) return;
     this.#cutMark = { sheet: this.#sheet().id, range: this.#selectedRange(), text: this.#clipboard().text };
     this.#copied = { ...this.#cutMark, move: true };
+    this.#copyMark = null;
     this.#render();
   }
 
@@ -5047,16 +5204,91 @@ export class GridEngine {
   /// L'incolla di ciò che si è copiato dalla cartella, quando il catalogo
   /// serve `fub.pasteFrom`: dall'angolo della selezione, ripetuto dove la
   /// selezione ne contiene più copie. Un taglio si incolla una volta.
+  ///
+  /// I valori si vedono subito, come anteprima (`#previewPaste`), e quelli
+  /// che il provider rilegge prendono il loro posto; se dice di no, le celle
+  /// tornano com'erano e l'avviso dice perché. Un taglio incollato ha le
+  /// formiche attorno a ciò che si sposta finché il foglio non risponde.
   #pasteFrom(copied: Copied): boolean {
     if (!this.commandable() || !this.#serves(PASTE_FROM) || this.#others.length) return false;
     const params = { source: rangeA1(copied.range), sourceSheet: copied.sheet, move: copied.move };
-    if (!this.command(PASTE_FROM, JSON.stringify(params))) return false;
+    const wait: Waiting | null = copied.move ? { kind: "move", sheet: copied.sheet, range: copied.range, source: null } : null;
+    let previews: PastePreview[] = [];
+    const given = this.#command(PASTE_FROM, JSON.stringify(params), (applied) => {
+      if (!applied) this.#unshowPaste(previews);
+      if (wait) this.#settleWait(wait, applied);
+    });
+    if (!given) return false;
+    // Incollare toglie il tratteggio di ciò che si è copiato; ciò che si è
+    // copiato resta, e si incolla ancora.
+    this.#copyMark = null;
     if (copied.move) {
       this.#copied = null;
       this.#cutMark = null;
-      this.#render();
+      this.#waiting = wait;
     }
+    previews = this.#previewPaste(copied);
+    this.#render();
     return true;
+  }
+
+  /// I valori di `copied` dove l'incolla li scriverà, come anteprima con le
+  /// regole delle celle scritte (`#showWritten`): ogni copia che la selezione
+  /// contiene, o la sola destinazione di un taglio, che svuota le celle da
+  /// cui parte. Una formula resta com'era: i suoi riferimenti li sposta il
+  /// provider. Una cella che non si scrive (bloccata, fuori dal foglio, non
+  /// letta) non si mostra.
+  #previewPaste(copied: Copied): PastePreview[] {
+    const values = clipboardRows(copied.text, "");
+    const block = { rows: values.length, columns: Math.max(0, ...values.map((row) => row.length)) };
+    if (!block.rows || !block.columns) return [];
+    const selection = tableRange(this.#selectedRange());
+    const targets = copied.move ? [cutDestination(tableRange(copied.range), selection)] : pasteTargets(selection, block);
+    const sheet = this.#sheet();
+    const writes = new Map<string, { readonly position: GridPosition; readonly after: string }>();
+    const put = (position: GridPosition, after: string) => {
+      if (position.row >= sheet.rows.length || position.column >= sheet.columns.length) return;
+      writes.set(`${position.row}:${position.column}`, { position, after });
+    };
+    if (copied.move && copied.sheet === sheet.id) {
+      for (let row = copied.range.rowStart; row <= copied.range.rowEnd; row += 1) {
+        for (let column = copied.range.columnStart; column <= copied.range.columnEnd; column += 1) put({ row, column }, "");
+      }
+    }
+    for (const target of targets) {
+      values.forEach((line, rowOffset) => line.forEach((value, columnOffset) => {
+        put({ row: target.r0 + rowOffset, column: target.c0 + columnOffset }, fileInput(value, this.#decimal));
+      }));
+    }
+    const shown: PastePreview[] = [];
+    for (const { position, after } of writes.values()) {
+      if (after.startsWith("=") || this.#writeRefusal(position)) continue;
+      const merge = mergeAt(this.#merges(), position);
+      if (merge && (merge.row !== position.row || merge.column !== position.column)) continue;
+      if ((this.#workbookCell(position)?.bytes.input ?? "") === after) continue;
+      const preview = this.#showWritten(position, after);
+      if (preview) shown.push(preview);
+    }
+    if (shown.length) this.#showView(sheet.id, false);
+    return shown;
+  }
+
+  /// Il provider non ha preso l'incolla: le celle mostrate in anticipo
+  /// tornano com'erano, se una lettura non le ha già sostituite.
+  #unshowPaste(previews: readonly PastePreview[]): void {
+    if (this.#destroyed || !previews.length) return;
+    let restored = false;
+    const gone = new Set<GridBytesCell>();
+    for (const { window, previous, shown } of previews) {
+      if (!window.cells.includes(shown)) continue;
+      window.cells = [...window.cells.filter((cell) => cell !== shown), ...(previous ? [previous] : [])];
+      this.#pendingCells.delete(shown);
+      gone.add(shown);
+      restored = true;
+    }
+    // Ciò che torna non è un valore nuovo: niente dissolvenza d'entrata.
+    for (const [key, written] of this.#written) if (gone.has(written.shown)) this.#written.delete(key);
+    if (restored && this.#workbook) this.#showView(this.#sheet().id, false);
   }
 
   #clipboard(): { readonly text: string; readonly html: string } {
@@ -5122,15 +5354,24 @@ export class GridEngine {
       }
     }
     this.#cutMark = null;
-    this.#writePasted(writes, to);
+    // Le formiche attorno a ciò che si sposta, finché il foglio non ha
+    // risposto alla scrittura: il passo dopo nella coda del protocollo.
+    const wait: Waiting = { kind: "move", sheet: this.#sheet().id, range: mark.range, source: null };
+    this.#waiting = wait;
+    if (!this.#writePasted(writes, to)) {
+      this.#waiting = null;
+      this.#updateMarks(this.#selectedRange());
+      return;
+    }
+    this.#enqueueProtocol(async () => this.#settleWait(wait, true));
   }
 
-  #writePasted(writes: readonly CellWrite[], range: GridRange): void {
+  #writePasted(writes: readonly CellWrite[], range: GridRange): boolean {
     const sheet = this.#sheet();
     const fits = writes.filter(({ position }) => position.row < sheet.rows.length && position.column < sheet.columns.length);
     if (!this.#commitCells(fits, "input", true)) {
       this.#render();
-      return;
+      return false;
     }
     const anchor = { row: range.rowStart, column: range.columnStart };
     const focus = this.#clampedPosition({ row: range.rowEnd, column: range.columnEnd });
@@ -5139,6 +5380,7 @@ export class GridEngine {
     this.#syncFormulaBar();
     this.#render();
     this.#selectionChanged();
+    return true;
   }
 
   #pointerDown(event: PointerEvent): void {
@@ -5598,19 +5840,15 @@ export class GridEngine {
     return { left: rect.left, top: rect.top };
   }
 
+  /// Il riempimento tirato fino a `target` (griglia T6): il contorno resta
+  /// con le formiche in cammino finché il foglio non risponde (`#beginFill`),
+  /// e la selezione resta sulla sorgente; il provider la mette sul
+  /// riempimento, la cella attiva al primo angolo, e i segni ci scivolano.
   #autoFill(source: GridRange, target: GridRange, alternate: boolean): void {
-    // La cella attiva resta al primo angolo, il riempimento è selezionato.
-    this.#others = [];
-    this.#selection = {
-      anchor: { row: target.rowStart, column: target.columnStart },
-      focus: { row: target.rowEnd, column: target.columnEnd },
-    };
-    this.#syncFormulaBar();
-    this.#render();
-    this.#selectionChanged();
     const params: Record<string, string> = { source: rangeA1(source), target: rangeA1(target) };
     if (alternate) params.mode = "alternate";
     this.command("edit.autoFill", JSON.stringify(params));
+    this.#render();
   }
 
   /// Il doppio clic sul quadratino, come in Excel: riempie in giù fin dove
@@ -5632,8 +5870,10 @@ export class GridEngine {
 
   /// Se il quadratino di riempimento si può tirare: una sessione a comandi che
   /// serve `edit.autoFill`, nessuna cella aperta, nessun oggetto scelto.
+  /// Mentre un riempimento aspetta il foglio, il quadratino non c'è.
   #fillServed(): boolean {
-    return this.commandable() && this.#serves("edit.autoFill") && !this.#editing && this.#selectedObject === null && !this.#others.length;
+    const waiting = this.#waiting?.kind === "fill" && this.#waiting.sheet === this.#sheet().id;
+    return this.commandable() && this.#serves("edit.autoFill") && !this.#editing && this.#selectedObject === null && !this.#others.length && !waiting;
   }
 
   /// La cella che comanda in `position`: l'angolo dell'unione che la copre.

@@ -1535,6 +1535,48 @@ export const CHOREOGRAPHIES = [
     undo: null,
     irreversible: "il ritorno è la risposta del provider: tirare di nuovo è un altro gesto, con la sua anteprima",
   },
+  // **Copiare e riempire** (griglia T6): Ctrl+C lascia il tratteggio largo e
+  // un battito, un velo che svanisce in `DURATION.swap`; Esc toglie il segno.
+  // Il riempimento tirato, nella cartella grande che lo accetta, aspetta la
+  // risposta con le formiche (che non sono una coreografia: le ferma la
+  // risposta, e la prova di `grid-motion.test.ts` lo dimostra); poi le
+  // formiche escono, la selezione scivola sul riempimento e i valori nuovi
+  // entrano sfalsati.
+  {
+    id: "griglia-copia-battito",
+    title: "Griglia: Ctrl+C su B2:B3, il tratteggio largo resta e il battito svanisce",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await pickCell(page, 1, 1);
+      await page.keyboard.press("Shift+ArrowDown");
+    },
+    act: (page) => page.keyboard.press("Control+c"),
+    arrived: has(".pane.focus .grid-mark-copy:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".pane.focus .grid-mark-copy:not([hidden])"),
+  },
+  {
+    id: "griglia-riempimento-risposta",
+    title: "Griglia: C4:C5 tirata col quadratino fino a C12; alla risposta le formiche escono e i valori entrano sfalsati",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-large-appunti",
+    setup: async (page) => {
+      await pickCell(page, 3, 2);
+      await page.keyboard.press("Shift+ArrowDown");
+    },
+    act: async (page) => {
+      const from = await centre(page, ".pane.focus .grid-mark-handle:not([hidden])");
+      const to = await centre(page, gridCell(11, 2));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 6 });
+      await page.mouse.up();
+    },
+    arrived: (page) => page.evaluate((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent === "90", gridCell(11, 2)),
+    undo: null,
+    irreversible: "il ritorno è Annulla, un comando che il provider esegue: un altro gesto, con la sua risposta",
+  },
 ];
 
 /// I file che fanno partire corse di `moto` e che il banco non guarda, con la

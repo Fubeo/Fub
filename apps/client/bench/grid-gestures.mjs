@@ -49,7 +49,7 @@ import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 /// I cantieri chiusi: i loro controlli decidono l'esito del banco.
-const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3", "G4", "G5", "G7"]);
+const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3", "G4", "G5", "G6", "G7"]);
 
 const REPORT = join(OUTPUT, "grid-gestures.json");
 const SHOTS = join(OUTPUT, "grid-gestures");
@@ -642,13 +642,13 @@ const CONTROLS = [
       const before = (await readState(page)).calls;
       await page.keyboard.press("Control+x");
       await settle(page);
-      const marked = await page.locator(".pane.focus .grid-cut-mark").count();
+      const marked = await page.locator(".pane.focus .grid-mark-cut:not([hidden])").count();
       const cleared = await patchesSince(page, before);
       await page.keyboard.press("Escape");
       await settle(page);
-      const after = await page.locator(".pane.focus .grid-cut-mark").count();
+      const after = await page.locator(".pane.focus .grid-mark-cut:not([hidden])").count();
       return {
-        ok: marked === 1 && cleared.length === 0 && after === 0,
+        ok: marked > 0 && cleared.length === 0 && after === 0,
         seen: `formiche dopo Ctrl+X: ${marked}, scritte: ${cleared.length}, formiche dopo Esc: ${after}`,
       };
     },
@@ -1660,6 +1660,164 @@ const CONTROLS = [
       return {
         ok,
         seen: `B ${Math.round(before.width)} → ${Math.round(preview)} → ${Math.round(back)} px, avviso «${widthNotice}»; B2 «${value}», avviso «${writeNotice}»`,
+      };
+    },
+  },
+  // **Riempire, copiare, incollare** (griglia T6): il riempimento tirato
+  // resta col contorno a formiche finché il foglio non risponde, ciò che si
+  // copia resta segnato, e ciò che si incolla si vede subito.
+  {
+    id: "g6-riempimento-resta",
+    cantiere: "G6",
+    scene: "grid-large-appunti",
+    title: "C4:C5 (10, 20) tirata col quadratino fino a C12 e rilasciata, col provider che risponde dopo 500 ms",
+    expected: "in ogni fotogramma fra il rilascio e la risposta il contorno a formiche attorno a C4:C12, senza quadratino; poi C6…C12 da 30 a 90, le formiche via, nessun avviso",
+    run: async (page) => {
+      await pick(page, "C4");
+      await page.keyboard.press("Shift+ArrowDown");
+      await settle(page);
+      const grip = await handleCenter(page);
+      if (!grip) return { ok: false, seen: "il quadratino non c'è" };
+      const end = await centerOf(page, cellSelector("C12"));
+      await page.mouse.move(grip.x, grip.y);
+      await page.mouse.down();
+      await page.mouse.move(grip.x, (grip.y + end.y) / 2);
+      await page.mouse.move(end.x, end.y);
+      await settle(page, 100);
+      await page.evaluate((selectors) => {
+        window.__g6Release = window.bench.throttle("gridBytesCommand");
+        window.__g6Answered = Infinity;
+        setTimeout(() => {
+          window.__g6Answered = performance.now();
+          window.__g6Release();
+        }, 500);
+        const frames = [];
+        window.__g6Frames = frames;
+        const started = performance.now();
+        const tick = () => {
+          const root = document.querySelector(".pane.focus .grid-viewport");
+          const ants = [...root.querySelectorAll(".grid-mark-ants")].filter((mark) => !mark.hidden && mark.getClientRects().length > 0);
+          const handles = [...root.querySelectorAll(".grid-mark-handle")].filter((mark) => !mark.hidden);
+          const box = ants.length ? {
+            top: Math.min(...ants.map((mark) => mark.getBoundingClientRect().top)),
+            bottom: Math.max(...ants.map((mark) => mark.getBoundingClientRect().bottom)),
+          } : null;
+          frames.push({
+            t: performance.now(),
+            ants: ants.length,
+            handles: handles.length,
+            box,
+            c12: document.querySelector(`${selectors.c12} .grid-cell-text`)?.textContent ?? "",
+          });
+          if (performance.now() - started < 1_400) requestAnimationFrame(tick);
+        };
+        document.addEventListener("pointerup", () => requestAnimationFrame(tick), { capture: true, once: true });
+      }, { c12: cellSelector("C12") });
+      await page.mouse.up();
+      await settle(page, 1_600);
+      const frames = await page.evaluate(() => window.__g6Frames);
+      const answered = await page.evaluate(() => window.__g6Answered);
+      const c4 = await page.evaluate((selector) => document.querySelector(selector).getBoundingClientRect().top, cellSelector("C4"));
+      const c12 = await page.evaluate((selector) => document.querySelector(selector).getBoundingClientRect().bottom, cellSelector("C12"));
+      const waiting = frames.filter((frame) => frame.t < answered);
+      const wrong = waiting.filter((frame) => frame.ants !== 4 || frame.handles !== 0 || !frame.box || Math.abs(frame.box.top - c4) > 3 || Math.abs(frame.box.bottom - c12) > 3);
+      const values = await page.evaluate((selectors) => selectors.map((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent ?? ""),
+        ["C6", "C7", "C8", "C9", "C10", "C11", "C12"].map(cellSelector));
+      const ants = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .grid-mark-ants")].filter((mark) => !mark.hidden).length);
+      const notice = await page.evaluate(() => {
+        const element = document.querySelector(".pane.focus .grid-notice");
+        return element && !element.hidden ? element.textContent : "";
+      });
+      return {
+        ok: waiting.length > 10 && wrong.length === 0 && values.join(",") === "30,40,50,60,70,80,90" && ants === 0 && !notice,
+        seen: `${waiting.length} fotogrammi prima della risposta, ${wrong.length} senza il contorno giusto${wrong.length ? ` (formiche ${wrong[0].ants}, quadratini ${wrong[0].handles})` : ""}; dopo: C6…C12 «${values.join(" ")}», formiche ${ants}${notice ? `, avviso «${notice}»` : ""}`,
+      };
+    },
+  },
+  {
+    id: "g6-copia-segnata",
+    cantiere: "G6",
+    scene: "grid-large-appunti",
+    title: "C4:E9 scelta, Ctrl+C vero, poi Esc",
+    expected: "dopo Ctrl+C il tratteggio largo attorno a C4:E9 (quattro lati) e il battito; dopo Esc nessun tratteggio",
+    run: async (page) => {
+      await pick(page, "C4");
+      for (const key of ["ArrowRight", "ArrowRight", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown"]) await page.keyboard.press(`Shift+${key}`);
+      await settle(page);
+      await page.evaluate(() => {
+        window.__g6Flash = false;
+        const root = document.querySelector(".pane.focus .grid-viewport");
+        document.addEventListener("copy", () => requestAnimationFrame(() => {
+          window.__g6Flash = [...root.querySelectorAll(".grid-mark-flash")].some((mark) => !mark.hidden);
+        }), { once: true });
+      });
+      await page.keyboard.press("Control+c");
+      await settle(page);
+      const look = () => page.evaluate(() => {
+        const marks = [...document.querySelectorAll(".pane.focus .grid-mark-copy")].filter((mark) => !mark.hidden && mark.getClientRects().length > 0);
+        const boxes = marks.map((mark) => mark.getBoundingClientRect());
+        return {
+          count: marks.length,
+          box: boxes.length ? { left: Math.min(...boxes.map((b) => b.left)), top: Math.min(...boxes.map((b) => b.top)), right: Math.max(...boxes.map((b) => b.right)), bottom: Math.max(...boxes.map((b) => b.bottom)) } : null,
+        };
+      });
+      const marked = await look();
+      const flash = await page.evaluate(() => window.__g6Flash);
+      const range = await page.evaluate((selectors) => {
+        const a = document.querySelector(selectors[0]).getBoundingClientRect();
+        const b = document.querySelector(selectors[1]).getBoundingClientRect();
+        return { left: a.left, top: a.top, right: b.right, bottom: b.bottom };
+      }, [cellSelector("C4"), cellSelector("E9")]);
+      const around = marked.box && ["left", "top", "right", "bottom"].every((side) => Math.abs(marked.box[side] - range[side]) <= 3);
+      await page.keyboard.press("Escape");
+      await settle(page);
+      const after = await look();
+      return {
+        ok: marked.count === 4 && around && flash && after.count === 0,
+        seen: `dopo Ctrl+C ${marked.count} lati tratteggiati${around ? " attorno a C4:E9" : " fuori posto"}, battito ${flash ? "sì" : "no"}; dopo Esc ${after.count}`,
+      };
+    },
+  },
+  {
+    id: "g6-incolla-subito",
+    cantiere: "G6",
+    scene: "grid-large-appunti",
+    title: "C4:C5 copiata con Ctrl+C, D8 scelta e incollata, col provider che risponde dopo 400 ms",
+    expected: "dal primo fotogramma dopo l'incolla D8 mostra 10 e D9 20, prima della risposta; dopo la risposta gli stessi, il tratteggio della copia via, nessun avviso",
+    run: async (page) => {
+      await pick(page, "C4");
+      await page.keyboard.press("Shift+ArrowDown");
+      await settle(page);
+      await page.evaluate(() => {
+        document.addEventListener("copy", (event) => { window.__g6Copied = event.clipboardData?.getData("text/plain") ?? ""; }, { once: true });
+      });
+      await page.keyboard.press("Control+c");
+      await settle(page);
+      await pick(page, "D8");
+      // L'incolla come lo manda il browser, con il testo copiato: il primo
+      // fotogramma dopo, prima che il provider risponda.
+      const first = await page.evaluate((selectors) => {
+        window.__g6Release = window.bench.throttle("gridBytesCommand");
+        setTimeout(() => window.__g6Release(), 400);
+        const transfer = new DataTransfer();
+        transfer.setData("text/plain", window.__g6Copied);
+        document.activeElement?.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+        return new Promise((resolve) => requestAnimationFrame(() => setTimeout(() => resolve(selectors.map((selector) =>
+          document.querySelector(`${selector} .grid-cell-text`)?.textContent ?? "")), 0)));
+      }, [cellSelector("D8"), cellSelector("D9")]);
+      const given = await page.evaluate(() => window.bench.calls.filter((call) => call.gate === "gridBytesCommand").map((call) => call.args[1]?.command?.id));
+      await settle(page, 1_000);
+      const after = await page.evaluate((selectors) => selectors.map((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent ?? ""),
+        [cellSelector("D8"), cellSelector("D9")]);
+      const copyMarks = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .grid-mark-copy")].filter((mark) => !mark.hidden).length);
+      const notice = await page.evaluate(() => {
+        const element = document.querySelector(".pane.focus .grid-notice");
+        return element && !element.hidden ? element.textContent : "";
+      });
+      const ok = first.join(",") === "10,20" && after.join(",") === "10,20" && given.includes("fub.pasteFrom") && copyMarks === 0 && !notice;
+      return {
+        ok,
+        seen: `al primo fotogramma D8, D9 «${first.join(" ")}»; dopo la risposta «${after.join(" ")}»; comandi ${given.join(" ") || "nessuno"}; tratteggi ${copyMarks}${notice ? `; avviso «${notice}»` : ""}`,
       };
     },
   },

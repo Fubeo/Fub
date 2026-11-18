@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activeMotions, createManualDriver, setMotionDriver, setMotionPreference, type ManualDriver } from "../../moto";
 import { frameListeners } from "../../moto/ticker";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { DURATION } from "../../moto/spring";
 import {
+  ANTS_MS,
+  ANTS_STEP,
   containMarks,
   createMarksMotion,
+  enterValues,
   GLIDE,
   slowRoot,
   SLIDE,
@@ -16,7 +20,7 @@ import {
   type MarksPose,
   type MarksTarget,
 } from "./grid-motion";
-import { selectionParts, ZONES, type Bands, type MarkGeometry, type SelectionLook, type Zone } from "./marks";
+import { edgeParts, selectionParts, ZONES, type Bands, type MarkGeometry, type SelectionLook, type Zone } from "./marks";
 
 const FRAME = 1000 / 60;
 const W = 100;
@@ -507,6 +511,126 @@ describe("il motore dei segni", () => {
     motion.clear();
     expect(pieces.every((el) => (el as HTMLElement).hidden)).toBe(true);
     expect(motion.shown()).toBeNull();
+    life.close();
+  });
+});
+
+/// Le promesse `finished` si risolvono in microtask: le lascia correre.
+async function flush(): Promise<void> {
+  for (let index = 0; index < 5; index += 1) await Promise.resolve();
+}
+
+describe("le formiche, il battito e i valori che entrano (griglia T6)", () => {
+  const BOX = { L: 140, T: 52, R: 240, B: 164 };
+  const ants = () => edgeParts("ants", "ants", BOX, 2, { glide: false, fade: true });
+  const strips = (layers: Record<Zone, HTMLElement>) => [...layers.body.querySelectorAll<HTMLElement>(".grid-mark-ants:not([hidden]) > .grid-ants")];
+  const walkingPlays = () => driver.plays.filter((play) => play.state === "running" && (play.el as HTMLElement).classList.contains("grid-ants"));
+
+  function waitingMarks(walk: boolean) {
+    const made = makeHost();
+    const marks = createMarksMotion(made.host);
+    marks.update({ geometry: geometryOf(1, 1, 2, 1, 1, 1), parts: partsFor(false), still: ants(), glide: false, walk });
+    return { ...made, marks };
+  }
+
+  it("camminano un passo lineare alla volta finché il foglio non risponde, poi si fermano ed escono con una dissolvenza", async () => {
+    const { life, layers, marks } = waitingMarks(true);
+    expect(strips(layers)).toHaveLength(4);
+    expect(marks.walking()).toBe(true);
+    const first = walkingPlays();
+    expect(first).toHaveLength(4);
+    for (const play of first) {
+      expect(play.timing.duration).toBe(ANTS_MS);
+      expect(play.timing.easing).toBe("cubic-bezier(0, 0, 1, 1)");
+      // Solo transform, di un passo.
+      expect(play.keyframes.every((frame) => Object.keys(frame).every((key) => key === "transform" || key === "offset" || key === "easing"))).toBe(true);
+      expect(JSON.stringify(play.keyframes)).toContain(`${ANTS_STEP}px`);
+    }
+    driver.advance(ANTS_MS + FRAME);
+    await flush();
+    // Il passo dopo riparte da capo.
+    expect(walkingPlays()).toHaveLength(4);
+    expect(driver.plays.filter((play) => (play.el as HTMLElement).classList.contains("grid-ants")).length).toBeGreaterThanOrEqual(8);
+
+    // La risposta: le formiche non servono più.
+    marks.update({ geometry: geometryOf(1, 1, 5, 1, 1, 1), parts: partsFor(false), still: [], walk: false });
+    expect(marks.walking()).toBe(false);
+    expect(walkingPlays()).toHaveLength(0);
+    const leaving = [...layers.body.querySelectorAll<HTMLElement>(".grid-mark-ants")];
+    expect(leaving.every((el) => !el.hidden)).toBe(true);
+    driver.advance(DURATION.swap + FRAME);
+    await flush();
+    expect(leaving.every((el) => el.hidden)).toBe(true);
+    driver.advance(ANTS_MS * 3);
+    await flush();
+    expect(walkingPlays()).toHaveLength(0);
+    expect(activeMotions()).toBe(0);
+    life.close();
+  });
+
+  it("ferme mentre si tira: il contorno c'è, nessuna corsa", () => {
+    const { life, layers, marks } = waitingMarks(false);
+    expect(strips(layers)).toHaveLength(4);
+    expect(marks.walking()).toBe(false);
+    expect(walkingPlays()).toHaveLength(0);
+    life.close();
+  });
+
+  it("lo smontaggio le ferma", async () => {
+    const { life, marks } = waitingMarks(true);
+    expect(walkingPlays()).toHaveLength(4);
+    life.close();
+    expect(marks.walking()).toBe(false);
+    expect(activeMotions()).toBe(0);
+    driver.advance(ANTS_MS * 2);
+    await flush();
+    expect(walkingPlays()).toHaveLength(0);
+  });
+
+  it("«ridotto» le ferma a metà cammino, e con «ridotto» non partono e se ne vanno senza dissolvenza", async () => {
+    const { life, layers, marks } = waitingMarks(true);
+    driver.advance(ANTS_MS / 2);
+    setMotionPreference("reduced");
+    expect(marks.walking()).toBe(false);
+    expect(walkingPlays()).toHaveLength(0);
+    driver.advance(ANTS_MS * 2);
+    await flush();
+    expect(walkingPlays()).toHaveLength(0);
+    // Ancora in attesa: il contorno resta, fermo.
+    marks.update({ geometry: geometryOf(1, 1, 2, 1, 1, 1), parts: partsFor(false), still: ants(), walk: true });
+    expect(strips(layers)).toHaveLength(4);
+    expect(marks.walking()).toBe(false);
+    marks.update({ geometry: geometryOf(1, 1, 2, 1, 1, 1), parts: partsFor(false), still: [], walk: false });
+    expect(layers.body.querySelectorAll(".grid-mark-ants:not([hidden])")).toHaveLength(0);
+    life.close();
+  });
+
+  it("il battito di una copia è un velo che svanisce in DURATION.swap e poi si nasconde", async () => {
+    const { host, life, layers } = makeHost();
+    const marks = createMarksMotion(host);
+    marks.pulse({ x: 140, y: 52, w: 300, h: 168 });
+    const flash = layers.body.querySelector<HTMLElement>(".grid-mark-flash")!;
+    expect(flash.hidden).toBe(false);
+    expect(marks.owns(flash)).toBe(true);
+    const play = driver.plays[driver.plays.length - 1]!;
+    expect(play.el).toBe(flash);
+    expect(play.timing.duration).toBe(DURATION.swap);
+    expect(play.keyframes.map((frame) => Number(frame.opacity))).toEqual([1, 0]);
+    driver.advance(DURATION.swap + FRAME);
+    await flush();
+    expect(flash.hidden).toBe(true);
+    life.close();
+  });
+
+  it("i valori di un riempimento entrano uno dopo l'altro, con una dissolvenza", () => {
+    const life = openLifetime();
+    const texts = [0, 1, 2].map(() => document.body.appendChild(document.createElement("span")));
+    enterValues(texts, life);
+    const plays = driver.plays.filter((play) => texts.includes(play.el as HTMLElement));
+    expect(plays).toHaveLength(3);
+    expect(plays.map((play) => play.timing.delay)).toEqual([...plays.map((play) => play.timing.delay)].sort((a, b) => a - b));
+    expect(plays[1]!.timing.delay).toBeGreaterThan(plays[0]!.timing.delay);
+    expect(plays.every((play) => Number(play.keyframes[0]!.opacity) === 0)).toBe(true);
     life.close();
   });
 });
