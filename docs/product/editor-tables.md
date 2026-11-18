@@ -195,7 +195,9 @@ Maiusc+clic) diventa celle scelte, dall'àncora alla testa, e Canc o Backspace
 le svuotano. Una selezione che esce dalla tabella si toglie a pezzi: il testo
 fuori, le tabelle intere che contiene, e in ogni cella toccata il pezzo
 scelto, con le celle che restano (vuote, se scelte tutte); una lettera scritta
-sopra va dove cominciava. Ciò che unirebbe due celle o lascerebbe una riga più
+sopra va dove cominciava. Taglia copia il testo scelto e lo toglie allo stesso
+modo; Invio (e Maiusc+Invio) lo toglie e va a capo dove cominciava, nella
+cella o nel paragrafo, e un Ctrl+Z rimette tutto. Ciò che unirebbe due celle o lascerebbe una riga più
 corta delle altre non si applica; una tabella del file che ha già righe di
 lunghezze diverse resta com'è, e Ctrl+Z passa sempre.
 

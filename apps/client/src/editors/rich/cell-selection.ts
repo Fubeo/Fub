@@ -24,12 +24,13 @@
 //
 // Una selezione di testo da una cella all'altra della stessa tabella diventa
 // di celle (`appendTransaction`); una che esce dalla cella si toglie a pezzi
-// (`deleteAcross`), senza unire celle. La guardia che ciò che resta non tolga
+// (`deleteAcross`), senza unire celle: così Canc, una lettera, Taglia
+// (`cutAcross`) e Invio (`acrossCells`). La guardia che ciò che resta non tolga
 // mai una cella da una riga sta in `table-structure.ts` (`tableShapeGuard`).
 // Il perché di non usare `prosemirror-tables` sta nell'ADR 0225.
 
 import { Fragment, type Node as PmNode, type ResolvedPos } from "prosemirror-model";
-import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
+import { EditorState, Plugin, PluginKey, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { TableCaps } from "../../tabella/adapter";
 import { clipboardData, cutMoves, cutTarget, tellCutOnce, type CutMark } from "../../tabella/clipboard";
@@ -42,7 +43,7 @@ import { resolvedLanguage, t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import { richSchema } from "./schema";
-import { applyTableEdit } from "./table-structure";
+import { applyTableEdit, splitsCells } from "./table-structure";
 
 const { para, row: rowType, cell: cellType, table: tableType } = richSchema.nodes;
 
@@ -331,6 +332,50 @@ function deleteAcross(state: EditorState): Transaction {
     }
   }
   return tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(from, -1))));
+}
+
+/// Il comando `command` (Invio, Maiusc+Invio) su una selezione che
+/// attraversa le celle ([`crossesCells`]): prima la selezione si toglie a
+/// pezzi come con Canc ([`deleteAcross`]), poi `command` va dove cominciava,
+/// in un passo solo. Se `command` lì non si applica, o unirebbe celle, resta
+/// soltanto lo svuotamento. `false` su ogni altra selezione: `command` fa da
+/// sé.
+export function acrossCells(command: Command): Command {
+  return (state, dispatch) => {
+    if (!crossesCells(state)) return false;
+    if (!dispatch) return true;
+    const tr = deleteAcross(state);
+    // Lo stato a metà, coi plugin di `state`: i comandi leggono gli stili da
+    // loro. Non si applica niente: i passi vanno nella transazione di Canc.
+    const cleared = EditorState.create({ doc: tr.doc, selection: tr.selection, storedMarks: tr.storedMarks, plugins: state.plugins });
+    let then: Transaction | null = null;
+    command(cleared, (next) => {
+      then = next;
+    });
+    const next = then as Transaction | null;
+    if (next && next.docChanged && !splitsCells(next)) {
+      for (const step of next.steps) tr.step(step);
+      tr.setSelection(TextSelection.create(tr.doc, next.selection.anchor, next.selection.head));
+      if (next.storedMarksSet) tr.setStoredMarks(next.storedMarks);
+    }
+    dispatch(tr.scrollIntoView());
+    return true;
+  };
+}
+
+/// Taglia su una selezione che attraversa le celle ([`crossesCells`]): negli
+/// appunti il testo scelto, come la copia di ProseMirror, e nel documento lo
+/// svuotamento di Canc ([`deleteAcross`]). ProseMirror da solo copierebbe e
+/// basta: la sua cancellazione unirebbe le celle, e la guardia la rifiuta.
+function cutAcross(view: EditorView, event: ClipboardEvent): boolean {
+  if (!event.clipboardData || !crossesCells(view.state)) return false;
+  event.preventDefault();
+  const { dom, text } = view.serializeForClipboard(view.state.selection.content());
+  event.clipboardData.clearData();
+  event.clipboardData.setData("text/html", dom.innerHTML);
+  event.clipboardData.setData("text/plain", text);
+  if (view.editable) view.dispatch(deleteAcross(view.state).scrollIntoView().setMeta("uiEvent", "cut"));
+  return true;
 }
 
 /// Il testo di una cella, coi blocchi a capo.
@@ -706,7 +751,7 @@ export const cellSelectionPlugin = new Plugin<CellState>({
     },
     handleDOMEvents: {
       copy: (view, event) => copyCells(view, event, false),
-      cut: (view, event) => copyCells(view, event, true),
+      cut: (view, event) => copyCells(view, event, true) || cutAcross(view, event),
       paste: (view, event) => pasteCut(view, event),
     },
     decorations(state) {
