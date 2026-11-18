@@ -11659,9 +11659,11 @@ button.cm-fub-page-icon:focus-visible {
 .grid-formula-editor .cm-formula-ref-6 {
   color: var(--doc-author-6);
 }
-/* La guida di una misura tirata, e la misura accanto. */
+/* La guida di una misura tirata, e la misura accanto. La guida sta sulla
+   carta del file come i segni: ha il loro colore (`--grid-mark`), che resta
+   leggibile anche nelle luci scure, dove l'accento è chiaro. */
 .grid-resize-guide {
-  background: var(--accent);
+  background: var(--grid-mark);
 }
 .grid-resize-label {
   padding: var(--space-2) var(--space-3);
