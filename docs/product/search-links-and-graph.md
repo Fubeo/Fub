@@ -44,7 +44,7 @@ TypeScript è legata da una fixture, così la barra della shell, `fub-cli search
 e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
 
 - parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR` maiuscolo fra
-  alternative e `( … )` per raggruppare;
+  alternative e `( … )` per raggruppare; una parola è fatta di lettere, cifre, accenti combinanti e CJK, mentre emoji e simboli separano (da soli non trovano niente, senza errore) e non c'è normalizzazione NFC;
 - `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`, `[chiave:>v]`, `[chiave:<v]`,
   con valori numerici, booleani o date ISO confrontati per specie;
 - gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`, `ext:`, `task:todo`,

@@ -939,6 +939,17 @@ fn search_syntax_cases() -> Vec<Value> {
             "(a OR b) (c OR d) (e OR f) (g OR h) (i OR j) (k OR l)",
             false,
         ),
+        // Caratteri di più byte (IMP-113): emoji, ZWJ, bandiere, accento
+        // combinante e CJK restano testo, e la colonna di un guasto che li
+        // segue è la stessa nelle due lingue (byte qui, UTF-16 nella shell).
+        ("è 🗺", true),
+        ("è🗺 (👨\u{200d}👩\u{200d}👧 OR 🇮🇹) -東京", true),
+        ("caffe\u{301} \"è qui 🗺\"", false),
+        ("tag:🗺 [città:🇮🇹] line:(東京 タワー)", false),
+        ("🗺 è \"aperta", true),
+        ("👨\u{200d}👩 (東京", false),
+        ("🇮🇹 )", false),
+        ("\\ * ? (", true),
     ]
     .into_iter()
     .map(|(input, typing)| (input.to_string(), typing))

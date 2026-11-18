@@ -604,14 +604,16 @@ impl SearchIndex {
             ));
         }
         if text.case_sensitive {
-            let parts: Vec<String> = match text.mode {
-                TextMode::Phrase => vec![regex::escape(&text.text)],
-                TextMode::Terms => text
-                    .text
-                    .split(|ch: char| !ch.is_alphanumeric())
-                    .filter(|word| !word.is_empty())
-                    .map(regex::escape)
+            // Ogni parte è un letterale col suo confine ai lati, e il confine
+            // c'è solo dove la parte comincia o finisce con una lettera: attorno
+            // a un'emoji `\b` non c'è mai, e la frase non combaciava (vedi
+            // `words`). L'ultima parte, mentre si scrive, resta aperta in coda.
+            let parts: Vec<&str> = match text.mode {
+                TextMode::Phrase => Some(text.text.trim())
+                    .filter(|phrase| !phrase.is_empty())
+                    .into_iter()
                     .collect(),
+                TextMode::Terms => words::words(&text.text),
             };
             if parts.is_empty() {
                 return Ok(None);
@@ -621,12 +623,15 @@ impl SearchIndex {
                 .iter()
                 .enumerate()
                 .map(|(at, part)| {
-                    let boundary = if at == last && text.partial_last_term {
-                        ""
-                    } else {
-                        r"\b"
-                    };
-                    format!(r"\b{part}{boundary}")
+                    let open = at == last && text.partial_last_term;
+                    let starts = part.chars().next().is_some_and(words::is_word_char);
+                    let ends = part.chars().next_back().is_some_and(words::is_word_char);
+                    format!(
+                        "{}{}{}",
+                        if starts { words::BEFORE } else { "" },
+                        regex::escape(part),
+                        if ends && !open { words::AFTER } else { "" },
+                    )
                 })
                 .map(|pattern| {
                     regex::Regex::new(&pattern)
