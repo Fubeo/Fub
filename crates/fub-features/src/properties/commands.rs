@@ -169,10 +169,10 @@ fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
 /// Il documento su cui scrivere, e solo se il suo formato ha un frontmatter:
 /// scriverne uno davanti a un `.base` o a un canvas lo corrompe.
 pub(super) fn doc_from(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
-    let doc = args
-        .document(DOC)
-        .or_else(|| host.active_context().and_then(|c| c.doc))
-        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES)))?;
+    let doc =
+        crate::formats::document_with(&args, DOC, host, fub_abi::options::syntax::FRONTMATTER)?
+            .or_else(|| host.active_context().and_then(|c| c.doc))
+            .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES)))?;
     crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
     Ok(doc)
 }

@@ -1357,7 +1357,10 @@ export const SCENE = touchLast(onPage("shell", [
     prepare: async (page) => {
       await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
       await selectWords(page, "Questa è la nota");
-      const box = await page.locator(".pane.focus .cm-selectionBackground").first().boundingBox();
+      // Il clic al centro del testo scelto: dello strato già ridisegnato, non
+      // di quello del tasto di prima (il menu cadeva 2 px più in qua o più in
+      // là secondo chi arrivava primo, #488).
+      const box = await selectionBox(page);
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
       await page.waitForSelector(".context-strip.context-strip-mini .mini-bar [data-command='markdown.bold']");
       await page.mouse.move(0, 0);
@@ -1634,6 +1637,50 @@ export const SCENE = touchLast(onPage("shell", [
       await page.keyboard.press("Escape");
       await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="document"][data-card-chosen="true"]`);
     },
+  })),
+  // La misura e il posto delle schede (T42, il prototipo `.pair` e la lavagna
+  // a tutta pagina, passo 17): due schede affiancate in un `[!columns]`, una
+  // a tutta pagina e bassa, una come riga; il bordo che si trascina sotto il
+  // puntatore; la stessa nota a 700 px, dove la scheda larga torna nella
+  // colonna.
+  ...[
+    ["schede-misura-01-affiancate", "Il contratto e i conti affiancati in due colonne, sopra i conti a tutta pagina", "top", false],
+    ["schede-misura-02-riga", "I conti bassi col bordo da trascinare sotto il puntatore, e il contratto come riga", "bottom", true],
+    ["schede-misura-03-stretta", "Nella finestra minima le schede affiancate stanno una sotto l'altra, e quella larga torna nella colonna", "wide", false, NOTE_NARROW],
+  ].map(([id, title, scroll, hover, viewport]) => ({
+    id,
+    title,
+    query: "live=schede-misura&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+        return cards.length >= 4 && cards.every((card) => card.dataset.cardState !== "loading");
+      });
+      if (scroll === "bottom") {
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        });
+        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-display="row"]');
+      }
+      if (scroll === "wide") {
+        // La seconda scheda delle colonne in alto, sopra quella larga.
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          const second = document.querySelectorAll(".pane.focus .pane-editor .fub-column > .live-card")[1];
+          if (scroller && second) scroller.scrollTop += second.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+        });
+      }
+    },
+    ...(hover ? {
+      hover: async (page) => {
+        const sized = '.pane.focus .pane-editor .live-card[data-card-height="set"]';
+        await page.hover(`${sized} .live-card-resize`);
+        await page.waitForSelector(`${sized}[data-card-resizable="true"]`);
+      },
+    } : {}),
   })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
@@ -3061,6 +3108,27 @@ async function selectWords(page, line) {
   await page.keyboard.press("Home");
   for (let step = 0; step < 3; step++) await page.keyboard.press("Control+ArrowRight");
   for (let step = 0; step < 3; step++) await page.keyboard.press("Control+Shift+ArrowRight");
+}
+
+/// Il riquadro del testo scelto nella nota a fuoco, letto quando lo strato
+/// della selezione l'ha raggiunto. CodeMirror cambia la selezione del documento
+/// subito, al tasto, ma ridisegna lo strato al suo fotogramma di misura: letto
+/// prima, lo strato è ancora quello del tasto di prima (#488). Si aspetta che
+/// copra la selezione del documento e resti fermo per due fotogrammi.
+async function selectionBox(page) {
+  await page.evaluate(() => delete globalThis.__benchSelection);
+  const found = await page.waitForFunction(() => {
+    const layer = document.querySelector(".pane.focus .cm-selectionBackground")?.getBoundingClientRect();
+    const chosen = getSelection();
+    const range = chosen && chosen.rangeCount > 0 ? chosen.getRangeAt(0).getBoundingClientRect() : null;
+    const covers = layer && range && range.width > 0 && Math.abs(layer.left - range.left) < 1 && Math.abs(layer.right - range.right) < 1;
+    const at = covers ? `${layer.x} ${layer.y} ${layer.width} ${layer.height}` : null;
+    const seen = (globalThis.__benchSelection ??= { at: null, frames: 0 });
+    seen.frames = at !== null && seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 2 && { x: layer.x, y: layer.y, width: layer.width, height: layer.height };
+  }, null, { polling: "raf" });
+  return found.jsonValue();
 }
 
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,

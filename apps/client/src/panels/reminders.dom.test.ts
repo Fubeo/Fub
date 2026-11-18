@@ -15,6 +15,7 @@ import {
 } from "./reminders";
 import { reminderNotificationsOn, setReminderNotifications } from "../editors/text/profiles/markdown/task-reminder";
 import { emit, state } from "../state/store";
+import { forwardNotice } from "../state/kernel";
 import { openLifetime } from "../ui/lifetime";
 
 const NOW = new Date(2026, 10, 18, 10, 0);
@@ -166,6 +167,26 @@ describe("all'apertura del vault", () => {
       emit("vault", "/vault");
       await vi.advanceTimersByTimeAsync(2_000);
       expect(port.ask).toHaveBeenCalledTimes(1);
+    } finally {
+      life.close();
+    }
+  });
+
+  /// #216: il vault lasciato si chiude **dopo** che il nuovo è aperto, e la
+  /// sua chiusura non ferma lo sguardo del vault nuovo.
+  it("la chiusura del vault lasciato non ferma i promemoria del vault aperto", async () => {
+    const life = openLifetime();
+    const port = fakePort({ reminders: [], more: false });
+    try {
+      mountReminders(life, port);
+      state.vaultRoot = "/altro";
+      emit("vault", "/altro");
+      forwardNotice({
+        event: { type: "vault_closed", root: "/vault" },
+        origin: { actor: { kind: "kernel" }, batch: null },
+        vault: "/vault",
+      });
+      await vi.waitFor(() => expect(port.ask).toHaveBeenCalled(), { timeout: 3_000 });
     } finally {
       life.close();
     }

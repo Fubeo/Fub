@@ -548,6 +548,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     port: opts.liveCards,
     hostDoc: docId,
     editable: () => editable(),
+    // Le schede dentro le colonne leggono il loro embed dal testo di adesso.
+    text: (from, to) => engine.readState((state) => (to <= state.doc.length ? state.sliceDoc(from, to) : null)),
   }) : null;
   const profile = createMarkdownProfile({
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
@@ -607,6 +609,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         editFence: readOnly ? undefined : actions.editFence,
         importRemoteImage: readOnly ? undefined : importRemoteImage,
         transclude: readOnly ? undefined : transclusions.mount,
+        ...(liveCards ? { liveCard: (slot: HTMLElement, life: Lifetime) => liveCards.hostSlot(slot, life) } : {}),
       }),
     },
     completions: slashMenu ? { ...opts.completions, slash: slashMenu } : opts.completions,

@@ -204,6 +204,15 @@ export function embedSize(label: string | undefined): { width: string; height?: 
   return match[2] ? { width: match[1]!, height: match[2] } : { width: match[1]! };
 }
 
+/// La misura da scrivere dopo la barra di un embed, nella forma che Obsidian
+/// capisce e che `embedSize` rilegge: `640`, o `640x300` con l'altezza. Una
+/// misura sola in altezza non esiste: chi la vuole scrive anche la larghezza.
+export function embedSizeText(width: number, height: number | null = null): string {
+  const w = Math.max(1, Math.min(99999, Math.round(width)));
+  if (height === null) return String(w);
+  return `${w}x${Math.max(1, Math.min(99999, Math.round(height)))}`;
+}
+
 async function lease(
   port: MediaPort,
   id: string,

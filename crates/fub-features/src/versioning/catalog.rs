@@ -11,7 +11,9 @@ use super::*;
 /// catalogo arriva al montaggio accanto a questo, come secondo catalogo della
 /// stessa lingua.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    // Il ripristino legge il campo «Documento» con le frasi comuni del nome
+    // scritto ([`crate::formats::any_document`]).
+    crate::formats::speaking(vec![
         StringCatalog::new("it")
             .with(NO_VERSIONS, "Nessuna versione di {doc}.")
             .with(NO_SUCH_VERSION, "La versione del {when} di {doc} non c'è.")
@@ -324,5 +326,5 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(RESTORED, "Version from {when} restored.")
             .with(UNDO_LABEL, "Undo")
             .with(KEPT_NOTE, "Kept: {note}"),
-    ]
+    ])
 }

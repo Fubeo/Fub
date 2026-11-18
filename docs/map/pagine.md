@@ -145,6 +145,7 @@
 
 - Qual è il contratto condiviso (ABI e WIT) fra core, provider nativi e componenti WASM? → [reference/abi-and-wit.md](../reference/abi-and-wit.md)
 - Qual è il confine JSON (contratto IPC) fra shell TypeScript e `fub-app`? → [reference/ipc-contract.md](../reference/ipc-contract.md)
+- Un documento scritto per nome nel campo «Documento» di un comando: chi vale, e quando è un errore? → [reference/document-by-name.md](../reference/document-by-name.md)
 - Come la shell deposita un file nel vault (`resource_write`, il riuso dello stesso contenuto)? → [reference/resource-write.md](../reference/resource-write.md)
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)

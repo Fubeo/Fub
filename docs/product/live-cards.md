@@ -37,8 +37,33 @@ la sua barra sotto la testata. L'annulla dentro la scheda attiva è del file
 della scheda; fuori, è della nota. In una nota in sola lettura le schede si
 guardano e si attivano, ma non si scrive.
 
-Il gruppo **Scheda** del menu del blocco ha **Apri**, **Attiva** e **Togli
-dalla nota**.
+Il gruppo **Scheda** del menu del blocco ha **Apri**, **Attiva**, **Mostra
+come**, **Larghezza**, **Affianca** e **Togli dalla nota** (le voci che
+cambiano la nota solo dove si scrive).
+
+## Misura, «Mostra come», affiancare
+
+La misura sta nell'embed, scritta come la capisce Obsidian:
+`![[Conti.xlsx|640x300]]` (larghezza e altezza in px) o `![[Conti.xlsx|640]]`
+(solo la larghezza). Una misura assurda (`|0x0`) non conta, e una fuori dai
+limiti si porta dentro (da 160 px di larghezza, da 120 a 2400 di altezza). Le
+immagini tengono la misura di sempre: non sono schede.
+
+- **Larghezza**: la colonna del testo; **Larga**, 64 px oltre a destra, come
+  la Base; **Tutta la pagina**, 64 px anche a sinistra. Quando la finestra è
+  stretta (sotto 1180 px, poi sotto 940) la scheda torna nella colonna.
+- **Altezza**: quella della specie; si cambia trascinando il bordo in basso
+  (o, col fuoco sul bordo, con le frecce). Esc durante il trascinamento la
+  riporta com'era; al rilascio la nota scrive la misura, un passo
+  d'annullamento. **Altezza normale** la toglie.
+- **Mostra come**: **Scheda**; **Link**, che diventa `[[Conti.xlsx]]`;
+  **Riga**, solo icona e nome (`![[Conti.xlsx|row]]`).
+- **Affianca**: la scheda va accanto a quella subito sotto (o sopra) in un
+  riquadro `[!columns]`, da due a quattro colonne; lo stesso trascinando una
+  scheda accanto a un'altra. Con quattro colonne la voce è spenta e dice
+  perché. Le schede nelle colonne sono vive come le altre; togliendone una
+  resta la colonna dell'altra, e con una sola si torna all'embed da solo. Sul
+  telefono le colonne stanno una sotto l'altra.
 
 ## La scheda di documento
 

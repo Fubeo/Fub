@@ -16,13 +16,25 @@ import {
   liveCardPart,
   liveCardPick,
   LiveCards,
+  besideCardAt,
+  embedRangeAtLine,
+  liveCardDisplay,
+  liveCardSize,
+  liveCardWidthOf,
+  liveCardWidthPx,
   relinkEmbedAt,
   removeEmbedAt,
+  showEmbedAt,
+  sizeEmbedAt,
   type LiveCardKit,
   type LiveCardsPort,
 } from "./live-cards";
 import type { CardContext, CardKind, CardMode, CardRenderer, CardView } from "../../../core/cards/contract";
-import { blockAt } from "./block-groups";
+import { blockAt, markdownBlockGroup, type BlockGroupHost } from "./block-groups";
+import { mountMarkdown } from "./mount";
+import { embedSize } from "./media";
+import { removeColumnAt } from "./callout";
+import { blockModel } from "./blocks/model";
 
 /// Una specie finta: ogni vista tiene il suo modo, ascolta il documento finché
 /// è montata (per contare chi resta) e scrive in un «file» suo.
@@ -157,11 +169,33 @@ function rig(text: string, options: {
     open: (path, subpath) => opened.push({ path, subpath }),
     ...(options.pick ? { pick: options.pick } : {}),
   };
-  const cards = new LiveCards({ port, hostDoc: () => "Note.md", editable: () => options.editable ?? true });
+  const editorView = (): EditorView | null => {
+    const editor = parent.querySelector<HTMLElement>(".cm-editor");
+    return editor ? EditorView.findFromDOM(editor) : null;
+  };
+  const cards = new LiveCards({
+    port,
+    hostDoc: () => "Note.md",
+    editable: () => options.editable ?? true,
+    text: (from, to) => {
+      const state = editorView()?.state;
+      return state && to <= state.doc.length ? state.sliceDoc(from, to) : null;
+    },
+  });
   const engine = createTextEngine(parent, {
     onChange() {},
     onSelectionChange() {},
-    extensions: () => [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {}, liveCards: cards })],
+    extensions: () => [markdown({ base: markdownGrammar }), livePreview({
+      openWikilink() {},
+      searchTag() {},
+      liveCards: cards,
+      // Le colonne rese come nella Scrittura vera: le schede dentro le prende
+      // l'ospite (T42).
+      mountRendered: (container, html, actions) => mountMarkdown(container, html, {
+        ...actions,
+        liveCard: (slot, life) => cards.hostSlot(slot, life),
+      }),
+    })],
   });
   engine.setDoc(text);
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
@@ -426,5 +460,268 @@ describe("le transazioni sull'embed", () => {
   it("il menu del blocco ha il gruppo «Scheda»", () => {
     const state = EditorState.create({ doc: "Prima\n\n![[Conti.xlsx#Budget]]\n" });
     expect(blockAt(state, state.doc.line(3).from)).toMatchObject({ kind: "card", page: "Conti.xlsx", subpath: "#Budget" });
+  });
+});
+
+// ── T42: la misura, «Mostra come», le schede affiancate ─────────────────────
+
+/// Il testo dopo aver applicato `spec`, o quello di prima se non c'è.
+function applied(state: EditorState, spec: ReturnType<typeof sizeEmbedAt>): string {
+  return spec ? state.update(spec).state.doc.toString() : state.doc.toString();
+}
+
+/// Uno stato col Markdown letto e il modello dei blocchi, come nella Scrittura.
+function mdState(doc: string): EditorState {
+  return EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
+}
+
+/// Quattro (o `names.length`) colonne con una scheda ciascuna.
+function columnsOf(names: readonly string[]): string {
+  return ["> [!columns]", names.map((name) => `> > [!column]\n> > ![[${name}.pdf]]`).join("\n>\n")].join("\n");
+}
+
+describe("la misura scritta come la capisce Obsidian", () => {
+  it("si legge `|LxA` e `|L`; zero, parole e misure assurde no", () => {
+    expect(liveCardSize("640x300")).toEqual({ width: 640, height: 300 });
+    expect(liveCardSize("300")).toEqual({ width: 300, height: null });
+    expect(liveCardSize("0x0")).toEqual({ width: null, height: null });
+    expect(liveCardSize("0")).toEqual({ width: null, height: null });
+    expect(liveCardSize("Budget")).toEqual({ width: null, height: null });
+    expect(liveCardSize(null)).toEqual({ width: null, height: null });
+    // Fuori dai limiti la misura si porta dentro.
+    expect(liveCardSize("20x9000")).toEqual({ width: 160, height: 2400 });
+    expect(liveCardSize("0x300")).toEqual({ width: null, height: 300 });
+  });
+
+  it("si scrive e si rilegge uguale", () => {
+    const state = EditorState.create({ doc: "Prima\n\n![[Percorso.pdf|0x0]]\n" });
+    const range = embedRangeAtLine(state, state.doc.line(3).from)!;
+    const written = applied(state, sizeEmbedAt(state, range, { width: 640, height: 300 }));
+    expect(written).toBe("Prima\n\n![[Percorso.pdf|640x300]]\n");
+    const again = EditorState.create({ doc: written });
+    expect(liveCardSize(liveCardEmbed(again.doc.line(3).text)!.alias)).toEqual({ width: 640, height: 300 });
+    // Solo la larghezza, poi niente: torna l'embed di sempre.
+    const back = embedRangeAtLine(again, again.doc.line(3).from)!;
+    expect(applied(again, sizeEmbedAt(again, back, { width: 300, height: null }))).toBe("Prima\n\n![[Percorso.pdf|300]]\n");
+    expect(applied(again, sizeEmbedAt(again, back, { width: null, height: null }))).toBe("Prima\n\n![[Percorso.pdf]]\n");
+  });
+
+  it("un'altezza sola prende la larghezza della colonna; senza colonna non si scrive", () => {
+    const state = EditorState.create({ doc: "![[Conti.xlsx#Budget]]" });
+    const range = embedRangeAtLine(state, 0)!;
+    expect(applied(state, sizeEmbedAt(state, range, { width: null, height: 260 }, 620))).toBe("![[Conti.xlsx#Budget|620x260]]");
+    expect(sizeEmbedAt(state, range, { width: null, height: 260 }, 0)).toBeNull();
+  });
+
+  it("le tre larghezze del menu, dalla colonna", () => {
+    expect(liveCardWidthPx("column", 600)).toBe(600);
+    expect(liveCardWidthPx("wide", 600)).toBe(664);
+    expect(liveCardWidthPx("page", 600)).toBe(728);
+    expect(liveCardWidthOf(null, 600)).toBe("column");
+    expect(liveCardWidthOf(300, 600)).toBe("column");
+    expect(liveCardWidthOf(664, 600)).toBe("wide");
+    expect(liveCardWidthOf(728, 600)).toBe("page");
+  });
+
+  it("un'immagine tiene la misura di oggi: non è una scheda", () => {
+    expect(liveCardEmbed("![[Foto.png|300]]")).toBeNull();
+    expect(embedSize("120")).toEqual({ width: "120" });
+    expect(embedSize("200x100")).toEqual({ width: "200", height: "100" });
+  });
+});
+
+describe("«Mostra come»", () => {
+  it("scheda, link, riga: cambia solo l'embed nella nota", () => {
+    const state = EditorState.create({ doc: "![[Contratto.pdf#page=3|640x300]]" });
+    const range = embedRangeAtLine(state, 0)!;
+    expect(applied(state, showEmbedAt(state, range, "link"))).toBe("[[Contratto.pdf#page=3]]");
+    const row = applied(state, showEmbedAt(state, range, "row"));
+    expect(row).toBe("![[Contratto.pdf#page=3|row]]");
+    expect(liveCardDisplay(liveCardEmbed(row)!.alias)).toBe("row");
+    const rowState = EditorState.create({ doc: row });
+    expect(applied(rowState, showEmbedAt(rowState, embedRangeAtLine(rowState, 0)!, "card"))).toBe("![[Contratto.pdf#page=3]]");
+    // Un alias scritto a mano resta nel link.
+    const own = EditorState.create({ doc: "![[Conti.xlsx|I conti]]" });
+    expect(applied(own, showEmbedAt(own, embedRangeAtLine(own, 0)!, "link"))).toBe("[[Conti.xlsx|I conti]]");
+  });
+
+  it("la riga mostra icona e nome, senza la vista della specie", async () => {
+    const { parent, species } = rig("Prima\n\n![[Conti.xlsx|row]]\n\nDopo\n");
+    await settle();
+    const [card] = cardsIn(parent);
+    expect(card!.dataset.cardState).toBe("row");
+    expect(card!.dataset.cardDisplay).toBe("row");
+    expect(card!.dataset.cardKind).toBe("sheet");
+    expect(card!.querySelector(".live-card-name")?.textContent).toBe("Conti.xlsx");
+    expect(species.views).toHaveLength(0);
+  });
+});
+
+describe("la misura sulla scheda", () => {
+  it("la misura scritta arriva alla scheda; cambiarla non rifà la specie", async () => {
+    const { parent, view, species } = rig("Prima\n\n![[Conti.xlsx|640x300]]\n\nDopo\n");
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardWidth).toBe("set");
+    expect(card.dataset.cardHeight).toBe("set");
+    expect(card.style.getPropertyValue("--live-card-width")).toBe("640px");
+    expect(card.style.getPropertyValue("--live-card-height")).toBe("300px");
+    const line = view.state.doc.line(3);
+    view.dispatch(sizeEmbedAt(view.state, embedRangeAtLine(view.state, line.from)!, { width: 700, height: 420 })!);
+    await settle();
+    expect(cardsIn(parent)[0]).toBe(card);
+    expect(card.style.getPropertyValue("--live-card-height")).toBe("420px");
+    expect(species.views).toHaveLength(1);
+    expect(species.views[0]!.destroyed).toBe(false);
+    // Un annulla torna alla misura di prima, sulla stessa scheda.
+    expect(undo(view)).toBe(true);
+    await settle();
+    expect(view.state.doc.line(3).text).toBe("![[Conti.xlsx|640x300]]");
+    expect(cardsIn(parent)[0]).toBe(card);
+    expect(card.style.getPropertyValue("--live-card-height")).toBe("300px");
+  });
+
+  it("trascinare il bordo in basso scrive l'altezza; Esc la riporta com'era", async () => {
+    const { parent, view } = rig("Prima\n\n![[Conti.xlsx|500]]\n\nDopo\n");
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    const handle = card.querySelector<HTMLElement>(".live-card-resize")!;
+    card.dispatchEvent(new Event("pointerenter"));
+    expect(card.dataset.cardResizable).toBe("true");
+    // happy-dom non impagina: la scheda parte da 0 e il bordo scende di 260.
+    handle.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientY: 100, pointerId: 1, bubbles: true }));
+    handle.dispatchEvent(new PointerEvent("pointermove", { clientY: 360, pointerId: 1, bubbles: true }));
+    expect(card.style.getPropertyValue("--live-card-height")).toBe("260px");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(card.dataset.cardHeight).toBeUndefined();
+    expect(view.state.doc.line(3).text).toBe("![[Conti.xlsx|500]]");
+    handle.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientY: 100, pointerId: 2, bubbles: true }));
+    handle.dispatchEvent(new PointerEvent("pointermove", { clientY: 360, pointerId: 2, bubbles: true }));
+    handle.dispatchEvent(new PointerEvent("pointerup", { clientY: 360, pointerId: 2, bubbles: true }));
+    expect(view.state.doc.line(3).text).toBe("![[Conti.xlsx|500x260]]");
+  });
+
+  it("in sola lettura il bordo non si trascina", async () => {
+    const { parent } = rig("Prima\n\n![[Conti.xlsx]]\n", { editable: false });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    card.dispatchEvent(new Event("pointerenter"));
+    expect(card.dataset.cardResizable).toBeUndefined();
+    expect(card.querySelector<HTMLElement>(".live-card-resize")!.tabIndex).toBe(-1);
+  });
+});
+
+describe("«Affianca»: le schede nelle colonne", () => {
+  /// Un ospite del gruppo del blocco sopra la vista del banco.
+  function groupHost(view: EditorView): BlockGroupHost {
+    return {
+      read: (read) => read(view.state),
+      write: (change) => {
+        const spec = change(view.state);
+        if (!spec) return false;
+        view.dispatch(spec);
+        return true;
+      },
+      view: (gesture) => gesture(view),
+      editable: () => true,
+      copy() {},
+      openLink() {},
+    };
+  }
+
+  function besideItem(host: BlockGroupHost, pos: number) {
+    const group = markdownBlockGroup(host, pos)!;
+    expect(group.id).toBe("card");
+    const item = group.items.find((one) => typeof one !== "string" && one.id === "markdown.card.beside");
+    if (typeof item === "string" || !item) throw new Error("voce «Affianca» mancante");
+    return item;
+  }
+
+  it("«Affianca» mette la scheda accanto a quella sotto: due colonne con le schede vive", async () => {
+    const before = "Prima\n\n![[Contratto.pdf#page=2]]\n\n![[Conti.xlsx]]\n\nDopo\n";
+    const { parent, view, species } = rig(before);
+    await settle();
+    expect(cardsIn(parent)).toHaveLength(2);
+    const beside = besideItem(groupHost(view), view.state.doc.line(3).from);
+    expect(beside.enabled).not.toBe(false);
+    beside.run!();
+    const after = view.state.doc.toString();
+    expect(after).toContain("> [!columns]");
+    expect(after.match(/\[!column\]/g)).toHaveLength(2);
+    expect(after.indexOf("Contratto.pdf")).toBeLessThan(after.indexOf("Conti.xlsx"));
+    await settle();
+    const columns = parent.querySelector<HTMLElement>(".fub-columns");
+    expect(columns?.dataset.liveCards).toBe("true");
+    const inColumns = [...columns!.querySelectorAll<HTMLElement>(".fub-column > .live-card")];
+    expect(inColumns).toHaveLength(2);
+    expect(inColumns.every((card) => card.dataset.cardColumn === "true")).toBe(true);
+    expect(inColumns.map((card) => card.querySelector(".live-card-name")?.textContent)).toEqual(["Contratto.pdf", "Conti.xlsx"]);
+    expect(inColumns.map((card) => card.dataset.cardState)).toEqual(["view", "view"]);
+    // Le schede di prima se ne sono andate con le loro viste.
+    expect(species.views.filter((one) => !one.destroyed)).toHaveLength(2);
+    // Un annulla le rimette una sotto l'altra.
+    expect(undo(view)).toBe(true);
+    await settle();
+    expect(view.state.doc.toString()).toBe(before);
+    expect(parent.querySelector(".fub-columns")).toBeNull();
+    expect(cardsIn(parent)).toHaveLength(2);
+    expect(species.views.filter((one) => !one.destroyed)).toHaveLength(2);
+  });
+
+  it("una scheda in una colonna si attiva e scrive nel suo file; la nota resta com'è", async () => {
+    const doc = "Prima\n\n> [!columns]\n> > [!column]\n> > ![[Contratto.pdf]]\n>\n> > [!column]\n> > ![[Conti.xlsx]]\n\nDopo\n";
+    const { parent, view, cards, species } = rig(doc);
+    await settle();
+    const sheet = parent.querySelector<HTMLElement>('.fub-column > .live-card[data-card-kind="sheet"]')!;
+    expect(sheet).not.toBeNull();
+    sheet.querySelector<HTMLElement>(".live-card-body")!.click();
+    expect(cards.activeCard()?.root).toBe(sheet);
+    sheet.dispatchEvent(new KeyboardEvent("keydown", { key: "4", bubbles: true, cancelable: true }));
+    const fake = species.views.find((one) => one.path.endsWith("Conti.xlsx") && !one.destroyed)!;
+    expect(fake.text).toBe("A14");
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it("togliere una scheda da due colonne lascia l'altra da sola, fuori dal riquadro", async () => {
+    const doc = "Prima\n\n> [!columns]\n> > [!column]\n> > ![[Vecchio.pdf]]\n>\n> > [!column]\n> > ![[Conti.xlsx]]\n\nDopo\n";
+    const { parent, view } = rig(doc, { files: new Set(["Conti.xlsx"]) });
+    await settle();
+    const missing = parent.querySelector<HTMLElement>('.fub-column > .live-card[data-card-state="missing"]')!;
+    expect(missing).not.toBeNull();
+    missing.querySelector<HTMLElement>('[data-live-card-action="remove"]')!.click();
+    expect(view.state.doc.toString()).toBe("Prima\n\n![[Conti.xlsx]]\n\nDopo\n");
+  });
+
+  it("le colonne si tolgono una alla volta", () => {
+    const three = columnsOf(["A", "B", "C"]);
+    const state = EditorState.create({ doc: three });
+    const spec = removeColumnAt(state, three.indexOf("B.pdf"))!;
+    expect(state.update(spec).state.doc.toString()).toBe(columnsOf(["A", "C"]));
+    expect(removeColumnAt(EditorState.create({ doc: "![[A.pdf]]" }), 2)).toBeNull();
+  });
+
+  it("cinque schede: al più quattro colonne, e la voce spenta lo dice", () => {
+    const full = mdState(`![[E.pdf]]\n\n${columnsOf(["A", "B", "C", "D"])}\n`);
+    expect(besideCardAt(full, 0)).toBe("full");
+    const host: BlockGroupHost = {
+      read: (read) => read(full),
+      write: () => false,
+      view: () => false,
+      editable: () => true,
+      copy() {},
+      openLink() {},
+    };
+    const beside = besideItem(host, 0);
+    expect(beside.enabled).toBe(false);
+    expect(beside.description).toBe("Le colonne accanto sono già quattro: di più non ci stanno.");
+    // Tre colonne prendono la quinta scheda, in testa.
+    const room = mdState(`![[E.pdf]]\n\n${columnsOf(["A", "B", "C"])}\n`);
+    const spec = besideCardAt(room, 0);
+    if (spec === null || spec === "full") throw new Error("le colonne avevano posto");
+    const after = room.update(spec).state.doc.toString();
+    expect(after.match(/\[!column\]/g)).toHaveLength(4);
+    expect(after.indexOf("E.pdf")).toBeLessThan(after.indexOf("A.pdf"));
+    // Senza una scheda accanto, niente.
+    expect(besideCardAt(mdState("Testo\n\n![[E.pdf]]\n\nAltro testo\n"), 7)).toBeNull();
   });
 });

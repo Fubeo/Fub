@@ -54,6 +54,10 @@
 //!   di Fub; e le impostazioni dell'editor (livello, parti del Personalizzato,
 //!   cartella dei modelli, suggerimenti).
 //!   Fuori dal `default`, dietro la cargo feature `draw`.
+//! - `pdf_export` — la prova del motore dell'esportazione delle note in PDF
+//!   (ADR 0247): il PDF scritto dagli elenchi di pagina che la vista misura,
+//!   con testo vero, caratteri incorporati in sotto-insieme e vettori. Fuori
+//!   dal `default`, dietro la cargo feature `draw`, da cui prende i caratteri.
 //! - [`lavagna`] — la lavagna: il comando `canvas.apply`, che porta in un
 //!   file `.canvas` una lista di operazioni del nucleo (`fub-canvas-core`)
 //!   come una modifica sola, con anteprima e annulla.
@@ -106,6 +110,9 @@ pub mod lavagna;
 mod note_types;
 #[cfg(feature = "outline")]
 pub mod outline;
+// La prova del motore del PDF delle note (ADR 0247), coi disegni.
+#[cfg(feature = "draw")]
+pub mod pdf_export;
 #[cfg(feature = "proof")]
 pub mod proof;
 #[cfg(feature = "properties")]

@@ -69,7 +69,12 @@ const BURST_CEILING: usize = 128;
 /// Va acceso **dopo** la scansione iniziale e **prima** che il rilevatore possa
 /// emettere il primo evento. L'apertura prepara prima un subscriber temporaneo,
 /// così il live subscriber può nascere senza perdere cambiamenti esterni.
-pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
+///
+/// `vault` è la radice canonica della sessione: ogni notice di questo ponte, e
+/// l'`Overflow` che ne paga il debito, esce col nome del vault di cui è il
+/// fatto (#216). Il bus è di un vault solo, quindi il ponte lo sa senza
+/// guardare l'evento.
+pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>, vault: String) {
     std::thread::spawn(move || {
         // Quanti notice l'uscita non ha preso, e nessuno ha ancora saputo. Il
         // conto sta **qui** e non dentro i sink: le uscite sono più d'una — il
@@ -85,7 +90,7 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
             // una finestra scelta da noi.
             burst.extend(rx.try_iter());
             for notice in reduce(burst) {
-                debt = delivers(&*sink, &notice, debt);
+                debt = delivers(&*sink, &vault, &notice, debt);
             }
         }
         // **E qui il ponte finisce**, che prima non lo diceva nessuno.
@@ -127,14 +132,14 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
 /// debito cresce di uno e si riproverà al prossimo. Consegnarlo scavalcando un
 /// «riconcilia» non consegnato vorrebbe dire raccontare un vault che non è
 /// quello che chi riceve ha in mano.
-fn delivers(sink: &dyn EventSink, notice: &Notice, debt: u64) -> u64 {
+fn delivers(sink: &dyn EventSink, vault: &str, notice: &Notice, debt: u64) -> u64 {
     if debt > 0 {
         let backlog = Notice::new(Event::Overflow { dropped: debt }, Origin::by(Actor::Kernel));
-        if sink.emit(&backlog) == Delivery::Dropped {
+        if sink.emit(&backlog, Some(vault)) == Delivery::Dropped {
             return debt + 1;
         }
     }
-    match sink.emit(notice) {
+    match sink.emit(notice, Some(vault)) {
         Delivery::Done => 0,
         Delivery::Dropped => 1,
     }
@@ -342,7 +347,7 @@ mod tests {
     }
 
     impl crate::session::EventSink for Exit {
-        fn emit(&self, notice: &Notice) -> Delivery {
+        fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
             use std::sync::atomic::Ordering::Relaxed;
             if !self.open.load(Relaxed) {
                 return Delivery::Dropped;
@@ -370,14 +375,14 @@ mod tests {
         // Chiusa: tre fatti non escono, e il debito li conta.
         let mut debt = 0;
         for id in ["a.md", "b.md", "c.md"] {
-            debt = delivers(&output, &changed(id), debt);
+            debt = delivers(&output, "/vault", &changed(id), debt);
         }
         assert_eq!(debt, 3, "il debito conta ciò che non è uscito");
         assert_eq!(output.seen.load(Relaxed), 0, "e niente è uscito");
 
         // Si apre: il primo fatto nuovo arriva **preceduto** dal conto.
         output.open.store(true, Relaxed);
-        debt = delivers(&output, &changed("d.md"), debt);
+        debt = delivers(&output, "/vault", &changed("d.md"), debt);
         assert_eq!(debt, 0, "pagato");
         assert_eq!(
             output.overflow_for.load(Relaxed),

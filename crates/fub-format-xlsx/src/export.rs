@@ -16,8 +16,8 @@
 //! filtri, i caratteri oltre i quattordici del PDF) lo dice una nota a parte.
 
 use fub_abi::command::{
-    document_named, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, DocumentNamed, InvokeMode, ParamKind, ParamSpec,
+    Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
+    CommandSpec, DocumentNameKeys, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -357,7 +357,7 @@ impl CommandProvider for XlsxCommands {
         }
         let spec = self.commands().remove(0);
         spec.validate_args(&args)?;
-        let doc = named_workbook(&*host, args["doc"].as_str().unwrap_or_default())?;
+        let doc = named_workbook(&*host, &args)?;
         if !is_workbook(&*host, &doc) {
             return Err(PluginError::BadArgs(
                 format!("`{doc}` is not an .xlsx workbook").into(),
@@ -388,30 +388,16 @@ impl CommandProvider for XlsxCommands {
 /// La cartella che il campo «Cartella» nomina: l'id scelto dall'elenco, o il
 /// nome scritto a mano di una sola cartella `.xlsx`. Un nome che non c'è, o
 /// che hanno più cartelle, lo dice una frase del catalogo.
-fn named_workbook(host: &dyn HostApi, raw: &str) -> Result<DocId, PluginError> {
-    let docs = host.list_documents(None)?.items;
-    let name = || Arg::text("doc", raw.trim());
-    match document_named(raw, docs, |doc| is_workbook(host, doc)) {
-        DocumentNamed::One(doc) => Ok(doc),
-        DocumentNamed::None => Err(PluginError::BadArgs(Text::message(
-            T_DOC_MISSING,
-            vec![name()],
-        ))),
-        DocumentNamed::Many(docs) => Err(PluginError::BadArgs(Text::message(
-            T_DOC_AMBIGUOUS,
-            vec![name(), Arg::text("docs", listed(&docs))],
-        ))),
-    }
-}
-
-/// Gli omonimi in una riga: i primi, e i puntini se sono di più.
-fn listed(docs: &[DocId]) -> String {
-    const SHOWN: usize = 5;
-    let mut names: Vec<&str> = docs.iter().take(SHOWN).map(DocId::as_str).collect();
-    if docs.len() > SHOWN {
-        names.push("…");
-    }
-    names.join(", ")
+fn named_workbook(host: &dyn HostApi, args: &serde_json::Value) -> Result<DocId, PluginError> {
+    let keys = DocumentNameKeys {
+        missing: T_DOC_MISSING,
+        ambiguous: T_DOC_AMBIGUOUS,
+    };
+    Args::new(args)
+        .named_document("doc", host, |doc| is_workbook(host, doc), keys)?
+        .ok_or_else(|| {
+            PluginError::BadArgs(Text::message(T_DOC_MISSING, vec![Arg::text("doc", "")]))
+        })
 }
 
 /// L'anteprima del comando: ciò che il modulo promette, cioè l'elenco di ciò

@@ -27,8 +27,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fub_abi::command::{
-    document_named, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, DocumentNamed, InvokeMode, ParamKind, ParamSpec,
+    Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
+    CommandSpec, DocumentNameKeys, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -694,7 +694,7 @@ impl CommandProvider for RichCommands {
         }
         let spec = self.commands().remove(0);
         spec.validate_args(&args)?;
-        let doc = named_document(&*host, args["doc"].as_str().unwrap_or_default())?;
+        let doc = named_document(&*host, &args)?;
         let target = args["format"]
             .as_str()
             .and_then(|key| Target::ALL.into_iter().find(|t| t.key() == key))
@@ -737,30 +737,16 @@ impl CommandProvider for RichCommands {
 /// Il documento che il campo «Documento» nomina: l'id scelto dall'elenco, o il
 /// nome scritto a mano di un solo documento di videoscrittura. Un nome che non
 /// c'è, o che hanno più documenti, lo dice una frase del catalogo.
-fn named_document(host: &dyn HostApi, raw: &str) -> Result<DocId, PluginError> {
-    let docs = host.list_documents(None)?.items;
-    let name = || Arg::text("doc", raw.trim());
-    match document_named(raw, docs, |doc| codec_of(host, doc).is_some()) {
-        DocumentNamed::One(doc) => Ok(doc),
-        DocumentNamed::None => Err(PluginError::BadArgs(Text::message(
-            T_DOC_MISSING,
-            vec![name()],
-        ))),
-        DocumentNamed::Many(docs) => Err(PluginError::BadArgs(Text::message(
-            T_DOC_AMBIGUOUS,
-            vec![name(), Arg::text("docs", listed(&docs))],
-        ))),
-    }
-}
-
-/// Gli omonimi in una riga: i primi, e i puntini se sono di più.
-fn listed(docs: &[DocId]) -> String {
-    const SHOWN: usize = 5;
-    let mut names: Vec<&str> = docs.iter().take(SHOWN).map(DocId::as_str).collect();
-    if docs.len() > SHOWN {
-        names.push("…");
-    }
-    names.join(", ")
+fn named_document(host: &dyn HostApi, args: &serde_json::Value) -> Result<DocId, PluginError> {
+    let keys = DocumentNameKeys {
+        missing: T_DOC_MISSING,
+        ambiguous: T_DOC_AMBIGUOUS,
+    };
+    Args::new(args)
+        .named_document("doc", host, |doc| codec_of(host, doc).is_some(), keys)?
+        .ok_or_else(|| {
+            PluginError::BadArgs(Text::message(T_DOC_MISSING, vec![Arg::text("doc", "")]))
+        })
 }
 
 /// L'anteprima del comando (IMP-139): ciò che il modulo promette, cioè

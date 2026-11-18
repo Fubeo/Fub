@@ -11,9 +11,11 @@
 //! - **da un modello** (`template`): uno dei sette disegni del modulo
 //!   [`templates`], nella lingua di chi lo crea (`en…` dà il file inglese,
 //!   ogni altra lingua l'italiano, come per «Disegno»);
-//! - **da un disegno del vault** (`from`): il suo testo, com'è. Con un
-//!   `template` diverso da `blank` è un errore: un disegno nasce da una cosa
-//!   sola. Un file che non è un disegno, che non c'è, o che non è una scena
+//! - **da un disegno del vault** (`from`, scelto dall'elenco o scritto per
+//!   nome, con la regola di `Args::named_document` fra i soli disegni): il suo
+//!   testo, com'è. Con un `template` diverso da `blank` è un errore: un
+//!   disegno nasce da una cosa sola. Un nome che nessun disegno porta, o che
+//!   ne portano più d'uno, è un errore che lo dice. Un file che non è un disegno, che non c'è, o che non è una scena
 //!   FubDraw modificabile, è un errore detto prima di scrivere.
 //!
 //! In tutti i casi il titolo del disegno nuovo è il suo nome: nel modello e
@@ -478,10 +480,7 @@ fn target(
     folder: Option<&str>,
     host: &dyn HostApi,
 ) -> Result<DocId, PluginError> {
-    let drawing = |doc: &DocId| {
-        host.format_of(doc)
-            .is_some_and(|format| format.descriptor.id == FORMAT_ID)
-    };
+    let drawing = |doc: &DocId| is_drawing(host, doc);
     // Prima il vault, poi il nome: senza il formato dei disegni nessun nome
     // ne fa nascere uno. La domanda è quella di `new_note_extension`, un nome
     // qualsiasi con l'estensione, e il formato decide da sé maiuscole e
@@ -555,8 +554,10 @@ enum Start {
     Blank,
     /// Uno dei modelli di Fub.
     Template(String),
-    /// La copia di un disegno del vault.
-    Copy(DocId),
+    /// La copia di un disegno del vault, come l'ha scritta chi chiede: un id
+    /// scelto dall'elenco o un nome, risolto in [`Start::source`], dopo il
+    /// controllo del nome che nasce.
+    Copy(String),
 }
 
 impl Start {
@@ -570,7 +571,7 @@ impl Start {
                 E_FROM_AND_TEMPLATE,
                 vec![Arg::text("doc", from), Arg::text("template", template)],
             ))),
-            (Some(from), None) => Ok(Start::Copy(DocId::new(from))),
+            (Some(from), None) => Ok(Start::Copy(from)),
             (None, Some(template)) => Ok(Start::Template(template.to_string())),
             (None, None) => Ok(Start::Blank),
         }
@@ -598,11 +599,9 @@ impl Start {
                 })?;
                 retitle(text, doc.page_name()).map_err(|error| unwritable(doc, &error.to_string()))
             }
-            Start::Copy(from) => {
-                let drawing = host
-                    .format_of(from)
-                    .is_some_and(|format| format.descriptor.id == FORMAT_ID);
-                if !drawing {
+            Start::Copy(written) => {
+                let from = &copied(written, host)?;
+                if !is_drawing(host, from) {
                     return Err(PluginError::BadArgs(one(E_FROM_NOT_A_DRAWING, from)));
                 }
                 let text = match host.read_document(from) {
@@ -624,6 +623,31 @@ impl Start {
             }
         }
     }
+}
+
+/// Il disegno da copiare, scelto dall'elenco o scritto per nome («Origine»):
+/// la regola di [`Args::named_document`], fra i soli disegni del vault, così
+/// una nota che si chiama come il disegno non lo rende ambiguo. Un id che c'è
+/// resta sé stesso anche se non è un disegno: lo rifiuta [`Start::source`],
+/// con la sua ragione. Un percorso con l'estensione di un file (`Manca.svg`,
+/// `foto.png`) che non c'è e che nessun disegno porta come nome resta la frase
+/// del comando su quel file.
+fn copied(written: &str, host: &dyn HostApi) -> Result<DocId, PluginError> {
+    let drawing = |doc: &DocId| is_drawing(host, doc);
+    match crate::formats::written_document_named_by(written, host, drawing) {
+        Ok(Some(found)) => Ok(found),
+        Ok(None) => Ok(DocId::new(written)),
+        Err(error) if crate::formats::missing_file(&error, written, host) => {
+            Ok(DocId::new(written))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// `doc` è servito dal provider dei disegni?
+fn is_drawing(host: &dyn HostApi, doc: &DocId) -> bool {
+    host.format_of(doc)
+        .is_some_and(|format| format.descriptor.id == FORMAT_ID)
 }
 
 /// Il guasto di un disegno che non si è potuto scrivere: non è colpa degli
@@ -1512,6 +1536,78 @@ mod tests {
             assert_eq!(
                 rendered(error.message(), "en"),
                 "The drawing «Manca.svg» to copy is not in the vault."
+            );
+        }
+        assert!(host.read_document(&DocId::new("Nuovo.svg")).is_err());
+    }
+
+    #[test]
+    fn the_drawing_to_copy_can_be_written_by_name() {
+        // Chi scrive «Origine» nel campo intende il disegno, non un id: lo
+        // trova fra i soli disegni, e una nota omonima non lo rende ambiguo.
+        let mut host = host()
+            .with_format(
+                "md",
+                DocumentFormat {
+                    descriptor: fub_abi::format::FormatDescriptor::text(
+                        "markdown",
+                        "Markdown",
+                        &["md"],
+                    ),
+                    capabilities: FormatCapabilities::default(),
+                },
+            )
+            .with_document("Classe/Origine.svg", &origin())
+            .with_document("Origine.md", "# Origine\n");
+        for (n, written) in ["Origine", "origine", "Classe/Origine", "Origine.svg"]
+            .into_iter()
+            .enumerate()
+        {
+            let doc = created(
+                invoke(
+                    &mut host,
+                    json!({ "name": format!("Copia {n}"), "from": written }),
+                    InvokeMode::Apply,
+                )
+                .unwrap_or_else(|error| panic!("{written}: {error:?}")),
+            );
+            assert!(
+                host.read_document(&doc).unwrap().contains("id=\"r1\""),
+                "{written}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_name_no_drawing_or_many_drawings_carry_is_said() {
+        let mut host = host()
+            .with_document("A/Doppio.svg", &origin())
+            .with_document("B/Doppio.svg", &origin());
+        for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+            let error = invoke(
+                &mut host,
+                json!({ "name": "Nuovo", "from": "Doppio" }),
+                mode,
+            )
+            .unwrap_err();
+            assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+            assert_eq!(
+                message(&error),
+                "Più documenti si chiamano «Doppio»: A/Doppio.svg, B/Doppio.svg. Scegli \
+                 dall'elenco del campo quello giusto."
+            );
+            let error =
+                invoke(&mut host, json!({ "name": "Nuovo", "from": "Manca" }), mode).unwrap_err();
+            assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+            assert_eq!(
+                message(&error),
+                "Nessun documento che questo comando può usare si chiama «Manca». Sceglilo \
+                 dall'elenco del campo."
+            );
+            assert_eq!(
+                rendered(error.message(), "en"),
+                "No document this command can use is called “Manca”. Pick it from the \
+                 field's list."
             );
         }
         assert!(host.read_document(&DocId::new("Nuovo.svg")).is_err());

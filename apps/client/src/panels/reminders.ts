@@ -222,6 +222,9 @@ export function showPastReminders(list: ReminderList, port: RemindersPort, lifet
 export function mountReminders(lifetime: Lifetime, port: RemindersPort): void {
   const shown = new Set<string>();
   let current: Lifetime | null = null;
+  /// Il vault di `current`: la chiusura di un altro vault (quello appena
+  /// lasciato, che si chiude dopo che questo si è aperto) non lo ferma (#216).
+  let currentRoot = "";
 
   const readPermission = (): void => {
     void port.notificationsOn().then(
@@ -238,6 +241,7 @@ export function mountReminders(lifetime: Lifetime, port: RemindersPort): void {
     if (shown.has(root)) return;
     const own = openLifetime();
     current = own;
+    currentRoot = root;
     lifetime.add(() => own.close());
     const since = Date.now();
     const look = async (): Promise<void> => {
@@ -265,7 +269,9 @@ export function mountReminders(lifetime: Lifetime, port: RemindersPort): void {
   };
 
   lifetime.add(on("vault", startup));
-  lifetime.add(onEvent("vault_closed", () => current?.close()));
+  lifetime.add(onEvent("vault_closed", (event) => {
+    if (event.root === currentRoot) current?.close();
+  }));
   lifetime.add(onEvent("setting_changed", (event) => {
     if (settingTouches(event.key, (key) => key === NOTIFICATIONS_SETTING)) readPermission();
   }));

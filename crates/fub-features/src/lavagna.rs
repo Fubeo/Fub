@@ -532,12 +532,13 @@ fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
 /// Il documento di un comando della lavagna: un argomento di tipo documento che
 /// è una lavagna. Un altro formato, o nessun formato, è `BadArgs`.
 fn canvas_doc(args: &Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
-    let doc = args
-        .document(DOC)
+    let is_canvas = |doc: &DocId| {
+        host.format_of(doc)
+            .is_some_and(|format| format.descriptor.id == CANVAS_FORMAT)
+    };
+    let doc = crate::formats::document_named_by(args, DOC, host, is_canvas)?
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
-    let is_canvas = host
-        .format_of(&doc)
-        .is_some_and(|format| format.descriptor.id == CANVAS_FORMAT);
+    let is_canvas = is_canvas(&doc);
     if !is_canvas {
         return Err(PluginError::BadArgs(about(E_NOT_CANVAS, &doc, Vec::new())));
     }
@@ -1301,7 +1302,9 @@ pub fn catalog() -> Vec<StringCatalog> {
         it = it.with(*key, *italiano);
         en = en.with(*key, *english);
     }
-    vec![it, en]
+    // I comandi leggono il campo «Documento» con le frasi comuni del nome
+    // scritto ([`crate::formats::document_named_by`]).
+    crate::formats::speaking(vec![it, en])
 }
 
 #[cfg(test)]
@@ -1421,7 +1424,12 @@ mod tests {
             }
         }
         assert_eq!(catalogs.len(), 2);
-        assert_eq!(catalogs[0].entries.len(), STRINGS.len());
+        // Più le frasi comuni del modulo dei formati (il nome scritto in un
+        // campo «Documento»).
+        assert_eq!(
+            catalogs[0].entries.len(),
+            STRINGS.len() + crate::formats::SPOKEN.len()
+        );
     }
 
     /// Ogni codice che il payload di `canvas.check` può dare ha la sua frase,

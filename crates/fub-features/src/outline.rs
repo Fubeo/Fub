@@ -592,7 +592,9 @@ const EMPTY: &str = "empty";
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
 /// componente e non nella shell.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    // Il comando che rinomina un titolo usa le frasi comuni del nome scritto
+    // in un campo «Documento» e dell'errore di formato.
+    crate::formats::speaking(vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Struttura")
             .with(FOOTNOTES_TITLE, "Note a piè di pagina")
@@ -731,7 +733,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 rename::E_SLUGS,
                 "With “{new_heading}” the address of a same-named heading would change.",
             ),
-    ]
+    ])
 }
 
 /// L'indice dell'heading che **contiene** `caret`: l'ultimo che comincia prima
