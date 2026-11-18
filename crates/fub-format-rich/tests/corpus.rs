@@ -23,7 +23,7 @@ use fub_abi::transfer::{ExportProvider, ExportRequest, ExportSelection, MemorySi
 use fub_abi::{DocId, DocumentFormat, DocumentSource, FormatProvider, ParseContext};
 use fub_format_rich::export::{RichExport, Target};
 use fub_format_rich::projection::{
-    Anchor, AtomKind, Block, CommentView, Inline, Layout, Look, Para, Projection, Role,
+    Anchor, AtomKind, Block, CommentView, Inline, Layout, Line, Look, Para, Projection, Role,
 };
 use fub_format_rich::{open, save, Codec, RichError, RichProvider, Saved};
 use fub_sdk::testing::MemoryHost;
@@ -479,13 +479,25 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             para.c.push(text_inline(" In fondo."));
         }
         // Inserisci › Tabella dopo l'ultimo paragrafo, come la shell
-        // (`insertTable`): una griglia 3×3 nuova, senza dati opachi, e un
-        // paragrafo vuoto dopo, perché il corpo finisce con un paragrafo.
+        // (`insertTable`): una griglia 3×3 nuova, senza dati opachi, con i
+        // paragrafi delle celle a spazio dopo 0 e interlinea singola, come
+        // la griglia di Word, e un paragrafo vuoto dopo, perché il corpo
+        // finisce con un paragrafo. Dove lo stile del documento dà già quella
+        // spaziatura (i file di LibreOffice, `semplice.odt`) il codec non la
+        // scrive e la riapertura non la porta: `different` per un campo che
+        // non cambia ciò che si vede.
         "E8" => {
             let cell = || fub_format_rich::projection::Cell {
                 k: None,
                 span: None,
-                blocks: vec![Block::Para(empty_para())],
+                blocks: vec![Block::Para(Para {
+                    p: Layout {
+                        after: Some(0.0),
+                        line: Some(Line::Multiple(1.0)),
+                        ..Layout::default()
+                    },
+                    ..empty_para()
+                })],
             };
             let row = || fub_format_rich::projection::Row {
                 k: None,

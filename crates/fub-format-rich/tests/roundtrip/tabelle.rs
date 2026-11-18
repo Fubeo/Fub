@@ -208,3 +208,98 @@ fn le_celle_si_uniscono_e_si_dividono_in_larghezza() {
     assert_eq!(back.grid, now.grid);
     assert!((back.rows[0].cells[1].props.width.unwrap() - now.grid[1]).abs() < 0.01);
 }
+
+/// La disposizione che la shell dà ai paragrafi di una tabella nuova
+/// (`insertTable`): spazio dopo 0 e interlinea singola, come la griglia di
+/// Word.
+fn cell_layout() -> Layout {
+    Layout {
+        after: Some(0.0),
+        line: Some(Line::Multiple(1.0)),
+        ..Layout::default()
+    }
+}
+
+/// I paragrafi delle celle della tabella `table`.
+fn cell_paras(table: &Table) -> impl Iterator<Item = &Para> {
+    table
+        .rows
+        .iter()
+        .flat_map(|row| &row.cells)
+        .flat_map(|cell| &cell.blocks)
+        .map(|block| match block {
+            Block::Para(para) => para,
+            Block::Table(_) => panic!("una tabella annidata"),
+        })
+}
+
+/// Inserisci › Tabella in un documento con la spaziatura di serie di Word (8
+/// punti dopo, interlinea 1,15): le celle si scrivono con la loro
+/// disposizione, riaperte la hanno uguale e si salvano senza cambiare; la
+/// copia RTF la porta.
+#[test]
+fn le_celle_di_una_tabella_nuova_si_rileggono_con_la_spaziatura_della_griglia() {
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    let mut fresh = new_table(2, 2);
+    let Block::Table(table) = &mut fresh else {
+        unreachable!()
+    };
+    for row in &mut table.rows {
+        for cell in &mut row.cells {
+            let Block::Para(para) = &mut cell.blocks[0] else {
+                unreachable!()
+            };
+            para.p = cell_layout();
+        }
+    }
+    p.blocks.insert(1, fresh);
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let WcBlock::Table(written) = &*after.body[1] else {
+        panic!("non è una tabella")
+    };
+    for cell in written.rows.iter().flat_map(|row| &row.cells) {
+        let props = &cell.blocks[0].as_para().unwrap().props;
+        assert_eq!(props.space_after, Some(0.0));
+        assert_eq!(props.line_spacing, Some(LineSpacing::Multiple(1.0)));
+    }
+    let reopened = projection(&out);
+    let Block::Table(table) = &reopened.blocks[1] else {
+        panic!("non è una tabella")
+    };
+    assert_eq!(cell_paras(table).count(), 4);
+    assert!(cell_paras(table).all(|para| para.p == cell_layout()));
+    // Il paragrafo dopo la tabella resta con la sua disposizione.
+    assert_eq!(
+        para_mut(&mut reopened.clone(), 2).p,
+        para_mut(&mut projection(&file), 1).p
+    );
+    assert!(matches!(
+        save(Codec::Docx, &out, &reopened.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
+
+    // La copia RTF: l'esportatore non scrive spaziature, e quelle di serie
+    // dell'RTF sono già spazio dopo 0 e interlinea singola, quindi la
+    // proiezione non le porta; riletta, ogni cella ha quella della griglia.
+    let rtf = wordcraft_formats::rtf::export(&after);
+    let opened = open(Codec::Rtf, rtf.as_bytes()).unwrap();
+    let imported = Projection::from_json(&opened.projection).unwrap();
+    let Some(Block::Table(table)) = imported.blocks.get(1) else {
+        panic!("la tabella nuova nella copia RTF")
+    };
+    assert_eq!(cell_paras(table).count(), 4);
+    let model = wordcraft_formats::rtf::import(rtf.as_bytes()).unwrap();
+    let WcBlock::Table(table) = &*model.body[1] else {
+        panic!("non è una tabella")
+    };
+    for cell in table.rows.iter().flat_map(|row| &row.cells) {
+        let props = &cell.blocks[0].as_para().unwrap().props;
+        let shown = model.styles.resolve_para(props);
+        assert_eq!(
+            (shown.space_after, shown.line_spacing),
+            (0.0, LineSpacing::Multiple(1.0))
+        );
+    }
+}
