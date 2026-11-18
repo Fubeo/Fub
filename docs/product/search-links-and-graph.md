@@ -100,15 +100,14 @@ Il provider estrae dalla sorgente l'intento del link:
 Il kernel risolve l'intento rispetto al vault e agli indici correnti. La
 sorgente conserva ciò che l'utente ha scritto; la risoluzione è un dato
 derivato. Wikilink e path seguono regole diverse: il primo risolve per path con
-slash (dalla radice, poi come coda a confine di cartella: `[[Progetti/Alpha]]`
-porta a `Note/Progetti/Alpha.md`), nome, nome con l'estensione
-(`[[board.canvas]]`) e alias; il secondo solo per path relativo al documento.
-Fra omonimi vince il più vicino alla radice, poi l'ordine dei path; fra formati
-diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il nome nudo porta
-prima al formato che dichiara un sorgente di prosa (`fub:prose-source`), e
-l'estensione scritta sceglie l'altro. Un nome o un path che finisce con
-l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina quel file, mai un
-documento con un'estensione in più come `Bando.pdf.fubann`.
+slash (dalla radice, poi come coda: `[[B/C]]` trova `A/B/C.md`), nome, nome con
+l'estensione (`[[board.canvas]]`) e alias; il secondo solo per path relativo al
+documento. Fra omonimi vince il più vicino alla radice, poi l'ordine dei path;
+fra formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il
+nome nudo porta prima al formato che dichiara un sorgente di prosa
+(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un path
+che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina quel
+file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
 Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
 la nota senza inventare una destinazione. Completamento e cambio rapido
 propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
