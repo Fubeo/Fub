@@ -973,7 +973,7 @@ verde; `npm run theme:generate && npm run theme:verify` senza differenze; la
 foto del banco (T13), chiara e scura, combacia col prototipo;
 `npm run typecheck`, `npm test` e `npm run build` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 5d241f768 (merge sopra T11) · check --rapido 21/21 verde; recipe-dialog 13 test, recipes 15. Differenze: stringhe in i18n/catalog.ts; sezione nella scheda «Componenti»; la prova mostra una frase (plan.summary); ricetta accesa = solo «Chiudi»; avviso che non blocca l'apertura; il filtro delle impostazioni toglie solo il suo «nessun risultato» (data-filter-empty); gancio showDocument; mappa del banco e scene a T13. Foto guardate dall'orchestratore (finestra 1280 chiara, sezione 700 scura): fedeli al prototipo.
 
 ## T13 · Le scene del banco delle ricette
 
