@@ -2919,10 +2919,20 @@ async function selectWords(page, line) {
 }
 
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
-/// senza suggerimenti.
+/// senza suggerimenti. La bolla della mini-barra, se c'è, ferma: lo stesso
+/// posto per tre fotogrammi di fila (si riposa quando la sua misura cambia).
 async function settleBar(page) {
   await page.mouse.move(0, 0);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.evaluate(() => delete globalThis.__benchBubble);
+  await page.waitForFunction(() => {
+    const bubble = document.querySelector(".selection-bubble:not([hidden])");
+    const at = bubble ? `${bubble.style.left} ${bubble.style.top} ${bubble.getBoundingClientRect().width}` : "";
+    const seen = (globalThis.__benchBubble ??= { at: null, frames: 0 });
+    seen.frames = seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 3;
+  }, null, { polling: "raf" });
 }
 
 async function openNote(page, path) {
