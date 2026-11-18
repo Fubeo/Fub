@@ -295,21 +295,36 @@ function staticSurface(
   element.className = `document-surface document-surface-${family}`;
   element.tabIndex = 0;
   element.setAttribute("role", family === "error" ? "alert" : "document");
-  element.dataset.i18nLabel = messageKey;
   context.parent.replaceChildren(element);
 
   let active = true;
   const redraw = () => {
     if (!active) return;
+    // Con un perché la superficie d'errore dice che il documento non si apre,
+    // con una frase di chi guarda. Il motivo è prosa del codec, in inglese, e
+    // sta in «Dettagli», chiuso. «Nessuna superficie disponibile» è il gergo
+    // del registro, e resta solo per chi non ha un perché.
+    if (family === "error" && context.errorReason) {
+      // Niente `data-i18n-label`: lo riscriverebbe il cambio di lingua con la
+      // frase generica, e la riga accessibile dev'essere quella del documento.
+      delete element.dataset.i18nLabel;
+      const phrase = t("surface.failed");
+      const note = document.createElement("p");
+      note.textContent = phrase;
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = t("surface.details");
+      const reason = document.createElement("p");
+      reason.textContent = context.errorReason;
+      details.append(summary, reason);
+      element.replaceChildren(note, details);
+      element.setAttribute("aria-label", phrase);
+      return;
+    }
     const message = t(messageKey);
-    // Con un perché, la superficie d'errore dice che il documento non si
-    // mostra e perché; «nessuna superficie disponibile» è il gergo del
-    // registro, e resta solo per chi non ne ha uno.
-    const failed = family === "error" && context.errorReason
-      ? `${t("surface.failed")}: ${context.errorReason}`
-      : null;
-    element.textContent = failed ?? message;
-    element.setAttribute("aria-label", failed ?? message);
+    element.dataset.i18nLabel = messageKey;
+    element.textContent = message;
+    element.setAttribute("aria-label", message);
   };
   redraw();
   const stopLanguage = onLanguage(redraw);

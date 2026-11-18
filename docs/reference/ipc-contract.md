@@ -224,7 +224,11 @@ l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 non una frase. L'errore di un indice esterno lo risolve il kernel col
 catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
 Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
-specie (`error.kind.*`), mai «[object Object]». Un errore nuovo destinato
+specie (`error.kind.*`), mai «[object Object]». Una riga che dice che cosa non
+è riuscito (un documento che non si apre, un pannello che non si ridisegna, una
+ricerca) usa `errorKindPhrase`: la specie e non il messaggio, perché il messaggio
+di un `FormatError` uscito come `internal` è prosa in inglese del codec, finché
+il kernel non la traduce. Un errore nuovo destinato
 all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
 letterali per crate e ne impedisce la crescita.
 
