@@ -56,6 +56,12 @@ al documento, mai alla nota. La barra della scheda è quella dei documenti.
 - Un documento lungo si ferma a 200 blocchi: in fondo «Il documento continua»,
   con **Apri**.
 - Sulla lavagna la scheda di documento si guarda e non si scrive.
+- Da attiva, Esc chiude prima ciò che l'editor dei documenti ha aperto (il
+  pennello, il taglio fra le celle), poi esce dalla scheda
+  (`escapePassesThrough` in `editors/rich/engine.ts`).
+
+La specie è `editors/core/cards/kinds/document.ts`, che riusa il corpo della
+scheda di nota (`kinds/note.ts`) con l'editor compatto dei documenti.
 
 ## I limiti
 
