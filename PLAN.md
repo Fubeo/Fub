@@ -2340,7 +2340,7 @@ Fatto quando: test della misura scritta e riletta; un test DOM di
 «Affianca»; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/live-cards.test.ts
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (f071b29ec, merge cf30f477a, 2026-11-18), in attesa del pacchetto 2. Scostamenti: «Riga» si scrive `![[x|row]]`; nel test il PDF prende il posto di `Percorso.canvas` (il canvas non è una scheda viva); le schede nelle colonne le monta l’opzione `liveCard` di mount.ts, callout.ts tiene solo `removeColumnAt`; le voci stanno nel gruppo Scheda della barra; «Larga» = +64 px a destra, «Tutta la pagina» = +64 px per lato, sotto 1180/940 px la scheda torna nella colonna.
 
 ## T43 · La scheda di foglio nella nota
 
