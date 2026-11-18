@@ -281,12 +281,10 @@ ricerca del campo **Gruppi**, separate da `;`, è un gruppo: una nota prende il
 colore della prima che la trova, e la legenda le nomina. Filtro e ricerche dei
 gruppi sono stato della vista, come gli altri filtri.
 
-Il grafo non ha un posto riservato nella shell. Si apre con il comando
-`graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
-Vista o dalla rail (ogni view principale senza argomenti), e uno per finestra:
-se è aperto, lo mettono a fuoco. Lo stesso fanno Indietro, Avanti e la
-riapertura di una scheda chiusa (`Mod-Shift-t`) quando il grafo intanto sta in
-un altro riquadro. Spento il componente, spariscono anche loro.
+Il grafo non ha un posto riservato. Si apre con `graph.open` (`Mod-Shift-g`),
+dalla palette, dal menu Vista o dalla rail, uno per finestra: se è aperto,
+questi gesti, Indietro, Avanti e `Mod-Shift-t` lo mettono a fuoco nel suo
+riquadro. Spento il componente, spariscono anche loro.
 
 Questo confine deve restare stabile:
 
