@@ -67,7 +67,7 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
     };
     // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
     comments(projection, &mut document, &mut state)?;
-    let body = blocks(&projection.blocks, &mut document, &mut state)?;
+    let body = blocks(&projection.blocks, &mut document, &mut state, None)?;
     document.body = body;
     drop_lost_anchors(&mut document);
     prune(base, &mut document);
@@ -291,16 +291,20 @@ impl Dangling {
     }
 }
 
+/// I blocchi del documento per quelli della proiezione. `in_table` è ciò che
+/// lo stile della tabella che li contiene dà ai paragrafi
+/// ([`projection::table_para`]), fuori da una tabella `None`.
 fn blocks(
     blocks: &[Block],
     document: &mut Document,
     state: &mut State,
+    in_table: Option<&ParaProps>,
 ) -> Result<Vec<Arc<WcBlock>>, RichError> {
     blocks
         .iter()
         .map(|block| match block {
             Block::Para(para) => {
-                paragraph(para, document, state).map(|p| Arc::new(WcBlock::Para(p)))
+                paragraph(para, document, state, in_table).map(|p| Arc::new(WcBlock::Para(p)))
             }
             Block::Table(table) => {
                 let mut out: wordcraft_doc::Table = match &table.k {
@@ -333,6 +337,9 @@ fn blocks(
                 {
                     out.props.style = None;
                 }
+                // Lo stile che la tabella avrà nel file, nuova compresa: le
+                // sue celle si scrivono contro di lui, come si rileggeranno.
+                let in_table = projection::table_para(&document.styles, &out);
                 out.rows = table
                     .rows
                     .iter()
@@ -364,7 +371,8 @@ fn blocks(
                                     out.props.span = span as u32;
                                     respanned.set(true);
                                 }
-                                out.blocks = self::blocks(&cell.blocks, document, state)?;
+                                out.blocks =
+                                    self::blocks(&cell.blocks, document, state, in_table.as_ref())?;
                                 if !out.blocks.iter().any(|b| matches!(**b, WcBlock::Para(_))) {
                                     // Word vuole un paragrafo in fondo a ogni cella.
                                     out.blocks.push(Arc::new(WcBlock::Para(Paragraph::new())));
@@ -402,6 +410,7 @@ fn paragraph(
     para: &Para,
     document: &mut Document,
     state: &mut State,
+    in_table: Option<&ParaProps>,
 ) -> Result<Paragraph, RichError> {
     let keep: ParaKeep = para
         .k
@@ -416,8 +425,8 @@ fn paragraph(
     // L'enfasi che la shell mostrava era risolta con lo stile di prima.
     let shown_style = keep.props.style.clone();
     let before = projection::role(document, &keep.props);
-    let shown_align = projection::align(&document.styles, &keep.props);
-    let shown_layout = projection::layout(&document.styles, &keep.props);
+    let shown_align = projection::align_in(&document.styles, &keep.props, in_table);
+    let shown_layout = projection::layout(&document.styles, &keep.props, in_table);
     let shown_s = (before == Role::Body)
         .then(|| projection::style_of(document, &keep.props))
         .flatten();
@@ -432,6 +441,7 @@ fn paragraph(
         (para.align, &para.p),
         (shown_align, &shown_layout),
         &document.styles,
+        in_table,
     );
     if let Role::List { ordered, .. } = para.role {
         if let Some(n) = document.styles.resolve_para(&keep.props).numbering {
@@ -1328,18 +1338,22 @@ fn with_style(mut props: ParaProps, style: Option<&str>, styles: &StyleSheet) ->
 /// Le proprietà di un paragrafo con l'allineamento e la disposizione voluti,
 /// con la regola delle enfasi: un valore diverso da quello mostrato si toglie
 /// se basta toglierlo, se no si scrive diretto. Ciò che la disposizione non
-/// nomina è quello dello stile.
+/// nomina è quello dello stile del paragrafo. In una cella i valori si
+/// risolvono con lo stile della tabella (`table`): ciò che lui dà già non si
+/// scrive nel paragrafo.
 fn with_layout(
     mut props: ParaProps,
     (align, want): (Option<Align>, &Layout),
     (shown_align, shown): (Option<Align>, &Layout),
     styles: &StyleSheet,
+    table: Option<&ParaProps>,
 ) -> ParaProps {
+    let resolved = |props: &ParaProps| styles.resolve_para_in(props, table);
     let left = |a: Option<Align>| a.filter(|a| *a != Align::Left);
     let (align, shown_align) = (left(align), left(shown_align));
     if align != shown_align {
         props.align = None;
-        if projection::align(styles, &props) != align {
+        if projection::align_in(styles, &props, table) != align {
             props.align = Some(match align {
                 None | Some(Align::Left) => WcAlign::Left,
                 Some(Align::Center) => WcAlign::Center,
@@ -1354,9 +1368,9 @@ fn with_layout(
         let target = want.left.unwrap_or(plain.indent_left);
         props.indent_left = None;
         props.indent_left_chars = None;
-        if !same(styles.resolve_para(&props).indent_left, target) {
+        if !same(resolved(&props).indent_left, target) {
             props.indent_left = Some(target);
-            if !same(styles.resolve_para(&props).indent_left, target) {
+            if !same(resolved(&props).indent_left, target) {
                 props.indent_left_chars = Some(0.0);
             }
         }
@@ -1365,9 +1379,9 @@ fn with_layout(
         let target = want.right.unwrap_or(plain.indent_right);
         props.indent_right = None;
         props.indent_right_chars = None;
-        if !same(styles.resolve_para(&props).indent_right, target) {
+        if !same(resolved(&props).indent_right, target) {
             props.indent_right = Some(target);
-            if !same(styles.resolve_para(&props).indent_right, target) {
+            if !same(resolved(&props).indent_right, target) {
                 props.indent_right_chars = Some(0.0);
             }
         }
@@ -1376,9 +1390,9 @@ fn with_layout(
         let target = want.first.unwrap_or(plain.indent_first);
         props.indent_first = None;
         props.indent_first_chars = None;
-        if !same(styles.resolve_para(&props).indent_first, target) {
+        if !same(resolved(&props).indent_first, target) {
             props.indent_first = Some(target);
-            if !same(styles.resolve_para(&props).indent_first, target) {
+            if !same(resolved(&props).indent_first, target) {
                 props.indent_first_chars = Some(0.0);
             }
         }
@@ -1387,9 +1401,9 @@ fn with_layout(
         let target = want.before.unwrap_or(plain.space_before);
         props.space_before = None;
         props.space_before_auto = None;
-        if !same(styles.resolve_para(&props).space_before, target) {
+        if !same(resolved(&props).space_before, target) {
             props.space_before = Some(target);
-            if !same(styles.resolve_para(&props).space_before, target) {
+            if !same(resolved(&props).space_before, target) {
                 props.space_before_auto = Some(false);
             }
         }
@@ -1398,9 +1412,9 @@ fn with_layout(
         let target = want.after.unwrap_or(plain.space_after);
         props.space_after = None;
         props.space_after_auto = None;
-        if !same(styles.resolve_para(&props).space_after, target) {
+        if !same(resolved(&props).space_after, target) {
             props.space_after = Some(target);
-            if !same(styles.resolve_para(&props).space_after, target) {
+            if !same(resolved(&props).space_after, target) {
                 props.space_after_auto = Some(false);
             }
         }
@@ -1408,7 +1422,7 @@ fn with_layout(
     if want.line != shown.line {
         let target = want.line.unwrap_or_else(|| Line::of(plain.line_spacing));
         props.line_spacing = None;
-        if !Line::of(styles.resolve_para(&props).line_spacing).same(target) {
+        if !Line::of(resolved(&props).line_spacing).same(target) {
             props.line_spacing = Some(target.spacing());
         }
     }

@@ -161,11 +161,15 @@ Una tabella nuova (**Inserisci › Tabella**, in un `.docx` o in un `.odt`)
 nasce con i paragrafi delle celle a spazio dopo 0 e interlinea singola, come
 lo stile «Griglia tabella» di Word, anche dove il documento dà al testo
 normale più spazio: è la spaziatura del paragrafo, che **Spaziatura del
-paragrafo** mostra e cambia, si salva come formattazione diretta e si
-rilegge uguale. Dove lo stile del documento la dà già, il file non la
-ripete. Righe, colonne e paragrafi aggiunti dopo copiano quelli accanto e la
-tengono; una tabella del file resta con la sua. Una copia RTF la porta,
-perché lì è la spaziatura di serie.
+paragrafo** mostra e cambia, e si rilegge uguale. In un `.docx` la dà lo
+stile «Griglia tabella» della tabella, come in Word, e i paragrafi non la
+ripetono; in un `.odt`, o in un `.docx` che non può ricevere quello stile, si
+salva come formattazione diretta. Righe, colonne e paragrafi aggiunti dopo
+copiano quelli accanto e la tengono. Una tabella del file resta con la sua:
+le celle di un `.docx` hanno la spaziatura che dà lo stile della loro
+tabella, sopra i valori predefiniti del documento e sotto lo stile del
+paragrafo (ECMA-376 §17.7.2). Una copia RTF la porta, perché lì è la
+spaziatura di serie.
 
 Nelle tabelle del docx il cursore resta nel testo: le frecce sono del testo,
 Tab e Maiusc+Tab vanno di cella in cella (Tab dall'ultima aggiunge una riga),
