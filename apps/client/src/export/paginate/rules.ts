@@ -235,9 +235,10 @@ class Layout {
       this.place(box, { box, id, part, ...(note ? { note } : {}), from: 0, to: height, column: this.column, y, scale: 1, continued: false, continues: false });
       return;
     }
-    // Più alta di una pagina: sotto i titoli che porta con sé, o in cima.
+    // Più alta di una pagina: sotto i titoli che porta con sé, o in cima. Se i
+    // titoli lasciano meno di un quarto della pagina, in cima alla dopo.
     let room = this.height - y - this.fitLabel;
-    if (room < this.height / 4) {
+    if (this.used && room < this.height / 4) {
       this.nextFrame();
       y = 0;
       room = this.height - this.fitLabel;
