@@ -21596,6 +21596,12 @@ h6.ui-heading {
 .mini-bar[hidden] {
   display: none;
 }
+/* Sopra il menu entra ed esce la striscia (`ui/menu.ts`), che ha il suo moto:
+   la mini-barra non ne aggiunge un altro, e l'immagine che esce, una copia,
+   non la fa ripartire da trasparente. */
+.context-strip .mini-bar {
+  animation: none;
+}
 @keyframes mini-bar-in {
   from {
     opacity: 0;
