@@ -90,7 +90,7 @@
 //! dato autorevole non si perde in silenzio, e qui il dato autorevole è il
 //! testo.
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::Revision;
@@ -98,6 +98,7 @@ use fub_abi::model::DocId;
 use fub_abi::rules::doc_data::{decode, encode};
 use serde::{Deserialize, Serialize};
 
+use crate::poison::Shelter;
 use crate::storage::VaultStorage;
 use crate::vault::FUB_DIR;
 use fub_abi::schema::SchemaVersion;
@@ -185,15 +186,10 @@ pub(crate) struct Drafts {
     /// ramo della maiuscola), ed essere sovrascritta dal record vecchio. Una
     /// bozza che arriva a migrazione finita resta sotto il suo id, come prima.
     /// Lo si tiene solo sul supporto delle bozze, mai attraverso codice esterno.
-    mutating: Mutex<()>,
-}
-
-/// Il lucchetto delle mutazioni delle bozze. Avvelenato vuol dire che un'altra
-/// mutazione è morta a metà: il supporto è atomico per file, quindi si va
-/// avanti invece di perdere anche questa bozza.
-fn mutating(lock: &Mutex<()>) -> MutexGuard<'_, ()> {
-    lock.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    /// Un lucchetto che si riprende ([`Shelter`]): non protegge uno stato in
+    /// memoria, e il supporto è atomico per file, quindi una mutazione morta a
+    /// metà non vale la perdita della bozza dopo.
+    mutating: Shelter<()>,
 }
 
 /// La porta delle bozze di un vault, staccata dal workspace (#485).
@@ -234,7 +230,7 @@ impl Drafts {
         Drafts {
             dir: drafts_dir(root),
             storage,
-            mutating: Mutex::new(()),
+            mutating: Shelter::new(()),
         }
     }
 
@@ -284,7 +280,7 @@ impl Drafts {
         };
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
         let path = self.path(doc);
-        let _mutating = mutating(&self.mutating);
+        let _mutating = self.mutating.acquire();
         // Ogni giro che non scrive ha spostato un record estraneo, che non
         // torna: il ciclo finisce quando al posto non ce n'è più nessuno.
         loop {
@@ -321,7 +317,7 @@ impl Drafts {
     /// fuori il lock dello scrittore del vault, preso dall'host all'apertura.
     pub(crate) fn discard(&self, doc: &DocId) -> std::io::Result<()> {
         let path = self.path(doc);
-        let _mutating = mutating(&self.mutating);
+        let _mutating = self.mutating.acquire();
         if crate::error::optional(self.storage.stat(&path))?.is_none() {
             return Ok(());
         }
@@ -474,7 +470,7 @@ impl Drafts {
     pub(crate) fn migrate_tracked(&self, from: &DocId, to: &DocId) -> std::io::Result<DraftMove> {
         let old = self.path(from);
         let new = self.path(to);
-        let _mutating = mutating(&self.mutating);
+        let _mutating = self.mutating.acquire();
         // Soltanto un «non c'è» del supporto vuol dire «niente da migrare»:
         // ogni altro errore lascerebbe la bozza sotto l'id morto con un Ok.
         if crate::error::optional(self.storage.stat(&old))?.is_none() {
@@ -521,7 +517,7 @@ impl Drafts {
             DraftMove::Moved => self.migrate(to, from),
             DraftMove::Recovered(recovery) => {
                 let old = self.path(from);
-                let _mutating = mutating(&self.mutating);
+                let _mutating = self.mutating.acquire();
                 match self.storage.rename_no_replace(recovery, &old) {
                     Ok(()) => Ok(()),
                     // `from` ha ricevuto una bozza nuova nel frattempo: quella
