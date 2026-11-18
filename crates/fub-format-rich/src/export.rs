@@ -27,8 +27,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fub_abi::command::{
-    Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    InvokeMode, ParamKind, ParamSpec,
+    document_named, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
+    CommandSpec, DocumentNamed, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -641,6 +641,8 @@ const T_COMMENTS: &str = "cmd.rich.export-copy.comments";
 const T_COMMENTS_DESC: &str = "cmd.rich.export-copy.comments.desc";
 const T_PREVIEW: &str = "cmd.rich.export-copy.preview";
 const T_PREVIEW_NONE: &str = "cmd.rich.export-copy.preview.none";
+const T_DOC_MISSING: &str = "cmd.rich.export-copy.doc.missing";
+const T_DOC_AMBIGUOUS: &str = "cmd.rich.export-copy.doc.ambiguous";
 
 fn format_key(target: Target) -> String {
     format!("{T_FORMAT}.{}", target.key())
@@ -692,7 +694,7 @@ impl CommandProvider for RichCommands {
         }
         let spec = self.commands().remove(0);
         spec.validate_args(&args)?;
-        let doc = DocId::new(args["doc"].as_str().unwrap_or_default());
+        let doc = named_document(&*host, args["doc"].as_str().unwrap_or_default())?;
         let target = args["format"]
             .as_str()
             .and_then(|key| Target::ALL.into_iter().find(|t| t.key() == key))
@@ -730,6 +732,35 @@ impl CommandProvider for RichCommands {
         }
         preview(&*host, &doc, codec, target, comments)
     }
+}
+
+/// Il documento che il campo «Documento» nomina: l'id scelto dall'elenco, o il
+/// nome scritto a mano di un solo documento di videoscrittura. Un nome che non
+/// c'è, o che hanno più documenti, lo dice una frase del catalogo.
+fn named_document(host: &dyn HostApi, raw: &str) -> Result<DocId, PluginError> {
+    let docs = host.list_documents(None)?.items;
+    let name = || Arg::text("doc", raw.trim());
+    match document_named(raw, docs, |doc| codec_of(host, doc).is_some()) {
+        DocumentNamed::One(doc) => Ok(doc),
+        DocumentNamed::None => Err(PluginError::BadArgs(Text::message(
+            T_DOC_MISSING,
+            vec![name()],
+        ))),
+        DocumentNamed::Many(docs) => Err(PluginError::BadArgs(Text::message(
+            T_DOC_AMBIGUOUS,
+            vec![name(), Arg::text("docs", listed(&docs))],
+        ))),
+    }
+}
+
+/// Gli omonimi in una riga: i primi, e i puntini se sono di più.
+fn listed(docs: &[DocId]) -> String {
+    const SHOWN: usize = 5;
+    let mut names: Vec<&str> = docs.iter().take(SHOWN).map(DocId::as_str).collect();
+    if docs.len() > SHOWN {
+        names.push("…");
+    }
+    names.join(", ")
 }
 
 /// L'anteprima del comando (IMP-139): ciò che il modulo promette, cioè
@@ -804,6 +835,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                 T_PREVIEW_NONE,
                 "La copia di «{doc}» arriverà nell'attività, da salvare dove vuoi. Il confronto \
                  con il documento non trova niente che il formato non porti.",
+            )
+            .with(
+                T_DOC_MISSING,
+                "Nessun documento di videoscrittura si chiama «{doc}». Sceglilo dall'elenco del \
+                 campo.",
+            )
+            .with(
+                T_DOC_AMBIGUOUS,
+                "Più documenti di videoscrittura si chiamano «{doc}»: {docs}. Scegli dall'elenco \
+                 del campo quello da esportare.",
             ),
         named(StringCatalog::new("en"), "Plain text")
             .with(T_TITLE, "Export a copy")
@@ -829,6 +870,15 @@ pub fn catalog() -> Vec<StringCatalog> {
                 T_PREVIEW_NONE,
                 "The copy of “{doc}” will appear in Activity, to save wherever you like. The \
                  comparison with the document finds nothing the format does not carry.",
+            )
+            .with(
+                T_DOC_MISSING,
+                "No word-processing document is called “{doc}”. Pick it from the field's list.",
+            )
+            .with(
+                T_DOC_AMBIGUOUS,
+                "More than one word-processing document is called “{doc}”: {docs}. Pick the one \
+                 to export from the field's list.",
             ),
     ]
 }

@@ -1113,6 +1113,77 @@ impl<'a> Args<'a> {
     }
 }
 
+/// Che cosa nomina il testo di un argomento [`ParamKind::Document`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DocumentNamed {
+    /// L'id di un documento che c'è, o il solo documento con quel nome.
+    One(DocId),
+    /// Nessun documento fra quelli che il comando accetta si chiama così.
+    None,
+    /// Più documenti si chiamano così, in ordine di id.
+    Many(Vec<DocId>),
+}
+
+/// Il documento che una persona ha **scritto** in un campo
+/// [`ParamKind::Document`], fra `docs` (i documenti del vault).
+///
+/// [`Args::document`] costruisce l'id dalla stringa e non risolve niente, ed è
+/// giusto per chi passa un id. Un modulo però si compila anche a mano: chi
+/// scrive «Relazione» invece di scegliere `Lavoro/Relazione.docx` dall'elenco
+/// intende quel documento, e il comando che lo riceve deve capirlo o dirgli
+/// perché no, non rispondere con l'errore di un id che non esiste.
+///
+/// La regola:
+///
+/// 1. un id che c'è è sé stesso, anche se il comando non lo accetta: il
+///    rifiuto, con la sua ragione, è del comando;
+/// 2. altrimenti contano i documenti che `accepts` vuole e il cui nome, nome
+///    del file, percorso o percorso senza estensione è il testo, senza
+///    distinzione di maiuscole: uno è la risposta, nessuno o più di uno lo
+///    dice, e la frase la scrive il comando.
+///
+/// Non è la risoluzione dei wikilink
+/// ([`IndexQuery::Resolve`](crate::traits::IndexQuery::Resolve)): quella non
+/// conosce gli allegati per nome e sceglie fra omonimi, mentre un modulo che
+/// sceglie al posto di chi lo compila esporta il documento sbagliato.
+pub fn document_named(
+    raw: &str,
+    docs: impl IntoIterator<Item = DocId>,
+    accepts: impl Fn(&DocId) -> bool,
+) -> DocumentNamed {
+    let text = raw.trim();
+    if text.is_empty() {
+        return DocumentNamed::None;
+    }
+    let wanted = text.to_lowercase();
+    let same = |candidate: &str| candidate.to_lowercase() == wanted;
+    let mut found = Vec::new();
+    for doc in docs {
+        if doc.as_str() == text {
+            return DocumentNamed::One(doc);
+        }
+        if !accepts(&doc) {
+            continue;
+        }
+        let path = doc.as_str();
+        let file = path.rsplit('/').next().unwrap_or(path);
+        let without_extension = path
+            .rsplit_once('.')
+            .filter(|(stem, _)| !stem.is_empty() && !stem.ends_with('/'))
+            .map_or(path, |(stem, _)| stem);
+        if same(doc.page_name()) || same(file) || same(path) || same(without_extension) {
+            found.push(doc);
+        }
+    }
+    found.sort();
+    found.dedup();
+    match found.len() {
+        0 => DocumentNamed::None,
+        1 => DocumentNamed::One(found.remove(0)),
+        _ => DocumentNamed::Many(found),
+    }
+}
+
 /// La modifica che un comando propone per **un** documento.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlannedEdit {
@@ -1591,6 +1662,63 @@ mod tests {
             !CommandScope::writing(CommandReach::Vault)
                 .irreversible()
                 .reversible
+        );
+    }
+
+    fn vault() -> Vec<DocId> {
+        [
+            "Lavoro/Relazione.docx",
+            "Relazione.md",
+            "Archivio/Bilancio.docx",
+            "Bilancio.odt",
+            "Note/Lettera.docx",
+        ]
+        .into_iter()
+        .map(DocId::new)
+        .collect()
+    }
+
+    fn word(doc: &DocId) -> bool {
+        [".docx", ".odt"]
+            .iter()
+            .any(|ext| doc.as_str().ends_with(ext))
+    }
+
+    #[test]
+    fn a_document_written_by_name_is_the_one_the_command_accepts() {
+        let one = |raw: &str| document_named(raw, vault(), word);
+        let relazione = DocumentNamed::One(DocId::new("Lavoro/Relazione.docx"));
+        // Il nome, il nome del file, il percorso senza estensione, senza
+        // distinzione di maiuscole: la nota omonima non conta, il comando non
+        // la vuole.
+        assert_eq!(one("Relazione"), relazione);
+        assert_eq!(one(" relazione "), relazione);
+        assert_eq!(one("Relazione.docx"), relazione);
+        assert_eq!(one("lavoro/relazione"), relazione);
+        assert_eq!(one("LAVORO/RELAZIONE.DOCX"), relazione);
+    }
+
+    #[test]
+    fn an_existing_id_is_itself_even_when_the_command_refuses_it() {
+        assert_eq!(
+            document_named("Relazione.md", vault(), word),
+            DocumentNamed::One(DocId::new("Relazione.md"))
+        );
+    }
+
+    #[test]
+    fn no_document_or_many_are_said_not_guessed() {
+        assert_eq!(
+            document_named("Preventivo", vault(), word),
+            DocumentNamed::None
+        );
+        assert_eq!(document_named("   ", vault(), word), DocumentNamed::None);
+        assert_eq!(
+            document_named("bilancio", vault(), word),
+            DocumentNamed::Many(vec![
+                DocId::new("Archivio/Bilancio.docx"),
+                DocId::new("Bilancio.odt"),
+            ])
         );
     }
 }
