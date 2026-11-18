@@ -1531,6 +1531,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       // al PDF, o apre quelle che ci sono.
       annotate: {
         available: () => state.commandSpecs.some((spec) => spec.id === "pdf.annotate"),
+        // L'elenco dei comandi arriva dopo le schede ripristinate all'avvio,
+        // e cambia quando un componente si accende o si spegne.
+        watch: (changed) => on("commands", changed),
         run: async (pdf) => {
           try {
             const outcome = await api.invokeCommand("pdf.annotate", { pdf }, "apply");
