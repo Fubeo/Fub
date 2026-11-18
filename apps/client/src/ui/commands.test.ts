@@ -4,6 +4,7 @@ import { state } from "../state/store";
 import { SHELL_KEYS } from "./shell-keys.generated";
 import {
   rejectedChords,
+  keybindingIssues,
   allCommands,
   advance,
   conflicts,
@@ -736,6 +737,9 @@ describe("un accordo che non si può premere si dice", () => {
 
   it("e un comando senza scorciatoia non è un accordo storto", () => {
     expect(rejectedChords([entry({ binding: null })])).toHaveLength(0);
+    // Neanche un campo svuotato (IMP-140): vuoto vuol dire nessuna scorciatoia.
+    expect(rejectedChords([entry({ binding: "" }), entry({ binding: "  " })])).toHaveLength(0);
+    expect(keybindingIssues([entry({ binding: "" })])).toEqual([]);
   });
 });
 

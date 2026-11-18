@@ -1292,7 +1292,11 @@ export function validateKeybinding(binding: string): KeybindingValidation {
 }
 
 export function rejectedChords(entries: CommandEntry[]): CommandEntry[] {
-  return entries.filter((e) => e.binding !== null && normalizeAlternatives(e.binding) === null);
+  // Un testo vuoto non è un accordo scritto male ma nessun accordo, come dice
+  // `validateKeybinding`: rifiutarlo diceva «non valida» a ogni comando senza
+  // scorciatoia (IMP-140).
+  return entries.filter((e) =>
+    e.binding !== null && e.binding.trim() !== "" && normalizeAlternatives(e.binding) === null);
 }
 
 export type KeybindingIssue =

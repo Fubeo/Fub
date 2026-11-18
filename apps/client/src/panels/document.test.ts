@@ -1590,4 +1590,29 @@ describe("chiusa l'ultima nota, il kernel non ne tiene più il contesto (IMP-107
     document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="Altra.md"]')!.click();
     await waitFor("il contesto segue la linguetta di Altra.md", () => published()?.doc === "Altra.md");
   });
+
+  // Un documento che non si apre è comunque quello a fuoco: la barra di
+  // Statistiche deve parlare di lui, non dei conteggi della nota di prima
+  // (IMP-143). Il perché lo dice la sua scheda; il contesto qui dice solo chi è.
+  it("un documento che non si apre pubblica sé stesso, non la nota di prima", async () => {
+    const host = await start("off");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    expect(published()).toMatchObject({ doc: "Benvenuto.md" });
+
+    const repair = host.fault("openDocument", { kind: "format", message: "rich codec: password" } as never);
+    try {
+      await open("Lettera.docx").catch(() => {});
+      // Il formato ha detto di no davvero: la prova non passa da un'apertura riuscita.
+      expect(host.atGate("openDocument").some((call) => call.args[0] === "Lettera.docx")).toBe(true);
+      expect(document.querySelector(".pane.focus .rich-editor .ProseMirror")).toBeNull();
+      await waitFor("il contesto segue il documento che non si apre", () => published()?.doc === "Lettera.docx");
+    } finally {
+      repair();
+    }
+  });
 });
