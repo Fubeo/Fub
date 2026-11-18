@@ -284,14 +284,8 @@ gruppi sono stato della vista, come gli altri filtri.
 Il grafo non ha un posto riservato nella shell. Si apre con il comando
 `graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
 Vista o dalla rail, che mostrano ogni view principale apribile senza argomenti.
-Con il componente spento spariscono anche comando, voce di menu e icona.
-
-Una view principale si apre una volta per finestra. Se il grafo è già in un
-riquadro, quei gesti portano il fuoco lì invece di aprirne un secondo nel
-riquadro col fuoco: anche dopo una nota aperta dal grafo, che si apre nel
-riquadro accanto. Fa eccezione un riquadro collegato, che rispecchia le
-aperture dell'altro. Un layout salvato dalle versioni di prima con due grafi si
-rilegge con il solo primo, e le altre schede restano.
+Con il componente spento spariscono anche comando, voce di menu e icona. Il
+grafo aperto è uno per finestra: quei gesti portano al riquadro che lo mostra.
 
 Questo confine deve restare stabile:
 

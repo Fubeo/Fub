@@ -1770,6 +1770,7 @@
     "ui-radio-option",
     "ui-form",
     "ui-html",
+    "ui-confirm",
     "ui-webview",
     "pane-view",
     "desk-commands",
@@ -3958,6 +3959,7 @@
     "ui-radio-option": "cornice",
     "ui-form": "cornice",
     "ui-html": "cornice",
+    "ui-confirm": "cornice",
     "ui-webview": "cornice",
     "pane-view": "cornice",
     "desk-commands": "cornice",
@@ -8676,6 +8678,7 @@
       "hooks": [
         "ui-html",
         "ui-custom",
+        "ui-confirm",
         "ui-webview"
       ],
       "states": [
@@ -11449,7 +11452,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2186,
+    "hooks": 2187,
     "state_names": 7,
     "assigned_states": 984,
     "components": 291,
