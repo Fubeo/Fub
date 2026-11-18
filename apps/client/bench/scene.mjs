@@ -3474,7 +3474,10 @@ async function openNoteTypes(page, gesture) {
       await page.waitForSelector("#sidebar-scrim:not([hidden])");
     }
     await page.waitForSelector("#types-list:not([hidden]) .type-row");
+    // Il «+» dell'albero apre il menu «Nuovo» (S34); la sua voce «Nota» è il
+    // gesto della nota nuova, che coi tipi chiede il tipo.
     await page.click("#new-note");
+    await page.locator("#context-menu button").filter({ has: page.locator(".menu-label", { hasText: /^Nota$/ }) }).first().click();
     await page.waitForSelector(".note-type-popover .note-type-menu-item");
   }
   if (gesture === "choose") {
