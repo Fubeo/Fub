@@ -14,6 +14,6 @@ export const CENTRES: PartAnatomy = {
     // vestono solo dentro un centro.
     { name: "dock-panel", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["dock-panel", "dock-panel--notify", "dock-panel--activity", "panel-title", "link-button", "muted"] },
     { name: "notices", states: REST, hooks: ["notify-list", "notify-testo", "notify-ora"] },
-    { name: "activities", states: REST, hooks: ["activity-row", "activity-label"] },
+    { name: "activities", states: REST, hooks: ["activity-row", "activity-label", "activity-actions"] },
   ],
 };

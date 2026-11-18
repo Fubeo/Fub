@@ -147,8 +147,14 @@ export function noticeOf(notice: KernelNotice, rows: readonly JobRow[] = []): { 
 /// sono il ripiego di un formato che non esiste più — non il ramo che decide.
 function describeOutcome(error: unknown): string {
   const plugin = asPluginError(error);
-  if (plugin) return plugin.message.trim() !== "" ? plugin.message : plugin.kind;
+  if (plugin) return plugin.message.trim() !== "" ? plugin.message : errorText({ kind: plugin.kind, message: null });
   if (typeof error === "string") return error;
+  // Un errore del contratto con una chiave che nessuno ha risolto (IMP-130:
+  // «bad_args» al posto del motivo): la frase della sua specie, nella lingua
+  // di chi legge, mai la sigla.
+  if (error && typeof error === "object" && typeof (error as { kind?: unknown }).kind === "string") {
+    return errorText(error);
+  }
   if (error && typeof error === "object") {
     const entries = Object.entries(error as Record<string, unknown>);
     const [name, detail] = entries[0] ?? [t("activity.unknown_error"), undefined];
@@ -494,13 +500,19 @@ function redraw(): void {
             artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
               artifact.detail || t("activity.artifact_ready");
         const busy = artifact.state === "saving" || artifact.state === "printing";
+        // Le azioni del file stanno in un gruppo solo, in fila: la griglia
+        // della riga ha un posto per un'azione (quello di «Annulla» nei
+        // lavori in corso), e due pulsanti in quel posto finivano uno sopra
+        // l'altro, col clic su «Salva…» che arrivava a «Stampa…» (IMP-129).
+        const actions = document.createElement("span");
+        actions.className = "activity-actions";
         const save = document.createElement("button");
         save.type = "button";
         save.className = "link-button";
         save.textContent = t("activity.artifact_save");
         save.disabled = busy;
         save.addEventListener("click", () => void persistArtifact(report, artifact));
-        item.append(save);
+        actions.append(save);
         // Un PDF si stampa anche: passa al lettore del sistema, e i byte
         // restano per salvarlo.
         if (artifact.media_type === "application/pdf") {
@@ -510,8 +522,9 @@ function redraw(): void {
           print.textContent = t("activity.artifact_print");
           print.disabled = busy;
           print.addEventListener("click", () => void printArtifact(report, artifact));
-          item.append(print);
+          actions.append(print);
         }
+        item.append(actions);
       }
       item.append(status);
       list.append(item);
