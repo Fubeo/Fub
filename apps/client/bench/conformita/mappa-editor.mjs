@@ -459,6 +459,18 @@ export const VISTE = {
     },
     app: { scena: "trasclusione-viva-02-scrive" },
   },
+  /// Le schede affiancate (T42): nel prototipo la coppia `.pair` del
+  /// documento d'apertura (il contratto e la lettera), nell'app il
+  /// `[!columns]` col contratto e i conti della scena `schede-misura`.
+  "schede-affiancate": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector("#win .pair .scard");
+      },
+    },
+    app: { scena: "schede-misura-01-affiancate" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1509,6 +1521,16 @@ export const PEZZI = [
     prototipo: '.blk[data-t="base"]',
     app: '.pane.focus .base-surface[data-embedded="true"]',
     proprieta: ["margin-right"],
+  },
+  // ── le schede affiancate (T42) ──────────────────────────────────────────
+  // Alla pari, 14 px fra l'una e l'altra, 64 px oltre il testo dai due lati
+  // a tutta larghezza e nella colonna a 700.
+  {
+    id: "schede.affiancate",
+    vista: "schede-affiancate",
+    prototipo: ".pair",
+    app: '.pane.focus .pane-editor .fub-columns[data-live-cards="true"]',
+    proprieta: ["column-gap", "margin-left", "margin-right", "align-items"],
   },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {

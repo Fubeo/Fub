@@ -1605,6 +1605,50 @@ export const SCENE = touchLast(onPage("shell", [
       }
     },
   })),
+  // La misura e il posto delle schede (T42, il prototipo `.pair` e la lavagna
+  // a tutta pagina, passo 17): due schede affiancate in un `[!columns]`, una
+  // a tutta pagina e bassa, una come riga; il bordo che si trascina sotto il
+  // puntatore; la stessa nota a 700 px, dove la scheda larga torna nella
+  // colonna.
+  ...[
+    ["schede-misura-01-affiancate", "Il contratto e i conti affiancati in due colonne, sopra i conti a tutta pagina", "top", false],
+    ["schede-misura-02-riga", "I conti bassi col bordo da trascinare sotto il puntatore, e il contratto come riga", "bottom", true],
+    ["schede-misura-03-stretta", "Nella finestra minima le schede affiancate stanno una sotto l'altra, e quella larga torna nella colonna", "wide", false, NOTE_NARROW],
+  ].map(([id, title, scroll, hover, viewport]) => ({
+    id,
+    title,
+    query: "live=schede-misura&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+        return cards.length >= 4 && cards.every((card) => card.dataset.cardState !== "loading");
+      });
+      if (scroll === "bottom") {
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        });
+        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-display="row"]');
+      }
+      if (scroll === "wide") {
+        // La seconda scheda delle colonne in alto, sopra quella larga.
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          const second = document.querySelectorAll(".pane.focus .pane-editor .fub-column > .live-card")[1];
+          if (scroller && second) scroller.scrollTop += second.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+        });
+      }
+    },
+    ...(hover ? {
+      hover: async (page) => {
+        const sized = '.pane.focus .pane-editor .live-card[data-card-height="set"]';
+        await page.hover(`${sized} .live-card-resize`);
+        await page.waitForSelector(`${sized}[data-card-resizable="true"]`);
+      },
+    } : {}),
+  })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
   // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.

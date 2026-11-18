@@ -75,6 +75,32 @@ const LIVE_CARDS_NOTE = [
   "Da chiedere all'agenzia: chi paga la caldaia.",
 ].join("\n");
 
+/// La misura e il posto delle schede (T42): il contratto e i conti affiancati
+/// in un `[!columns]`, i conti a tutta pagina e bassi (`|900x260`), il
+/// contratto come riga (`|row`).
+const LIVE_CARDS_SIZE_NOTE = [
+  "# Affitto di via Roma",
+  "",
+  "Il contratto e i conti, uno accanto all'altro:",
+  "",
+  "> [!columns]",
+  "> > [!column]",
+  "> > ![[contratto-affitto.pdf]]",
+  ">",
+  "> > [!column]",
+  "> > ![[Conti.xlsx]]",
+  "",
+  "I conti a tutta pagina, bassi:",
+  "",
+  "![[Conti.xlsx|900x260]]",
+  "",
+  "Il contratto, solo come riga:",
+  "",
+  "![[contratto-affitto.pdf|row]]",
+  "",
+  "Da chiedere all'agenzia: chi paga la caldaia.",
+].join("\n");
+
 /// Il blocco sincronizzato (T30): la nota riporta un blocco della riunione
 /// col suo id, che si scrive dove sta, e uno il cui blocco non c'è più.
 const SYNCED_NOTE = [
@@ -563,6 +589,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
   sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
   "schede-vive": { text: LIVE_CARDS_NOTE, cursor: null, files: { "Casa/foto-appartamento.zip": "" } },
+  "schede-misura": { text: LIVE_CARDS_SIZE_NOTE, cursor: null },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

@@ -147,7 +147,18 @@ describe("i gruppi", () => {
     const { host, opened, text } = hostOf("Prima\n\n![[Conti.xlsx#Budget]]\n\nDopo\n", 8);
     const group = markdownBlockGroup(host, null);
     expect(group?.label).toBe("Scheda");
-    expect(ids(group)).toEqual(["markdown.link.open", "markdown.card.remove"]);
+    // T42: «Mostra come», la larghezza e «Affianca» prima di togliere; senza
+    // un'altezza scritta, niente «Altezza normale», e senza un'altra scheda
+    // vicina «Affianca» è spenta e dice perché.
+    expect(ids(group)).toEqual([
+      "markdown.link.open",
+      "markdown.card.show",
+      "markdown.card.width",
+      "markdown.card.beside",
+      "markdown.card.remove",
+    ]);
+    expect(item(group, "markdown.card.beside").enabled).toBe(false);
+    expect(item(group, "markdown.card.beside").description).toBe("Serve un'altra scheda subito sopra o sotto.");
     item(group, "markdown.link.open").run?.();
     expect(opened).toEqual([["Conti.xlsx", "Budget", null]]);
     item(group, "markdown.card.remove").run?.();

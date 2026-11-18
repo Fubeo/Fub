@@ -1545,6 +1545,7 @@
     "live-card-open",
     "live-card-full",
     "live-card-label",
+    "live-card-resize",
     "live-card-missing",
     "live-card-unsupported",
     "live-card-message",
@@ -3769,6 +3770,7 @@
     "live-card-open": "cornice",
     "live-card-full": "cornice",
     "live-card-label": "cornice",
+    "live-card-resize": "cornice",
     "live-card-missing": "cornice",
     "live-card-unsupported": "cornice",
     "live-card-message": "cornice",
@@ -8211,6 +8213,31 @@
       ]
     },
     {
+      "name": "live-card-resize",
+      "part": "live-cards",
+      "hooks": [
+        "live-card-resize"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-columns",
+      "part": "live-cards",
+      "hooks": [
+        "markdown-rendered",
+        "fub-columns",
+        "fub-column"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "live-card-notice",
       "part": "live-cards",
       "hooks": [
@@ -11614,10 +11641,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2222,
+    "hooks": 2223,
     "state_names": 7,
-    "assigned_states": 998,
-    "components": 296,
+    "assigned_states": 1003,
+    "components": 298,
     "preference_tokens": 196
   }
 }
