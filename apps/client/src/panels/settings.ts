@@ -1126,7 +1126,7 @@ function syncToolbar(): void {
 
 /// Nasconde ciò che il filtro esclude, e le sezioni rimaste vuote.
 function applyFilter(): void {
-  for (const stale of bodyEl.querySelectorAll(".settings-empty")) stale.remove();
+  for (const stale of bodyEl.querySelectorAll(".settings-empty[data-filter-empty]")) stale.remove();
   if (!isFilterable(tab)) {
     if (countEl) countEl.textContent = "";
     syncTocEntries();
@@ -1153,6 +1153,8 @@ function applyFilter(): void {
   if (active && shown === 0) {
     const empty = document.createElement("div");
     empty.className = "settings-empty";
+    // Solo questo avviso è del filtro: le sezioni hanno i loro stati vuoti.
+    empty.dataset.filterEmpty = "";
     const trimmed = query.trim();
     empty.append(row("settings-empty-text", trimmed
       ? t("settings.search.none", { query: trimmed })
@@ -2987,13 +2989,15 @@ async function renderComponents(): Promise<HTMLElement[]> {
     Promise.resolve().then(() => api.pluginBudgetSnapshot()),
     Promise.resolve().then(() => api.pluginLimitedMode()),
     componentsPage.show(),
-    recipesSection.show(),
   ]);
   const installed = installedResult.status === "fulfilled" ? installedResult.value : [];
   const bundles = bundleResult.status === "fulfilled" ? bundleResult.value : [];
   const entries = entryResult.status === "fulfilled" ? entryResult.value : [];
   const forKey = new Map(entries.map((entry) => [entry.spec.key, entry]));
   recipesSection.setFolder(recipesFolder(entries));
+  // Non attesa: la sezione ha il suo caricamento, e una cartella di ricette
+  // lenta da leggere non ferma il resto della scheda.
+  void recipesSection.show();
   // `runtime_known` è la prova del claim dell'installazione. Un filtro per solo
   // id nasconderebbe invece una feature ufficiale omonima, proprio quando
   // l'installazione è stata rifiutata per collisione.
