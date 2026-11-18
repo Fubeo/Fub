@@ -822,7 +822,7 @@ Fatto quando: `cargo test -p fub-host --test recipes` verde;
 `cargo test -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich`
 (il passo «host senza draw» di `scripts/check.sh`) verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 8 commit fino a b130d2900 (recipes.rs dell'host, tests/recipes.rs 14/14) · check --rapido 25/25 verde. Differenze: bundle recipe.<id> come voce di una sorgente runtime (mount_bundle riscrive settings.json), Host::recipes → RecipeList { recipes, problems } con fingerprint/command/keybinding/surfaces/mounted/allowed, errori dell'host tradotti (recipes.host.*), riconciliazione anche dopo apply_snapshot, anagrafe da IndexQuery::Entries. Rischio per T10/T12: la riconciliazione rilegge tutta la cartella, non chiamarla a ogni evento.
 
 ## T10 · Le porte IPC delle ricette
 
