@@ -282,6 +282,14 @@ const TYPE_FILES: Readonly<Record<string, string>> = {
   "Progetti/Mostra di primavera.md": "---\ntipo: \"[[Tipi/Progetto]]\"\nstato: In corso\n---\nLe sale e le opere.\n",
 };
 
+/// Il tipo «Viaggio» della nota delle scene `testata-*` (T6): la nota lo
+/// nomina, e senza il suo file la testata mostrerebbe l'avviso del tipo che
+/// non c'è, che quelle scene non vogliono fotografare. In evidenza `tipo` e
+/// tre proprietà del tipo, così «Altre 2» resta com'era.
+const TRAVEL_TYPE_FILES: Readonly<Record<string, string>> = {
+  "Tipi/Viaggio.md": "---\nicon: 🧳\nproperties:\n  stato: stato\n  partenza: data\n  persone: persone\n  luogo: testo\n  budget: numero\nfeatured: [stato, partenza, persone]\n---\n## Itinerario\n",
+};
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
@@ -341,6 +349,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   testata: {
     text: "---\nicon: 🧳\ncover: ../Risorse/schema.png\ntipo: Viaggio\nstato: In corso\npartenza: 2027-03-20\npersone: [Anna, Luca]\nluogo: Lisbona\nbudget:\ntags: [viaggio]\n---\n" + NOTE,
     cursor: null,
+    files: TRAVEL_TYPE_FILES,
   },
   "testata-vuota": { text: NOTE, cursor: null },
   // Gli editor dei tipi (T8): una voce per tipo, le prime quattro come nella
