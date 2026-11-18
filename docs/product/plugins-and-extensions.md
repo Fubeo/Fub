@@ -101,21 +101,26 @@ Una ricetta è una nota della cartella delle ricette che fa più comandi in fila
 scheda «Componenti» delle impostazioni, sezione «Ricette»
 (`apps/client/src/panels/recipes.ts`): una riga per ricetta con lo stato (da
 guardare, accesa, cambiata, da correggere), la nota da cui viene e i problemi
-con codice e riga; in cima le ricette da guardare. «Nuova ricetta» lancia
+con codice e riga; in cima le ricette da guardare (le prime cinque col loro
+«Guarda», poi quante restano: le altre sono nell'elenco). Oltre le 200
+ricette, il limite dell'host, una riga dice che Fub legge soltanto le prime 200
+in ordine di percorso. «Nuova ricetta» lancia
 `recipes.new`; «Apri la nota» porta alla nota di una ricetta da correggere;
 «Spegni» scarta l'adozione di una accesa.
 
 All'apertura del vault, e poi quando una nota della cartella cambia, un avviso
-nomina le ricette da guardare (al massimo una volta per ricetta e per
-sessione) con una sola azione, «Guarda», che porta alla sezione: non si accende
-niente dall'avviso.
+nomina le ricette da guardare (le prime tre, poi «e altre N»; al massimo una
+volta per ricetta e per sessione) con una sola azione, «Guarda», che porta alla
+sezione: non si accende niente dall'avviso. Gli avvisi stanno sopra il velo di
+un dialogo aperto.
 
 «Guarda» apre la finestra della ricetta (`panels/recipe-dialog.ts`): titolo e
 descrizione sono di chi l'ha scritta, e la finestra lo dice; tutti i passi,
-mai piegati, col titolo vero del comando e gli argomenti in parole; che cosa
+mai piegati, col titolo vero del comando e gli argomenti in parole (un
+valore che ha già le sue «» si scrive fra “…”, mai due «» una dentro l'altra); che cosa
 tocca, quali comandi può usare, come si annulla, dove si trova e per chi vale;
-la prova sulla nota aperta (`recipe_simulate`, che non scrive). Il fuoco parte
-da «Non ora». «Accendi la ricetta» manda l'impronta che la finestra ha
+la prova sulla nota aperta (`recipe_simulate`, che non scrive). La finestra si
+apre dall'inizio anche con venti passi, e il fuoco parte da «Non ora». «Accendi la ricetta» manda l'impronta che la finestra ha
 mostrato: se la nota cambia mentre la finestra è aperta, l'accensione si ferma
 finché la persona non rilegge.
 

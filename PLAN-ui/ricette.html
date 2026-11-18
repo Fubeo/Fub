@@ -511,7 +511,7 @@ body {
       <button type="button" data-group="section" data-value="problemi" aria-pressed="false">Con problemi</button>
       <button type="button" data-group="section" data-value="carica" aria-pressed="false">In caricamento</button>
       <button type="button" data-group="section" data-value="errore" aria-pressed="false">In errore</button>
-      <button type="button" data-group="section" data-value="cinquecento" aria-pressed="false">500 note</button>
+      <button type="button" data-group="section" data-value="cinquecento" aria-pressed="false">Più di 200</button>
     </div>
     <div class="proto-group" role="group" aria-labelledby="g-dialog">
       <span class="proto-group-label" id="g-dialog">Finestra</span>
@@ -798,9 +798,12 @@ body {
           </div>
         </div>
 
-        <!-- 500 note: le righe le costruisce lo script -->
+        <!-- Oltre il limite (500 note nella cartella): le righe le costruisce lo script.
+             Il limite è dell'host (RECIPES_MAX = 200 in fub-features), che smette di
+             leggere alla duecentunesima: sa che sono «più di 200», non quante. La riga
+             è il problema `troppe` com'è nel catalogo. -->
         <div class="settings-section-body" data-proto-section="cinquecento" hidden>
-          <p class="recipe-limit" role="status" data-i18n="recipes.limit">Nella cartella ci sono 500 ricette: Fub legge le prime 200 in ordine di percorso. Le altre 300 restano note come le altre, ma non si accendono.</p>
+          <p class="recipe-limit" role="status" data-i18n="recipes.problem.troppe">Il vault ha più di 200 ricette: Fub legge soltanto le prime 200, in ordine di percorso.</p>
           <ul class="settings-card recipe-list" id="many" aria-label="Ricette del vault"></ul>
         </div>
       </section>
@@ -920,7 +923,7 @@ body {
     problemi: "5 ricette · 5 da correggere",
     carica: "",
     errore: "",
-    cinquecento: "200 di 500 lette",
+    cinquecento: "200 ricette · 80 da guardare",
   };
 
   function el(tag, cls, text) {

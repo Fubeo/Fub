@@ -1,10 +1,10 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs ricette` (dopo `git fetch`), che legge PLAN-ui/ricette.html dal ramo piano/a1-base-per-ai al commit 88b45bab2d865bcb7861b0b30b227ac8306bc7a5.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs ricette` (dopo `git fetch`), che legge PLAN-ui/ricette.html dal ramo piano/a1-base-per-ai al commit b221e90730756c94feb1f57adf3b1cf938d17783.",
   "prototipo": "ricette",
   "ramo": "piano/a1-base-per-ai",
-  "commit": "88b45bab2d865bcb7861b0b30b227ac8306bc7a5",
+  "commit": "b221e90730756c94feb1f57adf3b1cf938d17783",
   "file": "PLAN-ui/ricette.html",
-  "sha256": "717598f6c9e5dfba955aad16cd1c5f6f3b12f75182ffce418460e0a643d7cba2",
+  "sha256": "52992efe99acb38eb5da5cca397bdb2592fcd03d924cbbf20eacfd80eda7689b",
   "traduzioni": {
     "interfaccia": {
       "--bg": [

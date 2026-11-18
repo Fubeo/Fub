@@ -157,7 +157,7 @@ export const VISTE = {
   "finestra-venti": {
     stati: TUTTI,
     prototipo: { prepara: clic("dialog", "venti") },
-    app: { scena: "recipe-dialog-twenty-top" },
+    app: { scena: "recipe-dialog-twenty" },
   },
   "finestra-cambiata": {
     stati: TUTTI,
@@ -271,33 +271,10 @@ export const PEZZI = [
   { id: "cambiata.accendi", vista: "finestra-cambiata", prototipo: ".kit-dialog-actions .kit-button[data-kind=\"primary\"]", app: ".kit-dialog-actions .kit-button[data-kind=\"primary\"]", proprieta: ["opacity", "background-color", "color"] },
 ];
 
-/// Ciò che la pelle non fa come il prototipo, e che va corretto in T12 (in
-/// `skin/settings.css`, già chiuso): non è una scelta, quindi non è un'eccezione. Si
-/// legge e si confronta, e diventa rosso quando coincide, perché la si tolga di qui.
-export const DA_COPRIRE = [
-  {
-    id: "sezione.indizio",
-    proprieta: ["margin-top", "margin-bottom"],
-    perche: "il prototipo azzera il margine del testo della sezione; la pelle lo lascia al «p» del fondo (13 px). Da correggere in T12: .settings-section-hint { margin: 0 } in skin/settings.css",
-  },
-  {
-    id: "vuota.testo",
-    proprieta: ["margin-top", "margin-bottom"],
-    perche: "il prototipo azzera il margine del testo della sezione vuota; la pelle lo lascia al «p» del fondo (14 px). Da correggere in T12: .settings-empty-text { margin: 0 } in skin/settings.css",
-  },
-  {
-    id: "errore.messaggio",
-    proprieta: ["margin-bottom"],
-    perche: "il prototipo non mette margine sotto il messaggio d'errore; la pelle ne aggiunge 12 px. Da correggere in T12: .setting-error in skin/settings.css",
-  },
-  {
-    id: "prova.errore.riga",
-    proprieta: ["margin-bottom"],
-    perche: "stesso scarto del messaggio d'errore della sezione, nella finestra della prova. Da correggere in T12 con .setting-error",
-  },
-  {
-    id: "banner.nota",
-    proprieta: ["font-size", "line-height", "color"],
-    perche: "nel prototipo la riga sotto il titolo del banner è testo pieno a 13 px; la pelle la rende come .muted (12 px, colore attenuato). Da decidere in T12: o il prototipo o la pelle",
-  },
-];
+/// Ciò che la pelle non fa ancora come il prototipo: vuoto da T12-bis, che ha
+/// portato nella pelle i margini del testo della sezione, della sezione vuota e
+/// del messaggio d'errore. La riga sotto il titolo del banner resta attenuata per
+/// scelta: è un'eccezione con la sua ragione (`eccezioni-ricette.json`), non una
+/// voce da coprire. Una differenza nuova che un altro lavoro deve correggere torna
+/// qui con il suo `perche`; una scelta va fra le eccezioni.
+export const DA_COPRIRE = [];

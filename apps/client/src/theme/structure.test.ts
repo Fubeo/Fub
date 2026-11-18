@@ -151,6 +151,16 @@ describe("la struttura dichiara la scocca e i piani, e nient'altro", () => {
       "la struttura non dichiara token del foglio: la scocca non si tematizza",
     ).toEqual([]);
   });
+
+  it("l'avviso sta sopra il velo dei dialoghi e delle modali, e sotto il trascinamento", () => {
+    // Un avviso che arriva con un dialogo aperto (le ricette proposte mentre se
+    // ne guarda una) si legge e si chiude: sotto il velo sarebbe spento e non
+    // cliccabile. Non intrappola il fuoco, quindi stare sopra `--z-modal` non
+    // rompe la regola della pila.
+    const plane = (name: string) => Number(STRUCTURE[name]);
+    expect(plane("z-toast")).toBeGreaterThan(plane("z-modal"));
+    expect(plane("z-toast")).toBeLessThan(plane("z-drag"));
+  });
 });
 
 describe("la struttura regge senza il foglio", () => {

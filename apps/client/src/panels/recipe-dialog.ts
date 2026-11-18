@@ -71,8 +71,46 @@ const DOC_PLACEHOLDERS = new Set(["doc", "title", "folder"]);
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g;
 
-function placeholderWord(name: string): string {
-  if (name.startsWith("param.")) return t("recipes.arg.param", { name: name.slice("param.".length) });
+// --- le virgolette annidate ---------------------------------------------------
+//
+// Un valore si dice fra virgolette, e dentro può averne altre: la frase di un
+// parametro («il valore «cartella»…»), o le «» scritte nel nome di una nota.
+// Due «» una dentro l'altra non si leggono più (dove finisce il valore?). Ogni
+// modello ha quindi due livelli, «…» e “…” in italiano: un valore va al primo
+// livello le cui virgolette non contiene già, e ciò che sta dentro va all'altro.
+// Le virgolette si leggono dal catalogo, così ogni lingua ha le sue.
+
+/// I due livelli di virgolette di un modello: il primo, e quello che si usa
+/// dentro il primo.
+type Levels = readonly [Key, Key];
+const QUOTED: Levels = ["recipes.arg.quoted", "recipes.arg.quoted.inner"];
+const NOTE: Levels = ["recipes.arg.note", "recipes.arg.note.inner"];
+const PARAM: Levels = ["recipes.arg.param", "recipes.arg.param.inner"];
+
+/// Le virgolette che il modello `key` mette intorno al suo argomento `slot`:
+/// l'ultimo carattere prima, il primo dopo.
+function marksOf(key: Key, slot: string): [string, string] {
+  const marker = "\u0000";
+  const [before = "", after = ""] = t(key, { [slot]: marker }).split(marker);
+  return [before.slice(-1), after.slice(0, 1)];
+}
+
+/// Il livello per un testo: il primo le cui virgolette il testo non contiene.
+/// Se le contiene tutte vale il primo: il testo resta com'è scritto.
+function levelFor(levels: Levels, slot: string, text: string): 0 | 1 {
+  const clean = (key: Key) => marksOf(key, slot).every((mark) => mark === "" || !text.includes(mark));
+  return clean(levels[0]) || !clean(levels[1]) ? 0 : 1;
+}
+
+/// Un testo fra virgolette, al livello che non si confonde con le sue.
+function quoted(text: string): string {
+  return t(QUOTED[levelFor(QUOTED, "value", text)], { value: text });
+}
+
+/// Le parole di un segnaposto. `level` è il livello delle virgolette che la
+/// frase usa al suo interno: quello che il valore intorno non usa.
+function placeholderWord(name: string, level: 0 | 1 = 0): string {
+  if (name.startsWith("param.")) return t(PARAM[level], { name: name.slice("param.".length) });
   const key = PLACEHOLDER_WORDS[name];
   // Un segnaposto sconosciuto è un problema della ricetta (che allora non si
   // accende): qui lo si mostra com'è scritto, non lo si indovina.
@@ -117,12 +155,20 @@ export function valueInWords(value: unknown, param: ParamSpec | undefined): stri
   const whole = /^\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}$/.exec(value);
   if (whole) return placeholderWord(whole[1]!);
   if (placeholdersIn(value).size > 0) {
-    const said = value.replace(PLACEHOLDER, (_all, name: string) => t("recipes.arg.inline", { word: placeholderWord(name) }));
-    return t("recipes.arg.quoted", { value: said });
+    // Le virgolette di fuori le sceglie ciò che è scritto; le frasi dei
+    // segnaposto, dentro, prendono l'altro livello.
+    const level = levelFor(QUOTED, "value", value.replace(PLACEHOLDER, ""));
+    const inner = level === 0 ? 1 : 0;
+    const said = value.replace(PLACEHOLDER, (_all, name: string) =>
+      t("recipes.arg.inline", { word: placeholderWord(name, inner) }));
+    return t(QUOTED[level], { value: said });
   }
   const kind = param?.kind.kind;
-  if (kind === "document" || kind === "documents") return t("recipes.arg.note", { doc: noteName(value) });
-  return t("recipes.arg.quoted", { value });
+  if (kind === "document" || kind === "documents") {
+    const doc = noteName(value);
+    return t(NOTE[levelFor(NOTE, "doc", doc)], { doc });
+  }
+  return quoted(value);
 }
 
 function paramsOf(step: RecipeStepInfo): ParamSpec[] {
@@ -173,7 +219,7 @@ const REACH_ORDER: readonly CommandReach[] = ["session", "document", "documents"
 export function reachInWords(recipe: RecipeInfo): { text: string; others: boolean } {
   const fixed = fixedNotes(recipe);
   const onDoc = usesDoc(recipe);
-  const docs = fixed.map((doc) => t("recipes.arg.quoted", { value: noteName(doc) })).join(", ");
+  const docs = fixed.map((doc) => quoted(noteName(doc))).join(", ");
   if (fixed.length > 0) {
     return { text: t(onDoc ? "recipes.dialog.reach.others" : "recipes.dialog.reach.fixed", { docs }), others: true };
   }
@@ -317,6 +363,13 @@ export function openRecipeDialog(options: RecipeDialogOptions): RecipeDialog {
     confirm: (value) => (value === "adopted" ? adopt() : true),
   });
   void handle.result.then(() => own.close());
+  // Si legge dall'inizio. La trappola del fuoco del kit mette il fuoco sulla
+  // prima azione senza `preventScroll`, e il browser porta «Non ora» in vista:
+  // con venti passi la finestra si apriva già in fondo, coi passi saltati.
+  // Il fuoco resta su «Non ora»; tornare in cima avviene prima del primo
+  // fotogramma, quindi non si vede scorrere niente.
+  handle.element.scrollTop = 0;
+  if (handle.element.parentElement) handle.element.parentElement.scrollTop = 0;
   const adoptButton = handle.element.querySelector<HTMLButtonElement>('[data-action="adopt"]');
 
   function markStale(text: Key = "recipes.dialog.stale"): void {

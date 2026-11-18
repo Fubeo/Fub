@@ -31,5 +31,23 @@
     "proprieta": "background-color",
     "motivo": "Stesso fondo del codice di problema della sezione: il rosso all'8%, per i 4,5:1 di un testo piccolo nei due temi.",
     "riferimento": "PLAN.md, T13 (banco a11y verde sulle scene nuove); skin/settings.css, .recipe-problem-code"
+  },
+  {
+    "pezzo": "banner.nota",
+    "proprieta": "font-size",
+    "motivo": "La riga sotto il titolo del banner porta la classe «muted» anche nel prototipo, che però la veste solo dentro .setting-text e qui la lascia testo pieno a 13 px. La pelle la veste come ogni .muted (12 px, colore attenuato): è la seconda voce sotto il titolo, come nel banner delle scorciatoie proposte.",
+    "riferimento": "PLAN.md, T12-bis (banner.nota, «da decidere» in DA_COPRIRE); skin/foundation.css, .muted"
+  },
+  {
+    "pezzo": "banner.nota",
+    "proprieta": "line-height",
+    "motivo": "La riga sotto il titolo del banner porta la classe «muted» anche nel prototipo, che però la veste solo dentro .setting-text e qui la lascia testo pieno a 13 px. La pelle la veste come ogni .muted (12 px, colore attenuato): è la seconda voce sotto il titolo, come nel banner delle scorciatoie proposte.",
+    "riferimento": "PLAN.md, T12-bis (banner.nota, «da decidere» in DA_COPRIRE); skin/foundation.css, .muted"
+  },
+  {
+    "pezzo": "banner.nota",
+    "proprieta": "color",
+    "motivo": "La riga sotto il titolo del banner porta la classe «muted» anche nel prototipo, che però la veste solo dentro .setting-text e qui la lascia testo pieno a 13 px. La pelle la veste come ogni .muted (12 px, colore attenuato): è la seconda voce sotto il titolo, come nel banner delle scorciatoie proposte.",
+    "riferimento": "PLAN.md, T12-bis (banner.nota, «da decidere» in DA_COPRIRE); skin/foundation.css, .muted"
   }
 ]
