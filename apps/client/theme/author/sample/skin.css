@@ -14907,6 +14907,19 @@ input.canvas-toolbar-item {
 .base-column-hidden .base-column-label {
   color: var(--muted);
 }
+/* La colonna della nota: fissa in cima, senza maniglia, col perché accanto. */
+.base-column-fixed .base-column-grip {
+  visibility: hidden;
+}
+.base-column-fixed:hover {
+  background: transparent;
+}
+.base-column-fixed-note {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
 .base-body {
   padding: var(--space-6) var(--space-7) var(--space-9);
 }

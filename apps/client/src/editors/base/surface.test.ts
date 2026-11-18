@@ -541,7 +541,7 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     try {
       await ready(host);
       host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
-      expect([...popover("base-columns-popover").querySelectorAll<HTMLInputElement>(".base-column input")].map((box) => box.checked)).toEqual([true, true, false]);
+      expect([...popover("base-columns-popover").querySelectorAll<HTMLInputElement>(".base-column input")].map((box) => box.checked)).toEqual([true, true, true, false]);
       column("consegna").querySelector("input")!.click();
       expect(order()).toEqual(["stato", "artista", "consegna"]);
       deliver();
@@ -560,6 +560,67 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
       column("stato").querySelector("input")!.click();
       expect(order()).toEqual(["artista", "consegna"]);
       expect(invokeCommand.mock.calls.every(([command, args]) => command !== "base.view.set" || (args as { key: string }).key === "order")).toBe(true);
+    } finally { done(); }
+  });
+
+  // IMP-147: la colonna della nota c'è sempre nella tabella, anche quando il
+  // piano non dà nessuna colonna (una Base nuova, senza `order`).
+  const listed = () => [...popover("base-columns-popover").querySelectorAll<HTMLLIElement>(".base-column")]
+    .map((item) => `${item.dataset.column}:${item.querySelector<HTMLInputElement>("input")!.checked ? "sì" : "no"}`);
+
+  it("Proprietà di una Base nuova elenca la colonna della nota, fissa, e dice perché non c'è altro", async () => {
+    const bare = notes.map(({ doc }) => ({ doc, properties: [] }));
+    const { host, invokeCommand, done } = mount({ order: [] }, { rows: bare });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
+      expect(listed()).toEqual(["file.name:sì"]);
+      const note = popover("base-columns-popover").querySelector<HTMLLIElement>(".base-column-fixed")!;
+      expect(note.querySelector("label")!.textContent).toBe("File");
+      expect(note.textContent).toContain("sempre la prima");
+      expect(popover("base-columns-popover").textContent).toContain("non hanno ancora proprietà");
+      expect(popover("base-columns-popover").textContent).not.toContain("Trascina per cambiare l'ordine");
+      const box = note.querySelector<HTMLInputElement>("input")!;
+      expect(box.getAttribute("aria-disabled")).toBe("true");
+      expect(document.getElementById(box.getAttribute("aria-describedby")!)!.textContent).toBe("sempre la prima");
+      box.click();
+      box.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }));
+      expect(box.checked).toBe(true);
+      expect(invokeCommand).not.toHaveBeenCalled();
+    } finally { done(); }
+  });
+
+  it("Proprietà di una Base a più colonne mette la nota in cima e sposta solo le altre", async () => {
+    const { host, invokeCommand, done } = mount({ order: ["stato", "artista", "consegna"] });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
+      expect(listed()).toEqual(["file.name:sì", "stato:sì", "artista:sì", "consegna:sì"]);
+      expect(popover("base-columns-popover").textContent).toContain("Trascina per cambiare l'ordine");
+      // La prima colonna che si sposta non sale sopra la nota.
+      popover("base-columns-popover").querySelector<HTMLInputElement>('.base-column[data-column="stato"] input')!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+      expect(invokeCommand).not.toHaveBeenCalled();
+      popover("base-columns-popover").querySelector<HTMLInputElement>('.base-column[data-column="artista"] input')!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+      expect(JSON.parse(lastSet(invokeCommand)!.value as string)).toEqual(["artista", "stato", "consegna"]);
+    } finally { done(); }
+  });
+
+  it("Proprietà lascia `file.name` dove il file lo scrive, e non lo elenca due volte", async () => {
+    const { host, invokeCommand, deliver, done } = mount({ order: ["stato", "file.name", "artista"] });
+    const order = () => JSON.parse(lastSet(invokeCommand)!.value as string);
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
+      expect(listed()).toEqual(["file.name:sì", "stato:sì", "artista:sì", "consegna:no"]);
+      popover("base-columns-popover").querySelector<HTMLInputElement>('.base-column[data-column="artista"] input')!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
+      expect(order()).toEqual(["artista", "file.name", "stato"]);
+      deliver();
+      await settled(host);
+      popover("base-columns-popover").querySelector<HTMLInputElement>('.base-column[data-column="consegna"] input')!.click();
+      expect(order()).toEqual(["artista", "file.name", "stato", "consegna"]);
     } finally { done(); }
   });
 
