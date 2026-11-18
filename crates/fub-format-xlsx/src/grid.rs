@@ -647,6 +647,25 @@ impl Instance {
         self.ids = ids_of(&self.sheets);
     }
 
+    /// Rimette ai fogli le righe e le colonne di `before`. Il `GridCommit` di
+    /// `apply` non porta i fogli, e la shell controlla ogni finestra sulla
+    /// misura che conosce: una formula scritta sotto l'ultima riga usata, che
+    /// in modalità a comandi farebbe crescere il margine, rendeva illeggibili
+    /// le finestre (IMP-142). La misura cresce al primo comando dopo, che
+    /// porta i fogli, o alla riapertura. `counted` resta quello di prima, così
+    /// quel conteggio non salta il foglio cambiato.
+    fn keep_counts(&mut self, before: Vec<SheetInfo>) {
+        let mut before: HashMap<String, SheetInfo> = before
+            .into_iter()
+            .map(|info| (info.id.clone(), info))
+            .collect();
+        for info in &mut self.sheets {
+            if let Some(old) = before.remove(&info.id) {
+                *info = old;
+            }
+        }
+    }
+
     /// L'indice nel file del foglio `id`.
     fn file_index(&self, id: &str) -> Option<usize> {
         if !self.editable {
@@ -1754,6 +1773,7 @@ impl Instance {
     /// Le patch in modalità a comandi: ognuna è l'input della sua cella.
     fn apply_commands(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         let before = self.journal.to_text();
+        let counted = self.sheets.clone();
         self.transaction(|this| {
             this.enter()?;
             for patch in &request.patches {
@@ -1778,6 +1798,7 @@ impl Instance {
             }
             Ok(((), true))
         })?;
+        self.keep_counts(counted);
         let after = self.journal.to_text();
         Ok(GridCommit {
             revision: self.revision.clone(),
