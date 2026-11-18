@@ -459,6 +459,19 @@ export const VISTE = {
     },
     app: { scena: "trasclusione-viva-02-scrive" },
   },
+  /// La scheda di documento a riposo (T44): il prototipo al passo «Ogni
+  /// formato è una scheda» (la lettera in `.docx` accanto al PDF, che il passo
+  /// attiva), l'app dalla scena del verbale a riposo.
+  "scheda-documento": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="doc"] .docp p');
+      },
+    },
+    app: { scena: "scheda-documento-01-riposo" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1598,6 +1611,27 @@ export const PEZZI = [
     prototipo: ".rem svg",
     app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done) svg",
     proprieta: ["color"],
+  },
+  // ── la scheda di documento (T44) ──────────────────────────────────────────
+  // Il margine del testo (`.docw`) e l'inchiostro e lo spazio dei paragrafi
+  // (`.docp`). Il carattere no: il prototipo lo scrive con `var(--f-text)`,
+  // un token che non dichiara, e la regola `font` intera cade (il testo
+  // eredita quello della nota); l'app tiene la misura scritta, 14/1,6.
+  {
+    id: "scheda-documento.testo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docw',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content',
+    proprieta: ["padding"],
+  },
+  {
+    id: "scheda-documento.paragrafo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docp p:not(.r)',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content > p',
+    proprieta: ["margin", "color"],
   },
 ];
 
