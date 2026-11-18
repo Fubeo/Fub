@@ -8,6 +8,7 @@ import {
   TRUST_LABELS,
   PHRASES,
   PERMISSIONS,
+  LIST_SHOWN,
   detailOf,
   isPermissionKey,
   permissionKey,
@@ -105,12 +106,93 @@ describe("il parametro della rete", () => {
     expect(detailOf("fub:network", [])).toBe(t("permission.network.anywhere"));
   });
 
-  it("e nessun altro permesso finge di avere un parametro che si onori", () => {
-    // `read-vault`, `write-vault` ed `external-fs` ne portano uno nel
-    // contratto — i prefissi di path — e oggi non lo onora nessuno (§7.1).
-    // Mostrarlo sarebbe scrivere una promessa che l'app non mantiene.
-    expect(detailOf("fub:read-vault", ["Progetti/"])).toBeNull();
+  it("un elenco scritto male non apre a tutti: dice «nessuno», come il recinto", () => {
+    // `"api.acme.com"` al posto di `["api.acme.com"]`: il `Guard` lo legge come
+    // un recinto che non nomina nessuno, e la frase non può dire «ovunque».
+    expect(detailOf("fub:network", "api.acme.com")).toBe(t("permission.network.none"));
+    expect(detailOf("fub:network", { host: "api.acme.com" })).toBe(t("permission.network.none"));
+    expect(detailOf("fub:network", [42])).toBe(t("permission.network.none"));
+    // Il `Guard` della rete scarta le non-stringhe e tiene le altre.
+    expect(detailOf("fub:network", ["api.acme.com", 42])).toBe(
+      t("permission.network.only", { hosts: "api.acme.com" }),
+    );
+  });
+});
+
+describe("le cartelle dei permessi sul vault", () => {
+  // Il `Guard` le onora su ogni porta dei documenti (`path_allowlist`): la
+  // persona deve leggerle prima di accettare.
+  it("un permesso con elenco mostra l'elenco", () => {
+    for (const p of ["fub:read-vault", "fub:write-vault", "fub:read-drafts", "fub:read-session", "fub:read-selection"]) {
+      expect(detailOf(p, ["Progetti/", "Diario"]), p).toBe(
+        t("permission.folders.only", { folders: "Progetti, Diario" }),
+      );
+    }
+  });
+
+  it("senza elenco non aggiunge niente alla frase, che dice già tutto il vault", () => {
+    for (const value of [true, null, undefined, []]) {
+      expect(detailOf("fub:read-vault", value), String(value)).toBeNull();
+    }
+  });
+
+  it("un elenco scritto male dice «nessuna cartella»", () => {
+    for (const value of ["Progetti", 3, { Progetti: true }, ["Progetti", 3], [null]]) {
+      expect(detailOf("fub:write-vault", value), JSON.stringify(value)).toBe(t("permission.folders.none"));
+    }
+  });
+
+  it("la radice è detta a parole, e un nome lunghissimo non si taglia", () => {
+    expect(detailOf("fub:read-vault", ["/"])).toBe(
+      t("permission.folders.only", { folders: t("permission.folders.root") }),
+    );
+    const long = `${"Una cartella dal nome molto lungo/".repeat(8)}fine`;
+    expect(detailOf("fub:read-vault", [long])).toContain(long);
+  });
+
+  it("i prefissi di `external-fs` non si dicono: nessuno li onora", () => {
     expect(detailOf("fub:external-fs", ["/tmp"])).toBeNull();
+    expect(detailOf("fub:camera", ["x"])).toBeNull();
+  });
+});
+
+describe("i comandi di `fub:run-command`", () => {
+  it("un permesso con elenco mostra l'elenco, a nome esatto", () => {
+    expect(detailOf("fub:run-command", ["note.property.set", "note.rename"])).toBe(
+      t("permission.commands.only", { commands: "note.property.set, note.rename" }),
+    );
+  });
+
+  it("senza elenco non aggiunge niente", () => {
+    for (const value of [true, null, undefined, []]) {
+      expect(detailOf("fub:run-command", value), String(value)).toBeNull();
+    }
+  });
+
+  it("un elenco scritto male dice «nessun comando», come il `Guard` che chiude", () => {
+    for (const value of ["note.trash", 1, {}, ["note.trash", 1]]) {
+      expect(detailOf("fub:run-command", value), JSON.stringify(value)).toBe(t("permission.commands.none"));
+    }
+  });
+
+  it("un elenco di 50 comandi si accorcia con «e altri N»", () => {
+    const commands = Array.from({ length: 50 }, (_, i) => `recipe.passo${i}`);
+    const detail = detailOf("fub:run-command", commands)!;
+    const shown = commands.slice(0, LIST_SHOWN - 1).join(", ");
+    expect(detail).toBe(
+      t("permission.commands.only", {
+        commands: `${shown} ${t("permission.commands.more", { n: 50 - (LIST_SHOWN - 1) })}`,
+      }),
+    );
+    expect(detail).not.toContain(commands[LIST_SHOWN - 1]);
+    // Fino al limite si scrivono tutti: «e altri 1» non accorcia niente.
+    const few = commands.slice(0, LIST_SHOWN);
+    expect(detailOf("fub:run-command", few)).toBe(t("permission.commands.only", { commands: few.join(", ") }));
+  });
+
+  it("e la riga del componente lo porta", () => {
+    const [r] = rows(bundle({ "fub:run-command": ["note.rename"] }));
+    expect(r.detail).toBe(t("permission.commands.only", { commands: "note.rename" }));
   });
 });
 

@@ -88,7 +88,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Workflow](development/workflow.md), [test e qualità](development/testing-and-quality.md) e [il banco visivo](development/visual-bench.md)
 - Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
 - [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
-- [Creare un plugin](development/plugin-authoring.md)
+- [Creare un plugin](development/plugin-authoring.md) e [costruire su Fub con un'AI](development/costruire-con-ai.md): le porte, ricetta o componente, la CLI e l'MCP delle ricette
 - [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 
@@ -112,7 +112,8 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   scalette](reference/canvas-import.md), [il controllo](reference/canvas-check.md),
   [l'inchiostro](reference/canvas-ink.md) (`fub:ink`) con [le ancore di pagina e
   di cella](reference/canvas-ink-anchors.md), e [gli estratti](reference/canvas-parts.md) (`fub:parts`)
-- [Il server MCP](reference/mcp-server.md) e [il clipper del browser](reference/web-clipper.md)
+- [Il server MCP](reference/mcp-server.md), [il clipper del browser](reference/web-clipper.md),
+  [il censimento delle porte](reference/censimento-delle-porte.md) (che cosa rifà un componente di terzi) e [le ricette](reference/ricette.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)
 - [I tasti e i gesti della lavagna](reference/canvas-input.md), [la sua

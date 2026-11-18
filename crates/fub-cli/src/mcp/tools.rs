@@ -22,6 +22,12 @@
 //!   in prova, e con `"apply": true` vogliono tutto il vault fra le radici
 //!   di scrittura: un componente cambia il comportamento del vault intero,
 //!   come un piano che non dice quali note tocca.
+//! - **Le ricette** (`fub_recipe_check`, `fub_recipe_try`) seguono
+//!   `fub-cli ricette` (`crate::recipes`): leggono la nota della ricetta, la
+//!   controllano contro i comandi del vault e la provano in simulazione.
+//!   Non scrivono e non accendono niente: una ricetta la accende soltanto la
+//!   persona, nell'app. La prova lancia i comandi dei passi, quindi vuole
+//!   tutto il vault fra le radici di lettura, come `fub_invoke`.
 //! - **I file Craft** (`fub_preview`, `fub_external_editors`,
 //!   `fub_open_with`) seguono le regole di chi scrive: vedere vuole la radice
 //!   di lettura, passare un file a un'app vuole la sua radice di scrittura e
@@ -42,6 +48,7 @@ use super::RpcError;
 use crate::commands::{doc_id, paginate, render_text_value, Connection, Failure};
 use crate::componenti::{Orfani, Vista, OPZIONI_MCP};
 use crate::local::{link_target, match_json, outcome_json, search_expr};
+use crate::recipes::{self, Tried};
 
 const LIMIT_DEFAULT: u32 = 50;
 
@@ -352,6 +359,34 @@ pub fn specs() -> Value {
                 "additionalProperties": false
             },
             "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true }
+        },
+        {
+            "name": "fub_recipe_check",
+            "description": "Controlla una ricetta di Fub: legge il blocco fub-recipe della nota e lo confronta con i comandi del vault. Dice se è valida e, se no, ogni problema con il codice, il campo, la riga e una frase; nelle note, se la nota non sta nella cartella delle ricette o se il componente Ricette è spento. Non scrive e non accende la ricetta.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "recipe": { "type": "string", "description": "Path della nota della ricetta, per esempio Recipes/Archivia.md" }
+                },
+                "required": ["recipe"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "fub_recipe_try",
+            "description": "Prova una ricetta di Fub su una nota: la controlla, poi fa ogni passo in simulazione e dice che cosa cambierebbe (riassunto, note toccate, modifiche). Non scrive niente. Una ricetta con problemi non si prova: torna l'errore col primo problema e, nei dati, tutti.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "recipe": { "type": "string", "description": "Path della nota della ricetta" },
+                    "doc": { "type": "string", "description": "Path della nota su cui provarla: il {{doc}} della ricetta" },
+                    "args": { "type": "object", "description": "I parametri dichiarati dalla ricetta, e selection se usa {{selection}}" }
+                },
+                "required": ["recipe"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
         }
     ])
 }
@@ -388,6 +423,8 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         "fub_components_why" => components_why(c, &args).map(Output::from),
         "fub_components_enable" => components_enable(c, access, &args).map(Output::from),
         "fub_components_disable" => components_disable(c, access, &args).map(Output::from),
+        "fub_recipe_check" => recipe_check(c, access, &args).map(Output::from),
+        "fub_recipe_try" => recipe_try(c, access, &args),
         other => {
             return Err(RpcError::invalid_params(&format!(
                 "strumento sconosciuto: {other}"
@@ -1555,6 +1592,44 @@ fn components_disable(c: &Connection, access: &Access, args: &Value) -> Result<V
     };
     components_apply(c, access, args, |vista| {
         vista.spegni(c, id, also, orfani, &OPZIONI_MCP)
+    })
+}
+
+/// `fub_recipe_check`: la ricetta letta e controllata. Una ricetta con
+/// problemi è un controllo riuscito: `valid: false`, con i problemi.
+fn recipe_check(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = doc(args, "recipe")?;
+    access.check_read(id.as_str())?;
+    Ok(recipes::check(c, &id)?.to_json())
+}
+
+/// `fub_recipe_try`: la prova, ogni passo in `DryRun`. Una ricetta con
+/// problemi è un rifiuto che li dice.
+fn recipe_try(c: &Connection, access: &Access, args: &Value) -> Result<Output, Failure> {
+    let recipe = doc(args, "recipe")?;
+    access.check_read(recipe.as_str())?;
+    let target = text_arg(args, "doc")?;
+    if let Some(target) = target {
+        access.check_read(doc_id(target)?.as_str())?;
+    }
+    // I passi sono comandi, e un comando raggiunge il vault intero anche in
+    // prova: come `fub_invoke`, con radici di lettura più strette no.
+    if !access.read.is_all() {
+        return Err(Failure::new(
+            4,
+            "denied",
+            "fub_recipe_try vuole tutto il vault fra le radici di lettura: i passi sono comandi, e un comando raggiunge il vault intero",
+        ));
+    }
+    let call = recipes::try_args(target, args.get("args").cloned())?;
+    Ok(match recipes::try_recipe(c, &recipe, call)? {
+        Tried::Plan(data) => Output::from(data),
+        Tried::Refused(data) => Output {
+            text: Some(recipes::refusal(&data)),
+            data,
+            image: None,
+            refused: true,
+        },
     })
 }
 

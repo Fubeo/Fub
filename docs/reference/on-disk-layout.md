@@ -26,7 +26,7 @@ La cartella viene scelta in ordine:
 | Percorso relativo | Classe | Schema | Contenuto |
 |---|---|---:|---|
 | `settings.json` | autorevole | 1 | impostazioni della macchina |
-| `vaults.json` | autorevole | 1 | vault recenti, preferiti, nome e icona |
+| `vaults.json` | autorevole | 1 | vault recenti, preferiti, nome e icona; ricette adottate su questa macchina, con l'impronta (un Fub che non conosce il campo e riscrive il file lo perde, e le ricette tornano proposte) |
 | `view-state.json` | autorevole locale | 1 | stato delle view di questa macchina |
 | `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema; `extends`, `fonts` e `icons` facoltativi |
 | `themes/<id>/` | installato | per tema | fogli (`sheet-light.css`, `sheet-dark.css`), `skin.css` e asset; con `extends` i fogli sono facoltativi (vedi [Temi installati](permissions-and-security.md#temi-installati)) |

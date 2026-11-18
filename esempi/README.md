@@ -39,3 +39,10 @@ contratto WIT», per provare che il confine non regredisce:
   #285 (ADR 0235).
 - `cliente-prima`, `servizio-prima` — guest contro l'interfaccia importata
   «di prima»: si vede cosa succede quando l'host cresce.
+
+## Le ricette
+
+`ricette/` non è un componente WASM: sono tre note con un blocco `fub-recipe`
+(il formato è in `docs/reference/ricette.md`), da copiare nella cartella delle
+ricette di un vault. `crates/fub-cli/tests/recipes.rs` le controlla e le prova
+con `fub-cli ricette`.

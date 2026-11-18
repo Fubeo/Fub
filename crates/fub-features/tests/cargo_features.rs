@@ -347,6 +347,7 @@ fn fub_host_inoltra_ogni_feature_componente() {
     feature = "http-client",
     feature = "lavagna",
     feature = "craft",
+    feature = "recipes",
 ))]
 fn with_all_the_feature_the_two_lists_coincide() {
     // Una feature fuori dal default c'è nella mappa solo se questa build l'ha

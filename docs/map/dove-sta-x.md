@@ -37,8 +37,10 @@
 | le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
 | le porte IPC dei fogli di calcolo | `docs/reference/grid-ipc.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |
+| le porte di ogni funzione ufficiale, e che cosa si rifà da fuori | `docs/reference/censimento-delle-porte.md` |
 | la cattura del clipper | `apps/clipper/capture-v1.schema.json` |
 | il layout su disco di `.fub/` | `docs/reference/on-disk-layout.md` |
+| le ricette: il blocco, i controlli, come girano | `crates/fub-features/src/recipes.rs` e `recipes/`; `docs/reference/ricette.md` |
 
 ## Tipi e chiavi che si cercano spesso
 
@@ -51,6 +53,7 @@
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
 | `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
+| le ricette di un vault, il loro stato e il consenso di questa macchina (`Host::recipes`, `adopt_recipe`, `discard_recipe`, `simulate_recipe`, `recipes_adopted`) | `crates/fub-host/src/recipes.rs`; l'impronta adottata in `crates/fub-host/src/vaults.rs` |
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |

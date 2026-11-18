@@ -52,6 +52,24 @@ copie divergenti delle regole.
 
 L'elenco esatto delle funzioni vive nel contratto.
 
+## Elenco dei comandi
+
+`fub:run-command` accetta un elenco facoltativo degli id che il bundle può
+invocare. Il `Guard` lo legge quando monta il bundle e lo applica a ogni
+invocazione, nativa o WASM; un job che invoca o annulla fuori dal `Guard`
+(`JobHost`) passa dalle stesse `authorize_command` e `authorize_undo`:
+
+| Valore | Comandi consentiti |
+|---|---|
+| assente, `true` o `[]` | tutti |
+| elenco di stringhe, come `["note.property.set", "note.rename"]` | soltanto quelli, a confronto esatto: niente prefissi, niente `*`, niente spazi tolti |
+| stringa, numero, oggetto o elenco con una non-stringa | nessuno |
+
+Un manifest scritto male chiude il recinto: `"note.trash"` al posto di
+`["note.trash"]` non permette niente. Fuori dall'elenco `permission_denied`,
+nominato ma non registrato `unknown_command`; con un elenco anche
+l'annullamento è rifiutato, perché rigioca comandi che il `Guard` non vede.
+
 ## Path fence
 
 Ogni path del vault viene canonicalizzato e verificato contro la radice.

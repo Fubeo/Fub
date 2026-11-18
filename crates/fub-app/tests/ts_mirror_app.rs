@@ -22,7 +22,8 @@ use fub_abi::ui::UiNode;
 use fub_app_lib::{
     BundleInfo, ComponentGroup, ComponentProfile, ComponentRow, ComponentsApplied, ComponentsMap,
     DemoClosed, DocumentSource, EmbedContent, InstalledPluginInfo, LiveAddress, LiveStart,
-    LiveStarted, OpenVaults, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
+    LiveStarted, OpenVaults, RecipeInfo, RecipeList, RecipeProblem, RecipeStatus, RecipeStepInfo,
+    ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 use fub_host::componenti::{
     Azione, Effetto, Esito, Mancante, Orfani, Perche, Rifiuto, RigaNelVault, Scrittura, Stato,
@@ -261,6 +262,17 @@ fn expected() -> Value {
                     .on(permission::READ_VAULT)
                     .with(permission::NETWORK, json!(["api.acme.com"])),
             }),
+            // Una ricetta: la terza famiglia, che la shell non
+            // elenca fra i componenti. Il permesso che porta è quello di chi
+            // compone comandi altrui.
+            to_value(BundleInfo {
+                id: "ricetta.archivia".into(),
+                name: "Archivia con la data".into(),
+                mounted: false,
+                kind: BundleKind::Recipe,
+                trust: Trust::Community,
+                permissions: PluginPermissions::of(&[permission::RUN_COMMAND]).granted,
+            }),
         ],
         "ThemeInfo": [to_value(ThemeInfo {
             manifest: fub_abi::theme::ThemeManifest {
@@ -338,8 +350,9 @@ fn expected() -> Value {
         // Il registro dei vault (§11.1): quello appuntato con la sua icona e un
         // recente nudo, perché i campi opzionali hanno due forme e il mirror
         // deve reggerle entrambe. Il primo porta anche una scorciatoia già
-        // guardata (§23.13), che è l'unico campo del registro a non descrivere
-        // il vault ma cosa questa macchina ha visto di lui.
+        // guardata (§23.13) e una ricetta adottata: i due campi del registro
+        // che non descrivono il vault ma cosa questa macchina ha deciso di lui.
+        // Il secondo non porta ricette, e il campo vuoto non si serializza.
         "VaultEntry": [
             to_value(VaultEntry {
                 root: "/vault".into(),
@@ -350,6 +363,9 @@ fn expected() -> Value {
                 keys_seen: [("keys.note.create".to_string(), "Mod-Alt-k".to_string())]
                     .into_iter()
                     .collect(),
+                recipes_adopted: [("ricetta.archivia".to_string(), "b3a1".to_string())]
+                    .into_iter()
+                    .collect(),
             }),
             to_value(VaultEntry {
                 root: "/altro".into(),
@@ -358,6 +374,7 @@ fn expected() -> Value {
                 favorite: false,
                 last_opened: 1_699_000_000_000,
                 keys_seen: Default::default(),
+                recipes_adopted: Default::default(),
             }),
         ],
         // Comandi locali dell'app: serializzazione reale dei record di supporto,
@@ -764,6 +781,140 @@ fn live_samples() -> serde_json::Map<String, Value> {
         .into_iter()
         .map(to_value)
         .collect(),
+    );
+    samples
+}
+
+/// Le ricette del vault: ciò che `recipes_list` risponde. Il piano della
+/// prova (`recipe_simulate`) è un `CommandPlan`, che ha già il suo campione
+/// nel mirror del contratto.
+fn recipe_samples() -> serde_json::Map<String, Value> {
+    use fub_abi::command::{CommandReach, CommandSurface};
+    use fub_abi::model::DocId;
+
+    let mut samples = serde_json::Map::new();
+    let mut put = |name: &str, values: Vec<Value>| {
+        samples.insert(name.to_string(), Value::Array(values));
+    };
+    // Un passo che il registro conosce, e uno che non conosce: titolo e
+    // portata `null`, la forma che la finestra deve saper leggere.
+    let known = RecipeStepInfo {
+        run: "fub.tasks:add".into(),
+        title: Some("Aggiungi un'attività".into()),
+        args: json!({ "doc": "{{nota}}", "text": "Rivedere" })
+            .as_object()
+            .cloned()
+            .expect("an object"),
+        writes: true,
+        reach: Some(CommandReach::Document),
+        reversible: true,
+    };
+    let unknown = RecipeStepInfo {
+        run: "acme.sparito:run".into(),
+        title: None,
+        args: serde_json::Map::new(),
+        writes: false,
+        reach: None,
+        reversible: false,
+    };
+    let problem = RecipeProblem {
+        code: "comando-sconosciuto".into(),
+        field: "steps[1].run".into(),
+        line: Some(7),
+        message: "Il comando «acme.sparito:run» non c'è in questo vault.".into(),
+    };
+    let unreadable = RecipeProblem {
+        code: "blocchi-doppi".into(),
+        field: String::new(),
+        line: None,
+        message: "La nota ha due blocchi `fub-recipe`: non si sa quale leggere.".into(),
+    };
+    let adopted = RecipeInfo {
+        id: Some("revisione".into()),
+        title: "Revisione della nota".into(),
+        description: "Aggiunge un'attività di revisione alla nota aperta.".into(),
+        doc: DocId::new("Ricette/revisione.md"),
+        status: RecipeStatus::Adopted,
+        fingerprint: Some(
+            "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f".into(),
+        ),
+        problems: Vec::new(),
+        steps: vec![known.clone()],
+        command: Some("recipe.revisione:run".into()),
+        keybinding: Some("Mod-Alt-r".into()),
+        surfaces: vec![CommandSurface::Slash],
+        mounted: true,
+        allowed: true,
+    };
+    // Il blocco che non si legge: niente id, niente impronta, niente comando.
+    let broken = RecipeInfo {
+        id: None,
+        title: "rotta".into(),
+        description: String::new(),
+        doc: DocId::new("Ricette/rotta.md"),
+        status: RecipeStatus::Problems,
+        fingerprint: None,
+        problems: vec![unreadable.clone()],
+        steps: Vec::new(),
+        command: None,
+        keybinding: None,
+        surfaces: Vec::new(),
+        mounted: false,
+        allowed: false,
+    };
+    let with_unknown = RecipeInfo {
+        id: Some("sparita".into()),
+        title: "Ricetta senza comando".into(),
+        description: String::new(),
+        doc: DocId::new("Ricette/sparita.md"),
+        status: RecipeStatus::Problems,
+        fingerprint: Some(
+            "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1".into(),
+        ),
+        problems: vec![problem.clone()],
+        steps: vec![known.clone(), unknown.clone()],
+        command: Some("recipe.sparita:run".into()),
+        keybinding: None,
+        surfaces: Vec::new(),
+        mounted: false,
+        allowed: false,
+    };
+    put(
+        "RecipeStatus",
+        vec![
+            to_value(RecipeStatus::Proposed),
+            to_value(RecipeStatus::Adopted),
+            to_value(RecipeStatus::Changed),
+            to_value(RecipeStatus::Problems),
+        ],
+    );
+    put(
+        "RecipeProblem",
+        vec![to_value(&problem), to_value(&unreadable)],
+    );
+    put("RecipeStepInfo", vec![to_value(&known), to_value(&unknown)]);
+    put(
+        "RecipeInfo",
+        vec![
+            to_value(&adopted),
+            to_value(&broken),
+            to_value(&with_unknown),
+        ],
+    );
+    put(
+        "RecipeList",
+        vec![
+            to_value(RecipeList {
+                recipes: vec![adopted, broken, with_unknown],
+                problems: vec![RecipeProblem {
+                    code: "troppe".into(),
+                    field: String::new(),
+                    line: None,
+                    message: "Nella cartella ci sono più di 200 ricette.".into(),
+                }],
+            }),
+            to_value(RecipeList::default()),
+        ],
     );
     samples
 }
@@ -1329,6 +1480,10 @@ fn the_app_side_ts_mirror_fixture_is_in_sync_with_the_rust_types() {
         .as_object_mut()
         .expect("the samples are an object")
         .extend(live_samples());
+    expected
+        .as_object_mut()
+        .expect("the samples are an object")
+        .extend(recipe_samples());
     expected
         .as_object_mut()
         .expect("the samples are an object")

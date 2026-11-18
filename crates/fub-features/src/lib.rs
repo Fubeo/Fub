@@ -104,6 +104,8 @@ pub mod proof;
 pub mod properties;
 #[cfg(feature = "queries")]
 pub mod queries;
+#[cfg(feature = "recipes")]
+pub mod recipes;
 #[cfg(feature = "search")]
 pub mod search;
 #[cfg(feature = "stats")]
@@ -118,6 +120,9 @@ pub mod template;
 pub mod trash;
 #[cfg(feature = "versioning")]
 pub mod versioning;
+/// Le date e le ore dei segnaposto `{{…}}`, condivise da template e ricette.
+#[cfg(any(feature = "template", feature = "recipes"))]
+pub mod vocabulary;
 
 #[cfg(feature = "backlinks")]
 pub use backlinks::{
@@ -180,6 +185,8 @@ pub use queries::{
     QueriesCommands, QueriesView, COLLECTIONS_VIEW, QUERIES_DELETE, QUERIES_ID, QUERIES_RUN,
     QUERIES_SAVE, QUERIES_VIEW,
 };
+#[cfg(feature = "recipes")]
+pub use recipes::{RecipesCommands, RECIPES_FOLDER_KEY, RECIPES_ID, RECIPES_NEW};
 #[cfg(feature = "search")]
 pub use search::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "stats")]

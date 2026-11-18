@@ -4,9 +4,10 @@
 > risorse, lavagne, radici dell'automazione e regole di scrittura.
 > **Fonti autorevoli:** `crates/fub-cli/src/mcp.rs`,
 > `crates/fub-cli/src/mcp/tools.rs`, `crates/fub-cli/src/mcp/access.rs`,
-> `crates/fub-cli/src/componenti.rs`, `crates/fub-cli/src/port.rs`, i comandi
+> `crates/fub-cli/src/componenti.rs`, `crates/fub-cli/src/recipes.rs`,
+> `crates/fub-cli/src/port.rs`, i comandi
 > `canvas.*` di `crates/fub-features/src/lavagna.rs` e le prove in
-> `crates/fub-cli/tests/mcp.rs`.
+> `crates/fub-cli/tests/mcp.rs` e `crates/fub-cli/tests/recipes.rs`.
 
 Un agente usa Fub come usa le app Craft: cerca, legge, collega, scrive e
 invoca comandi, senza mai sovrascrivere il lavoro di qualcun altro. Il server
@@ -75,6 +76,8 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 | `fub_components_why` | perché `id` è acceso, o che è spento | `query_index(Settings)` | no |
 | `fub_components_enable` | accende `id` e ciò senza cui non funziona, in prova se non si chiede `apply` | `set_plugin_enabled` | con `apply` |
 | `fub_components_disable` | spegne `id`; `also_dependents` spegne anche chi lo richiede, `orphans` (`"remove"` o `"keep"`) decide di ciò che non serve più; in prova se non si chiede `apply` | `set_plugin_enabled` | con `apply` |
+| `fub_recipe_check` | legge la ricetta della nota `recipe` e la controlla contro i comandi del vault | `read_document`, `read_model`, `commands`, `query_index(Settings)` | no |
+| `fub_recipe_try` | controlla la ricetta, poi ne prova ogni passo sulla nota `doc` | come sopra, poi `invoke_user_command(DryRun)` per passo | no |
 
 Ogni risultato riuscito porta i dati due volte: in `structuredContent` e,
 come testo JSON, nel primo elemento di `content`. Gli elenchi sono a pagine:
@@ -174,6 +177,35 @@ formato, e `canvas.*` sono del componente `fub.lavagna`.
   (`outline`, `outline_omitted`).
 - Con il componente `fub.lavagna` spento questi strumenti rispondono
   `unavailable`, perché il comando non c'è, e la guida non è fra le risorse.
+
+## Le ricette
+
+Un agente scrive una ricetta come una nota (con `fub_create` o `fub_write`,
+nella cartella delle ricette), la controlla e la prova; non la accende mai. Il
+formato è in [Le ricette](ricette.md), il ciclo in
+[Costruire su Fub con un'AI](../development/costruire-con-ai.md).
+
+- `fub_recipe_check { recipe }` risponde `{doc, valid, id, title, command,
+  steps, folder, in_folder, component, problems, notes}`. Una ricetta con
+  problemi è un controllo riuscito: `valid: false`, e ogni problema ha `code`,
+  `field`, `line` e `message`. `notes` dice in una frase la nota fuori dalla
+  cartella delle ricette (`in_folder: false`) e il componente Ricette spento
+  (`component: false`), che non sono errori del blocco ma la tengono lontana
+  dall'app.
+- `fub_recipe_try { recipe, doc?, args? }` controlla, poi fa ogni passo in
+  `DryRun` con `doc` e `args` e risponde `{recipe, id, title, command, args,
+  dry_run: true, approximate, summary, docs, edits, notes}`; `approximate` è
+  vero con più di un passo, perché in simulazione niente si sposta. Una ricetta
+  con problemi è `isError: true`: il testo dice quanti e il primo, e
+  `structuredContent` è il controllo intero. Gli argomenti che il comando della
+  ricetta rifiuterebbe (un `doc` che manca) sono `bad_args`.
+- Le radici: tutti e due vogliono la nota della ricetta fra le radici di
+  lettura, e la prova anche `doc`. I passi della prova sono comandi, e un
+  comando raggiunge il vault intero: come `fub_invoke`, `fub_recipe_try` vuole
+  tutto il vault fra le radici di lettura, altrimenti è `denied`. Nessuno dei
+  due vuole una radice di scrittura.
+- Adottare e scartare una ricetta non sono strumenti: lo fa soltanto la
+  persona, nell'app.
 
 ## Risorse
 

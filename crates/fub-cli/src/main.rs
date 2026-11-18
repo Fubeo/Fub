@@ -18,6 +18,7 @@ mod mcp;
 mod native;
 mod output;
 mod port;
+mod recipes;
 mod remote;
 
 use std::io::IsTerminal;
@@ -341,6 +342,7 @@ fn dispatch(
             local::plugin(connection, global, format, args, print_line(global, format))
         }
         CliCommand::Componenti(args) => componenti::run(connection, global, format, args),
+        CliCommand::Ricette(args) => recipes::run(connection, global, format, args),
         CliCommand::Theme(args) => {
             local::theme(connection, global, format, args, print_line(global, format))
         }

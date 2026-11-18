@@ -165,8 +165,6 @@ const E_SOURCE_CHANGED: &str = "e_source_changed";
 const E_SOURCE_COPIED: &str = "e_source_copied";
 const E_BAD_FRONTMATTER: &str = "e_bad_frontmatter";
 const E_BAD_FRONTMATTER_MAP: &str = "e_bad_frontmatter_map";
-const E_BAD_ZONE: &str = "e_bad_zone";
-const E_BAD_INSTANT: &str = "e_bad_instant";
 const P_FROM: &str = "p_from";
 const D_FROM: &str = "d_from";
 const U_FROM: &str = "u_from";
@@ -210,12 +208,18 @@ mod provider;
 mod strings;
 mod view;
 
-use create::{
-    civil_parts, context, created, daily, expand_full, file_name, format_time, from_template, plan,
-    today, valid_time, with_extension, Ctx,
+#[cfg(test)]
+use crate::vocabulary::context_at;
+// Le date e le ore dei segnaposto sono del vocabolario condiviso con le
+// ricette: un solo modo di dire «oggi» nel fuso di chi usa Fub.
+use crate::vocabulary::{
+    civil_parts, context, expand_dates, format_time, Ctx, E_BAD_INSTANT, E_BAD_ZONE,
 };
 #[cfg(test)]
-use create::{context_at, valid_date};
+use create::valid_date;
+use create::{
+    created, daily, expand_full, file_name, from_template, plan, today, valid_time, with_extension,
+};
 use extract::{check_relative_assets, extract};
 #[cfg(test)]
 use insert::{datetime_now, frontmatter_bounds, insert_target, split_frontmatter};

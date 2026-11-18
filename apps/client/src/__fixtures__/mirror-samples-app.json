@@ -195,6 +195,16 @@
         ],
         "fub:read-vault": true
       }
+    },
+    {
+      "id": "ricetta.archivia",
+      "name": "Archivia con la data",
+      "mounted": false,
+      "kind": "recipe",
+      "trust": "community",
+      "permissions": {
+        "fub:run-command": true
+      }
     }
   ],
   "ThemeInfo": [
@@ -332,6 +342,9 @@
       "last_opened": 1700000000000,
       "keys_seen": {
         "keys.note.create": "Mod-Alt-k"
+      },
+      "recipes_adopted": {
+        "ricetta.archivia": "b3a1"
       }
     },
     {
@@ -908,6 +921,253 @@
     "cycle",
     "limit",
     "read-only"
+  ],
+  "RecipeStatus": [
+    "proposta",
+    "adottata",
+    "cambiata",
+    "problemi"
+  ],
+  "RecipeProblem": [
+    {
+      "code": "comando-sconosciuto",
+      "field": "steps[1].run",
+      "line": 7,
+      "message": "Il comando «acme.sparito:run» non c'è in questo vault."
+    },
+    {
+      "code": "blocchi-doppi",
+      "field": "",
+      "line": null,
+      "message": "La nota ha due blocchi `fub-recipe`: non si sa quale leggere."
+    }
+  ],
+  "RecipeStepInfo": [
+    {
+      "run": "fub.tasks:add",
+      "title": "Aggiungi un'attività",
+      "args": {
+        "doc": "{{nota}}",
+        "text": "Rivedere"
+      },
+      "writes": true,
+      "reach": "document",
+      "reversible": true
+    },
+    {
+      "run": "acme.sparito:run",
+      "title": null,
+      "args": {},
+      "writes": false,
+      "reach": null,
+      "reversible": false
+    }
+  ],
+  "RecipeInfo": [
+    {
+      "id": "revisione",
+      "title": "Revisione della nota",
+      "description": "Aggiunge un'attività di revisione alla nota aperta.",
+      "doc": "Ricette/revisione.md",
+      "status": "adottata",
+      "fingerprint": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "problems": [],
+      "steps": [
+        {
+          "run": "fub.tasks:add",
+          "title": "Aggiungi un'attività",
+          "args": {
+            "doc": "{{nota}}",
+            "text": "Rivedere"
+          },
+          "writes": true,
+          "reach": "document",
+          "reversible": true
+        }
+      ],
+      "command": "recipe.revisione:run",
+      "keybinding": "Mod-Alt-r",
+      "surfaces": [
+        "slash"
+      ],
+      "mounted": true,
+      "allowed": true
+    },
+    {
+      "id": null,
+      "title": "rotta",
+      "description": "",
+      "doc": "Ricette/rotta.md",
+      "status": "problemi",
+      "fingerprint": null,
+      "problems": [
+        {
+          "code": "blocchi-doppi",
+          "field": "",
+          "line": null,
+          "message": "La nota ha due blocchi `fub-recipe`: non si sa quale leggere."
+        }
+      ],
+      "steps": [],
+      "command": null,
+      "keybinding": null,
+      "surfaces": [],
+      "mounted": false,
+      "allowed": false
+    },
+    {
+      "id": "sparita",
+      "title": "Ricetta senza comando",
+      "description": "",
+      "doc": "Ricette/sparita.md",
+      "status": "problemi",
+      "fingerprint": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "problems": [
+        {
+          "code": "comando-sconosciuto",
+          "field": "steps[1].run",
+          "line": 7,
+          "message": "Il comando «acme.sparito:run» non c'è in questo vault."
+        }
+      ],
+      "steps": [
+        {
+          "run": "fub.tasks:add",
+          "title": "Aggiungi un'attività",
+          "args": {
+            "doc": "{{nota}}",
+            "text": "Rivedere"
+          },
+          "writes": true,
+          "reach": "document",
+          "reversible": true
+        },
+        {
+          "run": "acme.sparito:run",
+          "title": null,
+          "args": {},
+          "writes": false,
+          "reach": null,
+          "reversible": false
+        }
+      ],
+      "command": "recipe.sparita:run",
+      "keybinding": null,
+      "surfaces": [],
+      "mounted": false,
+      "allowed": false
+    }
+  ],
+  "RecipeList": [
+    {
+      "recipes": [
+        {
+          "id": "revisione",
+          "title": "Revisione della nota",
+          "description": "Aggiunge un'attività di revisione alla nota aperta.",
+          "doc": "Ricette/revisione.md",
+          "status": "adottata",
+          "fingerprint": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+          "problems": [],
+          "steps": [
+            {
+              "run": "fub.tasks:add",
+              "title": "Aggiungi un'attività",
+              "args": {
+                "doc": "{{nota}}",
+                "text": "Rivedere"
+              },
+              "writes": true,
+              "reach": "document",
+              "reversible": true
+            }
+          ],
+          "command": "recipe.revisione:run",
+          "keybinding": "Mod-Alt-r",
+          "surfaces": [
+            "slash"
+          ],
+          "mounted": true,
+          "allowed": true
+        },
+        {
+          "id": null,
+          "title": "rotta",
+          "description": "",
+          "doc": "Ricette/rotta.md",
+          "status": "problemi",
+          "fingerprint": null,
+          "problems": [
+            {
+              "code": "blocchi-doppi",
+              "field": "",
+              "line": null,
+              "message": "La nota ha due blocchi `fub-recipe`: non si sa quale leggere."
+            }
+          ],
+          "steps": [],
+          "command": null,
+          "keybinding": null,
+          "surfaces": [],
+          "mounted": false,
+          "allowed": false
+        },
+        {
+          "id": "sparita",
+          "title": "Ricetta senza comando",
+          "description": "",
+          "doc": "Ricette/sparita.md",
+          "status": "problemi",
+          "fingerprint": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "problems": [
+            {
+              "code": "comando-sconosciuto",
+              "field": "steps[1].run",
+              "line": 7,
+              "message": "Il comando «acme.sparito:run» non c'è in questo vault."
+            }
+          ],
+          "steps": [
+            {
+              "run": "fub.tasks:add",
+              "title": "Aggiungi un'attività",
+              "args": {
+                "doc": "{{nota}}",
+                "text": "Rivedere"
+              },
+              "writes": true,
+              "reach": "document",
+              "reversible": true
+            },
+            {
+              "run": "acme.sparito:run",
+              "title": null,
+              "args": {},
+              "writes": false,
+              "reach": null,
+              "reversible": false
+            }
+          ],
+          "command": "recipe.sparita:run",
+          "keybinding": null,
+          "surfaces": [],
+          "mounted": false,
+          "allowed": false
+        }
+      ],
+      "problems": [
+        {
+          "code": "troppe",
+          "field": "",
+          "line": null,
+          "message": "Nella cartella ci sono più di 200 ricette."
+        }
+      ]
+    },
+    {
+      "recipes": [],
+      "problems": []
+    }
   ],
   "ComponentsMap": [
     {

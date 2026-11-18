@@ -358,6 +358,16 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("pending_keybindings", Why::AppSurface),
     ("adopt_keybindings", Why::AppSurface),
     ("discard_keybindings", Why::AppSurface),
+    // Le ricette del vault: la stessa riga dei tasti qui sopra. Lo stato
+    // «adottata» non sta nel vault ma nel registro dei vault di questa
+    // macchina, e adottare è il consenso della persona: una porta generica
+    // (`invoke_command`, il canale di controllo) lo darebbe a un programma.
+    // `recipes_list` risponde con dei dati, ma messi accanto a ciò che
+    // questa macchina ha adottato, che nessun `IndexQuery` di un vault sa.
+    ("recipes_list", Why::AppSurface),
+    ("recipe_adopt", Why::AppSurface),
+    ("recipe_discard", Why::AppSurface),
+    ("recipe_simulate", Why::AppSurface),
     // --- demo, supporto e finestre: la macchina attorno ai vault --------------
     //
     // La demo vive nella cartella di configurazione, la diagnostica nasce dal

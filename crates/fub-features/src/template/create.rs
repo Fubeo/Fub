@@ -158,26 +158,8 @@ pub(super) fn plan(summary: Text, id: DocId) -> CommandOutcome {
     ))
 }
 
-/// Il contesto di espansione: data e ora **civili** dell'utente, dal suo fuso.
-pub(super) struct Ctx {
-    pub(super) date: String,
-    pub(super) time: String,
-    pub(super) datetime: String,
-    pub(super) year: String,
-    pub(super) month: String,
-    pub(super) day: String,
-    pub(super) hour: String,
-    pub(super) minute: String,
-}
-
-/// Contesto di adesso, dall'orologio e dal fuso dell'host (deterministico nei
-/// test via `MemoryHost`, mai `SystemTime` diretto).
-pub(super) fn context(host: &dyn ReadApi) -> Result<Ctx, PluginError> {
-    let locale = host.user_locale();
-    context_at(host.now_unix_millis(), &locale)
-}
-
 /// Contesto per una data `YYYY-MM-DD` con l'ora di adesso: è ciò che una
+/// giornaliera di un altro giorno vede come `{{date}}`.
 fn context_of(host: &dyn ReadApi, date: &str) -> Result<Ctx, PluginError> {
     let locale = host.user_locale();
     let (_, _, _, hh, mm) = civil_parts(host.now_unix_millis(), &locale)?;
@@ -192,70 +174,6 @@ fn context_of(host: &dyn ReadApi, date: &str) -> Result<Ctx, PluginError> {
         hour: format!("{hh:02}"),
         minute: format!("{mm:02}"),
     })
-}
-
-pub(super) fn context_at(
-    now_ms: u64,
-    locale: &fub_abi::locale::Locale,
-) -> Result<Ctx, PluginError> {
-    let (y, m, d, hh, mm) = civil_parts(now_ms, locale)?;
-    let date = format!("{y:04}-{m:02}-{d:02}");
-    let time = format_time(hh, mm, locale.hour_cycle);
-    Ok(Ctx {
-        date: date.clone(),
-        time: time.clone(),
-        datetime: format!("{date} {time}"),
-        year: format!("{y:04}"),
-        month: format!("{m:02}"),
-        day: format!("{d:02}"),
-        hour: format!("{hh:02}"),
-        minute: format!("{mm:02}"),
-    })
-}
-
-/// An explicitly named zone owns its historical/DST offset; the host's
-/// snapshot offset is used only when it supplied no named zone.
-pub(super) fn civil_parts(
-    now_ms: u64,
-    locale: &fub_abi::locale::Locale,
-) -> Result<(i64, u64, u64, u64, u64), PluginError> {
-    let name = locale.timezone.trim();
-    if !name.is_empty() {
-        let zone = jiff::tz::TimeZone::get(name).map_err(|_| {
-            PluginError::BadArgs(Text::message(E_BAD_ZONE, vec![Arg::text("zone", name)]))
-        })?;
-        let instant = i64::try_from(now_ms)
-            .ok()
-            .and_then(|ms| jiff::Timestamp::from_millisecond(ms).ok())
-            .ok_or_else(|| PluginError::BadArgs(Text::key(E_BAD_INSTANT)))?;
-        let civil = instant.to_zoned(zone);
-        return Ok((
-            civil.year() as i64,
-            civil.month() as u64,
-            civil.day() as u64,
-            civil.hour() as u64,
-            civil.minute() as u64,
-        ));
-    }
-    let civil = locale.to_civil_millis(now_ms);
-    let days = civil.div_euclid(86_400_000);
-    let in_day = civil.rem_euclid(86_400_000) as u64;
-    let (y, m, d) = civil_from_days(days);
-    Ok((y, m, d, in_day / 3_600_000, (in_day % 3_600_000) / 60_000))
-}
-
-pub(super) fn format_time(hh: u64, mm: u64, cycle: HourCycle) -> String {
-    match cycle {
-        HourCycle::H23 => format!("{hh:02}:{mm:02}"),
-        HourCycle::H12 => {
-            let suffix = if hh < 12 { "AM" } else { "PM" };
-            let h12 = match hh % 12 {
-                0 => 12,
-                h => h,
-            };
-            format!("{h12}:{mm:02} {suffix}")
-        }
-    }
 }
 
 /// Vocabolario **chiuso** delle variabili (P05.2): titolo, date/ore civili,
@@ -299,19 +217,12 @@ pub(super) fn expand_full(
     // Le `replace` a cascata restano per il caso pieno — una sostituzione può
     // contenere un segnaposto successivo, e una passata sola non lo
     // riprodurrebbe. Una variabile ignota resta testo: non si tocca.
-    Ok(src
+    let named = src
         .replace("{{title}}", title)
         .replace("{{name}}", title)
-        .replace("{{filename}}", title)
-        .replace("{{datetime}}", &ctx.datetime)
-        .replace("{{date}}", &ctx.date)
-        .replace("{{time}}", &ctx.time)
-        .replace("{{year}}", &ctx.year)
-        .replace("{{month}}", &ctx.month)
-        .replace("{{day}}", &ctx.day)
-        .replace("{{hour}}", &ctx.hour)
-        .replace("{{minute}}", &ctx.minute)
-        .replace("{{random}}", random.as_deref().unwrap_or("{{random}}")))
+        .replace("{{filename}}", title);
+    // Le date e le ore sono del vocabolario condiviso con le ricette.
+    Ok(expand_dates(&named, ctx).replace("{{random}}", random.as_deref().unwrap_or("{{random}}")))
 }
 
 /// Four readable hexadecimal digits from the host entropy capability. A

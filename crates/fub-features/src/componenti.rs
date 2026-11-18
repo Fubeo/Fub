@@ -245,6 +245,13 @@ pub fn righe() -> Vec<Riga> {
             .group("scrivere")
             .requires(&["fub.markdown", "fub.properties"])
             .cargo_feature("template"),
+        // Le ricette sono note che compongono comandi del registro: senza i
+        // comandi non c'è niente da comporre, né da annullare.
+        #[cfg(feature = "recipes")]
+        Riga::servizio("fub.recipes", "component.recipes.name")
+            .group("scrivere")
+            .requires(&["fub.markdown", "fub.commands"])
+            .cargo_feature("recipes"),
         #[cfg(feature = "queries")]
         Riga::modalita("fub.queries", "component.queries.name")
             .group("scrivere")
@@ -531,6 +538,11 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
         "Note templates, the daily note, the date and the time.",
     ),
     (
+        "component.recipes.description",
+        "Note che fanno più comandi in fila, scritte da te o da un'AI.",
+        "Notes that run several commands in a row, written by you or by an AI.",
+    ),
+    (
         "component.queries.description",
         "Le ricerche salvate, da rifare con un clic.",
         "Saved searches, to run again with one click.",
@@ -680,6 +692,7 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.tasks.name", "Compiti", "Tasks"),
     ("component.properties.name", "Proprietà", "Properties"),
     ("component.template.name", "Template", "Template"),
+    ("component.recipes.name", "Ricette", "Recipes"),
     ("component.queries.name", "Query", "Queries"),
     ("component.dashboard.name", "Dashboard", "Dashboard"),
     ("component.backup.name", "Backup", "Backup"),

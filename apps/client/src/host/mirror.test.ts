@@ -156,6 +156,11 @@ import type {
   LiveStopReport,
   LiveView,
   LiveWriterStatus,
+  RecipeInfo,
+  RecipeList,
+  RecipeProblem,
+  RecipeStatus,
+  RecipeStepInfo,
   ResourceWriteReceipt,
 } from "./contract";
 import type {
@@ -990,18 +995,6 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     skin: true,
     assets: true,
   }),
-  // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
-  // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
-  // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi
-  // `contract.ts`).
-  VaultEntry: keysOf<KnownVault>({
-    root: true,
-    name: true,
-    icon: true,
-    favorite: true,
-    last_opened: true,
-    keys_seen: true,
-  }),
   DemoOpened: keysOf<DemoOpened>({ root: true, previous: true }),
   DemoClosed: keysOf<DemoClosed>({ errors: true, current: true }),
   DiagnosticSummary: keysOf<DiagnosticSummary>({ kind: true, help: true }),
@@ -1067,6 +1060,19 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     id: true, name: true, opens: true, installed: true, running: true,
   }),
   OpenedWith: keysOf<OpenedWith>({ editor: true, how: true }),
+  // Le ricette del vault (`fub_host::recipes`): ciò che `recipes_list`
+  // risponde. Il piano della prova è un `CommandPlan`, già nel mirror del
+  // contratto.
+  RecipeList: keysOf<RecipeList>({ recipes: true, problems: true }),
+  RecipeInfo: keysOf<RecipeInfo>({
+    id: true, title: true, description: true, doc: true, status: true, fingerprint: true,
+    problems: true, steps: true, command: true, keybinding: true, surfaces: true,
+    mounted: true, allowed: true,
+  }),
+  RecipeStepInfo: keysOf<RecipeStepInfo>({
+    run: true, title: true, args: true, writes: true, reach: true, reversible: true,
+  }),
+  RecipeProblem: keysOf<RecipeProblem>({ code: true, field: true, line: true, message: true }),
 };
 const APP_OPTIONAL_KEYS = {
   InstalledPluginInfo: {
@@ -1080,6 +1086,22 @@ const APP_OPTIONAL_KEYS = {
       "id", "name", "mounted", "kind", "trust", "permissions",
       "installation", "version", "enabled", "consent", "runtime_known", "revoked",
     ],
+  },
+  // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
+  // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
+  // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi
+  // `contract.ts`). `recipes_adopted` manca quando è vuoto.
+  VaultEntry: {
+    all: keysOf<Required<KnownVault>>({
+      root: true,
+      name: true,
+      icon: true,
+      favorite: true,
+      last_opened: true,
+      keys_seen: true,
+      recipes_adopted: true,
+    }),
+    required: ["root", "name", "icon", "favorite", "last_opened", "keys_seen"],
   },
   // Senza indirizzo la sessione ascolta su quello della rotta predefinita.
   LiveStart: {
@@ -1347,7 +1369,7 @@ describe("mirror TS↔Rust", () => {
     }
     for (const type of [
       "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
-      "ConfigFileKind", "ConfigStatus", "RecoverAction",
+      "ConfigFileKind", "ConfigStatus", "RecoverAction", "RecipeStatus",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
@@ -1814,6 +1836,46 @@ describe("mirror TS↔Rust", () => {
         for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
       }
     }
+  });
+
+  it("le ricette della fixture hanno gli stati e le forme annidate del mirror", () => {
+    // Gli stati sono parole del contratto (`proposta`, `adottata`…): uno che
+    // Rust serializza e il mirror non nomina sarebbe una riga che la sezione
+    // «Ricette» non sa disegnare. Il `satisfies` tiene l'elenco esaustivo.
+    const states = {
+      proposta: true, adottata: true, cambiata: true, problemi: true,
+    } satisfies Record<RecipeStatus, true>;
+    const seen = appFixture.RecipeStatus as RecipeStatus[];
+    expect([...seen].sort()).toEqual(Object.keys(states).sort());
+    for (const list of appFixture.RecipeList as RecipeList[]) {
+      for (const problem of list.problems) expect(Object.keys(problem).sort()).toEqual(APP_RECORD_KEYS.RecipeProblem);
+      for (const recipe of list.recipes) {
+        expect(Object.keys(recipe).sort()).toEqual(APP_RECORD_KEYS.RecipeInfo);
+        expect(Object.keys(states)).toContain(recipe.status);
+        for (const step of recipe.steps) expect(Object.keys(step).sort()).toEqual(APP_RECORD_KEYS.RecipeStepInfo);
+        for (const problem of recipe.problems) expect(Object.keys(problem).sort()).toEqual(APP_RECORD_KEYS.RecipeProblem);
+      }
+    }
+    // L'impronta è una stringa opaca (lo SHA-256 del blocco, in esadecimale):
+    // si confronta e si rimanda indietro a `recipe_adopt`, mai si legge.
+    const fingerprints = (appFixture.RecipeInfo as RecipeInfo[]).map((recipe) => recipe.fingerprint);
+    expect(fingerprints).toContain(null);
+    for (const print of fingerprints) {
+      if (print !== null) expect(print).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it("ogni famiglia di bundle della fixture è una del mirror, ricette comprese", () => {
+    // Un `kind` che Rust serializza e il mirror non nomina sarebbe una riga che
+    // la shell non sa classificare: l'elenco qui sotto è l'unione di
+    // `BundleInfo["kind"]`, e il `satisfies` lo tiene esaustivo.
+    const kinds = { component: true, theme: true, recipe: true } satisfies Record<BundleInfo["kind"], true>;
+    const seen = (appFixture.BundleInfo as BundleInfo[]).map((b) => b.kind);
+    for (const kind of seen) expect(Object.keys(kinds)).toContain(kind);
+    expect(seen).toContain("recipe");
+    const vaults = appFixture.VaultEntry as KnownVault[];
+    expect(vaults.some((v) => v.recipes_adopted !== undefined)).toBe(true);
+    expect(vaults.some((v) => v.recipes_adopted === undefined)).toBe(true);
   });
 
   it("le unioni della pagina «Componenti» hanno un ramo TS per ogni variante Rust", () => {

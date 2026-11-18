@@ -29,6 +29,9 @@ use crate::JobHost;
 pub enum BundleKind {
     Component,
     Theme,
+    /// Una ricetta: una nota del vault che compone comandi, interpretata
+    /// dall'host. Non è un componente, e la shell non la elenca fra quelli.
+    Recipe,
 }
 
 /// Esito strutturato della registrazione dei provider.

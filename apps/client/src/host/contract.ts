@@ -2490,8 +2490,9 @@ export interface BundleInfo {
   mounted: boolean;
   // La famiglia decide quale gesto la riga offre: un componente si accende, un
   // tema si applica. Non è deducibile da `mounted`, perché anche uno spento
-  // deve restare classificabile.
-  kind: "component" | "theme";
+  // deve restare classificabile. Una ricetta (`recipe`) è una nota che compone
+  // comandi: non è un componente, e l'elenco dei componenti non la mostra.
+  kind: "component" | "theme" | "recipe";
   // Quanto l'host si fida di chi lo ha prodotto. Non è una decorazione accanto
   // ai permessi: «può leggere le mie note» non vuol dire la stessa cosa detto
   // di una feature di questo repo e di un componente arrivato da fuori.
@@ -2717,6 +2718,83 @@ export interface KnownVault {
   // cosa gli ha risposto. Sta qui perché il mirror è il contratto intero e un
   // campo taciuto è un campo che il giorno che serve nessuno sa esserci.
   keys_seen: Record<string, string>;
+  // Le ricette adottate su questa macchina per questo vault, id della ricetta →
+  // impronta del testo acceso. Assente quando non ce n'è nessuna (Rust non
+  // serializza l'elenco vuoto), e assente anche nei file scritti da un Fub che
+  // non conosceva le ricette: chi legge lo tratta come vuoto.
+  recipes_adopted?: Record<string, string>;
+}
+
+// --- le ricette del vault (rispecchiano `fub_host::recipes`) -----------------
+//
+// Una ricetta è una nota della cartella delle ricette con un blocco
+// `fub-recipe`: compone comandi che ci sono già. L'host la legge, la controlla
+// contro il registro vivo e la monta soltanto se questa macchina l'ha adottata
+// con l'impronta del testo di adesso. Di qua non si decide niente: le frasi
+// arrivano già nella lingua di chi guarda.
+
+// A che punto è una ricetta su questa macchina. `proposta` non gira;
+// `adottata` è montata; `cambiata` era adottata ma la nota è cambiata dopo, e
+// resta smontata finché la persona non la riguarda; `problemi` non si monta,
+// adottata o no.
+export type RecipeStatus = "proposta" | "adottata" | "cambiata" | "problemi";
+
+// Un problema di una ricetta, o del vault intero (`troppe`).
+export interface RecipeProblem {
+  // Il codice stabile del contratto (`comando-sconosciuto`, `id-ripetuto`…):
+  // per decidere, non per mostrare.
+  code: string;
+  // Il campo del blocco (`steps[1].run`); vuoto per il blocco intero.
+  field: string;
+  // La riga della nota, da 1; `null` quando il blocco non c'è.
+  line: number | null;
+  // La frase per chi legge, già tradotta.
+  message: string;
+}
+
+// Un passo, con ciò che il registro vivo dice del suo comando.
+export interface RecipeStepInfo {
+  run: string;
+  // Il titolo del comando; `null` se il registro non lo conosce (e allora la
+  // ricetta ha il problema `comando-sconosciuto`).
+  title: string | null;
+  // Gli argomenti come sono scritti, segnaposto compresi.
+  args: Record<string, unknown>;
+  writes: boolean;
+  // `null` se il registro non conosce il comando.
+  reach: CommandReach | null;
+  reversible: boolean;
+}
+
+export interface RecipeInfo {
+  // `null` se il blocco non si legge.
+  id: string | null;
+  // Il nome della nota se il blocco non si legge.
+  title: string;
+  description: string;
+  doc: string;
+  status: RecipeStatus;
+  // L'impronta del testo letto adesso: è ciò che la persona adotta, e ciò che
+  // `recipeAdopt` vuole indietro. Opaca: si confronta, non si interpreta.
+  // `null` se il blocco non si legge.
+  fingerprint: string | null;
+  problems: RecipeProblem[];
+  steps: RecipeStepInfo[];
+  // Il comando che la ricetta diventa: `recipe.<id>:run`.
+  command: string | null;
+  keybinding: string | null;
+  surfaces: CommandSurface[];
+  // Se il suo componente `recipe.<id>` è montato adesso.
+  mounted: boolean;
+  // Se il permesso di eseguire i comandi è acceso. Montata col permesso spento
+  // a mano dalla persona, la ricetta c'è ma i suoi passi vengono rifiutati.
+  allowed: boolean;
+}
+
+// Ciò che `recipesList` risponde: le ricette, e i problemi del vault intero.
+export interface RecipeList {
+  recipes: RecipeInfo[];
+  problems: RecipeProblem[];
 }
 
 // Che rapporto ha questo vault con il disco (rispecchia

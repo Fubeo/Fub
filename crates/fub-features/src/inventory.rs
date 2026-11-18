@@ -118,6 +118,8 @@ use crate::proof::{self, ProofCommands, PROOF_ID};
 use crate::properties::{self, PropertiesCommands, PropertiesView, PROPERTIES_ID};
 #[cfg(feature = "queries")]
 use crate::queries::{self, QueriesCommands, QueriesView, QUERIES_ID};
+#[cfg(feature = "recipes")]
+use crate::recipes::{self, RecipesCommands, RECIPES_ID};
 #[cfg(feature = "search")]
 use crate::search::{self, SEARCH_ID};
 #[cfg(feature = "stats")]
@@ -618,6 +620,27 @@ static OFFICIALS: &[OfficialFeature] = &[
         settings: Some(lavagna::settings),
         provides: &[],
         requires: &[],
+        wiring: HostWiring::None,
+    },
+    // In coda per la stessa ragione della lavagna: il suo comando si aggiunge
+    // dopo quelli che c'erano, e non registra pannelli.
+    #[cfg(feature = "recipes")]
+    OfficialFeature {
+        id: RECIPES_ID,
+        name: "Recipes",
+        catalog: recipes::catalog,
+        view: None,
+        commands: Some(|| Box::new(RecipesCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: None,
+        // `recipes.folder`: la cartella in cui stanno le ricette del vault.
+        settings: Some(RecipesCommands::settings),
+        provides: &[],
+        // L'annullamento di `recipes.new` è `note.trash`, e i passi delle
+        // ricette sono comandi del registro: senza i comandi non si monta.
+        requires: &[COMMANDS_ID],
         wiring: HostWiring::None,
     },
 ];

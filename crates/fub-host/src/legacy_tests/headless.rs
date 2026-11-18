@@ -143,7 +143,10 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         plugins.retain(|id| *id != "fub.craft");
         assert!(info.plugins.iter().any(|p| p.id == "fub.craft"));
     }
-    #[cfg_attr(not(any(feature = "draw", feature = "lavagna")), allow(unused_mut))]
+    #[cfg_attr(
+        not(any(feature = "draw", feature = "lavagna", feature = "recipes")),
+        allow(unused_mut)
+    )]
     let mut expected = vec![
         "fub.backlinks",
         "fub.backup",
@@ -180,6 +183,9 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // Con la feature `lavagna` c'è il comando `canvas.apply`.
     #[cfg(feature = "lavagna")]
     expected.push("fub.lavagna");
+    // Con la feature `recipes` c'è il comando `recipes.new`.
+    #[cfg(feature = "recipes")]
+    expected.push("fub.recipes");
     expected.sort();
     assert_eq!(plugins, expected);
 

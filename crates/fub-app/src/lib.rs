@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use camino::Utf8Path;
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::command::{CommandOutcome, CommandPlan, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::format::SourceKind;
 use fub_abi::grid::{GridApplyRequest, GridCommit, GridSurfaceSpec, GridWindowRequest};
@@ -58,7 +58,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
 pub use fub_host::{
-    BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
+    BundleInfo, EmbedContent, RecipeInfo, RecipeList, RecipeProblem, RecipeStatus, RecipeStepInfo,
+    ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
@@ -2136,6 +2137,73 @@ fn adopt_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), Plu
 fn discard_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), PluginError> {
     host.discard_keybindings(vault.as_deref())
 }
+
+// --- le ricette del vault (`fub_host::recipes`) ----------------------------
+//
+// Quattro porte sottili: la regola è tutta nell'host, qui c'è solo il
+// passaggio fuori dal thread principale. Ognuna rilegge la cartella delle
+// ricette (è anche la riconciliazione), e con duecento note sul thread
+// principale la finestra smetterebbe di presentare fotogrammi. Non sono
+// comandi del registro né porte del canale di controllo: adottare è il
+// consenso della persona davanti allo schermo, e un programma non se lo dà.
+
+/// Le ricette del vault, ognuna col suo stato su questa macchina, e i
+/// problemi del vault intero. Nella lingua di chi guarda.
+#[tauri::command]
+async fn recipes_list(app: AppHandle, vault: Option<String>) -> Result<RecipeList, PluginError> {
+    tauri::async_runtime::spawn_blocking(move || app.state::<Host>().recipes(vault.as_deref()))
+        .await
+        .map_err(|error| unfinished("recipe list", error))?
+}
+
+/// «Usa questa ricetta»: la persona adotta il testo che ha guardato
+/// (`fingerprint`). `Conflict` se la nota è cambiata nel frattempo.
+#[tauri::command]
+async fn recipe_adopt(
+    app: AppHandle,
+    id: String,
+    fingerprint: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<Host>()
+            .adopt_recipe(vault.as_deref(), &id, &fingerprint)
+    })
+    .await
+    .map_err(|error| unfinished("recipe adoption", error))?
+}
+
+/// «Non usarla più»: toglie l'adozione e smonta la ricetta.
+#[tauri::command]
+async fn recipe_discard(
+    app: AppHandle,
+    id: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<Host>().discard_recipe(vault.as_deref(), &id)
+    })
+    .await
+    .map_err(|error| unfinished("recipe discard", error))?
+}
+
+/// La prova di una ricetta, anche non adottata: il piano di tutti i passi in
+/// simulazione. Non scrive niente. `args` assente vale `{}`.
+#[tauri::command]
+async fn recipe_simulate(
+    app: AppHandle,
+    id: String,
+    args: Option<serde_json::Value>,
+    vault: Option<String>,
+) -> Result<CommandPlan, PluginError> {
+    let args = args.unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<Host>()
+            .simulate_recipe(vault.as_deref(), &id, args)
+    })
+    .await
+    .map_err(|error| unfinished("recipe simulation", error))?
+}
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OpenedAction {
@@ -3367,6 +3435,10 @@ pub fn run() {
             pending_keybindings,
             adopt_keybindings,
             discard_keybindings,
+            recipes_list,
+            recipe_adopt,
+            recipe_discard,
+            recipe_simulate,
             mobile_validate_capture,
             mobile_submit_capture,
             mobile_storage_roots,

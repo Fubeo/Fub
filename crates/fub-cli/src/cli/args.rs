@@ -60,6 +60,7 @@ pub enum CliCommand {
     Views(ViewsArgs),
     Plugin(PluginArgs),
     Componenti(ComponentiArgs),
+    Ricette(RicetteArgs),
     Theme(ThemeArgs),
     Diagnostics(DiagnosticsArgs),
     Capture(CaptureArgs),
@@ -272,6 +273,25 @@ pub struct ComponentiArgs {
     pub action: ComponentiAction,
 }
 
+/// `ricette controlla NOTA` e `ricette prova NOTA [--doc NOTA] [--args JSON]`.
+#[derive(Clone, Debug)]
+pub struct RicetteArgs {
+    pub global: GlobalArgs,
+    pub action: RicetteAction,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RicetteAction {
+    /// Legge la ricetta e la controlla contro il registro vivo.
+    Controlla { recipe: String },
+    /// La prova: ogni passo in simulazione, sulla nota `doc`.
+    Prova {
+        recipe: String,
+        doc: Option<String>,
+        args_json: Option<String>,
+    },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ComponentiAction {
     Elenco,
@@ -429,6 +449,7 @@ impl CliCommand {
             CliCommand::Views(a) => a.global.clone(),
             CliCommand::Plugin(a) => a.global.clone(),
             CliCommand::Componenti(a) => a.global.clone(),
+            CliCommand::Ricette(a) => a.global.clone(),
             CliCommand::Theme(a) => a.global.clone(),
             CliCommand::Diagnostics(a) => a.global.clone(),
             CliCommand::Capture(a) => a.global.clone(),
@@ -536,6 +557,10 @@ impl CliCommand {
             CliCommand::Componenti(mut a) => {
                 a.global = global;
                 CliCommand::Componenti(a)
+            }
+            CliCommand::Ricette(mut a) => {
+                a.global = global;
+                CliCommand::Ricette(a)
             }
             CliCommand::Theme(mut a) => {
                 a.global = global;

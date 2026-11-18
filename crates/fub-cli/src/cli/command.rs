@@ -911,6 +911,7 @@ pub(super) fn parse_command(
             Ok(CliCommand::Plugin(args))
         }
         "componenti" => parse_componenti(parser, global),
+        "ricette" => parse_ricette(parser, global),
         "theme" => {
             let mut args = ThemeArgs {
                 global,

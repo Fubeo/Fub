@@ -46,8 +46,10 @@ import type {
   ComponentsApplied,
   ComponentsMap,
   InstalledPluginInfo,
+  CommandPlan,
   CommandSpec,
   ParamSpec,
+  RecipeInfo,
   DraftInfo,
   DocumentSource,
   DocumentWindowEvent,
@@ -377,6 +379,16 @@ export interface Options {
   /// `fub-format-craft` montato, e il bundle `fub.craft` risponde a
   /// `craft.preview`. Senza, restano file senza formato.
   craft?: FakeCraft;
+  /// Le ricette del vault, come le darebbe `recipesList` dopo la
+  /// riconciliazione. `plan` è ciò che risponde la prova (`recipeSimulate`):
+  /// senza, la prova di quella ricetta lancia, perché il finto non sa
+  /// eseguire i comandi dei passi.
+  recipes?: FakeRecipe[];
+}
+
+/// Una ricetta del finto: la riga di `recipesList`, e il piano della prova.
+export interface FakeRecipe extends RecipeInfo {
+  plan?: CommandPlan;
 }
 
 /// Il bundle `fub.craft` del finto. I byte dei file stanno in `resources`.
@@ -490,6 +502,12 @@ export interface FakeHost {
   /// arrivano subito, nel loro ordine, senza passare da `componentsApply`. Una
   /// scelta che lo scenario non ha da questo stato lancia.
   componentsFromOutside(azione: ComponentAction, apply?: boolean): ComponentsApplied;
+  /// Riscrive la nota della ricetta `id` **senza che la shell l'abbia
+  /// chiesto**: l'impronta diventa `fingerprint`, e una ricetta adottata
+  /// diventa `cambiata` e si smonta, come nella riconciliazione dell'host.
+  /// Nessun evento arriva: l'host lo dice al prossimo `recipesList`. Un id che
+  /// il finto non ha lancia.
+  recipeChangedFromOutside(id: string, fingerprint: string): void;
 
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
@@ -839,6 +857,46 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// di sempre, e un banco che vuole provare «questa scrittura ha nominato il
   /// suo vault» lo legge dall'ultimo argomento (FUB-001).
   const named = (args: unknown[], vault?: string | null): unknown[] => (vault ? [...args, vault] : args);
+
+  // --- le ricette del vault -------------------------------------------------
+  //
+  // In memoria, con le regole che l'host fa vedere da fuori: si adotta solo il
+  // testo guardato (l'impronta), una ricetta con problemi non si adotta e non
+  // si prova, scartare una ricetta mai adottata è `not_found`. Le frasi sono
+  // quelle italiane dell'host. Le ricette adottate sul disco (il registro dei
+  // vault) e il montaggio dei bundle non ci sono: li provano i test di
+  // `fub-host`.
+  const recipes: FakeRecipe[] = structuredClone(options.recipes ?? []);
+  // Ciò che la persona ha adottato, id → impronta: è il registro dei vault
+  // della macchina, che sopravvive a una nota che cambia.
+  const recipesAdopted = new Map<string, string>(
+    recipes
+      .filter((recipe) => recipe.id !== null && recipe.fingerprint !== null
+        && (recipe.status === "adottata" || recipe.status === "cambiata"))
+      .map((recipe) => [recipe.id!, recipe.fingerprint!]),
+  );
+  const recipeError = (kind: PluginError["kind"], message: string): PluginError => ({ kind, message });
+  const noVault = (): PluginError => recipeError("not_found", "Nessun vault aperto.");
+  const recipeNamed = (id: string): FakeRecipe => {
+    if (root === null) throw noVault();
+    const recipe = recipes.find((candidate) => candidate.id === id);
+    if (!recipe) throw recipeError("not_found", `Nessuna ricetta con id «${id}» in questo vault.`);
+    return recipe;
+  };
+  const refuseProblems = (recipe: FakeRecipe) => {
+    const problem = recipe.problems[0];
+    if (problem) throw recipeError("bad_args", problem.message);
+  };
+  // Lo stato che la riconciliazione darebbe, dall'adozione e dai problemi.
+  const settleRecipe = (recipe: FakeRecipe) => {
+    const adopted = recipe.id === null ? undefined : recipesAdopted.get(recipe.id);
+    if (recipe.problems.length > 0) recipe.status = "problemi";
+    else if (adopted === undefined) recipe.status = "proposta";
+    else recipe.status = adopted === recipe.fingerprint ? "adottata" : "cambiata";
+    recipe.mounted = recipe.status === "adottata";
+    recipe.allowed = recipe.mounted;
+  };
+  const recipeRow = ({ plan: _plan, ...row }: FakeRecipe): RecipeInfo => structuredClone(row);
 
   // Le chiavi di apertura, per vault, come le tiene l'host: una chiave conta
   // quando apre o scrive un documento di videoscrittura, e cade con
@@ -2233,6 +2291,40 @@ export function createFakeHost(options: Options = {}): FakeHost {
       pendingKeybindings: () => gate("pendingKeybindings", [], Promise.resolve({})),
       adoptKeybindings: () => gate("adoptKeybindings", [], Promise.resolve()),
       discardKeybindings: () => gate("discardKeybindings", [], Promise.resolve()),
+      recipesList: (vault) =>
+        installedOperation("recipesList", named([], vault), () => {
+          if (root === null) throw noVault();
+          return { recipes: recipes.map(recipeRow), problems: [] };
+        }),
+      recipeAdopt: (id, fingerprint, vault) =>
+        installedOperation("recipeAdopt", named([id, fingerprint], vault), () => {
+          const recipe = recipeNamed(id);
+          refuseProblems(recipe);
+          if (recipe.fingerprint !== fingerprint) {
+            throw recipeError(
+              "conflict",
+              `La ricetta «${id}» è cambiata dopo che l'hai guardata: rileggila prima di accenderla.`,
+            );
+          }
+          recipesAdopted.set(id, fingerprint);
+          settleRecipe(recipe);
+        }),
+      recipeDiscard: (id, vault) =>
+        installedOperation("recipeDiscard", named([id], vault), () => {
+          const recipe = recipeNamed(id);
+          if (!recipesAdopted.has(id) && !recipe.mounted) {
+            throw recipeError("not_found", `Nessuna ricetta con id «${id}» in questo vault.`);
+          }
+          recipesAdopted.delete(id);
+          settleRecipe(recipe);
+        }),
+      recipeSimulate: (id, args = {}, vault) =>
+        installedOperation("recipeSimulate", named([id, args], vault), () => {
+          const recipe = recipeNamed(id);
+          refuseProblems(recipe);
+          if (!recipe.plan) throw new Error(`host fake: la ricetta «${id}» non ha un piano per la prova`);
+          return structuredClone(recipe.plan);
+        }),
       viewState: <T>(key: string) =>
         gate("viewState", [key], Promise.resolve((viewStates.get(key) ?? null) as T | null)),
       setViewState: (key, value) => {
@@ -2509,6 +2601,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const recorded = componentChoice(azione, apply);
       componentEvents(recorded).forEach(emit);
       return structuredClone(recorded.risposta);
+    },
+    recipeChangedFromOutside: (id, fingerprint) => {
+      const recipe = recipes.find((candidate) => candidate.id === id);
+      if (!recipe) throw new Error(`host fake: no recipe ${JSON.stringify(id)}`);
+      recipe.fingerprint = fingerprint;
+      settleRecipe(recipe);
     },
     fault: (name, reason) => {
       faults.set(name, reason ?? `host fake: «${name}» è guasta`);

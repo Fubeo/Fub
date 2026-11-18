@@ -106,6 +106,22 @@ pub struct VaultEntry {
     /// costerebbe meno e saprebbe rispondere solo tutto o niente.
     #[serde(default)]
     pub keys_seen: BTreeMap<String, String>,
+    /// Le **ricette adottate su questa macchina** per questo vault, id della
+    /// ricetta → impronta del testo che la persona ha acceso.
+    ///
+    /// Sta qui per la stessa ragione di [`keys_seen`](Self::keys_seen): non
+    /// descrive il vault ma una decisione che questa macchina ha preso su di
+    /// lui, e `forget` la porta via col resto. La ricetta è un file del vault e
+    /// può cambiare stanotte, per una sincronizzazione o per un collega;
+    /// l'impronta è ciò che dice se quello che gira è ancora quello che la
+    /// persona ha letto e acceso.
+    ///
+    /// Il campo manca nei file scritti prima che esistesse, e si legge vuoto. Un
+    /// Fub che non lo conosce e riscrive il file lo perde: le ricette tornano
+    /// proposte da accendere di nuovo, che è il verso sicuro. Vuoto non si
+    /// scrive, così il file di chi non adotta ricette resta quello di prima.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub recipes_adopted: BTreeMap<String, String>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -338,6 +354,39 @@ impl RegistryInner {
         self.update(root, move |entry| entry.keys_seen = keys)
     }
 
+    /// La persona ha acceso la ricetta `id` di questo vault, nel testo che ha
+    /// l'impronta `fingerprint`. Una seconda adozione dello stesso id ne
+    /// **sostituisce** l'impronta: la ricetta cambiata e riaccesa è una
+    /// decisione nuova, non un'aggiunta.
+    fn adopt_recipe(
+        &self,
+        root: &Utf8Path,
+        id: &str,
+        fingerprint: &str,
+    ) -> Result<(), PluginError> {
+        let (id, fingerprint) = (id.to_string(), fingerprint.to_string());
+        self.update(root, move |entry| {
+            entry.recipes_adopted.insert(id, fingerprint);
+        })
+    }
+
+    /// La ricetta `id` di questo vault non è più adottata su questa macchina.
+    ///
+    /// Non passa da [`update`](Self::update) perché quella fa nascere la voce
+    /// che manca: dimenticare una ricetta di un vault che il registro non
+    /// conosce non deve inventarne uno, con la data di adesso, in cima ai
+    /// recenti. La mutazione si applica comunque al file riletto sotto lock, o
+    /// un'adozione fatta da un'altra installazione dopo la nostra lettura
+    /// sfuggirebbe alla rimozione.
+    fn forget_recipe(&self, root: &Utf8Path, id: &str) -> Result<(), PluginError> {
+        let root = root.as_str();
+        self.mutate(|next| {
+            if let Some(entry) = next.iter_mut().find(|and| and.root == root) {
+                entry.recipes_adopted.remove(id);
+            }
+        })
+    }
+
     /// **L'aspetto intero**: l'icona (`None` = nessuna) e il nome (vuoto =
     /// quello della cartella).
     ///
@@ -412,6 +461,7 @@ impl RegistryInner {
                         // subito sotto con la sua (`note_opened`).
                         last_opened: fub_kernel::time::now_unix_millis(),
                         keys_seen: BTreeMap::new(),
+                        recipes_adopted: BTreeMap::new(),
                     };
                     f(&mut entry);
                     next.push(entry);
@@ -550,6 +600,24 @@ impl VaultRegistryHandle {
         keys: BTreeMap<String, String>,
     ) -> Result<(), PluginError> {
         self.inner.notes_keys_seen(root, keys)
+    }
+
+    /// Adotta su questa macchina la ricetta `id` del vault, con l'impronta del
+    /// testo acceso; sostituisce l'impronta di un'adozione precedente.
+    pub fn adopt_recipe(
+        &self,
+        root: &Utf8Path,
+        id: &str,
+        fingerprint: &str,
+    ) -> Result<(), PluginError> {
+        self.inner.adopt_recipe(root, id, fingerprint)
+    }
+
+    /// Toglie l'adozione della ricetta `id` del vault. Un vault o una ricetta
+    /// che il registro non conosce non sono un errore: non c'è niente da
+    /// togliere.
+    pub fn forget_recipe(&self, root: &Utf8Path, id: &str) -> Result<(), PluginError> {
+        self.inner.forget_recipe(root, id)
     }
 
     /// Sostituisce icona e nome visualizzati per una radice.
@@ -901,6 +969,174 @@ mod tests {
 
         assert!(and.to_string().contains("non lo sovrascrive"), "{and}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
+    }
+
+    fn on_disk() -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
+        (dir, path)
+    }
+
+    fn adopted(reg: &VaultRegistryHandle, root: &str) -> BTreeMap<String, String> {
+        reg.list()
+            .into_iter()
+            .find(|and| and.root == root)
+            .map(|and| and.recipes_adopted)
+            .unwrap_or_default()
+    }
+
+    /// L'impronta di una ricetta adottata si scrive, si rilegge da un altro
+    /// processo e si toglie; riadottare la stessa ricetta ne sostituisce
+    /// l'impronta. Tolta l'ultima, il campo esce anche dal file.
+    #[test]
+    fn an_adopted_recipe_survives_a_round_on_disk_and_is_forgotten() {
+        let (_dir, path) = on_disk();
+        let (owner, _) = VaultRegistry::open(&path);
+        let reg = owner.handle();
+        reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
+        reg.adopt_recipe(Utf8Path::new("/a"), "archivia", "impronta-1")
+            .unwrap();
+        reg.adopt_recipe(Utf8Path::new("/a"), "archivia", "impronta-2")
+            .unwrap();
+        reg.adopt_recipe(Utf8Path::new("/a"), "riassumi", "impronta-3")
+            .unwrap();
+
+        let (reopened_owner, warning) = VaultRegistry::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        assert_eq!(
+            adopted(&reopened_owner.handle(), "/a"),
+            BTreeMap::from([
+                ("archivia".to_string(), "impronta-2".to_string()),
+                ("riassumi".to_string(), "impronta-3".to_string()),
+            ]),
+            "la seconda adozione sostituisce l'impronta della prima"
+        );
+
+        reg.forget_recipe(Utf8Path::new("/a"), "archivia").unwrap();
+        reg.forget_recipe(Utf8Path::new("/a"), "riassumi").unwrap();
+        let (again, _) = VaultRegistry::open(&path);
+        assert!(adopted(&again.handle(), "/a").is_empty());
+        let json = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !json.contains("recipes_adopted"),
+            "un elenco vuoto non si scrive: {json}"
+        );
+    }
+
+    /// Un `vaults.json` scritto da un Fub che non conosceva le ricette si legge,
+    /// con il campo vuoto, e la prima adozione non perde gli altri campi.
+    #[test]
+    fn a_file_without_the_recipes_reads_them_empty() {
+        let (_dir, path) = on_disk();
+        std::fs::write(
+            &path,
+            r#"{"version":1,"vaults":[{"root":"/a","name":"Diario","icon":null,"favorite":true,"last_opened":7,"keys_seen":{"mod+k":"search.open"}}]}"#,
+        )
+        .unwrap();
+
+        let (owner, warning) = VaultRegistry::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        let reg = owner.handle();
+        assert!(adopted(&reg, "/a").is_empty());
+
+        reg.adopt_recipe(Utf8Path::new("/a"), "archivia", "impronta")
+            .unwrap();
+        let (reopened, _) = VaultRegistry::open(&path);
+        let entry = reopened.handle().list().remove(0);
+        assert_eq!(entry.name, "Diario");
+        assert!(entry.favorite);
+        assert_eq!(entry.last_opened, 7);
+        assert_eq!(entry.keys_seen.len(), 1);
+        assert_eq!(entry.recipes_adopted.len(), 1);
+    }
+
+    /// Un id lunghissimo e duecento ricette passano il giro sul disco intere.
+    #[test]
+    fn a_very_long_id_and_two_hundred_recipes_survive_the_disk() {
+        let (_dir, path) = on_disk();
+        let (owner, _) = VaultRegistry::open(&path);
+        let reg = owner.handle();
+        let long = "r".repeat(64 * 1024);
+        reg.adopt_recipe(Utf8Path::new("/a"), &long, "lunga")
+            .unwrap();
+        for the in 0..200 {
+            reg.adopt_recipe(
+                Utf8Path::new("/a"),
+                &format!("ricetta-{the:03}"),
+                &format!("impronta-{the}"),
+            )
+            .unwrap();
+        }
+
+        let (reopened, warning) = VaultRegistry::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        let recipes = adopted(&reopened.handle(), "/a");
+        assert_eq!(recipes.len(), 201);
+        assert_eq!(recipes.get(&long).map(String::as_str), Some("lunga"));
+        assert_eq!(
+            recipes.get("ricetta-199").map(String::as_str),
+            Some("impronta-199")
+        );
+    }
+
+    /// Una scrittura che fallisce tiene il valore di prima, in memoria e sul
+    /// disco: il file rotto dopo l'apertura ferma la rilettura sotto lock, e né
+    /// l'adozione né la rimozione toccano ciò che c'era.
+    #[test]
+    fn a_failed_write_keeps_the_previous_recipes() {
+        let (_dir, path) = on_disk();
+        let (owner, _) = VaultRegistry::open(&path);
+        let reg = owner.handle();
+        reg.adopt_recipe(Utf8Path::new("/a"), "archivia", "impronta-1")
+            .unwrap();
+        let broken = "{ rotto dopo l'apertura";
+        std::fs::write(&path, broken).unwrap();
+
+        reg.adopt_recipe(Utf8Path::new("/a"), "archivia", "impronta-2")
+            .expect_err("un file che non si rilegge non si riscrive");
+        reg.forget_recipe(Utf8Path::new("/a"), "archivia")
+            .expect_err("nemmeno per togliere");
+
+        assert_eq!(
+            adopted(&reg, "/a"),
+            BTreeMap::from([("archivia".to_string(), "impronta-1".to_string())])
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
+    }
+
+    /// Dimenticare una ricetta di un vault sconosciuto non lo fa nascere.
+    #[test]
+    fn forgetting_a_recipe_of_an_unknown_vault_does_not_create_it() {
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
+        reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
+        reg.forget_recipe(Utf8Path::new("/altro"), "archivia")
+            .unwrap();
+        reg.forget_recipe(Utf8Path::new("/a"), "mai-adottata")
+            .unwrap();
+        let roots: Vec<String> = reg.list().into_iter().map(|and| and.root).collect();
+        assert_eq!(roots, vec!["/a".to_string()]);
+    }
+
+    /// Due installazioni che adottano nello stesso momento non si perdono
+    /// l'adozione dell'altra: la seconda ha letto prima che la prima scrivesse.
+    #[test]
+    fn two_installations_that_adopt_a_recipe_keep_both() {
+        let (_dir, path) = on_disk();
+        let (first_owner, _) = VaultRegistry::open(&path);
+        let (second_owner, _) = VaultRegistry::open(&path);
+        first_owner
+            .handle()
+            .adopt_recipe(Utf8Path::new("/a"), "archivia", "uno")
+            .unwrap();
+        second_owner
+            .handle()
+            .adopt_recipe(Utf8Path::new("/a"), "riassumi", "due")
+            .unwrap();
+
+        let (third, _) = VaultRegistry::open(&path);
+        let keys: Vec<String> = adopted(&third.handle(), "/a").into_keys().collect();
+        assert_eq!(keys, vec!["archivia".to_string(), "riassumi".to_string()]);
     }
 
     #[test]

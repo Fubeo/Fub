@@ -86,6 +86,7 @@ vi.mock("../ui/commands", async (importOriginal) => {
     keybindingKey: (id: string) => id,
     newKinds: () => ["note"],
     registerComponentRow: actual.registerComponentRow,
+    hasKernelCommand: () => false,
     showComponent: actual.showComponent,
   };
 });
@@ -237,6 +238,30 @@ beforeEach(() => {
   box.entries = [];
   box.host = createFakeHost();
   state.vaultRoot = "/vault";
+});
+
+describe("la sezione «Ricette» nella scheda", () => {
+  it("una lettura lenta non ferma la scheda, e lo stato d'errore della sezione resta a schermo", async () => {
+    const slow = createFakeHost({ recipes: [] });
+    const release = slow.throttle("recipesList");
+    box.host = slow;
+    await openComponents();
+    // La scheda è in piedi mentre le ricette si leggono ancora.
+    expect(document.querySelector('#settings-recipes [aria-busy="true"]')).not.toBeNull();
+    release();
+    document.querySelector<HTMLButtonElement>("#settings-close")?.click();
+
+    const broken = createFakeHost({ recipes: [] });
+    broken.fault("recipesList", { kind: "io", message: "permesso negato" });
+    box.host = broken;
+    await openComponents();
+    await vi.waitFor(() =>
+      expect(document.querySelector('#settings-recipes [role="alert"]')?.textContent).toContain("permesso negato"));
+    // Il filtro della scheda non toglie lo stato della sezione come fosse suo.
+    document.querySelector<HTMLButtonElement>('button[data-tab="settings"]')!.click();
+    document.querySelector<HTMLButtonElement>('button[data-tab="components"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector("#settings-recipes .settings-empty")).not.toBeNull());
+  });
 });
 
 describe("inventario dei componenti installati", () => {

@@ -542,11 +542,22 @@ pub struct VaultSession {
     /// l'apertura prima di toccare il disco e lo lascia la chiusura per ultimo,
     /// quando nessun thread di questa sessione può più scrivere.
     writer: Arc<VaultWriterLock>,
+    /// **Le ricette montate** di questo vault e la sorgente runtime che ne
+    /// possiede i bundle ([`crate::recipes`]): cadono con la sessione, e la
+    /// riconciliazione dell'apertura le rimonta.
+    #[cfg_attr(not(feature = "recipes"), allow(dead_code))]
+    recipes: Arc<crate::recipes::SessionRecipes>,
 }
 
 impl VaultSession {
     pub fn root(&self) -> &Utf8Path {
         &self.root
+    }
+
+    /// Lo stato delle ricette della sessione, per [`crate::recipes`].
+    #[cfg_attr(not(feature = "recipes"), allow(dead_code))]
+    pub(crate) fn recipes(&self) -> &Arc<crate::recipes::SessionRecipes> {
+        &self.recipes
     }
     #[cfg(test)]
     pub(crate) fn workspace(&self) -> &Custody<Workspace> {
@@ -805,6 +816,7 @@ impl<'a> OpeningTransaction<'a> {
             watcher,
             used: 0,
             writer,
+            recipes: Arc::default(),
         });
     }
 
@@ -1735,6 +1747,9 @@ impl Host {
         let _phase = tracing::info_span!(target: "fub.apertura", "open").entered();
         let info = self.mounts(&root, writer)?;
         self.become_current(&root)?;
+        // Le ricette adottate su questa macchina si montano adesso, e quelle
+        // cambiate restano spente: un errore qui non fa cadere l'apertura.
+        crate::recipes::reconcile_at_open(self, &root);
         Ok(info)
     }
     /// Esegue la recovery di eventuali snapshot globali lasciati da un crash
@@ -1793,6 +1808,7 @@ impl Host {
         self.become_current(&canonical_root)
             .map_err(SnapshotHostError::Reopen)?;
         drop(claim);
+        crate::recipes::reconcile_at_open(self, &canonical_root);
         Ok(report)
     }
 
@@ -2498,6 +2514,52 @@ impl Host {
             .forget_vault(&forms)
             .map_err(|and| PluginError::Io(and.into()))?;
         Ok(())
+    }
+
+    // --- le ricette del vault (`crate::recipes`) ---------------------------
+
+    /// **Le ricette del vault** e il loro stato su questa macchina, e i
+    /// problemi del vault intero (`troppe`).
+    ///
+    /// È anche la riconciliazione: monta le adottate valide con l'impronta di
+    /// adesso e smonta le altre. Senza la feature `recipes`, un elenco vuoto.
+    pub fn recipes(&self, vault: Option<&str>) -> Result<crate::recipes::RecipeList, PluginError> {
+        crate::recipes::list(self, vault)
+    }
+
+    /// **La persona accende la ricetta `id`**, nel testo che ha guardato
+    /// (`fingerprint`). Rifiuta con `Conflict` se la nota è cambiata dopo,
+    /// con `BadArgs` se la ricetta ha problemi; poi scrive l'impronta nel
+    /// registro dei vault di questa macchina, monta il bundle e ne accende il
+    /// permesso. Se un passo fallisce, i passi prima si disfano.
+    ///
+    /// Soltanto l'app la chiama: non è un comando del registro né una porta
+    /// del canale di controllo, perché un programma non si dà il consenso.
+    pub fn adopt_recipe(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        fingerprint: &str,
+    ) -> Result<(), PluginError> {
+        crate::recipes::adopt(self, vault, id, fingerprint)
+    }
+
+    /// **La persona spegne la ricetta `id`**: toglie l'impronta dal registro
+    /// dei vault e smonta il bundle. `NotFound` se non era adottata.
+    pub fn discard_recipe(&self, vault: Option<&str>, id: &str) -> Result<(), PluginError> {
+        crate::recipes::discard(self, vault, id)
+    }
+
+    /// **La prova di una ricetta**, anche non adottata: ogni passo in
+    /// simulazione, come lo farebbe la persona, e i piani fusi. Non scrive
+    /// niente.
+    pub fn simulate_recipe(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        args: serde_json::Value,
+    ) -> Result<fub_abi::command::CommandPlan, PluginError> {
+        crate::recipes::simulate(self, vault, id, args)
     }
 
     // --- accendere e spegnere un componente (§11.1) -------------------------
@@ -3503,6 +3565,18 @@ impl Host {
             self.set_current(&current)?;
         }
         Ok(faults)
+    }
+
+    /// La lettura breve di [`crate::recipes`]: la cartella, l'anagrafe, il
+    /// registro dei comandi, il locale. Esiste perché quel modulo non vede la
+    /// custodia del workspace; nessun altro la usa.
+    #[cfg_attr(not(feature = "recipes"), allow(dead_code))]
+    pub(crate) fn recipes_read<R>(
+        &self,
+        vault: Option<&str>,
+        f: impl FnOnce(&Workspace) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        self.read_workspace(vault, f)
     }
 
     /// Esegue una lettura breve sul workspace selezionato. La custodia non

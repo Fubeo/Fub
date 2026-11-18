@@ -77,10 +77,15 @@ const ROOT: &[&str] = &["lib.rs", "inventory.rs"];
 ///   Non appartiene a nessuna feature e non ne nomina nessuna; uno split lo
 ///   porterebbe in un crate di appoggio da cui dipendono le feature che
 ///   scrivono sorgente.
+/// - `vocabulary` sono le date e le ore che un testo cita fra doppie graffe
+///   (`{{date}}`, `{{time}}` e compagni) e il contesto che le calcola nel fuso
+///   di chi usa Fub. Lo parlano i template e le ricette, e due copie della
+///   stessa regola darebbero due «oggi» diversi alla stessa mezzanotte; non
+///   nomina nessuna delle due.
 ///
 /// Un modulo condiviso resta sotto la stessa domanda degli altri: se nominasse
 /// una feature, l'accoppiamento passerebbe da lui.
-const SHARED: &[&str] = &["formats"];
+const SHARED: &[&str] = &["formats", "vocabulary"];
 
 /// La riga senza i nomi dei moduli condivisi, che sono vocabolario dichiarato.
 fn without_shared(row: &str) -> String {

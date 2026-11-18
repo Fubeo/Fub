@@ -17,6 +17,7 @@ import type {
   ComponentsMap,
   InstalledPluginInfo,
   CommandOutcome,
+  CommandPlan,
   CommandSpec,
   DocumentSource,
   DocumentWindowEvent,
@@ -47,6 +48,7 @@ import type {
   ResourceWriteOptions,
   Locale,
   PluginError,
+  RecipeList,
   SettingValue,
   ThemeInfo,
   ThemeLight,
@@ -587,6 +589,27 @@ export const api = {
   // un valore che nessuno leggerà mai è la cosa peggiore che un file di
   // configurazione possa contenere.
   discardKeybindings: () => invoke<void>("discard_keybindings"),
+
+  // --- le ricette del vault ------------------------------------------------
+  //
+  // Porte sottili: la regola è dell'host, che rilegge la cartella a ogni
+  // chiamata (è anche la riconciliazione: monta le adottate, smonta le
+  // altre). Per questo si chiamano quando la persona guarda, non a ogni
+  // evento. Le frasi arrivano già tradotte; gli errori sono `PluginError`
+  // tipizzati: `not_found` per un id che non c'è, `conflict` se la nota è
+  // cambiata dopo che la persona l'ha guardata, `bad_args` per una ricetta
+  // con problemi.
+  recipesList: (vault?: string | null) => invoke<RecipeList>("recipes_list", toVault({}, vault)),
+  // L'adozione è il consenso: vale per il testo che la persona ha guardato,
+  // e l'impronta lo dice. Accende anche il permesso della ricetta.
+  recipeAdopt: (id: string, fingerprint: string, vault?: string | null) =>
+    invoke<void>("recipe_adopt", toVault({ id, fingerprint }, vault)),
+  recipeDiscard: (id: string, vault?: string | null) =>
+    invoke<void>("recipe_discard", toVault({ id }, vault)),
+  // La prova: il piano di tutti i passi in simulazione, anche per una
+  // ricetta non adottata. Non scrive niente.
+  recipeSimulate: (id: string, args: Record<string, unknown> = {}, vault?: string | null) =>
+    invoke<CommandPlan>("recipe_simulate", toVault({ id, args }, vault)),
 
   // --- lo stato di vista (§11.2) ------------------------------------------
   //
