@@ -22,7 +22,7 @@ import {
   addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
+  type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BaseMutation, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
@@ -103,6 +103,11 @@ const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
 const TABLE_ROW_HEIGHT = 38;
 const TABLE_VIEWPORT_HEIGHT = 560;
+/// Una scrittura chiesta che non parte perché la Base è diventata in sola
+/// lettura nel frattempo: il gesto la mostra come ogni altro rifiuto.
+class BaseReadOnly extends Error {
+  constructor() { super(t("base.cell.read_only")); }
+}
 /// Un campo vuoto o corto della tabella resta largo almeno così (lettere).
 const CELL_MIN_CHARS = 6;
 /// Il bordo e il margine interno di un campo della tabella, ai due lati.
@@ -265,7 +270,6 @@ export function mountBaseSurface(
   let replanWanted = false;
   let pending: AbortController | null = null;
   let tileCleanup: (() => void) | null = null;
-  let writeEpoch = 0;
   let persistQueue = Promise.resolve();
   const localLanes = new Map<string, Set<string>>();
   // I gruppi chiusi di tabella, schede ed elenco, per vista: stato della
@@ -575,29 +579,41 @@ export function mountBaseSurface(
     }
   };
   const open = (doc: string): void => { void Promise.resolve(deps.onOpenDocument(doc)).catch(presentError); };
+  // ---- Le scritture che l'utente ha chiesto ------------------------------
+  // Una scrittura chiesta (una cella, una scheda o una colonna della Bacheca,
+  // un giorno del calendario, una barra della linea del tempo) va fino in
+  // fondo, oppure chi l'ha chiesta sa che non è passata (#484). Un evento del
+  // vault, una ricarica, una vista ridisegnata o la Base chiusa non la
+  // fermano: la mutazione preparata è già quella chiesta (nota, proprietà,
+  // valore letto e valore nuovo, li controlla `prepareBaseMutations`), e il
+  // conflitto vero lo dice la revisione attesa del comando, che il gesto
+  // mostra. La ferma soltanto una Base diventata in sola lettura, con un
+  // errore che il gesto mostra come ogni altro rifiuto.
+  const writeProperty = (mutation: BaseMutation): ReturnType<BaseSurfaceDeps["invokeCommand"]> => {
+    if (readOnly) return Promise.reject(new BaseReadOnly());
+    return deps.invokeCommand(mutation.command, mutation.args);
+  };
+  // Un gesto che non ha scritto lo dice dove si vede: nella Base aperta a modo
+  // suo (`onScreen`), a Base chiusa con un avviso.
+  const unwritten = (message: string, onScreen: () => void): void => {
+    if (destroyed) notify(message, "guasto");
+    else onScreen();
+  };
   const editCell = async (row: BaseRow, column: string, value: string | null): Promise<void> => {
-    if (readOnly || !plan || readOnlyColumn(column)) return;
+    if (!plan || readOnlyColumn(column)) return;
     const expected = expectedProperty(row, column);
     const view = plan.view;
-    const epoch = writeEpoch;
     const definition = source;
-    // Una scrittura già chiesta va a fondo anche se la Base si chiude nel
-    // frattempo: `destroyed` salta solo ciò che si disegna, mai la scrittura.
-    const stale = (): boolean => readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
-      if (stale()) return;
-      for (const mutation of mutations) {
-        if (stale()) return;
-        await deps.invokeCommand(mutation.command, mutation.args);
-      }
+      for (const mutation of mutations) await writeProperty(mutation);
       if (!destroyed) await reload(true);
     } catch (failure) {
-      // Chiusa la Base non c'è dove mostrarlo: l'avviso dice quale modifica non è passata.
-      if (destroyed) { notify(t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) }), "guasto"); return; }
+      const message = t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) });
       // No optimistic overwrite. The original observation stays on screen and
       // the next explicit reload will fetch the conflicting authoritative note.
-      if (isErrorKind(failure, "conflict")) {
+      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      else if (isErrorKind(failure, "conflict")) {
         draw();
         status.textContent = errorText(failure);
       } else presentError(failure);
@@ -1486,16 +1502,22 @@ export function mountBaseSurface(
             remember(next);
             localLanes.get(view)?.delete(name);
             saveLanes(view);
+            // Le schede e il file di quando la colonna è stata rinominata:
+            // ognuna si scrive col valore che si vedeva (`writeProperty`).
+            const members = rows.filter((row) => cellText(row.values[key]) === name);
+            const definition = source;
             void (async () => {
               try {
                 await persistQueue;
-                for (const member of rows.filter((row) => cellText(row.values[key]) === name)) {
-                  const [mutation] = await prepareBaseMutations(deps, source, view, [{ doc: member.doc, key, expected: expectedProperty(member, key), value: JSON.stringify(next) }]);
-                  if (destroyed || readOnly || !mutation) return;
-                  await deps.invokeCommand(mutation.command, mutation.args);
+                for (const member of members) {
+                  const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: member.doc, key, expected: expectedProperty(member, key), value: JSON.stringify(next) }]);
+                  for (const mutation of mutations) await writeProperty(mutation);
                 }
-                await reload(true);
-              } catch (failure) { if (!destroyed) { status.textContent = errorText(failure); void reload(true); } }
+                if (!destroyed) await reload(true);
+              } catch (failure) {
+                const message = t("base.lane.rename_failed", { name, next, reason: errorText(failure) });
+                unwritten(message, () => { notice = message; status.textContent = message; void reload(true); });
+              }
             })();
           };
           input.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
@@ -1725,7 +1747,7 @@ export function mountBaseSurface(
   // offre l'annulla del vault.
   const moveNote = async (row: BaseRow, day: IsoDay): Promise<void> => {
     const key = plan?.dateKey;
-    if (!plan || !key || readOnly || moving || destroyed) return;
+    if (!plan || !key || moving || destroyed) return;
     const value = movedDateValue(row.properties[key], day);
     if (value === null) return;
     const view = plan.view;
@@ -1735,20 +1757,24 @@ export function mountBaseSurface(
     notice = null;
     draw();
     try {
-      const [mutation] = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
-      if (destroyed || readOnly || !mutation || source !== definition || plan?.view !== view) return;
-      const outcome = await deps.invokeCommand(mutation.command, mutation.args);
-      if (destroyed) return;
+      const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
+      let outcome: Awaited<ReturnType<typeof writeProperty>> | undefined;
+      for (const mutation of mutations) outcome = await writeProperty(mutation);
+      // L'avviso è della shell: lo spostamento e il suo annulla si dicono
+      // anche a Base chiusa.
       const undo = outcome?.undo;
       notify(t("base.calendar.moved", { note: name, date: dateFormat(day) }), "info", undo
         ? { label: t("app.undo"), hint: typeof undo.label === "string" ? undo.label : undefined, run: () => void undoNoteMove() }
         : undefined);
     } catch (failure) {
-      if (destroyed) return;
       // Niente è stato scritto: la nota resta dov'era, e il calendario la
-      // rilegge com'è ora.
-      notice = isErrorKind(failure, "conflict") ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
-      if (calendar && row.day) calendar.focus = row.day;
+      // rilegge com'è ora. A Base chiusa non c'è un calendario che la
+      // mostri: l'avviso dice il motivo.
+      const message = isErrorKind(failure, "conflict") && !destroyed ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
+      unwritten(message, () => {
+        notice = message;
+        if (calendar && row.day) calendar.focus = row.day;
+      });
     } finally {
       moving = false;
       if (!destroyed) await reload(false);
@@ -1794,7 +1820,7 @@ export function mountBaseSurface(
   // seconda non passa, la prima si disfa: la barra non resta a metà. Una
   // sola «Annulla» disfa tutte e due.
   const moveSpan = async (row: TimelineRow, dates: { start?: IsoDay; end?: IsoDay }): Promise<void> => {
-    if (!plan || readOnly || moving || destroyed) return;
+    if (!plan || moving || destroyed) return;
     const keys = { start: plan.startKey, end: plan.endKey };
     const edits: { doc: string; key: string; expected: BaseExpected; value: string }[] = [];
     for (const edge of ["start", "end"] as const) {
@@ -1827,25 +1853,23 @@ export function mountBaseSurface(
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, edits);
       for (const mutation of mutations) {
-        if (destroyed || readOnly || source !== definition || plan?.view !== view) break;
-        const outcome = await deps.invokeCommand(mutation.command, mutation.args);
+        const outcome = await writeProperty(mutation);
         written++;
         if (!outcome?.undo) undoable = false;
         else if (typeof outcome.undo.label === "string") hint ??= outcome.undo.label;
       }
-      if (destroyed || written === 0) return;
-      // La vista è cambiata fra le due scritture: la barra non resta a metà.
-      if (written < mutations.length) { await undoNoteMove(written, true); return; }
+      // L'avviso è della shell: lo spostamento e il suo annulla si dicono
+      // anche a Base chiusa.
       const count = written;
       notify(said, "info", undoable
         ? { label: t("app.undo"), hint, run: () => void undoNoteMove(count) }
         : undefined);
     } catch (failure) {
-      if (destroyed) return;
-      // Ciò che è già scritto si disfa, perché la barra non resti a metà;
-      // poi la linea del tempo rilegge la nota com'è.
+      // Ciò che è già scritto si disfa, anche a Base chiusa, perché la barra
+      // non resti a metà; poi la linea del tempo rilegge la nota com'è.
       if (written > 0) await undoNoteMove(written, true);
-      notice = isErrorKind(failure, "conflict") ? t("base.timeline.conflict", { note: name }) : t("base.timeline.failed", { note: name, reason: errorText(failure) });
+      const message = isErrorKind(failure, "conflict") && !destroyed ? t("base.timeline.conflict", { note: name }) : t("base.timeline.failed", { note: name, reason: errorText(failure) });
+      unwritten(message, () => { notice = message; });
     } finally {
       moving = false;
       if (!destroyed) await reload(false);
@@ -1984,7 +2008,6 @@ export function mountBaseSurface(
   // generation/AbortController discard stale in-flight derivations.
   let refreshQueued = false;
   const memberChanged = () => {
-    writeEpoch++;
     if (destroyed || !source || refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(() => {
@@ -2119,7 +2142,7 @@ export function mountBaseSurface(
     cellSelection,
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
-      if (next) { writeEpoch++; toolbar.closePopover(); }
+      if (next) toolbar.closePopover();
       readOnly = next;
       root.dataset.readOnly = String(next);
       pushModel();

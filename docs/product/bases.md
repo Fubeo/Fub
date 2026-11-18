@@ -413,7 +413,8 @@ l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
 com'è, e la ricerca, il CSV e le copie usano il valore. Le colonne `file.*`,
 `container.*` e le formule sono di sola lettura: la loro cella è testo. In fondo alle righe
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
-Chiusa la Base, una modifica di cella passa comunque; se la nota non la accetta, un avviso dice di quale nota.
+Una modifica chiesta (cella, colonna della bacheca rinominata, nota spostata nel calendario o nella linea del tempo) passa anche se intanto il vault cambia o la Base si chiude.
+Se la nota è cambiata o la Base è passata in sola lettura non passa, e lo dice la riga di stato o, a Base chiusa, un avviso.
 
 Ogni valore sta su una riga sola e le colonne prendono la misura del loro
 contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando
