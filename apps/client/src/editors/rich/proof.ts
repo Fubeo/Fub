@@ -29,7 +29,7 @@ import {
   type ProseSegment,
 } from "../core/proof";
 import { t } from "../../i18n/strings";
-import { errorKindPhrase } from "../../host/errors";
+import { errorText } from "../../host/errors";
 import { showContextMenu, type MenuItem } from "../../ui/menu";
 import { richSchema } from "./schema";
 
@@ -253,7 +253,7 @@ function menuItems(
           (message) => {
             if (message) options.notify?.(message);
           },
-          (error: unknown) => options.notify?.(errorKindPhrase(error)),
+          (error: unknown) => options.notify?.(t("proof.add_word_failed", { word: hit.text, reason: errorText(error, "specie") })),
         );
       },
     });

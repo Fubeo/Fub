@@ -186,6 +186,17 @@ pub struct Rejected {
     pub id: DocId,
     /// Cosa ha risposto il disco, o il parser.
     pub why: PluginError,
+    /// [`Gate::FormatParse`] quando a dire di no è stato il provider del
+    /// formato (un parse fallito, una sorgente che non è la sua), `None`
+    /// quando il file non si è nemmeno letto.
+    ///
+    /// È la porta che il guasto porta con sé verso chi lo mostra: il messaggio
+    /// di un [`FormatError`] è la prosa del codec, in inglese e per chi
+    /// sviluppa, e chi disegna lo sostituisce con la sua frase («questo
+    /// documento non si apre») solo se sa che il guasto è entrato da lì
+    /// (IMP-117). Il provider era davvero in mezzo, che è il criterio con cui
+    /// [`Event::Trouble`] dice una porta.
+    pub gate: Option<Gate>,
 }
 
 /// L'esito di un'apertura: cosa **non** ha letto (§15.7).
@@ -226,11 +237,13 @@ impl Opening {
         self.discarded.is_empty() && !self.interrupted
     }
 
-    fn discards(&mut self, id: DocId, why: impl Into<PluginError>) {
+    fn discards(&mut self, id: DocId, why: KernelError) {
         self.index.insert(id.clone());
+        let gate = matches!(why, KernelError::Format(_)).then_some(Gate::FormatParse);
         self.discarded.push(Rejected {
             id,
             why: why.into(),
+            gate,
         });
     }
 }
@@ -6403,7 +6416,7 @@ impl Workspace {
                     Severity::Failure,
                     Some(discard.id.clone()),
                     discard.why.clone(),
-                    None,
+                    discard.gate,
                 );
             }
             ws.emit_event(Event::IndexUpdated);
@@ -8543,8 +8556,12 @@ impl Workspace {
         tracing::warn!(target: "fub.kernel", "sincronizzazione di {abs}: {and}");
         let subject = self.docs.vault.doc_id_for_path(abs).ok();
         let reason = PluginError::Internal(format!("sincronizzazione di {abs}: {and}").into());
+        // Un documento che il provider non legge più dice la porta del formato,
+        // come allo scarto dell'apertura: il messaggio è la prosa del codec, e
+        // chi lo mostra lo sostituisce con la sua frase (IMP-117).
+        let gate = matches!(and, KernelError::Format(_)).then_some(Gate::FormatParse);
         self.as_actor(Actor::Watcher, |ws| {
-            ws.report_trouble(Severity::Warning, subject, reason, None);
+            ws.report_trouble(Severity::Warning, subject, reason, gate);
             ws.dispatch_pending();
         });
     }

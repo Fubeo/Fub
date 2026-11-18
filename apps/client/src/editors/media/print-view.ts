@@ -7,6 +7,7 @@ import { openLifetime } from "../../ui/lifetime";
 import { adoptSheet } from "../../ui/stylesheets";
 import { writeClipboardText } from "../../platform/clipboard";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 export interface PrintOptions {
   title: string;
@@ -225,8 +226,6 @@ export async function copyRenderedText(text: string): Promise<void> {
   try {
     await writeClipboardText(text);
   } catch (error) {
-    throw new Error(
-      `cannot copy ${text.length} characters: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new Error(t("errors.print.copy_failed", { reason: errorText(error, "specie") }));
   }
 }

@@ -20,6 +20,7 @@ import type { EditorSurface } from "../editors/core/registry";
 import type { PeekLink } from "../editors/text/profiles/markdown/link-gesture";
 import type { Span } from "../host/contract";
 import { t } from "../i18n/strings";
+import { errorText } from "../host/errors";
 import { animate } from "../moto";
 import { pageName } from "../rules/mirrored";
 import { icon } from "../ui/icons";
@@ -405,7 +406,7 @@ export function createNotePeek(deps: NotePeekDeps): NotePeek {
       // testata è soltanto da leggere.
       doc = await deps.create(link.page, open.target.from);
     } catch (error) {
-      deps.failed?.(t("peek.create_failed", { name: open.page, reason: error instanceof Error ? error.message : String(error) }));
+      deps.failed?.(t("peek.create_failed", { name: open.page, reason: errorText(error, "specie") }));
     } finally {
       open.busy = false;
     }
@@ -436,7 +437,7 @@ export function createNotePeek(deps: NotePeekDeps): NotePeek {
     try {
       found = await deps.resolve(target);
     } catch (error) {
-      if (mine === generation) deps.failed?.(t("peek.failed", { name: page, reason: error instanceof Error ? error.message : String(error) }));
+      if (mine === generation) deps.failed?.(t("peek.failed", { name: page, reason: errorText(error, "specie") }));
       return;
     }
     if (mine !== generation) return;
@@ -501,7 +502,7 @@ export function createNotePeek(deps: NotePeekDeps): NotePeek {
       await (where === "here" ? deps.openHere(doc, at) : deps.openBeside(doc, at));
     } catch (error) {
       open.busy = false;
-      deps.failed?.(t("peek.failed", { name: pageName(doc), reason: error instanceof Error ? error.message : String(error) }));
+      deps.failed?.(t("peek.failed", { name: pageName(doc), reason: errorText(error, "specie") }));
       return;
     }
     teardown(open, false);

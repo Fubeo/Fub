@@ -194,7 +194,7 @@ export interface Outcome {
 /// sono il ripiego di un formato che non esiste più — non il ramo che decide.
 function describeOutcome(error: unknown): string {
   const plugin = asPluginError(error);
-  if (plugin) return plugin.message.trim() !== "" ? plugin.message : errorText({ kind: plugin.kind, message: null });
+  if (plugin) return plugin.message.trim() !== "" ? plugin.message : errorText(plugin, "specie");
   if (typeof error === "string") return error;
   // Un errore del contratto con una chiave che nessuno ha risolto (IMP-130:
   // «bad_args» al posto del motivo): la frase della sua specie, nella lingua

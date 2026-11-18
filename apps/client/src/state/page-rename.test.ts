@@ -136,7 +136,8 @@ describe("la sottopagina dalla testata", () => {
     expect(await newSubpage("Viaggio.md", "Tappe")).toContain("document.unsaved_blocks");
     world.pending = [];
     world.subpageFails = "esiste già";
-    expect(await newSubpage("Viaggio.md", "Tappe")).toContain("esiste già");
+    // Che cosa non è riuscito, poi il perché del vault.
+    expect(await newSubpage("Viaggio.md", "Tappe")).toBe("explorer.subpage_failed Tappe | esiste già");
     expect(world.notices).toEqual([]);
   });
 });

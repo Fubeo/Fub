@@ -247,7 +247,7 @@ describe("la testata della pagina", () => {
     expect(notify).toHaveBeenCalledWith("C'è già", "guasto");
   });
 
-  it("una sottopagina che l'host rifiuta con un errore tipizzato dice la specie, mai «[object Object]»", async () => {
+  it("una sottopagina che l'host rifiuta con un errore tipizzato dice che cosa e la specie, mai «[object Object]»", async () => {
     const notify = vi.fn();
     const refused = { kind: "already_exists", message: "Tappe.md esiste già nel vault" };
     const view = mount("Testo", { subpage: async () => { throw refused; }, notify, folderPage: () => true });
@@ -257,7 +257,7 @@ describe("la testata della pagina", () => {
     key(field, "Enter");
     await settle();
     expect(view.state.doc.toString()).toBe("Testo");
-    expect(notify).toHaveBeenCalledWith("esiste già qualcosa con lo stesso nome", "guasto");
+    expect(notify).toHaveBeenCalledWith("Non ho potuto creare la sottopagina «Tappe»: esiste già qualcosa con lo stesso nome", "guasto");
   });
 });
 

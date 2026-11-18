@@ -223,14 +223,32 @@ l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
 non una frase. L'errore di un indice esterno lo risolve il kernel col
 catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
-Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
-specie (`error.kind.*`), mai «[object Object]». Una riga che dice che cosa non
-è riuscito (un documento che non si apre, un pannello che non si ridisegna, una
-ricerca) usa `errorKindPhrase`: la specie e non il messaggio, perché il messaggio
-di un `FormatError` uscito come `internal` è prosa in inglese del codec, finché
-il kernel non la traduce. Un errore nuovo destinato
-all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
-letterali per crate e ne impedisce la crescita.
+Un errore nuovo destinato all'utente usa una chiave del catalogo invece di un
+letterale. Il guard `check-error-literals.mjs` conta i letterali per crate e ne
+impedisce la crescita.
+
+### Un errore davanti a chi usa Fub
+
+Nel client la regola è una, in `host/errors.ts`: una riga d'errore dice
+**che cosa** non è riuscito e **perché** («Non ho potuto creare la sottopagina
+«Tappe»: esiste già qualcosa con lo stesso nome»).
+
+- **Il soggetto lo dà chi chiama**, con una sua chiave del catalogo col
+  segnaposto `{reason}`; un avviso col solo motivo non si manda.
+- **Il motivo lo dà `errorText(e, motivo)`**: `"messaggio"` (il default) per
+  comandi, view e servizi dei componenti, già tradotti dal kernel, e per i
+  nostri `Error`; `"specie"` per le primitive dell'host su un documento
+  (aprire, creare, rinominare, leggere modelli o tipi, ridisegnare, cercare) e
+  per il motore della webview (appunti, `import()`). Sceglie chi chiama, non
+  la specie: un `conflict` è un id da una primitiva, una frase da un comando.
+- Un messaggio non stringa (chiave non risolta) o un oggetto qualsiasi danno
+  la frase della specie, mai «[object Object]» né JSON. Ciò che va **solo nel
+  registro** tiene il messaggio intero e non passa di qui.
+
+Un documento che il provider di formato rifiuta (all'apertura o quando cambia
+sul disco) esce come `trouble` con `gate: "format_parse"`: la notifica dice
+che non si apre, col suo nome, senza la prosa del codec; la barra di stato
+dice lo stesso, una volta, e non parla di parole da contare.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 

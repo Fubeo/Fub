@@ -621,7 +621,11 @@ pub enum Event {
         error: PluginError,
         /// **Da quale porta** è entrato il guasto (§17.3, decisione 0161): la
         /// porta del panico da cui il kernel stava chiamando codice di un
-        /// provider quando qualcosa è andato storto.
+        /// provider quando qualcosa è andato storto. Lo porta anche il rifiuto
+        /// ordinario di un provider di formato a un documento dell'apertura
+        /// (un parse fallito: [`Gate::FormatParse`]), perché anche lì il
+        /// provider era in mezzo e chi mostra il guasto sa così che il
+        /// messaggio è la prosa del codec, non una frase per chi legge.
         ///
         /// `None` per i guasti che non passano da una porta — un flush fallito,
         /// il watcher che smette: non c'è un componente di terzi in mezzo, e

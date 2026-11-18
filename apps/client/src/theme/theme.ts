@@ -2,7 +2,7 @@
 import { api } from "../host/ipc";
 import { settings } from "../host/query";
 import type { SettingEntry, ThemeFolderCheck, ThemeInfo, ThemeLink, ThemePayload } from "../host/contract";
-import { asPluginError, errorText } from "../host/errors";
+import { errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
 import { settingTouches } from "../state/setting-change";
 import { emit, on } from "../state/store";
@@ -327,14 +327,10 @@ function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLeve
   };
 }
 
+// Il motivo per il rapporto del tema: lo dice `errorText`, anche per un
+// oggetto qualunque (la frase della specie, mai il suo JSON).
 function errorDetail(error: unknown): string {
-  if (error instanceof Error || asPluginError(error)) return errorText(error);
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
+  return errorText(error);
 }
 
 function reportLoadFailure(id: string, detail: string): void {

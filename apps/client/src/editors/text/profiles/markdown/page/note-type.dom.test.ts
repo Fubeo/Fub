@@ -142,6 +142,17 @@ describe("il tipo nella testata", () => {
     expect(readOnly.dom.querySelector(".cm-fub-page-type-notice button")).toBeNull();
   });
 
+  it("i tipi che non si leggono lo dicono con il soggetto, non con la sola specie", async () => {
+    const notify = vi.fn();
+    const view = mount("---\ntipo: \"[[Tipi/Romanzo]]\"\n---\nTesto", {}, {
+      listTypes: () => Promise.reject({ kind: "internal", message: "parse failed: yaml codec" }),
+      notify,
+    });
+    view.dom.querySelector<HTMLButtonElement>(".cm-fub-page-type-notice button")!.click();
+    await settle();
+    expect(notify).toHaveBeenCalledWith("Non ho potuto leggere i tipi del vault: si è verificato un problema imprevisto", "guasto");
+  });
+
   it("«Scegli il tipo» scrive il link e le proprietà che mancano, senza togliere niente, in un passo d'annullamento", async () => {
     const doc = "---\ntipo: \"[[Tipi/Romanzo]]\"\nautore: Herbert\n---\nTesto";
     const view = mount(doc, {});
