@@ -430,6 +430,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         editor.teardowns.push(stop);
         return stop;
       },
+      select: (sheet, cell) => !editor.destroyed && (editor.surface.activeCell?.select?.(sheet, cell) ?? false),
       surface: () => (editor.destroyed ? null : editor.surface),
       destroy: (options) => destroy(editor, options?.quiet !== true),
     };

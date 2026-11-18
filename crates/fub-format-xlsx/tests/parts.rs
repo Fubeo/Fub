@@ -228,3 +228,29 @@ fn leggere_la_parte_non_cambia_la_sessione_e_i_parametri_sbagliati_si_rifiutano(
         );
     }
 }
+
+/// La scheda che scrive porta la griglia alla prima cella della parte con
+/// `selection.set`: anche su un altro foglio, il giornale resta com'è.
+#[test]
+fn portare_la_selezione_alla_parte_non_scrive_niente() {
+    let (mut provider, session) = open(&workbook());
+    let moved = provider
+        .command(
+            &session.instance,
+            GridCommandRequest {
+                revision: session.revision.clone(),
+                command: GridCommand {
+                    id: "selection.set".into(),
+                    params: r#"{"range":"'Budget'!B2","active":"'Budget'!B2"}"#.into(),
+                    sheet: session.active.clone(),
+                    selection: "A1".into(),
+                    active: "A1".into(),
+                },
+            },
+        )
+        .unwrap();
+    assert_eq!(moved.commit.revision, session.revision);
+    assert!(moved.commit.edit.inserted.is_empty() && moved.commit.edit.deleted.is_empty());
+    assert_eq!(moved.selection.sheet, id(&session, "Budget"));
+    assert_eq!(moved.selection.active, "B2");
+}

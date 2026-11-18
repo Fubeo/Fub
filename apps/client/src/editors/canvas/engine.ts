@@ -155,6 +155,7 @@ import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts
 import { cardTarget } from "./sources";
 import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
+import { cardFormulaBar, type CardFormulaBar } from "../core/cards/formula-bar";
 import { noteHeadingOf } from "../core/cards/kinds/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
@@ -1672,7 +1673,7 @@ export class CanvasEngine {
    * opzioni che lo mostra, aggiornato sul posto a ogni cambio.
    */
   #writingContext: CardEditorContext | null = null;
-  #formulaItem: { readonly cell: HTMLElement; readonly formula: HTMLElement } | null = null;
+  #formulaItem: CardFormulaBar | null = null;
   /** La scheda in cui si sta entrando: la scelta delle vive la accende con le altre. */
   #enteringId: string | null = null;
   /**
@@ -12328,24 +12329,12 @@ export class CanvasEngine {
       const element = document.createElement("div");
       element.className = "canvas-options-item";
       element.dataset.option = "formula";
-      const bar = document.createElement("div");
-      bar.className = "grid-formula-bar";
-      const cell = document.createElement("span");
-      cell.className = "grid-cell-name";
-      const formula = document.createElement("div");
-      formula.className = "grid-formula-editor";
-      const text = document.createElement("span");
-      text.className = "canvas-formula-text";
-      formula.append(text);
-      bar.append(cell, formula);
-      element.append(bar);
-      item = { cell, formula: text };
+      item = cardFormulaBar();
+      element.append(item.element);
       this.#formulaItem = item;
       this.setCardOptions([{ id: "formula", element, priority: 1 }]);
     }
-    item.cell.textContent = context.cell;
-    item.formula.textContent = context.formula;
-    item.formula.title = context.formula;
+    item.show(context);
     // «Apri a lato su B3» segue la cella (T45).
     this.#canvasOptions.sync();
   }

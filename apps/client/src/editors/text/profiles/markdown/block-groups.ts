@@ -165,6 +165,27 @@ export interface BlockGroupHost {
   activateCard?(start: number): boolean;
 }
 
+/// Il gruppo di una scheda di foglio attiva nella nota (T43, prototipo passo
+/// 16): «Foglio», la cella attiva con la sua formula (o niente, finché la
+/// griglia non c'è) e «Apri». Le righe, le colonne, i formati e i grafici
+/// stanno nel foglio aperto.
+export function sheetCardGroup(sheet: {
+  readonly open: () => void;
+  readonly context: { readonly cell: string; readonly formula: string } | null;
+}): SurfaceBlockGroup {
+  return {
+    id: "sheet",
+    label: liveStrings.t("blockgroup.sheet"),
+    context: sheet.context,
+    items: [{
+      id: "markdown.card.open",
+      label: liveStrings.t("blockgroup.card.open"),
+      icon: "fmt-open",
+      run: () => sheet.open(),
+    }],
+  };
+}
+
 /// I nomi dei gruppi, nella lingua dell'interfaccia.
 const LABELS = {
   task: "blockgroup.task",

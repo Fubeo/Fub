@@ -21,6 +21,12 @@
 //   file. Esc o un clic fuori esce; con Esc la scheda resta scelta. Una sola
 //   attiva alla volta, in tutta la nota.
 //
+// La scheda di foglio (T43) mostra la parte che l'embed nomina
+// (`![[Conti.xlsx#Budget!A1:E7]]`: un intervallo, un nome, una tabella, un
+// foglio), alta quanto le sue righe; la cella attiva e la sua formula vanno
+// alla barra di formato (`activeSheet`, il gruppo «Foglio»), e «Scegli di
+// nuovo» riscrive la parte nell'embed (`repartEmbedAt`).
+//
 // Il provider Markdown non cambia: l'embed si legge e si scrive com'è, e il
 // codice dell'ospite arriva con un `import()` alla prima scheda (la shell lo
 // carica con `LiveCardsPort.load`), mai all'apertura dell'app.
@@ -28,6 +34,7 @@ import { Prec, type EditorState, type Extension, type TransactionSpec } from "@c
 import { EditorView, keymap, ViewPlugin, WidgetType, type ViewUpdate } from "@codemirror/view";
 import type {
   CardContext,
+  CardEditorContext,
   CardEditorPort,
   CardEditorState,
   CardKind,
@@ -169,6 +176,9 @@ export interface LiveCardsHost {
   /// Se la nota si scrive adesso (Scrittura, non in sola lettura): altrimenti
   /// le schede si guardano e basta, e nessun gesto cambia la nota.
   editable(): boolean;
+  /// Ciò che `LiveCards.activeSheet` dà è cambiato (T43): la cella attiva,
+  /// la scheda attiva. La superficie lo dice alla barra di formato.
+  sheetChanged?(): void;
 }
 
 /// L'icona della testata per ogni specie: le figure del set.
@@ -265,6 +275,8 @@ export class LiveCard {
   #mode: "live" | "snapshot" = "snapshot";
   #path: string | null = null;
   #kind: CardKind | null = null;
+  /// La cella attiva e la sua formula, mentre la specie scrive (un foglio).
+  #cellContext: CardEditorContext | null = null;
 
   constructor(owner: LiveCards, view: EditorView, embed: LiveCardEmbed) {
     this.#owner = owner;
@@ -419,6 +431,8 @@ export class LiveCard {
     this.#tools.replaceChildren();
     this.#tools.hidden = true;
     delete this.root.dataset.cardWriting;
+    this.#setFit(null);
+    this.#setCellContext(null);
     const body = element("div", "live-card-body");
     this.#body.replaceWith(body);
     this.#body = body;
@@ -441,9 +455,19 @@ export class LiveCard {
       width: body.clientWidth || 640,
       height: body.clientHeight || 360,
     };
+    const editable = this.#owner.host.editable();
     const context: CardContext = {
       path,
       subpath: this.embed.subpath,
+      host: "note",
+      fitHeight: (height) => {
+        if (!life.closed) this.#setFit(height);
+      },
+      ...(editable ? {
+        choosePart: (part: string) => {
+          if (!life.closed) this.#owner.repart(this, part);
+        },
+      } : {}),
       documentId: this.#owner.host.hostDoc(),
       lifetime: life,
       snapshots: kit.snapshots,
@@ -461,7 +485,7 @@ export class LiveCard {
         if (life.closed) return;
         this.#setPart(liveStrings.t("live_card.page", { page: String(page) }));
       },
-      ...(kit.editors && this.#owner.host.editable() ? { editors: kit.editors } : {}),
+      ...(kit.editors && editable ? { editors: kit.editors } : {}),
       writing: (writing) => {
         if (life.closed) return;
         this.#writing(writing);
@@ -499,6 +523,7 @@ export class LiveCard {
   /// La specie scrive nel suo file, o ha smesso: la sua barra, se ne ha una,
   /// sta sotto la testata.
   #writing(writing: CardWriting | null): void {
+    this.#setCellContext(writing?.context ?? null);
     if (writing === null) {
       delete this.root.dataset.cardWriting;
       this.#tools.replaceChildren();
@@ -510,6 +535,30 @@ export class LiveCard {
     if (toolbar && toolbar.parentElement !== this.#tools) this.#tools.replaceChildren(toolbar);
     this.#tools.hidden = !toolbar;
     this.#owner.hintsChanged();
+  }
+
+  /// La cella attiva della specie che scrive: va alla barra di formato.
+  #setCellContext(context: CardEditorContext | null): void {
+    const before = this.#cellContext;
+    if (before?.cell === context?.cell && before?.formula === context?.formula) return;
+    this.#cellContext = context;
+    if (this.#owner.activeCard() === this) this.#owner.sheetChanged();
+  }
+
+  /// La cella attiva e la sua formula, se la specie ne dà una.
+  get cellContext(): CardEditorContext | null {
+    return this.#cellContext;
+  }
+
+  /// L'altezza che la specie chiede per il corpo (T43), o quella di serie.
+  #setFit(height: number | null): void {
+    if (height === null || !Number.isFinite(height) || height <= 0) {
+      delete this.root.dataset.cardFit;
+      this.root.style.removeProperty("--live-card-fit");
+      return;
+    }
+    this.root.dataset.cardFit = "true";
+    this.root.style.setProperty("--live-card-fit", `${Math.round(height)}px`);
   }
 
   #editState(state: CardEditorState | null, reason: string | null): void {
@@ -775,11 +824,14 @@ export class LiveCards {
     life.listen(card.root.ownerDocument, "pointerdown", (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (target && card.root.contains(target)) return;
-      if ((target as Element | null)?.closest?.(".context-menu, .kit-popover, [role=dialog]")) return;
+      // La barra di formato (il gruppo «Foglio», T43) e i suoi menu non
+      // sono «fuori»: agiscono sulla scheda attiva.
+      if ((target as Element | null)?.closest?.(".context-menu, .kit-popover, [role=dialog], .format-bar")) return;
       this.leave(card, { choose: false, focus: false });
     }, { capture: true });
     this.#ensureHints().changed(true);
     this.refreshLive();
+    this.sheetChanged();
     return true;
   }
 
@@ -792,6 +844,7 @@ export class LiveCards {
     this.#activeLife = null;
     card.exit();
     this.#hints?.changed();
+    this.sheetChanged();
     if (options.focus === false || card.destroyed) return;
     const view = EditorView.findFromDOM(card.root);
     if (!view) return;
@@ -865,6 +918,33 @@ export class LiveCards {
     if (!spec) return false;
     view.dispatch(spec);
     return true;
+  }
+
+  /// «Scegli di nuovo» (T43): l'embed nomina la parte `part` dello stesso
+  /// file, con il suo alias. Un passo d'annullamento.
+  repart(card: LiveCard, part: string): boolean {
+    const view = EditorView.findFromDOM(card.root);
+    if (!view || !this.host.editable()) return false;
+    const pos = positionOf(view, card.root);
+    if (pos === null) return false;
+    const spec = repartEmbedAt(view.state, view.state.doc.lineAt(pos).from, part);
+    if (!spec) return false;
+    view.dispatch(spec);
+    return true;
+  }
+
+  /// La scheda di foglio attiva (T43), per il gruppo «Foglio» della barra di
+  /// formato: «Apri» e la cella attiva con la sua formula, se si scrive.
+  activeSheet(): { readonly open: () => void; readonly context: CardEditorContext | null } | null {
+    const card = this.#active;
+    if (!card || card.destroyed || card.kind !== "sheet" || card.state !== "view") return null;
+    return { open: () => card.open(), context: card.cellContext };
+  }
+
+  /// Ciò che `activeSheet` dà è cambiato: lo sa la superficie.
+  sheetChanged(): void {
+    if (this.#destroyed) return;
+    this.host.sheetChanged?.();
   }
 
   /// Chi è viva: le schede con una vista, le più vicine al centro della
@@ -997,6 +1077,25 @@ export function removeEmbedAt(state: EditorState, lineFrom: number): Transaction
     selection: { anchor: from },
     userEvent: "delete.block",
     scrollIntoView: true,
+  };
+}
+
+/// La transazione che fa nominare all'embed della riga `lineFrom` la parte
+/// `part` (`Budget!A1:E7`) dello stesso file, scritto com'era, con l'alias
+/// di prima; `null` se la riga non è un embed o la parte non si scrive in un
+/// collegamento (`#`, `|`, `]]`, `^`, un a capo).
+export function repartEmbedAt(state: EditorState, lineFrom: number, part: string): TransactionSpec | null {
+  const line = state.doc.lineAt(lineFrom);
+  const embed = liveCardEmbed(line.text);
+  const text = part.trim();
+  if (!embed || text === "" || /[#|\]\^\n\r[]/.test(text)) return null;
+  const open = line.text.indexOf("![[");
+  const close = line.text.lastIndexOf("]]");
+  if (open < 0 || close < open) return null;
+  const inner = `${embed.page}#${text}${embed.alias === null ? "" : `|${embed.alias}`}`;
+  return {
+    changes: { from: line.from + open + 3, to: line.from + close, insert: inner },
+    userEvent: "input",
   };
 }
 
