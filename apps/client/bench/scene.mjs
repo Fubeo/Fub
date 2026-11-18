@@ -1564,12 +1564,12 @@ export const SCENE = touchLast(onPage("shell", [
   // Le schede vive nella nota (T41, il prototipo `.scard`, passi 16–18): il
   // PDF e il foglio a riposo, col nome del file in testata; il foglio attivo,
   // col bordo d'accento e «Esc per uscire»; in fondo un file mancante e un
-  // formato che la nota non sa mostrare; la stessa nota a 700 px.
+  // formato che la nota non sa mostrare; la stessa nota nella finestra minima.
   ...[
     ["schede-vive-01-riposo", "Le schede vive a riposo: il contratto in PDF e il foglio dei conti, col nome del file in testata", "top", null],
     ["schede-vive-02-attiva", "Il foglio attivo: bordo d'accento, «Esc per uscire», «Apri» e «A tutta pagina»", "top", "sheet"],
     ["schede-vive-03-mancante", "Un file mancante («Ritrova…», «Togli dalla nota») e un formato che la nota non mostra («Apri»)", "bottom", null],
-    ["schede-vive-04-stretta", "Le schede vive nella finestra a 700 px", "top", null, { width: 700, height: 900 }],
+    ["schede-vive-04-stretta", "Le schede vive nella finestra minima, 800 px", "top", null, NOTE_NARROW],
   ].map(([id, title, scroll, activate, viewport]) => ({
     id,
     title,
