@@ -915,7 +915,7 @@ formiche si fermano alla risposta, allo smontaggio e con «ridotto»;
 `check-listeners` verde.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, 29a838cd1: unito con T7 (griglia/t6-con-t7); Vitest della griglia 484/484, bench:grid 49/49 con G6 e G7, coreografie griglia-* verdi; menu-punto e menu-edge rossi anche su 8f1015a6f senza T6, regressione del gruppo editor 1 in correzione fuori piano)
 
 ## T7 · Il dito
 
