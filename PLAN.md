@@ -2260,7 +2260,7 @@ Fatto quando: `canvas-edit.e2e.test.ts` e i test di N6 passano senza cambiare
 asserzioni; `check-listeners` verde; la guardia c'è.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/canvas-edit.e2e.test.ts src/editors/core src/editors/canvas
-Stato: [~] in corso (coder feat/schede-in-core da integra/editor-2 d2e0db381, 2026-11-18; N6 in main con #302, onda 1 nel pacchetto 1)
+Stato: [~] integrato in `integra/editor-2` (59d31a9a7, merge 080b181e8, 2026-11-18), in attesa del pacchetto 2. Nomi: `editors/core/cards/contract.ts`, `editor-port.ts`, `kinds/` (anche craft). Rischio per T41: le specie importano ancora pezzi della lavagna (excerpt, whole-lines, crop, model, parts).
 
 ## T41 · L'ospite delle schede nella nota
 
