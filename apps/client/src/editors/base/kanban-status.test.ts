@@ -12,7 +12,8 @@ import { choiceLanes } from "./data";
 import { mountBaseSurface } from "./surface";
 import { parsePropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 
-vi.mock("../../ui/notify", () => ({ notify: () => {} }));
+const notified = vi.hoisted(() => [] as { message: string; tone?: string }[]);
+vi.mock("../../ui/notify", () => ({ notify: (message: string, tone?: string) => { notified.push({ message, tone }); } }));
 vi.mock("../../i18n/strings", async (real) => ({ ...await real<typeof import("../../i18n/strings")>(), resolvedLanguage: () => "it" }));
 
 const REGISTRY = {
@@ -241,6 +242,32 @@ describe("la Bacheca su uno Stato", () => {
       add.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
       await vi.waitFor(() => expect(lanes(host).map((lane) => lane.dataset.group)).toEqual(["Da fare", "Rimandata", "In corso", "In attesa", "Fatto", "Rivista"]));
       expect(invokeCommand).toHaveBeenLastCalledWith("property.option.set", { key: "stato", option: "Rimandata", color: "purple", group: "todo" });
+    } finally { done(); }
+  });
+
+  it("una corsia che non si crea a Base chiusa lo dice con un avviso (#484)", async () => {
+    notified.length = 0;
+    const { host, invokeCommand, done } = mount(NOTES);
+    const answer = invokeCommand.getMockImplementation()!;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let announce: () => void = () => {};
+    const reached = new Promise<void>((resolve) => { announce = resolve; });
+    invokeCommand.mockImplementation(async (command: string, args: Record<string, unknown> = {}) => {
+      if (command !== "property.option.set") return answer(command, args);
+      announce();
+      await held;
+      throw { kind: "bad_args", message: "Il registro dei tipi non si legge: le opzioni non si creano." };
+    });
+    try {
+      await ready(host);
+      const add = host.querySelector<HTMLInputElement>(".base-kanban > input")!;
+      add.value = "Rimandata";
+      add.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(notified).toEqual([{ message: "Il registro dei tipi non si legge: le opzioni non si creano.", tone: "guasto" }]));
     } finally { done(); }
   });
 

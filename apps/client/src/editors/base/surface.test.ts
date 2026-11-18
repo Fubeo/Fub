@@ -708,6 +708,55 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     } finally { done(); }
   });
 
+  // Un gesto partito va fino in fondo anche se la Base si chiude mentre il
+  // `.base` si salva (#484): il comando parte con la revisione, e quello che
+  // rifiuta lo dice un avviso.
+  const heldFlush = () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let announce: () => void = () => {};
+    const reached = new Promise<void>((resolve) => { announce = resolve; });
+    const documentWrites: BaseDocumentWrites = { flush: async () => { announce(); await held; return []; }, expect: () => () => {} };
+    return { documentWrites, reached, release };
+  };
+  const addSort = (host: HTMLElement): void => {
+    host.querySelector<HTMLButtonElement>(".base-tool-sort")!.click();
+    const add = popover("base-sort-popover").querySelector<HTMLSelectElement>(".base-sort-add")!;
+    add.value = "stato";
+    add.dispatchEvent(new Event("change"));
+  };
+
+  it("un gesto della barra si scrive anche se la Base si chiude mentre il .base si salva (#484)", async () => {
+    const { documentWrites, reached, release } = heldFlush();
+    const { host, invokeCommand, done } = mount({}, { documentWrites });
+    notified.length = 0;
+    try {
+      await ready(host);
+      addSort(host);
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(lastSet(invokeCommand)).toEqual({ doc: "Opere.base", view: "Tabella", key: "sort", value: JSON.stringify([{ key: "stato", descending: false }]), base: "r1" }));
+      await vi.waitFor(() => expect(notified.map((each) => each.message)).toEqual(["sort scritto"]));
+    } finally { done(); }
+  });
+
+  it("un gesto della barra che il comando rifiuta a Base chiusa lo dice con un avviso (#484)", async () => {
+    const { documentWrites, reached, release } = heldFlush();
+    const { host, invokeCommand, failNext, done } = mount({}, { documentWrites });
+    notified.length = 0;
+    try {
+      await ready(host);
+      addSort(host);
+      await reached;
+      failNext({ kind: "conflict", message: "revisione diversa" });
+      done();
+      release();
+      await vi.waitFor(() => expect(notified).toEqual([{ message: "Niente è stato scritto nel file .base: revisione diversa", tone: "guasto", action: undefined }]));
+      expect(invokeCommand).toHaveBeenCalledWith("base.view.set", expect.objectContaining({ key: "sort", base: "r1" }));
+    } finally { done(); }
+  });
+
   it("il filtro su una data si scrive in ISO; una data sbagliata lo dice e non si applica", async () => {
     const date = (day: number) => ({ kind: "date", value: { year: 2026, month: 11, day, time: null } });
     const rows = [
