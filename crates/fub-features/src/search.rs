@@ -114,7 +114,6 @@ use tantivy::tokenizer::TokenStream;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
 mod scope;
-mod words;
 
 const MAX_SCAN_DOCS: u64 = 2048;
 const MAX_SCAN_BYTES: usize = 8 * 1024 * 1024;
@@ -317,6 +316,7 @@ mod engine;
 mod index;
 mod provider;
 mod schema;
+mod words;
 
 pub use catalog::{catalog, settings};
 use catalog::{
