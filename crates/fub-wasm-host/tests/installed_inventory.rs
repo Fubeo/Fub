@@ -290,7 +290,10 @@ fn write_failure_and_unreadable_inventory_preserve_previous_bytes() {
     let base = store.snapshot().unwrap();
     let before = std::fs::read(inventory(config)).unwrap();
     let lock = config.join("wasm-plugins/.inventory.json.lock");
-    std::fs::remove_file(&lock).unwrap();
+    assert!(
+        !lock.exists(),
+        "il lock dell’inventario si toglie al rilascio"
+    );
     std::fs::create_dir(&lock).unwrap();
     let enable_failure = store.set_enabled(&base, installed.installation, true);
     assert!(
@@ -811,7 +814,10 @@ fn failed_update_publication_leaves_the_previous_release_visible() {
     let before = std::fs::read(inventory(config)).unwrap();
     let before_bytes = std::fs::read(&blobs(config)[0]).unwrap();
     let lock = config.join("wasm-plugins/.inventory.json.lock");
-    std::fs::remove_file(&lock).unwrap();
+    assert!(
+        !lock.exists(),
+        "il lock dell’inventario si toglie al rilascio"
+    );
     std::fs::create_dir(&lock).unwrap();
     let failure = store.update(
         &store.snapshot().unwrap(),

@@ -753,9 +753,15 @@ impl RootedFsStorage {
                 continue;
             }
             let (first, second) = if from_identity < to_identity {
-                ((from, from_lock_path, from_lock), (to, to_lock_path, to_lock))
+                (
+                    (from, from_lock_path, from_lock),
+                    (to, to_lock_path, to_lock),
+                )
             } else {
-                ((to, to_lock_path, to_lock), (from, from_lock_path, from_lock))
+                (
+                    (to, to_lock_path, to_lock),
+                    (from, from_lock_path, from_lock),
+                )
             };
             Self::acquire_lock(first.0, &first.2)?;
             Self::acquire_lock(second.0, &second.2)?;
@@ -1240,7 +1246,10 @@ impl VaultStorage for RootedFsStorage {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(error),
         }
-        let lock = match self.dir.open_with(&relative, OpenOptions::new().write(true)) {
+        let lock = match self
+            .dir
+            .open_with(&relative, OpenOptions::new().write(true))
+        {
             Ok(lock) => lock.into_std(),
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(error),
