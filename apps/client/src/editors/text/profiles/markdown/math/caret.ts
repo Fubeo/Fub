@@ -10,7 +10,8 @@
 // la scrive resta senza fiducia, come nella resa di lettura.
 import type { KatexOptions } from "katex";
 import { readOptions } from "../math";
-import { holesOf, mapFormula, placeAt } from "./points";
+import { emptyCells } from "./edit";
+import { holesOf, mapFormula, placeAt, type Span } from "./points";
 
 /// L'attributo dei segni: `data-fubp`, l'offset del punto nel TeX.
 export const POINT_ATTRIBUTE = "data-fubp";
@@ -18,6 +19,8 @@ export const POINT_ATTRIBUTE = "data-fubp";
 export const HOLE_ATTRIBUTE = "data-fubhole";
 /// Il comando che si sta scrivendo, in una pastiglia finché non è finito.
 export const PENDING_ATTRIBUTE = "data-fubcmd";
+/// Il pezzo scelto (T66), colorato come una selezione.
+export const CHOSEN_ATTRIBUTE = "data-fubsel";
 
 /// Le regole di KaTeX del riquadro di modifica: quelle della lettura, con la
 /// fiducia ai soli segni del cursore. `tex` è la formula, per le macro che
@@ -33,12 +36,20 @@ export function editOptions(display: boolean, tex?: string): KatexOptions {
 
 /// Il TeX col segno in ogni punto buono. `pending`, se c'è, è il comando che
 /// si sta scrivendo (dalla `\` al cursore): si disegna come testo, perché a
-/// metà non si legge.
-export function instrument(tex: string, pending: { from: number; to: number } | null = null): string {
+/// metà non si legge. `chosen`, se c'è, è il pezzo scelto (T66): sta in un
+/// segno suo, `data-fubsel`, che la pelle colora. Le celle vuote di una
+/// matrice sono spazi vuoti, col loro quadretto.
+export function instrument(tex: string, pending: { from: number; to: number } | null = null, chosen: Span | null = null): string {
   const map = mapFormula(tex);
-  const holes = new Set(holesOf(map));
-  type Mark = { at: number; remove: number; insert: string };
+  const holes = new Set([...holesOf(map), ...emptyCells(map)]);
+  // A pari posto, chi va applicato prima finisce più a destra: il segno del
+  // punto all'inizio del pezzo scelto ne resta fuori, come quello alla fine.
+  type Mark = { at: number; remove: number; insert: string; order: number };
   const marks: Mark[] = [];
+  if (chosen && chosen.from < chosen.to) {
+    marks.push({ at: chosen.from, remove: 0, insert: "\\htmlData{fubsel=1}{", order: 2 });
+    marks.push({ at: chosen.to, remove: 0, insert: "}", order: 0 });
+  }
   const points = map.points.map((point) => point.at);
   // A metà di un comando il cursore sta in fondo alla pastiglia, anche dove
   // la lettura dei punti (che vede il comando incollato a ciò che segue) non
@@ -51,15 +62,15 @@ export function instrument(tex: string, pending: { from: number; to: number } | 
     // Un quadretto in matematica; nel testo `\square` non si può, e il
     // quadretto lo disegna la pelle sul segno vuoto.
     const body = hole && placeAt(map, point.at).role !== "text" ? "\\square" : "";
-    marks.push({ at: point.at, remove: 0, insert: `\\htmlData{fubp=${point.at}${hole ? ",fubhole=1" : ""}}{${body}}` });
+    marks.push({ at: point.at, remove: 0, insert: `\\htmlData{fubp=${point.at}${hole ? ",fubhole=1" : ""}}{${body}}`, order: 1 });
   }
   if (pending) {
     const name = tex.slice(pending.from + 1, pending.to);
-    marks.push({ at: pending.from, remove: pending.to - pending.from, insert: `\\htmlData{fubcmd=1}{\\text{\\textbackslash ${name}}}` });
+    marks.push({ at: pending.from, remove: pending.to - pending.from, insert: `\\htmlData{fubcmd=1}{\\text{\\textbackslash ${name}}}`, order: 2 });
   }
   // Dalla fine, così gli offset dei segni prima restano buoni; in uno stesso
   // punto il segno del cursore va prima del comando in sospeso.
-  marks.sort((a, b) => b.at - a.at || b.remove - a.remove);
+  marks.sort((a, b) => b.at - a.at || b.order - a.order);
   let out = tex;
   for (const mark of marks) out = out.slice(0, mark.at) + mark.insert + out.slice(mark.at + mark.remove);
   return out;

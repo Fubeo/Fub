@@ -21,6 +21,7 @@ import {
   stopsOf,
   type Atom,
   type FormulaMap,
+  type Span,
 } from "./points";
 
 /// La formula e il cursore, un offset nel TeX.
@@ -129,10 +130,14 @@ function outOf(map: FormulaMap, caret: number): number | null {
 }
 
 /// Tab va allo spazio vuoto dopo; senza, esce dal pezzo; al primo livello
-/// esce dalla formula. Maiusc Tab torna allo spazio vuoto prima.
+/// esce dalla formula. Maiusc Tab torna allo spazio vuoto prima. In una
+/// matrice (o in un ambiente con le colonne) Tab passa alla cella dopo, dopo
+/// gli spazi vuoti della cella in cui si è (T66).
 export function tab(state: MathState, back: boolean): Outcome {
   const map = mapFormula(state.tex);
-  const holes = holesOf(map);
+  const cell = cellTab(map, state.caret, back);
+  if (cell !== null) return move(cell);
+  const holes = holesIn(map, 0, state.tex.length);
   if (back) {
     const before = holes.filter((at) => at < state.caret);
     const previous = before[before.length - 1];
@@ -367,6 +372,351 @@ export function finishCommand(state: MathState, from: number, renders: (tex: str
     return edit(joined.tex, hole < 0 ? joined.caret : start + hole + 1);
   }
   return null;
+}
+
+// ── Le celle di una matrice (T66) ───────────────────────────────────────────
+//
+// In un ambiente con le colonne (una matrice, `cases`, `aligned`) le celle
+// sono i tratti fra una `&` e l'altra e fra un `\\` e l'altro, contate come le
+// conta `points.ts`. Tab passa alla cella dopo; in una matrice Invio passa
+// alla riga dopo, e dall'ultima ne aggiunge una vuota. Una cella vuota di una
+// matrice è uno spazio vuoto: si disegna col suo quadretto (`caret.ts`).
+
+/// Una cella: il suo tratto nel TeX, riga e colonna da 1.
+export interface Cell {
+  readonly from: number;
+  readonly to: number;
+  readonly row: number;
+  readonly column: number;
+}
+
+/// Gli ambienti fatti a tabella, dove Invio passa alla riga dopo e una cella
+/// vuota ha il suo quadretto. Gli allineamenti (`aligned`, `gathered`) no:
+/// lì Invio va a capo e allinea gli uguali (T65), e la prima cella di una
+/// riga `&= …` è vuota di proposito.
+const TABLE_ENVS = /^(?:[pbBvV]?matrix|smallmatrix|array|darray|subarray|d?cases|d?rcases)\*?$/;
+
+/// Il nome di un ambiente: `pmatrix` per `\begin{pmatrix}…`.
+function envName(tex: string, atom: Atom): string {
+  return /^\\begin\{([a-zA-Z]+\*?)\}/.exec(tex.slice(atom.from, atom.to))?.[1] ?? "";
+}
+
+/// Ciò che divide le celle: una `&`, un `\\` o un `\cr`.
+function isSeparator(map: FormulaMap, atom: Atom): boolean {
+  const text = map.tex.slice(atom.from, atom.to);
+  return (atom.kind === "char" && text === "&") || (atom.kind === "command" && /^\\(?:\\|cr(?![a-zA-Z]))/.test(text));
+}
+
+const sameSpan = (a: Span | undefined, b: Span) => a !== undefined && a.from === b.from && a.to === b.to;
+
+/// Le celle dell'ambiente `env`, in ordine: contano soltanto le `&` e i `\\`
+/// del suo corpo, non quelli di una matrice dentro una cella.
+function cellsOf(map: FormulaMap, env: Atom): Cell[] {
+  const body = env.inner[0];
+  if (!body) return [];
+  const separators = map.atoms
+    .filter((atom) => atom.from >= body.from && atom.to <= body.to && isSeparator(map, atom))
+    .filter((atom) => sameSpan(enclosing(map, atom.from)?.span, body))
+    .sort((a, b) => a.from - b.from);
+  const cells: Cell[] = [];
+  let row = 1;
+  let column = 1;
+  let start = body.from;
+  for (const separator of separators) {
+    cells.push({ from: start, to: separator.from, row, column });
+    if (map.tex[separator.from] === "&") {
+      column++;
+    } else {
+      row++;
+      column = 1;
+    }
+    start = separator.to;
+  }
+  cells.push({ from: start, to: body.to, row, column });
+  return cells;
+}
+
+/// L'ambiente più interno che ha `at` nel suo corpo, col suo nome e le sue
+/// celle.
+export function tableAt(map: FormulaMap, at: number): { readonly env: Atom; readonly name: string; readonly cells: readonly Cell[] } | null {
+  let found: Atom | undefined;
+  for (const atom of map.atoms) {
+    const body = atom.inner[0];
+    if (atom.kind !== "env" || !body || at < body.from || at > body.to) continue;
+    if (!found || atom.to - atom.from < found.to - found.from) found = atom;
+  }
+  if (!found) return null;
+  return { env: found, name: envName(map.tex, found), cells: cellsOf(map, found) };
+}
+
+/// La cella in cui sta `at`. Il punto davanti a una `&` è della cella prima.
+function cellIndex(cells: readonly Cell[], at: number): number {
+  return cells.findIndex((cell) => cell.from <= at && at <= cell.to);
+}
+
+/// Gli spazi vuoti di un tratto: i `{}` e le celle vuote.
+function holesIn(map: FormulaMap, from: number, to: number): number[] {
+  return [...new Set([...holesOf(map), ...emptyCells(map)])].filter((at) => at >= from && at <= to).sort((a, b) => a - b);
+}
+
+/// Dove va il cursore entrando in una cella: nel primo spazio vuoto (l'ultimo
+/// tornando indietro), se no in fondo a ciò che c'è scritto.
+function cellStop(map: FormulaMap, cell: Cell, back: boolean): number {
+  const holes = holesIn(map, cell.from, cell.to);
+  const hole = back ? holes[holes.length - 1] : holes[0];
+  if (hole !== undefined) return hole;
+  let end = cell.to;
+  while (end > cell.from && /\s/.test(map.tex[end - 1]!)) end--;
+  return Math.min(snap(map, end), cell.to);
+}
+
+/// Tab in una cella: allo spazio vuoto dopo nella stessa cella, se no alla
+/// cella dopo (Maiusc Tab: prima). `null` fuori da un ambiente, o dall'ultima
+/// cella (dalla prima, all'indietro): lì vale il Tab di sempre, che esce.
+function cellTab(map: FormulaMap, caret: number, back: boolean): number | null {
+  const table = tableAt(map, caret);
+  if (!table) return null;
+  const index = cellIndex(table.cells, caret);
+  const cell = table.cells[index];
+  if (!cell) return null;
+  const holes = holesIn(map, cell.from, cell.to).filter((at) => (back ? at < caret : at > caret));
+  const hole = back ? holes[holes.length - 1] : holes[0];
+  if (hole !== undefined) return hole;
+  const next = table.cells[index + (back ? -1 : 1)];
+  return next ? cellStop(map, next, back) : null;
+}
+
+/// Invio in una matrice: la cella sotto, nella stessa colonna (o l'ultima di
+/// una riga più corta); dall'ultima riga, una riga nuova con tante celle
+/// vuote quante le colonne, e il cursore nella prima. `null` fuori da una
+/// tabella: Invio fa quello di sempre.
+export function cellEnter(state: MathState): Outcome | null {
+  const map = mapFormula(state.tex);
+  const table = tableAt(map, state.caret);
+  if (!table || !TABLE_ENVS.test(table.name)) return null;
+  const cell = table.cells[cellIndex(table.cells, state.caret)];
+  if (!cell) return null;
+  const below = table.cells.filter((other) => other.row === cell.row + 1);
+  if (below.length > 0) {
+    const target = below.find((other) => other.column === cell.column) ?? below[below.length - 1]!;
+    return move(cellStop(map, target, false));
+  }
+  const columns = Math.max(...table.cells.map((other) => other.column));
+  const body = table.env.inner[0]!;
+  let at = body.to;
+  while (at > body.from && /\s/.test(state.tex[at - 1]!)) at--;
+  const head = " \\\\ ";
+  const row = `${head}${"& ".repeat(columns - 1)}`;
+  const tex = state.tex.slice(0, at) + row + state.tex.slice(body.to);
+  return edit(tex, at + head.length);
+}
+
+/// Le celle vuote delle matrici: il punto di ognuna, che si disegna come un
+/// quadretto e dove Tab si ferma.
+export function emptyCells(map: FormulaMap): number[] {
+  const out: number[] = [];
+  for (const atom of map.atoms) {
+    if (atom.kind !== "env" || !TABLE_ENVS.test(envName(map.tex, atom))) continue;
+    for (const cell of cellsOf(map, atom)) {
+      if (map.tex.slice(cell.from, cell.to).trim() !== "") continue;
+      const at = snap(map, cell.from);
+      if (at <= cell.to) out.push(at);
+    }
+  }
+  return out.sort((a, b) => a - b);
+}
+
+// ── Scegliere un pezzo (T66) ────────────────────────────────────────────────
+//
+// Maiusc con le frecce, o il trascinamento, sceglie pezzi interi di uno stesso
+// tratto: una scelta che comincia a metà di una frazione si allarga alla
+// frazione, un esponente non si sceglie senza ciò che lo porta, e una scelta
+// che passa da una cella all'altra prende la matrice intera. Così ciò che si
+// sceglie si copia, si toglie o va sotto una radice, in una frazione, in un
+// esponente, e la formula resta sempre buona.
+
+const blankAtom = (map: FormulaMap, atom: Atom) => atom.kind === "char" && /^\s+$/.test(map.tex.slice(atom.from, atom.to));
+
+/// Il tratto più interno che contiene `from` e `to`, o la formula intera.
+function commonSpan(map: FormulaMap, from: number, to: number): Span {
+  let found: Span = { from: 0, to: map.tex.length };
+  for (const atom of map.atoms) {
+    for (const span of atom.inner) {
+      if (span.from <= from && to <= span.to && span.to - span.from < found.to - found.from) found = span;
+    }
+  }
+  return found;
+}
+
+/// Il pezzo più esterno, dentro `span`, che ha `at` strettamente dentro.
+function pieceAround(map: FormulaMap, span: Span, at: number): Atom | undefined {
+  let found: Atom | undefined;
+  for (const atom of map.atoms) {
+    if (atom.from < span.from || atom.to > span.to || !(atom.from < at && at < atom.to)) continue;
+    if (!found || atom.from < found.from) found = atom;
+  }
+  return found;
+}
+
+/// Il pezzo più lungo che comincia in `at` dentro `span`.
+function pieceFrom(map: FormulaMap, span: Span, at: number): Atom | undefined {
+  let found: Atom | undefined;
+  for (const atom of map.atoms) {
+    if (atom.from !== at || atom.to <= at || atom.to > span.to) continue;
+    if (!found || atom.to > found.to) found = atom;
+  }
+  return found;
+}
+
+/// Il pezzo più lungo che finisce in `at` dentro `span`, saltando gli spazi.
+function pieceBefore(map: FormulaMap, span: Span, at: number): Atom | undefined {
+  const atom = atomBefore(map, at);
+  return atom && atom.from >= span.from ? atom : undefined;
+}
+
+/// Il pezzo scelto fra `anchor` e `head`, allargato a pezzi interi di uno
+/// stesso tratto, senza spazi ai capi; `null` se è vuoto.
+export function choosePiece(tex: string, anchor: number, head: number): Span | null {
+  const map = mapFormula(tex);
+  let from = Math.min(anchor, head);
+  let to = Math.max(anchor, head);
+  if (from === to) return null;
+  // Ogni giro può solo allargare la scelta: finisce in pochi passi.
+  for (let round = 0; round < 64; round++) {
+    const span = commonSpan(map, from, to);
+    let nextFrom = pieceAround(map, span, from)?.from ?? from;
+    let nextTo = pieceAround(map, span, to)?.to ?? to;
+    // Un esponente o un pedice va con ciò che lo porta, e viceversa.
+    while (pieceFrom(map, span, nextFrom)?.kind === "script") {
+      const base = pieceBefore(map, span, nextFrom);
+      if (!base) break;
+      nextFrom = base.from;
+    }
+    for (;;) {
+      let after = pieceFrom(map, span, nextTo);
+      let at = nextTo;
+      while (after && blankAtom(map, after)) {
+        at = after.to;
+        after = pieceFrom(map, span, at);
+      }
+      if (after?.kind !== "script") break;
+      nextTo = after.to;
+    }
+    // Una `&`, un `\\` o un `\middle` presi senza il loro ambiente
+    // romperebbero la forma: si prende il pezzo che li contiene (la matrice,
+    // la coppia di parentesi).
+    const owner = map.atoms.find((atom) => (atom.kind === "env" || atom.kind === "delimited") && sameSpan(atom.inner[0], span));
+    const broken = owner !== undefined && map.atoms.some((atom) => atom.from >= nextFrom && atom.to <= nextTo
+      && sameSpan(enclosing(map, atom.from)?.span, span)
+      && (owner.kind === "env" ? isSeparator(map, atom) : /^\\middle(?![a-zA-Z])/.test(tex.slice(atom.from, atom.to))));
+    if (owner && broken) {
+      nextFrom = owner.from;
+      nextTo = owner.to;
+    }
+    if (nextFrom === from && nextTo === to) break;
+    from = nextFrom;
+    to = nextTo;
+  }
+  while (from < to && /\s/.test(tex[from]!)) from++;
+  while (to > from && /\s/.test(tex[to - 1]!)) to--;
+  return from < to ? { from, to } : null;
+}
+
+/// Maiusc ← e →: la punta della scelta salta un pezzo intero del suo tratto;
+/// in fondo al tratto prende il pezzo che lo contiene. `null` ai capi della
+/// formula.
+export function stepPiece(tex: string, head: number, dir: -1 | 1): number | null {
+  const map = mapFormula(tex);
+  const span = commonSpan(map, head, head);
+  /// Il pezzo dopo `at`, saltando gli spazi.
+  const next = (at: number) => {
+    let atom = pieceFrom(map, span, at);
+    while (atom && blankAtom(map, atom)) atom = pieceFrom(map, span, atom.to);
+    return atom;
+  };
+  // Un pezzo con i suoi esponenti e pedici è un passo solo.
+  if (dir > 0) {
+    let atom = next(head);
+    if (atom) {
+      let end = atom.to;
+      for (atom = next(end); atom?.kind === "script"; atom = next(end)) end = atom.to;
+      return end;
+    }
+  } else {
+    let atom = pieceBefore(map, span, head);
+    if (atom) {
+      while (atom.kind === "script") {
+        const base = pieceBefore(map, span, atom.from);
+        if (!base) break;
+        atom = base;
+      }
+      return atom.from;
+    }
+  }
+  const around = enclosing(map, head);
+  if (!around) return null;
+  return dir > 0 ? around.atom.to : around.atom.from;
+}
+
+/// Il LaTeX del pezzo scelto, da copiare.
+export function pieceText(tex: string, piece: Span): string {
+  return tex.slice(piece.from, piece.to).trim();
+}
+
+/// Toglie il pezzo scelto (Backspace, Canc, Ctrl X, un tasto che lo
+/// sostituisce): il cursore va dov'era il pezzo.
+export function removePiece(tex: string, piece: Span): Outcome {
+  return cut(tex, piece.from, piece.to);
+}
+
+/// Mette il pezzo scelto dentro un modello del catalogo: sotto la radice, nel
+/// numeratore, nell'esponente (`^{}` lo appende a ciò che lo precede), in un
+/// testo, fra due parentesi, nella prima cella di una matrice. Dove il
+/// modello non ha un posto per lui (gli estremi di una sommatoria), o dove il
+/// pezzo non ci sta (una potenza dentro un testo), il modello va davanti e il
+/// pezzo resta dopo; un simbolo senza spazi vuoti lo sostituisce. Il cursore
+/// va nello spazio vuoto dopo il pezzo, se c'è, se no dopo il modello.
+export function wrapPiece(
+  tex: string,
+  piece: Span,
+  template: string,
+  renders: (tex: string) => boolean,
+  options: TypeOptions = {},
+): Outcome {
+  const inner = tex.slice(piece.from, piece.to);
+  const before = tex.slice(0, piece.from);
+  const after = tex.slice(piece.to);
+  const body = options.inTable ? template.replace(/\|/g, "\\vert ") : template;
+  const mark = body.indexOf("§");
+  const clean = body.replace("§", "");
+  const hole = clean.indexOf("{}");
+  const target = mark >= 0 ? mark : hole >= 0 ? hole + 1 : -1;
+  if (target < 0) return insertSymbol({ tex: before + after, caret: piece.from }, template, piece.from, renders, options);
+  const shape = enclosing(mapFormula(clean), target);
+  if (shape && (shape.atom.kind !== "script" || shape.atom.from === 0)) {
+    const filled = clean.slice(0, target) + inner + clean.slice(target);
+    const candidates = /^[\^_]/.test(clean) ? [filled, `{}${filled}`] : [filled];
+    for (const candidate of candidates) {
+      const joined = join(before, candidate, after);
+      if (!renders(joined.tex)) continue;
+      const start = before.length + joined.lead;
+      const filledEnd = start + (candidate.length - filled.length) + target + inner.length;
+      const next = holesOf(mapFormula(joined.tex)).find((at) => at >= filledEnd && at <= start + candidate.length);
+      return edit(joined.tex, next ?? joined.caret);
+    }
+  }
+  // Il modello davanti, il pezzo dopo: il cursore nel primo spazio vuoto.
+  const joined = join(before, clean, inner + after);
+  if (!renders(joined.tex)) return NONE;
+  return edit(joined.tex, before.length + joined.lead + target);
+}
+
+/// Una coppia di parentesi attorno al pezzo scelto: `(` scrive `(…)`, e il
+/// cursore va dopo la chiusa.
+export function wrapPair(tex: string, piece: Span, open: "(" | "["): Outcome {
+  const close = open === "(" ? ")" : "]";
+  const joined = join(tex.slice(0, piece.from), `${open}${tex.slice(piece.from, piece.to)}${close}`, tex.slice(piece.to));
+  return edit(joined.tex, joined.caret);
 }
 
 // ── La scrittura veloce (T63) ───────────────────────────────────────────────

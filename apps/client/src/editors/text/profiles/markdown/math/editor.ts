@@ -35,7 +35,7 @@ import type { MathState, Outcome, QuickUndo, QuickWrite } from "./edit";
 import { alignEnter } from "./align";
 import { diagnose, explain, type MathFix } from "./errors";
 import { unwrapFormula } from "./paste";
-import { holesOf, mapFormula, placeAt, snap, type Place } from "./points";
+import { holesOf, mapFormula, placeAt, snap, type Place, type Span } from "./points";
 import { commandName, propose, proposalsAddNothing, SYMBOLS, symbolName, type MathSymbol } from "./symbols";
 
 /// Perché il cursore lascia la formula.
@@ -84,6 +84,10 @@ export interface MathEditorOptions {
 export type MathMode = "visual" | "source" | "latex";
 
 const HISTORY_LIMIT = 200;
+
+/// I tasti che da soli non scrivono e non muovono: arrivano prima del tasto
+/// che accompagnano (T66).
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta", "OS", "CapsLock", "Fn", "Hyper", "Super"]);
 /// Quanto si aspetta, dopo l'ultimo tasto, prima di dire che cosa non va:
 /// mentre si scrive niente lampeggia (E27).
 export const PROBLEM_DELAY = 450;
@@ -140,6 +144,13 @@ export class MathEditor {
   private readonly undoStack: MathState[] = [];
   private readonly redoStack: MathState[] = [];
   private said = "";
+  /// La scelta (T66): dove è cominciata e dove arriva la punta; `piece` sono
+  /// i pezzi interi che prende (`choosePiece`), `null` senza scelta.
+  private pick: { readonly anchor: number; readonly head: number } | null = null;
+  private piece: Span | null = null;
+  /// Il puntatore premuto sulla formula: il mouse trascinando sceglie, il
+  /// dito porta il cursore con sé.
+  private drag: { readonly id: number; readonly touch: boolean; readonly anchor: number } | null = null;
 
   constructor(private readonly options: MathEditorOptions) {
     this.life = openLifetime();
@@ -300,7 +311,11 @@ export class MathEditor {
       return true;
     }
     this.dropPending();
-    const outcome = rules.insertSymbol(this.state, symbol.template, this.state.caret, (tex) => this.reads(tex), { inTable: this.options.inTable });
+    // Un pezzo scelto va dentro il pezzo nuovo: sotto la radice, nel
+    // numeratore, nell'esponente (T66).
+    const outcome = this.piece
+      ? rules.wrapPiece(this.state.tex, this.piece, symbol.template, (tex) => this.reads(tex), { inTable: this.options.inTable })
+      : rules.insertSymbol(this.state, symbol.template, this.state.caret, (tex) => this.reads(tex), { inTable: this.options.inTable });
     if (outcome.kind === "none") return false;
     this.apply(outcome);
     // Il posto si ridice: «numeratore, spazio vuoto».
@@ -322,6 +337,11 @@ export class MathEditor {
     const t = liveStrings.t.bind(liveStrings);
     const mode = this.mode;
     this.element.dataset.mode = mode;
+    // Al tocco il dito sulla formula porta il cursore, in ogni direzione (fra
+    // numeratore e denominatore si va anche in su e in giù): la nota non
+    // scorre sotto di lui. Sta nel codice perché è un comportamento, non un
+    // aspetto, e la pelle non ha `touch-action` (T66).
+    this.surface.style.touchAction = mode === "visual" ? "none" : "";
     this.syncNote();
     if (mode === "visual") {
       this.input.className = "cm-fub-mx-input";
@@ -405,7 +425,15 @@ export class MathEditor {
     try {
       if (this.mode === "visual") {
         const pending = this.pending === null ? null : { from: this.pending, to: this.state.caret };
-        library.render(instrument(tex, pending), staging, editOptions(this.options.display, tex));
+        try {
+          library.render(instrument(tex, pending, this.piece), staging, editOptions(this.options.display, tex));
+        } catch (error) {
+          // Un pezzo scelto che KaTeX non sa chiudere in un gruppo (un `\\`
+          // al primo livello): la formula si disegna senza il suo colore.
+          if (!this.piece) throw error;
+          staging.replaceChildren();
+          library.render(instrument(tex, pending), staging, editOptions(this.options.display, tex));
+        }
       } else {
         // Nel campo del LaTeX soltanto gli spazi vuoti hanno il loro segno.
         library.render(instrumentHoles(tex, rules.sourceHoles(tex)), staging, editOptions(this.options.display, tex));
@@ -461,7 +489,24 @@ export class MathEditor {
   private showCaret(): void {
     for (const lit of this.surface.querySelectorAll(`.${CARET_CLASS}`)) lit.classList.remove(CARET_CLASS);
     if (this.mode === "latex") return;
-    markerElement(this.surface, this.state.caret)?.classList.add(CARET_CLASS);
+    // Con un pezzo scelto il cursore non si vede: si vede il pezzo.
+    if (this.piece && this.mode === "visual") return;
+    const marker = markerElement(this.surface, this.state.caret);
+    marker?.classList.add(CARET_CLASS);
+    if (marker && this.mode === "visual") this.keepInView(marker);
+  }
+
+  /// Una formula più larga del riquadro scorre: il cursore resta in vista
+  /// (le frecce, il dito che lo porta oltre il bordo). Si muove soltanto il
+  /// riquadro, mai la nota.
+  private keepInView(marker: HTMLElement): void {
+    const surface = this.surface;
+    if (surface.scrollWidth <= surface.clientWidth) return;
+    const box = surface.getBoundingClientRect();
+    const x = marker.getBoundingClientRect().left;
+    const margin = 24;
+    if (x < box.left + margin) surface.scrollLeft -= box.left + margin - x;
+    else if (x > box.right - margin) surface.scrollLeft += x - (box.right - margin);
   }
 
   // ── Gli errori in chiaro (T64) ─────────────────────────────────────────────
@@ -572,12 +617,86 @@ export class MathEditor {
   // ── Lo stato ───────────────────────────────────────────────────────────────
 
   private moveTo(caret: number): void {
+    this.dropPick();
     this.state = { tex: this.state.tex, caret };
     this.showCaret();
     this.announce();
   }
 
+  // ── Il pezzo scelto (T66) ──────────────────────────────────────────────────
+
+  /// Sceglie i pezzi interi fra `anchor` e `head`; il cursore sta dalla parte
+  /// della punta. Una scelta vuota torna il cursore in `head`.
+  private pickPieces(anchor: number, head: number): void {
+    const { tex } = this.state;
+    const piece = rules.choosePiece(tex, anchor, head);
+    if (!piece) {
+      this.moveTo(snap(mapFormula(tex), head));
+      return;
+    }
+    const same = this.piece !== null && this.piece.from === piece.from && this.piece.to === piece.to;
+    this.pick = { anchor, head };
+    this.piece = piece;
+    this.state = { tex, caret: snap(mapFormula(tex), head >= anchor ? piece.to : piece.from) };
+    if (same) return;
+    this.element.dataset.chosen = "true";
+    this.schedule();
+    this.say(liveStrings.t("live.math.chosen"));
+  }
+
+  /// Toglie la scelta, senza toccare il TeX.
+  private dropPick(): void {
+    if (!this.pick) return;
+    this.pick = null;
+    this.piece = null;
+    delete this.element.dataset.chosen;
+    this.said = "";
+    this.schedule();
+  }
+
+  /// Il clic o il tocco in `x`, `y`: il cursore nel punto più vicino, o con
+  /// `extend` la scelta fin lì. Torna il punto, o `null` se non ce n'è.
+  private pointAt(x: number, y: number, extend: boolean): number | null {
+    this.finishPending(true);
+    const at = nearestPoint(markersIn(this.surface), x, y);
+    if (at === null) return null;
+    if (extend) this.pickPieces(this.pick?.anchor ?? this.state.caret, at);
+    else this.moveTo(at);
+    return at;
+  }
+
+  /// Lascia la scelta e mette il cursore al suo inizio o alla sua fine.
+  private collapse(side: -1 | 1): void {
+    const piece = this.piece;
+    if (!piece) return;
+    this.moveTo(snap(mapFormula(this.state.tex), side < 0 ? piece.from : piece.to));
+  }
+
+  /// Un cambiamento sul pezzo scelto: entra se la formula si legge ancora.
+  private applyToPiece(outcome: Outcome): boolean {
+    if (outcome.kind !== "edit" || !this.reads(outcome.state.tex)) return false;
+    this.commit(outcome.state);
+    return true;
+  }
+
+  /// Copia il LaTeX del pezzo scelto; con `cut` lo toglie anche.
+  private copyPiece(data: DataTransfer | null, cut: boolean): boolean {
+    const piece = this.piece;
+    if (!piece || !data) return false;
+    data.setData("text/plain", rules.pieceText(this.state.tex, piece));
+    if (cut) this.applyToPiece(rules.removePiece(this.state.tex, piece));
+    else this.say(liveStrings.t("live.math.copied"));
+    return true;
+  }
+
   private commit(next: MathState, record = true): void {
+    if (this.pick) {
+      this.pick = null;
+      this.piece = null;
+      delete this.element.dataset.chosen;
+      this.said = "";
+      if (next.tex === this.state.tex) this.schedule();
+    }
     if (record && next.tex !== this.state.tex) {
       this.undoStack.push(this.state);
       if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
@@ -631,7 +750,7 @@ export class MathEditor {
       if (caret === points[0]?.at) text = liveStrings.t("live.math.place.start");
       else if (caret === points[points.length - 1]?.at) text = liveStrings.t("live.math.place.end");
     }
-    if (holesOf(map).includes(caret)) text = liveStrings.t("live.math.place.hole", { place: text });
+    if (holesOf(map).includes(caret) || rules.emptyCells(map).includes(caret)) text = liveStrings.t("live.math.place.hole", { place: text });
     if (text === this.said) return;
     this.said = text;
     this.status.textContent = text;
@@ -903,6 +1022,9 @@ export class MathEditor {
     on(this.input, "compositionend", (event) => {
       if (this.mode !== "visual") return;
       this.input.value = "";
+      // Il testo dell'IME prende il posto del pezzo scelto (T66).
+      const piece = this.piece;
+      if (piece && event.data && !this.applyToPiece(rules.removePiece(this.state.tex, piece))) return;
       // L'IME scrive il suo testo com'è: niente scrittura veloce.
       for (const ch of event.data ?? "") this.type(ch, false);
     });
@@ -932,8 +1054,30 @@ export class MathEditor {
       event.preventDefault();
       this.quickUndo = null;
       this.finishPending();
-      this.apply(rules.insertText(this.state, unwrapped ? unwrapped.tex : text));
+      const pasted = unwrapped ? unwrapped.tex : text;
+      const piece = this.piece;
+      if (piece) {
+        // Ciò che si incolla prende il posto del pezzo scelto, in un passo
+        // solo dell'annulla; se non entra, il pezzo resta.
+        const removed = rules.removePiece(this.state.tex, piece);
+        const outcome = removed.kind === "edit" ? rules.insertText(removed.state, pasted) : removed;
+        this.applyToPiece(outcome);
+        return;
+      }
+      this.apply(rules.insertText(this.state, pasted));
     });
+    // Ctrl C e Ctrl X col pezzo scelto (T66): il suo LaTeX, senza dollari,
+    // che si incolla in un'altra formula.
+    for (const type of ["copy", "cut"] as const) {
+      on(this.input, type, (event) => {
+        if (this.mode !== "visual") return;
+        this.input.value = "";
+        if (!this.piece) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.copyPiece(event.clipboardData, type === "cut");
+      });
+    }
     on(this.list, "mousedown", (event) => {
       // Il fuoco resta nel campo: il clic mette il simbolo.
       event.preventDefault();
@@ -960,11 +1104,45 @@ export class MathEditor {
         }
         return;
       }
-      this.finishPending(true);
-      const at = nearestPoint(markersIn(this.surface), event.clientX, event.clientY);
-      if (at !== null) this.moveTo(at);
+      // Col mouse il cursore l'ha già portato `pointerdown`, che sta
+      // trascinando; il tocco arriva qui dopo il dito alzato, nello stesso
+      // punto.
+      if (this.drag === null) this.pointAt(event.clientX, event.clientY, event.shiftKey);
       this.focus();
     });
+    // Il puntatore sulla formula che si tocca (T66). Il mouse: il clic porta
+    // il cursore, Maiusc clic e il trascinamento scelgono pezzi interi. Il
+    // dito: il tocco porta il cursore, e trascinando il cursore lo segue;
+    // niente scelta e niente che compaia al passaggio.
+    on(this.surface, "pointerdown", (event) => {
+      if (this.mode !== "visual" || !event.isPrimary || event.button !== 0) return;
+      const touch = event.pointerType === "touch";
+      this.quickUndo = null;
+      const anchor = this.pointAt(event.clientX, event.clientY, event.shiftKey && !touch);
+      if (anchor === null) return;
+      this.drag = { id: event.pointerId, touch, anchor: this.pick?.anchor ?? anchor };
+      this.surface.setPointerCapture?.(event.pointerId);
+    });
+    on(this.surface, "pointermove", (event) => {
+      const drag = this.drag;
+      if (!drag || event.pointerId !== drag.id || this.mode !== "visual") return;
+      const at = nearestPoint(markersIn(this.surface), event.clientX, event.clientY);
+      if (at === null) return;
+      if (drag.touch) {
+        if (at !== this.state.caret || this.pick) this.moveTo(at);
+      } else if (at === drag.anchor) {
+        if (this.pick) this.moveTo(at);
+      } else {
+        this.pickPieces(drag.anchor, at);
+      }
+    });
+    const release = (event: PointerEvent) => {
+      if (this.drag?.id !== event.pointerId) return;
+      this.drag = null;
+      if (this.surface.hasPointerCapture?.(event.pointerId)) this.surface.releasePointerCapture(event.pointerId);
+    };
+    on(this.surface, "pointerup", release);
+    on(this.surface, "pointercancel", release);
     on(this.row, "mousedown", (event) => {
       // I pulsanti della fila non rubano il fuoco al campo.
       if (event.target !== this.input) event.preventDefault();
@@ -1031,8 +1209,13 @@ export class MathEditor {
   }
 
   private keydown(event: KeyboardEvent): void {
+    // Un tasto modificatore da solo (Maiusc premuto prima di ←) non fa niente:
+    // né lascia la scelta né chiude la scrittura veloce.
+    if (MODIFIER_KEYS.has(event.key)) return;
     const undo = this.quickUndo;
     this.quickUndo = null;
+    // Il LaTeX messo nel campo per Ctrl C (T66) non resta.
+    if (this.input.value) this.input.value = "";
     if (this.optionsKey(event)) return;
     const mod = event.ctrlKey || event.metaKey;
     const handled = () => {
@@ -1047,15 +1230,44 @@ export class MathEditor {
       } else if (key === "y") {
         handled();
         this.history("redo");
-      } else if (key === "a" || key === "enter") {
+      } else if (key === "a") {
+        // Tutta la formula, come un pezzo solo.
         handled();
-        if (key === "enter") this.leave("enter");
+        this.finishPending(true);
+        const stops = mapFormula(this.state.tex).points;
+        if (stops.length > 1) this.pickPieces(stops[0]!.at, stops[stops.length - 1]!.at);
+      } else if (key === "enter") {
+        handled();
+        this.leave("enter");
+      } else if ((key === "c" || key === "x") && this.piece && !event.shiftKey) {
+        // La copia la fa il sistema, sul campo che prende i tasti: ci va il
+        // LaTeX del pezzo, e `copy` (o `cut`) lo scrive negli appunti.
+        event.stopPropagation();
+        this.input.value = rules.pieceText(this.state.tex, this.piece);
+        this.input.select();
       }
       // Le altre scorciatoie (salva, cerca) restano dell'app.
       return;
     }
     if (event.altKey) return;
     if (!this.list.hidden && this.proposalKey(event.key)) {
+      handled();
+      return;
+    }
+    if (event.shiftKey && /^(?:ArrowLeft|ArrowRight|Home|End)$/.test(event.key)) {
+      // Maiusc con le frecce sceglie un pezzo intero alla volta (T66).
+      handled();
+      this.finishPending(true);
+      const anchor = this.pick?.anchor ?? this.state.caret;
+      const head = this.pick?.head ?? this.state.caret;
+      const stops = mapFormula(this.state.tex).points;
+      const next = event.key === "Home" ? stops[0]?.at ?? null
+        : event.key === "End" ? stops[stops.length - 1]?.at ?? null
+          : rules.stepPiece(this.state.tex, head, event.key === "ArrowLeft" ? -1 : 1);
+      if (next !== null) this.pickPieces(anchor, next);
+      return;
+    }
+    if (this.piece && this.pieceKey(event.key)) {
       handled();
       return;
     }
@@ -1094,12 +1306,19 @@ export class MathEditor {
         if (this.finishPending() !== "none") return;
         this.apply(rules.tab(this.state, event.shiftKey));
         return;
-      case "Enter":
+      case "Enter": {
         handled();
         if (this.finishPending() !== "none") return;
+        // In una matrice Invio passa alla riga dopo (T66).
+        const cell = rules.cellEnter(this.state);
+        if (cell && (cell.kind !== "edit" || this.reads(cell.state.tex))) {
+          this.apply(cell);
+          return;
+        }
         if (this.options.display && this.alignRow()) return;
         this.leave("enter");
         return;
+      }
       case "Escape":
         handled();
         if (this.pending !== null) {
@@ -1159,6 +1378,53 @@ export class MathEditor {
           this.type(event.key);
         }
     }
+  }
+
+  /// Un tasto col pezzo scelto (T66). Le frecce lasciano la scelta da quel
+  /// lato, Esc e lo spazio la lasciano e basta; Backspace e Canc tolgono il
+  /// pezzo; `/`, `^`, `_` e le parentesi lo mettono in una frazione, in un
+  /// esponente, in un pedice, fra parentesi; un altro segno lo sostituisce.
+  /// `false` per i tasti che, lasciata la scelta, fanno quello di sempre.
+  private pieceKey(key: string): boolean {
+    const piece = this.piece!;
+    const { tex } = this.state;
+    const renders = (next: string) => this.reads(next);
+    const options = { inTable: this.options.inTable };
+    switch (key) {
+      case "ArrowLeft":
+      case "ArrowRight":
+        this.collapse(key === "ArrowLeft" ? -1 : 1);
+        return true;
+      case "Escape":
+      case " ":
+        this.collapse(1);
+        return true;
+      case "Backspace":
+      case "Delete":
+        this.applyToPiece(rules.removePiece(tex, piece));
+        return true;
+      case "Tab":
+      case "Enter":
+        this.collapse(1);
+        return false;
+      default:
+        break;
+    }
+    if (key.length !== 1) {
+      this.dropPick();
+      return false;
+    }
+    const wrapped = key === "/" ? rules.wrapPiece(tex, piece, "\\frac{}{}", renders, options)
+      : key === "^" || key === "_" ? rules.wrapPiece(tex, piece, `${key}{}`, renders, options)
+        : key === "(" || key === "[" ? rules.wrapPair(tex, piece, key)
+          : null;
+    if (wrapped && this.applyToPiece(wrapped)) return true;
+    // Il segno prende il posto del pezzo, in un passo solo dell'annulla.
+    const depth = this.undoStack.length;
+    if (!this.applyToPiece(rules.removePiece(tex, piece))) return true;
+    this.type(key);
+    if (this.undoStack.length === depth + 2) this.undoStack.splice(depth + 1, 1);
+    return true;
   }
 
   /// Invio nella formula a blocco che si tocca: una riga nuova, allineata

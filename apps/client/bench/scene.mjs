@@ -1463,6 +1463,10 @@ export const SCENE = touchLast(onPage("shell", [
     // copie e il posto; Invio nel blocco va a capo e allinea gli uguali.
     ["formula-19-menu", "formula-toccata", "Il tasto destro su una formula: Modifica, «Copia come» in riga e «Da riga a blocco»", "menu"],
     ["formula-20-allinea", "formula-toccata", "Invio in un blocco $$: un aligned con gli uguali allineati e la riga nuova", "align"],
+    // Scegliere un pezzo e le matrici (T66): Maiusc ← sceglie pezzi interi,
+    // colorati; in una matrice Tab va alla cella dopo, Invio alla riga dopo.
+    ["formula-21-scelta", "formula-toccata", "Maiusc ← nel blocco $$: la radice, il + e x² scelti come pezzi interi", "choose"],
+    ["formula-22-matrice", "formula-toccata", "Una matrice dalla tavolozza: Tab e Invio fra le celle, e dall'ultima riga una riga nuova", "matrix"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -2431,6 +2435,16 @@ export const SCENE = touchLast(onPage("shell", [
       viewport: PHONE,
       prepare: (page) => touchFormula(page, "palette"),
     },
+    // Al tocco (T66): il dito porta il cursore nella formula, la tavolozza
+    // sta sotto e dice «Tocca», nessun velo di passaggio.
+    {
+      id: "mobile-formula-tocco",
+      title: "Al tocco: il dito porta il cursore sotto la radice, la tavolozza sotto la formula",
+      query: "live=formula-toccata",
+      viewport: PHONE,
+      touch: true,
+      prepare: (page) => touchFormula(page, "touch"),
+    },
     // La testata della pagina (T6) sul telefono: la copertina bassa, le
     // colonne delle proprietà strette.
     {
@@ -3053,6 +3067,88 @@ async function touchFormula(page, gesture) {
     if (!/\\begin\{aligned\}[\s\S]*&=\s*y\s*\\end\{aligned\}/.test(doc)) throw new Error(`Invio nel blocco non allinea: ${doc}`);
     await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
     await page.mouse.move(0, 0);
+    return;
+  }
+  if (gesture === "choose" || gesture === "matrix" || gesture === "touch") {
+    // Scegliere un pezzo, le matrici, il tocco (T66), nel blocco $$.
+    const cdp = gesture === "touch" ? await touchOn(page) : null;
+    if (cdp && (await page.evaluate(() => matchMedia("(hover: hover)").matches))) throw new Error("il tocco emulato non ha tolto il passaggio");
+    await openLive(page, [], "top");
+    const centre = async (selector, fy = 0.5, fx = 0.5) => {
+      const box = await page.locator(selector).first().boundingBox();
+      if (!box) throw new Error(`la formula non ha ${selector}`);
+      return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+    };
+    if (cdp) {
+      // Un tocco sulla formula la apre; il dito, poi, porta il cursore dal
+      // numeratore fin sotto la radice, senza scegliere niente.
+      const tap = async (point) => {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      };
+      await tap(await centre(".cm-content .math-block .mfrac", 0.2));
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+      const from = await centre(".cm-fub-mx-block .mfrac", 0.2);
+      const to = await centre(".cm-fub-mx-block .sqrt", 0.5, 0.7);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+      for (let step = 1; step <= 8; step++) {
+        const point = { x: from.x + ((to.x - from.x) * step) / 8, y: from.y + ((to.y - from.y) * step) / 8 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      if ((await said()) !== "sotto la radice") throw new Error(`il dito non porta il cursore sotto la radice: ${await said()}`);
+      if (await page.locator(".cm-fub-mx-block [data-fubsel]").count()) throw new Error("il dito ha scelto un pezzo");
+      // La tavolozza sotto la formula, con l'invito al tocco.
+      await page.waitForSelector(".cm-fub-mx-block .cm-fub-mx-palette .cm-fub-mx-quick .cm-fub-mx-tile .katex");
+      const tip = await page.locator(".cm-fub-mx-block .cm-fub-mx-tip").textContent();
+      if (tip !== "Tocca un simbolo per metterlo nella formula") throw new Error(`l'invito della tavolozza non è quello del tocco: ${tip}`);
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      return;
+    }
+    const box = await page.locator(".cm-content .math-block").first().boundingBox();
+    if (!box) throw new Error("manca il blocco $$");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    await page.keyboard.press("End");
+    if (gesture === "choose") {
+      // Maiusc ← tre volte: la radice, il +, poi x con il suo esponente.
+      for (let i = 0; i < 3; i++) await page.keyboard.press("Shift+ArrowLeft");
+      const picked = await page.waitForSelector(".cm-fub-mx-block [data-fubsel] .sqrt", { timeout: 5000 }).then(() => true, () => false);
+      if (!picked) {
+        const seen = await page.evaluate(() => {
+          const mx = document.querySelector(".cm-fub-mx-block");
+          return `scelta=${mx?.dataset.chosen} segni=${mx?.querySelectorAll("[data-fubsel]").length} detto=${mx?.querySelector("[role=status]")?.textContent} fuoco=${document.activeElement?.className}`;
+        });
+        throw new Error(`Maiusc ← non sceglie la radice: ${seen}`);
+      }
+      await page.waitForSelector(".cm-fub-mx-block [data-fubsel] .msupsub");
+      if (await page.locator(".cm-fub-mx-block [data-fubsel] .mfrac").count()) throw new Error("la scelta ha preso anche la frazione");
+      if ((await said()) !== "pezzo scelto") throw new Error(`la scelta non si dice: ${await said()}`);
+    } else {
+      // Una matrice dalla tavolozza: Tab passa alla cella dopo, Invio alla
+      // riga dopo e, dall'ultima, ne aggiunge una.
+      await page.keyboard.type("+");
+      await page.click(".cm-fub-mx-block .cm-fub-mx-all");
+      await page.click(".cm-fub-mx-block .cm-fub-mx-find-input");
+      await page.keyboard.type("matrice");
+      await page.click('.cm-fub-mx-block .cm-fub-mx-grid .cm-fub-mx-tile[aria-label="Matrice 2 per 2"]');
+      await page.waitForSelector(`.cm-fub-mx-block ${ready} [data-fubhole]`);
+      await page.keyboard.type("1");
+      await page.keyboard.press("Tab");
+      await page.keyboard.type("0");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("1");
+      await page.keyboard.press("Enter");
+      if ((await said()) !== "riga 3, colonna 1, spazio vuoto") throw new Error(`Invio dall'ultima riga non porta alla riga nuova: ${await said()}`);
+      const doc = await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        return findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement).state.doc.toString();
+      });
+      if (!/\\begin\{pmatrix\}\s*1\s*&\s*0\s*\\\\\s*&\s*1\s*\\\\\s*&\s*\\end\{pmatrix\}/.test(doc)) throw new Error(`la matrice non è quella attesa: ${doc}`);
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    }
+    await page.mouse.move(0, 0);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
     return;
   }
   if (gesture.startsWith("source")) {

@@ -55,6 +55,24 @@ describe("i segni", () => {
     expect(marked).toContain("\\square");
   });
 
+  it("il pezzo scelto sta in un segno suo, coi segni dei suoi capi fuori (T66)", () => {
+    // 0 a 1 + 2 \frac{ 8 b 9 }{ 11 c 12 } 13
+    const marked = instrument("a+\\frac{b}{c}", null, { from: 2, to: 13 });
+    expect(marked).toContain("\\htmlData{fubp=2}{}\\htmlData{fubsel=1}{\\frac{");
+    expect(marked).toContain("}}\\htmlData{fubp=13}{}");
+    // Senza scelta, nessun segno della scelta.
+    expect(instrument("a+\\frac{b}{c}")).not.toContain("fubsel");
+  });
+
+  it("una cella vuota di una matrice è uno spazio vuoto, quella di un allineamento no (T66)", () => {
+    const matrix = "\\begin{pmatrix} a &  \\end{pmatrix}";
+    const marked = instrument(matrix);
+    expect(marked).toContain(`\\htmlData{fubp=${matrix.indexOf("\\end")},fubhole=1}{\\square}`);
+    expect(marked).not.toContain(`fubp=${matrix.indexOf("&")},fubhole`);
+    // Le righe `&= …` di un aligned cominciano con una cella vuota apposta.
+    expect(instrument("\\begin{aligned} &= x \\end{aligned}")).not.toContain("fubhole");
+  });
+
   it("le coordinate del modello sono punti buoni della formula", () => {
     const stops = new Set(stopsOf(mapFormula(tex)));
     for (const marker of markers) expect(stops.has(marker.at), String(marker.at)).toBe(true);
