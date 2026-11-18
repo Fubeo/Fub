@@ -58,6 +58,34 @@ sequenceDiagram
     Q->>UI: evento serializzato
 ```
 
+### Di quale vault è un evento
+
+L'host tiene una sessione per vault aperto, con il suo bus e il suo ponte verso
+l'uscita (`bridge::spawn`); l'uscita verso la shell è una. Il ponte conosce la
+radice della sua sessione e la passa a `EventSink::emit` con ogni notice;
+l'app la manda alla shell nel campo `vault`
+([contratto IPC](../reference/ipc-contract.md#eventi)).
+
+La shell mostra un vault alla volta. Cambiando vault, `vault-session.ts`:
+
+1. scrive ciò che è in sospeso nel vault che lascia, prima e dopo
+   `open_vault` del nuovo (ogni sessione scrive nel vault in cui è nata);
+2. chiude le sessioni dei documenti del vault lasciato;
+3. segna il vault come **lasciato** (`leaveVault` in `state/kernel.ts`):
+   da qui il router scarta i suoi eventi;
+4. chiude il vault lasciato nell'host (`close_vault`): watcher, job, indici e
+   lock di scrittura. La demo è l'eccezione: lascia aperto il vault di prima,
+   a cui `close_demo` torna;
+5. rende corrente il vault nuovo.
+
+Rientrare in un vault (tornare ad A, chiudere la demo) lo toglie dai lasciati
+**prima** di chiedere `open_vault`, perché i primi fatti dell'apertura (il job
+dell'indice) partono prima della risposta. `vault_opened` e `vault_closed`
+passano sempre: nominano la loro radice, e chi segue un lavoro di un vault che
+se ne va (un import, un controllo) li aspetta. Chi li ascolta confronta
+`root` con il vault a cui tiene. Un evento senza `vault` è della macchina e
+arriva sempre.
+
 ### Lotto e piano su più documenti
 
 Il lotto (`Workspace::batch`, decisione 0011) raggruppa ciò che si dice a chi

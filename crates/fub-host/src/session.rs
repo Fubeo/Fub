@@ -438,9 +438,33 @@ pub trait EventSink: Send + Sync + 'static {
     /// esiste. Chi tiene il conto è il ponte, che è uno solo
     /// (`bridge::consegna`); chi implementa questo trait deve solo **non
     /// mentire**.
+    ///
+    /// **`vault` dice di quale vault è il fatto** (#216): la radice canonica
+    /// della sessione il cui ponte lo consegna, la stessa stringa di
+    /// `VaultInfo::root`. `None` è un fatto che non appartiene a un vault (una
+    /// chiave della macchina). L'host tiene una sessione per vault aperto, ma
+    /// il canale verso chi guarda è uno: senza questo un `document_changed
+    /// "Nota.md"` di un vault lasciato aperto arriverebbe identico a uno del
+    /// vault che la shell mostra. L'uscita deve portarlo fino a chi riceve
+    /// ([`ShellNotice`]); chi riceve decide cosa è suo.
     #[must_use = "un'uscita che non dice se ha consegnato è una perdita silenziosa: \
                   chi riceve resta indietro e nessuno gli dice di riconciliare"]
-    fn emit(&self, notice: &Notice) -> Delivery;
+    fn emit(&self, notice: &Notice, vault: Option<&str>) -> Delivery;
+}
+
+/// Un notice **come lo riceve una shell**: l'evento, la sua origine e il vault
+/// da cui viene (#216).
+///
+/// È la forma di `fub://event`: i campi di [`Notice`] allo stesso livello, più
+/// `vault` quando il fatto è di un vault. Il campo è additivo — una shell che
+/// non lo legge riceve il notice di sempre — e assente, non `null`, per un
+/// fatto della macchina.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+pub struct ShellNotice<'a> {
+    #[serde(flatten)]
+    pub notice: &'a Notice,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<&'a str>,
 }
 
 /// Cosa è successo a un notice arrivato a un'[uscita](EventSink).
@@ -2164,7 +2188,7 @@ impl Host {
         })?;
 
         if let (Some(sink), Some(live)) = (&self.sink, live) {
-            crate::bridge::spawn(live, sink.clone());
+            crate::bridge::spawn(live, sink.clone(), root.to_string());
         }
 
         // **La seconda fase nasce dopo il subscriber live**, e l'ordine è la
@@ -3580,13 +3604,17 @@ impl Host {
             self.sync_theme_link();
         }
         if let Some(sink) = &self.sink {
-            let delivers = sink.emit(&fub_abi::Notice::new(
-                fub_abi::Event::SettingChanged {
-                    key: key.to_string(),
-                    scope: fub_abi::settings::SettingScope::Machine,
-                },
-                fub_abi::event::Origin::by(fub_abi::event::Actor::User),
-            ));
+            // Una chiave della macchina non è di nessun vault.
+            let delivers = sink.emit(
+                &fub_abi::Notice::new(
+                    fub_abi::Event::SettingChanged {
+                        key: key.to_string(),
+                        scope: fub_abi::settings::SettingScope::Machine,
+                    },
+                    fub_abi::event::Origin::by(fub_abi::event::Actor::User),
+                ),
+                None,
+            );
             if delivers == Delivery::Dropped {
                 tracing::error!(
                     target: "fub.host",
