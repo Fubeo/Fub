@@ -259,10 +259,18 @@ fn le_celle_di_una_tabella_nuova_si_rileggono_con_la_spaziatura_della_griglia() 
     let WcBlock::Table(written) = &*after.body[1] else {
         panic!("non è una tabella")
     };
+    // La tabella nuova ha lo stile «Table Grid», che dà già spazio dopo 0 e
+    // interlinea singola: i paragrafi non le ripetono, come in Word.
+    assert_eq!(written.props.style.as_deref(), Some("TableGrid"));
+    let table_style = after.styles.table_style("TableGrid").unwrap().para;
     for cell in written.rows.iter().flat_map(|row| &row.cells) {
         let props = &cell.blocks[0].as_para().unwrap().props;
-        assert_eq!(props.space_after, Some(0.0));
-        assert_eq!(props.line_spacing, Some(LineSpacing::Multiple(1.0)));
+        assert_eq!((props.space_after, props.line_spacing), (None, None));
+        let shown = after.styles.resolve_para_in(props, Some(&table_style));
+        assert_eq!(
+            (shown.space_after, shown.line_spacing),
+            (0.0, LineSpacing::Multiple(1.0))
+        );
     }
     let reopened = projection(&out);
     let Block::Table(table) = &reopened.blocks[1] else {
@@ -302,4 +310,116 @@ fn le_celle_di_una_tabella_nuova_si_rileggono_con_la_spaziatura_della_griglia() 
             (0.0, LineSpacing::Multiple(1.0))
         );
     }
+}
+
+/// Il documento del corpus con una tabella «Table Grid» fatta come la fa Word
+/// (`examples/genera_corpus.rs`, `stile_tabella`).
+fn table_grid_file() -> Vec<u8> {
+    std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/corpus/docx/stile-tabella.docx"
+    ))
+    .unwrap()
+}
+
+/// Le disposizioni dei paragrafi delle celle di `table`, riga per riga.
+fn cell_layouts(table: &Table) -> Vec<Layout> {
+    cell_paras(table).map(|para| para.p.clone()).collect()
+}
+
+/// In una tabella di Word la spaziatura di un paragrafo segue la cascata di
+/// ECMA-376 §17.7.2: valori predefiniti del documento (8 pt dopo,
+/// interlinea 1,08), poi lo stile della tabella («Table Grid»: 0 dopo,
+/// singola), poi lo stile del paragrafo, poi la formattazione diretta. La
+/// proiezione la porta; fuori dalla tabella i paragrafi restano come sono, e
+/// una tabella senza stile prende quello predefinito, che non ne dà.
+#[test]
+fn le_celle_di_word_hanno_la_spaziatura_dello_stile_della_tabella() {
+    let file = table_grid_file();
+    let p = projection(&file);
+    let Block::Table(table) = &p.blocks[1] else {
+        panic!("il blocco 1 non è la tabella «Table Grid»")
+    };
+    assert_eq!(
+        cell_layouts(table),
+        [
+            cell_layout(),
+            cell_layout(),
+            // «Spaziato» dice spazio dopo e interlinea: batte la tabella.
+            Layout::default(),
+            // La formattazione diretta batte tutti, per ciò che dice.
+            Layout {
+                before: Some(6.0),
+                after: Some(3.0),
+                line: Some(Line::Multiple(1.0)),
+                ..Layout::default()
+            },
+            cell_layout(),
+            // La cella vuota.
+            cell_layout(),
+        ]
+    );
+    let Block::Table(plain) = &p.blocks[3] else {
+        panic!("il blocco 3 non è la tabella senza stile")
+    };
+    assert_eq!(cell_layouts(plain), [Layout::default(), Layout::default()]);
+    for at in [0, 2, 4] {
+        assert_eq!(para_mut(&mut p.clone(), at).p, Layout::default(), "{at}");
+    }
+    // Aprire e salvare senza modifiche non cambia un byte.
+    assert!(matches!(
+        save(Codec::Docx, &file, &p.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
+}
+
+/// Una cella riscritta resta senza spaziatura diretta: lo stile della tabella
+/// non si copia nei paragrafi. Una cella a cui chi scrive dà la spaziatura
+/// del corpo la riceve diretta, perché la tabella le darebbe la sua.
+#[test]
+fn una_cella_riscritta_non_copia_lo_stile_della_tabella() {
+    let file = table_grid_file();
+    let mut p = projection(&file);
+    let Block::Table(table) = &mut p.blocks[1] else {
+        panic!()
+    };
+    let Block::Para(first) = &mut table.rows[0].cells[0].blocks[0] else {
+        panic!()
+    };
+    let Inline::Text { x, .. } = &mut first.c[0] else {
+        panic!()
+    };
+    *x = "Prima cella riscritta".into();
+    let Block::Para(second) = &mut table.rows[0].cells[1].blocks[0] else {
+        panic!()
+    };
+    second.p = Layout::default();
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let WcBlock::Table(written) = &*after.body[1] else {
+        panic!("non è una tabella")
+    };
+    let props = |cell: usize| {
+        &written.rows[0].cells[cell].blocks[0]
+            .as_para()
+            .unwrap()
+            .props
+    };
+    assert_eq!(
+        (props(0).space_after, props(0).line_spacing),
+        (None, None),
+        "lo stile della tabella è finito nel paragrafo"
+    );
+    // Il corpo: gli 8 pt dopo e l'interlinea dei valori predefiniti, scritti.
+    assert_eq!(props(1).space_after, Some(8.0));
+    assert!(props(1).line_spacing.is_some());
+    let reopened = projection(&out);
+    let (Block::Table(now), Block::Table(was)) = (&reopened.blocks[1], &p.blocks[1]) else {
+        panic!()
+    };
+    assert_eq!(cell_layouts(now), cell_layouts(was));
+    assert!(matches!(
+        save(Codec::Docx, &out, &reopened.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
 }

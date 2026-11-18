@@ -45,6 +45,15 @@ esercita = "i segni che Word rigenera a ogni salvataggio (w:rsid*, w:proofErr, w
 atteso = "modificabile"
 
 [[file]]
+path = "docx/stile-tabella.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Word moderno"
+esercita = "una tabella «Table Grid» come la scrive Word (spazio dopo 0 e interlinea singola nello stile della tabella, 8 pt dopo nei valori predefiniti), una cella con uno stile di paragrafo che dice la sua spaziatura, una con la spaziatura diretta, una vuota, e una tabella senza stile: la cascata di ECMA-376 §17.7.2"
+atteso = "modificabile"
+
+[[file]]
 path = "docx/revisioni-senza-perdite.docx"
 origine = "costruito a mano da ECMA-376"
 programma = "examples/genera_corpus.rs"
