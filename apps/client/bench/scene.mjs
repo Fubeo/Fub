@@ -2845,6 +2845,15 @@ export const GESTURE_SCENE = onPage("shell", [
     query: "workbook=large&risposte=si",
     prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
   },
+  // **Le velocità della selezione** (griglia T9): la stessa cartella con
+  // `editor.grid.selection-speed` scelta dal finto (`?velocita=…`). Il mouse
+  // fitto di G3 ci gira con ogni scelta.
+  ...[["quick", "svelta"], ["soft", "morbida"], ["none", "a scatti"]].map(([speed, name]) => ({
+    id: `grid-large-${speed}`,
+    title: `Grid v2: la cartella grande, con la selezione ${name}`,
+    query: `workbook=large&velocita=${speed}`,
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  })),
 ]);
 
 function onPage(page, scenes) {

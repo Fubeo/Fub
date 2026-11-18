@@ -1731,6 +1731,60 @@ const MATH_SETTINGS: readonly SettingEntry[] = !params.has("mathsource") && !par
   source: MATH_HELP_CHOSEN ? "machine" : "default",
 }];
 
+/// Le due preferenze della griglia (griglia T9), come le voci dell'host
+/// (`editor.grid.copy-mark` ed `editor.grid.selection-speed` di
+/// `crates/fub-host/src/settings.rs`): di macchina, di serie `dash-pulse` e
+/// `normal`. Le hanno le scene delle cartelle (`?workbook=…`), dove le
+/// scene dei gesti le cambiano con `?copia=dash|pulse` e
+/// `?velocita=quick|soft|none`, e con `?grigliapref=1` le Impostazioni, per
+/// guardarne la riga; le altre scene delle Impostazioni restano com'erano.
+const GRID_COPY_PARAM = params.get("copia");
+const GRID_COPY_CHOSEN = GRID_COPY_PARAM === "dash" || GRID_COPY_PARAM === "pulse" ? GRID_COPY_PARAM : null;
+const GRID_SPEED_PARAM = params.get("velocita");
+const GRID_SPEED_CHOSEN = GRID_SPEED_PARAM === "quick" || GRID_SPEED_PARAM === "soft" || GRID_SPEED_PARAM === "none" ? GRID_SPEED_PARAM : null;
+const GRID_PREFERENCES: readonly SettingEntry[] = WORKBOOK_DOC === null && params.get("grigliapref") !== "1" ? [] : [{
+  spec: {
+    key: "editor.grid.copy-mark",
+    label: "Segno della copia nei fogli di calcolo",
+    description: "Che cosa resta sulle celle che copi: un tratteggio largo finché non incolli, un battito che si accende e svanisce, o tutti e due. Il taglio resta sempre un tratteggio fitto.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "dash-pulse",
+      options: [
+        { value: "dash-pulse", label: "Tratteggio e battito" },
+        { value: "dash", label: "Solo il tratteggio" },
+        { value: "pulse", label: "Solo il battito" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: GRID_COPY_CHOSEN ?? "dash-pulse",
+  source: GRID_COPY_CHOSEN ? "machine" : "default",
+}, {
+  spec: {
+    key: "editor.grid.selection-speed",
+    label: "Velocità della selezione nei fogli di calcolo",
+    description: "Come la selezione va alla cella nuova, coi tasti e col puntatore: scivola più svelta, come di norma o più morbida, oppure salta di cella in cella. Col movimento ridotto si ferma subito, qualunque sia la scelta.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "normal",
+      options: [
+        { value: "quick", label: "Svelta" },
+        { value: "normal", label: "Come di norma" },
+        { value: "soft", label: "Morbida" },
+        { value: "none", label: "A scatti" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: GRID_SPEED_CHOSEN ?? "normal",
+  source: GRID_SPEED_CHOSEN ? "machine" : "default",
+}];
+
 /// `?tipi=1`: il registro dei tipi del vault (`properties.types` di
 /// `crates/fub-kernel/src/properties.rs`), per le scene di Selezione e Stato
 /// (T9): la testata di `live=opzioni` e la Bacheca della Base per `stato`.
@@ -2358,7 +2412,7 @@ const options: Options = {
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
     ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {

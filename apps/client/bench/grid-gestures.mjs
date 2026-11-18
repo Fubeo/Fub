@@ -1202,6 +1202,20 @@ const CONTROLS = [
     expected: "in ogni fotogramma i pezzi di ogni lato d'accordo (0,5 px), nessun lato oltre il bersaglio o all'indietro, anello e velo dentro il bordo, il quadratino un pezzo solo 8×8 nel livello della zona del suo angolo; a gesto finito la cella attiva sotto il puntatore",
     run: (page) => denseMouse(page),
   },
+  // **Le velocità della selezione** (griglia T9): lo stesso mouse fitto con
+  // ogni scelta di `editor.grid.selection-speed` diversa da quella di serie,
+  // che è `g3-mouse-fitto`. Le regole del motore dei segni valgono con tutte;
+  // «A scatti» non ha mai un fotogramma in moto.
+  ...[["quick", "svelta"], ["soft", "morbida"], ["none", "a-scatti"]].map(([speed, name]) => ({
+    id: `g3-mouse-fitto-${name}`,
+    cantiere: "G3",
+    scene: `grid-large-${speed}`,
+    title: `il mouse fitto di g3-mouse-fitto con la selezione ${name.replace("-", " ")} (editor.grid.selection-speed = ${speed})`,
+    expected: speed === "none"
+      ? "in ogni fotogramma la selezione scelta: zero fotogrammi in moto, i pezzi d'accordo, l'anello e il velo dentro il bordo, il quadratino intero; a gesto finito la cella attiva sotto il puntatore"
+      : "come g3-mouse-fitto: i pezzi d'accordo, nessun lato oltre il bersaglio o all'indietro, anello e velo dentro il bordo, il quadratino intero; a gesto finito la cella attiva sotto il puntatore",
+    run: (page) => denseMouse(page, { still: speed === "none" }),
+  })),
   // **Il dito** (griglia T7), a 390 px col tocco del CDP: trascinare scorre e
   // basta, un tocco sceglie, due aprono, il tocco lungo mette due maniglie
   // che si tirano.
@@ -2761,7 +2775,9 @@ async function denseGestures(page, cdp) {
 }
 
 /// g3-mouse-fitto: i quattro giri, ognuno col suo lettore dei fotogrammi.
-async function denseMouse(page) {
+/// Con `still` (la selezione «A scatti») nessun fotogramma è in moto;
+/// altrimenti qualcuno lo è, o il controllo non avrebbe guardato niente.
+async function denseMouse(page, { still = false } = {}) {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   const cdp = await page.context().newCDPSession(page);
   const size = page.viewportSize();
@@ -2784,7 +2800,7 @@ async function denseMouse(page) {
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
       const bad = ["disagree", "overshoot", "backward", "outside", "corner"].filter((key) => seen[key].count > 0);
       const missed = ends.filter((end) => !end.ok);
-      const good = bad.length === 0 && missed.length === 0 && seen.moving > 0;
+      const good = bad.length === 0 && missed.length === 0 && (still ? seen.moving === 0 : seen.moving > 0);
       ok = ok && good;
       lines.push(
         `${round.width} px, CPU ${round.cpu}×: ${seen.frames} fotogrammi (${seen.moving} in moto); disaccordo ${seen.disagree.count}, oltre ${seen.overshoot.count}, indietro ${seen.backward.count}, fuori dal bordo ${seen.outside.count}, angoli ${seen.corner.count}; ${ends.map((end) => end.text).join(", ")}`
