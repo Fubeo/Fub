@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
-// I difetti della lavagna trovati dal collaudo dell'app (IMP-040…043) e dal
-// giro dell'issue #411 (C-05, C-06): il fuoco dopo un pulsante della colonna,
-// lo spostamento dal corpo di una scheda, «Aggiungi testo» che apre in
-// scrittura in un posto libero, la scheda nuova lasciata vuota, l'aggancio
-// solo al rilascio e la barra della scelta durante lo zoom.
+// I difetti della lavagna trovati dal collaudo dell'app (IMP-040…043, 052,
+// 053) e dal giro dell'issue #411 (C-05, C-06): il fuoco dopo un pulsante
+// della colonna o della riga (e i tasti dello zoom), il fuoco dopo il clic su
+// un filo, il doppio clic su una porta, lo spostamento dal corpo di una
+// scheda, «Aggiungi testo» che apre in scrittura in un posto libero, la scheda
+// nuova lasciata vuota, l'aggancio solo al rilascio e la barra della scelta
+// durante lo zoom.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CanvasEngine, type CanvasChange } from "./engine";
 import { DEFAULT_PREFERENCES, type CanvasPreferences } from "./preferences";
@@ -99,6 +101,13 @@ function key(target: Element | null, init: KeyboardEventInit): void {
   (target ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
 }
 
+/** La cattura del puntatore della vista, spiata: happy-dom non la fa, il browser sì. */
+function captureOf(host: HTMLElement) {
+  const capture = vi.fn();
+  Object.defineProperty(viewportOf(host), "setPointerCapture", { value: capture, configurable: true });
+  return capture;
+}
+
 describe("il fuoco dopo un pulsante della lavagna (IMP-040)", () => {
   it("dopo un clic su un pulsante della colonna, il clic sulla testata di una scheda riporta il fuoco sulla lavagna: Canc la toglie e Ctrl+Z la riporta", async () => {
     const { engine, host, changes } = mounted(BOARD);
@@ -127,6 +136,138 @@ describe("il fuoco dopo un pulsante della lavagna (IMP-040)", () => {
     pointer(viewport, "pointerdown", { pointerId: 2, button: 0, buttons: 1, ...screenOf(host, 300, 400) });
     pointer(viewport, "pointerup", { pointerId: 2, button: 0, buttons: 0, ...screenOf(host, 300, 400) });
     expect(viewport.contains(document.activeElement)).toBe(true);
+    engine.destroy();
+  });
+
+  it("dopo il pulsante «−» della riga delle opzioni il fuoco resta sul pulsante, e + − 0 zoomano lo stesso (IMP-040, lo zoom)", async () => {
+    const { engine, host } = mounted(BOARD);
+    const start = cameraOf(host).zoom;
+    const zoomOut = host.querySelector<HTMLButtonElement>('[data-command="canvas.zoom_out"]')!;
+    zoomOut.click();
+    const out = cameraOf(host).zoom;
+    expect(out).toBeLessThan(start);
+    zoomOut.focus();
+    expect(document.activeElement).toBe(zoomOut);
+    key(document.activeElement, { key: "+" });
+    expect(cameraOf(host).zoom).toBeCloseTo(start, 6);
+    key(document.activeElement, { key: "-" });
+    expect(cameraOf(host).zoom).toBeCloseTo(out, 6);
+    // Il 100% è un volo: arriva sui fotogrammi, come nella vista.
+    key(document.activeElement, { key: "0" });
+    await vi.waitFor(() => expect(cameraOf(host).zoom).toBeCloseTo(1, 6));
+    expect(document.activeElement).toBe(zoomOut);
+    engine.destroy();
+  });
+
+  it("in una casella a discesa della barra del filo il segno cerca l'opzione e non zooma; Ctrl++ zooma ancora", () => {
+    const { engine, host } = mounted(LINKED);
+    const picker = host.querySelector<HTMLSelectElement>('select[data-canvas-field="select-edge"]')!;
+    picker.value = "e";
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    const field = host.querySelector<HTMLSelectElement>('[data-canvas-field="edge-fromNode"]')!;
+    expect(field).not.toBeNull();
+    const before = cameraOf(host).zoom;
+    key(field, { key: "+" });
+    expect(cameraOf(host).zoom).toBeCloseTo(before, 6);
+    key(field, { key: "+", ctrlKey: true });
+    expect(cameraOf(host).zoom).toBeGreaterThan(before);
+    engine.destroy();
+  });
+});
+
+/** Due schede unite da un filo: il suo punto di mezzo è (300, 50). */
+const LINKED = JSON.stringify({
+  nodes: [
+    { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "uno" },
+    { id: "b", type: "text", x: 400, y: 0, width: 200, height: 100, text: "due" },
+  ],
+  edges: [{ id: "e", fromNode: "a", fromSide: "right", toNode: "b", toSide: "left" }],
+});
+
+describe("il fuoco dopo il clic su un filo (IMP-052)", () => {
+  /**
+   * Il fuoco che il browser dà al mouse giù dopo i gestori del pointerdown, se
+   * nessuno l'ha annullato: sul bersaglio o sul suo antenato con `tabindex`. Se
+   * il bersaglio non sta più nel documento (la tela l'ha rifatto mentre il clic
+   * scendeva), il fuoco va su BODY. È quello che WebKitGTK fa, misurato con
+   * WebDriver; happy-dom non lo fa da sé.
+   */
+  function browserFocusAfterPress(press: PointerEvent, target: Element): void {
+    if (press.defaultPrevented) return;
+    if (!target.isConnected) {
+      (document.activeElement as HTMLElement | null)?.blur();
+      return;
+    }
+    target.closest<HTMLElement>("[tabindex]")?.focus({ preventScroll: true });
+  }
+
+  it("il clic sulla linea sceglie il filo e il fuoco resta sulla lavagna: Canc lo toglie, Ctrl+Z lo riporta", async () => {
+    const { engine, host, changes } = mounted(LINKED);
+    host.querySelector<HTMLButtonElement>(".canvas-tool")!.focus();
+    const line = host.querySelector<SVGElement>(".canvas-edge-hit")!;
+    const at = screenOf(host, 300, 50);
+    browserFocusAfterPress(pointer(line, "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...at }), line);
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...at });
+    expect(engine.selection().edges).toEqual(["e"]);
+    expect(document.activeElement).toBe(viewportOf(host));
+    key(document.activeElement, { key: "Delete" });
+    expect(changes).toHaveLength(1);
+    expect(JSON.parse(engine.getDoc()).edges).toEqual([]);
+    key(document.activeElement, { key: "z", ctrlKey: true });
+    await vi.waitFor(() => expect(JSON.parse(engine.getDoc()).edges).toHaveLength(1));
+    engine.destroy();
+  });
+});
+
+describe("il doppio clic su una porta non crea niente (IMP-053)", () => {
+  it("il doppio clic sulla porta di una scheda non mette una scheda di testo; nel vuoto della lavagna sì", () => {
+    const { engine, host } = mounted(BOARD);
+    const port = cardOf(host, "a").querySelector<HTMLElement>('.canvas-port[data-side="left"]')!;
+    const on = screenOf(host, 0, 50);
+    // Il primo clic sulla porta fa partire un filo, che cattura il puntatore:
+    // il doppio clic arriva alla vista, non alla porta (lo misura WebKitGTK).
+    // Sotto il puntatore, però, c'è la porta: è lei che il doppio clic trova.
+    for (const pointerId of [1, 2]) {
+      pointer(port, "pointerdown", { pointerId, button: 0, buttons: 1, ...on });
+      pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...on });
+    }
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(port);
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: on.clientX, clientY: on.clientY }));
+    hit.mockRestore();
+    expect(JSON.parse(engine.getDoc()).nodes).toHaveLength(2);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    // Nel vuoto della lavagna il doppio clic mette la scheda, come prima.
+    const empty = screenOf(host, 600, 300);
+    for (const pointerId of [3, 4]) {
+      pointer(viewportOf(host), "pointerdown", { pointerId, button: 0, buttons: 1, ...empty });
+      pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...empty });
+    }
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: empty.clientX, clientY: empty.clientY }));
+    expect(bornAfter(engine, ["a", "b"])).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("un clic su una scheda e poi il doppio clic nel vuoto mettono la scheda lì: conta il punto, non l'ultimo bersaglio", () => {
+    const { engine, host } = mounted(BOARD);
+    pointer(handleOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 20, 10) });
+    const empty = screenOf(host, 600, 300);
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: empty.clientX, clientY: empty.clientY }));
+    expect(bornAfter(engine, ["a", "b"])).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("il doppio clic su un filo non mette niente: il filo non è il vuoto, come per il doppio tocco", () => {
+    const { engine, host } = mounted(LINKED);
+    const on = screenOf(host, 300, 50);
+    // Ogni clic sceglie il filo, e la scelta rifà i fili: il bersaglio si cerca a ogni clic.
+    for (const pointerId of [1, 2]) {
+      pointer(host.querySelector<SVGElement>(".canvas-edge-hit")!, "pointerdown", { pointerId, button: 0, buttons: 1, ...on });
+      pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...on });
+    }
+    host.querySelector<SVGElement>(".canvas-edge-hit")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: on.clientX, clientY: on.clientY }));
+    expect(JSON.parse(engine.getDoc()).nodes).toHaveLength(2);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
     engine.destroy();
   });
 });
@@ -167,6 +308,64 @@ describe("lo spostamento dal corpo di una scheda (IMP-041)", () => {
     engine.destroy();
   });
 
+});
+
+describe("il corpo prende il puntatore solo oltre 3 px (IMP-053, il doppio clic sul corpo)", () => {
+  it("un clic fermo sul corpo non prende il puntatore; il trascinamento sì, oltre 3 px", () => {
+    const { engine, host } = mounted(BOARD);
+    const capture = captureOf(host);
+    const body = bodyOf(host, "a");
+    pointer(body, "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 100, 60) });
+    pointer(body, "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 102, 60) });
+    expect(capture).not.toHaveBeenCalled();
+    pointer(body, "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 110, 60) });
+    expect(capture).toHaveBeenCalledWith(1);
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 110, 60) });
+    engine.destroy();
+  });
+
+  it("il doppio clic sul corpo di una scheda di testo la mette in modifica, senza crearne un'altra", () => {
+    const { engine, host } = mounted(BOARD);
+    const capture = captureOf(host);
+    const body = bodyOf(host, "a");
+    const at = screenOf(host, 100, 60);
+    // Il browser manda i clic e il doppio clic a chi ha il puntatore: al corpo se non l'ha preso, alla vista se sì.
+    const aim = (): HTMLElement => (capture.mock.calls.length > 0 ? viewportOf(host) : body);
+    for (const pointerId of [1, 2]) {
+      pointer(body, "pointerdown", { pointerId, button: 0, buttons: 1, ...at });
+      pointer(aim(), "pointerup", { pointerId, button: 0, buttons: 0, ...at });
+      aim().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, clientX: at.clientX, clientY: at.clientY }));
+    }
+    // Sotto il puntatore c'è il corpo della scheda: è lui che il doppio clic trova.
+    const under = vi.spyOn(document, "elementFromPoint").mockReturnValue(body);
+    aim().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: at.clientX, clientY: at.clientY }));
+    under.mockRestore();
+    expect(bornAfter(engine, ["a", "b"])).toEqual([]);
+    // In modifica: il campo semplice, o l'editor Live che la scheda di testo monta nel browser, col fuoco dentro la scheda.
+    expect(cardOf(host, "a").querySelector(".canvas-text-editor, .cm-editor")).not.toBeNull();
+    expect(cardOf(host, "a").contains(document.activeElement)).toBe(true);
+    engine.destroy();
+  });
+
+  it("un trascinamento di 2 px non sposta la scheda: il documento non cambia", () => {
+    const { engine, host, changes } = mounted(BOARD);
+    pointer(bodyOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 100, 60) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 102, 60) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 102, 60) });
+    expect(changes).toEqual([]);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 0, y: 0 });
+    engine.destroy();
+  });
+
+  it("un trascinamento di 10 px sposta la scheda", () => {
+    const { engine, host, changes } = mounted(BOARD);
+    pointer(bodyOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 100, 60) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 110, 60) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 110, 60) });
+    expect(changes).toHaveLength(1);
+    expect(nodeOf(engine, "a")!.x).not.toBe(0);
+    engine.destroy();
+  });
 });
 
 // Una scheda sola: la vista si apre centrata su di lei.

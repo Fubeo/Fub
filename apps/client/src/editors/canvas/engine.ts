@@ -698,6 +698,9 @@ function isInkKey(event: KeyboardEvent): boolean {
   return event.key.toLowerCase() === "d";
 }
 
+/** I comandi della vista che cambiano lo zoom: valgono anche fuori dalla vista (IMP-040). */
+const VIEW_ZOOM_COMMANDS: ReadonlySet<string> = new Set(["canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.fit"]);
+
 /** Un campo dove i tasti scrivono. */
 function isTextTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -2419,6 +2422,9 @@ export class CanvasEngine {
       event.preventDefault();
       this.#workspace.setBare(!this.#workspace.bare);
     });
+    // I tasti dello zoom valgono anche fuori dalla vista (la riga, la colonna, il
+    // navigatore), come Ctrl+.: col fuoco su un pulsante dello zoom «+» zooma (IMP-040).
+    this.#life.listen(this.#root, "keydown", (event) => this.#zoomKeydown(event));
     const signal = this.#abort.signal;
     // Le dita giù, prima dello strato della penna (T64): in cattura e prima di
     // lui, che si monta dopo. Un dito che lo strato prende per scrivere non
@@ -9758,6 +9764,10 @@ export class CanvasEngine {
     // Un filo entro 8 px vince sulla scheda dove si vede, fuori dalla scheda (T67).
     const wire = this.#wireAt(target, event.clientX, event.clientY);
     if (wire) {
+      // Scegliere il filo rifà i fili, e il bersaglio di questo clic esce dal
+      // documento: WebKitGTK porterebbe il fuoco su BODY. Il mouse giù annullato
+      // lo lascia, e il fuoco va sulla vista qui sotto (IMP-052).
+      event.preventDefault();
       this.#selectEdge(wire);
       this.#claimFocus(null);
       return;
@@ -10100,7 +10110,8 @@ export class CanvasEngine {
     }
     const ids = this.#selection.filter((id) => origin.has(id));
     this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0, aimDx: 0, aimDy: 0 };
-    this.#viewport.setPointerCapture?.(event.pointerId);
+    // La cattura arriva con lo spostamento (`#moveDrag`), non qui: un clic fermo
+    // resta un clic, e il suo doppio clic arriva alla scheda, non alla vista (IMP-053).
     event.preventDefault();
   }
 
@@ -10589,6 +10600,11 @@ export class CanvasEngine {
   /** Il vuoto della lavagna sotto `target`: niente schede, fili, maniglie o controlli, e la lavagna si cambia. */
   #emptyAt(target: Element | null): boolean {
     if (!target?.isConnected || !this.#viewport.contains(target) || this.#readOnly || this.#isSceneOversized()) return false;
+    return this.#emptyTarget(target);
+  }
+
+  /** `target` non è una scheda, un filo, una maniglia né un controllo: la regola del doppio tocco e del doppio clic. */
+  #emptyTarget(target: Element): boolean {
     return this.#nodeAt(target) === null && this.#edgeAt(target) === null
       && target.closest(FINGER_CONTROLS) === null && target.closest(FINGER_HANDLES) === null;
   }
@@ -10947,8 +10963,10 @@ export class CanvasEngine {
     if (!drag || !doc) return;
     const dx = (at.clientX - drag.startX) / this.#camera.zoom;
     const dy = (at.clientY - drag.startY) / this.#camera.zoom;
-    if (Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
+    if (!drag.moved && Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
       drag.moved = true;
+      // Lo spostamento prende il puntatore adesso: così non lo perde se esce dalla vista.
+      this.#viewport.setPointerCapture?.(drag.pointerId);
     }
     const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
     // Le schede seguono il puntatore 1:1, in unità intere (#411 C-05): niente
@@ -11602,6 +11620,13 @@ export class CanvasEngine {
     // Il doppio tocco del dito mette la sua scheda da sé (T63): il `dblclick`
     // che il browser ne fa non ne mette un'altra.
     if (this.#downByTouch) return;
+    // Il doppio clic su una porta, su un filo o su un controllo non mette
+    // niente, come il doppio tocco (IMP-053). Conta ciò che è sotto il punto del
+    // clic, non il bersaglio: con la cattura del puntatore (il filo che parte da
+    // una porta) il `dblclick` arriva alla vista, ma la porta è lì sotto.
+    const under = this.#elementAt(event.clientX, event.clientY);
+    const at = under !== null && this.#viewport.contains(under) ? under : target;
+    if (!(at instanceof Element) || !this.#emptyTarget(at)) return;
     // Nel punto del clic, già in scrittura, come il doppio tocco (T63, T100).
     this.#placeText(event.clientX, event.clientY);
   }
@@ -11700,6 +11725,22 @@ export class CanvasEngine {
     event.preventDefault();
     if (command.disabled() === null) command.run();
     this.#statusSettle();
+  }
+
+  /**
+   * Un tasto dello zoom fuori dalla vista (la riga delle opzioni, la colonna, il
+   * navigatore) zooma, come i tasti degli strumenti sulla colonna (IMP-040).
+   * Dentro la vista lo prende `#keydown`, che sa della scheda attiva e dei campi.
+   */
+  #zoomKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || !this.#doc || this.#isSceneOversized()) return;
+    if (event.target instanceof Node && this.#viewport.contains(event.target)) return;
+    const zoom = this.commands().filter((command) => VIEW_ZOOM_COMMANDS.has(command.id));
+    // In una casella a discesa (i campi del filo nella barra della selezione) un
+    // numero o un segno cerca l'opzione, come in un campo: solo Ctrl zooma.
+    const writing = isTextTarget(event.target) || event.target instanceof HTMLSelectElement;
+    const command = commandForKey(zoom, event, { writing, onBoard: false });
+    if (command) this.#runKey(event, command);
   }
 
   /**

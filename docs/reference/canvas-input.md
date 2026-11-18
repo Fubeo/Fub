@@ -9,7 +9,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts`,
-> `engine-cards.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
+> `engine-cards.test.ts`, `engine-collaudo.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
 > (il rettangolo, con `marquee.test.ts` per la geometria); per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
 > `rail.ts`, `options.ts`, `selection-bar.ts` e le loro prove; per la lavagna vuota,
@@ -34,7 +34,7 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   fuori da un link aggiunge la scheda alla scelta, o la toglie, come
   Maiuscolo; Ctrl con uno spostamento sposta la lavagna, come prima. Un
   pulsante della vista («Apri») risponde a un clic anche fuori. Il clic che sceglie, o che cade su un filo o nel vuoto, riporta il fuoco sulla lavagna quando era fuori (un pulsante della colonna o della riga): Canc e Ctrl+Z valgono subito (IMP-040). Una scheda tolta col fuoco lo lascia alla vista.
-- **Spostare.** Dalla testata sempre; dal corpo finché la scheda non è attiva né in scrittura e il gesto non parte da un controllo del contenuto; un gruppo anche dall'etichetta. Il clic che segue il rilascio non entra (IMP-041). L'aggancio vale al rilascio ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)).
+- **Spostare.** Dalla testata sempre; dal corpo finché la scheda non è attiva né in scrittura e il gesto non parte da un controllo del contenuto; un gruppo anche dall'etichetta. Il clic che segue il rilascio non entra (IMP-041). Il corpo prende il puntatore solo oltre 3 px: un clic fermo, o il suo doppio clic, arriva alla scheda, e il doppio clic su una scheda di testo la apre per scrivere (IMP-053). L'aggancio vale al rilascio ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)).
 - **Entrare.** Un clic dentro una scheda che era già la sola scelta, Invio
   con una scheda scelta che non è di testo, o il doppio clic su una nota, un
   documento o un foglio chiamano `enter()`. Una scheda ferma prima si
@@ -258,7 +258,7 @@ diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
 (`Maiusc` 32, `Alt+Maiusc` 1); Tab e `Alt`+frecce muovono il fuoco ([la vista](canvas-view.md#da-tastiera-e-col-lettore-di-schermo)). Come nel disegno, i tasti della lavagna non si cambiano ancora.
 Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
 con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
-`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.
+`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`. I tasti dello zoom (`+`, `-`, `0`, «Mostra tutto») valgono anche col fuoco su un pulsante della riga, della colonna o del navigatore; in un campo che scrive o in una casella a discesa valgono solo con Ctrl (IMP-040).
 
 ### Il menu della scheda
 
