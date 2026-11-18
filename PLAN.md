@@ -2405,7 +2405,7 @@ Fatto quando: una scena del banco nei tre stati e nelle due luci; un test che
 scrivere nella scheda salva il documento e non la nota.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/core/cards
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (318c26b6f + unione 1d079467e, merge 00ec30ec1, 2026-11-18), in attesa del pacchetto 2. Scostamenti: «#Titolo» non ritaglia una sezione (il modello del ricco non ha gli span dei blocchi: la scheda mostra tutto il documento e la parte resta scritta nell'embed e nella testata); un solo renderer `document` con l'opzione `writes` (sola lettura sulla lavagna, D-14 (a)); note.ts riscritto su un TextCardFlavor; troncamento a 200 blocchi; da attiva la scheda non ha barra di formato (restano scorciatoie e menu).
 
 ## T45 · La scheda PDF
 
