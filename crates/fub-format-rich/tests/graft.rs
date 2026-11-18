@@ -940,3 +940,160 @@ fn il_paragrafo_dopo_la_tabella_finale_si_scrive_soltanto_se_si_tocca() {
     assert!(rest[0].contains("In fondo, cambiato"), "{rest:#?}");
     assert_eq!(texts(&projection(&out)), texts(&last));
 }
+
+/// Mette `href` sui testi che contengono `needle` (`None` lo toglie); quanti.
+fn set_href(projection: &mut Projection, needle: &str, value: Option<&str>) -> usize {
+    let mut count = 0;
+    for block in &mut projection.blocks {
+        let Block::Para(para) = block else { continue };
+        for inline in &mut para.c {
+            if let Inline::Text { x, href, .. } = inline {
+                if x.contains(needle) {
+                    *href = value.map(str::to_string);
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// Le relazioni di tipo link del documento principale.
+fn hyperlink_rels(bytes: &[u8]) -> usize {
+    let rels = String::from_utf8(entries(bytes).remove(MAIN_RELS).unwrap()).unwrap();
+    rels.matches("/relationships/hyperlink\"").count()
+}
+
+/// Il testo e i link di una proiezione, per confrontare la pagina con il file
+/// riaperto.
+fn linked_texts(projection: &Projection) -> Vec<(String, Option<String>)> {
+    let mut out: Vec<(String, Option<String>)> = Vec::new();
+    for block in &projection.blocks {
+        let Block::Para(para) = block else { continue };
+        for inline in &para.c {
+            if let Inline::Text { x, href, .. } = inline {
+                match out.last_mut() {
+                    Some((text, last)) if last == href => text.push_str(x),
+                    _ => out.push((x.clone(), href.clone())),
+                }
+            }
+        }
+        out.push(("¶".into(), None));
+    }
+    out
+}
+
+/// IMP-135: un link messo da qui e poi tolto se ne va dal file con la sua
+/// relazione, il testo resta con la sua enfasi, e il file riaperto è la
+/// pagina. Il codec scrive i link con `w:history`, che la proiezione non
+/// mostra: togliendo il link se ne va con lui, e non è una perdita.
+#[test]
+fn un_link_tolto_se_ne_va_dal_file_con_la_sua_relazione() {
+    let file = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/corpus/docx/senza-perdite.docx"
+    ))
+    .unwrap();
+    let mut p = projection(&file);
+    let phrase = "Un paragrafo di corpo";
+    assert_eq!(
+        set_href(&mut p, phrase, Some("https://esempio.test/i6g")),
+        1
+    );
+    let linked = saved(&file, &p);
+    assert_eq!(main_part(&linked).matches("<w:hyperlink ").count(), 1);
+    assert_eq!(hyperlink_rels(&linked), 1);
+
+    let mut p = projection(&linked);
+    let before = linked_texts(&p);
+    assert_eq!(set_href(&mut p, phrase, None), 1);
+    let out = saved(&linked, &p);
+    let xml = main_part(&out);
+    assert_eq!(xml.matches("<w:hyperlink").count(), 0, "{xml}");
+    assert_eq!(hyperlink_rels(&out), 0, "la relazione orfana resta");
+    let reopened = projection(&out);
+    assert_eq!(linked_texts(&reopened), linked_texts(&p));
+    assert_ne!(linked_texts(&reopened), before);
+    // L'innesto: il resto del file è quello di prima.
+    assert_eq!(grafted(&linked, &out).len(), 1);
+}
+
+/// Due link allo stesso indirizzo condividono la relazione: togliere il primo
+/// la lascia al secondo, togliere anche il secondo la toglie. La
+/// sottolineatura che lo stile «Hyperlink» dava resta sul testo, come la
+/// pagina la mostra.
+#[test]
+fn una_relazione_condivisa_resta_finché_un_link_la_usa() {
+    let file = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/corpus/docx/senza-perdite.docx"
+    ))
+    .unwrap();
+    let url = Some("https://esempio.test/stesso");
+    let mut p = projection(&file);
+    assert_eq!(set_href(&mut p, "Un paragrafo di corpo", url), 1);
+    let one = saved(&file, &p);
+    let mut p = projection(&one);
+    // Un altro paragrafo aperto, con testo e senza link.
+    let second = p
+        .blocks
+        .iter()
+        .position(|block| match block {
+            Block::Para(para) => {
+                !para.locked
+                    && para.c.iter().any(
+                        |inline| matches!(inline, Inline::Text { x, .. } if x.trim().len() > 2),
+                    )
+                    && para.c.iter().all(|inline| match inline {
+                        Inline::Text { href, .. } => href.is_none(),
+                        Inline::Atom { .. } => true,
+                    })
+            }
+            Block::Table(_) => false,
+        })
+        .expect("un altro paragrafo con testo");
+    for inline in &mut para_mut(&mut p, second).c {
+        if let Inline::Text { href, .. } = inline {
+            *href = url.map(str::to_string);
+        }
+    }
+    let two = saved(&one, &p);
+    assert_eq!(main_part(&two).matches("<w:hyperlink ").count(), 2);
+    assert_eq!(hyperlink_rels(&two), 1);
+
+    let mut p = projection(&two);
+    assert_eq!(set_href(&mut p, "Un paragrafo di corpo", None), 1);
+    let first_gone = saved(&two, &p);
+    assert_eq!(main_part(&first_gone).matches("<w:hyperlink ").count(), 1);
+    assert_eq!(hyperlink_rels(&first_gone), 1, "la relazione serve ancora");
+    let reopened = projection(&first_gone);
+    assert_eq!(linked_texts(&reopened), linked_texts(&p));
+    let marks = |projection: &Projection| {
+        projection
+            .blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Para(para) => Some(para.c.iter().filter_map(|inline| match inline {
+                    Inline::Text { x, m, .. } if x.contains("Un paragrafo di corpo") => {
+                        Some(m.clone())
+                    }
+                    _ => None,
+                })),
+                Block::Table(_) => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(marks(&reopened), marks(&p));
+
+    let mut p = reopened;
+    for inline in &mut para_mut(&mut p, second).c {
+        if let Inline::Text { href, .. } = inline {
+            *href = None;
+        }
+    }
+    let none = saved(&first_gone, &p);
+    assert_eq!(main_part(&none).matches("<w:hyperlink").count(), 0);
+    assert_eq!(hyperlink_rels(&none), 0);
+    assert_eq!(linked_texts(&projection(&none)), linked_texts(&p));
+}

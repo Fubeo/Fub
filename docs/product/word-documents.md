@@ -35,7 +35,10 @@ Si modificano:
   colonna (`Ctrl+Maiusc+Invio`), anche dalla scheda **Inserisci**;
 - i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo (web o
   posta) e lo mettono sulla selezione, sul link al cursore o, senza
-  selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
+  selezione, su un testo nuovo; dallo stesso modulo un link si toglie: il
+  testo resta come si vede (la sottolineatura e il colore che il link gli
+  dava restano, scritti sul testo), e dal file se ne vanno il collegamento e
+  il suo indirizzo, se nessun altro link lo usa;
 - grassetto, corsivo e barrato dal gruppo **Carattere** di **Home**;
 - l'aspetto del carattere dallo stesso gruppo: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore

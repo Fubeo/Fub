@@ -1578,12 +1578,29 @@ pub(crate) fn keeps(before: &[Token], after: &[Token]) -> Result<(), String> {
             }
         }
         if let (Some(b), Some(a)) = (before[i].sig(), after[j].sig()) {
-            if let Some(item) = missing(&b.opaque, &a.opaque).first() {
+            if let Some(item) = missing(&b.opaque, &a.opaque)
+                .into_iter()
+                .find(|item| !gone_with_wrapper(item, &a.full))
+            {
                 return Err(format!("{}: lost {item}", describe_at(before, i)));
             }
         }
     }
     Ok(())
+}
+
+/// Gli involucri che la superficie toglie interi: togliere un link dal testo
+/// toglie il suo `w:hyperlink`, e con lui gli attributi che la proiezione non
+/// mostra (`w:history`, `w:tooltip`, `w:tgtFrame`, `w:docLocation`). I link
+/// non si annidano, così un carattere ne ha al più uno.
+const REMOVABLE_WRAPPERS: &[&str] = &["ctx/w:hyperlink"];
+
+/// Se la voce `item` è di un involucro che il carattere, dopo, non ha più:
+/// se n'è andata con lui, non persa.
+fn gone_with_wrapper(item: &str, after: &[String]) -> bool {
+    REMOVABLE_WRAPPERS
+        .iter()
+        .any(|wrapper| under(item, wrapper) && !after.iter().any(|other| under(other, wrapper)))
 }
 
 #[cfg(test)]
@@ -1729,6 +1746,27 @@ mod tests {
             r#"<w:p><w:r><w:rPr><w:i/><w:rFonts w:ascii="C" w:eastAsia="B"/><w:lang w:eastAsia="ja-JP"/><w:eastAsianLayout w:combine="1"/></w:rPr><w:t>xy</w:t></w:r></w:p>"#,
         );
         assert!(keeps(&tokens, &edited).is_ok());
+    }
+
+    #[test]
+    fn un_link_tolto_porta_via_i_suoi_attributi_e_un_link_tenuto_no() {
+        let linked = one(
+            r#"<w:p><w:hyperlink r:id="rId1" w:history="1" w:tooltip="t"><w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>x</w:t></w:r></w:hyperlink></w:p>"#,
+        );
+        // Tolto il link, gli attributi che la proiezione non mostra se ne
+        // vanno con lui; le proprietà del run restano da tenere.
+        let unlinked =
+            one(r#"<w:p><w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>x</w:t></w:r></w:p>"#);
+        assert!(keeps(&linked, &unlinked).is_ok());
+        let bare = one(r#"<w:p><w:r><w:t>x</w:t></w:r></w:p>"#);
+        let lost = keeps(&linked, &bare).expect_err("perdita");
+        assert!(lost.contains("w:lang"), "{lost}");
+        // Il link che resta tiene ogni suo attributo.
+        let kept = one(
+            r#"<w:p><w:hyperlink r:id="rId1" w:history="1"><w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>x</w:t></w:r></w:hyperlink></w:p>"#,
+        );
+        let lost = keeps(&linked, &kept).expect_err("perdita");
+        assert!(lost.contains("w:tooltip"), "{lost}");
     }
 
     #[test]
