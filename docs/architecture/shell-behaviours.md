@@ -268,7 +268,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   limitata dei componenti, che è del vault. Quelli derivati dalla sessione
   durano quanto il suo stato; gli altri sono fatti del controllore
   (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
-  salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
+  salvataggio riuscito toglie «cambiato su disco»; la bozza ritrovata se ne
+  va col primo salvataggio riuscito che lascia il buffer pulito, cioè quando
+  il disco ha il testo ritrovato (anche dopo «Riprova»). Una nota
   rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
   mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude;
   ricreata la nota con quel testo, la bozza se ne va.

@@ -741,6 +741,9 @@ describe("recuperare le bozze", () => {
     let atAnnouncement: unknown = "il vault non si è mai annunciato";
 
     const shell = await start(VAULT, (early) => {
+      // Il disco non prende il testo: la fascia si guarda senza la corsa col
+      // salvataggio automatico, che la toglierebbe (IMP-146, la prova sotto).
+      early.host.fault("writeDocument", "disco pieno");
       box.probes.set("signal:vault:/vault", () => {
         atAnnouncement = early.sessions.inspect("Benvenuto.md") ?? "nessuna sessione";
       });
@@ -750,7 +753,8 @@ describe("recuperare le bozze", () => {
     expect(textToVideo()).toContain("testo ritrovato nella bozza");
     expect(shell.notices()).toContain(`Benvenuto.md: ${shell.t("draft.case.intatta")}`);
     expect(shell.notices()).toContain(shell.plural(1, "draft.found.one", "draft.found"));
-    // E il foglio lo tiene scritto sopra il testo finché non lo si chiude.
+    // E il foglio lo tiene scritto sopra il testo finché non lo si chiude, o
+    // finché il testo ritrovato non è sul disco.
     const recovered = document.querySelector<HTMLElement>('.sheet-notice[data-notice="recovered"]');
     expect(recovered?.textContent).toContain(shell.t("draft.case.intatta"));
   });
@@ -778,6 +782,32 @@ describe("recuperare le bozze", () => {
     expect(await recoverDrafts()).toBe(0);
     expect(textToVideo()).toContain("battuta dopo il recupero");
     expect(textToVideo()).not.toContain("una bozza più vecchia del buffer");
+  });
+
+  /// La fascia dice che il testo è una copia non salvata da recuperare: finché
+  /// il disco non lo ha resta, anche dopo un salvataggio fallito; quando
+  /// «Riprova» lo scrive, il fatto è passato e la fascia se ne va (IMP-146).
+  /// La bozza sul disco non si tocca prima della scrittura riuscita.
+  it("la fascia della bozza ritrovata resta finché il testo non è sul disco, poi se ne va", async () => {
+    box.drafts = [draftOfWelcome("testo ritrovato nella bozza\n")];
+    let repair = (): void => {};
+    const shell = await start(VAULT, (early) => {
+      repair = early.host.fault("writeDocument", { kind: "permission_denied", message: "file in sola lettura" });
+    });
+    const banner = () => document.querySelector<HTMLElement>('.sheet-notice[data-notice="recovered"]');
+    await waitFor("il salvataggio automatico fallisce", () => shell.sessions.saveState("Benvenuto.md") === "fallito");
+    expect(banner()?.textContent).toContain(shell.t("draft.case.intatta"));
+    expect(shell.host.atGate("discardDraft")).toHaveLength(0);
+
+    repair();
+    const retry = [...document.querySelectorAll<HTMLElement>('.sheet-notice[data-notice="save_failed"] button')]
+      .find((button) => button.textContent === shell.t("app.retry"));
+    expect(retry).toBeDefined();
+    retry!.click();
+    await waitFor("il testo è sul disco", () => shell.sessions.saveState("Benvenuto.md") === "salvato");
+
+    expect(shell.host.files()["Benvenuto.md"]).toBe("testo ritrovato nella bozza\n");
+    await waitFor("la fascia se ne va", () => banner() === null);
   });
 
   /// Il recupero è una rete di sicurezza: se non parte, il vault si apre lo

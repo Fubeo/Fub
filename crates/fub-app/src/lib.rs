@@ -76,6 +76,7 @@ mod print;
 mod promemoria;
 mod resources;
 mod reveal;
+mod riga_di_comando;
 mod support;
 mod tree_access;
 mod web_viewer;
@@ -3194,6 +3195,11 @@ fn log_the_webview(declared: Option<Result<String, String>>) {
 }
 
 pub fn run() {
+    // `--version` e `--help` rispondono ed escono prima di tutto il resto:
+    // niente finestra, niente Tauri, niente configurazione né log.
+    if let Some(codice) = riga_di_comando::rispondi(std::env::args_os().skip(1)) {
+        std::process::exit(codice);
+    }
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
     // store installato ricevono lo stesso valore: nessun proprietario riapre
     // l'ambiente o deduce una seconda posizione.
