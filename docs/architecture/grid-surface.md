@@ -106,36 +106,21 @@ fotogramma p90 11–13, peggiore 15–17 (prima 0,4 e 28–40, 16–20 e 23–26
 Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»: Invio e
 Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab (anche
 `Unidentified` da GTK) confermano e vanno a destra o a sinistra, le frecce
-confermano e si spostano. Invio dopo una serie di Tab torna alla colonna da
-cui la serie è partita. F2 e il doppio clic aprono in «Modifica», dove le
-frecce muovono il cursore; F2 alterna i due modi, e la banda di stato dice il
-modo («Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio
-scrive la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella,
-o il fuoco che lascia l'editor, conferma; dalla cella alla barra della formula
-la bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
-attiva senza aprirla, dentro l'intervallo se è più di una cella. La regola
-pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
-del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
-ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+confermano e si spostano; Invio dopo una serie di Tab torna alla colonna di
+partenza. F2 e il doppio clic aprono in «Modifica» (le frecce muovono il
+cursore); F2 alterna i modi, che la banda di stato dice («Pronto»,
+«Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio scrive in tutta la
+selezione, Esc annulla; un clic altrove o il fuoco che esce conferma, e verso
+la barra della formula la bozza passa col fuoco. Sulla selezione Invio e Tab
+spostano la cella attiva senza aprirla, dentro l'intervallo. Dove andare sta
+in `apps/client/src/tabella/navigation.ts`, il riempimento in
+`tabella/selection.ts` (`fillRange`): regole di ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
 
-La cella aperta è la cella stessa. Il suo campo (`.grid-cell-editor`, un
-CodeMirror da campo) non sta dentro la cella ma in fondo al livello «lift»
-della zona della cella, sopra i segni, e si muove con lei quando la griglia
-scorre. Prende dalla cella la carta e l'inchiostro del file
-(`--file-fill`, `--file-color`), il carattere (`--field-font`, che il tema del
-campo dà a `.cm-content`; senza, il carattere del codice), la misura, il peso,
-l'allineamento e i margini, così il testo non si sposta quando si apre; in
-«Inserisci» parte da sinistra. La riga attiva non ha tinta e il margine del
-testo non c'è. La cornice (`.grid-cell-editor-frame`: due pixel di
-`--grid-mark` e l'ombra) è un pezzo a parte, che compare in `DURATION.state`
-(con il moto ridotto, una dissolvenza); la maniglia del riempimento intanto
-non c'è. La misura la sceglie la griglia a ogni cambio della bozza, senza
-IPC: la riga più larga, misurata col carattere della cella, decide quante
-colonne intere prende a destra (a sinistra se la cella è allineata a destra),
-fino al bordo del riquadro (`openSpan` in `engine-geometry.ts`). Se il testo
-non ci sta il campo va a capo (`wraps`) e cresce in giù a righe intere fino a
-metà del riquadro, mai oltre il suo fondo; poi il testo scorre dentro. La
-griglia non scorre aprendo la cella.
+La cella aperta è la cella: il campo sta nel livello «lift» della sua zona,
+con carta, inchiostro, carattere (`--field-font`), allineamento e margini
+della cella; la cornice (2 px di `--grid-mark`) compare in `DURATION.state` e
+la maniglia se ne va. A ogni bozza cresce a colonne intere fino al bordo
+(`openSpan`), poi va a capo e scende fino a metà riquadro, poi scorre dentro.
 
 Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
 il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
@@ -145,18 +130,14 @@ punto dello schermo; Alt+PagSu e Alt+PagGiù fanno lo stesso di lato,
 Ctrl+Backspace riporta in vista la cella attiva, da cui partono le frecce
 senza Maiuscolo.
 
-Nelle formule si punta come nei fogli di calcolo. Dove la formula aspetta un
-operando (`operandSlot` in `profiles/formula.ts`: dopo `=`, un operatore,
-`(`, `,` o `;`), un clic su una cella scrive il suo riferimento, un
-trascinamento lo allarga a un intervallo, e un altro clic lo sostituisce
-finché il cursore resta alla sua fine. La cella aperta e la selezione non
-cambiano, e il fuoco resta nel campo. In «Inserisci» le frecce muovono il
-riferimento puntato, partendo dalla cella aperta, e con Maiuscolo lo
-allargano. F4 alterna i `$` del riferimento al cursore. Ogni riferimento ha
-uno di sei colori (`--doc-author-1…6`), lo stesso nel testo e nel contorno
-del suo intervallo sulla griglia; un riferimento a un altro foglio si
-contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
-ancora: il riferimento si scrive a mano.
+Nelle formule si punta. Dove la formula aspetta un operando (`operandSlot`
+in `profiles/formula.ts`: dopo `=`, un operatore, `(`, `,` o `;`) un clic
+scrive il riferimento della cella, un trascinamento lo allarga, un altro clic
+lo sostituisce finché il cursore resta alla sua fine; cella aperta, selezione
+e fuoco non cambiano. In «Inserisci» le frecce muovono il riferimento (con
+Maiuscolo lo allargano), F4 alterna i `$`. Ogni riferimento ha uno di sei
+colori (`--doc-author-1…6`), nel testo e nel contorno sulla griglia, solo sul
+suo foglio; le celle di un altro foglio si scrivono a mano.
 
 ## La selezione e il riempimento
 
