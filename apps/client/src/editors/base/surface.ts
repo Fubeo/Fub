@@ -21,7 +21,7 @@ import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
   addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
-  planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
+  planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, sameExpected, setBaseViewKey, writtenLines,
   type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BaseMutation, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
@@ -169,6 +169,18 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
 /// Il posto del fuoco nella tabella, per ritrovarlo dopo un ridisegno: la cella
 /// (la nota e la colonna) o la griglia. Un fuoco fuori dalla tabella non ne ha.
 type TableFocus = { readonly doc: string; readonly column: string } | "grid";
+/// Una cella in modifica (`cellDrafts`): il testo del campo, la proprietà
+/// letta al primo tasto, e dove è arrivata. `editing` si scrive alla
+/// conferma (Invio, Tab, un clic fuori, la Base chiusa); `writing` è partita;
+/// `conflict` aspetta la scelta fra il testo scritto e quello sul disco.
+interface CellDraft {
+  readonly doc: string;
+  readonly column: string;
+  text: string;
+  expected: BaseExpected;
+  state: "editing" | "writing" | "conflict";
+}
+const draftKey = (doc: string, column: string): string => `${doc}\u0000${column}`;
 function tableFocusOf(target: Element | null): TableFocus | null {
   if (target === null || target.closest(".base-table-viewport") === null) return null;
   const cell = target.closest<HTMLTableCellElement>("tbody > tr[data-doc] > td[data-cell]");
@@ -249,6 +261,21 @@ export function mountBaseSurface(
   // La scrittura della cella col fuoco, per ciascun campo: `destroy` la chiede
   // se la modifica non è ancora consegnata (né Invio, né Tab, né clic).
   const cellSaves = new WeakMap<HTMLInputElement, () => void>();
+  // Il testo che si sta scrivendo in una cella, per nota e colonna, dal primo
+  // tasto finché non è scritto o lasciato (IMP-137). Un ridisegno (un evento
+  // del vault, una ricarica, lo scorrimento) toglie il campo: quello nuovo
+  // riprende da qui testo e fuoco, invece del valore del disco. `expected` è
+  // la proprietà letta quando si è cominciato a scrivere: la scrittura la
+  // confronta col file (CAS), e se la nota è cambiata nel frattempo niente si
+  // scrive in silenzio: la Base chiede quale testo tenere (`conflict`).
+  const cellDrafts = new Map<string, CellDraft>();
+  // Un ridisegno in corso: il campo che se ne va (e il `blur` o il `change`
+  // che il browser gli mandasse togliendolo) non è una conferma.
+  let redrawing = 0;
+  const retire = (replace: () => void): void => {
+    redrawing++;
+    try { replace(); } finally { redrawing--; }
+  };
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
@@ -450,7 +477,7 @@ export function mountBaseSurface(
   const presentError = (reason: unknown): void => {
     error = errorText(reason);
     status.textContent = error;
-    body.replaceChildren(button(labels().retry, () => void reload(true)));
+    retire(() => body.replaceChildren(button(labels().retry, () => void reload(true))));
   };
   // Chi può riscrivere il file `.base`, e se no perché.
   const lock = () => readOnly ? "read_only" as const : options.sourceInNote ? "embedded" as const : null;
@@ -618,6 +645,139 @@ export function mountBaseSurface(
         status.textContent = errorText(failure);
       } else presentError(failure);
     }
+  };
+  // La conferma di una cella in modifica (`cellDrafts`). Si scrive contro la
+  // proprietà letta al primo tasto, non contro quella di adesso: se la nota è
+  // cambiata mentre si scriveva (un'altra app, un'altra scheda), la scrittura
+  // non passa e la Base chiede quale testo tenere. Lo dice prima di chiedere
+  // al core se l'ultima lettura lo sa già (la riga cambiata o uscita dalla
+  // vista), altrimenti lo dice la CAS del comando. A Base chiusa (`closing`)
+  // la scelta non si può mostrare: si prova la scrittura, e un rifiuto è un
+  // avviso.
+  const confirmCell = async (key: string, closing = false): Promise<void> => {
+    const draft = cellDrafts.get(key);
+    if (!draft || draft.state !== "writing") return;
+    const { doc, column, text, expected } = draft;
+    const value = text === "" ? null : JSON.stringify(text);
+    const current = rows.find((each) => each.doc === doc);
+    if (!closing && (!current || !sameExpected(expectedProperty(current, column), expected))) {
+      draft.state = "conflict";
+      draw();
+      return;
+    }
+    try {
+      if (!plan) throw new Error("base: piano assente");
+      const mutations = await prepareBaseMutations(deps, source, plan.view, [{ doc, key: column, expected, value }]);
+      for (const mutation of mutations) await writeProperty(mutation);
+      // Scritta. Un testo cambiato intanto nel campo resta in modifica, e il
+      // suo valore letto diventa quello appena scritto, come la riga riletta
+      // lo dice.
+      const typedOn = cellDrafts.get(key) === draft && draft.text !== text;
+      if (typedOn) draft.state = "editing";
+      else if (cellDrafts.get(key) === draft) cellDrafts.delete(key);
+      if (!destroyed) await reload(true);
+      const fresh = rows.find((each) => each.doc === doc);
+      if (typedOn && fresh && cellDrafts.get(key) === draft) draft.expected = expectedProperty(fresh, column);
+    } catch (failure) {
+      const conflict = isErrorKind(failure, "conflict");
+      if (conflict && !destroyed && cellDrafts.get(key) === draft) {
+        draft.state = "conflict";
+        draw();
+        // La nota sul disco non è quella letta: la riga si rilegge, e la
+        // scelta sa se la nota è ancora nella vista.
+        void reload(false);
+        return;
+      }
+      if (cellDrafts.get(key) === draft) cellDrafts.delete(key);
+      // Il testo che non si è scritto per un conflitto si legge nell'avviso.
+      const reason = conflict ? t("base.cell.conflict_closed", { column: labelOf(column), text }) : errorText(failure);
+      const message = t("base.cell.unsaved", { name: noteTitle(doc), reason });
+      if (destroyed || conflict || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      else presentError(failure);
+    }
+  };
+  // La scelta su una cella in conflitto: il testo scritto, contro il valore
+  // del disco di adesso (una nuova CAS: se la nota cambia ancora, si richiede),
+  // o il valore del disco, lasciando il testo.
+  const keepCellText = (key: string): void => {
+    const draft = cellDrafts.get(key);
+    const current = draft && rows.find((each) => each.doc === draft.doc);
+    if (!draft || draft.state !== "conflict" || !current) return;
+    draft.expected = expectedProperty(current, draft.column);
+    draft.state = "writing";
+    draw();
+    focusCell(draft.doc, draft.column);
+    void confirmCell(key);
+  };
+  const dropCellText = (key: string): void => {
+    const draft = cellDrafts.get(key);
+    if (!draft) return;
+    cellDrafts.delete(key);
+    draw();
+    focusCell(draft.doc, draft.column);
+    // Il valore del disco di adesso, anche se l'evento del vault non è ancora
+    // arrivato.
+    void reload(false);
+  };
+  // Il fuoco torna sulla cella dopo la scelta; se la riga non c'è più, alla
+  // Base, dove Ctrl+Z continua ad arrivare.
+  const focusCell = (doc: string, column: string): void => {
+    const row = [...body.querySelectorAll<HTMLElement>("[data-doc]")].find((each) => each.dataset.doc === doc && each.querySelector(".base-cell") !== null);
+    const field = [...(row?.querySelectorAll<HTMLElement>(".base-cell") ?? [])].find((each) => each.dataset.column === column);
+    const control = field?.querySelector<HTMLElement>("input, button");
+    if (control) control.focus({ preventScroll: true });
+    else root.focus({ preventScroll: true });
+  };
+  // Le celle in conflitto, sopra le righe: una scelta per cella, come il
+  // conflitto di una nota. Una nota uscita dalla vista non ha più la cella:
+  // il testo scritto si legge nell'avviso e si può copiare.
+  const conflicts = document.createElement("div");
+  conflicts.hidden = true;
+  body.before(conflicts);
+  // Una scelta già mostrata resta la stessa a ogni ridisegno (un evento del
+  // vault, una ricarica): non si riannuncia e non perde il fuoco. Si rifà solo
+  // se cambia quello che dice.
+  const conflictBoxes = new Map<string, { said: string; box: HTMLElement }>();
+  const drawConflicts = (): void => {
+    const waiting = [...cellDrafts.entries()].filter(([, draft]) => draft.state === "conflict");
+    conflicts.hidden = waiting.length === 0;
+    const kept = new Map<string, { said: string; box: HTMLElement }>();
+    const boxes = waiting.map(([key, draft]) => {
+      const gone = !rows.some((each) => each.doc === draft.doc);
+      const names = { name: noteTitle(draft.doc), column: labelOf(draft.column), text: draft.text };
+      const said = gone ? t("base.cell.conflict_gone", names) : t("base.cell.conflict", names);
+      const shown = conflictBoxes.get(key);
+      if (shown && shown.said === said) { kept.set(key, shown); return shown.box; }
+      const box = document.createElement("div");
+      box.className = "conflict-banner";
+      box.setAttribute("role", "alert");
+      box.dataset.doc = draft.doc;
+      box.dataset.column = draft.column;
+      const line = document.createElement("p");
+      line.textContent = said;
+      const actions = document.createElement("div");
+      actions.className = "conflict-actions";
+      const mine = gone
+        ? button(t("base.cell.conflict_copy"), () => void writeClipboardText(draft.text).then(() => { status.textContent = t("editor_menu.copied"); }, presentError))
+        : button(t("document.conflict.keep_mine"), () => keepCellText(key));
+      mine.classList.add("primary");
+      mine.dataset.choice = "mine";
+      const theirs = button(t("document.conflict.use_disk"), () => dropCellText(key));
+      theirs.dataset.choice = "theirs";
+      actions.append(mine, theirs);
+      box.append(line, actions);
+      // Il fuoco che era sulla scelta di prima della stessa cella resta lì.
+      const focused = shown?.box.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.choice : undefined;
+      kept.set(key, { said, box });
+      if (focused) queueMicrotask(() => box.querySelector<HTMLElement>(`[data-choice="${focused}"]`)?.focus({ preventScroll: true }));
+      return box;
+    });
+    conflictBoxes.clear();
+    for (const [key, entry] of kept) conflictBoxes.set(key, entry);
+    // Solo se l'elenco è cambiato: rimettere gli stessi nodi toglierebbe il
+    // fuoco dal bottone.
+    const same = boxes.length === conflicts.children.length && boxes.every((box, index) => conflicts.children[index] === box);
+    if (!same) conflicts.replaceChildren(...boxes);
   };
   // ---- I gesti della barra ------------------------------------------------
   // Ogni gesto riscrive una sola chiave della vista, con la revisione del file
@@ -1054,28 +1214,67 @@ export function mountBaseSurface(
       const control = document.createElement("input");
       control.type = "text";
       control.value = cellText(value);
-      // Il valore di partenza: Esc ci torna senza scrivere niente.
+      // Il valore di partenza, quello del disco: Esc ci torna senza scrivere
+      // niente.
       control.defaultValue = control.value;
       control.setAttribute("aria-label", `${row.doc} ${column}`);
-      // Una cella non ancora scritta non ha niente da disfare: lì Ctrl+Z è della
-      // Base (`undoKey`), finché non si scrive nel campo.
-      control.dataset.untouched = "true";
-      control.addEventListener("input", () => { delete control.dataset.untouched; }, { once: true });
-      // Invio chiude la modifica: il fuoco passa alla griglia, e la scrittura
-      // parte col `change` che il campo manda perdendo il fuoco. Il fuoco non
-      // cade così sul corpo della pagina, e Ctrl+Z arriva alla Base (IMP-124).
-      control.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !event.isComposing) control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
+      // Una cella che si stava scrivendo prima del ridisegno riprende il suo
+      // testo, non il valore del disco (IMP-137); in conflitto lo dice.
+      const key = draftKey(row.doc, column);
+      const draft = cellDrafts.get(key);
+      if (draft) {
+        control.value = draft.text;
+        if (draft.state === "conflict") control.setAttribute("aria-invalid", "true");
+      } else {
+        // Una cella non ancora scritta non ha niente da disfare: lì Ctrl+Z è
+        // della Base (`undoKey`), finché non si scrive nel campo.
+        control.dataset.untouched = "true";
+        control.addEventListener("input", () => { delete control.dataset.untouched; }, { once: true });
+      }
+      // Il campo tolto da un ridisegno non conferma niente: il suo testo è in
+      // `cellDrafts`, e il campo nuovo lo riprende.
+      const retired = (): boolean => redrawing > 0 || !control.isConnected;
+      control.addEventListener("input", () => {
+        if (retired()) return;
+        const typing = cellDrafts.get(key);
+        if (typing) typing.text = control.value;
+        else cellDrafts.set(key, { doc: row.doc, column, text: control.value, expected: expectedProperty(row, column), state: "editing" });
       });
-      // La scrittura della cella. Il `change` arriva mentre il browser sposta il
-      // fuoco (Tab, un clic): la consegna dopo quel passaggio, così il ridisegno
-      // che la chiude non cade sulla cella verso cui il fuoco va (IMP-124).
-      // Chiudendo la Base parte subito (`destroy`), e il `change` che il browser
-      // mandasse dopo non la ripete.
+      // Invio chiude la modifica: il fuoco passa alla griglia, e la scrittura
+      // parte perdendo il fuoco. Il fuoco non cade così sul corpo della
+      // pagina, e Ctrl+Z arriva alla Base (IMP-124). Esc lascia il testo
+      // scritto e torna al valore del disco.
+      control.addEventListener("keydown", (event) => {
+        if (event.isComposing) return;
+        if (event.key === "Enter") control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
+        else if (event.key === "Escape") {
+          const left = cellDrafts.get(key);
+          cellDrafts.delete(key);
+          control.value = control.defaultValue;
+          control.removeAttribute("aria-invalid");
+          if (left?.state === "conflict") drawConflicts();
+        }
+      });
+      // La scrittura della cella. Il `change` (o il `blur`, per un testo
+      // ripreso dopo un ridisegno, che il browser non vede cambiato) arriva
+      // mentre il browser sposta il fuoco (Tab, un clic): la consegna dopo quel
+      // passaggio, così il ridisegno che la chiude non cade sulla cella verso
+      // cui il fuoco va (IMP-124). Chiudendo la Base parte subito (`destroy`),
+      // e il `change` che il browser mandasse dopo non la ripete. Un campo
+      // tornato al valore del disco non ha niente da scrivere.
       let closing = false;
       const save = (now: boolean): void => {
-        const next = control.value === "" ? null : JSON.stringify(control.value);
-        const write = (): void => { void editCell(row, column, next); };
+        const pending = cellDrafts.get(key);
+        if (control.value === control.defaultValue && pending?.state !== "conflict" && pending?.state !== "writing") { cellDrafts.delete(key); return; }
+        const next = pending ?? { doc: row.doc, column, text: control.value, expected: expectedProperty(row, column), state: "editing" as const };
+        cellDrafts.set(key, next);
+        next.text = control.value;
+        // In conflitto la scelta aspetta: il testo nuovo è quello che «Mantieni»
+        // scriverà.
+        if (next.state === "conflict") { drawConflicts(); status.textContent = t("base.cell.conflict_waiting"); return; }
+        if (next.state === "writing") return;
+        next.state = "writing";
+        const write = (): void => { void confirmCell(key, now); };
         if (now) { write(); return; }
         const timer = window.setTimeout(() => { pendingWrites.delete(timer); write(); }, 0);
         pendingWrites.set(timer, write);
@@ -1085,11 +1284,13 @@ export function mountBaseSurface(
         closing = true;
         save(true);
       });
-      control.addEventListener("change", () => { if (!closing) save(false); });
+      control.addEventListener("change", () => { if (!closing && !retired()) save(false); });
+      control.addEventListener("blur", () => { if (!closing && !retired() && cellDrafts.get(key)?.state === "editing") save(false); });
       // Un numero si legge coi separatori della lingua; col fuoco il campo
-      // torna al valore com'è, quello che si scrive.
+      // torna al valore com'è, quello che si scrive. Un testo in modifica si
+      // mostra com'è.
       const shown = shownText(value, resolvedLanguage());
-      if (value?.kind === "number" && shown !== control.value) {
+      if (!draft && value?.kind === "number" && shown !== control.value) {
         const raw = control.value;
         control.value = shown;
         control.addEventListener("focus", () => { if (control.value === shown) control.value = raw; });
@@ -1215,7 +1416,7 @@ export function mountBaseSurface(
       // di lui (la stessa cella), come dopo un ridisegno della tabella intera.
       const kept = tableFocusOf(document.activeElement);
       const swap = (...nodes: Node[]): void => {
-        tableBody.replaceChildren(...nodes);
+        retire(() => tableBody.replaceChildren(...nodes));
         if (kept !== null && kept !== "grid") focusKept(kept);
       };
       if (!range) { swap(...(addRow ? [addRow] : [])); return; }
@@ -1923,7 +2124,8 @@ export function mountBaseSurface(
     // Il fuoco nella tabella (una cella, o la griglia) lo perde la tabella che
     // si disegna: `drawTable` lo riprende dov'era.
     tableFocus = tableFocusOf(document.activeElement);
-    body.replaceChildren();
+    retire(() => body.replaceChildren());
+    drawConflicts();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
     const hadPick = picked !== null;
@@ -2158,6 +2360,16 @@ export function mountBaseSurface(
       if (focused instanceof HTMLInputElement) cellSaves.get(focused)?.();
       for (const [timer, write] of pendingWrites) { window.clearTimeout(timer); write(); }
       pendingWrites.clear();
+      // Le altre celle in modifica, senza più il campo (uno scorrimento, un
+      // ridisegno le ha tolte): partono anche loro. Una cella in conflitto non
+      // si scrive sopra la nota cambiata: l'avviso ne riporta il testo (IMP-137).
+      for (const [key, draft] of cellDrafts) {
+        if (draft.state === "editing") { draft.state = "writing"; void confirmCell(key, true); }
+        else if (draft.state === "conflict") {
+          cellDrafts.delete(key);
+          notify(t("base.cell.unsaved", { name: noteTitle(draft.doc), reason: t("base.cell.conflict_closed", { column: labelOf(draft.column), text: draft.text }) }), "guasto");
+        }
+      }
       closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       window.clearTimeout(settleTimer);
