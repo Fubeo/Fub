@@ -35,7 +35,7 @@ export const DRAWING_NAMESPACE = "https://fubeo.github.io/ns/scene/1";
 /// commenti e doctype stanno ben dentro.
 const ROOT_WINDOW = 64 * 1024;
 
-/// Se `bytes` è un disegno di Fub: la prima `<svg` del file lega il prefisso
+/// Se `bytes` è un disegno di Fub: il primo elemento `svg` del file lega il prefisso
 /// dello spazio dei nomi dei disegni e ha la sua `version`. È lo stesso segno
 /// che la superficie legge (`status: "fubdraw"`); un falso sì lo corregge la
 /// superficie, che in una scheda mostra un SVG estraneo com'è.

@@ -73,12 +73,8 @@ Regole dell'estensione:
   `Corsi.2026/leggimi` è un file;
 - un nome nascosto senza altro punto (`.md`) non ha estensione.
 
-Sulla lavagna l'SVG è un'immagine ferma anche se `formatKindOf` lo chiama
-disegno: nella scheda della lavagna non diventa mai il disegno vivo. Nella
-nota (`noteCardKindOf`) è la specie `drawing`: a riposo la stessa immagine
-ferma, da attiva l'editor dei disegni compatto, se il file è un disegno di Fub
-([ADR 0248](../decisions/0248-il-disegno-nella-nota-si-modifica-sul-posto.md)). Una specie senza renderer registrato
-(senza la sua porta) si mostra come scheda di file con «Apri».
+Sulla lavagna l'SVG resta un'immagine ferma, mai il disegno vivo (ADR 0248).
+Una specie senza renderer (senza la sua porta) è una scheda di file con «Apri».
 
 ## Le misure di nascita
 
