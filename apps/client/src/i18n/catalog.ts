@@ -692,7 +692,8 @@ export const IT = { // --- la scocca -------------------------------------------
 "viewer.unavailable": "Anteprima binaria non disponibile",
 "viewer.bytes_unavailable": "Anteprima binaria non disponibile",
 "surface.unavailable": "Nessuna superficie disponibile",
-"surface.failed": "Questo documento non si può mostrare",
+"surface.failed": "Questo documento non si apre",
+"surface.details": "Dettagli",
 "mode.document": "Documento",
 "mode.page": "Pagina",
 "mode.writing": "Scrittura",
@@ -1304,6 +1305,7 @@ export const IT = { // --- la scocca -------------------------------------------
 // con un soggetto vuoto darebbe una frase che non finisce.
 "trouble.about": "{reason}: {doc}",
 "trouble.vault": "{reason}",
+"trouble.unreadable": "Questo documento non si apre",
 // La porta del panico (§17.3, decisione 0161): quando il kernel sa da dove è
 // entrato il guasto, l'avviso lo dice in coda. Le frasi riadattano quelle di
 // `Gate::what` in crates/fub-abi/src/gate.rs, senza il dettaglio del sito.
@@ -4911,7 +4913,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "viewer.unavailable": "Binary preview unavailable",
 "viewer.bytes_unavailable": "Binary preview unavailable",
 "surface.unavailable": "No surface available",
-"surface.failed": "This document can't be shown",
+"surface.failed": "This document can't be opened",
+"surface.details": "Details",
 "mode.document": "Document",
 "mode.page": "Page",
 "mode.writing": "Writing",
@@ -5581,6 +5584,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 
 "trouble.about": "{reason}: {doc}",
 "trouble.vault": "{reason}",
+"trouble.unreadable": "This document can't be opened",
 // La porta del panico (§17.3, decisione 0161): quando il kernel sa dove è
 // entrato il difetto, la notifica lo dice alla fine. Le frasi adattano
 // quelle di `Gate::what` in crates/fub-abi/src/gate.rs, senza il dettaglio

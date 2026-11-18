@@ -4,7 +4,7 @@
 // guarda.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { errorText } from "./errors";
+import { errorKindPhrase, errorText } from "./errors";
 // Caricare le stringhe registra chi traduce le frasi delle specie.
 import "../i18n/strings";
 
@@ -38,6 +38,27 @@ describe("errorText", () => {
     for (const e of [unresolved("internal"), { qualunque: 1 }, { kind: 3, message: {} }]) {
       expect(errorText(e)).not.toContain("[object");
       expect(errorText(e)).not.toContain("error.kind");
+    }
+  });
+});
+
+describe("errorKindPhrase", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Una riga che dice che cosa non è riuscito (un documento che non si apre, un
+  // pannello che non si ridisegna) non legge il messaggio del kernel: un
+  // `FormatError` esce come `internal` con la prosa in inglese del codec.
+  it("says the kind of a failure, never the English message of the kernel", () => {
+    speak("it-IT");
+    const codec = { kind: "internal", message: "parse failed: rich codec: not a valid zip package" };
+    expect(errorKindPhrase(codec)).toBe("si è verificato un problema imprevisto");
+    expect(errorKindPhrase({ kind: "not_found", message: "a/Uno.md" })).toBe("non esiste più");
+    expect(errorKindPhrase(new TypeError("rotto"))).toBe("si è verificato un problema imprevisto");
+    speak("en-US");
+    expect(errorKindPhrase(codec)).toBe("an unexpected problem occurred");
+    for (const e of [codec, unresolved("internal"), { qualunque: 1 }, "stringa"]) {
+      expect(errorKindPhrase(e)).not.toContain("parse failed");
+      expect(errorKindPhrase(e)).not.toContain("[object");
     }
   });
 });

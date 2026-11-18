@@ -62,6 +62,19 @@ export function errorText(e: unknown): string {
   return String(e);
 }
 
+// La frase della specie, senza il messaggio.
+//
+// Per le righe che dicono **che cosa non è riuscito** (un documento che non si
+// apre, un pannello che non si ridisegna, una ricerca che non parte). Lì il
+// messaggio di un `FormatError` uscito come `internal` è la prosa in inglese del
+// codec («parse failed: rich codec…»): la specie dice già abbastanza, nella
+// lingua di chi guarda, e il messaggio resta per chi lo cerca nel registro.
+// Chi vuole il messaggio usa `errorText`.
+export function errorKindPhrase(e: unknown): string {
+  const kind = typeof e === "object" && e !== null ? (e as { kind?: unknown }).kind : undefined;
+  return kindPhrase(typeof kind === "string" ? kind : "internal");
+}
+
 export type ErrorKindKey =
   | "error.kind.io"
   | "error.kind.not_found"
