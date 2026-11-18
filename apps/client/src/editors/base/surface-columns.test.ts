@@ -536,3 +536,17 @@ describe("la tabella come nel prototipo", () => {
     } finally { done(); }
   });
 });
+
+describe("una colonna container.* è di sola lettura", () => {
+  it("la sua cella non si apre in modifica, come quella di `file.*`", async () => {
+    // La cartella del file che ospita la Base non è una proprietà della nota:
+    // una cella che la scrivesse farebbe una riga `container.folder:` nel
+    // frontmatter (IMP-123, la stessa classe). La cella è testo.
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "container.folder"] } }]);
+    try {
+      await ready(host);
+      expect(host.querySelector('tr[data-doc="Opere/Nebbia.md"] td[data-cell="1"] input')).not.toBeNull();
+      expect(host.querySelector('tr[data-doc="Opere/Nebbia.md"] td[data-cell="2"] input')).toBeNull();
+    } finally { done(); }
+  });
+});

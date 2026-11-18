@@ -5,7 +5,7 @@ import type { Theme } from "../../theme/theme";
 import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
 import { parseFilter, type FilterDef } from "./filter";
-import { parseOrder, parseSort, propertyName, type SortEntry } from "./sort";
+import { parseOrder, parseSort, propertyName, readOnlyColumn, type SortEntry } from "./sort";
 // Il registro dei tipi del vault (`properties.types`) si legge come lo legge
 // la testata delle note: una regola sola per tipi, opzioni e gruppi.
 import { declaredType, OPTION_GROUPS, optionsOf, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
@@ -492,6 +492,9 @@ function sameJson(left: unknown, right: unknown): boolean {
 }
 
 export async function prepareBaseMutations(deps: BaseSurfaceDeps, source: string, view: string | null, edits: { doc: string; key: string; expected: BaseExpected; value?: string | null }[]): Promise<BaseMutation[]> {
+  // Una colonna che non è una proprietà (`file.*`, `container.*`, una formula)
+  // non si scrive: si dice prima di chiedere al core, e la cella non ci arriva.
+  if (edits.some((edit) => readOnlyColumn(edit.key))) throw new Error("base: colonna in sola lettura");
   const raw = await baseQuery(deps, { version: 1, op: "mutate", source, view, edits });
   if (!Array.isArray(raw.mutations) || raw.mutations.length !== edits.length) throw new Error("base: mutazioni malformate");
   return raw.mutations.map((item, index) => {
