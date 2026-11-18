@@ -393,12 +393,14 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     // riquadro) si conta di nuovo. Solo quando cambia il testo: mostrare le
     // occorrenze è una transazione anche lei, e non cambia niente da contare.
     let counted = engine.read((state) => state.doc);
-    own.add(engine.subscribe(() => {
+    const recount = (): void => {
       const doc = engine.read((state) => state.doc);
       if (doc === counted) return;
       counted = doc;
       if (!writing) refind();
-    }));
+    };
+    const unsubscribe = engine.subscribe(recount);
+    own.add(unsubscribe);
     bar = { what, replacing, life: own };
     findBar.hidden = false;
     changed();
