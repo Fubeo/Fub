@@ -228,7 +228,7 @@ lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
 parte che l'utente non ha toccato, che duplicherebbe un'immagine o
 lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
 di 256 MiB non si apre, e neppure uno vuoto o rotto: la scheda lo dice in
-una frase, e i pannelli accanto restano in piedi (le statistiche dicono che
+una frase, con il motivo tecnico in «Dettagli», chiuso; i pannelli accanto restano in piedi (le statistiche dicono che
 non c'è niente da contare); uno molto lungo (centomila paragrafi) si apre in
 qualche secondo, senza fermare l'interfaccia.
 
