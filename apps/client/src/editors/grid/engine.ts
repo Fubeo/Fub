@@ -65,7 +65,20 @@ import {
   type GridRange,
 } from "./merges";
 import { attachCommentCards, commentDescription } from "./comment-card";
-import { cornerPiece, rectPieces, wholeRect, type Bands, type Rect, type Zone } from "./marks";
+import { createMarksMotion, type MarksMotion } from "./grid-motion";
+import {
+  cornerSeen,
+  edgeParts,
+  rectPieces,
+  selectionParts,
+  wholeRect,
+  type Bands,
+  type MarkGeometry,
+  type MarkPart,
+  type Rect,
+  type SelectionLook,
+  type Zone,
+} from "./marks";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
 import { morphChildren, placeInOrder, syncAttributes } from "./dom-sync";
@@ -328,6 +341,8 @@ function zoneOf(frozenColumn: boolean, frozenRow: boolean): Zone {
 /// oltre il taglio: il livello lo taglia, e il bordo del segno non si vede
 /// dove la zona finisce (`marks.ts`, `bleed`). Più dei 2 px del bordo.
 const MARK_BLEED = 3;
+/// Il quadratino si prende entro tanti px dall'angolo dei fili.
+const FILL_SLOP = 6;
 /// Ciò che un disegno mette in ogni livello del piano, nell'ordine.
 type Drawing = Map<HTMLElement, HTMLElement[]>;
 /// Una cella disegnata in una riga che resta: l'elemento, il suo bordo, la
@@ -552,6 +567,12 @@ export class GridEngine {
   /// Ciò che vive quanto la griglia e si toglie con una vita: la scheda delle
   /// note e dei commenti.
   readonly #life: Lifetime = openLifetime();
+  /// I segni della selezione, che restano e scivolano (`grid-motion.ts`).
+  readonly #marks: MarksMotion;
+  /// Il prossimo disegno dei segni salta al bersaglio: una selezione rimessa
+  /// dall'host. Anche il cambio di foglio salta (`#marksSheet`).
+  #marksJump = true;
+  #marksSheet: string | null = null;
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
@@ -606,6 +627,13 @@ export class GridEngine {
     this.#layers = { body, top: part("grid-marks-top"), left: part("grid-marks-left"), corner: part("grid-marks-corner") };
     this.#lifts = { body, top: part("grid-lift-top"), left: part("grid-lift-left"), corner: part("grid-lift-corner") };
     this.#fixed = part("grid-fixed");
+    this.#marks = createMarksMotion({
+      layers: this.#layers,
+      lifts: this.#lifts,
+      lifetime: this.#life,
+      bands: () => this.#bands(),
+      title: (kind) => (kind === "handle" ? t("grid.fill.handle") : null),
+    });
     this.#sheetPaper = part("grid-paper");
     this.#paperRulesHost = part("grid-paper-rules", false);
     this.#sheetPaper.append(this.#paperRulesHost);
@@ -687,6 +715,8 @@ export class GridEngine {
       const view = this.#readView();
       this.#scrollView = view;
       if (this.#workbook) this.#renderRows(this.#selectedRange(), true, view, Infinity, GRID_FRAME_NEW_ROWS);
+      // Sotto il puntatore fermo passa un'altra cella: il gesto la prende.
+      if (this.#drag) this.#dragTo(this.#drag);
       this.#scheduleRender();
     }, { signal });
     // L'editor della cella sta dentro la griglia, e i suoi eventi salgono fin
@@ -702,7 +732,7 @@ export class GridEngine {
     this.#viewport.addEventListener("pointermove", grid((event) => this.#pointerMove(event)), { signal });
     this.#viewport.addEventListener("pointerup", (event) => {
       this.#endResize(true);
-      this.#endDrag(true, event.ctrlKey || event.metaKey);
+      this.#endDrag(true, event.ctrlKey || event.metaKey, { x: event.clientX, y: event.clientY });
       this.#endObjectGesture(event, true);
     }, { signal });
     this.#viewport.addEventListener("pointercancel", (event) => {
@@ -732,7 +762,7 @@ export class GridEngine {
         : event.target instanceof Element ? event.target : null;
       if (!target || !this.#viewport.contains(target)) return;
       if (target.closest(".grid-object-text-editor")) return;
-      if (target.closest(".grid-fill-handle")) {
+      if (this.#onFillHandle(event.clientX, event.clientY)) {
         this.#fillToNeighbour();
         return;
       }
@@ -1452,6 +1482,7 @@ export class GridEngine {
     }
     const active = parseCellA1(selection.active);
     if (index < 0 || !active) return;
+    this.#marksJump = true;
     const areas = selection.selection.split(",").map(parseRangeA1).filter((area): area is GridRange => area !== null);
     const area = areas.find((candidate) =>
       active.row >= candidate.rowStart && active.row <= candidate.rowEnd
@@ -2318,22 +2349,22 @@ export class GridEngine {
     // I segni, ognuno nel livello della zona dove cade.
     const drawing: Drawing = new Map();
     this.#objectElements(drawing);
-    this.#freezeLines(drawing);
-    this.#selectionMarks(drawing, range);
-    this.#fillMarks(drawing, range);
+    this.#updateMarks(range);
+    this.#fillPreview(drawing);
     this.#cutMarks(drawing);
     this.#resizeMarks(drawing);
     this.#moveMarks(drawing);
     this.#referenceMarks(drawing);
     this.#viewport.classList.toggle("filling", this.#drag?.kind === "fill");
     this.#viewport.classList.toggle("moving", this.#drag?.kind === "move");
-    this.#viewport.classList.toggle("ranged", !this.#lone(range) || this.#others.length > 0);
 
     // Ciò che non cambia resta: la cella sotto il puntatore riceve il clic e
     // il doppio clic, e l'editor aperto non perde il fuoco.
     const focused = this.#cellEditorHost.contains(document.activeElement);
+    // I pezzi dei segni che restano (`#marks`) non passano di qui.
     for (const container of new Set([...Object.values(this.#layers), ...Object.values(this.#lifts), this.#fixed])) {
-      this.#reconcile(container, [...container.children] as HTMLElement[], drawing.get(container) ?? []);
+      const drawn = [...container.children].filter((element) => !this.#marks.owns(element)) as HTMLElement[];
+      this.#reconcile(container, drawn, drawing.get(container) ?? []);
     }
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
     if (editing) {
@@ -2443,8 +2474,8 @@ export class GridEngine {
       (frozen ? headRows : bodyRows).push(element);
     }
 
-    // La riga delle intestazioni di colonna si confronta per intero: è una
-    // sola, e cambia con le colonne disegnate.
+    // La riga delle intestazioni di colonna: ogni intestazione resta per
+    // colonna e si aggiorna sul posto (una freccia cambia solo `selected`).
     const headerRow = [...this.#head.children].find((element): element is HTMLElement =>
       element instanceof HTMLElement && element.classList.contains("grid-column-header-row")) ?? null;
     let header: HTMLElement | null = null;
@@ -2452,9 +2483,10 @@ export class GridEngine {
       const fresh = this.#columnHeaders(renderedColumns, range);
       if (headerRow) {
         syncAttributes(headerRow, fresh);
-        this.#reconcile(headerRow, [...headerRow.children] as HTMLElement[], [...fresh.children] as HTMLElement[]);
+        this.#keepHeaders(headerRow, fresh);
         header = headerRow;
       } else {
+        fresh.prepend(this.#corner);
         header = fresh;
       }
     } else {
@@ -2800,6 +2832,40 @@ export class GridEngine {
     }
   }
 
+  /// Porta la riga delle intestazioni `row` a essere come `fresh`: l'angolo
+  /// in testa, poi un'intestazione per colonna, ritrovata per colonna e
+  /// aggiornata sul posto. Entra solo la colonna che entra nel margine, ed
+  /// esce solo quella che ne esce.
+  #keepHeaders(row: HTMLElement, fresh: HTMLElement): void {
+    const old = new Map<string, HTMLElement>();
+    for (const child of row.children) {
+      const column = child.getAttribute("aria-colindex");
+      if (child !== this.#corner && column !== null && child instanceof HTMLElement) old.set(column, child);
+    }
+    const placed: HTMLElement[] = [this.#corner];
+    for (const element of [...fresh.children] as HTMLElement[]) {
+      const column = element.getAttribute("aria-colindex") ?? "";
+      const before = old.get(column);
+      if (!before) {
+        placed.push(element);
+        continue;
+      }
+      old.delete(column);
+      syncAttributes(before, element);
+      if (before.textContent !== element.textContent) before.textContent = element.textContent;
+      placed.push(before);
+    }
+    const keep = new Set<Element>(placed);
+    for (const child of [...row.children]) if (!keep.has(child)) child.remove();
+    // Dal fondo: un'intestazione già al suo posto non si muove.
+    let next: ChildNode | null = null;
+    for (let index = placed.length - 1; index >= 0; index -= 1) {
+      const element = placed[index];
+      if (element.parentNode !== row || element.nextSibling !== next) row.insertBefore(element, next);
+      next = element;
+    }
+  }
+
   /// Se la selezione è la sola cella attiva, o l'unione che la contiene.
   #lone(range: GridRange): boolean {
     const active = this.#active();
@@ -2810,48 +2876,97 @@ export class GridEngine {
     return sameRange(range, cell);
   }
 
-  /// Il rettangolo dell'intervallo scelto, uno solo e non cella per cella:
-  /// con una cella sola il bordo è quello della cella attiva, su un taglio
-  /// sono le formiche.
-  #selectionMarks(drawing: Drawing, range: GridRange): void {
-    for (const area of this.#others) this.#rangeMark(drawing, area);
-    if (this.#lone(range) && !this.#others.length) return;
-    // Sulle formiche di un taglio il bordo pieno le coprirebbe.
+  /// I segni della selezione, che restano e scivolano: il rettangolo, la
+  /// cella attiva, il velo, le fasce delle intestazioni, il quadratino; e,
+  /// fermi, i fili del blocco e gli altri intervalli scelti. Li disegna e li
+  /// muove `grid-motion.ts` dai dieci numeri di `#markGeometry`.
+  #updateMarks(range: GridRange): void {
+    const geometry = this.#markGeometry(range);
+    if (!geometry) {
+      this.#marks.clear();
+      return;
+    }
+    const sheet = this.#sheet().id;
+    const glide = !this.#marksJump && this.#marksSheet === sheet;
+    this.#marksJump = false;
+    this.#marksSheet = sheet;
+    const frame = this.#frame;
     const cut = this.#cutMark;
-    if (cut && cut.sheet === this.#sheet().id && sameRange(cut.range, range)) return;
-    this.#rangeMark(drawing, range);
+    const look: SelectionLook = {
+      lone: this.#lone(range) && !this.#others.length,
+      // Sulle formiche di un taglio il bordo pieno le coprirebbe.
+      edges: !(cut && cut.sheet === sheet && sameRange(cut.range, range)),
+      handle: this.#fillServed(),
+      header: { width: frame.rowHeader, height: frame.columnHeader },
+    };
+    const still: MarkPart[] = [...this.#freezeParts()];
+    this.#others.forEach((area, index) => {
+      const box = this.#rangeBox(area);
+      if (!box) return;
+      const edges = { L: box.left, T: box.top, R: box.left + box.width, B: box.top + box.height };
+      still.push(...edgeParts(`other-${index}`, "edge", edges, 2, { glide: false }));
+      still.push({ name: `other-${index}-veil`, kind: "veil", rect: { x: box.left, y: box.top, w: box.width, h: box.height }, glide: false });
+    });
+    this.#marks.update({
+      geometry,
+      parts: (shown) => selectionParts(shown, look),
+      still,
+      fill: this.#drag?.kind === "fill",
+      glide,
+    });
   }
 
-  #rangeMark(drawing: Drawing, range: GridRange): void {
+  /// I dieci numeri dei segni (`MarkGeometry`): il rettangolo di `range`, la
+  /// cella attiva (con la sua unione) e l'angolo del quadratino, che mentre
+  /// si tira il riempimento sta su quello del riempimento. `null` se il
+  /// rettangolo o la cella attiva non hanno misura (righe o colonne
+  /// nascoste).
+  #markGeometry(range: GridRange): MarkGeometry | null {
+    const active = this.#active();
+    const merge = mergeAt(this.#merges(), active);
+    const cell: GridRange = merge
+      ? { rowStart: merge.row, rowEnd: merge.row + merge.rows - 1, columnStart: merge.column, columnEnd: merge.column + merge.columns - 1 }
+      : { rowStart: active.row, rowEnd: active.row, columnStart: active.column, columnEnd: active.column };
     const box = this.#rangeBox(range);
-    if (box) this.#rectMark(drawing, "grid-selection", box);
+    const own = this.#rangeBox(cell);
+    if (!box || !own) return null;
+    const drag = this.#drag?.kind === "fill" ? this.#drag : null;
+    const fill = (drag ? this.#rangeBox(drag.target) : null) ?? box;
+    return [
+      box.left, box.top, box.left + box.width, box.top + box.height,
+      own.left, own.top, own.left + own.width, own.top + own.height,
+      fill.left + fill.width, fill.top + fill.height,
+    ];
   }
 
-  /// Il quadratino di riempimento all'angolo della selezione e, mentre lo si
-  /// tira, il contorno di ciò che riempirà. Sono gesti del puntatore: dalla
-  /// tastiera gli stessi riempimenti sono Ctrl+D, Ctrl+R e Serie.
-  #fillMarks(drawing: Drawing, range: GridRange): void {
+  /// Se il punto (dello schermo) prende il quadratino: dove si vede il suo
+  /// angolo, entro `FILL_SLOP` px, anche sulla metà che una fascia ferma
+  /// copre, e mai quando l'angolo è passato sotto la fascia. Decide questa
+  /// prova, non il bersaglio del DOM, che sul filo dipende da chi copre chi.
+  #onFillHandle(x: number, y: number): boolean {
+    if (!this.#fillServed()) return false;
+    const box = this.#rangeBox(this.#selectedRange());
+    if (!box) return false;
+    const seen = cornerSeen(box.left + box.width, box.top + box.height, false, this.#bands(), {
+      left: this.#viewport.scrollLeft,
+      top: this.#viewport.scrollTop,
+    });
+    if (!seen) return false;
+    const rect = this.#viewport.getBoundingClientRect();
+    const px = x - rect.left - this.#viewport.clientLeft;
+    const py = y - rect.top - this.#viewport.clientTop;
+    return Math.abs(px - (seen.x - 1)) <= FILL_SLOP && Math.abs(py - (seen.y - 1)) <= FILL_SLOP;
+  }
+
+  /// Mentre si tira il quadratino, il contorno di ciò che riempirà. Sono
+  /// gesti del puntatore: dalla tastiera gli stessi riempimenti sono Ctrl+D,
+  /// Ctrl+R e Serie.
+  #fillPreview(drawing: Drawing): void {
     if (!this.#fillServed()) return;
     const drag = this.#drag?.kind === "fill" ? this.#drag : null;
-    if (drag && !sameRange(drag.source, drag.target)) {
-      const box = this.#rangeBox(drag.target);
-      if (box) this.#rectMark(drawing, "grid-fill-preview", box);
-    }
-    const box = this.#rangeBox(drag?.target ?? range);
-    if (box) {
-      // Un segno d'angolo: un pezzo solo, intero, nel livello «lift» della
-      // zona del suo angolo; sul filo del blocco la fascia ne copre ciò che
-      // le passa sotto, come copre le celle.
-      const handle = document.createElement("div");
-      handle.className = "grid-fill-handle";
-      handle.setAttribute("aria-hidden", "true");
-      handle.title = t("grid.fill.handle");
-      const right = box.left + box.width;
-      const bottom = box.top + box.height;
-      const piece = cornerPiece({ x: right - 4, y: bottom - 4, w: 8, h: 8 }, { x: right, y: bottom, start: false }, this.#bands());
-      this.#place(handle, piece.rect.x, piece.rect.y, piece.rect.w, piece.rect.h);
-      this.#draw(drawing, this.#lifts[piece.zone], handle);
-    }
+    if (!drag || sameRange(drag.source, drag.target)) return;
+    const box = this.#rangeBox(drag.target);
+    if (box) this.#rectMark(drawing, "grid-fill-preview", box);
   }
 
   /// Mentre si tira il bordo di un'intestazione: la guida dove cadrà e la
@@ -3027,7 +3142,8 @@ export class GridEngine {
     return { left: this.#columnLeft(range.columnStart), top: frame.columnHeader + this.#rows.offsets[range.rowStart], width, height };
   }
 
-  /// La riga delle intestazioni di colonna, con l'angolo.
+  /// La riga delle intestazioni di colonna, senza l'angolo: l'angolo è uno
+  /// solo e resta dov'è (`#keepHeaders`); qui si aggiorna sul posto.
   #columnHeaders(columns: readonly number[], range: GridRange): HTMLElement {
     const frame = this.#frame;
     const row = document.createElement("div");
@@ -3035,12 +3151,11 @@ export class GridEngine {
     row.setAttribute("role", "row");
     row.setAttribute("aria-rowindex", "1");
     this.#place(row, 0, 0, frame.rowHeader + this.#columns.total, frame.columnHeader);
-    this.#corner.className = "grid-corner";
-    this.#corner.setAttribute("role", "presentation");
-    this.#corner.textContent = "";
+    if (this.#corner.className !== "grid-corner") this.#corner.className = "grid-corner";
+    if (this.#corner.getAttribute("role") !== "presentation") this.#corner.setAttribute("role", "presentation");
+    if (this.#corner.firstChild) this.#corner.textContent = "";
     this.#corner.style.pointerEvents = "none";
     this.#stickLeft(this.#corner, 0, 0, frame.rowHeader, frame.columnHeader);
-    row.append(this.#corner);
     for (const column of columns) {
       if (this.#columns.sizes[column] === 0) continue;
       const header = document.createElement("div");
@@ -3060,31 +3175,22 @@ export class GridEngine {
     return row;
   }
 
-  /// I fili sotto le righe bloccate e a destra delle colonne bloccate: segni
+  /// I fili sotto le righe bloccate e a destra delle colonne bloccate: pezzi
   /// fermi nei livelli della testa, della colonna ferma e dell'angolo, che
   /// stanno fermi con loro.
-  #freezeLines(drawing: Drawing): void {
+  #freezeParts(): MarkPart[] {
     const frame = this.#frame;
     const bands = this.#bands();
     const width = frame.rowHeader + this.#columns.total;
     const height = frame.columnHeader + this.#rows.total;
-    const line = (zone: Zone, className: string, rect: Rect) => {
-      if (!(rect.w > 0 && rect.h > 0)) return;
-      const element = document.createElement("div");
-      element.className = `grid-freeze ${className}`;
-      element.setAttribute("aria-hidden", "true");
-      const at = wholeRect(zone, rect, bands);
-      this.#place(element, at.x, at.y, at.w, at.h);
-      this.#draw(drawing, this.#layers[zone], element);
-    };
-    if (frame.frozenRows > 0) {
-      line("top", "grid-freeze-rows", { x: 0, y: bands.top - 1, w: width, h: 1 });
-      line("corner", "grid-freeze-rows", { x: 0, y: bands.top - 1, w: bands.left, h: 1 });
+    const out: MarkPart[] = [];
+    if (frame.frozenRows > 0 && width > 0) {
+      out.push({ name: "freeze-rows", kind: "freeze", dir: "h", rect: { x: 0, y: bands.top - 1, w: width, h: 1 }, zones: ["top", "corner"], band: true, glide: false });
     }
-    if (frame.frozenColumns > 0) {
-      line("left", "grid-freeze-columns", { x: bands.left - 1, y: bands.top, w: 1, h: height - bands.top });
-      line("corner", "grid-freeze-columns", { x: bands.left - 1, y: frame.columnHeader, w: 1, h: frame.frozenHeight });
+    if (frame.frozenColumns > 0 && height > frame.columnHeader) {
+      out.push({ name: "freeze-columns", kind: "freeze", dir: "v", rect: { x: bands.left - 1, y: frame.columnHeader, w: 1, h: height - frame.columnHeader }, zones: ["left", "corner"], band: true, glide: false });
     }
+    return out;
   }
 
   /// Gli oggetti letti del foglio mostrato, nell'ordine in cui si disegnano.
@@ -4595,8 +4701,7 @@ export class GridEngine {
         return;
       }
     }
-    const handle = event.target instanceof Element && event.target.closest(".grid-fill-handle");
-    if (handle && this.#fillServed()) {
+    if (this.#onFillHandle(event.clientX, event.clientY)) {
       event.preventDefault();
       const source = this.#selectedRange();
       this.#drag = { kind: "fill", source, target: source, x: event.clientX, y: event.clientY };
@@ -4666,7 +4771,9 @@ export class GridEngine {
       const edge = this.#resizeEdge(event.clientX, event.clientY);
       this.#viewport.classList.toggle("resize-column", edge?.axis === "column");
       this.#viewport.classList.toggle("resize-row", edge?.axis === "row");
-      this.#viewport.classList.toggle("move-selection", !edge && this.#onSelectionEdge(event.clientX, event.clientY));
+      const fill = !edge && this.#onFillHandle(event.clientX, event.clientY);
+      this.#viewport.classList.toggle("fill-handle", fill);
+      this.#viewport.classList.toggle("move-selection", !edge && !fill && this.#onSelectionEdge(event.clientX, event.clientY));
       return;
     }
     if (event.buttons === 0) {
@@ -4788,10 +4895,19 @@ export class GridEngine {
   /// Chiude il gesto. Il riempimento tirato fuori dalla sorgente dà
   /// `edit.autoFill`; con Ctrl tirato, il modo alternato di Excel (un numero
   /// solo conta, una serie si copia).
-  #endDrag(commit: boolean, alternate: boolean): void {
+  ///
+  /// Il rilascio in `point` conta come l'ultimo spostamento: la selezione
+  /// finisce sulla cella sotto il punto dove il puntatore si è alzato.
+  #endDrag(commit: boolean, alternate: boolean, point?: { readonly x: number; readonly y: number }): void {
     const drag = this.#drag;
     this.#stopDragScroll();
     if (!drag) return;
+    // Solo se il punto è nuovo: un rilascio dove si è premuto non sposta.
+    if (commit && point && (point.x !== drag.x || point.y !== drag.y)) {
+      drag.x = point.x;
+      drag.y = point.y;
+      this.#dragTo(drag);
+    }
     this.#drag = null;
     if (drag.kind === "move") {
       if (commit && !sameRange(drag.source, drag.target)) this.#moveRange(drag.source, drag.target, alternate);

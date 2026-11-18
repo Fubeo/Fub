@@ -1846,6 +1846,11 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 .look-file .grid-rule-column,
 .look-adattato .grid-rule-column { background: var(--doc-rule, rgb(20 22 26 / 30%)); }
+/* Il colore dei segni della selezione: sulla carta del file, chiara in ogni
+   luce, è l'inchiostro del suo cursore, che resta leggibile anche nelle luci
+   scure dove l'accento del tema è chiaro; sulla carta del tema è l'accento. */
+.grid-viewport { --grid-mark: var(--accent, #007249); }
+.look-file .grid-viewport { --grid-mark: var(--paper-caret, #007249); }
 /* Un foglio senza griglia: la carta senza fili, solo il fondo. */
 .look-file .no-gridlines .grid-paper,
 .look-adattato .no-gridlines .grid-paper,
@@ -2053,11 +2058,22 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   z-index: 3;
 }
 
-/* I fili del blocco stanno sopra i segni del loro livello. */
-.grid-freeze {
+/* I pezzi dei segni che restano e scivolano (`grid-motion.ts`): ognuno sta
+   fermo nel suo posto d'arrivo e un `transform` dall'angolo lo porta dove la
+   corsa lo vede. Non prendono il puntatore: il quadratino si prende dove si
+   vede il suo angolo, per geometria. Il quadratino sta sopra i lati, i fili
+   del blocco sopra tutti i segni del loro livello. */
+.grid-mark {
   position: absolute;
-  z-index: 7;
+  box-sizing: border-box;
+  transform-origin: 0 0;
   pointer-events: none;
+}
+.grid-mark-handle {
+  z-index: 4;
+}
+.grid-mark-freeze {
+  z-index: 7;
 }
 
 /* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
@@ -2216,12 +2232,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   pointer-events: none;
 }
 
-/* I segni stanno nel livello della loro zona, sopra gli oggetti. Il
-   quadratino di riempimento è un pezzo solo, intero, nel livello «lift» della
-   zona del suo angolo, e prende il puntatore; il contorno del riempimento
-   tirato e le formiche di un taglio no. */
+/* I segni stanno nel livello della loro zona, sopra gli oggetti, e non
+   prendono il puntatore: il quadratino si prende per geometria. Il contorno
+   `.grid-selection` è quello della scheda di un foglio (`card.ts`). */
 .grid-selection,
-.grid-fill-handle,
 .grid-fill-preview,
 .grid-move-preview,
 .grid-formula-ref,
@@ -2231,11 +2245,7 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   box-sizing: border-box;
 }
 
-.grid-fill-handle {
-  pointer-events: auto;
-}
-
-.grid-fill-handle,
+.grid-viewport.fill-handle,
 .grid-viewport.filling {
   cursor: crosshair;
 }

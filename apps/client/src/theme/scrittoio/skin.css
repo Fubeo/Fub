@@ -11409,17 +11409,10 @@ button.cm-fub-page-icon:focus-visible {
     var(--sheet-2);
 }
 /* Le intestazioni della selezione prendono l'accento, come nei fogli di
-   calcolo. */
+   calcolo: il testo qui, il velo e il filo verso le celle nelle fasce che
+   scivolano con la selezione (`grid-mark-band-col`, `-row`). */
 .grid-header.selected {
-  box-shadow: inset 0 0 0 999px var(--accent-veil);
   color: var(--accent);
-}
-/* E un filo d'accento sul lato verso le celle. */
-.grid-column-header.selected {
-  box-shadow: inset 0 -2px 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
-}
-.grid-row-header.selected {
-  box-shadow: inset -2px 0 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
 }
 /* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
    che le segue. */
@@ -11430,7 +11423,7 @@ button.cm-fub-page-icon:focus-visible {
   border-top: 3px double var(--muted);
 }
 /* Il filo del blocco è quello di Excel. */
-.grid-freeze {
+.grid-mark-freeze {
   background: var(--muted);
 }
 /* Il segno di una nota nell'angolo, come in Excel: rosso per le note,
@@ -11532,28 +11525,49 @@ button.cm-fub-page-icon:focus-visible {
   background: var(--bg-elev);
   color: var(--doc-fg);
 }
-/* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
-   suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
-.grid-row .selected {
-  box-shadow: inset 0 0 0 999px var(--accent-veil);
+/* I segni della selezione prendono `--grid-mark` (in `structure.css`).
+   Il rettangolo: quattro lati di 2 px, uno sul filo e uno dentro; la cella
+   attiva ha un anello sottile e il resto un velo. Il velo sta sopra le
+   celle, quindi si vede anche su una cella col colore suo. */
+.grid-mark-edge,
+.grid-mark-ring,
+.grid-mark-handle {
+  background: var(--grid-mark, var(--accent));
 }
-.grid-row .active {
-  box-shadow: inset 0 0 0 2px var(--accent);
+.grid-mark-veil {
+  background: color-mix(in srgb, var(--grid-mark, var(--accent)) 14%, transparent);
 }
-/* Dentro un intervallo la cella attiva resta bianca, con un filo: il bordo
-   forte è quello del rettangolo. */
-.grid-viewport.ranged .grid-row .active {
-  box-shadow: inset 0 0 0 1px var(--accent);
+/* Il quadratino all'angolo della selezione: il bordo è la carta. */
+.grid-mark-handle {
+  box-shadow: 0 0 0 1px var(--doc-bg, #ffffff);
 }
+/* Le intestazioni della selezione: il velo e il filo d'accento del tema,
+   perché le intestazioni sono cornice e non carta. */
+.grid-mark-band-col {
+  background: var(--accent-veil);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.grid-mark-band-row {
+  background: var(--accent-veil);
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+@media (forced-colors: active) {
+  .grid-mark-edge,
+  .grid-mark-ring,
+  .grid-mark-handle {
+    border: 1px solid Highlight;
+  }
+  .grid-mark-veil,
+  .grid-mark-band-col,
+  .grid-mark-band-row {
+    background: transparent;
+  }
+}
+/* Il contorno della selezione nella scheda di un foglio (`card.ts`). */
 .grid-selection {
   border: 2px solid var(--accent);
 }
-/* Il quadratino all'angolo della selezione, e il riempimento tirato a
-   tratteggio come in Excel. */
-.grid-fill-handle {
-  border: 1px solid var(--sheet);
-  background: var(--accent);
-}
+/* Il riempimento tirato a tratteggio come in Excel. */
 .grid-fill-preview {
   border: 2px dashed var(--accent);
 }

@@ -172,3 +172,140 @@ export function cornerPiece(rect: Rect, corner: { readonly x: number; readonly y
   const zone = cornerZone(corner.x, corner.y, corner.start, bands);
   return { zone, rect: wholeRect(zone, rect, bands), cut: NO_CUT };
 }
+
+/// Il rettangolo `rect` (coordinate del piano) schiacciato nella zona `zone`,
+/// nelle coordinate del suo livello: per i fotogrammi di una corsa. Dove
+/// `clipRect` dice che nella zona non c'è, qui il pezzo diventa una riga
+/// vuota sul bordo della zona, da cui entra o in cui esce; così un pezzo che
+/// passa il filo del blocco ne esce invece di comparire già grande.
+export function looseRect(zone: Zone, rect: Rect, bands: Bands, band = false): Rect {
+  const capY = zone === "top" || zone === "corner" ? (band ? bands.top : bands.top - 1) : Infinity;
+  const capX = zone === "left" || zone === "corner" ? (band ? bands.left : bands.left - 1) : Infinity;
+  const floorY = zone === "left" ? bands.top : -Infinity;
+  const fitY = (y: number) => Math.min(capY, Math.max(floorY, y));
+  const x1 = Math.min(capX, rect.x);
+  const x2 = Math.min(capX, rect.x + Math.max(0, rect.w));
+  const y1 = fitY(rect.y);
+  const y2 = fitY(rect.y + Math.max(0, rect.h));
+  const origin = layerOrigin(zone, bands);
+  return { x: x1 - origin.x, y: y1 - origin.y, w: x2 - x1, h: y2 - y1 };
+}
+
+// ── I pezzi della selezione ──────────────────────────────────────────────
+//
+// I segni che scivolano si disegnano da dieci numeri, in coordinate del
+// piano (`MarkGeometry`): il rettangolo della selezione, la cella attiva e
+// l'angolo del quadratino. Sono i numeri a correre, non i pezzi: ogni pezzo
+// si ricava da loro, così i lati, l'anello, il velo, le fasce e il
+// quadratino restano attaccati in ogni fotogramma.
+
+/// `[bL, bT, bR, bB, aL, aT, aR, aB, hR, hB]`: i bordi del rettangolo, quelli
+/// della cella attiva e l'angolo in basso a destra del quadratino. Un bordo è
+/// la prima coordinata dopo il filo: il filo di una cella sta sul suo ultimo
+/// pixel, quindi il filo a sinistra di `bL` è `bL - 1`.
+export type MarkGeometry = readonly number[];
+
+/// Quanti numeri ha una `MarkGeometry`.
+export const MARK_NUMBERS = 10;
+
+/// Che cosa è un pezzo: dà il nome alla sua classe (`grid-mark-<kind>`).
+export type MarkKind = "edge" | "ring" | "veil" | "band-col" | "band-row" | "handle" | "freeze";
+
+/// Un pezzo di un segno, nelle coordinate del piano.
+export interface MarkPart {
+  /// Il nome, unico fra i pezzi di un disegno: un pezzo con lo stesso nome è
+  /// lo stesso elemento da un disegno all'altro.
+  readonly name: string;
+  readonly kind: MarkKind;
+  /// Il verso di un lato: orizzontale o verticale.
+  readonly dir?: "h" | "v";
+  readonly rect: Rect;
+  /// Le zone dove può cadere; di serie tutte.
+  readonly zones?: readonly Zone[];
+  /// Una fascia delle intestazioni arriva al bordo della zona, un lato si
+  /// ferma un pixel prima del filo del blocco.
+  readonly band?: boolean;
+  /// Falso: il pezzo non ha un posto d'arrivo (l'anello e il velo di una
+  /// cella sola), e si vede solo mentre esce o rientra.
+  readonly rest?: boolean;
+  /// Falso: non scivola, sta sempre al suo posto (i fili del blocco, i
+  /// rettangoli degli altri intervalli).
+  readonly glide?: boolean;
+  /// Un segno d'angolo non si taglia: è intero nel livello «lift» della zona
+  /// di questo angolo.
+  readonly corner?: { readonly x: number; readonly y: number; readonly start: boolean };
+}
+
+/// I quattro lati, spessi `thickness`, del rettangolo `box` (bordi come in
+/// `MarkGeometry`). Ogni lato ha un pixel sul filo e gli altri dentro, lo
+/// stesso sui quattro lati: il rettangolo è simmetrico sui fili.
+export function edgeParts(
+  prefix: string,
+  kind: MarkKind,
+  box: { readonly L: number; readonly T: number; readonly R: number; readonly B: number },
+  thickness: number,
+  extra: Partial<Pick<MarkPart, "rest" | "glide">> = {},
+): MarkPart[] {
+  const width = box.R - box.L + 1;
+  const height = box.B - box.T + 1;
+  return [
+    { name: `${prefix}-top`, kind, dir: "h", rect: { x: box.L - 1, y: box.T - 1, w: width, h: thickness }, ...extra },
+    { name: `${prefix}-bottom`, kind, dir: "h", rect: { x: box.L - 1, y: box.B - thickness, w: width, h: thickness }, ...extra },
+    { name: `${prefix}-left`, kind, dir: "v", rect: { x: box.L - 1, y: box.T - 1, w: thickness, h: height }, ...extra },
+    { name: `${prefix}-right`, kind, dir: "v", rect: { x: box.R - thickness, y: box.T - 1, w: thickness, h: height }, ...extra },
+  ];
+}
+
+/// Ciò che la selezione mostra oltre ai suoi numeri.
+export interface SelectionLook {
+  /// La selezione è la sola cella attiva: l'anello e il velo non hanno un
+  /// posto d'arrivo.
+  readonly lone: boolean;
+  /// Il bordo pieno del rettangolo (non c'è sulle formiche di un taglio).
+  readonly edges: boolean;
+  /// Il quadratino di riempimento.
+  readonly handle: boolean;
+  /// L'altezza della riga delle intestazioni di colonna e la larghezza della
+  /// colonna dei numeri di riga, per le fasce della selezione; zero se sono
+  /// nascoste.
+  readonly header: { readonly width: number; readonly height: number };
+}
+
+/// Il quadratino: 8 × 8 px, centrato sull'angolo dei fili.
+export const HANDLE_SIZE = 8;
+
+/// I pezzi della selezione dai suoi dieci numeri. L'anello e il velo ci
+/// sono anche su una cella sola, dove l'anello sta sotto il bordo e il velo è
+/// vuoto: allargando la selezione escono dal bordo, stringendola ci
+/// rientrano, invece di comparire e sparire di colpo.
+export function selectionParts(geometry: MarkGeometry, look: SelectionLook): MarkPart[] {
+  const [bL, bT, bR, bB, aL, aT, aR, aB, hR, hB] = geometry;
+  const b = { L: bL, T: bT, R: bR, B: bB };
+  const a = { L: aL, T: aT, R: aR, B: aB };
+  const parts: MarkPart[] = [];
+  if (look.edges) parts.push(...edgeParts("rect", "edge", b, 2));
+  const rest = !look.lone;
+  parts.push(
+    ...edgeParts("ring", "ring", a, 1, { rest }),
+    { name: "veil-top", kind: "veil", rect: { x: b.L, y: b.T, w: b.R - b.L, h: a.T - b.T }, rest },
+    { name: "veil-bottom", kind: "veil", rect: { x: b.L, y: a.B, w: b.R - b.L, h: b.B - a.B }, rest },
+    { name: "veil-left", kind: "veil", rect: { x: b.L, y: a.T, w: a.L - b.L, h: a.B - a.T }, rest },
+    { name: "veil-right", kind: "veil", rect: { x: a.R, y: a.T, w: b.R - a.R, h: a.B - a.T }, rest },
+  );
+  if (look.handle) {
+    const half = HANDLE_SIZE / 2;
+    parts.push({
+      name: "handle",
+      kind: "handle",
+      rect: { x: hR - 1 - half, y: hB - 1 - half, w: HANDLE_SIZE, h: HANDLE_SIZE },
+      corner: { x: hR, y: hB, start: false },
+    });
+  }
+  if (look.header.height > 0) {
+    parts.push({ name: "band-col", kind: "band-col", rect: { x: b.L, y: 0, w: b.R - b.L, h: look.header.height }, zones: ["top", "corner"], band: true });
+  }
+  if (look.header.width > 0) {
+    parts.push({ name: "band-row", kind: "band-row", rect: { x: 0, y: b.T, w: look.header.width, h: b.B - b.T }, zones: ["left", "corner"], band: true });
+  }
+  return parts;
+}

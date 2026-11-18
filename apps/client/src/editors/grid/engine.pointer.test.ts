@@ -2,7 +2,7 @@
 // La griglia su una cartella di Excel: i gesti del puntatore.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
-import { settle, workbookHost, workbookMounted } from "./test-support";
+import { settle, shownRanges, workbookHost, workbookMounted } from "./test-support";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -23,7 +23,7 @@ describe("GridEngine con una cartella di Excel", () => {
       return { x: parseFloat(element.style.left) + 8, y: row + parseFloat(element.style.top) + 8 };
     };
     const at = (cell: (row: number, column: number) => HTMLElement | null, row: number, column: number) => inside(cell(row, column)!);
-    const handle = (host: HTMLElement) => host.querySelector<HTMLElement>(".grid-fill-handle");
+    const handle = (host: HTMLElement) => host.querySelector<HTMLElement>(".grid-mark-handle:not([hidden])");
 
     it("trascinando si seleziona un intervallo, anche quando la cattura manda i movimenti alla griglia", async () => {
       const { engine, viewport, cell } = await workbookMounted(workbookHost());
@@ -157,7 +157,8 @@ describe("GridEngine con una cartella di Excel", () => {
       const { engine, host, go } = await workbookMounted(grid);
       go(1, 1);
       await settle();
-      handle(host)!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      const grip = inside(handle(host)!);
+      handle(host)!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: grip.x, clientY: grip.y }));
       await settle();
       expect(grid.given.map((request) => request.command.id)).toEqual(["edit.autoFill"]);
       const params = JSON.parse(grid.given[0].command.params);
@@ -210,7 +211,7 @@ describe("GridEngine con una cartella di Excel", () => {
       const corner = at(cell, 4, 4);
       press(viewport, "pointermove", corner.x, corner.y);
       press(viewport, "pointerup", corner.x, corner.y);
-      expect(host.querySelectorAll(".grid-selection")).toHaveLength(2);
+      expect(shownRanges(host)).toBe(2);
       expect(cell(1, 1)!.classList.contains("selected")).toBe(true);
       expect(cell(4, 4)!.classList.contains("selected")).toBe(true);
       expect(cell(2, 2)!.classList.contains("selected")).toBe(false);
@@ -224,7 +225,7 @@ describe("GridEngine con una cartella di Excel", () => {
       const again = at(cell, 2, 2);
       press(cell(2, 2)!, "pointerdown", again.x, again.y);
       press(viewport, "pointerup", again.x, again.y);
-      expect(host.querySelector(".grid-selection")).toBeNull();
+      expect(shownRanges(host)).toBe(1);
       expect(cell(1, 1)!.classList.contains("selected")).toBe(false);
       engine.destroy();
     });

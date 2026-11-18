@@ -8,7 +8,7 @@ import { HOVER_OPEN_DELAY_MS } from "../../kit";
 import { gridJournalText, parseGridJournal } from "../../state/grid-journal";
 import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
-import { settle, typeInActiveCell, workbookHost, workbookMounted } from "./test-support";
+import { frames, settle, shownMarks, typeInActiveCell, workbookHost, workbookMounted } from "./test-support";
 import type { GridHost } from "./engine";
 
 afterEach(() => {
@@ -381,11 +381,11 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(host.querySelector(".grid-column-header")).toBeNull();
     // I fili del blocco: fermi, nei livelli della testa, della colonna ferma
     // e dell'angolo.
-    expect([...host.querySelectorAll(".grid-freeze")].map((line) => `${line.parentElement!.className} ${line.className}`).sort()).toEqual([
-      "grid-marks-corner grid-freeze grid-freeze-columns",
-      "grid-marks-corner grid-freeze grid-freeze-rows",
-      "grid-marks-left grid-freeze grid-freeze-columns",
-      "grid-marks-top grid-freeze grid-freeze-rows",
+    expect(shownMarks(host, "freeze").map((line) => `${line.parentElement!.className} ${line.dataset.mark}`).sort()).toEqual([
+      "grid-marks-corner freeze-columns",
+      "grid-marks-corner freeze-rows",
+      "grid-marks-left freeze-columns",
+      "grid-marks-top freeze-rows",
     ]);
     expect(cell(1, 0)!.classList.contains("frozen")).toBe(true);
     expect(cell(1, 1)!.classList.contains("frozen")).toBe(false);
@@ -458,14 +458,14 @@ describe("GridEngine con una cartella di Excel", () => {
       frozen: style(cell(6, 0)),
       corner: style(cell(0, 0)),
       header: style(header()),
-      lines: [...host.querySelectorAll(".grid-freeze")].map(style),
+      lines: shownMarks(host, "freeze").map(style),
     };
     // Scorrendo, niente di tutto questo si sposta per mano dello script.
     await scrollTo(260, 40);
     expect(style(cell(6, 0))).toEqual(before.frozen);
     expect(style(cell(0, 0))).toEqual(before.corner);
     expect(style(header())).toEqual(before.header);
-    expect([...host.querySelectorAll(".grid-freeze")].map(style)).toEqual(before.lines);
+    expect(shownMarks(host, "freeze").map(style)).toEqual(before.lines);
     await scrollTo(0, 0);
 
     // A1:C3 passa la riga e la colonna bloccate: un pezzo per zona, ognuno
@@ -474,9 +474,10 @@ describe("GridEngine con una cartella di Excel", () => {
     key("ArrowDown", { shiftKey: true });
     key("ArrowRight", { shiftKey: true });
     key("ArrowRight", { shiftKey: true });
-    const layers = () => [...host.querySelectorAll(".grid-selection")].map((mark) => mark.parentElement!.className).sort();
+    const rect = () => shownMarks(host, "edge").filter((mark) => mark.dataset.mark!.startsWith("rect-"));
+    const layers = () => [...new Set(rect().map((mark) => mark.parentElement!.className))].sort();
     expect(layers()).toEqual(["grid-marks-body", "grid-marks-corner", "grid-marks-left", "grid-marks-top"]);
-    const pieces = () => [...host.querySelectorAll(".grid-selection")].map(style);
+    const pieces = () => rect().map(style);
     const drawn = pieces();
     await scrollTo(0, 140);
     expect(pieces()).toEqual(drawn);
@@ -487,7 +488,8 @@ describe("GridEngine con una cartella di Excel", () => {
     await scrollTo(0, 0);
     key("ArrowDown");
     key("ArrowDown");
-    const handles = [...host.querySelectorAll<HTMLElement>(".grid-fill-handle")];
+    await frames(40);
+    const handles = shownMarks(host, "handle");
     expect(handles).toHaveLength(1);
     expect(handles[0]!.parentElement!.className).toBe("grid-lift-left");
     expect([handles[0]!.style.width, handles[0]!.style.height]).toEqual(["8px", "8px"]);
@@ -495,7 +497,8 @@ describe("GridEngine con una cartella di Excel", () => {
     key("ArrowUp");
     key("ArrowUp");
     key("ArrowRight");
-    expect(host.querySelector(".grid-fill-handle")!.parentElement!.className).toBe("grid-lift-top");
+    await frames(40);
+    expect(shownMarks(host, "handle").map((mark) => mark.parentElement!.className)).toEqual(["grid-lift-top"]);
     engine.destroy();
   });
 

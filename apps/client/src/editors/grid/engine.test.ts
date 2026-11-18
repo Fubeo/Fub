@@ -5,7 +5,7 @@ import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
 import { fillTarget, typingOpens, type GridHost } from "./engine";
-import { bytesHost, cellAt, frames, mounted, settle, SURFACE, typeInActiveCell, written } from "./test-support";
+import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, written } from "./test-support";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -619,18 +619,22 @@ describe("GridEngine", () => {
     const { engine, host, viewport } = await mounted(bytesHost({ rows: 4, columns: 4, hiddenRows: [1], hiddenColumns: [1] }));
     const key = (name: string, init: KeyboardEventInit = {}) =>
       viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init }));
-    // Una cella sola: il bordo è quello della cella attiva.
-    expect(host.querySelector(".grid-selection")).toBeNull();
-    expect(viewport.classList.contains("ranged")).toBe(false);
+    // Una cella sola: il rettangolo è la cella attiva, senza anello né velo.
+    expect(shownRanges(host)).toBe(1);
+    expect(shownMarks(host, "veil")).toEqual([]);
+    expect(shownMarks(host, "ring")).toEqual([]);
     key("ArrowDown", { shiftKey: true });
     key("ArrowRight", { shiftKey: true });
-    expect(host.querySelectorAll(".grid-selection")).toHaveLength(1);
-    expect(viewport.classList.contains("ranged")).toBe(true);
+    await frames(40);
+    expect(shownRanges(host)).toBe(1);
+    expect(shownMarks(host, "ring")).toHaveLength(4);
+    expect(shownMarks(host, "veil").length).toBeGreaterThan(0);
     expect(host.querySelector(".grid-cell.active")?.classList.contains("selected")).toBe(true);
     key("Escape");
     key("ArrowLeft");
-    expect(host.querySelector(".grid-selection")).toBeNull();
-    expect(viewport.classList.contains("ranged")).toBe(false);
+    await frames(40);
+    expect(shownRanges(host)).toBe(1);
+    expect(shownMarks(host, "veil")).toEqual([]);
     // La tacca dei nascosti sta sull'intestazione che li segue.
     const marked = [...host.querySelectorAll(".grid-header.after-hidden")].map((header) => header.textContent);
     expect(marked.sort()).toEqual(["3", "C"]);
@@ -648,7 +652,7 @@ describe("GridEngine", () => {
     key("ArrowRight");
     key("Escape");
     // A1 resta scelta, e C3 è l'intervallo in cui si lavora; B2 no.
-    expect(host.querySelectorAll(".grid-selection")).toHaveLength(2);
+    expect(shownRanges(host)).toBe(2);
     const copy = new Event("copy", { bubbles: true, cancelable: true });
     const data = new Map<string, string>();
     Object.defineProperty(copy, "clipboardData", { value: { setData: (type: string, text: string) => data.set(type, text), getData: () => "" } });
@@ -658,7 +662,7 @@ describe("GridEngine", () => {
     expect(written(engine.getDoc())).toEqual({ "0,0": "", "2,2": "" });
     // Fuori dal modo, una freccia ricomincia da un intervallo solo.
     key("ArrowLeft");
-    expect(host.querySelector(".grid-selection")).toBeNull();
+    expect(shownRanges(host)).toBe(1);
     engine.destroy();
   });
 

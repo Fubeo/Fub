@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { clipRect, cornerPiece, cornerSeen, cornerZone, rectPieces, wholeRect, type Bands, type Rect } from "./marks";
+import {
+  clipRect,
+  cornerPiece,
+  cornerSeen,
+  cornerZone,
+  edgeParts,
+  looseRect,
+  rectPieces,
+  selectionParts,
+  wholeRect,
+  type Bands,
+  type Rect,
+} from "./marks";
 
 // Una griglia di prova: intestazioni di 52 × 28 px, righe di 28 px, la
 // colonna A di 140 px e le altre di 64. Con la riga 1 e la colonna A
@@ -152,5 +164,51 @@ describe("i segni d'angolo", () => {
     const scroll = { left: 0, top: 40 };
     expect(cornerSeen(colX(2), rowY(1), false, FROZEN, scroll)).toEqual({ x: colX(2), y: rowY(1), zone: "top" });
     expect(cornerSeen(colX(2), rowY(2), false, FROZEN, scroll)).toBeNull();
+  });
+});
+
+describe("i pezzi della selezione", () => {
+  it("i quattro lati sono simmetrici: uno spessore sul filo di ogni lato e uno dentro", () => {
+    const b = box(1, 1, 3, 2);
+    const parts = edgeParts("rect", "edge", { L: b.x, T: b.y, R: b.x + b.w, B: b.y + b.h }, 2);
+    const by = Object.fromEntries(parts.map((part) => [part.name, part.rect]));
+    // Il filo a sinistra di una cella è il suo pixel prima; quello a destra
+    // il suo ultimo.
+    expect(by["rect-top"]).toEqual({ x: b.x - 1, y: b.y - 1, w: b.w + 1, h: 2 });
+    expect(by["rect-bottom"]).toEqual({ x: b.x - 1, y: b.y + b.h - 2, w: b.w + 1, h: 2 });
+    expect(by["rect-left"]).toEqual({ x: b.x - 1, y: b.y - 1, w: 2, h: b.h + 1 });
+    expect(by["rect-right"]).toEqual({ x: b.x + b.w - 2, y: b.y - 1, w: 2, h: b.h + 1 });
+  });
+
+  it("dai dieci numeri: lati, anello, velo intorno alla cella attiva, quadratino e fasce", () => {
+    const b = box(1, 1, 3, 2);
+    const a = box(2, 1, 2, 1);
+    const g = [b.x, b.y, b.x + b.w, b.y + b.h, a.x, a.y, a.x + a.w, a.y + a.h, b.x + b.w, b.y + b.h];
+    const parts = selectionParts(g, { lone: false, edges: true, handle: true, header: { width: HEAD_W, height: HEAD_H } });
+    const by = Object.fromEntries(parts.map((part) => [part.name, part]));
+    expect(parts.filter((part) => part.kind === "edge")).toHaveLength(4);
+    expect(parts.filter((part) => part.kind === "ring")).toHaveLength(4);
+    // Il velo copre il rettangolo tranne la cella attiva.
+    const veil = parts.filter((part) => part.kind === "veil").reduce((sum, part) => sum + part.rect.w * part.rect.h, 0);
+    expect(veil).toBe(b.w * b.h - a.w * a.h);
+    expect(by.handle!.rect).toEqual({ x: b.x + b.w - 5, y: b.y + b.h - 5, w: 8, h: 8 });
+    expect(by.handle!.corner).toEqual({ x: b.x + b.w, y: b.y + b.h, start: false });
+    expect(by["band-col"]!.rect).toEqual({ x: b.x, y: 0, w: b.w, h: HEAD_H });
+    expect(by["band-row"]!.rect).toEqual({ x: 0, y: b.y, w: HEAD_W, h: b.h });
+    // Su una cella sola l'anello e il velo non hanno un posto d'arrivo.
+    const lone = selectionParts(g, { lone: true, edges: false, handle: false, header: { width: 0, height: 0 } });
+    expect(lone.every((part) => part.rest === false)).toBe(true);
+    expect(lone.some((part) => part.kind === "edge" || part.kind === "handle")).toBe(false);
+  });
+
+  it("un pezzo fuori dalla zona diventa una riga vuota sul suo bordo, da cui entra", () => {
+    // Un lato del corpo che sta tutto sotto la testa ferma: nella testa è una
+    // riga vuota sul filo, non un pezzo grande.
+    const rect = box(4, 2, 4, 2);
+    const flat = looseRect("top", rect, FROZEN);
+    expect(flat.h).toBe(0);
+    expect(flat.y).toBe(FROZEN.top - 1);
+    // Nel corpo resta com'è.
+    expect(looseRect("body", rect, FROZEN)).toEqual(rect);
   });
 });

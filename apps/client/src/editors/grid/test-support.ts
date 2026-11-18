@@ -248,6 +248,16 @@ export async function frames(count = 12): Promise<void> {
   for (let index = 0; index < count; index += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+/// I pezzi dei segni (`grid-motion.ts`) di un tipo che si vedono: quelli che
+/// non servono restano nascosti nel loro serbatoio.
+export const shownMarks = (host: HTMLElement, kind: string) =>
+  [...host.querySelectorAll<HTMLElement>(`.grid-mark-${kind}`)].filter((mark) => !mark.hidden);
+
+/// Quanti rettangoli scelti si vedono: uno per prefisso dei lati (`rect`,
+/// `other-0`, …), in qualunque livello cadano.
+export const shownRanges = (host: HTMLElement) =>
+  new Set(shownMarks(host, "edge").map((mark) => mark.dataset.mark!.replace(/-(top|bottom|left|right)$/, ""))).size;
+
 export const cellAt = (host: HTMLElement, row: number, column: number) =>
   host.querySelector<HTMLElement>(`.grid-cell[data-row="${row}"][data-column="${column}"]`);
 
