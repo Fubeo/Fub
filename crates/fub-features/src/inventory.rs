@@ -464,7 +464,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         id: TRASH_ID,
         name: "Trash",
         catalog: trash::catalog,
-        view: Some(|| Box::new(TrashView)),
+        view: Some(|| Box::new(TrashView::default())),
         commands: None,
         index: None,
         syntax: None,

@@ -54,6 +54,9 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "La pila strutturale": "The structural stack",
   "Svuota il cestino": "Empty the trash",
   "Cancella davvero ciò che è cestinato": "Really deletes what is in the trash",
+  // La domanda del cestino della scenografia (`fub-features/src/trash.rs`).
+  "Distruggo definitivamente 3 voci del cestino? Non si torna indietro.":
+    "Permanently destroy 3 trash entries? There is no way back.",
   "Statistiche del documento": "Document statistics",
   "Parole, caratteri, collegamenti": "Words, characters, links",
   // Barra di formattazione (`fub-features/src/formatting.rs`).

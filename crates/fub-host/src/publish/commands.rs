@@ -98,7 +98,7 @@ impl PublishBundle {
     }
 
     pub fn views(&self) -> super::views::PublishViews {
-        super::views::PublishViews
+        super::views::PublishViews::default()
     }
 
     fn manifest_inner(&self) -> fub_abi::PluginManifest {

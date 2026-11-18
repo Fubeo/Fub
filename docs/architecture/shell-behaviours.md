@@ -111,8 +111,11 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 - **Una view principale per finestra.** Rail, palette, menu Vista e
   `OpenView` aprono una view principale (il grafo) una volta sola: se è già
   in un riquadro il fuoco va lì, anche dopo una nota aperta dal grafo nel
-  riquadro accanto (`openViewIn` in `state/layout.ts`). Lo specchio di un
-  riquadro collegato resta. Un layout salvato con due grafi dalle versioni di
+  riquadro accanto (`openViewIn` in `state/layout.ts`). Indietro, Avanti e
+  «Riapri la scheda chiusa» seguono la stessa regola: se la view che
+  rimetterebbero nel riquadro sta già in un altro, il fuoco va lì (`goBack`,
+  `goForward`, `reopenClosedTab`, con lo stesso `paneHolding`). Lo specchio
+  di un riquadro collegato resta. Un layout salvato con due grafi dalle versioni di
   prima si rilegge col solo primo, e le altre schede restano (`parseLayout`).
 - **Linguette.** Rilasciata sul corpo di un foglio, una linguetta si
   divide (quattro bordi) o si sposta in coda al riquadro (centro);

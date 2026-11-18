@@ -523,10 +523,34 @@ const DAY_PAGE = params.get("giorno") === "1";
 /// `note_type_page` del componente delle proprietà.
 const TYPE_PAGE = params.get("live") === "tipo-pagina";
 
+/// «Svuota il cestino» in fondo al cestino, o la sua domanda al posto del
+/// bottone, nella forma del provider `trash` (fub-features, `trash.rs`): un
+/// nodo `fub.confirm` con la chiave del bottone, la domanda col conto delle
+/// voci, il sì e il no, e il no per Esc.
+function trashEmptyNode(count: number, asking: boolean): UiNode {
+  const key = "trash-empty";
+  if (!asking) {
+    return { node: "button", key, label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } };
+  }
+  const cancel = { action: "cancel", payload: null };
+  return {
+    node: "custom",
+    key,
+    ns: "fub.confirm",
+    payload: { cancel },
+    fallback: [
+      { node: "text", content: `Distruggo definitivamente ${count} voci del cestino? Non si torna indietro.` },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty_confirm", payload: null } },
+      { node: "button", label: "Annulla", intent: "neutral", action: cancel },
+    ],
+  };
+}
+
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
-/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino».
-function trashWithThree(): UiNode {
+/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino» o, con
+/// `asking`, la sua domanda.
+function trashWithThree(asking = false): UiNode {
   const row = (id: string, original: string, when: string): UiNode => ({
     node: "stack",
     key: id,
@@ -534,7 +558,7 @@ function trashWithThree(): UiNode {
     gap: 1,
     children: [
       { node: "list_item", title: original, subtitle: `Cestinata il ${when}`, action: null, selected: false },
-      { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+      { node: "button", key: `restore:${id}`, label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
     ],
   });
   return {
@@ -550,7 +574,7 @@ function trashWithThree(): UiNode {
           row("3-Prima idea.md", "Prima idea", "12 agosto 2026, 11:05"),
         ],
       },
-      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+      trashEmptyNode(3, asking),
     ],
   };
 }
@@ -2371,6 +2395,7 @@ function liveTrash(): UiNode | undefined {
   if (TRASH_FULL) return undefined;
   const entries = host.trash();
   if (entries.length === 0) return undefined;
+  const asking = trashAsking;
   return {
     node: "stack",
     dir: "column",
@@ -2385,14 +2410,18 @@ function liveTrash(): UiNode | undefined {
           gap: 1,
           children: [
             { node: "list_item", title: pageName(original), subtitle: null, action: null, selected: false },
-            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+            { node: "button", key: `restore:${id}`, label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
           ],
         })),
       },
-      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+      trashEmptyNode(entries.length, asking),
     ],
   };
 }
+
+/// Se il cestino del finto sta chiedendo «Svuoto davvero?». Come nel provider
+/// vive in memoria, non nello stato di vista: ricaricare la pagina la chiude.
+let trashAsking = false;
 
 /// I comandi che possono cambiare il cestino del finto.
 const TRASH_COMMANDS: ReadonlySet<string> = new Set(["note.trash", "trash.os", "folder.trash", "trash.restore", "trash.empty"]);
@@ -2423,7 +2452,15 @@ async function liveTrashAction(action: string, payload: unknown): Promise<ViewUp
     const back = outcome.effect.kind === "navigate" ? outcome.effect.doc : original;
     return { kind: "navigate", doc_id: back };
   }
-  if (action === "empty") {
+  // Svuotare chiede prima, come il provider: «Svuota il cestino» apre la
+  // domanda, il sì passa dal comando `trash.empty`, il no (o Esc) la chiude.
+  if (action === "empty" || action === "cancel") {
+    trashAsking = action === "empty";
+    return { kind: "replace", root: liveTrash() ?? TREES.trash! };
+  }
+  if (action === "empty_confirm") {
+    if (!trashAsking) return { kind: "replace", root: liveTrash() ?? TREES.trash! };
+    trashAsking = false;
     await api.invokeCommand("trash.empty");
     return { kind: "replace", root: liveTrash() ?? TREES.trash! };
   }
@@ -2622,6 +2659,11 @@ export const api: typeof host.module.api = {
     if (view === "desk" && DESK) return { kind: "replace" as const, root: DESK.act(instance ?? "main", action, payload) };
     const live = view === "trash" ? await liveTrashAction(action, payload) : undefined;
     if (live) return live;
+    // Il cestino della scenografia sa chiedere, e solo chiedere: il sì non
+    // distrugge le sue tre voci, che le foto conoscono.
+    if (view === "trash" && TRASH_FULL && (action === "empty" || action === "cancel" || action === "empty_confirm")) {
+      return { kind: "replace" as const, root: trashWithThree(action === "empty") };
+    }
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
     const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;

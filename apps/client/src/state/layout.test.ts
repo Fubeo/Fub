@@ -43,7 +43,9 @@ import {
   moveTabToPane,
   reopenClosedTab,
   goBack,
+  goForward,
   type Layout,
+  type Tab,
   type SplitNode,
 } from "./layout";
 
@@ -335,6 +337,73 @@ describe("una tab che non è un documento", () => {
       { k: "doc", doc: "Alpha CRLF.md" },
       { k: "doc", doc: "index.md" },
     ]);
+  });
+
+  /// Le view di tutta la finestra, riquadro per riquadro.
+  function viewsOf(l: Layout): Tab[] {
+    return panes(l).flatMap((id) => l.panes[id]!.tabs).filter((tab) => tab.k === "view");
+  }
+
+  // IMP-114, seguito: Indietro passa da `goBack` e non da `openViewIn`. Il
+  // grafo è stato trascinato nell'altro riquadro, ma la cronologia di quello
+  // da cui veniva lo ricorda ancora: Indietro lo rimetteva lì, accanto al
+  // primo.
+  it("Indietro verso una view che sta in un altro riquadro porta il fuoco lì", () => {
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openViewIn(right, "graph", l);
+    openIn(right, "Alpha CRLF.md", l);
+    const graph = l.panes[right]!.tabs.findIndex((tab) => tab.k === "view");
+    expect(moveTabToPane(right, graph, "main", l)).toBe(true);
+    focusPane(right, l);
+
+    expect(goBack(right, l)).toBe(true);
+    expect(viewsOf(l)).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(activeDoc(right, l)).toBe("Alpha CRLF.md");
+  });
+
+  it("Avanti verso una view che sta in un altro riquadro porta il fuoco lì", () => {
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openIn(right, "Alpha CRLF.md", l);
+    openViewIn(right, "graph", l);
+    expect(goBack(right, l)).toBe(true);
+    // Il grafo resta nel futuro del riquadro di destra, e intanto lo si
+    // chiude lì e lo si apre nel primo.
+    closeTab(right, l.panes[right]!.tabs.findIndex((tab) => tab.k === "view"), l);
+    openViewIn("main", "graph", l);
+    activateTab("main", 0, l);
+    focusPane(right, l);
+
+    expect(goForward(right, l)).toBe(true);
+    expect(viewsOf(l)).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(activeDoc(right, l)).toBe("Alpha CRLF.md");
+  });
+
+  it("riaprire la scheda chiusa di una view aperta altrove porta il fuoco lì", () => {
+    const drain = newItem();
+    while (reopenClosedTab(drain));
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openIn(right, "Alpha CRLF.md", l);
+    openViewIn(right, "graph", l);
+    closeTab(right, l.panes[right]!.tabs.findIndex((tab) => tab.k === "view"), l);
+    openViewIn("main", "graph", l);
+    activateTab("main", 0, l);
+    focusPane(right, l);
+
+    expect(reopenClosedTab(l)).toBe(true);
+    expect(viewsOf(l)).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(l.panes[right]!.tabs).toEqual([{ k: "doc", doc: "Alpha CRLF.md" }]);
   });
 
   // Un rename è un fatto dei documenti: una view che si chiamasse come una nota
