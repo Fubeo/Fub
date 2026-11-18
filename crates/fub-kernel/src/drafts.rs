@@ -180,10 +180,11 @@ pub(crate) struct Drafts {
     /// Le mutazioni delle bozze una alla volta. La shell scrive le bozze
     /// **senza** il turno di scrittura del workspace (#485: una bozza non
     /// aspetta il salvataggio lento che deve coprire), mentre la rinomina le
-    /// migra sotto quel turno: senza questo lucchetto una bozza scritta a metà
-    /// di una migrazione potrebbe finire sotto il nome vecchio dopo che il
-    /// record si è spostato, o essere tolta insieme a lui. Lo si tiene solo
-    /// sul supporto delle bozze, mai attraverso codice esterno.
+    /// migra sotto quel turno: senza questo lucchetto una bozza potrebbe
+    /// infilarsi fra la riscrittura del record e lo spostamento del nome (il
+    /// ramo della maiuscola), ed essere sovrascritta dal record vecchio. Una
+    /// bozza che arriva a migrazione finita resta sotto il suo id, come prima.
+    /// Lo si tiene solo sul supporto delle bozze, mai attraverso codice esterno.
     mutating: Mutex<()>,
 }
 
