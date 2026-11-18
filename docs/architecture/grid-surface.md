@@ -116,6 +116,17 @@ spostano la cella attiva senza aprirla, dentro l'intervallo. Dove andare sta
 in `apps/client/src/tabella/navigation.ts`, il riempimento in
 `tabella/selection.ts` (`fillRange`): regole di ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
 
+Ciò che si conferma si vede subito, prima che il provider risponda
+(`#showWritten`, la regola in `workbook.ts`, `writtenValue`): un numero
+semplice nella forma del file (segno, cifre, un separatore decimale; in
+italiano «1,5», in inglese «1.5») è un numero e va a destra, il resto resta
+testo come lo si è scritto (`'42`, date, percentuali, valute: li riconosce
+il motore). Una formula resta com'è scritta, più tenue (`.pending`, in
+`structure.css` accanto all'aspetto delle celle), finché il foglio non dà il
+valore, che compare in `DURATION.state`. La risposta del provider vince
+sempre; una scrittura rifiutata torna com'era, con l'avviso di oggi
+(`apply_failed`).
+
 La cella aperta è la cella: il campo sta nel livello «lift» della sua zona,
 con carta, inchiostro, carattere (`--field-font`), allineamento e margini
 della cella; la cornice (2 px di `--grid-mark`) compare in `DURATION.state` e
@@ -159,10 +170,19 @@ hanno velo e filo d'accento, e dopo righe o colonne nascoste una tacca doppia.
 Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
 serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
 segue il puntatore con la misura nelle unità di Excel e in pixel del file, e
-al rilascio parte un solo comando. Il doppio clic sul bordo dà
-`home.autofitColumnWidth` (o `home.autofitRowHeight`). Se la colonna sta fra
-quelle scelte intere, la misura vale per tutte. Senza il comando servito il
-bordo non si prende.
+al rilascio parte un solo comando. La misura sta dentro il riquadro: a
+destra del bordo, o a sinistra quando a destra non c'è posto
+(`resizeLabelAt`). Al rilascio la misura nuova vale subito come anteprima
+(`SizePreview`, che `#rebuildLayout` mette sopra le misure lette): le colonne
+o le righe dopo scivolano al posto nuovo col `flip` di `SLIDE`, e i segni
+le seguono con la stessa molla. Ogni anteprima ha il suo biglietto ed esce
+quando il suo comando ha risposto e le finestre sono rilette: una risposta
+vecchia non toglie quella di un gesto più nuovo sullo stesso bordo, e una
+risposta su un altro foglio la toglie senza moto. Su un rifiuto le colonne
+tornano scivolando e l'avviso dice perché (`command_failed`). Il doppio clic
+sul bordo dà `home.autofitColumnWidth` (o `home.autofitRowHeight`), senza
+anteprima. Se la colonna sta fra quelle scelte intere, la misura vale per
+tutte. Senza il comando servito il bordo non si prende.
 
 Ctrl+clic e Ctrl+trascina aggiungono un intervallo a quelli scelti;
 Maiuscolo estende l'ultimo, un clic semplice ricomincia. Da tastiera
