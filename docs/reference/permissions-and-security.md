@@ -134,10 +134,28 @@ documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazio
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
+Un tema si installa anche da una cartella scelta dalla persona, o si collega
+da una cartella in sviluppo, solo con la modalità sviluppatore accesa e con la
+cartella scelta nella finestra nativa dell'app. Il permesso, le porte sulla
+sorgente e sulla staging, la sostituzione di un id già installato e il tema
+collegato sono in [Temi da una cartella](theme-folder-security.md).
+
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
 un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
 Una preview non cambia la scelta persistente: annullarla o chiuderla rimonta il
 tema autorevole; un bundle illeggibile o rifiutato non si monta a metà.
+
+Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
+colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,
+`--logo-cartella-ombra`, `--logo-foglio-1` e `--logo-foglio-2`. La serie li
+ricava dall'accento (`logoColors` in `recipe.ts`) con la cartella tenuta alla
+soglia dei segni su `--bg` e `--bg-elev`. Un tema installato che non dichiara
+nessun ruolo del logo li riceve prima della validazione, calcolati dal suo
+`--accent` per la stessa luce e lo stesso contrasto (`completeSheet` della
+serie); un tema che ne dichiara anche uno solo resta com'è, e i ruoli mancanti
+cadono sull'accento e su `--sheet-2`. Il gufo tiene i suoi colori. Con i colori
+forzati il logo diventa una sagoma nei colori di sistema, regola in
+`structure.css`, che un tema non tocca.
 
 Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
 colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,

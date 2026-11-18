@@ -66,6 +66,7 @@
 - Come si prova a mano il moto dello Scrittoio nella finestra? → [development/motion-smoke-test.md](../development/motion-smoke-test.md)
 - Come si creano i plugin (provider nativi o componenti WASM)? → [development/plugin-authoring.md](../development/plugin-authoring.md)
 - Come si misurano i tempi di Fub nella WebView vera? → [development/webview-measurements.md](../development/webview-measurements.md)
+- Come si misura la memoria dell'app vera (R1, raccolta forzata `bench-gc`)? → [development/webview-memory.md](../development/webview-memory.md)
 - Quale stile deve avere ogni file Markdown canonico della repository? → [development/documentation-style.md](../development/documentation-style.md)
 - Quali versioni esistono, chi proteggono e come si prepara un rilascio? → [development/versioning-and-releases.md](../development/versioning-and-releases.md)
 
@@ -139,6 +140,7 @@
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)
 - Come si fidano bundle, capability, confini del vault e runtime WASM? → [reference/permissions-and-security.md](../reference/permissions-and-security.md)
+- Con quali regole si installa o si collega un tema da una cartella? → [reference/theme-folder-security.md](../reference/theme-folder-security.md)
 - Come si proteggono chiavi del vault, ruoli, login e quote dei servizi remoti? → [reference/remote-services-security.md](../reference/remote-services-security.md)
 - Qual è il JSON che `read_document`/`write_document` si scambiano per un documento di videoscrittura? → [reference/rich-projection.md](../reference/rich-projection.md)
 - Com'è fatto il protocollo della sessione live di FubDraw, versione 1? → [reference/live-session.md](../reference/live-session.md)

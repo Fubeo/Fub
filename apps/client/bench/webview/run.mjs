@@ -8,6 +8,7 @@
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
+//        [--gc=no]
 //        [--x11 | --wayland]  (con WAYLAND_DISPLAY: --x11 sotto Xvfb, --wayland sullo schermo)
 //        [--hz=N]  (la frequenza dello schermo, se il banco non la legge: `refresh.mjs`)
 //
@@ -17,6 +18,12 @@
 // tocca. Ogni scenario è un'app avviata da capo. Il referto va in `--out`:
 // un JSON per scenario e `referto.json` con macchina, sistema, WebView e
 // commit, il formato di `docs/misure/`.
+//
+// R1, su Linux, chiede alla WebView una raccolta forzata prima di ogni
+// lettura a schede chiuse (#284): il banco costruisce l'estensione web della
+// raccolta (`raccolta.rs`) e avvia per R1 un driver suo, con `FUB_BENCH_GC`
+// che la nomina; gli altri scenari girano sull'app senza gancio. `--gc=no`
+// misura senza raccolta, come prima.
 //
 // Linux: `tauri-driver` + WebKitWebDriver (pacchetto `webkit2gtk-driver`).
 // Windows: `tauri-driver` + msedgedriver della stessa versione di WebView2.
@@ -30,7 +37,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
-import { cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
+import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
 import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
@@ -51,6 +58,9 @@ const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
 const x11 = "x11" in args;
 const port = Number(args.port ?? 4444);
+/// La raccolta forzata prima delle letture di R1: di serie sì, `--gc=no` la
+/// spegne.
+const gcAsked = args.gc !== "no";
 /// WebKitWebDriver sulla porta dopo: due banchi con `--port` diversi non si pestano.
 const nativePort = port + 1;
 const base = `http://127.0.0.1:${port}`;
@@ -68,6 +78,9 @@ const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /// Il processo del driver: la memoria di R1 si legge sui suoi discendenti.
 let driverPid = null;
+/// L'estensione della raccolta forzata: `{ dir }` se è pronta, `{ skipped }`
+/// col motivo se no.
+let collector = { skipped: "non ancora costruita" };
 /// Il driver in corso (`startDriver`) e chi aspetta le righe di GTK che non
 /// parte dal suo stderr.
 let driver = null;
@@ -103,6 +116,9 @@ const R1_LATE_MS = 60_000;
 /// dieci: sul runner la pendenza di dieci giri andava da -25 a 70 MiB per giro
 /// sullo stesso albero (#284), con un errore di circa ±16 MiB; con trenta circa ±3.
 const R1_ROUNDS = 30;
+/// Ogni quanto si rilegge la memoria di un giro, fra `R1_SETTLE_MS` e
+/// `R1_LATE_MS` dalla chiusura.
+const R1_POLL_MS = 5_000;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina. Il lanciatore
@@ -1206,9 +1222,10 @@ const SCENARIOS = {
   ///    precedenti; una lettura dopo ognuno;
   /// 3. **chiuse**: chiuse tutte le schede, una lettura dopo `R1_SETTLE_MS` e
   ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo;
-  /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi, una
-  ///    lettura `R1_SETTLE_MS` dopo ogni chiusura, e alla fine una dopo
-  ///    `R1_LATE_MS`.
+  /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi; dopo
+  ///    ogni chiusura una lettura a `R1_SETTLE_MS` e poi una ogni
+  ///    `R1_POLL_MS` fino a `R1_LATE_MS`, e il giro vale la più bassa; alla
+  ///    fine la lettura «tardi», `R1_LATE_MS` dopo l'ultima chiusura.
   ///
   /// Ogni lettura è PSS in MiB, per processo: l'app (l'host Rust e la
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
@@ -1217,15 +1234,36 @@ const SCENARIOS = {
   /// La **pendenza** dei giri è la mediana delle pendenze fra ogni coppia di
   /// giri (`pendenza` in `memory.mjs`), in MiB per giro: vicina a zero se la
   /// memoria torna, positiva se ogni giro ne lascia un po'.
+  ///
+  /// Prima di ogni lettura a schede chiuse (vuota, chiuse, giri, tardi) il
+  /// banco chiede alla WebView una raccolta forzata e aspetta che finisca
+  /// (#284): così la lettura dice che cosa resta, non se la WebView ha già
+  /// raccolto da sé. Le letture a schede aperte non la chiedono. Il referto
+  /// dice in `gc` se il gancio c'era: chiesto ma spento, le letture vanno
+  /// avanti senza.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
+    const gc = { asked: gcAsked, on: null, absent: null, did: null, calls: 0, ms: 0, skipped: collector.skipped ?? null, openDocument: null };
+    const read = async () => {
+      if (gc.asked && !gc.skipped && gc.on !== false) {
+        const done = await collect(session);
+        gc.on = done.on;
+        if (!done.on) gc.absent = "gancio assente: l'app non è costruita con bench-gc";
+        if (done.on) {
+          gc.did = done.did;
+          gc.calls++;
+          gc.ms += done.ms;
+        }
+      }
+      return settled(driverPid, pause);
+    };
     await pause(MEMORY_QUIET_MS);
     // L'app riapre la sessione di prima: si chiude prima di misurare, così
     // «vuota» non dipende da che cosa ha lasciato lo scenario precedente.
     const restored = await session.execute("return document.querySelectorAll('.tab').length;");
     await closeAll(session);
     await pause(R1_SETTLE_MS);
-    const empty = await settled(driverPid, pause);
+    const empty = await read();
     const steps = [];
     for (const [name, mode] of MODES) {
       // Chi cerca per nome lo fa a indice pronto: aprire il precedente può
@@ -1239,12 +1277,24 @@ const SCENARIOS = {
       steps.push({ name, mode, surface, memory: await settled(driverPid, pause) });
     }
     const tabs = await session.execute("return document.querySelectorAll('.tab').length;");
+    // La raccolta con i documenti aperti non deve toccarne lo stato: le stesse
+    // schede, la stessa attiva.
+    if (gc.asked && !gc.skipped && gc.on !== false) {
+      const state = () => session.execute("return { tabs: document.querySelectorAll('.tab').length, active: document.querySelector('.pane.focus .tab[aria-selected=true]')?.getAttribute('aria-label') ?? null };");
+      const before = await state();
+      const done = await collect(session);
+      const after = await state();
+      gc.openDocument = { before, after, on: done.on };
+      if (done.on && JSON.stringify(before) !== JSON.stringify(after)) {
+        throw new Error(`la raccolta forzata ha cambiato le schede aperte: ${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+      }
+    }
     const left = await closeAll(session);
     const closedAt = Date.now();
     await pause(R1_SETTLE_MS);
-    const closed = await settled(driverPid, pause);
+    const closed = await read();
     await pause(Math.max(0, R1_LATE_MS - (Date.now() - closedAt)));
-    const late = await settled(driverPid, pause);
+    const late = await read();
     const rounds = [];
     for (let round = 1; round <= R1_ROUNDS; round++) {
       for (const [name] of MODES) {
@@ -1254,11 +1304,34 @@ const SCENARIOS = {
       await pause(MEMORY_QUIET_MS);
       const open = await settled(driverPid, pause);
       const remained = await closeAll(session);
+      const roundClosedAt = Date.now();
       await pause(R1_SETTLE_MS);
-      rounds.push({ round, open, left: remained, closed: await settled(driverPid, pause) });
+      // La WebView raccoglie quando vuole ciò che la lavagna lascia aprendosi
+      // (sul runner 300–400 MiB): una lettura sola a 10 s lo trova raccolto o
+      // no a caso, e la retta dei giri misurava questo invece di ciò che resta
+      // (#284). Si rilegge fino a un minuto dalla chiusura, come «tardi», e
+      // vale la lettura più bassa: ciò che ogni giro lascia davvero non scende,
+      // e la pendenza lo vede ancora.
+      const soon = await read();
+      let closed = soon;
+      let lowestAt = Date.now() - roundClosedAt;
+      while (Date.now() - roundClosedAt < R1_LATE_MS) {
+        await pause(Math.min(R1_POLL_MS, Math.max(0, R1_LATE_MS - (Date.now() - roundClosedAt))));
+        const again = await read();
+        if (again && closed && again.pss < closed.pss) {
+          closed = again;
+          lowestAt = Date.now() - roundClosedAt;
+        }
+      }
+      rounds.push({ round, open, left: remained, soon, closed, lowestAtMs: lowestAt });
     }
-    await pause(R1_LATE_MS);
-    const roundsLate = rounds.length > 0 ? await settled(driverPid, pause) : null;
+    // «Tardi» resta un minuto dopo l'ultima chiusura: l'ultimo giro lo ha già
+    // aspettato.
+    const roundsLate = rounds.length > 0 ? await read() : null;
+    if (!gc.asked) console.log("· R1: raccolta forzata spenta (--gc=no)");
+    else if (gc.skipped) console.log(`✗ R1: raccolta forzata non disponibile, ${gc.skipped} (--gc=no per misurare senza)`);
+    else if (gc.on) console.log(`· R1: raccolta forzata prima di ogni lettura a schede chiuse (${gc.calls}, ${gc.ms} ms in tutto)`);
+    else console.log(`✗ R1: gancio assente, l'app non è costruita con bench-gc: letture senza raccolta`);
     const opened = steps.at(-1)?.memory ?? null;
     const values = {};
     // Tutti i gruppi che la partenza o una lettura dopo hanno visto: la
@@ -1288,7 +1361,8 @@ const SCENARIOS = {
       values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
-      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
+      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, pollMs: R1_POLL_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
+      gc,
       restored,
       empty,
       steps,
@@ -1534,6 +1608,16 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
+  // L'estensione della raccolta forzata di R1, in una cartella della corsa.
+  if (!only.has("R1")) collector = { skipped: "R1 non gira" };
+  else if (!gcAsked) collector = { skipped: "spenta con --gc=no" };
+  else {
+    const dir = join(root, "raccolta");
+    mkdirSync(dir, { recursive: true });
+    collector = buildCollector(dir);
+  }
+  if (collector.dir) console.log("· estensione della raccolta forzata costruita");
+  else if (only.has("R1") && gcAsked) console.log(`· ${collector.skipped}`);
   benchVault = vault;
   // `--x11` toglie `WAYLAND_DISPLAY` al driver e chiede X11: la guardia in
   // fondo al file ha già detto che cosa scegliere (`display.mjs`).
@@ -1561,6 +1645,8 @@ async function main() {
   // dello scenario dopo (#287): si dice subito, prima delle misure.
   const reset = xvfbResetProblem(driverEnv, commandLines());
   if (reset) console.log(`⚠ ${reset}`);
+  /// Se il driver in corso ha il gancio della raccolta nell'ambiente (R1).
+  let driverGc = false;
   const results = {};
   let failed = 0;
   try {
@@ -1590,6 +1676,22 @@ async function main() {
     // note che gli avvii dopo riaprono.
     const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
+      // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
+      // nell'ambiente; lo scenario dopo torna su un driver senza.
+      const wantGc = id === "R1" && collector.dir !== undefined;
+      if (wantGc !== driverGc) {
+        // Fermare il driver ferma anche l'app di prima: `launch` non ha più
+        // niente da aspettare. Il driver nuovo, e quello che `launch` riavvia
+        // se GTK non parte, prendono l'ambiente di `driverEnv`.
+        await stopDriver(driver);
+        if (wantGc) driverEnv = { ...driverEnv, [GC_ENV]: collector.dir };
+        else {
+          driverEnv = { ...driverEnv };
+          delete driverEnv[GC_ENV];
+        }
+        driverGc = wantGc;
+        await startDriver();
+      }
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
       let session;
@@ -1640,6 +1742,9 @@ async function main() {
           console.log(`· ${seen.label}: dopo una nota ${seen.afterNote.join(", ") || "niente in più"}`);
           console.log(`· ${seen.label}: dei componenti spegnibili ${seen.switchable.join(", ") || "niente"}`);
         }
+        // R1 chiesta con la raccolta e misurata senza non passa in silenzio:
+        // i numeri restano nel referto, ma lo scenario è rosso.
+        if (result.gc?.asked && result.gc.on !== true) failed++;
       } catch (error) {
         failed++;
         await keep(session, id);

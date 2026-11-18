@@ -29,11 +29,12 @@ export const DRAWERS: PartAnatomy = {
     { name: "divider", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["layout-divider"] },
     // `search-results`, `search-exclusions` e `drop-into` sono di altri pezzi:
     // qui dicono soltanto quale titolo è l'esito della ricerca e quale è
-    // bersaglio di un rilascio.
+    // bersaglio di un rilascio. `conflict-banner` e `sheet-notice` (di
+    // `sheets`) dicono quale azione sta sul velo di un avviso.
     {
       name: "panel-title",
       states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("dragging")],
-      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into"],
+      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into", "conflict-banner", "sheet-notice"],
     },
     // Le azioni a icona del titolo del cassetto («ordina», «nuova nota») e il
     // conto di un'etichetta di sezione («Tutte le note 18»).

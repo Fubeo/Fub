@@ -65,49 +65,10 @@ nell'editor della scheda, il valore è `null` e il referto lo dice: la misura no
 vale. Uno scenario senza campioni non scrive un valore: un tempo di zero non è
 una misura, e la soglia lo conta come misura che manca.
 
-R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
-tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
-usa, quindi la somma non conta due volte le librerie. Ogni lettura è la
-mediana di tre a mezzo secondo. Il referto dà anche la RSS, i gruppi per
-processo (`app` è l'host Rust con la finestra, `webview` i processi
-WebKitWebProcess, poi `rete` e `gpu`) e la superficie che ogni file ha
-aperto.
-
-La procedura è fissa:
-
-1. **vuota**: chiuse le schede che l'app riapre, 10 s di quiete, una lettura;
-2. **aperte**: un file per modalità, senza chiudere i precedenti, una lettura
-   3 s dopo ognuno;
-3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
-   (**chiuse.tardi**);
-4. **giri**: trenta volte tutti i file aperti e poi tutto chiuso, una lettura
-   10 s dopo ogni chiusura, e alla fine una dopo 60 s.
-
-Ogni momento si legge in tutto e per gruppo di processi
-(`R1.vuota.app.MiB`, `R1.vuota.webview.MiB` e così via), e il referto tiene
-anche ogni processo con la sua PSS e la sua RSS.
-
-Il **residuo dopo la chiusura** (`R1.residuo.MiB`, e `R1.residuo.app.MiB`,
-`R1.residuo.webview.MiB` per processo) è «chiuse.tardi» meno «vuota»: la
-memoria che le schede chiuse tengono ancora un minuto dopo. Lo fanno le cache
-(caratteri, immagini decodificate, tessere), la memoria di JavaScript che la
-WebView non ha ancora raccolto e le pagine che l'allocatore ha liberato ma non
-ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
-`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il trentesimo giro,
-`R1.giri.pendenza.MiB` la mediana delle pendenze fra ogni coppia di giri (lo
-stimatore di Theil e Sen), in MiB per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
-stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
-che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
-
-La memoria della WebView sale e scende a dente di sega, di circa 150 MiB, col
-ritmo del suo GC. Con dieci giri e la retta dei minimi quadrati, una lettura
-alta in cima o bassa in fondo spostava la pendenza di decine di MiB: sul
-runner andava da -25 a 70 MiB per giro sullo stesso albero (#284). Trenta
-giri e la mediana la tengono entro pochi MiB, e il job WebView dura una
-dozzina di minuti in più.
-La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
-cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
-runner una volta e mezza il peggiore visto.
+R1 legge la PSS dei processi dell'app, con una raccolta forzata della
+WebView prima di ogni lettura a schede chiuse: la procedura, il residuo, la
+pendenza dei giri e il gancio `bench-gc` sono in
+[La memoria nella WebView](webview-memory.md).
 
 S3 misura lo spostamento, non l'apertura. Il primo disegno delle 300 schede
 dura secondi sul runner, e la sua coda, se cade dopo `start`, diventa il
@@ -338,9 +299,12 @@ variabile tolta) il banco si ferma, come dice la sezione che segue.
 
    ```bash
    cd apps/client && npm ci && npm run build && cd ../..
-   cargo build --release --locked -p fub-app --features tauri/custom-protocol
+   cargo build --release --locked -p fub-app --features tauri/custom-protocol,bench-gc
    cargo install tauri-driver --version "=2.1.0" --locked
    ```
+
+   `bench-gc` serve a R1 su Linux (la [raccolta forzata](webview-memory.md)); su Windows
+   non cambia niente.
 
 2. Su Linux serve WebKitWebDriver (pacchetto `webkit2gtk-driver`); su Windows
    msedgedriver della stessa versione di WebView2, nel `PATH`.

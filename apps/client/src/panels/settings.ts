@@ -52,7 +52,7 @@ import type {
   UiOption,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { state } from "../state/store";
+import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
@@ -79,6 +79,7 @@ import {
   currentThemeId,
   currentThemePreview,
   previewTheme,
+  refreshThemeLink,
   selectTheme,
   themeCatalog,
 } from "../theme/theme";
@@ -90,6 +91,15 @@ import { marcuzzoElement } from "../ui/marcuzzo";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
+import {
+  DEVELOPER_MODE_KEY,
+  installFolderButton,
+  linkFolderButton,
+  renderDiagnosis,
+  renderLinkedFolder,
+  themeDiagnoses,
+} from "./theme-folder";
+import { loadCatalogPage } from "../dev/catalogo/carica";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
   cssSnippetCatalog, disableCssSnippet, parseCssSnippets, previewCssSnippets,
@@ -555,6 +565,11 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     void refresh(event.key);
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
+  // Il tema collegato si rimonta a ogni salvataggio dell'autore: la riga
+  // «Ricaricato alle…» e la diagnosi si ridisegnano con lui.
+  lifetime.add(on("theme-link", () => {
+    if (!lifetime.closed && !panelEl.hidden) void render();
+  }));
   // Quali campi ha toccato chi scrive: solo quelli possono avere una bozza da
   // portare oltre il ridisegno (#401).
   lifetime.listen(bodyEl, "input", (event) => {
@@ -610,6 +625,8 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     race.cancel();
     release?.();
     release = null;
+    openedLifetime?.close();
+    openedLifetime = null;
   });
   syncToolbar();
   return teardown;
@@ -634,6 +651,9 @@ let updateChecker: UpdateChecker | null = null;
 /// lo chiamano il pulsante, Escape e l'evento `vault_closed`, e senza questa
 /// guardia il secondo giro rimetterebbe il fuoco dove stava *prima del primo*.
 let release: (() => void) | null = null;
+/// La vita di un'apertura del pannello: si chiude con lui. Ci vive ciò che sta
+/// sopra le impostazioni e non deve restarci senza (`Tutti i componenti`).
+let openedLifetime: Lifetime | null = null;
 
 async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
@@ -646,6 +666,7 @@ async function open(): Promise<void> {
   // chi non vede a parlare con la UI sotto, che è ancora lì e non è più quella
   // che ha davanti.
   release = trapFocus(panelEl, close);
+  openedLifetime = openLifetime();
   // La trappola mette il fuoco sul primo controllo, che nella scocca è la
   // chiusura: si comincia invece dalla scheda corrente, che dice dove si è.
   tabButtons().find((button) => button.dataset.tab === tab)?.focus();
@@ -675,6 +696,8 @@ export async function openSettingsAt(key: string): Promise<void> {
 }
 
 function close(): void {
+  openedLifetime?.close();
+  openedLifetime = null;
   release?.();
   race.cancel();
   cancelCssSnippetsPreview();
@@ -1324,8 +1347,17 @@ async function renderForm(): Promise<HTMLElement[]> {
       if (entry.spec.key === FRAME_KEY) await decorateFrame(item, entry);
       parts.body.append(item);
     }
-    if (themes.length > 0 && group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
-      parts.body.append(renderThemeCatalog(themes));
+    if (group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
+      // Con la modalità sviluppatore il blocco c'è anche senza temi
+      // installati: è da lì che se ne installa uno.
+      const developer = entries.some((entry) => entry.spec.key === DEVELOPER_MODE_KEY && entry.value === true);
+      if (themes.length > 0 || developer) parts.body.append(renderThemeCatalog(themes, developer));
+      // La cartella collegata si chiede all'host a ogni disegno: è lui che la
+      // guarda, e la storia dei rimontaggi resta in `theme/theme.ts`.
+      const link = developer ? await refreshThemeLink().catch(() => null) : null;
+      const owner = settingsLifetime;
+      if (link !== null && owner) parts.body.append(renderLinkedFolder({ lifetime: owner, rerender: render }, link));
+      for (const diagnosis of themeDiagnoses()) parts.body.append(renderDiagnosis(diagnosis));
     }
     nodes.push(parts.section);
   }
@@ -1660,10 +1692,15 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
   return parts.section;
 }
 
-function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
+function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "setting-row setting-block";
-  const text = blockHead(panel, t("settings.themes.title"), t("settings.themes.preview_hint"));
+  panel.dataset.themeCatalog = "";
+  const text = blockHead(
+    panel,
+    t("settings.themes.title"),
+    t(themes.length > 0 ? "settings.themes.preview_hint" : "settings.themes.none_installed"),
+  );
   panel.dataset.search = normalizeSearch([
     t("settings.themes.title"),
     t("settings.themes.preview_hint"),
@@ -1750,19 +1787,62 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
   cancelButton.addEventListener("click", () => {
     void write(() => cancelThemePreview());
   });
-  actions.append(applyButton, cancelButton, status);
+  if (themes.length > 0) actions.append(applyButton, cancelButton);
+  // Il gesto di chi scrive un tema; l'host lo rifiuta comunque a chiave spenta.
+  if (developer) {
+    const owner = settingsLifetime;
+    if (owner) {
+      const host = { lifetime: owner, rerender: render };
+      actions.append(installFolderButton(host), linkFolderButton(host), catalogPageButton());
+    }
+  }
   refreshPreviewState();
 
-  text.append(
-    row(
-      "setting-source",
-      t("settings.themes.source", {
-        ids: themes.map((theme) => theme.manifest.id).join(", "),
-      }),
-    ),
-  );
-  panel.append(control, actions);
+  if (themes.length > 0) {
+    text.append(
+      row(
+        "setting-source",
+        t("settings.themes.source", {
+          ids: themes.map((theme) => theme.manifest.id).join(", "),
+        }),
+      ),
+    );
+    panel.append(control);
+  }
+  panel.append(actions);
+  if (themes.length > 0) panel.append(status);
   return panel;
+}
+
+/// Il bottone che apre «Tutti i componenti» (`dev/catalogo/pagina.ts`): la
+/// pagina arriva con un `import()` (`dev/catalogo/carica.ts`), così non pesa
+/// su chi non scrive temi.
+/// Vive quanto l'apertura del pannello: chiuse le impostazioni (anche da un
+/// `vault_closed`), si chiude anche lei.
+function catalogPageButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-btn";
+  button.dataset.devAction = "catalog";
+  button.textContent = t("settings.themes.catalog");
+  button.addEventListener("click", () => {
+    // L'apertura del pannello di questo clic. Quando la pagina arriva, si apre
+    // solo se il pannello è ancora quello e il bottone ancora lì: chiuse (e
+    // magari riaperte) le Impostazioni, o cambiata scheda, il clic è vecchio.
+    const owner = openedLifetime;
+    if (!owner) return;
+    const current = (): boolean => owner === openedLifetime && !owner.closed && button.isConnected;
+    loadCatalogPage()
+      .then((page) => {
+        if (current()) page.openCatalogPage(owner);
+      })
+      .catch((error: unknown) => {
+        if (current()) {
+          notify(t("commands.failed", { command: t("settings.themes.catalog"), reason: errorText(error) }), "guasto");
+        }
+      });
+  });
+  return button;
 }
 
 /// Una riga di impostazione.

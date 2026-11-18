@@ -747,6 +747,7 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         ("THEME_KEY", fub_host::settings::APPEARANCE_THEME),
         ("CONTRAST_KEY", fub_host::settings::APPEARANCE_CONTRAST),
         ("DENSITY_KEY", fub_host::settings::APPEARANCE_DENSITY),
+        ("BARS_KEY", fub_host::settings::APPEARANCE_BARS),
         ("BODY_KEY", fub_host::settings::APPEARANCE_BODY),
         (
             "LINE_HEIGHT_KEY",

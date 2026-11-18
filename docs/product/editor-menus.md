@@ -91,8 +91,9 @@ il link», «Apri con un'altra app», «Mostra nell'esploratore», «Incolla sen
 formattazione».
 
 Lo stesso lessico tiene le parole dei componenti, uguali nella pagina
-«Componenti» delle impostazioni, nel riquadro di un file il cui editor è spento
-e nella riga di comando: Componente (non «Plugin», «Estensione», «Modulo»),
+«Componenti» delle impostazioni, nella scheda di un componente installato
+(«Acceso», «Spegni il componente prima di toglierlo.», «Togli»), nel riquadro
+di un file il cui editor è spento e nella riga di comando: Componente (non «Plugin», «Estensione», «Modulo»),
 Accendi e Spegni (non «Abilita», «Disabilita», «Disattiva»), Serve a, Non serve
 più, Togli, Tienili, Profilo, personalizzato, più avanti e solo come file. Le
 voci di un componente spento non ci sono nei menu (barra laterale, «Nuovo» e
@@ -238,11 +239,44 @@ voci sono parenti, «Sposta nel cestino» in rosso per ultimo.
 |---|---|
 | Nota | Apri a lato, Apri in una nuova finestra, Rinomina, Sposta in…, Duplica, Copia ▸ (il link, il percorso, il file), Appuntata, Organizza ▸ (icona, segnalibri, converti in cartella, ordine, mostra nella cartella del sistema, apri con un'altra app), Sposta nel cestino |
 | Altro file | Apri, Apri a lato, Apri con un'altra app, Rinomina, Sposta in…, Copia ▸, Mostra le note che lo usano, Sposta nel cestino |
-| Cartella | Nuova nota qui, Nuovo ▸ (cartella, disegno), Importa ▸, Rinomina, Sposta in…, Cerca nella cartella, Organizza ▸ (icona, usa come spazio, segnalibri, ordine, copia il percorso, esporta la cartella, mostra nella cartella del sistema), Sposta nel cestino |
-| Titolo e spazio vuoto | Nuova nota, Nuova cartella, Nuovo disegno…, Ordina ▸, Comprimi tutto, Importa ▸ |
+| Cartella | Nuova nota qui, Nuovo ▸ (l'elenco del «+», sotto), Importa ▸, Rinomina, Sposta in…, Cerca nella cartella, Organizza ▸ (icona, usa come spazio, segnalibri, ordine, copia il percorso, esporta la cartella, mostra nella cartella del sistema), Sposta nel cestino |
+| Titolo e spazio vuoto | Nuova nota, Nuovo ▸ (l'elenco del «+»), Ordina ▸, Comprimi tutto, Importa ▸ |
 | Scelta multipla | Sposta in…, In una cartella nuova…, Copia i link, Sposta nel cestino |
 | Scheda | Chiudi, Chiudi le altre, Chiudi anche ▸ (a destra, non appuntate, tutte), Appuntata, Dividi a destra, Apri in una nuova finestra, Pila ▸, Copia il percorso, Mostra nell'esploratore |
 | Riquadro (⋯) | Dividi a destra, Dividi in basso, Sorgente accanto, Esporta ▸ (i formati, poi «Altro formato…»), Stampa, Presenta come slide, Registra audio, Chiudi la scheda, Chiudi il riquadro |
+
+### Il menu «Nuovo»
+
+Il «+» del titolo dell'albero, anche al telefono, apre sotto di sé il menu
+«Nuovo»: Nota (con la scorciatoia di «Nuova nota»), Documento (.docx), Foglio
+(.xlsx), Disegno (.svg), Lavagna (.canvas), una riga, Nota da un modello… e
+Cartella. Il «+» è un interruttore: il secondo clic chiude il menu (come
+«Ordina» accanto). Lo stesso elenco è «Nuovo ▸» nel menu di una cartella, nel
+menu del titolo dell'albero e nel menu File dell'app; la ricerca del menu
+dell'app trova le sue voci come «Nuovo › Cartella», ma non «Nuovo › Nota», che
+è «Nuova nota».
+
+Dal menu di una cartella ogni file, la nota da un modello compresa, nasce in
+quella cartella: «Nota da un modello…» apre allora il modulo di
+`note.from_template` con la cartella già scritta. Dal «+», dal titolo e dal menu File la nota nasce dove la fa
+nascere Ctrl+N (con `files.new-note-folder` a `./`, accanto alla nota aperta),
+la cartella e gli altri file nella radice di ciò che si vede (lo spazio
+attivo, o il vault) e la nota da un modello nella radice del vault, dal
+comando «Nuova nota da un modello» della cornice. «Cartella»
+mostra l'albero, se il pannello era chiuso o su Cerca, e ci apre il campo del
+nome.
+
+Ogni voce c'è soltanto se si può fare: la nota e la cartella sempre; il
+documento, il foglio, il disegno e la lavagna se il kernel dichiara
+`document.create`, `sheet.create`, `drawing.create` o `canvas.create` e il loro
+editor è acceso; «Nota da un modello…» se la cornice ha il comando «Nuova
+nota da un modello» e il kernel dichiara `note.from_template`. L'elenco si rilegge a ogni
+apertura. Una voce che a menu aperto non si può più fare resta fino alla
+chiusura e, scelta, lo dice con un avviso: «il componente che lo fa non è più
+acceso» se se ne sono andati il suo comando o il suo editor, «non si può creare
+da questa finestra» se c'è tutto ma manca chi lo fa partire. Ctrl+N fa ancora
+una nota diretta, senza menu, ed Esc chiude il menu e torna al «+». L'elenco
+sta in `apps/client/src/ui/commands.ts` (`newEntries`).
 
 Si trovano scrivendo: Espandi tutto nel titolo dell'albero; Copia i file e
 Deseleziona nella scelta; gli spostamenti fra riquadri e pile di una scheda;
@@ -296,6 +330,8 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/editors/text/profiles/markdown/three-doors.test.ts`: le
   stesse azioni di blocco dal tasto destro, dalla barra di formato, dalla
   maniglia e da Ctrl O, e nessun pulsante sopra un blocco a riposo;
+- `apps/client/src/i18n/lexicon-settings.test.ts`: il lessico nei testi
+  `settings.components.*` delle impostazioni;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;
