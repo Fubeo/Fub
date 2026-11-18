@@ -206,7 +206,11 @@ fn doc(id: &str) -> DocId {
 impl Bench {
     /// Due note: la partenza col blocco, l'arrivo senza.
     fn open() -> Bench {
-        let root = Utf8PathBuf::from("/vault-piano");
+        // Una radice assoluta su ogni sistema: su Windows «/vault» non lo è, e il
+        // vault l'aprirebbe sul disco corrente, lontano dai file scritti qui.
+        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+            .expect("current dir is UTF-8")
+            .join("vault-piano");
         let inner = MemStorage::new();
         inner.write(&root.join(A), A_TEXT.as_bytes()).unwrap();
         inner.write(&root.join(B), B_TEXT.as_bytes()).unwrap();
