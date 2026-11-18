@@ -12,8 +12,8 @@ pub use args::{
     CallbackAction, CaptureArgs, CliCommand, CommandArgs, ComponentiAction, ComponentiArgs,
     ConfigArgs, CreateArgs, DailyAction, DailyArgs, DiagnosticsArgs, DocArgs, EditArgs, FilesArgs,
     GlobalArgs, LoginArgs, McpArgs, MfaArgs, PairAction, PluginArgs, PropertiesArgs, PublishAction,
-    PublishArgs, QueryArgs, ReadArgs, SearchArgs, SyncAction, SyncArgs, TasksArgs, TemplatesArgs,
-    ThemeArgs, VaultAction, ViewsArgs, WriteArgs,
+    PublishArgs, QueryArgs, ReadArgs, RicetteAction, RicetteArgs, SearchArgs, SyncAction, SyncArgs,
+    TasksArgs, TemplatesArgs, ThemeArgs, VaultAction, ViewsArgs, WriteArgs,
 };
 use command::parse_command;
 
@@ -278,6 +278,68 @@ fn parse_componenti(parser: &mut Parser, mut global: GlobalArgs) -> Result<CliCo
     Ok(CliCommand::Componenti(ComponentiArgs { global, action }))
 }
 
+/// `ricette controlla NOTA` | `ricette prova NOTA [--doc NOTA] [--args JSON]`.
+/// I flag globali possono stare in mezzo, come per `componenti`.
+fn parse_ricette(parser: &mut Parser, mut global: GlobalArgs) -> Result<CliCommand, String> {
+    parse_global(parser, &mut global)?;
+    let verbo = match parser.peek() {
+        Some(v) if split_flag(v).is_none() => {
+            parser.next();
+            v
+        }
+        _ => return Err("ricette vuole un'azione: controlla o prova".to_string()),
+    };
+    if !matches!(verbo, "controlla" | "prova") {
+        return Err(format!(
+            "ricette: `{verbo}` non è un'azione (controlla, prova)"
+        ));
+    }
+    let (mut recipe, mut doc, mut args_json) = (None, None, None);
+    loop {
+        parse_global(parser, &mut global)?;
+        let Some(arg) = parser.peek() else { break };
+        match split_flag(arg) {
+            None if recipe.is_none() => {
+                recipe = Some(arg.to_string());
+                parser.next();
+            }
+            Some((name @ ("doc" | "args"), inline)) if verbo == "prova" => {
+                parser.next();
+                let value = match inline {
+                    Some(v) => v.to_string(),
+                    None => parser
+                        .next()
+                        .map(str::to_string)
+                        .ok_or_else(|| format!("--{name} vuole un valore"))?,
+                };
+                if value.trim().is_empty() {
+                    return Err(format!("--{name} vuole un valore"));
+                }
+                let slot = if name == "doc" {
+                    &mut doc
+                } else {
+                    &mut args_json
+                };
+                if slot.replace(value).is_some() {
+                    return Err(format!("--{name} una volta sola"));
+                }
+            }
+            _ => break,
+        }
+    }
+    let recipe = recipe.ok_or_else(|| format!("ricette {verbo} vuole la nota della ricetta"))?;
+    let action = if verbo == "controlla" {
+        RicetteAction::Controlla { recipe }
+    } else {
+        RicetteAction::Prova {
+            recipe,
+            doc,
+            args_json,
+        }
+    };
+    Ok(CliCommand::Ricette(RicetteArgs { global, action }))
+}
+
 fn parse_vault(parser: &mut Parser, global: GlobalArgs) -> Result<CliCommand, String> {
     let verb = parser.next().unwrap_or("list").to_string();
     match verb.as_str() {
@@ -351,6 +413,7 @@ pub fn command_names() -> Vec<&'static str> {
         "views",
         "plugin",
         "componenti",
+        "ricette",
         "theme",
         "diagnostics",
         "capture",
@@ -369,14 +432,14 @@ pub fn command_names() -> Vec<&'static str> {
     ]
 }
 pub fn usage() -> &'static str {
-    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault mcp read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin componenti theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
+    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault mcp read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin componenti ricette theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
 }
 
 pub fn help_text(topic: Option<&str>) -> String {
     match topic {
         None => format!("fub-cli — automazione locale sopra Host.\n\n{}\n\nflag globali: --vault PATH --format F --config-dir DIR --no-watcher --standalone --limit N --offset N --dry-run --yes --no-input --quiet --verbose --no-color --color\nUsa `help <comando>` per la sintassi. Con il vault aperto nell'app, i comandi passano dall'app (canale di controllo locale); --standalone non passa dall'app e non elude il writer lock: vault occupato = busy.", usage()),
         Some(name) => match name {
-            "mcp" => "mcp [--automation-read-root DIR]… [--automation-write-root DIR]…\nServer MCP su stdio (JSON-RPC 2.0, un messaggio per riga) per gli agenti: fub_search, fub_query, fub_read, fub_read_model, fub_preview, fub_write, fub_create, fub_canvas_create, fub_canvas_apply, fub_commands, fub_invoke, fub_components*, fub_external_editors, fub_open_with, e le note come risorse. Senza --automation-write-root è in sola lettura; senza --automation-read-root legge tutto il vault. fub_write e fub_canvas_apply vogliono la revisione letta; fub_invoke e fub_canvas_apply senza apply mostrano il piano; fub_preview non avvia mai un'app, fub_open_with la avvia solo con apply e col file sotto le radici di scrittura. Vault da --vault/FUB_VAULT/corrente.".to_string(),
+            "mcp" => "mcp [--automation-read-root DIR]… [--automation-write-root DIR]…\nServer MCP su stdio (JSON-RPC 2.0, un messaggio per riga) per gli agenti: fub_search, fub_query, fub_read, fub_read_model, fub_preview, fub_write, fub_create, fub_canvas_create, fub_canvas_apply, fub_commands, fub_invoke, fub_components*, fub_recipe_check, fub_recipe_try, fub_external_editors, fub_open_with, e le note come risorse. Senza --automation-write-root è in sola lettura; senza --automation-read-root legge tutto il vault. fub_write e fub_canvas_apply vogliono la revisione letta; fub_invoke e fub_canvas_apply senza apply mostrano il piano; fub_preview non avvia mai un'app, fub_open_with la avvia solo con apply e col file sotto le radici di scrittura. Vault da --vault/FUB_VAULT/corrente.".to_string(),
             "read" => "read <doc> [--revision] [--model]\nLegge sorgente+revisione via Host::read_document. --model aggiunge il modello parsato. Vault da --vault/FUB_VAULT/corrente.".to_string(),
             "write" => "write <doc> [--base REV|--force] [--stdin|--text T|--file F]\nScrive con guardia CAS: --base la revisione letta, --force detta esplicita. Sorgente da --text/--file/stdin. Exit 5 su conflitto.".to_string(),
             "create" => "create [name] [--text T|--file F|--stdin] [--template T] [--title T]\nCrea senza sovrascrivere (AlreadyExists se occupato). --template espande note.from_template, --daily via templates.".to_string(),
@@ -403,6 +466,7 @@ pub fn help_text(topic: Option<&str>) -> String {
             "views" => "views [--list|--render ID|--action ID --payload JSON]".to_string(),
             "plugin" => "plugin [--list|--enable ID|--disable ID]".to_string(),
             "componenti" => "componenti [perche ID | accendi ID | spegni ID [--anche-questi] [--togli|--tieni]]\nI componenti con le regole dell'app: chi è acceso, perché, chi richiede chi. Senza azione l'elenco (acceso/spento, scelto/serve, id, nome, ← chi lo richiede). accendi accende anche ciò che serve; spegni rifiuta se altri lo richiedono (--anche-questi spegne anche loro) e chiede che fare di ciò che non serve più (--togli lo spegne, --tieni lo lascia). Lo stato è plugins.disabled; --dry-run mostra l'effetto senza cambiare niente, le scritture vogliono --yes fuori da un terminale.".to_string(),
+            "ricette" => "ricette controlla NOTA | ricette prova NOTA [--doc NOTA] [--args JSON]\nPer chi scrive una ricetta, a mano o con un'AI. controlla legge il blocco fub-recipe della nota e lo controlla contro i comandi del vault: un problema per riga (riga, campo, codice, frase), uscita 1 se ce n'è almeno uno. prova fa ogni passo in simulazione sulla nota di --doc (i parametri dichiarati in --args, un oggetto JSON) e dice che cosa cambierebbe, senza scrivere niente. Nessuno dei due accende la ricetta: la accende soltanto la persona, nell'app. Con il vault aperto nell'app passano da lei.".to_string(),
             "theme" => "theme [--list|--show ID|--light ID]".to_string(),
             "diagnostics" => "diagnostics [--startup|--session|--jobs|--health CHECK|--status]".to_string(),
             "config" => "config [--list|--get KEY|--set KEY=VALUE|--reset KEY]".to_string(),

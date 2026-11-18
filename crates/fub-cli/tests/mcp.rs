@@ -270,7 +270,9 @@ fn inizializzazione_elenco_e_errori_del_protocollo() {
             "fub_components",
             "fub_components_why",
             "fub_components_enable",
-            "fub_components_disable"
+            "fub_components_disable",
+            "fub_recipe_check",
+            "fub_recipe_try"
         ]
     );
     for tool in tools["result"]["tools"].as_array().unwrap() {

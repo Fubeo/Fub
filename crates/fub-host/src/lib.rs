@@ -178,6 +178,17 @@ pub use format_source::{FormatSource, PreparedFormatSource};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use recipes::{RecipeInfo, RecipeList, RecipeProblem, RecipeStatus, RecipeStepInfo};
+/// Il formato delle ricette, per chi le scrive da fuori: la CLI e l'MCP
+/// leggono, controllano e provano una ricetta con le stesse funzioni del
+/// componente, senza dipendere da `fub-features`.
+#[cfg(feature = "recipes")]
+pub mod recipe_format {
+    pub use fub_features::recipes::{
+        catalog, check_against, command_id, parse, plan, spec, Problem, ProblemCode, Recipe,
+        RECIPES_FOLDER_DEFAULT, RECIPES_FOLDER_KEY, RECIPES_ID, STEPS_MAX,
+    };
+    pub use fub_features::vocabulary::{context_at, Ctx};
+}
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};
 pub use registry::{
     Bundle, BundleClaim, BundleError, BundleInfo, BundleRegistry, OnlyProviders, StartupBundle,
