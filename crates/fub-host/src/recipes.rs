@@ -376,11 +376,7 @@ mod live {
     /// Legge le note della cartella, in ordine di percorso, fino a
     /// [`RECIPES_MAX`] ricette. Una nota senza blocco non è una ricetta e non
     /// conta; una nota che non si legge si salta, col suo avviso nel log.
-    fn read_folder(
-        host: &Host,
-        vault: Option<&str>,
-        docs: &[DocId],
-    ) -> (Vec<Note>, bool) {
+    fn read_folder(host: &Host, vault: Option<&str>, docs: &[DocId]) -> (Vec<Note>, bool) {
         let mut out = Vec::new();
         for doc in docs {
             let read = host
@@ -668,13 +664,13 @@ mod live {
         PluginError::NotFound(format!("Nessuna ricetta con id `{id}` in questo vault.").into())
     }
 
-    /// La sola ricetta del vault con questo `id`, se c'è.
+    /// La ricetta del vault con questo `id`. Se sono due, tutte e due hanno
+    /// `id-ripetuto`, e la prima basta a rifiutare.
     fn the_one<'r>(reads: &'r [Read], id: &str) -> Result<&'r Read, PluginError> {
-        let mut found = reads
+        reads
             .iter()
-            .filter(|read| read.info.id.as_deref() == Some(id));
-        let first = found.next().ok_or_else(|| not_found(id))?;
-        Ok(first)
+            .find(|read| read.info.id.as_deref() == Some(id))
+            .ok_or_else(|| not_found(id))
     }
 
     /// Una ricetta con problemi non si adotta e non si prova: l'errore è il
@@ -695,10 +691,8 @@ mod live {
         let root = host.session_root(vault)?;
         let recipes = state(host, vault)?;
         let mut mounted = turn(&recipes)?;
+        // Spento il componente l'elenco è vuoto, quindi la ricetta non c'è.
         let (reads, _) = reconcile(host, vault, &recipes, &mut mounted)?;
-        if !component_on(host, vault)? {
-            return Err(not_found(id));
-        }
         let read = the_one(&reads, id)?;
         refuse_problems(read)?;
         if read.info.fingerprint.as_deref() != Some(seen) {
@@ -776,9 +770,6 @@ mod live {
             let recipes = state(host, vault)?;
             let mut mounted = turn(&recipes)?;
             let (reads, _) = reconcile(host, vault, &recipes, &mut mounted)?;
-            if !component_on(host, vault)? {
-                return Err(not_found(id));
-            }
             let read = the_one(&reads, id)?;
             refuse_problems(read)?;
             let recipe = read.recipe.clone().ok_or_else(|| not_found(id))?;
