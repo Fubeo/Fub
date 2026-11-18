@@ -525,8 +525,10 @@ describe("il gesto che apre un PDF fa fare l'anteprima (T31)", () => {
   });
 });
 
-// T32: `![[guida.pdf#page=3]]` in una nota è un collegamento che apre il PDF
-// a quella pagina, sulla shell vera contro l'host finto.
+// T32: `![[guida.pdf#page=3]]` in una nota porta al PDF a quella pagina, sulla
+// shell vera contro l'host finto. Da T41, in Scrittura l'embed da solo nel suo
+// paragrafo è una scheda viva e ci si arriva col suo «Apri»; in Lettura resta
+// il collegamento, e il clic fa la stessa cosa.
 describe("il collegamento a una pagina di un PDF (T32)", () => {
   beforeEach(() => {
     activeStop?.();
@@ -536,29 +538,21 @@ describe("il collegamento a una pagina di un PDF (T32)", () => {
     box.pages = 5;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     box.pages = 1;
+    const menu = await import("../ui/menu");
+    menu.closeContextMenu();
   });
 
   const NOTE = "Rimandi.md";
-  const TEXT = [
-    "# Rimandi",
-    "",
-    "![[guida.pdf#page=3]]",
-    "",
-    "![[guida.pdf#page=9]]",
-    "",
-    "![[guida.pdf#page=0]]",
-    "",
-    "![[guida.pdf#page=abc]]",
-    "",
-    "![[guida.pdf#page=]]",
-    "",
-  ].join("\n");
+  /// Una nota con un solo embed del PDF, col punto `heading`.
+  const noteWith = (heading: string) => ["# Rimandi", "", `![[guida.pdf#${heading}]]`, ""].join("\n");
 
-  /// Il collegamento che la nota fa dell'embed con quel punto.
-  const linkTo = (heading: string) => visible("a.wikilink[data-wikilink-page='guida.pdf']")
+  /// Il collegamento che la Lettura fa dell'embed con quel punto.
+  const linkTo = (heading: string) => visible(".markdown-preview a.wikilink[data-wikilink-page='guida.pdf']")
     .find((a) => a.dataset.wikilinkHeading === heading);
+  /// «Apri» della scheda viva del PDF, in Scrittura.
+  const cardOpen = () => visible(".cm-content .live-card[data-card-kind='pdf'] .live-card-open")[0];
   /// La pagina che il visore del PDF dice di mostrare.
   const shownPage = () => visible(".media-pdf-page")[0]?.getAttribute("aria-label") ?? null;
   /// Le schede del PDF nel riquadro col fuoco.
@@ -567,46 +561,64 @@ describe("il collegamento a una pagina di un PDF (T32)", () => {
     return layout.panes[layout.focus]!.tabs.filter((tab) => tab.k === "doc" && tab.doc === GUIDA);
   };
 
-  async function clickLink(heading: string): Promise<void> {
-    await waitFor(`il collegamento #${heading}`, () => linkTo(heading) !== undefined);
-    linkTo(heading)!.click();
+  /// Preme «Apri» sulla scheda viva del PDF della nota aperta.
+  async function openFromCard(): Promise<void> {
+    await waitFor("la scheda viva del PDF", () => cardOpen() !== undefined);
+    cardOpen()!.click();
     await settle();
   }
 
-  it("il clic su ![[guida.pdf#page=3]] apre il visore alla pagina 3", async () => {
-    await start("off", "PdfCraft", { [NOTE]: TEXT });
+  /// La nota con l'embed `#heading`, e «Apri» sulla sua scheda viva.
+  async function openNoteCard(heading: string): Promise<void> {
+    await start("off", "PdfCraft", { [NOTE]: noteWith(heading) });
     await open(NOTE);
-    await clickLink("page=3");
+    await openFromCard();
+  }
+
+  it("«Apri» sulla scheda di ![[guida.pdf#page=3]] apre il visore alla pagina 3", async () => {
+    await openNoteCard("page=3");
     await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
     expect(await pdfTabs()).toHaveLength(1);
   });
 
   it("una pagina oltre l'ultima apre l'ultima", async () => {
-    await start("off", "PdfCraft", { [NOTE]: TEXT });
-    await open(NOTE);
-    await clickLink("page=9");
+    await openNoteCard("page=9");
     await waitFor("l'ultima pagina", () => shownPage() === "Pagina 5 di 5");
   });
 
   it.each(["page=0", "page=abc", "page="])("#%s apre la prima pagina, senza errori", async (heading) => {
-    await start("off", "PdfCraft", { [NOTE]: TEXT });
-    await open(NOTE);
-    await clickLink(heading);
+    await openNoteCard(heading);
     await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
   });
 
   it("il PDF già aperto in un'altra scheda torna attivo a quella pagina", async () => {
-    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await start("off", "PdfCraft", { [NOTE]: noteWith("page=3") });
     await open(GUIDA);
     await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
     await open(NOTE);
-    await clickLink("page=3");
+    await openFromCard();
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("in Lettura l'embed resta il collegamento, e il clic apre il visore alla pagina 3", async () => {
+    await start("off", "PdfCraft", { [NOTE]: noteWith("page=3") });
+    await open(NOTE);
+    const pane = visible(".pane")[0]!;
+    pane.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!.click();
+    await settle();
+    const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+    radios.find((item) => item.querySelector(".menu-label")?.textContent === "Lettura")!.click();
+    await waitFor("la nota in Lettura", () => pane.dataset.mode === "reading");
+    await waitFor("il collegamento #page=3", () => linkTo("page=3") !== undefined);
+    linkTo("page=3")!.click();
+    await settle();
     await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
     expect(await pdfTabs()).toHaveLength(1);
   });
 
   it("[[guida.pdf#page=4]] col PDF già nella scheda attiva lo porta a quella pagina", async () => {
-    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await start("off", "PdfCraft", { [NOTE]: noteWith("page=3") });
     await open(GUIDA);
     await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
     const { openWikilink } = await import("./document");
@@ -618,9 +630,7 @@ describe("il collegamento a una pagina di un PDF (T32)", () => {
   it("un PDF rotto resta l'errore di sempre", async () => {
     box.broken = true;
     try {
-      await start("off", "PdfCraft", { [NOTE]: TEXT });
-      await open(NOTE);
-      await clickLink("page=3");
+      await openNoteCard("page=3");
       await waitFor("l'errore del PDF", () => (visible(".media-pdf [role=status]")[0]?.textContent ?? "").includes("could not be opened"));
     } finally {
       box.broken = false;
