@@ -1278,6 +1278,22 @@ const SETTINGS: SettingEntry[] = [
     value: 72,
     source: "default",
   },
+  // Il nome di chi scrive, come lo dichiara l'host (`profile_settings` in
+  // `crates/fub-host/src/settings.rs`): il primo commento lo chiede e lo
+  // salva qui, e le risposte dopo lo firmano.
+  {
+    spec: {
+      key: "profile.name",
+      label: "Il tuo nome",
+      description: "Firma i commenti che scrivi nelle note. Il nome finisce nel file della nota: chi lo apre, anche con un altro programma, lo legge. Cambiarlo vale per i commenti nuovi.",
+      group: "Profilo",
+      scope: "machine",
+      kind: { kind: "text", default: "" },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
   {
     spec: {
       key: "vault.daily_folder",
