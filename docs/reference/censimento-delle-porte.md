@@ -74,15 +74,15 @@ compila soltanto se la sua cargo feature è dichiarata in `[features]` di
 | `fub.markdown` | — | — | nucleo |
 | `fub.search` | `search` | impostazioni, collegamento:search-index | solo host |
 | `fub.versioning` | `versioning` | vista, comandi, impostazioni, collegamento:version-store | solo host |
-| `fub.backlinks` | `backlinks` | vista | sì |
+| `fub.backlinks` | `backlinks` | vista, comandi | sì |
 | `fub.outline` | `outline` | vista, comandi | sì |
 | `fub.tags` | `tags` | vista, comandi | sì |
-| `fub.tasks` | `tasks` | vista, sintassi, renderer | solo nativa |
+| `fub.tasks` | `tasks` | vista, indice, sintassi, renderer | solo nativa |
 | `fub.properties` | `properties` | vista, comandi | sì |
 | `fub.template` | `template` | vista, comandi, impostazioni | sì |
 | `fub.recipes` | `recipes` | comandi, impostazioni | sì |
 | `fub.queries` | `queries` | vista, comandi | sì |
-| `fub.dashboard` | `dashboard` | vista | sì |
+| `fub.dashboard` | `dashboard` | vista, impostazioni | sì |
 | `fub.backup` | `backup` | vista, comandi, impostazioni | sì |
 | `fub.trash` | `trash` | vista | sì |
 | `fub.stats` | `stats` | vista | sì |
