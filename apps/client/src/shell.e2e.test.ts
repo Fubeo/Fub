@@ -4444,6 +4444,36 @@ describe("i riquadri dopo un'attesa", () => {
     expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
   });
 
+  it("col testo nella Cronologia e il disco che non si rilegge lo si dice, e ripetere non lo conserva due volte", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+    const repairOpen = host.fault("openDocument", "disco non leggibile");
+    const repairRead = host.fault("readDocument", "disco non leggibile");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "chi scrive sa che il suo testo è salvo",
+      () => recentNotices().some((notice) => notice.text.includes("è nella Cronologia, ma il file non si è riletto")),
+    );
+    await settle();
+    repairOpen();
+    repairRead();
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const keeps = host.calls.slice(before).filter((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    expect(keeps, "lo stesso testo entra nella Cronologia una volta sola").toHaveLength(1);
+  });
+
   it("se il testo non entra nella Cronologia non si scarta niente, e lo si dice", async () => {
     const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
     const { recentNotices } = await import("./ui/notify");
@@ -4492,7 +4522,10 @@ describe("i riquadri dopo un'attesa", () => {
       expect(args?.doc).toBe("Benvenuto.md");
       expect(args?.text).toBe("testo della finestra");
       expect(args?.note).toMatch(/^Testo scartato nel conflitto del /);
-      expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+      // Il nome della nota come lo dice il resto dell'app, non il percorso.
+      const notice = recentNotices().find((entry) => entry.text.includes("è nella Cronologia"));
+      expect(notice?.text).toContain("su Benvenuto è");
+      expect(notice?.text).not.toContain("Benvenuto.md");
 
       const repair = host.fault("invokeCommand", "spazio dati pieno");
       child.postMessage({ ...id, kind: "keep", token: "due", text: "testo della finestra" });

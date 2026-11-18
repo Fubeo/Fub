@@ -143,7 +143,10 @@ che dice perché c'è. È ciò che fa «Usa la versione su disco» in un conflit
 prima di scartare il testo dell'utente lo conserva con la nota «Testo scartato
 nel conflitto del …», e rilegge il disco solo dopo che la conservazione è
 riuscita. Se la conservazione fallisce non si scarta niente, il conflitto resta
-aperto e l'avviso dice perché; senza la Cronologia montata, o su un foglio di
+aperto e l'avviso dice perché. Se il testo è conservato ma il disco non si
+rilegge, il conflitto resta aperto e l'avviso dice che il testo è già nella
+Cronologia; ripetere la scelta sullo stesso testo non crea una seconda
+versione uguale. Senza la Cronologia montata, o su un foglio di
 calcolo (dove il testo in Fub è un giornale, non il file), la conferma avverte
 che il testo andrà perso, e così la descrizione del comando nella palette.
 Lo stesso vale nella [finestra documento a parte](../architecture/document-model.md#il-testo-non-salvato): «Scarta le modifiche locali»
@@ -199,7 +202,11 @@ Un file che non si legge non ferma il backup: lo snapshot nasce con il resto,
 l'esito è parziale e il pannello nomina ogni file saltato con il perché; uno
 snapshot parziale non fa ruotare via i precedenti. Gli snapshot prendono il
 nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
-precedente soltanto a copia finita. La copia nuova si scrive nell'altra cartella
+precedente soltanto a copia finita. Se quel backup salta dei file, la copia che
+lo snapshot sostituito aveva di ciascuno passa (verificata sull'inventario) nello
+snapshot nuovo: nessun file perde la sua copia. Se quella copia non si rilegge,
+il backup si ferma con un errore che nomina il file e lo snapshot di prima dello stesso giorno resta
+com'era. La copia nuova si scrive nell'altra cartella
 del giorno (`<data>.1/`), il manifest `snapshots.json` passa a lei e solo allora
 la vecchia si cancella: un guasto a metà lascia intero lo snapshot precedente.
 Accanto alla cartella di ogni snapshot sta il suo inventario
