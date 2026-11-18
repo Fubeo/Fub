@@ -5227,12 +5227,16 @@ export class GridEngine {
   #unshowPaste(previews: readonly PastePreview[]): void {
     if (this.#destroyed || !previews.length) return;
     let restored = false;
+    const gone = new Set<GridBytesCell>();
     for (const { window, previous, shown } of previews) {
       if (!window.cells.includes(shown)) continue;
       window.cells = [...window.cells.filter((cell) => cell !== shown), ...(previous ? [previous] : [])];
       this.#pendingCells.delete(shown);
+      gone.add(shown);
       restored = true;
     }
+    // Ciò che torna non è un valore nuovo: niente dissolvenza d'entrata.
+    for (const [key, written] of this.#written) if (gone.has(written.shown)) this.#written.delete(key);
     if (restored && this.#workbook) this.#showView(this.#sheet().id, false);
   }
 
