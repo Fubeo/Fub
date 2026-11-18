@@ -912,3 +912,140 @@ describe("le pagine per «Spargi le pagine» (T72)", () => {
     expect(await pdfPagesReader(odd.port).sizes("a.pdf", [1, 2])).toEqual([{ width: 600, height: 800 }, null]);
   });
 });
+
+describe("la scheda PDF nella nota (T45)", () => {
+  /// Un motore che sa stendere il testo: conta le pagine chieste e scrive un
+  /// pezzo per pagina; `holdText` fa aspettare la prossima.
+  function textEngine(pages: number): FakeEngine & { texts: number[]; holdText: Deferred<void> | null } {
+    const engine = Object.assign(fakeEngine(pages), { texts: [] as number[], holdText: null as Deferred<void> | null });
+    engine.renderText = async (index, container) => {
+      engine.texts.push(index);
+      const held = engine.holdText;
+      if (held) await held.promise;
+      const piece = document.createElement("span");
+      piece.textContent = `pagina ${index + 1}`;
+      container.append(piece);
+    };
+    return engine;
+  }
+
+  function layer(host: HTMLElement): HTMLElement | null {
+    return host.querySelector<HTMLElement>(".canvas-card-pdf-text");
+  }
+
+  it("la parte: #page=3 mostra la pagina 3 con «3 / 6»; un PDF di mille pagine ne disegna una", async () => {
+    const engine = fakeEngine(6);
+    const b = bench({ engine: async () => engine });
+    const view = b.mount("live", "#page=3");
+    await settle();
+    expect(view.page!()).toBe(3);
+    expect(status(b.host).textContent).toBe(t("canvas.card.page", { page: 3, pages: 6 }));
+    expect(engine.renders.map((r) => r.index)).toEqual([2]);
+    expect(b.changes).toEqual([]);
+    view.destroy();
+
+    const thousand = fakeEngine(1000);
+    const big = bench({ engine: async () => thousand });
+    const one = big.mount("live", "#page=1000");
+    await settle();
+    expect(status(big.host).textContent).toBe(t("canvas.card.page", { page: 1000, pages: 1000 }));
+    expect(thousand.renders.map((r) => r.index)).toEqual([999]);
+    one.destroy();
+  });
+
+  it("#page= oltre la fine parte dalla prima e lo dice a chi ospita", async () => {
+    const b = bench({ engine: async () => fakeEngine(6) });
+    const view = b.mount("live", "#page=9");
+    await settle();
+    expect(view.page!()).toBe(1);
+    expect(b.changes).toEqual([1]);
+    expect(status(b.host).textContent).toBe(t("canvas.card.page", { page: 1, pages: 6 }));
+    view.destroy();
+  });
+
+  it("le frecce della tastiera sfogliano come PgSu e PgGiù; con un modificatore no", async () => {
+    const b = bench({ engine: async () => fakeEngine(3) });
+    const view = b.mount("live");
+    await settle();
+    expect(press(view, "ArrowRight")).toBe(true);
+    await settle();
+    expect(view.page!()).toBe(2);
+    expect(press(view, "ArrowLeft")).toBe(true);
+    await settle();
+    expect(view.page!()).toBe(1);
+    expect(press(view, "ArrowRight", { shiftKey: true })).toBe(false);
+    expect(view.page!()).toBe(1);
+    view.destroy();
+  });
+
+  it("un PDF protetto da una password lo dice col suo nome", async () => {
+    const locked = Object.assign(new Error("No password given"), { name: "PasswordException" });
+    const b = bench({ engine: async () => { throw locked; } });
+    const view = b.mount("live");
+    await settle();
+    expect(message(b.host).textContent).toBe(t("canvas.card.pdf_locked", { name: "manuale.pdf" }));
+    expect(b.host.querySelector<HTMLElement>(".canvas-card-pdf")?.dataset.cardState).toBe("unreadable");
+    view.destroy();
+  });
+
+  it("il testo della pagina si stende quando arriva il puntatore, mai da solo", async () => {
+    const engine = textEngine(4);
+    const b = bench({ engine: async () => engine });
+    const view = b.mount("live");
+    await settle();
+    expect(engine.texts).toEqual([]);
+    expect(layer(b.host)).toBeNull();
+
+    b.host.querySelector(".canvas-card-pdf")!.dispatchEvent(new Event("pointerenter"));
+    await settle();
+    expect(engine.texts).toEqual([0]);
+    const first = layer(b.host)!;
+    expect(first.textContent).toBe("pagina 1");
+    // Sopra il canvas, con la proporzione della pagina.
+    expect(first.previousElementSibling).toBe(screen(b.host));
+    expect(first.style.getPropertyValue("--page-ratio")).toBe(String(600 / 800));
+
+    // Un'altra pagina: lo strato è suo.
+    expect(press(view, "PageDown")).toBe(true);
+    await settle();
+    expect(engine.texts).toEqual([0, 1]);
+    expect(b.host.querySelectorAll(".canvas-card-pdf-text")).toHaveLength(1);
+    expect(layer(b.host)!.textContent).toBe("pagina 2");
+
+    // Ferma: il motore si chiude e il testo va via.
+    view.setMode("snapshot");
+    expect(layer(b.host)).toBeNull();
+    view.destroy();
+  });
+
+  it("uno strato chiesto per una pagina che nel frattempo è cambiata non entra", async () => {
+    const engine = textEngine(4);
+    const b = bench({ engine: async () => engine });
+    const view = b.mount("live");
+    await settle();
+    engine.holdText = deferred<void>();
+    const held = engine.holdText;
+    b.host.querySelector(".canvas-card-pdf")!.dispatchEvent(new Event("focusin"));
+    await settle();
+    engine.holdText = null;
+    expect(press(view, "PageDown")).toBe(true);
+    await settle();
+    held.resolve();
+    await settle();
+    expect(b.host.querySelectorAll(".canvas-card-pdf-text")).toHaveLength(1);
+    expect(layer(b.host)!.textContent).toBe("pagina 2");
+    view.destroy();
+    expect(layer(b.host)).toBeNull();
+  });
+
+  it("senza `renderText` la pagina si guarda lo stesso", async () => {
+    const b = bench({ engine: async () => fakeEngine(2) });
+    const view = b.mount("live");
+    await settle();
+    b.host.querySelector(".canvas-card-pdf")!.dispatchEvent(new Event("pointerenter"));
+    await settle();
+    expect(layer(b.host)).toBeNull();
+    expect(screen(b.host).hidden).toBe(false);
+    view.destroy();
+  });
+});

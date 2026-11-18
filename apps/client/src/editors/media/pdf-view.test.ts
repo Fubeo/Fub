@@ -12,7 +12,7 @@ import { Lifetime } from "../../ui/lifetime";
 import { t } from "../../i18n/strings";
 import { closeContextMenu } from "../../ui/menu";
 import { icon } from "../../ui/icons";
-import { mountPdfView, type PdfEngine, type PdfOutlineItem } from "./pdf-view";
+import { isPdfPasswordError, makePdfJsLoader, mountPdfView, PDFJS_VERSION, type PdfEngine, type PdfJsModule, type PdfOutlineItem } from "./pdf-view";
 
 function fake(pageCount: number, extra: Partial<PdfEngine> = {}): PdfEngine {
   return {
@@ -461,5 +461,86 @@ describe("le annotazioni sopra le pagine", () => {
     const { page } = await mounted(3);
     expect(page.querySelectorAll("img")).toHaveLength(0);
     expect(created).not.toHaveBeenCalled();
+  });
+});
+
+describe("il testo della pagina da pdf.js (T45)", () => {
+  /// Un pdf.js finto col suo `TextLayer`: ricorda gli strati fatti e scrive
+  /// la misura come la scrive il vero (`setLayerDimensions`).
+  function module(withText: boolean) {
+    const layers: { container: HTMLElement; viewport: unknown; cancelled: boolean; finish: () => void }[] = [];
+    class FakeTextLayer {
+      readonly entry: (typeof layers)[number];
+      readonly done: Promise<void>;
+      constructor(options: { textContentSource: unknown; container: HTMLElement; viewport: unknown }) {
+        options.container.style.width = "round(down, var(--total-scale-factor) * 600px, var(--scale-round-x))";
+        options.container.style.height = "round(down, var(--total-scale-factor) * 800px, var(--scale-round-y))";
+        let finish!: () => void;
+        this.done = new Promise((resolve) => { finish = resolve; });
+        this.entry = { container: options.container, viewport: options.viewport, cancelled: false, finish };
+        layers.push(this.entry);
+      }
+      render() {
+        return this.done.then(() => {
+          if (this.entry.cancelled) throw new Error("annullato");
+          this.entry.container.append(Object.assign(document.createElement("span"), { textContent: "Art. 4" }));
+        });
+      }
+      cancel() {
+        this.entry.cancelled = true;
+        this.entry.finish();
+      }
+    }
+    const page = {
+      getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale, scale }),
+      getTextContent: async () => ({ items: [{ str: "Art. 4" }] }),
+    };
+    const document_ = { numPages: 2, getPage: async () => page };
+    const pdfjs = {
+      version: PDFJS_VERSION,
+      GlobalWorkerOptions: { workerSrc: "" },
+      getDocument: () => ({ promise: Promise.resolve(document_), destroy: async () => {} }),
+      ...(withText ? { TextLayer: FakeTextLayer } : {}),
+    } as unknown as PdfJsModule;
+    return { pdfjs, layers };
+  }
+
+  it("stende il testo nel contenitore e lascia la misura a chi lo ospita", async () => {
+    const { pdfjs, layers } = module(true);
+    const engine = await makePdfJsLoader(async () => pdfjs, "/pdf.worker.mjs")(new Uint8Array([1]));
+    const container = document.createElement("div");
+    const done = engine.renderText!(1, container);
+    await vi.waitFor(() => expect(layers).toHaveLength(1));
+    expect(container.style.width).toBe("");
+    expect(container.style.height).toBe("");
+    expect((layers[0]!.viewport as { scale: number }).scale).toBe(1);
+    layers[0]!.finish();
+    await done;
+    expect(container.textContent).toBe("Art. 4");
+    await expect(engine.renderText!(5, container)).rejects.toThrow();
+    engine.destroy();
+  });
+
+  it("chiuso il motore, lo strato in corso si ferma senza errori", async () => {
+    const { pdfjs, layers } = module(true);
+    const engine = await makePdfJsLoader(async () => pdfjs, "/pdf.worker.mjs")(new Uint8Array([1]));
+    const done = engine.renderText!(0, document.createElement("div"));
+    await vi.waitFor(() => expect(layers).toHaveLength(1));
+    engine.destroy();
+    await expect(done).resolves.toBeUndefined();
+    expect(layers[0]!.cancelled).toBe(true);
+  });
+
+  it("senza `TextLayer` il motore non offre il testo", async () => {
+    const { pdfjs } = module(false);
+    const engine = await makePdfJsLoader(async () => pdfjs, "/pdf.worker.mjs")(new Uint8Array([1]));
+    expect(engine.renderText).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("riconosce il PDF protetto da una password dal nome dell'errore", () => {
+    expect(isPdfPasswordError(Object.assign(new Error("x"), { name: "PasswordException" }))).toBe(true);
+    expect(isPdfPasswordError(new Error("PasswordException"))).toBe(false);
+    expect(isPdfPasswordError(null)).toBe(false);
   });
 });
