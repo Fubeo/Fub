@@ -1857,6 +1857,11 @@ impl HostServices for JobHost {
     /// L'importer gira fuori dal prestito e senza il turno di scrittura: un
     /// import può durare quanto la rete che lo alimenta, e ogni sua scrittura
     /// prende il turno da sé, come quelle di un job.
+    ///
+    /// L'errore dell'importer esce nel catalogo di **chi l'ha scritto**
+    /// (§12.2), come quello di un exporter in [`run_export`](Self::run_export):
+    /// il job che lo chiama è di un altro bundle, e la chiave arrivava al
+    /// centro attività non risolta.
     fn run_import(
         &mut self,
         source: &ImportSource,
@@ -1875,13 +1880,22 @@ impl HostServices for JobHost {
             ws.prepare_import()
         };
         let at = prepared.choose(source)?;
-        let host = self.for_provider(prepared.owner(at), self.mode);
-        if self.mode == InvokeMode::DryRun {
+        let owner = prepared.owner(at).to_owned();
+        let host = self.for_provider(owner.as_str(), self.mode);
+        let outcome = if self.mode == InvokeMode::DryRun {
             let mut host = Guard::new(host, read_only);
             prepared.invoke(at, source, request, &mut host)
         } else {
             let mut host = host;
             prepared.invoke(at, source, request, &mut host)
-        }
+        };
+        outcome.map_err(|mut error| {
+            // Il workspace si riprende solo per le parole, dopo l'import:
+            // l'importer ha girato fuori dal prestito.
+            if let Ok(ws) = self.workspace.read() {
+                ws.localize_as(&owner, &mut error);
+            }
+            error
+        })
     }
 }
