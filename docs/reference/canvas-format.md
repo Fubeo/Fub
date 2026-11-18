@@ -185,6 +185,14 @@ numero). I casi sono in `crates/fub-canvas-core/tests/source_edit.rs`.
 - **Un sorgente vuoto** (R1) diventa la lavagna scritta per intero, rientrata
   di due spazi e chiusa da `"\n"`; tiene il BOM e, se il file ne aveva, i
   terminatori CRLF.
+- **Verso la sessione** la tela manda il testo nuovo con il BOM e i
+  terminatori del file (nessun file misto), e l'operazione contata sul testo
+  a LF, come la valida la `DocumentSession`: su un file CRLF una modifica
+  non torna indietro come `realigned`. L'host scrive quel testo byte per
+  byte; i casi sono i vettori `46-*`…`61-*` di
+  `apps/client/src/__fixtures__/canvas-patches/`,
+  `apps/client/src/editors/canvas/line-endings.test.ts` e
+  `crates/fub-host/tests/canvas_line_endings.rs`.
 
 Le regole dei byte nuovi:
 
