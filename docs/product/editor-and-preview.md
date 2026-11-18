@@ -279,7 +279,11 @@ La `DocumentSession` accoda le scritture per documento. Il core applica la
 revisione di base. Un contenuto esterno più recente produce un conflitto
 esplicito. Un conflitto non si ritenta da solo: autosave e flush aspettano la
 scelta dell'utente, e «Usa disco» scarta il buffer e la bozza solo dopo aver
-letto il file. Una bozza recuperata senza revisione di base, su un file che
+letto il file. Prima ancora, se la Cronologia è montata, il buffer va nella
+cronologia del documento (`version.keep`, con la nota datata del conflitto):
+una conservazione fallita non scarta niente, e un tasto premuto mentre si
+conserva rende la lettura superata, col conflitto ancora aperto
+([versioni](vault-recupero-e-versioni.md#versioning)). Una bozza recuperata senza revisione di base, su un file che
 esiste, rientra direttamente in conflitto invece di sovrascriverlo.
 
 Un testo che nessun formato serve, come un SVG, non passa da `write_document`,

@@ -283,12 +283,12 @@ un gesto è in volo la barra non ne accetta un altro.
 Il file riscritto da un gesto si ricarica **in silenzio**: niente avviso «è
 cambiato su disco», perché il cambio l'ha chiesto chi usa la Base, e la tabella
 resta dove era scorsa. La frase del comando arriva come avviso con «Annulla»,
-che disfa l'ultima operazione del vault come dalla tavolozza: se quella non
-riscrive il `.base` (niente da annullare, o era su un altro file), la Base non
-resta in attesa e un cambio che arriva dopo si dice. Un cambio fatto da
-un'altra app, da un'altra finestra o da un altro comando si dice come sempre.
-Se il `.base` è aperto anche come testo con modifiche non salvate, il gesto
-prima le salva; se non si salvano, il gesto non parte e la barra lo dice.
+che disfa l'ultima operazione del vault come dalla tavolozza o con Ctrl+Z: se
+quella non riscrive il `.base` (niente da annullare, o era su un altro file), la
+Base non resta in attesa e un cambio che arriva dopo si dice. Un cambio fatto da
+un'altra app, da un'altra finestra o da un altro comando si dice come sempre. Se
+il `.base` è aperto anche come testo con modifiche non salvate, il gesto prima
+le salva; se non si salvano, il gesto non parte e la barra lo dice.
 
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
@@ -339,8 +339,7 @@ Il piano della vista (`op: "plan"` della query `fub.base`) porta per questo,
 oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`), le colonne
 scritte (`order`) e i riepiloghi (`summaries`, ognuno con `key`, `aggregate`,
 `expression`, `name` e la `label` con cui `derive` ne dà il valore) come il
-modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna
-(`types`).
+modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (`types`).
 
 ### Una vista nuova
 
@@ -369,8 +368,7 @@ vista ricordata o alla prima del file.
 
 ### Il menu della colonna
 
-Un clic sull'intestazione di una colonna (o il tasto destro, con le stesse
-voci) apre il suo menu:
+Un clic sull'intestazione di una colonna (o il tasto destro, con le stesse voci) apre il suo menu:
 
 | Voce | Che cosa fa | Che cosa scrive |
 |---|---|---|
@@ -388,7 +386,7 @@ scelto dal menu è uno per colonna, senza nome e senza formula; quello di una
 Relazione è un `rollup` ([Le Relazioni](../reference/property-types.md#il-riepilogo-in-una-base))
 nell'`expression`, col nome («Somma di pagine»): spento se la chiave ha spazi.
 Gli altri scritti a mano restano. La colonna della nota ha solo Ordina e
-Copia; le colonne `file.*` e le formule non si rinominano e non hanno un tipo.
+Copia; le colonne `file.*`, `container.*` e le formule non si rinominano e non hanno un tipo.
 In sola lettura e in una Base dentro una nota le voci che scrivono il `.base`
 sono spente col perché; in una Base dentro una nota anche Rinomina e Tipo (il
 blocco resterebbe sulla chiave vecchia): la voce dice di farlo dal `.base`.
@@ -412,8 +410,10 @@ casella, lista, collegamento), letta dalle righe come per i riepiloghi, e un
 filo divide le colonne. Le date si leggono come giorno e mese («2 mar», con
 l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
 è solo da guardare, perché il campo di una cella col fuoco torna al valore
-com'è, e la ricerca, il CSV e le copie usano il valore. In fondo alle righe
+com'è, e la ricerca, il CSV e le copie usano il valore. Le colonne `file.*`,
+`container.*` e le formule sono di sola lettura: la loro cella è testo. In fondo alle righe
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
+Una modifica chiesta (cella, colonna della bacheca, nota spostata nel calendario o nella linea del tempo) passa anche se il vault cambia o la Base si chiude; se la nota è cambiata o la Base è in sola lettura no, e lo dice la riga di stato o, a Base chiusa, un avviso.
 
 Ogni valore sta su una riga sola e le colonne prendono la misura del loro
 contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando

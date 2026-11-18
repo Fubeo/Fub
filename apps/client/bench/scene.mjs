@@ -138,6 +138,19 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector("#context-menu:not([hidden])");
     },
   },
+  // S34: il «+» del titolo dell'albero chiede il tipo. Aperto dalla tastiera,
+  // col fuoco sulla prima voce, e con tutti i comandi che creano un file
+  // (`?nuovo=tutto`), come la toppa `menu-nuovo` del prototipo.
+  {
+    id: "file-nuovo-tipo",
+    title: "«Nuovo» chiede il tipo: il menu del «+» dell'albero",
+    query: "nuovo=tutto",
+    prepare: async (page) => {
+      await page.focus("#new-note");
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(() => document.activeElement?.closest('#context-menu[aria-label="Nuovo"]') != null);
+    },
+  },
   // Il tasto destro: un menu per posto, aperto col mouse, con la testata, i
   // gruppi e il piede che invita a scrivere.
   ...[
@@ -1457,7 +1470,10 @@ export const SCENE = touchLast(onPage("shell", [
     prepare: async (page) => {
       await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
       await selectWords(page, "Questa è la nota");
-      const box = await page.locator(".pane.focus .cm-selectionBackground").first().boundingBox();
+      // Il clic al centro del testo scelto: dello strato già ridisegnato, non
+      // di quello del tasto di prima (il menu cadeva 2 px più in qua o più in
+      // là secondo chi arrivava primo, #488).
+      const box = await selectionBox(page);
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
       await page.waitForSelector(".context-strip.context-strip-mini .mini-bar [data-command='markdown.bold']");
       await page.mouse.move(0, 0);
@@ -3073,11 +3089,42 @@ async function selectWords(page, line) {
   for (let step = 0; step < 3; step++) await page.keyboard.press("Control+Shift+ArrowRight");
 }
 
+/// Il riquadro del testo scelto nella nota a fuoco, letto quando lo strato
+/// della selezione l'ha raggiunto. CodeMirror cambia la selezione del documento
+/// subito, al tasto, ma ridisegna lo strato al suo fotogramma di misura: letto
+/// prima, lo strato è ancora quello del tasto di prima (#488). Si aspetta che
+/// copra la selezione del documento e resti fermo per due fotogrammi.
+async function selectionBox(page) {
+  await page.evaluate(() => delete globalThis.__benchSelection);
+  const found = await page.waitForFunction(() => {
+    const layer = document.querySelector(".pane.focus .cm-selectionBackground")?.getBoundingClientRect();
+    const chosen = getSelection();
+    const range = chosen && chosen.rangeCount > 0 ? chosen.getRangeAt(0).getBoundingClientRect() : null;
+    const covers = layer && range && range.width > 0 && Math.abs(layer.left - range.left) < 1 && Math.abs(layer.right - range.right) < 1;
+    const at = covers ? `${layer.x} ${layer.y} ${layer.width} ${layer.height}` : null;
+    const seen = (globalThis.__benchSelection ??= { at: null, frames: 0 });
+    seen.frames = at !== null && seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 2 && { x: layer.x, y: layer.y, width: layer.width, height: layer.height };
+  }, null, { polling: "raf" });
+  return found.jsonValue();
+}
+
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
-/// senza suggerimenti.
+/// senza suggerimenti. La bolla della mini-barra, se c'è, ferma: lo stesso
+/// posto per tre fotogrammi di fila (si riposa quando la sua misura cambia).
 async function settleBar(page) {
   await page.mouse.move(0, 0);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.evaluate(() => delete globalThis.__benchBubble);
+  await page.waitForFunction(() => {
+    const bubble = document.querySelector(".selection-bubble:not([hidden])");
+    const at = bubble ? `${bubble.style.left} ${bubble.style.top} ${bubble.getBoundingClientRect().width}` : "";
+    const seen = (globalThis.__benchBubble ??= { at: null, frames: 0 });
+    seen.frames = seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 3;
+  }, null, { polling: "raf" });
 }
 
 async function openNote(page, path) {
@@ -3411,7 +3458,14 @@ async function openNoteTypes(page, gesture) {
       await page.waitForSelector("#sidebar-scrim:not([hidden])");
     }
     await page.waitForSelector("#types-list:not([hidden]) .type-row");
+    // Il «+» del cassetto apre il menu «Nuovo» (S34); la sua «Nota» è il
+    // gesto di «Nuova nota», che coi tipi nel vault chiede il tipo sotto il
+    // «+» (E5).
     await page.click("#new-note");
+    await page
+      .locator('#context-menu[aria-label="Nuovo"] [role=menuitem]')
+      .filter({ has: page.locator(".menu-label", { hasText: /^Nota$/ }) })
+      .click();
     await page.waitForSelector(".note-type-popover .note-type-menu-item");
   }
   if (gesture === "choose") {

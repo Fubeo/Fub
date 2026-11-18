@@ -8,8 +8,8 @@
 // riga attiva non ha un fondo suo e la segna il rettangolo del kit.
 import { describe, expect, it } from "vitest";
 
-import type { ComboboxFacts, Look } from "./a11y-rules.mjs";
-import { alpha, modalComboboxGap } from "./a11y-rules.mjs";
+import type { ComboboxFacts, EditorFrameFacts, FrameAfter, Look } from "./a11y-rules.mjs";
+import { alpha, editorFrameRingGap, modalComboboxGap } from "./a11y-rules.mjs";
 
 const plain: Look = {
   background: "rgba(0, 0, 0, 0)",
@@ -124,5 +124,50 @@ describe("il combobox di una finestra modale", () => {
     expect(modalComboboxGap(launcher({ tag: "DIV" }))).toBe("non è un input combobox");
     expect(modalComboboxGap(launcher({ focusVisible: false }))).toBe("senza :focus-visible");
     expect(modalComboboxGap(null)).toBe("nessun fatto");
+  });
+});
+
+/// I fatti che il banco raccoglie sullo scroller di una nota col fuoco da
+/// tastiera: il velo dell'editor disegna l'anello (`structure.css`).
+const scroller = (patch: Partial<EditorFrameFacts> = {}, after: Partial<FrameAfter> = {}): EditorFrameFacts => ({
+  focusVisible: true,
+  frame: true,
+  after: {
+    content: '""',
+    display: "block",
+    position: "absolute",
+    top: "0px",
+    right: "0px",
+    bottom: "0px",
+    left: "0px",
+    outlineStyle: "solid",
+    outlineWidth: "2px",
+    boxShadow: "none",
+    ...after,
+  },
+  ...patch,
+});
+
+describe("l'anello dell'editor di testo", () => {
+  it("passa con il velo dell'editor che dipinge l'anello", () => {
+    expect(editorFrameRingGap(scroller())).toBeNull();
+    expect(editorFrameRingGap(scroller({}, { outlineStyle: "none", boxShadow: "0 0 0 2px red" }))).toBeNull();
+  });
+
+  it("resta rosso senza :focus-visible, fuori da un editor o senza fatti", () => {
+    expect(editorFrameRingGap(scroller({ focusVisible: false }))).toBe("senza :focus-visible");
+    expect(editorFrameRingGap(scroller({ frame: false }))).toBe("il padre non è un editor");
+    expect(editorFrameRingGap(scroller({ after: null }))).toBe("nessun velo");
+    expect(editorFrameRingGap(null)).toBe("non è uno scroller dell'editor");
+  });
+
+  it("resta rosso con un velo che non si dipinge, non copre o non disegna", () => {
+    expect(editorFrameRingGap(scroller({}, { content: "none" }))).toBe("il velo non c'è");
+    expect(editorFrameRingGap(scroller({}, { content: "normal" }))).toBe("il velo non c'è");
+    expect(editorFrameRingGap(scroller({}, { display: "none" }))).toBe("il velo non c'è");
+    expect(editorFrameRingGap(scroller({}, { position: "static" }))).toBe("il velo non sta sull'editor");
+    expect(editorFrameRingGap(scroller({}, { left: "40px" }))).toBe("il velo non copre l'editor");
+    expect(editorFrameRingGap(scroller({}, { outlineStyle: "none" }))).toBe("il velo non dipinge un anello");
+    expect(editorFrameRingGap(scroller({}, { outlineWidth: "0px" }))).toBe("il velo non dipinge un anello");
   });
 });

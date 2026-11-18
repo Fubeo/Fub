@@ -97,6 +97,13 @@ export interface SurfaceMountContext {
    * Absent means `false`: in a pane Escape is the surface's.
    */
   readonly escapeLeaves?: boolean;
+  /**
+   * The text is not a page (a board's text card, whose text lives in the
+   * `.canvas`): the surface leaves out what belongs to a page — the title
+   * taken from the file name, the properties, the icon, the cover and the
+   * subpages — and shows the body alone. Absent means `false`.
+   */
+  readonly pageless?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */

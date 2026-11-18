@@ -33,9 +33,9 @@ Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
   colonna (`Ctrl+Maiusc+Invio`), anche dalla scheda **Inserisci**;
-- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo (web o
-  posta) e lo mettono sulla selezione, sul link al cursore o, senza
-  selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
+- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo
+  (web o posta) e lo mettono sulla selezione, sul link al cursore o su un
+  testo nuovo; dallo stesso modulo un link si toglie anche dal file;
 - grassetto, corsivo e barrato dal gruppo **Carattere** di **Home**;
 - l'aspetto del carattere dallo stesso gruppo: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
@@ -60,7 +60,10 @@ Si modificano:
 - le tabelle: una nuova dal pulsante **Tabella** di **Inserisci**, scegliendo
   righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
   del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
-  colonne uguali e con i bordi.
+  colonne uguali e con i bordi. In un documento che si scrive soltanto nel
+  corpo (parti chiuse, «Solo il testo») gli stili del file non cambiano: se
+  il file non ha già lo stile «Griglia tabella», la tabella nuova ne prende i
+  bordi come formattazione sua, e si salva come ogni paragrafo.
   Righe e colonne si aggiungono, si spostano e si tolgono dalla scheda
   **Tabella** o con le scorciatoie della tabella Markdown; una colonna nuova
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
@@ -93,7 +96,12 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   una battuta sola, che si annulla in una volta. Dopo un gesto della barra,
   o delle schede Commenti e Revisioni del pannello, `Ctrl+Z` e `Ctrl+Y`
   annullano e ripetono nel documento anche col fuoco sul pulsante; dentro
-  una casella (Trova, Sostituisci con, il nome) restano della casella;
+  una casella (Trova, Sostituisci con, il nome) restano della casella. Nella
+  scheda Revisioni il fuoco non esce col pulsante premuto: dopo **Accetta** o
+  **Rifiuta** passa allo stesso pulsante della voce che prende il posto di
+  quella risolta (o di quella prima, se era l'ultima), dopo **Accetta tutte**
+  o **Rifiuta tutte** all'interruttore **Registra le modifiche**, e senza
+  interruttore all'elenco, così `Ctrl+Z` annulla subito da lì;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
   spazi, un oggetto separa senza contare, il testo delle note non conta;
@@ -361,7 +369,8 @@ gli stessi limiti. Il codec non porta la sua pagina, quindi in Pagina sta su
 un A4 con i margini di 2 cm, che il riquadro **Pagina** dice senza
 cambiarli; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
-bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
+bordo sottile (`FubC…`), ognuna col suo paragrafo anche vuoto, come in
+LibreOffice: riaperta, è quella salvata. Le colonne si aggiungono o si
 tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
 uniscono o si dividono soltanto in una tabella senza celle unite in altezza;
 altrimenti il salvataggio lo rifiuta e il testo resta nel buffer. Il

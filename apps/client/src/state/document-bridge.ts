@@ -6,6 +6,7 @@ import { documentSessions, type DocumentSession, type DocumentSurfaceDescriptor 
 import { on, state } from "./store";
 import { mountedTheme, type MirroredTheme } from "../theme/loader";
 import { t } from "../i18n/strings";
+import { errorText } from "../host/errors";
 export type { MirroredTheme } from "../theme/loader";
 
 const normalized = (text: string): string => text.replace(/\r\n?/g, "\n");
@@ -34,6 +35,16 @@ export type RemoteMessage = Identity & (
   | { kind: "navigate"; target: NavigateTarget }
   /** Main to child: the theme as mounted, since the child has no IPC to mount its own. */
   | { kind: "theme"; theme: MirroredTheme }
+  /** Child to main: would discarding the window's text keep it in History first? */
+  | { kind: "keep-probe"; token: string }
+  /** Main to child: the answer to `keep-probe`. */
+  | { kind: "keep-mode"; token: string; keeps: boolean }
+  /** Child to main: keep this text in History before the child discards it. */
+  | { kind: "keep"; token: string; text: string }
+  /** Main to child: the text of `keep` is in History. */
+  | { kind: "kept"; token: string }
+  /** Main to child: the text of `keep` is not in History; the child discards nothing. */
+  | { kind: "keep-failed"; token: string; reason: string }
 );
 
 export type NavigateTarget =
@@ -51,6 +62,22 @@ let navigation: DocumentWindowNavigation | null = null;
 /** Set by the shell that can open documents; `null` takes it back. */
 export function setDocumentWindowNavigation(port: DocumentWindowNavigation | null): void {
   navigation = port;
+}
+
+/** How the main window keeps the text a child window is about to discard:
+ * the same rule as «Usa la versione su disco» (`state/conflict-keep.ts`),
+ * since the child has no IPC to run `version.keep` itself. */
+export interface DocumentWindowKeeper {
+  /** Whether discarding on `doc` keeps the text first (History mounted). */
+  keeps(doc: string): boolean;
+  /** Keeps `text` in the History of `doc`; a rejection means not kept. */
+  keep(doc: string, text: string): Promise<void>;
+}
+
+let keeper: DocumentWindowKeeper | null = null;
+/** Set by the shell that owns the History commands; `null` takes it back. */
+export function setDocumentWindowKeeper(port: DocumentWindowKeeper | null): void {
+  keeper = port;
 }
 
 /** The document has no text surface: a separate window cannot show it. */
@@ -113,6 +140,11 @@ export function isRemoteMessage(value: unknown): value is RemoteMessage {
       && !!m.token && counter(m.seq) && counter(m.revision);
     case "navigate": return validNavigateTarget(m.target);
     case "theme": return validMirroredTheme(m.theme);
+    case "keep-probe":
+    case "kept": return typeof m.token === "string" && !!m.token;
+    case "keep-mode": return typeof m.token === "string" && !!m.token && typeof m.keeps === "boolean";
+    case "keep": return typeof m.token === "string" && !!m.token && typeof m.text === "string";
+    case "keep-failed": return typeof m.token === "string" && !!m.token && typeof m.reason === "string";
     default: return false;
   }
 }
@@ -242,6 +274,10 @@ export async function attachRemoteSurface(
         } else if (message.kind === "operation") {
           reply({ ...identity(request), kind: "conflict", epoch: authority.epoch, seq: message.seq,
             revision: authority.revision, reason: "session-unavailable" });
+        } else if (message.kind === "keep-probe") {
+          reply({ ...identity(request), kind: "keep-mode", token: message.token, keeps: false });
+        } else if (message.kind === "keep") {
+          reply({ ...identity(request), kind: "keep-failed", token: message.token, reason: t("errors.bridge.session_changed") });
         }
         return;
       }
@@ -257,6 +293,24 @@ export async function attachRemoteSurface(
       if (!endpoint.ready) return;
       if (message.kind === "navigate") {
         navigation?.navigate(message.target, owner.id);
+        return;
+      }
+      // Before discarding its text the child asks whether it will be kept,
+      // then hands it over: it discards only after `kept`.
+      if (message.kind === "keep-probe") {
+        reply({ ...identity(request), kind: "keep-mode", token: message.token, keeps: keeper?.keeps(owner.id) ?? false });
+        return;
+      }
+      if (message.kind === "keep") {
+        const port = keeper;
+        if (!port || !port.keeps(owner.id)) {
+          reply({ ...identity(request), kind: "keep-failed", token: message.token, reason: t("errors.bridge.keep_unavailable") });
+          return;
+        }
+        port.keep(owner.id, message.text).then(
+          () => reply({ ...identity(request), kind: "kept", token: message.token }),
+          (error: unknown) => reply({ ...identity(request), kind: "keep-failed", token: message.token, reason: errorText(error) }),
+        );
         return;
       }
       if (message.kind === "operation") {
@@ -372,9 +426,20 @@ export async function attachRemoteSurface(
   }
 }
 
+/** How long the child waits for the main window to say whether it keeps. */
+const PROBE_WAIT_MS = 5000;
+/** How long the child waits for the text to be kept (a write to disk). */
+const KEEP_WAIT_MS = 15000;
+
 export interface ChildBridge {
   sendEdit(text: string, operation: TextOperation): void;
   resolveConflict(choice: "mine" | "theirs"): void;
+  /** Whether discarding the window's text keeps it in History first: the
+   * main window answers, since it owns the History commands. */
+  discardKeeps(): Promise<boolean>;
+  /** Keeps the window's text in History, then discards it. A keep that fails
+   * (or gets no answer) discards nothing and rejects with the reason. */
+  discardKeeping(): Promise<void>;
   /** Hands a link or tag to the main window, which can open it. */
   navigate(target: NavigateTarget): void;
   dispose(): boolean;
@@ -403,6 +468,24 @@ export function attachChildBridge(
   let freezeToken: string | null = null;
   let frozenToken: string | null = null;
   let recovery: string | null = null;
+  /// The questions to the main window still waiting for an answer.
+  const asks = new Map<string, { settle: (message: RemoteMessage) => void; fail: (error: Error) => void }>();
+  const ask = (message: RemoteMessage & { token: string }, waitMs: number): Promise<RemoteMessage> =>
+    new Promise<RemoteMessage>((resolve, reject) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        asks.delete(message.token);
+      };
+      const timer = globalThis.setTimeout(() => {
+        done();
+        reject(new Error(t("errors.bridge.no_answer")));
+      }, waitMs);
+      asks.set(message.token, {
+        settle: (answer) => { done(); resolve(answer); },
+        fail: (error) => { done(); reject(error); },
+      });
+      port.postMessage(message);
+    });
   const sendNext = (): void => {
     if (!initialized || outstanding || failed || !pending.length || !alive) return;
     outstanding = true;
@@ -420,6 +503,10 @@ export function attachChildBridge(
     const message = event.data;
     if (message.doc !== id.doc || message.vault !== id.vault || message.session !== id.session || message.surfaceId !== id.surfaceId) return;
     if (message.kind === "theme") { onTheme?.(message.theme); return; }
+    if (message.kind === "keep-mode" || message.kind === "kept" || message.kind === "keep-failed") {
+      asks.get(message.token)?.settle(message);
+      return;
+    }
     if (message.kind === "snapshot-error") { report(message.reason); return; }
     if (message.kind === "snapshot") {
       if (initialized || pending.length) return;
@@ -452,7 +539,8 @@ export function attachChildBridge(
       return;
     }
     if (!initialized || failed) return;
-    if (message.kind === "hello" || message.kind === "drain-ready" || message.kind === "navigate") return;
+    if (message.kind === "hello" || message.kind === "drain-ready" || message.kind === "navigate"
+      || message.kind === "keep-probe" || message.kind === "keep") return;
     if (message.kind !== "resync" && message.epoch !== epoch) return;
     if (message.kind === "freeze") {
       frozenToken = message.token;
@@ -518,6 +606,15 @@ export function attachChildBridge(
       finishFreeze();
     }
   };
+  function resolveConflict(choice: "mine" | "theirs"): void {
+    if (!alive || !failed || frozen) throw new Error(t("errors.bridge.drain_conflict"));
+    recovery = choice === "mine" ? current() : null;
+    pending.length = 0;
+    outstanding = false;
+    failed = false;
+    initialized = false;
+    port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
+  }
   port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
   return {
     sendEdit: (text, operation) => {
@@ -538,19 +635,27 @@ export function attachChildBridge(
     navigate: (target) => {
       if (alive) port.postMessage({ ...id, kind: "navigate", target } satisfies RemoteMessage);
     },
-    resolveConflict: (choice) => {
+    resolveConflict,
+    discardKeeps: async () => {
+      if (!alive) throw new Error(t("errors.bridge.not_ready"));
+      const answer = await ask({ ...id, kind: "keep-probe", token: crypto.randomUUID() }, PROBE_WAIT_MS);
+      return answer.kind === "keep-mode" && answer.keeps;
+    },
+    discardKeeping: async () => {
       if (!alive || !failed || frozen) throw new Error(t("errors.bridge.drain_conflict"));
-      recovery = choice === "mine" ? current() : null;
-      pending.length = 0;
-      outstanding = false;
-      failed = false;
-      initialized = false;
-      port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
+      const text = current();
+      const answer = await ask({ ...id, kind: "keep", token: crypto.randomUUID(), text }, KEEP_WAIT_MS);
+      if (answer.kind === "keep-failed") throw new Error(answer.reason);
+      if (answer.kind !== "kept") throw new Error(t("errors.bridge.no_answer"));
+      // Only the text that was kept is discarded.
+      if (current() !== text) throw new Error(t("errors.bridge.text_changed"));
+      resolveConflict("theirs");
     },
     dispose: () => {
       if (!alive) return true;
       if (pending.length || outstanding) return false;
       alive = false;
+      for (const waiting of [...asks.values()]) waiting.fail(new Error(t("errors.bridge.not_ready")));
       port.onmessage = null;
       port.close();
       return true;

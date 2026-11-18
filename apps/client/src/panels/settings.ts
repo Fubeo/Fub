@@ -45,6 +45,7 @@ import type {
   InstalledPluginInfo,
   CatalogEntry,
   SettingEntry,
+  SettingKind,
   SettingValue,
   ThemeInfo,
   SettingScope,
@@ -52,12 +53,13 @@ import type {
   UiOption,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { state } from "../state/store";
+import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
 import {
   allCommands,
+  commandOfKeybindingKey,
   displayBinding,
   keybindingIssues,
   keybindingKey,
@@ -66,11 +68,12 @@ import {
   reservedChord,
   validateKeybinding,
   type CommandEntry,
+  type KeybindingValidation,
 } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
-import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, t, type Key } from "../i18n/strings";
+import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, resolvedLanguage, t, type Key } from "../i18n/strings";
 import {
   MOTION_KEY,
   SERIES_THEME_ID,
@@ -79,6 +82,7 @@ import {
   currentThemeId,
   currentThemePreview,
   previewTheme,
+  refreshThemeLink,
   selectTheme,
   themeCatalog,
 } from "../theme/theme";
@@ -90,6 +94,15 @@ import { marcuzzoElement } from "../ui/marcuzzo";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
+import {
+  DEVELOPER_MODE_KEY,
+  installFolderButton,
+  linkFolderButton,
+  renderDiagnosis,
+  renderLinkedFolder,
+  themeDiagnoses,
+} from "./theme-folder";
+import { loadCatalogPage } from "../dev/catalogo/carica";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
   cssSnippetCatalog, disableCssSnippet, parseCssSnippets, previewCssSnippets,
@@ -103,12 +116,14 @@ import {
   matchesTerms,
   normalizeSearch,
   optionLabel,
+  parseSettingNumber,
   searchTerms,
   searchText,
   sectionAnchor,
   show,
   shownChoice,
   type Control,
+  type NumberProblem,
 } from "./settings-model";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
@@ -555,10 +570,16 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     void refresh(event.key);
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
+  // Il tema collegato si rimonta a ogni salvataggio dell'autore: la riga
+  // «Ricaricato alle…» e la diagnosi si ridisegnano con lui.
+  lifetime.add(on("theme-link", () => {
+    if (!lifetime.closed && !panelEl.hidden) void render();
+  }));
   // Quali campi ha toccato chi scrive: solo quelli possono avere una bozza da
   // portare oltre il ridisegno (#401).
   lifetime.listen(bodyEl, "input", (event) => {
     if (isDraftControl(event.target)) typedControls.add(event.target);
+    forgetRowError(event.target);
   });
   // Chromium, togliendo dal documento il campo che ha il fuoco, gli manda
   // `blur` e con esso il `change` di una casella modificata: il ridisegno per
@@ -610,6 +631,8 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     race.cancel();
     release?.();
     release = null;
+    openedLifetime?.close();
+    openedLifetime = null;
   });
   syncToolbar();
   return teardown;
@@ -634,6 +657,9 @@ let updateChecker: UpdateChecker | null = null;
 /// lo chiamano il pulsante, Escape e l'evento `vault_closed`, e senza questa
 /// guardia il secondo giro rimetterebbe il fuoco dove stava *prima del primo*.
 let release: (() => void) | null = null;
+/// La vita di un'apertura del pannello: si chiude con lui. Ci vive ciò che sta
+/// sopra le impostazioni e non deve restarci senza (`Tutti i componenti`).
+let openedLifetime: Lifetime | null = null;
 
 async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
@@ -646,6 +672,7 @@ async function open(): Promise<void> {
   // chi non vede a parlare con la UI sotto, che è ancora lì e non è più quella
   // che ha davanti.
   release = trapFocus(panelEl, close);
+  openedLifetime = openLifetime();
   // La trappola mette il fuoco sul primo controllo, che nella scocca è la
   // chiusura: si comincia invece dalla scheda corrente, che dice dove si è.
   tabButtons().find((button) => button.dataset.tab === tab)?.focus();
@@ -675,6 +702,8 @@ export async function openSettingsAt(key: string): Promise<void> {
 }
 
 function close(): void {
+  openedLifetime?.close();
+  openedLifetime = null;
   release?.();
   race.cancel();
   cancelCssSnippetsPreview();
@@ -1324,8 +1353,17 @@ async function renderForm(): Promise<HTMLElement[]> {
       if (entry.spec.key === FRAME_KEY) await decorateFrame(item, entry);
       parts.body.append(item);
     }
-    if (themes.length > 0 && group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
-      parts.body.append(renderThemeCatalog(themes));
+    if (group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
+      // Con la modalità sviluppatore il blocco c'è anche senza temi
+      // installati: è da lì che se ne installa uno.
+      const developer = entries.some((entry) => entry.spec.key === DEVELOPER_MODE_KEY && entry.value === true);
+      if (themes.length > 0 || developer) parts.body.append(renderThemeCatalog(themes, developer));
+      // La cartella collegata si chiede all'host a ogni disegno: è lui che la
+      // guarda, e la storia dei rimontaggi resta in `theme/theme.ts`.
+      const link = developer ? await refreshThemeLink().catch(() => null) : null;
+      const owner = settingsLifetime;
+      if (link !== null && owner) parts.body.append(renderLinkedFolder({ lifetime: owner, rerender: render }, link));
+      for (const diagnosis of themeDiagnoses()) parts.body.append(renderDiagnosis(diagnosis));
     }
     nodes.push(parts.section);
   }
@@ -1660,10 +1698,15 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
   return parts.section;
 }
 
-function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
+function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "setting-row setting-block";
-  const text = blockHead(panel, t("settings.themes.title"), t("settings.themes.preview_hint"));
+  panel.dataset.themeCatalog = "";
+  const text = blockHead(
+    panel,
+    t("settings.themes.title"),
+    t(themes.length > 0 ? "settings.themes.preview_hint" : "settings.themes.none_installed"),
+  );
   panel.dataset.search = normalizeSearch([
     t("settings.themes.title"),
     t("settings.themes.preview_hint"),
@@ -1750,19 +1793,62 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
   cancelButton.addEventListener("click", () => {
     void write(() => cancelThemePreview());
   });
-  actions.append(applyButton, cancelButton, status);
+  if (themes.length > 0) actions.append(applyButton, cancelButton);
+  // Il gesto di chi scrive un tema; l'host lo rifiuta comunque a chiave spenta.
+  if (developer) {
+    const owner = settingsLifetime;
+    if (owner) {
+      const host = { lifetime: owner, rerender: render };
+      actions.append(installFolderButton(host), linkFolderButton(host), catalogPageButton());
+    }
+  }
   refreshPreviewState();
 
-  text.append(
-    row(
-      "setting-source",
-      t("settings.themes.source", {
-        ids: themes.map((theme) => theme.manifest.id).join(", "),
-      }),
-    ),
-  );
-  panel.append(control, actions);
+  if (themes.length > 0) {
+    text.append(
+      row(
+        "setting-source",
+        t("settings.themes.source", {
+          ids: themes.map((theme) => theme.manifest.id).join(", "),
+        }),
+      ),
+    );
+    panel.append(control);
+  }
+  panel.append(actions);
+  if (themes.length > 0) panel.append(status);
   return panel;
+}
+
+/// Il bottone che apre «Tutti i componenti» (`dev/catalogo/pagina.ts`): la
+/// pagina arriva con un `import()` (`dev/catalogo/carica.ts`), così non pesa
+/// su chi non scrive temi.
+/// Vive quanto l'apertura del pannello: chiuse le impostazioni (anche da un
+/// `vault_closed`), si chiude anche lei.
+function catalogPageButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-btn";
+  button.dataset.devAction = "catalog";
+  button.textContent = t("settings.themes.catalog");
+  button.addEventListener("click", () => {
+    // L'apertura del pannello di questo clic. Quando la pagina arriva, si apre
+    // solo se il pannello è ancora quello e il bottone ancora lì: chiuse (e
+    // magari riaperte) le Impostazioni, o cambiata scheda, il clic è vecchio.
+    const owner = openedLifetime;
+    if (!owner) return;
+    const current = (): boolean => owner === openedLifetime && !owner.closed && button.isConnected;
+    loadCatalogPage()
+      .then((page) => {
+        if (current()) page.openCatalogPage(owner);
+      })
+      .catch((error: unknown) => {
+        if (current()) {
+          notify(t("commands.failed", { command: t("settings.themes.catalog"), reason: errorText(error) }), "guasto");
+        }
+      });
+  });
+  return button;
 }
 
 /// Una riga di impostazione.
@@ -2168,24 +2254,56 @@ function switchField(entry: SettingEntry, id: string): HTMLElement {
 /// controllano i due estremi, che è ciò che il kernel verifica davvero.
 function numberInput(entry: SettingEntry, id: string, min: number | null, max: number | null): HTMLInputElement {
   const input = document.createElement("input");
-  input.type = "number";
+  // Un testo e non un `input[type=number]`: quello legge a modo suo ciò che si
+  // scrive («1,5» diventava 15 in WebKit) e al codice dà un valore vuoto per
+  // tutto ciò che non capisce. Il numero lo legge `parseSettingNumber`, e ciò
+  // che non è il numero scritto si rifiuta col suo motivo, sotto la riga.
+  input.type = "text";
+  input.inputMode = "decimal";
+  input.autocomplete = "off";
+  input.spellcheck = false;
   input.className = "setting-number";
   input.id = id;
   input.value = String(entry.value);
-  if (min !== null) input.min = String(min);
-  if (max !== null) input.max = String(max);
-  input.step = "any";
+  const kind = numberKind(entry, min, max);
   input.addEventListener("change", () => {
-    // `Number("")` è **zero**, non `NaN`: con il solo controllo su `NaN`,
-    // svuotare il campo (o scriverci del testo, che per un `input[number]`
-    // dà lo stesso `value` vuoto) manderebbe uno zero al kernel — accettato
-    // in silenzio ovunque non ci sia un `min` sopra lo zero.
-    if (input.value.trim() === "") return;
-    const n = Number(input.value);
-    if (Number.isNaN(n)) return;
+    const read = parseSettingNumber(input.value, kind, resolvedLanguage());
+    if (!("value" in read)) {
+      refuseRow(entry.spec.key, numberProblemText(read), input.value);
+      return;
+    }
+    const n = read.value;
     void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, n));
   });
   return input;
+}
+
+/// La specie numerica di una riga, con gli estremi del suo controllo.
+function numberKind(entry: SettingEntry, min: number | null, max: number | null): Extract<SettingKind, { kind: "number" }> {
+  const kind = entry.spec.kind;
+  return { kind: "number", default: kind.kind === "number" ? kind.default : 0, min, max };
+}
+
+/// Perché un numero non si scrive, nelle parole dell'interfaccia.
+function numberProblemText(read: NumberProblem): string {
+  const bound = (n: number) =>
+    new Intl.NumberFormat(resolvedLanguage(), { useGrouping: false, maximumFractionDigits: 20 }).format(n);
+  switch (read.problem) {
+    case "min":
+      return t("settings.not_changed", { reason: t("settings.number.min", { min: bound(read.min) }) });
+    case "max":
+      return t("settings.not_changed", { reason: t("settings.number.max", { max: bound(read.max) }) });
+    default: {
+      const reasons: Record<typeof read.problem, Key> = {
+        empty: "settings.number.empty",
+        syntax: "settings.number.syntax",
+        finite: "settings.number.finite",
+        precision: "settings.number.precision",
+        ambiguous: "settings.number.ambiguous",
+      };
+      return t("settings.not_changed", { reason: t(reasons[read.problem]) });
+    }
+  }
 }
 
 /// Un numero con un intervallo: il cursore per il gesto, il campo per il
@@ -2219,8 +2337,10 @@ function rangeField(entry: SettingEntry, id: string, control: Extract<Control, {
     if (!Number.isFinite(n)) return;
     void writeRow(entry.spec.key, slider.value, () => api.setSetting(entry.spec.key, n));
   });
+  const kind = numberKind(entry, control.min, control.max);
   number.addEventListener("input", () => {
-    if (number.value.trim() !== "" && Number.isFinite(Number(number.value))) slider.value = number.value;
+    const read = parseSettingNumber(number.value, kind, resolvedLanguage());
+    if ("value" in read) slider.value = String(read.value);
   });
   wrap.append(name, slider, number);
   return wrap;
@@ -2234,9 +2354,24 @@ function textField(entry: SettingEntry, id: string): HTMLElement {
   input.value = String(entry.value);
   const zones = entry.spec.key === TIMEZONE_KEY ? timezoneSuggestions(input) : null;
   input.addEventListener("change", () => {
-    const shortcut = allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
-    if (shortcut && !validateKeybinding(input.value).valid) {
+    // Una scorciatoia si riconosce dalla forma della chiave (`keys.…`), come
+    // fa il kernel, e non soltanto dall'elenco dei comandi di adesso: quelle
+    // che l'elenco non porta finivano fra le righe sciolte, e lì «xx» si
+    // salvava (IMP-026).
+    const shortcut = commandOfKeybindingKey(entry.spec.key) !== null ||
+      allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
+    const validation = shortcut ? validateKeybinding(input.value) : null;
+    if (validation && !validation.valid) {
       input.setAttribute("aria-invalid", "true");
+      // Nella scheda delle scorciatoie lo dice già la diagnosi sotto il campo,
+      // mentre si scrive; altrove lo dice la riga, come ogni rifiuto.
+      if (tab !== "shortcuts") {
+        refuseRow(
+          entry.spec.key,
+          t("settings.not_changed", { reason: t(KEYBINDING_REASONS[validation.reason]) }),
+          input.value,
+        );
+      }
       return;
     }
     input.removeAttribute("aria-invalid");
@@ -2550,6 +2685,37 @@ function markPending(key: string, block: boolean): void {
   }
 }
 
+/// Un valore che la riga stessa rifiuta prima di scriverlo (un numero che non
+/// è il numero scritto, una scorciatoia che non si sa premere): come per un
+/// rifiuto dell'host, il controllo torna al valore salvato e sotto la riga
+/// restano il motivo e ciò che si era scritto. Niente parte verso l'host, e il
+/// valore salvato resta quello che era.
+function refuseRow(key: string, message: string, attempted: string): void {
+  rowErrors.set(key, { message, input: attempted });
+  // Il testo rifiutato non è una bozza da portare oltre il ridisegno: sta già
+  // sotto la riga.
+  writtenRows.add(key);
+  pinnedRow = key;
+  const snapshot = focusSnapshot(false);
+  void refresh(key).then(() => {
+    if (document.activeElement === document.body) restoreFocus(snapshot);
+  });
+}
+
+/// Chi torna a scrivere in una riga rifiutata non porta con sé l'esito di
+/// prima: il motivo valeva per ciò che aveva scritto allora (IMP-022).
+function forgetRowError(target: EventTarget | null): void {
+  if (!(target instanceof Element)) return;
+  const row = target.closest<HTMLElement>("[data-setting-key]");
+  const key = row?.dataset.settingKey;
+  if (!row || key === undefined || !rowErrors.has(key)) return;
+  rowErrors.delete(key);
+  row.querySelector(".setting-error")?.remove();
+  // La riga non dice più ciò che il suo stato ricordato dice: il prossimo
+  // aggiornamento la ridisegna.
+  renderedForm?.rows.set(key, "");
+}
+
 /// Scrive senza una riga (banner dei tasti proposti, catalogo dei temi,
 /// registro dei vault): qui non c'è un controllo a cui legare l'esito, e
 /// l'errore resta nel toast come prima.
@@ -2838,16 +3004,18 @@ async function drawSuggestedKeys(): Promise<HTMLElement[]> {
   return [box];
 }
 
+/// Le parole di ciò che non va in una scorciatoia scritta.
+const KEYBINDING_REASONS: Record<Extract<KeybindingValidation, { valid: false }>["reason"], Key> = {
+  "empty-alternative": "settings.shortcut.empty_alternative",
+  "too-many": "settings.shortcut.too_many",
+  "invalid-chord": "settings.shortcut.invalid_chord",
+  duplicate: "settings.shortcut.duplicate",
+};
+
 function shortcutDiagnostic(command: CommandEntry, binding: string, commands: CommandEntry[]): string {
   const validation = validateKeybinding(binding);
   if (!validation.valid) {
-    const descriptions: Record<typeof validation.reason, Key> = {
-      "empty-alternative": "settings.shortcut.empty_alternative",
-      "too-many": "settings.shortcut.too_many",
-      "invalid-chord": "settings.shortcut.invalid_chord",
-      duplicate: "settings.shortcut.duplicate",
-    };
-    return t("settings.shortcut.invalid_unsaved", { reason: t(descriptions[validation.reason]) });
+    return t("settings.shortcut.invalid_unsaved", { reason: t(KEYBINDING_REASONS[validation.reason]) });
   }
   const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
   const issues = keybindingIssues(proposed)

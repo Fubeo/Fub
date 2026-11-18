@@ -284,3 +284,44 @@ fn linking_a_mention_writes_the_file_once_and_undoes_in_one_step() {
     .expect("annulla");
     assert_eq!(disk(), before, "un passo solo riporta i byte di prima");
 }
+
+/// IMP-039: un disegno non è prosa. La copia di un disegno, col titolo
+/// dell'originale nel suo `<title>` e in un testo, non offre l'originale né
+/// una nota con lo stesso nome come menzione uscente, e il pannello non
+/// mostra mai un pezzo del suo markup come contesto: «Collega» scriverebbe un
+/// wikilink dentro l'XML.
+#[cfg(feature = "draw")]
+#[test]
+fn a_drawing_offers_no_mentions_from_its_markup() {
+    let drawing = "<svg xmlns=\"http://www.w3.org/2000/svg\" \
+        xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 210 297\">\
+        <title>Mappa del quartiere</title>\
+        <text x=\"10\" y=\"200\"><tspan>Mappa del quartiere, scritta</tspan></text></svg>\n";
+    let vault = Vault::new();
+    vault.put("Disegni/Mappa del quartiere.svg", drawing);
+    vault.put("Disegni/i8/c-est2.svg", drawing);
+    vault.put("Note/Mappa del quartiere.md", "# Mappa\n");
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("markdown");
+    registry
+        .register(fub_format_svg::SvgProvider::boxed())
+        .expect("svg");
+    let mut ws = Workspace::new(&vault.root, registry).expect("vault");
+    ws.register_core_feature(BACKLINKS_ID, BACKLINKS_ID)
+        .expect("dichiarato");
+    ws.register_view_provider(BACKLINKS_ID, Box::new(BacklinksView))
+        .expect("registrato");
+    ws.reindex().expect("reindex");
+    ws.set_active_document(Some(DocId::new("Disegni/i8/c-est2.svg")));
+
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render con un disegno attivo");
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(convert_actions(&tree).is_empty(), "{json}");
+    for markup in ["fub:version", "<title>", "<tspan>", "xmlns"] {
+        assert!(!json.contains(markup), "{markup}: {json}");
+    }
+}

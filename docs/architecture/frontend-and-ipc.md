@@ -229,11 +229,11 @@ della stessa chiave vanno in fila: una sola in volo, e dietro solo l'ultima
 chiesta, che sostituisce quella che aspettava; così all'host arrivano in
 ordine e una vecchia non sovrascrive mai la nuova. L'esito che conta è quello
 dell'ultima: se non va, la riga torna al valore salvato e mette sotto
-l'errore con l'input provato. Si spengono invece, finché l'esito non arriva,
-le righe la cui scrittura è un cambio rispetto al valore disegnato (aggiungere
-o togliere una voce di lista), perché una seconda scrittura partita dallo
-stesso disegno perderebbe la prima. Un ridisegno intero porta le righe in volo
-com'erano, con la scelta della persona.
+l'errore con l'input provato ([chi controlla il valore](setting-values.md)).
+Si spengono invece, finché l'esito non arriva, le righe la cui scrittura cambia
+il valore disegnato (aggiungere o togliere una voce di lista): una seconda
+scrittura dallo stesso disegno perderebbe la prima. Un ridisegno intero porta
+le righe in volo com'erano, con la scelta della persona.
 
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
@@ -316,8 +316,8 @@ pannelli) lo Scrittoio compone:
   formato delle note. La colonna è `kit/tool-rail.ts` (`kit-rail`). Fila
   e colonna hanno la forma in `theme/scrittoio/structure.css` e la pelle in
   `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
-  `--bar-tray` della ricetta, col ripiego su `--sheet-2` per un tema che
-  non lo dichiara;
+  `--bar-tray` della ricetta (ripiego `--sheet-2`); `appearance.bars`
+  «marcate» mette `data-bars="marked"` sulla radice e il vassoio su `--sheet-2`;
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato

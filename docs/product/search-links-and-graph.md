@@ -99,16 +99,15 @@ Il provider estrae dalla sorgente l'intento del link:
 
 Il kernel risolve l'intento rispetto al vault e agli indici correnti. La
 sorgente conserva ciò che l'utente ha scritto; la risoluzione è un dato
-derivato.
-Wikilink e path seguono regole diverse: il primo risolve per path con slash,
-nome, nome con l'estensione (`[[board.canvas]]`) e alias con priorità
-deterministica fra omonimi; il secondo solo per path relativo al documento.
-Fra omonimi vince il più vicino alla radice, poi l'ordine dei path; fra
-formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il nome
-nudo porta prima al formato che dichiara un sorgente di prosa
-(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un
-path che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina
-quel file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
+derivato. Wikilink e path seguono regole diverse: il primo risolve per path con
+slash (dalla radice, poi come coda: `[[B/C]]` trova `A/B/C.md`), nome, nome con
+l'estensione (`[[board.canvas]]`) e alias; il secondo solo per path relativo al
+documento. Fra omonimi vince il più vicino alla radice, poi l'ordine dei path;
+fra formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il
+nome nudo porta prima al formato che dichiara un sorgente di prosa
+(`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un path
+che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina quel
+file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
 Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
 la nota senza inventare una destinazione. Completamento e cambio rapido
 propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
@@ -116,12 +115,13 @@ riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
-in una formula o nel frontmatter. La converte `mention.link`: rilegge la nota alla
-revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è più una
-menzione, e si annulla in un passo con «Annulla l'ultima operazione». Il
-riferimento scritto è il più corto che la risoluzione manda davvero alla nota
-(nome, nome con estensione, percorso senza estensione, percorso intero); una
-parola scritta altrimenti, come un alias, resta testo del link (`[[Rossi|Mario]]`).
+in una formula o nel frontmatter; disegni, fogli e documenti non ne offrono, e
+la sezione delle uscenti lo dice. La converte `mention.link`: rilegge la nota
+alla revisione e allo span dichiarati, rifiuta se il testo è cambiato o non è
+più una menzione, e si annulla in un passo con «Annulla l'ultima operazione».
+Il riferimento scritto è il più corto che la risoluzione manda davvero alla
+nota (nome, con estensione, percorso senza o con estensione); un alias resta
+testo del link (`[[Rossi|Mario]]`).
 Il pannello tag mostra gerarchia piatta o ad albero, ordinamento per nome o
 conteggio e selezione multipla per esemplare; click e selezione lanciano
 tramite RunSearch la stessa ricerca che si scriverebbe nella barra

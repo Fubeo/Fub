@@ -9,7 +9,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts`,
-> `engine-cards.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
+> `engine-cards.test.ts`, `engine-collaudo.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
 > (il rettangolo, con `marquee.test.ts` per la geometria); per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
 > `rail.ts`, `options.ts`, `selection-bar.ts` e le loro prove; per la lavagna vuota,
@@ -33,7 +33,8 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   macOS) su un link lo segue subito, nella scheda attiva o no (D-18 (c));
   fuori da un link aggiunge la scheda alla scelta, o la toglie, come
   Maiuscolo; Ctrl con uno spostamento sposta la lavagna, come prima. Un
-  pulsante della vista («Apri») risponde a un clic anche fuori.
+  pulsante della vista («Apri») risponde a un clic anche fuori. Il clic che sceglie, o che cade su un filo o nel vuoto, riporta il fuoco sulla lavagna quando era fuori (un pulsante della colonna o della riga): Canc e Ctrl+Z valgono subito (IMP-040). Una scheda tolta col fuoco lo lascia alla vista.
+- **Spostare.** Dalla testata sempre; dal corpo finché la scheda non è attiva né in scrittura e il gesto non parte da un controllo del contenuto; un gruppo anche dall'etichetta. Il clic che segue il rilascio non entra (IMP-041). Il corpo prende il puntatore solo oltre 3 px: un clic fermo, o il suo doppio clic, arriva alla scheda, e il doppio clic su una scheda di testo la apre per scrivere (IMP-053). L'aggancio vale al rilascio ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)).
 - **Entrare.** Un clic dentro una scheda che era già la sola scelta, Invio
   con una scheda scelta che non è di testo, o il doppio clic su una nota, un
   documento o un foglio chiamano `enter()`. Una scheda ferma prima si
@@ -150,8 +151,10 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
 - **Ctrl+Invio** registra, chiude e apre in scrittura una scheda di testo larga
   uguale 24 px sotto (**Ctrl+Maiusc+Invio**: a destra, con un filo); su un'altra
   scheda, gruppi esclusi, scende sotto di lei al più 20 volte, poi resta sopra.
-- **Una scheda nuova lasciata vuota** (dal Testo, da Ctrl+Invio) se ne va
-  uscendo, coi suoi passi d'annulla; una che c'era già resta.
+- **Una scheda nuova lasciata vuota** (dal Testo, da Ctrl+Invio, da «Aggiungi testo») se ne va uscendo, anche con Esc, coi suoi passi d'annulla; una che c'era già resta.
+- **«Aggiungi testo»** (`canvas.add.text`: la riga delle opzioni, il menu, Ctrl+/) apre la scheda già in scrittura, col fuoco nel testo: dal menu nel punto del clic, se no nel primo posto libero vicino al centro della vista (`free-spot.ts`: anelli di 40 unità, 16 di margine, i gruppi non contano).
+- **Solo il testo.** Il Live di una scheda si monta `pageless`: niente titolo della pagina, proprietà, icona, copertina né sottopagina (IMP-044).
+- **I tasti della shell.** Un tasto con Ctrl (Cmd) che l'editor non usa sale alla shell, e la tela non ne fa un suo comando: Ctrl+W chiude la linguetta. Restano al campo Invio, Esc e Ctrl+A, C, V, X, Y, Z.
 
 ## La rotella
 
@@ -255,7 +258,7 @@ diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
 (`Maiusc` 32, `Alt+Maiusc` 1); Tab e `Alt`+frecce muovono il fuoco ([la vista](canvas-view.md#da-tastiera-e-col-lettore-di-schermo)). Come nel disegno, i tasti della lavagna non si cambiano ancora.
 Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
 con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
-`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.
+`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`. I tasti dello zoom (`+`, `-`, `0`, «Mostra tutto») valgono anche col fuoco su un pulsante della riga, della colonna o del navigatore; in un campo che scrive o in una casella a discesa valgono solo con Ctrl (IMP-040).
 
 ### Il menu della scheda
 
@@ -351,7 +354,7 @@ nessuna scheda ne ha.
 
 - **Tirare un angolo** sposta quell'angolo; l'opposto resta fermo. La misura
   si aggancia alle guide ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)) o
-  alla griglia di 8 px, se `canvas.snap` è acceso; e non scende sotto 40 px
+  alla griglia di `canvas.snap_step` (8 px di serie), se `canvas.snap` è acceso; e non scende sotto 40 px
   (`CANVAS_MIN_SIZE`).
 - **Maiusc** tiene le proporzioni di partenza: vince il lato che cresce di
   più, e l'aggancio non c'è. **Alt** tiene fermo il centro e cambia la misura
@@ -495,15 +498,11 @@ lavagna. Ogni pulsante è un comando del catalogo, col nome, il tasto e il
 perché quando è spento (`aria-disabled`); in sola lettura restano accesi solo
 quelli che non cambiano il file (Apri). I fili scelti da soli non la mostrano.
 
-- **Quando.** Compare a fine gesto (il rilascio del clic, la rotella ferma, un
-  tasto), mai durante: un `pointerdown` nella vista la toglie, e non torna
-  finché la vista si muove, la penna è giù (torna quando si alza) o si scrive
-  in una scheda (il campo del testo, una scheda attiva, una barra data con
-  `setCardOptions`).
+- **Quando.** Compare a fine gesto (il rilascio del clic, un tasto): un `pointerdown` nella vista la toglie, e non torna mentre si spostano o si ridimensionano schede, si sceglie col rettangolo o col lazo, la penna è giù (torna quando si alza) o si scrive in una scheda (il campo del testo, una scheda attiva, una barra data con `setCardOptions`). La camera che si muove senza puntatore giù (la rotella, lo zoom dai tasti, un volo) non la toglie: la barra segue le schede a ogni passo, senza rifare i pulsanti (#411 C-06).
 - **Dove.** Sopra il riquadro delle schede scelte, centrata, a 26 px dalle
   schede per lasciare il titolo (T39); al bordo alto va sotto; dentro la vista
   ai lati (`bubblePlace` della bolla del testo). Con le schede tutte fuori
-  dalla vista non c'è; con lo zoom cambiato si rimette a fine gesto.
+  dalla vista non c'è; durante lo zoom resta attaccata alle schede.
 - **Raggruppa** fa un gruppo senza nome attorno alle schede scelte, con 24 px
   di margine (valore di partenza), messo nella pila subito sotto la prima di
   loro, e sceglie il gruppo: un commit solo, che «Annulla» riporta.

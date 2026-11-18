@@ -901,6 +901,8 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
     // Il nome è nella cartella della lavagna, ma nessuna sessione lo porta.
     expect(surface.context.documentId).toBe(`cartella/board.canvas#${surface.context.paneId}`);
     expect(surface.context.compact).toBe(true);
+    // Il testo della scheda non è una pagina: niente titolo né proprietà (IMP-044).
+    expect(surface.context.pageless).toBe(true);
     expect(host.dataset.cardEditor).toBe("compact");
 
     surface.type("vedi [[Altra]] e altro");

@@ -205,6 +205,30 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
+/* Una superficie che riempie il suo riquadro (l'editor, l'anteprima, il
+   grafo) avrebbe l'anello fuori dal bordo, e il riquadro lo taglierebbe su
+   tutti e quattro i lati: l'anello rientra della sua larghezza e sta dentro. */
+.pane-preview:focus-visible,
+.graph-main:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+/* Nell'editor l'anello rientrato dello scroller finirebbe sotto i numeri di
+   riga, che stanno fermi a sinistra col loro fondo e lo coprirebbero. Lo
+   disegna allora l'editor, sopra i numeri: un velo vuoto grande quanto lui,
+   che non prende i clic. Resta un `outline`, così si vede anche coi colori
+   forzati. */
+.cm-editor:has(> .cm-scroller:focus-visible)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 201;
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  pointer-events: none;
+}
+.cm-editor > .cm-scroller:focus-visible {
+  outline: none;
+}
 
 /* In un dialogo il pulsante col fuoco è quello che Invio preme. L'anello si
    vede anche quando il dialogo è nato da un clic: lì il browser, da solo, non
@@ -1607,11 +1631,9 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   display: none !important;
 }
 
-/* La cornice si attenua e torna al passaggio, o quando il fuoco ci entra da
-   tastiera. Si muove la sola opacità; la durata è della pelle. */
-#app[data-focus-mode] #topbar:not(:hover):not(:focus-within) {
-  opacity: 0.3;
-}
+/* La barra del titolo si attenua e torna piena al passaggio, o quando il
+   fuoco ci entra da tastiera: è una questione di colori, quindi della pelle
+   (`skin/frame.css`, «La concentrazione»). */
 
 /* Il blocco del cursore resta acceso, gli altri si attenuano: nel foglio che
    ha il fuoco, mentre si scrive. Il blocco (le righe fino alla riga vuota
@@ -2388,8 +2410,8 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 
 /* La cella aperta (griglia T4) è la cella stessa: sta nel livello «lift»
    della zona della sua cella, sopra i segni, e ne esce. Il testo sta dove
-   stava nella cella: lo stesso carattere (`--field-font`, che il tema del
-   campo dà a `.cm-content`), la stessa misura, lo stesso allineamento, gli
+   stava nella cella: lo stesso carattere (`--field-font`, che la pelle
+   dell'editor dà a `.cm-content`), la stessa misura, lo stesso allineamento, gli
    stessi margini (`--field-pad-*`, letti dalla cella), la stessa carta.
    La cornice è un pezzo a parte attorno (`-frame`, nella pelle). La misura la
    scrive la griglia: a colonne intere fin dove il testo ci sta, poi a capo
@@ -3147,6 +3169,45 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
      l'inchiostro verso la carta, a 5,5:1 sul bianco. */
   --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #131715) 60%, var(--paper-bg, #ffffff));
+}
+/* L'anello del fuoco e la sintassi stanno sulle superfici di carta (il testo
+   del documento, l'intestazione e il piè in scrittura, le celle del foglio),
+   non sul fondo del tema: al buio l'accento chiaro del tema sul bianco
+   starebbe a 2,2:1, il «=» e i numeri di una formula a 1,8:1. Non su tutta la
+   scrivania: l'editor di un disegno ci galleggia col fondo del tema, e lì
+   l'anello del tema regge. L'anello prende l'accento della carta; la formula
+   l'inchiostro, come in Excel, dove hanno colore solo i riferimenti (i loro,
+   `--doc-author-*`, sono già della carta). */
+.look-file .rich-content,
+.look-file .rich-running,
+.look-file .grid-viewport {
+  --focus-ring: var(--paper-link, #007249);
+  --syn-keyword: var(--doc-fg);
+  --syn-name: var(--doc-fg);
+  --syn-function: var(--doc-fg);
+  --syn-literal: var(--doc-fg);
+  --syn-type: var(--doc-fg);
+  --syn-operator: var(--doc-fg);
+  --syn-string: var(--doc-fg);
+  --syn-heading: var(--doc-fg);
+  --syn-comment: var(--doc-gutter-fg);
+  --syn-invalid: var(--doc-danger);
+}
+/* I segni della griglia sulla carta: la cella attiva, la selezione, il
+   riempimento, lo spostamento, il taglio, la cella in modifica, gli oggetti,
+   il segno dei commenti. Erano dell'accento del tema, e al buio il verde
+   chiaro sul bianco sta a 2,2:1: la cella attiva quasi non si vede. Sui segni
+   l'accento è quello della carta, e il velo della selezione con lui. Le
+   intestazioni sono cornice, sul fondo del tema, e tengono l'accento del
+   tema: la regola va sulle celle e non sulla riga (`.grid-row`), che contiene
+   anche l'intestazione. Solo nella vista della griglia: la scheda di un
+   foglio sulla lavagna ha `look-file` ma la carta del tema, e lì l'accento
+   del tema regge. I pezzi del motore dei segni (`grid-mark-*`: l'anello, il
+   velo, il quadratino del riempimento, i tratteggi di copia e taglio) non
+   leggono l'accento ma `--grid-mark`, che sulla carta è già della carta. */
+.look-file .grid-viewport :is(.grid-cell, .grid-selection, .grid-move-preview, .grid-cell-editor, .grid-object, .grid-object-handle, .grid-object-text-editor, .grid-comment-mark) {
+  --accent: var(--paper-link, #007249);
+  --accent-veil: color-mix(in srgb, var(--paper-link, #007249) 12%, transparent);
 }
 /* Il testo del file: carattere, misura, colore, spazi e interlinea risolti
    dal formato, come variabili di dato sull'elemento (`--file-*`,
@@ -4115,6 +4176,31 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .canvas-node-group {
   z-index: -1;
 }
+/* Il gruppo ha un'etichetta sola, il suo nome dentro la cornice (#411 C-04):
+   la testata non scrive il titolo, e sta sopra il corpo, in alto, con → a
+   destra. Il resto della testata lascia il puntatore all'etichetta, che
+   sposta il gruppo come il corpo (IMP-041). Da lontano il nome grande è
+   `canvas-node-far`, al posto dell'etichetta. */
+.canvas-node-group > .canvas-node-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.canvas-node-group > .canvas-node-handle > .canvas-node-title {
+  display: none;
+}
+.canvas-node-group > .canvas-node-handle > * {
+  pointer-events: auto;
+}
+.canvas-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .canvas-node-handle {
   display: flex;
@@ -4430,19 +4516,44 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 
 /* «File mancante» (T16, prototipo T25): il messaggio e i due pulsanti al
-   centro della scheda. */
+   centro della scheda. Ciò che non ci sta esce in basso, mai in alto
+   (`safe`), e la scheda lo taglia; è un contenitore, così una scheda piccola
+   stringe il messaggio e i pulsanti su una riga sola (IMP-045). */
 .canvas-card-missing {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
+  justify-content: safe center;
   box-sizing: border-box;
   height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  container-type: size;
 }
 .canvas-card-missing-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3, 6px);
+}
+/* La scheda piccola (la misura di serie di un file è 200×100): il messaggio
+   su una riga, col nome intero nel suggerimento, e i due pulsanti accanto,
+   che si stringono col nome tagliato invece di andare a capo. */
+@container (max-height: 120px) {
+  .canvas-card-missing > .canvas-media-placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .canvas-card-missing-actions {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .canvas-card-missing-actions > button {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Scrivere nelle celle di un foglio (N6 T42, prototipo T27). La griglia del
@@ -7166,8 +7277,13 @@ textarea.draw-properties-input {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* In Lettura la pagina resta senza strumenti: la colonna, la barra
+   d'allineamento e i gruppi che scrivono se ne vanno, come l'immagine del
+   disegno in Lettura; restano la vista e le pagine. */
 .pdf-surface[data-mode="read"] .draw-group:not([data-group="view"]),
-.pdf-surface[data-mode="read"] .draw-title {
+.pdf-surface[data-mode="read"] .draw-title,
+.pdf-surface[data-mode="read"] .draw-rail,
+.pdf-surface[data-mode="read"] .draw-arrange {
   display: none;
 }
 .pdf-background {

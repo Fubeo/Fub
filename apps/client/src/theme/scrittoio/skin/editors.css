@@ -1,14 +1,141 @@
 /* Le superfici dei formati: canvas, base, foglio di calcolo. */
 
 /* Prima di loro l'editor di testo, che sta sotto a tutte: il margine, il
-   cursore, la selezione, i pannelli che CodeMirror apre sopra il foglio. Le
-   regole di CodeMirror pesano (0,2,0) o più e arrivano dopo la pelle: qui ogni
-   selettore ne porta almeno una in più, e nessuno ha bisogno di `!important`.
+   cursore, la selezione, la sintassi, i pannelli che CodeMirror apre sopra il
+   foglio. Le regole di CodeMirror pesano (0,2,0) o più: qui ogni selettore
+   che le deve battere ne porta almeno una classe in più, e nessuno ha bisogno
+   di `!important`. Un tema le ritocca con la sua pelle, che arriva dopo
+   questa.
 
    Niente di ciò che sta in un foglio ha un fondo suo: la carta è del foglio, e
    ne segue gli angoli. Le superfici dichiarano inchiostro, fili e rilievi. */
 
 /* ── L'editor di testo ───────────────────────────────────────────────────── */
+
+/* I colori di serie dell'editor di testo. Valgono per ogni editor CodeMirror
+   di Fub — il foglio, la finestra documento, la barra della formula, la cella —
+   e le regole più precise che seguono, qui o negli altri pezzi, li ritoccano.
+   Prima stavano nel tema di CodeMirror (`editors/text/theme.ts`), fuori dalla
+   pelle: adesso un tema li veste come veste il resto.
+
+   CodeMirror monta i suoi stili in testa al documento, prima della pelle: a
+   parità di peso vince la pelle. Ogni regola qui pesa quanto quella che
+   sostituisce, così batte gli stili di base di CodeMirror e cede a quelli di
+   un profilo che pesano di più. */
+.cm-editor {
+  background-color: var(--doc-bg);
+  color: var(--doc-fg);
+}
+/* Il carattere di serie è il monospazio. Pesa una classe sola: un profilo che
+   scrive prosa mette il suo con il proprio tema dell'editor, che pesa di più.
+   Un campo che deve scrivere col carattere di chi lo ospita (la cella aperta
+   della griglia) lo dice con `--field-font`; per ogni altro editor non cambia
+   niente. */
+.cm-content {
+  font-family: var(--field-font, var(--font-mono));
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-content {
+  caret-color: var(--doc-caret);
+}
+.cm-editor.cm-focused .cm-matchingBracket,
+.cm-editor.cm-focused .cm-nonmatchingBracket {
+  outline: 1px solid var(--doc-rule-soft);
+  background-color: var(--doc-fill);
+}
+.cm-editor .cm-tooltip {
+  border: 1px solid var(--border);
+  background-color: var(--doc-tooltip-bg);
+}
+.cm-editor .cm-tooltip .cm-tooltip-arrow::before {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+.cm-editor .cm-tooltip .cm-tooltip-arrow::after {
+  border-top-color: var(--doc-tooltip-bg);
+  border-bottom-color: var(--doc-tooltip-bg);
+}
+/* La riga su cui cadrà l'Invio, col fondo della palette: quello della riga
+   attiva sul fondo del suggerimento non si distingueva. */
+.cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: var(--bg-active);
+  color: var(--doc-fg);
+}
+
+/* La sintassi: una classe per gruppo di tag, nell'ordine di
+   `editors/text/theme.ts`. Un pezzo di testo può averne più d'una (un
+   collegamento dentro un titolo) e vince la regola che viene dopo: l'ordine
+   qui sotto è quello là, e non si cambia da un lato solo. Pesano una classe,
+   come le regole che CodeMirror generava: ogni regola più precisa della pelle
+   o di un profilo le batte. */
+.fub-syn-keyword {
+  color: var(--syn-keyword);
+}
+.fub-syn-name {
+  color: var(--syn-name);
+}
+.fub-syn-function {
+  color: var(--syn-function);
+}
+.fub-syn-constant {
+  color: var(--syn-literal);
+}
+.fub-syn-definition {
+  color: var(--doc-fg);
+}
+.fub-syn-type {
+  color: var(--syn-type);
+}
+.fub-syn-operator {
+  color: var(--syn-operator);
+}
+.fub-syn-comment {
+  color: var(--syn-comment);
+}
+.fub-syn-strong {
+  font-weight: bold;
+}
+.fub-syn-monospace {
+  background-color: var(--doc-fill);
+  color: var(--doc-fg);
+  font-family: var(--font-mono);
+}
+.fub-syn-emphasis {
+  font-style: italic;
+}
+.fub-syn-strikethrough {
+  text-decoration: line-through;
+}
+.fub-syn-link {
+  color: var(--doc-link);
+  text-decoration: underline;
+}
+.fub-syn-heading {
+  color: var(--doc-heading);
+  font-weight: bold;
+}
+.fub-syn-atom {
+  color: var(--syn-literal);
+}
+.fub-syn-string {
+  color: var(--syn-string);
+}
+.fub-syn-invalid {
+  color: var(--syn-invalid);
+}
+
+/* I segni della Live che non hanno una regola nel documento: il pallino di
+   una voce, l'ondina del correttore. */
+.cm-editor .cm-fub-bullet::before {
+  color: var(--muted);
+}
+.cm-editor .cm-lintRange.cm-fub-proof-spelling {
+  text-decoration: underline wavy var(--danger) 1px;
+}
+.cm-editor .cm-lintRange.cm-fub-proof-grammar {
+  text-decoration: underline wavy var(--warning) 1px;
+}
 
 /* Dove si scrive lo dicono il cursore e il rialzo del foglio: l'anello
    tratteggiato di CodeMirror intorno a tutta la carta è rumore. */
@@ -98,6 +225,14 @@
    è morbido, e il movimento ridotto lo toglie. */
 .pane-editor .cm-content > * {
   transition: opacity var(--duration-state) var(--ease);
+}
+/* La riga attiva si spegne dove c'è una selezione (`editors/text/engine.ts`
+   mette `cm-fub-no-active-line` sulle righe selezionate): la banda coprirebbe
+   il rettangolo della selezione, che CodeMirror disegna sotto il testo. Pesa
+   quanto la riga attiva e viene dopo; il fondo di un blocco, che pesa di più,
+   resta. */
+.cm-editor .cm-fub-no-active-line.cm-activeLine {
+  background-color: transparent;
 }
 .pane-editor[data-markdown-mode="source"] .cm-content > .cm-line {
   padding-inline: var(--space-3);
@@ -755,6 +890,18 @@
   .grid-cell-editor-frame {
     border-color: Highlight;
   }
+}
+/* I segni della griglia sulla carta del file prendono l'accento della carta
+   (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
+   modifica e il testo di un oggetto hanno il fondo della carta, sotto
+   l'inchiostro della carta, non quello dei pannelli (il quadratino del
+   riempimento ha il bordo della carta da sé, `.grid-mark-handle`). La cella
+   aperta nel livello dei segni prende poi la carta della sua cella
+   (`--file-fill`, in `structure.css`), che pesa di più e ricade sullo stesso
+   `--doc-bg`. */
+.look-file .grid-cell-editor,
+.look-file .grid-object-text-editor {
+  background: var(--doc-bg);
 }
 /* Una cella di una cartella di Excel che legge una cella cambiata mostra
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
@@ -2611,6 +2758,25 @@ input.canvas-toolbar-item {
 .canvas-card-missing > .canvas-media-placeholder {
   margin: 0;
   color: var(--text);
+}
+/* La scheda piccola (IMP-045): il messaggio e i pulsanti più stretti, così
+   stanno tutti e due dentro i 100 px di una scheda di serie. */
+@container (max-height: 120px) {
+  .canvas-card-missing {
+    gap: var(--space-3);
+  }
+  .canvas-card-missing > .canvas-media-placeholder {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-xs);
+  }
+  .canvas-card-missing-actions {
+    gap: var(--space-2);
+  }
+  .canvas-card-missing-actions > button {
+    min-height: calc(var(--control-h) - var(--space-3));
+    padding: 0 var(--space-4);
+    font-size: var(--text-xs);
+  }
 }
 /* Il fantasma del rilascio (T15): dove andranno i file, prima di lasciarli. */
 .canvas-drop-ghost {
@@ -5237,9 +5403,11 @@ input.canvas-toolbar-item {
   cursor: pointer;
 }
 .rich-side-open:hover { background: var(--bg-hover); }
+/* L'anello sta dentro la pillola, sul suo fondo: fuori, sulla carta bianca,
+   al buio starebbe a 2,2:1. L'ombra della pillola resta. */
 .rich-side-open:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring);
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring), var(--shadow-2);
 }
 .rich-find {
   background-color: var(--doc-find, var(--doc-highlight));

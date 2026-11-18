@@ -20,13 +20,14 @@ use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::{Event, EventMask, Notice};
 use fub_abi::model::DocId;
-use fub_abi::traits::{EventHandler, HostApi, ReadApi};
+use fub_abi::text::{Arg, StringCatalog, Text};
+use fub_abi::traits::{EventHandler, HostApi, PluginManifest, ReadApi};
 use fub_abi::transfer::{
     ArtifactSink, ExportArtifact, ExportProvider, ExportReport, ExportRequest, ExportSelection,
     ExportTarget, ImportOutcome, ImportProvider, ImportReport, ImportRequest, ImportSource,
     ImportedDocument,
 };
-use fub_kernel::{FormatRegistry, Workspace};
+use fub_kernel::{FormatRegistry, Trust, Workspace};
 use fub_testkit::SampleText;
 
 type Log = Arc<Mutex<Vec<String>>>;
@@ -557,4 +558,60 @@ fn run_export_reaches_the_registered_exporter() {
         matches!(unknown, Err(PluginError::BadArgs(_))),
         "{unknown:?}"
     );
+}
+
+/// Un importer che rifiuta ogni sorgente con una chiave del **suo** catalogo.
+struct Refusing;
+
+impl ImportProvider for Refusing {
+    fn can_handle(&self, source: &ImportSource) -> bool {
+        source.extension().as_deref() == Some("zz")
+    }
+
+    fn import(
+        &mut self,
+        source: &ImportSource,
+        _request: &ImportRequest,
+        _host: &mut dyn HostApi,
+    ) -> Result<ImportReport, PluginError> {
+        Err(PluginError::BadArgs(Text::message(
+            "e_zz_empty",
+            vec![Arg::text("name", source.name.clone())],
+        )))
+    }
+}
+
+/// **L'errore di un importer si legge nel catalogo di chi l'ha scritto**
+/// (§12.2), come quello di un exporter: senza, l'import del workspace — e chi
+/// lo chiede dall'host di un plugin — riceveva la chiave nuda.
+#[test]
+fn the_error_of_an_importer_speaks_with_its_catalog() {
+    let (_g, mut ws) = workspace();
+    let catalog =
+        |locale: &str, template: &str| StringCatalog::new(locale).with("e_zz_empty", template);
+    ws.register_plugin(
+        PluginManifest::core("spia.zz", "Spia zz").speaking(
+            "it",
+            vec![
+                catalog("it", "La nota «{name}» è vuota."),
+                catalog("en", "The note «{name}» is empty."),
+            ],
+        ),
+        Trust::Core,
+    )
+    .expect("dichiarato");
+    ws.register_import_provider("spia.zz", Box::new(Refusing))
+        .expect("registrato");
+    let error = ws
+        .import(
+            &ImportSource::text_source("Vuota.zz", ""),
+            &ImportRequest::apply(),
+        )
+        .expect_err("l'importer rifiuta");
+    let text = error.message().as_literal();
+    let either = [
+        "La nota «Vuota.zz» è vuota.",
+        "The note «Vuota.zz» is empty.",
+    ];
+    assert!(text.is_some_and(|text| either.contains(&text)), "{error:?}");
 }

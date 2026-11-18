@@ -104,9 +104,16 @@ struct InputRow {
 /// per `[[Dune]]`), il documento a cui chi chiama l'ha risolta con le regole
 /// del vault, e le proprietà che il piano chiede (`linked_props`). Una pagina
 /// che non risolve non si manda: è un link rotto.
+///
+/// `folder` è la cartella delle righe da cui la pagina è stata risolta (`""`
+/// la radice): lo stesso `[[Indice]]` o `./nota.md` in due cartelle porta a
+/// due note, e ognuna vale per le righe della sua. Senza, la nota vale per
+/// tutte le righe; con, vince su quella senza.
 #[derive(Deserialize)]
 struct InputLinked {
     target: String,
+    #[serde(default)]
+    folder: Option<String>,
     doc: String,
     props: BTreeMap<String, PropertyValue>,
 }
@@ -304,13 +311,28 @@ fn rollup_deps(plan: &Planned<'_>) -> (Vec<String>, Vec<String>) {
         linked.into_iter().collect(),
     )
 }
-/// Le note legate della richiesta, una volta per derivazione: ogni riga le
-/// legge dallo stesso contesto condiviso.
-fn linked_notes(linked: Vec<InputLinked>) -> Result<Arc<LinkedNotes>, PluginError> {
+/// Le note legate della richiesta, una volta per derivazione, come le legge
+/// ogni riga: quelle senza cartella valgono per tutte (`any`), quelle con una
+/// cartella per le righe di quella (`folders`, già unite a `any`).
+struct LinkedByFolder {
+    any: Arc<LinkedNotes>,
+    folders: BTreeMap<String, Arc<LinkedNotes>>,
+}
+
+impl LinkedByFolder {
+    /// Le note legate dal punto di vista della riga `doc`.
+    fn of_row(&self, doc: &str) -> Arc<LinkedNotes> {
+        let folder = doc.rsplit_once('/').map(|(f, _)| f).unwrap_or("");
+        Arc::clone(self.folders.get(folder).unwrap_or(&self.any))
+    }
+}
+
+fn linked_notes(linked: Vec<InputLinked>) -> Result<LinkedByFolder, PluginError> {
     if linked.len() > MAX_BASE_ROWS_PER_CALL {
         return Err(bad("base: troppe note legate per derivazione"));
     }
     let mut notes = LinkedNotes::new();
+    let mut by_folder: BTreeMap<String, LinkedNotes> = BTreeMap::new();
     for input in linked {
         if input.target.is_empty() || input.doc.is_empty() {
             return Err(bad("base: nota legata senza pagina o documento"));
@@ -323,15 +345,30 @@ fn linked_notes(linked: Vec<InputLinked>) -> Result<Arc<LinkedNotes>, PluginErro
         for value in props.values() {
             check_intermediate(value)?;
         }
-        notes.insert(
-            input.target,
-            LinkedNote {
-                doc: input.doc,
-                props,
-            },
-        );
+        let note = LinkedNote {
+            doc: input.doc,
+            props,
+        };
+        match input.folder {
+            Some(folder) => by_folder
+                .entry(folder)
+                .or_default()
+                .insert(input.target, note),
+            None => notes.insert(input.target, note),
+        };
     }
-    Ok(Arc::new(notes))
+    let folders = by_folder
+        .into_iter()
+        .map(|(folder, own)| {
+            let mut all = notes.clone();
+            all.extend(own);
+            (folder, Arc::new(all))
+        })
+        .collect();
+    Ok(LinkedByFolder {
+        any: Arc::new(notes),
+        folders,
+    })
 }
 fn check_file_field(field: &str) -> Result<(), PluginError> {
     if matches!(field, "path" | "name" | "folder" | "ext") {
@@ -1092,7 +1129,7 @@ fn derive(
             container: container_fields.clone(),
             formulas: BTreeMap::new(),
             now_ms,
-            linked: Arc::clone(&linked),
+            linked: linked.of_row(&input.doc),
         };
         for value in ctx.props.values() {
             check_intermediate(value)?;
@@ -1310,7 +1347,10 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                 } else {
                     "note.property.remove"
                 };
-                let mut args = json!({"doc":edit.doc,"key":edit.key,"expected":serde_json::to_string(&edit.expected).map_err(|e| bad(e.to_string()))?});
+                // Il comando scrive il nome del frontmatter (`prop.stato` è
+                // la proprietà `stato`). La chiave di primo livello resta
+                // quella della vista: il client la confronta con la richiesta.
+                let mut args = json!({"doc":edit.doc,"key":property_name(&edit.key),"expected":serde_json::to_string(&edit.expected).map_err(|e| bad(e.to_string()))?});
                 if let Some(value) = edit.value {
                     args["value"] = Value::String(value);
                 }
@@ -2403,6 +2443,50 @@ mod tests {
         );
     }
 
+    /// **Lo stesso link scritto in cartelle diverse porta a note diverse.**
+    /// Le note legate erano una per pagina di link: `[[Indice]]` in `A/` e in
+    /// `B/` prendevano tutte e due la nota della prima riga. Con `folder`
+    /// ognuna vale per le righe di quella cartella; senza, per tutte.
+    #[test]
+    fn a_rollup_reads_the_linked_note_of_the_row_folder() {
+        use fub_abi::model::LinkTarget;
+        let relation = |page: &str| {
+            serde_json::to_value(PropertyValue::List(vec![PropertyScalar::Link(
+                LinkTarget::wiki(page),
+            )]))
+            .unwrap()
+        };
+        let source = "formulas:\n  - {name: pagine, expression: 'rollup(prop.libri, \"sum\", \"pagine\")'}\nviews:\n  - name: T\n    type: table\n    order: [file.name, formula.pagine]\n";
+        let rows = json!([
+            {"doc":"A/Scaffale.md","props":{"libri":relation("Indice")}},
+            {"doc":"B/Scaffale.md","props":{"libri":relation("Indice")}},
+            {"doc":"Radice.md","props":{"libri":relation("Dune")}}
+        ]);
+        let number = |n: f64| json!({"kind":"number","value":n});
+        let linked = json!([
+            {"target":"Indice","folder":"A","doc":"A/Indice.md","props":{"pagine":number(1.0)}},
+            {"target":"Indice","folder":"B","doc":"B/Indice.md","props":{"pagine":number(2.0)}},
+            {"target":"Dune","doc":"Dune.md","props":{"pagine":number(600.0)}}
+        ]);
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":rows,"linked":linked})).unwrap();
+        let cell = |doc: &str| {
+            derived["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["doc"] == doc)
+                .unwrap()["values"]["formula.pagine"]
+                .clone()
+        };
+        assert_eq!(cell("A/Scaffale.md"), number(1.0));
+        assert_eq!(cell("B/Scaffale.md"), number(2.0));
+        assert_eq!(
+            cell("Radice.md"),
+            number(600.0),
+            "senza cartella vale per tutte"
+        );
+    }
+
     #[test]
     fn defaults_only_include_entailed_equalities_and_cycles_stay_errors() {
         let source = "filters:\n  condition: {property: status, op: is, value: ready}\nformulas:\n  - {name: a, expression: 'formula.b + 1'}\n  - {name: b, expression: 'formula.a + 1'}\nviews:\n  - name: Board\n    type: table\n    order: [formula.a]\n    filters:\n      and:\n        - condition: {property: priority, op: is, value: 2}\n        - or:\n            - condition: {property: lane, op: is, value: Done}\n            - condition: {property: lane, op: is, value: Todo}\n";
@@ -2513,6 +2597,31 @@ mod tests {
             ]}),
         );
         assert!(timeline.is_ok());
+    }
+
+    /// Una colonna `prop.stato` scrive la proprietà `stato` della nota: il
+    /// comando riceve il nome del frontmatter, senza il prefisso della vista
+    /// (IMP-123). La chiave di colonna resta quella della vista nel suo eco,
+    /// e una colonna che la vista non ha resta rifiutata.
+    #[test]
+    fn una_colonna_prop_scrive_la_proprieta_senza_il_prefisso() {
+        let source = "views:\n  - name: Tab\n    type: table\n    order:\n      - file.name\n      - prop.stato\n      - valore\n";
+        let edit = |key: &str| {
+            respond(
+                json!({"version":1,"op":"mutate","source":source,"view":"Tab","edits":[
+                    {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"Confermata"}
+                ]}),
+            )
+        };
+        let written = edit("prop.stato").unwrap();
+        assert_eq!(written["mutations"][0]["key"], "prop.stato");
+        assert_eq!(written["mutations"][0]["command"], "note.property.set");
+        assert_eq!(written["mutations"][0]["args"]["key"], "stato");
+        assert_eq!(
+            edit("valore").unwrap()["mutations"][0]["args"]["key"],
+            "valore"
+        );
+        assert!(edit("prop.altro").is_err());
     }
 
     /// Le viste che non sono di tempo non portano il campo `time`.

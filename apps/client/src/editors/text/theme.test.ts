@@ -8,6 +8,7 @@ import { EditorState, RangeSetBuilder, StateField, type Extension } from "@codem
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import { highlightTree } from "@lezer/highlight";
 import { editorTheme, highlightVisible, syntaxStyle } from "./theme";
+import editorsSkin from "../../theme/scrittoio/skin/editors.css?raw";
 
 // L'evidenziatore della sintassi lavora sui tratti visibili in una passata:
 // le classi che dà devono essere quelle che dava `syntaxHighlighting` di
@@ -188,10 +189,11 @@ describe("le classi della sintassi nell'editor", () => {
 });
 
 describe("il carattere del contenuto", () => {
+  // Il carattere di serie dell'editor sta nella pelle (`skin/editors.css`),
+  // non più nel tema di CodeMirror.
   it("è quello del codice, salvo un campo che dice il suo con --field-font", () => {
-    const view = mount("x", editorTheme("light"));
-    const rules = view.state.facet(EditorView.styleModule).map((module) => module.getRules()).join("\n");
-    const content = /\.cm-content\s*\{([^}]*)\}/.exec(rules)?.[1] ?? "";
+    const text = editorsSkin.replace(/\/\*[\s\S]*?\*\//g, "");
+    const content = /(?:^|\})\s*\.cm-content\s*\{([^}]*)\}/.exec(text)?.[1] ?? "";
     expect(content).toContain("font-family: var(--field-font, var(--font-mono))");
   });
 });

@@ -78,7 +78,10 @@ nuovo, una rinomina) li consegna in un piano solo:
   nato dal piano (mai la cancellazione definitiva), la rinomina all'incontrario;
 - se anche un ritorno fallisce, la copia di prima va nello spazio dati del
   plugin (`.fub/plugins/<id>/piani-non-rimessi/<istante>/<path>`) e l'errore
-  diventa `io`, con i file e le copie nella frase.
+  diventa `io`, con i file e le copie nella frase. Vale anche per una modifica
+  su un file che il piano stesso ha rinominato: la copia c'è, e il file si
+  nomina col nome che ha dopo il ritorno (quello di prima, se la rinomina è
+  tornata indietro).
 
 Il piano è composto dalle capacità dell'`HostApi` che il comando già usa
 (`read-document-bytes`, `apply-edit`, `create-document`, `rename-document`,

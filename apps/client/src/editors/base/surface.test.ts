@@ -657,6 +657,33 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
     } finally { done(); }
   });
 
+  it("Ctrl+Z fuori da un campo chiede l'Annulla del vault; dentro un campo resta al campo; Ctrl+Y e la sola lettura non chiedono nulla", async () => {
+    const { host, surface, invokeCommand, done } = mount({});
+    try {
+      await ready(host);
+      const press = (target: Element, init: KeyboardEventInit): KeyboardEvent => {
+        const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+        target.dispatchEvent(event);
+        return event;
+      };
+      const viewport = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      // Fuori da un campo il tasto è della Base, anche senza niente da disfare.
+      expect(press(viewport, { key: "z", ctrlKey: true }).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("vault.undo"));
+      invokeCommand.mockClear();
+      // Dentro il campo di ricerca Ctrl+Z è del campo: il vault non si tocca.
+      expect(press(host.querySelector<HTMLInputElement>(".base-search")!, { key: "z", ctrlKey: true }).defaultPrevented).toBe(false);
+      // Nessun «rifai» nel vault: Ctrl+Y e Ctrl+Maiusc+Z non si prendono.
+      expect(press(viewport, { key: "y", ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(press(viewport, { key: "z", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalled();
+      // In sola lettura la Base non annulla il vault per conto suo.
+      surface.setReadOnly!(true);
+      expect(press(viewport, { key: "z", ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalled();
+    } finally { done(); }
+  });
+
   it("un gesto che non scrive ritira l'annuncio, e uno col .base non salvato non parte", async () => {
     const withdraw = vi.fn();
     let unsaved: string[] = [];
@@ -949,5 +976,254 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
       closed = true;
       expect(withdraws[2]).toHaveBeenCalledTimes(1);
     } finally { if (!closed) done(); }
+  });
+});
+
+describe("il fuoco di una cella resta nella tabella (IMP-124)", () => {
+  // Il core finto: `plan` e `derive` come `fub-features`, `mutate` che riceve
+  // la chiave di colonna e `note.property.set` che riceve il nome della
+  // proprietà, con la CAS sul valore letto come il core.
+  interface Note { doc: string; stato: string; artista: string }
+  const props = (note: Note) => [
+    { key: "stato", value: { kind: "text", value: note.stato } },
+    { key: "artista", value: { kind: "text", value: note.artista } },
+  ];
+  const mount = (options: { holdMutate?: boolean; columns?: string[]; order?: string[] } = {}) => {
+    const notes: Note[] = [
+      { doc: "Opere/Nebbia.md", stato: "Arrivata", artista: "Elena Sala" },
+      { doc: "Opere/Campo.md", stato: "In prestito", artista: "Pietro Neri" },
+    ];
+    // La mutazione in volo: `mutating` dice che il core è stato chiesto, e
+    // `release` la lascia rispondere quando la prova lo decide.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = () => resolve(); });
+    let announce: () => void = () => {};
+    const mutating = new Promise<void>((resolve) => { announce = () => resolve(); });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const queryIndex = vi.fn(async (request: IndexQuery): Promise<IndexResult> => {
+      if (request.kind === "documents") return { kind: "documents", value: { offset: 0, total: notes.length, items: notes.map((note) => ({ doc: note.doc, properties: props(note) })) } };
+      const query = request.kind === "custom" ? request.query as { op: string; edits?: { doc: string; key: string; expected: unknown; value?: string | null }[] } : null;
+      if (!query) throw new Error("unexpected query");
+      if (query.op === "parse") return { kind: "custom", value: { views: ["Tabella"], types: ["table"] } };
+      if (query.op === "plan") return { kind: "custom", value: {
+        view: "Tabella", view_type: "table", columns: options.columns ?? ["stato", "artista"], column_labels: {}, required_props: [], all_properties: true,
+        group: null, limit: null, map: null, create_defaults: {}, filters: "all", sort: [], order: options.order ?? [],
+      } };
+      if (query.op === "derive") return { kind: "custom", value: { summaries: {}, rows: notes.map((note) => ({
+        doc: note.doc, values: Object.fromEntries(props(note).map(({ key, value }) => [key, value])),
+      })) } };
+      if (query.op === "mutate") {
+        announce();
+        if (options.holdMutate) await held;
+      }
+      if (query.op === "mutate") return { kind: "custom", value: { mutations: query.edits!.map((edit) => ({
+        doc: edit.doc, key: edit.key, command: edit.value == null ? "note.property.remove" : "note.property.set",
+        args: { doc: edit.doc, key: edit.key.replace(/^prop\./, ""), expected: JSON.stringify(edit.expected), ...(edit.value == null ? {} : { value: edit.value }) },
+      })) } };
+      throw new Error(`unexpected Base operation ${query.op}`);
+    });
+    const invokeCommand = vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
+      if (command !== "note.property.set") return {};
+      const note = notes.find((each) => each.doc === args.doc)!;
+      const key = args.key as "stato" | "artista";
+      const expected = JSON.parse(args.expected as string) as { value?: { value?: unknown } };
+      if (expected.value?.value !== note[key]) throw { kind: "conflict", message: "La nota è cambiata: riprova." };
+      note[key] = JSON.parse(args.value as string) as string;
+      return {};
+    });
+    const surface = mountBaseSurface("base", { paneId: "base-fuoco", documentId: "Opere.base", parent: host }, {
+      queryIndex, invokeCommand, viewState: async () => null, setViewState: async () => {},
+      onOpenDocument: () => {}, revision: () => "r1",
+    });
+    surface.buffer.setDoc("views:\n  - {name: Tabella, type: table}\n");
+    return { host, notes, invokeCommand, release, mutating, done: () => { surface.destroy(); host.remove(); } };
+  };
+  const ready = (host: HTMLElement) => vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(2));
+  // La casella di una nota e di una colonna (1: stato, 2: artista).
+  const field = (host: HTMLElement, doc: string, column: number) => host.querySelector<HTMLInputElement>(`tr[data-doc="${doc}"] td[data-cell="${column}"] input`);
+  const grid = (host: HTMLElement) => host.querySelector(".base-table-viewport");
+  const type = (input: HTMLInputElement, text: string) => { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); };
+  const press = (target: Element, init: KeyboardEventInit): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const CTRL_Z: KeyboardEventInit = { key: "z", ctrlKey: true };
+
+  it("Invio scrive la cella e il fuoco va alla griglia: lì Ctrl+Z annulla la scrittura", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      press(stato, { key: "Enter" });
+      // Il campo che perde il fuoco con una modifica la manda come `change`.
+      stato.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      await vi.waitFor(() => expect(field(host, "Opere/Nebbia.md", 1)?.value).toBe("Confermata"));
+      expect(document.activeElement).toBe(grid(host));
+      expect(press(document.activeElement!, CTRL_Z).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo"));
+    } finally { done(); }
+  });
+
+  it("Tab sposta il fuoco sulla cella dopo, e lì Ctrl+Z è della Base finché non ci si scrive", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      // Il Tab porta il fuoco sulla cella seguente; il campo lasciato manda la modifica.
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      await vi.waitFor(() => expect(field(host, "Opere/Nebbia.md", 1)?.value).toBe("Confermata"));
+      const artista = field(host, "Opere/Nebbia.md", 2)!;
+      expect(document.activeElement).toBe(artista);
+      expect(press(artista, CTRL_Z).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo"));
+      // Una cella scritta ha il suo campo: Ctrl+Z disfa il testo, non la Base.
+      invokeCommand.mockClear();
+      type(artista, "Altro");
+      expect(press(artista, CTRL_Z).defaultPrevented).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalledWith("vault.undo");
+    } finally { done(); }
+  });
+
+  it("una finestra che si ridisegna (lo scorrimento) non toglie il fuoco alla sua cella", async () => {
+    const { host, done } = mount();
+    try {
+      await ready(host);
+      field(host, "Opere/Campo.md", 2)!.focus();
+      grid(host)!.dispatchEvent(new Event("scroll"));
+      expect(document.activeElement).toBe(field(host, "Opere/Campo.md", 2));
+    } finally { done(); }
+  });
+
+  it("Esc lascia la cella senza scriverla e porta il fuoco alla griglia, dove Ctrl+Z è della Base", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Scartata");
+      press(stato, { key: "Escape" });
+      expect(document.activeElement).toBe(grid(host));
+      expect(notes[0]!.stato).toBe("Arrivata");
+      expect(press(document.activeElement!, CTRL_Z).defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("vault.undo"));
+    } finally { done(); }
+  });
+
+  it("la Base è focalizzabile: un clic sulle sue parti che non si fermano (la riga di stato) le dà il fuoco", async () => {
+    // Il browser porta il fuoco al primo antenato focalizzabile del clic: la
+    // Base ha `tabindex="-1"`, così un clic sulla scritta «Results» non lascia
+    // il fuoco sul corpo della pagina (IMP-124, il resto). Il clic lo fa il
+    // browser, che questa prova non simula: il punto è che la Base sia
+    // focalizzabile.
+    const { host, done } = mount();
+    try {
+      await ready(host);
+      expect(host.querySelector(".base-surface")!.getAttribute("tabindex")).toBe("-1");
+    } finally { done(); }
+  });
+
+  it("chiudendo la Base una scrittura in attesa parte: il timer non la butta", async () => {
+    notified.length = 0;
+    const { host, notes, invokeCommand, done } = mount();
+    let closed = false;
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      // Il fuoco va alla cella seguente: la scrittura aspetta che il passaggio finisca.
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      // La Base si chiude prima che il timer scada.
+      done();
+      closed = true;
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Opere/Nebbia.md", key: "stato" }));
+      expect(notified.filter((each) => each.tone === "guasto")).toEqual([]);
+    } finally { if (!closed) done(); }
+  });
+
+  it("una scrittura già in volo arriva all'host anche se la Base si chiude nel frattempo", async () => {
+    notified.length = 0;
+    const { host, notes, invokeCommand, release, mutating, done } = mount({ holdMutate: true });
+    let closed = false;
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      // La richiesta di mutazione è partita e aspetta il core.
+      await mutating;
+      done();
+      closed = true;
+      release();
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Opere/Nebbia.md", key: "stato" }));
+      expect(notified.filter((each) => each.tone === "guasto")).toEqual([]);
+    } finally { if (!closed) done(); }
+  });
+
+  it("chiudendo la Base una cella scritta e non consegnata (senza Invio, Tab o clic) la scrive", async () => {
+    const { host, notes, invokeCommand, done } = mount();
+    let closed = false;
+    try {
+      await ready(host);
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      // Nessun `change`: il fuoco è ancora nella cella quando la Base si chiude.
+      done();
+      closed = true;
+      await vi.waitFor(() => expect(notes[0]!.stato).toBe("Confermata"));
+      expect(invokeCommand).toHaveBeenCalledWith("note.property.set", expect.objectContaining({ doc: "Opere/Nebbia.md", key: "stato" }));
+    } finally { if (!closed) done(); }
+  });
+
+  it("un errore di scrittura dopo la chiusura della Base lo dice con un avviso", async () => {
+    notified.length = 0;
+    const { host, notes, done } = mount();
+    let closed = false;
+    try {
+      await ready(host);
+      // La nota è cambiata sotto la cella: la scrittura non passa (CAS del core).
+      notes[0]!.stato = "Altrove";
+      const stato = field(host, "Opere/Nebbia.md", 1)!;
+      stato.focus();
+      type(stato, "Confermata");
+      field(host, "Opere/Nebbia.md", 2)!.focus();
+      stato.dispatchEvent(new Event("change"));
+      done();
+      closed = true;
+      await vi.waitFor(() => expect(notified.filter((each) => each.tone === "guasto")).toHaveLength(1));
+      // L'avviso dice di quale nota è la modifica che non è passata.
+      expect(notified.find((each) => each.tone === "guasto")!.message).toContain("Nebbia");
+      expect(notes[0]!.stato).toBe("Altrove");
+    } finally { if (!closed) done(); }
+  });
+
+  it("il filtro non offre `container.*` fra le proprietà; «Proprietà» la mostra ancora fra le nascoste", async () => {
+    const { host, done } = mount({ columns: ["stato", "container.folder"], order: ["stato"] });
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
+      const pop = document.querySelector<HTMLElement>(".base-filter-popover")!;
+      [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Aggiungi una condizione")!.click();
+      const options = [...pop.querySelectorAll<HTMLOptionElement>(".base-filter-subject option")].map((option) => option.value);
+      expect(options).toContain("stato");
+      expect(options).not.toContain("container.folder");
+      host.querySelector<HTMLButtonElement>(".base-tool-columns")!.click();
+      expect(document.querySelector('.base-columns-popover .base-column[data-column="container.folder"]')).not.toBeNull();
+    } finally { done(); }
   });
 });

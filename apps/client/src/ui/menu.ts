@@ -7,7 +7,7 @@
 // cui un pannello nuovo non poteva averle senza copiarle.
 
 import { t } from "../i18n/strings";
-import { trapFocus } from "./a11y";
+import { focusReturnsInto, trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
@@ -1502,9 +1502,14 @@ function mountStrip(menu: HTMLElement, options: ContextMenuOptions, lifetime: Li
   if (options.stripLabel) strip.setAttribute("aria-label", options.stripLabel);
   (menu.parentElement ?? document.body).appendChild(strip);
   const unmount = options.strip!(strip);
+  // L'immagine che esce si prende con la barra ancora dentro: smontata prima,
+  // la striscia resterebbe vuota (o col rialzo suo, senza la mini-barra) e
+  // l'uscita partirebbe da un riquadro diverso da quello che si vedeva.
   lifetime.add(() => {
-    unmount();
-    exitSurface(strip, () => strip.remove());
+    exitSurface(strip, () => {
+      unmount();
+      strip.remove();
+    });
   });
   placeStrip(strip, menu.getBoundingClientRect());
   enterSurface(strip);
@@ -1629,6 +1634,18 @@ function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly, grows = false):
   menu.style.top = `${top}px`;
   // Dal lato del pulsante: sotto cresce dal bordo alto, sopra dal basso.
   growFrom(menu, Math.max(margin, left), top, anchor.left, top > anchor.top ? anchor.bottom : anchor.top);
+}
+
+/// Chiude il menu contestuale se l'ha aperto qualcosa dentro `container` (il
+/// suo fuoco torna lì): chi cambia sotto il menu, come l'editor che passa alla
+/// Lettura, non lascia aperte voci che agirebbero su ciò che non si vede più.
+/// Vero se il menu aveva il fuoco, che adesso è tornato in `container`.
+export function closeContextMenuFrom(container: HTMLElement): boolean {
+  const menu = document.getElementById("context-menu");
+  if (!menuLifetime || !menu || !focusReturnsInto(menu, container)) return false;
+  const held = menu.contains(document.activeElement);
+  closeContextMenu();
+  return held;
 }
 
 export function closeContextMenu(): void {

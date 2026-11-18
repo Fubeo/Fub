@@ -60,7 +60,7 @@ describe("un pezzo che arriva con un import()", () => {
   });
 
   it("un import() che non riesce lo dice, e il gesto dopo riprova", async () => {
-    const said = vi.spyOn(notices, "notify").mockImplementation(() => {});
+    const said = vi.spyOn(notices, "notify").mockImplementation(() => ({ withdraw: () => {}, rewrite: () => {} }));
     const source = deferred<number>();
     const part = lazyPart(source.importer);
     const gesture = vi.fn();

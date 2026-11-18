@@ -232,7 +232,18 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - **Una linguetta o un riquadro che si chiude.** Il controller passa da
   `dismissIfUnwatched`: davanti a `unsaved` chiede con il dialogo
   `document.close_unsaved` se scartare le modifiche o tenere la nota, e senza
-  una risposta esplicita la nota torna aperta dov'era.
+  una risposta esplicita la nota torna aperta dov'era. Un fatto nuovo ritira
+  la domanda (il segnale di ritiro di `platform/confirm`) col suo motivo: un
+  cambio da fuori la chiude come «Tienila aperta», e il salvataggio tentato
+  subito trova il disco cambiato e mostra la barra del conflitto (se non
+  parte, lo dice l'avviso del salvataggio fallito); una lettura del disco
+  fallita, un'eco tardiva o una rilettura che non cambia il testo la lasciano
+  chiedere; una
+  rinomina da fuori riapre la nota col nome nuovo; un'eliminazione da fuori
+  non riapre niente, perché il testo è già nell'avviso con «Ricrea»; una
+  seconda domanda sulla stessa nota prende il posto della prima, che non fa
+  niente. Chiusa con Ctrl+W mentre si scriveva, la nota che torna riprende il
+  fuoco nel testo.
 - **Uno spazio di lavoro che toglie la nota, una finestra del documento che si
   chiude, un'apertura che finisce con la linguetta già chiusa.** Questi
   rilasci (`state/shell-layout.ts`, `state/document-bridge.ts`, il `finally`
@@ -259,11 +270,18 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   il testo va in bozza e il riquadro offre «Ricrea la nota». Ricreata la nota
   col testo, la bozza se ne va (`discardRemovedDraft`, dopo che la sua
   scrittura è finita): alla riapertura non c'è un conflitto con un disco che
-  le è uguale. Se la scrittura del file fallisce, la bozza resta.
+  le è uguale. Se la scrittura del file fallisce, la bozza resta. Si scarta
+  soltanto la bozza che tiene il testo ricreato: una sessione riaperta sull'id
+  si prende la bozza (la voce della rimozione se ne va), e un «Ricrea» rimasto
+  su un avviso di prima non tocca la bozza di una rimozione più nuova.
 - **La scrittura annunciata di un comando.** Chi lancia un comando che
   riscrive un documento aperto (un gesto della barra di una Base con
   `base.view.set`) lo annuncia prima con `expectWrite(id)`, e ritira
-  l'annuncio se il comando non scrive. Il primo evento dell'utente su quel
+  l'annuncio se il comando non scrive. Un'azione di una view dichiarata (una
+  proprietà cambiata dall'ispettore, una versione ripristinata) annuncia la
+  nota a fuoco (`ui/views.ts`) e, alla risposta, ne accorcia la scadenza a
+  1,5 s (`withdraw(graceMs)`), perché non sa se ha scritto e l'evento può
+  arrivare dopo la risposta. Il primo evento dell'utente su quel
   documento (non l'eco di un salvataggio in volo) lo consuma: a buffer pulito
   la sessione ricarica e l'esito è `reloaded` con `quiet`, che il controller
   non dice; a buffer sporco vale la regola di sempre. Un evento di un'altra
@@ -271,6 +289,17 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
   dopo averlo messo in bozza: se la bozza non si scrive restituisce
   `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.
+- **Lo scarto nella finestra del documento a parte.** Quando un testo della
+  finestra non entra nella sessione, la finestra offre «Conserva le mie
+  modifiche» e «Scarta le modifiche locali». Lo scarto si conferma nella
+  pagina, in due tempi (la finestra non ha IPC né dialoghi di sistema): la
+  prima pressione chiede alla finestra principale se il testo resterà nella
+  Cronologia (`keep-probe`) e lo dice, la seconda («Sì, scarta») glielo manda
+  (`keep`). La principale lo conserva con la regola di «Usa la versione su
+  disco» (`state/conflict-keep.ts`, `setDocumentWindowKeeper` in
+  `state/document-bridge.ts`), e la finestra scarta soltanto dopo `kept`; un
+  `keep-failed`, o nessuna risposta, non scarta niente e la finestra dice
+  perché.
 
 ## Invarianti
 

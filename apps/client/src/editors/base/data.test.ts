@@ -112,6 +112,48 @@ describe("Base contract", () => {
     expect(mutations[0]?.args.expected).toBe('{"kind":"value","value":{"value":false,"kind":"bool"}}');
   });
 
+  it("una colonna prop.stato legge e scrive la proprietà stato: il comando riceve stato, mai prop.stato", async () => {
+    // Il core riceve la chiave di colonna e scrive il nome del frontmatter:
+    // il finto fa lo stesso. Una risposta che ripete `prop.stato` è rifiutata.
+    const core = deps(async (request) => {
+      const edits = (request as { query: { edits: { doc: string; key: string; expected: unknown; value?: string | null }[] } }).query.edits;
+      return custom({ mutations: edits.map((edit) => ({
+        doc: edit.doc, key: edit.key, command: edit.value == null ? "note.property.remove" : "note.property.set",
+        args: { doc: edit.doc, key: edit.key.replace(/^prop\./, ""), expected: JSON.stringify(edit.expected), ...(edit.value == null ? {} : { value: edit.value }) },
+      })) });
+    });
+    const row = { doc: "a.md", values: {}, properties: { stato: { kind: "text", value: "Arrivata" } } };
+    const expected = expectedProperty(row, "prop.stato");
+    expect(expected).toEqual({ kind: "value", value: { kind: "text", value: "Arrivata" } });
+    expect(expectedProperty(row, "prop.valore")).toEqual({ kind: "absent" });
+    const [set] = await prepareBaseMutations(core, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: JSON.stringify("Confermata") }]);
+    expect(set).toMatchObject({ command: "note.property.set", args: { key: "stato", value: '"Confermata"' } });
+    const [clear] = await prepareBaseMutations(core, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: null }]);
+    expect(clear?.command).toBe("note.property.remove");
+    expect(clear?.args).toMatchObject({ key: "stato" });
+    expect(clear?.args).not.toHaveProperty("value");
+    const echo = deps(async () => custom({ mutations: [{
+      doc: "a.md", key: "prop.stato", command: "note.property.set",
+      args: { doc: "a.md", key: "prop.stato", value: '"Confermata"', expected: JSON.stringify(expected) },
+    }] }));
+    await expect(prepareBaseMutations(echo, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: JSON.stringify("Confermata") }])).rejects.toThrow("mutazione diversa");
+  });
+
+  it("le colonne container.* e file.* non sono proprietà: nessuna mutazione le scrive, neanche se il core la ripete", async () => {
+    // `container.folder` è la cartella del file che ospita la Base, non una
+    // proprietà della nota: il finto la ripete come `note.property.set`, e la
+    // mutazione va rifiutata prima che arrivi a un comando.
+    for (const key of ["container.folder", "file.mtime"]) {
+      const core = deps(async () => custom({ mutations: [{
+        doc: "a.md", key, command: "note.property.set",
+        args: { doc: "a.md", key, expected: '{"kind":"absent"}', value: '"x"' },
+      }] }));
+      await expect(prepareBaseMutations(core, source, "Board", [
+        { doc: "a.md", key, expected: { kind: "absent" }, value: '"x"' },
+      ])).rejects.toThrow("sola lettura");
+    }
+  });
+
   it("restores independent document view choices and quotes CSV content", async () => {
     const bridge = deps(async () => { throw new Error("no query"); });
     await persistBaseView(bridge, "a.base", "Cards");
@@ -191,9 +233,32 @@ describe("le note legate dei riepiloghi di Relazione (T35)", () => {
       return { kind: "documents", value: { offset: 0, total: 1, items: [{ doc: "Libri/Dune.md", properties: [{ key: "pagine", value: { kind: "number", value: 600 } }] }] } } as IndexResult;
     });
     const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, rows);
-    expect(linked).toEqual([{ target: "Dune", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
+    expect(linked).toEqual([{ target: "Dune", folder: "Letture", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
     expect(asked.filter((query) => query.kind === "resolve")).toHaveLength(2);
     expect(asked.find((query) => query.kind === "resolve")).toMatchObject({ from: "Letture/2025.md" });
+  });
+
+  it("lo stesso link in cartelle diverse si risolve dal punto di vista di ogni riga", async () => {
+    const folders = [
+      { doc: "A/Scaffale.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+      { doc: "A/Altro.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+      { doc: "B/Scaffale.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+    ];
+    const asked: IndexQuery[] = [];
+    const bridge = deps(async (query) => {
+      asked.push(query);
+      if (query.kind === "resolve") {
+        const from = (query as { from: string }).from;
+        return { kind: "resolved", value: { doc: `${from.split("/")[0]}/Indice.md` } } as IndexResult;
+      }
+      return { kind: "documents", value: { offset: 0, total: 2, items: [{ doc: "A/Indice.md", properties: [] }, { doc: "B/Indice.md", properties: [] }] } } as IndexResult;
+    });
+    const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, folders);
+    expect(linked).toEqual([
+      { target: "Indice", folder: "A", doc: "A/Indice.md", props: {} },
+      { target: "Indice", folder: "B", doc: "B/Indice.md", props: {} },
+    ]);
+    expect(asked.filter((query) => query.kind === "resolve"), "una domanda per cartella e pagina").toHaveLength(2);
   });
 
   it("una vista senza riepiloghi di Relazione non chiede niente", async () => {

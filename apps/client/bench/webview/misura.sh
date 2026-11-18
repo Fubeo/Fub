@@ -38,7 +38,8 @@ echo "== il client"
 (cd "$client" && npm ci && npm run build)
 
 echo "== l'app di release"
-(cd "$root" && cargo build --release --locked -p fub-app --features tauri/custom-protocol)
+# `bench-gc`: il gancio della raccolta forzata che R1 chiede (#284).
+(cd "$root" && cargo build --release --locked -p fub-app --features tauri/custom-protocol,bench-gc)
 
 if [[ ! -x "$driver_root/bin/tauri-driver" ]]; then
   echo "== tauri-driver 2.1.0, in target/tauri-driver"

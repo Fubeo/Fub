@@ -1553,3 +1553,40 @@ fn relation_target_arguments_are_checked_and_the_target_follows_a_rename() {
         assert_eq!(registry(&ws), raw);
     }
 }
+
+/// «Add» senza chiave (IMP-108): la riga dice cosa manca in parole, e non
+/// porta davanti il nome della variante dell'errore («invalid arguments»).
+#[test]
+fn add_without_a_key_says_what_is_missing_in_words() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ntitle: Ciao\n---\ncorpo\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "a.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("add")
+                .with_payload(serde_json::json!({"doc": "a.md"}))
+                .with_fields(vec![
+                    FieldValue {
+                        field: "new_key".into(),
+                        value: UiValue::Text(String::new()),
+                    },
+                    FieldValue {
+                        field: "new_value".into(),
+                        value: UiValue::Text("x".into()),
+                    },
+                ]),
+        )
+        .expect("view_action");
+    let fub_abi::ui::ViewUpdate::Replace { root } = update else {
+        panic!("{update:?}");
+    };
+    let shown = serde_json::to_string(&root).unwrap();
+    assert!(
+        shown.contains("Non ho aggiornato le proprietà: Manca il nome della proprietà."),
+        "{shown}"
+    );
+    assert!(!shown.contains("invalid arguments"), "{shown}");
+    assert_eq!(vault.read("a.md"), "---\ntitle: Ciao\n---\ncorpo\n");
+}

@@ -31,6 +31,11 @@ function engine(blocks: readonly Block[]): RichEngine {
 
 const para = (c: unknown[]): Block => ({ t: "para", role: { kind: "body" }, c }) as Block;
 
+function press(key: string): boolean {
+  const editable = document.querySelector<HTMLElement>(".rich-content")!;
+  return !editable.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+}
+
 function at(e: RichEngine, needle: string): number {
   let found = -1;
   e.state.doc.descendants((node, pos) => {
@@ -133,6 +138,51 @@ describe("le tabelle nuove", () => {
     e.select(e.state.doc.content.size - 1);
     e.paste(new Slice(Fragment.from(e.state.doc.child(1)), 0, 0));
     expect(shape(e).filter((b) => b !== "p")).toEqual(["3x3", "3x3"]);
+  });
+
+  it("hanno la spaziatura della griglia di Word in ogni paragrafo, anche nelle righe e colonne aggiunte", () => {
+    const grid = { after: 0, line: { multiple: 1 } };
+    const layouts = (e: RichEngine) =>
+      (parseProjection(e.getDoc()).blocks[1] as Table).rows.map((row) => row.cells.map((cell) => cell.blocks.map((b) => (b as Para).p)));
+    const e = engine([para([{ t: "text", x: "sopra" }])]);
+    e.select(at(e, "sopra"));
+    expect(e.apply(insertTable(2, 2))).toBe(true);
+    expect(layouts(e)).toEqual([[[grid], [grid]], [[grid], [grid]]]);
+    // Il paragrafo che segue la tabella e quello sopra restano del loro stile.
+    const blocks = parseProjection(e.getDoc()).blocks;
+    expect((blocks[0] as Para).p).toBeUndefined();
+    expect((blocks[2] as Para).p).toBeUndefined();
+    // Si vede: la cella porta la disposizione che la carta disegna.
+    const shown = document.querySelector<HTMLElement>(".rich-content .rich-table .rich-para")!;
+    expect(JSON.parse(shown.getAttribute("data-rich-p")!)).toEqual(grid);
+    expect(shown.style.getPropertyValue("--file-after")).toBe("0pt");
+    // Una riga e una colonna aggiunte, e Invio in una cella, la tengono.
+    expect(e.run("markdown.table.row.after")).toBe(true);
+    expect(e.run("markdown.table.column.after")).toBe(true);
+    expect(e.apply((state, dispatch) => (dispatch?.(state.tr.insertText("testo")), true))).toBe(true);
+    expect(e.run("markdown.table.row.before")).toBe(true);
+    expect(layouts(e).flat(2)).toHaveLength(12);
+    expect(layouts(e).flat(2).every((p) => JSON.stringify(p) === JSON.stringify(grid))).toBe(true);
+    e.select(at(e, "testo") + 2);
+    expect(press("Enter")).toBe(true);
+    const split = (parseProjection(e.getDoc()).blocks[1] as Table).rows.flatMap((row) => row.cells).find((cell) => cell.blocks.length === 2)!;
+    expect(split.blocks.map((b) => (b as Para).p)).toEqual([grid, grid]);
+    // Tab dall'ultima cella aggiunge una riga con la stessa disposizione.
+    const last = (parseProjection(e.getDoc()).blocks[1] as Table).rows.length;
+    // La fine del testo dell'ultima cella: prima di paragrafo, cella, riga e tabella.
+    e.select(e.state.doc.child(0).nodeSize + e.state.doc.child(1).nodeSize - 4);
+    expect(press("Tab")).toBe(true);
+    expect(layouts(e)).toHaveLength(last + 1);
+    expect(layouts(e)[last]!.flat()).toEqual([grid, grid, grid]);
+  });
+
+  it("una riga aggiunta a una tabella del file copia i suoi paragrafi, senza la spaziatura della griglia", () => {
+    const cell = (x: string) => ({ k: `K${x}`, blocks: [para([{ t: "text", x }])] });
+    const e = engine([{ t: "table", k: "T", rows: [{ k: "R", cells: [cell("a"), cell("b")] }] } as Block]);
+    e.select(at(e, "a"));
+    expect(e.run("markdown.table.row.after")).toBe(true);
+    const table = parseProjection(e.getDoc()).blocks[0] as Table;
+    expect(table.rows.flatMap((row) => row.cells.map((c) => (c.blocks[0] as Para).p))).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it("prendono il posto prima di un paragrafo vuoto, e il limite delle colonne vale", () => {

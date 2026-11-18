@@ -12,7 +12,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { modalComboboxGap } from "./a11y-rules.mjs";
+import { editorFrameRingGap, modalComboboxGap } from "./a11y-rules.mjs";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, assertCsp, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
@@ -571,6 +571,10 @@ async function inspectKeyboard(page) {
         if (!actual.indicator && modalComboboxGap(actual.combobox) === null) actual.indicator = true;
         delete actual.combobox;
       }
+      if (actual?.editorFrame) {
+        if (!actual.indicator && editorFrameRingGap(actual.editorFrame) === null) actual.indicator = true;
+        delete actual.editorFrame;
+      }
       return actual;
     };
     const readFocused = () => page.evaluate(() => {
@@ -712,8 +716,34 @@ async function inspectKeyboard(page) {
             descendant: activeFacts,
           };
         }
+        // I fatti dello scroller dell'editor di testo, per l'anello che
+        // disegna l'editor: solo per un `.cm-scroller` senza un anello suo.
+        let editorFrame = null;
+        if (!indicator && el.classList.contains("cm-scroller")) {
+          const frame = el.parentElement;
+          const veil = frame ? getComputedStyle(frame, "::after") : null;
+          editorFrame = {
+            focusVisible: el.matches(":focus-visible"),
+            frame: frame?.classList.contains("cm-editor") ?? false,
+            after: veil
+              ? {
+                  content: veil.content,
+                  display: veil.display,
+                  position: veil.position,
+                  top: veil.top,
+                  right: veil.right,
+                  bottom: veil.bottom,
+                  left: veil.left,
+                  outlineStyle: veil.outlineStyle,
+                  outlineWidth: veil.outlineWidth,
+                  boxShadow: veil.boxShadow,
+                }
+              : null,
+          };
+        }
         return {
           combobox,
+          editorFrame,
           probe: el.dataset.a11yProbe ?? null,
           indicator,
           descendant: descendant

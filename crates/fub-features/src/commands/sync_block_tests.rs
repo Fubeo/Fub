@@ -318,3 +318,48 @@ fn a_fence_with_its_id_on_a_line_of_its_own_keeps_it() {
         format!("{DEST}\n![[Riunione#^cod]]\n")
     );
 }
+
+/// **L'id chiesto si confronta come il kernel confronta le ancore.** Si
+/// confrontava alla lettera: `Preso` passava accanto a `^preso` e la nota si
+/// trovava con due blocchi dallo stesso id.
+#[test]
+fn an_id_taken_in_another_case_is_a_conflict() {
+    let source = "Altro. ^preso\n\nLibero.\n";
+    let mut host = vault(&[("Riunione.md", source)]);
+    let free = "Libero.";
+    let error = invoke(
+        &mut host,
+        json!({ "doc": "Riunione.md", "at": at(source, free), "text": free, "id": "Preso" }),
+        InvokeMode::Apply,
+    )
+    .expect_err("l'id è di un altro blocco, in un'altra forma");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error:?}");
+    assert_eq!(text(&host, "Riunione.md"), source);
+}
+
+/// **Gli id validi sono quelli del contratto** (`valid_anchor`): anche `_` e
+/// le lettere non ASCII. E `^ab_c` non prende `ab`: il segno arriva fino in
+/// fondo all'id.
+#[test]
+fn ids_follow_the_contract_rule_underscore_and_unicode_included() {
+    let source = "Altro. ^ab_c\n\nLibero.\n\nAncora.\n";
+    let mut host = vault(&[("Riunione.md", source)]);
+    let free = "Libero.";
+    apply(
+        &mut host,
+        json!({ "doc": "Riunione.md", "at": at(source, free), "text": free, "id": "ab" }),
+    );
+    let after = text(&host, "Riunione.md");
+    assert_eq!(after, source.replace(free, "Libero. ^ab"));
+
+    let other = "Ancora.";
+    let mut host = vault(&[("Riunione.md", after.as_str())]);
+    apply(
+        &mut host,
+        json!({ "doc": "Riunione.md", "at": at(&after, other), "text": other, "id": "città_2" }),
+    );
+    assert_eq!(
+        text(&host, "Riunione.md"),
+        after.replace(other, "Ancora. ^città_2")
+    );
+}

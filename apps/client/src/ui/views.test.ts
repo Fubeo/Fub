@@ -52,7 +52,24 @@ vi.mock("../host/ipc", () => ({
 }));
 // `state/document-session` possiede il flush senza trascinare qui CodeMirror
 // e il pannello del documento.
-vi.mock("../state/document-session", () => ({ flushPendingSave: async () => {} }));
+const writeWithdrawn = vi.fn();
+const expectDocumentWrite = vi.fn((_doc: string) => writeWithdrawn);
+vi.mock("../state/document-session", () => ({
+  flushPendingSave: async () => {},
+  get expectDocumentWrite() {
+    return expectDocumentWrite;
+  },
+}));
+// La nota a fuoco: la decide il test che la scrive, gli altri leggono il layout.
+let focusedDoc: string | null | undefined;
+vi.mock("../state/layout", async (original) => {
+  const layout = await original<typeof import("../state/layout")>();
+  return {
+    ...layout,
+    activeDoc: (...args: Parameters<typeof layout.activeDoc>) =>
+      focusedDoc === undefined ? layout.activeDoc(...args) : focusedDoc,
+  };
+});
 
 function spec(id: string, surface: ViewSpec["surface"]): ViewSpec {
   return {
@@ -790,6 +807,65 @@ describe("lifecycle delle view dichiarate", () => {
   });
 });
 
+describe("la scrittura di un'azione di view (IMP-109)", () => {
+  /// Una proprietà cambiata dall'ispettore riscrive la nota aperta: è un gesto
+  /// di chi la guarda, e la sessione non deve dirlo con «è cambiato su disco ed
+  /// è stato ricaricato». L'annuncio parte **prima** della chiamata (l'evento
+  /// arriva mentre il comando scrive) e si ritira poco dopo la risposta.
+  it("annuncia la scrittura della nota a fuoco prima dell'azione, e dopo la risposta ne accorcia la scadenza", async () => {
+    try {
+      expectDocumentWrite.mockClear();
+      writeWithdrawn.mockClear();
+      focusedDoc = "index.md";
+      listViews.mockResolvedValueOnce([spec("graph", "main")]);
+      const views = await loadViews();
+      await views.mountDeclaredViews();
+      renderView.mockImplementationOnce(async () => ({
+        node: "list_item", title: "voce", subtitle: null, action: { action: "set", payload: null }, selected: false,
+      }));
+      const pane = document.createElement("div");
+      document.body.appendChild(pane);
+      await views.mountViewInPane("graph", "main", pane);
+
+      let answer!: (update: ViewUpdate) => void;
+      let calledAfterAnnouncement = false;
+      viewAction.mockImplementationOnce(() => {
+        calledAfterAnnouncement = expectDocumentWrite.mock.calls.length === 1;
+        return new Promise<ViewUpdate>((resolve) => (answer = resolve));
+      });
+      pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+      await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+      expect(expectDocumentWrite).toHaveBeenCalledWith("index.md");
+      expect(calledAfterAnnouncement, "annunciata prima della chiamata").toBe(true);
+      expect(writeWithdrawn, "mentre il comando scrive l'annuncio resta").not.toHaveBeenCalled();
+      answer({ kind: "none" });
+      // Non ritirato del tutto: l'evento può arrivare dopo la risposta.
+      await vi.waitFor(() => expect(writeWithdrawn).toHaveBeenCalledWith(1500));
+      expect(writeWithdrawn).toHaveBeenCalledTimes(1);
+    } finally {
+      focusedDoc = undefined;
+    }
+  });
+
+  it("senza una nota a fuoco non annuncia niente", async () => {
+    expectDocumentWrite.mockClear();
+    focusedDoc = null;
+    listViews.mockResolvedValueOnce([spec("graph", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    renderView.mockImplementationOnce(async () => ({
+      node: "list_item", title: "voce", subtitle: null, action: { action: "set", payload: null }, selected: false,
+    }));
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
+    pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    expect(expectDocumentWrite).not.toHaveBeenCalled();
+    focusedDoc = undefined;
+  });
+});
+
 describe("il vault di una view (FUB-001)", () => {
   /// Senza il nome l'host risponde col vault **corrente**, e «corrente» cambia
   /// aprendone un altro mentre una view è ancora sullo schermo: un'azione che
@@ -841,5 +917,130 @@ describe("il vault di una view (FUB-001)", () => {
     document.body.appendChild(pane);
     await views.mountViewInPane("graph", "main", pane);
     expect(renderView).toHaveBeenLastCalledWith("graph", "main", null);
+  });
+});
+
+describe("la Cronologia con un testo conservato", () => {
+  /// La forma è quella che disegna `fub_features::versioning::view` (le
+  /// stringhe come le scrive il catalogo italiano): la nota del testo
+  /// conservato al posto della variazione, la riga «Conservata: …» in
+  /// anteprima, e dopo un ripristino la riga con «Annulla».
+  const tree: UiNode = {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      { node: "text", content: "Versioni: 3" },
+      {
+        node: "stack",
+        dir: "row",
+        gap: 4,
+        key: "restore-undo",
+        children: [
+          { node: "text", content: "Ripristinata la versione del 18 novembre 2026, 10:12." },
+          { node: "button", label: "Annulla", intent: "neutral", action: { action: "undo_restore", payload: { doc: "Nota.md" } } },
+        ],
+      },
+      {
+        node: "list",
+        items: [
+          { node: "list_item", key: "3", title: "18 novembre 2026, 10:40", subtitle: "Testo scartato nel conflitto del 18 novembre 2026, 10:40", action: { action: "preview", payload: { doc: "Nota.md", ts: 3 } }, selected: true },
+          { node: "list_item", key: "2", title: "18 novembre 2026, 10:12", subtitle: "Versione attuale", action: { action: "preview", payload: { doc: "Nota.md", ts: 2 } }, selected: false },
+        ],
+      },
+      {
+        node: "section",
+        title: "Versione del 18 novembre 2026, 10:40",
+        collapsed: false,
+        key: "preview:3",
+        children: [
+          { node: "text", content: "Conservata: Testo scartato nel conflitto del 18 novembre 2026, 10:40" },
+          { node: "stack", dir: "row", gap: 4, children: [
+            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { doc: "Nota.md", ts: 3 } } },
+          ] },
+        ],
+      },
+    ],
+  };
+
+  /// IMP-136: conservare un testo non scrive la nota, quindi nessun
+  /// `document_changed` invecchia il pannello. Lo invita il kernel, con un
+  /// `view_invalidated` della Cronologia: la scheda già aperta si ridisegna, e
+  /// quella chiusa mostra la voce nuova appena si apre — non «Nessuna
+  /// versione.», l'albero che aveva prima del conflitto.
+  it("un invito del kernel porta la voce conservata nella scheda aperta e in quella chiusa", async () => {
+    let current: UiNode = emptyTree("Nessuna versione.");
+    renderView.mockImplementation(async (view) => (view === "history" ? current : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("outline", "right_sidebar"), spec("history", "right_sidebar")]);
+      const views = await loadViews();
+      const { forwardNotice } = await import("../state/kernel");
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const lifetime = openLifetime();
+      views.mountViewInvalidation(lifetime);
+      const invite = async (): Promise<void> => {
+        forwardNotice({
+          event: { type: "view_invalidated", view: "history", instance: null },
+          origin: { actor: { kind: "kernel" }, batch: null },
+        });
+        await vi.waitFor(() => expect(renderView.mock.calls[renderView.mock.calls.length - 1]?.[0]).toBe("history"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      };
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="history"]')!;
+      tabs[1]!.click();
+      expect(content.textContent).toContain("Nessuna versione.");
+
+      // Aperta durante il conflitto: si ridisegna all'invito.
+      current = tree;
+      renderView.mockClear();
+      await invite();
+      expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+
+      // Chiusa durante il conflitto: alla riapertura c'è l'albero dell'invito.
+      current = emptyTree("Nessuna versione.");
+      await panelHost.refreshPanel("history");
+      expect(content.textContent).toContain("Nessuna versione.");
+      tabs[0]!.click();
+      current = tree;
+      renderView.mockClear();
+      await invite();
+      expect(content.textContent, "chiusa, non si disegna").toContain("Nessuna versione.");
+      tabs[1]!.click();
+      expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+      lifetime.close();
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("mostra la nota sulla versione e «Annulla» manda l'annullamento del ripristino", async () => {
+    viewAction.mockClear();
+    const { state } = await import("../state/store");
+    state.vaultRoot = "";
+    listViews.mockResolvedValueOnce([spec("history", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    renderView.mockImplementationOnce(async () => tree);
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("history", "main", pane);
+
+    const kept = [...pane.querySelectorAll<HTMLElement>(".ui-list-item")][0]!;
+    expect(kept.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+    expect(pane.textContent).toContain("Conservata: Testo scartato nel conflitto");
+    expect(pane.textContent).toContain("Ripristinata la versione del 18 novembre 2026");
+    const undo = [...pane.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Annulla");
+    expect(undo, "«Annulla» dopo il ripristino").toBeDefined();
+
+    undo!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    const args = viewAction.mock.calls[0] as unknown as unknown[];
+    expect(args[0]).toBe("history");
+    expect(args[3]).toBe("undo_restore");
+    expect(args[4]).toEqual({ doc: "Nota.md" });
   });
 });

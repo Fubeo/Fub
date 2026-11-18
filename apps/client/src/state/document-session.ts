@@ -182,7 +182,19 @@ type DiskReloadResult = Exclude<ReloadResult, { kind: "missing" } | { kind: "dir
 export type ConflictResolutionResult =
   | { kind: "none" }
   | { kind: "kept" }
-  | { kind: "discarded"; reload: ReloadResult };
+  // `kept`: il testo dell'utente (quello che c'era alla scelta) è nella
+  // Cronologia, conservato adesso o da un «Usa disco» di prima sullo stesso
+  // testo. Con la rilettura mancata è ciò che dice all'utente che il testo è
+  // salvo anche se il conflitto resta aperto.
+  | { kind: "discarded"; reload: ReloadResult; kept: boolean }
+  // Il testo dell'utente non si è potuto mettere in salvo: niente è stato
+  // scartato, il conflitto resta aperto e la scelta si può ripetere.
+  | { kind: "keep-failed"; error: unknown };
+
+/// Mette in salvo il testo che «Usa disco» sta per scartare (la shell lo
+/// conserva nella cronologia con `version.keep`). Una promessa rifiutata
+/// ferma lo scarto.
+export type KeepDiscarded = (text: string) => Promise<void>;
 
 export type RenameResult =
   | { kind: "renamed"; from: string; to: string }
@@ -213,6 +225,9 @@ export type DocumentSessionEvent =
   | { kind: "saved"; id: string }
   | { kind: "save-failed"; id: string; error: unknown; outcome: "conflitto" | "fallito" }
   | { kind: "draft-blind"; id: string }
+  /// Dopo un `draft-blind`, la prima bozza che torna a scriversi: la rete
+  /// sotto il testo non salvato c'è di nuovo (`id` è la nota di quella bozza).
+  | { kind: "draft-restored"; id: string }
   | { kind: "deletion-changed"; id: string; pending: boolean };
 
 type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
@@ -223,7 +238,7 @@ type SessionHooks = {
   /// Il testo della sessione è il giornale delle celle di una cartella
   /// (`text_kind` `grid_journal`): salvarlo lo mette nei byte.
   journal(): boolean;
-  draftSucceeded(): void;
+  draftSucceeded(id: string): void;
   draftFailed(id: string): void;
 };
 
@@ -285,6 +300,10 @@ export class DocumentSession implements DraftBuffer {
   #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
+  /// Il testo che «Usa disco» ha già messo in salvo in questo conflitto: se la
+  /// rilettura è mancata e la scelta si ripete sullo stesso testo, non si
+  /// conserva una seconda volta.
+  #keptInConflict: string | undefined;
   readonly #api: SessionPort;
   readonly #hooks: SessionHooks;
   /// Le superfici sottoscritte, per identità di registrazione. È ownership di
@@ -616,22 +635,49 @@ export class DocumentSession implements DraftBuffer {
    * «Usa disco» scarta il buffer e la bozza soltanto dopo che il disco è stato
    * letto: se la lettura manca, il conflitto resta aperto con il testo
    * dell'utente e la sua bozza, e la scelta si può ripetere.
+   *
+   * Con `keep` il testo dell'utente va prima in salvo: se la conservazione
+   * fallisce non si scarta niente, e lo scarto vale solo per il testo
+   * conservato — un tasto premuto nel frattempo rende la lettura superata e
+   * lascia il conflitto aperto. Un documento a giornale (la griglia,
+   * `grid_journal`) non ha un testo da conservare: lì `keep` non si chiama.
    */
-  async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
+  async resolveConflict(choice: ConflictChoice, keep?: KeepDiscarded): Promise<ConflictResolutionResult> {
     const held = this.settled();
     if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     if (choice === "mine") {
+      this.#keptInConflict = undefined;
       await this.saveKeepingMine();
       return { kind: "kept" };
     }
+    let kept: string | undefined;
+    if (keep && !this.#hooks.journal()) {
+      kept = this.#state.text;
+      // Lo stesso testo già in salvo da un «Usa disco» la cui rilettura è
+      // mancata: una seconda versione uguale non serve a nessuno.
+      if (this.#keptInConflict !== kept) {
+        try {
+          await keep(kept);
+        } catch (error) {
+          return { kind: "keep-failed", error };
+        }
+        this.#keptInConflict = kept;
+      }
+      if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
+    }
     const reload = await this.#reloadFromDisk(++this.#externalGeneration, () => {
       if (this.#state.result !== "conflitto") return false;
+      // Si scarta soltanto il testo che è stato messo in salvo.
+      if (kept !== undefined && this.#state.text !== kept) return false;
       this.discardChanges();
       return true;
     });
-    if (reload.kind === "reloaded") await this.discardDraft();
-    return { kind: "discarded", reload };
+    if (reload.kind === "reloaded") {
+      this.#keptInConflict = undefined;
+      await this.discardDraft();
+    }
+    return { kind: "discarded", reload, kept: kept !== undefined };
   }
 
   /**
@@ -1093,7 +1139,7 @@ export class DocumentSession implements DraftBuffer {
           return;
         }
         this.#draftOutcome = { generation, succeeded: true };
-        this.#hooks.draftSucceeded();
+        this.#hooks.draftSucceeded(id);
       } catch {
         if (
           !this.#isOpen() ||
@@ -1179,7 +1225,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// Le scritture che un comando sta per fare su un documento, annunciate da
   /// chi lo lancia (`expectWrite`). Ognuna è un gettone con la sua scadenza:
   /// la consuma il primo evento dell'utente su quel documento.
-  readonly #expectedWrites = new Map<string, { readonly deadline: number }[]>();
+  readonly #expectedWrites = new Map<string, { deadline: number }[]>();
   readonly #renaming = new Set<string>();
   readonly #deletions = new Map<string, Promise<DeletionResult>>();
   /// Aliases for an owner whose confirmation survives a rename. The pending
@@ -1193,9 +1239,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// A pending open reserves this owner before any flush/read `await`.
   readonly #openIntents = new Map<string, number>();
   /// Le bozze scritte per un file cancellato da fuori con testo non salvato,
-  /// per vault e id: «Ricrea la nota» le toglie dopo la riscrittura
-  /// (`discardRemovedDraft`), aspettando che la loro scrittura sia finita.
-  readonly #removedDrafts = new Map<string, Promise<void>>();
+  /// per vault e id, col testo che tengono: «Ricrea la nota» le toglie dopo la
+  /// riscrittura (`discardRemovedDraft`), aspettando che la loro scrittura sia
+  /// finita, e soltanto se tengono il testo ricreato. Una sessione che si
+  /// riapre sull'id toglie la voce: da lì la bozza è sua.
+  readonly #removedDrafts = new Map<string, { text: string; saving: Promise<void> }>();
   /// Il vault in cui è nata ciascuna sessione (FUB-001), `null` se nessun vault
   /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
   /// quando l'host ha già aperto un altro vault.
@@ -1252,6 +1300,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
   isDirty(id: string): boolean {
     return this.#sessions.get(id)?.dirty === true;
+  }
+  /// Le bozze non arrivano più sul disco (l'ultima è fallita dopo un
+  /// `draft-blind`, e nessuna è tornata a scriversi): chi si monta dopo
+  /// l'evento lo rilegge qui.
+  isDraftBlind(): boolean {
+    return this.#blindDraft;
   }
   /** Conservative fallback if a lifecycle flush rejects before reporting failures. */
   dirtyIds(): string[] {
@@ -1310,13 +1364,22 @@ export class DocumentSessionCollection implements DraftBufferStore {
    * (rifiutato, o niente da cambiare), o resterebbe a zittire un cambio vero.
    * Soltanto un evento dell'utente lo consuma: un'altra app (il watcher) e il
    * kernel avvisano sempre. L'annuncio scade dopo `EXPECTED_WRITE_MS`.
+   *
+   * `graceMs`: chi non sa se il comando ha scritto (un'azione di una view
+   * dichiarata) non ritira subito, perché l'evento può arrivare dopo la
+   * risposta: accorcia la scadenza a `graceMs` da adesso. Senza timer: la
+   * scadenza la legge chi consuma l'annuncio.
    */
-  expectWrite(id: string): () => void {
+  expectWrite(id: string): (graceMs?: number) => void {
     const token = { deadline: Date.now() + EXPECTED_WRITE_MS };
     const tokens = this.#expectedWrites.get(id) ?? [];
     tokens.push(token);
     this.#expectedWrites.set(id, tokens);
-    return () => {
+    return (graceMs = 0) => {
+      if (graceMs > 0) {
+        token.deadline = Math.min(token.deadline, Date.now() + graceMs);
+        return;
+      }
       const left = (this.#expectedWrites.get(id) ?? []).filter((each) => each !== token);
       if (left.length) this.#expectedWrites.set(id, left);
       else this.#expectedWrites.delete(id);
@@ -1664,7 +1727,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const saving = this.#api.saveDraft(session.id, text, base, ...vaultArg(vault)).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
-    this.#removedDrafts.set(removedDraftKey(session.id, vault), saving);
+    this.#removedDrafts.set(removedDraftKey(session.id, vault), { text, saving });
     return { kind: "removed", dirty, text };
   }
 
@@ -1674,14 +1737,20 @@ export class DocumentSessionCollection implements DraftBufferStore {
    * lasciata lì alla riapertura farebbe un conflitto falso, perché la sua
    * base è la revisione del file cancellato e non quella ricreata (IMP-047).
    * Si aspetta che la sua scrittura sia finita, così non arriva dopo lo
-   * scarto. Una sessione nel frattempo riaperta sull'id tiene la sua bozza.
+   * scarto. Si scarta soltanto la bozza che tiene `text`, il testo ricreato:
+   * una sessione nel frattempo riaperta sull'id tiene la sua bozza, e una
+   * rimozione più nuova (un «Ricrea» rimasto su un avviso di prima) tiene la
+   * bozza col testo più nuovo.
    */
-  async discardRemovedDraft(id: string, vault: string | null | undefined): Promise<void> {
+  async discardRemovedDraft(id: string, vault: string | null | undefined, text: string): Promise<void> {
     const key = removedDraftKey(id, vault ?? null);
-    const saving = this.#removedDrafts.get(key);
+    const entry = this.#removedDrafts.get(key);
+    if (!entry || entry.text !== text) return;
     this.#removedDrafts.delete(key);
-    await saving;
-    if (this.#sessions.has(id)) return;
+    await entry.saving;
+    // Nell'attesa la nota si è riaperta, o è sparita un'altra volta con una
+    // bozza sua: quella non è la bozza di questo testo.
+    if (this.#sessions.has(id) || this.#removedDrafts.has(key)) return;
     await this.#api.discardDraft(id, ...vaultArg(vault));
   }
   async release(id: string): Promise<CloseResult> {
@@ -1759,8 +1828,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return outcome;
   }
 
-  async resolveConflict(id: string, choice: ConflictChoice): Promise<ConflictResolutionResult> {
-    return (await this.#sessions.get(id)?.resolveConflict(choice)) ?? { kind: "none" };
+  async resolveConflict(id: string, choice: ConflictChoice, keep?: KeepDiscarded): Promise<ConflictResolutionResult> {
+    return (await this.#sessions.get(id)?.resolveConflict(choice, keep)) ?? { kind: "none" };
+  }
+  /// Se «Usa disco» su `id` ha un testo da conservare: no per i documenti a
+  /// giornale (la griglia), dove il buffer non è il file.
+  keepsDiscardedText(id: string): boolean {
+    const session = this.#sessions.get(id);
+    return session !== undefined && !this.#journals.has(session);
   }
   async renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
     const pendingAlias = this.#pendingDeletionOwners.get(from);
@@ -1957,8 +2032,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const session: DocumentSession = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
       emit: (event) => this.#emit(event),
       journal: (): boolean => this.#journals.has(session),
-      draftSucceeded: () => {
+      draftSucceeded: (doc) => {
+        if (!this.#blindDraft) return;
         this.#blindDraft = false;
+        this.#emit({ kind: "draft-restored", id: doc });
       },
       draftFailed: (doc) => {
         if (this.#blindDraft) return;
@@ -1969,6 +2046,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
     this.#vaults.set(session, vault);
     this.#keys.set(session, open ?? newOpenKey());
     this.#sessions.set(id, session);
+    // La bozza di una rimozione di prima è adesso di questa sessione: un
+    // «Ricrea» rimasto sul vecchio avviso non la deve toccare.
+    this.#removedDrafts.delete(removedDraftKey(id, vault));
     return session;
   }
 
@@ -1991,7 +2071,7 @@ export function flushPendingSave(): Promise<string[]> {
 
 /// Annuncia la scrittura di un comando su `id` (`expectWrite`): la ricarica
 /// che ne viene, a buffer pulito, non si dice.
-export function expectDocumentWrite(id: string): () => void {
+export function expectDocumentWrite(id: string): (graceMs?: number) => void {
   return documentSessions.expectWrite(id);
 }
 

@@ -35,23 +35,23 @@ schermo mostra, al massimo 256 righe per 128 colonne l'una. Righe e colonne
 sono virtualizzate; le coordinate stabili `SheetId + RowId + ColumnId` vengono
 dalle finestre.
 
-Editor in-cell e formula bar usano due istanze di `TextEngine` con
-`FormulaProfile`, e nessuna battuta attraversa IPC. Un commit scrive le voci
-nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
-controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
-con le celle da rileggere; le modifiche in coda partono una dopo l'altra.
-Su una cartella annulla e ripeti sono del provider, celle e comandi in una pila
-anche oltre il salvataggio ([contratto](../reference/ipc-contract.md#cartelle-di-excel));
-senza provider l'undo è locale. Un giornale cambiato altrove (altro riquadro,
-salvataggio, ricarica) riapre la sessione e chiude la precedente; la bozza
-aperta resta, col cursore e il fuoco. Se la sua cella è cambiata sotto, un
-avviso chiede «Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più,
-la bozza si chiude e l'avviso lo dice. La cella aperta è testo [in
-sospeso](frontend-and-ipc.md#il-testo-in-sospeso): va nelle bozze, e si
-conferma prima di salvare, di chiudere o di un cambio da fuori (che diventa un
-conflitto). Se i byte di base del giornale non sono più sul disco, la griglia
-lo apre su quelli di adesso (come «Tieni il mio testo»). Senza superficie
-compatibile, o se sessione o finestra non si aprono, la griglia è
+Editor in-cell e formula bar usano due `TextEngine` con `FormulaProfile`, e
+nessuna battuta attraversa IPC. Un commit scrive le voci nel giornale, lo pubblica
+alla sessione e lo consegna al provider, che controlla le preimmagini, rifiuta le
+celle bloccate e risponde con le celle da rileggere; le modifiche in coda partono
+in fila. Su una cartella annulla e ripeti sono del provider, celle e comandi in
+una pila anche oltre il salvataggio
+([contratto](../reference/ipc-contract.md#cartelle-di-excel)); senza provider
+l'undo è locale, e si svuota con avviso se altri cambiano una sua cella. Un
+giornale cambiato altrove riapre la sessione; la bozza resta col cursore e il
+fuoco e segue la sua riga. Se la sua cella è cambiata sotto, un avviso chiede
+«Tieni la tua» o «Prendi quella nuova»; un'altra cella cambiata lo dice l'avviso;
+senza la riga la bozza va negli appunti, senza il foglio si chiude con l'avviso.
+La cella aperta è testo [in sospeso](frontend-and-ipc.md#il-testo-in-sospeso): va
+nelle bozze, e si conferma prima di salvare, di chiudere o di un cambio da fuori
+(che diventa un conflitto). Se i byte di base del giornale non sono più sul disco,
+la griglia lo apre su quelli di adesso (come «Tieni il mio testo»). Senza
+superficie compatibile, o se sessione o finestra non si aprono, la griglia è
 `data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive.
 
 La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede

@@ -10194,11 +10194,16 @@ impl Workspace {
                     LinkTarget::Wiki { page, .. } => {
                         // Riscrivi solo se il link puntava davvero a `from`
                         // (non a un omonimo) e ci arrivava per nome o per path
-                        // — mai per alias.
+                        // — mai per alias. Il path può essere parziale
+                        // (`[[Progetti/Alpha]]` per `Note/Progetti/Alpha.md`):
+                        // è la coda del path a confine di cartella, la stessa
+                        // regola del grafo, che qui sotto conferma il bersaglio.
                         let key = resolution_key(page);
                         let by_name = key == from_name;
-                        let by_path =
-                            key == from_path || resolution_key(&strip_ext(&key)) == from_path;
+                        let stem = resolution_key(&strip_ext(&key));
+                        let by_path = key == from_path
+                            || stem == from_path
+                            || (key.contains('/') && from_path.ends_with(&format!("/{stem}")));
                         let with_extension = key == from_file || key == from_full;
                         if !(by_name || by_path || with_extension)
                             || self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from)
@@ -12714,7 +12719,9 @@ impl Workspace {
             }
         });
         self.dispatch_pending();
-        report
+        // L'errore dell'importer, nel catalogo di chi l'ha scritto (§12.2),
+        // come quello di un exporter.
+        report.map_err(|error| self.localized(&owner, error))
     }
 
     /// Le destinazioni di export offerte dai provider registrati.
@@ -12752,8 +12759,12 @@ impl Workspace {
     ) -> std::result::Result<ExportReport, PluginError> {
         let prepared = self.prepare_export();
         let at = prepared.choose(&request.target)?;
-        let host = self.read_host_for(prepared.owner(at));
-        prepared.invoke(at, request, &host, out)
+        let owner = prepared.owner(at);
+        let host = self.read_host_for(owner);
+        // L'errore dell'exporter, nel catalogo di chi l'ha scritto (§12.2).
+        prepared
+            .invoke(at, request, &host, out)
+            .map_err(|error| self.localized(owner, error))
     }
 
     // --- eventi ------------------------------------------------------------

@@ -8,6 +8,7 @@ import { t } from "../../i18n/strings";
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type CommentView } from "./projection";
 import { mountRichSide, RICH_SIDE_VIEWS, type RichSide } from "./side";
+import { lineFeeds, tryApplyOperation, type EditorChange } from "../core/text-operation";
 
 let engines: RichEngine[] = [];
 let sides: RichSide[] = [];
@@ -225,6 +226,113 @@ describe("la scheda Revisioni", () => {
     expect(key(host, { key: "z" }).defaultPrevented).toBe(false);
     expect(items()).toHaveLength(0);
     expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
+  });
+
+  it("dopo Rifiuta e Rifiuta tutte il fuoco resta nella scheda, e Ctrl+Z da lì li annulla (IMP-126)", () => {
+    const e = engine([para([{ t: "text", x: "resta " }, { t: "text", x: "nuovo", ins: ada }, { t: "text", x: " e " }, { t: "text", x: "vecchio", del: bea }, { t: "text", x: " e " }, { t: "text", x: "altro", ins: bea }])]);
+    const { side: panel, host } = side(e);
+    panel.show("revisions");
+    const items = () => [...host.querySelectorAll<HTMLElement>(".rich-side-change")];
+    const kinds = () => items().map((el) => el.dataset.kind);
+    // Il tasto parte da dove sta il fuoco, come nell'app.
+    const press = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, ...init });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const undo = () => press({ key: "z" });
+    // Rifiutata la prima voce, il fuoco va al «Rifiuta» della voce che ora
+    // sta al suo posto: non su BODY.
+    const reject = pressed(items()[0]!, t("rich.rev.reject.one"));
+    reject.focus();
+    reject.click();
+    expect(e.state.doc.textContent).toBe("resta  e vecchio e altro");
+    expect(kinds()).toEqual(["del", "ins"]);
+    expect(document.activeElement).toBe(pressed(items()[0]!, t("rich.rev.reject.one")));
+    expect(undo()).toBe(true);
+    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio e altro");
+    expect(kinds()).toEqual(["ins", "del", "ins"]);
+    // La voce che torna sposta l'altra nell'elenco: il fuoco resta sul suo
+    // pulsante, e da lì si ripete e si annulla ancora.
+    expect(host.contains(document.activeElement)).toBe(true);
+    expect(press({ key: "Z", shiftKey: true })).toBe(true);
+    expect(kinds()).toEqual(["del", "ins"]);
+    expect(host.contains(document.activeElement)).toBe(true);
+    expect(undo()).toBe(true);
+    expect(kinds()).toEqual(["ins", "del", "ins"]);
+    // L'ultima voce: il fuoco passa a quella prima di lei.
+    const last = pressed(items()[2]!, t("rich.rev.reject.one"));
+    last.focus();
+    last.click();
+    expect(kinds()).toEqual(["ins", "del"]);
+    expect(document.activeElement).toBe(pressed(items()[1]!, t("rich.rev.reject.one")));
+    expect(undo()).toBe(true);
+    expect(kinds()).toEqual(["ins", "del", "ins"]);
+    // «Rifiuta tutte» si nasconde col gesto: il fuoco va all'interruttore.
+    const all = pressed(host, t("rich.rev.reject_all.short"));
+    all.focus();
+    all.click();
+    expect(items()).toHaveLength(0);
+    expect(e.state.doc.textContent).toBe("resta  e vecchio e ");
+    expect(all.hidden).toBe(true);
+    expect(document.activeElement).toBe(host.querySelector('[role="switch"]'));
+    expect(undo()).toBe(true);
+    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio e altro");
+    expect(kinds()).toEqual(["ins", "del", "ins"]);
+  });
+
+  it("l'ultima voce rifiutata senza interruttore lascia il fuoco sull'elenco (IMP-126)", () => {
+    const e = engine([para([{ t: "text", x: "resta " }, { t: "text", x: "nuovo", ins: ada }])]);
+    const { side: panel, host } = side(e, false);
+    panel.show("revisions");
+    const toggle = host.querySelector<HTMLInputElement>('[role="switch"]')!;
+    expect(toggle.disabled).toBe(true);
+    const reject = pressed(host.querySelector(".rich-side-change")!, t("rich.rev.reject.one"));
+    reject.focus();
+    reject.click();
+    expect(host.querySelectorAll(".rich-side-change")).toHaveLength(0);
+    expect(document.activeElement).toBe(host.querySelector('.rich-side-list[role="list"]'));
+  });
+
+  it("un gesto del pannello col fuoco altrove non lo sposta", () => {
+    const e = engine(tracked());
+    const { side: panel, host } = side(e);
+    panel.show("revisions");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    pressed(host.querySelector(".rich-side-change")!, t("rich.rev.reject.one")).click();
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("Rifiuta e Rifiuta tutte dal pannello portano alla sessione un'operazione che regge sul testo di prima (IMP-127)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const changes: EditorChange[] = [];
+    const e = new RichEngine(parent, { label: () => "documento", onChange: (change) => changes.push(change), onSelectionChange: () => {} });
+    engines.push(e);
+    e.setDoc(JSON.stringify({ format: "fub-rich", version: 1, track: true, blocks: tracked() }));
+    const { side: panel, host } = side(e);
+    panel.show("revisions");
+    // La sessione accetta una modifica soltanto se l'operazione, applicata al
+    // testo che ha, dà il testo nuovo (`acceptSurfaceChange`): altrimenti la
+    // respinge e non salva.
+    let text = e.getDoc();
+    const accepted = () => {
+      const change = changes.shift()!;
+      expect(changes).toHaveLength(0);
+      const applied = tryApplyOperation(lineFeeds(text), change.operation);
+      expect(applied).toEqual({ kind: "applied", text: lineFeeds(change.text) });
+      expect(change.origin).toBe("input");
+      text = change.text;
+    };
+    pressed(host.querySelector(".rich-side-change")!, t("rich.rev.reject.one")).click();
+    accepted();
+    expect(text).toBe(e.getDoc());
+    pressed(host, t("rich.rev.reject_all.short")).click();
+    accepted();
+    expect(parseProjection(text).track).toBe(true);
+    expect(e.state.doc.textContent).toBe("resta  e vecchio");
   });
 
   it("accettando, la voce esce come immagine entro 140 ms e l'altra sale; una battuta non muove niente", async () => {

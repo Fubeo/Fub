@@ -8,7 +8,7 @@ import { BoxTree } from "../box-tree";
 import { type LayerInfo, TREE_FROM } from "./base";
 import { Lasso } from "./geometry";
 import { later } from "./lookup";
-import type { Nested, Unit } from "./unit";
+import { Unit, type Erasable, type ForeignBlock, type Nested } from "./unit";
 
 /// L'indice degli oggetti di una scena, in ordine di documento: l'ultimo è
 /// quello che si vede sopra. Gli oggetti dell'indice sono quelli in cima, o
@@ -29,6 +29,10 @@ export class SceneIndex {
     readonly units: readonly Unit[],
     readonly layers: readonly LayerInfo[],
     private readonly nested: Nested | null = null,
+    /// I blocchi estranei accanto agli oggetti dell'indice, nei livelli dove
+    /// si sceglie o nel gruppo isolato: non si scelgono, ma la gomma li
+    /// toglie interi.
+    readonly foreign: readonly ForeignBlock[] = [],
   ) {
     for (const unit of units) this.byKey.set(unit.key, unit);
   }
@@ -124,20 +128,25 @@ export class SceneIndex {
   /// fatto con gli stessi conti: sono proprio quelli che `touches` non
   /// scarterebbe subito.
   ///
+  /// Un blocco estraneo che il segmento tocca, un testo o un collegamento di
+  /// un altro programma, viene dopo gli oggetti e si prende intero: la gomma
+  /// non lo riscrive, lo toglie, come toglie ogni cosa che attraversa.
+  ///
   /// Un gruppo o un collegamento non si prende intero perché il segmento ne
   /// tocca un figlio: la gomma scende fra i figli e prende soltanto quelli
   /// toccati, fino in fondo («la gomma non cancella ciò che non ha toccato»).
   /// Un livello di Inkscape, che per Fub è un `<g>` qualsiasi, con dentro
   /// tutto il disegno non sparisce perché la gomma ha sfiorato una parola.
-  along(a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Unit>): Unit[] {
+  along(a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Erasable>): Erasable[] {
     if (this.tree === undefined) this.tree = this.units.length < TREE_FROM ? null : new BoxTree(this.units.map((unit) => unit.bounds));
     const touched = (unit: Unit): boolean => marked?.get(unit.key) !== unit && unit.touches(a, b, tolerance);
-    const deep = (unit: Unit): Unit[] => this.deepAlong(unit, a, b, tolerance, marked);
-    if (this.tree === null) return this.units.filter(touched).flatMap(deep);
-    const found: Unit[] = [];
+    const deep = (unit: Unit): Erasable[] => this.deepAlong(unit, a, b, tolerance, marked);
+    const blocks = this.foreign.filter((block) => marked?.get(block.key) !== block && block.touches(a, b, tolerance));
+    if (this.tree === null) return [...this.units.filter(touched).flatMap(deep), ...blocks];
+    const found: Erasable[] = [];
     const near = this.tree.search(Math.min(a[0], b[0]) - tolerance, Math.min(a[1], b[1]) - tolerance, Math.max(a[0], b[0]) + tolerance, Math.max(a[1], b[1]) + tolerance);
     for (const i of near) if (touched(this.units[i]!)) found.push(...deep(this.units[i]!));
-    return found;
+    return [...found, ...blocks];
   }
 
   /// Ciò che la gomma prende di `unit`, che il segmento tocca: lui intero se
@@ -145,20 +154,20 @@ export class SceneIndex {
   /// (che si prende intera); sennò i figli toccati, e così via. Il
   /// contenitore si prende intero soltanto quando lo stesso segmento prende
   /// interi tutti i suoi figli, nessuno era già segnato e non ha altri figli
-  /// (bloccati, nascosti, titoli, blocchi estranei): così non resta un `<g>`
-  /// o un `<a>` vuoto, niente si toglie due volte, e niente che la gomma non
-  /// tocca se ne va col contenitore. Un figlio già segnato non si riprova; un
-  /// figlio bloccato non è fra i figli (`childrenOf`), quindi non si prende
-  /// mai.
-  private deepAlong(unit: Unit, a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Unit>): Unit[] {
+  /// (bloccati, nascosti, titoli): così non resta un `<g>` o un `<a>` vuoto,
+  /// niente si toglie due volte, e niente che la gomma non tocca se ne va col
+  /// contenitore. Un figlio già segnato non si riprova; un figlio bloccato non
+  /// è fra i figli (`childrenOf`), quindi non si prende mai. Un blocco
+  /// estraneo fra i figli (`foreignOf`) si prende intero, come un oggetto.
+  private deepAlong(unit: Unit, a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Erasable>): Erasable[] {
     const node = unit.node;
     if (node.kind !== "container") return [unit];
     const role = node.details?.role;
     if ((role !== "group" && role !== "link") || node.details?.repeat !== undefined) return [unit];
-    const children = this.children(unit);
+    const children: Erasable[] = [...this.children(unit), ...(this.nested?.foreignOf(node) ?? [])];
     // Soltanto figli bloccati o che non si scelgono: la gomma li lascia.
     if (children.length === 0) return elementChildren(node).length === 0 ? [unit] : [];
-    const out: Unit[] = [];
+    const out: Erasable[] = [];
     let whole = children.length === elementChildren(node).length;
     for (const child of children) {
       if (marked?.get(child.key) === child) {
@@ -169,7 +178,7 @@ export class SceneIndex {
         whole = false;
         continue;
       }
-      const taken = this.deepAlong(child, a, b, tolerance, marked);
+      const taken = child instanceof Unit ? this.deepAlong(child, a, b, tolerance, marked) : [child];
       if (taken.length !== 1 || taken[0] !== child) whole = false;
       out.push(...taken);
     }

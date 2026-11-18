@@ -255,3 +255,33 @@ fn the_collections_list_the_query_saved() {
     let list = titles(&tree);
     assert!(list.iter().any(|t| t.contains("Inbox")), "{list:?}");
 }
+
+/// «Save» senza nome (IMP-112): la riga dice cosa fare, in parole, senza il
+/// nome della variante dell'errore («invalid arguments») davanti.
+#[test]
+fn form_save_without_a_name_says_what_to_do() {
+    let vault = Vault::new();
+    vault.put("a.md", "ciao rust\n");
+    let mut ws = vault.open();
+    let update = ws
+        .view_action(
+            &ViewInstance::only(QUERIES_VIEW),
+            UiAction::new("save").with_fields(vec![
+                FieldValue {
+                    field: "new_name".into(),
+                    value: UiValue::Text("  ".into()),
+                },
+                FieldValue {
+                    field: "new_text".into(),
+                    value: UiValue::Text("rust".into()),
+                },
+            ]),
+        )
+        .expect("save");
+    let ViewUpdate::Replace { root } = update else {
+        panic!("{update:?}");
+    };
+    let shown = serde_json::to_string(&root).unwrap();
+    assert!(shown.contains("Query: Dai un nome alla query."), "{shown}");
+    assert!(!shown.contains("invalid arguments"), "{shown}");
+}

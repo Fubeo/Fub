@@ -57,7 +57,7 @@ La specie della scheda viene dall'estensione del file
 | file Craft (`.vectorcraft`, `.figcraft`, `.pcraft`) | l'anteprima, con «Apri» e «Apri con…» ([la scheda dei file Craft](../reference/canvas-craft.md)) |
 | pagina web | l'indirizzo e il dominio; titolo, descrizione e icona solo dopo «Mostra l'anteprima» |
 | altro file (CSV, audio, video, ZIP…) | il percorso, che si apre con un clic |
-| gruppo | l'etichetta e lo sfondo, sotto le schede che contiene |
+| gruppo | il nome, una volta sola, dentro la cornice in alto a sinistra, e lo sfondo, sotto le schede che contiene; da lontano il nome grande |
 
 La scheda di una pagina web non va mai in rete da sé: ogni richiesta è un
 clic su «Mostra l'anteprima». Un renderer legge e basta: sfogliare un PDF o
@@ -75,7 +75,8 @@ Obsidian. Accanto al titolo due numeri
 
 Quando un file non c'è più, la scheda dice «File mancante» con **Ritrova…**
 (sceglie un altro file del vault, gli omonimi per primi) e **Togli dalla
-lavagna**. Se il file torna, la scheda si rimonta da sola
+lavagna**. Tutto sta dentro la scheda: in una scheda bassa il messaggio va su
+una riga e i due pulsanti si stringono, col testo intero nel suggerimento. Se il file torna, la scheda si rimonta da sola
 ([il file che manca](../reference/canvas-cards.md#il-file-che-manca)).
 
 ### Da vicino e da lontano
@@ -111,6 +112,23 @@ volta ([entrare e uscire](../reference/canvas-input.md#entrare-e-uscire)).
 - **Uscire:** Esc, un clic fuori, o la scheda che esce dalla vista a fine
   gesto. Con Esc la scheda resta scelta.
 
+Un clic su una scheda, dopo un pulsante della colonna o della riga delle
+opzioni, riporta il fuoco sulla lavagna: Canc, Ctrl+Z e gli altri tasti
+valgono subito.
+
+## Spostare e agganciare
+
+Una scheda si sposta trascinandola dalla testata o dal corpo, finché non è
+attiva; un gruppo anche dalla sua etichetta. Mentre la si trascina la scheda
+segue il puntatore senza salti, e le guide mostrano a quali schede vicine si
+allineerà. Lasciata, scivola al suo posto: sulla guida, se ce n'è una, o
+sulla griglia; col movimento ridotto ci va subito. Alt tenuto al rilascio la
+lascia dove sta. «Aggancia le schede» (`canvas.snap`) spegne l'aggancio, e
+«Passo della griglia» (`canvas.snap_step`, Impostazioni › Lavagna) sceglie la
+griglia: 8 di serie, 16, 32 o nessuna, che aggancia solo alle schede vicine.
+Il passo vale anche ridimensionando
+([la griglia e le guide](../reference/canvas-view.md#la-griglia-e-le-guide)).
+
 Una scheda di file che non si mostra (il file manca, non si legge, è troppo
 grande) non apre il campo del percorso: Invio e il doppio clic chiedono il file
 come «Ritrova…», o lo aprono come «Apri».
@@ -123,10 +141,15 @@ scheda si vede nei riquadri dello stesso file, e viceversa, senza rileggere il
 disco ([scrivere dentro una scheda](../reference/canvas-cards.md#scrivere-dentro-una-scheda)).
 
 - **Una scheda di testo** si scrive col doppio clic, o con Invio, nel Live
-  delle note. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
+  delle note: solo il testo, senza il titolo, le proprietà, l'icona e la
+  copertina di una pagina. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
   480 px di larghezza, poi va a capo; Ctrl+Invio apre una scheda nuova sotto,
-  Ctrl+Maiusc+Invio a destra con un filo. Una scheda nuova lasciata vuota se
-  ne va uscendo ([la scheda di testo](../reference/canvas-input.md#scrivere-in-una-scheda-di-testo)).
+  Ctrl+Maiusc+Invio a destra con un filo. «Aggiungi testo» (la riga delle
+  opzioni, il menu, Ctrl+/) apre la scheda già in scrittura in un posto libero
+  vicino al centro della vista. Una scheda nuova lasciata vuota se ne va
+  uscendo, anche con Esc, e non lascia niente da annullare. Mentre si scrive,
+  Ctrl+W chiude la linguetta come fuori
+  ([la scheda di testo](../reference/canvas-input.md#scrivere-in-una-scheda-di-testo)).
 - **Una nota** si scrive col doppio clic o con Invio: l'editor Live prende il
   posto della resa, la barra di formato va nella riga delle opzioni e la
   riga del titolo dice «Salvato», «Non salvato», «Cambiato su disco»… come la
@@ -200,8 +223,10 @@ oltre i limiti della domanda, o nel dubbio, si copia. Lo decide il kernel
   misura del testo delle schede scelte, le punte del filo, la Vista; mentre
   si scrive in una scheda, la barra di chi scrive
   ([la riga delle opzioni](../reference/canvas-input.md#la-riga-delle-opzioni)).
-- **La barra della selezione**, sopra le schede scelte a fine gesto: Colore,
-  Collega…, Raggruppa, «Allinea e distribuisci», Apri, Togli dalla lavagna.
+- **La barra della selezione**, sopra le schede scelte: Colore, Collega…,
+  Raggruppa, «Allinea e distribuisci», Apri, Togli dalla lavagna. Sparisce
+  mentre si spostano o si ridimensionano le schede e torna a fine gesto;
+  durante lo zoom segue le schede.
 - **Il navigatore**, in basso a destra: la mappa della lavagna col riquadro di
   ciò che si vede. Un clic ci vola, il trascinamento sposta la vista; sparisce
   quando tutta la lavagna sta già in vista

@@ -1103,8 +1103,11 @@ describe("il titolo sopra la scheda (T39, D-21 a)", () => {
     expect(outside).toMatch(/bottom:\s*100%;/);
     expect(outside).toMatch(/left:\s*0;/);
     expect(outside).toMatch(/right:\s*0;/);
-    // Le schede di testo e i gruppi non cambiano.
-    expect(structure).not.toMatch(/\.canvas-node-(text|group) > \.canvas-node-handle\s*[,{][^}]*position:\s*absolute/);
+    // Le schede di testo non cambiano. La testata di un gruppo sta dentro la
+    // cornice, sopra il corpo (`top: 0`), mai fuori (#411 C-04).
+    expect(structure).not.toMatch(/\.canvas-node-text > \.canvas-node-handle\s*[,{][^}]*position:\s*absolute/);
+    expect(ruleOf(".canvas-node-group > .canvas-node-handle")).toMatch(/top:\s*0;/);
+    expect(ruleOf(".canvas-node-group > .canvas-node-handle")).not.toMatch(/bottom:\s*100%/);
     // Il contenuto è un mondo a sé, sotto l'inchiostro e le maniglie.
     expect(ruleOf(".canvas-node-file > .canvas-card-body,\n.canvas-node-link > .canvas-card-body")).toMatch(/isolation:\s*isolate;/);
   });

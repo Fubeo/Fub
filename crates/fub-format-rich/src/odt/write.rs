@@ -30,7 +30,7 @@ use super::read::{inner, Body, Unit};
 use super::styles::Styles;
 use super::xml::Tree;
 use crate::blob;
-use crate::projection::{Block, Inline, Role};
+use crate::projection::{Block, Cell, Inline, Role};
 use crate::RichError;
 
 mod looks;
@@ -125,20 +125,23 @@ struct Open {
     item: String,
 }
 
-/// Un paragrafo che la shell mostra vuoto in una cella vuota: ProseMirror ne
-/// vuole uno, il file no.
-pub(crate) fn bare_cell(blocks: &[Block]) -> bool {
-    match blocks {
-        [] => true,
-        [Block::Para(p)] => {
-            p.k.is_none()
-                && p.role == Role::Body
-                && p.c
-                    .iter()
-                    .all(|i| matches!(i, Inline::Text { x, .. } if x.is_empty()))
+/// Una cella del file vuota, col paragrafo che la shell vi mostra: ProseMirror
+/// ne vuole uno, il file no, e la cella si riscrive com'era. Una cella nuova
+/// (senza chiave) non è mai nuda: si scrive col suo paragrafo, come la scrive
+/// LibreOffice, e riletta resta uguale.
+pub(crate) fn bare_cell(cell: &Cell) -> bool {
+    cell.k.is_some()
+        && match cell.blocks.as_slice() {
+            [] => true,
+            [Block::Para(p)] => {
+                p.k.is_none()
+                    && p.role == Role::Body
+                    && p.c
+                        .iter()
+                        .all(|i| matches!(i, Inline::Text { x, .. } if x.is_empty()))
+            }
+            _ => false,
         }
-        _ => false,
-    }
 }
 
 /// Le coppie (blocco del file, blocco voluto): uguali, e poi accoppiati per

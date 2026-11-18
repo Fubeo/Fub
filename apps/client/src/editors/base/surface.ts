@@ -22,7 +22,7 @@ import {
   addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
-  type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
+  type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BaseMutation, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
 import { mountBaseToolbar } from "./toolbar";
@@ -31,10 +31,12 @@ import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
 import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
 import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
-import { sameKey, sortedBy } from "./sort";
+import { readOnlyColumn, sameKey, sortedBy } from "./sort";
 import { freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
+import { keyboardPlatform } from "../../ui/commands";
+import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField } from "../../ui/field-history";
 import { writeClipboardText } from "../../platform/clipboard";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
@@ -101,6 +103,11 @@ const SVG = "http://www.w3.org/2000/svg";
 const VISIBLE_STEP = 100;
 const TABLE_ROW_HEIGHT = 38;
 const TABLE_VIEWPORT_HEIGHT = 560;
+/// Una scrittura chiesta che non parte perché la Base è diventata in sola
+/// lettura nel frattempo: il gesto la mostra come ogni altro rifiuto.
+class BaseReadOnly extends Error {
+  constructor() { super(t("base.cell.read_only")); }
+}
 /// Un campo vuoto o corto della tabella resta largo almeno così (lettere).
 const CELL_MIN_CHARS = 6;
 /// Il bordo e il margine interno di un campo della tabella, ai due lati.
@@ -159,6 +166,18 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
   return element;
 }
 
+/// Il posto del fuoco nella tabella, per ritrovarlo dopo un ridisegno: la cella
+/// (la nota e la colonna) o la griglia. Un fuoco fuori dalla tabella non ne ha.
+type TableFocus = { readonly doc: string; readonly column: string } | "grid";
+function tableFocusOf(target: Element | null): TableFocus | null {
+  if (target === null || target.closest(".base-table-viewport") === null) return null;
+  const cell = target.closest<HTMLTableCellElement>("tbody > tr[data-doc] > td[data-cell]");
+  const doc = cell?.parentElement?.dataset.doc;
+  if (cell === null || doc === undefined) return "grid";
+  const column = cell.dataset.cell === "0" ? FILE_COLUMN : cell.querySelector<HTMLElement>("[data-column]")?.dataset.column;
+  return column === undefined ? "grid" : { doc, column };
+}
+
 export function mountBaseSurface(
   profile: string, context: SurfaceMountContext, deps: BaseMountDeps,
   options: {
@@ -174,6 +193,10 @@ export function mountBaseSurface(
   root.className = "base-surface";
   root.dataset.format = BASE_FORMAT;
   root.dataset.theme = currentTheme();
+  // Un clic sulle parti che non si fermano (la riga di stato, un'etichetta) dà
+  // il fuoco al primo antenato focalizzabile, cioè alla Base: così Ctrl+Z ci
+  // arriva (IMP-124). Fuori dall'ordine dei Tab.
+  root.tabIndex = -1;
   // «Raggruppa»: una scelta della superficie, ricordata per vista come le
   // corsie della bacheca; il file `.base` non si riscrive. Sta in «Ordina».
   const groupControls = document.createElement("div");
@@ -219,6 +242,13 @@ export function mountBaseSurface(
   let settleTimer = 0;
   // Gli annunci di «Annulla» che aspettano il loro evento (`UNDO_EVENT_GRACE_MS`).
   const undoGraces = new Map<number, () => void>();
+  // Le scritture di una cella che aspettano il passaggio del fuoco (il `change`
+  // in `editable` le consegna dopo): ciascuna col suo timer. `destroy` le fa
+  // partire subito, non le disdice (IMP-124).
+  const pendingWrites = new Map<number, () => void>();
+  // La scrittura della cella col fuoco, per ciascun campo: `destroy` la chiede
+  // se la modifica non è ancora consegnata (né Invio, né Tab, né clic).
+  const cellSaves = new WeakMap<HTMLInputElement, () => void>();
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
@@ -240,7 +270,6 @@ export function mountBaseSurface(
   let replanWanted = false;
   let pending: AbortController | null = null;
   let tileCleanup: (() => void) | null = null;
-  let writeEpoch = 0;
   let persistQueue = Promise.resolve();
   const localLanes = new Map<string, Set<string>>();
   // I gruppi chiusi di tabella, schede ed elenco, per vista: stato della
@@ -264,6 +293,9 @@ export function mountBaseSurface(
   // La vista è cambiata: il prossimo disegno non legge la tabella di prima,
   // che è ancora lì, e parte dall'alto.
   let scrollReset = false;
+  // Il fuoco nella tabella prima di un ridisegno (`draw`): la tabella nuova lo
+  // riprende, perché il ridisegno toglie il campo col fuoco (IMP-124).
+  let tableFocus: TableFocus | null = null;
   let picked: { anchor: Cell; focus: Cell } | null = null;
   let pickedKeys: { anchor: CellKey; focus: CellKey } | null = null;
   let picking = false;
@@ -547,25 +579,41 @@ export function mountBaseSurface(
     }
   };
   const open = (doc: string): void => { void Promise.resolve(deps.onOpenDocument(doc)).catch(presentError); };
+  // ---- Le scritture che l'utente ha chiesto ------------------------------
+  // Una scrittura chiesta (una cella, una scheda o una colonna della Bacheca,
+  // un giorno del calendario, una barra della linea del tempo) va fino in
+  // fondo, oppure chi l'ha chiesta sa che non è passata (#484). Un evento del
+  // vault, una ricarica, una vista ridisegnata o la Base chiusa non la
+  // fermano: la mutazione preparata è già quella chiesta (nota, proprietà,
+  // valore letto e valore nuovo, li controlla `prepareBaseMutations`), e il
+  // conflitto vero lo dice la revisione attesa del comando, che il gesto
+  // mostra. La ferma soltanto una Base diventata in sola lettura, con un
+  // errore che il gesto mostra come ogni altro rifiuto.
+  const writeProperty = (mutation: BaseMutation): ReturnType<BaseSurfaceDeps["invokeCommand"]> => {
+    if (readOnly) return Promise.reject(new BaseReadOnly());
+    return deps.invokeCommand(mutation.command, mutation.args);
+  };
+  // Un gesto che non ha scritto lo dice dove si vede: nella Base aperta a modo
+  // suo (`onScreen`), a Base chiusa con un avviso.
+  const unwritten = (message: string, onScreen: () => void): void => {
+    if (destroyed) notify(message, "guasto");
+    else onScreen();
+  };
   const editCell = async (row: BaseRow, column: string, value: string | null): Promise<void> => {
-    if (readOnly || !plan || column.startsWith("formula.") || column.startsWith("file.")) return;
+    if (!plan || readOnlyColumn(column)) return;
     const expected = expectedProperty(row, column);
     const view = plan.view;
-    const epoch = writeEpoch;
     const definition = source;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
-      if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
-      for (const mutation of mutations) {
-        if (destroyed || readOnly || writeEpoch !== epoch || source !== definition || plan?.view !== view) return;
-        await deps.invokeCommand(mutation.command, mutation.args);
-      }
+      for (const mutation of mutations) await writeProperty(mutation);
       if (!destroyed) await reload(true);
     } catch (failure) {
-      if (destroyed) return;
+      const message = t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) });
       // No optimistic overwrite. The original observation stays on screen and
       // the next explicit reload will fetch the conflicting authoritative note.
-      if (isErrorKind(failure, "conflict")) {
+      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      else if (isErrorKind(failure, "conflict")) {
         draw();
         status.textContent = errorText(failure);
       } else presentError(failure);
@@ -610,6 +658,22 @@ export function mountBaseSurface(
       notify(t("commands.undo_failed", { reason: errorText(failure) }), "guasto");
     }
   };
+  // Ctrl+Z fuori da un campo di testo chiede lo stesso «Annulla» del vault,
+  // anche quando non c'è niente da disfare: il tasto è della Base (IMP-124).
+  // Dentro un campo resta del campo (`ui/field-history.ts`), tranne la cella
+  // della tabella che non si è ancora scritta: il suo campo non ha niente da
+  // disfare. Ctrl+Maiusc+Z e Ctrl+Y non passano di qui: il vault non ha un
+  // «rifai» da chiamare.
+  const undoKey = (event: KeyboardEvent): void => {
+    if (readOnly || event.defaultPrevented || event.isComposing) return;
+    if (fieldHistoryStep(event, keyboardPlatform(navigator.platform)) !== "undo") return;
+    const untouched = event.target instanceof HTMLElement && event.target.dataset.untouched === "true";
+    if (isPlainTextField(event.target, TEXT_INPUT_TYPES) && !untouched) return;
+    if (event.target instanceof HTMLElement && event.target.isContentEditable) return;
+    event.preventDefault();
+    void undoWrite();
+  };
+  root.addEventListener("keydown", undoKey);
   // Un gesto che scrive il `.base` con un comando (`invoke`, che riceve la
   // revisione da confrontare). Torna quando la barra si riaccende: `true` se
   // il file è stato scritto. `quiet` tace la frase del comando (un passo di
@@ -977,7 +1041,7 @@ export function mountBaseSurface(
     field.className = "base-cell";
     field.dataset.column = column;
     const value = row.values[column];
-    const writable = !readOnly && !column.startsWith("formula.") && !column.startsWith("file.") && value?.kind !== "error";
+    const writable = !readOnly && !readOnlyColumn(column) && value?.kind !== "error";
     if (value?.kind === "bool") {
       const control = document.createElement("input");
       control.type = "checkbox";
@@ -993,7 +1057,35 @@ export function mountBaseSurface(
       // Il valore di partenza: Esc ci torna senza scrivere niente.
       control.defaultValue = control.value;
       control.setAttribute("aria-label", `${row.doc} ${column}`);
-      control.addEventListener("change", () => void editCell(row, column, control.value === "" ? null : JSON.stringify(control.value)));
+      // Una cella non ancora scritta non ha niente da disfare: lì Ctrl+Z è della
+      // Base (`undoKey`), finché non si scrive nel campo.
+      control.dataset.untouched = "true";
+      control.addEventListener("input", () => { delete control.dataset.untouched; }, { once: true });
+      // Invio chiude la modifica: il fuoco passa alla griglia, e la scrittura
+      // parte col `change` che il campo manda perdendo il fuoco. Il fuoco non
+      // cade così sul corpo della pagina, e Ctrl+Z arriva alla Base (IMP-124).
+      control.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.isComposing) control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
+      });
+      // La scrittura della cella. Il `change` arriva mentre il browser sposta il
+      // fuoco (Tab, un clic): la consegna dopo quel passaggio, così il ridisegno
+      // che la chiude non cade sulla cella verso cui il fuoco va (IMP-124).
+      // Chiudendo la Base parte subito (`destroy`), e il `change` che il browser
+      // mandasse dopo non la ripete.
+      let closing = false;
+      const save = (now: boolean): void => {
+        const next = control.value === "" ? null : JSON.stringify(control.value);
+        const write = (): void => { void editCell(row, column, next); };
+        if (now) { write(); return; }
+        const timer = window.setTimeout(() => { pendingWrites.delete(timer); write(); }, 0);
+        pendingWrites.set(timer, write);
+      };
+      cellSaves.set(control, () => {
+        if (control.value === control.defaultValue) return;
+        closing = true;
+        save(true);
+      });
+      control.addEventListener("change", () => { if (!closing) save(false); });
       // Un numero si legge coi separatori della lingua; col fuoco il campo
       // torna al valore com'è, quello che si scrive.
       const shown = shownText(value, resolvedLanguage());
@@ -1096,13 +1188,37 @@ export function mountBaseSurface(
     // «Nuova nota» in fondo alle righe: la stessa cosa di «Nuova» nella barra,
     // che non c'è in sola lettura.
     const addRow = readOnly ? null : newNoteRow(columns);
+    // Il fuoco torna dov'era dopo un ridisegno: sulla cella della stessa nota e
+    // colonna, se la tabella ne ha ancora una, altrimenti sulla griglia (che
+    // resta nella tabella, e lì Ctrl+Z arriva alla Base).
+    const focusKept = (wanted: TableFocus | null): void => {
+      if (wanted === null) return;
+      if (wanted !== "grid") {
+        const row = [...tableBody.querySelectorAll<HTMLTableRowElement>("tr[data-doc]")].find((each) => each.dataset.doc === wanted.doc);
+        const at = wanted.column === FILE_COLUMN ? 0 : gridColumns().indexOf(wanted.column) + 1;
+        const cell = at > 0 || wanted.column === FILE_COLUMN ? row?.querySelector(`td[data-cell="${at}"]`) : null;
+        const control = cell?.querySelector<HTMLElement>("input, button");
+        if (control) {
+          control.focus({ preventScroll: true });
+          if (document.activeElement === control) return;
+        }
+      }
+      viewport.focus({ preventScroll: true });
+    };
     const renderWindow = (top = viewport.scrollTop) => {
       // La finestra è alta quanto il suo contenuto fino al tetto: al primo
       // disegno la tabella è ancora vuota e `clientHeight` ne direbbe solo
       // l'intestazione, così le righe sotto le prime non comparirebbero mai
       // senza uno scorrimento. Le righe da disegnare sono quelle del tetto.
       const range = uniformRowRange(items.length, top, Math.max(viewport.clientHeight, TABLE_VIEWPORT_HEIGHT), TABLE_ROW_HEIGHT);
-      if (!range) { tableBody.replaceChildren(...(addRow ? [addRow] : [])); return; }
+      // Il ridisegno delle righe toglie il campo col fuoco: il fuoco torna su
+      // di lui (la stessa cella), come dopo un ridisegno della tabella intera.
+      const kept = tableFocusOf(document.activeElement);
+      const swap = (...nodes: Node[]): void => {
+        tableBody.replaceChildren(...nodes);
+        if (kept !== null && kept !== "grid") focusKept(kept);
+      };
+      if (!range) { swap(...(addRow ? [addRow] : [])); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
       for (let index = range.start; index <= range.end; index++) {
@@ -1139,7 +1255,7 @@ export function mountBaseSurface(
       }
       if (range.end + 1 < items.length) fragment.append(spacer((items.length - range.end - 1) * TABLE_ROW_HEIGHT));
       if (addRow) fragment.append(addRow);
-      tableBody.replaceChildren(fragment);
+      swap(fragment);
       paint();
     };
     // Le celle scelte si segnano solo fra le righe disegnate: con ventimila
@@ -1267,6 +1383,10 @@ export function mountBaseSurface(
     renderWindow(top);
     viewport.scrollTop = top;
     viewport.scrollLeft = left;
+    // Il fuoco che la tabella di prima aveva torna qui, sulla stessa cella.
+    const wanted = tableFocus;
+    tableFocus = null;
+    focusKept(wanted);
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
     const key = grouping();
@@ -1324,7 +1444,7 @@ export function mountBaseSurface(
       : [...groups].map(([name, members]) => ({ name, members, option: null }));
     const board = document.createElement("div");
     board.className = "base-kanban";
-    const writable = !readOnly && !key.startsWith("formula.") && !key.startsWith("file.");
+    const writable = !readOnly && !readOnlyColumn(key);
     /// Sposta una scheda in una corsia: scrive il valore nella nota, con la
     /// revisione letta (`editCell`).
     const move = (row: BaseRow, name: string) => {
@@ -1382,16 +1502,22 @@ export function mountBaseSurface(
             remember(next);
             localLanes.get(view)?.delete(name);
             saveLanes(view);
+            // Le schede e il file di quando la colonna è stata rinominata:
+            // ognuna si scrive col valore che si vedeva (`writeProperty`).
+            const members = rows.filter((row) => cellText(row.values[key]) === name);
+            const definition = source;
             void (async () => {
               try {
                 await persistQueue;
-                for (const member of rows.filter((row) => cellText(row.values[key]) === name)) {
-                  const [mutation] = await prepareBaseMutations(deps, source, view, [{ doc: member.doc, key, expected: expectedProperty(member, key), value: JSON.stringify(next) }]);
-                  if (destroyed || readOnly || !mutation) return;
-                  await deps.invokeCommand(mutation.command, mutation.args);
+                for (const member of members) {
+                  const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: member.doc, key, expected: expectedProperty(member, key), value: JSON.stringify(next) }]);
+                  for (const mutation of mutations) await writeProperty(mutation);
                 }
-                await reload(true);
-              } catch (failure) { if (!destroyed) { status.textContent = errorText(failure); void reload(true); } }
+                if (!destroyed) await reload(true);
+              } catch (failure) {
+                const message = t("base.lane.rename_failed", { name, next, reason: errorText(failure) });
+                unwritten(message, () => { notice = message; status.textContent = message; void reload(true); });
+              }
             })();
           };
           input.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
@@ -1621,7 +1747,7 @@ export function mountBaseSurface(
   // offre l'annulla del vault.
   const moveNote = async (row: BaseRow, day: IsoDay): Promise<void> => {
     const key = plan?.dateKey;
-    if (!plan || !key || readOnly || moving || destroyed) return;
+    if (!plan || !key || moving || destroyed) return;
     const value = movedDateValue(row.properties[key], day);
     if (value === null) return;
     const view = plan.view;
@@ -1631,20 +1757,24 @@ export function mountBaseSurface(
     notice = null;
     draw();
     try {
-      const [mutation] = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
-      if (destroyed || readOnly || !mutation || source !== definition || plan?.view !== view) return;
-      const outcome = await deps.invokeCommand(mutation.command, mutation.args);
-      if (destroyed) return;
+      const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key, expected: expectedProperty(row, key), value: JSON.stringify(value) }]);
+      let outcome: Awaited<ReturnType<typeof writeProperty>> | undefined;
+      for (const mutation of mutations) outcome = await writeProperty(mutation);
+      // L'avviso è della shell: lo spostamento e il suo annulla si dicono
+      // anche a Base chiusa.
       const undo = outcome?.undo;
       notify(t("base.calendar.moved", { note: name, date: dateFormat(day) }), "info", undo
         ? { label: t("app.undo"), hint: typeof undo.label === "string" ? undo.label : undefined, run: () => void undoNoteMove() }
         : undefined);
     } catch (failure) {
-      if (destroyed) return;
       // Niente è stato scritto: la nota resta dov'era, e il calendario la
-      // rilegge com'è ora.
-      notice = isErrorKind(failure, "conflict") ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
-      if (calendar && row.day) calendar.focus = row.day;
+      // rilegge com'è ora. A Base chiusa non c'è un calendario che la
+      // mostri: l'avviso dice il motivo.
+      const message = isErrorKind(failure, "conflict") && !destroyed ? t("base.calendar.conflict", { note: name }) : t("base.calendar.failed", { note: name, reason: errorText(failure) });
+      unwritten(message, () => {
+        notice = message;
+        if (calendar && row.day) calendar.focus = row.day;
+      });
     } finally {
       moving = false;
       if (!destroyed) await reload(false);
@@ -1668,7 +1798,7 @@ export function mountBaseSurface(
     const today = localDay();
     calendar ??= calendarState(today);
     const key = plan?.dateKey ?? null;
-    const writableKey = key !== null && !key.startsWith("file.") && !key.startsWith("formula.");
+    const writableKey = key !== null && !readOnlyColumn(key);
     body.append(renderCalendar({
       rows: page, state: calendar, locale: resolvedLanguage(), today, dateKey: key,
       title: noteTitle,
@@ -1690,7 +1820,7 @@ export function mountBaseSurface(
   // seconda non passa, la prima si disfa: la barra non resta a metà. Una
   // sola «Annulla» disfa tutte e due.
   const moveSpan = async (row: TimelineRow, dates: { start?: IsoDay; end?: IsoDay }): Promise<void> => {
-    if (!plan || readOnly || moving || destroyed) return;
+    if (!plan || moving || destroyed) return;
     const keys = { start: plan.startKey, end: plan.endKey };
     const edits: { doc: string; key: string; expected: BaseExpected; value: string }[] = [];
     for (const edge of ["start", "end"] as const) {
@@ -1723,25 +1853,23 @@ export function mountBaseSurface(
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, edits);
       for (const mutation of mutations) {
-        if (destroyed || readOnly || source !== definition || plan?.view !== view) break;
-        const outcome = await deps.invokeCommand(mutation.command, mutation.args);
+        const outcome = await writeProperty(mutation);
         written++;
         if (!outcome?.undo) undoable = false;
         else if (typeof outcome.undo.label === "string") hint ??= outcome.undo.label;
       }
-      if (destroyed || written === 0) return;
-      // La vista è cambiata fra le due scritture: la barra non resta a metà.
-      if (written < mutations.length) { await undoNoteMove(written, true); return; }
+      // L'avviso è della shell: lo spostamento e il suo annulla si dicono
+      // anche a Base chiusa.
       const count = written;
       notify(said, "info", undoable
         ? { label: t("app.undo"), hint, run: () => void undoNoteMove(count) }
         : undefined);
     } catch (failure) {
-      if (destroyed) return;
-      // Ciò che è già scritto si disfa, perché la barra non resti a metà;
-      // poi la linea del tempo rilegge la nota com'è.
+      // Ciò che è già scritto si disfa, anche a Base chiusa, perché la barra
+      // non resti a metà; poi la linea del tempo rilegge la nota com'è.
       if (written > 0) await undoNoteMove(written, true);
-      notice = isErrorKind(failure, "conflict") ? t("base.timeline.conflict", { note: name }) : t("base.timeline.failed", { note: name, reason: errorText(failure) });
+      const message = isErrorKind(failure, "conflict") && !destroyed ? t("base.timeline.conflict", { note: name }) : t("base.timeline.failed", { note: name, reason: errorText(failure) });
+      unwritten(message, () => { notice = message; });
     } finally {
       moving = false;
       if (!destroyed) await reload(false);
@@ -1751,7 +1879,7 @@ export function mountBaseSurface(
     const today = localDay();
     timeline ??= timelineState(today, firstWeekday(resolvedLanguage()));
     const startKey = plan?.startKey ?? null, endKey = plan?.endKey ?? null;
-    const writableKey = (key: string | null): key is string => key !== null && !key.startsWith("file.") && !key.startsWith("formula.");
+    const writableKey = (key: string | null): key is string => key !== null && !readOnlyColumn(key);
     body.append(renderTimeline({
       rows: page, undated, state: timeline, locale: resolvedLanguage(), today, startKey, endKey,
       title: noteTitle,
@@ -1792,6 +1920,9 @@ export function mountBaseSurface(
     if (scrollReset) tableScroll = { top: 0, left: 0 };
     else if (shown) tableScroll = { top: shown.scrollTop, left: shown.scrollLeft };
     scrollReset = false;
+    // Il fuoco nella tabella (una cella, o la griglia) lo perde la tabella che
+    // si disegna: `drawTable` lo riprende dov'era.
+    tableFocus = tableFocusOf(document.activeElement);
     body.replaceChildren();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
@@ -1877,7 +2008,6 @@ export function mountBaseSurface(
   // generation/AbortController discard stale in-flight derivations.
   let refreshQueued = false;
   const memberChanged = () => {
-    writeEpoch++;
     if (destroyed || !source || refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(() => {
@@ -1981,7 +2111,7 @@ export function mountBaseSurface(
     const column = under.closest<HTMLElement>(".base-cell[data-column]")?.dataset.column;
     if (column !== undefined) {
       const value = cellText(row.values[column]);
-      const writable = !readOnly && !column.startsWith("formula.") && !column.startsWith("file.") && row.values[column]?.kind !== "error";
+      const writable = !readOnly && !readOnlyColumn(column) && row.values[column]?.kind !== "error";
       items.unshift(
         { id: "base.cell.copy", label: t("base_menu.cell.copy"), enabled: value !== "", run: () => copy(value) },
         { id: "base.cell.search", label: t("base_menu.cell.search"), enabled: value !== "", run: () => searchFor(value) },
@@ -2012,7 +2142,7 @@ export function mountBaseSurface(
     cellSelection,
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
-      if (next) { writeEpoch++; toolbar.closePopover(); }
+      if (next) toolbar.closePopover();
       readOnly = next;
       root.dataset.readOnly = String(next);
       pushModel();
@@ -2020,6 +2150,14 @@ export function mountBaseSurface(
     },
     setTheme(theme: Theme) { root.dataset.theme = theme; },
     destroy() {
+      // Chiudere la Base non butta una scrittura: la cella col fuoco con una
+      // modifica non ancora consegnata parte ora, e partono ora anche quelle
+      // che aspettavano il passaggio del fuoco. Prima di smontare qualsiasi
+      // cosa, perché la scrittura non dipende dal DOM (IMP-124).
+      const focused = document.activeElement;
+      if (focused instanceof HTMLInputElement) cellSaves.get(focused)?.();
+      for (const [timer, write] of pendingWrites) { window.clearTimeout(timer); write(); }
+      pendingWrites.clear();
       closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
       window.clearTimeout(settleTimer);
@@ -2029,7 +2167,7 @@ export function mountBaseSurface(
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }
       downloads.clear();
-      stopLanguage(); root.remove();
+      stopLanguage(); root.removeEventListener("keydown", undoKey); root.remove();
     },
   };
 }

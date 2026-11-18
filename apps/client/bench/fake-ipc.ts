@@ -38,6 +38,7 @@
 // `appearance.theme` fra le impostazioni che serve.
 import { COMPONENT_SCENARIO, createFakeHost, type DrawingFake, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
+import { pageName } from "../src/rules/mirrored";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
 import RICH_BENCH from "../src/__fixtures__/rich-bench.json";
@@ -49,6 +50,7 @@ import type {
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
+  GridBytesSession,
   GridBytesWindow,
   GridCommand,
   GridCommandOutcome,
@@ -59,11 +61,13 @@ import type {
   JobStatus,
   KnownVault,
   Organization,
+  PluginError,
   QueryExpr,
   SettingEntry,
   Span,
   UiNode,
   ViewSpec,
+  ViewUpdate,
 } from "../src/host/contract";
 import { inShellLanguage } from "./fake-english";
 import { gridJournalText } from "../src/state/grid-journal";
@@ -72,6 +76,7 @@ import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./con
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
+import { treeFixture, type TreeFixture } from "./vault-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import {
   craftSceneCase,
@@ -94,6 +99,7 @@ import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
+import { GiroWorkbook, giroResources } from "./giro-fixture";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -122,6 +128,36 @@ type ConnectorsBenchMetadata = Readonly<{
     digest: string;
   }> | null;
 }>;
+
+/// Ciò che il banco dell'albero (`tree.mjs`) legge del vault che apre: le
+/// cartelle, la catena, il nome lungo e la nota da cercare, e quando ogni
+/// risposta dell'indice è arrivata al client.
+type TreeBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    total: number;
+    folders: TreeFixture["folders"];
+    big: string;
+    chain: TreeFixture["chain"];
+    deepest: string;
+    longName: string;
+    target: string;
+    digest: string;
+  }> | null;
+  arrivals: TreeArrival[];
+}>;
+
+/// Una risposta dell'indice durante il banco dell'albero: di che specie è la
+/// domanda, di quale cartella (`scope`, `null` se non ne ha una), e l'ora della
+/// domanda e quella della risposta, in millisecondi dall'avvio della pagina. Il
+/// finto risponde sul thread della pagina, quindi il suo tempo sta dentro i
+/// fotogrammi: il banco lo conta a parte.
+type TreeArrival = {
+  kind: IndexQuery["kind"];
+  scope: string | null;
+  descendants: boolean | null;
+  requestedAt: number;
+  answeredAt: number;
+};
 
 /// Ciò che il banco delle scene grandi (`large.mjs`) legge del disegno che
 /// apre: dove sta, quanto è grande, il rettangolo da scegliere.
@@ -252,6 +288,30 @@ globalThis.__fubLargeBench = Object.freeze({
         digest: LARGE.digest,
       })
     : null,
+});
+
+// `?vault=5000` mette nel vault i cinquemila file del banco dell'albero
+// (`vault-fixture.ts`), e basta: né il corpus né la scenografia, perché
+// l'albero conta i file del vault e non deve contarne altri. `TREE_ARRIVALS`
+// dice quando ogni risposta dell'indice arriva al client: il primo disegno si
+// misura da lì.
+const TREE: TreeFixture | null = params.get("vault") === "5000" ? treeFixture() : null;
+const TREE_ARRIVALS: TreeArrival[] = [];
+
+globalThis.__fubTreeBench = Object.freeze({
+  fixture: TREE
+    ? Object.freeze({
+        total: TREE.total,
+        folders: TREE.folders,
+        big: TREE.big,
+        chain: TREE.chain,
+        deepest: TREE.deepest,
+        longName: TREE.longName,
+        target: TREE.target,
+        digest: TREE.digest,
+      })
+    : null,
+  arrivals: TREE_ARRIVALS,
 });
 
 // `?live=<caso>` mette nel vault la nota delle scene della Live
@@ -744,6 +804,26 @@ if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE 
   throw new RangeError("albero is a vault of its own");
 }
 
+/// I finti del gruppo «editor» del giro (`?giro=editor`, vedi
+/// `giro-fixture.ts`): il manuale in PDF di quattro pagine e, con
+/// `?workbook=1`, la cartella che risponde alla formula e all'ordine che il
+/// giro chiede e ricorda che cosa il salvataggio ha innestato, al posto della
+/// modifica registrata delle scene.
+const GIRO_EDITOR = params.get("giro") === "editor";
+if (GIRO_EDITOR && (GRID_CASE !== null || RESULT_CASE !== null)) throw new RangeError("giro=editor has a workbook of its own");
+const GIRO_WORKBOOK = GIRO_EDITOR && WORKBOOK_DOC !== null
+  ? new GiroWorkbook(
+    WORKBOOK_DOC,
+    // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
+    BENCH_SESSION as unknown as GridBytesSession,
+    XLSX_GRID.windows.find((window) => window.sheet === BENCH_SESSION.active) as unknown as GridBytesWindow,
+    // Il finto di sotto e il suo registro nascono più giù: si leggono alla
+    // prima chiamata.
+    { openGridBytes: (...args) => behind.openGridBytes(...args) },
+    (call) => host.calls.push(call),
+  )
+  : null;
+
 /// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
 /// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
 const TRASH_FULL = params.get("cestino") === "3";
@@ -1001,6 +1081,26 @@ const BENCH_COMMANDS: CommandSpec[] = [
   command("stats.open", "Statistiche del documento", "Parole, caratteri, collegamenti", null),
 ];
 
+/// Con `?nuovo=tutto` il kernel finto dichiara i comandi che creano un file di
+/// ogni tipo e la nota da un modello, come l'host con tutte le feature: il menu
+/// «Nuovo» del «+» (S34) ha tutte le sue voci. Senza, ha la nota e la cartella.
+/// I comandi che creano un file chiedono il nome e la cartella, come quelli
+/// veri: scelti dal menu aprono il modulo della palette, non un'invocazione.
+const NEW_FILE_COMMANDS: CommandSpec[] = params.get("nuovo") === "tutto"
+  ? [
+    newFileCommand("document.create", "Nuovo documento", "Crea un documento di Word vuoto e lo apre"),
+    newFileCommand("sheet.create", "Nuovo foglio", "Crea una cartella di Excel vuota e la apre"),
+    newFileCommand("drawing.create", "Nuovo disegno", "Crea un disegno, vuoto o da un modello, e lo apre"),
+    newFileCommand("canvas.create", "Nuova lavagna", "Crea una lavagna vuota e la apre"),
+    command("note.from_template", "Nota da un modello", "Crea una nota da un modello del vault", null, true),
+  ]
+  : [];
+
+function newFileCommand(id: string, title: string, description: string): CommandSpec {
+  const text = (name: string, label: string) => ({ name, title: label, description: "", kind: { kind: "text" as const }, required: false });
+  return { ...command(id, title, description, null, true), params: [text("name", "Nome"), text("folder", "Cartella")] };
+}
+
 /// La barra di formattazione la fotografa il telefono (`mobile.html`), dove
 /// sta sopra la tastiera, e la finestra principale con `?formatbar=1`. Nelle
 /// altre pagine i comandi sono quelli del banco, e le loro foto con loro.
@@ -1165,6 +1265,26 @@ const SETTINGS: SettingEntry[] = [
       program_writable: false,
     },
     value: "comfortable",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.bars",
+      label: "Le barre",
+      description: "Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "light",
+        options: [
+          { value: "light", label: "Chiare" },
+          { value: "marked", label: "Marcate" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "light",
     source: "default",
   },
   ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
@@ -2376,7 +2496,7 @@ const TREES: Record<string, UiNode> = {
 // ---------------------------------------------------------------------------
 
 const options: Options = {
-  file: NEW_VAULT ? {} : {
+  file: TREE !== null ? TREE.files : NEW_VAULT ? {} : {
     ...CORPUS,
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
@@ -2391,22 +2511,28 @@ const options: Options = {
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
     ...(BASE === null ? {} : BASE.files),
   },
-  resources: NEW_VAULT ? {} : {
+  resources: TREE !== null || NEW_VAULT ? {} : {
     ...RESOURCES,
     ...(PHOTO === null ? {} : photoResources(PHOTO)),
     ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
     ...(RAW_SCENE === null ? {} : rawSceneResources(RAW_SCENE)),
     ...(PDF_SCENE === null ? {} : pdfSceneResources()),
     ...(TREE_SCENE === null ? {} : treeSceneResources()),
+    ...(GIRO_EDITOR ? giroResources() : {}),
   },
   root: ROOT,
   view: VIEWS,
   commands: [
-    // Con la barra e il «/» insieme («+ Inserisci» della barra) le voci del
-    // «/» si aggiungono a quelle della barra, senza ripeterne gli id.
-    ...(ON_MOBILE
-      ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS, ...SLASH_COMMANDS.filter((spec) => !FORMAT_COMMANDS.some((format) => format.id === spec.id))]
-      : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
+    // Con `?formatbar=1&slash=1` ci sono tutti e due, come nell'host vero
+    // (il giro sul banco, `bench/giro/scrivere.mjs`, e «+ Inserisci» della
+    // barra): le voci della barra restano nel loro ordine, ma una che c'è
+    // anche nel «/» è quella del «/», che porta anche la superficie `slash`;
+    // le altre voci del «/» vengono dopo, senza ripetere gli id. Da soli,
+    // ognuno dà ciò che dava.
+    ...BENCH_COMMANDS,
+    ...NEW_FILE_COMMANDS,
+    ...(ON_MOBILE ? FORMAT_COMMANDS.map((format) => SLASH_COMMANDS.find((slash) => slash.id === format.id) ?? format) : []),
+    ...(ON_MOBILE ? SLASH_COMMANDS.filter((slash) => !FORMAT_COMMANDS.some((format) => format.id === slash.id)) : SLASH_COMMANDS),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
@@ -2424,7 +2550,7 @@ const options: Options = {
     } as GridBytesFake : {
       surface: XLSX_GRID.surface,
       session: BENCH_SESSION,
-      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window, ...(GIRO_WORKBOOK?.windows ?? [])].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
       ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
@@ -2478,7 +2604,9 @@ else if (AVVIO === "guasto") host.fault("initialVault", "il ponte non risponde")
 /// guidarlo da fuori: emettere un evento del kernel, guastare una porta,
 /// frenarla. Sono i tre gesti che una scena non può fare cliccando — un avviso
 /// non ha un bottone che lo produca — e senza di loro tre scene su diciotto non
-/// esisterebbero.
+/// esisterebbero. Il quarto, la scrittura da fuori, è del giro sul banco: un
+/// evento emesso da qui ha l'origine di una scrittura della shell, e la shell
+/// lo prenderebbe per l'eco di un suo salvataggio; quello del watcher no.
 ///
 /// Sta su `window` e non in un `export` perché chi la chiama è Playwright, cioè
 /// codice che non condivide il grafo dei moduli con la pagina.
@@ -2486,12 +2614,17 @@ declare global {
   var __fubGraphBench: GraphBenchMetadata;
   var __fubConnectorsBench: ConnectorsBenchMetadata;
   var __fubLargeBench: LargeBenchMetadata;
+  var __fubTreeBench: TreeBenchMetadata;
   var __fubLiveBench: Readonly<{ doc: string | null; cursor: number | null; head: number | null }>;
   interface Window {
     bench: {
       emit: typeof host.emit;
       fault: typeof host.fault;
       throttle: typeof host.throttle;
+      /// Riscrive un file come l'altra applicazione o il sync: i byte
+      /// cambiano e l'evento arriva dal watcher (il giro sul banco,
+      /// `bench/giro/guasti.mjs`).
+      writeFromOutside: typeof host.writeFromOutside;
       calls: typeof host.calls;
       light: "dark" | "light";
       /// Solo nello Scrittoio: dichiara le voci di un tema (vedi sotto).
@@ -2527,6 +2660,7 @@ globalThis.window.bench = {
       release();
     };
   },
+  writeFromOutside: host.writeFromOutside,
   calls: host.calls,
   light: LIGHT,
 };
@@ -2617,6 +2751,77 @@ if (ON_SHELL) {
 
 const behind = host.module.api;
 
+/// **Il cestino vero del finto**, fuori dalla scena dei tre file: ciò che il
+/// finto host ha cestinato (`note.trash`) nella forma del provider `trash`
+/// (fub-features, `trash.rs`), una riga per voce col nome della nota e
+/// «Ripristina», e sotto «Svuota il cestino». Serve al giro sul banco
+/// (`bench/giro/guasti.mjs`), che cestina una nota, la ritrova qui e la
+/// rimette. Il finto non sa quando una voce è stata cestinata: la riga non ha
+/// la data che il provider scrive sotto il nome. Vuoto, il pannello resta lo
+/// stato vuoto della scenografia, quello che le foto conoscono.
+function liveTrash(): UiNode | undefined {
+  if (TRASH_FULL) return undefined;
+  const entries = host.trash();
+  if (entries.length === 0) return undefined;
+  return {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      {
+        node: "list",
+        items: entries.map(({ id, original }): UiNode => ({
+          node: "stack",
+          key: id,
+          dir: "row",
+          gap: 1,
+          children: [
+            { node: "list_item", title: pageName(original), subtitle: null, action: null, selected: false },
+            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+          ],
+        })),
+      },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+    ],
+  };
+}
+
+/// I comandi che possono cambiare il cestino del finto.
+const TRASH_COMMANDS: ReadonlySet<string> = new Set(["note.trash", "trash.os", "folder.trash", "trash.restore", "trash.empty"]);
+
+/// Il cestino del finto in una riga confrontabile: cambia solo se è cambiato
+/// il cestino.
+function trashFingerprint(): string {
+  return JSON.stringify(host.trash());
+}
+
+/// Un'azione sul cestino vero del finto: «Ripristina» passa dal comando
+/// `trash.restore` e porta alla nota dove il comando dice di averla rimessa,
+/// come il provider; «Svuota» dal comando `trash.empty`. `undefined` se il
+/// cestino è quello della scenografia.
+///
+/// Il kernel non rimette una nota sopra un file che occupa il suo nome
+/// (`already_exists`, e il provider chiede un nome libero); il finto invece
+/// scriverebbe sopra. Il banco non rischia la copia: col nome occupato
+/// l'azione fallisce come il comando vero, e niente si sovrascrive.
+async function liveTrashAction(action: string, payload: unknown): Promise<ViewUpdate | undefined> {
+  if (TRASH_FULL || host.trash().length === 0) return undefined;
+  if (action === "restore") {
+    const { entry, original } = payload as { entry: string; original: string };
+    if (host.files()[original] !== undefined) {
+      throw { kind: "already_exists", message: `«${pageName(original)}» c'è già: il cestino non la rimette sopra un'altra nota.` } satisfies PluginError;
+    }
+    const outcome = await api.invokeCommand("trash.restore", { entry });
+    const back = outcome.effect.kind === "navigate" ? outcome.effect.doc : original;
+    return { kind: "navigate", doc_id: back };
+  }
+  if (action === "empty") {
+    await api.invokeCommand("trash.empty");
+    return { kind: "replace", root: liveTrash() ?? TREES.trash! };
+  }
+  return undefined;
+}
+
 /// Le specie di query che rispondono testo dell'host: le altre portano il
 /// vault, che non si traduce.
 const HOST_TEXT: ReadonlySet<IndexQuery["kind"]> = new Set(["settings", "jobs"]);
@@ -2683,6 +2888,24 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
   return { snippet, highlights };
 }
 
+/// Ogni risposta dell'indice, per `tree.mjs`: la domanda e la risposta, con
+/// l'ora di ciascuna. Senza il banco dell'albero la risposta passa com'è, e non
+/// si registra niente.
+async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Promise<IndexResult> {
+  if (TREE === null) return answer();
+  const requestedAt = performance.now();
+  const result = await answer();
+  const scope = q.kind === "folders" ? q.under : q.kind === "entries" ? q.within : null;
+  TREE_ARRIVALS.push({
+    kind: q.kind,
+    scope: scope?.path ?? null,
+    descendants: scope?.descendants ?? null,
+    requestedAt,
+    answeredAt: performance.now(),
+  });
+  return result;
+}
+
 export const api: typeof host.module.api = {
   ...behind,
   ...(SIZES_ANSWER || CELLS_ANSWER ? {
@@ -2735,9 +2958,20 @@ export const api: typeof host.module.api = {
     // Il gesto della barra della Base delle scene `base-*`.
     const based = BASE?.invoke(id, args);
     if (based) return based as ReturnType<typeof behind.invokeCommand>;
-    return behind.invokeCommand(id, args, ...rest);
+    const trashBefore = TRASH_COMMANDS.has(id) ? trashFingerprint() : null;
+    const outcome = await behind.invokeCommand(id, args, ...rest);
+    // Dopo un comando che cambia il cestino il kernel vero rifà l'indice, e il
+    // provider `trash` si fa ridisegnare a ogni giro dell'indice (`refresh`
+    // di `trash.rs`). Il finto l'indice non l'ha: i due eventi partono qui,
+    // perché l'albero ritrovi la nota rimessa e il pannello si aggiorni. Solo
+    // se il cestino è cambiato davvero: le altre scene non si ridisegnano.
+    if (trashBefore !== null && trashFingerprint() !== trashBefore) {
+      host.emit({ type: "index_updated" });
+      host.emit({ type: "view_invalidated", view: "trash", instance: null });
+    }
+    return outcome;
   },
-  queryIndex: async (q) => {
+  queryIndex: (q) => timedQuery(q, async () => {
     // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
     // il finto non sa leggere le proprietà, e del banco ce l'ha solo la nota
     // della Live delle scene della pagina.
@@ -2790,12 +3024,12 @@ export const api: typeof host.module.api = {
       }
     }
     return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
-  },
+  }),
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
   listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),
   renderView: (view, instance, params) => {
     if (view === "desk" && DESK) return Promise.resolve(DESK.tree(instance ?? "main"));
-    const tree = treeOf(view);
+    const tree = (view === "trash" ? liveTrash() : undefined) ?? treeOf(view);
     return tree ? Promise.resolve(tree) : behind.renderView(view, instance, params);
   },
   // Un'azione di una view della scenografia non fa niente e **lo dice
@@ -2804,15 +3038,29 @@ export const api: typeof host.module.api = {
   // far morire una foto. Tranne il salto dell'indice: come il provider vero,
   // segna scelto il titolo a cui si è andati, e il banco del moto vede la
   // sagoma della voce scelta scorrere.
-  viewAction: (view, instance, params, action, payload, fields) => {
-    if (view === "desk" && DESK) return Promise.resolve({ kind: "replace" as const, root: DESK.act(instance ?? "main", action, payload) });
+  viewAction: async (view, instance, params, action, payload, fields) => {
+    if (view === "desk" && DESK) return { kind: "replace" as const, root: DESK.act(instance ?? "main", action, payload) };
+    const live = view === "trash" ? await liveTrashAction(action, payload) : undefined;
+    if (live) return live;
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
     const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
-    return Promise.resolve({ kind: "replace" as const, root });
+    return { kind: "replace" as const, root };
   },
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
+  // La cartella del gruppo «editor» del giro (`giro-fixture.ts`): risponde
+  // lei alla formula e all'ordine, e sa che cosa il salvataggio ha innestato.
+  ...(GIRO_WORKBOOK === null ? {} : {
+    openGridBytes: (...args: Parameters<typeof behind.openGridBytes>) => GIRO_WORKBOOK.openGridBytes(...args),
+    applyGridBytes: (...args: Parameters<typeof behind.applyGridBytes>) => GIRO_WORKBOOK.applyGridBytes(...args),
+    gridBytesCommand: (...args: Parameters<typeof behind.gridBytesCommand>) => GIRO_WORKBOOK.gridBytesCommand(...args),
+    writeDocument: async (...args: Parameters<typeof behind.writeDocument>) => {
+      const revision = await behind.writeDocument(...args);
+      GIRO_WORKBOOK.saved(args[0], args[1]);
+      return revision;
+    },
+  }),
 };
 
 export const onKernelEvent = host.module.onKernelEvent;

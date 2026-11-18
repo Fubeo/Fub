@@ -49,7 +49,8 @@ import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
-import { cellSelectionPlugin } from "./cell-selection";
+import { acrossCells, cellSelectionPlugin } from "./cell-selection";
+import { SHAPE_FREE, tableShapeGuard } from "./table-structure";
 import { GO_TO, lineBoxes, RichMotion, type Rect } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -231,6 +232,7 @@ export class RichEngine {
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
       history(),
+      tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
       findPlugin,
@@ -258,8 +260,10 @@ export class RichEngine {
 
   #keys(): Record<string, (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean> {
     const keys: Record<string, (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean> = {
-      Enter: splitParagraph,
-      "Shift-Enter": insertBreak("\n"),
+      // Su una selezione che esce da una cella, prima lo svuotamento di Canc:
+      // la cancellazione di ProseMirror unirebbe le celle.
+      Enter: chainCommands(acrossCells(splitParagraph), splitParagraph),
+      "Shift-Enter": chainCommands(acrossCells(insertBreak("\n")), insertBreak("\n")),
       "Mod-Enter": insertBreak("\u000c"),
       Backspace: chainCommands(backspace, deleteChar(-1)),
       Delete: chainCommands(deleteForward, deleteChar(1)),
@@ -366,7 +370,7 @@ export class RichEngine {
       this.#notify();
       return;
     }
-    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true));
+    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true).setMeta(SHAPE_FREE, true));
     this.#notify();
   }
 

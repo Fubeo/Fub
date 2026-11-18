@@ -124,6 +124,13 @@ non deve poter spegnere gli altri. Le forme, i rifiuti tipati, l'avviso del
 rimontaggio e lo scenario dell'host finto sono nel
 [contratto dei componenti](components-contract.md).
 
+## Temi
+
+I temi passano da porte loro: `list_themes` e `read_theme` per leggerli,
+l'installazione da una cartella, la cartella collegata in modalità
+sviluppatore con l'evento `fub://theme-changed`, e il catalogo firmato. Forme,
+esiti e limiti sono nelle [porte dei temi](theme-ipc.md).
+
 ## Apri con e anteprime Craft
 
 Tre comandi dell'app servono «Apri con» un'app Craft e l'anteprima fatta dalla

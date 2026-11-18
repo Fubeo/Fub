@@ -38,6 +38,8 @@ pub const HISTORY_VIEW: &str = "history";
 pub const VERSION_RESTORE: &str = "version.restore";
 /// L'id del comando che svuota la cronologia del vault intero.
 pub const VERSION_CLEAR: &str = "version.clear";
+/// L'id del comando che conserva un testo nella cronologia, con una nota.
+pub const VERSION_KEEP: &str = "version.keep";
 
 /// Mostra il contenuto di una versione; l'istante sta nel payload.
 pub(super) const A_PREVIEW: &str = "preview";
@@ -65,10 +67,53 @@ const PREVIEW_STATE: &str = "preview";
 const COMPARE_STATE: &str = "compare";
 /// L'istante di cui si sta chiedendo il ripristino, finché non si risponde.
 const CONFIRM_STATE: &str = "restore_confirm";
+/// Disfa l'ultimo ripristino fatto da questo pannello.
+const A_UNDO_RESTORE: &str = "undo_restore";
+/// L'annullamento dell'ultimo ripristino, finché vale ([`RestoreUndo`]).
+const UNDO_STATE: &str = "restore_undo";
+
+/// Ciò che il pannello ricorda dopo un «Sì, ripristina» per offrire
+/// «Annulla».
+///
+/// Non è un secondo meccanismo di annullamento: [`undo`](RestoreUndo::undo) è
+/// l'[`Undo`](fub_abi::command::Undo) che `version.restore` ha dichiarato,
+/// tale e quale, e «Annulla» ne esegue i passi con `run_command`, come farebbe
+/// chi annulla dalla pila. Il pannello lo tiene perché la pila del kernel non
+/// arriva a chi ha cliccato qui (vedi [`A_RESTORE`]).
+///
+/// [`revision`](RestoreUndo::revision) è la revisione della nota **subito
+/// dopo** il ripristino: l'offerta vale finché la nota è quella. Una scrittura
+/// dopo — una battuta, un altro ripristino, un file cambiato da fuori — la
+/// toglie, perché «com'era prima del ripristino» non sarebbe più il contrario
+/// dell'ultima cosa successa.
+#[derive(Serialize, Deserialize)]
+struct RestoreUndo {
+    doc: String,
+    ts: u64,
+    revision: String,
+    undo: fub_abi::command::Undo,
+}
+
+impl RestoreUndo {
+    /// L'offerta ricordata, se è di `doc` e la nota non è cambiata da allora.
+    fn current(doc: &DocId, host: &dyn ReadApi) -> Result<Option<Self>, PluginError> {
+        let Some(raw) = host.view_state(UNDO_STATE)? else {
+            return Ok(None);
+        };
+        let Ok(offer) = serde_json::from_value::<RestoreUndo>(raw) else {
+            return Ok(None);
+        };
+        if offer.doc != doc.as_str() {
+            return Ok(None);
+        }
+        let now = host.document_revision(doc).ok().map(|revision| revision.0);
+        Ok((now.as_deref() == Some(offer.revision.as_str())).then_some(offer))
+    }
+}
 
 /// Le versioni di un documento secondo la voce già caricata dell'indice.
 fn versions_of_docs(doc: Option<&DocVersions>) -> Vec<VersionRef> {
-    doc.map(|d| d.versions.iter().rev().copied().collect())
+    doc.map(|d| d.versions.iter().rev().cloned().collect())
         .unwrap_or_default()
 }
 
@@ -86,12 +131,12 @@ pub(super) fn version_source_doc(
         ))
     })?;
     let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
-    read_snapshot(&path, *version, host)
+    read_snapshot(&path, version, host)
 }
 
 pub(super) fn read_snapshot(
     path: &str,
-    version: VersionRef,
+    version: &VersionRef,
     host: &dyn ReadApi,
 ) -> Result<Vec<u8>, PluginError> {
     let bytes = host.data_read(path)?.ok_or_else(|| {
@@ -112,9 +157,12 @@ pub struct HistoryView;
 impl ViewProvider for HistoryView {
     fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
         ViewInterests {
-            // Una versione nasce da una scrittura, e da niente altro: la
-            // maschera è più stretta di quella dei pannelli che leggono
-            // l'indice.
+            // Una fotografia nasce da una scrittura: la maschera è più
+            // stretta di quella dei pannelli che leggono l'indice. Non basta
+            // da sola — un testo conservato non scrive la nota, e la
+            // fotografia arriva dopo il suo `document-changed` — e per questo
+            // lo store, a scrittura riuscita, invita anche a ridisegnare
+            // ([`history_changed`]).
             refresh: EventMask::of([
                 EventKind::DocumentChanged,
                 EventKind::EntryChanged,
@@ -240,10 +288,50 @@ impl ViewProvider for HistoryView {
                 };
                 host.set_view_state(PREVIEW_STATE, None)?;
                 host.set_view_state(COMPARE_STATE, None)?;
-                host.run_command(
+                host.set_view_state(UNDO_STATE, None)?;
+                let outcome = host.run_command(
                     VERSION_RESTORE,
                     serde_json::json!({ DOC: doc.as_str(), TS: ts }),
                 )?;
+                // L'annullamento che il comando ha dichiarato, se l'ha
+                // dichiarato: senza una preimmagine leggibile non promette
+                // niente, e il pannello non offre niente.
+                if let Some(undo) = outcome.undo.filter(|undo| !undo.is_empty()) {
+                    let revision = host.document_revision(&doc)?.0;
+                    let offer = RestoreUndo {
+                        doc: doc.to_string(),
+                        ts,
+                        revision,
+                        undo,
+                    };
+                    host.set_view_state(
+                        UNDO_STATE,
+                        Some(
+                            serde_json::to_value(offer)
+                                .map_err(|error| PluginError::Internal(error.to_string().into()))?,
+                        ),
+                    )?;
+                }
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // «Annulla» dopo un ripristino: i passi dell'`Undo` che
+            // `version.restore` ha dichiarato, eseguiti come li eseguirebbe la
+            // pila. Un'offerta scaduta (la nota è cambiata) non fa niente:
+            // l'albero l'aveva già tolta, e questo è il clic arrivato prima del
+            // ridisegno.
+            A_UNDO_RESTORE => {
+                let Some(doc) = same_notes(&action, host) else {
+                    return Ok(ViewUpdate::None);
+                };
+                let offer = RestoreUndo::current(&doc, host)?;
+                host.set_view_state(UNDO_STATE, None)?;
+                if let Some(offer) = offer {
+                    for step in offer.undo.steps {
+                        if let fub_abi::command::UndoStep::Command { command, args } = step {
+                            host.run_command(&command, args)?;
+                        }
+                    }
+                }
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
             _ => Ok(ViewUpdate::None),
@@ -297,19 +385,46 @@ pub(super) fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         .view_state(PREVIEW_STATE)?
         .and_then(|v| v.as_u64())
         .filter(|ts| versions.iter().any(|v| v.ts == *ts));
+    // La versione attuale è l'ultima fotografia del disco, non l'ultima
+    // versione: un testo conservato più recente non è mai stato la nota.
+    let on_disk = entry.latest_on_disk().map(|v| v.ts);
     let mut children = vec![UiNode::text(Text::message(
         COUNT,
         vec![Arg::int("count", versions.len() as i64)],
     ))];
+    // Dopo un ripristino, prima della lista: è la cosa appena successa, e
+    // disfarla è il gesto che si cerca subito.
+    if let Some(offer) = RestoreUndo::current(&doc, host)? {
+        children.push(
+            UiNode::row(
+                4,
+                vec![
+                    UiNode::text(Text::message(
+                        RESTORED,
+                        vec![Arg::timestamp(WHEN, offer.ts)],
+                    )),
+                    UiNode::button(
+                        Text::key(UNDO_LABEL),
+                        Intent::Neutral,
+                        ActionRef::with(A_UNDO_RESTORE, serde_json::json!({ DOC: doc.as_str() })),
+                    ),
+                ],
+            )
+            .with_key("restore-undo"),
+        );
+    }
     children.push(UiNode::list(
         versions
             .iter()
             .enumerate()
             .map(|(the, v)| {
+                // La variazione di una fotografia si misura sulla fotografia
+                // prima, saltando i testi conservati che le stanno in mezzo.
+                let older = versions[the + 1..].iter().find(|older| !older.is_kept());
                 row(
                     v,
-                    the == 0,
-                    versions.get(the + 1),
+                    Some(v.ts) == on_disk,
+                    older,
                     previewed == Some(v.ts),
                     doc.as_str(),
                 )
@@ -321,7 +436,11 @@ pub(super) fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     // mostra la dimensione e resta ripristinabile come byte.
     if let Some(ts) = previewed {
         let bytes = version_source_doc(entry, &doc, ts, host)?;
-        let current = versions.first().is_some_and(|v| v.ts == ts);
+        let current = on_disk == Some(ts);
+        let note = versions
+            .iter()
+            .find(|v| v.ts == ts)
+            .and_then(|v| v.note.clone());
         // Di una versione passata si vuole sapere prima di tutto *cosa è
         // cambiato*: il confronto è la vista di partenza, e il testo intero è
         // a un clic. La versione attuale, identica alla nota, si mostra come
@@ -406,7 +525,14 @@ pub(super) fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             UiKind::Section {
                 title: Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, ts)]),
                 collapsed: false,
-                children: vec![UiNode::row(4, actions), body],
+                // La nota di un testo conservato sta sopra i gesti: è la
+                // ragione per cui questa versione c'è, e la prima cosa da
+                // leggere prima di ripristinarla.
+                children: note
+                    .map(|note| UiNode::text(Text::message(KEPT_NOTE, vec![Arg::text(NOTE, note)])))
+                    .into_iter()
+                    .chain([UiNode::row(4, actions), body])
+                    .collect(),
             },
         ));
     }

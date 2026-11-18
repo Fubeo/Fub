@@ -209,7 +209,12 @@ livello.
 Il calcolo è nel core (`fub.base`). Il `plan` dice in `relations` le
 Relazioni da risolvere e in `linked_props` le proprietà delle note legate da
 chiedere; il `derive` riceve le note legate in `linked`, una per pagina di
-link risolta, `{target, doc, props}`. Una pagina che non risolve non si
+link risolta, `{target, folder, doc, props}`. Un link si risolve dal punto di
+vista della riga che lo scrive: lo stesso `[[Indice]]` o `./nota.md` in due
+cartelle può portare a due note. La superficie chiede una risoluzione per
+(cartella della riga, pagina) e manda la cartella in `folder` (`""` la
+radice); `derive` dà a ogni riga le note della sua cartella. Una voce senza
+`folder` vale per tutte le righe. Una pagina che non risolve non si
 manda ed è un link rotto. Una formula che non dice per scritto la Relazione,
 il riepilogo o la proprietà non si legge (`#PARSE!`).
 

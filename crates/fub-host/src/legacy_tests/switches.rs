@@ -199,6 +199,36 @@ fn the_mounted_bundle_clears_the_history_even_when_turned_off() {
     );
 }
 
+/// `version.keep` is mounted on the live store, like `version.clear`, and
+/// keeps working with the sampler switched off: whoever discards a text in a
+/// conflict needs the history even then.
+#[test]
+fn a_text_is_kept_in_the_history_even_with_versioning_off() {
+    let v = Vault::new();
+    let host = headless();
+    host.open(&v.root).expect("opens");
+    let nota = DocId::new("Nota.md");
+    host.write_document(None, &nota, "# Nota\n\nuno\n", WriteBase::Dictated)
+        .expect("writes");
+    host.set_setting_for_user(None, "versioning.enabled", SettingValue::Toggle(false))
+        .expect("turned off");
+
+    let kept = host.invoke_user_command(
+        None,
+        fub_features::versioning::VERSION_KEEP,
+        serde_json::json!({ "doc": "Nota.md", "text": "scartato", "note": "Testo scartato" }),
+        InvokeMode::Apply,
+    );
+    assert!(kept.is_ok(), "keeping needs no photograph: {kept:?}");
+    let versions = host.list_versions(None, &nota).unwrap();
+    assert_eq!(versions[0].note.as_deref(), Some("Testo scartato"));
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Nota.md")).unwrap(),
+        "# Nota\n\nuno\n",
+        "the note itself is untouched"
+    );
+}
+
 #[test]
 fn a_component_off_not_is_mounts_at_all_and_is_turns_on_again() {
     let v = Vault::new();
@@ -809,6 +839,7 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         ("THEME_KEY", fub_host::settings::APPEARANCE_THEME),
         ("CONTRAST_KEY", fub_host::settings::APPEARANCE_CONTRAST),
         ("DENSITY_KEY", fub_host::settings::APPEARANCE_DENSITY),
+        ("BARS_KEY", fub_host::settings::APPEARANCE_BARS),
         ("BODY_KEY", fub_host::settings::APPEARANCE_BODY),
         (
             "LINE_HEIGHT_KEY",

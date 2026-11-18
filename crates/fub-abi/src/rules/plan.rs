@@ -263,6 +263,11 @@ fn check(host: &dyn HostApi, plan: &WritePlan) -> Result<HashMap<DocId, Vec<u8>>
                     Some(_) => return Err(twice(to)),
                 }
                 before.insert(from.clone(), bytes.clone());
+                // La copia anche sotto il nome nuovo: una modifica del piano
+                // su quel nome che poi non torna ha bisogno dei byte di prima
+                // lì, perché il ritorno la cerca col nome che il documento ha
+                // quando cade (A-10).
+                before.insert(to.clone(), bytes.clone());
                 known.insert(from.clone(), Known::Absent);
                 known.insert(to.clone(), Known::Moved(bytes));
             }
@@ -324,11 +329,15 @@ fn roll_back(
                     left.push((doc, why));
                 }
             }
-            AppliedStep::Renamed { from, to, .. } => {
-                if let Err(why) = host.rename_document(&to, &from) {
-                    left.push((from, why));
-                }
-            }
+            AppliedStep::Renamed { from, to, .. } => match host.rename_document(&to, &from) {
+                // Ciò che non è tornato sotto il nome nuovo ora sta sotto il
+                // vecchio, ed è con quello che lo si nomina.
+                Ok(()) => left
+                    .iter_mut()
+                    .filter(|(doc, _)| *doc == to)
+                    .for_each(|(doc, _)| *doc = from.clone()),
+                Err(why) => left.push((from, why)),
+            },
         }
     }
     if left.is_empty() {

@@ -204,38 +204,23 @@ può appartenere alle dipendenze statiche degli ingressi applicativi.
 Il controllo misura il codice finale, dopo la riscrittura degli import di
 Vite, e interrompe la build in caso di superamento.
 Il limite non si alza per far passare un chunk: si toglie dal chunk ciò che
-non serve al suo primo uso.
-
-Il ponte dei documenti (`document-bridge`) e il chunk condiviso `search` si
-caricano all'avvio, e dentro hanno solo ciò che serve per aprire e scrivere
-una nota. Le parti che servono a un gesto arrivano con un `import()` dal
-loro modulo d'ingresso, che dà il nome al chunk:
-
-- il riquadro delle formule (`math-editing`) e le frasi dei loro errori
-  (`math-errors`, dopo KaTeX);
-- i campi e il menu delle proprietà (`property-actions`);
-- il menu dei diagrammi (`diagram-menu`), con le tavolozze
-  (`mermaid-styles`, che arrivano anche col primo diagramma da disegnare);
-- la lightbox (`lightbox`);
-- la modifica di un brano incluso (`range-surface`);
-- il visore dei PDF (`pdf-view`);
-- il registratore (`recorder-part`), le slide (`slides`) e la stampa
-  (`print-view`).
-
-Le carica
+non serve al suo primo uso. Il ponte dei documenti (`document-bridge`) e il
+chunk condiviso `search` si caricano all'avvio con solo ciò che serve per
+aprire e scrivere una nota; le parti di un gesto arrivano con un `import()`
+dal loro modulo d'ingresso, che dà il nome al chunk: formule (`math-editing`,
+e `math-errors` dopo KaTeX), proprietà (`property-actions`), diagrammi
+(`diagram-menu`, con `mermaid-styles`), `lightbox`, brano incluso
+(`range-surface`), PDF (`pdf-view`), registratore (`recorder-part`), `slides`
+e stampa (`print-view`). Le carica
 [`ui/lazy-part.ts`](../../apps/client/src/ui/lazy-part.ts) (`lazyPart`):
-
-- `warm()` chiede il codice a thread libero (`requestIdleCallback`) appena
-  la superficie che lo userà monta;
-- il puntatore o il fuoco sopra l'elemento lo chiedono prima del gesto;
-- un gesto che arriva prima del codice va in coda e si fa appena il codice
-  arriva, se chi l'ha chiesto c'è ancora;
-- un `import()` che non riesce lo dice con una nota, e il gesto dopo riprova.
-
-Nessuna di queste parti è un chunk che si carica all'avvio: l'elenco di
-quelli che ogni pagina carica sta in `dist/startup-chunks.json`. Le prove che guardano un gesto col codice già lì
-aspettano `loadLazyParts()`; quelle del gesto che arriva prima stanno in
-`ui/lazy-part.test.ts` e in `markdown/math-live-lazy.dom.test.ts`.
+`warm()` chiede il codice a thread libero (`requestIdleCallback`) appena la
+superficie che lo userà monta, e il puntatore o il fuoco sopra l'elemento
+prima del gesto; un gesto che arriva prima del codice va in coda e si fa
+appena il codice arriva, se chi l'ha chiesto c'è ancora; un `import()` che non
+riesce lo dice con una nota, e il gesto dopo riprova. Nessuna è un chunk
+d'avvio (l'elenco di ogni pagina è in `dist/startup-chunks.json`). Le prove
+col codice già lì aspettano `loadLazyParts()`; quelle del gesto in anticipo
+stanno in `ui/lazy-part.test.ts` e `markdown/math-live-lazy.dom.test.ts`.
 La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
 `theme-skin`), che Vite non minimizza: nella build
 [`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie
@@ -286,6 +271,8 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:grid` | i gesti della griglia con mouse e tastiera veri |
 | `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
 | `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
+| `npm run bench:tree` | l'albero di un vault da 5.000 file: primo disegno, apertura, scorrimento, ricerca, a velocità normale e con la pagina quattro volte più lenta |
+| `npm run bench:giro` | il giro della pre-alpha: i compiti di una persona, di fila, con una foto per compito ([Il giro](bench-giro.md)) |
 | `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
@@ -298,6 +285,7 @@ npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
 npm run bench:large -- --elements 30000   # da 200 a 49 900 elementi, senza soglie
 npm run bench:large -- --cpu 4            # la pagina quattro volte più lenta
+npm run bench:tree -- --cpu 4             # l'albero da 5.000 file, solo a pagina quattro volte più lenta
 ```
 
 ## Visuale e accessibilità
@@ -399,6 +387,9 @@ predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
 `baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
 scrivere un file. Le regole e le loro prove stanno in
 [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
+Una scena nuova ancora senza foto non fa cadere il client: il presidio di
+`bench/scene.test.ts` vuole solo che ogni scena abbia tutte le sue luci o
+nessuna, e il rosso lo dà il banco visivo, che fa partire il bot.
 
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo

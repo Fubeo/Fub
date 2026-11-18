@@ -171,8 +171,8 @@ colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
 il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che
 le stanno sopra, col suo colore, e il contrasto del testo sul foglio diventa un
 esito invece di un «da verificare».
-Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
-le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
+Il catalogo (cuore in `src/dev/catalogo/`, come «Tutti i componenti») ha i
+campioni nei loro riquadri; le regioni che scorrono hanno nome e un Tab.
 Il controllo del focus distingue i discendenti di un `details` chiuso
 dagli elementi realmente visibili e raggiungibili. In ogni scena con la
 modalità nella banda, Invio su `#status-mode` apre il menu (che prende il
@@ -188,6 +188,10 @@ cella la dichiara sua con `aria-owns`, che `aria-required-children` di axe
 non segue: il banco rifà la stessa visita di axe senza i sottoalberi
 dichiarati da un altro elemento della griglia, e il rilievo cade solo se così
 non resta niente fuori posto.
+Lo scroller dell'editor di testo (`.cm-scroller`) ha l'anello dipinto dal
+velo `::after` del suo `.cm-editor`, sopra i numeri di riga: il banco lo conta
+solo se il velo c'è, copre tutto l'editor e dipinge un contorno o un'ombra
+(`editorFrameRingGap`, stesso file).
 
 Regole:
 

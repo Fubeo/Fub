@@ -36,6 +36,10 @@ d'arrivo e nelle note che linkano la partenza (`[[Riunione#^abc123]]`,
 `[[#^abc123]]`, `[[Riunione#Titolo]]`) puntano alla nota nuova: cambia solo
 il nome della pagina, alias e frammento restano. Un link Markdown
 (testo fra quadre e il percorso `Riunione.md#^abc123` fra tonde) resta com'è.
+I link dentro il blocco spostato puntano ancora dove puntavano: un
+`[[#Titolo]]` o un `[[#^id]]` verso ciò che resta nella partenza diventa
+`[[Riunione#Titolo]]`; uno verso ciò che si sposta col blocco resta com'è, e
+un `[[Riunione#^id]]` verso ciò che si sposta diventa `[[Progetto#^id]]`.
 
 **Nella stessa nota** il blocco va in fondo alla nota o alla sezione scelta
 e non lascia niente; un titolo dentro ciò che si sposta non è una

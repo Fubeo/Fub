@@ -2506,11 +2506,11 @@ describe("nuova cartella", () => {
       ["folder.create", { path: "note/Progetti" }],
     ]);
 
-    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("Archivio");
     await waitFor("la cartella di radice compare", () => !!folderRow("Archivio"));
 
-    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("note");
     await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
     expect(withoutTypeReads(host.atGate("invokeCommand"))).toHaveLength(3);
@@ -3299,6 +3299,135 @@ describe("il fuoco dopo un gesto che toglie ciò che lo aveva", () => {
       expect(document.activeElement).toBe(divider());
       expect(divider().getAttribute("aria-valuenow")).toBe(expected);
     }
+  });
+});
+
+// Un cambio di scheda fatto con un tasto globale porta il fuoco nell'editor
+// della scheda che diventa attiva, da qualunque punto del riquadro parta: dal
+// testo, o dalla linguetta su cui un clic lo aveva lasciato. Senza, la battuta
+// dopo il tasto finiva sul `body` o su una linguetta e si perdeva in silenzio
+// (IMP-048…051). Il tasto passa dalla tastiera vera (`ui/keyboard.ts`), come
+// nell'app.
+describe("il fuoco dopo un cambio di scheda da tastiera", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const selected = () => document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Il tasto, con Ctrl, sull'elemento col fuoco: dove lo manda il WebView.
+  /// Maiusc+Tab arriva come lo passa WebKitGTK, `Unidentified` col tasto
+  /// fisico in `code` (GTK lo chiama `ISO_Left_Tab`).
+  const press = (key: string, shift = false) => {
+    const webkit = shift && key === "Tab" ? { key: "Unidentified", code: "Tab" } : { key };
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", {
+      ...webkit, ctrlKey: true, shiftKey: shift, bubbles: true, cancelable: true,
+    }));
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+  };
+  /// Il fuoco è nell'editor che si vede, e quell'editor mostra `text`.
+  const focusedEditorShows = (text: string): boolean => {
+    const focused = document.activeElement;
+    if (!(focused instanceof HTMLElement) || focused === document.body) return false;
+    const content = focused.closest(".cm-content");
+    return !!content && !!focused.closest(".pane-editor") && !focused.closest("[hidden]")
+      && (content.textContent ?? "").includes(text);
+  };
+  const editorOf = (text: string) => editorViews().find((view) => view.state.doc.toString().includes(text))!;
+  /// Due schede, Benvenuto e Riunione (attiva), col fuoco nel testo di Riunione.
+  const twoTabs = async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    expect(selected()).toBe("Riunione");
+    editorOf("Appunti della riunione").focus();
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  };
+  /// Il clic su una linguetta lascia il fuoco sulla linguetta (le frecce della
+  /// striscia partono da lì): un tasto globale dopo il clic lo porta comunque
+  /// nell'editor.
+  const clickTab = async (name: string) => {
+    const tab = tabs().find((each) => each.textContent?.includes(name))!;
+    tab.focus();
+    tab.click();
+    await settle();
+    expect(document.activeElement).toBe(tabs().find((each) => each.textContent?.includes(name)));
+  };
+  const lands = async (name: string, text: string) => {
+    await waitFor(`la scheda ${name} è attiva`, () => selected() === name);
+    await waitFor(`il fuoco è nel testo di ${name}`, () => focusedEditorShows(text));
+    await settle();
+    expect(focusedEditorShows(text)).toBe(true);
+  };
+
+  it("Ctrl+W porta il fuoco nell'editor della scheda vicina, non sulla sua linguetta (IMP-048)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Tab porta il fuoco nell'editor della scheda nuova, dal testo e dalla linguetta (IMP-049)", async () => {
+    await twoTabs();
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Riunione");
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Maiusc+Tab torna alla scheda usata prima, col fuoco nel suo editor (IMP-050)", async () => {
+    await twoTabs();
+    press("Tab", true);
+    await lands("Benvenuto", "Il primo documento");
+    press("Tab", true);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+PagGiù e Ctrl+PagSu portano il fuoco nell'editor della scheda nuova (IMP-049)", async () => {
+    await twoTabs();
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("PageUp");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+1 e Ctrl+9 portano il fuoco nell'editor della scheda scelta (IMP-049)", async () => {
+    await twoTabs();
+    press("1");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("9");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await clickTab("Benvenuto");
+    press("T", true);
+    await waitFor("Riunione torna", () => tabs().length === 2);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+\\ porta il fuoco nell'editor del riquadro nuovo anche dalla linguetta", async () => {
+    await twoTabs();
+    await clickTab("Riunione");
+    press("\\");
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await waitFor("il riquadro nuovo ha il suo editor", () => editorViews().length >= 2);
+    await settle();
+    const second = document.querySelectorAll<HTMLElement>(".pane")[1]!;
+    await waitFor("il fuoco è nel riquadro nuovo", () => second.contains(document.activeElement));
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  });
+
+  it("un tasto di scheda col fuoco fuori dai riquadri porta il fuoco nella scheda nuova", async () => {
+    await twoTabs();
+    const search = document.querySelector<HTMLElement>("#file-list .tree-row")!;
+    search.focus();
+    expect(search.contains(document.activeElement)).toBe(true);
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
   });
 });
 
@@ -4273,6 +4402,154 @@ describe("i riquadri dopo un'attesa", () => {
     expect(editorTexts()[1]).toContain("mio B");
     expect(banners()[1]?.hidden, "il conflitto di Riunione resta da decidere").toBe(false);
     expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
+  });
+
+  /// La Cronologia accesa monta `version.keep` fra i comandi del registro.
+  const specVersionKeep: CommandSpec = {
+    id: "version.keep",
+    title: "Conserva un testo nella cronologia",
+    description: "",
+    keybinding: null,
+    params: [
+      { name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true },
+      { name: "text", title: "Testo", description: "", kind: { kind: "text" }, required: true },
+      { name: "note", title: "Nota", description: "", kind: { kind: "text" }, required: true },
+    ],
+    scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
+  };
+
+  it("«Usa la versione su disco» mette il mio testo nella Cronologia prima di scartarlo", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const after = host.calls.slice(before);
+    const kept = after.findIndex((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    const reread = after.findIndex((c) => (c.gate === "readDocument" || c.gate === "openDocument") && c.args[0] === "Benvenuto.md");
+    expect(kept, "il testo è stato conservato").toBeGreaterThan(-1);
+    expect(reread, "il disco si rilegge solo dopo la conservazione").toBeGreaterThan(kept);
+    const args = after[kept]!.args[1] as { doc: string; text: string; note: string };
+    expect(args.doc).toBe("Benvenuto.md");
+    expect(args.text).toContain("mio A ");
+    expect(args.note).toMatch(/^Testo scartato nel conflitto del /);
+    expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+  });
+
+  it("col testo nella Cronologia e il disco che non si rilegge lo si dice, e ripetere non lo conserva due volte", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+    const repairOpen = host.fault("openDocument", "disco non leggibile");
+    const repairRead = host.fault("readDocument", "disco non leggibile");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "chi scrive sa che il suo testo è salvo",
+      () => recentNotices().some((notice) => notice.text.includes("è nella Cronologia, ma il file non si è riletto")),
+    );
+    await settle();
+    repairOpen();
+    repairRead();
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const keeps = host.calls.slice(before).filter((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    expect(keeps, "lo stesso testo entra nella Cronologia una volta sola").toHaveLength(1);
+  });
+
+  it("se il testo non entra nella Cronologia non si scarta niente, e lo si dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const repair = host.fault("invokeCommand", "spazio dati pieno");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "l'errore arriva a chi scrive",
+      () => recentNotices().some((notice) => notice.text.includes("non è entrato nella Cronologia")),
+    );
+    await settle();
+    repair();
+
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+    expect(host.files()["Benvenuto.md"]).toBe("disco A\n");
+  });
+
+  it("la finestra staccata conserva il suo testo con la stessa regola, e un guasto lo dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    const { attachRemoteSurface } = await import("./state/document-bridge");
+    const { state } = await import("./state/store");
+    const { request, handle } = await attachRemoteSurface("Benvenuto.md", state.vaultRoot, () => "plain-text");
+    // La finestra staccata, com'è vista dal canale: chiede e aspetta.
+    const child = new BroadcastChannel(request.channel);
+    const replies: Array<{ kind: string; token?: string; keeps?: boolean; reason?: string }> = [];
+    child.onmessage = (event: MessageEvent) => replies.push(event.data);
+    const id = { v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId };
+    try {
+      child.postMessage({ ...id, kind: "hello" });
+      await waitFor("la finestra è collegata", () => replies.some((r) => r.kind === "snapshot"));
+      child.postMessage({ ...id, kind: "keep-probe", token: "domanda" });
+      await waitFor("la finestra sa se conserva", () => replies.some((r) => r.kind === "keep-mode"));
+      expect(replies.find((r) => r.kind === "keep-mode")?.keeps).toBe(true);
+
+      const before = host.calls.length;
+      child.postMessage({ ...id, kind: "keep", token: "uno", text: "testo della finestra" });
+      await waitFor("il testo è conservato", () => replies.some((r) => r.kind === "kept" && r.token === "uno"));
+      const kept = host.calls.slice(before).find((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+      const args = kept?.args[1] as { doc: string; text: string; note: string } | undefined;
+      expect(args?.doc).toBe("Benvenuto.md");
+      expect(args?.text).toBe("testo della finestra");
+      expect(args?.note).toMatch(/^Testo scartato nel conflitto del /);
+      // Il nome della nota come lo dice il resto dell'app, non il percorso.
+      const notice = recentNotices().find((entry) => entry.text.includes("è nella Cronologia"));
+      expect(notice?.text).toContain("su Benvenuto è");
+      expect(notice?.text).not.toContain("Benvenuto.md");
+
+      const repair = host.fault("invokeCommand", "spazio dati pieno");
+      child.postMessage({ ...id, kind: "keep", token: "due", text: "testo della finestra" });
+      await waitFor("il guasto torna alla finestra", () => replies.some((r) => r.token === "due"));
+      repair();
+      const failed = replies.find((r) => r.token === "due");
+      expect(failed?.kind).toBe("keep-failed");
+      expect(failed?.reason).toContain("spazio dati pieno");
+    } finally {
+      child.close();
+      await handle.dispose();
+    }
+  });
+
+  it("la palette dice che il testo resta nella Cronologia solo quando c'è chi lo conserva", async () => {
+    const { IT } = await import("./i18n/catalog");
+    const describe = async (): Promise<string | undefined> => {
+      const registry = await import("./ui/commands");
+      return registry.allCommands().find((entry) => entry.id === "shell.doc.conflict.theirs")?.description;
+    };
+    await start(VAULT);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc_lost"]);
+    await start(VAULT, [], undefined, null, [specVersionKeep]);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc"]);
   });
 
   it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {

@@ -1,5 +1,5 @@
 //! **Il banco del corpus.** Ogni file di `tests/corpus/` passa dall'apertura,
-//! dalle esportazioni e dalle modifiche standard della shell (E0–E7); l'esito
+//! dalle esportazioni e dalle modifiche standard della shell (E0–E10); l'esito
 //! si confronta con `tests/corpus/expected/<file>.json`.
 //!
 //! I risultati attesi committati sono il comportamento del motore di oggi: in
@@ -23,7 +23,7 @@ use fub_abi::transfer::{ExportProvider, ExportRequest, ExportSelection, MemorySi
 use fub_abi::{DocId, DocumentFormat, DocumentSource, FormatProvider, ParseContext};
 use fub_format_rich::export::{RichExport, Target};
 use fub_format_rich::projection::{
-    Anchor, AtomKind, Block, CommentView, Inline, Layout, Look, Para, Projection, Role,
+    Anchor, AtomKind, Block, CommentView, Inline, Layout, Line, Look, Para, Projection, Role,
 };
 use fub_format_rich::{open, save, Codec, RichError, RichProvider, Saved};
 use fub_sdk::testing::MemoryHost;
@@ -169,7 +169,8 @@ fn readonly_of(readonly: Option<fub_format_rich::ReadOnly>) -> Value {
 /// oggetti nuovi; l'aspetto del carattere (`f`), lo stile di corpo (`s`), la
 /// lingua e la galleria degli stili sono suggerimenti di resa che il codec
 /// risolve per un paragrafo nuovo. Restano testo, ruoli, enfasi, link,
-/// allineamento, disposizione, oggetti, commenti e revisioni.
+/// allineamento, disposizione, oggetti, commenti e revisioni; due testi
+/// vicini con tutto il resto uguale contano come uno.
 fn visible(projection: &Projection) -> Value {
     fn strip(value: &mut Value) {
         match value {
@@ -179,9 +180,39 @@ fn visible(projection: &Projection) -> Value {
                 }
                 map.values_mut().for_each(strip);
             }
-            Value::Array(items) => items.iter_mut().for_each(strip),
+            Value::Array(items) => {
+                items.iter_mut().for_each(strip);
+                merge_texts(items);
+            }
             _ => {}
         }
+    }
+    // Due testi vicini con tutto il resto uguale sono un testo solo: il
+    // codec fonde i run che una modifica ha reso uguali (un link tolto fra
+    // due testi semplici).
+    fn merge_texts(items: &mut Vec<Value>) {
+        let mut out: Vec<Value> = Vec::with_capacity(items.len());
+        for item in items.drain(..) {
+            if let (Some(Value::Object(last)), Value::Object(next)) = (out.last_mut(), &item) {
+                let rest = |map: &serde_json::Map<String, Value>| {
+                    map.iter()
+                        .filter(|(key, _)| key.as_str() != "x")
+                        .map(|(key, value)| (key.clone(), value.clone()))
+                        .collect::<Vec<_>>()
+                };
+                if let (Some(Value::String(a)), Some(Value::String(b))) =
+                    (last.get("x"), next.get("x"))
+                {
+                    if rest(last) == rest(next) {
+                        let joined = format!("{a}{b}");
+                        last.insert("x".into(), Value::String(joined));
+                        continue;
+                    }
+                }
+            }
+            out.push(item);
+        }
+        *items = out;
     }
     let mut value = serde_json::to_value(projection).unwrap();
     strip(&mut value);
@@ -258,6 +289,26 @@ fn text_inline(x: &str) -> Inline {
         f: Look::default(),
         ins: None,
         del: None,
+    }
+}
+
+/// Un paragrafo nuovo del corpo, vuoto, come lo crea la shell.
+fn empty_para() -> Para {
+    Para {
+        role: Role::Body,
+        locked: false,
+        align: None,
+        k: None,
+        sect: None,
+        page: None,
+        header: None,
+        footer: None,
+        p: Layout::default(),
+        s: None,
+        f: Box::default(),
+        ins: None,
+        del: None,
+        c: Vec::new(),
     }
 }
 
@@ -362,20 +413,8 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
                 .splice(b..=b, [Block::Para(first), Block::Para(second)]);
         }
         "E3" => p.blocks.push(Block::Para(Para {
-            role: Role::Body,
-            locked: false,
-            align: None,
-            k: None,
-            sect: None,
-            page: None,
-            header: None,
-            footer: None,
-            p: Layout::default(),
-            s: None,
-            f: Box::default(),
-            ins: None,
-            del: None,
             c: vec![text_inline("Un paragrafo aggiunto in fondo.")],
+            ..empty_para()
         })),
         "E4" => {
             let (b, i) = first_text(&mut p, false)?;
@@ -439,6 +478,78 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             })?;
             para.c.push(text_inline(" In fondo."));
         }
+        // Inserisci › Tabella dopo l'ultimo paragrafo, come la shell
+        // (`insertTable`): una griglia 3×3 nuova, senza dati opachi, con i
+        // paragrafi delle celle a spazio dopo 0 e interlinea singola, come
+        // la griglia di Word, e un paragrafo vuoto dopo, perché il corpo
+        // finisce con un paragrafo. Dove lo stile del documento dà già quella
+        // spaziatura (i file di LibreOffice, `semplice.odt`) il codec non la
+        // scrive e la riapertura non la porta: `different` per un campo che
+        // non cambia ciò che si vede.
+        "E8" => {
+            let cell = || fub_format_rich::projection::Cell {
+                k: None,
+                span: None,
+                blocks: vec![Block::Para(Para {
+                    p: Layout {
+                        after: Some(0.0),
+                        line: Some(Line::Multiple(1.0)),
+                        ..Layout::default()
+                    },
+                    ..empty_para()
+                })],
+            };
+            let row = || fub_format_rich::projection::Row {
+                k: None,
+                cells: vec![cell(), cell(), cell()],
+            };
+            p.blocks
+                .push(Block::Table(fub_format_rich::projection::Table {
+                    locked: false,
+                    k: None,
+                    rows: vec![row(), row(), row()],
+                }));
+            p.blocks.push(Block::Para(empty_para()));
+        }
+        // Canc sulle prime due celle scelte di una tabella aperta, come la
+        // shell (`clearCells`): le celle restano, con un paragrafo vuoto che
+        // tiene i dati del loro primo; la riga non perde celle.
+        "E9" => {
+            let table = p.blocks.iter_mut().find_map(|block| match block {
+                Block::Table(table)
+                    if !table.locked && table.rows.first().is_some_and(|r| r.cells.len() > 1) =>
+                {
+                    Some(table)
+                }
+                _ => None,
+            })?;
+            for cell in table.rows[0].cells.iter_mut().take(2) {
+                let first = match cell.blocks.first() {
+                    Some(Block::Para(para)) => Para {
+                        c: Vec::new(),
+                        ..para.clone()
+                    },
+                    _ => empty_para(),
+                };
+                cell.blocks = vec![Block::Para(first)];
+            }
+        }
+        // Togli il link (Ctrl+K › Remove link) dal primo testo collegato di
+        // un paragrafo aperto, come la shell: il testo resta, senza `href`.
+        "E10" => {
+            let href = p.blocks.iter_mut().find_map(|block| match block {
+                Block::Para(para) if !para.locked => {
+                    para.c.iter_mut().find_map(|inline| match inline {
+                        Inline::Text { href, del, .. } if href.is_some() && del.is_none() => {
+                            Some(href)
+                        }
+                        _ => None,
+                    })
+                }
+                _ => None,
+            })?;
+            *href = None;
+        }
         // Ciò che la shell non fa: cambiare un blocco chiuso.
         "E6" => {
             let (b, i) = first_text(&mut p, true)?;
@@ -449,7 +560,9 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
     Some(p)
 }
 
-const EDITS: [&str; 8] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7"];
+const EDITS: [&str; 11] = [
+    "E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
+];
 
 /// Salva una modifica, riapre i byte e confronta la proiezione riaperta con
 /// quella voluta, a meno dei dati opachi.

@@ -34,13 +34,14 @@ import { paletteHost } from "../../../state/palette-host";
 import { searchPeople, peopleFolder } from "../../../state/people";
 import { existingRecentNotes } from "../../../state/recent";
 import { openVaultRoot, state, vaultArg } from "../../../state/store";
-import { allCommands, type CommandEntry } from "../../../ui/commands";
+import { allCommands, NOTE_FROM_TEMPLATE, type CommandEntry } from "../../../ui/commands";
 import { filterCommands, orderCommands, paletteHistoryForTest, viewEntries } from "../../../ui/palette";
 import { filterByText, linePlace, lineTarget, type Mode } from "./model";
 
-/// Il comando del kernel che crea una nota da un modello. Il lanciatore non
+/// Il comando del kernel che crea una nota da un modello: lo stesso id che
+/// decide se il menu «Nuovo» offre «Nota da un modello…». Il lanciatore non
 /// ha più un modo dei modelli: lo lancia il comando «Nuova nota da un modello».
-export const TEMPLATE_COMMAND = "note.from_template";
+export const TEMPLATE_COMMAND = NOTE_FROM_TEMPLATE;
 /// Quanti risultati mostra una ricerca nel testo: il resto si dice nel conto.
 export const SEARCH_LIMIT = 50;
 /// Quante righe mostra un elenco che si filtra di qua.

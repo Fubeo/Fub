@@ -1,11 +1,4 @@
 {
   "$comment": "Eccezioni all'audit npm (ADR 0179, .github/scripts/npm-audit.mjs). Solo per pacchetti che non entrano nell'app; ognuna scade e va riguardata.",
-  "eccezioni": [
-    {
-      "avviso": "GHSA-fc5q-39xc-vjpf",
-      "pacchetto": "picomatch",
-      "scade": "2026-12-17",
-      "perché": "ReDoS con extglob ripetuti. picomatch arriva solo da vite e vitest (sviluppo, build e test) e legge solo glob scritti nel repository, non input dell'utente; nessuna versione corretta esiste (4.0.7 è l'ultima). Da togliere quando esce la correzione: issue #475."
-    }
-  ]
+  "eccezioni": []
 }

@@ -16,6 +16,7 @@ const HOST_APPEARANCE = [
   "appearance.contrast",
   "appearance.accent",
   "appearance.density",
+  "appearance.bars",
   "chrome.compactness",
   "appearance.zoom",
   "appearance.motion",

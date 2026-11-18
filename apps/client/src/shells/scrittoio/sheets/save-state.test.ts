@@ -22,6 +22,8 @@ const world = vi.hoisted(() => ({
   /// Il suggerimento di ogni elemento, e ogni sua scrittura in ordine.
   tips: new Map<HTMLElement, string>(),
   tipWrites: [] as string[],
+  /// I comandi del registro: `version.keep` c'è se la Cronologia è accesa.
+  kernelCommands: [] as string[],
 }));
 
 function subscribe<K>(map: Map<K, Set<Listener>>, key: K, listener: Listener): () => void {
@@ -34,6 +36,7 @@ function subscribe<K>(map: Map<K, Set<Listener>>, key: K, listener: Listener): (
 vi.mock("../../../ui/commands", () => ({
   allCommands: () => world.commands,
   displayBinding: (binding: string | null) => (binding ? "Ctrl+S" : ""),
+  hasKernelCommand: (id: string) => world.kernelCommands.includes(id),
 }));
 vi.mock("../../../state/layout", () => ({
   layout: world,
@@ -47,6 +50,7 @@ vi.mock("../../../state/document-session", () => ({
     },
     inspect: () => ({ base: world.base }),
     saveState: () => world.saveState,
+    keepsDiscardedText: () => true,
   },
 }));
 vi.mock("../../../state/kernel", () => ({
@@ -132,6 +136,7 @@ beforeEach(() => {
   driver = createManualDriver();
   setMotionDriver(driver);
   world.focus = "main";
+  world.kernelCommands = [];
   world.doc = "Guida/Nota.md";
   world.base = { kind: "descends_from", value: "8842117" };
   world.confirm = null;
@@ -367,8 +372,27 @@ describe("il popover dello stato", () => {
     expect(asked).toHaveLength(1);
     expect(asked[0]!.message).toContain("Guida/Nota.md");
     expect(asked[0]!.options.danger).toBe(true);
+    // Senza la Cronologia la domanda dice che il testo va perso.
+    expect(asked[0]!.message).toContain("commands.doc.conflict.theirs.desc_lost");
     expect(panel()).toBeNull();
     expect(runs["shell.doc.conflict.theirs"]).not.toHaveBeenCalled();
+  });
+
+  it("con la Cronologia accesa la domanda dice che il testo resta lì", async () => {
+    commandsOf("shell.doc.conflict.mine", "shell.doc.conflict.theirs");
+    world.kernelCommands = ["version.keep"];
+    const asked: string[] = [];
+    world.confirm = (message) => {
+      asked.push(message);
+      return Promise.resolve(false);
+    };
+    drawSave("conflitto");
+    mountSaveState(lifetime);
+    button().click();
+    actions()[1]!.click();
+    await settled();
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.split("\n").pop()).toBe("commands.doc.conflict.theirs.desc");
   });
 
   it("dopo un sì esegue il comando del lato scelto, una volta", async () => {

@@ -24,6 +24,8 @@
     "bench:fidelity": "node bench/fidelity.mjs",
     "bench:grid": "node bench/grid-gestures.mjs",
     "bench:large": "node bench/large.mjs",
+    "bench:tree": "node bench/tree.mjs",
+    "bench:giro": "node bench/giro.mjs",
     "bench:conformita": "node bench/conformita/verifica.mjs",
     "bench:webview": "node bench/webview/run.mjs",
     "theme:generate": "node theme/generate.mjs",
@@ -73,7 +75,7 @@
     "pngjs": "7.0.0",
     "postcss": "8.5.26",
     "typescript": "^5.7.2",
-    "vite": "^6.4.4",
+    "vite": "^6.4.5",
     "vitest": "^5.0.1"
   },
   "overrides": {

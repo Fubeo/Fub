@@ -21,7 +21,7 @@
 //!
 //! # Le impostazioni
 //!
-//! [`settings`] dichiara le tredici impostazioni del gruppo «Lavagna», nell'ordine
+//! [`settings`] dichiara le quattordici impostazioni del gruppo «Lavagna», nell'ordine
 //! del pannello. Le prime sei sono della macchina, come i modi di scrivere e
 //! di toccare di questo computer; le altre sono del vault. Due dicono come si
 //! scrive e si tocca: [`CANVAS_INK_MOUSE_REMEMBER_KEY`] fa ricordare a ogni
@@ -137,6 +137,13 @@ pub const CANVAS_GRID_KEY: &str = "canvas.grid";
 /// L'impostazione «Aggancia le schede»: i bordi di una scheda che si sposta o si
 /// ridimensiona si agganciano alle schede vicine e alla griglia.
 pub const CANVAS_SNAP_KEY: &str = "canvas.snap";
+
+/// L'impostazione «Passo della griglia»: a quale passo, in unità della lavagna,
+/// si aggancia una scheda lasciata o ridimensionata; `none` la aggancia solo
+/// alle schede vicine. Vale con [`CANVAS_SNAP_KEY`] acceso.
+pub const CANVAS_SNAP_STEP_KEY: &str = "canvas.snap_step";
+/// I valori di [`CANVAS_SNAP_STEP_KEY`]. Il primo è quello di serie.
+pub const CANVAS_SNAP_STEP_VALUES: [&str; 4] = ["8", "16", "32", "none"];
 
 /// L'impostazione «Scegli le parti di una nota»: a una nota con titoli, portata
 /// sulla lavagna, si apre l'elenco delle sue parti.
@@ -263,6 +270,12 @@ const S_GRID: &str = "s_grid";
 const S_GRID_DESC: &str = "s_grid_desc";
 const S_SNAP: &str = "s_snap";
 const S_SNAP_DESC: &str = "s_snap_desc";
+const S_SNAP_STEP: &str = "s_snap_step";
+const S_SNAP_STEP_DESC: &str = "s_snap_step_desc";
+const S_SNAP_STEP_8: &str = "s_snap_step_8";
+const S_SNAP_STEP_16: &str = "s_snap_step_16";
+const S_SNAP_STEP_32: &str = "s_snap_step_32";
+const S_SNAP_STEP_NONE: &str = "s_snap_step_none";
 const S_PARTS_PICKER: &str = "s_parts_picker";
 const S_PARTS_PICKER_DESC: &str = "s_parts_picker_desc";
 const S_DROP_FOLDER: &str = "s_drop_folder";
@@ -273,7 +286,7 @@ const S_DROP_FOLDER_FOLDER: &str = "s_drop_folder_folder";
 const S_DROP_FOLDER_PATH: &str = "s_drop_folder_path";
 const S_DROP_FOLDER_PATH_DESC: &str = "s_drop_folder_path_desc";
 
-/// Lo schema delle impostazioni della lavagna: le tredici del gruppo «Lavagna»,
+/// Lo schema delle impostazioni della lavagna: le quattordici del gruppo «Lavagna»,
 /// nell'ordine del pannello.
 ///
 /// Le prime sei sono della **macchina**, come i suggerimenti dei disegni:
@@ -368,6 +381,20 @@ pub fn settings() -> Vec<SettingSpec> {
             S_SNAP,
             S_SNAP_DESC,
             SettingKind::Toggle { default: true },
+        ),
+        row(
+            CANVAS_SNAP_STEP_KEY,
+            S_SNAP_STEP,
+            S_SNAP_STEP_DESC,
+            choice(
+                &CANVAS_SNAP_STEP_VALUES,
+                &[
+                    S_SNAP_STEP_8,
+                    S_SNAP_STEP_16,
+                    S_SNAP_STEP_32,
+                    S_SNAP_STEP_NONE,
+                ],
+            ),
         ),
         row(
             CANVAS_PARTS_PICKER_KEY,
@@ -1233,6 +1260,16 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Spostando o ridimensionando una scheda, i bordi si agganciano alle schede vicine e alla griglia. Alt tenuto lo spegne per quel gesto.",
         "When you move or resize a card, its edges snap to nearby cards and to the grid. Holding Alt turns it off for that gesture.",
     ),
+    (S_SNAP_STEP, "Passo della griglia", "Grid step"),
+    (
+        S_SNAP_STEP_DESC,
+        "Ogni quanto si aggancia una scheda, in unità della lavagna. Mentre la sposti segue il puntatore e le guide mostrano dove andrà; quando la lasci si aggancia. «Nessuna griglia» la aggancia solo alle schede vicine. Vale con «Aggancia le schede» acceso.",
+        "How far apart the snapping points are, in whiteboard units. While you move a card it follows the pointer and the guides show where it will go; when you let go, it snaps. «No grid» snaps it only to nearby cards. It applies when «Snap cards» is on.",
+    ),
+    (S_SNAP_STEP_8, "Fine (8)", "Fine (8)"),
+    (S_SNAP_STEP_16, "Medio (16)", "Medium (16)"),
+    (S_SNAP_STEP_32, "Largo (32)", "Wide (32)"),
+    (S_SNAP_STEP_NONE, "Nessuna griglia", "No grid"),
     (S_PARTS_PICKER, "Scegli le parti di una nota", "Choose the parts of a note"),
     (
         S_PARTS_PICKER_DESC,
@@ -1358,6 +1395,12 @@ mod tests {
             S_GRID_DESC,
             S_SNAP,
             S_SNAP_DESC,
+            S_SNAP_STEP,
+            S_SNAP_STEP_DESC,
+            S_SNAP_STEP_8,
+            S_SNAP_STEP_16,
+            S_SNAP_STEP_32,
+            S_SNAP_STEP_NONE,
             S_PARTS_PICKER,
             S_PARTS_PICKER_DESC,
             S_DROP_FOLDER,
@@ -1609,12 +1652,12 @@ mod tests {
         fub_abi::text::Strings::new(&catalogs, "it", &locale).render(text)
     }
 
-    /// Le tredici impostazioni nell'ordine del pannello: la chiave, la specie, il
+    /// Le quattordici impostazioni nell'ordine del pannello: la chiave, la specie, il
     /// valore di serie, lo spazio. Le prime cinque sono della macchina.
     #[test]
-    fn le_tredici_impostazioni_hanno_chiave_specie_e_valore_di_serie() {
+    fn le_quattordici_impostazioni_hanno_chiave_specie_e_valore_di_serie() {
         use fub_abi::settings::{SettingScope, SettingValue};
-        let want: [(&str, &str, SettingValue); 13] = [
+        let want: [(&str, &str, SettingValue); 14] = [
             (
                 "canvas.ink_mouse_remember",
                 "toggle",
@@ -1649,6 +1692,7 @@ mod tests {
             ("canvas.toolbar", "list", SettingValue::List(Vec::new())),
             ("canvas.grid", "toggle", SettingValue::Toggle(true)),
             ("canvas.snap", "toggle", SettingValue::Toggle(true)),
+            ("canvas.snap_step", "choice", SettingValue::Text("8".into())),
             ("canvas.parts_picker", "toggle", SettingValue::Toggle(true)),
             (
                 "canvas.drop_folder",
@@ -1708,7 +1752,9 @@ mod tests {
         assert_eq!(values(CANVAS_DRAG_EMPTY_KEY), ["select", "pan"]);
         assert_eq!(values(CANVAS_WORKSPACE_KEY), ["auto", "full", "simple"]);
         assert_eq!(values(CANVAS_DROP_FOLDER_KEY), ["notes", "board", "folder"]);
+        assert_eq!(values(CANVAS_SNAP_STEP_KEY), ["8", "16", "32", "none"]);
         for key in [
+            CANVAS_SNAP_STEP_KEY,
             CANVAS_PEN_BUTTON_KEY,
             CANVAS_WHEEL_KEY,
             CANVAS_DRAG_EMPTY_KEY,
@@ -1780,11 +1826,12 @@ mod tests {
                 "Il nome della cartella accanto alla lavagna, o il percorso nel vault per «In una cartella». Con «Con le note» non si usa.",
             ),
         ];
-        // «Trascinare nel vuoto» (N6 T20b) non è nel prototipo T25: il suo testo
-        // si controlla qui sotto, a parte, finché il prototipo non lo porta.
+        // «Trascinare nel vuoto» (N6 T20b) e «Passo della griglia» (#411 C-05)
+        // non sono nel prototipo T25: i loro testi si controllano qui sotto, a
+        // parte, finché il prototipo non li porta.
         let approved_rows = specs
             .iter()
-            .filter(|spec| spec.key != CANVAS_DRAG_EMPTY_KEY);
+            .filter(|spec| spec.key != CANVAS_DRAG_EMPTY_KEY && spec.key != CANVAS_SNAP_STEP_KEY);
         for (spec, (label, description)) in approved_rows.zip(approved) {
             assert_eq!(said(&spec.label, "it"), label, "{}", spec.key);
             assert_eq!(said(&spec.description, "it"), description, "{}", spec.key);
@@ -1797,6 +1844,14 @@ mod tests {
         let it = said(&drag.description, "it");
         assert!(it.contains("«Sceglie» disegna un rettangolo"), "{it}");
         assert!(it.contains("Esc la annulla"), "{it}");
+        let step = specs
+            .iter()
+            .find(|spec| spec.key == CANVAS_SNAP_STEP_KEY)
+            .expect(CANVAS_SNAP_STEP_KEY);
+        assert_eq!(said(&step.label, "it"), "Passo della griglia");
+        let it = said(&step.description, "it");
+        assert!(it.contains("quando la lasci si aggancia"), "{it}");
+        assert!(it.contains("«Nessuna griglia»"), "{it}");
     }
 
     /// Le opzioni in italiano e in inglese, e le etichette inglesi delle righe.
@@ -1839,6 +1894,14 @@ mod tests {
             ["Con le note", "Con la lavagna", "In una cartella"]
         );
         assert_eq!(
+            labels(CANVAS_SNAP_STEP_KEY, "it"),
+            ["Fine (8)", "Medio (16)", "Largo (32)", "Nessuna griglia"]
+        );
+        assert_eq!(
+            labels(CANVAS_SNAP_STEP_KEY, "en"),
+            ["Fine (8)", "Medium (16)", "Wide (32)", "No grid"]
+        );
+        assert_eq!(
             labels(CANVAS_PEN_BUTTON_KEY, "en"),
             [
                 "Opens the menu",
@@ -1874,6 +1937,7 @@ mod tests {
             "Column tools",
             "Grid",
             "Snap cards",
+            "Grid step",
             "Choose the parts of a note",
             "Where dragged files go",
             "Folder for dragged files",

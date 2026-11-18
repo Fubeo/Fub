@@ -5,7 +5,7 @@ import type { Theme } from "../../theme/theme";
 import type { DocumentUpdate } from "../core/text-operation";
 import type { SurfaceMode, SurfaceMountContext } from "../core/registry";
 import { parseFilter, type FilterDef } from "./filter";
-import { parseOrder, parseSort, type SortEntry } from "./sort";
+import { parseOrder, parseSort, propertyName, readOnlyColumn, type SortEntry } from "./sort";
 // Il registro dei tipi del vault (`properties.types`) si legge come lo legge
 // la testata delle note: una regola sola per tipi, opzioni e gruppi.
 import { declaredType, OPTION_GROUPS, optionsOf, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
@@ -252,9 +252,12 @@ export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: 
 
 /// Una nota legata come la vuole `derive`: la pagina del link com'è scritta
 /// nella Relazione (`Dune` per `[[Dune]]`), il documento a cui il vault la
-/// risolve e le proprietà che il piano chiede.
+/// risolve e le proprietà che il piano chiede. `folder` è la cartella delle
+/// righe da cui si è risolta (`""` la radice): lo stesso `[[Indice]]` in due
+/// cartelle può portare a due note, e `derive` dà a ogni riga quella della sua.
 export interface BaseLinkedNote {
   readonly target: string;
+  readonly folder: string;
   readonly doc: string;
   readonly props: Record<string, unknown>;
 }
@@ -291,39 +294,52 @@ function linkedKey(target: LinkTarget): string | null {
   return target.kind === "path" ? target.value : null;
 }
 
-/// Le note legate dalle Relazioni del piano nelle righe `rows`: ogni pagina
-/// di link si risolve una volta, con le regole del vault (`resolve`, dalla
-/// prima nota che la scrive), e le note trovate si leggono in una domanda
-/// sola, con le proprietà che il piano chiede. Un link rotto non si manda.
-/// Niente da fare se la vista non ha riepiloghi di Relazione.
+/// La cartella di un documento, come la legge `derive` (`""` la radice).
+function folderOf(doc: string): string {
+  const slash = doc.lastIndexOf("/");
+  return slash < 0 ? "" : doc.slice(0, slash);
+}
+
+/// Le note legate dalle Relazioni del piano nelle righe `rows`. Un link si
+/// risolve dal punto di vista della riga che lo scrive, con le regole del
+/// vault (`resolve`): lo stesso `[[Indice]]` o `./nota.md` in due cartelle può
+/// portare a due note. Le domande si raggruppano per (cartella della riga,
+/// pagina), che dà la stessa risposta, e le note trovate si leggono in una
+/// domanda sola, con le proprietà che il piano chiede. Un link rotto non si
+/// manda. Niente da fare se la vista non ha riepiloghi di Relazione.
 export async function linkedNotes(deps: BaseSurfaceDeps, plan: Pick<BasePlan, "relations" | "linkedProps">, rows: readonly BaseRowInput[], signal?: AbortSignal): Promise<BaseLinkedNote[]> {
   if (plan.relations.length === 0) return [];
-  const pages = new Map<string, { target: LinkTarget; from: string }>();
+  const pages = new Map<string, { key: string; folder: string; target: LinkTarget; from: string }>();
   for (const row of rows) {
+    const folder = folderOf(row.doc);
     for (const property of row.properties ?? []) {
       if (!plan.relations.includes(property.key)) continue;
       for (const target of relationTargets(property.value)) {
         const key = linkedKey(target);
-        if (key !== null && !pages.has(key)) pages.set(key, { target: target.kind === "wiki" ? { kind: "wiki", value: { page: target.value.page } } : target, from: row.doc });
+        if (key === null) continue;
+        const group = JSON.stringify([folder, key]);
+        if (!pages.has(group)) pages.set(group, { key, folder, target: target.kind === "wiki" ? { kind: "wiki", value: { page: target.value.page } } : target, from: row.doc });
       }
     }
   }
   if (pages.size > MAX_DERIVE_ROWS) throw new Error(`base: ${pages.size} note legate superano il budget di ${MAX_DERIVE_ROWS}; nessun risultato parziale`);
-  const resolved = new Map<string, string>();
-  const entries = [...pages];
+  const resolved: { target: string; folder: string; doc: string }[] = [];
+  const entries = [...pages.values()];
   for (let at = 0; at < entries.length; at += RESOLVE_BATCH) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    await Promise.all(entries.slice(at, at + RESOLVE_BATCH).map(async ([key, { target, from }]) => {
+    // Nell'ordine delle righe, non in quello delle risposte.
+    const answers = await Promise.all(entries.slice(at, at + RESOLVE_BATCH).map(async ({ key, folder, target, from }) => {
       const answer = await deps.queryIndex({ kind: "resolve", target, from });
       if (answer.kind !== "resolved") throw new Error("base: risoluzione fuori tema");
-      if (answer.value) resolved.set(key, answer.value.doc);
+      return answer.value ? { target: key, folder, doc: answer.value.doc } : null;
     }));
+    for (const answer of answers) if (answer) resolved.push(answer);
   }
-  if (resolved.size === 0) return [];
-  const docs = [...new Set(resolved.values())];
+  if (resolved.length === 0) return [];
+  const docs = [...new Set(resolved.map((entry) => entry.doc))];
   const found = await fetchAllDocuments(deps, { any: [{ all: [{ negated: false, predicate: { kind: "docs", docs } }] }] }, { kind: "keys", keys: plan.linkedProps }, { offset: 0, limit: 256 }, signal);
   const props = new Map(found.rows.map((row) => [row.doc, Object.fromEntries((row.properties ?? []).map((entry) => [entry.key, entry.value]))]));
-  return [...resolved].map(([target, doc]) => ({ target, doc, props: props.get(doc) ?? {} }));
+  return resolved.map(({ target, folder, doc }) => ({ target, folder, doc, props: props.get(doc) ?? {} }));
 }
 
 /// Le chiavi di una vista che i gesti della barra, del menu della colonna e
@@ -492,6 +508,9 @@ function sameJson(left: unknown, right: unknown): boolean {
 }
 
 export async function prepareBaseMutations(deps: BaseSurfaceDeps, source: string, view: string | null, edits: { doc: string; key: string; expected: BaseExpected; value?: string | null }[]): Promise<BaseMutation[]> {
+  // Una colonna che non è una proprietà (`file.*`, `container.*`, una formula)
+  // non si scrive: si dice prima di chiedere al core, e la cella non ci arriva.
+  if (edits.some((edit) => readOnlyColumn(edit.key))) throw new Error("base: colonna in sola lettura");
   const raw = await baseQuery(deps, { version: 1, op: "mutate", source, view, edits });
   if (!Array.isArray(raw.mutations) || raw.mutations.length !== edits.length) throw new Error("base: mutazioni malformate");
   return raw.mutations.map((item, index) => {
@@ -503,12 +522,19 @@ export async function prepareBaseMutations(deps: BaseSurfaceDeps, source: string
     try { actual = JSON.parse(args.expected as string) as BaseExpected; }
     catch { throw new Error("base: expected command malformato"); }
     const command = edit.value == null ? "note.property.remove" : "note.property.set";
-    if (mutation.doc !== edit.doc || mutation.key !== edit.key || args.doc !== edit.doc || args.key !== edit.key || actual.kind !== edit.expected.kind || (actual.kind === "value" && edit.expected.kind === "value" && !sameJson(actual.value, edit.expected.value)) || mutation.command !== command || (edit.value == null ? Object.prototype.hasOwnProperty.call(args, "value") : args.value !== edit.value)) throw new Error("base: mutazione diversa dalla richiesta");
+    // Il comando scrive la proprietà (`prop.stato` → `stato`), non la chiave
+    // di colonna: una risposta che ripete `prop.stato` scriverebbe una riga
+    // `prop.stato:` nel frontmatter, e qui si ferma.
+    if (mutation.doc !== edit.doc || mutation.key !== edit.key || args.doc !== edit.doc || args.key !== propertyName(edit.key) || actual.kind !== edit.expected.kind || (actual.kind === "value" && edit.expected.kind === "value" && !sameJson(actual.value, edit.expected.value)) || mutation.command !== command || (edit.value == null ? Object.prototype.hasOwnProperty.call(args, "value") : args.value !== edit.value)) throw new Error("base: mutazione diversa dalla richiesta");
     return { doc: edit.doc, key: edit.key, command, args };
   });
 }
+/// Lo stato letto della proprietà che la chiave di colonna scrive (`prop.stato`
+/// è `stato`): il comando lo confronta col file, e se la nota è cambiata non
+/// scrive niente.
 export function expectedProperty(row: BaseRow, key: string): BaseExpected {
-  return Object.prototype.hasOwnProperty.call(row.properties, key) ? { kind: "value", value: row.properties[key] } : { kind: "absent" };
+  const name = propertyName(key);
+  return Object.prototype.hasOwnProperty.call(row.properties, name) ? { kind: "value", value: row.properties[name] } : { kind: "absent" };
 }
 export function baseRowsToCsv(rows: BaseRow[], columns: string[]): string {
   const escape = (value: string): string => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;

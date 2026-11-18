@@ -62,6 +62,8 @@ pub use fub_host::{
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
+#[cfg(feature = "bench-gc")]
+mod bench_gc;
 #[cfg(target_os = "linux")]
 mod disegno;
 mod document_windows;
@@ -1581,6 +1583,215 @@ fn read_theme(
     light: ThemeLight,
 ) -> Result<ThemePayload, PluginError> {
     host.read_theme(&id, light)
+}
+
+/// La scelta di una cartella di tema arriva da qui.
+type ThemeFolderPick = std::sync::mpsc::Receiver<Option<tauri_plugin_dialog::FilePath>>;
+
+/// Apre la finestra nativa per scegliere la cartella di un tema, col titolo
+/// scritto dall'host, e restituisce dove arriverà la scelta (`None`: la
+/// persona l'ha chiusa). Sul desktop la finestra ha per genitore quella della
+/// shell.
+///
+/// Su Android e iOS il plugin del dialogo non ha la scelta di una cartella
+/// (`pick_folder` esiste solo sul desktop): il comando risponde `Unserved`,
+/// e niente si apre. I temi da cartella sono un attrezzo da sviluppatore sul
+/// computer; sul telefono la cartella condivisa passa da `tree_access`.
+#[cfg(desktop)]
+fn pick_theme_folder(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    title: String,
+) -> Result<ThemeFolderPick, PluginError> {
+    use tauri_plugin_dialog::DialogExt;
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.dialog()
+        .file()
+        .set_parent(window)
+        .set_title(title)
+        .pick_folder(move |selection| {
+            let _ = sender.send(selection);
+        });
+    Ok(receiver)
+}
+
+#[cfg(mobile)]
+fn pick_theme_folder(
+    _app: &AppHandle,
+    _window: &tauri::WebviewWindow,
+    _title: String,
+) -> Result<ThemeFolderPick, PluginError> {
+    Err(PluginError::Unserved(fub_abi::Text::key(
+        "host.theme_folder.desktop_only",
+    )))
+}
+
+/// «Installa da cartella…»: la persona sceglie la cartella di un tema nella
+/// finestra **nativa**, aperta qui, e l'host la legge senza installarla
+/// (`Host::check_theme_folder`): il manifest, il fascio di ogni luce e
+/// l'impronta dei byte, perché la shell faccia girare i suoi cancelli CSS
+/// prima che niente arrivi nella configurazione.
+///
+/// La webview non dà un path e non dà nemmeno il titolo della finestra: quella
+/// finestra è il punto in cui la persona dà il suo permesso, e la scrive
+/// l'host (`Host::theme_folder_pick_title`). La webview riceve l'esito, con la
+/// cartella scelta da mostrare. Così la modalità sviluppatore, che la webview
+/// può accendere con `set_setting`, non basta a far leggere o installare una
+/// cartella che la persona non ha scelto. Solo la shell principale; la
+/// modalità si controlla prima di aprire la finestra, e l'host la ricontrolla.
+/// Aprire la finestra scarta il permesso del controllo di prima, qualunque
+/// cosa la persona scelga poi; la finestra chiusa è `cancelled`.
+#[tauri::command]
+async fn check_theme_folder(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<fub_host::theme::ThemeFolderCheck, PluginError> {
+    guard_main_shell(&window, "install themes from a folder")?;
+    let title = {
+        let host = app.state::<Host>();
+        host.forget_theme_folder();
+        let allowed = host.theme_folder_allowed();
+        for_the_shell(&host, None, allowed)?;
+        host.theme_folder_pick_title()
+    };
+    let receiver = {
+        let host = app.state::<Host>();
+        for_the_shell(&host, None, pick_theme_folder(&app, &window, title))?
+    };
+    off_main(app, move |host| {
+        let result = receiver
+            .recv()
+            .map_err(|_| PluginError::Internal(fub_abi::Text::key("host.theme_folder.pick_failed")))
+            .and_then(|selection| match selection {
+                None => Ok(fub_host::theme::ThemeFolderCheck::Cancelled),
+                Some(selected) => {
+                    let unreadable = || {
+                        PluginError::BadArgs(fub_abi::Text::key(
+                            "host.theme_folder.unreadable_path",
+                        ))
+                    };
+                    let path = selected.into_path().map_err(|_| unreadable())?;
+                    let path = Utf8PathBuf::from_path_buf(path).map_err(|_| unreadable())?;
+                    host.check_theme_folder(&path)
+                }
+            });
+        for_the_shell(host, None, result)
+    })
+    .await
+}
+
+/// Installa la cartella che `check_theme_folder` ha fatto scegliere e ha
+/// letto: `digest` dice quale controllo la shell ha visto, il path lo tiene
+/// l'host (`Host::install_theme_from_folder`), che applica anche la modalità
+/// sviluppatore, le porte dell'installazione e il confronto dei byte. Con
+/// `replace` un tema con lo stesso id si sostituisce; senza, la collisione
+/// torna come esito e niente si tocca. Solo la shell principale. La copia
+/// legge e scrive il disco: fuori dal thread principale.
+#[tauri::command]
+async fn install_theme_from_folder(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    replace: bool,
+    digest: String,
+) -> Result<fub_host::theme::ThemeFolderInstall, PluginError> {
+    guard_main_shell(&window, "install themes from a folder")?;
+    off_main(app, move |host| {
+        let result = host.install_theme_from_folder(replace, &digest);
+        for_the_shell(host, None, result)
+    })
+    .await
+}
+
+/// Scarta la cartella che `check_theme_folder` ha controllato: la persona ha
+/// risposto «no» a «Sostituisci», o il cancello della shell l'ha rifiutata
+/// (`Host::forget_theme_folder`). Dopo, `install_theme_from_folder` risponde
+/// `unchecked`. Solo la shell principale; niente modalità sviluppatore, perché
+/// un permesso si può sempre buttare.
+#[tauri::command]
+fn discard_theme_folder(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), PluginError> {
+    guard_main_shell(&window, "install themes from a folder")?;
+    app.state::<Host>().forget_theme_folder();
+    Ok(())
+}
+
+/// L'evento del tema collegato verso la finestra principale: la cartella è
+/// cambiata (un salvataggio, un rifiuto, la cartella sparita), col suo stato
+/// (`fub_host::theme::ThemeLink`). La shell rilegge e rimonta il tema se è
+/// quello in uso o in anteprima.
+pub const THEME_CHANGED: &str = "fub://theme-changed";
+
+/// «Collega una cartella…»: la persona sceglie la cartella di un tema nella
+/// finestra **nativa**, aperta qui col titolo dell'host, e l'host la legge con
+/// le porte dell'installazione e, se è pronta, la collega e la guarda
+/// (`Host::link_theme_folder`). Come «Installa da cartella…», la webview non
+/// dà un path e la modalità sviluppatore si controlla prima di aprire la
+/// finestra e di nuovo nell'host. Solo la shell principale; la finestra chiusa
+/// è `cancelled`, e il collegamento di prima resta.
+#[tauri::command]
+async fn link_theme_folder(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<fub_host::theme::ThemeFolderLink, PluginError> {
+    guard_main_shell(&window, "link a theme folder")?;
+    let title = {
+        let host = app.state::<Host>();
+        let allowed = host.theme_folder_allowed();
+        for_the_shell(&host, None, allowed)?;
+        host.theme_link_pick_title()
+    };
+    let receiver = {
+        let host = app.state::<Host>();
+        for_the_shell(&host, None, pick_theme_folder(&app, &window, title))?
+    };
+    off_main(app, move |host| {
+        let result = receiver
+            .recv()
+            .map_err(|_| PluginError::Internal(fub_abi::Text::key("host.theme_folder.pick_failed")))
+            .and_then(|selection| match selection {
+                None => Ok(fub_host::theme::ThemeFolderLink::Cancelled),
+                Some(selected) => {
+                    let unreadable = || {
+                        PluginError::BadArgs(fub_abi::Text::key(
+                            "host.theme_folder.unreadable_path",
+                        ))
+                    };
+                    let path = selected.into_path().map_err(|_| unreadable())?;
+                    let path = Utf8PathBuf::from_path_buf(path).map_err(|_| unreadable())?;
+                    host.link_theme_folder(&path)
+                }
+            });
+        for_the_shell(host, None, result)
+    })
+    .await
+}
+
+/// «Scollega»: azzera la cartella collegata e smonta l'osservatore
+/// (`Host::unlink_theme_folder`). Solo la shell principale; niente modalità
+/// sviluppatore, perché scollegare si può sempre.
+#[tauri::command]
+async fn unlink_theme_folder(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), PluginError> {
+    guard_main_shell(&window, "link a theme folder")?;
+    off_main(app, move |host| {
+        let result = host.unlink_theme_folder();
+        for_the_shell(host, None, result)
+    })
+    .await
+}
+
+/// Il tema collegato com'è adesso (`Host::theme_link`), `null` se nessuna
+/// cartella è collegata o la modalità sviluppatore è spenta: Aspetto lo
+/// disegna, e la shell all'avvio dice se la cartella non c'è più. Legge il
+/// disco: fuori dal thread principale.
+#[tauri::command]
+async fn theme_link(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<Option<fub_host::theme::ThemeLink>, PluginError> {
+    guard_main_shell(&window, "link a theme folder")?;
+    off_main(app, move |host| Ok(host.theme_link())).await
 }
 
 fn parse_installation(installation: &str) -> Result<u64, PluginError> {
@@ -3233,6 +3444,21 @@ pub fn run() {
         })
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
+            // Il tema collegato: gli eventi vanno solo alla finestra
+            // principale, e l'osservatore parte se la chiave e la modalità
+            // sviluppatore lo dicono (una cartella sparita non ferma l'avvio:
+            // lo stato lo dice alla shell). `sync_theme_link` non si ferma qui:
+            // legge il disco e monta su un thread del custode.
+            {
+                let events = app.handle().clone();
+                let host = app.state::<Host>();
+                host.set_theme_link_sink(std::sync::Arc::new(move |link| {
+                    if let Err(error) = events.emit_to("main", THEME_CHANGED, link) {
+                        tracing::warn!(target: "fub.app", %error, "the linked theme event did not cross the IPC");
+                    }
+                }));
+                host.sync_theme_link();
+            }
             let machine = app.state::<Host>().machine_settings();
             let zoom = machine.iter()
                 .find(|entry| entry.spec.key == fub_host::settings::APPEARANCE_ZOOM)
@@ -3269,6 +3495,18 @@ pub fn run() {
             start_control(app);
             #[cfg(not(mobile))]
             promemoria::start(app.handle());
+            // Il banco della memoria (R1) può chiedere la raccolta forzata
+            // della WebView, ma soltanto in una build con `bench-gc`; senza
+            // `FUB_BENCH_GC` non succede niente.
+            #[cfg(feature = "bench-gc")]
+            bench_gc::install(app);
+            #[cfg(not(feature = "bench-gc"))]
+            if std::env::var_os("FUB_BENCH_GC").is_some() {
+                tracing::warn!(
+                    target: "fub.app",
+                    "FUB_BENCH_GC ignored: this build has no bench-gc feature"
+                );
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -3327,6 +3565,12 @@ pub fn run() {
             list_bundles,
             list_themes,
             read_theme,
+            check_theme_folder,
+            install_theme_from_folder,
+            discard_theme_folder,
+            link_theme_folder,
+            unlink_theme_folder,
+            theme_link,
             list_installed_plugins,
             plugin_budget_snapshot,
             plugin_limited_mode,
@@ -3451,6 +3695,8 @@ pub fn run() {
                 tauri::async_runtime::block_on(
                     app.state::<live::LiveSessions>().close_on_exit(),
                 );
+                // L'osservatore del tema collegato si smonta prima dei vault.
+                app.state::<Host>().close_theme_link();
                 let shutdown = app.state::<InstalledPlugins>().begin_shutdown();
                 for and in app.state::<Host>().close() {
                     // L'app sta uscendo: il ponte verso la shell sta morendo e

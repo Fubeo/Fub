@@ -13,7 +13,7 @@ import type { PaintAttr } from "../../painter/paint";
 import { Clip } from "../clips";
 import type { Style } from "./base";
 import { hidden, styleOf, transformOf } from "./shapes";
-import type { Nested, Unit } from "./unit";
+import type { ForeignBlock, Nested, Unit } from "./unit";
 
 /// Dove stanno i figli di un contenitore: il suo percorso, il livello, la
 /// matrice dalle sue coordinate a quelle della scena, lo stile che trasmette
@@ -28,6 +28,11 @@ interface Context {
 
 type MakeUnit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null) => Unit | null;
 
+/// Il blocco estraneo `leaf`, figlio di un contenitore: il suo percorso, la
+/// matrice e lo stile del contenitore e i ritagli e le maschere suoi e di chi
+/// lo contiene. `null` se non disegna niente.
+type MakeForeign = (leaf: LeafNode, path: number[], parent: Matrix, style: Style, clips: readonly Clip[] | null) => ForeignBlock | null;
+
 /// Aggiunge a `outer` i ritagli e le maschere di un contenitore: il nodo, i
 /// suoi attributi dipinti, la matrice dalle sue coordinate a quelle della
 /// scena e lo stile che trasmette.
@@ -38,6 +43,7 @@ type AddClips = (node: ElementPart, attrs: readonly PaintAttr[], matrix: Matrix,
 export class Lookup implements Nested {
   private ids: Map<string, ElementPart> | null = null;
   private readonly contexts = new Map<ContainerNode, Context | null>();
+  private readonly foreign = new Map<ContainerNode, readonly ForeignBlock[]>();
 
   constructor(
     private readonly model: DocumentModel,
@@ -50,6 +56,7 @@ export class Lookup implements Nested {
     private readonly addClips: AddClips,
     /// Le pagine che si annotano: gli altri figli della radice non ci sono.
     private readonly pages: readonly ContainerNode[] | null = null,
+    private readonly makeForeign: MakeForeign = () => null,
   ) {}
 
   resolve(key: string): Unit | null {
@@ -76,6 +83,32 @@ export class Lookup implements Nested {
     const out: Unit[] = [];
     childLoop(container, (child, index) => {
       if (pickable(child) && child.details!.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style, context.clips));
+    });
+    return out;
+  }
+
+  foreignOf(container: ContainerNode): readonly ForeignBlock[] {
+    let found = this.foreign.get(container);
+    if (found === undefined) {
+      found = this.computeForeign(container);
+      this.foreign.set(container, found);
+    }
+    return found;
+  }
+
+  /// I blocchi estranei fra i figli di `container`, come [`foreignOf`]: lo
+  /// stesso blocco ogni volta, perché la gomma li riconosce così.
+  private computeForeign(container: ContainerNode): ForeignBlock[] {
+    const role = container.details?.role;
+    if (role !== "group" && role !== "link") return [];
+    if (this.scope !== null && container !== this.scope && !within(container, this.scope)) return [];
+    const context = this.contextOf(container);
+    if (context === null) return [];
+    const out: ForeignBlock[] = [];
+    childLoop(container, (child, index) => {
+      if (child.kind !== "leaf" || child.details !== null) return;
+      const block = this.makeForeign(child, [...context.path, index], context.matrix, context.style, context.clips);
+      if (block !== null) out.push(block);
     });
     return out;
   }
@@ -252,7 +285,7 @@ function within(node: ElementPart, container: ContainerNode): boolean {
   return false;
 }
 
-export function push(out: Unit[], unit: Unit | null): void {
+export function push<T>(out: T[], unit: T | null): void {
   if (unit !== null) out.push(unit);
 }
 

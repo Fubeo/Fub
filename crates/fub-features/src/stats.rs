@@ -259,11 +259,13 @@ impl ViewProvider for StatsView {
         // volta sola è ciò che rende il render una **fotografia coerente**. Con
         // due letture il documento veniva dalla prima e la selezione dalla
         // seconda, e nulla nel tipo diceva che fossero lo stesso contesto.
+        // Senza nota la barra tace, come Collegamenti e Proprietà: una banda che
+        // ripete «nessuna nota» è rumore (IMP-107).
         let Some(context) = host.active_context() else {
-            return Ok(row(Text::key(NO_ACTIVE_DOC)));
+            return Ok(UiNode::row(12, Vec::new()));
         };
         let Some(doc) = context.doc.as_ref() else {
-            return Ok(row(Text::key(NO_ACTIVE_DOC)));
+            return Ok(UiNode::row(12, Vec::new()));
         };
         // Un PDF, un'immagine: un file che non è testo non ha parole, e lo si
         // dice. Restituire l'errore della lettura farebbe fallire il pannello a
@@ -691,8 +693,6 @@ fn row(text: Text) -> UiNode {
 
 /// Il titolo del pannello, che sta nella barra di stato e si vede sempre.
 const VIEW_TITLE: &str = "view_title";
-/// Nessuna nota aperta: non è un errore, è uno stato.
-const NO_ACTIVE_DOC: &str = "no_active_doc";
 /// La nota chiesta a `stats.document` non esiste.
 const NO_DOC: &str = "no_doc";
 /// Il file non è testo (un PDF, un'immagine): non ci sono parole da contare.
@@ -735,7 +735,6 @@ pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Statistiche")
-            .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(NO_DOC, "La nota non esiste.")
             .with(
                 NOT_TEXT,
@@ -762,7 +761,6 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(READING_TIME, "~{minutes} min di lettura"),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Statistics")
-            .with(NO_ACTIVE_DOC, "No note open.")
             .with(NO_DOC, "The note does not exist.")
             .with(
                 NOT_TEXT,
@@ -1178,7 +1176,7 @@ mod tests {
     }
 
     #[test]
-    fn without_a_document_it_says_so() {
+    fn without_a_document_it_is_silent() {
         let host = MemoryHost::new();
         assert_eq!(
             texts(
@@ -1186,7 +1184,7 @@ mod tests {
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
             ),
-            vec!["Nessuna nota aperta.".to_string()]
+            Vec::<String>::new()
         );
     }
 
@@ -1345,7 +1343,7 @@ mod tests {
                     .unwrap(),
                 "en"
             ),
-            vec!["No note open.".to_string()]
+            Vec::<String>::new()
         );
     }
 }
