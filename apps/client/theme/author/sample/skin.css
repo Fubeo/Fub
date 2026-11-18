@@ -3266,10 +3266,31 @@ kbd,
   transition: opacity var(--duration-slow) var(--ease);
 }
 
-/* La barra del titolo si attenua e torna al passaggio (la regola sta in
-   `structure.css`): qui la durata, la stessa del velo. */
-.titlebar {
+/* La barra del titolo si attenua e torna piena al passaggio del puntatore, o
+   quando il fuoco ci entra da tastiera. Si attenua nei colori e non con
+   un'opacità: un velo porterebbe il nome del vault e l'invito della pillola
+   sotto 2:1, mentre il grigio quieto (`--muted`) tiene 4,5:1 sul fondo della
+   barra in tutte e due le luci. Il nome del vault e il titolo scendono al
+   grigio, la pillola perde il pozzetto e il marchio, che è un disegno e non
+   un testo, si vela a metà (le sue parti chiare restano sopra 3:1); la
+   durata è quella del velo. */
+[data-focus-mode] .titlebar :is(.vault-chip, .pill-title) {
+  transition: color var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar .pill {
+  transition: transform var(--duration-state) var(--ease), background-color var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar .brand-glyph {
   transition: opacity var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) :is(.vault-chip, .pill-title) {
+  color: var(--muted);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) .pill {
+  background: var(--bg);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) .brand-glyph {
+  opacity: 0.5;
 }
 
 /* «Esci dalla concentrazione», in testa alla parte destra della banda: il
@@ -22522,6 +22543,12 @@ h6.ui-heading {
   background: var(--diagram-paper, transparent);
   scrollbar-width: thin;
   transition: background-color 0.22s, opacity 0.18s;
+}
+/* Quando scorre la tavola prende il fuoco del Tab (`ui/mermaid.ts`): l'anello
+   rientra della sua larghezza e segue gli angoli della tavola, perché il
+   bordo della colonna non lo tagli. */
+.mermaid-diagram .mermaid-diagram-view:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 .mermaid-diagram[data-diagram-style="acquerello"] .mermaid-diagram-view,
 .mermaid-diagram[data-diagram-style="aurora"] .mermaid-diagram-view,

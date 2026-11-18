@@ -338,6 +338,32 @@ describe("gli stili dei diagrammi", () => {
     expect(diagram.element.querySelector("details")!.hidden).toBe(true);
   });
 
+  it("la tavola che scorre di lato entra nel giro del Tab, e ne esce quando il disegno ci sta", async () => {
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:largo");
+    const diagram = view("flowchart LR; A-->B");
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    const stage = diagram.element.querySelector<HTMLElement>(".mermaid-diagram-view")!;
+    const image = diagram.element.querySelector("img")!;
+    // Il disegno ci sta: la tavola è una figura qualunque, fuori dal Tab.
+    Object.defineProperty(stage, "clientWidth", { configurable: true, value: 600 });
+    Object.defineProperty(stage, "scrollWidth", { configurable: true, value: 600 });
+    image.dispatchEvent(new Event("load"));
+    expect(stage.hasAttribute("tabindex")).toBe(false);
+    expect(stage.hasAttribute("role")).toBe(false);
+    // Più largo del riquadro: la tavola scorre, e la tastiera la raggiunge.
+    Object.defineProperty(stage, "scrollWidth", { configurable: true, value: 900 });
+    image.dispatchEvent(new Event("load"));
+    expect(stage.tabIndex).toBe(0);
+    expect(stage.getAttribute("role")).toBe("group");
+    expect(stage.getAttribute("aria-label")).toBe("Disegno del diagramma: scorre di lato con le frecce");
+    // Il riquadro si allarga di nuovo: fuori dal Tab, senza nome.
+    Object.defineProperty(stage, "clientWidth", { configurable: true, value: 1000 });
+    image.dispatchEvent(new Event("load"));
+    expect(stage.hasAttribute("tabindex")).toBe(false);
+    expect(stage.hasAttribute("aria-label")).toBe(false);
+  });
+
   it("lo stile scritto nel sorgente vince sulla scelta generale", async () => {
     document.documentElement.dataset.theme = "light";
     setDiagramStylePreference("aurora");

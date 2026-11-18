@@ -16,8 +16,9 @@ vede nell'editor.
 
 ## «Nuova nota» chiede il tipo
 
-Se il vault ha dei tipi, «Nuova nota» (il pulsante del cassetto e il comando)
-apre sotto il pulsante il menu «Nuova nota di tipo»: in cima «Nota», la nota
+Se il vault ha dei tipi, «Nuova nota» (il comando, Ctrl+N, e la voce «Nota»
+del menu [«Nuovo»](editor-menus.md#il-menu-nuovo) che il «+» del cassetto apre)
+apre sotto il «+» il menu «Nuova nota di tipo»: in cima «Nota», la nota
 semplice, già scelta; sotto un tassello per tipo, con la sua icona, il nome e
 le proprietà che porta (quelle in evidenza, o le prime tre; senza proprietà la
 cartella dove nasce). Il piede ricorda dove stanno i tipi.
