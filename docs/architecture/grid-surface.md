@@ -156,6 +156,22 @@ in colori forzati `Highlight`; il quadratino si prende dove si vede (6 px). Il
 fuoco è la cella attiva (`aria-activedescendant`). Le intestazioni scelte
 hanno velo e filo d'accento, e dopo righe o colonne nascoste una tacca doppia.
 
+Col dito (`pointerType` `touch`) trascinare scorre e basta: la griglia dice
+`touch-action: pan-x pan-y` e non sceglie niente oltre 8 px (`TAP_MOVE`). Un
+tocco sceglie la cella, la colonna, la riga o il foglio come un clic, e
+conferma una cella aperta; due tocchi sulla stessa cella entro 300 ms la
+aprono; un tocco lungo (450 ms, fermo) la sceglie, se non è già scelta, e
+mette due maniglie agli angoli della selezione, che si tirano per
+allargarla. Le maniglie sono pezzi del motore dei segni (`grid-mark-touch`,
+`data-handle` `a` e `b`): crescono dal centro con la molla `SLIDE` (con
+«ridotto» si dissolvono), seguono la selezione e, come il quadratino, sono
+intere nel livello della zona del loro angolo. Non prendono il puntatore: la
+presa è un cerchio di 9 px attorno all'angolo che si vede, anche dove una
+fascia ferma copre metà maniglia, e un `touchstart` sulla presa ferma lo
+scorrimento. Un tocco altrove, il mouse o la penna le tolgono. Col dito il
+quadratino non c'è (il riempimento si fa dal menu) e il tocco lungo non apre
+menu. Il mouse e la penna fanno ciò che fanno sempre.
+
 Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
 serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
 segue il puntatore con la misura nelle unità di Excel e in pixel del file, e

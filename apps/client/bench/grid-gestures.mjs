@@ -49,7 +49,7 @@ import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 /// I cantieri chiusi: i loro controlli decidono l'esito del banco.
-const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3"]);
+const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3", "G7"]);
 
 const REPORT = join(OUTPUT, "grid-gestures.json");
 const SHOTS = join(OUTPUT, "grid-gestures");
@@ -1200,7 +1200,277 @@ const CONTROLS = [
     expected: "in ogni fotogramma i pezzi di ogni lato d'accordo (0,5 px), nessun lato oltre il bersaglio o all'indietro, anello e velo dentro il bordo, il quadratino un pezzo solo 8×8 nel livello della zona del suo angolo; a gesto finito la cella attiva sotto il puntatore",
     run: (page) => denseMouse(page),
   },
+  // **Il dito** (griglia T7), a 390 px col tocco del CDP: trascinare scorre e
+  // basta, un tocco sceglie, due aprono, il tocco lungo mette due maniglie
+  // che si tirano.
+  {
+    id: "g7-trascinare-scorre",
+    cantiere: "G7",
+    scene: LARGE_SCENE_ID,
+    title: "a 390 px col dito: un tocco su B4, poi un trascinamento verticale di 300 px nel corpo",
+    expected: "lo scorrimento cambia, nessun intervallo, la cella attiva resta B4",
+    run: async (page) => {
+      const finger = await touchPage(page);
+      const b4 = await centerOf(page, cellSelector("B4"));
+      await finger.tap(b4.x, b4.y);
+      await settle(page, 400);
+      const before = await selectionLook(page);
+      const viewport = await viewportBox(page);
+      const from = { x: viewport.left + viewport.bandLeft + (viewport.width - viewport.bandLeft) / 2, y: viewport.top + viewport.height - 40 };
+      await finger.drag(from, { x: from.x, y: from.y - 300 });
+      await settle(page, 500);
+      const after = await selectionLook(page);
+      return {
+        ok: before.name === "B4" && after.scrollTop > before.scrollTop + 100 && after.cells <= 1 && after.name === "B4",
+        seen: `prima ${before.name} a ${before.scrollTop} px; dopo il dito ${after.name}, ${after.cells} celle scelte, scorso a ${after.scrollTop} px`,
+      };
+    },
+  },
+  {
+    id: "g7-tocco-sceglie",
+    cantiere: "G7",
+    title: "a 390 px col dito: un tocco su una cella in vista (B4)",
+    expected: "B4 è la cella attiva, da sola",
+    run: async (page) => {
+      const finger = await touchPage(page);
+      const b4 = await centerOf(page, cellSelector("B4"));
+      await finger.tap(b4.x, b4.y);
+      await settle(page);
+      const look = await selectionLook(page);
+      const s = await readState(page);
+      return { ok: look.name === "B4" && look.cells === 1 && !s.editorOpen, seen: `${look.name}, ${look.cells} celle scelte, ${editorLabel(s)}` };
+    },
+  },
+  {
+    id: "g7-due-tocchi-aprono",
+    cantiere: "G7",
+    title: "a 390 px col dito: due tocchi su B4 a 120 ms l'uno dall'altro",
+    expected: "la cella B4 aperta",
+    run: async (page) => {
+      const finger = await touchPage(page);
+      const b4 = await centerOf(page, cellSelector("B4"));
+      await finger.tap(b4.x, b4.y);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await finger.tap(b4.x, b4.y);
+      await settle(page);
+      const s = await readState(page);
+      return { ok: s.editorOpen && s.name === "B4", seen: seen(s) };
+    },
+  },
+  {
+    id: "g7-tocco-lungo",
+    cantiere: "G7",
+    title: "a 390 px col dito (si vede solo la colonna A): un tocco lungo su A2, poi la maniglia di fine tirata fino ad A4",
+    expected: "due maniglie distinte (`data-handle` a e b) agli angoli della selezione; tirata quella di fine, la selezione è A2:A4 e il foglio non scorre",
+    run: async (page) => {
+      const finger = await touchPage(page);
+      const a2 = await centerOf(page, cellSelector("A2"));
+      const a4 = await centerOf(page, cellSelector("A4"));
+      await finger.long(a2.x, a2.y);
+      await settle(page);
+      const grips = await gripsLook(page);
+      const a = grips.find((grip) => grip.handle === "a");
+      const b = grips.find((grip) => grip.handle === "b");
+      const placed = grips.length === 2 && a && b && a.x !== b.x && a.y !== b.y;
+      if (!placed) return { ok: false, seen: `${grips.length} maniglie (${grips.map((grip) => grip.handle).join(", ")})` };
+      const before = await selectionLook(page);
+      await finger.drag({ x: b.x, y: b.y }, a4);
+      await settle(page);
+      const after = await selectionLook(page);
+      const still = after.scrollTop === before.scrollTop && after.scrollLeft === before.scrollLeft;
+      return {
+        ok: before.range === "A2:A2" && after.range === "A2:A4" && after.name === "A2" && still,
+        seen: `maniglie ${a.size} e ${b.size}; prima ${before.range}, tirata quella di fine ${after.range} (attiva ${after.name}); scorso ${still ? "no" : `sì, a ${after.scrollLeft},${after.scrollTop}`}`,
+      };
+    },
+  },
+  {
+    id: "g7-maniglia-sul-filo",
+    cantiere: "G7",
+    scene: LARGE_SCENE_ID,
+    title: "con la colonna A bloccata, a 390 px col dito: tocco lungo su B5, la maniglia d'inizio presa al centro e tirata; poi 40 px di lato; poi il tocco lungo su A5",
+    expected: "la maniglia d'inizio di B5 un elemento solo, 14 × 14, col centro sul filo; presa al centro la tira (la selezione si allarga, il foglio non scorre); dopo 40 px di lato sul filo non ne resta niente; su A5 la maniglia di fine resta intera sul filo, anche dopo 40 px",
+    run: async (page) => {
+      const finger = await touchPage(page);
+      const report = [];
+      const b5 = await centerOf(page, cellSelector("B5"));
+      await finger.long(b5.x, b5.y);
+      await settle(page);
+      let grips = await gripsLook(page);
+      const a = grips.find((grip) => grip.handle === "a");
+      const onWire = (grip, axis) => Math.abs(grip[axis === "x" ? "wireX" : "wireY"]) <= 1;
+      const aOk = grips.filter((grip) => grip.handle === "a").length === 1 && a?.size === "14×14" && onWire(a, "x");
+      report.push(a ? `B5: maniglia d'inizio ${a.size}, centro dal filo ${a.wireX} px, ${a.visible} punti visti su ${a.samples}` : "B5: nessuna maniglia d'inizio");
+      if (!a) return { ok: false, seen: report.join("; ") };
+      // Presa al centro (sul filo, metà sotto la fascia) e tirata in
+      // giù: B5 è la fine fissa, la selezione cresce fino a B7 (la colonna C
+      // a 390 px esce dal riquadro, e il gesto lo farebbe scorrere da sé).
+      const before = await selectionLook(page);
+      const b7 = await centerOf(page, cellSelector("B7"));
+      await finger.drag({ x: a.x, y: a.y }, b7);
+      await settle(page);
+      const pulled = await selectionLook(page);
+      const still = pulled.scrollTop === before.scrollTop && pulled.scrollLeft === before.scrollLeft;
+      const pullOk = before.range === "B5:B5" && pulled.range === "B5:B7" && still;
+      report.push(`tirata dal centro: ${before.range} → ${pulled.range}, scorso ${still ? "no" : "sì"}`);
+      // 40 px di lato: la maniglia d'inizio va sotto la fascia con la sua cella.
+      await page.evaluate(() => {
+        document.querySelector(".pane.focus .grid-viewport").scrollLeft += 40;
+      });
+      await settle(page);
+      grips = await gripsLook(page);
+      const under = grips.find((grip) => grip.handle === "a");
+      const underOk = !under || under.visible === 0;
+      report.push(`dopo 40 px: ${under ? `${under.visible} punti della maniglia d'inizio visti` : "maniglia d'inizio nascosta"}`);
+      // Su A5, nella colonna ferma, la maniglia di fine sta intera sul filo.
+      await page.evaluate(() => {
+        document.querySelector(".pane.focus .grid-viewport").scrollLeft = 0;
+      });
+      await settle(page);
+      const a5 = await centerOf(page, cellSelector("A5"));
+      await finger.long(a5.x, a5.y);
+      await settle(page);
+      let end = (await gripsLook(page)).find((grip) => grip.handle === "b");
+      const wholeAt = (grip) => grip && grip.size === "14×14" && grip.visible === grip.samples && onWire(grip, "x");
+      let endOk = wholeAt(end);
+      report.push(end ? `A5: maniglia di fine ${end.size}, centro dal filo ${end.wireX} px, ${end.visible}/${end.samples} punti visti` : "A5: nessuna maniglia di fine");
+      await page.evaluate(() => {
+        document.querySelector(".pane.focus .grid-viewport").scrollLeft += 40;
+      });
+      await settle(page);
+      end = (await gripsLook(page)).find((grip) => grip.handle === "b");
+      endOk = endOk && wholeAt(end);
+      report.push(end ? `dopo 40 px ${end.visible}/${end.samples} punti, centro dal filo ${end.wireX} px` : "dopo 40 px nessuna maniglia di fine");
+      return { ok: aOk && pullOk && underOk && endOk, seen: report.join("; ") };
+    },
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// G7: il dito.
+// ---------------------------------------------------------------------------
+
+/// La larghezza del telefono dei controlli G7.
+const G7_WIDTH = 390;
+/// Un passo del dito che scorre, come un fotogramma.
+const G7_STEP_MS = 16;
+/// Quanto resta giù il dito di un tocco lungo: oltre `LONG_PRESS_MS` (450).
+const G7_LONG_MS = 700;
+
+/// Accende il tocco del CDP e porta la finestra a 390 px. Il dito passa dal
+/// browser vero (`Input.dispatchTouchEvent`): `touch-action` decide chi
+/// scorre, come su un telefono.
+async function touchPage(page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  const size = page.viewportSize();
+  await page.setViewportSize({ width: G7_WIDTH, height: size.height });
+  await gridSteady(page);
+  await settle(page);
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const send = (type, points) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map(({ x, y }) => ({ x, y, id: 1 })) });
+  return {
+    tap: async (x, y) => {
+      await send("touchStart", [{ x, y }]);
+      await pause(40);
+      await send("touchEnd", []);
+    },
+    long: async (x, y) => {
+      await send("touchStart", [{ x, y }]);
+      await pause(G7_LONG_MS);
+      await send("touchEnd", []);
+    },
+    /// Da `from` a `to` in 20 passi di un fotogramma.
+    drag: async (from, to) => {
+      await send("touchStart", [from]);
+      await pause(G7_STEP_MS);
+      for (let step = 1; step <= 20; step += 1) {
+        const t = step / 20;
+        await send("touchMove", [{ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }]);
+        await pause(G7_STEP_MS);
+      }
+      await send("touchEnd", []);
+    },
+  };
+}
+
+/// Il riquadro della griglia nello schermo e la misura delle fasce ferme.
+function viewportBox(page) {
+  return page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const v = viewport.getBoundingClientRect();
+    return {
+      left: v.left + viewport.clientLeft,
+      top: v.top + viewport.clientTop,
+      width: viewport.clientWidth,
+      height: viewport.clientHeight,
+      bandLeft: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
+      bandTop: parseFloat(plane.style.getPropertyValue("--grid-top-h")),
+    };
+  });
+}
+
+/// La selezione che si vede: il nome della cella attiva, quante celle sono
+/// scelte, l'intervallo A1 che coprono e lo scorrimento.
+function selectionLook(page) {
+  return page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const chosen = [...viewport.querySelectorAll(".grid-cell.selected, .grid-cell.active")];
+    const rows = chosen.map((cell) => Number(cell.dataset.row));
+    const columns = chosen.map((cell) => Number(cell.dataset.column));
+    const a1 = (row, column) => `${String.fromCharCode(65 + column)}${row + 1}`;
+    return {
+      name: document.querySelector(".pane.focus .grid-cell-name")?.textContent ?? null,
+      cells: new Set(chosen).size,
+      range: chosen.length ? `${a1(Math.min(...rows), Math.min(...columns))}:${a1(Math.max(...rows), Math.max(...columns))}` : "niente",
+      scrollTop: viewport.scrollTop,
+      scrollLeft: viewport.scrollLeft,
+    };
+  });
+}
+
+/// Le maniglie del tocco che si vedono: quale (`data-handle`), il centro
+/// nello schermo e dal filo del blocco, la misura, e quanti dei punti
+/// campionati dentro il tondo stanno sopra a tutto (le maniglie non prendono
+/// il puntatore: per leggerle lo si accende).
+function gripsLook(page) {
+  return page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const v = viewport.getBoundingClientRect();
+    const bands = { top: parseFloat(plane.style.getPropertyValue("--grid-top-h")), left: parseFloat(plane.style.getPropertyValue("--grid-left-w")) };
+    const grips = [...viewport.querySelectorAll(".grid-mark-touch")].filter((mark) => !mark.hidden);
+    const probe = new CSSStyleSheet();
+    probe.replaceSync(".grid-mark-touch { pointer-events: auto !important; }");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, probe];
+    const out = grips.map((grip) => {
+      const box = grip.getBoundingClientRect();
+      const cx = box.left + box.width / 2;
+      const cy = box.top + box.height / 2;
+      let samples = 0;
+      let visible = 0;
+      for (const dx of [-4, -2, 0, 2, 4]) {
+        for (const dy of [-4, -2, 0, 2, 4]) {
+          samples += 1;
+          if (document.elementsFromPoint(cx + dx, cy + dy)[0] === grip) visible += 1;
+        }
+      }
+      return {
+        handle: grip.dataset.handle,
+        x: cx,
+        y: cy,
+        size: `${Math.round(box.width)}×${Math.round(box.height)}`,
+        wireX: Math.round((cx - v.left - viewport.clientLeft - bands.left) * 2) / 2,
+        wireY: Math.round((cy - v.top - viewport.clientTop - bands.top) * 2) / 2,
+        samples,
+        visible,
+      };
+    });
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== probe);
+    return out;
+  });
+}
 
 /// d42: filma uno scorrimento vero e confronta, fotogramma per fotogramma, il
 /// nastro delle intestazioni di colonna con quello di prima.
