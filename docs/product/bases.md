@@ -210,10 +210,7 @@ del file resta byte per byte:
   il titolo di un gruppo di colonne), vanno con la loro voce;
 - l'ordine delle chiavi che non si toccano;
 - le virgolette, i rientri e le righe vuote;
-- le fini di riga (`\n` o `\r\n`) e l'assenza dell'a capo in fondo al file;
-- il BOM in testa al file: la modifica lo salta e lo lascia al suo posto
-  (`fub_abi::rules::text_policy`), anche quando la chiave toccata è sulla
-  prima riga;
+- le fini di riga (`\n` o `\r\n`), il BOM in testa e l'a capo che manca in fondo;
 - le chiavi che Fub non conosce.
 
 Una chiave nuova va al suo posto, prima della prima chiave che la segue nella
