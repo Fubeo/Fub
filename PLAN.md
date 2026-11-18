@@ -3141,7 +3141,7 @@ Fatto quando: test del modello coi casi limite; un test che il profilo
 futuro conserva i campi sconosciuti.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (f371440f8, merge d3d167b6a, 2026-11-18), in attesa del pacchetto 2. Scostamenti: dietro la feature `draw`, senza una feature sua; profili in `.fub/plugins/fub.esporta-pdf/profili/<id>.json` (id = nome del file, il nome visibile dentro), memoria nello spazio del documento (`doc/<nota>/esportazione-pdf.json`) che il kernel sposta già con rinomina, cestino e raccolta; un profilo futuro si legge ma non si riscrive; niente mirror TypeScript finché i tipi non passano dall'IPC (T70/T79).
 
 ## T69a · Le regole dell'impaginazione, senza DOM
 
