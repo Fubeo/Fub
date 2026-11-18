@@ -94,6 +94,35 @@ describe("la riga di una scorciatoia che non torna", () => {
   });
 });
 
+describe("un comando senza scorciatoia (IMP-140)", () => {
+  it("ha la riga vuota e neutra; un valore scritto male la fa ancora parlare", async () => {
+    // A stato pulito il campo di un comando senza scorciatoia vale "": è
+    // «nessuna scorciatoia», non una scorciatoia scritta male.
+    fake.commands = [command("uno", "Mod-Shift-y"), { ...command("muto", ""), binding: null, declared: null }];
+    fake.entries = [keyEntry("uno", "Mod-Shift-y"), keyEntry("muto", "")];
+    await openShortcuts();
+    const row = document.querySelector<HTMLElement>('.setting-row[data-setting-key="keys.muto"]')!;
+    const diagnostic = row.querySelector<HTMLElement>(".setting-diagnostic")!;
+    const input = row.querySelector<HTMLInputElement>("input[type=text]")!;
+    expect(input.value).toBe("");
+    expect(diagnostic.textContent).toBe("");
+    expect(row.hasAttribute("data-issue")).toBe(false);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+
+    input.value = "xx";
+    input.dispatchEvent(new Event("input"));
+    expect(diagnostic.textContent).not.toBe("");
+    expect(row.hasAttribute("data-issue")).toBe(true);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+
+    // Svuotarlo di nuovo torna a «nessuna scorciatoia», anche con soli spazi.
+    input.value = "  ";
+    input.dispatchEvent(new Event("input"));
+    expect(diagnostic.textContent).toBe("");
+    expect(row.hasAttribute("data-issue")).toBe(false);
+  });
+});
+
 describe("una scorciatoia fra le righe sciolte (IMP-026)", () => {
   it("«xx» non si salva: la riga dice perché, come la scheda delle scorciatoie", async () => {
     // Nessun comando la porta, quindi la riga sta nella configurazione, fra le

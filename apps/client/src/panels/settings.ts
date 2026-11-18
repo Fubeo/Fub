@@ -3030,7 +3030,10 @@ function shortcutDiagnostic(command: CommandEntry, binding: string, commands: Co
   if (!validation.valid) {
     return t("settings.shortcut.invalid_unsaved", { reason: t(KEYBINDING_REASONS[validation.reason]) });
   }
-  const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
+  // Il campo vuoto è «nessuna scorciatoia», come nel modello dei comandi
+  // (`binding: null`), non una scorciatoia scritta male (IMP-140).
+  const proposed = commands.map((item) =>
+    item.id === command.id ? { ...item, binding: binding.trim() === "" ? null : binding } : item);
   const issues = keybindingIssues(proposed)
     .filter((issue) => issue.type === "invalid"
       ? issue.command.id === command.id
