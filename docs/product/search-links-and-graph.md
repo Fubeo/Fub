@@ -121,7 +121,9 @@ riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
-in una formula o nel frontmatter; disegni e fogli non ne offrono. La converte
+in una formula o nel frontmatter; disegni e fogli non ne offrono. Con un
+documento che non è una nota aperto (un .docx, un disegno) la sezione delle
+menzioni uscenti resta chiusa e dice perché non ne ha. La converte
 `mention.link`: rilegge la nota alla revisione e allo span dichiarati, rifiuta
 se il testo è cambiato o non è più una menzione, e si annulla in un passo con
 «Annulla l'ultima operazione». Il riferimento scritto è il più corto che la
