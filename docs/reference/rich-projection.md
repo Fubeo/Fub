@@ -26,6 +26,14 @@ uno nuovo non ha `k`. Un segno senza il suo commento si toglie; due commenti
 con lo stesso id, o una risposta senza il suo, sono una proiezione malformata.
 Il codec ODT rifiuta un elenco non vuoto.
 
+`href` di un tratto è il suo link. Uno nuovo prende lo stile «Hyperlink»
+del documento (o quello predefinito di WordCraft), come in Word. Toglierlo
+toglie il link prima di confrontare l'enfasi: se ne vanno lo stile
+«Hyperlink» e, nel `.docx`, il `w:hyperlink` con gli attributi che la
+proiezione non porta (`w:history`, `w:tooltip`, `w:tgtFrame`); ciò che il
+tratto mostra (`m`, `f`) resta, scritto diretto dove lo dava lo stile. La
+relazione dell'indirizzo se ne va con l'ultimo link che la usa.
+
 `"track": true`, fra `readonly` e `lang`, dice che il documento registra le
 modifiche (assente quando non lo fa): la shell scrive ciò che cambia come
 revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il

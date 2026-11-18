@@ -1539,6 +1539,13 @@ fn with_marks(
     shown_style: Option<&str>,
     styles: &mut StyleSheet,
 ) -> CharProps {
+    // Un link tolto si toglie prima di confrontare l'enfasi: con lui se ne va
+    // lo stile «Hyperlink», e la sottolineatura che chi legge vedeva da quello
+    // stile, se la vuole ancora, diventa diretta. Il testo resta come la
+    // pagina lo mostra.
+    if href.is_none() && props.link.is_some() {
+        unlink(&mut props);
+    }
     let want: BTreeSet<Mark> = marks.iter().copied().collect();
     let shown: BTreeSet<Mark> = projection::marks(styles, shown_style, &props)
         .into_iter()
@@ -1570,15 +1577,23 @@ fn with_marks(
             props
         };
     }
-    if props.link.as_deref() != href {
-        props.link = href.map(str::to_string);
-        match href {
-            Some(_) if props.style.is_none() => props.style = builtin_style(styles, "Hyperlink"),
-            None if props.style.as_deref() == Some("Hyperlink") => props.style = None,
-            _ => {}
+    // Un link nuovo o cambiato prende lo stile «Hyperlink», come in Word, dopo
+    // l'enfasi: il suo aspetto è quello che il link aggiunge.
+    if let Some(href) = href.filter(|href| props.link.as_deref() != Some(href)) {
+        props.link = Some(href.to_string());
+        if props.style.is_none() {
+            props.style = builtin_style(styles, "Hyperlink");
         }
     }
     props
+}
+
+/// Toglie il link da un tratto, e con lui lo stile «Hyperlink».
+fn unlink(props: &mut CharProps) {
+    props.link = None;
+    if props.style.as_deref() == Some("Hyperlink") {
+        props.style = None;
+    }
 }
 
 /// Riporta sul tratto l'aspetto voluto con la stessa regola delle enfasi: un

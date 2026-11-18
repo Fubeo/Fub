@@ -62,7 +62,7 @@
     "E7": {
       "saved": true,
       "readonly": null,
-      "reopened": "different"
+      "reopened": "same"
     },
     "E8": {
       "saved": true,
@@ -73,6 +73,7 @@
       "saved": true,
       "readonly": null,
       "reopened": "same"
-    }
+    },
+    "E10": "n/a"
   }
 }

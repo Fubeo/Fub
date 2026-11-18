@@ -1,7 +1,7 @@
 # Corpus dei documenti di videoscrittura
 
 I file su cui gira il banco `tests/corpus.rs`: apertura, esportazioni e
-modifiche standard (E0–E9) di ogni file, confrontate con i risultati attesi in
+modifiche standard (E0–E10) di ogni file, confrontate con i risultati attesi in
 `expected/`. Il banco gira dentro `cargo test --workspace`.
 
 ## Regole
@@ -24,7 +24,9 @@ impronta della proiezione, differenze del controllo dei byte
 (`preservation::report`), modello dell'indice, avvisi delle esportazioni e
 risultato di ogni modifica. Dopo un salvataggio il banco riapre i byte e
 confronta la proiezione con quella voluta, a meno dei dati opachi e dei
-suggerimenti di resa (`reopened`).
+suggerimenti di resa, con due testi vicini e per il resto uguali contati come
+uno, perché il codec fonde i run che una modifica ha reso uguali
+(`reopened`).
 
 Quando un cambiamento è voluto, per esempio in una PR che aggiorna WordCraft:
 

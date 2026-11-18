@@ -661,6 +661,39 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(sessions.inspect("nota.md")).toMatchObject({ lifecycle: "open", text: "testo da proteggere", dirty: true });
   });
 
+  // IMP-135: un link messo su un .docx si sta ancora scrivendo quando arriva
+  // «Remove link». La scrittura in volo che il formato rifiuta non lascia la
+  // sessione «in corso»: dice l'errore, e la modifica arrivata intanto si
+  // scrive dopo, sulla stessa coda, finché non è sul disco.
+  it("una scrittura rifiutata con una modifica arrivata intanto dice l'errore, e la modifica si salva", async () => {
+    let refuse!: (error: Error) => void;
+    const writes: string[] = [];
+    api.writeDocument = vi.fn((_id: string, text: string) => {
+      writes.push(text);
+      if (writes.length === 1) {
+        return new Promise<string>((_resolve, reject) => {
+          refuse = reject;
+        });
+      }
+      return Promise.resolve("rev-3");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.docx");
+    acceptText(sessions, "nota.docx", "con il link");
+
+    const first = sessions.flush("nota.docx");
+    await vi.waitFor(() => expect(writes).toEqual(["con il link"]));
+    expect(sessions.inspect("nota.docx")?.result).toBe("in_corso");
+    acceptText(sessions, "nota.docx", "senza il link");
+    const second = sessions.flush("nota.docx");
+
+    refuse(Object.assign(new Error("non si rilegge uguale"), { kind: "internal" }));
+    await first;
+    await second;
+    expect(writes).toEqual(["con il link", "senza il link"]);
+    expect(sessions.inspect("nota.docx")).toMatchObject({ result: "ok", dirty: false, text: "senza il link" });
+  });
+
   it("un buffer che non si salva si chiude solo scartandolo, con la sua bozza", async () => {
     api.writeDocument = vi.fn(async () => {
       throw new Error("permesso negato");

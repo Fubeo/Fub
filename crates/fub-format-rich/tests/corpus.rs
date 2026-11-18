@@ -1,5 +1,5 @@
 //! **Il banco del corpus.** Ogni file di `tests/corpus/` passa dall'apertura,
-//! dalle esportazioni e dalle modifiche standard della shell (E0–E9); l'esito
+//! dalle esportazioni e dalle modifiche standard della shell (E0–E10); l'esito
 //! si confronta con `tests/corpus/expected/<file>.json`.
 //!
 //! I risultati attesi committati sono il comportamento del motore di oggi: in
@@ -169,7 +169,8 @@ fn readonly_of(readonly: Option<fub_format_rich::ReadOnly>) -> Value {
 /// oggetti nuovi; l'aspetto del carattere (`f`), lo stile di corpo (`s`), la
 /// lingua e la galleria degli stili sono suggerimenti di resa che il codec
 /// risolve per un paragrafo nuovo. Restano testo, ruoli, enfasi, link,
-/// allineamento, disposizione, oggetti, commenti e revisioni.
+/// allineamento, disposizione, oggetti, commenti e revisioni; due testi
+/// vicini con tutto il resto uguale contano come uno.
 fn visible(projection: &Projection) -> Value {
     fn strip(value: &mut Value) {
         match value {
@@ -179,9 +180,39 @@ fn visible(projection: &Projection) -> Value {
                 }
                 map.values_mut().for_each(strip);
             }
-            Value::Array(items) => items.iter_mut().for_each(strip),
+            Value::Array(items) => {
+                items.iter_mut().for_each(strip);
+                merge_texts(items);
+            }
             _ => {}
         }
+    }
+    // Due testi vicini con tutto il resto uguale sono un testo solo: il
+    // codec fonde i run che una modifica ha reso uguali (un link tolto fra
+    // due testi semplici).
+    fn merge_texts(items: &mut Vec<Value>) {
+        let mut out: Vec<Value> = Vec::with_capacity(items.len());
+        for item in items.drain(..) {
+            if let (Some(Value::Object(last)), Value::Object(next)) = (out.last_mut(), &item) {
+                let rest = |map: &serde_json::Map<String, Value>| {
+                    map.iter()
+                        .filter(|(key, _)| key.as_str() != "x")
+                        .map(|(key, value)| (key.clone(), value.clone()))
+                        .collect::<Vec<_>>()
+                };
+                if let (Some(Value::String(a)), Some(Value::String(b))) =
+                    (last.get("x"), next.get("x"))
+                {
+                    if rest(last) == rest(next) {
+                        let joined = format!("{a}{b}");
+                        last.insert("x".into(), Value::String(joined));
+                        continue;
+                    }
+                }
+            }
+            out.push(item);
+        }
+        *items = out;
     }
     let mut value = serde_json::to_value(projection).unwrap();
     strip(&mut value);
@@ -491,6 +522,22 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
                 cell.blocks = vec![Block::Para(first)];
             }
         }
+        // Togli il link (Ctrl+K › Remove link) dal primo testo collegato di
+        // un paragrafo aperto, come la shell: il testo resta, senza `href`.
+        "E10" => {
+            let href = p.blocks.iter_mut().find_map(|block| match block {
+                Block::Para(para) if !para.locked => {
+                    para.c.iter_mut().find_map(|inline| match inline {
+                        Inline::Text { href, del, .. } if href.is_some() && del.is_none() => {
+                            Some(href)
+                        }
+                        _ => None,
+                    })
+                }
+                _ => None,
+            })?;
+            *href = None;
+        }
         // Ciò che la shell non fa: cambiare un blocco chiuso.
         "E6" => {
             let (b, i) = first_text(&mut p, true)?;
@@ -501,7 +548,9 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
     Some(p)
 }
 
-const EDITS: [&str; 10] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"];
+const EDITS: [&str; 11] = [
+    "E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10",
+];
 
 /// Salva una modifica, riapre i byte e confronta la proiezione riaperta con
 /// quella voluta, a meno dei dati opachi.
