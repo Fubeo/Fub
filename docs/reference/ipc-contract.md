@@ -241,29 +241,19 @@ Un errore Rust non attraversa il confine come debug string o stack trace.
 
 ## Eventi
 
-Gli eventi IPC sono fatti già accaduti. Contengono almeno:
-
-- specie;
-- origine;
-- soggetto;
-- batch, quando presente;
-- payload tipizzato;
-- severità per gli avvisi.
+Gli eventi IPC sono fatti già accaduti. Contengono almeno specie, origine,
+soggetto, batch quando presente, payload tipizzato e severità per gli avvisi.
 
 Una coda può compattare progresso o notifiche ripetute. Il risultato autorevole
 di un'operazione resta nella sua risposta.
 
-Su `fub://event` ogni notice è `{ event, origin, vault? }`
-(`fub_host::ShellNotice`): i campi di `fub_abi::Notice` più `vault`, la radice
-canonica del vault di cui è il fatto, la stessa stringa di `VaultInfo.root`.
-Il ponte di ogni sessione la mette su tutto ciò che consegna, `overflow`
-compreso; manca, non è `null`, per un fatto della macchina (una chiave di
-configurazione della macchina). Il campo è additivo: una shell che non lo legge
-riceve il notice di prima. L'host tiene aperto un vault per sessione e il
-canale è uno, quindi è `vault` a dire di chi è un `document_changed` di una
-nota con lo stesso id in due vault (#216).
-
-Gli avvisi nati prima della shell non si spingono, si tirano con
+Su `fub://evenSu `fub://event` ogni notice è `{ event, origin, vault? }`
+(`fub_host::ShellNotice`). `vault` è la radice canonica del vault del fatto, la
+stessa stringa di `VaultInfo.root`, su tutto ciò che il ponte di una sessione
+consegna, `overflow` compreso; manca, non è `null`, per un fatto della
+macchina. È additivo: chi non lo legge riceve il notice di prima. L'uso:
+[di quale vault è un evento](../architecture/runtime-events-and-jobs.md#di-quale-vault-è-un-evento).
+ti prima della shell non si spingono, si tirano con
 `session_notice`: prima la diagnosi del log, poi gli altri avvisi d'avvio
 (come il percorso di disegno, `Event::Custom` col topic `rendering`, vedi
 [la webview del desktop](../architecture/desktop-webview.md#gli-avvisi)), uno
