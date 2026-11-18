@@ -151,6 +151,8 @@ describe("all'apertura del vault", () => {
       mountReminders(life, port);
       state.vaultRoot = "/vault";
       emit("vault", "/vault");
+      expect(port.indexed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2_000);
       await vi.waitFor(() => expect(port.indexed).toHaveBeenCalled());
       expect(port.ask).not.toHaveBeenCalled();
       await vi.waitFor(() => expect(reminderNotificationsOn()).toBe(false));
@@ -176,7 +178,9 @@ describe("all'apertura del vault", () => {
       mountReminders(life, port);
       state.vaultRoot = "/vuoto";
       emit("vault", "/vuoto");
-      await vi.waitFor(() => expect(port.ask).toHaveBeenCalled());
+      // Il primo sguardo aspetta un giro: l'apertura del vault viene prima.
+      expect(port.indexed).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(port.ask).toHaveBeenCalled(), { timeout: 3_000 });
       expect(dialog()).toBeNull();
     } finally {
       life.close();

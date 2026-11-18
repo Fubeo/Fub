@@ -84,8 +84,8 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
   ridisegno costa così circa 70 ms invece di 180.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
-- Il `⏰` ha la sua pastiglia soltanto in Live: in Lettura e nel recinto
-  ```` ```tasks ```` resta testo.
+- Il `⏰` ha la sua pastiglia soltanto in Live: in Lettura e nel recinto dei
+  compiti (```` ```tasks ````) resta testo.
 - L'elenco dei promemoria passati non ricorda chi li ha già visti: un
   promemoria passato di un compito aperto torna a ogni apertura del vault,
   finché il compito non è fatto o il `⏰` non è cambiato.
@@ -124,7 +124,7 @@ Fub non cambia il `⏰` da solo: lo scrive soltanto chi lo sceglie (vedi sotto).
 ### Nella nota
 
 In Live il `⏰` con la sua data diventa una **pastiglia blu** con la sveglia e
-l'ora: l'ora sola se è oggi, altrimenti anche il giorno breve («ven 13 nov,
+l'ora: l'ora sola nel giorno stesso, altrimenti anche il giorno breve («ven 13 nov,
 09:00»), e l'anno se non è questo. Col compito fatto la pastiglia è grigia,
 perché non suona più. Col cursore sulla riga il testo torna com'è scritto,
 segnato di blu, e si corregge a mano. Un `⏰` che non si legge resta testo,

@@ -245,10 +245,7 @@ export function mountReminders(lifetime: Lifetime, port: RemindersPort): void {
       const ready = await port.indexed().catch(() => false);
       if (own.closed || openVaultRoot() !== root) return;
       if (!ready) {
-        if (Date.now() - since < INDEX_WAIT_MS) {
-          const timer = setTimeout(() => void look(), INDEX_POLL_MS);
-          own.add(() => clearTimeout(timer));
-        }
+        if (Date.now() - since < INDEX_WAIT_MS) later();
         return;
       }
       shown.add(root);
@@ -257,7 +254,14 @@ export function mountReminders(lifetime: Lifetime, port: RemindersPort): void {
       if (own.closed || openVaultRoot() !== root || !list || list.reminders.length === 0) return;
       showPastReminders(list, port, own, now);
     };
-    void look();
+    const later = (): void => {
+      const timer = setTimeout(() => void look(), INDEX_POLL_MS);
+      own.add(() => clearTimeout(timer));
+    };
+    // Il primo sguardo aspetta un giro anche lui: l'apertura del vault ha i
+    // suoi passi (registri, viste, prima nota), e l'elenco viene dopo di loro,
+    // non in mezzo.
+    later();
   };
 
   lifetime.add(on("vault", startup));
