@@ -229,37 +229,26 @@ impedisce la crescita.
 
 ### Un errore davanti a chi usa Fub
 
-Nel client la regola è una e sta in `host/errors.ts`. Una riga d'errore dice
-**che cosa** non è riuscito e **perché**: «Non ho potuto creare la sottopagina
-«Tappe»: esiste già qualcosa con lo stesso nome».
+Nel client la regola è una, in `host/errors.ts`: una riga d'errore dice
+**che cosa** non è riuscito e **perché** («Non ho potuto creare la sottopagina
+«Tappe»: esiste già qualcosa con lo stesso nome»).
 
-- **Il soggetto lo dà chi chiama**, con una chiave sua del catalogo che ha il
-  segnaposto `{reason}`. Un avviso con il solo motivo («non esiste più») non si
-  manda: chi legge non saprebbe che cosa è fallito.
-- **Il motivo lo dà `errorText(e, motivo)`**, che ha un solo parametro:
-  - `"messaggio"` (il default) per gli errori di comandi, view e servizi dei
-    componenti, che escono dal kernel già tradotti, e per i nostri `Error`
-    scritti con `t()`;
-  - `"specie"` per gli errori delle primitive dell'host su un documento
-    (aprire, creare, rinominare, leggere i modelli o i tipi, ridisegnare un
-    pannello, cercare) e per quelli del motore della webview (appunti,
-    `import()`): lì il messaggio non è una frase per chi legge.
-- La scelta è di chi chiama, non della specie: lo stesso `conflict` è l'id
-  di una nota quando esce da una primitiva e «La nota è cambiata: riprova»
-  quando lo scrive un comando.
-- Un messaggio che non è una stringa (una chiave non risolta) e ogni oggetto
-  che non è un errore del contratto danno la frase della specie, mai
-  «[object Object]» né JSON.
-- Ciò che va **solo nel registro** (`console.warn`, lo stato interno di un
-  registratore, l'analisi della riga di un errore di Mermaid) tiene il
-  messaggio intero e non passa di qui.
+- **Il soggetto lo dà chi chiama**, con una sua chiave del catalogo col
+  segnaposto `{reason}`; un avviso col solo motivo non si manda.
+- **Il motivo lo dà `errorText(e, motivo)`**: `"messaggio"` (il default) per
+  comandi, view e servizi dei componenti, già tradotti dal kernel, e per i
+  nostri `Error`; `"specie"` per le primitive dell'host su un documento
+  (aprire, creare, rinominare, leggere modelli o tipi, ridisegnare, cercare) e
+  per il motore della webview (appunti, `import()`). Sceglie chi chiama, non
+  la specie: un `conflict` è un id da una primitiva, una frase da un comando.
+- Un messaggio non stringa (chiave non risolta) o un oggetto qualsiasi danno
+  la frase della specie, mai «[object Object]» né JSON. Ciò che va **solo nel
+  registro** tiene il messaggio intero e non passa di qui.
 
-Un documento che il provider di formato rifiuta (all'apertura del vault o
-quando cambia sul disco) esce come `trouble` con `gate: "format_parse"`. Il
-centro notifiche lo legge così: dice che il documento non si apre, col suo
-nome, e non la prosa del codec («parse failed: rich codec…»). La barra di
-stato di un documento che non si apre dice la stessa cosa, una volta, e non
-parla di parole da contare.
+Un documento che il provider di formato rifiuta (all'apertura o quando cambia
+sul disco) esce come `trouble` con `gate: "format_parse"`: la notifica dice
+che non si apre, col suo nome, senza la prosa del codec; la barra di stato
+dice lo stesso, una volta, e non parla di parole da contare.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 
