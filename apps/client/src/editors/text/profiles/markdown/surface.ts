@@ -2387,6 +2387,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       transclusions.setTheme(theme);
     },
     editorActions,
+    // Anche in Lettura, come Ctrl+Z sulla resa: la pila è dell'editor nascosto.
+    history: (step) => {
+      if (readOnly || life.closed) return false;
+      closeSlashPalette(parent);
+      return step === "undo" ? engine.undo() : engine.redo();
+    },
     panels: comments.panels,
     contextMenu: (at) => {
       if (life.closed) return null;

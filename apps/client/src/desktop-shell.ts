@@ -84,7 +84,7 @@ import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
-import { focusedContextMode, focusEditor, openingsSoFar } from "./state/document-controller";
+import { focusedContextMode, focusedDocumentHistory, focusEditor, openingsSoFar } from "./state/document-controller";
 import { escapeLeavesConcentration, setConcentrating } from "./state/concentration";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
@@ -1179,7 +1179,13 @@ async function init(): Promise<Teardown> {
   // funziona senza toccare questo file. Cos'è un accordo e quando è finito lo
   // sa `ui/keyboard.ts`, che è il posto in cui una sequenza a metà ha un tempo
   // e una via d'uscita (§18.2).
-  mountKeyboard(pageWindowLifetime, (entry) => startCommand(entry, paletteHost));
+  // Col fuoco fuori dal foglio, i riquadri dei documenti e l'ispettore sono
+  // legati al documento attivo: da lì Ctrl+Z annulla nella sua superficie
+  // (`ui/off-sheet-keys.ts`).
+  mountKeyboard(pageWindowLifetime, (entry) => startCommand(entry, paletteHost), {
+    owns: (target) => target.closest(".pane, #right-pane") !== null,
+    history: focusedDocumentHistory,
+  });
   // Le porte di creazione dei pannelli (menu di una cartella, riquadro vuoto)
   // non importano la palette: quando un comando non ha un modulo proprio, la
   // fanno partire da qui.

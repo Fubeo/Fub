@@ -18,13 +18,15 @@
 // ascoltatore. `defaultPrevented` è il loro verdetto osservabile: nessun elenco
 // di collisioni cablato nella shell e nessun listener globale nei renderer.
 import { t } from "../i18n/strings";
-import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField, runFieldHistory } from "./field-history";
+import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField, isWritingField, runFieldHistory } from "./field-history";
 import type { Lifetime } from "./lifetime";
+import { offSheetKey, type OffSheetDocument } from "./off-sheet-keys";
 import {
   WAIT_MS,
   allCommands,
   advance,
   keyboardPlatform,
+  type KeyboardPlatform,
   type Waiting,
   type CommandEntry,
 } from "./commands";
@@ -42,7 +44,13 @@ let deadline: ReturnType<typeof setTimeout> | undefined;
 
 /// Monta l'ascoltatore. `execute` è cosa fare del comando trovato — l'avvio vero
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
-export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
+/// `sheet` è il documento attivo, per i tasti premuti fuori dal foglio
+/// (`ui/off-sheet-keys.ts`); senza, Ctrl+Z da un pannello non annulla niente.
+export function mountKeyboard(
+  lifetime: Lifetime,
+  execute: (entry: CommandEntry) => void,
+  sheet?: OffSheetDocument,
+): void {
   lifetime.listen(document, "keydown", (e) => {
     if (e.defaultPrevented) {
       stopWaiting();
@@ -58,6 +66,9 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
       // lega da sé (`ui/field-history.ts`): solo se nessun comando lo ha preso.
       const step = waiting === null && isPlainTextField(e.target, TEXT_INPUTS) ? fieldHistoryStep(e, platform) : null;
       if (step !== null && runFieldHistory(step)) e.preventDefault();
+      // Fuori dal foglio la lettera non entra nella nota, e l'annulla è del
+      // documento attivo (`ui/off-sheet-keys.ts`).
+      else if (waiting === null) offSheet(e, platform, sheet);
       return;
     }
     // Popup e editor locali sono già passati: da qui decide l'ordine dei layer
@@ -75,15 +86,19 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
 /// I tipi di `input` in cui si scrive (`ui/field-history.ts`).
 const TEXT_INPUTS = TEXT_INPUT_TYPES;
 
-/// Un campo in cui si scrive: `input` di testo, `textarea`, `contenteditable`
-/// (CodeMirror compreso).
-function isTextField(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target instanceof HTMLTextAreaElement) return !target.readOnly && !target.disabled;
-  if (target instanceof HTMLInputElement) {
-    return TEXT_INPUTS.has(target.type.toLowerCase()) && !target.readOnly && !target.disabled;
+/// Applica la regola del tasto fuori dal foglio a un tasto che nessuno ha
+/// preso: la lettera si ferma, l'annulla va alla superficie del riquadro col
+/// fuoco se il controllo sta in un contenitore del documento.
+function offSheet(e: KeyboardEvent, platform: KeyboardPlatform, sheet: OffSheetDocument | undefined): void {
+  const verdict = offSheetKey(e, platform, document.activeElement);
+  if (verdict === null) return;
+  if (verdict.kind === "quiet") {
+    e.preventDefault();
+    return;
   }
-  return target.isContentEditable;
+  const target = e.target;
+  if (!sheet || !(target instanceof Element) || !sheet.owns(target)) return;
+  if (sheet.history(verdict.step) !== null) e.preventDefault();
 }
 
 /// Un tasto dell'app non ruba un tasto di testo. Dentro un campo, un accordo
@@ -98,7 +113,7 @@ function isTextField(target: EventTarget | null): boolean {
 /// chi chiama lo lascia passare prima di arrivare qui.
 function yieldsToField(e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.metaKey || /^F\d{1,2}$/.test(e.key)) return false;
-  return isTextField(e.target);
+  return isWritingField(e.target);
 }
 
 /// Solo per i banchi e per chi chiude un vault: una sequenza a metà che

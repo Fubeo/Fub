@@ -624,6 +624,26 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("Ctrl+Z da un pannello: un passo della storia senza prendere il fuoco, e niente in sola lettura", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("parola");
+    view().dispatch({ selection: { anchor: 2 } });
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    const tab = document.createElement("button");
+    document.body.append(tab);
+    tab.focus();
+    expect(ed.history!("undo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("parola");
+    expect(document.activeElement).toBe(tab);
+    expect(ed.history!("redo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    ed.setReadOnly!(true);
+    expect(ed.history!("undo")).toBe(false);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    tab.remove();
+    ed.destroy();
+  });
+
   it("piega tutto e apri tutto non toccano il testo né la cronologia", () => {
     const { ed, view } = editor();
     const text = "# Uno\n\ntesto\n\n# Due\n\naltro\n";

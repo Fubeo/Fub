@@ -700,6 +700,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       engine?.setPaper(paper());
     },
     editorActions,
+    history: (step) => !!engine && editable() && engine.history(step),
     contextMenu,
     miniBar: () => (editable() ? miniBar : null),
     destroy() {

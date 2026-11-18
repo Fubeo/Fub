@@ -171,6 +171,21 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Tasti col fuoco fuori dal foglio.** Una regola sola, nell'unico `keydown`
+  della shell, dopo i gestori locali e i comandi (`ui/off-sheet-keys.ts`,
+  applicata da `ui/keyboard.ts`). Una lettera, un Backspace o un Canc premuti
+  su un controllo che non scrive (una linguetta, un pulsante, l'albero) e che
+  nessuno ha preso si fermano: WebKitGTK li manderebbe alla selezione rimasta
+  nel testo della nota, che li scriverebbe portandoci il fuoco. Il controllo
+  tiene le sue frecce, Home, Fine, lo spazio e Invio; un campo, una tendina e
+  chi apre un campo al primo tasto (una cella) tengono il tasto. Ctrl+Z,
+  Ctrl+Maiusc+Z e Ctrl+Y (⌘Z, ⇧⌘Z) premuti su un controllo di un riquadro di
+  documento o dell'ispettore (Trova e sostituisci, Revisioni, le linguette)
+  fanno un passo della storia della superficie del riquadro col fuoco
+  (`EditorSurface.history`, nel Markdown e nel ricco), senza spostare il
+  fuoco; il tasto è preso anche quando non c'è niente da annullare. In un
+  campo di testo (la casella Trova, un campo delle Proprietà) Ctrl+Z resta
+  del campo (`ui/field-history.ts`).
 - **Doppio clic nei pannelli.** In ogni albero dichiarativo (le view dei
   pannelli) il secondo clic di un doppio clic vale solo sulla voce del primo,
   con la stessa azione (`guardClickRuns` in `ui/node.ts`): la voce che

@@ -11,6 +11,8 @@ import type { EditorView } from "prosemirror-view";
 import { countText, findKey, findMatches, replaceAll, replaceMatch, revisionPlugin, revisions } from "./review";
 import { mountProperties } from "./properties";
 import { mountRichRibbon } from "./ribbon";
+import { mountKeyboard } from "../../ui/keyboard";
+import { openLifetime } from "../../ui/lifetime";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -133,6 +135,10 @@ describe("la barra", () => {
     const e = engine([para([{ t: "text", x: "voce e voce" }])]);
     const ribbon = mountRichRibbon(e, () => null);
     document.body.append(ribbon.element, ribbon.findBar);
+    // La tastiera della shell, con la barra nel riquadro del documento
+    // (`ui/off-sheet-keys.ts`).
+    const keys = openLifetime();
+    mountKeyboard(keys, () => {}, { owns: (target) => ribbon.findBar.contains(target), history: (step) => e.history(step) });
     expect(e.run("rich.find")).toBe(true);
     const field = (label: string) =>
       document.getElementById([...document.querySelectorAll("form label")].find((l) => l.textContent === label)!.getAttribute("for")!) as HTMLInputElement;
@@ -165,6 +171,8 @@ describe("la barra", () => {
     expect(texts(e)).toEqual([{ t: "text", x: "voce e voce" }]);
     // Il fuoco resta nella barra.
     expect(ribbon.findBar.hidden).toBe(false);
+    expect(document.activeElement).toBe(every);
+    keys.close();
     ribbon.destroy();
   });
 
