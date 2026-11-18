@@ -164,53 +164,53 @@ misura nel riquadro. Al rilascio parte un comando e la misura vale già
 lo dice, una risposta vecchia non toglie un gesto più nuovo. Il doppio clic dà
 `home.autofit…`; con una colonna fra le scelte intere la misura vale per tutte.
 
-Ctrl+clic e Ctrl+trascina aggiungono un intervallo a quelli scelti;
-Maiuscolo estende l'ultimo, un clic semplice ricomincia. Da tastiera
-Maiuscolo+F8 tiene ciò che è scelto mentre ci si sposta, finché non si
-ripete o si preme Esc. I comandi ricevono tutti gli intervalli, separati da
-virgole come in GridCraft, che spegne col suo motivo quelli che non li
-reggono. Canc li svuota tutti; copia e taglia li rifiutano e lo dicono, e il
-quadratino di riempimento non c'è.
+Ctrl+clic e Ctrl+trascina aggiungono un intervallo, Maiuscolo estende
+l'ultimo, un clic semplice ricomincia; Maiuscolo+F8 tiene ciò che è scelto
+mentre ci si sposta, finché non si ripete o si preme Esc. I comandi ricevono
+gli intervalli separati da virgole, come in GridCraft, che spegne col motivo
+quelli che non li reggono. Canc li svuota; copia e taglia li rifiutano e lo
+dicono, e il quadratino non c'è.
 
-In una cartella a comandi che serve `edit.autoFill` la selezione ha il
-quadratino di riempimento nell'angolo in basso a destra. Tirato fuori dalla
-selezione mostra il bersaglio lungo l'asse su cui il puntatore è uscito di più
-e, al rilascio, dà un solo `edit.autoFill` con sorgente e bersaglio (con Ctrl
-tenuto, nel modo alternato di Excel). Il doppio clic riempie in giù fin dove
-arriva la colonna accanto, nelle righe che la griglia ha letto. Le serie le
-calcola il provider; Ctrl+D e Ctrl+R restano i riempimenti da tastiera.
+Con `edit.autoFill` la selezione ha il quadratino in basso a destra: tirato
+fuori, il bersaglio a formiche ferme segue l'asse su cui il puntatore è uscito
+di più, e il rilascio dà un `edit.autoFill` (con Ctrl nel modo alternato di
+Excel). Il doppio clic riempie in giù fin dove arriva la colonna accanto;
+Ctrl+D, Ctrl+R e Serie riempiono da tastiera, le serie le calcola il provider.
+Finché il foglio non risponde le formiche camminano (`ANTS_STEP` px ogni
+`ANTS_MS`, ferme con «ridotto»), la selezione resta sulla sorgente e il
+quadratino non c'è; poi le formiche svaniscono, la selezione scivola sul
+riempimento e i valori nuovi entrano sfalsati; un no lo dice l'avviso.
 
 ## Gli appunti
 
 Copia scrive il TSV degli input, formule comprese, e una tabella HTML di ciò
 che si vede, segnata `data-fub-table`. Incolla legge la tabella HTML di
 Excel, LibreOffice, Sheets o Word quando c'è (le celle unite lasciano celle
-vuote), altrimenti il TSV; quella di Fub cede al TSV accanto, che porta gli
-input. Si incolla dall'angolo in alto a sinistra della selezione: un valore,
-o un blocco che la selezione contiene un numero intero di volte, la riempie,
-e dopo la selezione è ciò che si è scritto. Taglia non svuota: segna
-l'intervallo con le formiche, e l'incolla che segue sposta gli input e
-svuota ciò che resta fuori in un passo solo di Annulla; Esc, una copia o
-una scrittura tolgono il segno. Le regole pure stanno in
-`apps/client/src/tabella/clipboard.ts`.
+vuote), altrimenti il TSV; quella di Fub cede al TSV accanto. Un valore, o un
+blocco che la selezione contiene un numero intero di volte, la riempie
+dall'angolo, e dopo è selezionato ciò che si è scritto. Copia lascia un
+tratteggio largo e un battito; Taglia non svuota, segna con un tratteggio
+fitto, e l'incolla dopo sposta gli input e svuota il resto in un passo di
+Annulla. Il segno resta sul suo foglio e segue l'ultima copia; Esc, una
+scrittura, un comando o un incolla lo tolgono, ma non un'altra app che cambia
+gli appunti di sistema. Regole pure: `apps/client/src/tabella/clipboard.ts`.
 
-Dentro una cartella a comandi l'incolla che trova negli appunti il testo
-appena copiato dalla cartella non scrive gli input: dà il comando composto
-`fub.pasteFrom` con la sorgente, il suo foglio e `move` per un taglio, sulla
-selezione di arrivo. Il provider lo esegue con `edit.copy` (o `edit.cut`) e
-`edit.pasteSpecial` della facciata in un passo, senza appunti che restano,
-così formule con i riferimenti relativi, formati e unioni seguono come in
-GridCraft, e il giornale lo rifà. Un taglio si incolla una volta; Esc, una
-scrittura o un altro comando dimenticano la sorgente, e l'incolla torna agli
-input. `fub.copyHtml` legge il testo e la tabella HTML di GridCraft di un
-intervallo senza cambiare niente. Senza `fub.pasteFrom` nel catalogo gli
-appunti portano gli input.
+In una cartella a comandi l'incolla che trova negli appunti il testo appena
+copiato dalla cartella dà il comando composto `fub.pasteFrom` (sorgente, suo
+foglio, `move` per un taglio) sulla selezione di arrivo. Il provider lo esegue
+con `edit.copy` (o `edit.cut`) e `edit.pasteSpecial` in un passo, senza
+appunti che restano: formule relative, formati e unioni seguono come in
+GridCraft, e il giornale lo rifà. I valori si vedono subito come anteprima
+(regole di «Scrivere nelle celle»), la risposta del provider vince e un no
+rimette le celle; un taglio ha le formiche attorno alla sorgente finché il
+foglio non risponde, e si incolla una volta. Esc, una scrittura o un altro
+comando dimenticano la sorgente. `fub.copyHtml` legge testo e tabella HTML di
+un intervallo; senza `fub.pasteFrom` gli appunti portano gli input.
 
-Il bordo della selezione, preso a 3 px fuori dal quadratino, si tira quando
-la cartella serve `fub.pasteFrom`: il contorno segue il puntatore e al
-rilascio un solo `fub.pasteFrom` sposta l'intervallo (con Ctrl tenuto lo
-copia), e la selezione è dove lo si è lasciato. Righe o colonne intere e
-più intervalli non si tirano.
+Con `fub.pasteFrom` il bordo della selezione, preso a 3 px fuori dal
+quadratino, si tira: il contorno segue il puntatore, il rilascio dà un
+`fub.pasteFrom` che sposta l'intervallo (con Ctrl lo copia) e lo seleziona.
+Righe o colonne intere e più intervalli non si tirano.
 
 ## La barra multifunzione
 
