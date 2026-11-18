@@ -1987,6 +1987,10 @@ fn an_installed_theme_whose_pointer_does_not_read_is_blocked() {
     install_folder(&host, &old, false);
     std::fs::write(themes.join("acme.carta/.fub-current.json"), "{ not json").unwrap();
 
+    // Il posto è il nome canonico della cartella dei temi, come lo apre
+    // l'installazione: su Windows è un'altra scrittura della cartella
+    // temporanea (il prefisso `\\?\`, il nome lungo al posto di `RUNNER~1`).
+    let themes = themes.canonicalize_utf8().unwrap();
     assert_blocked(
         &host,
         &config,

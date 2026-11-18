@@ -29,6 +29,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_kernel::storage::{identity_of_the_file, Identity};
 
 use crate::theme::{theme_link, ThemeLink, ThemeLinkState};
 
@@ -162,18 +163,13 @@ fn held<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// L'identità della cartella sul disco: una cartella tolta e rifatta (un
 /// `rm -rf dist` e un build) ha lo stesso nome ma non è più quella guardata.
-fn root_id(folder: &Utf8Path) -> Option<(u64, u64)> {
-    let metadata = std::fs::metadata(folder).ok()?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        Some((metadata.dev(), metadata.ino()))
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = metadata;
-        Some((0, 0))
-    }
+/// Il volume e l'inode su unix, il numero di serie del volume e l'indice del
+/// file su Windows ([`identity_of_the_file`]). Su Windows l'osservatore non
+/// dice niente della cartella guardata stessa (riporta solo ciò che c'è
+/// dentro, e tace quando la cartella sparisce): senza un'identità vera una
+/// cartella rifatta sembrerebbe quella di prima, con l'osservatore già morto.
+fn root_id(folder: &Utf8Path) -> Option<Identity> {
+    identity_of_the_file(folder)
 }
 
 impl ThemeKeeper {
@@ -525,7 +521,7 @@ struct Delivery {
     config_dir: Option<Utf8PathBuf>,
     folder: Utf8PathBuf,
     /// L'identità della cartella quando la si è cominciata a guardare.
-    root: Option<(u64, u64)>,
+    root: Option<Identity>,
     sink: Arc<Mutex<Option<ThemeLinkSink>>>,
     known: Arc<Mutex<Known>>,
     alive: Arc<AtomicBool>,
