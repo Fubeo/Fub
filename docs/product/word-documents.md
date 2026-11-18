@@ -33,10 +33,9 @@ Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
   colonna (`Ctrl+Maiusc+Invio`), anche dalla scheda **Inserisci**;
-- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo (web o
-  posta) e lo mettono sulla selezione, sul link al cursore o, senza
-  selezione, su un testo nuovo; dallo stesso modulo un link si toglie, e
-  il testo resta come si vede: dal file se ne va anche il collegamento;
+- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo
+  (web o posta) e lo mettono sulla selezione, sul link al cursore o su un
+  testo nuovo; dallo stesso modulo un link si toglie anche dal file;
 - grassetto, corsivo e barrato dal gruppo **Carattere** di **Home**;
 - l'aspetto del carattere dallo stesso gruppo: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
