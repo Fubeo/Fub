@@ -93,7 +93,7 @@ In inglese (`localStorage["fub.locale.language"] = "en"`, come Impostazioni):
 Il corridore non ha un «rosso atteso». Un compito che fallisce per un
 difetto di Fub sta in `SALTATI`, nello stesso file, col motivo e i passi; il
 primo compito ne stampa i nomi. Corretto il difetto, il compito torna fra gli
-altri. Oggi non ne è saltato nessuno.
+altri. L'elenco è vuoto: non ne è saltato nessuno.
 
 ## Che cosa il gruppo non prova
 
