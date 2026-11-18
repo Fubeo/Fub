@@ -21,6 +21,11 @@ Una correzione si offre soltanto quando la parola sta tutta in un tratto di
 testo semplice: un segno che attraversa il markup (`**`, `_`) si mostra ma non
 si corregge. In sola lettura le correzioni non ci sono.
 
+Una voce d'elenco (puntata, numerata o di attività) è spesso un frammento:
+la sua prima parola può cominciare in minuscolo («- primo punto») senza il
+segno «Maiuscola a inizio frase». Un paragrafo normale, o una citazione dentro
+una voce, la chiede come prima.
+
 Nei documenti di videoscrittura il correttore segna allo stesso modo il testo
 di ogni paragrafo, anche nelle celle; immagini, campi e note contano come
 separatori.

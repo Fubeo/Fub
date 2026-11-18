@@ -236,6 +236,11 @@ enum ProofQuery {
         #[serde(default)]
         words: Vec<String>,
         segments: Vec<String>,
+        /// Gli indici dei segmenti che sono voci d'elenco: spesso frammenti,
+        /// la loro prima parola non chiede la maiuscola. Assente per chi non
+        /// ne ha (un documento ricco, una richiesta di prima).
+        #[serde(default)]
+        list_items: Vec<usize>,
     },
 }
 
@@ -331,7 +336,9 @@ impl ProofIndex {
         }
     }
 
-    /// I problemi di ogni segmento, in `language`.
+    /// I problemi di ogni segmento, in `language`. `list_items` sono gli
+    /// indici dei segmenti che sono voci d'elenco: la regola della maiuscola
+    /// sulla prima parola non vale per loro (le frasi dopo la prima sì).
     ///
     /// Una lingua che il motore non corregge (`fr`, `ja`) non produce segni:
     /// è il comportamento di Word senza gli strumenti di quella lingua, e non
@@ -342,9 +349,20 @@ impl ProofIndex {
         options: CheckOptions,
         words: &[String],
         segments: &[String],
+        list_items: &[usize],
     ) -> Result<CheckResult, PluginError> {
         if segments.len() > MAX_SEGMENTS {
             return Err(over(E_SEGMENTS, MAX_SEGMENTS));
+        }
+        if let Some(index) = list_items.iter().find(|&&i| i >= segments.len()) {
+            return Err(bad_query(&format!(
+                "list item {index} out of {} segments",
+                segments.len()
+            )));
+        }
+        let mut listed = vec![false; segments.len()];
+        for &index in list_items {
+            listed[index] = true;
         }
         let mut total = 0usize;
         for segment in segments {
@@ -373,7 +391,7 @@ impl ProofIndex {
         };
         let mut suggested = 0usize;
         let mut out = Vec::with_capacity(segments.len());
-        for segment in segments {
+        for (segment, &list_item) in segments.iter().zip(&listed) {
             let issues = if !support.grammar {
                 Vec::new()
             } else if support.spelling {
@@ -382,14 +400,18 @@ impl ProofIndex {
                     &[(0..segment.len(), lang)],
                     &opts,
                     options.grammar,
-                    // La domanda non dice se un segmento è una voce d'elenco:
-                    // la maiuscola della prima parola si chiede sempre.
-                    false,
+                    list_item,
                 )
             } else if options.grammar {
                 // Senza dizionario non si chiama l'ortografia: oltre a non
-                // servire, cercherebbe il dizionario sul disco.
-                wordcraft_proof::check_grammar_in(segment, lang)
+                // servire, cercherebbe il dizionario sul disco. Il motore non
+                // espone le regole grammaticali con l'eccezione della voce
+                // d'elenco, che `check_text_with` passa: la si applica qui.
+                let mut found = wordcraft_proof::check_grammar_in(segment, lang);
+                if list_item {
+                    found.retain(|issue| !first_word_capital(segment, issue));
+                }
+                found
             } else {
                 Vec::new()
             };
@@ -521,7 +543,8 @@ impl IndexProvider for ProofIndex {
                 options,
                 words,
                 segments,
-            } => to_value(&self.check(&language, options, &words, &segments)?),
+                list_items,
+            } => to_value(&self.check(&language, options, &words, &segments, &list_items)?),
             ProofQuery::Languages { .. } | ProofQuery::Check { .. } => {
                 Err(bad_query("unsupported version"))
             }
@@ -852,6 +875,37 @@ pub fn catalog() -> Vec<StringCatalog> {
 /// in mezzo, parla di un pezzo che il motore non ha visto, e si scarta.
 pub const PLACEHOLDER: char = '\u{FFFC}';
 
+/// Se `issue` è la regola «maiuscola a inizio frase» sulla prima parola del
+/// segmento: un rilievo di grammatica sulla prima parola, prima di cui non c'è
+/// né una lettera né una cifra, che propone soltanto la stessa parola con la
+/// prima lettera maiuscola. È ciò che ogni lingua del motore segnala quando
+/// `capital_first` è vero e non segnala quando è falso (`grammar_in`, privata
+/// in `wordcraft-proof`); il test `list_items_match_the_engine_rule` lo tiene
+/// uguale a `check_text_with` con `list_item`.
+fn first_word_capital(segment: &str, issue: &wordcraft_proof::Issue) -> bool {
+    if issue.kind != IssueKind::Grammar {
+        return false;
+    }
+    let (Some(before), Some(word)) = (
+        segment.get(..issue.start),
+        segment.get(issue.start..issue.end),
+    ) else {
+        return false;
+    };
+    if before.chars().any(char::is_alphanumeric) {
+        return false;
+    }
+    let [fixed] = issue.suggestions.as_slice() else {
+        return false;
+    };
+    let mut written = word.chars();
+    let mut proposed = fixed.chars();
+    match (written.next(), proposed.next()) {
+        (Some(w), Some(f)) => w.is_lowercase() && f.is_uppercase() && written.eq(proposed),
+        _ => false,
+    }
+}
+
 fn touches_placeholder(segment: &str, start: usize, text: &str) -> bool {
     text.contains(PLACEHOLDER)
         || segment
@@ -869,7 +923,7 @@ mod tests {
     fn check(index: &ProofIndex, language: &str, segments: &[&str]) -> CheckResult {
         let segments: Vec<String> = segments.iter().map(|s| s.to_string()).collect();
         index
-            .check(language, CheckOptions::default(), &[], &segments)
+            .check(language, CheckOptions::default(), &[], &segments, &[])
             .unwrap()
     }
 
@@ -911,7 +965,7 @@ mod tests {
         let segments = vec!["Fubvault is here".to_string()];
         let words = vec!["fubvault".to_string()];
         let result = index
-            .check("en", CheckOptions::default(), &words, &segments)
+            .check("en", CheckOptions::default(), &words, &segments, &[])
             .unwrap();
         assert!(result.segments[0].is_empty(), "{:?}", result.segments[0]);
         let result = check(&index, "en", &["Fubvault is here"]);
@@ -958,7 +1012,7 @@ mod tests {
             grammar: false,
             ..CheckOptions::default()
         };
-        let result = index.check("en", options, &[], &segments).unwrap();
+        let result = index.check("en", options, &[], &segments, &[]).unwrap();
         assert!(result.segments[0].is_empty());
         let result = check(&index, "en", &["the the cat"]);
         assert_eq!(result.segments[0][0].kind, ProofIssueKind::Grammar);
@@ -992,6 +1046,103 @@ mod tests {
                 result.segments[0]
             );
         }
+    }
+
+    /// Una voce d'elenco è spesso un frammento: «primo punto» non chiede la
+    /// maiuscola. Un paragrafo che non è una voce la chiede come prima.
+    #[test]
+    fn a_list_item_may_start_in_lower_case() {
+        let index = ProofIndex::bundled_only();
+        let segments: Vec<String> = ["primo punto", "attività da fare", "primo punto"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // L'italiano senza dizionario: la strada delle sole regole.
+        let result = index
+            .check("it", CheckOptions::default(), &[], &segments, &[0, 1])
+            .unwrap();
+        assert!(result.segments[0].is_empty(), "{:?}", result.segments[0]);
+        assert!(result.segments[1].is_empty(), "{:?}", result.segments[1]);
+        assert_eq!(spans(&segments[2], &result.segments[2]), ["primo"]);
+        // L'inglese, col dizionario: la strada di `check_text_with`.
+        let english: Vec<String> = ["first item", "first item"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let result = index
+            .check("en", CheckOptions::default(), &[], &english, &[0])
+            .unwrap();
+        assert!(result.segments[0].is_empty(), "{:?}", result.segments[0]);
+        assert_eq!(spans(&english[1], &result.segments[1]), ["first"]);
+    }
+
+    /// Senza dizionario la regola della voce d'elenco si applica qui: deve
+    /// togliere esattamente ciò che il motore toglie con `list_item`, in ogni
+    /// lingua, e nient'altro.
+    #[test]
+    fn list_items_match_the_engine_rule() {
+        let samples = [
+            "primo punto",
+            "  «primo» punto, poi",
+            "uno. due tre",
+            "un pò di più",
+            "the the cat. and more",
+            "ıstanbul güzel. izmir de",
+            "istanbul",
+            "яблоки и груши. потом",
+            "první bod",
+            "anak anak sekolah",
+            "\u{FFFC} dopo",
+            "Già maiuscola. bene",
+            "",
+        ];
+        let grammar = |issues: Vec<wordcraft_proof::Issue>| {
+            let mut kept: Vec<_> = issues
+                .into_iter()
+                .filter(|i| i.kind == IssueKind::Grammar)
+                .map(|i| (i.start, i.end, i.message, i.suggestions))
+                .collect();
+            kept.sort();
+            kept
+        };
+        let languages = LANGUAGES
+            .iter()
+            .map(|(_, lang)| *lang)
+            .chain([ProofLang::Id, ProofLang::EnGb]);
+        for lang in languages {
+            for text in samples {
+                let mut ours = wordcraft_proof::check_grammar_in(text, lang);
+                ours.retain(|issue| !first_word_capital(text, issue));
+                let engine = wordcraft_proof::check_text_with(
+                    text,
+                    &[(0..text.len(), lang)],
+                    &Options::default(),
+                    true,
+                    true,
+                );
+                assert_eq!(grammar(ours), grammar(engine), "{lang:?}: {text:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_list_item_out_of_range_is_refused() {
+        let index = ProofIndex::bundled_only();
+        let ask = |list_items: serde_json::Value| {
+            index.query(IndexQuery::Custom {
+                ns: PROOF_ID.into(),
+                query: json!({
+                    "op": "check", "version": 1, "language": "it",
+                    "segments": ["primo"], "list_items": list_items,
+                }),
+            })
+        };
+        let error = ask(json!([1])).unwrap_err();
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        let Ok(IndexResult::Custom(value)) = ask(json!([0])) else {
+            panic!("non è una risposta custom");
+        };
+        assert_eq!(value["segments"][0], json!([]));
     }
 
     #[test]
@@ -1038,11 +1189,11 @@ mod tests {
         let words = vec!["x".to_string(); MAX_WORDS + 1];
         let opts = CheckOptions::default();
         for result in [
-            index.check("en", opts, &[], &many),
-            index.check("en", opts, &[], &big),
-            index.check("en", opts, &[], &total),
-            index.check("en", opts, &words, &[]),
-            index.check("not a tag!", opts, &[], &[]),
+            index.check("en", opts, &[], &many, &[]),
+            index.check("en", opts, &[], &big, &[]),
+            index.check("en", opts, &[], &total, &[]),
+            index.check("en", opts, &words, &[], &[]),
+            index.check("not a tag!", opts, &[], &[], &[]),
         ] {
             assert!(matches!(result, Err(PluginError::BadArgs(_))), "{result:?}");
         }

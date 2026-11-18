@@ -171,6 +171,9 @@ export interface ProseSegment {
   readonly from: number;
   readonly to: number;
   readonly pieces: readonly ProsePiece[];
+  /// Il blocco è una voce d'elenco (un paragrafo dentro la voce, o un
+  /// compito): la prima parola può cominciare in minuscolo.
+  readonly listItem?: boolean;
 }
 
 /// Dove sta nel documento un intervallo del segmento. `exact` quando sta dentro
@@ -216,6 +219,12 @@ interface ProofScope {
 interface CachedSegment {
   readonly issues: readonly ProofIssue[];
   readonly units: number;
+}
+
+/// La chiave di un segmento: lo scope, se è una voce d'elenco, il testo. Il
+/// prefisso dello scope resta il primo pezzo, perché `dropScope` lo cerca.
+function cacheKey(scope: ProofScope, text: string, listItem: boolean): string {
+  return `${scope.id}\u0000${listItem ? "l" : "p"}\u0000${text}`;
 }
 
 /// I segmenti già controllati, condivisi da tutti i client: una superficie che
@@ -276,8 +285,11 @@ export class ProofCache {
     return scope;
   }
 
-  get(scope: ProofScope, text: string): readonly ProofIssue[] | undefined {
-    const key = `${scope.id}\u0000${text}`;
+  /// I rilievi di `text`; `listItem` perché una voce d'elenco ha una regola
+  /// in meno (la maiuscola della prima parola) e la stessa frase in un
+  /// paragrafo risponde diversamente.
+  get(scope: ProofScope, text: string, listItem = false): readonly ProofIssue[] | undefined {
+    const key = cacheKey(scope, text, listItem);
     const entry = this.entries.get(key);
     if (!entry) return undefined;
     this.entries.delete(key);
@@ -286,9 +298,9 @@ export class ProofCache {
   }
 
   /// Ricorda i rilievi di `text`, se nessuno ha svuotato la cache da `epoch`.
-  set(epoch: number, scope: ProofScope, text: string, issues: readonly ProofIssue[]): void {
+  set(epoch: number, scope: ProofScope, text: string, issues: readonly ProofIssue[], listItem = false): void {
     if (epoch !== this.epochValue || text.length > this.maxUnits) return;
-    const key = `${scope.id}\u0000${text}`;
+    const key = cacheKey(scope, text, listItem);
     this.remove(key);
     while (this.entries.size >= this.maxEntries || this.units + text.length > this.maxUnits) {
       const oldest = this.entries.keys().next().value;
@@ -350,10 +362,16 @@ export class ProofClient {
   }
 
   /// Controlla `segments` nella lingua del documento (`documentLanguage`, se ne
-  /// dichiara una) o in quella delle impostazioni. `null` quando il correttore
-  /// non c'è, o quando la configurazione è cambiata durante l'attesa: chi
-  /// chiama non applica niente e aspetta il prossimo `onChange`.
-  async check(segments: readonly string[], documentLanguage?: string | null): Promise<ProofResult | null> {
+  /// dichiara una) o in quella delle impostazioni. `listItems[i]` dice che il
+  /// segmento `i` è una voce d'elenco: spesso un frammento, la sua prima parola
+  /// non chiede la maiuscola. `null` quando il correttore non c'è, o quando la
+  /// configurazione è cambiata durante l'attesa: chi chiama non applica niente
+  /// e aspetta il prossimo `onChange`.
+  async check(
+    segments: readonly string[],
+    documentLanguage?: string | null,
+    listItems: readonly boolean[] = [],
+  ): Promise<ProofResult | null> {
     if (this.disposed || !this.available) return null;
     const generation = this.generation;
     const epoch = this.cache.epoch;
@@ -370,7 +388,7 @@ export class ProofClient {
     // Cosa sa fare il motore, secondo l'ultima risposta di questa chiamata.
     let answered: ProofLanguage | null = null;
     for (let i = 0; i < segments.length; i += 1) {
-      results[i] = this.cache.get(scope, segments[i]);
+      results[i] = this.cache.get(scope, segments[i], listItems[i] === true);
       if (results[i]) continue;
       // Un segmento oltre il limite della route non si chiede: non ha rilievi.
       if (utf8Length(segments[i]) > MAX_SEGMENT_BYTES) results[i] = [];
@@ -378,6 +396,9 @@ export class ProofClient {
     }
     try {
       for (const batch of this.batches(segments, pending)) {
+        // Gli indici nella richiesta, non nella chiamata; il campo manca
+        // quando non c'è nessuna voce, e la richiesta resta quella di prima.
+        const lists = batch.flatMap((index, at) => (listItems[index] === true ? [at] : []));
         const response = await this.ports.queryIndex({
           kind: "custom",
           ns: PROOF_NS,
@@ -388,6 +409,7 @@ export class ProofClient {
             options,
             words: config.words,
             segments: batch.map((i) => segments[i]),
+            ...(lists.length > 0 ? { list_items: lists } : {}),
           },
         });
         if (generation !== this.generation || epoch !== this.cache.epoch || this.disposed) return null;
@@ -408,7 +430,7 @@ export class ProofClient {
         batch.forEach((index, at) => {
           const issues = this.convert(segments[index], wire.segments[at] ?? []);
           results[index] = issues;
-          if (lasting) this.cache.set(epoch, scope, segments[index], issues);
+          if (lasting) this.cache.set(epoch, scope, segments[index], issues, listItems[index] === true);
         });
       }
     } catch (error) {

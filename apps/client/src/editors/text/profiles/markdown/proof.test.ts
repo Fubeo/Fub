@@ -57,6 +57,36 @@ describe("extractProse", () => {
     ]);
   });
 
+  it("segna come voci d'elenco i paragrafi delle voci e i compiti, non gli altri", () => {
+    const s = state([
+      "Un paragrafo",
+      "",
+      "- primo punto",
+      "  - sotto punto",
+      "",
+      "1. uno",
+      "",
+      "- [ ] attività da fare",
+      "",
+      "> una citazione",
+      "",
+      "- voce",
+      "",
+      "  > citazione nella voce",
+    ].join("\n"));
+    const marked = extractProse(s, [{ from: 0, to: s.doc.length }]).map((segment) => [segment.text, segment.listItem === true]);
+    expect(marked).toEqual([
+      ["Un paragrafo", false],
+      ["primo punto", true],
+      ["sotto punto", true],
+      ["uno", true],
+      ["attività da fare", true],
+      ["una citazione", false],
+      ["voce", true],
+      ["citazione nella voce", false],
+    ]);
+  });
+
   it("toglie il markup e lascia intera la parola che racchiude", () => {
     expect(prose("Una **parola** in _corsivo_, ~~barrata~~ e ==evidenziata==.")).toEqual([
       "Una parola in corsivo, barrata e evidenziata.",
@@ -233,6 +263,35 @@ describe("markdownProof", () => {
     expect(changes).toHaveBeenCalledTimes(1);
     undo(view);
     expect(engine.getDoc()).toBe("Un **testo** con 😀 speling qui.");
+    engine.destroy();
+    client.dispose();
+    vi.useRealTimers();
+  });
+
+  it("non chiede la maiuscola alla prima parola di una voce d'elenco", async () => {
+    // Un host che fa come la route: la prima parola minuscola è un rilievo
+    // di grammatica, tranne nei segmenti che la richiesta dice voci.
+    const client = new ProofClient(ports({
+      queryIndex: async (query) => {
+        if (query.kind !== "custom") throw new Error("query inattesa");
+        const q = query.query as { segments: string[]; language: string; list_items?: number[] };
+        const lists = new Set(q.list_items ?? []);
+        return {
+          kind: "custom",
+          value: {
+            language: { code: q.language, spelling: false, grammar: true, missing_dictionary: "it_IT" },
+            segments: q.segments.map((segment, at) => {
+              const first = /^\p{Ll}\p{L}*/u.exec(segment);
+              if (!first || lists.has(at)) return [];
+              return [{ start: 0, end: new TextEncoder().encode(first[0]).length, kind: "grammar", message: "Maiuscola a inizio frase", suggestions: [] }];
+            }),
+          },
+        };
+      },
+    }));
+    const { engine, view } = mount("minuscolo qui.\n\n- primo punto\n- [ ] attività da fare\n1. uno", client);
+    await settle();
+    expect(diagnostics(view).map((found) => view.state.sliceDoc(found.from, found.to))).toEqual(["minuscolo"]);
     engine.destroy();
     client.dispose();
     vi.useRealTimers();
