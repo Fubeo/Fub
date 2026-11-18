@@ -106,6 +106,7 @@ import {
   type ExternalChangeResult,
   type DocumentSurfaceSource,
 } from "./document-session";
+import { keepsDiscardedText, VERSION_KEEP } from "./conflict-keep";
 import { setDocumentWindowNavigation, type NavigateTarget } from "./document-bridge";
 import {
   openIn,
@@ -168,7 +169,7 @@ import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews
 import { openWithEntry } from "../panels/open-with";
 import { showContextMenu } from "../ui/menu";
 import { writeChrome } from "./machine-chrome";
-import { onLanguage, t } from "../i18n/strings";
+import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 // Il pannello del «/», coi passi e l'anteprima, è un chunk suo: si chiede
@@ -2040,23 +2041,50 @@ export async function resolveKeepingMine(doc: string | null): Promise<void> {
 /// documento. Gli editor seguono perché la sessione ha diffuso il testo
 /// autorevole alle superfici sottoscritte; qui restano il ridisegno della
 /// lettura e delle scritte di stato.
+///
+/// Prima dello scarto il testo dell'utente va nella Cronologia della nota
+/// (`version.keep`, con una nota datata), e solo dopo la conservazione
+/// riuscita la sessione rilegge il disco: una conservazione fallita non scarta
+/// niente e lo dice. Senza il comando (Cronologia spenta) lo scarto resta
+/// quello di sempre, e la conferma lo ha detto.
 export async function resolveDiscardingMine(doc: string | null): Promise<void> {
   if (!doc) {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  const outcome = await documentSessions.resolveConflict(doc, "theirs");
+  const keep = keepsDiscardedText(doc)
+    ? (text: string) => keepDiscardedText(doc, text)
+    : undefined;
+  const outcome = await documentSessions.resolveConflict(doc, "theirs", keep);
   if (outcome.kind === "none") {
     notify(t("document.conflict_none"), "info");
+    return;
+  }
+  if (outcome.kind === "keep-failed") {
+    notify(t("document.conflict.keep_failed", { doc, reason: errorText(outcome.error) }), "guasto");
     return;
   }
   // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
   if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
     notify(t("document.reload_failed", { doc }), "guasto");
+  } else if (keep && outcome.kind === "discarded" && outcome.reload.kind === "reloaded") {
+    notify(t("document.conflict.kept", { doc }), "info");
   }
   redrawReading(doc);
   view.drawSave();
   redrawTabs(doc);
+}
+
+/// Conserva `text` nella Cronologia di `doc`, con la nota datata del conflitto.
+async function keepDiscardedText(doc: string, text: string): Promise<void> {
+  const when = new Date().toLocaleString(resolvedLanguage(), {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  await api.invokeCommand(VERSION_KEEP, { doc, text, note: t("document.conflict.kept_note", { when }) }, "apply");
 }
 
 /// Divide il riquadro col fuoco e ci porta dentro **lo stesso documento**.

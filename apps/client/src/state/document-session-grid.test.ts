@@ -242,7 +242,11 @@ describe("il conflitto di un foglio", () => {
   it("«Usa la versione sul disco» scarta il mio testo e mostra il disco (IMP-034)", async () => {
     const { disk, sessions, pane } = await inConflict();
 
-    expect((await sessions.resolveConflict(DOC, "theirs")).kind).toBe("discarded");
+    // Il giornale non è il file: non c'è un testo da mettere nella Cronologia.
+    const keep = vi.fn(async () => {});
+    expect(sessions.keepsDiscardedText(DOC)).toBe(false);
+    expect((await sessions.resolveConflict(DOC, "theirs", keep)).kind).toBe("discarded");
+    expect(keep).not.toHaveBeenCalled();
     await settle();
 
     expect(disk.writes).toHaveLength(0);

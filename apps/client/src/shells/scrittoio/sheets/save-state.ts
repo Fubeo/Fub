@@ -37,6 +37,7 @@ import "./sheets.css";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../../i18n/strings";
 import { openPopover, textButton, type PopoverHandle } from "../../../kit";
 import { confirm } from "../../../platform/confirm";
+import { discardDescription } from "../../../state/conflict-keep";
 import { documentSessions } from "../../../state/document-session";
 import { onEvent } from "../../../state/kernel";
 import { activeDoc, layout } from "../../../state/layout";
@@ -158,7 +159,7 @@ export function mountSaveState(lifetime: Lifetime): void {
       // domanda è una finestra sua.
       opened?.popover.close();
       const title = t(id === KEEP_MINE ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs");
-      const detail = t(id === KEEP_MINE ? "commands.doc.conflict.mine.desc" : "commands.doc.conflict.theirs.desc");
+      const detail = t(id === KEEP_MINE ? "commands.doc.conflict.mine.desc" : discardDescription(doc));
       const ok = await confirm(`${title}\n${doc}\n${detail}`, {
         title: t("document.conflict.title", { doc }),
         okLabel: title,

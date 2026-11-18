@@ -54,6 +54,7 @@ import {
 import { $ } from "../ui/dom";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../ui/menu";
 import { confirm } from "../platform/confirm";
+import { discardDescription } from "../state/conflict-keep";
 import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing, type CommandEntry } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
@@ -1606,7 +1607,7 @@ function fillConflict(box: HTMLElement, doc: string | null, readingMode: boolean
   const ask = async (choice: "mine" | "theirs"): Promise<void> => {
     const detail = choice === "mine"
       ? t("commands.doc.conflict.mine.desc")
-      : t("commands.doc.conflict.theirs.desc");
+      : t(discardDescription(current));
     const ok = await confirm(
       `${t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs")}\n${current}\n${detail}`,
       {

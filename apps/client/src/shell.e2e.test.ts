@@ -4275,6 +4275,68 @@ describe("i riquadri dopo un'attesa", () => {
     expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
   });
 
+  /// La Cronologia accesa monta `version.keep` fra i comandi del registro.
+  const specVersionKeep: CommandSpec = {
+    id: "version.keep",
+    title: "Conserva un testo nella cronologia",
+    description: "",
+    keybinding: null,
+    params: [
+      { name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true },
+      { name: "text", title: "Testo", description: "", kind: { kind: "text" }, required: true },
+      { name: "note", title: "Nota", description: "", kind: { kind: "text" }, required: true },
+    ],
+    scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
+  };
+
+  it("«Usa la versione su disco» mette il mio testo nella Cronologia prima di scartarlo", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const after = host.calls.slice(before);
+    const kept = after.findIndex((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    const reread = after.findIndex((c) => (c.gate === "readDocument" || c.gate === "openDocument") && c.args[0] === "Benvenuto.md");
+    expect(kept, "il testo è stato conservato").toBeGreaterThan(-1);
+    expect(reread, "il disco si rilegge solo dopo la conservazione").toBeGreaterThan(kept);
+    const args = after[kept]!.args[1] as { doc: string; text: string; note: string };
+    expect(args.doc).toBe("Benvenuto.md");
+    expect(args.text).toContain("mio A ");
+    expect(args.note).toMatch(/^Testo scartato nel conflitto del /);
+    expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+  });
+
+  it("se il testo non entra nella Cronologia non si scarta niente, e lo si dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const repair = host.fault("invokeCommand", "spazio dati pieno");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "l'errore arriva a chi scrive",
+      () => recentNotices().some((notice) => notice.text.includes("non è entrato nella Cronologia")),
+    );
+    await settle();
+    repair();
+
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+    expect(host.files()["Benvenuto.md"]).toBe("disco A\n");
+  });
+
   it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {
     const host = await start(VAULT);
     const { setMode } = await import("./panels/document");

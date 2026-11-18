@@ -2643,7 +2643,16 @@ export const IT = { // --- la scocca -------------------------------------------
   "Riscrive il file col testo che è in Fub, coprendo la modifica arrivata da fuori.",
 "commands.doc.conflict.theirs": "Conflitto: tieni il testo sul disco",
 "commands.doc.conflict.theirs.desc":
-  "Butta le modifiche non salvate e ricarica il file come sta sul disco.",
+  "Ricarica il file come sta sul disco. Il tuo testo non salvato resta nella Cronologia, con la data del conflitto.",
+// Senza la Cronologia (spenta, o un documento senza testo da conservare come
+// la griglia) il testo non si conserva: la conferma lo dice com'è.
+"commands.doc.conflict.theirs.desc_lost":
+  "Butta le modifiche non salvate e ricarica il file come sta sul disco: il tuo testo non si potrà ritrovare.",
+// La nota della versione conservata: si legge nel pannello Cronologia.
+"document.conflict.kept_note": "Testo scartato nel conflitto del {when}",
+"document.conflict.kept": "Il tuo testo su {doc} è nella Cronologia: lo ritrovi lì quando serve.",
+"document.conflict.keep_failed":
+  "Il tuo testo su {doc} non è entrato nella Cronologia, quindi non è stato scartato: {reason}. Riprova, oppure tieni il tuo testo.",
 "panes.redraw_failed": "I riquadri non si sono ridisegnati: {reason}",
 "file_only.mode": "Solo come file",
 "file_only.title": "Solo come file",
@@ -6719,7 +6728,13 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "Rewrites the file with the buffer text, covering the change that arrived from outside.",
 "commands.doc.conflict.theirs": "Conflict: keep the text on disk",
 "commands.doc.conflict.theirs.desc":
-  "Discards the unsaved changes and reloads the file as it is on disk.",
+  "Reloads the file as it is on disk. Your unsaved text stays in History, with the date of the conflict.",
+"commands.doc.conflict.theirs.desc_lost":
+  "Discards the unsaved changes and reloads the file as it is on disk: your text cannot be recovered.",
+"document.conflict.kept_note": "Text discarded in the conflict of {when}",
+"document.conflict.kept": "Your text on {doc} is in History: you can find it there whenever you need it.",
+"document.conflict.keep_failed":
+  "Your text on {doc} did not get into History, so it was not discarded: {reason}. Try again, or keep your text.",
 "panes.redraw_failed": "The panes did not redraw: {reason}",
 "file_only.mode": "File only",
 "file_only.title": "File only",
