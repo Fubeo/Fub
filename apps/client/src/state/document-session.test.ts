@@ -312,6 +312,29 @@ describe("decisioni del ciclo di vita della sessione", () => {
     } finally { now.mockRestore(); }
   });
 
+  // IMP-109: un'azione di view non sa se ha scritto; dopo la risposta accorcia
+  // la scadenza invece di ritirare, perché l'evento può arrivare dopo.
+  it("un ritiro con attesa zittisce l'evento che arriva entro l'attesa, non quello dopo", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      let disk = "a\n";
+      api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: disk, revision: `rev-${disk}`, format_id: "markdown", source_kind: "text", text_kind: "source" }));
+      const sessions = new DocumentSessionCollection(api);
+      await sessions.read("index.md");
+      const gesture = { actor: { kind: "user" }, batch: "batch-1" } as const;
+
+      sessions.expectWrite("index.md")(1_500);
+      now.mockReturnValue(2_400);
+      disk = "b\n";
+      expect(await sessions.handleExternalChange("index.md", gesture)).toMatchObject({ kind: "reloaded", quiet: true });
+
+      sessions.expectWrite("index.md")(1_500);
+      now.mockReturnValue(4_000);
+      disk = "c\n";
+      expect(await sessions.handleExternalChange("index.md", gesture)).toEqual({ kind: "reloaded", text: disk, changed: true });
+    } finally { now.mockRestore(); }
+  });
+
   it("la ricarica forzata mette in bozza il testo sporco, poi aggiorna il testo autorevole", async () => {
     const source: DocumentSource = { text: "versione ripristinata", revision: "rev-3", format_id: "markdown", source_kind: "text", text_kind: "source" };
     const sessions = new DocumentSessionCollection(api);

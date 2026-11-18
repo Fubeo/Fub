@@ -134,6 +134,29 @@ function drawInputs(): string {
 /// Gli ingressi del giro in corso: li legge una volta `mountTree` o
 /// `patchTree`, e valgono per tutto il loro giro, che è sincrono.
 let passInputs = "";
+/// Vero mentre il giro in corso disegna o riconcilia ciò che sta **dentro un
+/// form**. Un campo lì non ha bisogno di un'azione propria per servire: l'invio
+/// del form manda tutti i suoi campi (`UiKind::Form` in `fub-abi`), quindi non
+/// va disabilitato. Come `passInputs`, vale per un giro sincrono, e lo rimette
+/// a posto chi lo cambia (`withinForm`).
+let insideForm = false;
+
+/// Esegue `run` con `insideForm` a `inside`, e lo rimette com'era dopo.
+function withinForm<T>(inside: boolean, run: () => T): T {
+  const before = insideForm;
+  insideForm = inside;
+  try {
+    return run();
+  } finally {
+    insideForm = before;
+  }
+}
+
+/// Se `el`, già nel DOM, sta dentro un form: per i giri che partono a metà
+/// albero (una patch, «mostra altre»), dove il form non è passato di lì.
+function enclosedInForm(el: HTMLElement): boolean {
+  return el.parentElement?.closest(".ui-form") != null;
+}
 /// Il montaggio di una porta: il disegno riceve soltanto la porta, e da lì
 /// risale al contesto senza che ogni funzione lo porti con sé.
 const mountOfPort = new WeakMap<Port, Mount>();
@@ -329,7 +352,7 @@ export function patchTree(container: HTMLElement, key: string, node: UiNode): bo
   // **il primo** montaggio, non l'ultimo. Riconciliare con quello riscriverebbe
   // i legami del sottoalbero patchato con l'handler di ieri — cioè disferebbe
   // la 0118 proprio dove nessuno guarda.
-  const updated = reconcile(target, node, mount.port);
+  const updated = withinForm(enclosedInForm(target), () => reconcile(target, node, mount.port));
   if (target === mount.root) mount.root = updated;
   return true;
 }
@@ -531,7 +554,7 @@ function update(
     }
     case "form": {
       if (prev.node !== "form") return false;
-      children(childrenContainer(el), next.children, onAction);
+      withinForm(true, () => children(childrenContainer(el), next.children, onAction));
       const dispatchAction = el.querySelector<HTMLButtonElement>(":scope > .ui-submit");
       if (dispatchAction) {
         dispatchAction.textContent = next.submit_label;
@@ -894,7 +917,7 @@ function showMoreItems(el: HTMLElement, onAction: Port): void {
   const more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
   const hadFocus = more?.contains(document.activeElement) ?? false;
   passInputs = drawInputs();
-  drawListItems(el, node.items, onAction, false);
+  withinForm(enclosedInForm(el), () => drawListItems(el, node.items, onAction, false));
   markListItems(el);
   if (hadFocus && !more?.isConnected) {
     const first = el.children[before];
@@ -1241,7 +1264,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       const el = document.createElement("form");
       el.className = "ui-form";
       const body = div("ui-children");
-      for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      withinForm(true, () => {
+        for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      });
       el.appendChild(body);
       const dispatchAction = document.createElement("button");
       dispatchAction.type = "submit";
@@ -1596,7 +1621,7 @@ function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction
     const input = row.querySelector<HTMLInputElement>("input")!;
     input.name = el.id;
     input.value = option.value;
-    input.disabled = node.action === null;
+    staticControl(input, node.action);
     row.querySelector<HTMLElement>("span")!.textContent = option.label;
     actionsOfField(input, node.action, onAction);
   });
@@ -1814,7 +1839,10 @@ function staticControl(
   // Un campo senza azione è dato da leggere, non un editor senza salvataggio.
   // Lasciarlo modificabile produce uno stato che sembra accettato e sparisce al
   // primo ridisegno. Il browser espone già la semantica corretta: `disabled`.
-  control.disabled = action === null;
+  // Dentro un form invece il salvataggio c'è, ed è l'invio: i campi per
+  // aggiungere una proprietà o salvare una query non hanno un'azione propria
+  // e devono potersi scrivere (IMP-108, IMP-112).
+  control.disabled = action === null && !insideForm;
 }
 
 function actionsOfField(

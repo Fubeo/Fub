@@ -93,7 +93,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SAVE_SUBMIT, "Salva")
             .with(RUN_LABEL, "Esegui")
             .with(DELETE_LABEL, "Elimina")
-            .with(E_EMPTY_NAME, "Il nome è vuoto.")
+            .with(E_EMPTY_NAME, "Dai un nome alla query.")
             .with(E_NO_EXPR, "Manca l'espressione (o il testo da cui farla).")
             .with(E_BAD_EXPR, "Espressione illeggibile: {reason}")
             .with(E_MISSING, "Nessuna query «{id}».")
@@ -143,7 +143,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SAVE_SUBMIT, "Save")
             .with(RUN_LABEL, "Run")
             .with(DELETE_LABEL, "Delete")
-            .with(E_EMPTY_NAME, "The name is empty.")
+            .with(E_EMPTY_NAME, "Give the query a name.")
             .with(E_NO_EXPR, "Missing expression (or text to build one from).")
             .with(E_BAD_EXPR, "Unreadable expression: {reason}")
             .with(E_MISSING, "No query «{id}».")
@@ -285,9 +285,12 @@ fn command_then_tree(
             root: tree_helper(
                 view,
                 host,
+                // Il motivo e basta: `to_string` dell'errore ci metteva
+                // davanti la sua variante («invalid arguments: …»), che è
+                // lessico del contratto e non una frase per chi usa Fub.
                 Some(Text::message(
                     FAILED,
-                    vec![Arg::text("reason", and.to_string())],
+                    vec![Arg::text("reason", and.message().to_string())],
                 )),
             )?,
         }),
