@@ -445,6 +445,51 @@ describe("il motore dei segni", () => {
       expect(gripsIn(lifts)).toHaveLength(0);
       life.close();
     });
+
+    it("tolte mentre crescono tornano indietro da dove sono, senza saltare; richieste di nuovo, riprendono da lì", () => {
+      const { host, life, lifts } = makeHost();
+      const marks = createMarksMotion(host);
+      const g = geometryOf(2, 2, 4, 3, 2, 2);
+      marks.update({ geometry: g, parts: withGrips(false), glide: false });
+      marks.update({ geometry: g, parts: withGrips(true) });
+      driver.advance(FRAME);
+      driver.advance(FRAME);
+      const b = gripsIn(lifts).find((el) => el.dataset.handle === "b")!;
+      const midway = Number(b.style.opacity);
+      expect(midway).toBeGreaterThan(0);
+      expect(midway).toBeLessThan(1);
+      marks.update({ geometry: g, parts: withGrips(false) });
+      // Nello stesso fotogramma è ancora lì, con la stessa comparsa.
+      expect(b.hidden).toBe(false);
+      expect(Number(b.style.opacity)).toBeCloseTo(midway, 6);
+      // La molla porta la velocità che aveva: prima rallenta, poi torna
+      // indietro, senza salti da un fotogramma all'altro.
+      let last = midway;
+      let peak = midway;
+      for (let frame = 0; frame < 12; frame += 1) {
+        driver.advance(FRAME);
+        const now = Number(b.style.opacity);
+        expect(Math.abs(now - last)).toBeLessThan(0.2);
+        peak = Math.max(peak, now);
+        last = now;
+      }
+      expect(last).toBeLessThan(peak);
+      expect(b.hidden).toBe(false);
+      const shrinking = last;
+      // Richiesta di nuovo mentre torna indietro: cresce da dove è.
+      marks.update({ geometry: g, parts: withGrips(true) });
+      expect(gripsIn(lifts).filter((el) => el.dataset.handle === "b")).toEqual([b]);
+      expect(Number(b.style.opacity)).toBeCloseTo(shrinking, 6);
+      driver.advance(1000);
+      expect(b.style.opacity).toBe("");
+      // Tolta di nuovo, si nasconde quando è tornata a zero e il motore si ferma.
+      marks.update({ geometry: g, parts: withGrips(false) });
+      driver.advance(1000);
+      expect(gripsIn(lifts)).toHaveLength(0);
+      expect(marks.moving()).toBe(false);
+      expect(frameListeners()).toBe(0);
+      life.close();
+    });
   });
 
   let motion: MarksMotion | null = null;
