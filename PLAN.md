@@ -731,7 +731,7 @@ l'azzeramento della velocità all'indietro; d45 verde; `check-listeners`, `npm r
 `theme:verify` verdi.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, 241687491: unito integra/editor-1 nel piano; bench:grid 34/34, G3 verdi nelle 4 luci, bench:motion 4/4, grid-motion 18 test; gestore p90 8,2 ms, fotogramma p90 7,4 ms. Differenze: attributi data-mark/data-arrive per il banco; --grid-mark in structure.css; colori forzati con bordo Highlight; .grid-selection resta per card.ts; tolti gli hook ranged, active, grid-freeze, grid-fill-handle; in più al rilascio la selezione rifà il gesto se il riquadro si è spostato. Da guardare: su grid-large una cella lunga della colonna D allarga di 8 px la barra della formula)
 
 ## T4 · La cella aperta è la cella
 
