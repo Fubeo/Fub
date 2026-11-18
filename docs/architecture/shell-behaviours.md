@@ -166,6 +166,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Doppio clic nei pannelli.** In ogni albero dichiarativo (le view dei
+  pannelli) il secondo clic di un doppio clic vale solo sulla voce del primo,
+  con la stessa azione (`guardClickRuns` in `ui/node.ts`): la voce che
+  scorre sotto il puntatore quando il primo clic apre una nota e il pannello
+  si ridisegna non si apre, e la seconda pressione non sposta il fuoco, che
+  resta nell'editor della nota aperta. Il clic da tastiera non cambia.
 - **Cassetti sopra i fogli.** Sotto i 960 px l'albero, e sotto i 1200
   l'ispettore, sono cassetti col velo (`desktop-shell.ts`), e il velo è
   modale: la tastiera non arriva a ciò che copre. Scegliere un documento

@@ -218,16 +218,30 @@ impl ViewProvider for BacklinksView {
                     .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
             })(),
         );
-        let outbound_unlinked = part(
-            OUTBOUND_UNLINKED,
-            OUTBOUND_UNLINKED_COUNT,
-            (|| {
-                let (targets, _) = outgoing_result.clone()?;
-                let linked = targets.into_iter().collect::<BTreeSet<_>>();
-                outbound_unlinked_mentions(host, &active, &linked, &filter_result.clone()?)
-                    .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
-            })(),
-        );
+        // Le menzioni uscenti sono parole nella prosa del documento aperto: un
+        // documento che non è prosa (un .docx, un disegno, un foglio) non ne ha
+        // da offrire, e la sezione lo dice in parole, chiusa, invece di
+        // mostrarsi vuota come se le avesse cercate o rotta come se fosse un
+        // guasto.
+        let outbound_unlinked = if crate::formats::understands(host, &active, PROSE) {
+            part(
+                OUTBOUND_UNLINKED,
+                OUTBOUND_UNLINKED_COUNT,
+                (|| {
+                    let (targets, _) = outgoing_result.clone()?;
+                    let linked = targets.into_iter().collect::<BTreeSet<_>>();
+                    outbound_unlinked_mentions(host, &active, &linked, &filter_result.clone()?)
+                        .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
+                })(),
+            )
+        } else {
+            section(
+                OUTBOUND_UNLINKED,
+                Text::key(OUTBOUND_UNLINKED),
+                true,
+                placeholder(MENTIONS_ONLY_IN_NOTES),
+            )
+        };
         // Il filtro è un'espressione di query in JSON: uno strumento per chi
         // la sa scrivere, non la prima cosa del pannello. Sta in fondo, chiuso
         // finché non ce n'è uno attivo.
@@ -402,6 +416,11 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Le menzioni si cercano nel testo delle note: serve la ricerca, che \
                  in questo vault non è attiva.",
             )
+            .with(
+                MENTIONS_ONLY_IN_NOTES,
+                "Le menzioni uscenti si cercano nel testo di una nota: questo \
+                 documento non è una nota, quindi non ne ha.",
+            )
             .with(CONVERT_LABEL, "Collega")
             .with(INCOMING_COUNT, "In entrata · {count}")
             .with(OUTGOING_COUNT, "In uscita · {count}")
@@ -503,6 +522,11 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Mentions are found in the notes' text: this needs search, which is \
                  not active in this vault.",
             )
+            .with(
+                MENTIONS_ONLY_IN_NOTES,
+                "Outgoing mentions are found in the text of a note: this document \
+                 is not a note, so it has none.",
+            )
             .with(CONVERT_LABEL, "Link")
             .with(INCOMING_COUNT, "Incoming · {count}")
             .with(OUTGOING_COUNT, "Outgoing · {count}")
@@ -589,6 +613,9 @@ const EMPTY_UNLINKED: &str = "empty_unlinked";
 const FAILED: &str = "failed";
 /// Le menzioni non collegate senza la ricerca che valuta il testo.
 const MENTIONS_NEED_SEARCH: &str = "mentions_need_search";
+/// Le menzioni uscenti di un documento che non è prosa: non ce ne sono, e non
+/// è un guasto.
+const MENTIONS_ONLY_IN_NOTES: &str = "mentions_only_in_notes";
 const CONVERT_LABEL: &str = "convert_label";
 const FILTER_INVALID: &str = "filter_invalid";
 const FILTER_INVALID_JSON: &str = "filter_invalid_json";
@@ -1029,7 +1056,10 @@ fn unlinked_mentions(
 }
 
 /// Menzioni nella nota attiva di pagine non ancora collegate. La selezione dei
-/// candidati passa dall'indice e ha un limite di 200 note.
+/// candidati passa dall'indice e ha un limite di 200 note. Chi la chiama ha
+/// già escluso i documenti che non sono prosa (`MENTIONS_ONLY_IN_NOTES`); il
+/// controllo qui resta perché leggere i byte di un .docx come testo è un
+/// errore, non una risposta.
 fn outbound_unlinked_mentions(
     host: &dyn ReadApi,
     active: &DocId,
@@ -1623,6 +1653,56 @@ mod tests {
         );
         assert_eq!(readable("[[Nota#^blocco]]"), "Nota › blocco");
         assert_eq!(readable("aperto [[ma non chiuso"), "aperto [[ma non chiuso");
+    }
+
+    /// IMP-116: con un .docx aperto la sezione delle menzioni uscenti leggeva i
+    /// byte del documento come testo e si mostrava come «Impossibile caricare
+    /// questa sezione». Un documento che non è prosa non ha menzioni uscenti:
+    /// la sezione lo dice in parole, chiusa, e nessuna parte è un guasto.
+    #[test]
+    fn a_document_that_is_not_prose_says_why_it_has_no_outgoing_mentions() {
+        let docx: &[u8] = b"PK\x03\x04\x14\x00\x06\x00\xb4\xff\x00\x80word/document.xml";
+        let host = MemoryHost::new()
+            .with_format(
+                "docx",
+                fub_abi::format::DocumentFormat {
+                    descriptor: fub_abi::format::FormatDescriptor {
+                        source: fub_abi::format::SourceKind::Bytes,
+                        ..fub_abi::format::FormatDescriptor::text("docx", "Word", &["docx"])
+                    },
+                    capabilities: fub_abi::format::FormatCapabilities::of(&[]),
+                },
+            )
+            .with_document("Note/a.md", "parla di altchunk senza link\n")
+            .with_binary_document("Documenti/altchunk.docx", docx);
+        host.set_active(Some("Documenti/altchunk.docx"));
+
+        let tree = BacklinksView.render_view(&instance(), &host).unwrap();
+        let json = serde_json::to_string(&tree).unwrap();
+        fn failed(node: &UiNode) -> bool {
+            matches!(node.kind, UiKind::Failed { .. }) || node.children().into_iter().any(failed)
+        }
+        assert!(!failed(&tree), "{json}");
+        let UiKind::Stack { children, .. } = &tree.kind else {
+            panic!("the panel is a column");
+        };
+        let outbound = children
+            .iter()
+            .find(|child| child.key.as_deref() == Some(OUTBOUND_UNLINKED))
+            .expect("the outgoing mentions section is there");
+        let UiKind::Section {
+            collapsed,
+            children,
+            ..
+        } = &outbound.kind
+        else {
+            panic!("the part is a section");
+        };
+        assert!(*collapsed, "{json}");
+        assert!(
+            matches!(&children[0].kind, UiKind::EmptyState { title, .. } if *title == Text::key(MENTIONS_ONLY_IN_NOTES)),
+            "{json}"
+        );
     }
 
     #[test]

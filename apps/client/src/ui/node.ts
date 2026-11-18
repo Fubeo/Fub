@@ -193,7 +193,55 @@ function route(container: HTMLElement, onAction: ActionHandler): Mount {
   };
   mounted.set(container, mount);
   mountOfPort.set(mount.port, mount);
+  guardClickRuns(container);
   return mount;
+}
+
+/// **Il secondo clic di un doppio clic vale solo sul controllo del primo**
+/// (IMP-103, la stessa regola delle schede di IMP-013).
+///
+/// Il primo clic su una voce del pannello Collegamenti apre la nota, il
+/// pannello si ridisegna con le voci della nota nuova, e il secondo clic, 180
+/// ms dopo, cadeva sulla voce che intanto era scivolata sotto il puntatore:
+/// apriva una terza nota. Vale per ogni albero dichiarativo, perché ogni
+/// pannello può ridisegnarsi fra i due clic.
+///
+/// Il controllo della prima pressione si ricorda con la sua azione: il
+/// riconciliatore può riusare lo stesso elemento per un nodo diverso, e lì
+/// l'elemento è lo stesso ma la voce no. Un clic che continua una serie
+/// (`detail` > 1) arriva solo se cade sullo stesso elemento con la stessa
+/// azione; la sua pressione, se cade altrove, non sposta nemmeno il fuoco, che
+/// resta dove l'ha messo il primo clic (l'editor della nota aperta). Il clic da
+/// tastiera (`detail` 0) e il clic singolo non cambiano.
+let firstPress: { control: HTMLElement | null; action: string | null } = { control: null, action: null };
+
+/// Il controllo d'azione più interno sotto un evento: l'elemento che ha un
+/// ascoltatore di clic con un'azione in vigore.
+function clickControl(target: EventTarget | null): HTMLElement | null {
+  for (let el = target instanceof Element ? target : null; el; el = el.parentElement) {
+    if (el instanceof HTMLElement && links.get(el)?.get("click")) return el;
+  }
+  return null;
+}
+
+function clickActionOf(control: HTMLElement | null): string | null {
+  const link = control ? links.get(control)?.get("click") : null;
+  return link ? JSON.stringify(link.action) : null;
+}
+
+function continuesFirstPress(control: HTMLElement): boolean {
+  return firstPress.control === control && firstPress.action === clickActionOf(control);
+}
+
+function guardClickRuns(container: HTMLElement): void {
+  container.addEventListener("mousedown", (event) => {
+    const control = clickControl(event.target);
+    if (event.detail <= 1) {
+      firstPress = { control, action: clickActionOf(control) };
+      return;
+    }
+    if (control && !continuesFirstPress(control)) event.preventDefault();
+  }, { capture: true });
 }
 
 /// **Un'azione che va storta lo dice**, e lo dice qui.
@@ -1727,6 +1775,10 @@ function listen(
     const link = links.get(el)?.get(event);
     if (!link) return;
     if (link.when && !link.when(e)) return;
+    if (event === "click" && e instanceof MouseEvent && e.detail > 1 && !continuesFirstPress(el)) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     void dispatchAction(el, event);
   });

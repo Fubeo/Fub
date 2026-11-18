@@ -921,6 +921,103 @@ describe("le voci di una lista", () => {
   });
 });
 
+describe("il secondo clic di un doppio clic (IMP-103)", () => {
+  const row = (doc: string): UiNode =>
+    ({
+      node: "list_item",
+      title: doc,
+      subtitle: null,
+      action: { action: "open", payload: { doc } },
+      selected: false,
+      key: `${doc}#0`,
+    }) as UiNode;
+  const list = (...docs: string[]): UiNode => ({ node: "list", items: docs.map(row) }) as UiNode;
+
+  /// Una pressione del mouse con il suo clic, come li manda il browser: la
+  /// seconda di un doppio clic porta `detail` 2.
+  function press(el: HTMLElement, detail: number): { mousedown: boolean; click: boolean } {
+    const mousedown = el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail }));
+    const click = el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail }));
+    return { mousedown, click };
+  }
+
+  it("il secondo clic sulla voce scivolata sotto il puntatore non apre niente", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      const doc = (a.payload as { doc: string }).doc;
+      opened.push(doc);
+      // Il primo clic apre la nota, e il pannello si ridisegna con le voci
+      // della nota nuova: al posto della voce cliccata ce n'è un'altra.
+      if (doc === "Nota B.md") mountTree(host, list("Indice.md"), onAction);
+    };
+    mountTree(host, list("Nota B.md"), onAction);
+    press(host.querySelector<HTMLElement>(".ui-list-item")!, 1);
+    const slid = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(slid.textContent).toContain("Indice.md");
+    const second = press(slid, 2);
+    expect(opened).toEqual(["Nota B.md"]);
+    // La pressione non sposta nemmeno il fuoco: resta dove l'ha messo il primo.
+    expect(second.mousedown).toBe(false);
+  });
+
+  /// Fra due pressioni l'azione della prima torna (`aria-busy` si toglie),
+  /// come fra i 180 ms di un doppio clic vero.
+  const settle = (el: HTMLElement) => vi.waitFor(() => expect(el.hasAttribute("aria-busy")).toBe(false));
+
+  it("il doppio clic sulla stessa voce resta un doppio clic, e un clic nuovo apre l'altra", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      opened.push((a.payload as { doc: string }).doc);
+    };
+    mountTree(host, list("Uno.md", "Due.md"), onAction);
+    const [uno, due] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    press(uno!, 1);
+    await settle(uno!);
+    expect(press(uno!, 2).mousedown).toBe(true);
+    await settle(uno!);
+    expect(opened).toEqual(["Uno.md", "Uno.md"]);
+    // Una serie nuova comincia dove cade: la regola tocca solo i clic che
+    // continuano una serie.
+    press(due!, 1);
+    await settle(due!);
+    expect(opened).toEqual(["Uno.md", "Uno.md", "Due.md"]);
+    // Il clic da tastiera (`detail` 0) e `click()` passano sempre.
+    uno!.click();
+    expect(opened[opened.length - 1]).toBe("Uno.md");
+  });
+
+  it("lo stesso elemento riusato per una voce diversa non prende il secondo clic", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      opened.push((a.payload as { doc: string }).doc);
+    };
+    const tree = (doc: string): UiNode =>
+      ({
+        node: "tree",
+        roots: [
+          { node: "tree_item", label: doc, action: { action: "open", payload: { doc } }, selected: false, expanded: true, children: [], key: "riga" },
+        ],
+      }) as unknown as UiNode;
+    mountTree(host, tree("Uno.md"), onAction);
+    const el = host.querySelector<HTMLElement>(".ui-tree-label")!;
+    press(el, 1);
+    await settle(el);
+    mountTree(host, tree("Due.md"), onAction);
+    // Il riconciliatore ha riusato l'elemento: senza confrontare l'azione il
+    // secondo clic aprirebbe la voce nuova.
+    expect(host.querySelector(".ui-tree-label")).toBe(el);
+    press(el, 2);
+    await settle(el);
+    expect(opened).toEqual(["Uno.md"]);
+  });
+});
+
 describe("un'azione in volo", () => {
   it("un secondo click non la ripete, e il bottone dice che sta lavorando", async () => {
     const host = document.createElement("div");
