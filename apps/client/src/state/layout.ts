@@ -370,6 +370,22 @@ function paneHolding(tab: Tab, preferred: string, l: Layout): string | null {
   return panes(l).find(holds) ?? null;
 }
 
+/// Il riquadro **diverso da `id`** che tiene già la view `tab`, o `null`: un
+/// documento, o una view che `id` ha già o che nessuno ha. Indietro, Avanti e
+/// la riapertura di una scheda chiusa non passano da `openViewIn`, e senza
+/// questa domanda rimettevano in `id` una view che intanto era andata in un
+/// altro riquadro: il secondo grafo di IMP-114 per un'altra strada.
+function viewHeldElsewhere(tab: Tab, id: string, l: Layout): string | null {
+  if (tab.k !== "view") return null;
+  const holder = paneHolding(tab, id, l);
+  return holder !== null && holder !== id ? holder : null;
+}
+
+/// Porta il fuoco sulla linguetta `tab` del riquadro `holder`, che la tiene.
+function showHeld(holder: string, tab: Tab, l: Layout): void {
+  activateTab(holder, l.panes[holder]!.tabs.findIndex((each) => sameTab(each, tab)), l);
+}
+
 function openTabIn(id: string, tab: Tab, l: Layout): void {
   const p = l.panes[id];
   if (!p) return;
@@ -635,13 +651,20 @@ function rememberClosed(id: string, index: number, l: Layout): void {
 }
 
 /// Riapre l'ultima tab chiusa nel suo riquadro (o in quello col fuoco, se il
-/// suo non c'è più), al suo posto. `false` se non c'è niente da riaprire.
+/// suo non c'è più), al suo posto. `false` se non c'è niente da riaprire. Una
+/// view che intanto si è aperta in un altro riquadro non si raddoppia: il
+/// fuoco va lì, come con `openViewIn`.
 export function reopenClosedTab(l: Layout = layout): boolean {
   const closed = closedTabs.pop();
   if (!closed) return false;
   const id = l.panes[closed.pane] ? closed.pane : l.focus;
   const p = l.panes[id];
   if (!p) return false;
+  const holder = viewHeldElsewhere(closed.tab, id, l);
+  if (holder) {
+    showHeld(holder, closed.tab, l);
+    return true;
+  }
   const already = p.tabs.findIndex((tab) => sameTab(tab, closed.tab));
   if (already >= 0) {
     activateTab(id, already, l);
@@ -754,12 +777,19 @@ export function activateTab(id: string, index: number, l: Layout = layout): void
 
 /// Torna indietro nella cronologia del riquadro (P06/F21): la tab attiva va
 /// nel futuro, e si mostra l'ultima del passato. Torna `false` se non c'è
-/// un passato — niente da fare, niente scritto.
+/// un passato — niente da fare, niente scritto. Se l'ultima del passato è una
+/// view che intanto sta in un altro riquadro, il passo si consuma e il fuoco
+/// va lì: una view si apre una volta per finestra (`openViewIn`).
 export function goBack(id: string, l: Layout = layout): boolean {
   const p = l.panes[id];
   if (!p || !p.history || p.history.past.length === 0) return false;
   const current = p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null;
   const prev = p.history.past.pop()!;
+  const holder = viewHeldElsewhere(prev, id, l);
+  if (holder) {
+    showHeld(holder, prev, l);
+    return true;
+  }
   if (current) p.history.future.push(current);
   const at = p.tabs.findIndex((t) => sameTab(t, prev));
   if (at >= 0) {
@@ -773,13 +803,19 @@ export function goBack(id: string, l: Layout = layout): boolean {
   return true;
 }
 
-/// Va avanti nella cronologia del riquadro (P06/F21): speculare a `goBack`.
-/// Torna `false` se non c'è un futuro.
+/// Va avanti nella cronologia del riquadro (P06/F21): speculare a `goBack`,
+/// anche per una view che intanto sta in un altro riquadro. Torna `false` se
+/// non c'è un futuro.
 export function goForward(id: string, l: Layout = layout): boolean {
   const p = l.panes[id];
   if (!p || !p.history || p.history.future.length === 0) return false;
   const current = p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null;
   const next = p.history.future.pop()!;
+  const holder = viewHeldElsewhere(next, id, l);
+  if (holder) {
+    showHeld(holder, next, l);
+    return true;
+  }
   if (current) {
     if (!p.history) p.history = { past: [], future: [] };
     p.history.past.push(current);
