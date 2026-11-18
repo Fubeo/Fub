@@ -40,6 +40,23 @@ describe("GridEngine con una cartella di Excel", () => {
       engine.destroy();
     });
 
+    it("al rilascio la selezione finisce sulla cella sotto il puntatore, anche se la griglia si è spostata sotto il punto fermo", async () => {
+      const { engine, viewport, cell } = await workbookMounted(workbookHost());
+      const start = at(cell, 1, 1);
+      press(cell(1, 1)!, "pointerdown", start.x, start.y);
+      const end = at(cell, 3, 2);
+      press(viewport, "pointermove", end.x, end.y);
+      expect(engine.selection().focus).toEqual({ row: 3, column: 2 });
+      // Ciò che sta sopra la griglia cresce di una riga: senza scorrere, sotto
+      // il punto fermo passa la riga di prima.
+      const shift = end.y - at(cell, 2, 2).y;
+      const box = viewport.getBoundingClientRect();
+      vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue(new DOMRect(box.x, box.y + shift, box.width, box.height));
+      press(viewport, "pointerup", end.x, end.y);
+      expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 2, column: 2 } });
+      engine.destroy();
+    });
+
     it("le intestazioni prendono la colonna o la riga intera, e l'angolo il foglio", async () => {
       const { engine, viewport, cell } = await workbookMounted(workbookHost());
       // La cella attiva (il fuoco) resta sulla prima riga o colonna.

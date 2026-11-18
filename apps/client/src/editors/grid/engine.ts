@@ -513,6 +513,10 @@ export class GridEngine {
   /// Il gesto del puntatore sulle celle: una selezione che si allarga
   /// (celle, righe o colonne intere) o il quadratino di riempimento tirato.
   #drag: CellDrag | null = null;
+  /// Dove stava il riquadro all'ultimo evento del gesto: se al rilascio sta
+  /// altrove, ciò che c'è sopra ha cambiato misura e la cella sotto il punto
+  /// fermo può essere un'altra.
+  #dragSeen: { readonly left: number; readonly top: number } | null = null;
   #resize: ResizeDrag | null = null;
   /// Gli altri intervalli di una selezione a più intervalli, sul foglio
   /// mostrato; quello in cui si lavora è `#selection`.
@@ -4740,6 +4744,7 @@ export class GridEngine {
       const anchor = event.shiftKey ? this.#selection.anchor : position;
       this.#tabStart = null;
       this.#drag = { kind, anchor, x: event.clientX, y: event.clientY };
+      this.#dragSeen = this.#viewportAt();
       this.#selection = this.#dragSelection(kind, anchor, position);
     }
     this.#viewport.setPointerCapture?.(event.pointerId);
@@ -4791,6 +4796,7 @@ export class GridEngine {
   #dragTo(drag: CellDrag): void {
     const hit = this.#hit(drag.x, drag.y, true);
     if (!hit) return;
+    this.#dragSeen = this.#viewportAt();
     const position = { row: hit.row ?? 0, column: hit.column ?? 0 };
     if (drag.kind === "point") {
       const pointing = this.#pointing;
@@ -4902,13 +4908,15 @@ export class GridEngine {
     const drag = this.#drag;
     this.#stopDragScroll();
     if (!drag) return;
-    // Solo se il punto è nuovo: un rilascio dove si è premuto non sposta.
-    if (commit && point && (point.x !== drag.x || point.y !== drag.y)) {
+    // Solo se il punto è nuovo, o se sotto il punto fermo è passata un'altra
+    // cella: un rilascio dove si è premuto non sposta.
+    if (commit && point && (point.x !== drag.x || point.y !== drag.y || this.#shiftedUnder(drag))) {
       drag.x = point.x;
       drag.y = point.y;
       this.#dragTo(drag);
     }
     this.#drag = null;
+    this.#dragSeen = null;
     if (drag.kind === "move") {
       if (commit && !sameRange(drag.source, drag.target)) this.#moveRange(drag.source, drag.target, alternate);
       else this.#render();
@@ -4917,6 +4925,29 @@ export class GridEngine {
     if (drag.kind !== "fill") return;
     if (commit && !sameRange(drag.source, drag.target)) this.#autoFill(drag.source, drag.target, alternate);
     else this.#render();
+  }
+
+  /// Se sotto il punto fermo di una selezione col puntatore sta un'altra
+  /// cella da quella che il gesto ha preso: ciò che sta sopra la griglia ha
+  /// cambiato misura e l'ha spostata, senza che scorresse. Il riempimento e lo
+  /// spostamento non si rifanno: un rilascio dove si è premuto non li avvia.
+  #shiftedUnder(drag: CellDrag): boolean {
+    if (drag.kind !== "cells" && drag.kind !== "rows" && drag.kind !== "columns") return false;
+    const seen = this.#dragSeen;
+    const now = this.#viewportAt();
+    if (!seen || (seen.left === now.left && seen.top === now.top)) return false;
+    const hit = this.#hit(drag.x, drag.y, true);
+    if (!hit) return false;
+    const focus = this.#selection.focus;
+    if (drag.kind === "rows") return (hit.row ?? 0) !== focus.row;
+    if (drag.kind === "columns") return (hit.column ?? 0) !== focus.column;
+    // Su un'unione conta l'unione: un clic dentro non sposta il fuoco.
+    return !samePosition(this.#anchorOf({ row: hit.row ?? 0, column: hit.column ?? 0 }), this.#anchorOf(focus));
+  }
+
+  #viewportAt(): { readonly left: number; readonly top: number } {
+    const rect = this.#viewport.getBoundingClientRect();
+    return { left: rect.left, top: rect.top };
   }
 
   #autoFill(source: GridRange, target: GridRange, alternate: boolean): void {
