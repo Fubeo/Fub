@@ -1486,7 +1486,7 @@ fn table_grid_borders() -> Option<wordcraft_doc::props::Borders> {
     StyleSheet::builtin()
         .get("TableGrid")
         .and_then(|style| style.table.as_ref())
-        .and_then(|table| table.borders.clone())
+        .and_then(|table| table.borders)
 }
 
 /// Ogni cella prende la larghezza delle colonne della griglia che copre.
