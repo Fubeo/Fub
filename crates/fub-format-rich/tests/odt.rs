@@ -482,11 +482,16 @@ fn le_celle_vuote_di_una_tabella_nuova_si_rileggono_col_loro_paragrafo() {
     old.rows[2].cells[1].blocks = vec![Block::Para(empty.clone())];
     let out = saved(&bytes, &projection);
     let content = part(&out, "content.xml");
-    let fresh = &content[content.find("table:name=\"Tabella2\"").expect("the new table")..];
+    let fresh = &content[content
+        .find("table:name=\"Tabella2\"")
+        .expect("the new table")..];
     let fresh = &fresh[..fresh.find("</table:table>").unwrap()];
     assert_eq!(fresh.matches("<table:table-cell ").count(), 4, "{fresh}");
     assert_eq!(fresh.matches("<text:p").count(), 4, "{fresh}");
-    assert!(content.contains("<table:table-cell/></table:table-row>"), "{content}");
+    assert!(
+        content.contains("<table:table-cell/></table:table-row>"),
+        "{content}"
+    );
     let reopened = self::projection(&out);
     let Block::Table(table) = &reopened.blocks[1] else {
         panic!("not a table");
