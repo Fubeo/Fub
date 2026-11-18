@@ -59,13 +59,20 @@ fn a_draft_is_written_and_discarded_while_a_save_holds_the_write_turn() {
     let drafting = Arc::clone(&host);
     let drafter = std::thread::spawn(move || {
         let id = DocId::new("nota.md");
-        let saved = drafting.save_draft(None, &id, "# Nota\n\nbattuta nuova\n", Some(Revision::new("rev-1")));
+        let saved = drafting.save_draft(
+            None,
+            &id,
+            "# Nota\n\nbattuta nuova\n",
+            Some(Revision::new("rev-1")),
+        );
         done_tx.send(("save", saved)).expect("the test listens");
         if next_rx.recv().is_err() {
             return;
         }
         let discarded = drafting.discard_draft(None, &id);
-        done_tx.send(("discard", discarded)).expect("the test listens");
+        done_tx
+            .send(("discard", discarded))
+            .expect("the test listens");
     });
 
     let saved = done_rx.recv_timeout(FREE_WITHIN);
@@ -83,7 +90,11 @@ fn a_draft_is_written_and_discarded_while_a_save_holds_the_write_turn() {
     let (step, saved) = saved.expect("save_draft waited for the write turn of the save in flight");
     assert_eq!(step, "save");
     saved.expect("the draft is written");
-    assert_eq!(on_disk, before + 1, "the draft is on disk while the save holds the turn");
+    assert_eq!(
+        on_disk,
+        before + 1,
+        "the draft is on disk while the save holds the turn"
+    );
     let (step, discarded) = discarded.expect("discard_draft waited for the write turn");
     assert_eq!(step, "discard");
     discarded.expect("the draft is discarded");

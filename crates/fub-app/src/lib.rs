@@ -1023,7 +1023,11 @@ async fn save_draft(
 /// scelto di scartare ciò che aveva recuperato. Fuori dal thread principale
 /// come [`save_draft`], e nella stessa coda della sessione.
 #[tauri::command]
-async fn discard_draft(app: AppHandle, id: String, vault: Option<String>) -> Result<(), PluginError> {
+async fn discard_draft(
+    app: AppHandle,
+    id: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
     let id = doc_id(&id)?;
     off_main(app, move |host| host.discard_draft(vault.as_deref(), &id)).await
 }

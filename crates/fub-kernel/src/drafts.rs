@@ -192,7 +192,8 @@ pub(crate) struct Drafts {
 /// mutazione è morta a metà: il supporto è atomico per file, quindi si va
 /// avanti invece di perdere anche questa bozza.
 fn mutating(lock: &Mutex<()>) -> MutexGuard<'_, ()> {
-    lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    lock.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// La porta delle bozze di un vault, staccata dal workspace (#485).
@@ -217,7 +218,8 @@ impl DraftPort {
     /// Scrive (o riscrive) la bozza di un documento: vedi
     /// [`crate::workspace::Workspace::save_draft`].
     pub fn save(&self, doc: &DocId, text: &str, base: Option<Revision>) -> std::io::Result<()> {
-        self.drafts.save(doc, text, base, self.clock.now_unix_millis())
+        self.drafts
+            .save(doc, text, base, self.clock.now_unix_millis())
     }
 
     /// Butta la bozza di un documento: vedi

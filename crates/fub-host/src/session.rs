@@ -4676,22 +4676,25 @@ impl Host {
         text: &str,
         base: Option<Revision>,
     ) -> Result<(), PluginError> {
-        self.draft_port(vault)?.save(id, text, base).map_err(|error| {
-            PluginError::Internal(format!("draft not written: {error}").into())
-        })
+        self.draft_port(vault)?
+            .save(id, text, base)
+            .map_err(|error| PluginError::Internal(format!("draft not written: {error}").into()))
     }
 
     /// Butta la bozza di un documento, senza il turno come [`Self::save_draft`].
     pub fn discard_draft(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
-        self.draft_port(vault)?.discard(id).map_err(|error| {
-            PluginError::Internal(format!("draft not discarded: {error}").into())
-        })
+        self.draft_port(vault)?
+            .discard(id)
+            .map_err(|error| PluginError::Internal(format!("draft not discarded: {error}").into()))
     }
 
     /// La porta delle bozze del vault, presa con un prestito condiviso breve:
     /// i reader non guardano il turno, quindi un salvataggio in volo non la
     /// ferma se non nei tratti in cui tiene il workspace in esclusiva.
-    fn draft_port(&self, vault: Option<&str>) -> Result<fub_kernel::drafts::DraftPort, PluginError> {
+    fn draft_port(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<fub_kernel::drafts::DraftPort, PluginError> {
         let workspace = self.session_workspace(vault)?;
         let port = workspace.read()?.draft_port();
         Ok(port)
