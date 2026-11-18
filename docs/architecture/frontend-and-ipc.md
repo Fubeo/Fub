@@ -28,14 +28,6 @@ smontaggio valgono «no». I dialoghi della shell in `ui/dialogs.ts` coprono ci�
 che il sistema non offre, cioè un nome da scrivere e una scelta in un elenco
 lungo.
 
-Le superfici modali (il dialogo del kit, i dialoghi della shell, la palette, le
-preferenze) tengono il fuoco con `trapFocus` di `ui/a11y.ts` e **si aprono
-dall'inizio**: il fuoco iniziale va dove deve andare senza far scorrere la
-superficie (`preventScroll`), anche quando quel comando sta in fondo a un corpo
-lungo e resta fuori vista. Il giro del Tab invece scorre, e alla chiusura il
-fuoco torna al comando che ha aperto la superficie. Le guardie sono
-`ui/a11y.test.ts`, `kit/dialog.test.ts` e la scena `dialog-long` del banco.
-
 ```mermaid
 flowchart LR
     PANEL["pannelli e editor"] --> PORT["interfaccia Host"]
