@@ -207,14 +207,19 @@ export function failureNotice(e: Extract<KernelEvent, { type: "trouble" }>): {
   text: string;
   tone: Tone;
 } {
-  const reason = e.error.message;
+  // Un documento che non si legge dice già il gate di formato che cosa è
+  // successo: la sua frase è quella di chi guarda, e la prosa del codec («parse
+  // failed: rich codec…», in inglese) non arriva allo schermo (IMP-117). Il
+  // suffisso «da parsando…» non si aggiunge: direbbe la stessa cosa in gergo.
+  const unreadable = e.gate === "format_parse";
+  const reason = unreadable ? t("trouble.unreadable") : e.error.message;
   // Prima che cosa è successo, poi a quale nota: per nome, non per percorso.
   const base = e.subject
     ? t("trouble.about", { doc: pageName(e.subject), reason: reason.charAt(0).toLocaleUpperCase() + reason.slice(1) })
     : t("trouble.vault", { reason });
   return {
     text:
-      e.gate === null
+      e.gate === null || unreadable
         ? base
         : base + t("trouble.gate", { gate: t(GATE_LABELS[e.gate]) }),
     tone: e.severity === "failure" ? "guasto" : "info",
