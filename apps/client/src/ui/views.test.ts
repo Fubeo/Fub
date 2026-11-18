@@ -812,8 +812,7 @@ describe("la scrittura di un'azione di view (IMP-109)", () => {
   /// di chi la guarda, e la sessione non deve dirlo con «è cambiato su disco ed
   /// è stato ricaricato». L'annuncio parte **prima** della chiamata (l'evento
   /// arriva mentre il comando scrive) e si ritira poco dopo la risposta.
-  it("annuncia la scrittura della nota a fuoco prima dell'azione, e la ritira dopo la risposta", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  it("annuncia la scrittura della nota a fuoco prima dell'azione, e dopo la risposta ne accorcia la scadenza", async () => {
     try {
       expectDocumentWrite.mockClear();
       writeWithdrawn.mockClear();
@@ -828,22 +827,23 @@ describe("la scrittura di un'azione di view (IMP-109)", () => {
       document.body.appendChild(pane);
       await views.mountViewInPane("graph", "main", pane);
 
+      let answer!: (update: ViewUpdate) => void;
       let calledAfterAnnouncement = false;
-      viewAction.mockImplementationOnce(async () => {
+      viewAction.mockImplementationOnce(() => {
         calledAfterAnnouncement = expectDocumentWrite.mock.calls.length === 1;
-        return { kind: "none" };
+        return new Promise<ViewUpdate>((resolve) => (answer = resolve));
       });
       pane.querySelector<HTMLElement>(".ui-list-item")!.click();
       await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
       expect(expectDocumentWrite).toHaveBeenCalledWith("index.md");
       expect(calledAfterAnnouncement, "annunciata prima della chiamata").toBe(true);
-      await Promise.resolve();
-      expect(writeWithdrawn, "l'evento può arrivare dopo la risposta").not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(1500);
+      expect(writeWithdrawn, "mentre il comando scrive l'annuncio resta").not.toHaveBeenCalled();
+      answer({ kind: "none" });
+      // Non ritirato del tutto: l'evento può arrivare dopo la risposta.
+      await vi.waitFor(() => expect(writeWithdrawn).toHaveBeenCalledWith(1500));
       expect(writeWithdrawn).toHaveBeenCalledTimes(1);
     } finally {
       focusedDoc = undefined;
-      vi.useRealTimers();
     }
   });
 

@@ -1205,7 +1205,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// Le scritture che un comando sta per fare su un documento, annunciate da
   /// chi lo lancia (`expectWrite`). Ognuna è un gettone con la sua scadenza:
   /// la consuma il primo evento dell'utente su quel documento.
-  readonly #expectedWrites = new Map<string, { readonly deadline: number }[]>();
+  readonly #expectedWrites = new Map<string, { deadline: number }[]>();
   readonly #renaming = new Set<string>();
   readonly #deletions = new Map<string, Promise<DeletionResult>>();
   /// Aliases for an owner whose confirmation survives a rename. The pending
@@ -1336,13 +1336,22 @@ export class DocumentSessionCollection implements DraftBufferStore {
    * (rifiutato, o niente da cambiare), o resterebbe a zittire un cambio vero.
    * Soltanto un evento dell'utente lo consuma: un'altra app (il watcher) e il
    * kernel avvisano sempre. L'annuncio scade dopo `EXPECTED_WRITE_MS`.
+   *
+   * `graceMs`: chi non sa se il comando ha scritto (un'azione di una view
+   * dichiarata) non ritira subito, perché l'evento può arrivare dopo la
+   * risposta: accorcia la scadenza a `graceMs` da adesso. Senza timer: la
+   * scadenza la legge chi consuma l'annuncio.
    */
-  expectWrite(id: string): () => void {
+  expectWrite(id: string): (graceMs?: number) => void {
     const token = { deadline: Date.now() + EXPECTED_WRITE_MS };
     const tokens = this.#expectedWrites.get(id) ?? [];
     tokens.push(token);
     this.#expectedWrites.set(id, tokens);
-    return () => {
+    return (graceMs = 0) => {
+      if (graceMs > 0) {
+        token.deadline = Math.min(token.deadline, Date.now() + graceMs);
+        return;
+      }
       const left = (this.#expectedWrites.get(id) ?? []).filter((each) => each !== token);
       if (left.length) this.#expectedWrites.set(id, left);
       else this.#expectedWrites.delete(id);
@@ -2023,7 +2032,7 @@ export function flushPendingSave(): Promise<string[]> {
 
 /// Annuncia la scrittura di un comando su `id` (`expectWrite`): la ricarica
 /// che ne viene, a buffer pulito, non si dice.
-export function expectDocumentWrite(id: string): () => void {
+export function expectDocumentWrite(id: string): (graceMs?: number) => void {
   return documentSessions.expectWrite(id);
 }
 

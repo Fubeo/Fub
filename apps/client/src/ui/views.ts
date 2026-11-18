@@ -131,14 +131,13 @@ const VIEW_WRITE_GRACE_MS = 1500;
 /// Annuncia alla sessione della nota a fuoco che un'azione di view sta per
 /// riscriverla (`expectDocumentWrite`), e torna come ritirare l'annuncio.
 /// La nota a fuoco è quella che l'ispettore segue: le sue view scrivono lì.
-/// Il ritiro aspetta `VIEW_WRITE_GRACE_MS` ed è idempotente.
+/// Il ritiro accorcia la scadenza dell'annuncio a `VIEW_WRITE_GRACE_MS`: la
+/// scadenza la tiene la sessione, e qui non resta nessun timer da spegnere.
 function announceViewWrite(): () => void {
   const doc = activeDoc();
   if (doc === null) return () => {};
   const withdraw = expectDocumentWrite(doc);
-  return () => {
-    window.setTimeout(withdraw, VIEW_WRITE_GRACE_MS);
-  };
+  return () => withdraw(VIEW_WRITE_GRACE_MS);
 }
 
 // # Le righe che nominano un posto di un documento
