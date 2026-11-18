@@ -40,7 +40,9 @@ pub enum ThemeLinkState {
 /// Il tema collegato com'è adesso: la cartella, l'id e il nome dell'ultimo
 /// manifest letto (restano quelli di prima se il manifest di adesso non si
 /// legge), lo stato e, nell'evento di un salvataggio (`fub://theme-changed`),
-/// i file salvati, relativi alla cartella.
+/// i file salvati, relativi alla cartella. `folder` è da mostrare: su Windows
+/// senza il prefisso `\\?\` ([`plain_text`]); l'host confronta la cartella
+/// sempre nella sua forma canonica, quella salvata nell'impostazione.
 ///
 /// `watched` dice se un osservatore vivo guarda la cartella: `false` vuol dire
 /// che i salvataggi non arrivano (la cartella non è pronta, il sistema non ha
@@ -157,7 +159,7 @@ fn installed_already(config_dir: Option<&Utf8Path>, id: &str) -> bool {
 pub fn theme_link(config_dir: Option<&Utf8Path>, folder: &Utf8Path) -> ThemeLink {
     let (state, manifest) = read_link(config_dir, folder);
     ThemeLink {
-        folder: folder.to_string(),
+        folder: plain_text(folder.as_str()).into_owned(),
         id: manifest.as_ref().map(|manifest| manifest.id.clone()),
         name: manifest.map(|manifest| manifest.name),
         state,

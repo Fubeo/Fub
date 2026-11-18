@@ -678,7 +678,11 @@ pub fn export_preview(
     {
         if dest.starts_with(&root) {
             return Err(PluginError::BadArgs(
-                format!("scrivi il rapporto fuori dai vault (non dentro {root})").into(),
+                format!(
+                    "scrivi il rapporto fuori dai vault (non dentro {})",
+                    crate::vault_path::plain_text(root.as_str())
+                )
+                .into(),
             ));
         }
     }
@@ -696,7 +700,7 @@ pub fn export_preview(
     let bytes = serde_json::to_vec_pretty(exported)
         .map_err(|and| PluginError::Internal(format!("rapporto: {and}").into()))?;
     write_atomic(&dest, &bytes)?;
-    Ok(dest.to_string())
+    Ok(crate::vault_path::plain_text(dest.as_str()).into_owned())
 }
 
 /// Un file temporaneo unico evita di troncare un precedente omonimo. Scrive

@@ -118,6 +118,7 @@ use fub_abi::traits::{Plugin, PluginManifest};
 use fub_abi::{PluginError, Text};
 
 use crate::registry::{BundleKind, OnlyProviders};
+use crate::vault_path::plain_text;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 
