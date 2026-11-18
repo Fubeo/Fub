@@ -220,7 +220,7 @@ quando cambia il moto, non prima.
 ### La battuta
 
 Quanto costa un carattere scritto in una nota grande: dalla transazione al
-layout forzato, senza il disegno. Lo stesso banco la misura su due note
+layout forzato, senza il disegno. Lo stesso banco la misura su tre note
 sintetiche (`live-fixture.ts`, sezioni da diciotto righe con titolo, stili,
 wikilink, tag, codice, apice, evidenziato, compito, voce, recinto, callout e
 tabella), con trenta battute e venti spostamenti del cursore di 200 caratteri:

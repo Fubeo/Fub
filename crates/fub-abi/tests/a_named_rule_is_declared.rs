@@ -844,6 +844,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-xlsx/src/parts.rs::name_key",
+            (
+                Family::ContextualCase,
+                "trova la parte che una nota incorpora (`fub.part`) fra i fogli, i nomi definiti e \
+                 le tabelle di una cartella: Excel tiene uguali due nomi che differiscono soltanto \
+                 per le maiuscole, anche fuori dall'ASCII («Città» e «CITTÀ»), e la piegatura \
+                 contestuale è quella che lo segue. Sono nomi dentro un file, non del vault, e la \
+                 risposta sceglie soltanto che cosa mostrare: non scrive niente.",
+            ),
+        ),
+        (
             "crates/fub-format-xlsx/src/package.rs::normalize",
             (
                 Family::AsciiCase,

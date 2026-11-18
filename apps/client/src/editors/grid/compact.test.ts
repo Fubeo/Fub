@@ -114,8 +114,21 @@ describe("il foglio in una scheda", () => {
     const { host, engine } = await workbookMounted({ ...grid, host: compactGridHost(grid.host) });
     engine.destroy();
     life = openLifetime();
-    const fresh = { book: () => null, selectionRefs: () => engine.selectionRefs() };
+    const fresh = { book: () => null, selectionRefs: () => engine.selectionRefs(), command: () => true };
     expect(activeCellSource(fresh, host, life).read()).toBeNull();
+    expect(activeCellSource(fresh, host, life).select!("Budget", "A1")).toBe(false);
+  });
+
+  it("`select` porta la griglia a una cella di un foglio col solo `selection.set`, il nome fra apici", async () => {
+    const { host, engine } = await compactMounted();
+    life = openLifetime();
+    const command = vi.fn(() => true);
+    const source = activeCellSource({ book: () => engine.book(), selectionRefs: () => engine.selectionRefs(), command }, host, life);
+    expect(source.select!("Conti dell'anno", "C3")).toBe(true);
+    expect(command).toHaveBeenCalledWith("selection.set", JSON.stringify({ range: "'Conti dell''anno'!C3", active: "'Conti dell''anno'!C3" }));
+    life.close();
+    expect(source.select!("Conti", "C3")).toBe(false);
+    expect(command).toHaveBeenCalledTimes(1);
   });
 
   it("`editCellIn` apre la cella disegnata come il doppio clic, e dice no a una cella fuori vista", async () => {

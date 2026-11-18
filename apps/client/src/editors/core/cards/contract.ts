@@ -236,6 +236,19 @@ export interface CardContext {
   /// I gesti di una scheda-estratto (T75) per l'avviso «Sezione non
   /// trovata»; assente (in sola lettura), l'avviso non ha pulsanti.
   readonly excerpt?: CardExcerptActions;
+  /// Chi ospita la scheda (T43): la lavagna (assente) o una nota. Nella nota
+  /// un foglio mostra soltanto la sua parte, senza lettere e numeri finché
+  /// non è attivo, ed è alto quanto le sue righe (`fitHeight`).
+  readonly host?: "board" | "note";
+  /// La scheda vorrebbe il corpo alto `height` pixel (la parte di un foglio
+  /// nella nota, T43); `null`: la misura di serie. Assente sulla lavagna, dove
+  /// la misura è della persona.
+  fitHeight?(height: number | null): void;
+  /// «Scegli di nuovo» di una parte che non c'è più (T43): scrive nella nota
+  /// la parte scelta (`Budget!A1:E7`, un nome, una tabella) al posto di
+  /// quella persa. Assente (in sola lettura, sulla lavagna), il pulsante non
+  /// c'è.
+  choosePart?(part: string): void;
 }
 
 /// Che cosa fa la tela per una scheda-estratto che ha perso una sezione (T75).
@@ -357,6 +370,10 @@ export interface CardEditor {
   context?(): CardEditorContext | null;
   /// Avvisa quando `context()` cambia; restituisce come smettere.
   onContext?(listener: (context: CardEditorContext | null) => void): () => void;
+  /// Porta la cella attiva a `cell` del foglio `sheet` (per nome), senza
+  /// scrivere niente (T43: la prima cella della parte che la nota mostra).
+  /// Falso se l'editor non lo sa fare.
+  select?(sheet: string, cell: string): boolean;
   /// La superficie montata (per la sbirciata: le selezioni da portare al
   /// riquadro, la barra di formato che agisce su di lei), o `null` se
   /// l'editor è già smontato.

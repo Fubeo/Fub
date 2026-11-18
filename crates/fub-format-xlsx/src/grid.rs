@@ -1458,6 +1458,9 @@ impl Instance {
             return Err(stale_revision());
         }
         let command = &request.command;
+        if command.id == commands::PART {
+            return self.part(command);
+        }
         let before = self.journal.to_text();
         let was = self.commanding;
         let (ran, selection, prior) = self.transaction(|this| {
@@ -1498,6 +1501,40 @@ impl Instance {
             selection,
             result: ran.result,
             dialog: ran.dialog,
+            commands,
+            book: self.book(),
+        })
+    }
+
+    /// [`commands::PART`]: dove sta la parte `part` della cartella mostrata
+    /// ([`crate::parts`]), o le parti che ci sono. Legge soltanto: niente
+    /// facciata nuova, niente modalità a comandi, il giornale com'è.
+    fn part(&mut self, command: &GridCommand) -> Result<GridCommandOutcome, PluginError> {
+        let params: Json = serde_json::from_str(&command.params)
+            .map_err(|_| bad("grid command parameters are not JSON"))?;
+        let text = match params.get("part") {
+            None | Some(Json::Null) => "",
+            Some(Json::String(text)) => text.as_str(),
+            Some(_) => return Err(bad(format!("{}: `part` is not text", commands::PART))),
+        };
+        let result = crate::parts::answer(self.shown(), text, |index| {
+            self.sheets.get(index).map(|info| info.id.clone())
+        });
+        let journal = self.journal.to_text();
+        let selection = self.selection();
+        let (sheets, hidden) = self.sheet_list();
+        let commands = self.catalog(&selection);
+        Ok(GridCommandOutcome {
+            commit: GridCommit {
+                revision: self.revision.clone(),
+                edit: text_diff(&journal, &journal),
+                invalidation: GridInvalidation::Cells(Vec::new()),
+            },
+            sheets,
+            hidden,
+            selection,
+            result: Some(result.to_string()),
+            dialog: None,
             commands,
             book: self.book(),
         })

@@ -1565,6 +1565,11 @@
         "id": "fub.copyHtml",
         "enabled": true,
         "reason": null
+      },
+      {
+        "id": "fub.part",
+        "enabled": true,
+        "reason": null
       }
     ],
     "book": {
@@ -6994,6 +6999,11 @@
         },
         {
           "id": "fub.copyHtml",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "fub.part",
           "enabled": true,
           "reason": null
         }

@@ -17231,6 +17231,98 @@ input.canvas-toolbar-item {
   height: 260px;
 }
 
+/* ── La scheda di foglio nella nota (T43, prototipo passo 16) ─────────────
+   Mostra la parte che l'embed nomina, alta quanto le sue righe (la scheda
+   lo chiede in `--live-card-fit`, fino a sedici righe). Le lettere e i
+   numeri hanno il loro spazio anche a riposo, vuoto (`.scard-b`), e si
+   vedono soltanto a scheda attiva, piccoli e senza fondo (`.gr-let`,
+   `.gr-num`). Un valore che Fub non ha ricalcolato porta il filo a puntini
+   del foglio. */
+.live-card[data-card-fit="true"] .live-card-body {
+  height: var(--live-card-fit);
+  min-height: 0;
+}
+.live-card[data-card-fit="true"][data-card-full="true"] .live-card-body {
+  height: calc(var(--live-card-full, 80vh) - 36px);
+}
+.live-card .canvas-card-sheet .grid-header,
+.live-card .canvas-card-sheet .grid-corner {
+  border: 0;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+}
+/* Come nel prototipo, la lettera della colonna scelta non si accende: il
+   segno della selezione è nelle celle. */
+.live-card .canvas-card-sheet .grid-header.selected {
+  box-shadow: none;
+}
+.live-card .canvas-card-sheet .stale {
+  text-decoration: underline dotted var(--doc-gutter-fg);
+  text-underline-offset: 3px;
+}
+/* La parte che non c'è più: che cosa manca e «Scegli di nuovo». */
+.live-card[data-card-kind="sheet"] .canvas-card-lost {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: 14px 16px;
+}
+.live-card[data-card-kind="sheet"] .canvas-card-lost .canvas-card-message {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--doc-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card[data-card-kind="sheet"]:has(.canvas-card-lost) .live-card-body {
+  height: auto;
+  min-height: 0;
+  cursor: default;
+}
+/* La cella attiva nel gruppo «Foglio» della barra di formato (`.fxr`): il
+   nome e la formula in una riga a spaziatura fissa, tagliata. */
+.format-bar-context .format-bar-context-cell {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 168px;
+  padding: 0 6px 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 12px/1 var(--font-mono);
+  white-space: nowrap;
+}
+.format-bar-context .format-bar-context-cell[hidden] {
+  display: none;
+}
+/* Nella finestra stretta la cella lascia il posto ai gesti (prototipo, riga
+   784: `.fxr` sparisce sotto i 760 px della finestra). */
+@media (max-width: 760px) {
+  .format-bar-context .format-bar-context-cell {
+    display: none;
+  }
+}
+.format-bar-context-cell .grid-cell-name {
+  flex: none;
+  border: 0;
+  color: var(--muted);
+  font-size: inherit;
+}
+.format-bar-context-cell .grid-formula-editor {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.format-bar-context-cell .canvas-formula-text {
+  padding: 0;
+  font: inherit;
+}
+
 /* ── La scheda di documento ──────────────────────────────────────────────
    (E20, T44; il prototipo `.docw` e `.docp`, passo 17.) Un `.docx` o un
    `.odt` nella nota: a riposo il testo reso in continuo, senza pagine, nel

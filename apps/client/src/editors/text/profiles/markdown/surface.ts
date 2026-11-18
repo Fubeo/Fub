@@ -124,7 +124,7 @@ import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource 
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
-import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup } from "./block-groups";
+import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup } from "./block-groups";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
@@ -548,6 +548,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     port: opts.liveCards,
     hostDoc: docId,
     editable: () => editable(),
+    // La cella attiva della scheda di foglio va al gruppo «Foglio» della
+    // barra di formato (T43), che la chiede dopo la sua pausa.
+    sheetChanged: () => actionsChanged(),
     // Le schede dentro le colonne leggono il loro embed dal testo di adesso.
     text: (from, to) => engine.readState((state) => (to <= state.doc.length ? state.sliceDoc(from, to) : null)),
   }) : null;
@@ -2453,6 +2456,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // barra la chiede dopo una pausa, non a ogni battuta (`block-groups.ts`).
     blockGroup: (at) => {
       if (life.closed || mode === "reading") return null;
+      // Con una scheda di foglio attiva il gruppo è suo (T43): «Apri» e la
+      // cella attiva con la sua formula.
+      const sheet = at ? null : liveCards?.activeSheet() ?? null;
+      if (sheet) return sheetCardGroup(sheet);
       const pos = at ? engine.posAtPoint(at.x, at.y) : null;
       if (at && pos === null) return null;
       return markdownBlockGroup({

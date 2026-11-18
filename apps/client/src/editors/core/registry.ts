@@ -452,6 +452,12 @@ export interface SurfaceActiveCellSource {
   read(): SurfaceActiveCell | null;
   /** Called when the active cell or what it holds may have changed. */
   subscribe(listener: () => void): () => void;
+  /**
+   * Moves the active cell to `cell` of the sheet named `sheet` without writing
+   * anything (a sheet card in a note lands on its range, T43). `false` when
+   * the surface can't.
+   */
+  select?(sheet: string, cell: string): boolean;
 }
 
 /**
@@ -753,6 +759,13 @@ export interface SurfaceBlockGroup {
   /** The name the bar shows before the gestures, in the UI language. */
   readonly label: string;
   readonly items: readonly SurfaceMenuEntry[];
+  /**
+   * What the block is writing now, shown after the name as a sheet's formula
+   * bar (the active cell of a sheet card in a note, T43). `null`: nothing yet
+   * (the slot stays); absent: the group has no such slot. Its text is updated
+   * in place, without redrawing the group.
+   */
+  readonly context?: { readonly cell: string; readonly formula: string } | null;
 }
 
 /** A command a surface offers to the command palette. */
