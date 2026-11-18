@@ -245,6 +245,22 @@ describe("le appuntate", () => {
     expect(pinnedList.hidden).toBe(false);
     expect(document.getElementById("pinned-title")!.hidden).toBe(false);
   });
+
+  it("una nota appuntata e rinominata resta fra le appuntate, col nome nuovo", async () => {
+    await start();
+    const pinnedRow = (path: string) =>
+      document.querySelector<HTMLElement>(`#pinned-list .tree-row[data-path="${CSS.escape(path)}"]`);
+    const { setPinned } = await import("../state/organization");
+    const { renameNote } = await import("../state/vault");
+    await setPinned("Benvenuto.md", true);
+    await waitFor("l'appuntata nella lista", () => pinnedRow("Benvenuto.md") !== null);
+
+    await renameNote("Benvenuto.md", "Ingresso.md");
+
+    await waitFor("l'appuntata col nome nuovo", () => pinnedRow("Ingresso.md") !== null);
+    expect(pinnedRow("Benvenuto.md")).toBeNull();
+    expect(document.getElementById("pinned-list")!.hidden).toBe(false);
+  });
 });
 
 describe("le azioni del titolo", () => {
