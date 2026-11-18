@@ -10,6 +10,7 @@ import { livePreview } from "../livepreview";
 import { liveReveal } from "../../../live-reveal";
 import { propertyList, setProperty } from "../properties";
 import { blocksMode, type BlocksOptions } from "./index";
+import "../../../../../i18n/strings";
 import { pageClassesWith, pageData, subpageLink } from "./page";
 
 // La testata della pagina in Blocchi (H12) e il suo menu «…» (H13).
@@ -244,6 +245,19 @@ describe("la testata della pagina", () => {
     await settle();
     expect(view.state.doc.toString()).toBe("Testo");
     expect(notify).toHaveBeenCalledWith("C'è già", "guasto");
+  });
+
+  it("una sottopagina che l'host rifiuta con un errore tipizzato dice la specie, mai «[object Object]»", async () => {
+    const notify = vi.fn();
+    const refused = { kind: "already_exists", message: "Tappe.md esiste già nel vault" };
+    const view = mount("Testo", { subpage: async () => { throw refused; }, notify, folderPage: () => true });
+    [...view.dom.querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].find((button) => button.textContent === "Nuova sottopagina")!.click();
+    const field = document.querySelector<HTMLInputElement>(".cm-fub-page-popover input")!;
+    field.value = "Tappe";
+    key(field, "Enter");
+    await settle();
+    expect(view.state.doc.toString()).toBe("Testo");
+    expect(notify).toHaveBeenCalledWith("esiste già qualcosa con lo stesso nome", "guasto");
   });
 });
 

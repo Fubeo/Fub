@@ -18,6 +18,7 @@ import { firstWeekday } from "../../../../../../state/dates";
 import { liveStrings } from "../../strings";
 import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, targetOf, validDate, type OptionGroup, type PropertyOption, type RelationTarget, type RowKind } from "./kind";
 import { entryStamp, longDate, optionElement, personElement, relationItems, type PropertyRowHost, type RelationNote, type WriteOutcome } from "./values";
+import { errorKindPhrase } from "../../../../../../host/errors";
 
 /// Un editor aperto su una chiave: l'impronta che porta alla scrittura.
 interface Session {
@@ -416,7 +417,7 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
   /// la riga lo segna fuori dal tipo.
   const promote = async (): Promise<void> => {
     if (!host.setType) return;
-    const problem = await host.setType(entry.key, "date_time").catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    const problem = await host.setType(entry.key, "date_time").catch((error: unknown) => errorKindPhrase(error));
     if (problem === null) host.notify?.(liveStrings.t("page.properties.date.with_time", { key: entry.key }), "info");
     else host.notify?.(liveStrings.t("page.properties.type.failed", { key: entry.key, reason: problem }), "guasto");
   };
@@ -930,7 +931,7 @@ export function openRelationEditor(entry: PropertyEntry, anchor: HTMLButtonEleme
     creating = true;
     const made = await port.create(name, target).then(
       (created) => created ?? liveStrings.t("page.properties.relation.create.unknown"),
-      (error: unknown) => error instanceof Error ? error.message : String(error),
+      (error: unknown) => errorKindPhrase(error),
     );
     creating = false;
     if (own.closed) return;
@@ -1123,7 +1124,7 @@ export function openOptionsEditor(entry: PropertyEntry, kind: "select" | "status
     creating = true;
     const color = freeColor(options);
     const group: OptionGroup | null = status ? "todo" : null;
-    const problem = await host.addOption(entry.key, { name, color, group }).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    const problem = await host.addOption(entry.key, { name, color, group }).catch((error: unknown) => errorKindPhrase(error));
     creating = false;
     if (own.closed) return;
     if (problem !== null) {

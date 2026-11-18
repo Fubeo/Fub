@@ -16,7 +16,7 @@ import { BlockType, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/
 import { closeContextMenu, menuKeyFoot, showContextMenu, type MenuItem } from "../../../../../ui/menu";
 import { displayBinding } from "../../../../../ui/commands";
 import { writeClipboardText } from "../../../../../platform/clipboard";
-import { errorText } from "../../../../../host/errors";
+import { errorKindPhrase, errorText } from "../../../../../host/errors";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
 import { iconEl } from "../../../../../ui/icons";
 import { attachTooltip } from "../../../../../ui/tooltip";
@@ -1021,7 +1021,7 @@ class HandlesView {
       const link = blockLink(options.page?.() ?? null, anchor.fragment);
       writeClipboardText(link).then(
         () => options.notify?.(liveStrings.t("blocks.link.copied", { link }), "info"),
-        (error: unknown) => options.notify?.(liveStrings.t("blocks.link.failed", { reason: error instanceof Error ? error.message : String(error) }), "guasto"),
+        (error: unknown) => options.notify?.(liveStrings.t("blocks.link.failed", { reason: errorKindPhrase(error) }), "guasto"),
       );
     });
   }
