@@ -1706,7 +1706,7 @@ cambiata (allora anche `CLAUDE.md`).
 Fatto quando: `check-doc-size`, `check-doc-links` e `check-doc-orphans`
 verdi; nessuna pagina descrive un comportamento che il codice non ha.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso (coder docs/editor-onda-1 da integra/editor-2 5de067608, 2026-11-18; base integra/editor-2 e non main: l'onda 1 è nel pacchetto #472, le pagine viaggiano col codice)
+Stato: [~] integrato in `integra/editor-2` (31a50bfb5, merge ad9c55e13, 2026-11-18), in attesa del pacchetto 2. Base integra/editor-2 e non main (l'onda 1 è nel pacchetto #472). Divise editor-writing (→ editor-links) ed editor-blocks (→ editor-note-extras; la testata in editor-header); «Live»/«Blocchi» → «Scrittura»; tolte le frasi sul futuro. Resti nel codice in coda (commenti con sezioni spostate, ramo morto in profile.ts:209, editor-math «in Live»)
 
 ## T29a · Una superficie su una parte della sessione
 
