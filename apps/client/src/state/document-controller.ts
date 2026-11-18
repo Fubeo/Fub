@@ -53,26 +53,26 @@ import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
 import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
-import { pdfIdWithoutFragment, pdfPageFromFragment } from "../editors/media/pdf-view";
+import { pdfIdWithoutFragment, pdfPageFromFragment } from "../editors/media/pdf-ids";
 import { formatBytes, mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
 import { depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
-import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
-import { mountRecorderSurface } from "../editors/media/recorder-surface";
-import { printDocument } from "../editors/media/print-view";
-import { mountSlidePresentation } from "../ui/slides";
+import { lazyPart } from "../ui/lazy-part";
 import { mountMarkdown, mountRenderedDocument, type MarkdownMountOptions } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import { newSubpage, renamePage } from "./page-rename";
+import { moveBlock, moveHeadings, moveNotes } from "./move-block";
+import { syncBlockPort } from "./sync-block";
+import { vaultBlockPort } from "./vault-blocks";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
-import { dailyPath, firstWeekday } from "./dates";
+import { dailyDate, dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
 import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
 import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
@@ -106,7 +106,8 @@ import {
   type ExternalChangeResult,
   type DocumentSurfaceSource,
 } from "./document-session";
-import { setDocumentWindowNavigation, type NavigateTarget } from "./document-bridge";
+import { discardDescription, keepsDiscardedText, VERSION_KEEP } from "./conflict-keep";
+import { setDocumentWindowKeeper, setDocumentWindowNavigation, type NavigateTarget } from "./document-bridge";
 import {
   openIn,
   closePane,
@@ -152,7 +153,7 @@ import { registerShellCommand, showComponent, type CommandEntry } from "../ui/co
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { trashWithConfirm } from "../panels/trash";
-import { showActivity } from "../panels/activity";
+import { nameJob, queuedJob, showActivity } from "../panels/activity";
 import { notify, type NoticeHandle } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
@@ -168,7 +169,7 @@ import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews
 import { openWithEntry } from "../panels/open-with";
 import { showContextMenu } from "../ui/menu";
 import { writeChrome } from "./machine-chrome";
-import { onLanguage, t } from "../i18n/strings";
+import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 // Il pannello del «/», coi passi e l'anteprima, è un chunk suo: si chiede
@@ -1246,6 +1247,17 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
   lifetime.add(() => setDocumentWindowNavigation(null));
+  // Né può conservare da sé il testo che sta per scartare: lo conserva qui la
+  // stessa regola di «Usa la versione su disco», e la finestra scarta soltanto
+  // dopo la risposta.
+  setDocumentWindowKeeper({
+    keeps: keepsDiscardedText,
+    keep: async (doc, text) => {
+      await keepDiscardedText(doc, text);
+      notify(t("document.conflict.kept", { doc: pageName(doc) }), "info");
+    },
+  });
+  lifetime.add(() => setDocumentWindowKeeper(null));
   lifetime.add(() => scrollLinks.close());
   // Il giro di Ctrl+Tab finisce quando si lascia il modificatore.
   lifetime.listen(document, "keyup", (event) => {
@@ -1400,6 +1412,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onSearchTag: (tag) => deps.searchTag(tag),
     onRenamePage: renamePage,
     onNewSubpage: newSubpage,
+    moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
+    syncBlock: syncBlockPort,
     pageIcons: {
       icon: linkedPageIcon,
       isPerson: (page) => isPersonTarget(page),
@@ -1426,6 +1440,16 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
           notes();
         };
       },
+    },
+    // La trasclusione viva (E14): le sessioni, la sola lettura e il conflitto
+    // di un riquadro, come per una scheda della lavagna.
+    transclusion: {
+      sessions: documentSessions,
+      held: heldReadOnly,
+      heldWhy,
+      shownInPane: isOpen,
+      conflict: (box, path) => view.drawCardConflict(box, path),
+      unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
     },
     runShellCommand: (id) => deps.runCommand(id),
     ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
@@ -1495,8 +1519,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       headingsOf: (page: string) => noteHeadings(page).catch(() => []),
       searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
       blocksOf: (page: string) => noteBlocks(page).catch(() => []),
+      vaultBlocks: vaultBlockPort,
       people: { folder: peopleFolder, search: searchPeople, create: createPerson },
-      dates: { dailyPath, firstDay: firstWeekday },
+      dates: { dailyPath, dailyDate, firstDay: firstWeekday },
     },
     gridHost: api,
     exportDocument: {
@@ -1507,6 +1532,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       const base = documentSessions.inspect(doc)?.base;
       return base?.kind === "descends_from" ? base.value : null;
     },
+    documentDiskRevision: (doc) => api.readDocument(doc, documentSessions.vaultFor(doc)).then((source) => source.revision),
     documentWrites: { flush: flushPendingSave, expect: (doc) => documentSessions.expectWrite(doc) },
     media: {
       transport: mediaTransport,
@@ -1519,6 +1545,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       // al PDF, o apre quelle che ci sono.
       annotate: {
         available: () => state.commandSpecs.some((spec) => spec.id === "pdf.annotate"),
+        // L'elenco dei comandi arriva dopo le schede ripristinate all'avvio,
+        // e cambia quando un componente si accende o si spegne.
+        watch: (changed) => on("commands", changed),
         run: async (pdf) => {
           try {
             const outcome = await api.invokeCommand("pdf.annotate", { pdf }, "apply");
@@ -1607,8 +1636,17 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // `recreate` riceve il vault **in cui la rimozione è stata vista**: l'utente
   // può cliccare «ricrea» dopo aver aperto un altro vault, e la nota deve
   // tornare dove è sparita, non in un omonimo del vault nuovo (FUB-001).
-  const removed = (id: string, recreate: (text: string, vault: string | undefined) => Promise<unknown>): void => {
+  const removed = (id: string, write: (text: string, vault: string | undefined) => Promise<unknown>): void => {
     const vault = openVaultRoot();
+    // Riscritto il file, la bozza che teneva lo stesso testo se ne va: alla
+    // riapertura non resta un conflitto con un disco che le è uguale (IMP-047).
+    // Una scrittura fallita la lascia, col testo ancora da recuperare.
+    const recreate = async (text: string, at: string | undefined): Promise<void> => {
+      await write(text, at);
+      // La nota è tornata: uno scarto non riuscito non la fa sembrare persa,
+      // e alla riapertura il confronto mostra due testi uguali.
+      await documentSessions.discardRemovedDraft(id, at, text).catch((error: unknown) => console.error(error));
+    };
     const shownIn = panesWithDoc(id);
     withdrawUnsavedQuestion(id, { kind: "removed" });
     const outcome = documentSessions.handleExternalRemoval(id);
@@ -1661,6 +1699,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       // The layout still names the old path until `rename` below runs. Keep
       // those editors read-only across that tiny migration window.
       setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lendHeld(to));
+      // Prima del layout: il giro di disegno che `rename` annuncia trova le
+      // superfici che reggono il nome nuovo già sulla scheda nuova, e non le
+      // rimonta (fuoco, cursore, annulla e scorrimento restano).
+      followRenameInPanes(from, to);
       rename(from, to);
     }
   };
@@ -1762,7 +1804,7 @@ function stepRecentTab(step: 1 | -1): void {
   const index = p.tabs.findIndex((each) => sameTab(each, next.order[next.at]!));
   if (index < 0) return;
   activateTab(id, index);
-  void synchronize();
+  void focusShownAfter(synchronize());
 }
 
 function registerCommands(): void {
@@ -1878,7 +1920,7 @@ function registerCommands(): void {
     description: "commands.tab.reopen.desc",
     layer: "global",
     run: () => {
-      if (reopenClosedTab()) void synchronize();
+      if (reopenClosedTab()) void focusShownAfter(synchronize());
     },
   });
   registerShellCommand({
@@ -1887,7 +1929,7 @@ function registerCommands(): void {
     description: "commands.tab.next.desc",
     layer: "global",
     run: () => {
-      if (cycleTab(layout.focus, 1)) void synchronize();
+      if (cycleTab(layout.focus, 1)) void focusShownAfter(synchronize());
     },
   });
   registerShellCommand({
@@ -1896,7 +1938,7 @@ function registerCommands(): void {
     description: "commands.tab.previous.desc",
     layer: "global",
     run: () => {
-      if (cycleTab(layout.focus, -1)) void synchronize();
+      if (cycleTab(layout.focus, -1)) void focusShownAfter(synchronize());
     },
   });
   for (const [id, step] of [["shell.tab.recent", 1], ["shell.tab.recent.back", -1]] as const) {
@@ -1931,7 +1973,7 @@ function registerCommands(): void {
       description: `commands.tab.go.${position}.desc`,
       layer: "global",
       run: () => {
-        if (goToTab(layout.focus, position === "last" ? "last" : position - 1)) void synchronize();
+        if (goToTab(layout.focus, position === "last" ? "last" : position - 1)) void focusShownAfter(synchronize());
       },
     });
   }
@@ -1978,7 +2020,8 @@ function registerCommands(): void {
   registerShellCommand({
     id: "shell.doc.conflict.theirs",
     title: "commands.doc.conflict.theirs",
-    description: "commands.doc.conflict.theirs.desc",
+    // Dice se il testo resterà nella Cronologia come lo dice la conferma.
+    description: () => discardDescription(activeDoc()),
     layer: "document",
     run: () => void resolveDiscardingMine(activeDoc()),
   });
@@ -2031,23 +2074,52 @@ export async function resolveKeepingMine(doc: string | null): Promise<void> {
 /// documento. Gli editor seguono perché la sessione ha diffuso il testo
 /// autorevole alle superfici sottoscritte; qui restano il ridisegno della
 /// lettura e delle scritte di stato.
+///
+/// Prima dello scarto il testo dell'utente va nella Cronologia della nota
+/// (`version.keep`, con una nota datata), e solo dopo la conservazione
+/// riuscita la sessione rilegge il disco: una conservazione fallita non scarta
+/// niente e lo dice. Senza il comando (Cronologia spenta) lo scarto resta
+/// quello di sempre, e la conferma lo ha detto.
 export async function resolveDiscardingMine(doc: string | null): Promise<void> {
   if (!doc) {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  const outcome = await documentSessions.resolveConflict(doc, "theirs");
+  const keep = keepsDiscardedText(doc)
+    ? (text: string) => keepDiscardedText(doc, text)
+    : undefined;
+  const outcome = await documentSessions.resolveConflict(doc, "theirs", keep);
   if (outcome.kind === "none") {
     notify(t("document.conflict_none"), "info");
     return;
   }
+  if (outcome.kind === "keep-failed") {
+    notify(t("document.conflict.keep_failed", { doc: pageName(doc), reason: errorText(outcome.error) }), "guasto");
+    return;
+  }
   // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
+  // Se il testo dell'utente è già nella Cronologia lo si dice, e ripetere la
+  // scelta non lo conserva una seconda volta (lo sa la sessione).
   if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
-    notify(t("document.reload_failed", { doc: pageName(doc) }), "guasto");
+    notify(t(outcome.kept ? "document.conflict.kept_reload_failed" : "document.reload_failed", { doc: pageName(doc) }), "guasto");
+  } else if (keep && outcome.kind === "discarded" && outcome.reload.kind === "reloaded") {
+    notify(t("document.conflict.kept", { doc: pageName(doc) }), "info");
   }
   redrawReading(doc);
   view.drawSave();
   redrawTabs(doc);
+}
+
+/// Conserva `text` nella Cronologia di `doc`, con la nota datata del conflitto.
+async function keepDiscardedText(doc: string, text: string): Promise<void> {
+  const when = new Date().toLocaleString(resolvedLanguage(), {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  await api.invokeCommand(VERSION_KEEP, { doc, text, note: t("document.conflict.kept_note", { when }) }, "apply");
 }
 
 /// Divide il riquadro col fuoco e ci porta dentro **lo stesso documento**.
@@ -2064,10 +2136,13 @@ function splitPane(dir: "row" | "col"): void {
   const toSplit = layout.focus;
   const current = activeDoc(toSplit);
   const newItem = split(toSplit, dir);
-  if (newItem && current) openIn(newItem, current);
+  if (!newItem) return;
+  if (current) openIn(newItem, current);
+  void focusShownAfter(synchronize());
 }
 
 async function closeCurrentPane(): Promise<void> {
+  const origin = document.activeElement;
   const id = layout.focus;
   const tabs = paneState(id)?.tabs ?? [];
   if (!closePane(id)) return;
@@ -2077,37 +2152,21 @@ async function closeCurrentPane(): Promise<void> {
     if (tab.k === "view") unmountViewFromPane(tab.view, id);
     else await dismissIfUnwatched(tab.doc);
   }
-  await synchronize();
-  const pane = panes.get(layout.focus);
-  if (!pane) return;
-  const nextActive = paneState(layout.focus)?.active ?? -1;
-  if (nextActive >= 0) view.focusTab(pane, nextActive);
-  else pane.root.focus();
+  await focusShownAfter(synchronize(), origin);
 }
 
 export async function closeCurrentTab(): Promise<void> {
+  const origin = document.activeElement;
   const id = layout.focus;
   const p = activePane();
   const tab = activeTab(id);
   if (p.active < 0) return;
-  // Chi scriveva e chiude una nota che non si è potuta salvare se la ritrova
-  // davanti («Tienila aperta», o un cambio da fuori): il fuoco torna nel testo.
-  const typing = tab?.k === "doc" && (panes.get(id)?.editorEl.contains(document.activeElement) ?? false);
   closeTab(id, p.active);
   await releaseTab(id, tab);
-  await synchronize();
-  const pane = panes.get(id);
-  if (!pane) return;
-  const focusText = pane.surface?.focus;
-  if (typing && tab?.k === "doc" && activeDoc(id) === tab.doc && focusText) {
-    focusText.call(pane.surface);
-    return;
-  }
-  // La linguetta attiva di adesso: durante il rilascio la nota chiusa può
-  // essere tornata, e l'indice di prima indicherebbe un'altra linguetta.
-  const active = paneState(id)?.active ?? -1;
-  if (active >= 0) view.focusTab(pane, active);
-  else pane.root.focus();
+  // Chi scriveva e chiude una nota che non si è potuta salvare se la ritrova
+  // davanti («Tienila aperta», o un cambio da fuori): il fuoco torna nella
+  // superficie della linguetta attiva di adesso, il testo col suo cursore.
+  await focusShownAfter(synchronize(), origin);
 }
 
 /// Appunta o stacca la tab corrente (shell.tab.pin/unpin): stesso `run` di
@@ -2168,12 +2227,12 @@ export function closeUnpinnedTabs(): void {
 /// cronologia del riquadro.
 export function paneBack(): void {
   if (panes.get(layout.focus)?.surface?.jumps?.back()) return;
-  if (goBack(layout.focus)) void synchronize();
+  if (goBack(layout.focus)) void focusShownAfter(synchronize());
 }
 
 export function paneForward(): void {
   if (panes.get(layout.focus)?.surface?.jumps?.forward()) return;
-  if (goForward(layout.focus)) void synchronize();
+  if (goForward(layout.focus)) void focusShownAfter(synchronize());
 }
 
 /// Collega o scollega il riquadro col fuoco (shell.pane.link/unlink): il
@@ -2446,6 +2505,7 @@ async function render(): Promise<void> {
   // La mappa dei componenti si legge insieme al resto, non in coda: un file
   // di un componente la aspetta (`show`), una nota no.
   if (openVaultRoot() !== undefined) void componentsReady().catch((error: unknown) => console.error(error));
+  const held = focusInPanes();
   buildStructure();
   const active = activeDoc();
   let failure: { error: unknown } | null = null;
@@ -2474,11 +2534,93 @@ async function render(): Promise<void> {
   }
   view.drawSave();
   linkScrolls();
+  keepFocusInPanes(held);
   if (state.currentDoc !== active) {
     state.currentDoc = active;
     emit("active-doc", active);
+    // Il kernel segue la nota a fuoco. Senza, il contesto resta quello di prima
+    // e le view che seguono il documento (Struttura, Collegamenti, Statistiche)
+    // mostrano i dati di una nota chiusa o della precedente (IMP-107). Il giro
+    // è finito e il testo della nota è già caricato (`show` aspetta il buffer),
+    // come quando `openDocument` pubblica dopo il suo `synchronize`.
+    void publishContext();
   }
   if (failure) throw failure.error;
+}
+
+/// L'elemento col fuoco, se sta dentro un riquadro.
+function focusInPanes(): HTMLElement | null {
+  const focused = document.activeElement;
+  if (!(focused instanceof HTMLElement)) return null;
+  for (const r of panes.values()) if (r.root.contains(focused)) return focused;
+  return null;
+}
+
+/// Un giro di disegno non lascia il fuoco sul `body` (IMP-011, Ctrl+\).
+///
+/// Il giro toglie o sposta ciò che aveva il fuoco: la superficie della scheda
+/// chiusa con la ×, l'editor che una divisione riappende in un contenitore
+/// nuovo (staccare un nodo dal documento gli toglie il fuoco anche se torna
+/// subito). Se il fuoco era in un riquadro e il giro lo ha fatto cadere, torna
+/// nel riquadro col fuoco: all'elemento di prima se è ancora lì e si vede,
+/// altrimenti all'editor (alla linguetta attiva in Lettura e nelle viste, al
+/// riquadro se è vuoto). Un fuoco che intanto è andato altrove (il lanciatore,
+/// un dialogo, l'albero) non si tocca. Il divisore mosso con le frecce lo
+/// tiene la vista (`layoutTree`).
+function keepFocusInPanes(held: HTMLElement | null): void {
+  if (!held) return;
+  const now = document.activeElement;
+  if (now instanceof HTMLElement && now !== document.body && now.isConnected && !now.closest("[hidden]")) return;
+  const r = panes.get(layout.focus);
+  if (!r) return;
+  if (held.isConnected && r.root.contains(held) && !held.closest("[hidden]")) {
+    held.focus({ preventScroll: true });
+    return;
+  }
+  focusPaneSurface(r);
+}
+
+/// Il fuoco nella superficie che il riquadro mostra: il testo col suo cursore,
+/// il foglio di un disegno, la pagina in Lettura — ciò che la superficie
+/// chiama il suo `focus`. Se la superficie non lo prende (non ne ha, si sta
+/// ancora caricando, lo mette in una parte che non si vede) va sulla linguetta
+/// attiva, e in un riquadro vuoto sul riquadro: mai sul `body`.
+function focusPaneSurface(r: Pane): void {
+  if (r.surface?.focus) {
+    r.surface.focus();
+    if (focusedVisiblyIn(r.root)) return;
+  }
+  const active = paneState(r.id)?.active ?? -1;
+  if (active >= 0) view.focusTab(r, active);
+  else r.root.focus({ preventScroll: true });
+}
+
+/// Il fuoco è in `root`, su un elemento che si vede.
+function focusedVisiblyIn(root: HTMLElement): boolean {
+  const focused = document.activeElement;
+  return focused instanceof HTMLElement && root.contains(focused) && focused.closest("[hidden]") === null;
+}
+
+/// Un cambio di scheda chiesto con un comando — un tasto globale, la palette,
+/// il menu — porta il fuoco nella superficie della scheda che diventa attiva,
+/// a giro di disegno finito (IMP-048…051, Ctrl+\). È la regola di tutti i
+/// comandi che cambiano la scheda attiva, e sta qui e non in ognuno.
+///
+/// Un clic su una linguetta non passa di qui: lascia il fuoco sulla linguetta,
+/// da cui le frecce della striscia continuano. Un fuoco che intanto è andato
+/// altrove fuori dai riquadri (un dialogo, il lanciatore) non si tocca; quello
+/// rimasto dov'era quando il comando è partito (l'albero, una linguetta), o
+/// caduto sul `body`, sì: chi ha cambiato scheda con un tasto scrive lì.
+function focusShownAfter(drawn: Promise<void>, origin: Element | null = document.activeElement): Promise<void> {
+  return drawn.finally(() => {
+    const now = document.activeElement;
+    const fallen = !(now instanceof HTMLElement) || now === document.body || !now.isConnected
+      || now.closest("[hidden]") !== null;
+    const inPanes = now instanceof HTMLElement && [...panes.values()].some((r) => r.root.contains(now));
+    if (!fallen && !inPanes && now !== origin) return;
+    const r = panes.get(layout.focus);
+    if (r) focusPaneSurface(r);
+  });
 }
 
 /// Ricostruisce l'albero di contenitori, ma **solo se è cambiato**.
@@ -3609,6 +3751,58 @@ function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSu
   return true;
 }
 
+// --- la rinomina sotto una superficie montata --------------------------------
+
+/// Una superficie di testo (Markdown o testo semplice) che segue la sessione
+/// anche quando il file cambia nome: la sessione è la stessa (`rename`) e la
+/// superficie legge l'identità da lei. Un cambio di estensione può chiedere
+/// un'altra superficie, e un file di un componente segue i componenti: in quei
+/// casi il riquadro rimonta come prima.
+function surfaceFollowsRename(surface: EditorSurface, from: string, to: string): boolean {
+  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
+  if (uisForFile(from).length > 0 || uisForFile(to).length > 0) return false;
+  return extensionOf(from) === extensionOf(to);
+}
+
+function extensionOf(doc: string): string {
+  const base = doc.split("/").pop() ?? "";
+  const point = base.lastIndexOf(".");
+  return point > 0 ? base.slice(point + 1).toLowerCase() : "";
+}
+
+/// Il file mostrato ha cambiato nome (da questa finestra o da fuori): la scheda
+/// è la stessa, solo il nome cambia. Le superfici che reggono il nome nuovo
+/// passano alla scheda nuova **senza rimontarsi**: rimontarle buttava via il
+/// fuoco (le battute dopo una rinomina da fuori finivano sul body, IMP-046),
+/// il cursore, la cronologia locale e lo scorrimento. La registrazione nella
+/// sessione si rifà col nome nuovo, perché gli aggiornamenti e le battute
+/// cercano la sessione per nome. Lo stesso per le superfici da parte.
+function followRenameInPanes(from: string, to: string): void {
+  for (const r of panes.values()) {
+    const shown = r.shown;
+    const surface = r.surface;
+    if (shown?.k === "doc" && shown.doc === from && surface && r.disposeSurface && !r.bytes
+      && surfaceFollowsRename(surface, from, to)) {
+      // La scheda prima, poi lo stacco: il testo che la superficie registra
+      // staccandosi va alla sessione col nome nuovo, l'unico che c'è ancora.
+      r.shown = { ...shown, doc: to };
+      detachSurface(r);
+      // Gli allegati e il registratore scrivono nel documento per nome.
+      r.disposeAttachments?.();
+      r.disposeAttachments = null;
+      r.disposeRecorder?.();
+      r.disposeRecorder = null;
+      attachSurface(r, to);
+      refreshNoteClasses(r, to);
+      mountDocumentAttachments(r, to);
+    }
+    r.parked = r.parked.map((entry) =>
+      entry.tab.doc === from && surfaceFollowsRename(entry.surface, from, to)
+        ? { ...entry, tab: { ...entry.tab, doc: to } }
+        : entry);
+  }
+}
+
 /// La stessa scheda di una superficie da parte: lo stesso documento con la
 /// stessa scelta di superficie, come `show` decide se rimontare.
 function sameParked(tab: Tab, parked: Extract<Tab, { k: "doc" }>): boolean {
@@ -3779,6 +3973,19 @@ export function runEditorAction(action: string, params: Readonly<Record<string, 
   return "done";
 }
 
+/// Il registratore, le slide e la stampa di un riquadro: arrivano con un
+/// `import()`, fuori dal chunk che apre una nota. Il menu del riquadro, che
+/// li offre, li chiede appena si apre (`loadPaneTools`).
+const recorderPart = lazyPart(() => import("../editors/media/recorder-part"));
+const slidesPart = lazyPart(() => import("../ui/slides"));
+const printPart = lazyPart(() => import("../editors/media/print-view"));
+
+/// Chiede il codice dei gesti del menu del riquadro: quando se ne sceglie
+/// uno, c'è già.
+export function loadPaneTools(): void {
+  for (const part of [recorderPart, slidesPart, printPart]) void part.load().catch(() => {});
+}
+
 export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
   if (r.disposeRecorder) {
     r.disposeRecorder();
@@ -3787,8 +3994,10 @@ export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
   }
   const surface = r.surface;
   try {
-    const attachment = await attachmentDeposit(doc);
+    const [attachment, { createViewStateCrashDeposit, mountRecorderSurface }] = await Promise.all([attachmentDeposit(doc), recorderPart.load()]);
     if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+    // Un secondo clic mentre il codice arrivava ha già aperto il registratore.
+    if (r.disposeRecorder) return;
     r.disposeRecorder = mountRecorderSurface(view.recorderHost(r), {
       staging: createViewStateCrashDeposit({ get: (key) => api.viewState(key), set: api.setViewState }),
       attachment,
@@ -3807,6 +4016,16 @@ export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
 export function presentSlides(r: Pane, doc: string): void {
   const surface = r.surface;
   if (r.shown?.k !== "doc" || r.shown.doc !== doc || !surface?.mountPresentation) return;
+  // Se il codice delle slide non è ancora arrivato, partono appena arriva,
+  // purché il riquadro mostri ancora la stessa nota.
+  slidesPart.run(({ mountSlidePresentation }) => {
+    if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc || !surface.mountPresentation) return;
+    showSlides(r, surface, mountSlidePresentation);
+  });
+}
+
+function showSlides(r: Pane, surface: NonNullable<Pane["surface"]>, mountSlidePresentation: typeof import("../ui/slides").mountSlidePresentation): void {
+  if (!surface.mountPresentation) return;
   r.disposeSlides?.();
   const content = document.createElement("div");
   let contentStop: (() => void) | null = null;
@@ -3833,6 +4052,7 @@ export async function presentPrint(r: Pane, doc: string): Promise<void> {
       (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
       () => new Set<string>(),
     );
+    const { printDocument } = await printPart.load();
     const stop = await printDocument(doc, pageName(doc), renderPrint, (container, rendered) =>
       mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }));
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) {
@@ -4590,7 +4810,11 @@ export async function runExport(doc: string, chosen: SurfaceExport): Promise<voi
     options: chosen.options?.() ?? {},
   };
   try {
-    await api.invokeCommand(EXPORT_COMMAND, { request_json: JSON.stringify(request) }, "apply");
+    const outcome = await api.invokeCommand(EXPORT_COMMAND, { request_json: JSON.stringify(request) }, "apply");
+    // Il nome del lavoro nel centro attività: il job dei trasferimenti non sa
+    // dire in che lingua parla chi guarda, la shell sì.
+    const id = queuedJob(outcome);
+    if (id !== null) nameJob(id, () => t("activity.job.export", { doc: docTitle(doc), what: chosen.label() }));
   } catch (error) {
     notify(t("document.export.failed", { reason: errorText(error) }), "guasto");
     return;

@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
+use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{PluginManifest, ViewInstance};
-use fub_abi::ui::{UiKind, UiNode};
+use fub_abi::ui::{ActionId, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_features::{
     BackupCommands, BackupView, BACKUP_ID, BACKUP_KEEP_KEY, BACKUP_VIEW, VAULT_BACKUP,
     VAULT_BACKUP_RESTORE,
@@ -47,6 +48,11 @@ impl Vault {
         let mut registry = FormatRegistry::new();
         registry
             .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
+        // Un formato che legge byte, come quello dei `.docx` nell'app: i suoi
+        // file stanno nel vault accanto alle note, e non sono testo.
+        registry
+            .register(fub_testkit::SampleExtractor::by_extension("docx").boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = Workspace::new(&self.root, registry)
             .expect("l'apertura del vault riesce")
@@ -181,6 +187,299 @@ fn an_unreadable_snapshot_file_stops_the_restore() {
         ws.read_source(&DocId::new("b.md")).is_err(),
         "un ripristino fermato non crea niente a metà"
     );
+}
+
+/// I byte di un `.docx` dentro lo snapshot, sul disco: «Backup ora» con un
+/// documento binario nel vault crea lo snapshot (prima falliva con «il file
+/// non è UTF-8» e non ne creava nessuno, IMP-111), e il ripristino lo riporta
+/// byte per byte insieme alla nota di testo.
+#[test]
+fn a_docx_in_the_vault_is_backed_up_and_restored_byte_for_byte() {
+    let vault = Vault::new();
+    let docx: &[u8] = b"PK\x03\x04\x14\x00\x06\x00\xb4\xff\x00\x80word/document.xml";
+    let note = "# Indice\r\nvedi il documento\r\n";
+    vault.put("Note/index.md", note);
+    std::fs::create_dir_all(vault.root.join("Documenti")).unwrap();
+    std::fs::write(vault.root.join("Documenti/Protetto.docx"), docx).unwrap();
+    let mut ws = vault.open();
+
+    let tree = run_from_the_panel(&mut ws);
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(!json.contains("failed"), "{json}");
+    let id = titles(&tree)
+        .iter()
+        .find_map(|t| t.split_whitespace().next().map(str::to_string))
+        .expect("uno snapshot");
+    let copy = vault.root.join(".fub/plugins").join(BACKUP_ID).join(&id);
+    assert_eq!(
+        std::fs::read(copy.join("Documenti/Protetto.docx")).unwrap(),
+        docx
+    );
+    assert_eq!(
+        std::fs::read(copy.join("Note/index.md")).unwrap(),
+        note.as_bytes()
+    );
+
+    ws.delete_document(&DocId::new("Documenti/Protetto.docx"))
+        .expect("cestina");
+    ws.delete_document(&DocId::new("Note/index.md"))
+        .expect("cestina");
+    ws.invoke_command(
+        VAULT_BACKUP_RESTORE,
+        serde_json::json!({ "id": id }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("restore");
+    assert_eq!(
+        std::fs::read(vault.root.join("Documenti/Protetto.docx")).unwrap(),
+        docx
+    );
+    assert_eq!(
+        std::fs::read(vault.root.join("Note/index.md")).unwrap(),
+        note.as_bytes()
+    );
+}
+
+/// **Un file che non si legge non ferma il backup degli altri.** Il backup va
+/// avanti, lo snapshot nasce con ciò che si è potuto copiare, e il pannello
+/// nomina il file saltato con una frase, non col messaggio del sistema.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_file_is_skipped_and_named_not_the_whole_backup() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    vault.put("c.md", "# C\n");
+    let mut ws = vault.open();
+    let locked = vault.root.join("b.md");
+    let set = |mode| {
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(mode)).expect("permessi")
+    };
+    set(0o000);
+    if std::fs::read(&locked).is_ok() {
+        // Chi gira da root legge lo stesso: il guasto non si riproduce.
+        set(0o644);
+        return;
+    }
+    let outcome = ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    );
+    let tree = run_from_the_panel(&mut ws);
+    set(0o644);
+
+    let outcome = outcome.expect("il backup va avanti");
+    let partial = outcome.partial.expect("dice che non ha copiato tutto");
+    assert_eq!((partial.attempted, partial.done), (3, 2));
+    assert_eq!(
+        partial.failures[0].subject.as_ref().map(DocId::as_str),
+        Some("b.md")
+    );
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("b.md"), "il file saltato si nomina: {json}");
+    assert!(!json.contains("I/O"), "niente messaggio da log: {json}");
+    assert!(
+        !json.contains("os error"),
+        "niente messaggio da log: {json}"
+    );
+    assert!(
+        titles(&tree).iter().any(|t| t.contains("2 note")),
+        "lo snapshot c'è, con ciò che si è copiato: {:?}",
+        titles(&tree)
+    );
+}
+
+/// Toglie e ridà il permesso di leggere ai file del vault: il guasto di un file
+/// bloccato. `None` quando chi gira legge lo stesso (root): il caso non si
+/// riproduce.
+#[cfg(unix)]
+fn lock(vault: &Vault, rels: &[&str], locked: bool) -> Option<()> {
+    use std::os::unix::fs::PermissionsExt;
+    for rel in rels {
+        let path = vault.root.join(rel);
+        let mode = if locked { 0o000 } else { 0o644 };
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).expect("permessi");
+        if locked && std::fs::read(&path).is_ok() {
+            lock(vault, rels, false);
+            return None;
+        }
+    }
+    Some(())
+}
+
+/// Le note cestinate e poi ripristinate dallo snapshot `id`, col testo che
+/// tornano ad avere.
+#[cfg(unix)]
+fn restored(ws: &mut Workspace, id: &str, docs: &[&str]) -> Vec<String> {
+    for doc in docs {
+        ws.delete_document(&DocId::new(*doc)).expect("cestina");
+    }
+    ws.invoke_command(
+        VAULT_BACKUP_RESTORE,
+        serde_json::json!({ "id": id }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("restore");
+    docs.iter()
+        .map(|doc| ws.read_source(&DocId::new(*doc)).expect("ripristinata"))
+        .collect()
+}
+
+/// **Un backup con file saltati non cancella la copia completa di oggi.** Il
+/// secondo backup del giorno sostituiva lo snapshot del mattino anche quando
+/// un file non si leggeva: la sua sola copia se ne andava con la cartella
+/// vecchia, mentre l'avviso diceva che gli snapshot di prima restavano tutti.
+/// Ora la copia di prima del file saltato passa nello snapshot nuovo, e
+/// l'avviso dice proprio questo.
+#[cfg(unix)]
+#[test]
+fn a_partial_backup_keeps_the_morning_copy_of_the_skipped_file() {
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    vault.put("c.md", "# C\n");
+    let clock = Arc::new(Days(AtomicU64::new(1_789_905_600_000)));
+    let mut ws = vault.open_at(clock);
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il backup del mattino");
+    ws.write_document(&DocId::new("a.md"), "# A della sera\n", WriteBase::Dictated)
+        .expect("la sera");
+    if lock(&vault, &["b.md"], true).is_none() {
+        return;
+    }
+    let tree = run_from_the_panel(&mut ws);
+    lock(&vault, &["b.md"], false);
+
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("b.md"), "il file saltato si nomina: {json}");
+    assert!(
+        json.contains("copia di prima"),
+        "l'avviso dice dove sta la copia del file saltato: {json}"
+    );
+    assert!(
+        !json.contains("restano tutti"),
+        "lo snapshot del mattino non resta com'era, e l'avviso non lo dice: {json}"
+    );
+    assert!(
+        titles(&tree).iter().any(|t| t.contains("3 note")),
+        "lo snapshot ha ancora tutte le note: {:?}",
+        titles(&tree)
+    );
+    assert_eq!(
+        restored(&mut ws, "2026-09-20", &["a.md", "b.md", "c.md"]),
+        ["# A della sera\n", "# B\n", "# C\n"],
+        "la sera per ciò che si è letto, il mattino per il file saltato"
+    );
+}
+
+/// **Un backup che non legge niente non svuota lo snapshot di oggi.** Con
+/// zero file copiati, lo snapshot pieno del mattino diventava vuoto.
+#[cfg(unix)]
+#[test]
+fn a_backup_that_reads_nothing_keeps_todays_full_snapshot() {
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    let clock = Arc::new(Days(AtomicU64::new(1_789_905_600_000)));
+    let mut ws = vault.open_at(clock);
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il backup del mattino");
+    if lock(&vault, &["a.md", "b.md"], true).is_none() {
+        return;
+    }
+    let tree = run_from_the_panel(&mut ws);
+    lock(&vault, &["a.md", "b.md"], false);
+
+    assert!(
+        titles(&tree).iter().any(|t| t.contains("2 note")),
+        "lo snapshot non si svuota: {:?}",
+        titles(&tree)
+    );
+    assert_eq!(
+        restored(&mut ws, "2026-09-20", &["a.md", "b.md"]),
+        ["# A\n", "# B\n"]
+    );
+}
+
+/// **Se la copia di prima del file saltato non si rilegge, lo snapshot di
+/// oggi resta com'era.** Il backup si ferma con un errore che nomina il file
+/// e dice che lo snapshot di prima c'è ancora: meglio niente di nuovo che uno
+/// snapshot nuovo che ha perso l'unica copia.
+#[cfg(unix)]
+#[test]
+fn a_partial_backup_whose_earlier_copy_is_damaged_leaves_today_as_it_was() {
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    let clock = Arc::new(Days(AtomicU64::new(1_789_905_600_000)));
+    let mut ws = vault.open_at(clock);
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il backup del mattino");
+    let morning = vault
+        .root
+        .join(".fub/plugins")
+        .join(BACKUP_ID)
+        .join("2026-09-20");
+    std::fs::write(morning.join("b.md"), "# B alterata\n").unwrap();
+    ws.write_document(&DocId::new("a.md"), "# A della sera\n", WriteBase::Dictated)
+        .expect("la sera");
+    if lock(&vault, &["b.md"], true).is_none() {
+        return;
+    }
+    let tree = run_from_the_panel(&mut ws);
+    lock(&vault, &["b.md"], false);
+
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("b.md"), "l'errore nomina il file: {json}");
+    assert!(
+        json.contains("resta com'era"),
+        "l'errore dice che lo snapshot di prima c'è ancora: {json}"
+    );
+    assert_eq!(snapshot_dirs(&vault), ["2026-09-20"], "niente di nuovo");
+    assert_eq!(
+        std::fs::read_to_string(morning.join("a.md")).unwrap(),
+        "# A\n",
+        "lo snapshot del mattino resta com'era"
+    );
+}
+
+/// «Backup ora» dal pannello, come lo preme chi usa Fub: l'albero che torna.
+fn run_from_the_panel(ws: &mut Workspace) -> UiNode {
+    let update = ws
+        .view_action(
+            &ViewInstance::only(BACKUP_VIEW),
+            UiAction {
+                action: ActionId("run".into()),
+                payload: serde_json::Value::Null,
+                fields: Vec::new(),
+            },
+        )
+        .expect("view_action");
+    match update {
+        ViewUpdate::Replace { root } => root,
+        other => panic!("il pannello si ridisegna: {other:?}"),
+    }
 }
 
 #[test]
@@ -369,6 +668,48 @@ mod in_memory {
 
     fn trash(host: &mut MemoryHost, doc: &str) {
         host.trash_document(&DocId::new(doc)).unwrap();
+    }
+
+    /// **Un documento che non è testo entra nello snapshot e torna uguale.**
+    /// Il backup leggeva ogni documento come testo: un `.docx` nel vault (byte
+    /// che non sono UTF-8) fermava il backup di tutto, senza nessuna copia
+    /// (IMP-111). Accanto, una nota con `\r\n` torna con i suoi terminatori.
+    #[test]
+    fn a_binary_document_is_backed_up_and_restored_byte_for_byte() {
+        let docx: &[u8] = b"PK\x03\x04\x14\x00\x06\x00\xb4\xff\x00\x80word/document.xml";
+        let note = "# Nota\r\ncon i terminatori di Windows\r\n";
+        let mut host = MemoryHost::new()
+            .with_format(
+                "docx",
+                fub_abi::format::DocumentFormat {
+                    descriptor: fub_abi::format::FormatDescriptor {
+                        source: fub_abi::format::SourceKind::Bytes,
+                        ..fub_abi::format::FormatDescriptor::text("docx", "Word", &["docx"])
+                    },
+                    capabilities: fub_abi::format::FormatCapabilities::of(&[]),
+                },
+            )
+            .with_document("Note/a.md", note)
+            .with_binary_document("Documenti/Protetto.docx", docx);
+        let outcome = BackupCommands
+            .invoke(VAULT_BACKUP, json!({}), InvokeMode::Apply, &mut host)
+            .expect("un file binario non ferma il backup");
+        assert!(outcome.partial.is_none(), "{:?}", outcome.partial);
+        let id = manifest(&host)["snapshots"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(manifest(&host)["snapshots"][0]["n"], 2);
+
+        trash(&mut host, "Note/a.md");
+        trash(&mut host, "Documenti/Protetto.docx");
+        restore(&mut host, &id).expect("il ripristino riporta tutti e due");
+        assert_eq!(
+            host.read_document_bytes(&DocId::new("Documenti/Protetto.docx"))
+                .unwrap(),
+            docx
+        );
+        assert_eq!(read(&host, "Note/a.md"), note);
     }
 
     /// **Un secondo backup dello stesso giorno che si ferma a metà lascia

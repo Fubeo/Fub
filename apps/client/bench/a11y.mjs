@@ -904,8 +904,11 @@ async function inspectModeMenu(page) {
     const button = document.getElementById("status-mode");
     const shown = (el) => el !== null && el.checkVisibility() && !el.closest("[hidden], [inert], [aria-hidden=\"true\"]");
     const menu = document.getElementById("context-menu");
+    // Un blocco in mano (il puntatore è giù) è un gesto aperto: Esc è suo,
+    // e lo riporta al posto. La copia in mano è nascosta ai lettori, perciò
+    // conta che ci sia, non che si veda.
     const other = [...document.querySelectorAll("[role=\"menu\"], [role=\"dialog\"], [aria-modal=\"true\"]")]
-      .some((el) => shown(el) && !(menu?.contains(el)));
+      .some((el) => shown(el) && !(menu?.contains(el))) || document.querySelector(".cm-fub-block-lift") !== null;
     return {
       present: shown(button) && button.getAttribute("aria-disabled") !== "true",
       expanded: button?.getAttribute("aria-expanded") === "true",

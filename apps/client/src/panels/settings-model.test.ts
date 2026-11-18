@@ -11,6 +11,7 @@ import {
   matchesSearch,
   normalizeSearch,
   numberStep,
+  parseSettingNumber,
   sectionAnchor,
   searchTerms,
   shownChoice,
@@ -209,5 +210,48 @@ describe("le ancore delle sezioni", () => {
     expect(sectionAnchor("Template e giornaliere", 13)).toBe("settings-section-13-template-e-giornaliere");
     expect(sectionAnchor("Proprietà", 10)).toBe("settings-section-10-proprieta");
     expect(sectionAnchor("…", 2)).toBe("settings-section-2");
+  });
+});
+
+describe("il numero scritto nel campo di una riga", () => {
+  const open = { kind: "number", default: 10, min: 0, max: null } as const;
+  const read = (text: string, language = "en", kind: Extract<SettingKind, { kind: "number" }> = open) =>
+    parseSettingNumber(text, kind, language);
+
+  it("la virgola e il punto separano i decimali, in ogni lingua", () => {
+    for (const language of ["en", "it"]) {
+      expect(read("1,5", language)).toEqual({ value: 1.5 });
+      expect(read("1.5", language)).toEqual({ value: 1.5 });
+      expect(read(" 12 ", language)).toEqual({ value: 12 });
+    }
+  });
+
+  it("ciò che non è il numero scritto si rifiuta col suo motivo", () => {
+    expect(read("")).toEqual({ problem: "empty" });
+    expect(read("   ")).toEqual({ problem: "empty" });
+    expect(read("abc")).toEqual({ problem: "syntax" });
+    expect(read("12px")).toEqual({ problem: "syntax" });
+    expect(read("1e400")).toEqual({ problem: "finite" });
+    expect(read("99999999999999999999")).toEqual({ problem: "precision" });
+    expect(read("100000000000000000000")).toEqual({ problem: "precision" });
+    expect(read("0.1234567890123456")).toEqual({ problem: "precision" });
+    expect(read("123456789012345")).toEqual({ value: 123456789012345 });
+  });
+
+  it("un numero che nella lingua si legge anche come migliaia non si indovina", () => {
+    expect(read("1,500", "en")).toEqual({ problem: "ambiguous" });
+    expect(read("1,500", "it")).toEqual({ value: 1.5 });
+    expect(read("1.500", "it")).toEqual({ problem: "ambiguous" });
+    expect(read("1.500", "en")).toEqual({ value: 1.5 });
+    expect(read("0,500", "en")).toEqual({ value: 0.5 });
+    expect(read("1,5000", "en")).toEqual({ value: 1.5 });
+  });
+
+  it("gli estremi sono quelli dello schema", () => {
+    const bounded = { kind: "number", default: 16, min: 12, max: 28 } as const;
+    expect(read("-7")).toEqual({ problem: "min", min: 0 });
+    expect(read("11", "en", bounded)).toEqual({ problem: "min", min: 12 });
+    expect(read("29", "en", bounded)).toEqual({ problem: "max", max: 28 });
+    expect(read("28", "en", bounded)).toEqual({ value: 28 });
   });
 });

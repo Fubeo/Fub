@@ -208,6 +208,45 @@ describe("«Tutte le note» sopra l'albero", () => {
   });
 });
 
+describe("i tasti del mouse sulle righe", () => {
+  /// Un clic vero: la pressione col suo tasto, poi il `click`. WebKitGTK manda
+  /// il `click` anche dopo il centrale, col `button` del sinistro.
+  const press = (target: HTMLElement, button: number): void => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+  };
+  const expanded = (path: string) =>
+    document.querySelector(`#file-list li[data-path="${CSS.escape(path)}"]`)!.getAttribute("aria-expanded");
+
+  it("il tasto centrale non apre né chiude una cartella; il sinistro sì (IMP-002)", async () => {
+    await start();
+    expect(expanded("Guida")).toBe("false");
+    press(row("Guida")!.querySelector<HTMLElement>(".row-name")!, 1);
+    await quiet();
+    expect(expanded("Guida")).toBe("false");
+    press(row("Guida")!.querySelector<HTMLElement>(".row-name")!, 0);
+    await waitFor("la cartella aperta", () => expanded("Guida") === "true");
+    // Dopo un centrale, Invio sulla riga (un clic senza tasti) la chiude ancora.
+    press(row("Guida")!.querySelector<HTMLElement>(".row-name")!, 1);
+    row("Guida")!.click();
+    await waitFor("la cartella chiusa", () => expanded("Guida") === "false");
+  });
+});
+
+describe("le appuntate", () => {
+  it("una nota appuntata dal menu compare subito fra le appuntate (IMP-009)", async () => {
+    await start();
+    const pinnedList = document.getElementById("pinned-list")!;
+    expect(pinnedList.hidden).toBe(true);
+    const { setPinned } = await import("../state/organization");
+    await setPinned("Benvenuto.md", true);
+    await waitFor("l'appuntata nella lista", () => pinnedList.querySelector('.tree-row[data-path="Benvenuto.md"]') !== null);
+    expect(pinnedList.hidden).toBe(false);
+    expect(document.getElementById("pinned-title")!.hidden).toBe(false);
+  });
+});
+
 describe("le azioni del titolo", () => {
   it("«nuovo» è una figura col suo nome, che apre un menu", async () => {
     await start();
@@ -378,6 +417,22 @@ describe("le azioni del titolo", () => {
     // L'albero segue: le cartelle in ordine inverso.
     const top = [...document.querySelectorAll<HTMLElement>("#file-list > li[data-path]")].map((li) => li.dataset.path);
     expect(top.indexOf("Progetti")).toBeLessThan(top.indexOf("Guida"));
+
+    // Il secondo clic sul pulsante chiude il menu che il primo ha aperto
+    // (IMP-006), e lo stato dice ciò che si vede.
+    sort.click();
+    await quiet();
+    expect(document.querySelectorAll('.context-menu [role="menuitemradio"]').length).toBe(5);
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+    sort.click();
+    await quiet();
+    expect(document.querySelectorAll('.context-menu [role="menuitemradio"]').length).toBe(0);
+    expect(sort.getAttribute("aria-expanded")).toBe("false");
+    sort.click();
+    await quiet();
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await quiet();
 
     // Il contestuale della radice ha le stesse voci, con la scelta nuova.
     document.getElementById("files-title")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));

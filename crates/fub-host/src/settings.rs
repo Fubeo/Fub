@@ -196,6 +196,9 @@ pub const EDITOR_CURSOR_BLINK: &str = "editor.cursor-blink";
 /// Nei Blocchi il cursore scivola fra due posizioni invece di saltare (N13).
 /// Di serie salta.
 pub const EDITOR_SOFT_CURSOR: &str = "editor.soft-cursor";
+/// La macchina da scrivere: la riga del cursore resta a metà altezza del
+/// foglio e il testo le scorre sotto. Di serie spenta.
+pub const EDITOR_TYPEWRITER: &str = "editor.typewriter";
 /// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
 pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
@@ -209,10 +212,17 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// YAML. Il default è quello di prima che fosse una scelta.
 pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// Quando compare la mini-barra di formattazione accanto al puntatore:
-/// `auto` col tasto destro e, a barra del foglio spenta, sul testo scelto;
-/// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
+/// `auto` col tasto destro e sul testo scelto, tranne con la barra `completa`;
+/// `always` anche sul testo scelto con la barra completa; `menu` soltanto col tasto
 /// destro; `off` mai.
 pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// La forma della barra di formato del foglio: `compatta` (poche cose fisse,
+/// lo stile e il gruppo del blocco del cursore, «+ Inserisci»), `completa`
+/// (tutti i pulsanti, la fila della pre-alpha), `nascosta` (resta la
+/// mini-barra sulla selezione). Finché nessuno la sceglie,
+/// `chrome.formatbar.visible` spento da un Fub di prima vale `nascosta`; quella
+/// chiave non si riscrive più.
+pub const EDITOR_TOOLBAR: &str = "editor.toolbar";
 /// Che cosa fa il clic che apre un link a una nota: `apri` la porta nel
 /// riquadro, come sempre; `sbircia` la apre nella sbirciata, sopra la destra
 /// del foglio. Alt col clic (o Alt-Invio) sbircia comunque.
@@ -230,6 +240,12 @@ pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
 /// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
 /// non c'è al telefono né sotto i 620 px.
 pub const EDITOR_HINTS: &str = "editor.hints";
+/// La tipografia italiana mentre si scrive: `"` diventa « o » (“ ” dentro
+/// una citazione già aperta), `--` diventa —, `...` diventa … e l'apostrofo
+/// diventa ’. Spenta di serie. Vale nella prosa delle note in italiano (la
+/// lingua dichiarata nella nota, altrimenti quella dell'app), mai in codice,
+/// formule, link, frontmatter, nell'incolla e nella composizione (IME).
+pub const EDITOR_TYPOGRAPHY: &str = "editor.typography";
 /// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
 /// `source` o `reading`, gli id delle modalità della superficie testuale.
 /// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
@@ -251,6 +267,18 @@ pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
 /// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
 /// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
 pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Le formule di Scrittura mostrano il loro LaTeX: accesa, la formula toccata
+/// ha sotto di sé il campo del suo LaTeX, e il clic sulla formula porta
+/// soltanto agli spazi vuoti. Spenta (di serie) la formula si modifica
+/// toccandola: resta disegnata, col cursore dentro, e il LaTeX nel file non si
+/// vede. Coi tasti di Vim le formule si aprono col riquadro di prima.
+pub const EDITOR_MATH_SOURCE: &str = "editor.math.source";
+/// Quanto aiuta il campo del LaTeX delle formule (con `editor.math.source`):
+/// `piene` (di serie) chiude le parentesi, completa dopo `\`, trasforma la
+/// scrittura veloce (`a/b`, `->`, `alpha`) e mostra la tavolozza; `discrete`
+/// lascia parentesi e completamento, e la tavolozza a richiesta; `spente`
+/// lascia il LaTeX e la sua anteprima, nient'altro.
+pub const EDITOR_MATH_HELP: &str = "editor.math.help";
 /// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
 /// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
 /// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
@@ -483,6 +511,13 @@ pub const FILES_STARTUP_NOTE: &str = "files.startup-note";
 /// scrive `[[Persone/Nome|Nome]]`; una persona nuova vi nasce. Vuota, `@` non
 /// propone persone.
 pub const FILES_PEOPLE_FOLDER: &str = "files.people-folder";
+/// La cartella dei tipi di nota (E5): ogni nota che ci sta, sottocartelle
+/// comprese, è un tipo, e il suo testo è il modello delle note nuove. Del
+/// vault, di serie `Tipi`; vuota, i tipi sono spenti. La legge
+/// `fub-features` (`note_types`).
+pub const FILES_TYPES_FOLDER: &str = "files.types-folder";
+/// Il valore di serie di [`FILES_TYPES_FOLDER`].
+pub const DEFAULT_TYPES_FOLDER: &str = "Tipi";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -658,6 +693,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(C_FILES_PEOPLE_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_TYPES_FOLDER,
+            Text::key(C_FILES_TYPES_FOLDER),
+            SettingKind::Text {
+                default: DEFAULT_TYPES_FOLDER.into(),
+            },
+        )
+        .describing(Text::key(C_FILES_TYPES_FOLDER_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
@@ -906,6 +952,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 true,
             ),
             (
+                EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE_DESC,
+                false,
+            ),
+            (
                 EDITOR_FOLD_GUTTER,
                 C_EDITOR_FOLD_GUTTER,
                 C_EDITOR_FOLD_GUTTER_DESC,
@@ -942,6 +994,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 false,
             ),
             (
+                EDITOR_TYPEWRITER,
+                C_EDITOR_TYPEWRITER,
+                C_EDITOR_TYPEWRITER_DESC,
+                false,
+            ),
+            (
                 EDITOR_PASTE_HTML,
                 C_EDITOR_PASTE_HTML,
                 C_EDITOR_PASTE_HTML_DESC,
@@ -963,6 +1021,17 @@ fn editor_settings() -> Vec<SettingSpec> {
                 .for_machine()
         }),
     );
+    settings.push(choice(
+        EDITOR_MATH_HELP,
+        C_EDITOR_MATH_HELP,
+        C_EDITOR_MATH_HELP_DESC,
+        "piene",
+        vec![
+            UiOption::new("piene", Text::key(C_EDITOR_MATH_HELP_FULL)),
+            UiOption::new("discrete", Text::key(C_EDITOR_MATH_HELP_DISCREET)),
+            UiOption::new("spente", Text::key(C_EDITOR_MATH_HELP_OFF)),
+        ],
+    ));
     settings.push(choice(
         EDITOR_INDENT,
         C_EDITOR_INDENT,
@@ -998,6 +1067,17 @@ fn editor_settings() -> Vec<SettingSpec> {
         ],
     ));
     settings.push(choice(
+        EDITOR_TOOLBAR,
+        C_EDITOR_TOOLBAR,
+        C_EDITOR_TOOLBAR_DESC,
+        "compatta",
+        vec![
+            UiOption::new("compatta", Text::key(C_EDITOR_TOOLBAR_COMPACT)),
+            UiOption::new("completa", Text::key(C_EDITOR_TOOLBAR_FULL)),
+            UiOption::new("nascosta", Text::key(C_EDITOR_TOOLBAR_HIDDEN)),
+        ],
+    ));
+    settings.push(choice(
         EDITOR_LINK_CLICK,
         C_EDITOR_LINK_CLICK,
         C_EDITOR_LINK_CLICK_DESC,
@@ -1016,6 +1096,12 @@ fn editor_settings() -> Vec<SettingSpec> {
     settings.push(
         SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
             .describing(Text::key(C_EDITOR_HINTS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_TYPOGRAPHY, Text::key(C_EDITOR_TYPOGRAPHY), false)
+            .describing(Text::key(C_EDITOR_TYPOGRAPHY_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
     );
@@ -1564,6 +1650,49 @@ fn service_settings() -> Vec<SettingSpec> {
     ]
 }
 
+/// **Il cancello della persona**: le chiavi il cui valore ha una forma che la
+/// specie dello schema non sa dire, controllata prima che arrivi al suo livello.
+///
+/// Lo schema dice «testo» per un fuso e per un indirizzo, e il kernel accetta
+/// quindi qualunque testo; chi sa se un nome è un fuso, o un testo un indirizzo
+/// a cui l'host accetta di collegarsi, è l'host — il database dei fusi sta in
+/// [`crate::wall`], la regola degli indirizzi in
+/// [`validate_base_url`](crate::remote::validate_base_url). Senza questo
+/// cancello `Mars/Olympus` si salvava, e le sveglie a un orario di parete
+/// smettevano di suonare senza che nessuno lo dicesse; un server di
+/// sincronizzazione `ftp://…` si salvava, e falliva soltanto alla prima replica.
+///
+/// Vuoto resta ammesso: per il fuso vuol dire «come il sistema», per un server
+/// «nessun server configurato». Il rifiuto è un [`PluginError::BadArgs`] con una
+/// chiave del catalogo del core, che chi lo porta alla shell risolve nella
+/// lingua di chi guarda.
+pub fn user_value_problem(
+    key: &str,
+    value: &fub_abi::settings::SettingValue,
+) -> Option<fub_abi::PluginError> {
+    let text = value.as_text()?;
+    if key == fub_kernel::locale::TIMEZONE {
+        if text.is_empty() || crate::wall::known_zone(text) {
+            return None;
+        }
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_TIMEZONE,
+            vec![Arg::text("name", text)],
+        )));
+    }
+    #[cfg(feature = "http-client")]
+    if key == SYNC_SERVER_URL || key == PUBLISH_SERVER_URL {
+        if text.trim().is_empty() || crate::remote::validate_base_url(text).is_ok() {
+            return None;
+        }
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_SERVER_URL,
+            vec![Arg::text("value", text)],
+        )));
+    }
+    None
+}
+
 /// Il visore web: di macchina, perché fidarsi di un sito è una scelta di chi
 /// usa questo PC, non un dato del vault che si sincronizza altrove.
 fn viewer_settings() -> Vec<SettingSpec> {
@@ -1781,6 +1910,8 @@ const C_FILES_STARTUP_NOTE: &str = "core.files_startup_note";
 const C_FILES_STARTUP_NOTE_DESC: &str = "core.files_startup_note.desc";
 const C_FILES_PEOPLE_FOLDER: &str = "core.files_people_folder";
 const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
+const C_FILES_TYPES_FOLDER: &str = "core.files_types_folder";
+const C_FILES_TYPES_FOLDER_DESC: &str = "core.files_types_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
@@ -1814,6 +1945,8 @@ const C_EDITOR_CURSOR_BLINK: &str = "core.editor.cursor_blink";
 const C_EDITOR_CURSOR_BLINK_DESC: &str = "core.editor.cursor_blink.desc";
 const C_EDITOR_SOFT_CURSOR: &str = "core.editor.soft_cursor";
 const C_EDITOR_SOFT_CURSOR_DESC: &str = "core.editor.soft_cursor.desc";
+const C_EDITOR_TYPEWRITER: &str = "core.editor.typewriter";
+const C_EDITOR_TYPEWRITER_DESC: &str = "core.editor.typewriter.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
@@ -1836,6 +1969,11 @@ const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
 const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
 const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
 const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_TOOLBAR: &str = "core.editor.toolbar";
+const C_EDITOR_TOOLBAR_DESC: &str = "core.editor.toolbar.desc";
+const C_EDITOR_TOOLBAR_COMPACT: &str = "core.editor.toolbar.compatta";
+const C_EDITOR_TOOLBAR_FULL: &str = "core.editor.toolbar.completa";
+const C_EDITOR_TOOLBAR_HIDDEN: &str = "core.editor.toolbar.nascosta";
 const C_EDITOR_LINK_CLICK: &str = "core.editor.link_click";
 const C_EDITOR_LINK_CLICK_DESC: &str = "core.editor.link_click.desc";
 const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
@@ -1844,6 +1982,8 @@ const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_HINTS: &str = "core.editor.hints";
 const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
+const C_EDITOR_TYPOGRAPHY: &str = "core.editor.typography";
+const C_EDITOR_TYPOGRAPHY_DESC: &str = "core.editor.typography.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -1862,6 +2002,13 @@ const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
 const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
+const C_EDITOR_MATH_SOURCE: &str = "core.editor.math_source";
+const C_EDITOR_MATH_SOURCE_DESC: &str = "core.editor.math_source.desc";
+const C_EDITOR_MATH_HELP: &str = "core.editor.math_help";
+const C_EDITOR_MATH_HELP_DESC: &str = "core.editor.math_help.desc";
+const C_EDITOR_MATH_HELP_FULL: &str = "core.editor.math_help.piene";
+const C_EDITOR_MATH_HELP_DISCREET: &str = "core.editor.math_help.discrete";
+const C_EDITOR_MATH_HELP_OFF: &str = "core.editor.math_help.spente";
 const C_EDITOR_BLOCKS: &str = "core.editor.blocks";
 const C_EDITOR_BLOCKS_DESC: &str = "core.editor.blocks.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -1997,6 +2144,8 @@ const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
+const C_REJECTED_TIMEZONE: &str = "core.settings.rejected.timezone";
+const C_REJECTED_SERVER_URL: &str = "core.settings.rejected.server_url";
 const C_GROUP_VIEWER: &str = "core.group.viewer";
 const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
 const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
@@ -2116,6 +2265,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.vault.moved", "«{doc}» è cambiata dopo aver letto la sua revisione: riprova.")
         .with("host.open_key.malformed", "La chiave di apertura del documento non è valida: da 1 a 64 lettere, cifre, «-» o «_».")
         .with("host.rich.encrypted", "«{doc}» è protetto da una password: Fub non lo apre.")
+        .with("host.rich.unreadable", "«{doc}» non si apre: il file è vuoto, rovinato o non è un documento di questo tipo.")
         .with("host.rich.readonly.revisions", "«{doc}» ha revisioni tracciate: si legge, ma non si scrive da qui.")
         .with("host.rich.readonly.track_changes", "«{doc}» registra le modifiche: si legge, ma non si scrive da qui.")
         .with("host.rich.readonly.protected", "«{doc}» è protetto contro le modifiche: si legge, ma non si scrive da qui.")
@@ -2130,17 +2280,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.missing", "Il contenuto da salvare in «{doc}» nomina {what}, che il documento non ha.")
         .with("host.rich.duplicate", "Il contenuto da salvare in «{doc}» mostra due volte la stessa nota o casella di testo.")
         .with("host.rich.fidelity", "«{doc}» non è stato salvato: il file nuovo non si rileggeva uguale a ciò che si voleva scrivere.")
-        .with("host.rich.locked.block", "«{doc}» non è stato salvato: il paragrafo o la tabella {block} del testo ha parti che Fub non sa riscrivere senza perderle, e da qui non si cambia.")
-        .with("host.rich.locked.outside", "«{doc}» non è stato salvato: la modifica tocca parti del file fuori dal testo che Fub non sa riscrivere senza perderle. Si salvano soltanto i paragrafi e le tabelle del testo.")
+        .with("host.rich.locked.block", "il paragrafo o la tabella {block} di «{doc}» è una parte chiusa: Fub non sa riscriverla senza perderne qualcosa, e da qui non si cambia.")
+        .with("host.rich.locked.outside", "la modifica tocca parti di «{doc}» fuori dal testo che Fub non sa riscrivere senza perderle: si salvano soltanto i paragrafi e le tabelle del testo.")
         .with("host.rich.codec", "«{doc}» non si legge o non si scrive nel suo formato: {why}")
         .with("host.resource.reuse_with_expected", "«{doc}» non si deposita: riusare un file con gli stessi byte vale solo per un file nuovo, non per ricoprirne uno.")
-        .with("host.xlsx.readonly", "«{doc}» è una cartella di Excel: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
-        .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella di Excel dalle celle cambiate.")
+        .with("host.xlsx.readonly", "«{doc}» è una cartella .xlsx: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
+        .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella .xlsx dalle celle cambiate.")
         .with("host.xlsx.journal", "Le celle cambiate da salvare in «{doc}» non sono leggibili: {why}")
         .with("host.xlsx.encrypted", "«{doc}» è protetta da una password: Fub non la apre.")
         .with("host.xlsx.too_large", "«{doc}» pesa {bytes} byte, più di quanto Fub apra.")
-        .with("host.xlsx.not_xlsx", "«{doc}» non è una cartella di Excel, anche se ne ha il nome ({found}).")
-        .with("host.xlsx.codec", "«{doc}» non si legge come cartella di Excel: {why}")
+        .with("host.xlsx.not_xlsx", "«{doc}» non è una cartella .xlsx, anche se ne ha il nome ({found}).")
+        .with("host.xlsx.codec", "«{doc}» non si legge come cartella .xlsx: {why}")
         .with("xlsx.rewrite.loses", "La cartella non si salva: riscriverla perderebbe parti del file che Fub non sa scrivere, e il file resta com'era ({why}).")
         .with("host.grid.protocol", "La superficie della griglia parla un'altra versione del protocollo: questa porta non la serve.")
         .with("host.grid.no_surface", "Un provider della griglia deve dichiarare almeno una superficie.")
@@ -2445,6 +2595,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_PEOPLE_FOLDER_DESC,
             "@ in una nota propone le note di questa cartella e scrive il link alla persona; una persona nuova nasce qui. Vuota, @ non propone persone.",
         )
+        .with(C_FILES_TYPES_FOLDER, "Cartella dei tipi di nota")
+        .with(
+            C_FILES_TYPES_FOLDER_DESC,
+            "Ogni nota di questa cartella è un tipo: il suo frontmatter dice icona, proprietà e cartella delle note nuove, il suo testo è il modello. Vuota, i tipi sono spenti.",
+        )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
         .with(C_CHROME_SCHEMA, "Versione configurazione dell'interfaccia")
@@ -2509,6 +2664,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CURSOR_BLINK_DESC, "Il cursore dell'editor si accende e si spegne. Di serie sta fermo, per non distrarre mentre si legge.")
         .with(C_EDITOR_SOFT_CURSOR, "Cursore morbido")
         .with(C_EDITOR_SOFT_CURSOR_DESC, "Nei Blocchi il cursore scivola fino al punto nuovo invece di saltarci. Mai mentre scrivi, e mai col movimento ridotto.")
+        .with(C_EDITOR_TYPEWRITER, "Macchina da scrivere")
+        .with(C_EDITOR_TYPEWRITER_DESC, "La riga del cursore resta a metà altezza del foglio e il testo le scorre sotto, come il foglio in una macchina da scrivere. In cima a una nota corta il testo non scende oltre l'inizio.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
@@ -2527,10 +2684,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_MINIBAR, "Mini-barra di formattazione")
         .with(C_EDITOR_MINIBAR_DESC, "I gesti di formattazione accanto al puntatore: sopra il menu del tasto destro e, se si vuole, sul testo scelto.")
-        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto a barra spenta")
+        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto se la barra non è completa")
         .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
         .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_TOOLBAR, "Barra di formato")
+        .with(C_EDITOR_TOOLBAR_DESC, "Sopra il foglio. Compatta: poche cose fisse, lo stile e gli strumenti del blocco in cui sta il cursore. Completa: tutti i pulsanti. Nascosta: resta la mini-barra sul testo scelto.")
+        .with(C_EDITOR_TOOLBAR_COMPACT, "Compatta")
+        .with(C_EDITOR_TOOLBAR_FULL, "Completa")
+        .with(C_EDITOR_TOOLBAR_HIDDEN, "Nascosta")
         .with(C_EDITOR_LINK_CLICK, "Clic su un link a una nota")
         .with(C_EDITOR_LINK_CLICK_DESC, "Che cosa fa il clic che apre un link: portare la nota nel riquadro, o aprirla nella sbirciata, sopra la destra del foglio, dove si scrive senza lasciare la nota di prima. Alt col clic, o Alt Invio, sbircia sempre.")
         .with(C_EDITOR_LINK_CLICK_OPEN, "Apre la nota")
@@ -2539,6 +2701,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
         .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
+        .with(C_EDITOR_TYPOGRAPHY, "Tipografia italiana")
+        .with(C_EDITOR_TYPOGRAPHY_DESC, "Mentre scrivi, le virgolette diventano « », due trattini —, tre punti … e l'apostrofo ’. Vale nelle note in italiano, fuori da codice, formule e link; Backspace subito dopo rimette ciò che avevi scritto.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
@@ -2547,11 +2711,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
         .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Scrittura")
         .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Scrittura.")
-        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai, come in Word")
+        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Dell'elemento del cursore")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_MATH_SOURCE, "Mostra il LaTeX delle formule")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "Accesa, sotto la formula toccata c'è il campo del suo LaTeX e si scrive lì; il clic sulla formula porta solo agli spazi vuoti. Spenta, la formula resta disegnata e si modifica toccandola: si clicca dove si vuole scrivere.")
+        .with(C_EDITOR_MATH_HELP, "Aiuti nel LaTeX delle formule")
+        .with(C_EDITOR_MATH_HELP_DESC, "Con «Mostra il LaTeX delle formule» accesa. Pieni: parentesi che si chiudono, completamento dopo \\, scrittura veloce (a/b, alpha, ->) e tavolozza. Discreti: solo parentesi e completamento, la tavolozza a richiesta. Spenti: il LaTeX che scrivi e la sua anteprima, nient'altro.")
+        .with(C_EDITOR_MATH_HELP_FULL, "Pieni")
+        .with(C_EDITOR_MATH_HELP_DISCREET, "Discreti")
+        .with(C_EDITOR_MATH_HELP_OFF, "Spenti")
         .with(C_EDITOR_BLOCKS, "Blocchi: maniglie e selezione")
         .with(C_EDITOR_BLOCKS_DESC, "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -2721,6 +2892,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
         )
+        .with(
+            C_REJECTED_TIMEZONE,
+            "«{name}» non è un fuso orario conosciuto. Scrivi un nome IANA come Europe/Rome, \
+             oppure lascia vuoto per usare quello del sistema.",
+        )
+        .with(
+            C_REJECTED_SERVER_URL,
+            "«{value}» non è un indirizzo di server valido. Scrivi un indirizzo https://, \
+             oppure http:// solo verso 127.0.0.1, ::1 o localhost; vuoto vuol dire nessun server.",
+        )
         .with(C_GROUP_VIEWER, "Visore web")
         .with(C_VIEWER_HOSTS, "Siti approvati")
         .with(
@@ -2825,6 +3006,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.vault.moved", "“{doc}” changed after its revision was read: try again.")
         .with("host.open_key.malformed", "The document's open key is not valid: 1 to 64 letters, digits, “-” or “_”.")
         .with("host.rich.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
+        .with("host.rich.unreadable", "“{doc}” does not open: the file is empty, damaged, or not a document of this kind.")
         .with("host.rich.readonly.revisions", "“{doc}” has tracked changes: it can be read, but not written from here.")
         .with("host.rich.readonly.track_changes", "“{doc}” tracks changes: it can be read, but not written from here.")
         .with("host.rich.readonly.protected", "“{doc}” is protected against editing: it can be read, but not written from here.")
@@ -2839,17 +3021,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.missing", "The content to save into “{doc}” names {what}, which the document does not have.")
         .with("host.rich.duplicate", "The content to save into “{doc}” shows the same note or text box twice.")
         .with("host.rich.fidelity", "“{doc}” was not saved: the new file did not read back the same as what was to be written.")
-        .with("host.rich.locked.block", "“{doc}” was not saved: paragraph or table {block} of the text has parts Fub cannot rewrite without losing them, and it cannot be changed from here.")
-        .with("host.rich.locked.outside", "“{doc}” was not saved: the change touches parts of the file outside the text that Fub cannot rewrite without losing them. Only the paragraphs and tables of the text are saved.")
+        .with("host.rich.locked.block", "paragraph or table {block} of “{doc}” is a closed part: Fub cannot rewrite it without losing something, and it cannot be changed from here.")
+        .with("host.rich.locked.outside", "the change touches parts of “{doc}” outside the text that Fub cannot rewrite without losing them: only the paragraphs and tables of the text are saved.")
         .with("host.rich.codec", "“{doc}” cannot be read or written in its format: {why}")
         .with("host.resource.reuse_with_expected", "“{doc}” was not deposited: reusing a file with the same bytes only applies to a new file, not to overwriting one.")
-        .with("host.xlsx.readonly", "“{doc}” is an Excel workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
-        .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an Excel workbook from changed cells.")
+        .with("host.xlsx.readonly", "“{doc}” is an .xlsx workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
+        .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an .xlsx workbook from changed cells.")
         .with("host.xlsx.journal", "The changed cells to save in “{doc}” cannot be read: {why}")
         .with("host.xlsx.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
         .with("host.xlsx.too_large", "“{doc}” is {bytes} bytes, more than Fub opens.")
-        .with("host.xlsx.not_xlsx", "“{doc}” is not an Excel workbook, even though it has the name of one ({found}).")
-        .with("host.xlsx.codec", "“{doc}” cannot be read as an Excel workbook: {why}")
+        .with("host.xlsx.not_xlsx", "“{doc}” is not an .xlsx workbook, even though it has the name of one ({found}).")
+        .with("host.xlsx.codec", "“{doc}” cannot be read as an .xlsx workbook: {why}")
         .with("xlsx.rewrite.loses", "The workbook was not saved: rewriting it would lose parts of the file that Fub cannot write, so the file stays as it was ({why}).")
         .with("host.grid.protocol", "The grid surface speaks another protocol version: this port does not serve it.")
         .with("host.grid.no_surface", "A grid provider must declare at least one surface.")
@@ -3177,6 +3359,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_PEOPLE_FOLDER_DESC,
             "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
+        .with(C_FILES_TYPES_FOLDER, "Note types folder")
+        .with(
+            C_FILES_TYPES_FOLDER_DESC,
+            "Every note in this folder is a type: its frontmatter gives the icon, the properties and the folder for new notes, its text is the template. Empty, note types are off.",
+        )
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_GROUP_PROFILE, "Profile")
         .with(C_PROFILE_NAME, "Your name")
@@ -3215,6 +3402,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CURSOR_BLINK_DESC, "The editor cursor turns on and off. By default it stays still, so it does not distract while reading.")
         .with(C_EDITOR_SOFT_CURSOR, "Soft cursor")
         .with(C_EDITOR_SOFT_CURSOR_DESC, "In Blocks the cursor glides to its new place instead of jumping there. Never while you type, and never with reduced motion.")
+        .with(C_EDITOR_TYPEWRITER, "Typewriter")
+        .with(C_EDITOR_TYPEWRITER_DESC, "The cursor line stays at half the height of the sheet and the text scrolls under it, like paper in a typewriter. At the top of a short note the text does not move past the start.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")
@@ -3233,10 +3422,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_MINIBAR, "Formatting mini toolbar")
         .with(C_EDITOR_MINIBAR_DESC, "Formatting gestures next to the pointer: above the right-click menu and, if you like, on selected text.")
-        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text with the bar off")
+        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text unless the bar is full")
         .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
         .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
         .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_TOOLBAR, "Formatting toolbar")
+        .with(C_EDITOR_TOOLBAR_DESC, "Above the sheet. Compact: a few fixed buttons, the style and the tools of the block the cursor is in. Full: every button. Hidden: the mini toolbar on selected text remains.")
+        .with(C_EDITOR_TOOLBAR_COMPACT, "Compact")
+        .with(C_EDITOR_TOOLBAR_FULL, "Full")
+        .with(C_EDITOR_TOOLBAR_HIDDEN, "Hidden")
         .with(C_EDITOR_LINK_CLICK, "Clicking a link to a note")
         .with(C_EDITOR_LINK_CLICK_DESC, "What the click that opens a link does: bring the note into the pane, or open it in the peek, over the right of the sheet, where you write without leaving the note you were in. Alt with the click, or Alt Enter, always peeks.")
         .with(C_EDITOR_LINK_CLICK_OPEN, "Opens the note")
@@ -3245,6 +3439,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_HINTS, "Hints row")
         .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
+        .with(C_EDITOR_TYPOGRAPHY, "Italian typography")
+        .with(C_EDITOR_TYPOGRAPHY_DESC, "As you type, quotes become « », two hyphens —, three dots … and the apostrophe ’. It applies to notes in Italian, outside code, formulas and links; Backspace right after puts back what you typed.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
@@ -3253,11 +3449,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
         .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Writing")
         .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Writing shows them too.")
-        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never, as in Word")
+        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Of the element at the cursor")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
         .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_MATH_SOURCE, "Show the LaTeX of formulas")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "On, under the touched formula there is the field with its LaTeX, and you write there; clicking the formula only reaches the empty slots. Off, the formula stays drawn and you edit it by touching it: click where you want to write.")
+        .with(C_EDITOR_MATH_HELP, "Help in the LaTeX of formulas")
+        .with(C_EDITOR_MATH_HELP_DESC, "With “Show the LaTeX of formulas” on. Full: brackets that close themselves, completion after \\, quick writing (a/b, alpha, ->) and the palette. Light: only brackets and completion, the palette on request. Off: the LaTeX you write and its preview, nothing else.")
+        .with(C_EDITOR_MATH_HELP_FULL, "Full")
+        .with(C_EDITOR_MATH_HELP_DISCREET, "Light")
+        .with(C_EDITOR_MATH_HELP_OFF, "Off")
         .with(C_EDITOR_BLOCKS, "Blocks: handles and selection")
         .with(C_EDITOR_BLOCKS_DESC, "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.")
         .with(C_MODE_SOURCE, "Source")
@@ -3420,6 +3623,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(
+            C_REJECTED_TIMEZONE,
+            "“{name}” is not a known time zone. Write an IANA name such as Europe/Rome, \
+             or leave it empty to use the system one.",
+        )
+        .with(
+            C_REJECTED_SERVER_URL,
+            "“{value}” is not a valid server address. Write an https:// address, \
+             or http:// only towards 127.0.0.1, ::1 or localhost; empty means no server.",
         )
         .with(C_GROUP_VIEWER, "Web viewer")
         .with(C_VIEWER_HOSTS, "Approved sites")
@@ -3770,6 +3983,22 @@ mod tests {
         ));
     }
 
+    /// La cartella dei tipi di nota (E5) è del vault, viaggia con lui, e
+    /// parte da `Tipi`.
+    #[test]
+    fn the_types_folder_is_a_vault_text_starting_at_tipi() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == FILES_TYPES_FOLDER)
+            .expect("la cartella dei tipi è fra le impostazioni");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
+        assert_eq!(spec.group, Text::key(C_GROUP_FILES));
+        assert!(matches!(
+            &spec.kind,
+            SettingKind::Text { default } if default == DEFAULT_TYPES_FOLDER
+        ));
+    }
+
     fn map(rows: &[(&str, &str)]) -> BTreeMap<String, String> {
         rows.iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -3923,6 +4152,44 @@ mod tests {
             assert!(matches!(&spec.kind, SettingKind::Toggle { default } if *default == expected));
             assert!(!spec.program_writable);
         }
+    }
+
+    /// La tipografia italiana è della macchina e spenta di serie (D8 A): chi
+    /// non la accende scrive i caratteri della tastiera, e un programma non
+    /// la cambia.
+    #[test]
+    fn typography_is_an_opt_in_machine_toggle_of_the_editor() {
+        let machine = core_machine_settings();
+        let spec = machine
+            .iter()
+            .find(|spec| spec.key == EDITOR_TYPOGRAPHY)
+            .expect("la tipografia fra le impostazioni");
+        assert!(matches!(&spec.kind, SettingKind::Toggle { default: false }));
+        assert_eq!(spec.label, Text::key(C_EDITOR_TYPOGRAPHY));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert!(!spec.program_writable);
+    }
+
+    /// Gli aiuti del LaTeX delle formule sono una scelta della macchina, pieni
+    /// di serie, subito dopo gli interruttori dell'editor (fra cui «Mostra il
+    /// LaTeX»), con le tre misure nell'ordine del riquadro (T63).
+    #[test]
+    fn math_help_is_a_machine_choice_full_by_default() {
+        let machine = core_machine_settings();
+        let spec = machine
+            .iter()
+            .find(|spec| spec.key == EDITOR_MATH_HELP)
+            .expect("gli aiuti delle formule fra le impostazioni");
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("gli aiuti sono una scelta");
+        };
+        assert_eq!(default, "piene");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["piene", "discrete", "spente"]);
+        assert_eq!(spec.label, Text::key(C_EDITOR_MATH_HELP));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert!(!spec.program_writable);
+        assert!(machine.iter().any(|spec| spec.key == EDITOR_MATH_SOURCE));
     }
 
     /// La Live si scrive come in Word se nessuno sceglie altro: i segni si

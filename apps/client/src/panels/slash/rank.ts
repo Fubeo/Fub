@@ -84,3 +84,24 @@ export function rank(entry: { readonly id: string; readonly label: string; reado
   match.score -= 0.3 * ctx.recency(entry.id) + 0.2 * ctx.fits(entry.id);
   return match;
 }
+
+/// L'uso di questa macchina: i preferiti nell'ordine scelto, i recenti dal
+/// più recente.
+export interface SlashUsage {
+  readonly favorites: readonly string[];
+  readonly recent: readonly string[];
+}
+
+/// I più usati, per le tessere in cima al «/»: prima i preferiti, poi ciò che
+/// si è scelto di recente, poi l'ordine scritto (`defaults`), che vale da solo
+/// in un vault nuovo. Soltanto fra le voci `offered` (una voce nascosta, o che
+/// la superficie non sa fare, non c'è e la seguente prende il suo posto),
+/// senza doppioni, al più `count`.
+export function byUse(offered: ReadonlySet<string>, usage: SlashUsage, defaults: readonly string[], count: number): string[] {
+  const out: string[] = [];
+  for (const id of [...usage.favorites, ...usage.recent, ...defaults]) {
+    if (out.length >= count) break;
+    if (offered.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
+}

@@ -28,6 +28,7 @@ vi.mock("../host/query", () => ({ settings: async () => fake.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: () => () => {} }));
 vi.mock("../ui/commands", () => ({
   allCommands: () => [],
+  commandOfKeybindingKey: () => null,
   keybindingKey: (id: string) => id,
   registerComponentRow: () => () => {},
 }));

@@ -8,6 +8,7 @@ import type { EditorSurface } from "../../core/registry";
 import type { EditorChange } from "../../core/text-operation";
 import type { PdfEngine, PdfEngineLoader } from "../../media/pdf-view";
 import type { ResourceTransport } from "../../media/resource-port";
+import structure from "../../../theme/scrittoio/structure.css?raw";
 import { PDF_MODES } from "../modes";
 import { mountPdfSurface, type PdfPorts } from "./surface";
 
@@ -335,6 +336,23 @@ describe("gli strumenti delle annotazioni", () => {
   });
 });
 
+describe("il doppio clic su una nota", () => {
+  it("con la Selezione apre il dialogo della nota, come Invio (IMP-121)", async () => {
+    mount(bando, "bandi/Bando di gara.pdf.fubann", {
+      transport: transportOf({ "bandi/Bando di gara.pdf": "test" }),
+      loader: loaderOf(12),
+    });
+    await loaded("di 12");
+    key("v");
+    // Al centro del testo «Importo da rivedere», due clic vicini.
+    drag([[380, 146]]);
+    drag([[380, 146]]);
+    const dialog = document.querySelector<HTMLElement>(".shell-dialog");
+    expect(dialog?.querySelector("h2")?.textContent).toBe("Modifica la nota");
+    expect(dialog!.querySelector("textarea")!.value).toBe("L'importo a base d'asta è cambiato.\n\nChiedere conferma all'ufficio gare.");
+  });
+});
+
 describe("la Lettura", () => {
   it("elenca le note pagina per pagina, porta alla pagina, e non si scrive", async () => {
     const { surface, changes } = mount(bando, "bandi/Bando di gara.pdf.fubann", {
@@ -362,6 +380,28 @@ describe("la Lettura", () => {
     drag([[10, 10], [60, 10], [110, 12]]);
     expect(changes).toEqual([]);
     expect(surface.selections!()).toBeUndefined();
+  });
+  it("nasconde gli strumenti: la colonna non resta sotto la pagina (IMP-122)", async () => {
+    const style = document.createElement("style");
+    style.textContent = structure;
+    document.head.append(style);
+    // happy-dom tiene lo stile calcolato anche quando cambia un attributo di
+    // un antenato: due superfici, una per modalità, lette una volta sola.
+    const files = { transport: transportOf({ "bandi/Bando di gara.pdf": "test" }), loader: loaderOf(12) };
+    try {
+      const reading = mount(bando, "bandi/Bando di gara.pdf.fubann", files);
+      mount(bando, "bandi/Bando di gara.pdf.fubann", files);
+      await vi.waitFor(() => expect(parent.querySelectorAll(".pdf-canvas")).toHaveLength(2));
+      reading.surface.setMode!("read");
+      const [read, draw] = [...parent.querySelectorAll<HTMLElement>(".pdf-surface")];
+      expect(read!.dataset.mode).toBe("read");
+      expect(getComputedStyle(read!.querySelector(".draw-rail")!).display).toBe("none");
+      expect(getComputedStyle(read!.querySelector(".pdf-pages")!).display).not.toBe("none");
+      expect(draw!.dataset.mode).toBe("draw");
+      expect(getComputedStyle(draw!.querySelector(".draw-rail")!).display).not.toBe("none");
+    } finally {
+      style.remove();
+    }
   });
 });
 

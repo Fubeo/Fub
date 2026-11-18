@@ -133,23 +133,34 @@ describe("l'elenco delle scene", () => {
       expect(long, s.id).toBeLessThanOrEqual(960);
     }
   });
+
+  it("mette in fondo le scene che accendono il tocco", () => {
+    // Acceso, il tocco emulato lascia `(hover: none)` alla pagina per sempre:
+    // una scena col puntatore dopo di lui vedrebbe un telefono.
+    const first = scene.findIndex((s) => s.touch === true);
+    expect(first).toBeGreaterThan(0);
+    expect(scene.slice(first).every((s) => s.touch === true)).toBe(true);
+  });
 });
 
 describe("le baseline", () => {
   // Le scrive solo il runner (su un'altra macchina i caratteri resi non
   // coincidono al pixel), quindi fra una spinta che aggiunge scene e il suo
-  // artefatto la cartella può essere vuota: quello stato è dichiarato qui, non
-  // taciuto, e il rosso lo dà `npm run bench:verify` in CI, che senza
-  // baseline non passa. Ciò che questo presidio non lascia esistere è la via
-  // di mezzo — metà delle foto — che è il modo in cui un insieme smette di
-  // coprire senza che nessuno lo dica.
+  // artefatto una scena nuova non ha ancora foto: quello stato è dichiarato
+  // qui, non taciuto, e il rosso lo dà `npm run bench:verify` in CI, che senza
+  // baseline non passa e fa partire `baseline.yml` (#483: un presidio globale
+  // «tutte o nessuna» faceva cadere anche il client, e il bot non committava).
+  // Ciò che questo presidio non lascia esistere è la via di mezzo dentro una
+  // scena — una luce sì e l'altra no — che è il modo in cui una scena smette
+  // di coprire senza che nessuno lo dica.
   const expected = scene.flatMap((s) => lights.map((l) => foto(s, l)));
 
-  it("ci sono tutte, o non ce n'è ancora nessuna", () => {
-    const present = expected.filter((n) => baseline.includes(n));
-    expect([0, expected.length], `ne mancano ${expected.length - present.length} su ${expected.length}`).toContain(
-      present.length,
-    );
+  it("ogni scena ha le foto di tutte le luci, o non ne ha ancora nessuna", () => {
+    const halves = scene
+      .map((s) => ({ id: s.id, present: lights.filter((l) => baseline.includes(foto(s, l))).length }))
+      .filter(({ present }) => present !== 0 && present !== lights.length)
+      .map(({ id }) => id);
+    expect(halves, "una scena con una luce sola: l'altra va fotografata dal runner").toEqual([]);
   });
 
   it("non ne avanza nessuna senza la sua scena", () => {

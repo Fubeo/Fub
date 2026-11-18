@@ -1,0 +1,732 @@
+/* ── La formula che si modifica toccandola ───────────────────────────────
+   (T60, E27; il prototipo `.mx.vis`, `.mxpop`, `.mblk`.) Una formula in
+   riga toccata apre sotto di sé un riquadro di 392 px con la formula grande
+   e il cursore dentro; un blocco `$$` si modifica sul posto, col bordo
+   d'accento. Il campo che prende i tasti non si vede: il LaTeX resta del
+   file. Una formula con un errore mostra invece il suo LaTeX, in un campo a
+   vista, con sotto che cosa non va (T64). I segni del cursore li mette KaTeX
+   (`math/caret.ts`). */
+
+/* Il riquadro sotto la formula in riga: largo quanto il prototipo, mai più
+   largo della finestra (al telefono resta un margine per parte). */
+.kit-popover.cm-fub-mx-popover {
+  width: 392px;
+  max-width: calc(100vw - 16px);
+  padding: 0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.cm-fub-mx {
+  position: relative;
+  display: grid;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* La formula grande, dove si scrive. */
+.cm-fub-mx-surface {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  padding: 22px 44px 22px 22px;
+  border-radius: 14px;
+  background: var(--sheet-2);
+  color: var(--text);
+  font-size: 22px;
+  overflow-x: auto;
+  cursor: text;
+  transition: box-shadow 0.12s, opacity 0.18s;
+}
+.cm-fub-mx:focus-within .cm-fub-mx-surface {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Il TeX nuovo non si legge ancora: l'ultima resa buona resta, attenuata. */
+.cm-fub-mx-surface[data-state="stale"] {
+  opacity: 0.45;
+}
+/* Non c'è ancora niente da disegnare (il LaTeX di una formula rotta). */
+.cm-fub-mx-surface[data-state="empty"] {
+  display: none;
+}
+.cm-fub-mx-surface .katex {
+  font-size: 1.12em;
+}
+.cm-fub-mx-surface .katex-display {
+  margin: 0;
+}
+
+/* Il cursore: un filo d'accento davanti al segno del punto in cui si è.
+   Non lampeggia, come il cursore delle note di serie. */
+.cm-fub-mx-surface .cm-fub-mx-caret {
+  border-left: 1.5px solid var(--accent);
+  margin-left: -1.5px;
+}
+/* Gli spazi vuoti sono quadretti; quello in cui si è prende l'accento. */
+.cm-fub-mx-surface [data-fubhole] {
+  color: var(--muted);
+}
+.cm-fub-mx-surface [data-fubhole].cm-fub-mx-caret {
+  color: var(--accent);
+}
+/* Nel testo il quadretto non si scrive: lo disegna il filo attorno. */
+.cm-fub-mx-surface .text [data-fubhole],
+.cm-fub-mx-surface .mord.text [data-fubhole] {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.7em;
+  border: 1px solid currentColor;
+  vertical-align: -0.05em;
+}
+/* Il comando che si scrive per nome, finché non è finito. */
+.cm-fub-mx-surface [data-fubcmd] {
+  padding: 0 0.2em;
+  border-radius: 4px;
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.cm-fub-mx-placeholder {
+  margin-left: 6px;
+  color: var(--muted);
+  font-family: var(--font-reading, serif);
+  font-size: 14px;
+  font-style: italic;
+}
+
+/* Le proposte dei simboli (T61; il prototipo `.mx-ac`): `\` e le prime
+   lettere mostrano sotto la formula al più cinque simboli, disegnati, col
+   nome nella lingua di chi scrive; il comando non si vede. ↑ ↓ scelgono,
+   Invio, Tab o lo spazio mettono. */
+.cm-fub-mx-symbols {
+  margin: 0 8px 8px;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+.cm-fub-mx-symbols[hidden] {
+  display: none;
+}
+.cm-fub-mx-symbol {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+.cm-fub-mx-symbol-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  color: var(--text);
+  font-size: 13px;
+}
+.cm-fub-mx-symbol-glyph .katex {
+  font-size: 1em;
+}
+.cm-fub-mx-symbol-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-mx-symbol[aria-selected="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* Col LaTeX a vista la proposta dice anche il suo comando (T63). */
+.cm-fub-mx-symbol-code {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-code {
+  color: var(--accent-soft);
+}
+/* Nel blocco le proposte stanno sotto la formula, larghe come il riquadro
+   della formula in riga. */
+.cm-fub-mx-block .cm-fub-mx-symbols {
+  width: min(392px, 100%);
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+/* La tavolozza (T62; il prototipo `.mx-pal`, `.mx-quick`, `.mx-s`,
+   `.mx-all`, `.mx-full`, `.mx-find`, `.mx-tabs`, `.mx-grid`, `.mx-tip`):
+   sotto la formula gli otto pezzi più usati e «Tutti», che apre la ricerca,
+   i sette gruppi e la griglia; in fondo il nome del simbolo sotto il
+   puntatore. Con «Tutti» aperto il riquadro cresce verso il basso. */
+.cm-fub-mx-palette {
+  /* Il nome in fondo non allarga il riquadro: si taglia. */
+  min-width: 0;
+  border-top: 1px solid var(--border);
+}
+/* Una formula che non si legge non ha la tavolozza; col campo del LaTeX la
+   decidono gli aiuti (T63): coi discreti si apre a richiesta, con gli
+   spenti non c'è. */
+.cm-fub-mx[data-mode="latex"] .cm-fub-mx-palette,
+.cm-fub-mx[data-help="spente"] .cm-fub-mx-palette,
+.cm-fub-mx[data-help="discrete"]:not([data-palette="open"]) .cm-fub-mx-palette {
+  display: none;
+}
+/* Sopra la tavolozza la formula ha gli angoli in basso dritti. */
+.cm-fub-mx-popover .cm-fub-mx[data-mode="visual"] .cm-fub-mx-surface {
+  border-radius: 14px 14px 0 0;
+}
+.cm-fub-mx-quick {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+}
+.cm-fub-mx-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background var(--duration-state), transform var(--duration-state);
+}
+.cm-fub-mx-tile:hover,
+.cm-fub-mx-tile:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-mx-tile:active {
+  transform: scale(0.93);
+}
+.cm-fub-mx-tile .katex,
+.cm-fub-mx-group .katex {
+  font-size: 1em;
+}
+.cm-fub-mx-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-all:hover,
+.cm-fub-mx-all[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* La freccia guarda in giù, e in su con «Tutti» aperto. */
+.cm-fub-mx-all-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  transform: rotate(180deg);
+  transition: transform var(--duration-fast);
+}
+.cm-fub-mx-all[aria-expanded="true"] .cm-fub-mx-all-icon {
+  transform: none;
+}
+.cm-fub-mx-full {
+  padding: 0 8px 8px;
+}
+.cm-fub-mx-full[hidden] {
+  display: none;
+}
+/* Il campo di ricerca: la scatola e il suo anello sono dell'`input`, che ha
+   il fuoco; la lente gli sta sopra, a sinistra. */
+.cm-fub-mx-find {
+  position: relative;
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+.cm-fub-mx-find-icon {
+  position: absolute;
+  top: 8px;
+  left: 9px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.cm-fub-mx-find-input {
+  display: block;
+  width: 100%;
+  height: 30px;
+  min-height: 0;
+  padding: 0 9px 0 31px;
+  border: 0;
+  border-radius: 8px;
+  outline: none;
+  background: var(--sheet-2);
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+}
+.cm-fub-mx-find-input::placeholder {
+  color: var(--muted);
+}
+/* L'anello del prototipo, dentro la scatola: niente alone dei campi. */
+.cm-fub-mx-find-input:focus,
+.cm-fub-mx-find-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-mx-groups {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.cm-fub-mx-group {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cm-fub-mx-group:hover {
+  background: var(--overlay-hover);
+}
+.cm-fub-mx-group[aria-selected="true"] {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+/* Mentre si cerca, la griglia non è del gruppo scelto. */
+.cm-fub-mx-searching .cm-fub-mx-group[aria-selected="true"] {
+  background: none;
+  color: var(--muted);
+}
+.cm-fub-mx-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  align-content: start;
+  min-height: 70px;
+}
+.cm-fub-mx-grid .cm-fub-mx-tile {
+  width: auto;
+}
+.cm-fub-mx-none {
+  grid-column: 1 / -1;
+  padding: 16px 4px;
+  color: var(--muted);
+}
+.cm-fub-mx-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.cm-fub-mx-tip-name {
+  color: var(--text);
+  font-weight: 600;
+}
+/* Il comando (col LaTeX a vista) e la scrittura veloce del simbolo (T63). */
+.cm-fub-mx-tip-code {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.cm-fub-mx-tip-quick kbd {
+  font-size: 11px;
+}
+/* Nel blocco la tavolozza sta in una scheda sotto la formula. */
+.cm-fub-mx-block .cm-fub-mx-palette {
+  margin-top: 8px;
+  border-top: 0;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 13px;
+}
+
+/* Il campo che prende i tasti: dentro la formula, invisibile, perché l'IME
+   e il lettore di schermo abbiano un campo vero. */
+.cm-fub-mx-input {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Una formula con un errore: il LaTeX a vista, sotto la resa. */
+.cm-fub-mx[data-mode="latex"] .cm-fub-mx-surface {
+  cursor: default;
+  border-radius: 14px 14px 0 0;
+}
+.cm-fub-mx[data-mode="latex"]:focus-within .cm-fub-mx-surface {
+  box-shadow: none;
+}
+.cm-fub-mx-latex {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 7px;
+  outline: none;
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  overflow: hidden;
+}
+.cm-fub-mx-latex:focus,
+.cm-fub-mx-latex:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Col fuoco da tastiera il prototipo arrotonda a 6 px, come ogni anello. */
+.cm-fub-mx-latex:focus-visible {
+  border-radius: 6px;
+}
+.cm-fub-mx-latex::placeholder {
+  color: var(--muted);
+  font-family: var(--font-ui);
+}
+.cm-fub-mx-note {
+  margin: 0 10px 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Che cosa non va nel LaTeX (T64, E27; il prototipo `.mx-err`): sotto il
+   campo, dopo una pausa, una frase in chiaro su un vassoio, e la correzione
+   in un pulsante d'accento quando è una sola. */
+.cm-fub-mx-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--sheet-2);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.cm-fub-mx-error[hidden] {
+  display: none;
+}
+.cm-fub-mx-error-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cm-fub-mx-error code {
+  padding: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: normal;
+}
+.cm-fub-mx-error-fix {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--sheet);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-error-fix:hover {
+  background: color-mix(in oklch, var(--accent) 88%, var(--text));
+}
+.cm-fub-mx-error-fix:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Nel blocco la frase sta sotto il campo, larga quanto lui. */
+.cm-fub-mx-block .cm-fub-mx-error {
+  margin: 8px 0 0;
+}
+
+/* ── «Mostra il LaTeX» e le tre misure di aiuto ───────────────────────────
+   (T63, E27; il prototipo `.mx-prev`, `.mx-row`, `.mx-tex`, `.mx-more`,
+   `.mx-opts`, `.seg2`.) Sopra la resa della formula, sotto la fila col campo
+   del LaTeX, il pulsante della tavolozza (coi discreti) e i tre puntini; i
+   tre puntini aprono «Mostra il LaTeX» e gli aiuti. Nella formula che si
+   tocca la fila sta in cima a destra e ha soltanto i tre puntini. */
+.cm-fub-mx-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 8px 8px 10px;
+}
+.cm-fub-mx[data-mode="visual"] .cm-fub-mx-row {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 0;
+}
+.cm-fub-mx-more {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cm-fub-mx-more > svg {
+  width: 16px;
+  height: 16px;
+}
+.cm-fub-mx-more:hover,
+.cm-fub-mx-more[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-mx-more:focus-visible,
+.cm-fub-mx-palette-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Sotto un blocco toccato i tre puntini chiudono la fila dei pezzi. */
+.cm-fub-mx-quick .cm-fub-mx-more {
+  margin-left: 2px;
+}
+/* La tavolozza a richiesta, con gli aiuti discreti. */
+.cm-fub-mx-palette-toggle {
+  flex: none;
+  height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-palette-toggle[hidden] {
+  display: none;
+}
+.cm-fub-mx-palette-toggle:hover,
+.cm-fub-mx-palette-toggle[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-fub-mx-options {
+  display: grid;
+  gap: 6px;
+  padding: 2px 10px 10px;
+}
+.cm-fub-mx-options[hidden] {
+  display: none;
+}
+.cm-fub-mx[data-mode="visual"] .cm-fub-mx-options {
+  padding-top: 10px;
+}
+.cm-fub-mx-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.cm-fub-mx-option-name {
+  flex: 1;
+  min-width: 0;
+}
+/* La scelta: un vassoio, e la parte premuta è un foglio rialzato. */
+.cm-fub-mx-segments {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.cm-fub-mx-segment {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cm-fub-mx-segment:hover {
+  color: var(--text);
+}
+.cm-fub-mx-segment[aria-pressed="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.cm-fub-mx-segment:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Col campo la formula sopra è la sua anteprima: più bassa, e il clic porta
+   soltanto agli spazi vuoti. */
+.cm-fub-mx[data-mode="source"] .cm-fub-mx-surface {
+  min-height: 76px;
+  padding: 16px;
+  font-size: 20px;
+  cursor: default;
+}
+.cm-fub-mx[data-mode="source"]:focus-within .cm-fub-mx-surface {
+  box-shadow: none;
+}
+.cm-fub-mx[data-mode="source"] .cm-fub-mx-surface [data-fubhole] {
+  cursor: pointer;
+}
+.cm-fub-mx-popover .cm-fub-mx[data-mode="source"] .cm-fub-mx-surface {
+  border-radius: 14px 14px 0 0;
+}
+
+/* Il blocco `$$` toccato, sul posto: la formula col bordo d'accento. */
+.cm-editor .cm-content .cm-fub-mx-block {
+  margin: 14px 0;
+}
+.cm-fub-mx-block .cm-fub-mx {
+  font-size: inherit;
+}
+.cm-fub-mx-block .cm-fub-mx-surface {
+  min-height: 0;
+  padding: 12px 8px;
+  border-radius: 10px;
+  font-size: inherit;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cm-fub-mx-block .cm-fub-mx:not([data-mode="visual"]) .cm-fub-mx-row {
+  padding: 8px 0 0;
+}
+.cm-fub-mx-block .cm-fub-mx-note {
+  margin: 6px 0 0;
+}
+/* Col campo il blocco è l'anteprima: niente bordo d'accento, che sta sul
+   campo col fuoco. */
+.cm-fub-mx-block .cm-fub-mx[data-mode="source"] .cm-fub-mx-surface {
+  min-height: 0;
+  padding: 12px 8px;
+  font-size: inherit;
+  box-shadow: none;
+}
+/* Le opzioni del blocco in una scheda sotto la formula, come la tavolozza. */
+.cm-fub-mx-block .cm-fub-mx-options {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+/* Nella frase, la formula che si sta modificando. */
+.cm-editor .cm-content .cm-fub-math.cm-fub-math-on {
+  border-radius: 5px;
+  background: var(--accent-wash);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+@media (forced-colors: active) {
+  .cm-fub-mx-surface .cm-fub-mx-caret {
+    border-left-color: Highlight;
+  }
+  .cm-fub-mx:focus-within .cm-fub-mx-surface,
+  .cm-fub-mx-block .cm-fub-mx-surface {
+    outline: 1px solid Highlight;
+  }
+  .cm-fub-mx-symbol[aria-selected="true"],
+  .cm-fub-mx-group[aria-selected="true"],
+  .cm-fub-mx-segment[aria-pressed="true"] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+  .cm-fub-mx-error {
+    outline: 1px solid CanvasText;
+  }
+  .cm-fub-mx-error-fix {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Al telefono il riquadro prende tutta la larghezza, meno un margine per
+   parte, e la griglia ha otto colonne. */
+@media (max-width: 620px) {
+  .kit-popover.cm-fub-mx-popover {
+    width: calc(100vw - 16px);
+  }
+  .cm-fub-mx-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  /* I pezzi si stringono prima che «Tutti» esca dalla fila. */
+  .cm-fub-mx-quick .cm-fub-mx-tile {
+    flex: 0 1 34px;
+    min-width: 0;
+  }
+}
+/* Sul telefono i bottoni sono alti 44 px: le tessere lo restano, per il
+   dito, ma non si allargano a 44, che porterebbe «Tutti» fuori dalla fila e
+   le colonne della griglia una sull'altra. */
+:root[data-client-shell="mobile"] .cm-fub-mx-tile {
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-fub-mx-tile,
+  .cm-fub-mx-all-icon {
+    transition: none;
+  }
+  .cm-fub-mx-tile:active {
+    transform: none;
+  }
+}

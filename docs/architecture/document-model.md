@@ -255,11 +255,33 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   buffer: per la sessione è un cambio da fuori come un altro. Il testo della
   persona resta, la nota dice che il file è cambiato sul disco, e il
   salvataggio successivo va in conflitto invece di coprire la versione
-  ripristinata.
+  ripristinata. Il ripristino scrive il disco dal kernel, non il buffer di un
+  editor: Ctrl+Z nel testo non lo annulla. Il testo di prima resta però una
+  versione (la fotografia prima della scrittura), e la Cronologia lo rimette
+  come ogni altra.
+- **Una rinomina, da questa finestra o da fuori.** La sessione cambia nome e
+  tiene buffer, bozza e salvataggio in attesa. Un riquadro che mostra il
+  documento con una superficie di testo (Markdown o testo semplice) che regge
+  il nome nuovo (stessa estensione, nessun componente) non la rimonta:
+  `followRenameInPanes` in `state/document-controller.ts` passa la superficie
+  alla scheda col nome nuovo e la riattacca alla sessione, così fuoco,
+  cursore, annulla e scorrimento restano. Le altre superfici si rimontano.
+- **Una cancellazione da fuori con testo non salvato.** La sessione si chiude,
+  il testo va in bozza e il riquadro offre «Ricrea la nota». Ricreata la nota
+  col testo, la bozza se ne va (`discardRemovedDraft`, dopo che la sua
+  scrittura è finita): alla riapertura non c'è un conflitto con un disco che
+  le è uguale. Se la scrittura del file fallisce, la bozza resta. Si scarta
+  soltanto la bozza che tiene il testo ricreato: una sessione riaperta sull'id
+  si prende la bozza (la voce della rimozione se ne va), e un «Ricrea» rimasto
+  su un avviso di prima non tocca la bozza di una rimozione più nuova.
 - **La scrittura annunciata di un comando.** Chi lancia un comando che
   riscrive un documento aperto (un gesto della barra di una Base con
   `base.view.set`) lo annuncia prima con `expectWrite(id)`, e ritira
-  l'annuncio se il comando non scrive. Il primo evento dell'utente su quel
+  l'annuncio se il comando non scrive. Un'azione di una view dichiarata (una
+  proprietà cambiata dall'ispettore, una versione ripristinata) annuncia la
+  nota a fuoco (`ui/views.ts`) e, alla risposta, ne accorcia la scadenza a
+  1,5 s (`withdraw(graceMs)`), perché non sa se ha scritto e l'evento può
+  arrivare dopo la risposta. Il primo evento dell'utente su quel
   documento (non l'eco di un salvataggio in volo) lo consuma: a buffer pulito
   la sessione ricarica e l'esito è `reloaded` con `quiet`, che il controller
   non dice; a buffer sporco vale la regola di sempre. Un evento di un'altra
@@ -267,6 +289,17 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
   dopo averlo messo in bozza: se la bozza non si scrive restituisce
   `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.
+- **Lo scarto nella finestra del documento a parte.** Quando un testo della
+  finestra non entra nella sessione, la finestra offre «Conserva le mie
+  modifiche» e «Scarta le modifiche locali». Lo scarto si conferma nella
+  pagina, in due tempi (la finestra non ha IPC né dialoghi di sistema): la
+  prima pressione chiede alla finestra principale se il testo resterà nella
+  Cronologia (`keep-probe`) e lo dice, la seconda («Sì, scarta») glielo manda
+  (`keep`). La principale lo conserva con la regola di «Usa la versione su
+  disco» (`state/conflict-keep.ts`, `setDocumentWindowKeeper` in
+  `state/document-bridge.ts`), e la finestra scarta soltanto dopo `kept`; un
+  `keep-failed`, o nessuna risposta, non scarta niente e la finestra dice
+  perché.
 
 ## Invarianti
 

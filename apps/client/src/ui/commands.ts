@@ -90,7 +90,10 @@ export interface ShellCommand {
   /// (0081). Un comando nuovo non compila finché non si dichiara di là.
   id: ShellCommandId;
   title: Key;
-  description: Key;
+  /// La frase sotto il titolo. Una funzione quando la frase dipende da com'è
+  /// adesso (`shell.doc.conflict.theirs`: il testo resta nella Cronologia
+  /// soltanto se c'è): si legge ogni volta che la palette chiede i comandi.
+  description: Key | (() => Key);
   layer: CommandLayer;
   available?: () => boolean;
   run: () => void | Promise<void>;
@@ -634,7 +637,7 @@ export function allCommands(): CommandEntry[] {
     .map((command) => ({
       id: command.id,
       title: t(command.title),
-      description: t(command.description),
+      description: t(typeof command.description === "function" ? command.description() : command.description),
       layer: command.layer,
       // La stessa riga dei comandi del kernel, e da questa voce lo è per davvero
       // (§16.3): l'accordo riconfigurato se c'è, il dichiarato se no.
@@ -660,6 +663,9 @@ export interface KeyChord {
   metaKey: boolean;
   shiftKey: boolean;
   altKey: boolean;
+  /// Il tasto fisico (`KeyboardEvent.code`): serve solo a dare un nome ai
+  /// tasti che la WebView passa come `Unidentified` (`namedKey`).
+  code?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -851,9 +857,29 @@ export function keyboardPlatform(platform: string): KeyboardPlatform {
   return /Mac|iPhone|iPad|iPod/i.test(platform) ? "mac" : "other";
 }
 
+/// I tasti con nome che WebKitGTK può passare come `Unidentified`: Maiusc+Tab
+/// arriva da GTK come `ISO_Left_Tab`, e la WebView lo dà con
+/// `key === "Unidentified"` e `code === "Tab"`, Ctrl compreso — così
+/// `Ctrl-Shift-Tab` non arrivava mai al suo comando (IMP-050; per la griglia
+/// IMP-029, `editors/grid/shortcuts.ts`). Per questi il tasto fisico dice
+/// quale è.
+const NAMED_BY_CODE: Readonly<Record<string, string>> = {
+  Tab: "tab",
+  Enter: "enter",
+  NumpadEnter: "enter",
+  Escape: "escape",
+};
+
+/// Il nome del tasto premuto, minuscolo, con `Unidentified` riletto dal tasto
+/// fisico quando è uno di quelli con nome.
+function namedKey(e: KeyChord): string {
+  if (e.key === "Unidentified" && e.code !== undefined) return NAMED_BY_CODE[e.code] ?? "unidentified";
+  return e.key.toLowerCase();
+}
+
 function pressedChord(e: KeyChord, platform: KeyboardPlatform = "any"): Chord {
   return sameKeyOnEveryLayout({
-    key: e.key.toLowerCase(),
+    key: namedKey(e),
     mod: platform === "mac" ? e.metaKey : platform === "other" ? e.ctrlKey : e.ctrlKey || e.metaKey,
     ctrl: platform === "mac" && e.ctrlKey,
     shift: e.shiftKey,
@@ -1146,8 +1172,9 @@ export function advance(
   e: KeyChord,
   platform: KeyboardPlatform = "any",
 ): ResultKeys {
-  if (MODIFIER_KEYS.has(e.key.toLowerCase())) return { type: "passa" };
-  if (waiting && e.key === "Escape") return { type: "annulla" };
+  const key = namedKey(e);
+  if (MODIFIER_KEYS.has(key)) return { type: "passa" };
+  if (waiting && key === "escape") return { type: "annulla" };
   if (platform === "other" && e.metaKey) {
     return waiting ? { type: "annulla" } : { type: "passa" };
   }

@@ -33,9 +33,9 @@ Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
   colonna (`Ctrl+Maiusc+Invio`), anche dalla scheda **Inserisci**;
-- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo (web o
-  posta) e lo mettono sulla selezione, sul link al cursore o, senza
-  selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
+- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo
+  (web o posta) e lo mettono sulla selezione, sul link al cursore o su un
+  testo nuovo; dallo stesso modulo un link si toglie anche dal file;
 - grassetto, corsivo e barrato dal gruppo **Carattere** di **Home**;
 - l'aspetto del carattere dallo stesso gruppo: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
@@ -60,7 +60,10 @@ Si modificano:
 - le tabelle: una nuova dal pulsante **Tabella** di **Inserisci**, scegliendo
   righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
   del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
-  colonne uguali e con i bordi.
+  colonne uguali e con i bordi. In un documento che si scrive soltanto nel
+  corpo (parti chiuse, «Solo il testo») gli stili del file non cambiano: se
+  il file non ha già lo stile «Griglia tabella», la tabella nuova ne prende i
+  bordi come formattazione sua, e si salva come ogni paragrafo.
   Righe e colonne si aggiungono, si spostano e si tolgono dalla scheda
   **Tabella** o con le scorciatoie della tabella Markdown; una colonna nuova
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
@@ -90,7 +93,15 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
   oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
   prende l'aspetto del primo carattere sostituito, e **Sostituisci tutto** è
-  una battuta sola, che si annulla in una volta;
+  una battuta sola, che si annulla in una volta. Dopo un gesto della barra,
+  o delle schede Commenti e Revisioni del pannello, `Ctrl+Z` e `Ctrl+Y`
+  annullano e ripetono nel documento anche col fuoco sul pulsante; dentro
+  una casella (Trova, Sostituisci con, il nome) restano della casella. Nella
+  scheda Revisioni il fuoco non esce col pulsante premuto: dopo **Accetta** o
+  **Rifiuta** passa allo stesso pulsante della voce che prende il posto di
+  quella risolta (o di quella prima, se era l'ultima), dopo **Accetta tutte**
+  o **Rifiuta tutte** all'interruttore **Registra le modifiche**, e senza
+  interruttore all'elenco, così `Ctrl+Z` annulla subito da lì;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
   spazi, un oggetto separa senza contare, il testo delle note non conta;
@@ -122,8 +133,9 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   inserito si toglie davvero, e un tratto battuto di seguito resta una
   modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
   spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
-  accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
-  così, non più in sola lettura;
+  accettare e rifiutare restano liberi. Senza un autore la revisione nuova
+  si scrive come fa Word, con l'autore «Unknown». Un `.docx` che registra
+  già si apre così, non più in sola lettura;
 - **Pagina** in un `.docx` cambia la pagina della sezione dove sta il
   cursore: la dimensione della carta (quelle di Word), l'orientamento, i
   margini (già pronti o in centimetri) e le colonne. Una pagina girata tiene
@@ -144,7 +156,8 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
   mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
   pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
-  legge ma si modifica in Word. Mentre si registra non si cambiano;
+  legge ma qui non si può ancora modificare. Mentre si registra non si
+  cambiano;
 - **Sommario** in un `.docx` mette prima del paragrafo del cursore il
   sommario dei titoli fino al terzo livello, o rifà quello già messo da Fub
   con i titoli di adesso. I numeri di pagina li calcola Word aprendo il file.
@@ -180,7 +193,9 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
 
 - un **paragrafo o una tabella** che la riscrittura non porterebbe intero
   resta com'è nel file, segnato, e da Fub non si cambia: lo si può spostare
-  intero, ma non scriverci dentro né toglierlo. Il chip accanto al percorso
+  intero, ma non scriverci dentro né toglierlo. Chi ci prova (una lettera,
+  un a capo, una cancellazione) lo legge in un avviso, uno solo finché
+  riprova senza fermarsi per qualche secondo. Il chip accanto al percorso
   dice quante parti restano come sono («2 parti chiuse»); il suo riquadro le
   elenca, con la pagina e un «Vai» per ciascuna, e il resto del testo si
   scrive;
@@ -212,7 +227,9 @@ uguale a ciò che si voleva scrivere non scrive, e il testo resta nel buffer;
 lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
 parte che l'utente non ha toccato, che duplicherebbe un'immagine o
 lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
-di 256 MiB non si apre; uno molto lungo (centomila paragrafi) si apre in
+di 256 MiB non si apre, e neppure uno vuoto o rotto: la scheda lo dice in
+una frase, e i pannelli accanto restano in piedi (le statistiche dicono che
+non c'è niente da contare); uno molto lungo (centomila paragrafi) si apre in
 qualche secondo, senza fermare l'interfaccia.
 
 Limiti attuali:
@@ -286,10 +303,10 @@ Lettura la barra non c'è. F6 vale anche per gli altri fogli, che sono una zona
 sola; la scorciatoia si cambia in Preferenze come le altre.
 
 Il formato si vede prima di aprire: nell'albero, nelle schede e nel
-lanciatore un documento di Word, un OpenDocument, un foglio di calcolo e un
+lanciatore un documento .docx, un OpenDocument, un foglio di calcolo e un
 disegno hanno ciascuno la sua icona, diversa dal foglietto di una nota. Accanto
-al percorso, nella testata del foglio, un'etichetta dice **WORD**, **ODT**,
-**RTF** o **EXCEL**. La specie viene dall'estensione (`ui/format-kind.ts`);
+al percorso, nella testata del foglio, un'etichetta dice **DOCX**, **ODT**,
+**RTF** o **XLSX**. La specie viene dall'estensione (`ui/format-kind.ts`);
 quale formato apre il file lo decide sempre il backend.
 
 **Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
@@ -352,7 +369,8 @@ gli stessi limiti. Il codec non porta la sua pagina, quindi in Pagina sta su
 un A4 con i margini di 2 cm, che il riquadro **Pagina** dice senza
 cambiarli; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
-bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
+bordo sottile (`FubC…`), ognuna col suo paragrafo anche vuoto, come in
+LibreOffice: riaperta, è quella salvata. Le colonne si aggiungono o si
 tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
 uniscono o si dividono soltanto in una tabella senza celle unite in altezza;
 altrimenti il salvataggio lo rifiuta e il testo resta nel buffer. Il
@@ -391,7 +409,7 @@ apre.
 ## Esportare una copia
 
 **Esporta una copia** (`rich.export-copy`, dalla palette) scrive un documento
-di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o Word XML
+di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o XML
 (un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
 Il documento non si tocca: la copia arriva nell'attività e si salva dove si
 vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un

@@ -877,6 +877,71 @@ describe("controlli statici e righe valide", () => {
     expect(host.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
   });
 
+  // IMP-108, IMP-112: «Aggiungi» delle proprietà e «Salva» delle query sono
+  // form i cui campi non hanno un'azione propria. Il form li manda tutti
+  // all'invio (`UiKind::Form`), quindi devono potersi scrivere: disabilitati,
+  // l'invio partiva sempre con chiave e nome vuoti.
+  const addForm = (extra: UiNode[] = []): UiNode =>
+    ({
+      node: "form",
+      submit_label: "Aggiungi",
+      submit: { action: "add", payload: null },
+      children: [
+        { node: "text_input", field: "new_key", label: "Chiave", value: "", placeholder: null, action: null },
+        {
+          node: "stack", dir: "row", gap: 4, children: [
+            { node: "text_area", field: "note", label: null, value: "", rows: 2, action: null },
+            { node: "radio", field: "r", label: null, value: null, options: [{ label: "A", value: "a" }], action: null },
+          ],
+        },
+        ...extra,
+      ],
+    }) as UiNode;
+
+  it("dentro un form un campo senza azione si può scrivere, anche annidato e dopo un ridisegno", () => {
+    const host = mount(addForm());
+    const controls = () => [...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")];
+    expect(controls()).toHaveLength(3);
+    for (const control of controls()) expect(control.disabled, control.outerHTML).toBe(false);
+    // Il riuso del riconciliatore passa da `applyField` e non deve rimettere `disabled`.
+    mountTree(host, addForm([
+      { node: "text_input", field: "new_value", label: "Valore", value: "", placeholder: null, action: null },
+    ] as UiNode[]), async () => {});
+    expect(controls()).toHaveLength(4);
+    for (const control of controls()) expect(control.disabled, control.outerHTML).toBe(false);
+  });
+
+  it("l'invio del form manda ciò che si è scritto nei suoi campi", async () => {
+    const seen: FieldValue[][] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, addForm(), async (_action, fields) => {
+      seen.push(fields);
+    });
+    const key = host.querySelector<HTMLInputElement>('[data-field="new_key"] input')!;
+    key.value = "stato";
+    host.querySelector<HTMLButtonElement>(".ui-submit")!.click();
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toContainEqual({ field: "new_key", value: { type: "text", value: "stato" } });
+  });
+
+  it("un campo patchato dentro un form resta scrivibile, uno patchato fuori resta disabilitato", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const field = (key: string): UiNode =>
+      ({ node: "text_input", field: key, label: null, value: "", placeholder: null, action: null, key }) as UiNode;
+    mountTree(host, {
+      node: "stack", dir: "column", gap: 0, children: [
+        { node: "form", submit_label: "Vai", submit: { action: "vai", payload: null }, children: [field("dentro")] },
+        field("fuori"),
+      ],
+    } as UiNode, async () => {});
+    expect(patchTree(host, "dentro", { ...field("dentro"), node: "text_area", rows: 2 } as UiNode)).toBe(true);
+    expect(patchTree(host, "fuori", field("fuori"))).toBe(true);
+    expect(host.querySelector<HTMLTextAreaElement>('[data-field="dentro"] textarea')!.disabled).toBe(false);
+    expect(host.querySelector<HTMLInputElement>('[data-field="fuori"] input')!.disabled).toBe(true);
+  });
+
   it("una riga senza celle resta una riga HTML valida", () => {
     const host = mount({ node: "row", cells: [], action: null } as UiNode);
     expect(host.querySelectorAll("tr > td")).toHaveLength(1);
@@ -918,6 +983,103 @@ describe("le voci di una lista", () => {
     } as UiNode, vi.fn());
     const inner = host.querySelector<HTMLElement>(".ui-list-item")!;
     expect(inner.getAttribute("role")).toBe("button");
+  });
+});
+
+describe("il secondo clic di un doppio clic (IMP-103)", () => {
+  const row = (doc: string): UiNode =>
+    ({
+      node: "list_item",
+      title: doc,
+      subtitle: null,
+      action: { action: "open", payload: { doc } },
+      selected: false,
+      key: `${doc}#0`,
+    }) as UiNode;
+  const list = (...docs: string[]): UiNode => ({ node: "list", items: docs.map(row) }) as UiNode;
+
+  /// Una pressione del mouse con il suo clic, come li manda il browser: la
+  /// seconda di un doppio clic porta `detail` 2.
+  function press(el: HTMLElement, detail: number): { mousedown: boolean; click: boolean } {
+    const mousedown = el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail }));
+    const click = el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail }));
+    return { mousedown, click };
+  }
+
+  it("il secondo clic sulla voce scivolata sotto il puntatore non apre niente", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      const doc = (a.payload as { doc: string }).doc;
+      opened.push(doc);
+      // Il primo clic apre la nota, e il pannello si ridisegna con le voci
+      // della nota nuova: al posto della voce cliccata ce n'è un'altra.
+      if (doc === "Nota B.md") mountTree(host, list("Indice.md"), onAction);
+    };
+    mountTree(host, list("Nota B.md"), onAction);
+    press(host.querySelector<HTMLElement>(".ui-list-item")!, 1);
+    const slid = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(slid.textContent).toContain("Indice.md");
+    const second = press(slid, 2);
+    expect(opened).toEqual(["Nota B.md"]);
+    // La pressione non sposta nemmeno il fuoco: resta dove l'ha messo il primo.
+    expect(second.mousedown).toBe(false);
+  });
+
+  /// Fra due pressioni l'azione della prima torna (`aria-busy` si toglie),
+  /// come fra i 180 ms di un doppio clic vero.
+  const settle = (el: HTMLElement) => vi.waitFor(() => expect(el.hasAttribute("aria-busy")).toBe(false));
+
+  it("il doppio clic sulla stessa voce resta un doppio clic, e un clic nuovo apre l'altra", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      opened.push((a.payload as { doc: string }).doc);
+    };
+    mountTree(host, list("Uno.md", "Due.md"), onAction);
+    const [uno, due] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    press(uno!, 1);
+    await settle(uno!);
+    expect(press(uno!, 2).mousedown).toBe(true);
+    await settle(uno!);
+    expect(opened).toEqual(["Uno.md", "Uno.md"]);
+    // Una serie nuova comincia dove cade: la regola tocca solo i clic che
+    // continuano una serie.
+    press(due!, 1);
+    await settle(due!);
+    expect(opened).toEqual(["Uno.md", "Uno.md", "Due.md"]);
+    // Il clic da tastiera (`detail` 0) e `click()` passano sempre.
+    uno!.click();
+    expect(opened[opened.length - 1]).toBe("Uno.md");
+  });
+
+  it("lo stesso elemento riusato per una voce diversa non prende il secondo clic", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      opened.push((a.payload as { doc: string }).doc);
+    };
+    const tree = (doc: string): UiNode =>
+      ({
+        node: "tree",
+        roots: [
+          { node: "tree_item", label: doc, action: { action: "open", payload: { doc } }, selected: false, expanded: true, children: [], key: "riga" },
+        ],
+      }) as unknown as UiNode;
+    mountTree(host, tree("Uno.md"), onAction);
+    const el = host.querySelector<HTMLElement>(".ui-tree-label")!;
+    press(el, 1);
+    await settle(el);
+    mountTree(host, tree("Due.md"), onAction);
+    // Il riconciliatore ha riusato l'elemento: senza confrontare l'azione il
+    // secondo clic aprirebbe la voce nuova.
+    expect(host.querySelector(".ui-tree-label")).toBe(el);
+    press(el, 2);
+    await settle(el);
+    expect(opened).toEqual(["Uno.md"]);
   });
 });
 

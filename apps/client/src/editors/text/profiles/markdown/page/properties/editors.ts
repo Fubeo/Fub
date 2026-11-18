@@ -1,19 +1,23 @@
-// Gli editor dei valori della testata (T8), uno per tipo. Testo, numero e
+// Gli editor dei valori della testata (T8, T9), uno per tipo. Testo, numero e
 // indirizzo si scrivono in riga; la casella si spunta col clic o con Spazio;
-// data, elenco, etichette e persone aprono un riquadro. Ogni modifica è una
+// data, elenco, etichette, persone, Selezione e Stato aprono un riquadro.
+// Ogni modifica è una
 // scrittura sola, con un passo d'annullamento suo (`PropertyRowHost.write`),
 // e porta l'impronta del valore di quando l'editor si è aperto: se nel
 // frattempo il valore è cambiato (un altro riquadro, il file da fuori) non si
 // scrive, l'editor resta aperto con ciò che si stava scrivendo e lo dice; una
 // seconda conferma scrive.
+import type { PropertyType } from "../../../../../../host/enums.generated";
 import { createList, openPopover, type PopoverHandle } from "../../../../../../kit";
 import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
+import { saidDay } from "../../dates";
+import { firstWeekday } from "../../../../../../state/dates";
 import { liveStrings } from "../../strings";
-import { KIND_ICONS, linkName, linkTo, parseNumber, validDate, type RowKind } from "./kind";
-import { entryStamp, longDate, personElement, type PropertyRowHost, type WriteOutcome } from "./values";
+import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, targetOf, validDate, type OptionGroup, type PropertyOption, type RelationTarget, type RowKind } from "./kind";
+import { entryStamp, longDate, optionElement, personElement, relationItems, type PropertyRowHost, type RelationNote, type WriteOutcome } from "./values";
 
 /// Un editor aperto su una chiave: l'impronta che porta alla scrittura.
 interface Session {
@@ -67,7 +71,7 @@ export function openEditor(entry: PropertyEntry, kind: RowKind, value: HTMLButto
   switch (kind.kind) {
     case "date":
     case "date_time":
-      openDateEditor(entry, kind.kind, value, host, life);
+      openDateEditor(entry, kind.kind, value, host, life, kind.declared);
       return;
     case "list":
     case "tags":
@@ -75,6 +79,13 @@ export function openEditor(entry: PropertyEntry, kind: RowKind, value: HTMLButto
       return;
     case "people":
       openPeopleEditor(entry, value, host, life);
+      return;
+    case "relation":
+      openRelationEditor(entry, value, host, life);
+      return;
+    case "select":
+    case "status":
+      openOptionsEditor(entry, kind.kind, value, host, life);
       return;
     case "checkbox":
       toggleCheckbox(entry, host);
@@ -230,41 +241,47 @@ function addMonths(iso: string, months: number): string {
   return isoOf(new Date(first.getFullYear(), first.getMonth(), Math.min(day, last)));
 }
 
-/// Il prossimo venerdì dopo oggi (oggi venerdì: fra una settimana).
-function nextFriday(today: string): string {
-  const day = dateOf(today).getDay();
-  return addDays(today, ((5 - day + 7) % 7) || 7);
-}
-
-/// Una data scritta: `2026-03-20`, con l'ora `2026-03-20T10:30` o
-/// `2026-03-20 10:30`, oppure `20/3/2026`, `20.3.2026`, `20-3-26`. `null` se
-/// non è una data del calendario.
-export function parseDateInput(text: string): { date: string; time: string | null } | null {
+/// Una data scritta nel campo, con la regola di `@` (`saidDay`): «venerdì»,
+/// «fra due settimane», «20 marzo», «3/4», `2026-03-20`, `20/3/2026`. Dopo,
+/// un'ora facoltativa: «venerdì 18:30», «domani alle 9», `2026-03-20T10:30`.
+/// `null` se non è un giorno del calendario o l'ora non è un'ora: niente si
+/// indovina.
+export function parseDateInput(text: string, today: Date = new Date(), firstDay = 1, locale = "it"): { date: string; time: string | null } | null {
   const value = text.trim();
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?$/.exec(value);
-  const local = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/.exec(value);
-  const parts = iso ? [iso[1]!, iso[2]!, iso[3]!, iso[4], iso[5]] : local ? [local[3]!.length === 2 ? `20${local[3]}` : local[3]!, local[2]!, local[1]!, local[4], local[5]] : null;
-  if (!parts) return null;
-  const date = `${parts[0]}-${parts[1]!.padStart(2, "0")}-${parts[2]!.padStart(2, "0")}`;
-  if (!validDate(date)) return null;
-  if (parts[3] === undefined) return { date, time: null };
-  const hours = Number(parts[3]);
-  const minutes = Number(parts[4]);
-  if (hours > 23 || minutes > 59) return null;
-  return { date, time: `${String(hours).padStart(2, "0")}:${parts[4]}` };
+  const date = saidDay(value, today, firstDay, locale);
+  if (date !== null) return { date, time: null };
+  const clock = /^(.+?)(?:T|\s+(?:alle ore|alle|ore|at)\s+|\s+)(\d{1,2}):(\d{2})$/iu.exec(value)
+    ?? /^(.+?)\s+(?:alle ore|alle|ore|at)\s+(\d{1,2})(?:\.(\d{2}))?$/iu.exec(value);
+  if (!clock) return null;
+  const day = saidDay(clock[1]!, today, firstDay, locale);
+  const hours = Number(clock[2]);
+  const minutes = Number(clock[3] ?? "0");
+  if (day === null || hours > 23 || minutes > 59) return null;
+  return { date: day, time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}` };
 }
 
 /// Data, e Data e ora: il campo per scriverla, i giorni vicini, il mese da
 /// sfogliare. Nella griglia ← → cambiano giorno, ↑ ↓ settimana, Pagina su e
-/// giù mese, Inizio e Fine vanno ai capi della settimana; Invio sceglie.
-export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time", anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): PopoverHandle {
+/// giù mese, Inizio e Fine vanno ai capi della settimana; Invio sceglie. Il
+/// campo capisce le parole come `@` (`parseDateInput`): ciò che capisce si
+/// vede subito nel mese; ciò che non capisce resta scritto, lo dice, e il
+/// valore non cambia. Il file riceve sempre `AAAA-MM-GG` (con l'ora,
+/// `AAAA-MM-GGTHH:MM`). «Aggiungi l'ora» su una proprietà dichiarata Data la
+/// dichiara Data e ora (`declared`): ogni data di prima ci sta ancora.
+export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time", anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime, declared: PropertyType | null = null): PopoverHandle {
   const state = session(entry, host);
   const own = openLifetime();
   const language = resolvedLanguage();
   const raw = entry.value.trim();
-  const today = isoOf(new Date());
-  let selected = validDate(raw.slice(0, 10)) ? raw.slice(0, 10) : null;
+  const now = new Date();
+  const today = isoOf(now);
+  const firstDay = firstWeekday();
+  const original = validDate(raw.slice(0, 10)) ? raw.slice(0, 10) : null;
+  let selected = original;
   let withTime = kind === "date_time";
+  // Una Data dichiarata passa a Data e ora solo se il registro si può
+  // scrivere; altrimenti l'ora non si offre.
+  const timeAllowed = declared !== "date" || host.setType !== undefined;
   // L'ora com'era scritta: il separatore, e ciò che segue `HH:MM` (secondi,
   // fuso) resta finché l'ora non cambia.
   const stamp = /^\d{4}-\d{2}-\d{2}([T ])(\d{2}:\d{2})(.*)$/.exec(raw);
@@ -292,7 +309,8 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
     ["page.properties.date.today", today],
     ["page.properties.date.tomorrow", addDays(today, 1)],
     ["page.properties.date.week", addDays(today, 7)],
-    ["page.properties.date.friday", nextFriday(today)],
+    // Il venerdì che viene, con la regola delle parole: mai oggi.
+    ["page.properties.date.friday", saidDay("venerdì", now, firstDay, language) ?? addDays(today, 7)],
   ] as const) {
     const choice = button("cm-fub-prop-date-choice", liveStrings.t(label));
     choice.dataset.quick = day;
@@ -369,7 +387,12 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
 
   const drawTime = () => {
     timeRow.hidden = !withTime;
-    timeToggle.textContent = liveStrings.t(withTime ? "page.properties.date.remove_time" : "page.properties.date.add_time");
+    timeToggle.hidden = !withTime && !timeAllowed;
+    // L'orologio davanti al testo, come nel prototipo: decorativo, il nome del
+    // pulsante resta il testo.
+    const figure = iconEl("clock");
+    figure?.setAttribute("aria-hidden", "true");
+    timeToggle.replaceChildren(...(figure ? [figure] : []), liveStrings.t(withTime ? "page.properties.date.remove_time" : "page.properties.date.add_time"));
   };
 
   /// Scrive la data (con l'ora, se c'è), o la toglie con `""`.
@@ -385,7 +408,19 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
       return;
     }
     popover.close();
+    if (withTime && date !== "" && declared === "date") void promote();
   };
+  /// La proprietà dichiarata Data diventa Data e ora nel registro, come
+  /// «Tipo» del menu, e lo dice: le date senza ora delle altre note ci
+  /// stanno ancora. Se il registro non si scrive, il valore scritto resta e
+  /// la riga lo segna fuori dal tipo.
+  const promote = async (): Promise<void> => {
+    if (!host.setType) return;
+    const problem = await host.setType(entry.key, "date_time").catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    if (problem === null) host.notify?.(liveStrings.t("page.properties.date.with_time", { key: entry.key }), "info");
+    else host.notify?.(liveStrings.t("page.properties.type.failed", { key: entry.key, reason: problem }), "guasto");
+  };
+  const understood = () => parseDateInput(input.value, new Date(), firstDay, language);
   const choose = (day: string) => write(day);
 
   own.listen(grid, "click", (event) => {
@@ -418,20 +453,36 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
     cursor = addMonths(cursor, 1);
     drawGrid(false);
   });
+  // Mentre si scrive, il giorno capito si vede scelto nel suo mese; il
+  // campo vuoto torna al valore di prima. La frase sotto parlava del testo
+  // di prima: si toglie.
   own.listen(input, "input", () => {
-    const parsed = parseDateInput(input.value);
-    input.toggleAttribute("aria-invalid", input.value.trim() !== "" && !parsed);
-    if (parsed) {
-      cursor = parsed.date;
+    const parsed = understood();
+    const empty = input.value.trim() === "";
+    input.toggleAttribute("aria-invalid", !empty && !parsed);
+    say(note, null);
+    if (parsed || empty) {
+      selected = parsed?.date ?? original;
+      cursor = selected ?? today;
       drawGrid(false);
     }
   });
   own.listen(input, "keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing) return;
     event.preventDefault();
-    const parsed = parseDateInput(input.value);
+    if (input.value.trim() === "") return;
+    const parsed = understood();
     if (!parsed) {
-      say(note, liveStrings.t("page.properties.date.invalid"));
+      // Il mese torna sul valore di prima, che è quello che resta: mentre
+      // si scriveva poteva mostrare il giorno di un testo capito a metà.
+      selected = original;
+      cursor = selected ?? today;
+      drawGrid(false);
+      say(note, liveStrings.t("page.properties.date.invalid", { text: input.value.trim() }));
+      return;
+    }
+    if (parsed.time && !timeAllowed) {
+      say(note, liveStrings.t("page.properties.date.no_time", { key: entry.key }));
       return;
     }
     if (parsed.time) {
@@ -681,6 +732,418 @@ export function openPeopleEditor(entry: PropertyEntry, anchor: HTMLButtonElement
   own.listen(input, "input", () => look(input.value));
   look("");
   const popover = popoverFor(anchor, body, liveStrings.t("page.properties.people.label", { key: entry.key }), host, life, own);
+  input.focus();
+  return popover;
+}
+
+// ——— Relazione ———
+
+/// La pagina di un link `[[Libri/Dune|Il libro]]`, com'è scritta (`Libri/Dune`),
+/// in minuscolo: due link alla stessa pagina sono la stessa nota.
+function linkPage(link: string): string {
+  return link.trim().replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0]!.split("#")[0]!.trim().toLocaleLowerCase();
+}
+
+/// Il link scelto e la nota trovata sono la stessa? La stessa pagina, o un
+/// link scritto col nome solo (`[[Dune]]`) e una nota che si chiama così: è
+/// il nome con cui il vault lo risolve. Senza risolvere non si sa di più.
+function sameNote(chosen: string, found: RelationNote): boolean {
+  const page = linkPage(chosen);
+  const other = linkPage(found.link);
+  if (page === other) return true;
+  return !page.includes("/") && other.slice(other.lastIndexOf("/") + 1) === page;
+}
+
+/// La cartella di un documento, per la riga che la dice sotto il nome.
+function folderOf(doc: string): string {
+  const at = doc.lastIndexOf("/");
+  return at < 0 ? "" : doc.slice(0, at);
+}
+
+/// Il nome che un bersaglio ha nell'interfaccia: il tipo per il suo nome
+/// (`Libro`), la cartella per il suo percorso.
+function targetLabel(target: RelationTarget): string {
+  return target.kind === "type" ? target.page.slice(target.page.lastIndexOf("/") + 1) : target.path;
+}
+
+type RelationRow =
+  | { readonly kind: "group"; readonly id: string }
+  | { readonly kind: "chosen"; readonly id: string; readonly item: string }
+  | { readonly kind: "found"; readonly id: string; readonly note: RelationNote }
+  | { readonly kind: "create"; readonly id: string; readonly name: string };
+
+/// Relazione (T35): la scelta di più note, con la ricerca ristretta al
+/// bersaglio del registro (le note di un tipo, o di una cartella; senza,
+/// ogni nota). Le note legate stanno in cima, spuntate; un clic, Invio o
+/// Spazio ne mette una o la toglie. Un nome che non c'è si crea («Crea
+/// «nome»», nel tipo o nella cartella del bersaglio) e diventa subito una
+/// nota legata. Il valore è un elenco di link `[[…]]`; un link solo scritto
+/// come testo (`tipo: "[[Tipi/Libro]]"`) resta un link solo finché le note
+/// legate sono al più una. Le voci che non sono link restano dove sono.
+export function openRelationEditor(entry: PropertyEntry, anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): PopoverHandle {
+  const state = session(entry, host);
+  const own = openLifetime();
+  const target = targetOf(host.types, entry.key);
+  const port = host.relations;
+  const scalar = (host.current(entry.key) ?? entry).items === null;
+  let chosen = relationItems(host.current(entry.key) ?? entry);
+  let found: RelationNote[] = [];
+  let query = "";
+  let asked = 0;
+  let creating = false;
+  const body = document.createElement("div");
+  body.className = "cm-fub-prop-relation";
+  const search = document.createElement("div");
+  search.className = "cm-fub-prop-search";
+  const icon = iconEl("search");
+  icon?.setAttribute("aria-hidden", "true");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.placeholder = liveStrings.t("page.properties.relation.search");
+  input.setAttribute("aria-label", liveStrings.t("page.properties.relation.search"));
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-autocomplete", "list");
+  search.append(...(icon ? [icon] : []), input);
+  const list = document.createElement("div");
+  list.className = "cm-fub-block-menu cm-fub-prop-options";
+  list.setAttribute("aria-label", liveStrings.t("page.properties.relation.label", { key: entry.key }));
+  list.setAttribute("aria-multiselectable", "true");
+  const empty = document.createElement("p");
+  empty.className = "cm-fub-prop-empty";
+  const note = noteElement();
+  const foot = document.createElement("p");
+  foot.className = "cm-fub-prop-foot";
+  const footIcon = iconEl(target?.kind === "folder" ? "folder" : "backlink");
+  footIcon?.setAttribute("aria-hidden", "true");
+  const footText = document.createElement("span");
+  footText.textContent = target === null
+    ? liveStrings.t("page.properties.relation.foot.any")
+    : liveStrings.t(target.kind === "type" ? "page.properties.relation.foot.type" : "page.properties.relation.foot.folder", { target: targetLabel(target) });
+  foot.append(...(footIcon ? [footIcon] : []), footText);
+  body.append(search, list, empty, note, foot);
+
+  const rows = (): RelationRow[] => {
+    const wanted = query.trim().toLocaleLowerCase();
+    const mine = chosen
+      .filter((item) => wanted === "" || linkName(item).toLocaleLowerCase().includes(wanted) || item.toLocaleLowerCase().includes(wanted))
+      .map((item): RelationRow => ({ kind: "chosen", id: `c:${item}`, item }));
+    const others = found
+      .filter((each) => !chosen.some((item) => sameNote(item, each)))
+      .map((each): RelationRow => ({ kind: "found", id: `f:${each.doc}`, note: each }));
+    const name = query.trim();
+    const exact = name !== "" && (chosen.some((item) => linkName(item).toLocaleLowerCase() === wanted)
+      || found.some((each) => linkName(each.link).toLocaleLowerCase() === wanted));
+    const create: RelationRow[] = port?.create && name !== "" && !exact && !/[[\]|#^]/.test(name)
+      ? [{ kind: "create", id: `n:${name}`, name }]
+      : [];
+    const notes = [...mine, ...others];
+    return [...(notes.length > 0 ? [{ kind: "group", id: "g" } as RelationRow] : []), ...notes, ...create];
+  };
+
+  const handle = createList<RelationRow>({
+    container: list,
+    role: "listbox",
+    items: [],
+    key: (row) => row.id,
+    render: (row, element) => {
+      if (row.kind === "group") {
+        element.classList.add("cm-fub-prop-group");
+        element.textContent = liveStrings.t("page.properties.relation.group");
+        return;
+      }
+      if (row.kind === "create") {
+        const figure = iconEl("plus");
+        figure?.setAttribute("aria-hidden", "true");
+        const label = document.createElement("span");
+        label.className = "cm-fub-prop-menu-label";
+        const named = document.createElement("span");
+        named.textContent = liveStrings.t("page.properties.relation.create", { name: row.name });
+        const hint = document.createElement("small");
+        hint.className = "cm-fub-prop-menu-hint";
+        hint.textContent = target === null
+          ? liveStrings.t("page.properties.relation.create.any")
+          : liveStrings.t(target.kind === "type" ? "page.properties.relation.create.type" : "page.properties.relation.create.folder", { target: targetLabel(target) });
+        label.append(named, hint);
+        element.classList.add("cm-fub-prop-create");
+        element.replaceChildren(...(figure ? [figure] : []), label);
+        return;
+      }
+      const check = document.createElement("span");
+      check.className = "cm-fub-page-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = row.kind === "chosen" ? "✓" : "";
+      const figure = iconEl("notes");
+      figure?.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.className = "cm-fub-prop-menu-label";
+      const named = document.createElement("span");
+      const link = row.kind === "chosen" ? row.item : row.note.link;
+      const isLink = /^\[\[[^[\]]+\]\]$/.test(link.trim());
+      named.textContent = isLink ? linkName(link) : link;
+      label.append(named);
+      // Sotto il nome, più piano, dov'è: la cartella della nota trovata, o il
+      // link com'è scritto per una nota legata.
+      const where = row.kind === "found" ? folderOf(row.note.doc) : isLink ? link.trim().replace(/^\[\[|\]\]$/g, "") : "";
+      if (where !== "" && where !== named.textContent) {
+        const hint = document.createElement("small");
+        hint.className = "cm-fub-prop-menu-hint";
+        hint.textContent = where;
+        label.append(hint);
+      }
+      element.replaceChildren(check, ...(figure ? [figure] : []), label);
+    },
+    disabled: (row) => row.kind === "group",
+    selected: (row) => row.kind === "chosen",
+    onActivate: (row) => {
+      if (row.kind === "chosen") write(chosen.filter((item) => item !== row.item));
+      else if (row.kind === "found") write([...chosen, row.note.link]);
+      else if (row.kind === "create") void create(row.name);
+    },
+    owner: input,
+    focus: "activedescendant",
+    lifetime: own,
+  });
+
+  /// Il valore da scrivere: un link solo resta testo se lo era.
+  const valueOf = (next: string[]): PropertyWrite => scalar && next.length <= 1 ? next[0] ?? "" : next;
+  /// Scrive le note legate. Se il valore è cambiato sotto, la scelta resta
+  /// (le spunte la mostrano), lo si dice, e «Scrivi la mia» la scrive.
+  function write(next: string[]): void {
+    const outcome = commit(state, valueOf(next));
+    if (outcome === "conflict") {
+      chosen = next;
+      sayConflict(note, conflictText(state), own, () => write(chosen));
+    } else if (outcome === "written") {
+      chosen = next;
+      say(note, null);
+    }
+    refresh();
+    input.focus();
+  }
+
+  /// Crea la nota nel bersaglio, poi la lega. Se non si crea, il riquadro
+  /// lo dice e la proprietà non cambia.
+  async function create(name: string): Promise<void> {
+    if (creating || !port?.create) return;
+    creating = true;
+    const made = await port.create(name, target).then(
+      (created) => created ?? liveStrings.t("page.properties.relation.create.unknown"),
+      (error: unknown) => error instanceof Error ? error.message : String(error),
+    );
+    creating = false;
+    if (own.closed) return;
+    if (typeof made === "string") {
+      say(note, liveStrings.t("page.properties.relation.create.failed", { name, reason: made }));
+      input.focus();
+      return;
+    }
+    query = "";
+    input.value = "";
+    write([...chosen, made.link]);
+  }
+
+  /// `first`: una ricerca nuova attiva la prima proposta, che Invio sceglie.
+  function refresh(first = false): void {
+    const items = rows();
+    handle.setItems(items);
+    if (first) handle.setActive(items.find((row) => row.kind !== "group")?.id ?? null);
+    const nothing = items.length === 0;
+    empty.hidden = !nothing;
+    if (nothing) {
+      empty.textContent = query.trim() !== "" ? liveStrings.t("page.properties.relation.none")
+        : target === null ? liveStrings.t("page.properties.relation.empty.any")
+          : liveStrings.t(target.kind === "type" ? "page.properties.relation.empty.type" : "page.properties.relation.empty.folder", { target: targetLabel(target) });
+    }
+  }
+  const look = (text: string) => {
+    query = text;
+    const question = ++asked;
+    say(note, null);
+    refresh(true);
+    if (!port) return;
+    void port.search(text, target).then((notes) => {
+      if (question !== asked || own.closed) return;
+      found = notes;
+      refresh(true);
+    }, () => {});
+  };
+  own.listen(input, "input", () => look(input.value));
+  look("");
+  const popover = popoverFor(anchor, body, liveStrings.t("page.properties.relation.label", { key: entry.key }), host, life, own);
+  input.focus();
+  return popover;
+}
+
+// ——— Selezione e Stato ———
+
+type ChoiceRow =
+  | { readonly kind: "group"; readonly id: string; readonly group: OptionGroup }
+  | { readonly kind: "option"; readonly id: string; readonly option: PropertyOption }
+  | { readonly kind: "create"; readonly id: string; readonly name: string };
+
+/// Selezione e Stato: le opzioni del registro come pastiglie del loro colore;
+/// lo Stato le raggruppa in Da fare, In corso, Fatto. La ricerca le filtra;
+/// un nome che non c'è si crea («Crea «nome»»): l'opzione entra nel registro
+/// del vault (`addOption`, lo Stato in Da fare, con un colore libero) e poi
+/// diventa il valore. Se il registro non si scrive (illeggibile, di una
+/// versione futura) il riquadro lo dice e la nota non cambia. Il valore è il
+/// nome dell'opzione, scritto come testo.
+export function openOptionsEditor(entry: PropertyEntry, kind: "select" | "status", anchor: HTMLButtonElement, host: PropertyRowHost, life: Lifetime): PopoverHandle {
+  const state = session(entry, host);
+  const own = openLifetime();
+  const status = kind === "status";
+  const options: PropertyOption[] = [...optionsOf(host.types, entry.key)];
+  let chosen = (host.current(entry.key) ?? entry).value;
+  let query = "";
+  let creating = false;
+  const body = document.createElement("div");
+  body.className = "cm-fub-prop-choices";
+  const search = document.createElement("div");
+  search.className = "cm-fub-prop-search";
+  const icon = iconEl("search");
+  icon?.setAttribute("aria-hidden", "true");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.placeholder = liveStrings.t("page.properties.options.search");
+  input.setAttribute("aria-label", liveStrings.t("page.properties.options.search"));
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-autocomplete", "list");
+  search.append(...(icon ? [icon] : []), input);
+  const list = document.createElement("div");
+  list.className = "cm-fub-block-menu cm-fub-prop-options";
+  list.setAttribute("aria-label", liveStrings.t("page.properties.options.label", { key: entry.key }));
+  const empty = document.createElement("p");
+  empty.className = "cm-fub-prop-empty";
+  empty.textContent = liveStrings.t("page.properties.options.none");
+  const note = noteElement();
+  const foot = document.createElement("p");
+  foot.className = "cm-fub-prop-foot";
+  const footIcon = iconEl("base-sliders");
+  footIcon?.setAttribute("aria-hidden", "true");
+  const footText = document.createElement("span");
+  footText.textContent = liveStrings.t("page.properties.options.foot", { key: entry.key });
+  foot.append(...(footIcon ? [footIcon] : []), footText);
+  body.append(search, list, empty, note, foot);
+
+  const rows = (): ChoiceRow[] => {
+    const wanted = query.trim().toLocaleLowerCase();
+    const shown = options.filter((option) => wanted === "" || option.name.toLocaleLowerCase().includes(wanted));
+    const row = (option: PropertyOption): ChoiceRow => ({ kind: "option", id: `o:${option.name}`, option });
+    const out: ChoiceRow[] = status
+      ? OPTION_GROUPS.flatMap((group): ChoiceRow[] => {
+        const members = shown.filter((option) => option.group === group);
+        return members.length === 0 ? [] : [{ kind: "group", id: `g:${group}`, group }, ...members.map(row)];
+      })
+      : shown.map(row);
+    const name = query.trim();
+    if (host.addOption && name !== "" && !options.some((option) => option.name === name)) out.push({ kind: "create", id: `c:${name}`, name });
+    return out;
+  };
+
+  const handle = createList<ChoiceRow>({
+    container: list,
+    role: "listbox",
+    items: [],
+    key: (row) => row.id,
+    render: (row, element) => {
+      if (row.kind === "group") {
+        // L'intestazione di un gruppo: si vede, non si sceglie, le frecce la
+        // saltano (`disabled`).
+        element.classList.add("cm-fub-prop-group");
+        element.textContent = liveStrings.t(`page.properties.options.group.${row.group}`);
+        return;
+      }
+      if (row.kind === "create") {
+        const figure = iconEl("plus");
+        figure?.setAttribute("aria-hidden", "true");
+        // Il nome e, sotto, più piano, dove va e con che colore (`.lb small`).
+        const label = document.createElement("span");
+        label.className = "cm-fub-prop-menu-label";
+        const named = document.createElement("span");
+        named.textContent = liveStrings.t("page.properties.options.create", { name: row.name });
+        const hint = document.createElement("small");
+        hint.className = "cm-fub-prop-menu-hint";
+        hint.textContent = liveStrings.t(status ? "page.properties.options.create.status" : "page.properties.options.create.select");
+        label.append(named, hint);
+        element.classList.add("cm-fub-prop-create");
+        element.replaceChildren(...(figure ? [figure] : []), label);
+        return;
+      }
+      const check = document.createElement("span");
+      check.className = "cm-fub-page-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = row.option.name === chosen ? "✓" : "";
+      element.replaceChildren(check, optionElement(row.option.name, row.option.color, status));
+    },
+    disabled: (row) => row.kind === "group",
+    selected: (row) => row.kind === "option" && row.option.name === chosen,
+    onActivate: (row) => {
+      if (row.kind === "option") choose(row.option.name);
+      else if (row.kind === "create") void create(row.name);
+    },
+    owner: input,
+    focus: "activedescendant",
+    lifetime: own,
+  });
+
+  /// `first`: una ricerca nuova attiva la prima proposta, che Invio sceglie;
+  /// senza ricerca è attiva l'opzione del valore.
+  const refresh = (first = false) => {
+    const items = rows();
+    handle.setItems(items);
+    if (first) {
+      const current = query.trim() === "" ? items.find((row) => row.kind === "option" && row.option.name === chosen) : undefined;
+      handle.setActive((current ?? items.find((row) => row.kind !== "group"))?.id ?? null);
+    }
+    empty.hidden = items.length > 0;
+  };
+
+  /// Scrive l'opzione come valore e chiude. Se il valore è cambiato sotto, la
+  /// scelta resta segnata, lo si dice, e «Scrivi la mia» la scrive.
+  function choose(name: string): void {
+    const outcome = commit(state, name);
+    if (outcome === "conflict") {
+      chosen = name;
+      sayConflict(note, conflictText(state), own, () => choose(name));
+      refresh();
+      input.focus();
+      return;
+    }
+    popover.close();
+  }
+
+  /// Crea l'opzione nel registro, poi la scrive. Un rifiuto del registro si
+  /// dice nel riquadro, e la nota non cambia.
+  async function create(name: string): Promise<void> {
+    if (creating || !host.addOption) return;
+    creating = true;
+    const color = freeColor(options);
+    const group: OptionGroup | null = status ? "todo" : null;
+    const problem = await host.addOption(entry.key, { name, color, group }).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    creating = false;
+    if (own.closed) return;
+    if (problem !== null) {
+      say(note, liveStrings.t("page.properties.options.failed", { name, reason: problem }));
+      input.focus();
+      return;
+    }
+    options.push({ name, color, group: group ?? "todo" });
+    query = "";
+    input.value = "";
+    choose(name);
+  }
+
+  own.listen(input, "input", () => {
+    query = input.value;
+    say(note, null);
+    refresh(true);
+  });
+  refresh(true);
+  const popover = popoverFor(anchor, body, liveStrings.t("page.properties.options.label", { key: entry.key }), host, life, own);
   input.focus();
   return popover;
 }

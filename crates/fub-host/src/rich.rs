@@ -123,7 +123,7 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
         crate::new_file::Words {
             locale: "it",
             title: "Nuovo documento",
-            desc: "Crea un documento di Word vuoto e lo apre. Senza nome nasce «Documento senza \
+            desc: "Crea un documento .docx vuoto e lo apre. Senza nome nasce «Documento senza \
                    titolo», e se quel nome è preso «Documento senza titolo 1», «2», …",
             untitled: "Documento senza titolo",
             the: "il documento",
@@ -131,13 +131,13 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
             of_the: "del documento",
             a: "un documento",
             a_new: "un documento nuovo",
-            all: "i documenti di Word",
+            all: "i documenti .docx",
             extra: &[],
         },
         crate::new_file::Words {
             locale: "en",
             title: "New document",
-            desc: "Creates an empty Word document and opens it. Without a name it is called \
+            desc: "Creates an empty .docx document and opens it. Without a name it is called \
                    «Untitled document», and if that name is taken «Untitled document 1», «2», …",
             untitled: "Untitled document",
             the: "the document",
@@ -145,7 +145,7 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
             of_the: "the document",
             a: "a document",
             a_new: "a new document",
-            all: "Word documents",
+            all: ".docx documents",
             extra: &[],
         },
     ],
@@ -200,7 +200,20 @@ pub(crate) fn open(
         };
         opened
             .map(|opened| opened.projection)
-            .map_err(|error| plugin_error(doc, error))
+            .map_err(|error| match error {
+                // Il codec che rifiuta i byte all'apertura dice il perché in
+                // inglese tecnico («Could not find EOCD»): è una diagnosi per
+                // chi indaga, e va nel log. Chi apre il file legge che cosa
+                // ha il file e che non si apre.
+                fub_format_rich::RichError::Codec(why) => {
+                    tracing::warn!(target: "fub.host", doc = %doc.as_str(), %why, "documento illeggibile");
+                    PluginError::Internal(Text::message(
+                        "host.rich.unreadable",
+                        vec![Arg::text("doc", doc.as_str())],
+                    ))
+                }
+                other => plugin_error(doc, other),
+            })
     }
     #[cfg(not(feature = "rich"))]
     {
@@ -313,15 +326,18 @@ fn plugin_error(doc: &DocId, error: fub_format_rich::RichError) -> PluginError {
         RichError::Fidelity => {
             PluginError::Internal(Text::message("host.rich.fidelity", vec![doc_arg()]))
         }
-        // Il numero del paragrafo da uno, come lo conta chi legge.
-        RichError::Locked(Some(block)) => PluginError::PermissionDenied(Text::message(
+        // Una modifica che il formato non scrive, non un file in sola
+        // lettura: il file si scrive, quella modifica no. La shell dice il
+        // perché come per ogni salvataggio rifiutato, accanto al chip delle
+        // parti chiuse (IMP-133). Il numero del paragrafo da uno, come lo
+        // conta chi legge.
+        RichError::Locked(Some(block)) => PluginError::BadArgs(Text::message(
             "host.rich.locked.block",
             vec![doc_arg(), Arg::text("block", (block + 1).to_string())],
         )),
-        RichError::Locked(None) => PluginError::PermissionDenied(Text::message(
-            "host.rich.locked.outside",
-            vec![doc_arg()],
-        )),
+        RichError::Locked(None) => {
+            PluginError::BadArgs(Text::message("host.rich.locked.outside", vec![doc_arg()]))
+        }
         RichError::Codec(why) => PluginError::Internal(Text::message(
             "host.rich.codec",
             vec![doc_arg(), Arg::text("why", why)],

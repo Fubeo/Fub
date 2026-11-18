@@ -90,7 +90,7 @@ static NEW_SHEET: crate::new_file::NewFile = crate::new_file::NewFile {
         crate::new_file::Words {
             locale: "it",
             title: "Nuovo foglio",
-            desc: "Crea una cartella di Excel vuota, con un foglio solo, e la apre. Senza nome \
+            desc: "Crea una cartella .xlsx vuota, con un foglio solo, e la apre. Senza nome \
                    nasce «Foglio senza titolo», e se quel nome è preso «Foglio senza titolo 1», \
                    «2», …",
             untitled: "Foglio senza titolo",
@@ -99,13 +99,13 @@ static NEW_SHEET: crate::new_file::NewFile = crate::new_file::NewFile {
             of_the: "del foglio",
             a: "un foglio",
             a_new: "un foglio nuovo",
-            all: "i fogli di Excel",
+            all: "i fogli .xlsx",
             extra: &[("first_sheet", "Foglio1")],
         },
         crate::new_file::Words {
             locale: "en",
             title: "New spreadsheet",
-            desc: "Creates an empty Excel workbook with one sheet and opens it. Without a name \
+            desc: "Creates an empty .xlsx workbook with one sheet and opens it. Without a name \
                    it is called «Untitled spreadsheet», and if that name is taken «Untitled \
                    spreadsheet 1», «2», …",
             untitled: "Untitled spreadsheet",
@@ -114,7 +114,7 @@ static NEW_SHEET: crate::new_file::NewFile = crate::new_file::NewFile {
             of_the: "the spreadsheet",
             a: "a spreadsheet",
             a_new: "a new spreadsheet",
-            all: "Excel spreadsheets",
+            all: ".xlsx spreadsheets",
             extra: &[("first_sheet", "Sheet1")],
         },
     ],

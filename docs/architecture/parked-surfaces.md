@@ -65,8 +65,11 @@ Una superficie da parte si distrugge, e tornarci rimonta la scheda da capo,
 quando:
 
 - il riquadro ne mette da parte una quinta: si libera la meno recente;
-- la scheda si chiude, si rinomina, si sposta o cambia superficie scelta (il
-  confronto è documento più override, a ogni disegno del riquadro);
+- la scheda si chiude o cambia superficie scelta (il confronto è documento
+  più override, a ogni disegno del riquadro);
+- la scheda si rinomina o si sposta cambiando estensione. Con la stessa
+  estensione la superficie segue il nome nuovo, come quella davanti
+  (`followRenameInPanes`): resta da parte e torna col suo cursore;
 - il riquadro si chiude, o il vault cambia;
 - cambiano i componenti montati, da cui vengono le forme sintattiche;
 - un'apertura chiede un gesto o una pagina, che vogliono il montaggio che

@@ -21,8 +21,10 @@ pub const MAX_THEME_FONT_TOTAL_BYTES: u64 = 6 * 1024 * 1024;
 /// Quanto può essere lungo il nome di una famiglia di caratteri del tema.
 pub const MAX_THEME_FONT_FAMILY: usize = 64;
 
-/// Quante icone (nomi) il set di un tema può ridisegnare al massimo.
-pub const MAX_THEME_ICONS: usize = 512;
+/// Quante icone (nomi) il set di un tema può ridisegnare al massimo: più dei
+/// nomi che Fub registra (519 a novembre 2026), perché un tema li ridisegni
+/// tutti; il peso lo tiene `MAX_THEME_ICONS_BYTES`.
+pub const MAX_THEME_ICONS: usize = 1024;
 /// Quanti tracciati (`d`) può avere un'icona del tema.
 pub const MAX_THEME_ICON_PATHS: usize = 8;
 /// Quanto possono pesare, insieme, i tracciati di un'icona del tema.

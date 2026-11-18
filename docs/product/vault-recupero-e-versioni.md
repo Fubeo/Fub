@@ -132,17 +132,46 @@ grande, il pannello lo dice invece di calcolarlo.
 Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
+Dopo un «Sì, ripristina» il pannello lo offre come «Annulla», accanto alla
+riga «Ripristinata la versione del …»: esegue quel ripristino inverso, non un
+meccanismo suo, e torna al contenuto che il disco aveva prima. L'offerta vale
+finché la nota resta quella del ripristino: una scrittura dopo la toglie.
+
+Una versione può anche nascere a mano, con `version.keep`: conserva un testo
+dato (`doc`, `text`, `note`) senza toccare il file, con una nota obbligatoria
+che dice perché c'è. È ciò che fa «Usa la versione su disco» in un conflitto:
+prima di scartare il testo dell'utente lo conserva con la nota «Testo scartato
+nel conflitto del …», e rilegge il disco solo dopo che la conservazione è
+riuscita. Se la conservazione fallisce non si scarta niente, il conflitto resta
+aperto e l'avviso dice perché. Se il testo è conservato ma il disco non si
+rilegge, il conflitto resta aperto e l'avviso dice che il testo è già nella
+Cronologia; ripetere la scelta sullo stesso testo non crea una seconda
+versione uguale. Senza la Cronologia montata, o su un foglio di
+calcolo (dove il testo in Fub è un giornale, non il file), la conferma avverte
+che il testo andrà perso, e così la descrizione del comando nella palette.
+Lo stesso vale nella [finestra documento a parte](../architecture/document-model.md#il-testo-non-salvato): «Scarta le modifiche locali»
+conserva prima nella Cronologia il testo della finestra, attraverso la
+finestra principale, e lo scarta solo a conservazione riuscita; la conferma,
+dentro la finestra, dice se il testo resterà o andrà perso. Il pannello mostra la nota al posto della
+variazione e in cima all'anteprima. Un testo conservato
+non è il disco: «Versione attuale» resta sull'ultima fotografia del file, e il
+ripristino inverso torna a quella. `version.keep` funziona anche a versioning
+spento.
 
 Le versioni si diradano a ogni nuova versione della nota: nelle ultime 24 ore
 tutte, o una per `versioning.interval` (minuti, 0 di serie); fino a 7 giorni una
 per ora, poi una al giorno fino a `versioning.retention` (giorni: 90 di serie, 0
-per sempre); oltre, solo la più recente. `version.clear` svuota la cronologia
+per sempre); oltre, solo la più recente. I testi conservati con una nota non
+si diradano mai e non contano nelle fasce. `version.clear` svuota la cronologia
 del vault anche a versioning spento, con conferma rafforzata e senza ritorno.
 
 Un file oltre 64 MiB non ha versioni: il versioning non lo apre e non lo
 copia, e una scrittura su di lui passa senza fotografia, come a versioning
 spento. Per la stessa ragione il ripristino rifiuta di sostituire una nota
 cresciuta oltre quel limite, e il pannello non la legge per confrontarla.
+
+I file dello store e le loro regole di scrittura sono in
+[versioning-store.md](../reference/versioning-store.md).
 
 
 ## Snapshot globale e backup
@@ -166,9 +195,18 @@ Questo flusso è distinto da `fub.versioning`:
 transazione dell'intero vault. È distinto anche dal drill backup/restore offline
 dell'issue [#7](https://github.com/Fubeo/Fub/issues/7), che conserva il proprio
 fixture e manifesto indipendente. La feature `fub.backup` resta invece uno
-snapshot namespaced delle sole note nello stesso vault. Gli snapshot prendono il
+snapshot namespaced dei documenti nello stesso vault. Copia i byte, mai il
+testo: un `.docx`, un PDF o una nota con un encoding suo entrano e tornano
+byte per byte, e il ripristino scrive soltanto dove il nome è ancora libero.
+Un file che non si legge non ferma il backup: lo snapshot nasce con il resto,
+l'esito è parziale e il pannello nomina ogni file saltato con il perché; uno
+snapshot parziale non fa ruotare via i precedenti. Gli snapshot prendono il
 nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
-precedente soltanto a copia finita. La copia nuova si scrive nell'altra cartella
+precedente soltanto a copia finita. Se quel backup salta dei file, la copia che
+lo snapshot sostituito aveva di ciascuno passa (verificata sull'inventario) nello
+snapshot nuovo: nessun file perde la sua copia. Se quella copia non si rilegge,
+il backup si ferma con un errore che nomina il file e lo snapshot di prima dello stesso giorno resta
+com'era. La copia nuova si scrive nell'altra cartella
 del giorno (`<data>.1/`), il manifest `snapshots.json` passa a lei e solo allora
 la vecchia si cancella: un guasto a metà lascia intero lo snapshot precedente.
 Accanto alla cartella di ogni snapshot sta il suo inventario

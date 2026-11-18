@@ -58,6 +58,47 @@ sequenceDiagram
     Q->>UI: evento serializzato
 ```
 
+### Lotto e piano su più documenti
+
+Il lotto (`Workspace::batch`, decisione 0011) raggruppa ciò che si dice a chi
+ascolta: dentro, gli eventi portano l'id del lotto, `index-updated` non esce e
+il dispatch aspetta la chiusura, che manda un solo `batch-ended`. Un comando
+che scrive gira sempre dentro un lotto. Il lotto da solo non è una
+transazione: se una scrittura fallisce, le altre restano fatte.
+
+Il tutto-o-niente lo dà `WritePlan` (`fub_abi::command`), con la regola in
+`fub_abi::rules::plan`. Un comando che scrive più documenti (modifiche, un file
+nuovo, una rinomina) li consegna in un piano solo:
+
+- prima di scrivere si controlla tutto: la revisione di ogni modifica e di ogni
+  rinomina, ogni nome da occupare libero. Se uno non passa, non si scrive niente;
+- se una scrittura fallisce a metà (un conflitto arrivato dopo il controllo, il
+  disco pieno), quelle già fatte si disfano all'indietro prima di tornare
+  l'errore del passo caduto: l'inverso della modifica, il cestino per il file
+  nato dal piano (mai la cancellazione definitiva), la rinomina all'incontrario;
+- se anche un ritorno fallisce, la copia di prima va nello spazio dati del
+  plugin (`.fub/plugins/<id>/piani-non-rimessi/<istante>/<path>`) e l'errore
+  diventa `io`, con i file e le copie nella frase. Vale anche per una modifica
+  su un file che il piano stesso ha rinominato: la copia c'è, e il file si
+  nomina col nome che ha dopo il ritorno (quello di prima, se la rinomina è
+  tornata indietro).
+
+Il piano è composto dalle capacità dell'`HostApi` che il comando già usa
+(`read-document-bytes`, `apply-edit`, `create-document`, `rename-document`,
+`trash-document-if`, `data-write`). Per questo passa da ogni guardia e da ogni
+turno come loro, non tiene il workspace fra un passo e l'altro, e non aggiunge
+niente alla WIT né all'IPC. Le scritture e i ritorni escono come fatti in coda,
+una volta, alla chiusura del lotto del comando.
+
+L'annullamento di un piano è una voce sola (`AppliedPlan::undo`): per ogni
+file l'inverso della modifica, o una richiesta senza edit che fa da guardia
+per un file creato o rinominato, poi i passi strutturali. Prima del primo
+passo il kernel controlla le revisioni di tutte le `UndoStep::Edit` in testa
+alla voce (una per documento, fino al primo passo di comando): se un file è
+cambiato dopo l'operazione, l'annullamento non tocca niente, risponde
+`conflict` con i file cambiati e la voce resta in pila. Vale per ogni voce, non
+solo per i piani.
+
 ## Job
 
 Un job ha un'identità, uno stato e un proprietario. Il suo nome sta nello

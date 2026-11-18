@@ -18,7 +18,8 @@ use fub_features::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
     NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
     PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TYPES_RESTORE, PROPERTY_TYPE_SET,
+    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TARGET_SET, PROPERTY_TYPES_RESTORE,
+    PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -1399,4 +1400,193 @@ fn the_panel_offers_the_options_and_keeps_outside_values_as_text() {
         text.contains("tint: '3'") || text.contains("tint: \"3\""),
         "{text}"
     );
+}
+
+fn target(ws: &mut Workspace, args: serde_json::Value) -> fub_abi::command::CommandOutcome {
+    ws.invoke_command(PROPERTY_TARGET_SET, args, InvokeMode::Apply, Actor::User)
+        .expect("target set")
+}
+
+/// Il bersaglio di una Relazione si dice, si cambia e si toglie dal registro;
+/// ogni passo si annulla byte per byte, un registro senza bersagli resta
+/// quello di prima e le note non cambiano.
+#[test]
+fn a_relation_target_is_set_cleared_and_undone_byte_for_byte() {
+    use fub_abi::model::RelationTarget;
+    let vault = Vault::new();
+    let note = "---\nlibri: [\"[[Fuori/Altro]]\"]\n---\n";
+    vault.put("a.md", note);
+    let mut ws = vault.open();
+    declare(&mut ws, "libri", "relation");
+    let declared = registry(&ws);
+    assert_eq!(declared, r#"{"version":1,"types":{"libri":"relation"}}"#);
+
+    let dry = ws
+        .invoke_command(
+            PROPERTY_TARGET_SET,
+            serde_json::json!({"key": "libri", "target": "Libri"}),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .unwrap();
+    assert!(matches!(dry.effect, CommandEffect::Plan(_)), "{dry:?}");
+    assert_eq!(registry(&ws), declared, "il dry-run non scrive");
+
+    let folder = target(
+        &mut ws,
+        serde_json::json!({"key": "libri", "target": "/Libri/", "expected": declared}),
+    );
+    let with_folder = registry(&ws);
+    assert_eq!(
+        with_folder,
+        r#"{"version":1,"types":{"libri":"relation"},"targets":{"libri":"Libri"}}"#
+    );
+    let kind = target(
+        &mut ws,
+        serde_json::json!({"key": "libri", "target": "[[Tipi/Libro]]"}),
+    );
+    let types: PropertyTypes = serde_json::from_str(&registry(&ws)).unwrap();
+    assert_eq!(
+        types.target("libri"),
+        Some(RelationTarget::Type("Tipi/Libro".into()))
+    );
+    // Lo stesso bersaglio due volte non scrive e non si annulla.
+    let same = target(
+        &mut ws,
+        serde_json::json!({"key": "libri", "target": "[[Tipi/Libro]]"}),
+    );
+    assert!(same.undo.is_none());
+    let cleared = target(&mut ws, serde_json::json!({"key": "libri"}));
+    assert_eq!(
+        registry(&ws),
+        declared,
+        "senza bersaglio, il registro di prima"
+    );
+
+    undo_by_command(&mut ws, &cleared);
+    undo_by_command(&mut ws, &kind);
+    assert_eq!(registry(&ws), with_folder);
+    undo_by_command(&mut ws, &folder);
+    assert_eq!(registry(&ws), declared);
+    // Un link fuori dal bersaglio resta com'era: il bersaglio non tocca le note.
+    assert_eq!(vault.read("a.md"), note);
+}
+
+/// Gli argomenti sbagliati hanno un errore col suo tipo e non scrivono; un
+/// registro futuro non si riscrive; il bersaglio segue una chiave rinominata.
+#[test]
+fn relation_target_arguments_are_checked_and_the_target_follows_a_rename() {
+    use fub_abi::error::PluginError;
+    let vault = Vault::new();
+    vault.put("a.md", "---\nlibri: [\"[[Dune]]\"]\n---\n");
+    let mut ws = vault.open();
+    declare(&mut ws, "libri", "relation");
+    declare(&mut ws, "nota", "text");
+    let before = registry(&ws);
+    for (args, expected) in [
+        (serde_json::json!({"key": "nota", "target": "Libri"}), "bad"),
+        (
+            serde_json::json!({"key": "manca", "target": "Libri"}),
+            "bad",
+        ),
+        (
+            serde_json::json!({"key": "libri", "target": "../fuori"}),
+            "bad",
+        ),
+        (serde_json::json!({"key": "libri", "target": "[[]]"}), "bad"),
+        (
+            serde_json::json!({"key": "libri", "target": "Libri", "expected": "{}"}),
+            "conflict",
+        ),
+    ] {
+        let result = ws.invoke_command(
+            PROPERTY_TARGET_SET,
+            args.clone(),
+            InvokeMode::Apply,
+            Actor::User,
+        );
+        match expected {
+            "bad" => assert!(
+                matches!(result, Err(PluginError::BadArgs(_))),
+                "{args}: {result:?}"
+            ),
+            _ => assert!(
+                matches!(result, Err(PluginError::Conflict(_))),
+                "{args}: {result:?}"
+            ),
+        }
+        assert_eq!(registry(&ws), before, "{args}");
+    }
+
+    target(
+        &mut ws,
+        serde_json::json!({"key": "libri", "target": "Libri"}),
+    );
+    ws.invoke_command(
+        PROPERTY_KEY_RENAME,
+        serde_json::json!({"old_key": "libri", "new_key": "letture"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .unwrap();
+    let types: PropertyTypes = serde_json::from_str(&registry(&ws)).unwrap();
+    assert_eq!(types.resolve("letture"), Some(PropertyType::Relation));
+    assert_eq!(types.target("letture"), types.target("libri"));
+    assert!(types.target("letture").is_some());
+
+    for raw in [
+        r#"{"version":2,"types":{"libri":"relation"}}"#,
+        r#"{"version":1,"types":{"libri":"relation"},"targets":{"libri":{"folder":"x"}}}"#,
+    ] {
+        ws.set_setting("properties.types", SettingValue::Text(raw.into()))
+            .unwrap();
+        let refused = ws.invoke_command(
+            PROPERTY_TARGET_SET,
+            serde_json::json!({"key": "libri", "target": "Libri"}),
+            InvokeMode::Apply,
+            Actor::User,
+        );
+        assert!(
+            matches!(refused, Err(PluginError::BadArgs(_))),
+            "{raw}: {refused:?}"
+        );
+        assert_eq!(registry(&ws), raw);
+    }
+}
+
+/// «Add» senza chiave (IMP-108): la riga dice cosa manca in parole, e non
+/// porta davanti il nome della variante dell'errore («invalid arguments»).
+#[test]
+fn add_without_a_key_says_what_is_missing_in_words() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ntitle: Ciao\n---\ncorpo\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "a.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("add")
+                .with_payload(serde_json::json!({"doc": "a.md"}))
+                .with_fields(vec![
+                    FieldValue {
+                        field: "new_key".into(),
+                        value: UiValue::Text(String::new()),
+                    },
+                    FieldValue {
+                        field: "new_value".into(),
+                        value: UiValue::Text("x".into()),
+                    },
+                ]),
+        )
+        .expect("view_action");
+    let fub_abi::ui::ViewUpdate::Replace { root } = update else {
+        panic!("{update:?}");
+    };
+    let shown = serde_json::to_string(&root).unwrap();
+    assert!(
+        shown.contains("Non ho aggiornato le proprietà: Manca il nome della proprietà."),
+        "{shown}"
+    );
+    assert!(!shown.contains("invalid arguments"), "{shown}");
+    assert_eq!(vault.read("a.md"), "---\ntitle: Ciao\n---\ncorpo\n");
 }

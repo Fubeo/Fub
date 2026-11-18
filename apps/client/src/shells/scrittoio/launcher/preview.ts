@@ -1,4 +1,7 @@
 // L'anteprima del lanciatore: la nota della riga attiva, resa accanto all'elenco.
+// Per ciò che non è una nota (un comando, un blocco, un'etichetta) c'è un
+// quadro: che cos'è, che cosa fa, il tasto o la sintassi. Il quadro lo compone
+// chi monta (`launcher.ts`) coi dati della riga; qui c'è solo il disegno.
 //
 // La strada è quella delle altre anteprime della shell: la resa si chiede al
 // canale dati (`render_preview`, la stessa proiezione della Lettura), passa
@@ -39,6 +42,29 @@ export interface Preview {
   /// La nota da mostrare; `null` svuota il riquadro. Chiedere quella che già
   /// si mostra, o che si sta aspettando, non fa niente.
   follow(doc: string | null): void;
+  /// Il quadro di una riga che non è una nota (un comando, un blocco,
+  /// un'etichetta); `null` lo toglie. Lo stesso `key` di quello che si vede
+  /// non lo ridisegna.
+  describe(card: PreviewCard | null): void;
+}
+
+/// Una riga dei dati sotto il quadro: l'icona e le parole, con un tasto
+/// (`{ key }`) dove la frase lo nomina.
+export interface PreviewFact {
+  readonly icon: string;
+  readonly parts: readonly (string | { readonly key: string })[];
+}
+
+/// Il quadro di ciò che non è una nota: un quadratino d'accento con l'icona
+/// (o un segno scritto, come `#`), il nome, che cosa fa, e sotto i dati.
+export interface PreviewCard {
+  /// Chi è, per non ridisegnare lo stesso quadro a ogni freccia.
+  readonly key: string;
+  readonly icon?: string;
+  readonly glyph?: string;
+  readonly title: string;
+  readonly text: string;
+  readonly facts: readonly PreviewFact[];
 }
 
 /// Un file che non è un documento (un PDF, un'immagine, un audio): il canale
@@ -109,7 +135,17 @@ export function createPreview(lifetime: Lifetime): Preview {
   };
   const place = fact("folder");
   const age = fact("clock");
-  element.append(sheet, note, meta);
+  // Il quadro di ciò che non è una nota: il quadratino, il nome, che cosa fa,
+  // e sotto i suoi dati (il tasto, la sintassi), nello stesso vestito di quelli
+  // della nota. Si disegna intero a ogni riga nuova: sono pochi nodi.
+  const card = document.createElement("div");
+  card.className = "launcher-preview-card";
+  card.hidden = true;
+  const cardMeta = document.createElement("div");
+  cardMeta.className = "launcher-preview-meta";
+  cardMeta.hidden = true;
+  let described: string | null = null;
+  element.append(sheet, note, meta, card, cardMeta);
   /// Un dato vuoto non c'è, e senza dati non c'è la riga.
   const show = (line: Fact, words: string): void => {
     line.words.textContent = words;
@@ -196,8 +232,59 @@ export function createPreview(lifetime: Lifetime): Preview {
     clock.cancel();
   });
 
+  const drawCard = (shown: PreviewCard): void => {
+    const tile = document.createElement("span");
+    tile.className = "launcher-preview-tile";
+    const drawn = shown.icon ? iconEl(shown.icon) : null;
+    if (drawn) tile.append(drawn);
+    else tile.textContent = shown.glyph ?? "";
+    const title = document.createElement("p");
+    title.className = "launcher-preview-title";
+    title.textContent = shown.title;
+    card.replaceChildren(tile, title);
+    if (shown.text) {
+      const text = document.createElement("p");
+      text.className = "launcher-preview-text";
+      text.textContent = shown.text;
+      card.append(text);
+    }
+    cardMeta.replaceChildren(...shown.facts.map((each) => {
+      const row = document.createElement("div");
+      row.className = "launcher-preview-fact";
+      const glyph = iconEl(each.icon);
+      if (glyph) row.append(glyph);
+      const words = document.createElement("span");
+      for (const part of each.parts) {
+        if (typeof part === "string") {
+          words.append(part);
+          continue;
+        }
+        const key = document.createElement("kbd");
+        key.className = "launcher-preview-key";
+        key.textContent = part.key;
+        words.append(key);
+      }
+      row.append(words);
+      return row;
+    }));
+  };
+
   return {
     element,
+    describe(shown) {
+      if (lifetime.closed) return;
+      const key = shown?.key ?? null;
+      if (key === described) return;
+      described = key;
+      card.hidden = shown === null;
+      cardMeta.hidden = shown === null || shown.facts.length === 0;
+      if (shown === null) {
+        card.replaceChildren();
+        cardMeta.replaceChildren();
+        return;
+      }
+      drawCard(shown);
+    },
     follow(doc) {
       if (lifetime.closed || doc === wanted) return;
       wanted = doc;

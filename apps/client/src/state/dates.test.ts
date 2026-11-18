@@ -24,7 +24,7 @@ vi.mock("./store", async (original) => ({
 }));
 vi.mock("./locale", () => ({ systemLocale: () => ({ first_day_of_week: "sunday" }) }));
 
-import { dailyFolder, dailyFormat, dailyName, dailyPath, firstWeekday, mountDates } from "./dates";
+import { dailyDateIn, dailyFolder, dailyFormat, dailyName, dailyPath, firstWeekday, mountDates } from "./dates";
 import { Lifetime } from "../ui/lifetime";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -42,6 +42,29 @@ describe("dailyName", () => {
     expect(dailyName("YYYY/MM MMMM/dddd D", "2026-03-01", "en")).toBe("2026/03 March/Sunday 1");
     expect(dailyName("[Diario] YY.M.D ddd", "2024-02-29", "it")).toBe("Diario 24.2.29 gio");
     expect(dailyName("[YYYY", "2026-10-19", "it")).toBe("[2026");
+  });
+});
+
+describe("dailyDateIn", () => {
+  it("legge il giorno dal nome della giornaliera, e lo ricontrolla riscrivendolo", () => {
+    expect(dailyDateIn("Daily", "YYYY-MM-DD", "Daily/2026-10-19.md", "it")).toBe("2026-10-19");
+    expect(dailyDateIn("Diario", "YYYY/MMMM/YYYY-MMM-DD", "Diario/2026/ottobre/2026-ott-19.md", "it")).toBe("2026-10-19");
+    expect(dailyDateIn("Daily", "YYYY/MM MMMM/dddd D", "Daily/2026/03 March/Sunday 1.md", "en")).toBe("2026-03-01");
+    expect(dailyDateIn("Daily", "[Diario] YY.M.D ddd", "Daily/Diario 24.2.29 gio.md", "it")).toBe("2024-02-29");
+  });
+
+  it("dice null per una nota che non è una giornaliera", () => {
+    // Altra cartella, senza estensione, con un punto nella cartella soltanto.
+    expect(dailyDateIn("Daily", "YYYY-MM-DD", "Note/2026-10-19.md", "it")).toBeNull();
+    expect(dailyDateIn("Daily", "YYYY-MM-DD", "Daily/2026-10-19", "it")).toBeNull();
+    expect(dailyDateIn("Daily.v2", "YYYY-MM-DD", "Daily.v2/2026-10-19", "it")).toBeNull();
+    // Un giorno che non esiste, un nome che il formato non scrive.
+    expect(dailyDateIn("Daily", "YYYY-MM-DD", "Daily/2026-02-30.md", "it")).toBeNull();
+    expect(dailyDateIn("Daily", "YYYY-MM-DD", "Daily/2026-1-9.md", "it")).toBeNull();
+    // Il giorno della settimana sbagliato: il 1° marzo 2026 è domenica.
+    expect(dailyDateIn("Daily", "dddd D MMMM YYYY", "Daily/lunedì 1 marzo 2026.md", "it")).toBeNull();
+    expect(dailyDateIn("Daily", "dddd D MMMM YYYY", "Daily/domenica 1 marzo 2026.md", "it")).toBe("2026-03-01");
+    expect(dailyDateIn("Daily", "YYYY-MM-DD", "Daily/Riunione.md", "it")).toBeNull();
   });
 });
 

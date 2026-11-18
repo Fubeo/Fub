@@ -4,6 +4,11 @@ import type { CommandOutcome } from "../host/contract";
 
 const fake = vi.hoisted(() => ({
   invokeCommand: vi.fn<(command: string, args?: Record<string, unknown>, mode?: string) => Promise<CommandOutcome>>(),
+  nameJob: vi.fn<(id: string, name: () => string) => void>(),
+}));
+vi.mock("../panels/activity", async (original) => ({
+  ...(await original<typeof import("../panels/activity")>()),
+  nameJob: fake.nameJob,
 }));
 vi.mock("../host/ipc", () => ({ api: { invokeCommand: fake.invokeCommand } }));
 vi.mock("../host/query", () => ({ vaultFolders: () => Promise.resolve({ items: [], total: 0 }) }));
@@ -96,8 +101,13 @@ describe("la finestra «Importa note»", () => {
   beforeEach(() => {
     document.body.replaceChildren();
     fake.invokeCommand.mockReset();
+    fake.nameJob.mockReset();
     state.commandSpecs = [];
   });
+
+  /// Il nome che il lavoro `id` ha nel centro attività.
+  const nameOf = (id: string): string | undefined =>
+    fake.nameJob.mock.calls.find(([job]) => job === id)?.[1]();
 
   it("anteprima, poi import, poi annullamento: ognuno aspetta il suo job", async () => {
     const file = new File(["# Kant\n"], "Kant.md", { type: "text/markdown" });
@@ -111,6 +121,8 @@ describe("la finestra «Importa note»", () => {
     expect(command).toBe("import.prepare");
     expect(JSON.parse(String(args!.request_json))).toMatchObject({ mode: "apply", folder: "Import", on_conflict: "skip" });
     expect(JSON.parse(String(args!.source_json)).name).toBe("Kant.md");
+    // Ogni lavoro ha un nome nella lingua dell'interfaccia, non «import.transfer».
+    expect(nameOf("1")).toBe("Lettura di «Kant.md» per l'importazione");
     // Un job d'altri non è il nostro.
     done("99", { Ok: {} });
     done("1", { Ok: manifest });
@@ -126,6 +138,7 @@ describe("la finestra «Importa note»", () => {
     form.requestSubmit();
     await settle();
     expect(fake.invokeCommand.mock.calls[1]![0]).toBe("import.commit");
+    expect(nameOf("2")).toBe("Importazione di «Kant.md»");
     done("2", { Ok: { mode: "apply", documents: [manifest.preview.documents[0]], log: [] } });
     await settle();
     expect(document.querySelector(".note-import-plan")!.textContent).toContain("Import/Kant.md");
@@ -136,6 +149,7 @@ describe("la finestra «Importa note»", () => {
     undo.click();
     await settle();
     expect(fake.invokeCommand.mock.calls[2]).toEqual(["import.rollback", { job: fake.invokeCommand.mock.calls[0]![1]!.job }, "apply"]);
+    expect(nameOf("3")).toBe("Annullamento dell'importazione di «Kant.md»");
     done("3", { Ok: { rolled_back: true } });
     await settle();
     expect(undo.hidden).toBe(true);

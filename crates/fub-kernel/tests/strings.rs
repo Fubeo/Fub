@@ -462,3 +462,82 @@ fn nothing_is_resolved_on_the_way_in() {
     // E un `ActionRef` non è mai stato un `Text`: l'id di un'azione è opaco.
     let _ = ActionRef::new(GREETING);
 }
+
+/// Un indice che a ogni domanda risponde con una chiave del **suo** catalogo.
+struct KeyIndex;
+
+const KEY_INDEX_NS: &str = "uno.domande";
+
+impl fub_abi::traits::IndexProvider for KeyIndex {
+    fn routes(&self) -> Vec<fub_abi::traits::QueryRoute> {
+        vec![fub_abi::traits::QueryRoute::Query(
+            fub_abi::traits::QueryKind::Custom(KEY_INDEX_NS.into()),
+        )]
+    }
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+    fn on_documents_indexed(
+        &mut self,
+        _docs: &[fub_abi::model::DocumentModel],
+    ) -> Vec<fub_abi::traits::IndexLoss> {
+        Vec::new()
+    }
+    fn on_documents_removed(
+        &mut self,
+        _ids: &[fub_abi::model::DocId],
+    ) -> Vec<fub_abi::traits::IndexLoss> {
+        Vec::new()
+    }
+    fn reconcile(&mut self, _ids: &[fub_abi::model::DocId]) -> Vec<fub_abi::traits::IndexLoss> {
+        Vec::new()
+    }
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::BadArgs(Text::message(
+            WITH_ARGOMENTI,
+            vec![Arg::int("n", 2), Arg::text("where", "Ricerca")],
+        )))
+    }
+}
+
+/// **Anche l'errore di un indice esce risolto**, col catalogo di chi l'ha
+/// scritto: per la domanda che il kernel serve sotto il suo prestito e per
+/// quella staccata, che l'host esegue senza. Prima la chiave usciva nuda, e sul
+/// filo era un oggetto: «[object Object]» sotto la casella di ricerca.
+#[test]
+fn the_error_of_an_index_is_resolved_with_its_catalog() {
+    let fx = Fixture::new();
+    let system = Arc::new(SystemLocale::default());
+    assert!(system.publish(italian()));
+    let mut ws = fx.workspace(system);
+    ws.register_index_provider("uno", Box::new(KeyIndex))
+        .expect("registrato");
+    let query = IndexQuery::Custom {
+        ns: KEY_INDEX_NS.into(),
+        query: serde_json::Value::Null,
+    };
+
+    let Err(mut direct) = ws.query_index(query.clone()) else {
+        panic!("l'indice rifiuta ogni domanda")
+    };
+    assert!(all_resolved(&mut direct), "{direct:?}");
+    assert_eq!(texts(&mut direct), ["2 note in «Ricerca»"]);
+
+    let prepared = ws
+        .prepare_detached_index_query(&query)
+        .expect("una domanda a un indice esterno è staccata");
+    let failure = match prepared.invoke(&ws, query) {
+        Err(failure) => failure,
+        Ok(_) => panic!("l'indice rifiuta ogni domanda"),
+    };
+    assert_eq!(failure.owner.as_deref(), Some("uno"));
+    let mut detached = ws.localized_query_failure(failure);
+    assert!(all_resolved(&mut detached), "{detached:?}");
+    assert_eq!(texts(&mut detached), ["2 note in «Ricerca»"]);
+}

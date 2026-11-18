@@ -72,6 +72,8 @@ mod frame_rate;
 mod live;
 mod mobile;
 mod print;
+#[cfg(not(mobile))]
+mod promemoria;
 mod resources;
 mod reveal;
 mod support;
@@ -521,10 +523,13 @@ async fn read_document(
     let id = doc_id(&id)?;
     let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        let (text, revision, format) = match &key {
-            Some(key) => host.open_document_with_format(vault.as_deref(), &id, key)?,
-            None => host.read_document_with_format(vault.as_deref(), &id)?,
+        // Un documento che non si legge (un .docx vuoto o rotto) dice perché
+        // con una chiave del core: la frase la risolve `for_the_shell`.
+        let read = match &key {
+            Some(key) => host.open_document_with_format(vault.as_deref(), &id, key),
+            None => host.read_document_with_format(vault.as_deref(), &id),
         };
+        let (text, revision, format) = for_the_shell(host, vault.as_deref(), read)?;
         let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
         let text_kind = document_text(format.as_ref());
         let source_kind = format
@@ -969,11 +974,14 @@ async fn write_document(
     let id = doc_id(&id)?;
     let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        match &key {
+        // Un salvataggio rifiutato (un documento in sola lettura, una
+        // riscrittura che non si rileggeva uguale) dice perché con una chiave
+        // del core: la frase la risolve `for_the_shell`.
+        let written = match &key {
             Some(key) => host.write_open_document(vault.as_deref(), &id, &source, base, key),
             None => host.write_document(vault.as_deref(), &id, &source, base),
-        }
-        .map(|revision| revision.0)
+        };
+        for_the_shell(host, vault.as_deref(), written).map(|revision| revision.0)
     })
     .await
 }
@@ -3485,6 +3493,8 @@ pub fn run() {
             }
             #[cfg(not(mobile))]
             start_control(app);
+            #[cfg(not(mobile))]
+            promemoria::start(app.handle());
             // Il banco della memoria (R1) può chiedere la raccolta forzata
             // della WebView, ma soltanto in una build con `bench-gc`; senza
             // `FUB_BENCH_GC` non succede niente.

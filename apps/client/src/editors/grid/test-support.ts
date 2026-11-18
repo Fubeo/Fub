@@ -252,6 +252,10 @@ function inputOfValue(value: unknown): string {
 }
 
 /// Le celle che i comandi `range.setValues` del giornale scrivono, per foglio.
+/// Il comando con cui il provider porta la cartella a uno stato tenuto in
+/// memoria, in testa al giornale (`fub.restore`).
+const RESTORE = "fub.restore";
+
 function commandInputs(journal: GridJournal): Map<string, string> {
   const out = new Map<string, string>();
   for (const command of journal.commands) {
@@ -274,6 +278,8 @@ export function workbookHost(options: {
   readonly dialog?: (command: GridCommand) => GridDialog | null;
   /// I comandi che il catalogo non serve.
   readonly drop?: readonly string[];
+  /// L'intervallo che `selection.currentRegion` rende.
+  readonly region?: string;
 } = {}) {
   const calls: string[] = [];
   const opened: string[] = [];
@@ -284,23 +290,81 @@ export function workbookHost(options: {
   let failApply: PluginError | null = null;
   let journal = "";
   let instances = 0;
-  const base = options.base ?? (() => xlsx.document_revision);
+  /// Le celle che `save` ha messo nei byte, sopra quelle della fixture.
+  const saved = new Map<string, string>();
+  /// I comandi della barra che i byte salvati portano, `id@selezione`: il
+  /// formato, l'ordine, le righe che il finto non disegna.
+  let savedStyles: string[] = [];
+  let savedRevision = xlsx.document_revision;
+  const base = options.base ?? (() => savedRevision);
   const given: GridCommandRequest[] = [];
-  const undone: GridCommand[] = [];
+  /// La cronologia del documento, come la tiene il provider: i punti con il
+  /// giornale che li dà sui byte `base`, e le celle che mostrano. Un punto
+  /// salvato da un'altra base si raggiunge con `fub.restore`.
+  type State = { cells: Map<string, string>; styles: string[] };
+  type Point = { journal: string; base: string } & State;
+  let points: Point[] = [];
+  let cursor = 0;
+  /// Come il provider, la cronologia di ogni giornale si copia quando cambia:
+  /// il salvataggio ritrova quella del giornale che scrive, anche se una
+  /// sessione vecchia, nel frattempo, è andata avanti per conto suo.
+  const lines = new Map<string, { points: Point[]; cursor: number }>();
+  let savedLine: { points: Point[]; cursor: number } | null = null;
+  const publish = (text: string) => lines.set(text, { points: points.map((point) => ({ ...point })), cursor });
+  const states = new Map<string, State>();
+  const restoredOf = (parsed: GridJournal): State | undefined => parsed.commands[0]?.id === RESTORE
+    ? states.get((JSON.parse(parsed.commands[0].params) as { state: string }).state)
+    : undefined;
+  /// I comandi della barra che il giornale `text` porta sopra i byte.
+  const styled = (text: string): string[] => {
+    const parsed = parseGridJournal(text);
+    return [
+      ...(restoredOf(parsed)?.styles ?? savedStyles),
+      ...parsed.commands.filter((command) => command.id !== RESTORE && command.id !== "range.setValues")
+        .map((command) => `${command.id}@${command.selection}`),
+    ];
+  };
+  const stateOf = (text: string): State => ({ cells: visible(text), styles: styled(text) });
   const catalog = (): GridCommandState[] => (structuredClone(xlsx.session.commands) as GridCommandState[])
     .filter((command) => options.serves !== false || command.id !== "range.setValues")
-    .filter((command) => !options.drop?.includes(command.id));
+    .filter((command) => !options.drop?.includes(command.id))
+    .map((command) => {
+      const enabled = command.id === "edit.undo" ? cursor > 0 : command.id === "edit.redo" ? cursor + 1 < points.length : null;
+      return enabled === null ? command : { ...command, enabled, reason: enabled ? null : command.reason };
+    });
+  /// Le celle che il giornale `text` mostra: quelle salvate (o dello stato
+  /// che `fub.restore` chiama) con quelle che il giornale scrive.
+  const visible = (text: string): Map<string, string> => {
+    const parsed = parseGridJournal(text);
+    const out = new Map(restoredOf(parsed)?.cells ?? saved);
+    for (const entry of parsed.entries) out.set(`${entry.sheet}\u0000${entry.row}\u0000${entry.column}`, entry.after);
+    for (const [key, input] of commandInputs(parsed)) out.set(key, input);
+    return out;
+  };
+  /// Un passo nuovo: il futuro da ripetere esce.
+  const record = (text: string) => {
+    points.splice(cursor + 1);
+    points.push({ journal: text, base: savedRevision, ...stateOf(text) });
+    cursor = points.length - 1;
+    publish(text);
+  };
   const sessionFor = (text: string): GridBytesSession => {
     if (text === xlsx.conflict.journal) return structuredClone(xlsx.conflict.session) as GridBytesSession;
     const session = structuredClone(xlsx.session) as GridBytesSession;
-    return { ...session, revision: text === "" ? session.revision : `rev:${text}`, commands: catalog() };
+    return { ...session, revision: plainRevision(text), commands: catalog() };
   };
-  const diskOf = (sheet: string, row: string, column: string) => (xlsx.windows as GridBytesWindow[])
-    .find((window) => window.sheet === sheet)?.cells
-    .find((cell) => cell.key.row === row && cell.key.column === column)?.input ?? "";
-  const revisionOf = (text: string) => text === xlsx.edit.commit.edit.inserted
+  const diskOf = (sheet: string, row: string, column: string) => saved.get(`${sheet}\u0000${row}\u0000${column}`)
+    ?? (xlsx.windows as GridBytesWindow[])
+      .find((window) => window.sheet === sheet)?.cells
+      .find((cell) => cell.key.row === row && cell.key.column === column)?.input ?? "";
+  // Dopo un `save` la revisione dice anche i byte salvati.
+  function plainRevision(text: string): string {
+    if (!saved.size) return text === "" ? xlsx.session.revision : `rev:${text}`;
+    return text === "" ? `${xlsx.session.revision}:${savedRevision}` : `rev:${savedRevision}:${text}`;
+  }
+  const revisionOf = (text: string) => text === xlsx.edit.commit.edit.inserted && saved.size === 0
     ? xlsx.edit.commit.revision
-    : text === "" ? xlsx.session.revision : `rev:${text}`;
+    : plainRevision(text);
   const host: GridHost = {
     listGridSurfaces: async () => {
       calls.push("list");
@@ -310,6 +374,16 @@ export function workbookHost(options: {
       calls.push(`open ${surface} ${doc} ${text === "" ? "∅" : "journal"} ${revision === xlsx.document_revision ? "base" : revision}`);
       if (revision !== base()) throw { kind: "conflict", message: "grid source changed" } satisfies PluginError;
       journal = text;
+      if (savedLine && text === "") {
+        points = savedLine.points;
+        cursor = savedLine.cursor;
+      }
+      savedLine = null;
+      // L'istanza nuova ritrova la cronologia: il punto di adesso è il
+      // giornale aperto sui byte di adesso.
+      const here = { journal: text, base: savedRevision, ...stateOf(text) };
+      if (points.length) points[cursor] = here;
+      else points.push(here);
       const session = sessionFor(text);
       session.instance = `xlsx-${++instances}`;
       opened.push(session.instance);
@@ -326,11 +400,7 @@ export function workbookHost(options: {
       }
       const window = structuredClone((xlsx.windows as GridBytesWindow[]).find((candidate) => candidate.sheet === request.sheet)!);
       window.revision = request.revision;
-      const parsed = parseGridJournal(journal);
-      const written = [
-        ...parsed.entries.map((entry) => [entry.sheet, entry.row, entry.column, entry.after] as const),
-        ...[...commandInputs(parsed)].map(([key, input]) => [...key.split("\u0000"), input] as [string, string, string, string]),
-      ];
+      const written = [...visible(journal)].map(([key, input]) => [...key.split("\u0000"), input] as [string, string, string, string]);
       for (const [sheet, row, column, input] of written.filter((candidate) => candidate[0] === request.sheet)) {
         const cell = window.cells.find((candidate) => candidate.key.row === row && candidate.key.column === column);
         const value = input === "" ? { kind: "blank" as const } : { kind: "text" as const, value: input };
@@ -359,7 +429,6 @@ export function workbookHost(options: {
         let commands = next.commands.length ? [...next.commands] : next.entries.map((entry) => input(entry.sheet, entry.row, entry.column, entry.after));
         for (const patch of request.patches) commands = [...commands, input(patch.cell.sheet, patch.cell.row, patch.cell.column, patch.after)];
         next = { entries: [], commands };
-        undone.length = 0;
       } else {
         for (const patch of request.patches) {
           next = recordGridJournal(next, patch.cell, diskOf(patch.cell.sheet, patch.cell.row, patch.cell.column), patch.after);
@@ -367,6 +436,7 @@ export function workbookHost(options: {
       }
       const deleted = journal;
       journal = gridJournalText(next);
+      if (journal !== deleted) record(journal);
       const commit: GridCommit = {
         revision: revisionOf(journal),
         edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted: journal },
@@ -378,37 +448,58 @@ export function workbookHost(options: {
       calls.push("commands");
       return catalog();
     },
-    gridBytesCommand: async (_surface, _instance, request) => {
+    gridBytesCommand: async (_surface, instance, request) => {
       calls.push(`command ${request.command.id}`);
       given.push(structuredClone(request));
       if (hold) await new Promise<void>((resolve) => answers.push(resolve));
+      // Come l'host: un'istanza chiusa nel frattempo non c'è più.
+      if (closed.includes(instance)) throw { kind: "not_found", message: "grid instance closed" } satisfies PluginError;
       if (request.revision !== revisionOf(journal)) throw { kind: "conflict", message: "stale grid revision" } satisfies PluginError;
       if (!catalog().some((command) => command.id === request.command.id)) {
         throw { kind: "bad_args", message: `grid command \`${request.command.id}\` is not served` } satisfies PluginError;
       }
+      // Leggere la zona della cella non cambia la cartella.
+      if (request.command.id === "selection.currentRegion") {
+        return {
+          commit: { revision: revisionOf(journal), edit: { from: 0, to: 0, deleted: "", inserted: "" }, invalidation: { kind: "cells", cells: [] } },
+          sheets: structuredClone(xlsx.session.sheets),
+          hidden: structuredClone(xlsx.session.hidden),
+          selection: { sheet: request.command.sheet, selection: options.region ?? request.command.selection, active: request.command.active },
+          result: JSON.stringify({ selection: options.region ?? request.command.selection }),
+          dialog: null,
+          commands: catalog(),
+          book: structuredClone(xlsx.session.book) as GridBytesSession["book"],
+        };
+      }
       const current = parseGridJournal(journal);
-      let commands = [...current.commands];
-      if (request.command.id === "edit.undo") {
-        const last = commands.pop();
-        if (!last) throw { kind: "bad_args", message: "nothing to undo" } satisfies PluginError;
-        undone.push(last);
-      } else if (request.command.id === "edit.redo") {
-        const again = undone.pop();
-        if (!again) throw { kind: "bad_args", message: "nothing to redo" } satisfies PluginError;
-        commands.push(again);
+      const deleted = journal;
+      const history = request.command.id === "edit.undo" || request.command.id === "edit.redo";
+      if (history) {
+        const to = request.command.id === "edit.undo" ? cursor - 1 : cursor + 1;
+        const target = points[to];
+        if (!target) throw { kind: "bad_args", message: request.command.id === "edit.undo" ? "nothing to undo" : "nothing to redo" } satisfies PluginError;
+        if (target.base !== savedRevision) {
+          // Oltre un salvataggio: lo stato del punto, tenuto in memoria.
+          const id = `stato-${states.size + 1}`;
+          states.set(id, { cells: target.cells, styles: target.styles });
+          target.journal = gridJournalText({ entries: [], commands: [{ id: RESTORE, params: JSON.stringify({ state: id }), sheet: "s1", selection: "A1", active: "A1" }] });
+          target.base = savedRevision;
+        }
+        cursor = to;
+        journal = target.journal;
+        publish(journal);
       } else {
-        commands = [
+        const commands = [
           ...current.entries.map((entry) => {
             const at = cellA1({ row: Number(entry.row.slice(1)), column: Number(entry.column.slice(1)) });
             return { id: "range.setValues", params: JSON.stringify({ range: at, values: [[entry.after]] }), sheet: entry.sheet, selection: at, active: at };
           }),
-          ...commands,
+          ...current.commands,
           request.command,
         ];
-        undone.length = 0;
+        journal = gridJournalText({ entries: [], commands });
+        record(journal);
       }
-      const deleted = journal;
-      journal = gridJournalText({ entries: [], commands });
       const outcome: GridCommandOutcome = {
         commit: {
           revision: revisionOf(journal),
@@ -438,6 +529,26 @@ export function workbookHost(options: {
     applied,
     given,
     journal: () => journal,
+    /// Il disco, cella per cella: l'input che i byte salvati danno a `sheet`,
+    /// `row`, `column`.
+    disk: diskOf,
+    /// I comandi della barra che i byte salvati portano, `id@selezione`.
+    diskStyles: () => [...savedStyles],
+    /// La revisione dei byte su disco.
+    base: () => savedRevision,
+    /// Salva il giornale `text` nei byte, come la scrittura del documento: le
+    /// celle che scrive (voci o `range.setValues`) vanno sul disco, e la
+    /// revisione cambia.
+    save: (text: string) => {
+      const line = lines.get(text);
+      savedLine = line ? { points: line.points.map((point) => ({ ...point })), cursor: line.cursor } : null;
+      const written = visible(text);
+      savedStyles = styled(text);
+      saved.clear();
+      for (const [key, input] of written) saved.set(key, input);
+      savedRevision = `sha256:salvato-${saved.size}-${text.length}-${Math.random().toString(36).slice(2)}`;
+      return savedRevision;
+    },
     hold: (value: boolean) => { hold = value; },
     release: () => { for (const answer of answers.splice(0)) answer(); },
     failApply: (error: PluginError | null) => { failApply = error; },

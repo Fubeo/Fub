@@ -202,3 +202,126 @@ fn unlinked_mentions_without_search_say_so_instead_of_failing() {
     }
     assert!(!failed(&tree), "{json}");
 }
+
+/// Le azioni «Collega» dell'albero, con il loro payload.
+fn convert_actions(tree: &UiNode) -> Vec<serde_json::Value> {
+    fn walk(value: &serde_json::Value, out: &mut Vec<serde_json::Value>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if map.get("action").and_then(|a| a.as_str()) == Some("convert_to_link") {
+                    out.push(map.get("payload").cloned().unwrap_or_default());
+                }
+                map.values().for_each(|v| walk(v, out));
+            }
+            serde_json::Value::Array(items) => items.iter().for_each(|v| walk(v, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(&serde_json::to_value(tree).unwrap(), &mut out);
+    out
+}
+
+/// IMP-102, IMP-104, IMP-105 attraverso il kernel vero: il pannello offre
+/// solo la menzione in prosa (non quella già dentro un link, non quella nel
+/// codice); «Collega» la converte sul disco; la stessa azione ripetuta non
+/// scrive niente; «Annulla l'ultima operazione» riporta i byte di prima in un
+/// passo solo.
+#[cfg(feature = "commands")]
+#[test]
+fn linking_a_mention_writes_the_file_once_and_undoes_in_one_step() {
+    use fub_abi::command::InvokeMode;
+    use fub_abi::event::Actor;
+    use fub_features::commands::{CoreCommands, COMMANDS_ID, VAULT_UNDO};
+    use fub_features::MentionCommands;
+
+    let before = "Il Capo passa. Vedi [[Altra|Capo]] e `Capo`.\n";
+    let vault = Vault::new();
+    vault.put("Diario.md", before);
+    vault.put("Mario Rossi.md", "---\naliases: [Capo]\n---\n# Mario\n");
+    vault.put("Altra.md", "# Altra\n");
+    let mut ws = vault.open();
+    ws.register_command_provider(BACKLINKS_ID, Box::new(MentionCommands))
+        .expect("registrato");
+    ws.register_plugin(
+        fub_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID),
+        fub_kernel::Trust::Core,
+    )
+    .expect("dichiarato");
+    ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
+        .expect("registrato");
+    ws.set_active_document(Some(DocId::new("Diario.md")));
+    let instance = ViewInstance::only(BACKLINKS_VIEW);
+    let disk = || std::fs::read_to_string(vault.root.join("Diario.md")).unwrap();
+
+    let offered = convert_actions(&ws.render_view(&instance).expect("render"));
+    assert_eq!(offered.len(), 1, "solo la menzione in prosa: {offered:?}");
+    assert_eq!(offered[0]["start"], 3, "{offered:?}");
+    let convert = UiAction::new("convert_to_link").with_payload(offered[0].clone());
+
+    ws.view_action(&instance, convert.clone()).expect("collega");
+    let linked = disk();
+    assert_eq!(
+        linked,
+        "Il [[Mario Rossi|Capo]] passa. Vedi [[Altra|Capo]] e `Capo`.\n"
+    );
+    assert!(
+        convert_actions(&ws.render_view(&instance).expect("render")).is_empty(),
+        "una menzione collegata non si offre di nuovo"
+    );
+
+    // Il secondo «Collega» (un clic doppio, un pannello vecchio) non scrive.
+    let again = ws.view_action(&instance, convert);
+    assert!(again.is_err(), "{again:?}");
+    assert_eq!(disk(), linked);
+
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("annulla");
+    assert_eq!(disk(), before, "un passo solo riporta i byte di prima");
+}
+
+/// IMP-039: un disegno non è prosa. La copia di un disegno, col titolo
+/// dell'originale nel suo `<title>` e in un testo, non offre l'originale né
+/// una nota con lo stesso nome come menzione uscente, e il pannello non
+/// mostra mai un pezzo del suo markup come contesto: «Collega» scriverebbe un
+/// wikilink dentro l'XML.
+#[cfg(feature = "draw")]
+#[test]
+fn a_drawing_offers_no_mentions_from_its_markup() {
+    let drawing = "<svg xmlns=\"http://www.w3.org/2000/svg\" \
+        xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 210 297\">\
+        <title>Mappa del quartiere</title>\
+        <text x=\"10\" y=\"200\"><tspan>Mappa del quartiere, scritta</tspan></text></svg>\n";
+    let vault = Vault::new();
+    vault.put("Disegni/Mappa del quartiere.svg", drawing);
+    vault.put("Disegni/i8/c-est2.svg", drawing);
+    vault.put("Note/Mappa del quartiere.md", "# Mappa\n");
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("markdown");
+    registry
+        .register(fub_format_svg::SvgProvider::boxed())
+        .expect("svg");
+    let mut ws = Workspace::new(&vault.root, registry).expect("vault");
+    ws.register_core_feature(BACKLINKS_ID, BACKLINKS_ID)
+        .expect("dichiarato");
+    ws.register_view_provider(BACKLINKS_ID, Box::new(BacklinksView))
+        .expect("registrato");
+    ws.reindex().expect("reindex");
+    ws.set_active_document(Some(DocId::new("Disegni/i8/c-est2.svg")));
+
+    let tree = ws
+        .render_view(&ViewInstance::only(BACKLINKS_VIEW))
+        .expect("render con un disegno attivo");
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(convert_actions(&tree).is_empty(), "{json}");
+    for markup in ["fub:version", "<title>", "<tspan>", "xmlns"] {
+        assert!(!json.contains(markup), "{markup}: {json}");
+    }
+}

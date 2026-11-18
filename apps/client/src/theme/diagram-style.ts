@@ -70,6 +70,8 @@ const DIRECTIVE = /^[ \t]*%%(?!\{)[ \t]*(?:stile|style)[ \t]*:[ \t]*([\w-]*)[ \t
 export interface StyleDirective {
   /// Lo stile nominato, o `null` se il nome non è uno stile.
   readonly style: DiagramStyleId | null;
+  /// Il nome com'è scritto: chi legge uno stile sconosciuto sa quale.
+  readonly name: string;
   /// Inizio e fine della riga nel sorgente, senza il suo a capo.
   readonly from: number;
   readonly to: number;
@@ -83,7 +85,7 @@ export function styleDirective(source: string): StyleDirective | null {
     const to = end < 0 ? source.length : end;
     const line = source.slice(from, to).replace(/\r$/, "");
     const match = DIRECTIVE.exec(line);
-    if (match) return { style: diagramStyleNamed(match[1] ?? ""), from, to: from + line.length };
+    if (match) return { style: diagramStyleNamed(match[1] ?? ""), name: match[1] ?? "", from, to: from + line.length };
     if (end < 0) break;
     from = end + 1;
   }
@@ -103,9 +105,26 @@ export interface SourceEdit {
   readonly insert: string;
 }
 
+/// Dove finisce il frontmatter di Mermaid (`---` … `---` in cima al corpo):
+/// l'offset della riga che lo segue, o 0 se il corpo non ne ha uno chiuso.
+export function frontmatterEnd(source: string): number {
+  const first = source.indexOf("\n");
+  if (first < 0 || source.slice(0, first).replace(/\r$/, "").trim() !== "---") return 0;
+  let from = first + 1;
+  while (from < source.length) {
+    const end = source.indexOf("\n", from);
+    const to = end < 0 ? source.length : end;
+    if (source.slice(from, to).replace(/\r$/, "").trim() === "---") return end < 0 ? source.length : end + 1;
+    if (end < 0) break;
+    from = end + 1;
+  }
+  return 0;
+}
+
 /// La modifica che dà al diagramma lo stile `style`, o che toglie la sua
-/// scelta con `null`. La direttiva sta in cima, come prima riga; se c'era già
-/// si riscrive al suo posto. `null` quando non c'è niente da cambiare.
+/// scelta con `null`. La direttiva nuova sta in cima, dopo l'eventuale
+/// frontmatter di Mermaid, che deve restare la prima cosa del corpo; se c'era
+/// già si riscrive al suo posto. `null` quando non c'è niente da cambiare.
 export function styleDirectiveEdit(source: string, style: DiagramStyleId | null): SourceEdit | null {
   const found = styleDirective(source);
   if (style === null) {
@@ -119,5 +138,9 @@ export function styleDirectiveEdit(source: string, style: DiagramStyleId | null)
     if (found.style === style) return null;
     return { from: found.from, to: found.to, insert: line };
   }
-  return { from: 0, to: 0, insert: `${line}\n` };
+  const at = frontmatterEnd(source);
+  // Un frontmatter chiuso sull'ultima riga, senza a capo: la direttiva va a
+  // capo dopo di lui.
+  if (at === source.length && at > 0 && !source.endsWith("\n")) return { from: at, to: at, insert: `\n${line}` };
+  return { from: at, to: at, insert: `${line}\n` };
 }

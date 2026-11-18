@@ -9,6 +9,7 @@ import { gridJournalText, parseGridJournal } from "../../state/grid-journal";
 import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
 import { settle, typeInActiveCell, workbookHost, workbookMounted } from "./test-support";
+import type { GridHost } from "./engine";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -84,13 +85,15 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(cell(3, 1)?.textContent).toBe("680");
     expect(notice().textContent).toContain(" ");
 
-    // Annullare riporta i byte: il giornale si svuota.
+    // Annullare riporta i byte: il giornale si svuota. La cronologia è del
+    // provider, che dà il giornale di ogni passo.
     expect(engine.undo()).toBe(true);
+    await settle();
     expect(changes[changes.length - 1]?.origin).toBe("undo");
     expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }], commands: [] }));
     expect(engine.undo()).toBe(true);
-    expect(engine.getDoc()).toBe("");
     await settle();
+    expect(engine.getDoc()).toBe("");
     expect(grid.journal()).toBe("");
     expect(cell(1, 1)?.textContent).toBe("800");
     expect(engine.redo()).toBe(true);
@@ -172,11 +175,11 @@ describe("GridEngine con una cartella di Excel", () => {
     ]);
     expect(changes[changes.length - 1]?.text).toBe(grid.journal());
 
-    // Da qui annulla e ripeti sono del documento.
+    // Annullare la formula torna al giornale di celle di prima.
     expect(engine.undo()).toBe(true);
     await settle();
     expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
-    expect(parseGridJournal(engine.getDoc()).commands).toHaveLength(1);
+    expect(parseGridJournal(engine.getDoc())).toMatchObject({ commands: [], entries: [{ row: "r1", column: "c1", after: "7" }] });
     expect(engine.redo()).toBe(true);
     await settle();
     expect(parseGridJournal(engine.getDoc()).commands).toHaveLength(2);
@@ -184,6 +187,114 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(engine.redo()).toBe(true);
     await settle();
     expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).not.toContain("nothing to redo");
+    engine.destroy();
+  });
+
+  // IMP-027: il salvataggio mette il giornale di comandi nei byte, e la
+  // sessione del provider che si riapre non ha più la sua history. Una
+  // formula scritta (o cancellata) resta da annullare con l'input di prima.
+  it("una formula scritta si annulla e si ripete anche dopo che il salvataggio l'ha messa nei byte (IMP-027)", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
+    const save = async () => {
+      grid.save(engine.getDoc());
+      // La sessione del documento, salvato, dà il giornale vuoto sui byte nuovi.
+      engine.syncDoc("");
+      await settle();
+      await settle();
+    };
+    go(8, 6);
+    typeInActiveCell(host, viewport, "=B2*2");
+    await settle();
+    expect(parseGridJournal(engine.getDoc()).commands.map((command) => command.selection)).toEqual(["G9"]);
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("=B2*2");
+    expect(engine.getDoc()).toBe("");
+
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 6)?.textContent ?? "").toBe("");
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("");
+
+    expect(engine.redo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 6)?.textContent).toBe("=B2*2");
+    await save();
+    expect(grid.disk("s1", "r8", "c6")).toBe("=B2*2");
+    engine.destroy();
+  });
+
+  it("Canc su una formula salvata si annulla: la formula torna nella cella e sul disco (IMP-027)", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
+    const save = async () => {
+      grid.save(engine.getDoc());
+      engine.syncDoc("");
+      await settle();
+      await settle();
+    };
+    go(8, 7);
+    typeInActiveCell(host, viewport, "=B2+1");
+    await settle();
+    await save();
+    go(8, 7);
+    // Prima che il salvataggio arrivi: la cancellazione entra come comando.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    await settle();
+    expect(cell(8, 7)?.textContent ?? "").toBe("");
+    await save();
+    expect(grid.disk("s1", "r8", "c7")).toBe("");
+
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 7)?.textContent).toBe("=B2+1");
+    await save();
+    expect(grid.disk("s1", "r8", "c7")).toBe("=B2+1");
+    // E il passo prima, la formula scritta, si annulla ancora.
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    await save();
+    expect(grid.disk("s1", "r8", "c7")).toBe("");
+    engine.destroy();
+  });
+
+  it("annulla e ripeti vanno al provider, prima e dopo il salvataggio (IMP-027)", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => grid.base());
+    go(8, 6);
+    typeInActiveCell(host, viewport, "=B2*2");
+    await settle();
+    go(9, 6);
+    typeInActiveCell(host, viewport, "=B2*3");
+    await settle();
+    expect(engine.undo()).toBe(true);
+    await settle();
+    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
+    expect(cell(9, 6)?.textContent ?? "").toBe("");
+    // Salvato, il primo passo si annulla con l'input di prima, e quello
+    // annullato si ripete con il suo.
+    grid.save(engine.getDoc());
+    engine.syncDoc("");
+    await settle();
+    await settle();
+    expect(engine.undo()).toBe(true);
+    await settle();
+    await settle();
+    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo", "edit.undo"]);
+    expect(cell(8, 6)?.textContent ?? "").toBe("");
+    expect(engine.redo()).toBe(true);
+    await settle();
+    await settle();
+    expect(engine.redo()).toBe(true);
+    await settle();
+    await settle();
+    expect(cell(8, 6)?.textContent).toBe("=B2*2");
+    expect(cell(9, 6)?.textContent).toBe("=B2*3");
     engine.destroy();
   });
 
@@ -282,6 +393,28 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(cell(0, 0)).not.toBeNull();
     expect(cell(0, 1)).toBeNull();
     expect(cell(1, 0)).toBeNull();
+    engine.destroy();
+  });
+
+  // IMP-028: una formula su un riferimento circolare dice `#CIRC!`, e la
+  // riga degli avvisi spiega che cosa vuol dire.
+  it("una cella con #CIRC! porta l'avviso del riferimento circolare", async () => {
+    const plain = await workbookMounted(workbookHost());
+    expect(plain.host.querySelector<HTMLElement>(".grid-notice")?.textContent ?? "").not.toContain(t("grid.workbook.circular"));
+    plain.engine.destroy();
+    document.body.replaceChildren();
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        const affitto = window.cells.find((cell) => cell.key.row === "r1" && cell.key.column === "c0")!;
+        affitto.input = "=A2+1";
+        affitto.value = { kind: "error", value: "#CIRC!" };
+        affitto.display = "#CIRC!";
+      },
+    });
+    const { engine, host, cell } = await workbookMounted(grid);
+    expect(cell(1, 0)?.textContent).toBe("#CIRC!");
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.workbook.circular"));
     engine.destroy();
   });
 
@@ -460,7 +593,11 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(changes[changes.length - 1]?.text).toBe("");
     expect(notice().textContent).toContain("grid cell text is too long");
     expect(cell(1, 1)?.textContent).toBe("800");
-    expect(engine.undo()).toBe(false);
+    // Niente da annullare: il provider lo sa, e non è un errore da dire.
+    engine.undo();
+    await settle();
+    expect(engine.getDoc()).toBe("");
+    expect(notice().textContent).not.toContain("nothing to undo");
     engine.destroy();
   });
 
@@ -565,5 +702,36 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(selections()).toBe(1);
     engine.destroy();
     expect(host.querySelector(".grid-sheets")).toBeNull();
+  });
+
+  it("Inserisci foglio rende attivo il foglio nuovo, che la cartella non conosceva ancora (IMP-033)", async () => {
+    const grid = workbookHost();
+    const added = { id: "s4", name: "Sheet1", row_count: 100, column_count: 26 };
+    const host: GridHost = {
+      ...grid.host,
+      // Come il provider: il foglio entra dopo l'attivo e diventa attivo.
+      gridBytesCommand: async (surface, instance, request) => {
+        const outcome = await grid.host.gridBytesCommand(surface, instance, request);
+        if (request.command.id !== "home.insertSheet") return outcome;
+        const sheets = [...outcome.sheets];
+        sheets.splice(1, 0, added);
+        return { ...outcome, sheets, selection: { sheet: added.id, selection: "A1", active: "A1" } };
+      },
+      gridBytesWindow: async (surface, instance, request) => {
+        if (request.sheet !== added.id) return grid.host.gridBytesWindow(surface, instance, request);
+        const window = await grid.host.gridBytesWindow(surface, instance, { ...request, sheet: "s2" });
+        return { ...window, sheet: added.id, cells: [] };
+      },
+    };
+    const { engine, host: root, cell } = await workbookMounted({ ...grid, host });
+    expect(engine.command("home.insertSheet")).toBe(true);
+    await settle();
+    await settle();
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Conti", "Sheet1", "Note"]);
+    expect(tabs[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(engine.selectionRefs()).toEqual({ sheet: "Sheet1", range: "A1", active: "A1" });
+    expect(cell(0, 0)?.textContent).toBe("");
+    engine.destroy();
   });
 });

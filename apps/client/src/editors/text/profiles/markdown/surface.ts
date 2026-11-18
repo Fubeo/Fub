@@ -19,12 +19,17 @@ import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives, plainMode, type BlocksOptions } from "./blocks";
 import { refreshPageHeader, retitleView } from "./blocks/page";
+import { refreshTypePage } from "./type-page";
+import { TYPES_FOLDER_SETTING } from "../../../../state/note-type-commands";
 import { NO_TYPES, parsePropertyTypes, sameTypes, type PropertyTypes } from "./page/properties/kind";
 import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
+import type { MoveBlockPort } from "./blocks/move-to";
+import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
+import type { RelationPort } from "./page/properties/values";
 import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
@@ -32,9 +37,13 @@ import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
 import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type WikilinkGesture } from "./link-gesture";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
-import { settings } from "../../../../host/query";
+import { resolvedReference, settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
 import { openVaultRoot } from "../../../../state/store";
+import { featureInType, listNoteTypes, noteTypeOf, type NoteType, type NoteTypeState } from "../../../../state/note-types";
+import { undoLastOperation } from "../../../../state/vault";
+import { isErrorKind } from "../../../../host/errors";
+import { noteTypeSource } from "./page/note-type";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
@@ -59,12 +68,14 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, SYNC_BLOCK_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 
 export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
+import { Transclusions, type TransclusionDeps } from "./transclusion";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
@@ -97,31 +108,24 @@ import {
   tableRowAt,
   tagAt,
   taskAt,
+  formulaAt,
+  type FormulaAt,
   type MarkdownLinkAt,
 } from "./menu";
+import { loadKatex, readOptions } from "./math";
+import { editFormulaAt, placeFormulaAt } from "./math-live";
+import { mathmlHtml, equationMathml } from "./math/paste";
+import { toBlock, toInline } from "./math/place";
 import { MENU_RULE, type SurfaceMenuClipboard } from "../../../core/editor-menu";
 import { linkDialogOpener } from "./link-dialog";
 import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource } from "./image-live";
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
+import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup } from "./block-groups";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
-
-/// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri
-/// si scrivono con «Altro…».
-const CODE_LANGUAGES: readonly (readonly [string, string])[] = [
-  ["python", "Python"],
-  ["rust", "Rust"],
-  ["typescript", "TypeScript"],
-  ["json", "JSON"],
-  ["bash", "Bash"],
-];
-
-/// Le larghezze di «Larghezza ▸», in pixel CSS; «Piena» è la colonna del
-/// testo, «Originale» toglie la misura.
-const IMAGE_WIDTHS = { small: 240, medium: 480 } as const;
 
 /// Le tre viste esclusive sullo stesso buffer (D1 A, E1). `live_preview` è
 /// **Scrittura**: la resa viva con dentro i Blocchi (maniglie, testata,
@@ -202,6 +206,12 @@ export interface MarkdownSurfaceOptions {
   /// «Nuova sottopagina» dalla testata dei Blocchi: `null` se è andata,
   /// altrimenti la frase che dice perché no.
   onNewSubpage?(doc: string, name: string): Promise<string | null>;
+  /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
+  /// blocco. Senza, il menu del blocco non lo offre.
+  moveBlock?: MoveBlockPort;
+  /// Il blocco sincronizzato (T30): «Sincronizza in un'altra nota» nel menu
+  /// del blocco e «Blocco di un'altra nota» nel «/». Senza, non ci sono.
+  syncBlock?: SyncBlockPort;
   /// Le icone delle pagine (`icon:`) per i wikilink della Live (K9): la
   /// lettura per nome, e chi avvisa quando cambiano.
   pageIcons?: PageIcons;
@@ -211,6 +221,10 @@ export interface MarkdownSurfaceOptions {
   /// chi la legge, perché l'editor non chiama l'host da sé. Senza, la riga
   /// non c'è.
   noteFacts?: NoteFactsSource;
+  /// La trasclusione viva (E14): le sessioni della finestra e le regole di
+  /// un riquadro, per scrivere dentro `![[Nota#^id]]`. Senza, le note
+  /// riportate si leggono soltanto.
+  transclusion?: TransclusionDeps;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -262,6 +276,11 @@ const FOLDS = new Map<string, (view: EditorView) => boolean>([
   ["text.fold.less", foldLess],
   ["text.fold.properties", foldProperties],
 ]);
+
+/// «Collega», il gesto di Mod-k come azione dell'editor (la mini-barra, il
+/// tasto destro): in Live e in Blocchi apre il riquadro «Collegamento», in
+/// Sorgente fa il wikilink, come la scorciatoia.
+const LINK_EDIT_ACTION = "markdown.link.edit";
 
 /// La palette slash si apre a inizio riga o dopo uno spazio: dentro una
 /// parola il `/` è testo («e/o», «km/h», 24/09).
@@ -389,7 +408,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const { entry } = choice;
       const params = actionParams(entry.id, choice.params);
       const selection = transform ? engine.selections().primary.text : undefined;
-      if (entry.action && transform) {
+      if (entry.id === BASE_ACTION && !transform) {
+        // Il «/base» resta finché il file non c'è: lo toglie l'embed.
+        startBase(view, from, to);
+      } else if (entry.id === SYNC_BLOCK_ACTION && !transform) {
+        // Come la Base: il «/» resta finché la trasclusione non c'è.
+        startSync(view, from, to);
+      } else if (entry.action && transform) {
         const action = MARKDOWN_ACTIONS.get(entry.id);
         const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
         if (command) engine.runCommand(command);
@@ -400,6 +425,53 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       }
       slashHost.chosen(entry, parent, engine.anchorBox(), selection);
     },
+  };
+  /// «Base» dal «/» o da un menu (E12): il file accanto alla nota, poi
+  /// l'embed. Una alla volta: la seconda aspetta che la prima finisca.
+  let creatingBase = false;
+  const startBase = (view: EditorView, from: number, to: number): void => {
+    if (creatingBase) return;
+    creatingBase = true;
+    const port: NewBasePort = {
+      note: linkSource(),
+      taken: async (file) =>
+        (await resolvedReference({ kind: "wiki", value: { page: file } }, linkSource()).catch(() => null)) !== null,
+      ask: (proposal, taken) => promptText({
+        title: liveStrings.t("base.new.title"),
+        label: taken === null ? liveStrings.t("base.new.name") : liveStrings.t("base.new.taken", { name: taken }),
+        value: proposal,
+        okLabel: liveStrings.t("base.new.create"),
+      }),
+      create: async (id, text) => {
+        await api.resourceWrite(id, new TextEncoder().encode(text), null, vault);
+      },
+      writable: () => editable() && !tableGrid,
+      notify: (message) => {
+        if (!life.closed) notify(message, "guasto");
+      },
+    };
+    void createBaseHere(view, from, to, port)
+      .catch((error: unknown) => port.notify(errorText(error)))
+      .finally(() => { creatingBase = false; });
+  };
+  /// «Blocco di un'altra nota» dal «/» (T30): la nota, il blocco, l'id, poi
+  /// la trasclusione qui. Una alla volta; il resto si carica al primo uso.
+  let syncing = false;
+  const startSync = (view: EditorView, from: number, to: number): void => {
+    const port = opts.syncBlock;
+    if (syncing || !port) return;
+    syncing = true;
+    const say = (message: string) => {
+      if (!life.closed) notify(message, "guasto");
+    };
+    void import("./blocks/sync-to")
+      .then((sync) => sync.syncedBlockHere(view, from, to, port, {
+        doc: linkSource(),
+        writable: () => editable() && !tableGrid,
+        notify: say,
+      }))
+      .catch((error: unknown) => say(errorText(error)))
+      .finally(() => { syncing = false; });
   };
   /// Gli argomenti di un'azione come li vuole il profilo: la data detta
   /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
@@ -415,6 +487,35 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     openLinks: () => opts.noteFacts?.openLinks(),
     searchTag: (tag: string) => opts.onSearchTag(tag),
   };
+  /// Le trasclusioni vive della nota (E14): l'editor del tratto è la
+  /// Scrittura delle note sul documento d'origine, senza trasclusione viva
+  /// (si scrive un livello solo) e senza i Blocchi.
+  let currentTheme: Theme = getCurrentTheme();
+  const transclusions = new Transclusions({
+    deps: opts.transclusion ?? null,
+    hostDoc: linkSource,
+    editable: () => editable(),
+    open: (page, heading, block) => void openWikilink(page, heading, block),
+    theme: () => currentTheme,
+    extensions: (doc) => createMarkdownProfile({
+      callbacks: {
+        openWikilink: (page, heading, block) => void opts.onOpenWikilink(page, heading, block, doc),
+        searchTag: opts.onSearchTag,
+        openPath: (path) => void Promise.resolve(opts.onOpenPath(path, doc)).catch(() => {}),
+        pageIcon: opts.pageIcons?.icon,
+        isPerson: opts.pageIcons?.isPerson,
+        mountRendered: (container, html, actions) => mountMarkdown(container, html, {
+          ...actions,
+          documentId: doc,
+          openWikilink: (page, heading, block) => opts.onOpenWikilink(page, heading ?? null, block ?? null, doc),
+          openPath: (path) => opts.onOpenPath(path, doc),
+          openFigure: opts.onOpenFigure,
+          searchTag: opts.onSearchTag,
+        }),
+      },
+      completions: { searchNotes: opts.completions.searchNotes, listTags: opts.completions.listTags },
+    }).extensions(),
+  });
   const profile = createMarkdownProfile({
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
@@ -435,6 +536,20 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
       linkCard: linkCards,
+      // La pagina del giorno (E17): in fondo alla giornaliera, se questa nota
+      // lo è con la cartella e il formato di adesso.
+      ...(opts.completions.dates?.dailyDate ? {
+        dayPage: {
+          current: () => {
+            const doc = resources?.documentId ?? documentId;
+            const date = opts.completions.dates?.dailyDate?.(doc) ?? null;
+            return date === null ? null : { doc, date };
+          },
+        },
+      } : {}),
+      // La pagina del tipo (E5): in fondo alla nota di un tipo, quando il
+      // core dice che lo è (`checkTypePage`).
+      typePage: { current: () => typePageDoc },
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -457,6 +572,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         toggleTask: readOnly ? undefined : actions.toggleTask,
         editFence: readOnly ? undefined : actions.editFence,
         importRemoteImage: readOnly ? undefined : importRemoteImage,
+        transclude: readOnly ? undefined : transclusions.mount,
       }),
     },
     completions: slashMenu ? { ...opts.completions, slash: slashMenu } : opts.completions,
@@ -513,8 +629,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     copied = null;
     carried = null;
     if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
-    // La griglia di una tabella copia le sue celle da sé.
-    if (event.target.closest(".tb-frame")) return;
+    // La griglia di una tabella copia le sue celle da sé, e l'editor di una
+    // trasclusione viva il suo testo.
+    if (event.target.closest(".tb-frame, [data-transclusion-editing]")) return;
     copied = engine.readState(selectionSource);
     // Tagliare tutto il testo di un passo porta il commento negli appunti di
     // Fub (`comments/copy.ts`); qualunque altra copia lo dimentica.
@@ -540,8 +657,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       !slash || event.key !== "/" || event.defaultPrevented || event.isComposing ||
       event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
       !(event.target instanceof Element) || !event.target.closest(".cm-content") ||
-      // Una griglia di tabella scrive le sue celle: il `/` è testo.
-      event.target.closest(".tb-frame")
+      // Una griglia di tabella scrive le sue celle, una trasclusione viva il
+      // suo tratto: il `/` è testo.
+      event.target.closest(".tb-frame, [data-transclusion-editing]")
     ) return;
     if (slash.currentDoc() !== documentId) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
@@ -600,6 +718,77 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // impostazioni di questa superficie, e ogni suo cambio rifà la testata.
   let propertyTypes: PropertyTypes = NO_TYPES;
   let propertyTypesRaw: unknown = undefined;
+  // Il tipo della nota (E5): lo dice il core quando il valore di `tipo`
+  // cambia, e la testata si rifà quando la risposta arriva.
+  const noteTypes = noteTypeSource({
+    lookup: (raw) => noteTypeOf(raw),
+    changed: () => redrawPageHeader(),
+    lifetime: life,
+  });
+  /// La nota del tipo di cui la pagina mostra le note (`./type-page`), o
+  /// `null` se la nota non è un tipo; e quante domande sono partite.
+  let typePageDoc: string | null = null;
+  let typePageAsked = 0;
+  /// L'ultimo tipo saputo, per sapere quali file lo cambiano.
+  let lastNoteType: NoteTypeState | null = null;
+  // Un tipo cambiato su disco (le sue proprietà in evidenza, un tipo che
+  // arriva o se ne va) si richiede, raccolto dopo una pausa: mai per battuta.
+  let typeTimer: ReturnType<typeof setTimeout> | null = null;
+  const typeTouched = (...docs: string[]): void => {
+    const known = lastNoteType;
+    if (known === null) return;
+    if (known.state === "typed" && !docs.includes(known.type.doc)) return;
+    if (typeTimer !== null) clearTimeout(typeTimer);
+    typeTimer = setTimeout(() => {
+      typeTimer = null;
+      noteTypes.refresh();
+    }, 250);
+  };
+  life.add(() => {
+    if (typeTimer !== null) clearTimeout(typeTimer);
+  });
+  life.add(onEvent("document_changed", (event) => typeTouched(event.id)));
+  life.add(onEvent("document_removed", (event) => typeTouched(event.id)));
+  life.add(onEvent("document_renamed", (event) => typeTouched(event.from, event.to)));
+  /// «In evidenza» in una nota con un tipo: scrive nel file del tipo, con la
+  /// revisione letta; dice com'è andata, con «Annulla».
+  const featureTyped = async (type: NoteType, key: string, on: boolean): Promise<void> => {
+    try {
+      await featureInType(type, key, on);
+      notify(liveStrings.t(on ? "page.type.featured" : "page.type.unfeatured", { key, type: type.name }), "info", {
+        label: t("app.undo"),
+        run: () => void undoLastOperation().catch((error: unknown) => notify(errorText(error), "guasto")),
+      });
+    } catch (error) {
+      const message = isErrorKind(error, "conflict")
+        ? liveStrings.t("page.type.feature.changed", { type: type.name })
+        : isErrorKind(error, "permission_denied")
+          ? liveStrings.t("page.type.feature.denied", { type: type.name })
+          : liveStrings.t("page.type.feature.failed", { type: type.name, reason: errorText(error) });
+      notify(message, "guasto");
+    }
+    noteTypes.refresh();
+  };
+  // Le note delle Relazioni (T35): la ricerca e la creazione arrivano con un
+  // `import()` quando l'editor si apre. Il tipo di una nota lo dice il core;
+  // le risposte valgono finché l'editor cerca, e si richiedono quando si
+  // riapre (la ricerca vuota).
+  let relationLookup: import("../../../../state/relations").TypeLookup | null = null;
+  const relationPort: RelationPort = {
+    search: (text, target) => import("../../../../state/relations").then((relations) => {
+      if (relationLookup === null || text.trim() === "") relationLookup = relations.cachedTypeLookup();
+      return relations.searchRelation(text, target, (written) => opts.completions.searchNotes(written), relationLookup);
+    }),
+    create: (name, target) => import("../../../../state/relations").then((relations) => relations.createRelation(name, target)),
+    open: (link) => {
+      const inner = link.trim().replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0]!;
+      const hash = inner.indexOf("#");
+      const page = (hash < 0 ? inner : inner.slice(0, hash)).trim();
+      const anchor = hash < 0 ? "" : inner.slice(hash + 1).trim();
+      void Promise.resolve(openWikilink(page, anchor.startsWith("^") ? null : anchor || null, anchor.startsWith("^") ? anchor.slice(1) : null))
+        .catch((error: unknown) => notify(errorText(error), "guasto"));
+    },
+  };
   const pageOptions: PageOptions = {
     page: () => pageName(resources?.documentId ?? documentId),
     notify: (message, tone) => notify(message, tone),
@@ -626,6 +815,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
     propertyTypes: () => propertyTypes,
+    noteType: (raw) => {
+      const known = noteTypes.stateFor(raw);
+      lastNoteType = known;
+      return known;
+    },
+    listTypes: () => listNoteTypes(),
+    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, linkSource())).catch((error: unknown) => notify(errorText(error), "guasto")),
+    featureInType: (type, key, on) => void featureTyped(type, key, on),
     // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
     // comando del registro (`property.type.set`) a scriverlo.
     setPropertyType: async (key, type) => {
@@ -637,22 +834,41 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         return errorText(error);
       }
     },
+    // «Crea «nome»» nell'editor di Selezione e Stato: l'opzione entra nel
+    // registro del vault (`property.option.set`, con l'annullo suo). Il
+    // registro si rilegge prima di scrivere il valore, così la riga lo
+    // mostra già come opzione.
+    addPropertyOption: async (key, option) => {
+      try {
+        await api.invokeCommand("property.option.set", { key, option: option.name, color: option.color, ...(option.group ? { group: option.group } : {}) }, "apply");
+        await readSurfaceSettings();
+        return null;
+      } catch (error) {
+        return errorText(error);
+      }
+    },
     // Le persone: la cartella delle persone, se c'è; se no le note.
     searchPeople: (text) => {
       const people = opts.completions.people;
       return people && people.folder() !== "" ? people.search(text) : opts.completions.searchNotes(text);
     },
+    relations: relationPort,
   };
   const blocksOptions: BlocksOptions = {
     ...pageOptions,
     // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
     // Blocchi, la testata non li usa.
     document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
+    ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
+    ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
   };
-  const blocksExtension: Extension = blocksMode(blocksOptions);
-  const plainExtension: Extension = plainMode(blocksOptions);
+  // Un testo che non è una pagina (la scheda di testo della lavagna) non ha
+  // testata: niente titolo dal nome del file, proprietà, icona né copertina.
+  const isPage = context.pageless !== true;
+  const blocksExtension: Extension = blocksMode(blocksOptions, isPage);
+  const plainExtension: Extension = plainMode(blocksOptions, isPage);
   let blocksOn = blocksPreferred();
   /// «Altre N proprietà» nella testata della Lettura, fra una resa e l'altra.
   let readingMoreOpen = false;
@@ -697,7 +913,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       actionsChanged();
     },
     theme: getCurrentTheme(),
-    extensions: () => [profile.extensions(), comments.extension()],
+    extensions: () => [profile.extensions(), comments.extension(), transclusions.keys()],
   });
   if (opts.linkCards) {
     life.add(opts.linkCards.watch(() => {
@@ -745,6 +961,33 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let readingPageTags = false;
   function readingFactTags(): boolean {
     return opts.noteFacts !== undefined && (noteFactsLabels(facts)?.tags.length ?? 0) > 0;
+  }
+  /// La nota è un tipo, con la cartella dei tipi di adesso? Chiede al core
+  /// l'elenco dei tipi e, se la risposta cambia, la pagina del tipo compare o
+  /// sparisce. Una risposta vecchia non copre una più nuova.
+  function checkTypePage(): void {
+    const asked = ++typePageAsked;
+    const doc = resources?.documentId ?? documentId;
+    void listNoteTypes().then((list) => {
+      if (life.closed || asked !== typePageAsked) return;
+      const next = list.types.some((type) => type.doc === doc) ? doc : null;
+      if (next === typePageDoc) return;
+      typePageDoc = next;
+      engine.runViewCommand((view) => {
+        refreshTypePage(view);
+        return true;
+      });
+    }, () => {
+      // Senza l'elenco dei tipi la pagina resta com'era: la prossima
+      // domanda riprova.
+    });
+  }
+  /// Rifà la testata in Scrittura e in Lettura: è cambiato qualcosa che il
+  /// testo non dice (il tipo della nota).
+  function redrawPageHeader(): void {
+    if (life.closed) return;
+    engine.runViewCommand((view) => refreshPageHeader(view));
+    if (mode === "reading" && unmountReadingPage) mountReadingPage();
   }
   function mountReadingPage(): void {
     unmountReadingPage?.();
@@ -820,6 +1063,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     setBlocks(rememberBlocks(entries));
   };
   void readSurfaceSettings();
+  checkTypePage();
+  life.add(onEvent("document_renamed", (event) => {
+    if (event.to === (resources?.documentId ?? documentId)) checkTypePage();
+  }));
+  life.add(onEvent("setting_changed", (event) => {
+    if (event.key === TYPES_FOLDER_SETTING) checkTypePage();
+  }));
   life.add(onEvent("setting_changed", (event) => {
     if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY || event.key === EDITOR_BLOCKS_KEY || event.key === PROPERTY_TYPES_KEY) void readSurfaceSettings();
   }));
@@ -1173,17 +1423,25 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     );
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
+  /// La vista ha il riquadro «Collegamento» (Live e Blocchi): lì Mod-k apre
+  /// lui, in Sorgente il wikilink.
+  const linkDialogHere = (): boolean => engine.readState((state) => state.facet(linkDialogOpener) !== null);
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION,
+    has: (id) =>
+      MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION ||
+      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
       if (FOLDS.has(id)) return { enabled: true, active: null };
+      if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
+      if (id === SYNC_BLOCK_ACTION) return { enabled: !tableGrid && !syncing && opts.syncBlock !== undefined, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
       }
       if (id === COMMENT_ACTION) return { enabled: comments.canComment(), active: null };
+      if (id === LINK_EDIT_ACTION) return linkDialogHere() ? { enabled: true, active: null } : editorActions.state("markdown.wikilink");
       if (tableGrid) return tableGrid.actionState(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return ACTION_UNAVAILABLE;
@@ -1197,6 +1455,33 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const fold = FOLDS.get(id);
       if (fold) return engine.runViewCommand(fold);
       if (id === COMMENT_ACTION) return comments.comment();
+      if (id === BASE_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid || creatingBase) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startBase(view, at, at);
+          return true;
+        });
+      }
+      if (id === SYNC_BLOCK_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid || syncing || !opts.syncBlock) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startSync(view, at, at);
+          return true;
+        });
+      }
+      if (id === LINK_EDIT_ACTION) {
+        if (!linkDialogHere()) return editorActions.run("markdown.wikilink");
+        return engine.runViewCommand((view) => {
+          const open = view.state.facet(linkDialogOpener);
+          if (!open) return false;
+          open(view);
+          return true;
+        });
+      }
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -1209,6 +1494,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (id === "text.undo") return "Mod-z";
       if (id === "text.redo") return "Mod-y";
       if (id === COMMENT_ACTION) return COMMENT_CHORD;
+      if (id === LINK_EDIT_ACTION) return "Mod-k";
       return MARKDOWN_ACTIONS.get(id)?.chord ?? null;
     },
     subscribe(listener) {
@@ -1410,7 +1696,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const linkDialogItem = (label: string, from: number, to: number, chord: string | null = null): SurfaceMenuItem[] => {
     if (!engine.readState((state) => state.facet(linkDialogOpener) !== null)) return [];
     return [{
-      id: "markdown.link.edit",
+      id: LINK_EDIT_ACTION,
       label,
       chord,
       run: () => void engine.runViewCommand((view) => {
@@ -1615,6 +1901,70 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     };
   };
 
+  /// Le voci di una formula (T65): Modifica, «Copia come ▸», il posto. Al
+  /// passaggio del puntatore non compare niente: soltanto il tasto destro.
+  const mathMenu = (formula: FormulaAt, pos: number, element: Element | null): SurfaceMenu => {
+    const writable = editable();
+    const s = liveStrings.t.bind(liveStrings);
+    // `$$` in mezzo a una frase resta in riga, ma si disegna come un blocco.
+    const display = formula.dollars === 2;
+    const source = engine.readState((state) => state.sliceDoc(formula.from, formula.to));
+    const failed = (error: unknown) => notify(s("live.math.menu.copy_failed", { reason: errorText(error) }), "guasto");
+    const copyImage = (): void => {
+      // I colori e la misura della formula dove sta nella nota.
+      const host = element?.closest(".cm-fub-math, .math-block, .cm-fub-mx-block") ?? parent.querySelector(".cm-content") ?? parent;
+      const png = import("./math/image").then(({ formulaPng, lookOf }) => formulaPng(formula.tex, display, lookOf(host)));
+      png.catch(() => undefined);
+      // La promessa dei byte entra negli appunti dentro il gesto; col PNG il
+      // sorgente, che incollato in una nota torna formula.
+      void writeClipboardData({ "image/png": png, "text/plain": new Blob([source], { type: "text/plain" }) }).then(
+        () => notify(s("live.math.menu.copied_image"), "info"),
+        failed,
+      );
+    };
+    const copyEquation = (): void => {
+      const mathml = loadKatex().then((library) => {
+        const made = equationMathml(library.renderToString(formula.tex, { ...readOptions(display, formula.tex), output: "mathml" }));
+        if (made === null) throw new Error(s("live.math.menu.copy_failed", { reason: "MathML" }));
+        return made;
+      });
+      mathml.catch(() => undefined);
+      const done = clipboardSupports("text/html")
+        ? writeClipboardData({
+          "text/plain": mathml.then((made) => new Blob([made], { type: "text/plain" })),
+          "text/html": mathml.then((made) => new Blob([mathmlHtml(made)], { type: "text/html" })),
+        })
+        : mathml.then(writeClipboardText);
+      void done.then(() => notify(s("live.math.menu.copied_equation"), "info"), failed);
+    };
+    const toPlace = formula.block ? toInline(formula) : engine.readState((state) => toBlock(state, formula));
+    return {
+      target: { kind: "block", label: s("blocks.kind.math"), name: formula.tex.length > 60 ? `${formula.tex.slice(0, 59)}…` : formula.tex },
+      context: [
+        ...(writable ? [{ id: "markdown.math.edit", label: s("live.math.menu.edit"), icon: "pen", run: () => void engine.runViewCommand((view) => editFormulaAt(view, pos)) }] : []),
+        MENU_RULE,
+        ...(writable && toPlace !== null ? [{
+          id: formula.block ? "markdown.math.to_inline" : "markdown.math.to_block",
+          label: s(formula.block ? "live.math.menu.to_inline" : "live.math.menu.to_block"),
+          run: () => void engine.runViewCommand((view) => placeFormulaAt(view, pos, !formula.block)),
+        }] : []),
+      ],
+      // «Copia come ▸» come nel testo: prima il sorgente, poi l'immagine
+      // (dove gli appunti prendono un PNG) e l'equazione. Nessun gesto
+      // «Copia»: Ctrl C copia la selezione, non la formula toccata.
+      clipboard: {
+        offers: {},
+        run: () => undefined,
+        copyAs: [
+          { id: "markdown.math.copy_latex", label: s("live.math.copy_as.latex"), icon: "copy-latex", run: () => copyText(formula.tex, s("live.math.menu.copied_latex")) },
+          ...(clipboardSupports("image/png") ? [{ id: "markdown.math.copy_image", label: s("live.math.copy_as.image"), icon: "copy-image", run: copyImage }] : []),
+          { id: "markdown.math.copy_equation", label: s("live.math.copy_as.equation"), icon: "copy-equation", run: copyEquation },
+        ],
+      },
+      note: { kind: "note", id: docId() },
+    };
+  };
+
   /// Il menu dove si scrive: Sorgente e Live.
   function writingMenu(at: SurfacePoint | null): SurfaceMenu | null {
     let pos = engine.readState((state) => state.selection.main.head);
@@ -1629,7 +1979,17 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         const menu = imageMenu(picture);
         if (menu) return menu;
       }
-      const point = engine.posAtPoint(at.x, at.y);
+      // Una formula resa (T65) non ha testo sotto il puntatore, e il punto
+      // dello schermo può cadere fuori da lei: vale la sua posizione nel DOM.
+      const formulaHost = mode === "live_preview" ? element.closest(".cm-fub-math, .math-block, .cm-fub-mx-block") : null;
+      let hostAt: number | null = null;
+      if (formulaHost) {
+        engine.runViewCommand((view) => {
+          hostAt = view.posAtDOM(formulaHost);
+          return true;
+        });
+      }
+      const point = hostAt ?? engine.posAtPoint(at.x, at.y);
       if (point !== null) {
         // Il tasto destro dentro la selezione la lascia com'è; fuori porta il
         // cursore lì, come il clic, perché le voci parlino di quel punto.
@@ -1637,7 +1997,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         // In Live un link resta com'è: il cursore dentro ne mostrerebbe la
         // sintassi, e il testo salterebbe proprio mentre il menu si apre.
         const onLink = mode === "live_preview" && engine.readState((state) => linkAt(state, point)) !== null;
-        if (!inside && !onLink) engine.placeCursor(point);
+        // Lo stesso per una formula resa: il cursore sul blocco lo aprirebbe.
+        const onFormula = formulaHost !== null;
+        if (!inside && !onLink && !onFormula) engine.placeCursor(point);
         pos = inside ? pos : point;
       }
     }
@@ -1689,6 +2051,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     const code = engine.readState((state) => codeBlockAt(state, pos));
     if (code) return codeMenu(code);
+    const formula = hasSelection ? null : engine.readState((state) => formulaAt(state, pos));
+    if (formula) return mathMenu(formula, pos, element);
     if (mode === "source" && engine.readState((state) => tableRowAt(state, pos))) {
       return {
         ...common,
@@ -2017,12 +2381,37 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       syncReading();
       actionsChanged();
     },
-    setTheme: (theme) => engine.setTheme(theme),
+    setTheme: (theme) => {
+      currentTheme = theme;
+      engine.setTheme(theme);
+      transclusions.setTheme(theme);
+    },
     editorActions,
     panels: comments.panels,
     contextMenu: (at) => {
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
+    },
+    // Il gruppo del blocco nella barra di formato: si scrive soltanto, e la
+    // barra la chiede dopo una pausa, non a ogni battuta (`block-groups.ts`).
+    blockGroup: (at) => {
+      if (life.closed || mode === "reading") return null;
+      const pos = at ? engine.posAtPoint(at.x, at.y) : null;
+      if (at && pos === null) return null;
+      return markdownBlockGroup({
+        read: (read) => engine.readState(read),
+        write: (change) => editable() && engine.runViewCommand((view) => {
+          const spec = change(view.state);
+          if (!spec) return false;
+          view.dispatch(spec);
+          return true;
+        }),
+        view: (gesture) => engine.runViewCommand(gesture),
+        editable,
+        copy: (text) => copyText(text, t("editor_menu.copied")),
+        openLink: (page, heading, block) => void openWikilink(page, heading, block),
+        editHere: (start) => engine.runViewCommand((view) => transclusions.editAt(view, start)),
+      }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
     anchorHere: () => {

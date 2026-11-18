@@ -9,7 +9,11 @@ import type { PropertyEntry } from "../../properties";
 
 /// Gli editor che la testata sa aprire. `people` è un elenco di soli link a
 /// note (le persone): il registro non ha un tipo suo, lo legge dal valore.
-export type PropertyKind = "text" | "number" | "checkbox" | "date" | "date_time" | "list" | "tags" | "people" | "url";
+/// Selezione e Stato vengono solo dal registro: un valore non le dice da sé.
+/// `relation` è un link a una nota o un elenco di link (T35): dichiarata nel
+/// registro, o letta da un link solo (`tipo: "[[Tipi/Libro]]"`), come il core
+/// legge una stringa `[[…]]` senza registro.
+export type PropertyKind = "text" | "number" | "checkbox" | "date" | "date_time" | "list" | "tags" | "people" | "url" | "select" | "status" | "relation";
 
 /// I nove colori di un'opzione (`PropertyColor` nel core): i nomi dei colori
 /// del contenuto, che il tema disegna con `--doc-color-*` e `--doc-tint-*`.
@@ -29,9 +33,40 @@ export interface PropertyOption {
 
 /// Il registro dei tipi del vault: chiave → tipo, dichiarato a mano o dal
 /// menu «Tipo». Le chiavi si confrontano esatte, come nel core. `options`
-/// porta, per chiave, le opzioni di Selezione e Stato nel loro ordine.
+/// porta, per chiave, le opzioni di Selezione e Stato nel loro ordine;
+/// `targets` il bersaglio di una Relazione (`RelationTarget` nel core).
 export interface PropertyTypes extends ReadonlyMap<string, PropertyType> {
   readonly options?: ReadonlyMap<string, readonly PropertyOption[]>;
+  readonly targets?: ReadonlyMap<string, RelationTarget>;
+}
+
+/// Dove si scelgono le note di una Relazione (`RelationTarget` nel core): le
+/// note di un tipo (la pagina del tipo com'è scritta nel link, `Tipi/Libro`)
+/// o quelle di una cartella e delle sue sottocartelle. Restringe la scelta
+/// nell'editor, non il valore.
+export type RelationTarget =
+  | { readonly kind: "type"; readonly page: string }
+  | { readonly kind: "folder"; readonly path: string };
+
+/// La parola del registro letta come bersaglio (`RelationTarget::parse`):
+/// `[[Tipi/Libro]]` è un tipo, ogni altra parola una cartella, senza barre ai
+/// capi. `null` se non dice niente o se esce dal vault: ogni nota.
+export function parseRelationTarget(raw: unknown): RelationTarget | null {
+  if (typeof raw !== "string") return null;
+  const written = raw.trim();
+  const link = /^\[\[([^[\]]*)\]\]$/.exec(written);
+  if (link) {
+    const page = link[1]!.split("|")[0]!.split("#")[0]!.trim();
+    return page === "" ? null : { kind: "type", page };
+  }
+  const path = written.replace(/^\/+|\/+$/g, "");
+  if (path === "" || path.split("/").some((part) => part === ".." || part === ".")) return null;
+  return { kind: "folder", path };
+}
+
+/// Il bersaglio della Relazione `key`, se il registro ne dice uno.
+export function targetOf(types: PropertyTypes, key: string): RelationTarget | null {
+  return types.targets?.get(key) ?? null;
 }
 
 export const NO_TYPES: PropertyTypes = new Map();
@@ -56,10 +91,10 @@ function readOptions(raw: unknown): PropertyOption[] {
   return out;
 }
 
-const KNOWN: ReadonlySet<string> = new Set<PropertyType>(["text", "list", "number", "checkbox", "date", "date_time", "tags", "select", "status", "url"]);
+const KNOWN: ReadonlySet<string> = new Set<PropertyType>(["text", "list", "number", "checkbox", "date", "date_time", "tags", "select", "status", "url", "relation"]);
 
 /// Legge il valore dell'impostazione `properties.types` (JSON
-/// `{"version":1,"types":{…},"options":{…}}`). Un testo che non si legge, o
+/// `{"version":1,"types":{…},"options":{…},"targets":{…}}`). Un testo che non si legge, o
 /// una versione che non conosce, è un registro vuoto: i tipi si leggono dai
 /// valori, e niente si perde.
 export function parsePropertyTypes(raw: unknown): PropertyTypes {
@@ -71,7 +106,7 @@ export function parsePropertyTypes(raw: unknown): PropertyTypes {
     return NO_TYPES;
   }
   if (!value || typeof value !== "object") return NO_TYPES;
-  const { version, types, options } = value as { version?: unknown; types?: unknown; options?: unknown };
+  const { version, types, options, targets } = value as { version?: unknown; types?: unknown; options?: unknown; targets?: unknown };
   if (version !== 1 || !types || typeof types !== "object") return NO_TYPES;
   const out = new Map<string, PropertyType>();
   for (const [key, type] of Object.entries(types as Record<string, unknown>)) {
@@ -84,8 +119,37 @@ export function parsePropertyTypes(raw: unknown): PropertyTypes {
       if (read.length > 0) choices.set(key, read);
     }
   }
-  if (out.size === 0 && choices.size === 0) return NO_TYPES;
-  return choices.size === 0 ? out : Object.assign(out, { options: choices as ReadonlyMap<string, readonly PropertyOption[]> });
+  const aims = new Map<string, RelationTarget>();
+  if (targets && typeof targets === "object") {
+    for (const [key, raw] of Object.entries(targets as Record<string, unknown>)) {
+      const target = parseRelationTarget(raw);
+      if (target) aims.set(key, target);
+    }
+  }
+  if (out.size === 0 && choices.size === 0 && aims.size === 0) return NO_TYPES;
+  return Object.assign(out, {
+    ...(choices.size > 0 ? { options: choices as ReadonlyMap<string, readonly PropertyOption[]> } : {}),
+    ...(aims.size > 0 ? { targets: aims as ReadonlyMap<string, RelationTarget> } : {}),
+  });
+}
+
+/// Le opzioni di `key` nel loro ordine: nessuna, se il registro non ne ha.
+export function optionsOf(types: PropertyTypes, key: string): readonly PropertyOption[] {
+  return types.options?.get(key) ?? [];
+}
+
+/// L'ordine dei gruppi dello Stato: Da fare, In corso, Fatto.
+export const OPTION_GROUPS: readonly OptionGroup[] = ["todo", "doing", "done"];
+
+/// I colori che un'opzione nuova prende, nell'ordine: il primo che nessuna
+/// opzione della chiave ha già. Il grigio resta di chi non ne dice uno.
+const FREE_COLORS: readonly OptionColor[] = ["blue", "green", "orange", "purple", "pink", "yellow", "red", "brown"];
+
+/// Il colore libero per un'opzione nuova fra `options`: il primo non usato;
+/// se ci sono tutti, il giro ricomincia.
+export function freeColor(options: readonly PropertyOption[]): OptionColor {
+  const used = new Set(options.map((option) => option.color));
+  return FREE_COLORS.find((color) => !used.has(color)) ?? FREE_COLORS[options.length % FREE_COLORS.length]!;
 }
 
 /// L'opzione di `key` che si chiama `value`, carattere per carattere (la
@@ -107,12 +171,23 @@ function sameOptions(a: PropertyTypes, b: PropertyTypes): boolean {
   return true;
 }
 
+function sameTargets(a: PropertyTypes, b: PropertyTypes): boolean {
+  const left = a.targets ?? new Map<string, RelationTarget>();
+  const right = b.targets ?? new Map<string, RelationTarget>();
+  if (left.size !== right.size) return false;
+  for (const [key, target] of left) {
+    const other = right.get(key);
+    if (!other || JSON.stringify(other) !== JSON.stringify(target)) return false;
+  }
+  return true;
+}
+
 /// Due registri che dicono la stessa cosa.
 export function sameTypes(a: PropertyTypes, b: PropertyTypes): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
   for (const [key, type] of a) if (b.get(key) !== type) return false;
-  return sameOptions(a, b);
+  return sameOptions(a, b) && sameTargets(a, b);
 }
 
 /// Il tipo dichiarato di `key`: il registro, poi le chiavi convenzionali
@@ -137,13 +212,15 @@ export function emptyValue(entry: PropertyEntry): boolean {
   return entry.items ? entry.items.length === 0 : entry.value.trim() === "";
 }
 
-/// Il tipo che il valore dice da sé, senza registro.
+/// Il tipo che il valore dice da sé, senza registro. Un elenco di soli link
+/// resta Persone (T8); un link solo è una Relazione, come lo legge il core.
 function inferred(entry: PropertyEntry): PropertyKind {
   if (entry.items) {
     if (entry.items.length > 0 && entry.items.every((item) => LINK.test(item))) return "people";
     return "list";
   }
   const value = entry.value.trim();
+  if (LINK.test(value)) return "relation";
   if (!entry.quoted && BOOLEAN.test(value)) return "checkbox";
   if (!entry.quoted && NUMBER.test(value)) return "number";
   if (DATE.test(value) && validDate(value)) return "date";
@@ -163,14 +240,18 @@ function fits(entry: PropertyEntry, type: PropertyType): boolean {
     case "date_time": return !entry.items && (DATE_TIME.test(value) || DATE.test(value)) && validDate(value.slice(0, 10));
     // Un testo solo è un elenco di una voce, come lo legge il core.
     case "list":
-    case "tags": return true;
+    case "tags":
+    // Una Relazione è un link o un elenco di link (T35a).
+    case "relation": return true;
     default: return !entry.items;
   }
 }
 
 /// Il tipo di una riga: quello dichiarato, se il valore torna; altrimenti
-/// testo, e `mismatch` dice quale tipo il valore non rispetta. Selezione e
-/// Stato hanno i loro editor più avanti: intanto si scrivono come testo.
+/// testo, e `mismatch` dice quale tipo il valore non rispetta. Un valore di
+/// Selezione o di Stato fuori dalle opzioni torna lo stesso (è un testo): la
+/// riga lo segna (`outsideOptions`) e il suo editor resta quello delle
+/// opzioni.
 export interface RowKind {
   readonly kind: PropertyKind;
   readonly declared: PropertyType | null;
@@ -182,7 +263,6 @@ export function rowKind(entry: PropertyEntry, types: PropertyTypes): RowKind {
   if (!declared) return { kind: inferred(entry), declared: null, mismatch: null };
   if (!fits(entry, declared)) return { kind: "text", declared, mismatch: declared };
   if (declared === "list") return { kind: entry.items && entry.items.length > 0 && inferred(entry) === "people" ? "people" : "list", declared, mismatch: null };
-  if (declared === "select" || declared === "status") return { kind: "text", declared, mismatch: null };
   return { kind: declared, declared, mismatch: null };
 }
 
@@ -198,13 +278,13 @@ export const KIND_ICONS: Readonly<Record<PropertyKind, string>> = {
   tags: "prop-tags",
   people: "prop-people",
   url: "prop-url",
+  select: "prop-select",
+  status: "prop-status",
+  relation: "backlink",
 };
 
-/// La figura di un tipo del registro: Selezione e Stato hanno la loro anche
-/// se il valore si scrive intanto come testo.
+/// La figura di un tipo del registro.
 export function typeIcon(type: PropertyType): string {
-  if (type === "select") return "prop-select";
-  if (type === "status") return "prop-status";
   return KIND_ICONS[type];
 }
 
@@ -214,9 +294,18 @@ export function rowIcon(kind: RowKind): string {
   return kind.declared ? typeIcon(kind.declared) : KIND_ICONS[kind.kind];
 }
 
-/// I tipi che il menu «Tipo» offre, nell'ordine del prototipo. Selezione e
-/// Stato arrivano coi loro editor; Persone è un elenco di link.
-export const MENU_TYPES: readonly PropertyType[] = ["text", "number", "checkbox", "date", "date_time", "list", "tags", "url"];
+/// I tipi che il menu «Tipo» offre, nell'ordine del prototipo (`TYPES`):
+/// Selezione e Stato dopo il numero, la Relazione prima dell'URL. Persone è
+/// un elenco di link.
+export const MENU_TYPES: readonly PropertyType[] = ["text", "number", "select", "status", "checkbox", "date", "date_time", "list", "tags", "relation", "url"];
+
+/// Un valore di Selezione o di Stato che non è il nome di un'opzione: resta
+/// testo, segnato. Vuoto non lo è.
+export function outsideOptions(entry: PropertyEntry, kind: RowKind, types: PropertyTypes): boolean {
+  if (kind.kind !== "select" && kind.kind !== "status") return false;
+  if (emptyValue(entry)) return false;
+  return optionOf(types, entry.key, entry.value) === null;
+}
 
 /// Una data `aaaa-mm-gg` che esiste nel calendario.
 export function validDate(text: string): boolean {

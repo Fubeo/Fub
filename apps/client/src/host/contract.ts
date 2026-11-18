@@ -423,6 +423,9 @@ export interface VersionRef {
   // con l'aritmetica.
   hash: string;
   size: number;
+  // Perché la versione è stata conservata a mano (`version.keep`): c'è solo
+  // sui testi messi in salvo, mai sulle fotografie del disco.
+  note?: string;
 }
 
 export interface BacklinkRef {
@@ -3009,6 +3012,8 @@ export const COMMANDS = {
   trashFolder: "folder.trash",
   folderPage: "note.folder_page",
   subpage: "note.subpage",
+  moveBlock: "note.block.move",
+  syncBlock: "note.block.sync",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

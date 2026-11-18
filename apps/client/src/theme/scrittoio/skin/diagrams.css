@@ -1,0 +1,463 @@
+/* I diagrammi (E26): il disegno, la didascalia, il sorgente accanto, il
+   diagramma a tutta finestra e il menu del tasto destro. */
+
+/* ── Il disegno ──────────────────────────────────────────────────────────── */
+
+/* Il renderer condiviso usa immagini SVG inerti, non SVG attivo nella shell.
+   A riposo e al passaggio c'è soltanto il disegno: niente barra, niente
+   pulsanti, niente bordo. La figura è il disegno e, sotto, la didascalia
+   (`.dg`, una griglia con 10 px fra i due); i caratteri sono quelli della
+   nota, per la didascalia. */
+.mermaid-diagram {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  color: var(--doc-fg);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  white-space: normal;
+}
+/* La tavola (`.dg-view`). Con Armonia sta sulla pagina senza fondo; uno stile
+   con la sua carta sta su una tavola dagli angoli morbidi, della sua carta
+   (`--diagram-paper`, che `ui/mermaid.ts` scrive dalla tavolozza). Cambiare
+   stile sfuma la tavola in 220 ms; il disegno di prima, con un errore, si
+   attenua in 180. Più larga del riquadro la tavola scorre di lato: il disegno
+   non scende sotto il 72% della sua misura (`--diagram-min-width`). */
+.mermaid-diagram .mermaid-diagram-view {
+  display: grid;
+  place-items: center;
+  justify-items: safe center;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 6px 0;
+  border-radius: var(--radius-lg);
+  background: var(--diagram-paper, transparent);
+  scrollbar-width: thin;
+  transition: background-color 0.22s, opacity 0.18s;
+}
+/* Quando scorre la tavola prende il fuoco del Tab (`ui/mermaid.ts`): l'anello
+   rientra della sua larghezza e segue gli angoli della tavola, perché il
+   bordo della colonna non lo tagli. */
+.mermaid-diagram .mermaid-diagram-view:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.mermaid-diagram[data-diagram-style="acquerello"] .mermaid-diagram-view,
+.mermaid-diagram[data-diagram-style="aurora"] .mermaid-diagram-view,
+.mermaid-diagram[data-diagram-style="blueprint"] .mermaid-diagram-view,
+.mermaid-diagram[data-diagram-style="inchiostro"] .mermaid-diagram-view {
+  padding: 22px 18px;
+}
+.mermaid-diagram.is-stale .mermaid-diagram-view {
+  opacity: 0.5;
+}
+/* La carta della tavola, come la disegna l'SVG esportato: la vignetta
+   (Acquerello, Inchiostro), l'alone (Aurora), la griglia tecnica (Blueprint).
+   L'immagine nella vista non ha il suo foglio: sotto c'è questa, per tutta la
+   larghezza, senza uno stacco fra il disegno e la tavola. */
+.mermaid-diagram[data-diagram-texture="paper"] .mermaid-diagram-view {
+  background-image: radial-gradient(farthest-corner at 50% 45%, var(--diagram-paper), var(--diagram-paper-tint));
+}
+.mermaid-diagram[data-diagram-texture="glow"] .mermaid-diagram-view {
+  background-image: radial-gradient(farthest-corner at 50% 35%, var(--diagram-paper-tint), var(--diagram-paper));
+}
+.mermaid-diagram[data-diagram-texture="grid"] .mermaid-diagram-view {
+  background-image:
+    linear-gradient(var(--diagram-paper-tint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--diagram-paper-tint) 1px, transparent 1px),
+    linear-gradient(var(--diagram-paper-tint) 0.5px, transparent 0.5px),
+    linear-gradient(90deg, var(--diagram-paper-tint) 0.5px, transparent 0.5px);
+  background-size: 60px 60px, 60px 60px, 12px 12px, 12px 12px;
+}
+.mermaid-diagram[data-state="error"] .mermaid-diagram-view {
+  display: none;
+}
+.mermaid-diagram img {
+  display: block;
+  min-width: var(--diagram-min-width, 0);
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+  border-radius: 0;
+}
+.mermaid-diagram summary {
+  margin-top: var(--space-4);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.mermaid-diagram summary:hover {
+  color: var(--text);
+}
+.mermaid-diagram pre {
+  overflow: auto;
+  max-height: 24em;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--sheet);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre;
+}
+/* Senza disegno, l'errore e il sorgente stanno su una tavola tenue di rosso. */
+.mermaid-diagram[data-state="error"] {
+  display: block;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--danger-wash);
+}
+.mermaid-diagram [role="status"] {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  overflow-wrap: anywhere;
+}
+
+/* ── La didascalia ───────────────────────────────────────────────────────── */
+
+/* Il `title` del frontmatter, sotto il disegno, piccolo, quieto, centrato,
+   coi caratteri della nota (`.dg-cap`). Vuota non occupa spazio; col
+   sorgente aperto, o col fuoco, mostra il suo invito. */
+.mermaid-diagram-caption {
+  min-height: 1px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.mermaid-diagram-caption[data-empty] {
+  display: none;
+}
+.cm-fub-diagram-live .mermaid-diagram-caption[data-empty],
+.mermaid-diagram-caption:focus-within {
+  display: block;
+}
+.mermaid-diagram-caption-text {
+  display: inline-block;
+  min-width: 4em;
+  border-radius: var(--radius-control);
+  outline: none;
+}
+.mermaid-diagram-caption-text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
+.mermaid-diagram-caption-text[contenteditable]:not([contenteditable="false"]) {
+  cursor: text;
+}
+.mermaid-diagram-caption-text:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── Il sorgente accanto ─────────────────────────────────────────────────── */
+
+/* Col cursore nel recinto il sorgente sta nelle righe della nota e il disegno
+   accanto, metà e metà, 14 px fra i due (`.dg.editing`); sotto i 940 px uno
+   sopra l'altro. Il widget sotto il recinto porta la riga dell'errore, il
+   disegno (che sale di `--diagram-lift` accanto alle righe), lo spazio che il
+   disegno supera (`--diagram-rest`) e la didascalia; `ui/mermaid.ts` e
+   `diagram-live.ts` scrivono le misure, e sanno se il disegno sta accanto
+   dallo spazio sotto il sorgente, che c'è soltanto accanto. */
+.cm-editor .cm-content .cm-fub-diagram-live {
+  display: grid;
+  gap: 10px;
+  padding-bottom: var(--space-4);
+}
+/* Un diagramma che non si disegna ancora: la riga sotto il sorgente lo dice. */
+.cm-fub-diagram-live > .mermaid-diagram[data-state="error"] {
+  display: none;
+}
+/* La riga dell'errore (`.dg-err`): attaccata sotto il sorgente, una riga di
+   carattere dell'interfaccia; «Riga 12» in grassetto. */
+.cm-editor .cm-content .cm-fub-diagram-notice {
+  margin: 0 0 0;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-control) var(--radius-control);
+  background: var(--doc-fill-soft);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.cm-editor .cm-content .cm-fub-diagram-live > .cm-fub-diagram-notice {
+  margin-top: -10px;
+}
+.cm-editor .cm-content .cm-fub-diagram-notice b {
+  color: var(--text);
+  font-weight: 600;
+}
+.cm-fub-diagram-live > .cm-fub-diagram-rest {
+  display: none;
+}
+/* «Fatto» nella testata del sorgente (`.dg-ed-h button`): nell'accento. */
+.cm-editor .cm-content .cm-fub-code-header .cm-fub-code-done {
+  color: var(--accent);
+  font-weight: 600;
+}
+.cm-editor .cm-content .cm-fub-code-header .cm-fub-code-done:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+@container sheet (min-width: 941px) {
+  .cm-editor .cm-content .cm-fub-diagram-live {
+    position: relative;
+  }
+  .cm-editor .cm-content .cm-line.cm-fub-diagram-src,
+  .cm-editor .cm-content .cm-fub-diagram-live > .cm-fub-diagram-notice {
+    margin-inline-end: calc(50% + 7px);
+  }
+  .cm-editor .cm-content .cm-fub-diagram-live > .mermaid-diagram {
+    position: absolute;
+    top: calc(-1 * var(--diagram-lift, 0px));
+    inset-inline: calc(50% + 7px) 0;
+  }
+  .cm-editor .cm-content .cm-fub-diagram-live > .cm-fub-diagram-rest {
+    display: block;
+    height: var(--diagram-rest, 0px);
+    margin-top: -10px;
+  }
+  /* La didascalia sta sotto il disegno, nella sua metà. */
+  .cm-editor .cm-content .cm-fub-diagram-live > .mermaid-diagram-caption {
+    margin-inline-start: calc(50% + 7px);
+  }
+  /* Accanto al sorgente il disegno sta nella sua metà, senza minimo. */
+  .cm-fub-diagram-live > .mermaid-diagram img {
+    min-width: 0;
+  }
+}
+/* Il blocco si allarga come le schede, quando il foglio ha spazio. */
+@container sheet (min-width: 1181px) {
+  .cm-editor .cm-content .cm-fub-diagram-live > .mermaid-diagram {
+    inset-inline-end: -64px;
+  }
+  .cm-editor .cm-content .cm-line.cm-fub-diagram-src,
+  .cm-editor .cm-content .cm-fub-diagram-live > .cm-fub-diagram-notice {
+    margin-inline-start: -64px;
+  }
+  .cm-editor .cm-content .cm-fub-diagram-live > .mermaid-diagram-caption {
+    margin-inline-end: -64px;
+  }
+}
+
+/* ── A tutta finestra ────────────────────────────────────────────────────── */
+
+/* «Ingrandisci» (`.dg-full`): la lightbox sul fondo dello stile, la carta o
+   la pagina, quasi opaco; il disegno senza ombra; in fondo come si usa. */
+.modale.lightbox.lightbox-diagram {
+  background: color-mix(in srgb, var(--diagram-paper, var(--sheet)) 96%, transparent);
+}
+.lightbox-diagram .zoom-content {
+  box-shadow: none;
+}
+.lightbox-diagram .lightbox-diagram-hint {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: var(--leading-normal);
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mermaid-diagram .mermaid-diagram-view {
+    transition: none;
+  }
+}
+:root[data-motion="reduced"] .mermaid-diagram .mermaid-diagram-view {
+  transition: none;
+}
+
+/* ── Il menu del diagramma ───────────────────────────────────────────────── */
+
+/* Il menu del posto (`.context-menu.menu-at-point`, 316 px) con gli angoli
+   del prototipo (`.dgmenu`, 14 px) e i pezzi suoi: le miniature, le scelte a
+   due, le azioni. */
+.context-menu.diagram-menu {
+  border-radius: var(--radius-dialog);
+  overflow-y: auto;
+}
+/* «Stile»: il nome della sezione, piccolo e in grigio (`.dgm-h`). */
+.diagram-menu .diagram-menu-label {
+  padding: 11px 14px 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+/* Cinque miniature in fila (`.dgm-sw`). */
+.diagram-menu .diagram-menu-styles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding: 8px 10px 4px;
+}
+.diagram-menu .diagram-menu-style {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px 0 5px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+.diagram-menu .diagram-menu-style-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La miniatura nei colori del suo stile (`.dg-swp`). Armonia non ha carta: sta
+   sul foglio del menu. */
+.diagram-menu .diagram-menu-swatch {
+  display: block;
+  width: 50px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--diagram-swatch-paper);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+.diagram-menu [data-diagram-style="armonia"] .diagram-menu-swatch {
+  background: var(--sheet);
+}
+.diagram-menu .diagram-menu-swatch svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.diagram-menu .diagram-menu-swatch-node {
+  fill: var(--diagram-swatch-node);
+  stroke: var(--diagram-swatch-node-border);
+  stroke-width: 1;
+}
+.diagram-menu .diagram-menu-swatch-choice {
+  fill: var(--diagram-swatch-choice);
+  stroke: var(--diagram-swatch-choice-border);
+  stroke-width: 1;
+}
+.diagram-menu .diagram-menu-swatch-pill {
+  fill: var(--diagram-swatch-pill);
+  stroke: var(--diagram-swatch-pill-border);
+  stroke-width: 1;
+}
+.diagram-menu .diagram-menu-swatch-line {
+  fill: none;
+  stroke: var(--diagram-swatch-line);
+  stroke-width: 1;
+}
+.diagram-menu .diagram-menu-style:hover,
+.diagram-menu .diagram-menu-style:focus-visible {
+  color: var(--text);
+}
+.diagram-menu .diagram-menu-style:hover .diagram-menu-swatch,
+.diagram-menu .diagram-menu-style:focus-visible .diagram-menu-swatch {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 4px 10px -6px rgba(0, 0, 0, 0.35);
+}
+.diagram-menu .diagram-menu-style[aria-checked="true"] {
+  color: var(--text);
+  font-weight: 600;
+}
+.diagram-menu .diagram-menu-style[aria-checked="true"] .diagram-menu-swatch {
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 2px var(--accent-veil);
+}
+.diagram-menu .diagram-menu-style:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Uno stile scritto che non esiste, o che qui non si riscrive. */
+.diagram-menu .diagram-menu-notice {
+  margin: 2px 14px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* «Vale per» e «Orientamento»: il nome a sinistra, la scelta a destra
+   (`.dgm-row`). */
+.diagram-menu .diagram-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 9px 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.diagram-menu .diagram-menu-row-name {
+  flex: 1;
+  min-width: 0;
+}
+/* La scelta a due: un vassoio, e la parte premuta è un foglio rialzato
+   (`.seg2`). */
+.diagram-menu .diagram-menu-segments {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.diagram-menu .diagram-menu-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.diagram-menu .diagram-menu-segment > svg {
+  width: 13px;
+  height: 13px;
+}
+.diagram-menu .diagram-menu-segment:hover:not(:disabled) {
+  color: var(--text);
+}
+.diagram-menu .diagram-menu-segment[aria-pressed="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.diagram-menu .diagram-menu-segment:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.diagram-menu .diagram-menu-segment:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Le azioni: le righe del menu, a 5 px dai bordi (`.dgm .m-i`). */
+.context-menu.diagram-menu .diagram-menu-actions {
+  flex: none;
+  padding: 5px 0 6px;
+  overflow: visible;
+}
+.diagram-menu .diagram-menu-actions [role="menuitem"] {
+  width: calc(100% - 10px);
+  margin: 0 5px;
+}
+.diagram-menu .diagram-menu-actions [role="menuitem"][data-lit] .menu-icon {
+  color: var(--accent-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .diagram-menu .diagram-menu-swatch {
+    transition: none;
+  }
+}
+:root[data-motion="reduced"] .diagram-menu .diagram-menu-swatch {
+  transition: none;
+}

@@ -1,5 +1,5 @@
-// Le voci del menu «/» nel testo: quali, con che nome, in che sezione e in che
-// ordine. Il pannello le disegna (`panel.ts`) e la superficie le esegue; qui
+// Le voci del menu «/» nel testo: quali, con che nome, in che gruppo e in che
+// ordine, e quali sono le tessere dei più usati. Il pannello le disegna (`panel.ts`) e la superficie le esegue; qui
 // c'è soltanto la regola, pura sui dati.
 //
 // Le voci vengono dal registro, come quelle del «/» con la selezione e di
@@ -17,17 +17,37 @@ import { t } from "../../i18n/strings";
 import { displayBinding } from "../../ui/commands";
 import { ACTION_LOOKS } from "../format-bar";
 import { quickCommand } from "./quick";
-import { rank, type RankContext } from "./rank";
+import { byUse, rank, type RankContext } from "./rank";
 
-/// Quante voci recenti stanno in cima, a menu appena aperto.
-export const SLASH_RECENT = 5;
 /// Quanti risultati, al più, quando si scrive.
 export const SLASH_RESULTS = 12;
-/// Quanti Suggeriti.
-const SUGGESTED = 3;
+/// Quante tessere dei più usati, in cima a menu appena aperto.
+export const SLASH_TOP = 6;
+/// Le tessere di un vault nuovo, prima di ogni uso: Attività, Titolo,
+/// Riquadro, Tabella, Base, poi gli altri blocchi che si usano spesso.
+/// Scheda viene subito dopo Base: la aggiunge il task che porta la sua voce.
+export const SLASH_TOP_DEFAULTS: readonly string[] = [
+  "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table", "markdown.base",
+  "markdown.list.bullet", "markdown.codeblock", "markdown.quote", "markdown.image", "markdown.rule",
+];
 
 /// La voce sola dei colori, che apre la tavolozza.
 export const COLOR_ENTRY = "slash.color";
+
+/// «Base» (E12): crea un file `.base` accanto alla nota e la incorpora al
+/// posto della riga. Non è un comando del registro ma un'azione della
+/// superficie, che la offre (`has`) soltanto dove sa creare il file. Lo
+/// stesso id è `BASE_ACTION` in `editors/text/profiles/markdown/slash.ts`.
+export const BASE_ENTRY = "markdown.base";
+
+/// «Blocco di un'altra nota» (E14, T30): sceglie un blocco di un'altra nota e
+/// lo mette qui come blocco sincronizzato. Come la Base, un'azione della
+/// superficie che la offre soltanto dove sa farla. Lo stesso id è
+/// `SYNC_BLOCK_ACTION` in `editors/text/profiles/markdown/slash.ts`.
+export const SYNC_BLOCK_ENTRY = "markdown.syncblock";
+
+/// Un comando che c'è soltanto con la componente delle Basi accesa.
+const BASE_COMMAND = "base.view.add";
 
 /// La scorciatoia Markdown che fa lo stesso: la si impara guardando il menu.
 const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
@@ -57,6 +77,8 @@ const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
   "markdown.mention": "@",
   "markdown.date": "@",
   "markdown.linkcard": "https://",
+  // Non ha una forma Markdown sua: si chiama scrivendo il suo nome.
+  [BASE_ENTRY]: "/base",
 };
 
 /// Altri nomi con cui si cerca la stessa voce, in tutte e due le lingue: chi
@@ -94,6 +116,8 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.date": "data giorno oggi domani scadenza date day today tomorrow due",
   "markdown.linkcard": "pagina web sito segnalibro scheda anteprima bookmark web page site card",
   "markdown.underline": "sottolineato underline",
+  [BASE_ENTRY]: "base database dati data vista view raccolta collection",
+  [SYNC_BLOCK_ENTRY]: "sincronizzato sincronizza synced sync blocco block altra nota other note trasclusione transclusion",
   [COLOR_ENTRY]: "colore color colori colors evidenzia fondo testo",
 };
 
@@ -112,6 +136,9 @@ const SLASH_ICONS: Readonly<Record<string, string>> = {
   "markdown.linkcard": "fmt-webpage",
   "markdown.property.add": "fmt-property",
   [COLOR_ENTRY]: "fmt-color",
+  // La figura delle Basi nell'app (la componente `fub.base`).
+  [BASE_ENTRY]: "collection",
+  [SYNC_BLOCK_ENTRY]: "search",
 };
 
 /// La scorciatoia Markdown di una voce, se ne ha una; `null` per un accordo.
@@ -140,7 +167,7 @@ export function isColorAction(id: string): boolean {
 function sectionOf(id: string): SlashSection {
   if (id === "markdown.paragraph" || id.startsWith("markdown.heading.") || id === "markdown.quote") return "text";
   if (id.startsWith("markdown.list.")) return "lists";
-  if (["markdown.callout", "markdown.details", "markdown.columns", "markdown.table", "markdown.rule"].includes(id)) return "blocks";
+  if (["markdown.callout", "markdown.details", "markdown.columns", "markdown.table", BASE_ENTRY, "markdown.rule"].includes(id)) return "blocks";
   if (["markdown.codeblock", "markdown.mathblock", "markdown.diagram"].includes(id)) return "code";
   if (["markdown.mention", "markdown.date"].includes(id)) return "people";
   if (id === "markdown.underline" || id === COLOR_ENTRY || isColorAction(id)) return "style";
@@ -148,10 +175,9 @@ function sectionOf(id: string): SlashSection {
   return "media";
 }
 
-/// Le sezioni nell'ordine delle linguette. Suggeriti e Recenti ci sono solo
-/// a menu appena aperto.
+/// I gruppi delle righe nel loro ordine di serie.
 export const SECTION_ORDER: readonly SlashSection[] = [
-  "suggested", "favorites", "recent", "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault",
+  "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault",
 ];
 
 /// Ciò che il pannello sa dell'uso e del posto.
@@ -167,22 +193,23 @@ export interface SlashUse {
   readonly sections?: readonly string[];
 }
 
-/// Le sezioni nell'ordine dell'uso: Suggeriti, Preferiti e Recenti in cima,
-/// poi quelle scelte, poi le altre.
+/// I gruppi nell'ordine scelto (`editor.slash.sections`), poi gli altri nel
+/// loro ordine.
 function sectionOrder(use: SlashUse): readonly SlashSection[] {
-  const head = SECTION_ORDER.slice(0, 3);
-  const rest = SECTION_ORDER.slice(3);
-  const chosen = (use.sections ?? []).filter((id): id is SlashSection => (rest as readonly string[]).includes(id));
-  return [...head, ...new Set([...chosen, ...rest])];
+  const chosen = (use.sections ?? []).filter((id): id is SlashSection => (SECTION_ORDER as readonly string[]).includes(id));
+  return [...new Set([...chosen, ...SECTION_ORDER])];
 }
 
 const NO_USE: SlashUse = { recent: [], favorites: [], chord: () => null, today: new Date() };
 
-/// Le voci di un'apertura: per sezioni a menu appena aperto, al più dodici
-/// dal più pertinente scrivendo, i comandi rapidi in cima.
+/// Le voci di un'apertura: a menu appena aperto le tessere dei più usati e
+/// le righe per gruppi; scrivendo un elenco solo, al più dodici dal più
+/// pertinente, col comando rapido in cima.
 export interface SlashResults {
+  /// I più usati, come tessere; vuoto scrivendo.
+  readonly top: readonly SlashMenuEntry[];
   readonly entries: readonly SlashMenuEntry[];
-  /// Le sezioni che hanno voci, nell'ordine delle linguette.
+  /// I gruppi che hanno righe, nell'ordine in cui si vedono; vuoto scrivendo.
   readonly sections: readonly SlashSection[];
   /// Si è scritto qualcosa.
   readonly filtering: boolean;
@@ -220,19 +247,50 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
       action,
     }));
   }
+  // La Base subito dopo la Tabella, scritta come le altre voci: la trova
+  // anche chi legge il catalogo per i suoi menu. Soltanto se le Basi ci sono
+  // (la componente `fub.base` accesa registra i suoi comandi): altrimenti il
+  // file nascerebbe e nessuno lo saprebbe mostrare.
+  const bases = specs.some((spec) => spec.id === BASE_COMMAND);
+  if (bases && has(BASE_ENTRY) && !hidden.has(BASE_ENTRY) && !listed.some((each) => each.id === BASE_ENTRY)) {
+    const base = entry({
+      id: BASE_ENTRY,
+      label: t("slash.base"),
+      description: t("slash.base.desc"),
+      icon: SLASH_ICONS[BASE_ENTRY]!,
+      hint: MARKDOWN_HINTS[BASE_ENTRY]!,
+      section: sectionOf(BASE_ENTRY),
+      action: true,
+    });
+    const table = listed.findIndex((each) => each.id === "markdown.table");
+    listed.splice(table < 0 ? listed.length : table + 1, 0, base);
+  }
+  // Il blocco di un'altra nota subito dopo la trasclusione, dove la superficie
+  // lo sa fare.
+  if (has(SYNC_BLOCK_ENTRY) && !hidden.has(SYNC_BLOCK_ENTRY) && !listed.some((each) => each.id === SYNC_BLOCK_ENTRY)) {
+    const synced = entry({
+      id: SYNC_BLOCK_ENTRY,
+      label: t("slash.syncblock"),
+      description: t("slash.syncblock.desc"),
+      icon: SLASH_ICONS[SYNC_BLOCK_ENTRY]!,
+      // Nessuna forma Markdown la fa da sola: si sceglie la nota e il blocco.
+      hint: null,
+      section: sectionOf(SYNC_BLOCK_ENTRY),
+      action: true,
+    });
+    const embed = listed.findIndex((each) => each.id === "markdown.embed");
+    listed.splice(embed < 0 ? listed.length : embed + 1, 0, synced);
+  }
   if (colors.length > 0) {
     listed.push(entry({ id: COLOR_ENTRY, label: t("slash.color"), description: t("slash.color.desc"), icon: "fmt-color", hint: null, section: "style", action: true }));
   }
   return { listed, colors };
 }
 
-/// Le voci che stanno bene dopo il blocco sopra, nell'ordine in cui le si
-/// propone.
-function suggestionsFor(place: SlashPlace): readonly string[] {
-  if (place.inList || place.above === "task") return ["markdown.list.task", "markdown.list.bullet", "markdown.paragraph"];
-  if (place.above === "list") return ["markdown.list.bullet", "markdown.list.task", "markdown.paragraph"];
-  if (place.above === "heading") return ["markdown.paragraph", "markdown.list.task", "markdown.list.bullet"];
-  return ["markdown.paragraph", "markdown.heading.2", "markdown.list.task"];
+/// Un blocco che può stare fra le tessere: un'azione dell'editor che mette
+/// qualcosa nella nota, non uno stile né un comando del vault.
+function blockLike(entry: SlashMenuEntry): boolean {
+  return entry.action && entry.section !== "style" && entry.section !== "vault";
 }
 
 /// Le voci del «/» per `query`, dove si scrive.
@@ -246,14 +304,10 @@ export function slashMenuEntries(
   const { listed, colors } = slashCatalog(specs, has, use);
   const order = sectionOrder(use);
   if (query.trim() === "") {
-    const pick = (ids: readonly string[], section: SlashSection, max: number) =>
-      ids.map((id) => listed.find((each) => each.id === id)).filter((each): each is SlashMenuEntry => each !== undefined)
-        .slice(0, max).map((each) => ({ ...each, section }));
-    const favorites = pick(use.favorites, "favorites", SLASH_RESULTS);
-    const top = pick(use.recent.filter((id) => !use.favorites.includes(id)), "recent", SLASH_RECENT);
-    const suggested = pick(suggestionsFor(place), "suggested", SUGGESTED);
-    const entries = [...suggested, ...favorites, ...top, ...order.flatMap((section) => listed.filter((each) => each.section === section))];
-    return { entries, sections: order.filter((section) => entries.some((each) => each.section === section)), filtering: false };
+    const blocks = new Map(listed.filter(blockLike).map((each) => [each.id, each]));
+    const top = byUse(new Set(blocks.keys()), use, SLASH_TOP_DEFAULTS, SLASH_TOP).map((id) => blocks.get(id)!);
+    const entries = order.flatMap((section) => listed.filter((each) => each.section === section));
+    return { top, entries, sections: order.filter((section) => entries.some((each) => each.section === section)), filtering: false };
   }
   const recentRank = (id: string) => {
     const at = use.recent.indexOf(id);
@@ -286,5 +340,5 @@ export function slashMenuEntries(
       })]
     : [];
   const entries = [...quickEntry, ...ranked].slice(0, SLASH_RESULTS);
-  return { entries, sections: [], filtering: true };
+  return { top: [], entries, sections: [], filtering: true };
 }

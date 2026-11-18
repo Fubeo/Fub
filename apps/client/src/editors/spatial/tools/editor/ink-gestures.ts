@@ -14,6 +14,7 @@ import { plural, t } from "../../strings";
 import type { PaintNode } from "../../painter/paint";
 import { cutPath, cutStroke } from "../erase-precise";
 import { addOp, gesture as asGesture, strokeElem, type Destination } from "../edit";
+import { Unit } from "../hit";
 import { inkAsPath } from "../ink-path";
 import type { Elem } from "../../scene/serialize";
 import { DRAG_PX } from "./constants";
@@ -62,6 +63,11 @@ export function installInkGestures(ctx: EditorContext): void {
       const unit = units[i]!;
       const known = g.cuts.get(unit.key);
       if (known === "whole") continue;
+      // Un blocco estraneo non si taglia: se ne va intero.
+      if (!(unit instanceof Unit)) {
+        g.cuts.set(unit.key, "whole");
+        continue;
+      }
       if (i < marked && !unit.touches(before, p, g.radius)) continue;
       const cut = cutStroke(unit, g.path, g.radius);
       if (cut !== null) g.cuts.set(unit.key, cut);
@@ -75,6 +81,10 @@ export function installInkGestures(ctx: EditorContext): void {
     const paths = new Map<PaintNode, string>();
     const precise = ctx.grid.eraser === "precise";
     for (const unit of g.sweep.marked()) {
+      // Un blocco estraneo sta nello strato immagine, con ciò che gli è
+      // accanto: non si sbiadisce da solo, e se ne va quando la gomma si
+      // alza.
+      if (!(unit instanceof Unit)) continue;
       const cut = precise ? g.cuts.get(unit.key) : "whole";
       // Un tratto che il cerchio sfiora senza tagliarlo resta com'è.
       if (cut === undefined) continue;

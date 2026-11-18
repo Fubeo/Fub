@@ -22,6 +22,10 @@ export interface ThemeCssViolation {
   readonly detail: string;
   readonly line: number;
   readonly column: number;
+  /// Ciò che la violazione nomina, com'è scritto nel foglio (un selettore,
+  /// una proprietà, una regola @), quando ce n'è uno: è ciò che le parole per
+  /// chi scrive un frammento (`describeCssViolations`) gli rimostrano.
+  readonly subject?: string;
 }
 
 /**
@@ -389,6 +393,55 @@ export class ThemeCssError extends Error {
   }
 }
 
+/// Come la persona che ha scritto un frammento legge perché non è stato
+/// preso: nelle parole dell'interfaccia, una colpa per punto del foglio.
+///
+/// Il messaggio di [`ThemeCssError`] resta quello per chi scrive un tema
+/// (codice e dettaglio tecnico); questo è per la riga delle impostazioni, che
+/// mescolava l'italiano del controllo comune e l'inglese di quello dei
+/// frammenti, a qualunque lingua (IMP-023).
+export function describeCssViolations(violations: readonly ThemeCssViolation[]): string {
+  const said = new Set<string>();
+  const out: string[] = [];
+  for (const item of violations) {
+    const family = VIOLATION_FAMILY[item.code];
+    const seen = `${family}:${item.line}:${item.column}:${item.subject ?? ""}`;
+    if (said.has(seen)) continue;
+    said.add(seen);
+    const where = { line: item.line, column: item.column };
+    const subject = item.subject ?? "";
+    out.push(
+      family === "selector" ? t("css.violation.selector", { ...where, subject })
+        : family === "property" ? t("css.violation.property", { ...where, subject })
+          : family === "value" ? t("css.violation.value", { ...where, subject })
+            : family === "at_rule" ? t("css.violation.at_rule", where)
+              : family === "url" ? t("css.violation.url", where)
+                : family === "syntax" ? t("css.violation.syntax", where)
+                  : t("css.violation.other", where),
+    );
+  }
+  return out.join("; ");
+}
+
+type ViolationFamily = "syntax" | "at_rule" | "url" | "selector" | "property" | "value" | "other";
+
+const VIOLATION_FAMILY: Readonly<Record<ThemeCssViolationCode, ViolationFamily>> = {
+  "syntax-error": "syntax",
+  "at-import": "at_rule",
+  "at-namespace": "at_rule",
+  "at-rule": "at_rule",
+  "remote-url": "url",
+  "asset-namespace": "url",
+  "selector-hook": "selector",
+  "selector-id": "selector",
+  "selector-token": "selector",
+  "structural-property": "property",
+  "disallowed-property": "property",
+  "disallowed-value": "value",
+  "missing-role": "other",
+  "content-look": "other",
+};
+
 function uniqueInOrder(values: readonly string[]): string[] {
   const seen = new Set<string>();
   return values.filter((value) => {
@@ -443,8 +496,9 @@ function violation(
   index: number,
   code: ThemeCssViolationCode,
   detail: string,
+  subject?: string,
 ): IndexedViolation {
-  return { code, detail, index, ...location(source, index) };
+  return { code, detail, index, ...location(source, index), ...(subject ? { subject } : {}) };
 }
 
 function parse(source: string): Root {
@@ -619,15 +673,15 @@ function selectorViolations(
     const tokens = selectorTokens(rule.selector);
     for (const hook of tokens.hooks) {
       if (!allowed.has(hook.text)) {
-        out.push(violation(source, start + hook.index, "selector-hook", `hook .${hook.text} non dichiarato`));
+        out.push(violation(source, start + hook.index, "selector-hook", `hook .${hook.text} non dichiarato`, `.${hook.text}`));
       }
     }
     if (hooksOnly) return;
     for (const id of tokens.ids) {
-      out.push(violation(source, start + id.index, "selector-id", `selettore #${id.text} fuori dal vocabolario`));
+      out.push(violation(source, start + id.index, "selector-id", `selettore #${id.text} fuori dal vocabolario`, `#${id.text}`));
     }
     for (const token of tokens.types) {
-      out.push(violation(source, start + token.index, "selector-token", `selettore ${token.text} fuori dal vocabolario`));
+      out.push(violation(source, start + token.index, "selector-token", `selettore ${token.text} fuori dal vocabolario`, token.text));
     }
   });
   return out;
@@ -1039,41 +1093,41 @@ function declarationViolations(
     const property = decodedProperty.toLowerCase();
     const index = nodeIndex(source, decl);
     if (decl.prop !== decodedProperty && !decl.prop.toLowerCase().startsWith("--")) {
-      out.push(violation(source, index, "disallowed-property", `proprietà ${decl.prop} usa escape CSS`));
+      out.push(violation(source, index, "disallowed-property", `proprietà ${decl.prop} usa escape CSS`, decl.prop));
       return;
     }
     if (decodedProperty.startsWith("--")) {
       if (!customPropertyName(decodedProperty) || decl.prop !== decodedProperty) {
-        out.push(violation(source, index, "disallowed-property", `custom property ${decl.prop} non canonica`));
+        out.push(violation(source, index, "disallowed-property", `custom property ${decl.prop} non canonica`, decl.prop));
       } else {
         const invalid = valueViolation(decl.value, vocabulary);
-        if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`));
+        if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`, property));
       }
       return;
     }
     if (Object.prototype.hasOwnProperty.call(NEVER_PROPERTIES, property)) {
-      out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`));
+      out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`, property));
       return;
     }
     if (!property || (!skin && isStructuralProperty(property))) {
       if (isStructuralProperty(property)) {
-        out.push(violation(source, index, "structural-property", `proprietà ${property} vietata`));
+        out.push(violation(source, index, "structural-property", `proprietà ${property} vietata`, property));
       } else {
-        out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`));
+        out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`, property));
       }
       return;
     }
     if (skin && isStructuralProperty(property)) {
       const invalid = valueViolation(decl.value, vocabulary);
-      if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`));
+      if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`, property));
       return;
     }
     if (!ALLOWED_PROPERTIES.has(property) && !vocabulary.properties.has(property)) {
-      out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`));
+      out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`, property));
       return;
     }
     const invalid = valueViolation(decl.value, vocabulary) ?? drawnOnlyViolation(property, decl.value);
-    if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`));
+    if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`, property));
   });
   return out;
 }
@@ -1090,20 +1144,20 @@ function atRuleViolations(
     const name = decodeCssEscapes(rule.name).toLowerCase();
     const index = nodeIndex(source, rule);
     if (name === "import") {
-      out.push(violation(source, index, "at-import", "@import vietato"));
+      out.push(violation(source, index, "at-import", "@import vietato", "@import"));
     } else if (name === "namespace") {
-      out.push(violation(source, index, "at-namespace", "@namespace vietato"));
+      out.push(violation(source, index, "at-namespace", "@namespace vietato", "@namespace"));
     } else if (
       !Object.prototype.hasOwnProperty.call(allowed, name) &&
       !(kind === "skin" && vocabulary.atRules.has(name))
     ) {
-      out.push(violation(source, index, "at-rule", `@${name} non ammesso`));
+      out.push(violation(source, index, "at-rule", `@${name} non ammesso`, `@${name}`));
     } else {
       // Un profilo con vocabolario suo scrive condizioni composte; `theme-1`
       // conserva la lettura di sempre, anche dove era più stretta del dovuto.
       const query = vocabulary.extended && (name === "media" || name === "container");
       const invalid = query ? queryViolation(rule.params, vocabulary) : valueViolation(rule.params, vocabulary);
-      if (invalid) out.push(violation(source, index, "disallowed-value", `@${name}: ${invalid}`));
+      if (invalid) out.push(violation(source, index, "disallowed-value", `@${name}: ${invalid}`, `@${name}`));
     }
   });
   return out;
@@ -1180,7 +1234,7 @@ function urlViolations(source: string, root: Root, assetNamespace: string): Inde
   for (const { index, value } of allUrls(source, root)) {
     if (value.startsWith("#")) continue;
     if (/^(?:https?:|data:|blob:|file:|javascript:|\/\/)/i.test(value)) {
-      out.push(violation(source, index, "remote-url", `URL remoto ${value} vietato`));
+      out.push(violation(source, index, "remote-url", `URL remoto ${value} vietato`, value));
     } else if (!assetNamespace || !value.startsWith(assetNamespace)) {
       out.push(
         violation(source, index, "asset-namespace", `asset ${value || "<vuoto>"} fuori da ${assetNamespace || "<namespace vuoto>"}`),
@@ -1259,19 +1313,30 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
     ...(policy.gate ? contentLookViolations(css, root, policy.gate) : []),
   ];
   if (snippet) {
+    // Ciò che il controllo comune ha già nominato nello stesso punto non si
+    // ridice: chi legge il rifiuto di un frammento vedeva la stessa colpa due
+    // volte, con due parole diverse (IMP-023).
+    const named = (code: ThemeCssViolationCode, from: number, to: number) =>
+      violations.some((item) => item.index >= from && item.index <= to &&
+        (item.code === code || (code === "selector-token" && item.code.startsWith("selector-"))));
     root.walkAtRules((rule) => {
-      violations.push(violation(css, nodeIndex(css, rule), "at-rule", "user CSS cannot declare at-rules"));
+      const index = nodeIndex(css, rule);
+      if (named("at-rule", index, index) || named("at-import", index, index) || named("at-namespace", index, index)) return;
+      violations.push(violation(css, index, "at-rule", "user CSS cannot declare at-rules", `@${rule.name}`));
     });
     for (const url of allUrls(css, root)) {
-      violations.push(violation(css, url.index, "remote-url", "user CSS cannot reference URLs"));
+      if (named("remote-url", url.index, url.index) || named("asset-namespace", url.index, url.index)) continue;
+      violations.push(violation(css, url.index, "remote-url", "user CSS cannot reference URLs", url.value));
     }
     const allowed = new Set(policy.allowedHooks);
     root.walkRules((rule) => {
+      const start = nodeIndex(css, rule);
+      if (named("selector-token", start, start + rule.selector.length)) return;
       for (const selector of rule.selector.split(",")) {
         const classes = selector.trim().match(/^\.([a-z][a-z0-9-]*)(?:\s*\.([a-z][a-z0-9-]*))?$/);
         if (!classes || !classes.slice(1).filter(Boolean).every((name) => allowed.has(name!))) {
-          violations.push(violation(css, nodeIndex(css, rule), "selector-token",
-            `user CSS selector ${selector.trim()} is outside the class hook allowlist`));
+          violations.push(violation(css, start, "selector-token",
+            `user CSS selector ${selector.trim()} is outside the class hook allowlist`, selector.trim()));
         }
       }
     });

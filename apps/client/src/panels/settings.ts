@@ -45,6 +45,7 @@ import type {
   InstalledPluginInfo,
   CatalogEntry,
   SettingEntry,
+  SettingKind,
   SettingValue,
   ThemeInfo,
   SettingScope,
@@ -58,6 +59,7 @@ import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
 import {
   allCommands,
+  commandOfKeybindingKey,
   displayBinding,
   keybindingIssues,
   keybindingKey,
@@ -66,11 +68,12 @@ import {
   reservedChord,
   validateKeybinding,
   type CommandEntry,
+  type KeybindingValidation,
 } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
-import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, t, type Key } from "../i18n/strings";
+import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, resolvedLanguage, t, type Key } from "../i18n/strings";
 import {
   MOTION_KEY,
   SERIES_THEME_ID,
@@ -113,12 +116,14 @@ import {
   matchesTerms,
   normalizeSearch,
   optionLabel,
+  parseSettingNumber,
   searchTerms,
   searchText,
   sectionAnchor,
   show,
   shownChoice,
   type Control,
+  type NumberProblem,
 } from "./settings-model";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
@@ -574,6 +579,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
   // portare oltre il ridisegno (#401).
   lifetime.listen(bodyEl, "input", (event) => {
     if (isDraftControl(event.target)) typedControls.add(event.target);
+    forgetRowError(event.target);
   });
   // Chromium, togliendo dal documento il campo che ha il fuoco, gli manda
   // `blur` e con esso il `change` di una casella modificata: il ridisegno per
@@ -2248,24 +2254,56 @@ function switchField(entry: SettingEntry, id: string): HTMLElement {
 /// controllano i due estremi, che è ciò che il kernel verifica davvero.
 function numberInput(entry: SettingEntry, id: string, min: number | null, max: number | null): HTMLInputElement {
   const input = document.createElement("input");
-  input.type = "number";
+  // Un testo e non un `input[type=number]`: quello legge a modo suo ciò che si
+  // scrive («1,5» diventava 15 in WebKit) e al codice dà un valore vuoto per
+  // tutto ciò che non capisce. Il numero lo legge `parseSettingNumber`, e ciò
+  // che non è il numero scritto si rifiuta col suo motivo, sotto la riga.
+  input.type = "text";
+  input.inputMode = "decimal";
+  input.autocomplete = "off";
+  input.spellcheck = false;
   input.className = "setting-number";
   input.id = id;
   input.value = String(entry.value);
-  if (min !== null) input.min = String(min);
-  if (max !== null) input.max = String(max);
-  input.step = "any";
+  const kind = numberKind(entry, min, max);
   input.addEventListener("change", () => {
-    // `Number("")` è **zero**, non `NaN`: con il solo controllo su `NaN`,
-    // svuotare il campo (o scriverci del testo, che per un `input[number]`
-    // dà lo stesso `value` vuoto) manderebbe uno zero al kernel — accettato
-    // in silenzio ovunque non ci sia un `min` sopra lo zero.
-    if (input.value.trim() === "") return;
-    const n = Number(input.value);
-    if (Number.isNaN(n)) return;
+    const read = parseSettingNumber(input.value, kind, resolvedLanguage());
+    if (!("value" in read)) {
+      refuseRow(entry.spec.key, numberProblemText(read), input.value);
+      return;
+    }
+    const n = read.value;
     void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, n));
   });
   return input;
+}
+
+/// La specie numerica di una riga, con gli estremi del suo controllo.
+function numberKind(entry: SettingEntry, min: number | null, max: number | null): Extract<SettingKind, { kind: "number" }> {
+  const kind = entry.spec.kind;
+  return { kind: "number", default: kind.kind === "number" ? kind.default : 0, min, max };
+}
+
+/// Perché un numero non si scrive, nelle parole dell'interfaccia.
+function numberProblemText(read: NumberProblem): string {
+  const bound = (n: number) =>
+    new Intl.NumberFormat(resolvedLanguage(), { useGrouping: false, maximumFractionDigits: 20 }).format(n);
+  switch (read.problem) {
+    case "min":
+      return t("settings.not_changed", { reason: t("settings.number.min", { min: bound(read.min) }) });
+    case "max":
+      return t("settings.not_changed", { reason: t("settings.number.max", { max: bound(read.max) }) });
+    default: {
+      const reasons: Record<typeof read.problem, Key> = {
+        empty: "settings.number.empty",
+        syntax: "settings.number.syntax",
+        finite: "settings.number.finite",
+        precision: "settings.number.precision",
+        ambiguous: "settings.number.ambiguous",
+      };
+      return t("settings.not_changed", { reason: t(reasons[read.problem]) });
+    }
+  }
 }
 
 /// Un numero con un intervallo: il cursore per il gesto, il campo per il
@@ -2299,8 +2337,10 @@ function rangeField(entry: SettingEntry, id: string, control: Extract<Control, {
     if (!Number.isFinite(n)) return;
     void writeRow(entry.spec.key, slider.value, () => api.setSetting(entry.spec.key, n));
   });
+  const kind = numberKind(entry, control.min, control.max);
   number.addEventListener("input", () => {
-    if (number.value.trim() !== "" && Number.isFinite(Number(number.value))) slider.value = number.value;
+    const read = parseSettingNumber(number.value, kind, resolvedLanguage());
+    if ("value" in read) slider.value = String(read.value);
   });
   wrap.append(name, slider, number);
   return wrap;
@@ -2314,9 +2354,24 @@ function textField(entry: SettingEntry, id: string): HTMLElement {
   input.value = String(entry.value);
   const zones = entry.spec.key === TIMEZONE_KEY ? timezoneSuggestions(input) : null;
   input.addEventListener("change", () => {
-    const shortcut = allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
-    if (shortcut && !validateKeybinding(input.value).valid) {
+    // Una scorciatoia si riconosce dalla forma della chiave (`keys.…`), come
+    // fa il kernel, e non soltanto dall'elenco dei comandi di adesso: quelle
+    // che l'elenco non porta finivano fra le righe sciolte, e lì «xx» si
+    // salvava (IMP-026).
+    const shortcut = commandOfKeybindingKey(entry.spec.key) !== null ||
+      allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
+    const validation = shortcut ? validateKeybinding(input.value) : null;
+    if (validation && !validation.valid) {
       input.setAttribute("aria-invalid", "true");
+      // Nella scheda delle scorciatoie lo dice già la diagnosi sotto il campo,
+      // mentre si scrive; altrove lo dice la riga, come ogni rifiuto.
+      if (tab !== "shortcuts") {
+        refuseRow(
+          entry.spec.key,
+          t("settings.not_changed", { reason: t(KEYBINDING_REASONS[validation.reason]) }),
+          input.value,
+        );
+      }
       return;
     }
     input.removeAttribute("aria-invalid");
@@ -2630,6 +2685,37 @@ function markPending(key: string, block: boolean): void {
   }
 }
 
+/// Un valore che la riga stessa rifiuta prima di scriverlo (un numero che non
+/// è il numero scritto, una scorciatoia che non si sa premere): come per un
+/// rifiuto dell'host, il controllo torna al valore salvato e sotto la riga
+/// restano il motivo e ciò che si era scritto. Niente parte verso l'host, e il
+/// valore salvato resta quello che era.
+function refuseRow(key: string, message: string, attempted: string): void {
+  rowErrors.set(key, { message, input: attempted });
+  // Il testo rifiutato non è una bozza da portare oltre il ridisegno: sta già
+  // sotto la riga.
+  writtenRows.add(key);
+  pinnedRow = key;
+  const snapshot = focusSnapshot(false);
+  void refresh(key).then(() => {
+    if (document.activeElement === document.body) restoreFocus(snapshot);
+  });
+}
+
+/// Chi torna a scrivere in una riga rifiutata non porta con sé l'esito di
+/// prima: il motivo valeva per ciò che aveva scritto allora (IMP-022).
+function forgetRowError(target: EventTarget | null): void {
+  if (!(target instanceof Element)) return;
+  const row = target.closest<HTMLElement>("[data-setting-key]");
+  const key = row?.dataset.settingKey;
+  if (!row || key === undefined || !rowErrors.has(key)) return;
+  rowErrors.delete(key);
+  row.querySelector(".setting-error")?.remove();
+  // La riga non dice più ciò che il suo stato ricordato dice: il prossimo
+  // aggiornamento la ridisegna.
+  renderedForm?.rows.set(key, "");
+}
+
 /// Scrive senza una riga (banner dei tasti proposti, catalogo dei temi,
 /// registro dei vault): qui non c'è un controllo a cui legare l'esito, e
 /// l'errore resta nel toast come prima.
@@ -2918,16 +3004,18 @@ async function drawSuggestedKeys(): Promise<HTMLElement[]> {
   return [box];
 }
 
+/// Le parole di ciò che non va in una scorciatoia scritta.
+const KEYBINDING_REASONS: Record<Extract<KeybindingValidation, { valid: false }>["reason"], Key> = {
+  "empty-alternative": "settings.shortcut.empty_alternative",
+  "too-many": "settings.shortcut.too_many",
+  "invalid-chord": "settings.shortcut.invalid_chord",
+  duplicate: "settings.shortcut.duplicate",
+};
+
 function shortcutDiagnostic(command: CommandEntry, binding: string, commands: CommandEntry[]): string {
   const validation = validateKeybinding(binding);
   if (!validation.valid) {
-    const descriptions: Record<typeof validation.reason, Key> = {
-      "empty-alternative": "settings.shortcut.empty_alternative",
-      "too-many": "settings.shortcut.too_many",
-      "invalid-chord": "settings.shortcut.invalid_chord",
-      duplicate: "settings.shortcut.duplicate",
-    };
-    return t("settings.shortcut.invalid_unsaved", { reason: t(descriptions[validation.reason]) });
+    return t("settings.shortcut.invalid_unsaved", { reason: t(KEYBINDING_REASONS[validation.reason]) });
   }
   const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
   const issues = keybindingIssues(proposed)

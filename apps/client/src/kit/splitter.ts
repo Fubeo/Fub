@@ -12,9 +12,13 @@
 // che rifarebbe il layout di tutto ciò che il divisore governa.
 //
 // Due cose restano al foglio di stile della maniglia, come per ogni gesto di
-// `moto`: `touch-action: none` e `user-select: none`. Le mette `kit.css`.
+// `moto`: `touch-action: none` e `user-select: none`. Le mette `kit.css`. Il
+// foglio non basta a WebKitGTK: lì premere su una maniglia che non si sceglie
+// comincia lo stesso una selezione, che il trascinamento allarga ai titoli
+// accanto (IMP-017). La pressione quindi non fa il suo lavoro di sempre
+// (scegliere il testo, dare il fuoco): la maniglia prende il fuoco dal Tab.
 import { animate, drag, motionLevel, type Motion } from "../moto";
-import type { Lifetime } from "../ui/lifetime";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 export interface SplitterOptions {
   handle: HTMLElement;
@@ -110,6 +114,28 @@ export function mountSplitter(options: SplitterOptions): SplitterHandle {
   const along = (info: { dx: number; dy: number }): number =>
     origin + sign * (vertical ? info.dx : info.dy);
 
+  // WebKitGTK comincia una selezione premendo sulla maniglia anche con
+  // `user-select: none`, e il gesto la allarga al testo accanto (IMP-017).
+  // Annullare la pressione non basta da solo: la selezione nasce dal
+  // `mousedown`, e finché il tasto è giù ogni `selectstart` del documento
+  // viene fermato.
+  let pressed: Lifetime | null = null;
+  const release = (): void => {
+    pressed?.close();
+    pressed = null;
+  };
+  const press = (event: PointerEvent | MouseEvent): void => {
+    if (event.button !== 0 || ("isPrimary" in event && !event.isPrimary)) return;
+    event.preventDefault();
+    if (pressed || lifetime.closed) return;
+    pressed = openLifetime();
+    const capture = { capture: true };
+    pressed.listen(document, "selectstart", (e: Event) => e.preventDefault(), capture);
+    for (const type of ["pointerup", "pointercancel", "mouseup"]) pressed.listen(document, type, release, capture);
+  };
+  lifetime.listen(handle, "pointerdown", press);
+  lifetime.listen(handle, "mousedown", press);
+  lifetime.add(release);
   drag(handle, {
     onStart() {
       stopBack();

@@ -101,13 +101,13 @@ luce del tema: **Armonia** (predefinito, derivato dai token del tema),
 **Acquerello** (pastelli su carta calda), **Aurora** (colori vivi e profondi),
 **Blueprint** (tavola tecnica su griglia) e **Inchiostro** (tratto sottile su
 avorio, una nota rossa). Lo stile generale è l'impostazione di macchina
-`appearance.diagram-style` e si cambia anche dal menu dello stile nella barra
-del diagramma. In Live lo stesso menu scrive o toglie in cima al recinto il
-commento Mermaid `%% stile: <stile>`, che vale soltanto per quel diagramma e
-che GitHub ignora; a mano vale anche `style:` con `harmony`, `watercolor` o
-`ink`. I font dello stile sono incorporati nell'SVG, perché un'immagine non vede
-i webfont della pagina. La barra offre anche **Esporta** (SVG copiato o
-salvato, PNG a risoluzione doppia) e **Schermo intero**, nella lightbox. Una
+`appearance.diagram-style`. Il diagramma non ha barra né pulsanti: stile,
+orientamento, sorgente, schermo intero, copia ed esportazione stanno nel menu
+del tasto destro, descritto in [I diagrammi](editor-diagrams.md). Il commento
+Mermaid `%% stile: <stile>` in cima al recinto (dopo l'eventuale frontmatter)
+vale soltanto per quel diagramma, e GitHub lo ignora; a mano vale anche
+`style:` con `harmony`, `watercolor` o `ink`. I font dello stile sono
+incorporati nell'SVG, perché un'immagine non vede i webfont della pagina. Una
 resa con lo stesso sorgente, stile e luce si riusa senza ridisegnare.
 
 Dentro un recinto `mermaid` ancora vuoto (righe vuote e commenti `%%` non
@@ -164,7 +164,9 @@ aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc la speg
 spazio chiude apice e pedice e Backspace lo annulla; un segno lasciato aperto è
 ondulato. Senza i blocchi il titolo del cursore ha «H2» nel margine, che apre i livelli
 (coi blocchi quel margine è della maniglia, [Scrittura](editor-writing.md)); la riga
-vuota un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
+vuota un segnaposto. Le righe vuote dopo un blocco reso (tabella, richiamo, embed) sono
+alte zero, e lo stacco è del blocco; col cursore su una di loro la riga si vede e prende
+lo stacco, così il testo sotto non si sposta. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
@@ -191,10 +193,11 @@ apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco (e le righe che
 ne continuano il paragrafo) vanno a capo sotto il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
 (`<kbd>`, `<u>`, i [colori](editor-blocks.md#i-colori)) si vede senza tag. I
 recinti con info string dichiarata (Mermaid, formule) tornano sorgente col
-cursore dentro, con la resa sotto. Con `mai` una formula in riga resta resa: un
-clic, o → e ← che ci entrano, aprono il riquadro col TeX e l'anteprima, e Invio
-o Esc lo chiudono. Con `elemento` torna la sorgente, con l'anteprima sopra la
-riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
+cursore dentro, con la resa sotto. Con `mai` una formula si modifica
+toccandola, senza vedere il LaTeX ([Formule in Live](editor-math.md)); con
+«Mostra il LaTeX delle formule», o con Vim, un clic o le frecce aprono invece il
+riquadro col TeX e l'anteprima. Con `elemento` torna la sorgente, con
+l'anteprima sopra la riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
 
 La vista Struttura può spostare una sezione fra fratelli adiacenti con una
 singola modifica protetta dalla revisione osservata. La vista Note a piè di
@@ -276,7 +279,11 @@ La `DocumentSession` accoda le scritture per documento. Il core applica la
 revisione di base. Un contenuto esterno più recente produce un conflitto
 esplicito. Un conflitto non si ritenta da solo: autosave e flush aspettano la
 scelta dell'utente, e «Usa disco» scarta il buffer e la bozza solo dopo aver
-letto il file. Una bozza recuperata senza revisione di base, su un file che
+letto il file. Prima ancora, se la Cronologia è montata, il buffer va nella
+cronologia del documento (`version.keep`, con la nota datata del conflitto):
+una conservazione fallita non scarta niente, e un tasto premuto mentre si
+conserva rende la lettura superata, col conflitto ancora aperto
+([versioni](vault-recupero-e-versioni.md#versioning)). Una bozza recuperata senza revisione di base, su un file che
 esiste, rientra direttamente in conflitto invece di sovrascriverlo.
 
 Un testo che nessun formato serve, come un SVG, non passa da `write_document`,

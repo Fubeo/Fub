@@ -106,7 +106,8 @@ sono spenti.
   annullare.»). Due dita che si muovono sono il pizzico e non annullano.
 - **Il doppio tocco** di un dito nel vuoto (entro 300 ms e 24 px) mette lì
   una scheda di testo già in scrittura, come il doppio clic; sopra una
-  scheda, un filo o un controllo no.
+  scheda, un filo o un controllo no. Il doppio clic del mouse ha la stessa
+  regola: su una porta o su un filo non mette niente (IMP-053).
 - **Dalla tastiera** «Menu radiale» (`canvas.radial`, in fondo al menu del
   tasto destro nel vuoto: `Maiusc+F10`) lo apre al centro della vista, col
   fuoco sulla prima voce; col mouse nel punto del clic.
@@ -117,9 +118,9 @@ chiudono il menu.
 
 ## La griglia e le guide
 
-La griglia aggancia ogni 8 unità della lavagna (`CANVAS_SNAP`, A-23), ma i
-suoi punti si vedono ogni 32 (`CANVAS_GRID_DOT_STEPS`), su incroci
-dell'aggancio: lo sfondo resta calmo. Sta sotto le schede e segue la vista.
+La griglia aggancia ogni 8 unità della lavagna di serie (`CANVAS_SNAP`, A-23),
+ma i suoi punti si vedono ogni 32 (`CANVAS_GRID_DOT_STEPS`), su incroci
+dell'aggancio a ogni passo: lo sfondo resta calmo. Sta sotto le schede e segue la vista.
 Sotto il 50% di zoom, dove i punti sarebbero più fitti di 16 px, non si
 disegna.
 
@@ -129,6 +130,16 @@ disegna.
   lavagna, come il navigatore, e vale finché non si cambia.
 - **`canvas.snap`** (Impostazioni) accende l'aggancio. Spento, una scheda va
   in unità intere, senza griglia e senza guide.
+- **`canvas.snap_step`** (Impostazioni, «Passo della griglia») è il passo
+  dell'aggancio, per lo spostamento e il ridimensionamento: `8` di serie,
+  `16`, `32`, o `none`, che aggancia solo alle guide. Le schede che nascono
+  (il rilascio, l'incolla, «Aggiungi testo») restano su 8.
+- **Solo al rilascio** (#411 C-05). Mentre si sposta, la scheda segue il
+  puntatore 1:1, in unità intere, e le guide mostrano già dove andrà; la mira
+  (la guida, o la griglia) vale al rilascio, e la scheda ci scivola in 120 ms
+  (con il movimento ridotto subito). Lo stato, i fili e il passo d'annulla
+  sono subito quelli finali: la scivolata è solo dell'aspetto. Il
+  ridimensionamento si aggancia mentre si tira.
 - **Le guide.** Mentre si sposta una scheda, o si tira un angolo di una scheda
   sola, il bordo e il centro della scheda si agganciano ai bordi e ai centri
   delle altre schede in vista, entro 6 px sullo schermo. Spostando più schede
@@ -145,7 +156,8 @@ disegna.
   in un solo elemento (`.canvas-guides`) che non prende il puntatore. Spariscono
   al rilascio e con `Esc`.
 - **Alt** tenuto mentre si sposta o si tira spegne l'aggancio per quel gesto:
-  niente guide e niente griglia, la scheda va dove la porta il puntatore. Premuto
+  niente guide e niente griglia, la scheda va dove la porta il puntatore. Per
+  uno spostamento conta Alt al rilascio: tenuto lì, la scheda resta dove sta. Premuto
   sul corpo di una scheda, Alt tira invece un filo ([I fili](canvas-input.md#i-fili)).
 
 Spostare e ridimensionare restano un commit e un annulla, come prima.
@@ -258,6 +270,10 @@ Il titolo grande (`.canvas-node-far`, `farTitle`) è sempre nel nodo,
 nascosto finché il livello non lo mostra: il nome del file senza cartella
 (con la sezione, se la scheda ne mostra una), l'indirizzo senza schema, il
 nome di un testo (`textCardName`, in `card-name.ts`), il nome del gruppo.
+Un gruppo ha un nome solo per livello (#411 C-04): da vicino l'etichetta
+dentro la cornice (`.canvas-group-label`), su una riga, tagliata se non ci
+sta; la sua testata non scrive il titolo e tiene solo → in alto a destra. Da
+lontano c'è soltanto il titolo grande.
 Il nome di un testo è la sua prima riga non vuota senza i segni del
 Markdown: il titolo `#`, la citazione `>`, l'elenco e la casella davanti;
 in linea il grassetto, il corsivo, il barrato, l'evidenziato, il codice, i

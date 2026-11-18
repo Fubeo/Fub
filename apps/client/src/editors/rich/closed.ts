@@ -12,7 +12,7 @@
 // documento non ha vorrebbe una numerazione nuova, che sta fuori anche lei.
 // L'autorità resta il formato: ciò che qui sfugge lo rifiuta lui.
 import type { Node as PmNode } from "prosemirror-model";
-import { TextSelection, type Command } from "prosemirror-state";
+import { TextSelection, type Command, type Selection } from "prosemirror-state";
 import { commentsOf } from "./comments";
 import { GO_TO } from "./rich-motion";
 import { writeBlock, writeComment, writePage, writeRunning, type Block, type Page, type Role, type RunningText } from "./projection";
@@ -88,6 +88,18 @@ export function closedPlaces(doc: PmNode): ClosedPlace[] {
     return node.type.name !== "para";
   });
   return out;
+}
+
+/// Un capo della selezione sta dentro un blocco chiuso: ciò che vi si
+/// scrivesse lo cambierebbe.
+export function selectionInClosed(selection: Selection): boolean {
+  for (const $pos of [selection.$from, selection.$to]) {
+    for (let depth = $pos.depth; depth > 0; depth -= 1) {
+      const node = $pos.node(depth);
+      if (node.attrs.locked === true && (node.type.name === "para" || node.type.name === "table")) return true;
+    }
+  }
+  return false;
 }
 
 /// Dove comincia il blocco `index` del corpo, contato come nella proiezione:

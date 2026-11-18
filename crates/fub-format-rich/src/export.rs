@@ -112,7 +112,7 @@ impl Target {
             Target::Latex => "LaTeX",
             Target::Rtf => "RTF",
             Target::Odt => "OpenDocument",
-            Target::WordXml => "Word XML",
+            Target::WordXml => "XML",
         }
     }
 

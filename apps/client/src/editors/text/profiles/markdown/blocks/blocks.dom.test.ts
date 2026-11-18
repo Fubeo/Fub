@@ -958,6 +958,214 @@ describe("fuori dalla colonna (E2)", () => {
   });
 });
 
+// ── «Sposta in…» (E13, T32) ─────────────────────────────────────────────────
+//
+// Il menu del blocco e il blocco lasciato su una nota del cassetto: l'editor
+// non tocca il documento, chiede lo spostamento al comando del nucleo (qui una
+// porta finta) coi byte del blocco e il testo letto lì.
+
+describe("«Sposta in…» (E13)", () => {
+  const DOC = "Uno\n\n## I conti\n\nDue\n\n## Fine\n\nTre";
+  const NOTE = { documentId: "nota.md", vault: undefined };
+  const tag = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-block-lift-to");
+  const live = (view: EditorView) => view.dom.querySelector(".cm-fub-block-live")?.textContent?.trim() ?? "";
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  function port() {
+    return {
+      notes: vi.fn(async () => [{ id: "nota.md", title: "nota" }, { id: "Progetto.md", title: "Progetto" }]),
+      headings: vi.fn(async (doc: string) => doc === "Progetto.md"
+        ? [{ slug: "idee", text: "Idee", level: 2, start: 10 }]
+        : [{ slug: "i-conti", text: "I conti", level: 2, start: 5 }]),
+      move: vi.fn(async () => null as string | null),
+    };
+  }
+
+  /// Il cassetto: la nota «Progetto» nella riga 0–240 × 300–328.
+  function drawer(hover = vi.fn()) {
+    const stop = offerDropTargets({
+      offers: (doc) => [{ kind: "note", document: { documentId: "Progetto.md", vault: doc.vault }, title: "Progetto", rect: { left: 0, top: 300, right: 240, bottom: 328 }, hover }],
+    });
+    return { hover, stop };
+  }
+
+  afterEach(() => closeContextMenu());
+
+  it("trascinato su una nota del cassetto, il cartellino la nomina e il rilascio la chiede al comando: in fondo, col link", async () => {
+    const { hover, stop } = drawer();
+    try {
+      const move = port();
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(314, 120);
+      expect(hand.lift()?.dataset.free, "fuori dalla colonna").toBe("true");
+      expect(tag(view)?.textContent).toBe("Sposta in «Progetto»");
+      expect(live(view)).toBe("Sposta in «Progetto»");
+      expect(hover).toHaveBeenLastCalledWith(true);
+      hand.up(314);
+      await settle();
+      expect(hover).toHaveBeenLastCalledWith(false);
+      expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [0, 3], text: "Uno", to: "Progetto.md", heading: null, leave: "link" });
+      expect(view.state.doc.toString(), "il documento lo cambia la ricarica dopo le due scritture").toBe(DOC);
+      expect(view.state.field(dragPose).lifted, "il blocco si è posato").toBeNull();
+    } finally {
+      stop();
+    }
+  });
+
+  it("senza chi sposta fra le note, le note del cassetto non sono bersagli", () => {
+    const { hover, stop } = drawer();
+    try {
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(314, 120);
+      expect(tag(view)?.hidden).toBe(true);
+      expect(hover).not.toHaveBeenCalled();
+      hand.up(314);
+      hand.handles.returning?.land();
+      expect(view.state.doc.toString()).toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  it("un rifiuto del comando si dice, e il documento resta com'era", async () => {
+    const { stop } = drawer();
+    try {
+      const move = port();
+      move.move.mockResolvedValue("«Progetto» è cambiata");
+      const notify = vi.fn();
+      const view = mount(DOC, 0, notify, [], { document: () => NOTE, move });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(314, 120);
+      hand.up(314);
+      await settle();
+      expect(notify).toHaveBeenCalledWith("Il blocco non si è spostato: «Progetto» è cambiata", "guasto");
+      expect(view.state.doc.toString()).toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  /// Il menu della maniglia del blocco `at`, aperto col tasto destro.
+  function openMenu(view: EditorView, at: number): void {
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[at]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 3, clientY: 3 }));
+  }
+  const item = (label: string) => [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem]")]
+    .find((each) => each.querySelector(".menu-label")?.textContent === label);
+
+  it("dal menu del blocco: la nota, poi dove e che cosa resta; il comando riceve i byte del blocco", async () => {
+    const move = port();
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+    openMenu(view, 4);
+    const labels = [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem] .menu-label")].map((label) => label.textContent);
+    expect(labels, "dopo Duplica, come nel prototipo").toEqual(["Trasforma in", "Colore", "Duplica", "Sposta in…", "Copia il link al blocco", "Elimina"]);
+    item("Sposta in…")!.click();
+    await settle();
+    // La nota: l'elenco filtrabile, col percorso; la nota stessa lo dice.
+    const dialog = document.querySelector<HTMLElement>(".modale[role=dialog]")!;
+    expect(dialog.querySelector(".palette-heading")?.textContent).toBe("Sposta in…");
+    expect(dialog.querySelector<HTMLInputElement>(".palette-input")?.placeholder).toBe("Cerca una nota…");
+    const options = [...dialog.querySelectorAll<HTMLElement>("[role=option]")];
+    expect(options.map((option) => option.textContent), "la nota stessa per ultima").toEqual(["ProgettoProgetto.md", "notaquesta nota · nota.md"]);
+    options[0]!.click();
+    await settle();
+    // Dove e che cosa resta: in fondo e il link sono già scelti.
+    const form = document.querySelector<HTMLFormElement>(".modale .palette-form")!;
+    expect(document.querySelector(".modale .palette-heading")?.textContent).toBe("Sposta in «Progetto»");
+    const where = form.querySelector<HTMLSelectElement>("select[name=where]")!;
+    const leave = form.querySelector<HTMLSelectElement>("select[name=leave]")!;
+    expect(document.activeElement, "il fuoco sulla prima domanda").toBe(where);
+    expect([...where.options].map((option) => option.text)).toEqual(["In fondo alla nota", " In fondo a «Idee»"]);
+    expect([...leave.options].map((option) => option.text)).toEqual(["Un link alla nota", "Niente", "Una trasclusione del blocco"]);
+    where.value = "idee";
+    leave.value = "embed";
+    form.requestSubmit();
+    await settle();
+    const tre = DOC.indexOf("Tre");
+    expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [tre, tre + 3], text: "Tre", to: "Progetto.md", heading: "idee", leave: "embed" });
+    expect(document.querySelector(".modale"), "le finestre si sono chiuse").toBeNull();
+  });
+
+  it("nella stessa nota non chiede che cosa resta, e non offre i titoli dentro ciò che si sposta", async () => {
+    const move = port();
+    move.headings.mockResolvedValue([{ slug: "i-conti", text: "I conti", level: 2, start: DOC.indexOf("## I conti") }, { slug: "fine", text: "Fine", level: 2, start: DOC.indexOf("## Fine") }]);
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+    openMenu(view, 1);
+    item("Sposta in…")!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>(".modale [role=option]")][1]!.click();
+    await settle();
+    const form = document.querySelector<HTMLFormElement>(".modale .palette-form")!;
+    const where = form.querySelector<HTMLSelectElement>("select[name=where]")!;
+    expect([...where.options].map((option) => option.text), "il titolo in mano non è una destinazione").toEqual(["In fondo alla nota", " In fondo a «Fine»"]);
+    expect(form.querySelector<HTMLSelectElement>("select[name=leave]")!.closest("label")!.hidden).toBe(true);
+    form.requestSubmit();
+    await settle();
+    const start = new TextEncoder().encode(DOC.slice(0, DOC.indexOf("## I conti"))).length;
+    // Un titolo è un blocco solo: la sua riga (la sezione resta dov'è).
+    expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [start, start + "## I conti".length], text: "## I conti", to: "nota.md", heading: null, leave: "none" });
+  });
+
+  it("una tratta di più blocchi si sposta intera, e non offre la trasclusione", async () => {
+    const move = port();
+    const view = mount("Uno\n\nDue\n\nTre", 1, vi.fn(), [], { document: () => NOTE, move });
+    press(view, "Escape");
+    press(view, "ArrowDown", { shiftKey: true });
+    openMenu(view, 0);
+    item("Sposta in…")!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>(".modale [role=option]")][0]!.click();
+    await settle();
+    const form = document.querySelector<HTMLFormElement>(".modale .palette-form")!;
+    expect([...form.querySelector<HTMLSelectElement>("select[name=leave]")!.options].map((option) => option.value)).toEqual(["link", "none"]);
+    form.requestSubmit();
+    await settle();
+    expect(move.move).toHaveBeenCalledWith({ doc: "nota.md", at: [0, 8], text: "Uno\n\nDue", to: "Progetto.md", heading: null, leave: "link" });
+  });
+
+  it("il testo cambiato mentre si sceglie: non si sposta niente, e lo dice", async () => {
+    const move = port();
+    const notify = vi.fn();
+    const view = mount(DOC, 0, notify, [], { document: () => NOTE, move });
+    openMenu(view, 0);
+    item("Sposta in…")!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>(".modale [role=option]")][0]!.click();
+    await settle();
+    view.dispatch({ changes: { from: 0, insert: "Prima\n\n" } });
+    document.querySelector<HTMLFormElement>(".modale .palette-form")!.requestSubmit();
+    await settle();
+    expect(move.move).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("La nota è cambiata mentre sceglievi: non si è spostato niente.", "guasto");
+  });
+
+  it("chiusa la scelta della nota, non si sposta niente", async () => {
+    const move = port();
+    const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, move });
+    openMenu(view, 0);
+    item("Sposta in…")!.click();
+    await settle();
+    document.querySelector<HTMLElement>(".modale")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle();
+    expect(document.querySelector(".modale")).toBeNull();
+    expect(move.headings).not.toHaveBeenCalled();
+    expect(move.move).not.toHaveBeenCalled();
+  });
+});
+
 // ── I gesti ai bordi (E2, T2) ───────────────────────────────────────────────
 //
 // Ogni caso limite di E2 coi gesti che spostano un blocco: il trascinamento
@@ -1416,5 +1624,122 @@ describe("i gesti ai bordi (E2): il posto interrotto a metà corsa", () => {
     const after = LIFT_SCALE * (liveState(card)?.pose.scaleX ?? 1);
     expect(Math.abs(after - before), "la carta prosegue dalla grandezza di adesso").toBeLessThan(0.005);
     hand.handles.endDrag(false);
+  });
+});
+
+// La regola al tocco (T26a, E18 «Al tocco»): senza un puntatore che passi
+// sopra le cose, il «+» e la maniglia stanno sul blocco del cursore.
+describe("al tocco", () => {
+  /// Un sistema finto: `pointer` dice se c'è un puntatore (`any-hover`), e
+  /// `connect` lo cambia come un mouse collegato o staccato.
+  function screen(pointer: boolean) {
+    const listeners = new Set<() => void>();
+    const query = {
+      get matches() {
+        return pointer;
+      },
+      media: "(any-hover: hover)",
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+    };
+    const other = (media: string) => ({ matches: false, media, addEventListener() {}, removeEventListener() {} });
+    vi.stubGlobal("matchMedia", (media: string) => (media === "(any-hover: hover)" ? query : other(media)));
+    return {
+      connect(next: boolean) {
+        pointer = next;
+        for (const listener of [...listeners]) listener();
+      },
+      listeners,
+    };
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  /// Il testo del blocco che le maniglie servono adesso.
+  const served = (view: EditorView): string | null => {
+    const index = view.plugin(handlesView)!.current();
+    if (index < 0) return null;
+    const block = view.state.field(blockModel).blocks[index]!;
+    return view.state.sliceDoc(block.from, block.to);
+  };
+  const keyOfText = (view: EditorView, text: string) => {
+    const block = view.state.field(blockModel).blocks.find((each) => view.state.sliceDoc(each.from, each.to) === text)!;
+    return { from: block.from, depth: block.depth };
+  };
+
+  it("la maniglia segue il cursore, e il passaggio non la sposta", () => {
+    screen(false);
+    const view = mount("Uno\n\nDue\n\nTre", 1);
+    view.focus();
+    const handles = view.plugin(handlesView)!;
+    expect(view.dom.classList.contains("cm-fub-blocks-touch")).toBe(true);
+    expect(handles.hoverable).toBe(false);
+    expect(served(view)).toBe("Uno");
+    view.dispatch({ selection: { anchor: 6 } });
+    expect(served(view)).toBe("Due");
+    // Dopo un tocco il sistema manda anche gli eventi del mouse: un blocco
+    // «sotto il puntatore» non porta via la maniglia dal cursore.
+    handles.hovered = keyOfText(view, "Tre");
+    expect(served(view)).toBe("Due");
+    // Senza il fuoco (il dito è andato altrove) non c'è.
+    view.contentDOM.blur();
+    expect(served(view)).toBeNull();
+  });
+
+  it("col puntatore vale il puntatore, anche se arriva a nota aperta", () => {
+    const system = screen(false);
+    const view = mount("Uno\n\nDue\n\nTre", 1);
+    view.focus();
+    const handles = view.plugin(handlesView)!;
+    // Un tablet a cui si collega un mouse: la regola cambia subito.
+    system.connect(true);
+    expect(view.dom.classList.contains("cm-fub-blocks-touch")).toBe(false);
+    expect(handles.hoverable).toBe(true);
+    handles.hovered = keyOfText(view, "Tre");
+    expect(served(view)).toBe("Tre");
+    // Staccato, si torna al cursore, e il passaggio di prima non conta più.
+    system.connect(false);
+    expect(view.dom.classList.contains("cm-fub-blocks-touch")).toBe(true);
+    expect(handles.hovered).toBeNull();
+    expect(served(view)).toBe("Uno");
+    // Chiusa la nota, il sistema non ha più nessuno da avvisare.
+    view.destroy();
+    views.splice(views.indexOf(view), 1);
+    expect(system.listeners.size).toBe(0);
+  });
+
+  it("il dito tenuto 300 ms prende il blocco, con un colpetto; un movimento prima scorre", () => {
+    vi.useFakeTimers();
+    try {
+      const vibrate = vi.fn(() => true);
+      vi.stubGlobal("navigator", Object.assign(Object.create(navigator), { vibrate }));
+      screen(false);
+      const view = mount("Uno\n\nDue\n\nTre", 1);
+      rowsOf20(view);
+      const handles = view.plugin(handlesView)!;
+      handles.shown = keyOfText(view, "Uno");
+      const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+      const finger = (type: string, y: number) =>
+        grip.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 7, pointerType: "touch", clientX: 0, clientY: y }));
+      // Il dito si muove prima dei 300 ms: è uno scorrimento, il gesto non parte.
+      finger("pointerdown", 10);
+      vi.advanceTimersByTime(100);
+      finger("pointermove", 30);
+      vi.advanceTimersByTime(400);
+      expect(handles.drag).toBeNull();
+      expect(view.scrollDOM.querySelector(".cm-fub-block-lift")).toBeNull();
+      expect(vibrate).not.toHaveBeenCalled();
+      // Tenuto fermo: a 299 ms ancora niente, a 300 il blocco è in mano.
+      handles.shown = keyOfText(view, "Uno");
+      finger("pointerdown", 10);
+      vi.advanceTimersByTime(299);
+      expect(handles.drag?.moving).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(handles.drag?.moving).toBe(true);
+      expect(view.dom.classList.contains("cm-fub-blocks-dragging")).toBe(true);
+      expect(vibrate).toHaveBeenCalledTimes(1);
+      handles.endDrag(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

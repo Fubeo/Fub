@@ -2184,7 +2184,9 @@ describe("CanvasEngine: l'annulla torna ai byte di prima", () => {
 
   /** I gesti della tela, sulle schede di adesso: le prime due, che nei testi pieni sono quelle di partenza. */
   const gestures: readonly Gesture[] = [
-    ["aggiungere", (_engine, host) => action(host, "add-text")],
+    // «Aggiungi testo» apre la scheda in scrittura, e lasciata vuota se ne va
+    // (IMP-042, IMP-043, le prove in `engine-collaudo.test.ts`): qui l'indirizzo.
+    ["aggiungere", (_engine, host) => action(host, "add-link")],
     ["aggiungere", (_engine, host) => action(host, "add-group")],
     ["spostare", (engine, host) => {
       select(host, ids(engine)[0]!);

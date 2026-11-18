@@ -14,6 +14,7 @@
 // sua anteprima, la lingua, il fuso), e li decide `settings.ts`.
 import type { SettingEntry, SettingKind, SettingValue, UiOption } from "../host/contract";
 import { t } from "../i18n/strings";
+import { evaluate } from "../kit/quantity";
 
 /// Il controllo di una riga.
 export type Control =
@@ -151,6 +152,87 @@ function decimalsOf(n: number): number {
   if (text.includes("e")) return Infinity;
   const dot = text.indexOf(".");
   return dot === -1 ? 0 : text.length - dot - 1;
+}
+
+/// Perché un numero scritto nel campo di una riga non si può scrivere.
+export type NumberProblem =
+  | { readonly problem: "empty" | "syntax" | "finite" | "precision" | "ambiguous" }
+  | { readonly problem: "min"; readonly min: number }
+  | { readonly problem: "max"; readonly max: number };
+
+export type SettingNumber = { readonly value: number } | NumberProblem;
+
+/// Quante cifre significative un numero conserva esatte: oltre, il numero che
+/// il campo salverebbe e mostrerebbe non è più quello scritto
+/// (99999999999999999999 diventava 100000000000000000000).
+const EXACT_DIGITS = 15;
+
+/// Il numero che una persona ha scritto nel campo di una riga, o perché non
+/// lo si può scrivere.
+///
+/// Si legge come ogni campo numerico della shell (`kit/quantity.ts`): la
+/// virgola e il punto separano entrambi i decimali, e le migliaia non si
+/// separano. Il campo è un testo e non un `input[type=number]`, che in WebKit
+/// leggeva «1,5» come 15 e passava al codice un valore vuoto per «1e400» o per
+/// un campo svuotato: un numero diverso, o nessun numero, senza dirlo.
+///
+/// Ciò che non è il numero scritto si rifiuta con il suo motivo, mai si
+/// corregge: un campo vuoto, un testo, un numero troppo grande o con troppe
+/// cifre per restare esatto, e un numero che nella lingua dell'interfaccia si
+/// leggerebbe anche come migliaia (`1,500` in inglese, `1.500` in italiano).
+/// Gli estremi sono quelli che lo schema dichiara, e il kernel li verifica
+/// comunque: qui si dicono prima, con le parole della shell.
+export function parseSettingNumber(
+  text: string,
+  kind: Extract<SettingKind, { kind: "number" }>,
+  language: string,
+): SettingNumber {
+  const read = evaluate(text, { units: {}, current: null, relative: false });
+  if ("problem" in read) {
+    if (read.problem === "empty") return { problem: "empty" };
+    if (read.problem === "finite") return { problem: "finite" };
+    return { problem: "syntax" };
+  }
+  const literals = text.match(/\d+(?:[.,]\d+)?/g) ?? [];
+  if (
+    Math.abs(read.value) > Number.MAX_SAFE_INTEGER ||
+    literals.some((literal) => significantDigits(literal) > EXACT_DIGITS)
+  ) {
+    return { problem: "precision" };
+  }
+  const group = groupSeparator(language);
+  if (group !== null && literals.some((literal) => isGrouped(literal, group))) return { problem: "ambiguous" };
+  if (kind.min !== null && read.value < kind.min) return { problem: "min", min: kind.min };
+  if (kind.max !== null && read.value > kind.max) return { problem: "max", max: kind.max };
+  return { value: read.value };
+}
+
+/// Le cifre che contano di un numero scritto: senza gli zeri davanti, e senza
+/// quelli in coda (dopo la virgola non dicono niente, prima li dice la
+/// grandezza, che ha il suo controllo).
+function significantDigits(literal: string): number {
+  const [whole = "", fraction = ""] = literal.split(/[.,]/);
+  return (whole + fraction).replace(/^0+/, "").replace(/0+$/, "").length;
+}
+
+/// `1,500` con la virgola delle migliaia: da una a tre cifre senza zero
+/// davanti, il separatore, tre cifre.
+function isGrouped(literal: string, group: "." | ","): boolean {
+  const at = literal.indexOf(group);
+  return at >= 1 && at <= 3 && literal[0] !== "0" && literal.length - at - 1 === 3;
+}
+
+/// Il separatore delle migliaia della lingua, se è uno dei due che separano
+/// anche i decimali.
+function groupSeparator(language: string): "." | "," | null {
+  try {
+    const part = new Intl.NumberFormat(language, { useGrouping: true })
+      .formatToParts(1234567)
+      .find((candidate) => candidate.type === "group")?.value;
+    return part === "." || part === "," ? part : null;
+  } catch {
+    return null;
+  }
 }
 
 /// Il valore di una riga come lo scriverebbe un umano.

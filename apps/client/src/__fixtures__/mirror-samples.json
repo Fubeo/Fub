@@ -1448,6 +1448,12 @@
       "ts": 1,
       "hash": "18446744073709551615",
       "size": 3
+    },
+    {
+      "ts": 2,
+      "hash": "7",
+      "size": 5,
+      "note": "Testo scartato"
     }
   ],
   "DocumentMatch": [

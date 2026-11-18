@@ -138,39 +138,73 @@ Maiusc+tasto destro, che dà sempre il menu del sistema.
 
 ## La mini-barra
 
-Sopra il menu c'è la **mini-barra**: lo stile del paragrafo, le formattazioni
-in riga e i link. Sulla selezione compare da sola quando la barra di
-formattazione è spenta. L'impostazione «Mini-barra di formattazione»
-(`editor.minibar`) sceglie fra `auto` (così), `always` (anche su ogni
-selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
+La **mini-barra** è una fila compatta, scura di giorno e color foglio di
+notte, con quest'ordine: «Trasforma» (lo stesso menu «Trasforma in» dello
+stile nella [barra di formato](editor-toolbar.md)), Grassetto, Corsivo,
+Sottolineato, Barrato, Codice in riga, Collega, Colore e «Commenta». Ogni
+pulsante esegue l'azione della sua scorciatoia, con lo stesso passo
+d'annullamento, e la sua didascalia dice la scorciatoia vera della persona
+(Ctrl B, Ctrl K, Ctrl Alt M…). «Collega» fa ciò che fa Ctrl K: il riquadro
+«Collegamento» in Live e in Blocchi, il wikilink in Sorgente. «Colore» apre
+le due righe dei nove colori dei Blocchi, Testo e Sfondo; il colore già dato
+alla selezione è segnato, e un clic lo toglie. «Commenta» apre il primo
+messaggio della discussione sulla selezione, come Ctrl Alt M: su più blocchi
+il commento va nel primo, nel codice o in una formula subito dopo il blocco.
+Un pulsante che la nota non sa fare non c'è; in sola lettura sono tutti
+spenti. Il puntatore non prende il fuoco, che resta al testo con la sua
+selezione; da tastiera la fila è un punto di tabulazione con le frecce, ed
+Escape torna al testo.
+
+Sul testo scelto compare da sola, con la barra di formattazione compatta o
+nascosta: sopra la selezione (sotto se sopra non c'è posto) e senza uscire
+dalla finestra; mentre il suo menu Trasforma o Colore è aperto resta ferma.
+Con la barra completa, che ha già tutti i pulsanti, no. Se si apre il menu
+del tasto destro, la mini-barra ne prende la testa (E29). L'impostazione
+«Mini-barra di formattazione» (`editor.minibar`) sceglie fra `auto` (così),
+`always` (su ogni selezione, anche con la barra completa), `menu` (solo col
+tasto destro) e `off`. Le scene `mini-barra-*` del banco la
+fotografano.
 
 ## Il «/» nel testo
 
 Il **«/»** scritto a inizio riga o dopo uno spazio apre il pannello dei blocchi
-sotto la riga. Se sotto non ci sta intero si accorcia, e l'elenco o il passo
-scorrono dentro (con la scelta delle frecce, la rotella e il dito: il fuoco
-resta nell'editor), fino a 220 px; solo se sotto non c'è neanche quello si apre sopra la
-riga. Non esce mai dall'area del documento: testata, barra degli strumenti e
-barra della finestra restano scoperte (`slashPlacement` in
-`editors/text/profiles/markdown/slash.ts`). Sul telefono è un foglio in fondo
-alla finestra. Vale in ogni modalità di scrittura; il «+» della maniglia mette
-un blocco vuoto e ci apre il «/».
+sotto la riga: una colonna sola, larga 352 px, che copre poco testo. Se sotto
+non ci sta intero si accorcia, e l'elenco o il passo scorrono dentro (con la
+scelta delle frecce, la rotella e il dito: il fuoco resta nell'editor), fino a
+300 px (le tessere, un gruppo di tre righe e il disegno); solo se sotto non c'è
+neanche quello si apre sopra la riga. Segue il cursore mentre la nota scorre,
+e si chiude se il cursore esce dalla parola. Non esce mai dall'area del
+documento: testata, barra degli strumenti e barra della finestra restano
+scoperte (`slashPlacement` in `editors/text/profiles/markdown/slash.ts`). Sul
+telefono, sotto i 600 px o col dito, è un foglio a tutta larghezza in fondo
+alla finestra, sopra la tastiera, con righe da 44 px. Vale in ogni modalità di
+scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
 
-- **La testata** mostra ciò che si è scritto, il contesto («riga vuota:
-  diventa il blocco scelto», «dopo il testo: un blocco nuovo sotto») e il
-  conto dei risultati, letto dal lettore di schermo.
-- **Le sezioni** sono linguette: Suggeriti (guardano il blocco sopra),
-  Preferiti, Recenti, Testo, Elenchi, Blocchi, Codice e formule, Collegamenti
-  e media, Persone e date, Stile, Pagina, Dal vault. Tab salta di sezione.
-- **Le righe** hanno un'icona, il nome e a destra la sintassi Markdown come
-  un tasto, oppure «›» per le voci che aprono un passo. Una pillola d'accento
-  segue la scelta.
-- **L'anteprima** a destra mostra il blocco coi caratteri della nota, che
-  cosa fa e come scriverlo senza menu. La stella mette la voce fra i
+- **In alto, i sei più usati**, come tessere con l'icona e una parola. In un
+  vault nuovo: Attività, Titolo, Riquadro, Tabella, Base (con le Basi accese),
+  poi Punti e Codice (Scheda la aggiunge il suo lavoro). L'uso li riordina: prima i Preferiti,
+  poi i blocchi scelti di recente, poi l'ordine scritto; una voce nascosta
+  lascia il posto alla seguente, e stili e comandi del vault non diventano
+  tessere (`byUse` in `panels/slash/rank.ts`). A menu appena aperto Invio mette
+  la prima; ← e → scorrono le tessere.
+- **Sotto, tutti i blocchi per gruppo**, una riga ciascuno: icona, nome e a
+  destra, in grigio, ciò che si scrive per farne a meno (`- [ ]`, `##`), o «›»
+  per le voci che aprono un passo. I gruppi sono Testo, Elenchi, Blocchi,
+  Codice e formule, Collegamenti e media, Persone e date, Stile, Pagina e Dal
+  vault; i loro titoli restano in cima mentre si scorre. Tab salta al gruppo
+  dopo (le tessere sono una tappa), Maiusc+Tab torna.
+- **In fondo, il disegno** della voce scelta: una miniatura della forma del
+  blocco, che cosa fa in una frase, come scriverlo senza menu e gli argomenti
+  rapidi («Scrivendo `##` · anche `/h2`»). La stella mette la voce fra i
   Preferiti; «Nascondi dal menu» la toglie dal «/», e resta un comando.
-- **Trovare.** Con due lettere valgono gli inizi di parola, dei nomi in
-  italiano e in inglese, e le iniziali («/ea» trova Elenco di attività); mai
-  lettere sparse. Da tre lettere conta anche l'interno delle parole, da
+- **I tasti** non stanno nel pannello: li dice la riga dei suggerimenti della
+  banda di stato (frecce, Invio, Tab per il gruppo dopo, Esc che lascia il
+  testo, Ctrl+/ per tutti i comandi).
+- **Trovare.** Scrivendo, l'elenco diventa uno solo, ordinato per
+  pertinenza, con la parte trovata in evidenza, e in fondo «Cerca fra tutti i
+  comandi». Con due lettere valgono gli inizi di parola, dei nomi in italiano
+  e in inglese e dei sinonimi, e le iniziali («/ea» trova Elenco di attività);
+  mai lettere sparse. Da tre lettere conta anche l'interno delle parole, da
   quattro si perdona un errore («/tabela» trova Tabella). Al massimo 12
   risultati. I comandi rapidi vanno in cima: «/tab 3x4», «/col 3», «/code
   py», «/h2», «/domani», «/venerdì», «/fra una settimana».
@@ -178,25 +212,51 @@ un blocco vuoto e ci apre il «/».
   dieci fondi, col nome), Data (i giorni vicini e il mese), Riquadro (la
   galleria dei tipi), Link a una nota e Incorpora (le note, poi una sezione),
   Blocco di codice (i linguaggi) e Diagramma (i modelli Mermaid) si scelgono
-  nello stesso riquadro; ⌫ o Esc tornano all'elenco. I venti colori non sono
-  più voci del «/»: stanno sotto «Colore ›» e si trovano scrivendo («/blu»).
-- **Niente trovato.** Il pannello resta aperto e lo dice; Invio o Ctrl+/
-  cercano fra tutti i comandi, Esc lascia il testo com'è.
-- **Con una selezione** il «/» apre «Trasforma»: solo ciò che cambia le righe
-  scelte, con il prima e il dopo.
+  nello stesso riquadro, sotto una testata col nome del passo; ⌫ o Esc tornano
+  all'elenco. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
+  si trovano scrivendo («/blu»).
+- **Niente trovato.** Il pannello resta aperto e lo dice («Nessun blocco per
+  «qwerty».»); la sola riga, accesa, cerca fra tutti i comandi, con Invio o
+  Ctrl+/. Esc lascia il testo com'è.
+- **Con una selezione** il «/» apre «Trasforma»: niente tessere, solo ciò che
+  cambia le righe scelte, e il disegno in fondo dice il dopo.
 
 Scegliere una voce toglie il «/…» e applica il blocco come una sola modifica:
 un Annulla fa tornare il testo scritto. «e/o», «24/09» e gli indirizzi non lo
-aprono, né dentro codice, link e formule. Sotto i 760 px di finestra resta
-solo l'elenco; sotto i 600 px, o col dito, il pannello è un foglio dal basso
-con righe da 44 px.
+aprono, né dentro codice, link e formule.
 
 Le impostazioni, in Editor: «Menu «/» nel testo» (`editor.slash`) lo spegne;
 `editor.slash.hidden` elenca gli id delle voci nascoste; `editor.slash.sections`
-ordina le sezioni dopo Suggeriti, Preferiti e Recenti. I blocchi sono
+ordina i gruppi (quelli non detti seguono nel loro ordine). I blocchi sono
 dichiarati da `fub.formatting`: spento il plugin, il «/» offre soltanto i
-comandi del vault. Ogni voce resta un comando del registro, con i suoi
-parametri (`markdown.table` con `rows` e `cols`).
+comandi del vault, senza tessere. Ogni voce resta un comando del registro, con
+i suoi parametri (`markdown.table` con `rows` e `cols`). Fa eccezione «Base»
+(`markdown.base`), un'azione dell'editor che crea un file prima di scrivere.
+
+### Una Base dal «/»
+
+«Base» (`/base`, o la tessera dopo «Tabella») crea una
+[Base](bases.md) accanto alla nota e la mette al posto della riga. C'è con la
+componente delle Basi accesa e in una nota che si può scrivere.
+
+1. Chiede il nome, di serie il titolo della nota. Se nel vault c'è già un file
+   con quel nome propone «Nome 2», «Nome 3»…, perché `![[Nome.base]]` trova il
+   file per nome in tutto il vault; un nome scritto a mano e già preso fa
+   richiedere. I caratteri che rompono il link o il nome del file
+   (`# | ^ [ ] / \ : * ? " < >`) diventano spazi.
+2. Crea `Nome.base` nella cartella della nota, soltanto se non c'è: non
+   sovrascrive mai. Dentro, una vista «Tabella» sulle note della cartella e
+   delle sottocartelle (filtro `file.path` `in_folder`); nella radice, su tutto
+   il vault.
+3. Scrive `![[Nome.base#Tabella]]` al posto del «/base», da solo e staccato
+   da una riga vuota dal testo intorno (se il «/» seguiva del testo, in un
+   paragrafo sotto), e porta il cursore oltre, perché in Live si veda la Base.
+
+Se il file non nasce (cartella in sola lettura, disco pieno) la nota non
+cambia, il «/base» resta e un avviso dice perché; rinunciare al nome lascia la
+nota com'era. Intanto la nota resta scrivibile, e l'embed va dove il «/base» è
+finito. Un Annulla toglie l'embed e rimette il «/base»; il file resta, come un
+allegato.
 
 ## Gli altri editor
 
@@ -334,7 +394,10 @@ griglia delle tabelle in Live ha il suo
   `settings.components.*` delle impostazioni;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
-- `apps/client/src/panels/mini-bar.ts`: la mini-barra;
+- `apps/client/src/panels/mini-bar.ts`: la mini-barra, e
+  `apps/client/src/panels/selection-bubble.ts` che la posa sul testo scelto;
+  `apps/client/src/editors/text/profiles/markdown/mini-bar.dom.test.ts`
+  confronta ogni pulsante con la sua scorciatoia su una nota vera;
 - `apps/client/src/panels/slash/` (voci, classifica, comandi rapidi, passi,
   pannello) e `apps/client/src/editors/text/profiles/markdown/slash.ts`
   (contesto e stato): il «/» nel testo;

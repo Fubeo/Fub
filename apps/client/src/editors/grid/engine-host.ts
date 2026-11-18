@@ -119,6 +119,12 @@ export interface GridEngineOptions {
   /// La revisione dei byte da cui il giornale discende adesso: cambia a ogni
   /// salvataggio. Senza, si usa `revision`.
   readonly base?: () => string | null;
+  /// La revisione dei byte che il file ha adesso sul disco. La griglia la
+  /// chiede quando i byte di `base` non ci sono più (il file è cambiato
+  /// fuori mentre il giornale aveva modifiche): si apre allora il giornale
+  /// su quelli, come li scriverebbe «Tieni il mio testo», invece di restare
+  /// bianca.
+  readonly diskRevision?: () => Promise<string | null>;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
   /// Il catalogo dei comandi è cambiato (`GridEngine.commands`).

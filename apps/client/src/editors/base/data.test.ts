@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
-  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments,
+  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
   parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
   persistBaseView, restoreBaseView, setBaseViewKey, writtenLines, type BaseSurfaceDeps,
 } from "./data";
@@ -26,13 +26,11 @@ describe("Base contract", () => {
     await expect(parseBaseViews(future, "version: 999\n")).rejects.toMatchObject({ kind: "bad_args" });
   });
 
-  // T34 toglie `timeline` da qui quando la superficie la disegna.
-  it("reads the calendar and refuses the timeline until the surface draws it, as an unknown kind", async () => {
-    const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: null, end_key: null }));
-    for (const kind of ["timeline", "gallery"]) {
-      await expect(planBaseView(planOf(kind), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
-    }
+  it("reads the calendar and the timeline, and refuses a kind the surface does not draw", async () => {
+    const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: "from", end_key: null }));
+    await expect(planBaseView(planOf("gallery"), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
     await expect(planBaseView(planOf("calendar"), source, "Agenda")).resolves.toMatchObject({ viewType: "calendar", dateKey: "due" });
+    await expect(planBaseView(planOf("timeline"), source, "Agenda")).resolves.toMatchObject({ viewType: "timeline", startKey: "from", endKey: null });
     const drawn = deps(async () => custom({ view: "Board", view_type: "kanban", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
     await expect(planBaseView(drawn, source, "Board")).resolves.toMatchObject({ viewType: "kanban" });
   });
@@ -45,6 +43,16 @@ describe("Base contract", () => {
     const plain = await deriveBaseRows(answer([undefined, undefined]), source, "Cal", rows);
     expect(plain.rows[0]).not.toHaveProperty("day");
     await expect(deriveBaseRows(answer([{ day: "14/11/2026" }, { day: null }]), source, "Cal", rows)).rejects.toThrow("giorno malformato");
+  });
+
+  it("reads the span of each note in a timeline view, and refuses a malformed one", async () => {
+    const rows = [{ doc: "a.md", properties: [] }, { doc: "b.md", properties: [] }];
+    const answer = (time: unknown[]) => deps(async () => custom({ rows: [{ doc: "a.md", values: {}, time: time[0] }, { doc: "b.md", values: {}, time: time[1] }], summaries: {} }));
+    const derived = await deriveBaseRows(answer([{ start: "2026-11-14", end: "2026-11-10", inverted: true }, { start: "2026-11-01", end: null, inverted: false }]), source, "Lin", rows);
+    expect(derived.rows.map((row) => row.span)).toEqual([{ start: "2026-11-14", end: "2026-11-10", inverted: true }, { start: "2026-11-01", end: null, inverted: false }]);
+    expect(derived.rows[0]).not.toHaveProperty("day");
+    await expect(deriveBaseRows(answer([{ start: "2026-11-14", end: null }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
+    await expect(deriveBaseRows(answer([{ start: "ieri", end: null, inverted: false }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
   });
 
   it("consumes every page beyond the former 2,000-row cutoff", async () => {
@@ -102,6 +110,48 @@ describe("Base contract", () => {
       { doc: "a.md", key: "flag", expected: { kind: "value", value: { kind: "bool", value: false } }, value: "true" },
     ]);
     expect(mutations[0]?.args.expected).toBe('{"kind":"value","value":{"value":false,"kind":"bool"}}');
+  });
+
+  it("una colonna prop.stato legge e scrive la proprietà stato: il comando riceve stato, mai prop.stato", async () => {
+    // Il core riceve la chiave di colonna e scrive il nome del frontmatter:
+    // il finto fa lo stesso. Una risposta che ripete `prop.stato` è rifiutata.
+    const core = deps(async (request) => {
+      const edits = (request as { query: { edits: { doc: string; key: string; expected: unknown; value?: string | null }[] } }).query.edits;
+      return custom({ mutations: edits.map((edit) => ({
+        doc: edit.doc, key: edit.key, command: edit.value == null ? "note.property.remove" : "note.property.set",
+        args: { doc: edit.doc, key: edit.key.replace(/^prop\./, ""), expected: JSON.stringify(edit.expected), ...(edit.value == null ? {} : { value: edit.value }) },
+      })) });
+    });
+    const row = { doc: "a.md", values: {}, properties: { stato: { kind: "text", value: "Arrivata" } } };
+    const expected = expectedProperty(row, "prop.stato");
+    expect(expected).toEqual({ kind: "value", value: { kind: "text", value: "Arrivata" } });
+    expect(expectedProperty(row, "prop.valore")).toEqual({ kind: "absent" });
+    const [set] = await prepareBaseMutations(core, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: JSON.stringify("Confermata") }]);
+    expect(set).toMatchObject({ command: "note.property.set", args: { key: "stato", value: '"Confermata"' } });
+    const [clear] = await prepareBaseMutations(core, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: null }]);
+    expect(clear?.command).toBe("note.property.remove");
+    expect(clear?.args).toMatchObject({ key: "stato" });
+    expect(clear?.args).not.toHaveProperty("value");
+    const echo = deps(async () => custom({ mutations: [{
+      doc: "a.md", key: "prop.stato", command: "note.property.set",
+      args: { doc: "a.md", key: "prop.stato", value: '"Confermata"', expected: JSON.stringify(expected) },
+    }] }));
+    await expect(prepareBaseMutations(echo, source, "Board", [{ doc: "a.md", key: "prop.stato", expected, value: JSON.stringify("Confermata") }])).rejects.toThrow("mutazione diversa");
+  });
+
+  it("le colonne container.* e file.* non sono proprietà: nessuna mutazione le scrive, neanche se il core la ripete", async () => {
+    // `container.folder` è la cartella del file che ospita la Base, non una
+    // proprietà della nota: il finto la ripete come `note.property.set`, e la
+    // mutazione va rifiutata prima che arrivi a un comando.
+    for (const key of ["container.folder", "file.mtime"]) {
+      const core = deps(async () => custom({ mutations: [{
+        doc: "a.md", key, command: "note.property.set",
+        args: { doc: "a.md", key, expected: '{"kind":"absent"}', value: '"x"' },
+      }] }));
+      await expect(prepareBaseMutations(core, source, "Board", [
+        { doc: "a.md", key, expected: { kind: "absent" }, value: '"x"' },
+      ])).rejects.toThrow("sola lettura");
+    }
   });
 
   it("restores independent document view choices and quotes CSV content", async () => {
@@ -162,5 +212,64 @@ describe("i gesti della barra con base.view.set", () => {
       removed: [], added: ["    sort:", "      - key: stato"], line: 4,
     });
     expect(writtenLines("a\nb\nc\n", "a\nB\nc\n")).toEqual({ removed: ["b"], added: ["B"], line: 2 });
+  });
+});
+
+describe("le note legate dei riepiloghi di Relazione (T35)", () => {
+  const wiki = (page: string) => ({ kind: "link", value: { kind: "wiki", value: { page, heading: null, block: null } } });
+  const rows = [
+    { doc: "Letture/2025.md", properties: [{ key: "libri", value: { kind: "list", value: [wiki("Dune"), wiki("Rotto")] } }] },
+    { doc: "Letture/2026.md", properties: [{ key: "libri", value: wiki("Dune") }, { key: "altro", value: wiki("Ubik") }] },
+  ];
+
+  it("risolve ogni pagina una volta, legge le note trovate con le proprietà chieste e lascia fuori i link rotti", async () => {
+    const asked: IndexQuery[] = [];
+    const bridge = deps(async (query) => {
+      asked.push(query);
+      if (query.kind === "resolve") {
+        const page = (query.target as { value: { page: string } }).value.page;
+        return { kind: "resolved", value: page === "Dune" ? { doc: "Libri/Dune.md" } : null } as IndexResult;
+      }
+      return { kind: "documents", value: { offset: 0, total: 1, items: [{ doc: "Libri/Dune.md", properties: [{ key: "pagine", value: { kind: "number", value: 600 } }] }] } } as IndexResult;
+    });
+    const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, rows);
+    expect(linked).toEqual([{ target: "Dune", folder: "Letture", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
+    expect(asked.filter((query) => query.kind === "resolve")).toHaveLength(2);
+    expect(asked.find((query) => query.kind === "resolve")).toMatchObject({ from: "Letture/2025.md" });
+  });
+
+  it("lo stesso link in cartelle diverse si risolve dal punto di vista di ogni riga", async () => {
+    const folders = [
+      { doc: "A/Scaffale.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+      { doc: "A/Altro.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+      { doc: "B/Scaffale.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+    ];
+    const asked: IndexQuery[] = [];
+    const bridge = deps(async (query) => {
+      asked.push(query);
+      if (query.kind === "resolve") {
+        const from = (query as { from: string }).from;
+        return { kind: "resolved", value: { doc: `${from.split("/")[0]}/Indice.md` } } as IndexResult;
+      }
+      return { kind: "documents", value: { offset: 0, total: 2, items: [{ doc: "A/Indice.md", properties: [] }, { doc: "B/Indice.md", properties: [] }] } } as IndexResult;
+    });
+    const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, folders);
+    expect(linked).toEqual([
+      { target: "Indice", folder: "A", doc: "A/Indice.md", props: {} },
+      { target: "Indice", folder: "B", doc: "B/Indice.md", props: {} },
+    ]);
+    expect(asked.filter((query) => query.kind === "resolve"), "una domanda per cartella e pagina").toHaveLength(2);
+  });
+
+  it("una vista senza riepiloghi di Relazione non chiede niente", async () => {
+    const queryIndex = vi.fn(async () => custom(null));
+    expect(await linkedNotes(deps(queryIndex), { relations: [], linkedProps: [] }, rows)).toEqual([]);
+    expect(queryIndex).not.toHaveBeenCalled();
+  });
+
+  it("il piano porta le Relazioni e le proprietà legate; un host che non le dice vale come vuote", async () => {
+    const raw = { view: "T", view_type: "table", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} };
+    await expect(planBaseView(deps(async () => custom(raw)), source, "T")).resolves.toMatchObject({ relations: [], linkedProps: [] });
+    await expect(planBaseView(deps(async () => custom({ ...raw, relations: ["libri"], linked_props: ["pagine"] })), source, "T")).resolves.toMatchObject({ relations: ["libri"], linkedProps: ["pagine"] });
   });
 });

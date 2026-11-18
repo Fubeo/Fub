@@ -203,6 +203,24 @@ Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
 può appartenere alle dipendenze statiche degli ingressi applicativi.
 Il controllo misura il codice finale, dopo la riscrittura degli import di
 Vite, e interrompe la build in caso di superamento.
+Il limite non si alza per far passare un chunk: si toglie dal chunk ciò che
+non serve al suo primo uso. Il ponte dei documenti (`document-bridge`) e il
+chunk condiviso `search` si caricano all'avvio con solo ciò che serve per
+aprire e scrivere una nota; le parti di un gesto arrivano con un `import()`
+dal loro modulo d'ingresso, che dà il nome al chunk: formule (`math-editing`,
+e `math-errors` dopo KaTeX), proprietà (`property-actions`), diagrammi
+(`diagram-menu`, con `mermaid-styles`), `lightbox`, brano incluso
+(`range-surface`), PDF (`pdf-view`), registratore (`recorder-part`), `slides`
+e stampa (`print-view`). Le carica
+[`ui/lazy-part.ts`](../../apps/client/src/ui/lazy-part.ts) (`lazyPart`):
+`warm()` chiede il codice a thread libero (`requestIdleCallback`) appena la
+superficie che lo userà monta, e il puntatore o il fuoco sopra l'elemento
+prima del gesto; un gesto che arriva prima del codice va in coda e si fa
+appena il codice arriva, se chi l'ha chiesto c'è ancora; un `import()` che non
+riesce lo dice con una nota, e il gesto dopo riprova. Nessuna è un chunk
+d'avvio (l'elenco di ogni pagina è in `dist/startup-chunks.json`). Le prove
+col codice già lì aspettano `loadLazyParts()`; quelle del gesto in anticipo
+stanno in `ui/lazy-part.test.ts` e `markdown/math-live-lazy.dom.test.ts`.
 La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
 `theme-skin`), che Vite non minimizza: nella build
 [`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie
@@ -210,6 +228,15 @@ commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
 e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
 e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
 al banco la pelle resta quella scritta.
+Rollup non divide un modulo: [`build/skin-split.mjs`](../../apps/client/build/skin-split.mjs)
+taglia la pelle ai confini fra i pezzi di `skin/order.ts` in gruppi di circa
+300 000 byte (`theme-skin`, `theme-skin-2`, …), che il modulo della pelle
+importa staticamente e rimette insieme: al tema arriva, byte per byte, la
+pelle minimizzata intera (la build si ferma se no), all'avvio come prima.
+Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
+temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
+Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
+della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
 
 L'audit npm della supply chain
 ([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni
@@ -245,40 +272,8 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
 | `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
 | `npm run bench:tree` | l'albero di un vault da 5.000 file: primo disegno, apertura, scorrimento, ricerca, a velocità normale e con la pagina quattro volte più lenta |
-| `npm run bench:giro` | il giro della pre-alpha: i compiti di una persona, di fila, con una foto per compito (vedi sotto) |
+| `npm run bench:giro` | il giro della pre-alpha: i compiti di una persona, di fila, con una foto per compito ([Il giro](bench-giro.md)) |
 | `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
-
-### Il giro della pre-alpha
-
-Il giro fa sul banco, di fila e sulla stessa pagina, i compiti che una persona fa
-nella pre-alpha: la shell vera col finto host e il vault del banco, gesti con la
-tastiera e col puntatore, il moto ridotto e la lingua italiana del palco
-(`bench/stage.mjs`). Ogni compito controlla il risultato nel DOM o nel finto host (per
-esempio il Markdown che arriva a `writeDocument`, non solo l'assenza di errori) e lascia una foto.
-
-```bash
-cd apps/client
-npm run bench:giro -- --out=$TMPDIR/giro              # a 1280×800
-npm run bench:giro -- --out=$TMPDIR/giro --telefono   # mobile.html a 390×844
-npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce giorno
-```
-
-Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`, uno per file
-accanto che dice in testa che cosa prova. `avvio`: dal primo avvio senza vault all'albero, alla scrittura
-in Live e alle quattro modalità. `scrivere` (non al telefono): «/» e maniglia, tasto destro, palette, due
-riquadri, rinomina coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui il
-finto non dà i comandi di formato. `editor` (non al telefono): una frase in un Word, formula e «Ordina» in
-un Excel, un rettangolo in un SVG, una ricerca in un PDF; `giro=editor` (`bench/giro-fixture.ts`) dà il
-PDF e un foglio che serve solo quei comandi. `lavagna` (non al telefono, `?lavagna=1`): schede, un filo,
-la penna (`pointerType: "pen"`, con la pressione) e la Gomma, visti nel `.canvas`. `guasti` (non al
-telefono): conflitti, errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
-quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto (`giro.json`) in `--out` (di
-serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
-
-Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`), il motore vero
-(risponde il finto host; i suoi «Struttura» e «Collegamenti» sono uguali per ogni nota, la sua
-rinomina riscrive solo i wikilink, i valori del foglio sono a mano), il sistema operativo (finestre,
-dialoghi, WebView e installer, al giro a mano; il selettore dà il vault del banco).
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
 grandi:
@@ -392,6 +387,9 @@ predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
 `baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
 scrivere un file. Le regole e le loro prove stanno in
 [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
+Una scena nuova ancora senza foto non fa cadere il client: il presidio di
+`bench/scene.test.ts` vuole solo che ogni scena abbia tutte le sue luci o
+nessuna, e il rosso lo dà il banco visivo, che fa partire il bot.
 
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo

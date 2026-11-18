@@ -7,8 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
 import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
-import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE, RICH_READING_MODE } from "./surface";
+import { CLOSED_QUIET_MS, mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE, RICH_READING_MODE } from "./surface";
 import { t } from "../../i18n/strings";
+import closedFixture from "../../__fixtures__/rich-closed.json";
 import { declareClipboard } from "../../platform/clipboard";
 import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
 import type { SurfaceMenuItem } from "../core/editor-menu";
@@ -501,6 +502,59 @@ describe("la superficie ricca", () => {
     expect(surface.zone!(1)).toBe(true);
     expect(document.activeElement).toBe(parent.querySelector(".rich-page"));
     expect(surface.zone!(1)).toBe(false);
+    surface.destroy();
+  });
+
+  it("battere in una parte chiusa lo dice con un avviso solo, finché si riprova senza fermarsi (IMP-118)", async () => {
+    let engine: engineModule.RichEngine | null = null;
+    class Captured extends engineModule.RichEngine {
+      constructor(...args: ConstructorParameters<typeof engineModule.RichEngine>) {
+        super(...args);
+        engine = this;
+      }
+    }
+    const told = vi.fn();
+    const never = () => new Promise<never>(() => {});
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const surface = mountRichSurface(
+      RICH_PROFILE,
+      { paneId: "pane", documentId: "lettera.docx", parent, formatId: "docx" },
+      {
+        onChange: vi.fn(),
+        onSelectionChange: vi.fn(),
+        loadEngine: () => Promise.resolve({ ...engineModule, RichEngine: Captured }),
+        proof: { ports: { queryIndex: never, invokeCommand: never, settings: never, interfaceLanguage: () => "it", watch: () => () => {} }, notify: told },
+      },
+    );
+    await flush();
+    surface.buffer!.setDoc(closedFixture.source);
+    const e = engine as engineModule.RichEngine | null;
+    expect(e!.hasClosed()).toBe(true);
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const closedAt = e!.read((state) => {
+      let pos = -1;
+      state.doc.child(1).descendants((node, at) => {
+        if (pos < 0 && node.isText) pos = state.doc.resolve(0).posAtIndex(1) + 1 + at + 1;
+        return pos < 0;
+      });
+      return pos;
+    });
+    e!.select(closedAt);
+    const type = (key: string) => e!.contentElement().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    // Una parola intera, un tasto ogni 200 ms: un avviso.
+    for (const key of "Quadro") {
+      type(key);
+      now += 200;
+    }
+    expect(told).toHaveBeenCalledTimes(1);
+    expect(told).toHaveBeenCalledWith(t("rich.locked.refused"));
+    // Dopo una pausa, il tentativo dopo lo ridice.
+    now += CLOSED_QUIET_MS + 1;
+    type("Q");
+    expect(told).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
     surface.destroy();
   });
 

@@ -939,3 +939,84 @@ fn upsert_matches_build_after_aliases_homonyms_and_rename() {
         Some(DocId::new("team/Rossi.md"))
     );
 }
+
+/// IMP-101: `[[Progetti/Alpha|Alfa]]` scritto in `Note/index.md` punta a
+/// `Note/Progetti/Alpha.md`, anche se dalla radice del vault non c'è nessun
+/// `Progetti/Alpha`. Prima restava irrisolto: niente uscente, niente backlink.
+#[test]
+fn a_partial_path_resolves_as_a_suffix_of_the_path() {
+    let index = doc_with_links("Note/index.md", &["Nota B", "Progetti/Alpha"]);
+    let nota_b = DocumentModel::empty(DocId::new("Note/Nota B.md"));
+    let mut alpha = DocumentModel::empty(DocId::new("Note/Progetti/Alpha.md"));
+    alpha
+        .frontmatter
+        .0
+        .insert("aliases".into(), serde_json::json!(["Alfa"]));
+    let crlf = doc_with_aliases("Note/Alpha CRLF.md", &["Alfa"]);
+    let graph = LinkGraph::build([&index, &nota_b, &alpha, &crlf]);
+
+    assert_eq!(
+        graph.resolve_wiki("Progetti/Alpha"),
+        Some(DocId::new("Note/Progetti/Alpha.md"))
+    );
+    assert_eq!(
+        graph.resolve_wiki("progetti/alpha.md"),
+        Some(DocId::new("Note/Progetti/Alpha.md"))
+    );
+    assert_eq!(
+        graph.outgoing(&DocId::new("Note/index.md")),
+        [
+            DocId::new("Note/Nota B.md"),
+            DocId::new("Note/Progetti/Alpha.md")
+        ]
+    );
+    assert_eq!(sources(&graph, "Note/Progetti/Alpha.md"), ["Note/index.md"]);
+}
+
+/// La coda si legge a confine di cartella, il percorso dalla radice resta il
+/// primo, e fra più code vince il più vicino alla radice.
+#[test]
+fn a_partial_path_prefers_the_root_then_the_shortest_suffix() {
+    let deep = DocumentModel::empty(DocId::new("a/b/Progetti/Alpha.md"));
+    let near = DocumentModel::empty(DocId::new("z/Progetti/Alpha.md"));
+    let lookalike = DocumentModel::empty(DocId::new("XProgetti/Alpha.md"));
+    let graph = LinkGraph::build([&deep, &near, &lookalike]);
+    assert_eq!(
+        graph.resolve_wiki("Progetti/Alpha"),
+        Some(DocId::new("z/Progetti/Alpha.md"))
+    );
+
+    let root = DocumentModel::empty(DocId::new("Progetti/Alpha.md"));
+    let graph = LinkGraph::build([&deep, &near, &root]);
+    assert_eq!(
+        graph.resolve_wiki("Progetti/Alpha"),
+        Some(DocId::new("Progetti/Alpha.md"))
+    );
+
+    // Nessuna coda a confine di cartella: nessuna risposta.
+    let graph = LinkGraph::build([&lookalike]);
+    assert_eq!(graph.resolve_wiki("Progetti/Alpha"), None);
+}
+
+/// L'aggiornamento incrementale segue il percorso parziale: un documento che
+/// arriva in una cartella qualunque con quella coda prende il link, uno più
+/// vicino alla radice glielo toglie, e quando se ne vanno il link torna
+/// irrisolto.
+#[test]
+fn a_partial_path_follows_documents_as_they_come_and_go() {
+    let index = doc_with_links("Note/index.md", &["Progetti/Alpha"]);
+    let mut graph = LinkGraph::build([&index]);
+    assert!(graph.outgoing(&DocId::new("Note/index.md")).is_empty());
+
+    graph.upsert(&DocumentModel::empty(DocId::new("Note/Progetti/Alpha.md")));
+    assert_eq!(sources(&graph, "Note/Progetti/Alpha.md"), ["Note/index.md"]);
+
+    graph.upsert(&DocumentModel::empty(DocId::new("Progetti/Alpha.md")));
+    assert!(sources(&graph, "Note/Progetti/Alpha.md").is_empty());
+    assert_eq!(sources(&graph, "Progetti/Alpha.md"), ["Note/index.md"]);
+
+    graph.remove(&DocId::new("Progetti/Alpha.md"));
+    assert_eq!(sources(&graph, "Note/Progetti/Alpha.md"), ["Note/index.md"]);
+    graph.remove(&DocId::new("Note/Progetti/Alpha.md"));
+    assert!(graph.outgoing(&DocId::new("Note/index.md")).is_empty());
+}

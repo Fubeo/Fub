@@ -152,18 +152,18 @@ salvataggio resta un debounce sulla pausa.
 ### Il testo in sospeso
 
 Una superficie può tenere testo che non è ancora nel buffer della sessione,
-come il campo di una scheda della lavagna. Lo dichiara con una porta
-facoltativa del `SurfaceBuffer` (`editors/core/registry.ts`): `watchPending`
-avvisa quando c'è o non c'è più testo in sospeso, `pendingText` dà il testo
-del documento con quel testo già dentro (per la lavagna una `preview` del
-nucleo, senza commit) e `commitPending` lo registra. La sessione tiene
-l'elenco delle superfici con testo in sospeso: la prima battuta arma la bozza
-come un buffer sporco, e la bozza scrive `pendingText`. Prima di ogni passo
-che legge o sostituisce il buffer (flush, chiusura, rilascio, ricarica, cambio
-da fuori, conflitto, recupero, rinomina, cancellazione) la sessione chiede
-`commitPending`, e il controller lo chiede prima di staccare una superficie:
-nessuna superficie si distrugge con testo in sospeso. Se l'anteprima non
-riesce, la bozza tiene l'ultimo testo accettato e la console lo dice.
+come il campo di una scheda della lavagna o la cella aperta di un foglio. Lo
+dichiara con una porta facoltativa del `SurfaceBuffer`: `watchPending` avvisa
+a ogni suo cambio, `pendingText` dà il documento con quel testo dentro (per la
+lavagna una `preview` del nucleo, per il foglio il giornale con la cella), e
+`commitPending` lo registra, con la promessa del passo se passa dal provider.
+La prima battuta arma la bozza come un buffer sporco, e la bozza scrive
+`pendingText`. Prima di ogni passo che legge o sostituisce il buffer (flush,
+chiusura, rilascio, ricarica, cambio da fuori, conflitto, recupero, rinomina,
+cancellazione) la sessione chiede `commitPending`, e nei passi asincroni ne
+aspetta la promessa (`settled`); il controller lo chiede prima di staccare una
+superficie. Se l'anteprima non riesce (una formula, un foglio a comandi) la
+bozza tiene l'ultimo testo accettato.
 
 Ogni sessione fissa alla nascita il vault in cui il documento è stato letto e lo
 nomina (`vault`) in ogni lettura, scrittura, bozza e scarto di bozza: il vault
@@ -229,11 +229,11 @@ della stessa chiave vanno in fila: una sola in volo, e dietro solo l'ultima
 chiesta, che sostituisce quella che aspettava; così all'host arrivano in
 ordine e una vecchia non sovrascrive mai la nuova. L'esito che conta è quello
 dell'ultima: se non va, la riga torna al valore salvato e mette sotto
-l'errore con l'input provato. Si spengono invece, finché l'esito non arriva,
-le righe la cui scrittura è un cambio rispetto al valore disegnato (aggiungere
-o togliere una voce di lista), perché una seconda scrittura partita dallo
-stesso disegno perderebbe la prima. Un ridisegno intero porta le righe in volo
-com'erano, con la scelta della persona.
+l'errore con l'input provato ([chi controlla il valore](setting-values.md)).
+Si spengono invece, finché l'esito non arriva, le righe la cui scrittura cambia
+il valore disegnato (aggiungere o togliere una voce di lista): una seconda
+scrittura dallo stesso disegno perderebbe la prima. Un ridisegno intero porta
+le righe in volo com'erano, con la scelta della persona.
 
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo

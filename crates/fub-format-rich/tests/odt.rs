@@ -445,6 +445,133 @@ fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
     ));
 }
 
+/// Inserisci › Tabella della shell: ogni cella nuova ha un paragrafo vuoto.
+/// Si scrive col suo paragrafo, come in LibreOffice, e riletta la tabella è
+/// quella voluta; la cella vuota del file resta senza paragrafo.
+#[test]
+fn le_celle_vuote_di_una_tabella_nuova_si_rileggono_col_loro_paragrafo() {
+    let bytes = odt(&format!("{TABLE}<text:p>dopo</text:p>"));
+    let mut projection = projection(&bytes);
+    let empty = Para {
+        role: Role::Body,
+        k: None,
+        c: Vec::new(),
+        ..para(&projection, 1).clone()
+    };
+    let cell = || Cell {
+        k: None,
+        span: None,
+        blocks: vec![Block::Para(empty.clone())],
+    };
+    let row = || Row {
+        k: None,
+        cells: vec![cell(), cell()],
+    };
+    projection.blocks.insert(
+        1,
+        Block::Table(Table {
+            locked: false,
+            k: None,
+            rows: vec![row(), row()],
+        }),
+    );
+    // La cella vuota del file, come la manda la shell: col paragrafo.
+    let Block::Table(old) = &mut projection.blocks[0] else {
+        panic!("not a table");
+    };
+    old.rows[2].cells[1].blocks = vec![Block::Para(empty.clone())];
+    let out = saved(&bytes, &projection);
+    let content = part(&out, "content.xml");
+    let fresh = &content[content
+        .find("table:name=\"Tabella2\"")
+        .expect("the new table")..];
+    let fresh = &fresh[..fresh.find("</table:table>").unwrap()];
+    assert_eq!(fresh.matches("<table:table-cell ").count(), 4, "{fresh}");
+    assert_eq!(fresh.matches("<text:p").count(), 4, "{fresh}");
+    assert!(
+        content.contains("<table:table-cell/></table:table-row>"),
+        "{content}"
+    );
+    let reopened = self::projection(&out);
+    let Block::Table(table) = &reopened.blocks[1] else {
+        panic!("not a table");
+    };
+    for row in &table.rows {
+        for cell in &row.cells {
+            assert!(
+                matches!(&cell.blocks[..], [Block::Para(p)] if p.role == Role::Body && words(p).is_empty()),
+                "{cell:?}"
+            );
+        }
+    }
+    assert!(matches!(
+        save(Codec::Odt, &out, &reopened.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
+}
+
+/// Inserisci › Tabella in un documento il cui stile di serie lascia spazio
+/// dopo e interlinea 115%: i paragrafi delle celle, che la shell crea a
+/// spazio dopo 0 e interlinea singola, si scrivono con la loro disposizione
+/// e si rileggono uguali; il paragrafo di prima resta com'era.
+#[test]
+fn le_celle_di_una_tabella_nuova_si_rileggono_con_la_spaziatura_della_griglia() {
+    let mut fixture = Fixture::new("<text:p>prima</text:p><text:p>dopo</text:p>");
+    fixture.common = COMMON.replace(
+        "<style:default-style style:family=\"paragraph\">",
+        "<style:default-style style:family=\"paragraph\">\
+         <style:paragraph-properties fo:margin-bottom=\"0.247cm\" fo:line-height=\"115%\"/>",
+    );
+    let bytes = fixture.bytes();
+    let mut projection = projection(&bytes);
+    assert_eq!(para(&projection, 0).p, Layout::default());
+    let layout = Layout {
+        after: Some(0.0),
+        line: Some(Line::Multiple(1.0)),
+        ..Layout::default()
+    };
+    let empty = Para {
+        role: Role::Body,
+        k: None,
+        c: Vec::new(),
+        p: layout.clone(),
+        ..para(&projection, 1).clone()
+    };
+    let cell = || Cell {
+        k: None,
+        span: None,
+        blocks: vec![Block::Para(empty.clone())],
+    };
+    let row = || Row {
+        k: None,
+        cells: vec![cell(), cell()],
+    };
+    projection.blocks.insert(
+        1,
+        Block::Table(Table {
+            locked: false,
+            k: None,
+            rows: vec![row(), row()],
+        }),
+    );
+    let out = saved(&bytes, &projection);
+    let reopened = self::projection(&out);
+    let Block::Table(table) = &reopened.blocks[1] else {
+        panic!("not a table");
+    };
+    for r in 0..2 {
+        for c in 0..2 {
+            assert_eq!(cell_para(table, r, c).p, layout, "{r}.{c}");
+        }
+    }
+    assert_eq!(para(&reopened, 0).p, Layout::default());
+    assert_eq!(para(&reopened, 2).p, Layout::default());
+    assert!(matches!(
+        save(Codec::Odt, &out, &reopened.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
+}
+
 fn cell_para(table: &Table, row: usize, cell: usize) -> &Para {
     match &table.rows[row].cells[cell].blocks[0] {
         Block::Para(para) => para,

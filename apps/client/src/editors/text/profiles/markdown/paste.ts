@@ -9,6 +9,7 @@ import { readClipboard } from "../../../../platform/clipboard";
 import { escapeLinkLabel, linkDestination } from "./link-syntax";
 import { AddressChoiceWidget, bareUrl } from "./link-card";
 import { carriedMarkdown } from "./comments/copy";
+import { webEmbedOf } from "./web-embed";
 
 // Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
 // una nota resta commento, invece di passare dall'HTML che non lo porta.
@@ -270,12 +271,22 @@ function addressOnBlankLine(view: EditorView, data: DataTransfer): string | null
 }
 
 /// La scelta sotto un indirizzo incollato su una riga vuota. `link` è il
-/// Markdown scritto a `from`: «Scheda» lo sostituisce con l'indirizzo da solo.
+/// Markdown scritto a `from`: «Scheda» lo sostituisce con l'indirizzo da solo,
+/// «Incorpora» con `embed`, che c'è soltanto per un sito dell'elenco chiuso.
 /// La scelta vale finché il testo non cambia e il cursore resta sul link.
 interface AddressChoice {
   readonly from: number;
   readonly link: string;
   readonly url: string;
+  readonly embed: string | null;
+}
+
+/// La pagina incorporata, `![](https://…)` come Obsidian la scrive e la
+/// incorpora per i video: l'indirizzo è quello che il segnaposto aprirà, in
+/// `https` e senza parametri di tracciamento. `null` fuori dall'elenco.
+function embedMarkdown(url: string): string | null {
+  const embed = webEmbedOf(url);
+  return embed === null ? null : `![](${linkDestination(embed.url).replace(/\|/gu, "%7C")})`;
 }
 const offerAddressChoice = StateEffect.define<AddressChoice | null>();
 const addressChoice = StateField.define<AddressChoice | null>({
@@ -292,7 +303,7 @@ const addressChoice = StateField.define<AddressChoice | null>({
   },
   provide: (field) => EditorView.decorations.from(field, (choice) => (choice === null
     ? Decoration.none
-    : Decoration.set(Decoration.widget({ widget: new AddressChoiceWidget(choice.url), block: true, side: 1 })
+    : Decoration.set(Decoration.widget({ widget: new AddressChoiceWidget(choice.url, choice.embed !== null), block: true, side: 1 })
       .range(choice.from + choice.link.length)))),
 });
 
@@ -303,17 +314,19 @@ function choiceButton(event: Event): HTMLElement | null {
 }
 
 /// Applica una voce della scelta: «Scheda» scrive l'indirizzo da solo sulla
-/// riga, «Link» (o una scelta che non c'è più) la chiude e lascia il link. Il
-/// fuoco torna nell'editor, dove il cursore è già.
-function chooseAddress(view: EditorView, card: boolean): void {
+/// riga, «Incorpora» lo scrive come pagina incorporata, «Link» (o una scelta
+/// che non c'è più) la chiude e lascia il link. Il fuoco torna nell'editor,
+/// dove il cursore è già.
+function chooseAddress(view: EditorView, kind: string | undefined): void {
   const choice = view.state.field(addressChoice);
   if (choice === null) return;
   const to = choice.from + choice.link.length;
+  const insert = kind === "card" ? choice.url : kind === "embed" ? choice.embed : null;
   // Il testo deve essere ancora quello scritto: altrimenti la scelta è vecchia.
-  if (card && !view.state.readOnly && view.state.sliceDoc(choice.from, to) === choice.link) {
+  if (insert !== null && !view.state.readOnly && view.state.sliceDoc(choice.from, to) === choice.link) {
     view.dispatch({
-      changes: { from: choice.from, to, insert: choice.url },
-      selection: { anchor: choice.from + choice.url.length },
+      changes: { from: choice.from, to, insert },
+      selection: { anchor: choice.from + insert.length },
       userEvent: "input.paste",
     });
   } else {
@@ -379,7 +392,7 @@ const addressChoiceGestures = EditorView.domEventHandlers({
     const button = choiceButton(event);
     if (button === null) return false;
     event.preventDefault();
-    chooseAddress(view, button.dataset.choice === "card");
+    chooseAddress(view, button.dataset.choice);
     return true;
   },
   // Un tasto che la scelta non prende la chiude col Link, e il fuoco torna
@@ -415,7 +428,7 @@ const pasteHandler = EditorView.domEventHandlers({
       const { from } = view.state.selection.main;
       const markdown = linkMarkdown(address, address);
       // «Scheda» esiste per le pagine web: un mailto è solo un link, senza scelta.
-      const offer = bareUrl(address) === null ? null : { from, link: markdown, url: address };
+      const offer = bareUrl(address) === null ? null : { from, link: markdown, url: address, embed: embedMarkdown(address) };
       view.dispatch(view.state.replaceSelection(markdown), {
         userEvent: "input.paste",
         effects: offerAddressChoice.of(offer),

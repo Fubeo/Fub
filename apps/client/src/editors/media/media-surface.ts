@@ -18,7 +18,9 @@ import { openResourcePort, readAllResource, type ResourcePort, type ResourceTran
 import { decodeImage, mountImageView, type ImageView } from "./image-view";
 import { ZOOM_STEP } from "./zoom-view";
 import { mountAudioView, mountVideoView } from "./player-view";
-import { mountPdfView, pdfIdWithoutFragment, pdfPageFromFragment, pdfWhereText, type PdfEngineLoader, type PdfView } from "./pdf-view";
+import { pdfIdWithoutFragment, pdfPageFromFragment, pdfWhereText } from "./pdf-ids";
+import type { PdfEngineLoader, PdfView } from "./pdf-view";
+import { lazyPart } from "../../ui/lazy-part";
 import { openWithChoices, shellOpenWith, type OpenWithHost } from "../../state/external-editors";
 
 export interface MediaSurfaceDeps {
@@ -34,8 +36,12 @@ export interface MediaSurfaceDeps {
   openWith?: OpenWithHost;
   copyText?: (text: string) => Promise<void>;
   /// «Annota» sul PDF: crea o apre le sue annotazioni. `available` dice se il
-  /// kernel ha il comando, cioè se il vault serve le annotazioni.
-  annotate?: { available(): boolean; run(pdf: string): Promise<void> };
+  /// kernel ha il comando, cioè se il vault serve le annotazioni. `watch`
+  /// avvisa quando `available` può essere cambiato (l'elenco dei comandi è
+  /// arrivato o è cambiato) e restituisce lo smontaggio: un PDF montato prima,
+  /// come una scheda ripristinata all'avvio, prende allora «Annota» e le
+  /// annotazioni sopra le pagine.
+  annotate?: { available(): boolean; run(pdf: string): Promise<void>; watch?(changed: () => void): () => void };
   /// I dati di LightCraft sotto una foto (N7): mostra in fondo a `root` la
   /// riga dell'XMP accanto a `doc`, finché `life` è vivo. Senza, la foto è
   /// sola; con, la riga arriva dopo la foto, che non la aspetta.
@@ -149,6 +155,9 @@ export function mountMediaSurface(
       message("viewer.unavailable");
       return;
     }
+    // Il visore dei PDF si chiede subito, insieme ai byte: quando sono letti
+    // il suo codice di solito c'è già.
+    if (kind === "pdf") void pdfViewer.load().catch(() => {});
     // Le annotazioni accanto al PDF si cercano subito, insieme ai byte del
     // PDF: quando il PDF è letto la risposta di solito c'è già.
     const marks = kind === "pdf" ? watchAnnotations(bareId) : null;
@@ -184,6 +193,7 @@ export function mountMediaSurface(
         if (!active) return;
         mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId, wantedPage, statusChanged);
         if (marks !== null && mounted?.pdf) followAnnotations(mounted.pdf, marks, digest);
+        if (mounted?.pdf) followAvailability(mounted.pdf, bareId, marks !== null);
         // La prima pagina può arrivare prima della view: la banda la rilegge.
         statusChanged();
       }
@@ -231,6 +241,29 @@ export function mountMediaSurface(
       marks.redraw?.();
     }));
     return marks;
+  }
+
+  /// «Annota» e le annotazioni seguono il comando del kernel anche dopo il
+  /// montaggio (IMP-131): una scheda ripristinata all'avvio monta il PDF
+  /// prima che l'elenco dei comandi arrivi, e senza questo restava senza
+  /// «Annota» finché non si chiudeva e riapriva. `following` dice se le
+  /// annotazioni si seguono già.
+  function followAvailability(view: PdfView, pdf: string, following: boolean): void {
+    const watch = deps.annotate?.watch;
+    if (!watch) return;
+    let followed = following;
+    const sync = (): void => {
+      if (!active) return;
+      const annotate = deps.annotate;
+      view.setAnnotate(annotate?.available() ? () => annotate.run(pdf) : null);
+      if (followed) return;
+      const marks = watchAnnotations(pdf);
+      if (marks === null) return;
+      followed = true;
+      followAnnotations(view, marks, null);
+    };
+    life.add(watch(sync));
+    sync();
   }
 
   /// Porta le annotazioni sulle pagine di `view`, e ce le riporta a ogni
@@ -373,6 +406,10 @@ export function mountMediaSurface(
   };
 }
 
+/// Il visore dei PDF (`pdf-view.ts`): arriva con un `import()` quando si apre
+/// un PDF, fuori dal chunk che le finestre condividono.
+const pdfViewer = lazyPart(() => import("./pdf-view"));
+
 async function mountBytes(
   descriptor: ResourceDescriptor,
   bytes: Uint8Array,
@@ -403,6 +440,8 @@ async function mountBytes(
       return { kind, element: view.element };
     }
     case "pdf": {
+      const { mountPdfView } = await pdfViewer.load();
+      if (life.closed) return null;
       const page = wantedPage ?? pdfPageFromFragment(documentId);
       const view = mountPdfView(
         descriptor,

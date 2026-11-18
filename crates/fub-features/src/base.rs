@@ -2,6 +2,7 @@
 //! the generic index registry; this provider plans and evaluates a definition.
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
@@ -16,7 +17,9 @@ use fub_abi::traits::{
     QueryRoute,
 };
 use fub_abi::{DocId, DocumentModel};
-use fub_format_base::formula::{BaseValue, EvalBudget, Formula, FormulaErrorCode, RowContext};
+use fub_format_base::formula::{
+    BaseValue, EvalBudget, Formula, FormulaErrorCode, LinkedNote, LinkedNotes, RowContext,
+};
 use fub_format_base::model::{BaseError, FilterOp, BASE_FORMAT_ID};
 use fub_format_base::patch::{self, BaseChange, PatchError, Place, ViewKey};
 use fub_format_base::{
@@ -87,9 +90,30 @@ struct Request {
     edits: Vec<Edit>,
     #[serde(default)]
     now_ms: Option<i64>,
+    /// Le note legate dalle Relazioni che i riepiloghi leggono (`rollup`),
+    /// una per pagina di link risolta; assente vuol dire nessuna nota legata.
+    #[serde(default)]
+    linked: Vec<InputLinked>,
 }
 #[derive(Deserialize)]
 struct InputRow {
+    doc: String,
+    props: BTreeMap<String, PropertyValue>,
+}
+/// Una nota legata: la pagina del link com'è scritta nella Relazione (`Dune`
+/// per `[[Dune]]`), il documento a cui chi chiama l'ha risolta con le regole
+/// del vault, e le proprietà che il piano chiede (`linked_props`). Una pagina
+/// che non risolve non si manda: è un link rotto.
+///
+/// `folder` è la cartella delle righe da cui la pagina è stata risolta (`""`
+/// la radice): lo stesso `[[Indice]]` o `./nota.md` in due cartelle porta a
+/// due note, e ognuna vale per le righe della sua. Senza, la nota vale per
+/// tutte le righe; con, vince su quella senza.
+#[derive(Deserialize)]
+struct InputLinked {
+    target: String,
+    #[serde(default)]
+    folder: Option<String>,
     doc: String,
     props: BTreeMap<String, PropertyValue>,
 }
@@ -258,6 +282,93 @@ fn required(plan: &Planned<'_>) -> Result<Vec<String>, PluginError> {
         }
     }
     Ok(keys.into_iter().collect())
+}
+/// Le Relazioni che i riepiloghi (`rollup`) della vista leggono, e le
+/// proprietà delle note legate che chiedono: dalle formule della base e dalle
+/// espressioni dei riepiloghi della vista. Il piano le dice alla superficie,
+/// che risolve i link di quelle Relazioni e manda le note legate a `derive`.
+fn rollup_deps(plan: &Planned<'_>) -> (Vec<String>, Vec<String>) {
+    let mut relations = BTreeSet::new();
+    let mut linked = BTreeSet::new();
+    let summaries = plan
+        .view
+        .summaries
+        .iter()
+        .filter_map(|summary| summary.expression.as_deref())
+        .filter_map(|source| Formula::parse(source).ok());
+    for formula in plan
+        .formulas
+        .values()
+        .filter_map(|f| f.as_ref().ok())
+        .cloned()
+        .chain(summaries)
+    {
+        relations.extend(formula.relation_deps);
+        linked.extend(formula.linked_deps);
+    }
+    (
+        relations.into_iter().collect(),
+        linked.into_iter().collect(),
+    )
+}
+/// Le note legate della richiesta, una volta per derivazione, come le legge
+/// ogni riga: quelle senza cartella valgono per tutte (`any`), quelle con una
+/// cartella per le righe di quella (`folders`, già unite a `any`).
+struct LinkedByFolder {
+    any: Arc<LinkedNotes>,
+    folders: BTreeMap<String, Arc<LinkedNotes>>,
+}
+
+impl LinkedByFolder {
+    /// Le note legate dal punto di vista della riga `doc`.
+    fn of_row(&self, doc: &str) -> Arc<LinkedNotes> {
+        let folder = doc.rsplit_once('/').map(|(f, _)| f).unwrap_or("");
+        Arc::clone(self.folders.get(folder).unwrap_or(&self.any))
+    }
+}
+
+fn linked_notes(linked: Vec<InputLinked>) -> Result<LinkedByFolder, PluginError> {
+    if linked.len() > MAX_BASE_ROWS_PER_CALL {
+        return Err(bad("base: troppe note legate per derivazione"));
+    }
+    let mut notes = LinkedNotes::new();
+    let mut by_folder: BTreeMap<String, LinkedNotes> = BTreeMap::new();
+    for input in linked {
+        if input.target.is_empty() || input.doc.is_empty() {
+            return Err(bad("base: nota legata senza pagina o documento"));
+        }
+        let props: BTreeMap<String, BaseValue> = input
+            .props
+            .iter()
+            .map(|(k, v)| (k.clone(), property_value(v)))
+            .collect();
+        for value in props.values() {
+            check_intermediate(value)?;
+        }
+        let note = LinkedNote {
+            doc: input.doc,
+            props,
+        };
+        match input.folder {
+            Some(folder) => by_folder
+                .entry(folder)
+                .or_default()
+                .insert(input.target, note),
+            None => notes.insert(input.target, note),
+        };
+    }
+    let folders = by_folder
+        .into_iter()
+        .map(|(folder, own)| {
+            let mut all = notes.clone();
+            all.extend(own);
+            (folder, Arc::new(all))
+        })
+        .collect();
+    Ok(LinkedByFolder {
+        any: Arc::new(notes),
+        folders,
+    })
 }
 fn check_file_field(field: &str) -> Result<(), PluginError> {
     if matches!(field, "path" | "name" | "folder" | "ext") {
@@ -989,11 +1100,13 @@ fn derive(
     rows: Vec<InputRow>,
     now_ms: i64,
     container: Option<&str>,
+    linked: Vec<InputLinked>,
 ) -> Result<Value, PluginError> {
     if rows.len() > MAX_BASE_ROWS_PER_CALL {
         return Err(bad("base: troppe righe per derivazione"));
     }
     required(plan)?;
+    let linked = linked_notes(linked)?;
     let columns = columns(plan);
     let container_fields = container.map(file_fields).unwrap_or_default();
     let search = plan
@@ -1016,6 +1129,7 @@ fn derive(
             container: container_fields.clone(),
             formulas: BTreeMap::new(),
             now_ms,
+            linked: linked.of_row(&input.doc),
         };
         for value in ctx.props.values() {
             check_intermediate(value)?;
@@ -1166,6 +1280,10 @@ fn respond(query: Value) -> Result<Value, PluginError> {
             // Le proprietà di tempo che la vista legge: il piano le dice alla
             // superficie, che sceglie cosa mostrare se mancano.
             let (date_key, start_key, end_key) = time_keys(plan.view);
+            // Le Relazioni dei riepiloghi e le proprietà delle note legate:
+            // la superficie risolve quei link e le manda a `derive` in
+            // `linked`.
+            let (relations, linked_props) = rollup_deps(&plan);
             let labels: BTreeMap<_, _> = plan
                 .definition
                 .properties
@@ -1183,7 +1301,7 @@ fn respond(query: Value) -> Result<Value, PluginError> {
             // YAML da sé. `order` è vuoto quando le colonne le deduce
             // `columns`.
             Ok(
-                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"filters":plan.view.filters,"sort":plan.view.sort,"order":plan.view.order,"summaries":summary_plan(plan.view),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
+                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"filters":plan.view.filters,"sort":plan.view.sort,"order":plan.view.order,"summaries":summary_plan(plan.view),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters),"relations":relations,"linked_props":linked_props}),
             )
         }
         "derive" => derive(
@@ -1191,6 +1309,7 @@ fn respond(query: Value) -> Result<Value, PluginError> {
             request.rows,
             request.now_ms.ok_or_else(|| bad("base: ora mancante"))?,
             request.container.as_deref(),
+            request.linked,
         ),
         "mutate" => {
             let plan = planned(&definition, request.view.as_deref())?;
@@ -1228,7 +1347,10 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                 } else {
                     "note.property.remove"
                 };
-                let mut args = json!({"doc":edit.doc,"key":edit.key,"expected":serde_json::to_string(&edit.expected).map_err(|e| bad(e.to_string()))?});
+                // Il comando scrive il nome del frontmatter (`prop.stato` è
+                // la proprietà `stato`). La chiave di primo livello resta
+                // quella della vista: il client la confronta con la richiesta.
+                let mut args = json!({"doc":edit.doc,"key":property_name(&edit.key),"expected":serde_json::to_string(&edit.expected).map_err(|e| bad(e.to_string()))?});
                 if let Some(value) = edit.value {
                     args["value"] = Value::String(value);
                 }
@@ -2224,7 +2346,7 @@ mod tests {
             })
             .collect();
         assert!(matches!(
-            derive(&plan, rows, 0, None),
+            derive(&plan, rows, 0, None, Vec::new()),
             Err(PluginError::BadArgs(_))
         ));
     }
@@ -2249,6 +2371,120 @@ mod tests {
         let plan =
             respond(json!({"version":1,"op":"plan","source":source,"view":"Board"})).unwrap();
         assert_eq!(plan["required_props"], json!(["score"]));
+    }
+
+    /// Un riepilogo su una Relazione, come colonna e nel piede: il piano dice
+    /// quali link risolvere e quali proprietà chiedere, `derive` legge le note
+    /// legate della richiesta. Un link rotto non conta, una nota che lega sé
+    /// stessa sì, un giro di relazioni si ferma al primo livello, e una
+    /// richiesta senza `linked` (come quelle di oggi) dà zero e vuoto.
+    #[test]
+    fn a_rollup_reads_the_linked_notes_one_level_deep() {
+        use fub_abi::model::LinkTarget;
+        let relation = |pages: &[&str]| {
+            serde_json::to_value(PropertyValue::List(
+                pages
+                    .iter()
+                    .map(|page| PropertyScalar::Link(LinkTarget::wiki(*page)))
+                    .collect(),
+            ))
+            .unwrap()
+        };
+        let source = "formulas:\n  - {name: pagine, expression: 'rollup(prop.libri, \"sum\", \"pagine\")'}\n  - {name: quanti, expression: 'rollup(libri, \"count\")'}\nviews:\n  - name: T\n    type: table\n    order: [file.name, formula.pagine, formula.quanti]\n    summaries:\n      - {name: Media, key: libri, aggregate: average, expression: 'rollup(libri, \"max\", \"voto\")'}\n";
+        let plan = respond(json!({"version":1,"op":"plan","source":source,"view":"T"})).unwrap();
+        assert_eq!(plan["relations"], json!(["libri"]));
+        assert_eq!(plan["linked_props"], json!(["pagine", "voto"]));
+        assert_eq!(plan["required_props"], json!(["libri"]));
+        let rows = json!([
+            {"doc":"Scaffale.md","props":{"libri":relation(&["Dune", "Rotto", "Scaffale"])}},
+            {"doc":"Dune.md","props":{"libri":relation(&["Scaffale"])}},
+            {"doc":"Vuoto.md","props":{}}
+        ]);
+        let number = |n: f64| json!({"kind":"number","value":n});
+        let linked = json!([
+            {"target":"Dune","doc":"Dune.md","props":{"pagine":number(600.0),"voto":number(4.0),"libri":relation(&["Scaffale"])}},
+            {"target":"Scaffale","doc":"Scaffale.md","props":{"pagine":number(10.0),"voto":number(2.0),"libri":relation(&["Dune"])}}
+        ]);
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":rows,"linked":linked})).unwrap();
+        let cell = |doc: &str, key: &str| {
+            derived["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["doc"] == doc)
+                .unwrap()["values"][key]
+                .clone()
+        };
+        assert_eq!(cell("Scaffale.md", "formula.pagine"), number(610.0));
+        assert_eq!(cell("Scaffale.md", "formula.quanti"), number(2.0));
+        assert_eq!(cell("Dune.md", "formula.pagine"), number(10.0));
+        assert_eq!(cell("Vuoto.md", "formula.quanti"), number(0.0));
+        assert_eq!(cell("Vuoto.md", "formula.pagine"), json!({"kind":"empty"}));
+        // Il piede: la media dei massimi per riga, sulle righe con un valore.
+        assert_eq!(derived["summaries"]["Media"], number(3.0));
+        // Senza `linked` ogni link è rotto: la richiesta di oggi resta valida.
+        let without = respond(
+            json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":rows}),
+        )
+        .unwrap();
+        assert_eq!(without["rows"][0]["values"]["formula.quanti"], number(0.0));
+        // Una nota legata senza documento non si accetta.
+        assert!(respond(
+            json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":rows,
+            "linked":[{"target":"Dune","doc":"","props":{}}]})
+        )
+        .is_err());
+        // Una base senza riepiloghi di Relazione dice due elenchi vuoti.
+        let bare =
+            respond(json!({"version":1,"op":"plan","source":SOURCE,"view":"Board"})).unwrap();
+        assert_eq!(
+            (bare["relations"].clone(), bare["linked_props"].clone()),
+            (json!([]), json!([]))
+        );
+    }
+
+    /// **Lo stesso link scritto in cartelle diverse porta a note diverse.**
+    /// Le note legate erano una per pagina di link: `[[Indice]]` in `A/` e in
+    /// `B/` prendevano tutte e due la nota della prima riga. Con `folder`
+    /// ognuna vale per le righe di quella cartella; senza, per tutte.
+    #[test]
+    fn a_rollup_reads_the_linked_note_of_the_row_folder() {
+        use fub_abi::model::LinkTarget;
+        let relation = |page: &str| {
+            serde_json::to_value(PropertyValue::List(vec![PropertyScalar::Link(
+                LinkTarget::wiki(page),
+            )]))
+            .unwrap()
+        };
+        let source = "formulas:\n  - {name: pagine, expression: 'rollup(prop.libri, \"sum\", \"pagine\")'}\nviews:\n  - name: T\n    type: table\n    order: [file.name, formula.pagine]\n";
+        let rows = json!([
+            {"doc":"A/Scaffale.md","props":{"libri":relation("Indice")}},
+            {"doc":"B/Scaffale.md","props":{"libri":relation("Indice")}},
+            {"doc":"Radice.md","props":{"libri":relation("Dune")}}
+        ]);
+        let number = |n: f64| json!({"kind":"number","value":n});
+        let linked = json!([
+            {"target":"Indice","folder":"A","doc":"A/Indice.md","props":{"pagine":number(1.0)}},
+            {"target":"Indice","folder":"B","doc":"B/Indice.md","props":{"pagine":number(2.0)}},
+            {"target":"Dune","doc":"Dune.md","props":{"pagine":number(600.0)}}
+        ]);
+        let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"T","now_ms":0,"rows":rows,"linked":linked})).unwrap();
+        let cell = |doc: &str| {
+            derived["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["doc"] == doc)
+                .unwrap()["values"]["formula.pagine"]
+                .clone()
+        };
+        assert_eq!(cell("A/Scaffale.md"), number(1.0));
+        assert_eq!(cell("B/Scaffale.md"), number(2.0));
+        assert_eq!(
+            cell("Radice.md"),
+            number(600.0),
+            "senza cartella vale per tutte"
+        );
     }
 
     #[test]
@@ -2361,6 +2597,31 @@ mod tests {
             ]}),
         );
         assert!(timeline.is_ok());
+    }
+
+    /// Una colonna `prop.stato` scrive la proprietà `stato` della nota: il
+    /// comando riceve il nome del frontmatter, senza il prefisso della vista
+    /// (IMP-123). La chiave di colonna resta quella della vista nel suo eco,
+    /// e una colonna che la vista non ha resta rifiutata.
+    #[test]
+    fn una_colonna_prop_scrive_la_proprieta_senza_il_prefisso() {
+        let source = "views:\n  - name: Tab\n    type: table\n    order:\n      - file.name\n      - prop.stato\n      - valore\n";
+        let edit = |key: &str| {
+            respond(
+                json!({"version":1,"op":"mutate","source":source,"view":"Tab","edits":[
+                    {"doc":"a.md","key":key,"expected":{"kind":"absent"},"value":"Confermata"}
+                ]}),
+            )
+        };
+        let written = edit("prop.stato").unwrap();
+        assert_eq!(written["mutations"][0]["key"], "prop.stato");
+        assert_eq!(written["mutations"][0]["command"], "note.property.set");
+        assert_eq!(written["mutations"][0]["args"]["key"], "stato");
+        assert_eq!(
+            edit("valore").unwrap()["mutations"][0]["args"]["key"],
+            "valore"
+        );
+        assert!(edit("prop.altro").is_err());
     }
 
     /// Le viste che non sono di tempo non portano il campo `time`.

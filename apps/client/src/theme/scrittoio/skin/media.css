@@ -1290,3 +1290,90 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ── La pagina web incorporata ───────────────────────────────────────────── */
+
+/*
+   Un video, una mappa o un disegno di un sito dell'elenco chiuso (T37): il
+   segnaposto dell'immagine remota, un poco più largo, con l'icona della specie
+   su un cartoncino, il nome del sito e «Carica», la stessa pillola di
+   «Scarica nel vault». Nessuna anteprima e nessuna icona del sito: aprire la
+   nota non chiede niente alla rete. La pagina si apre nel visore.
+*/
+.web-embed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: 28rem;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: left;
+  vertical-align: middle;
+}
+.web-embed-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.web-embed-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.web-embed-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.web-embed-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* In Lettura la figura è larga quanto il segnaposto, come in Scrittura: la
+   didascalia sta sotto di lui, non al centro della colonna. */
+.markdown-rendered figure:has(.web-embed) {
+  width: fit-content;
+  max-width: 100%;
+}
+/* Rifiutata o senza visore la riga dice che cosa è successo: va a capo. */
+.web-embed[data-state="refused"] .web-embed-detail,
+.web-embed[data-state="unavailable"] .web-embed-detail {
+  white-space: normal;
+}
+.web-embed-load {
+  flex: none;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.web-embed-load:hover,
+.web-embed-load:focus-visible {
+  color: var(--accent);
+}
+.web-embed-load:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.web-embed-load:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

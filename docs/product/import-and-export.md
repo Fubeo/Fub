@@ -27,6 +27,12 @@ stessa finestra. L'import ha tre tappe, e solo la seconda scrive nel vault.
 Chiudere la finestra dopo l'anteprima toglie la sorgente depositata
 (`import.cancel`).
 
+Ogni tappa è un lavoro del centro attività, col nome della sorgente:
+«Lettura di «Diario.enex» per l'importazione», «Importazione di
+«Diario.enex»», «Annullamento dell'importazione di «Diario.enex»». Se
+l'importer rifiuta la sorgente, il motivo esce con la frase del suo catalogo,
+nella lingua dell'interfaccia, come per un exporter.
+
 ### Archivi grandi
 
 Un import prende al più 64 MiB e 10 000 voci per volta. Un archivio ZIP più

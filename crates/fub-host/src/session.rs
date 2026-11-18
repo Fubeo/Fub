@@ -3124,6 +3124,12 @@ impl Host {
                 "host.theme_folder.link_only",
             )));
         }
+        // Una forma che lo schema non sa dire (un fuso, un indirizzo): il
+        // valore rifiutato non arriva a nessun livello, e il motivo esce nella
+        // lingua di chi guarda.
+        if let Some(problem) = crate::settings::user_value_problem(key, &value) {
+            return Err(self.localized_error(vault, problem));
+        }
         if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
@@ -3391,6 +3397,36 @@ impl Host {
         // chiudere un vault bloccherebbe ogni nuova lettura delle sessioni —
         // compresa quella con cui il provider stesso torna sull'host.
         query_workspace(&self.session_workspace(vault)?, query)
+    }
+
+    /// Il `Guard` di un componente concede questa famiglia, **adesso**?
+    ///
+    /// È per chi agisce a nome di un componente fuori dal kernel, con una
+    /// capacità che nessun metodo dell'host esercita: il notificatore dei
+    /// promemoria dell'app, che mostra una notifica a nome di `fub.tasks` solo
+    /// se il permesso `fub:notifications` è dichiarato e non spento. La politica
+    /// si legge a ogni chiamata, come la legge il cancello: un interruttore
+    /// spento vale dalla notifica dopo. Un componente spento o sconosciuto
+    /// non è dichiarato, e la risposta è no.
+    pub fn component_allows(
+        &self,
+        vault: Option<&str>,
+        component: &str,
+        capability: Capability,
+    ) -> Result<bool, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let ws = workspace.read()?;
+        Ok(fub_kernel::Policy::denies(&ws.granted_policy(component), capability).is_none())
+    }
+
+    /// L'orologio e il locale del vault, dalla stessa fotografia: i
+    /// millisecondi UTC e la lingua e il fuso con cui li legge chi guarda.
+    /// Sono quelli che l'`HostEnv` dà ai componenti, così l'ora del muro del
+    /// notificatore è la stessa che leggerebbe un provider.
+    pub fn vault_clock(&self, vault: Option<&str>) -> Result<(u64, fub_abi::Locale), PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let ws = workspace.read()?;
+        Ok((ws.now_unix_millis(), ws.locale()))
     }
 
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e

@@ -356,6 +356,8 @@ pub(super) fn function_arity(name: &str) -> Option<(usize, usize)> {
         "inFolder" | "in_folder" => (2, 2),
         "asLink" | "as_link" => (1, 2),
         "asFile" | "as_file" => (1, 1),
+        // Il riepilogo di una Relazione: `rollup(prop.libri, "sum", "pagine")`.
+        "rollup" => (2, 3),
         _ => return None,
     })
 }

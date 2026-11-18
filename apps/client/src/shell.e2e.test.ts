@@ -48,6 +48,7 @@ import {
 import type { Call, FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
+import { withoutTypeReads } from "./state/note-type-commands";
 
 // Ogni gesto monta la shell vera: qui un giro sta fra 0,5 e 3 s, sul runner CI
 // è circa tre volte più lento e i 5 s del default li superava ora un gesto ora
@@ -1030,7 +1031,7 @@ describe("il formato si vede", () => {
     expect(bar().querySelector(".pane-format")).toBeNull();
     const tab = () => document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
     expect(tab().querySelector("svg.tab-format")).not.toBeNull();
-    expect(tab().getAttribute("aria-label")).toContain("Documento di Word");
+    expect(tab().getAttribute("aria-label")).toContain("Documento .docx");
     // «Salvato» è il bottone dello stato, che ridice la parola nel nome; «…» è
     // una figura col nome di sempre.
     const save = bar().querySelector<HTMLButtonElement>(".pane-status-slot button.sheet-save")!;
@@ -1045,7 +1046,7 @@ describe("il formato si vede", () => {
     row("Benvenuto.md")!.click();
     await waitFor("la nota si apre", () => name() === "Benvenuto");
     expect(tab().querySelector("svg.tab-format")).not.toBeNull();
-    expect(tab().getAttribute("aria-label")).not.toContain("Documento di Word");
+    expect(tab().getAttribute("aria-label")).not.toContain("Documento .docx");
   });
 });
 
@@ -1246,7 +1247,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     press();
     await waitFor("la domanda arriva", () => box.asked === asked + 1);
     await settle();
-    expect(host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash")).toBe(false);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).some((call) => call.args[0] === "folder.trash")).toBe(false);
 
     const noConfirm = {
       spec: {
@@ -1265,7 +1266,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     asked = box.asked;
     press();
     await waitFor("la cartella va nel cestino", () =>
-      host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash"));
+      withoutTypeReads(host.atGate("invokeCommand")).some((call) => call.args[0] === "folder.trash"));
     expect(box.asked).toBe(asked);
   });
 
@@ -1340,7 +1341,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     expect(again.getAttribute("aria-describedby")).toBe(problem.id);
     expect(problem.textContent).toContain("CON");
     // Niente è partito verso il kernel, e alla prima battuta la frase se ne va.
-    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
     again.dispatchEvent(new Event("input", { bubbles: true }));
     expect(noteItem("note/Spesa.md")!.querySelector(".tree-rename-problem")).toBeNull();
     expect(again.hasAttribute("aria-invalid")).toBe(false);
@@ -1399,7 +1400,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     riunione.dispatchEvent(canc);
     expect(canc.defaultPrevented).toBe(true);
     await waitFor("anche la seconda è nel cestino", () => host.trash().length === 2);
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["note.trash", { doc: "note/Spesa.md" }],
       ["note.trash", { doc: "note/Riunione.md" }],
     ]);
@@ -1639,7 +1640,7 @@ describe("apri un vault", () => {
     await contextMenu(fileRow()!, "Sposta nel cestino");
     await waitFor("l'allegato è nel cestino", () => host.trash().length === 1);
     expect(Object.keys(host.files())).not.toContain("note/foto.png");
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["note.trash", { doc: "note/foto.png" }],
     ]);
     await waitFor("la riga sparisce", () => !fileRow());
@@ -2194,27 +2195,42 @@ describe("una sessione e le sue superfici", () => {
       expect(undoDepth(parked.state)).toBe(0);
     });
 
-    it("una rinomina o uno spostamento smontano la superficie da parte, e la scheda rimonta col testo", async () => {
+    it("una rinomina o uno spostamento lasciano la superficie da parte, e la scheda torna con lei", async () => {
+      // La scheda è la stessa, cambia solo il nome: la superficie la segue
+      // col cursore e la cronologia locale (IMP-046, come per quella davanti).
       const host = await start({ ...VAULT });
       const parked = await parkSpesa();
       host.renameFromOutside("note/Spesa.md", "note/Lista.md");
       await waitFor("la scheda segue la rinomina", () => !!tabOf(panes()[0]!, "Lista"));
-      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
-      expect(destroyed(parked)).toBe(true);
+      await settle();
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(false);
 
       tabOf(panes()[0]!, "Lista").click();
-      await waitFor("Lista si monta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
-      const lista = viewIn(panes()[0]!)!;
+      await waitFor("Lista torna davanti", () => viewIn(panes()[0]!) === parked);
       tabOf(panes()[0]!, "Benvenuto").click();
       await waitFor("Lista va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
 
       host.renameFromOutside("note/Lista.md", "Archivio/Lista.md");
-      await waitFor("la superficie da parte se ne va dopo lo spostamento", () =>
-        panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
-      expect(destroyed(lista)).toBe(true);
+      await waitFor("la scheda segue lo spostamento", () => !!tabOf(panes()[0]!, "Lista"));
+      await settle();
+      expect(destroyed(parked)).toBe(false);
       tabOf(panes()[0]!, "Lista").click();
-      await waitFor("Lista si monta dalla cartella nuova", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      await waitFor("Lista torna dalla cartella nuova", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("pane, latte");
       expect(editorViews()).toHaveLength(1);
+
+      // La battuta va alla sessione col nome nuovo.
+      parked.dispatch({ changes: { from: 0, insert: "X " }, userEvent: "input.type" });
+      await waitFor("il salvataggio va al path nuovo", () => host.files()["Archivio/Lista.md"]?.startsWith("X ") === true);
+    });
+
+    it("cambiata l'estensione, la superficie da parte si smonta e la scheda rimonta", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Spesa.txt");
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(parked)).toBe(true);
     });
 
     it("un salvataggio in volo quando la scheda va da parte arriva al disco, e la superficie torna intatta", async () => {
@@ -2362,7 +2378,7 @@ describe("una sessione e le sue superfici", () => {
     if (!field) throw new Error("la riga non è diventata un campo");
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await waitFor("la rinomina arriva al kernel", () => withoutTypeReads(host.atGate("invokeCommand")).length > 0);
     await settle();
     // La barriera è la **linguetta**: l'albero si riscrive con un evento, la
     // migrazione dell'identità aperta (evento `document_renamed` → layout →
@@ -2443,10 +2459,10 @@ describe("rinomina", () => {
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle();
-    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await waitFor("la rinomina arriva al kernel", () => withoutTypeReads(host.atGate("invokeCommand")).length > 0);
     await settle();
 
-    const invoked = host.atGate("invokeCommand")[0];
+    const invoked = withoutTypeReads(host.atGate("invokeCommand"))[0];
     expect(invoked.args[0]).toBe("note.rename");
     expect(invoked.args[1]).toEqual({ doc: "Benvenuto.md", to: "Indice.md" });
     expect(Object.keys(host.files())).toContain("Indice.md");
@@ -2486,7 +2502,7 @@ describe("nuova cartella", () => {
     await contextMenu(folderRow("note")!, "Nuovo", "Cartella");
     await typeFolder("Progetti");
     await waitFor("la sottocartella compare aperta sotto la madre", () => !!folderRow("note/Progetti"));
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["folder.create", { path: "note/Progetti" }],
     ]);
 
@@ -2497,7 +2513,7 @@ describe("nuova cartella", () => {
     await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("note");
     await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
-    expect(host.atGate("invokeCommand")).toHaveLength(3);
+    expect(withoutTypeReads(host.atGate("invokeCommand"))).toHaveLength(3);
     expect(document.querySelectorAll('#file-list li[data-path="note"]')).toHaveLength(1);
   });
 });
@@ -2529,7 +2545,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     return el;
   };
   const commands = (host: FakeHost, id: string) =>
-    host.atGate("invokeCommand").filter((call) => call.args[0] === id).map((call) => call.args[1]);
+    withoutTypeReads(host.atGate("invokeCommand")).filter((call) => call.args[0] === id).map((call) => call.args[1]);
 
   it("una cartella si rinomina con F2 e si sposta trascinandola su un'altra", async () => {
     const host = await start({ ...VAULT, "Archivio/vecchio.md": "x" });
@@ -2720,12 +2736,12 @@ describe("rinomina durante un salvataggio in volo", () => {
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle();
-    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
 
     unlock();
     await waitFor(
       "la rinomina parte dopo il salvataggio",
-      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.rename"),
+      () => withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.rename"),
     );
     await settle();
 
@@ -3057,7 +3073,7 @@ describe("chiudere linguette e superfici", () => {
     await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor(
       "la cancellazione arriva al kernel",
-      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash"),
+      () => withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.trash"),
     );
 
     // Keep the delete command in flight past the save debounce. If the delete
@@ -3090,7 +3106,7 @@ describe("chiudere linguette e superfici", () => {
 
     const deleting = trashWithConfirm("Benvenuto.md");
     await microtasks();
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash")).toBe(true);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.trash")).toBe(true);
     expect(view.state.readOnly).toBe(true);
 
     view.focus();
@@ -3164,6 +3180,286 @@ describe("chiudere linguette e superfici", () => {
     );
     expect(host.files()["Benvenuto.md"]).toBe(after);
     expect(documentSessions.inspect("Benvenuto.md")?.dirty).toBe(false);
+  });
+});
+
+describe("i tasti del mouse sulla striscia delle schede", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const names = () => tabs().map((tab) => tab.querySelector(".tab-name")?.textContent);
+  const selected = () => document.querySelector('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Una pressione vera: giù e su col tasto, poi il `click` col `detail` della
+  /// serie. WebKitGTK lo manda anche dopo il centrale, col `button` del sinistro.
+  const press = (target: Element, button: number, detail = 1): void => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button, detail }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button, detail }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail }));
+  };
+
+  it("il centrale chiude la scheda e non la attiva, in WebKitGTK e in Chromium (IMP-012)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    expect(selected()).toBe("Spesa");
+
+    // WebKitGTK: un `click` dopo il centrale.
+    press(tabs()[0]!, 1);
+    await settle();
+    expect(names()).toEqual(["Riunione", "Spesa"]);
+    expect(selected()).toBe("Spesa");
+
+    // Chromium: un `auxclick` col centrale, e nient'altro. Una scheda sola.
+    const riunione = tabs()[0]!;
+    riunione.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 1 }));
+    riunione.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 1 }));
+    riunione.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1, detail: 1 }));
+    riunione.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+    await settle();
+    expect(names()).toEqual(["Spesa"]);
+  });
+
+  it("il doppio clic sulla × chiude una scheda sola: il secondo clic non tocca ciò che scorre sotto (IMP-013)", async () => {
+    const host = await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const files = Object.keys(host.files()).sort();
+
+    press(tabs()[2]!.parentElement!.querySelector(".tab-close")!, 0, 1);
+    await settle();
+    expect(names()).toEqual(["Benvenuto", "Riunione"]);
+    expect(selected()).toBe("Riunione");
+    // Il secondo clic della serie cade sulla vicina, sul «+» o sul vuoto, e
+    // non sceglie la parola che ha sotto.
+    const second = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 2 });
+    tabs()[0]!.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    press(tabs()[0]!, 0, 2);
+    const plus = document.querySelector(".pane .tab-new");
+    if (plus) press(plus, 0, 2);
+    const strip = document.querySelector(".pane .pane-tabs")!;
+    press(strip, 0, 2);
+    strip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 }));
+    await settle();
+    expect(names()).toEqual(["Benvenuto", "Riunione"]);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort()).toEqual(files);
+
+    // Un clic che comincia da capo sulla vicina la attiva, come sempre.
+    press(tabs()[0]!, 0, 1);
+    await settle();
+    expect(selected()).toBe("Benvenuto");
+  });
+});
+
+describe("il fuoco dopo un gesto che toglie ciò che lo aveva", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const focusIn = (el: HTMLElement) => el.contains(document.activeElement);
+
+  it("chiusa con la × la scheda attiva, il fuoco resta nel riquadro (IMP-011)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    editorViews()[0]!.focus();
+    expect(focusIn(panes()[0]!)).toBe(true);
+    const close = document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] + .tab-close')!;
+    close.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    await waitFor("resta Benvenuto", () => editorTexts().join().includes("Il primo documento"));
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[0]!)).toBe(true);
+  });
+
+  it("dopo «Dividi a destra» il fuoco è nel riquadro nuovo", async () => {
+    await start(VAULT);
+    editorViews()[0]!.focus();
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[1]!)).toBe(true);
+    expect(panes()[1]!.classList.contains("focus")).toBe(true);
+  });
+
+  it("il divisore mosso con le frecce tiene il fuoco e continua a muoversi (IMP-016)", async () => {
+    await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    const divider = () => document.querySelector<HTMLElement>(".pane-divider")!;
+    divider().focus();
+    for (const expected of ["55", "60"]) {
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      await settle();
+      expect(document.activeElement).toBe(divider());
+      expect(divider().getAttribute("aria-valuenow")).toBe(expected);
+    }
+  });
+});
+
+// Un cambio di scheda fatto con un tasto globale porta il fuoco nell'editor
+// della scheda che diventa attiva, da qualunque punto del riquadro parta: dal
+// testo, o dalla linguetta su cui un clic lo aveva lasciato. Senza, la battuta
+// dopo il tasto finiva sul `body` o su una linguetta e si perdeva in silenzio
+// (IMP-048…051). Il tasto passa dalla tastiera vera (`ui/keyboard.ts`), come
+// nell'app.
+describe("il fuoco dopo un cambio di scheda da tastiera", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const selected = () => document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Il tasto, con Ctrl, sull'elemento col fuoco: dove lo manda il WebView.
+  /// Maiusc+Tab arriva come lo passa WebKitGTK, `Unidentified` col tasto
+  /// fisico in `code` (GTK lo chiama `ISO_Left_Tab`).
+  const press = (key: string, shift = false) => {
+    const webkit = shift && key === "Tab" ? { key: "Unidentified", code: "Tab" } : { key };
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", {
+      ...webkit, ctrlKey: true, shiftKey: shift, bubbles: true, cancelable: true,
+    }));
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+  };
+  /// Il fuoco è nell'editor che si vede, e quell'editor mostra `text`.
+  const focusedEditorShows = (text: string): boolean => {
+    const focused = document.activeElement;
+    if (!(focused instanceof HTMLElement) || focused === document.body) return false;
+    const content = focused.closest(".cm-content");
+    return !!content && !!focused.closest(".pane-editor") && !focused.closest("[hidden]")
+      && (content.textContent ?? "").includes(text);
+  };
+  const editorOf = (text: string) => editorViews().find((view) => view.state.doc.toString().includes(text))!;
+  /// Due schede, Benvenuto e Riunione (attiva), col fuoco nel testo di Riunione.
+  const twoTabs = async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    expect(selected()).toBe("Riunione");
+    editorOf("Appunti della riunione").focus();
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  };
+  /// Il clic su una linguetta lascia il fuoco sulla linguetta (le frecce della
+  /// striscia partono da lì): un tasto globale dopo il clic lo porta comunque
+  /// nell'editor.
+  const clickTab = async (name: string) => {
+    const tab = tabs().find((each) => each.textContent?.includes(name))!;
+    tab.focus();
+    tab.click();
+    await settle();
+    expect(document.activeElement).toBe(tabs().find((each) => each.textContent?.includes(name)));
+  };
+  const lands = async (name: string, text: string) => {
+    await waitFor(`la scheda ${name} è attiva`, () => selected() === name);
+    await waitFor(`il fuoco è nel testo di ${name}`, () => focusedEditorShows(text));
+    await settle();
+    expect(focusedEditorShows(text)).toBe(true);
+  };
+
+  it("Ctrl+W porta il fuoco nell'editor della scheda vicina, non sulla sua linguetta (IMP-048)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Tab porta il fuoco nell'editor della scheda nuova, dal testo e dalla linguetta (IMP-049)", async () => {
+    await twoTabs();
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Riunione");
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Maiusc+Tab torna alla scheda usata prima, col fuoco nel suo editor (IMP-050)", async () => {
+    await twoTabs();
+    press("Tab", true);
+    await lands("Benvenuto", "Il primo documento");
+    press("Tab", true);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+PagGiù e Ctrl+PagSu portano il fuoco nell'editor della scheda nuova (IMP-049)", async () => {
+    await twoTabs();
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("PageUp");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+1 e Ctrl+9 portano il fuoco nell'editor della scheda scelta (IMP-049)", async () => {
+    await twoTabs();
+    press("1");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("9");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await clickTab("Benvenuto");
+    press("T", true);
+    await waitFor("Riunione torna", () => tabs().length === 2);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+\\ porta il fuoco nell'editor del riquadro nuovo anche dalla linguetta", async () => {
+    await twoTabs();
+    await clickTab("Riunione");
+    press("\\");
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await waitFor("il riquadro nuovo ha il suo editor", () => editorViews().length >= 2);
+    await settle();
+    const second = document.querySelectorAll<HTMLElement>(".pane")[1]!;
+    await waitFor("il fuoco è nel riquadro nuovo", () => second.contains(document.activeElement));
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  });
+
+  it("un tasto di scheda col fuoco fuori dai riquadri porta il fuoco nella scheda nuova", async () => {
+    await twoTabs();
+    const search = document.querySelector<HTMLElement>("#file-list .tree-row")!;
+    search.focus();
+    expect(search.contains(document.activeElement)).toBe(true);
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+  });
+});
+
+describe("chiudere un riquadro", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const tabNames = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>(".tab .tab-name")].map((tab) => tab.textContent);
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)?.run?.();
+  };
+
+  // La scheda unica di un riquadro chiuso col testo ancora da salvare: il
+  // testo arriva sul disco prima che la sessione si chiuda, e la scheda si
+  // riapre con Mod-Shift-t come una chiusa con la × (IMP-018).
+  it("la scheda unica non si perde: il testo va sul disco e Mod-Shift-t la riapre (IMP-018)", async () => {
+    const host = await start(VAULT);
+    await twoPanes();
+    // Nel secondo riquadro resta solo Riunione.
+    panes()[1]!.querySelector<HTMLElement>(".tab-entry .tab-close")!.click();
+    await waitFor("il secondo riquadro ha solo Riunione", () => tabNames(panes()[1]!).join() === "Riunione");
+    const right = editorViews()[1]!;
+    right.dispatch({ changes: { from: right.state.doc.length, insert: "testo del riquadro chiuso" } });
+    expect(host.files()["note/Riunione.md"]).not.toContain("testo del riquadro chiuso");
+
+    await run("shell.pane.close");
+    expect(panes()).toHaveLength(1);
+    expect(host.files()["note/Riunione.md"]).toContain("testo del riquadro chiuso");
+    expect(tabNames(panes()[0]!)).toEqual(["Benvenuto"]);
+
+    await run("shell.tab.reopen");
+    await waitFor("Riunione torna nel riquadro rimasto", () => tabNames(panes()[0]!).includes("Riunione"));
+    await waitFor("col testo scritto", () => editorViews()[0]?.state.doc.toString().includes("testo del riquadro chiuso") === true);
   });
 });
 
@@ -3419,7 +3715,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle(20);
 
-    const renames = host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename");
+    const renames = withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename");
     expect(
       renames,
       "il file si è mosso mentre il testo battuto era solo in RAM: la " +
@@ -3659,7 +3955,7 @@ describe("il cestino scelto", () => {
 
     await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor("la nota è nel cestino", () => host.trash().length === 1);
-    expect(host.atGate("invokeCommand").map((call) => call.args[0])).toEqual(["trash.os"]);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args[0])).toEqual(["trash.os"]);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("cestino del vault"))).toBe(true);
   });
@@ -3857,6 +4153,62 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
     // passato per una nota duplicata invece che per una battuta persa.
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
   });
+
+  it("lascia l'editor dov'era: stesso editor, stesso fuoco, stesso cursore (IMP-046)", async () => {
+    // La scheda segue il nome nuovo, ma rimontare la superficie buttava via il
+    // fuoco: le battute dopo un `mv` da fuori finivano sul body, perse.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+
+    const after = editorViews();
+    expect(after).toHaveLength(1);
+    expect(after[0]).toBe(before);
+    expect(before.dom.isConnected).toBe(true);
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    expect(before.state.selection.main.head).toBe(3);
+
+    // La battuta dopo la rinomina va alla sessione col nome nuovo, e da lì sul disco.
+    before.dispatch({ changes: { from: 3, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("il salvataggio parte col nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Fuori.md" && String(w.args[1]).includes("dopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+});
+
+describe("una nota cancellata da fuori con testo non salvato", () => {
+  it("«Ricrea la nota» riscrive il testo e toglie la bozza che lo teneva (IMP-047)", async () => {
+    // La bozza scritta alla cancellazione ha come base la revisione del file
+    // sparito: lasciata lì dopo la ricreazione, alla riapertura dava un
+    // conflitto con un disco uguale a lei.
+    const host = await start(VAULT);
+    const unlock = host.throttle("saveDraft");
+    typeInEditor(" e il testo non salvato");
+    expect(host.emit({ type: "document_removed", id: "Benvenuto.md" })).toBe(true);
+    await waitFor("la bozza parte", () => host.atGate("saveDraft").some((call) => call.args[0] === "Benvenuto.md"));
+
+    await waitFor("il riquadro offre di ricrearla", () =>
+      !!document.querySelector('.sheet-notice[data-notice="removed"]'));
+    const notice = document.querySelector<HTMLElement>('.sheet-notice[data-notice="removed"]')!;
+    const action = [...notice.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Ricrea la nota");
+    expect(action).toBeDefined();
+    action!.click();
+    await waitFor("il file torna col testo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.md" && String(w.args[1]).includes("il testo non salvato")));
+    await settle();
+    // La bozza è ancora in scrittura: scartarla prima la lascerebbe dopo.
+    expect(host.atGate("discardDraft")).toHaveLength(0);
+
+    unlock();
+    await waitFor("la bozza se ne va", () => host.atGate("discardDraft").some((call) => call.args[0] === "Benvenuto.md"));
+  });
 });
 
 describe("segui un link dentro la nota", () => {
@@ -3924,7 +4276,7 @@ describe("la palette flussa prima di un comando che scrive", () => {
       [...document.querySelectorAll<HTMLElement>(".launcher-row")].find(
         (each) =>
           each.querySelector(".launcher-row-title")?.textContent === spec.title &&
-          (each.querySelector(".launcher-row-meta")?.textContent ?? "").includes(scopeLabel(spec)),
+          (each.querySelector(".launcher-row-main")?.textContent ?? "").includes(scopeLabel(spec)),
       );
     await waitFor(`il lanciatore offre «${spec.title}» del kernel`, () => row() !== undefined);
     row()!.click();
@@ -4050,6 +4402,154 @@ describe("i riquadri dopo un'attesa", () => {
     expect(editorTexts()[1]).toContain("mio B");
     expect(banners()[1]?.hidden, "il conflitto di Riunione resta da decidere").toBe(false);
     expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
+  });
+
+  /// La Cronologia accesa monta `version.keep` fra i comandi del registro.
+  const specVersionKeep: CommandSpec = {
+    id: "version.keep",
+    title: "Conserva un testo nella cronologia",
+    description: "",
+    keybinding: null,
+    params: [
+      { name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true },
+      { name: "text", title: "Testo", description: "", kind: { kind: "text" }, required: true },
+      { name: "note", title: "Nota", description: "", kind: { kind: "text" }, required: true },
+    ],
+    scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
+  };
+
+  it("«Usa la versione su disco» mette il mio testo nella Cronologia prima di scartarlo", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const after = host.calls.slice(before);
+    const kept = after.findIndex((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    const reread = after.findIndex((c) => (c.gate === "readDocument" || c.gate === "openDocument") && c.args[0] === "Benvenuto.md");
+    expect(kept, "il testo è stato conservato").toBeGreaterThan(-1);
+    expect(reread, "il disco si rilegge solo dopo la conservazione").toBeGreaterThan(kept);
+    const args = after[kept]!.args[1] as { doc: string; text: string; note: string };
+    expect(args.doc).toBe("Benvenuto.md");
+    expect(args.text).toContain("mio A ");
+    expect(args.note).toMatch(/^Testo scartato nel conflitto del /);
+    expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+  });
+
+  it("col testo nella Cronologia e il disco che non si rilegge lo si dice, e ripetere non lo conserva due volte", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+    const repairOpen = host.fault("openDocument", "disco non leggibile");
+    const repairRead = host.fault("readDocument", "disco non leggibile");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "chi scrive sa che il suo testo è salvo",
+      () => recentNotices().some((notice) => notice.text.includes("è nella Cronologia, ma il file non si è riletto")),
+    );
+    await settle();
+    repairOpen();
+    repairRead();
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const keeps = host.calls.slice(before).filter((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    expect(keeps, "lo stesso testo entra nella Cronologia una volta sola").toHaveLength(1);
+  });
+
+  it("se il testo non entra nella Cronologia non si scarta niente, e lo si dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const repair = host.fault("invokeCommand", "spazio dati pieno");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "l'errore arriva a chi scrive",
+      () => recentNotices().some((notice) => notice.text.includes("non è entrato nella Cronologia")),
+    );
+    await settle();
+    repair();
+
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+    expect(host.files()["Benvenuto.md"]).toBe("disco A\n");
+  });
+
+  it("la finestra staccata conserva il suo testo con la stessa regola, e un guasto lo dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    const { attachRemoteSurface } = await import("./state/document-bridge");
+    const { state } = await import("./state/store");
+    const { request, handle } = await attachRemoteSurface("Benvenuto.md", state.vaultRoot, () => "plain-text");
+    // La finestra staccata, com'è vista dal canale: chiede e aspetta.
+    const child = new BroadcastChannel(request.channel);
+    const replies: Array<{ kind: string; token?: string; keeps?: boolean; reason?: string }> = [];
+    child.onmessage = (event: MessageEvent) => replies.push(event.data);
+    const id = { v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId };
+    try {
+      child.postMessage({ ...id, kind: "hello" });
+      await waitFor("la finestra è collegata", () => replies.some((r) => r.kind === "snapshot"));
+      child.postMessage({ ...id, kind: "keep-probe", token: "domanda" });
+      await waitFor("la finestra sa se conserva", () => replies.some((r) => r.kind === "keep-mode"));
+      expect(replies.find((r) => r.kind === "keep-mode")?.keeps).toBe(true);
+
+      const before = host.calls.length;
+      child.postMessage({ ...id, kind: "keep", token: "uno", text: "testo della finestra" });
+      await waitFor("il testo è conservato", () => replies.some((r) => r.kind === "kept" && r.token === "uno"));
+      const kept = host.calls.slice(before).find((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+      const args = kept?.args[1] as { doc: string; text: string; note: string } | undefined;
+      expect(args?.doc).toBe("Benvenuto.md");
+      expect(args?.text).toBe("testo della finestra");
+      expect(args?.note).toMatch(/^Testo scartato nel conflitto del /);
+      // Il nome della nota come lo dice il resto dell'app, non il percorso.
+      const notice = recentNotices().find((entry) => entry.text.includes("è nella Cronologia"));
+      expect(notice?.text).toContain("su Benvenuto è");
+      expect(notice?.text).not.toContain("Benvenuto.md");
+
+      const repair = host.fault("invokeCommand", "spazio dati pieno");
+      child.postMessage({ ...id, kind: "keep", token: "due", text: "testo della finestra" });
+      await waitFor("il guasto torna alla finestra", () => replies.some((r) => r.token === "due"));
+      repair();
+      const failed = replies.find((r) => r.token === "due");
+      expect(failed?.kind).toBe("keep-failed");
+      expect(failed?.reason).toContain("spazio dati pieno");
+    } finally {
+      child.close();
+      await handle.dispose();
+    }
+  });
+
+  it("la palette dice che il testo resta nella Cronologia solo quando c'è chi lo conserva", async () => {
+    const { IT } = await import("./i18n/catalog");
+    const describe = async (): Promise<string | undefined> => {
+      const registry = await import("./ui/commands");
+      return registry.allCommands().find((entry) => entry.id === "shell.doc.conflict.theirs")?.description;
+    };
+    await start(VAULT);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc_lost"]);
+    await start(VAULT, [], undefined, null, [specVersionKeep]);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc"]);
   });
 
   it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {

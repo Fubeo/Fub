@@ -41,7 +41,7 @@ import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
-import { applyTableEdit, emptyCellLike, emptyRowLike, evenColumns } from "./table-structure";
+import { applyTableEdit, emptyCellLike, emptyRowLike, evenColumns, newCell } from "./table-structure";
 import { tracking } from "./track";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -721,7 +721,8 @@ export const splitCell: Command = (state, dispatch) => {
 export const TABLE_MAX_COLS = 63;
 
 /// Una tabella `rows × cols` vuota, senza `k`: il formato la scrive con le sue
-/// proprietà predefinite (in Word, la griglia a tutta riga). Va dopo il blocco
+/// proprietà predefinite (in Word, la griglia a tutta riga), e i paragrafi
+/// delle celle hanno la spaziatura della griglia (`newCell`). Va dopo il blocco
 /// del cursore, o prima di un paragrafo vuoto, come in Word; un paragrafo la
 /// segue sempre, perché due tabelle accostate Word le fonde. Non dentro una
 /// tabella: le tabelle annidate non si creano qui.
@@ -735,7 +736,7 @@ export function insertTable(rows: number, cols: number): Command {
       const block = $from.node(1);
       const empty = block.type === para && block.content.size === 0;
       const pos = empty ? $from.before(1) : $from.after(1);
-      const cells = () => Array.from({ length: cols }, () => cellType.create(null, para.create()));
+      const cells = () => Array.from({ length: cols }, newCell);
       const table = tableType.create(
         null,
         Array.from({ length: rows }, () => rowType.create(null, cells())),

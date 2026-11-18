@@ -12,12 +12,29 @@ cercare nel testo, lanciare un comando e inserire un blocco. Si apre con
 con il comando «Cerca nel vault dal lanciatore» e con il menu «Cerca fra tutti
 i comandi» di un menu contestuale.
 
-Il campo tiene sempre il fuoco; in fondo al campo il segno **Esc** chiude col
-puntatore, come il tasto. Sotto il campo c'è la fila dei modi: ogni modo porta
-il suo prefisso in un quadratino davanti al nome («Tutto» porta la lente), e il
-modo scelto ha il quadratino d'accento. Sotto ancora c'è l'elenco. Il modo si
-sceglie in tre modi: scrivendo il prefisso in testa al campo, cliccando la
-linguetta, oppure con il comando che apre quel modo.
+Il lanciatore nasce dalla pillola: il suo campo si allarga sul posto nel campo
+di ricerca, e la pillola sparisce finché il lanciatore è aperto. Il campo tiene
+sempre il fuoco; in fondo al campo il segno **Esc** chiude col puntatore, come
+il tasto. Sotto il campo c'è la fila dei modi: ogni modo porta il suo prefisso
+in un quadratino davanti al nome («Tutto» porta la lente), e il modo scelto ha
+il quadratino d'accento. Sotto ancora c'è l'elenco, e a destra l'anteprima della
+riga attiva. Il modo si sceglie in tre modi: scrivendo il prefisso in testa al
+campo, cliccando la linguetta, oppure con il comando che apre quel modo.
+
+Ogni risultato sta su **una riga** alta 38 px: l'icona della sua specie, il nome
+con le lettere scritte in evidenza, e a destra in grigio ciò che serve: la
+cartella di una nota (o il punto trovato nel testo), la scorciatoia di un
+comando, la sintassi di un blocco, il livello di un titolo. La descrizione di un
+comando non sta nella riga: la dice l'anteprima, e chi usa un lettore di schermo
+la sente col nome. Il titolo di un gruppo («Recenti», «Note») resta in cima
+mentre l'elenco scorre.
+
+I tasti non stanno nel lanciatore: li dice la **banda di stato** in fondo alla
+finestra, che resta visibile sopra il velo e cambia con la riga attiva (Invio
+apre una nota, esegue un comando, inserisce un blocco; Tab mostra le azioni di
+una nota; e così via). La banda li pubblica dopo la stessa pausa breve delle
+altre parti dell'editor, e una finestra stretta lascia fuori, intere, le voci
+che non ci stanno.
 
 ## I modi
 
@@ -70,8 +87,8 @@ dice quante sono in tutto. Una sintassi di ricerca a metà (per esempio una
 virgoletta aperta) si dice, senza fermare i gruppi che trovano qualcosa.
 
 Quando non c'è niente, la frase dice perché e che cosa fare. Se il testo può
-diventare il nome di una nota, la frase lo propone e il piede mostra il bottone
-**Crea la nota**, col suo tasto `Maiusc-Invio`; se non può (per esempio è fatto
+diventare il nome di una nota, la frase lo propone e sotto la frase c'è il
+bottone **Crea la nota** (il suo tasto, `Maiusc-Invio`, lo dice la banda); se non può (per esempio è fatto
 solo di barre), non propone niente. Mentre l'indice lavora, con una sintassi a
 metà o con un guasto la frase dice quello, e non si crea niente.
 
@@ -93,11 +110,11 @@ Tab non cambia modo: mostra le azioni. Le azioni di una nota sono **Apri qui**,
 **Copia il link**, **Appunta** (o **Togli dagli appunti**, se è già appuntata).
 Scrivere nel campo lascia le azioni e torna all'elenco.
 
-Sulla riga di una nota o di una persona il piede mostra il bottone **Azioni**,
-che fa quello che fa Tab: è la strada di chi tocca, senza tastiera. Allo stesso
-modo **Crea la nota** fa quello che fa Maiusc-Invio. I bottoni del piede non
-sono fermate del Tab. Al telefono il piede non mostra i tasti, solo le parole, e
-l'anteprima non c'è.
+**Crea la nota** fa quello che fa Maiusc-Invio. Al telefono, dove non c'è una
+tastiera, il lanciatore ha in fondo un piede coi bottoni di chi tocca: sulla riga
+di una nota o di una persona **Azioni**, che fa quello che fa Tab, e in Tutto
+con una domanda **Apri nel pannello**, che fa quello che fa Ctrl Maiusc Invio.
+Questi bottoni non sono fermate del Tab. Al telefono l'anteprima non c'è.
 
 ### Maiusc-Invio e le note nuove
 
@@ -136,8 +153,21 @@ niente: serve a leggere.
 
 ## L'anteprima
 
-In Tutto, quando la finestra è larga abbastanza (almeno 960 × 560 px), a destra
-dell'elenco c'è l'anteprima della nota della riga attiva, su un foglio rialzato
+Quando la finestra è larga abbastanza (almeno 960 × 560 px), a destra
+dell'elenco c'è l'anteprima della riga attiva, in ogni modo tranne Riga.
+Cambia con la specie della riga:
+
+- **una nota** (o una persona) è un piccolo foglio, descritto qui sotto;
+- **un comando** è un quadratino d'accento con la sua icona, il nome, che cosa
+  fa (o perché ora è spento), e sotto la scorciatoia, che cosa tocca (un
+  comando che non si annulla lo dice col segno d'avviso) e il gruppo in cui sta;
+- **un blocco** è il quadratino con l'icona del blocco, il nome, e sotto la
+  sintassi che lo scrive a inizio riga (o la sua scorciatoia) e dove finisce:
+  dov'è il cursore, nella nota aperta;
+- **un'etichetta** dice quante note la portano, **un titolo** il suo livello e
+  la nota in cui sta, una riga d'**aiuto** il tasto.
+
+Il foglio della nota è rialzato,
 in una colonna di 288 px; sotto il foglio c'è la cartella della nota (niente
 per una nota in cima al vault) e «modificata …», l'ora dell'ultima modifica
 detta come altrove. Segue le frecce, ma aspetta una pausa
@@ -158,7 +188,8 @@ Il codice è in `apps/client/src/shells/scrittoio/launcher/`:
 - `actions.ts`: che cosa fa una riga scelta, le azioni di Tab, la creazione;
 - `commands.ts`: i comandi che aprono il lanciatore;
 - `preview.ts`: l'anteprima;
-- `launcher.ts`: il disegno, i tasti e la gara fra le risposte.
+- `launcher.ts`: il disegno, i tasti (pubblicati sulla porta dei suggerimenti,
+  `editors/core/hints.ts`, che la banda di stato mostra) e la gara fra le risposte.
 
 Le parole sono in `i18n/catalog.ts`, con la chiave `launcher.*`.
 
@@ -169,3 +200,5 @@ Le parole sono in `i18n/catalog.ts`, con la chiave `launcher.*`.
   in cui si è: la riga dei suggerimenti li porterà.
 - Dal lanciatore non si apre più una nota in una finestra nuova: quella resta
   nel menu della scheda e in quello dell'albero.
+- L'anteprima di un comando non dice ancora in quale menu dell'app sta: il
+  registro dei comandi non lo sa; dice il gruppo.

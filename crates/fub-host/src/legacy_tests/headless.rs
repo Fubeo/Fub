@@ -290,9 +290,22 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
         fub_abi::command::InvokeMode::Apply,
     )
     .expect("ripristina");
-    let ws = host.debug_workspace(None).unwrap();
-    let ws = ws.read().unwrap();
-    assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
+    {
+        let ws = host.debug_workspace(None).unwrap();
+        let ws = ws.read().unwrap();
+        assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
+    }
+
+    // Il ripristino scrive il disco, non il buffer di un editor: Ctrl+Z nel
+    // testo non lo annulla. Ciò che c'era prima resta però una versione, e
+    // la Cronologia lo ripristina come ogni altra.
+    let restored = host.list_versions(None, &id).expect("versioning acceso");
+    assert!(
+        restored
+            .iter()
+            .any(|v| host.read_version(None, &id, v.ts).unwrap() == "# Nota\n\ndopo\n"),
+        "the text before the restore stays in the history"
+    );
 }
 
 /// **La prima fotografia è copy-on-first-write** (0154): l'apertura non

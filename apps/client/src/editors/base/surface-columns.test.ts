@@ -214,7 +214,7 @@ describe("«+»: una vista nuova", () => {
       expect(plus.disabled).toBe(false);
       plus.click();
       expect(document.querySelector("#context-menu .menu-head-kind")!.textContent).toBe("Nuova vista");
-      expect([...document.querySelectorAll("#context-menu .menu-label")].map((each) => each.textContent)).toEqual(["Tabella", "Schede", "Elenco", "Bacheca", "Mappa", "Calendario"]);
+      expect([...document.querySelectorAll("#context-menu .menu-label")].map((each) => each.textContent)).toEqual(["Tabella", "Schede", "Elenco", "Bacheca", "Mappa", "Calendario", "Linea del tempo"]);
       pick("Bacheca");
       await vi.waitFor(() => expect(host.querySelector('.base-tab[aria-pressed="true"]')?.getAttribute("data-view")).toBe("Bacheca"));
       await settled(host);
@@ -245,6 +245,9 @@ describe("«+»: una vista nuova", () => {
       const calendar = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Calendario")!;
       expect(calendar.getAttribute("aria-disabled") === "true" || calendar.disabled).toBe(true);
       expect(calendar.querySelector(".menu-description")!.textContent).toBe("Serve una proprietà data nelle note.");
+      const timeline = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Linea del tempo")!;
+      expect(timeline.getAttribute("aria-disabled") === "true" || timeline.disabled).toBe(true);
+      expect(timeline.querySelector(".menu-description")!.textContent).toBe("Serve una proprietà data nelle note.");
       pick("Tabella");
       await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.add", expect.objectContaining({ name: "Tabella 2", type: "table" })));
       await settled(host);
@@ -530,6 +533,20 @@ describe("la tabella come nel prototipo", () => {
       await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("note.create", {}));
       surface.setReadOnly!(true);
       await vi.waitFor(() => expect(host.querySelector(".base-add-row")).toBeNull());
+    } finally { done(); }
+  });
+});
+
+describe("una colonna container.* è di sola lettura", () => {
+  it("la sua cella non si apre in modifica, come quella di `file.*`", async () => {
+    // La cartella del file che ospita la Base non è una proprietà della nota:
+    // una cella che la scrivesse farebbe una riga `container.folder:` nel
+    // frontmatter (IMP-123, la stessa classe). La cella è testo.
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "container.folder"] } }]);
+    try {
+      await ready(host);
+      expect(host.querySelector('tr[data-doc="Opere/Nebbia.md"] td[data-cell="1"] input')).not.toBeNull();
+      expect(host.querySelector('tr[data-doc="Opere/Nebbia.md"] td[data-cell="2"] input')).toBeNull();
     } finally { done(); }
   });
 });

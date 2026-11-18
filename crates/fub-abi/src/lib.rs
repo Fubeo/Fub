@@ -82,9 +82,9 @@ pub mod ui;
 // trova rosso, e chi lo toglie pure. Gli unici moduli che restano qualificati
 // sono quelli dichiarati là dentro, con la ragione per cui lo sono.
 pub use command::{
-    Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit,
-    Undo, UndoStep, Undone,
+    AppliedPlan, AppliedStep, Args, Choice, CommandEffect, CommandOutcome, CommandPlan,
+    CommandReach, CommandScope, CommandSpec, CommandSurface, Failure, InvokeMode, ParamKind,
+    ParamSpec, Partial, PlannedEdit, Reversal, Undo, UndoStep, Undone, WritePlan, WriteStep,
 };
 pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
@@ -149,7 +149,7 @@ pub use model::{
     Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
     HeadingSlugs, Inline, Link, LinkTarget, ListItem, OptionMatch, ParsedWikilink, PropertyColor,
     PropertyDate, PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes,
-    PropertyValue, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
+    PropertyValue, RelationTarget, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};

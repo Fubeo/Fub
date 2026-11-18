@@ -2,15 +2,21 @@
 
 > **Ambito:** le forme che Fub legge e riscrive dentro il testo di una nota
 > Markdown, oltre a CommonMark e alle estensioni di Obsidian: i commenti con
-> la discussione e l'archivio dei risolti.
+> la discussione e l'archivio dei risolti, i tipi di nota, il promemoria di
+> un compito e le macro delle formule.
 > **Fonti autorevoli:** `crates/fub-format-markdown/src/parse/comments.rs`,
 > `crates/fub-abi/src/model.rs` (`custom_kind::COMMENT_RANGE`,
 > `custom_kind::COMMENT_MESSAGE`), i casi «discussione» di
-> `crates/fub-format-markdown/tests/corpus/mod.rs`.
+> `crates/fub-format-markdown/tests/corpus/mod.rs`;
+> `crates/fub-features/src/note_types.rs` per i tipi di nota;
+> `crates/fub-abi/src/rules/tasks.rs` (`task_reminder`) per il promemoria;
+> `apps/client/src/editors/text/profiles/markdown/math/macros.ts` per le
+> macro delle formule.
 
 Una convenzione di questa pagina è testo semplice nel file: un'altra app la
 mostra così com'è, e Fub la rilegge e la riscrive byte per byte. Nessuna
-richiede un file accanto alla nota né un campo del frontmatter.
+richiede un file accanto alla nota: i commenti stanno nel testo, il tipo in
+un campo del frontmatter.
 
 ## I commenti con la discussione
 
@@ -105,3 +111,122 @@ riga, com'era scritto.
 
 Le modifiche suggerite di CriticMarkup (`{++ ++}`, `{-- --}`, `{~~ ~> ~~}`)
 non sono una convenzione di Fub: restano testo.
+
+## I tipi di nota
+
+Un tipo di nota (Libro, Persona, Riunione) è una nota Markdown nella cartella
+dei tipi: `Tipi/` di partenza, l'impostazione del vault `files.types-folder`
+(Impostazioni › File) la sposta, e vuota spegne i tipi. Il nome del file è il
+nome del tipo; il frontmatter dice com'è fatto, il corpo è il modello del
+testo delle note nuove, con le variabili `{{…}}` dei template.
+
+```markdown
+---
+icon: book
+properties:
+  autore: testo
+  letto: casella
+  generi: elenco
+featured: [autore]
+folder: Biblioteca
+---
+# {{title}}
+
+Note di lettura.
+```
+
+- `properties`: le proprietà del tipo, una per riga col tipo di proprietà
+  (in italiano, `testo`, `numero`, `casella`, `data`, `data e ora`, `elenco`,
+  `etichette`, `selezione`, `stato`, `url`, o con l'id del registro, `number`,
+  `checkbox`, `date_time`); anche soltanto i nomi, `properties: [autore, anno]`.
+  Una parola che Fub non conosce lascia la proprietà senza tipo.
+- `featured`: le proprietà da tenere in vista; `icon`: l'icona del tipo, un'emoji
+  o una figura (`book` o `fub:book`), letta come l'icona di una pagina;
+  `folder`: dove nascono le note del tipo (un percorso del vault, senza `..`).
+  Tutti i campi sono facoltativi.
+- Il registro dei tipi di proprietà resta uno per vault: se il registro dice
+  per una proprietà un tipo diverso da quello scritto nel tipo, vale il
+  registro, e il pannello delle proprietà aperto sul tipo lo dice riga per
+  riga.
+
+Una nota dice il suo tipo con `tipo`, un link alla nota del tipo:
+
+```markdown
+---
+tipo: "[[Tipi/Libro]]"
+autore: Frank Herbert
+letto: false
+generi: []
+---
+```
+
+- Fub scrive sempre il link col percorso nella cartella dei tipi
+  (`[[Tipi/Libro]]`, `[[Tipi/Lavoro/Progetto]]`): è la forma che usano anche
+  le relazioni verso un tipo (`Tipi/<Nome>`). Legge anche un link senza
+  cartella o il nome in testo semplice (`tipo: Libro`), senza distinguere
+  maiuscole e minuscole.
+- Due tipi con lo stesso nome in sottocartelle diverse vanno nominati col
+  percorso: il nome solo non sceglie, e la nota lo dice.
+- «Nuova nota di un tipo» (`note.from_type`) scrive `tipo`, poi le proprietà
+  del tipo vuote (`false` una casella, `[]` un elenco o le etichette, niente
+  le altre), poi il modello; la nota nasce nella cartella chiesta, se no in
+  quella del tipo, se no alla radice.
+- «Cambia il tipo della nota» (`note.type.set`) riscrive `tipo` e aggiunge in
+  fondo al frontmatter le proprietà del tipo che mancano. Non toglie niente,
+  né le proprietà del tipo di prima né i valori scritti, e si annulla in un
+  passo.
+- Un tipo che non c'è, che è di più o che non si legge (frontmatter rotto, un
+  campo della forma sbagliata) lascia la nota com'è: il pannello delle
+  proprietà dice che cosa non va, e i due comandi non scrivono niente.
+- Rinominare o spostare un tipo non aggiorna ancora i `tipo` delle note: i link
+  del frontmatter non sono nel grafo dei link, e la nota dice che il tipo non
+  c'è finché `tipo` non lo nomina di nuovo.
+
+## Il promemoria di un compito
+
+Accanto alla scadenza `📅` del plugin Tasks di Obsidian, un compito può
+portare un promemoria: `⏰`, poi la data e, se si vuole, l'ora.
+
+```markdown
+- [ ] Chiamare Mario ⏰ 2026-11-13 09:30 📅 2026-11-14
+- [ ] Pagare l'affitto ⏰ 2026-12-01
+```
+
+- La data è `AAAA-MM-GG` e deve esistere; l'ora è `HH:MM` dalle `00:00` alle
+  `23:59`, separata dalla data da spazi. Senza ora suona alle **9:00**.
+- Conta l'ultimo `⏰` del testo del compito. Una data o un'ora che non si
+  leggono (`⏰ 2026-02-30`, `⏰ 2026-11-13 25:00`) fanno un promemoria che non
+  suona.
+- L'ora non ha fuso: è l'ora dell'orologio di chi legge la nota, quando la
+  legge.
+- È testo semplice, come la scadenza: il parser Markdown non lo tocca, Obsidian
+  lo mostra così com'è, e Fub non riscrive mai la riga per suonarlo. La regola
+  che lo legge è una sola, nel contratto (`task_reminder`), e cosa succede
+  quando suona sta in [Compiti](../product/tasks-and-reminders.md#i-promemoria).
+
+## Le macro delle formule
+
+Le macro di tutte le formule di un vault stanno nella nota `Formule/Macro.md`:
+una nota normale, che si scrive come le altre e che Fub legge soltanto.
+
+```markdown
+# Macro
+
+$$
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\vect}[1]{\mathbf{#1}}
+\DeclareMathOperator{\sgn}{sgn}
+$$
+```
+
+- Valgono le righe `\newcommand`, `\renewcommand`, `\providecommand`,
+  `\DeclareMathOperator` (anche `*`), `\def`, `\gdef`, `\edef`, `\xdef` e
+  `\let`, dovunque stiano nella nota; metterle in un blocco `$$` le fa vedere
+  anche lì. Il resto del testo non conta.
+- Un nome che KaTeX conosce già (`\R`) si ridefinisce senza `\renewcommand`.
+  Gli argomenti facoltativi (`[2][a]`) non si leggono.
+- Una dichiarazione che non si legge, scritta a metà o che chiama sé stessa
+  senza fine si salta, con un avviso che dice la riga; le altre valgono. Oltre
+  300 macro si usano le prime 300; una nota oltre 100 000 caratteri si ignora.
+- Le formule restano scritte con i nomi delle macro: un altro programma che
+  non legge questa nota le mostra col nome che non conosce.

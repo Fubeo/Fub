@@ -10,7 +10,10 @@ impl ViewProvider for PropertiesView {
     fn interests(&self, instance: &ViewInstance) -> ViewInterests {
         ViewInterests {
             refresh: EventMask::of([EventKind::IndexUpdated, EventKind::BatchEnded]),
-            follows: if instance.view == GLOBAL_PROPERTIES_VIEW {
+            // La pagina del tipo segue i suoi parametri, non la nota attiva.
+            follows: if instance.view == GLOBAL_PROPERTIES_VIEW
+                || instance.view == super::type_page::NOTE_TYPE_PAGE_VIEW
+            {
                 ContextMask::default()
             } else {
                 ContextMask(vec![ContextKind::Document])
@@ -41,6 +44,7 @@ impl ViewProvider for PropertiesView {
                 ViewSurface::StatusBar,
             )
             .open_by_default(),
+            super::type_page::type_page_spec(),
         ]
     }
 
@@ -49,7 +53,9 @@ impl ViewProvider for PropertiesView {
         instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
-        if instance.view == GLOBAL_PROPERTIES_VIEW {
+        if instance.view == super::type_page::NOTE_TYPE_PAGE_VIEW {
+            super::type_page::type_page(instance, host)
+        } else if instance.view == GLOBAL_PROPERTIES_VIEW {
             global_tree(host)
         } else if instance.view == PROPERTIES_STATUS_VIEW {
             status_count(host)
@@ -66,6 +72,9 @@ impl ViewProvider for PropertiesView {
     ) -> Result<ViewUpdate, PluginError> {
         if instance.view == GLOBAL_PROPERTIES_VIEW {
             return global_action(action, host);
+        }
+        if instance.view == super::type_page::NOTE_TYPE_PAGE_VIEW {
+            return Ok(super::type_page::type_page_action(&action));
         }
         match action.action.0.as_str() {
             "mode" => {
@@ -172,7 +181,7 @@ fn open_daily(host: &mut dyn HostApi, date: &str) -> Result<ViewUpdate, PluginEr
             E_DAILY,
             vec![
                 Arg::text("date", date),
-                Arg::text("reason", and.to_string()),
+                Arg::text("reason", and.message().to_string()),
             ],
         ),
     };
@@ -193,9 +202,12 @@ fn command_then_tree(
         Err(and) => Ok(ViewUpdate::Replace {
             root: tree(
                 host,
+                // Il motivo e basta: `to_string` dell'errore ci metteva
+                // davanti la sua variante («invalid arguments: …»), che è
+                // lessico del contratto e non una frase per chi usa Fub.
                 Some(Text::message(
                     FAILED,
-                    vec![Arg::text("reason", and.to_string())],
+                    vec![Arg::text("reason", and.message().to_string())],
                 )),
             )?,
         }),
@@ -274,6 +286,9 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
         return Ok(UiNode::column(1, children));
     }
     let model = host.read_model(&doc)?;
+    // Ciò che non va nel tipo è un avviso in più: se l'indice non risponde,
+    // le proprietà si mostrano lo stesso invece di spegnere il pannello.
+    children.extend(super::types::type_notices(host, &doc, &model).unwrap_or_default());
     let types = property_types(host);
     let props = model
         .frontmatter

@@ -76,6 +76,9 @@ struct CoreBundle {
     strings: Vec<StringCatalog>,
     provides: Vec<&'static str>,
     requires: Vec<&'static str>,
+    /// I permessi oltre a quelli del core, dalla riga dell'inventario
+    /// (`OfficialFeature::permissions`): nel manifest come quelli di un plugin.
+    permissions: Vec<&'static str>,
     /// Dalla riga della mappa dei componenti (`fub_features::componenti`),
     /// per chi ne ha una: usa se c'è, tipo, gruppo e pezzi del client.
     uses: Vec<&'static str>,
@@ -100,6 +103,7 @@ impl CoreBundle {
             strings: Vec::new(),
             provides: Vec::new(),
             requires: Vec::new(),
+            permissions: Vec::new(),
             uses: Vec::new(),
             kind: ComponentKind::default(),
             group: None,
@@ -126,6 +130,11 @@ impl CoreBundle {
 
     fn requiring(mut self, services: &[&'static str]) -> Self {
         self.requires.extend_from_slice(services);
+        self
+    }
+
+    fn permitting(mut self, permissions: &[&'static str]) -> Self {
+        self.permissions.extend_from_slice(permissions);
         self
     }
 
@@ -172,6 +181,9 @@ impl Bundle for CoreBundle {
             .speaking(self.default_locale, self.strings.clone())
             .providing(&self.provides)
             .requiring(&self.requires);
+        for permission in &self.permissions {
+            manifest.permissions.granted.set(*permission, true);
+        }
         manifest.uses = self.uses.iter().map(|id| id.to_string()).collect();
         manifest.kind = self.kind;
         manifest.group = self.group.map(str::to_string);
@@ -460,13 +472,9 @@ pub(crate) fn mount_with_formats(
     // vengono col codec, e un vault senza la feature non li vede.
     #[cfg(feature = "rich")]
     bundles.push(Arc::new(
-        CoreBundle::new(
-            crate::rich::RICH_ID,
-            "Word processing",
-            crate::rich::register,
-        )
-        .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
-        .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
+        CoreBundle::new(crate::rich::RICH_ID, "Documents", crate::rich::register)
+            .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
+            .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
     ));
 
     // La griglia delle cartelle di Excel, sui byte del file, e la loro stampa
@@ -475,7 +483,7 @@ pub(crate) fn mount_with_formats(
     bundles.push(Arc::new(
         CoreBundle::new(
             crate::workbook::WORKBOOK_ID,
-            "Excel workbooks",
+            "Spreadsheets",
             crate::workbook::register,
         )
         .speaking(
@@ -516,6 +524,7 @@ pub(crate) fn mount_with_formats(
         )
         .providing(feature.provides)
         .requiring(feature.requires)
+        .permitting(feature.permissions)
         .described_by(rows.iter().find(|row| row.id == feature.id));
         bundles.push(Arc::new(bundle));
     }

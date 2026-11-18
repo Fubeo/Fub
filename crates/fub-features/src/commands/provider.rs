@@ -101,6 +101,32 @@ impl CoreCommands {
                 .with_param(parameter(NOTES_TASK_TOGGLE, "at", ParamKind::Numbers))
                 .with_param(parameter(NOTES_TASK_TOGGLE, "revision", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            // «Sposta in…» (E13): il menu del blocco e il trascinamento sul
+            // cassetto lo chiamano coi byte del blocco; dallo spazio comandi
+            // vale il blocco del cursore. Il raggio è `Documents`: oltre alle
+            // due note riscrive i link che nominano il blocco.
+            command(NOTES_BLOCK_MOVE)
+                .with_param(parameter(NOTES_BLOCK_MOVE, "to", ParamKind::Document).required())
+                .with_param(parameter(NOTES_BLOCK_MOVE, "heading", ParamKind::Text))
+                .with_param(parameter(
+                    NOTES_BLOCK_MOVE,
+                    "leave",
+                    ParamKind::Choice(move_block::leave_choices()),
+                ))
+                .with_param(parameter(NOTES_BLOCK_MOVE, "doc", ParamKind::Document))
+                .with_param(parameter(NOTES_BLOCK_MOVE, "at", ParamKind::Numbers))
+                .with_param(parameter(NOTES_BLOCK_MOVE, "text", ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
+            // Il blocco sincronizzato (E14): il menu del blocco lo chiama coi
+            // byte del blocco e la nota d'arrivo; senza `to` dà soltanto l'id
+            // (il «/» «Blocco di un'altra nota»), e `id` dice quale.
+            command(NOTES_BLOCK_SYNC)
+                .with_param(parameter(NOTES_BLOCK_SYNC, "to", ParamKind::Document))
+                .with_param(parameter(NOTES_BLOCK_SYNC, "doc", ParamKind::Document))
+                .with_param(parameter(NOTES_BLOCK_SYNC, "at", ParamKind::Numbers))
+                .with_param(parameter(NOTES_BLOCK_SYNC, "text", ParamKind::Text))
+                .with_param(parameter(NOTES_BLOCK_SYNC, "id", ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
             // --- le impostazioni (§11.1) --------------------------------
             //
             // Sono comandi e non codice dell'app per la ragione della
@@ -186,6 +212,8 @@ impl CommandProvider for CoreCommands {
             NOTES_FOLDER_PAGE => notes_folder_page(args, mode, host),
             NOTES_SUBPAGE => notes_subpage(args, mode, host),
             NOTES_TASK_TOGGLE => notes_task_toggle(args, mode, host),
+            NOTES_BLOCK_MOVE => notes_block_move(args, mode, host),
+            NOTES_BLOCK_SYNC => notes_block_sync(args, mode, host),
             VAULT_UNDO => vault_undo(mode, host),
             SETTINGS_SET => settings_set(args, mode, host),
             SETTINGS_RESET => settings_reset(args, mode, host),

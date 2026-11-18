@@ -803,6 +803,20 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  // IMP-029: nella WebView di GTK Maiusc+Tab arriva come `ISO_Left_Tab`,
+  // cioè `key === "Unidentified"` con `code === "Tab"`.
+  it("Maiusc+Tab torna a sinistra anche quando la WebView non dà il nome del tasto", async () => {
+    const { engine, viewport } = await mounted(bytesHost({ rows: 2, columns: 3 }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(engine.selection().focus).toEqual({ row: 0, column: 2 });
+    const backward = new KeyboardEvent("keydown", { key: "Unidentified", code: "Tab", shiftKey: true, bubbles: true, cancelable: true });
+    viewport.dispatchEvent(backward);
+    expect(engine.selection().focus).toEqual({ row: 0, column: 1 });
+    expect(backward.defaultPrevented).toBe(true);
+    engine.destroy();
+  });
+
   it("lascia uscire Tab ai bordi senza intrappolare il fuoco", async () => {
     const { engine, viewport } = await mounted(bytesHost({ rows: 1, columns: 2 }));
     expect(engine.selection().focus).toEqual({ row: 0, column: 0 });

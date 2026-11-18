@@ -139,7 +139,7 @@ fn restoring_a_version_is_itself_undoable() {
 
     // Il ripristino è una scrittura normale (D8): non c'è un percorso speciale
     // che scavalchi grafo, indici ed eventi — e infatti passa dall'handler.
-    let old = *store.list(&notes).last().unwrap();
+    let old = store.list(&notes).last().unwrap().clone();
     let content = version(&mut ws, &store, &notes, old.ts);
     ws.write_document(&notes, &content, WriteBase::Dictated)
         .unwrap();

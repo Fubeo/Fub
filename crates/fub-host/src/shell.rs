@@ -226,6 +226,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.zoom.reset", Some("Mod-0")),
     // La scrittura senza cornice: via pannelli, rail e toolbar.
     ("shell.focus.toggle", None),
+    // La barra di formato (`editor.toolbar`): nascosta, o l'ultima forma
+    // visibile.
+    ("shell.toolbar.toggle", None),
     // Lo spazio dell'interfaccia (`chrome.compactness`), un passo alla volta
     // come lo zoom: più compatta lascia più posto al foglio. **Senza accordo**:
     // `Mod-=` e `Mod--` sono dello zoom, e un gesto che si fa quando si cambia
@@ -283,6 +286,10 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     fub_kernel::properties::TYPES,
     // Il catalogo dei temi.
     crate::settings::APPEARANCE_THEME_ID,
+    // La barra di formato accesa o spenta di un Fub di prima: si legge come
+    // `editor.toolbar` = `nascosta` finché quella non c'è, e la sceglie
+    // `editor.toolbar` nel modulo, una fonte sola.
+    crate::settings::CHROME_FORMATBAR_VISIBLE,
     // «Collega una cartella…» e «Scollega», in Aspetto: il percorso lo dà
     // solo la finestra nativa.
     crate::settings::DEVELOPER_THEME_FOLDER,

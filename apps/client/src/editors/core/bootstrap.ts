@@ -1,4 +1,7 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
+import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
+import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
+import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import type { PeekLink } from "../text/profiles/markdown/link-gesture";
@@ -33,7 +36,8 @@ import {
 import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
 import { isRawPhoto } from "../../ui/format-kind";
 import { showPhotoData } from "../craft/photo-data";
-import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
+import { pdfIdWithoutFragment } from "../media/pdf-ids";
+import type { PdfEngineLoader, PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
@@ -129,10 +133,16 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onRenamePage?: (doc: string, name: string) => Promise<string | null>;
   /// «Nuova sottopagina» dalla testata dei Blocchi.
   readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
+  /// «Sposta in…» dal menu del blocco e sulle note del cassetto (T32).
+  readonly moveBlock?: MoveBlockPort;
+  /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
+  readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
   readonly pageIcons?: PageIcons;
   /// Le schede dei collegamenti della Live (K8).
   readonly linkCards?: LinkCardSource;
+  /// La trasclusione viva delle note (E14): le sessioni della finestra.
+  readonly transclusion?: TransclusionDeps;
   /// Un comando della shell dato da dentro una superficie, come dalla
   /// palette: lo zoom della barra del documento.
   readonly runShellCommand?: (id: string) => void;
@@ -149,6 +159,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// La revisione dei byte da cui il testo della sessione di `doc` discende
   /// adesso: una cartella di Excel ci apre il suo giornale.
   readonly documentBase?: (doc: string) => string | null;
+  /// La revisione che il file `doc` ha adesso sul disco: la cartella di Excel
+  /// la chiede quando i byte di `documentBase` non ci sono più.
+  readonly documentDiskRevision?: (doc: string) => Promise<string | null>;
   /// Le scritture dei documenti aperti, per i gesti della barra di una Base:
   /// salvare prima, e annunciare la scrittura perché la ricarica non si dica.
   readonly documentWrites?: BaseDocumentWrites;
@@ -289,10 +302,14 @@ function staticSurface(
   const redraw = () => {
     if (!active) return;
     const message = t(messageKey);
-    element.textContent = family === "error" && context.errorReason
-      ? `${message}: ${context.errorReason}`
-      : message;
-    element.setAttribute("aria-label", message);
+    // Con un perché, la superficie d'errore dice che il documento non si
+    // mostra e perché; «nessuna superficie disponibile» è il gergo del
+    // registro, e resta solo per chi non ne ha uno.
+    const failed = family === "error" && context.errorReason
+      ? `${t("surface.failed")}: ${context.errorReason}`
+      : null;
+    element.textContent = failed ?? message;
+    element.setAttribute("aria-label", failed ?? message);
   };
   redraw();
   const stopLanguage = onLanguage(redraw);
@@ -331,8 +348,9 @@ const GRID_MODE_KEYS = { ready: "grid.mode.ready", insert: "grid.mode.insert", e
 let pdfEngine: Promise<PdfEngineLoader> | null = null;
 
 function pdfEngineLoader(): Promise<PdfEngineLoader> {
-  pdfEngine ??= import("pdfjs-dist/build/pdf.worker.min.mjs?url").then(
-    ({ default: workerUrl }) => makePdfJsLoader(
+  // Il visore (`pdf-view.ts`) arriva anche lui col primo PDF: col worker.
+  pdfEngine ??= Promise.all([import("pdfjs-dist/build/pdf.worker.min.mjs?url"), import("../media/pdf-view")]).then(
+    ([{ default: workerUrl }, { makePdfJsLoader }]) => makePdfJsLoader(
       () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
       workerUrl,
     ),
@@ -682,8 +700,11 @@ export function createDocumentSurfaceRegistry(
             onSearchTag: options.onSearchTag,
             onRenamePage: options.onRenamePage,
             onNewSubpage: options.onNewSubpage,
+            ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
+            ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
+            ...(options.transclusion ? { transclusion: options.transclusion } : {}),
             noteFacts,
             completions: options.completions,
             slash: options.slash,
@@ -741,7 +762,7 @@ export function createDocumentSurfaceRegistry(
     // shell condivide con gli altri editor.
     factory: {
       load: async () => {
-        const { mountBaseSurface } = await import("../base/surface");
+        const { mountBaseSurface, vaultPropertyTypes } = await import("../base/surface");
         return {
           mount(profile, context) {
             // Il vault in cui la superficie nasce (FUB-001).
@@ -755,6 +776,8 @@ export function createDocumentSurfaceRegistry(
               // La revisione del `.base` aperto, per i gesti della barra (CAS).
               revision: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
               documentWrites: options.documentWrites,
+              // Il registro dei tipi: le corsie della Bacheca su Selezione e Stato.
+              propertyTypes: vaultPropertyTypes,
             });
           },
         };
@@ -911,6 +934,7 @@ function mountGrid(
       revision: context.revision,
       documentId: context.documentId,
       base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
+      diskRevision: options.documentDiskRevision ? () => options.documentDiskRevision!(context.documentId) : undefined,
       onChange: (change) => {
         options.onChange(context.paneId, change);
         cellChanged();
@@ -987,6 +1011,11 @@ function mountGrid(
         setDoc: (text) => engine.setDoc(text),
         syncDoc: (update) => engine.syncDoc(update),
         getDoc: () => engine.getDoc(),
+        // La cella aperta e non confermata: entra nella bozza di recupero, e
+        // si conferma prima che la sessione si chiuda o legga il disco.
+        pendingText: () => engine.pendingText(),
+        commitPending: () => engine.commitPending(),
+        watchPending: (listener) => engine.watchPending(listener),
       },
       focus: () => engine.focus(),
       selectedText: () => engine.selectedText(),

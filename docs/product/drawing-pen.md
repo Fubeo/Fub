@@ -91,6 +91,12 @@ livello di Inkscape con tutto il disegno dentro non sparisce perché la gomma
 ha sfiorato una parola. Il gruppo se ne va soltanto quando la gomma ne tocca
 tutti i figli, e i figli bloccati restano.
 
+Una parte di un altro programma che il disegno conserva com'è, come un testo
+senza righe di Inkscape o un collegamento a un indirizzo `mailto:`, non si
+sceglie, ma la gomma che la attraversa la toglie intera, in tutti e due i
+modi. Mentre la gomma passa non sbiadisce, perché si disegna insieme alle
+parti estranee vicine: se ne va quando la gomma si alza.
+
 ## Ripennare e levigare
 
 Con dei tratti scelti, cambiare penna, misura, colore o opacità nella riga

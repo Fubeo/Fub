@@ -52,6 +52,7 @@ import type {
   DrawingOutcome,
   GridBytesSession,
   GridBytesWindow,
+  Heading,
   IndexQuery,
   IndexResult,
   JobStatus,
@@ -90,9 +91,10 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
-import { baseFixture } from "./base-fixture";
+import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
+import { deskCase, deskScene } from "./desk-scene";
 import { GiroWorkbook, giroResources } from "./giro-fixture";
 import {
   generateGraphFixture as graphFixture,
@@ -350,12 +352,15 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
   : {};
 
 /// La Base delle scene `base-*` (`?base=1`, T15; `?base=venti`, T16;
-/// `?base=calendario`, T17):
+/// `?base=calendario`, T17; `?base=tempo`, T34; `?base=nota`, T18, la stessa
+/// di `1` incorporata nella nota della Live, con la voce «Base» del «/»):
 /// `Opere.base` e le note di `Opere/`, con le domande `fub.base` e i comandi
 /// `base.view.*` che il finto da solo non ha. Gli attrezzi del finto li chiede
 /// quando servono, cioè dopo che il finto è nato.
-const BASE_VARIANT = params.get("base");
-const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario"
+const BASE_PARAM = params.get("base");
+const BASE_IN_NOTE = BASE_PARAM === "nota";
+const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
+const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
       writeByCommand: async (doc, text) => {
@@ -511,6 +516,12 @@ const GIRO_WORKBOOK = GIRO_EDITOR && WORKBOOK_DOC !== null
 /// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
 /// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
 const TRASH_FULL = params.get("cestino") === "3";
+/// La pagina del giorno (T39): `?giorno=1` dichiara la view `day_page` e la
+/// cartella delle giornaliere del componente dei template (`daily.folder`).
+const DAY_PAGE = params.get("giorno") === "1";
+/// La pagina del tipo (T33): `?live=tipo-pagina` dichiara la view
+/// `note_type_page` del componente delle proprietà.
+const TYPE_PAGE = params.get("live") === "tipo-pagina";
 
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
@@ -695,6 +706,10 @@ function view(
   };
 }
 
+/// La Scrivania delle scene `scrivania-*` (T40): vedi `bench/desk-scene.ts`.
+const DESK_CASE = deskCase(params.get("scrivania"));
+const DESK = DESK_CASE === null ? null : deskScene(DESK_CASE);
+
 const VIEWS: ViewSpec[] = [
   view("outline", "Struttura", "right_sidebar", "struttura", 0),
   view("backlinks", "Collegamenti", "right_sidebar", "backlink", 1),
@@ -705,6 +720,14 @@ const VIEWS: ViewSpec[] = [
   view("tags", "Tag", "left_sidebar", "tag", 0),
   view("graph", "Grafo", "main", "graph", 0),
   view("trash", "Cestino", "left_sidebar", "trash", 1),
+  // La Scrivania solo nelle sue scene: nelle altre il binario resta quello
+  // delle loro foto.
+  ...(DESK === null ? [] : [view("desk", "Scrivania", "main", "dashboard", 1)]),
+  // La pagina del giorno (T39), con la cartella del diario del componente
+  // dei template: solo nelle sue scene, perché le altre non cambino.
+  ...(DAY_PAGE ? [view("day_page", "La pagina del giorno", "main", "calendar", 1)] : []),
+  // La pagina del tipo (T33): solo nella sua scena.
+  ...(TYPE_PAGE ? [view("note_type_page", "Le note del tipo", "main", "template", 1)] : []),
 ];
 
 /// Un `CommandSpec` di lettura, che è la forma della gran parte.
@@ -791,6 +814,32 @@ const FORMAT_COMMANDS: CommandSpec[] = (
 /// fotografano il menu (`?slash=1`), perché la palette elenca ogni comando e
 /// le sue foto sono fatte coi soli comandi del banco.
 const SLASH_COMMANDS: readonly CommandSpec[] = params.get("slash") === "1" ? SLASH_SPECS : [];
+
+/// `?toolbar=nascosta`: la forma della barra di formato scelta (`editor.toolbar`
+/// di `crates/fub-host/src/settings.rs`), per le scene della mini-barra (T12).
+/// Senza, l'impostazione non c'è e la barra ha la forma di serie.
+const TOOLBAR_FORM = params.get("toolbar");
+const TOOLBAR_SETTING_ROW: readonly SettingEntry[] = TOOLBAR_FORM === null ? [] : [{
+  spec: {
+    key: "editor.toolbar",
+    label: "Barra di formato",
+    description: "La barra sopra il foglio: compatta, completa o nascosta (resta la mini-barra sul testo scelto).",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "compatta",
+      options: [
+        { value: "compatta", label: "Compatta" },
+        { value: "completa", label: "Completa" },
+        { value: "nascosta", label: "Nascosta" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: TOOLBAR_FORM,
+  source: "machine",
+}];
 
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
@@ -1163,6 +1212,22 @@ const SETTINGS: SettingEntry[] = [
     value: true,
     source: "default",
   },
+  // `editor.typewriter` di `crates/fub-host/src/settings.rs` (T24): la voce
+  // «Macchina da scrivere» del menu «…» la scrive, e gli editor la rileggono.
+  {
+    spec: {
+      key: "editor.typewriter",
+      label: "Macchina da scrivere",
+      description:
+        "La riga del cursore resta a metà altezza del foglio e il testo le scorre sotto, come il foglio in una macchina da scrivere. In cima a una nota corta il testo non scende oltre l'inizio.",
+      group: "Editor",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: false,
+    source: "default",
+  },
   {
     spec: {
       key: "editor.line_numbers",
@@ -1390,6 +1455,22 @@ const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
   source: "default",
 }));
 
+/// La cartella delle giornaliere come la dichiara `fub.template`
+/// (`daily.folder`): il diario del banco sta in `Diario/`.
+const DAY_FOLDER: readonly SettingEntry[] = DAY_PAGE ? [{
+  spec: {
+    key: "daily.folder",
+    label: "Cartella delle note del giorno",
+    description: "Dove nascono le note del giorno.",
+    group: "Note del giorno",
+    scope: "vault",
+    kind: { kind: "text", default: "Daily" },
+    program_writable: true,
+  },
+  value: "Diario",
+  source: "vault",
+}] : [];
+
 /// Come la nota mostra le proprietà (`editor.properties`), come la voce
 /// dell'host: di macchina, di serie `visible`. Le scene della testata (T6)
 /// la cambiano con `?properties=visible|hidden|source`.
@@ -1415,6 +1496,79 @@ const PROPERTIES_DISPLAY: readonly SettingEntry[] = [{
   },
   value: PROPERTIES_CHOSEN ?? "visible",
   source: PROPERTIES_CHOSEN ? "machine" : "default",
+}];
+
+/// Le due preferenze delle formule (T63), come le voci dell'host: di
+/// macchina, «Mostra il LaTeX» spenta e gli aiuti pieni di serie. Le scene
+/// del campo del LaTeX le cambiano con `?mathsource=1` e
+/// `?mathhelp=piene|discrete|spente`.
+const MATH_SOURCE_CHOSEN = params.get("mathsource") === "1";
+const MATH_HELP_PARAM = params.get("mathhelp");
+const MATH_HELP_CHOSEN = MATH_HELP_PARAM === "piene" || MATH_HELP_PARAM === "discrete" || MATH_HELP_PARAM === "spente" ? MATH_HELP_PARAM : null;
+/// Solo nelle scene che le chiedono: le altre (le Impostazioni) restano com'erano.
+const MATH_SETTINGS: readonly SettingEntry[] = !params.has("mathsource") && !params.has("mathhelp") ? [] : [{
+  spec: {
+    key: "editor.math.source",
+    label: "Mostra il LaTeX delle formule",
+    description: "Accesa, sotto la formula toccata c'è il campo del suo LaTeX e si scrive lì.",
+    group: "Editor",
+    scope: "machine",
+    kind: { kind: "toggle", default: false },
+    program_writable: true,
+  },
+  value: MATH_SOURCE_CHOSEN,
+  source: MATH_SOURCE_CHOSEN ? "machine" : "default",
+}, {
+  spec: {
+    key: "editor.math.help",
+    label: "Aiuti nel LaTeX delle formule",
+    description: "Con «Mostra il LaTeX»: quanto aiuta il campo.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "piene",
+      options: [
+        { value: "piene", label: "Pieni" },
+        { value: "discrete", label: "Discreti" },
+        { value: "spente", label: "Spenti" },
+      ],
+    },
+    program_writable: true,
+  },
+  value: MATH_HELP_CHOSEN ?? "piene",
+  source: MATH_HELP_CHOSEN ? "machine" : "default",
+}];
+
+/// `?tipi=1`: il registro dei tipi del vault (`properties.types` di
+/// `crates/fub-kernel/src/properties.rs`), per le scene di Selezione e Stato
+/// (T9): la testata di `live=opzioni` e la Bacheca della Base per `stato`.
+const PROPERTY_TYPES_SETTING: readonly SettingEntry[] = params.get("tipi") !== "1" ? [] : [{
+  spec: {
+    key: "properties.types",
+    label: "Tipi delle proprietà",
+    description: "Il tipo di ogni proprietà del vault, con le opzioni di Selezione e Stato.",
+    group: "Proprietà",
+    scope: "vault",
+    kind: { kind: "text", default: "" },
+    program_writable: true,
+  },
+  value: JSON.stringify({
+    version: 1,
+    types: { stato: "status", sala: "select", sito: "url", fase: "status", libri: "relation" },
+    targets: { libri: "Biblioteca" },
+    options: {
+      stato: [
+        { name: "Prenotata", color: "purple", group: "todo" },
+        { name: "In viaggio", color: "orange", group: "doing" },
+        { name: "In restauro", color: "blue", group: "doing" },
+        { name: "Arrivata", color: "green", group: "done" },
+      ],
+      sala: [{ name: "Grande", color: "purple" }, { name: "Piccola", color: "pink" }],
+      fase: [{ name: "Bozza", color: "yellow", group: "todo" }, { name: "Chiusa", color: "green", group: "done" }],
+    },
+  }),
+  source: "vault",
 }];
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
@@ -1559,6 +1713,29 @@ function askedDocs(expr: QueryExpr): string[] | null {
   return docs.length > 0 ? docs : null;
 }
 
+/// La sezione di `text` sotto il titolo `heading`, titolo compreso, fino al
+/// prossimo titolo dello stesso livello o più alto; senza titolo, tutto.
+function embedSection(text: string, heading: string | null): string {
+  if (heading === null) return text;
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => /^#{1,6} /.test(line) && line.replace(/^#+ /, "").trim() === heading);
+  if (start < 0) throw new Error(`Titolo non trovato nel banco: ${heading}`);
+  const level = /^#+/.exec(lines[start]!)![0].length;
+  let end = start + 1;
+  while (end < lines.length && !(/^#{1,6} /.test(lines[end]!) && /^#+/.exec(lines[end]!)![0].length <= level)) end++;
+  return lines.slice(start, end).join("\n").trim();
+}
+
+/// Il blocco col suo `^id` a fine paragrafo (il blocco sincronizzato, T30),
+/// senza l'id, come lo rende il kernel. Un id che non c'è è l'errore del
+/// kernel: la resa scrive «Blocco non trovato».
+function embedBlock(text: string, block: string): string {
+  const mark = new RegExp(`\\s\\^${block.replace(/[^A-Za-z0-9-]/g, "")}\\s*$`);
+  const found = text.split(/\n\s*\n/).find((paragraph) => mark.test(paragraph));
+  if (found === undefined) throw new Error(`Blocco non trovato nel banco: ^${block}`);
+  return found.replace(mark, "").trim();
+}
+
 /// Una resa di Markdown per le note che il banco non ha scritte a mano in
 /// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
 /// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
@@ -1628,7 +1805,30 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   },
   render_embed: (q) => {
     if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
+    // Una Base incorporata (`?base=nota`, T18): il blocco `fub:base` che il
+    // kernel darebbe, col testo del file e la vista della sezione. Le domande
+    // `fub.base` del finto rispondono per `Opere.base` qualunque sia il file.
+    if (BASE !== null && q.page.endsWith(".base") && !q.block) {
+      const source = BASE.files[BASE_DOC] ?? "";
+      return {
+        kind: "render_embed",
+        value: {
+          doc_id: q.page.includes("/") ? q.page : BASE_DOC,
+          html: '<div class="ui-slot" data-ui-slot="0" data-custom-kind="base"></div>',
+          parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, view: q.heading ?? null, container: q.page.includes("/") ? q.page : BASE_DOC }, fallback: [] } }],
+        },
+      };
+    }
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
+    // Una nota che un caso della Live riporta (la trasclusione viva): la
+    // sezione dal suo titolo al prossimo dello stesso livello, letta dal
+    // vault com'è adesso, come la rende il kernel dopo un salvataggio.
+    const liveFile = LIVE?.files?.[page];
+    if (liveFile !== undefined) {
+      const text = host.files()[page] ?? liveFile;
+      const part = q.block ? embedBlock(text, q.block) : embedSection(text, q.heading ?? null);
+      return { kind: "render_embed", value: { doc_id: page, html: plainHtml(part), parts: [] } };
+    }
     const doc = Object.keys(CORPUS).find((id) => id === page || id.endsWith(`/${page}`));
     if (!doc || OUTPUT[doc] === undefined || q.heading || q.block) {
       throw new Error(`Embed non dichiarato nel banco: ${q.page}`);
@@ -1647,6 +1847,28 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   backlinks: (q) => {
     const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
     return { kind: "backlinks", value: { items: [], offset: 0, total } };
+  },
+  // I titoli `#` di una nota del corpus, coi byte del sorgente: quelli che
+  // «Sposta in…» offre come destinazione. Lo slug è quello semplice, minuscole
+  // e trattini; una nota fuori dal corpus non ha titoli.
+  outline: (q) => {
+    const source = q.kind === "outline" ? (CORPUS[q.doc] ?? "") : "";
+    const encoder = new TextEncoder();
+    const value: Heading[] = [];
+    let offset = 0;
+    let fence = false;
+    for (const line of source.split("\n")) {
+      if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+      const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+      if (found) {
+        const text = found[2]!;
+        const start = encoder.encode(source.slice(0, offset)).length;
+        const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
+        value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
+      }
+      offset += line.length + 1;
+    }
+    return { kind: "outline", value };
   },
   organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
@@ -1848,6 +2070,60 @@ const TREES: Record<string, UiNode> = {
     },
     fallback: [{ node: "text", content: "Il grafo, per chi non sa disegnarlo." }],
   },
+  // La pagina del tipo (T33) in fondo a `Tipi/Libro.md`: la forma è quella
+  // di `fub_features::properties` (`note_type_page`), un gruppo col conto e
+  // le proprietà in evidenza del tipo. Solo nella scena `?live=tipo-pagina`.
+  note_type_page: {
+    node: "stack",
+    dir: "column",
+    gap: 0,
+    children: [{
+      node: "section", title: "Note di tipo Libro · 2", collapsed: false, key: "type-notes", children: [{
+        node: "list",
+        items: [
+          { node: "list_item", title: "Dune", subtitle: "Frank Herbert", action: { action: "note_type.page.open", payload: { doc: "Biblioteca/Dune.md" } }, selected: false, key: "Biblioteca/Dune.md" },
+          { node: "list_item", title: "Live", subtitle: "Frank Herbert · letto", action: { action: "note_type.page.open", payload: { doc: "Guida/Live.md" } }, selected: false, key: "Guida/Live.md" },
+        ],
+      }],
+    }],
+  },
+  // La pagina del giorno (T39) in fondo a `Diario/2026-08-19.md`: la forma è
+  // quella di `fub_features::template` (`day_page`), i tre gruppi col conto.
+  // Solo nelle scene `?giorno=1`, che dichiarano la view.
+  day_page: {
+    node: "stack",
+    dir: "column",
+    gap: 4,
+    children: [
+      {
+        node: "section", title: "Compiti di oggi · 2", collapsed: false, key: "day-tasks", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Mandare le foto del banco", subtitle: "Il banco che vede", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#4" },
+            { node: "list_item", title: "Rileggere la sintassi delle date, e dire a Mario cosa cambia nei frammenti di codice", subtitle: "Sintassi di Fub", action: { action: "day.open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#9" },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Stesso giorno · 1", collapsed: false, key: "day-same", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Il banco che vede", subtitle: "scadenza", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md" },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Create e cambiate · 3", collapsed: false, key: "day-changed", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Il banco che vede", subtitle: "Cambiata alle 18:40", action: { action: "day.open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md" },
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Cambiata alle 11:05", action: { action: "day.open", payload: { doc: "Guida/Frammenti di codice.md" } }, selected: false, key: "Guida/Frammenti di codice.md" },
+            { node: "list_item", title: "Benvenuto", subtitle: "Cambiata alle 09:12", action: { action: "day.open", payload: { doc: "Benvenuto.md" } }, selected: false, key: "Benvenuto.md" },
+          ],
+        }],
+      },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -1865,7 +2141,7 @@ const options: Options = {
     // Il testo di un documento di videoscrittura è la sua proiezione.
     ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
     // La nota della Live, per le scene che la chiedono.
-    ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
+    ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text, ...LIVE.files }),
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
     ...(BASE === null ? {} : BASE.files),
@@ -1883,17 +2159,21 @@ const options: Options = {
   view: VIEWS,
   commands: [
     // Con `?formatbar=1&slash=1` ci sono tutti e due, come nell'host vero
-    // (il giro sul banco, `bench/giro/scrivere.mjs`): le voci del «/» vincono,
-    // perché portano anche la superficie `slash` che le gemelle della barra
-    // non hanno. Da soli, ognuno dà ciò che dava.
+    // (il giro sul banco, `bench/giro/scrivere.mjs`, e «+ Inserisci» della
+    // barra): le voci della barra restano nel loro ordine, ma una che c'è
+    // anche nel «/» è quella del «/», che porta anche la superficie `slash`;
+    // le altre voci del «/» vengono dopo, senza ripetere gli id. Da soli,
+    // ognuno dà ciò che dava.
     ...BENCH_COMMANDS,
     ...NEW_FILE_COMMANDS,
-    ...SLASH_COMMANDS,
-    ...(ON_MOBILE ? FORMAT_COMMANDS.filter((format) => !SLASH_COMMANDS.some((slash) => slash.id === format.id)) : []),
+    ...(ON_MOBILE ? FORMAT_COMMANDS.map((format) => SLASH_COMMANDS.find((slash) => slash.id === format.id) ?? format) : []),
+    ...(ON_MOBILE ? SLASH_COMMANDS.filter((slash) => !FORMAT_COMMANDS.some((format) => format.id === slash.id)) : SLASH_COMMANDS),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
+    // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
+    ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
@@ -2328,6 +2608,7 @@ export const api: typeof host.module.api = {
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
   listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),
   renderView: (view, instance, params) => {
+    if (view === "desk" && DESK) return Promise.resolve(DESK.tree(instance ?? "main"));
     const tree = (view === "trash" ? liveTrash() : undefined) ?? treeOf(view);
     return tree ? Promise.resolve(tree) : behind.renderView(view, instance, params);
   },
@@ -2338,6 +2619,7 @@ export const api: typeof host.module.api = {
   // segna scelto il titolo a cui si è andati, e il banco del moto vede la
   // sagoma della voce scelta scorrere.
   viewAction: async (view, instance, params, action, payload, fields) => {
+    if (view === "desk" && DESK) return { kind: "replace" as const, root: DESK.act(instance ?? "main", action, payload) };
     const live = view === "trash" ? await liveTrashAction(action, payload) : undefined;
     if (live) return live;
     const tree = treeOf(view);

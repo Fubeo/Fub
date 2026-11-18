@@ -157,6 +157,16 @@ e si copia, ma non si scrive.
 
 ## Nei documenti
 
+Una tabella nuova (**Inserisci › Tabella**, in un `.docx` o in un `.odt`)
+nasce con i paragrafi delle celle a spazio dopo 0 e interlinea singola, come
+lo stile «Griglia tabella» di Word, anche dove il documento dà al testo
+normale più spazio: è la spaziatura del paragrafo, che **Spaziatura del
+paragrafo** mostra e cambia, si salva come formattazione diretta e si
+rilegge uguale. Dove lo stile del documento la dà già, il file non la
+ripete. Righe, colonne e paragrafi aggiunti dopo copiano quelli accanto e la
+tengono; una tabella del file resta con la sua. Una copia RTF la porta,
+perché lì è la spaziatura di serie.
+
 Nelle tabelle del docx il cursore resta nel testo: le frecce sono del testo,
 Tab e Maiusc+Tab vanno di cella in cella (Tab dall'ultima aggiunge una riga),
 e Maiusc con una freccia che esce dalla cella, o il trascinamento da una cella
@@ -188,6 +198,18 @@ tabella HTML (con più intervalli rifiuta, e lo dice, come i fogli), e
 modo foglio, dentro la loro tabella, e l'incolla le sposta in un passo solo;
 Escape toglie prima il segno, poi gli intervalli aggiunti, poi le celle. Ogni
 gesto è un passo d'annullamento, e le celle restano scelte.
+
+Nessuna modifica toglie una cella da una riga. Una selezione di testo che va
+da una cella a un'altra della stessa tabella (il trascinamento del browser,
+Maiusc+clic) diventa celle scelte, dall'àncora alla testa, e Canc o Backspace
+le svuotano. Una selezione che esce dalla tabella si toglie a pezzi: il testo
+fuori, le tabelle intere che contiene, e in ogni cella toccata il pezzo
+scelto, con le celle che restano (vuote, se scelte tutte); una lettera scritta
+sopra va dove cominciava. Taglia copia il testo scelto e lo toglie allo stesso
+modo; Invio (e Maiusc+Invio) lo toglie e va a capo dove cominciava, nella
+cella o nel paragrafo, e un Ctrl+Z rimette tutto. Ciò che unirebbe due celle o lascerebbe una riga più
+corta delle altre non si applica; una tabella del file che ha già righe di
+lunghezze diverse resta com'è, e Ctrl+Z passa sempre.
 
 Alcuni gesti del foglio nel documento mancano apposta, e la prova comune lo
 dice col perché: Mod con una freccia, che nel testo salta di parola; la cella

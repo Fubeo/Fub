@@ -221,8 +221,11 @@ una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
 I comandi e le view escono già localizzati. Un comando IPC che porta alla shell
 l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
-non una frase. Un errore nuovo destinato all'utente usa una chiave del
-catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
+non una frase. L'errore di un indice esterno lo risolve il kernel col
+catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
+Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
+specie (`error.kind.*`), mai «[object Object]». Un errore nuovo destinato
+all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
 letterali per crate e ne impedisce la crescita.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
@@ -429,6 +432,21 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
   cartella cambia soltanto dal giornale, con `write_document`.
 
+Annulla e ripeti sono del provider (`edit.undo`, `edit.redo`): celle e
+comandi nell'ordine in cui sono avvenuti, anche oltre un salvataggio. Ogni
+passo riscrive il giornale, e il salvataggio seguente lo porta nei byte. Un
+passo di celle si disfa riscrivendo le celle; un comando oltre un salvataggio
+con `fub.restore` (`{"state": "<32 cifre esadecimali>"}`), che vale soltanto
+come primo comando e porta la cartella a uno stato tenuto in memoria dal
+provider. Il giornale resta della versione 2: `fub.restore` è un id del
+catalogo aperto dei comandi, come `fub.pasteFrom`, e un giornale di prima si
+legge com'era. Uno stato che il processo non ha più (una bozza dopo un
+riavvio), o `fub.restore` non in testa, è `Conflict`: il giornale non si
+applica e il file resta com'era; un Fub di prima lo rifiuta allo stesso modo,
+perché non serve il comando. La cronologia tiene 100 passi e 128 MiB di stati
+oltre la cartella di adesso: oltre, esce il passo più vecchio, mai un dato.
+Riaprendo il programma ricomincia vuota.
+
 Nella finestra:
 
 - i valori sono quelli che il file ha salvato, comprese le celle versate
@@ -448,8 +466,10 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
-(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+lettura ha lasciato indietro qualcosa), `not-shown-slicers`, `uncomputed`
+(formule senza valore salvato) e `circular` (formule su un riferimento
+circolare, salvate con `0`: la finestra le dà come `#CIRC!`), ciascuno con il
+suo conteggio. Le unioni, le
 note, la formattazione condizionale e gli oggetti (grafici, grafici
 sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
 

@@ -1,10 +1,10 @@
 // Le finestre delle celle e dei fogli: Inserisci ed Elimina celle, altezza e
-// larghezza, rinomina, sposta, scopri, zoom e ridimensiona tabella.
+// larghezza, rinomina, sposta, scopri, zoom, crea e ridimensiona tabella.
 //
 // Excel parla di righe in punti e di colonne in caratteri, il modello in
 // pixel: le conversioni sono quelle di GridCraft (`cmd::format`), perché il
 // numero proposto sia quello che il provider rileggerebbe.
-import type { DialogBuilder } from "./host";
+import type { DialogBuilder, DialogContext } from "./host";
 import { formDialog } from "./form";
 import { required, type Values } from "./fields";
 import { columnLetters } from "./refs";
@@ -241,6 +241,67 @@ const tableResize: DialogBuilder = (context) => {
   });
 };
 
+/// Quante celle della prima riga si guardano per indovinare le intestazioni.
+const HEADER_PROBE = 64;
+
+/// L'intervallo dei dati di una tabella nuova: la selezione, o con una cella
+/// sola la sua area di dati, come Excel (`selection.currentRegion`).
+async function tableData(context: DialogContext): Promise<string> {
+  const range = context.engine.selectionRefs().range;
+  if (range.includes(":")) return range;
+  const read = await context.read("selection.currentRegion");
+  const region = read && typeof read === "object" ? (read as { selection?: unknown }).selection : undefined;
+  return typeof region === "string" && region ? region : range;
+}
+
+/// Vero se la prima riga dell'intervallo è tutta di testo e sotto c'è altro:
+/// la stessa ipotesi di GridCraft, che la finestra fa vedere e lascia
+/// cambiare.
+async function guessHeader(context: DialogContext, range: string): Promise<boolean> {
+  const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(range.replace(/\$/g, "").toUpperCase());
+  if (!match) return true;
+  const [, firstColumn, firstRow, lastColumn, lastRow] = match;
+  if (Number(lastRow) <= Number(firstRow)) return false;
+  const from = columnIndex(firstColumn!);
+  const to = Math.min(columnIndex(lastColumn!), from + HEADER_PROBE - 1);
+  for (let column = from; column <= to; column += 1) {
+    const cell = await context.read("cell.get", { cell: `${columnLetters(column)}${firstRow}` });
+    if (!cell || typeof cell !== "object" || (cell as { type?: unknown }).type !== "text") return false;
+  }
+  return true;
+}
+
+/// L'indice (da 0) della colonna `letters`.
+function columnIndex(letters: string): number {
+  let index = 0;
+  for (const letter of letters) index = index * 26 + (letter.charCodeAt(0) - 64);
+  return index - 1;
+}
+
+/// Inserisci › Tabella, come «Crea tabella» di Excel: dove sono i dati e se
+/// la prima riga ha le intestazioni. Senza intestazioni la tabella ne
+/// aggiunge una riga sopra i dati, che scendono: la finestra lo dice prima
+/// (IMP-032).
+const createTable: DialogBuilder = async (context) => {
+  const range = await tableData(context);
+  const header = await guessHeader(context, range);
+  return formDialog(context, {
+    title: t("grid.dialog.create_table.title"),
+    values: { range, header },
+    command: "insert.table",
+    fields: (values) => [
+      { kind: "text", key: "range", label: t("grid.dialog.create_table.range") },
+      { kind: "check", key: "header", label: t("grid.dialog.create_table.header") },
+      ...(values.header === true ? [] : [{ kind: "note" as const, text: t("grid.dialog.create_table.no_header") }]),
+    ],
+    change: (key) => key === "header",
+    params: (values) => {
+      const text = String(values.range ?? "").trim().replace(/^=/, "").replace(/\$/g, "");
+      return text ? { range: text, header: values.header === true } : required(t("grid.dialog.create_table.range"));
+    },
+  });
+};
+
 export const CELL_DIALOGS: Readonly<Record<string, DialogBuilder>> = {
   insertCells,
   deleteCells,
@@ -252,4 +313,5 @@ export const CELL_DIALOGS: Readonly<Record<string, DialogBuilder>> = {
   unhideSheet,
   zoom,
   tableResize,
+  createTable,
 };

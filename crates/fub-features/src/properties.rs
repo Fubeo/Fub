@@ -12,8 +12,9 @@ use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::model::{
-    DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, OptionMatch, PropertyColor,
-    PropertyOption, PropertyScalar, PropertyType, PropertyTypes, PropertyValue, Span, StatusGroup,
+    Block, DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, OptionMatch, PropertyColor,
+    PropertyOption, PropertyScalar, PropertyType, PropertyTypes, PropertyValue, RelationTarget,
+    Span, StatusGroup,
 };
 use fub_abi::query::{QueryExpr, QueryPredicate};
 use fub_abi::session::{ContextKind, ContextMask};
@@ -27,10 +28,15 @@ use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, UiOption, ViewUpd
 
 mod catalog;
 mod commands;
+mod relation;
+mod type_page;
+mod types;
 mod view;
 
 pub use catalog::catalog;
 pub use commands::PropertiesCommands;
+pub use relation::{linked_from, LinkedFrom};
+pub use type_page::NOTE_TYPE_PAGE_VIEW;
 pub use view::PropertiesView;
 use view::{date_formats, frontmatter_span, property_types, show_date, show_link, show_list};
 
@@ -62,9 +68,33 @@ pub const PROPERTY_KEYS_MIGRATE: &str = "property.keys.migrate";
 /// Aggiunge, rinomina o colora un'opzione di una proprietà Selezione o Stato
 /// nel registro dei tipi del vault.
 pub const PROPERTY_OPTION_SET: &str = "property.option.set";
+/// Cambia il tipo della nota (E5): `tipo` diventa il link al tipo, e le
+/// proprietà del tipo che mancano si aggiungono; non si toglie niente.
+pub const NOTES_TYPE_SET: &str = "note.type.set";
+/// I tipi di nota del vault coi conteggi (E5), per il cassetto e per «Nuova
+/// nota»: un comando di sola lettura il cui esito porta i dati
+/// (`CommandEffect::Custom`, spazio [`NOTE_TYPES_NS`]).
+pub const NOTES_TYPE_LIST: &str = "note.type.list";
+/// Il tipo che un valore di `tipo` nomina, com'è adesso (E5): icona, proprietà
+/// in evidenza, o che cosa non va. Sola lettura, come [`NOTES_TYPE_LIST`].
+pub const NOTES_TYPE_GET: &str = "note.type.get";
+/// Lo spazio dell'esito di [`NOTES_TYPE_LIST`] e [`NOTES_TYPE_GET`].
+pub const NOTE_TYPES_NS: &str = "fub.note_types";
 /// Rimette il registro dei tipi com'era, se nessuno l'ha cambiato nel
-/// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`].
+/// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`] e di
+/// [`PROPERTY_TARGET_SET`].
 pub const PROPERTY_TYPES_RESTORE: &str = "property.types.restore";
+/// Dice, o toglie, il bersaglio di una Relazione nel registro dei tipi: un
+/// tipo (`[[Tipi/Libro]]`) o una cartella.
+pub const PROPERTY_TARGET_SET: &str = "property.target.set";
+const TARGET: &str = "target";
+const P_TARGET_SET: &str = "p_target_set";
+const P_TARGET_CLEAR: &str = "p_target_clear";
+const P_TARGET_SAME: &str = "p_target_same";
+const U_TARGET: &str = "u_target";
+const E_NOT_RELATION: &str = "e_not_relation";
+const E_TARGET: &str = "e_target";
+const E_LINKED_FROM: &str = "e_linked_from";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";
@@ -179,6 +209,12 @@ const SAME_DAY_ROWS: usize = 50;
 /// Una nota con la chiave al singolare e al plurale insieme: la conversione
 /// non sceglie per l'utente.
 const E_BOTH_FORMS: &str = "e_both_forms";
+/// Il tipo della nota (E5).
+const E_NOTE_CHANGED: &str = "e_note_changed";
+const P_NOTE_TYPE: &str = "p_note_type";
+const P_TYPE_SAME: &str = "p_type_same";
+const U_NOTE_TYPE: &str = "u_note_type";
+const A_COUNT: &str = "count";
 
 fn global_action(action: UiAction, host: &mut dyn HostApi) -> Result<ViewUpdate, PluginError> {
     match action.action.0.as_str() {

@@ -31,8 +31,8 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md).
-`DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
+Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md);
+una trasclusione ne ha una [su un tratto](range-surface.md). `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
 riquadro o l'owner vengono smontati. Ogni famiglia dichiara anche l'insieme dei

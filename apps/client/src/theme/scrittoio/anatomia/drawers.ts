@@ -55,6 +55,14 @@ export const DRAWERS: PartAnatomy = {
       states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")],
       hooks: ["bookmarks-panel", "workspaces-panel", "search-result", "palette-row", "palette-title", "palette-desc"],
     },
+    // «Nuova nota di tipo» e «Scegli il tipo» (E5): il menu dei tipi, col
+    // tassello dell'icona; `kit-popover` è del pezzo del kit.
+    {
+      name: "note-type-menu",
+      layer: "cornice",
+      states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")],
+      hooks: ["kit-popover", "note-type-popover", "note-type-menu", "note-type-menu-head", "note-type-menu-list", "note-type-menu-item", "note-type-menu-tile", "note-type-menu-label", "note-type-menu-name", "note-type-menu-sub", "note-type-menu-foot"],
+    },
     { name: "icon-picker", states: INTERACTIVE, hooks: ["icon-picker", "icon-picker-title", "icon-grid", "icon-grid--figures", "icon-none"] },
     {
       name: "declared-view",

@@ -64,7 +64,13 @@ pub(crate) fn query_workspace(
         return workspace.read()?.query_index(query);
     };
 
-    let completed = prepared.invoke(workspace, query.clone())?;
+    // L'errore di un indice è nel suo catalogo: le parole le mette il
+    // workspace, con una lettura breve presa dopo che gli handle sono stati
+    // lasciati.
+    let completed = match prepared.invoke(workspace, query.clone()) {
+        Ok(completed) => completed,
+        Err(failure) => return Err(workspace.read()?.localized_query_failure(failure)),
+    };
     let workspace = workspace.read()?;
     workspace.finish_detached_index_query(completed, &query)
 }

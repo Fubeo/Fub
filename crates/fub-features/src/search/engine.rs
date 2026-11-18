@@ -928,20 +928,16 @@ fn term_query(field: Field, value: &str) -> Box<dyn Query> {
     ))
 }
 
-/// I metacaratteri di regex resi letterali.
+/// I metacaratteri di regex resi letterali, e **soltanto** quelli.
 ///
-/// Non ci sono liste di caratteri «pericolosi» da tenere aggiornate: tutto ciò
-/// che non è alfanumerico si scrive con la fuga davanti, che è sempre lecito e
-/// non richiede di sapere quali metacaratteri conosca il motore di oggi.
+/// Una fuga davanti a ogni carattere non alfanumerico sembrava la scelta
+/// prudente e non lo è: la sintassi delle regex rifiuta la fuga davanti a un
+/// carattere che non è un metacarattere ASCII (`\🗺` è «unrecognized escape
+/// sequence», e la ricerca di un'emoji falliva tutta), e ne dà un significato
+/// ad altri (`\<` è un confine di parola). La lista giusta è quella di chi
+/// scrive la sintassi.
 fn escape_regex(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 4);
-    for c in text.chars() {
-        if !c.is_alphanumeric() {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
+    regex::escape(text)
 }
 
 fn boosted(query: Box<dyn Query>, boost: f32) -> Box<dyn Query> {

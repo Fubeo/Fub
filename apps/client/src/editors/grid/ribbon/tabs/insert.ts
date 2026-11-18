@@ -117,7 +117,7 @@ export const INSERT: RibbonTab = {
       label: "ribbon.group.tables",
       icon: "gr-table",
       keytip: "ZT",
-      columns: [{ kind: "button", id: "insert.table", label: "ribbon.insert.table", keytip: "T", icon: "gr-table", size: "large" }],
+      columns: [{ kind: "button", id: "insert.table", dialog: "createTable", label: "ribbon.insert.table", keytip: "T", icon: "gr-table", size: "large" }],
     },
     {
       id: "illustrations",

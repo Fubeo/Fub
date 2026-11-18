@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listenerLedger, press } from "../../../kit/testing";
 import { trapFocus } from "../../../ui/a11y";
 import { activeMotions, createManualDriver, setMotionDriver, setMotionPreference } from "../../../moto";
+import { currentHints, resetHintSources } from "../../../editors/core/hints";
 import {
   allCommands,
   registerShellCommand,
@@ -60,6 +61,8 @@ vi.mock("./sources", () => ({
 // Le parole sono le chiavi, con gli argomenti accanto.
 vi.mock("../../../i18n/strings", () => ({
   t: (key: string, args?: Record<string, unknown>) => (args ? `${key} ${JSON.stringify(args)}` : key),
+  plural: (count: number, one: string, other: string, args: Record<string, unknown> = {}) =>
+    `${count === 1 ? one : other} ${JSON.stringify({ count, n: count, ...args })}`,
   onLanguage: (listener: () => void) => {
     world.languageListeners.add(listener);
     return () => world.languageListeners.delete(listener);
@@ -212,6 +215,13 @@ const activeTitle = (): string | null => {
 const selectedMode = (): string | null =>
   document.querySelector('.launcher-modes [role="tab"][aria-selected="true"]')?.textContent ?? null;
 const said = (): string => document.querySelector(".launcher-note")?.textContent ?? "";
+/// Ciò che la banda di stato direbbe adesso: i tasti del lanciatore stanno lì,
+/// pubblicati sulla porta dei suggerimenti, non nel pannello.
+const bandSays = (): string => {
+  const context = currentHints();
+  if (context?.id !== "launcher") return "";
+  return context.items.map((item) => `${"keys" in item ? item.keys.join("+") : item.command} ${item.say}`).join(" · ");
+};
 const counted = (): string => document.querySelector(".launcher-status")?.textContent ?? "";
 const pane = (): HTMLElement => document.querySelector(".launcher-preview") as HTMLElement;
 const page = (): HTMLElement => document.querySelector(".launcher-preview-page") as HTMLElement;
@@ -266,6 +276,7 @@ let vaultBefore = "";
 
 beforeEach(() => {
   resetShellCommands();
+  resetHintSources();
   world.asked.length = 0;
   world.log.length = 0;
   world.notices.length = 0;
@@ -316,6 +327,24 @@ describe("i comandi che lo aprono", () => {
     expect(selectedMode()).toContain("launcher.mode.commands");
     expect(common.switcher).not.toHaveBeenCalled();
     expect(common.palette).not.toHaveBeenCalled();
+  });
+
+  it("apre chiudendo il menu aperto, e il primo Esc rende il fuoco a chi aveva aperto il menu (IMP-015)", () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const chosen = vi.fn();
+    showContextMenu(trigger, [{ label: "Nota B", run: chosen }]);
+    const inMenu = (): boolean => document.querySelector("#context-menu")?.contains(document.activeElement) ?? false;
+    expect(inMenu()).toBe(true);
+    run("shell.switcher");
+    expect(surface()).not.toBeNull();
+    expect(inMenu()).toBe(false);
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(launcher.isOpen).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+    expect(chosen).not.toHaveBeenCalled();
+    trigger.remove();
   });
 
   it("dai menu contestuali «Cerca fra tutti i comandi» apre i comandi con ciò che si è scritto, e smontato non risponde più", () => {
@@ -605,23 +634,6 @@ describe("i modi", () => {
     expect(selectedMode()).toBe("launcher.mode.all");
   });
 
-  it("il campo cambia invito e i tasti del piede col modo", () => {
-    world.answer = () => listed([note("Uno.md")]);
-    launcher.open("all");
-    expect(field().placeholder).toBe("launcher.placeholder.all");
-    const hints = (): string => document.querySelector(".launcher-hints")!.textContent ?? "";
-    expect(hints()).toContain("launcher.hint.open");
-    expect(hints()).not.toContain("launcher.hint.window");
-    (document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')[1] as HTMLElement).click();
-    expect(field().placeholder).toBe("launcher.placeholder.commands");
-    expect(hints()).toContain("launcher.hint.run");
-  });
-
-  it("senza una riga da scegliere il piede non dice che cosa fa Invio", () => {
-    world.answer = () => nothing("launcher.note.all.none");
-    launcher.open("all");
-    expect(document.querySelector(".launcher-hints")!.textContent).not.toContain("launcher.hint.open");
-  });
 });
 
 describe("scegliere una riga", () => {
@@ -713,7 +725,7 @@ describe("scegliere una riga", () => {
     world.answer = () => listed([note("Uno.md", { hit: "text", at: 42, snippet: { text: "il banco vede", highlights: [{ start: 3, end: 8 }] } })]);
     launcher.open("all");
     typed("banco ");
-    expect(document.querySelector(".launcher-row-detail mark")!.textContent).toBe("banco");
+    expect(document.querySelector(".launcher-row-meta[data-snippet] mark")!.textContent).toBe("banco");
     press(field(), "Enter");
     await settle();
     expect(world.log).toEqual(["remember search banco ", "open Uno.md", "reveal Uno.md 42"]);
@@ -804,15 +816,18 @@ describe("scegliere una riga", () => {
   it("un comando si avvia col modulo che esiste già; uno di shell si ricorda", async () => {
     const shell = command("shell.note.new", "Mod-N");
     const kernel = command("note.rename", null, null);
-    kernel.spec = { id: "note.rename" } as CommandEntry["spec"];
+    kernel.spec = { id: "note.rename", scope: { reach: "document", writes: false, reversible: true } } as CommandEntry["spec"];
     world.answer = () => listed([{ kind: "command", key: "c:1", entry: shell }, { kind: "command", key: "c:2", entry: kernel }]);
     launcher.open("commands");
     const rows = [...document.querySelectorAll<HTMLElement>(".launcher-row")];
     expect(rows[0]!.querySelector(".launcher-row-title")!.textContent).toBe("Titolo shell.note.new");
-    expect(rows[0]!.querySelector(".launcher-row-detail")!.textContent).toBe("Descrizione shell.note.new");
-    expect(rows[0]!.querySelector(".launcher-key")!.textContent).toBe("Ctrl+N");
-    expect(rows[1]!.querySelector(".launcher-row-meta")!.textContent).toBe("legge · una nota");
-    expect(rows[1]!.querySelector(".launcher-key")).toBeNull();
+    expect(rows[0]!.querySelector(".launcher-row-main .sr-only")!.textContent).toBe(", Descrizione shell.note.new");
+    expect(rows[0]!.querySelector(".launcher-row-meta[data-mono]")!.textContent).toBe("Ctrl+N");
+    // Il raggio di un comando del nucleo sta nell'anteprima: la riga resta una.
+    expect(rows[1]!.querySelector(".launcher-row-meta")).toBeNull();
+    press(field(), "ArrowDown");
+    expect(document.querySelector(".launcher-preview-card + .launcher-preview-meta")!.textContent).toBe("legge · una nota");
+    press(field(), "ArrowUp");
 
     press(field(), "Enter");
     expect(surface()).toBeNull();
@@ -906,7 +921,7 @@ describe("scegliere una riga", () => {
   it("una riga d'aiuto mostra il suo tasto, e Invio non fa niente", async () => {
     world.answer = () => listed([{ kind: "help", key: "k:shell.switcher", entry: command("shell.switcher", "Mod-o") }]);
     launcher.open("help");
-    expect(document.querySelector(".launcher-key")!.textContent).toBe("Ctrl+O");
+    expect(document.querySelector(".launcher-row-meta[data-mono]")!.textContent).toBe("Ctrl+O");
     press(field(), "Enter");
     await settle();
     expect(surface()).not.toBeNull();
@@ -930,7 +945,7 @@ describe("le azioni di una riga (Tab)", () => {
     expect(shown[0]).toBe('launcher.group.actions {"name":"Uno"}');
     expect(shown).toHaveLength(7);
     expect(titles()).toEqual(["launcher.action.open", "launcher.action.split", "launcher.action.peek", "launcher.action.rename", "launcher.action.copy_link", "launcher.action.pin"]);
-    expect(document.querySelector(".launcher-hints")!.textContent).toContain("launcher.hint.back");
+    expect(bandSays()).toContain("launcher.hint.back");
     // Con le azioni aperte la domanda non si porta al pannello: il controllo sparisce.
     expect(toPanel().hidden).toBe(true);
   });
@@ -1943,19 +1958,22 @@ describe("l'anteprima accanto all'elenco", () => {
     expect(wide()).toBe(true);
   });
 
-  it("nei modi senza una nota da mostrare il riquadro non c'è", async () => {
-    for (const mode of ["commands", "tags", "people", "blocks", "help", "line"] as const) {
+  it("il riquadro c'è in ogni modo che ha una riga da mostrare; non in Riga", async () => {
+    for (const mode of ["commands", "tags", "people", "blocks", "help"] as const) {
       launcher.open(mode);
-      expect(surface()!.hasAttribute("data-preview")).toBe(false);
-      expect(pane().hidden).toBe(true);
+      expect(surface()!.hasAttribute("data-preview")).toBe(true);
+      expect(pane().hidden).toBe(false);
     }
+    launcher.open("line");
+    expect(surface()!.hasAttribute("data-preview")).toBe(false);
+    expect(pane().hidden).toBe(true);
   });
 
   it("passando a un altro modo e tornando, riparte dalla riga attiva", async () => {
     launcher.open("all");
     vi.advanceTimersByTime(PREVIEW_DELAY_MS);
     await settle();
-    tabAt(1).click();
+    tabAt(6).click();
     expect(pane().hidden).toBe(true);
     expect(page().childNodes).toHaveLength(0);
     tabAt(0).click();
@@ -2000,7 +2018,7 @@ describe("l'anteprima accanto all'elenco", () => {
 });
 
 describe("«Crea la nota», da toccare", () => {
-  it("c'è solo quando la risposta offre di creare, porta scritto il suo accordo, e toccato crea e apre", async () => {
+  it("c'è solo quando la risposta offre di creare, dice solo la parola, e toccato crea e apre", async () => {
     world.answer = () => listed([note("Uno.md")]);
     launcher.open("all");
     typed("Uno");
@@ -2013,7 +2031,7 @@ describe("«Crea la nota», da toccare", () => {
     expect(toCreate().hidden).toBe(false);
     expect(toCreate().tabIndex).toBe(-1);
     expect(toCreate().firstChild?.textContent).toBe("launcher.create.offer");
-    expect(toCreate().querySelector("kbd")?.textContent).toMatch(/↵$/);
+    expect(toCreate().querySelector("kbd")).toBeNull();
     expect(toCreate().getAttribute("aria-keyshortcuts")).toBe("Shift+Enter");
     toCreate().click();
     await settle();
@@ -2079,7 +2097,7 @@ describe("«Apri nel pannello», dal modo Cerca", () => {
     state.vaultRoot = "";
   });
 
-  it("il controllo c'è solo in Tutto con una domanda, e porta scritto il suo accordo", () => {
+  it("il controllo c'è solo in Tutto con una domanda, e il suo accordo si dice per lo schermo", () => {
     launcher.open("all");
     expect(toPanel().hidden).toBe(false);
     expect(toPanel().disabled).toBe(true);
@@ -2090,9 +2108,9 @@ describe("«Apri nel pannello», dal modo Cerca", () => {
     expect(button.hidden).toBe(false);
     expect(button.disabled).toBe(false);
     expect(button.closest(".launcher-foot")).not.toBeNull();
-    expect(button.textContent).toContain("launcher.panel");
-    expect(button.querySelector("kbd")!.textContent).toContain("Shift");
-    expect(button.querySelector("kbd")!.textContent).toContain("↵");
+    expect(button.textContent).toBe("launcher.panel");
+    // Il suo accordo lo dice la banda, non il bottone.
+    expect(button.querySelector("kbd")).toBeNull();
     expect(button.getAttribute("aria-keyshortcuts")).toMatch(/^(Control|Meta)\+Shift\+Enter$/);
     // Tab qui mostra le azioni: il controllo non è una sua fermata.
     expect(button.tabIndex).toBe(-1);
@@ -2268,5 +2286,103 @@ describe("smontato", () => {
     lifetime.close();
     launcher.open("all");
     expect(surface()).toBeNull();
+  });
+});
+
+describe("i tasti nella banda di stato", () => {
+  beforeEach(() => {
+    document.body.insertAdjacentHTML("beforeend", '<footer id="status-band"><div id="status-hints" class="status-hints"></div></footer>');
+  });
+
+  /// I tasti che il pannello scrive da sé, fuori dal quadro di un comando
+  /// (dove la scorciatoia è un dato, come nel prototipo): nessuno.
+  const panelKeys = (): number =>
+    surface()!.querySelectorAll(".launcher-hints, .launcher-hint, .launcher-key, .launcher-head kbd, .launcher-results kbd, .launcher-foot kbd").length;
+
+  it("aperto, il lanciatore dice i suoi tasti alla banda e non nel pannello", () => {
+    world.answer = () => listed([note("Uno.md")]);
+    launcher.open("all");
+    const context = currentHints();
+    expect(context?.id).toBe("launcher");
+    expect(context?.items[0]).toEqual({ keys: ["Enter"], say: "launcher.hint.open" });
+    expect(bandSays()).toContain("Mod-Enter launcher.hint.split");
+    expect(bandSays()).toContain("Tab launcher.hint.actions");
+    expect(bandSays()).toContain("Escape launcher.hint.close");
+    expect(panelKeys()).toBe(0);
+    // La banda si alza sopra il velo finché il lanciatore è aperto.
+    expect(document.getElementById("status-band")!.hasAttribute("data-launcher")).toBe(true);
+  });
+
+  it("i tasti cambiano con la riga attiva", () => {
+    world.answer = () => listed([note("Uno.md"), { kind: "command", key: "c:1", entry: command("shell.note.new", "Mod-N") }]);
+    launcher.open("all");
+    expect(bandSays()).toContain("Enter launcher.hint.open");
+    press(field(), "ArrowDown");
+    expect(bandSays()).toContain("Enter launcher.hint.run");
+    expect(bandSays()).not.toContain("launcher.hint.split");
+    expect(bandSays()).toContain("> launcher.hint.commands");
+    expect(panelKeys()).toBe(0);
+  });
+
+  it("senza una riga da scegliere la banda non dice che cosa fa Invio", () => {
+    world.answer = () => offer("zzz");
+    launcher.open("all", "zzz");
+    expect(bandSays()).not.toContain("Enter launcher.hint.open");
+    expect(bandSays()).toContain("Shift-Enter launcher.hint.create");
+  });
+
+  it("col modo cambia anche il tasto di Invio", () => {
+    world.answer = () => listed([note("Uno.md")]);
+    launcher.open("all");
+    world.answer = () => listed([{ kind: "command", key: "c:1", entry: command("shell.note.new", "Mod-N") }]);
+    tabAt(1).click();
+    expect(field().placeholder).toBe("launcher.placeholder.commands");
+    expect(bandSays()).toContain("Enter launcher.hint.run");
+  });
+
+  it("chiuso, la banda torna a chi c'era prima e si riabbassa", () => {
+    launcher.open("all");
+    press(field(), "Escape");
+    expect(currentHints()).toBeNull();
+    expect(document.getElementById("status-band")!.hasAttribute("data-launcher")).toBe(false);
+  });
+});
+
+describe("l'anteprima secondo la specie della riga", () => {
+  const card = (): HTMLElement => document.querySelector(".launcher-preview-card") as HTMLElement;
+  const cardTitle = (): string => card().querySelector(".launcher-preview-title")?.textContent ?? "";
+
+  it("un comando dice che cosa fa e la sua scorciatoia, senza il foglio", () => {
+    world.answer = () => listed([{ kind: "command", key: "c:1", entry: command("shell.note.new", "Mod-N") }]);
+    launcher.open("commands");
+    expect(card().hidden).toBe(false);
+    expect(cardTitle()).toBe("Titolo shell.note.new");
+    expect(card().querySelector(".launcher-preview-text")!.textContent).toBe("Descrizione shell.note.new");
+    expect(document.querySelector(".launcher-preview-card + .launcher-preview-meta .launcher-preview-key")!.textContent).toBe("Ctrl+N");
+    expect(document.querySelector(".launcher-preview-sheet")!.hasAttribute("data-empty")).toBe(true);
+  });
+
+  it("un blocco mostra la sua icona e la sintassi", () => {
+    world.answer = () => listed([{ kind: "block", key: "b:markdown.table", entry: command("markdown.table", null) }]);
+    launcher.open("blocks");
+    expect(cardTitle()).toBe("Titolo markdown.table");
+    expect(card().querySelector(".launcher-preview-tile svg")).not.toBeNull();
+    expect(document.querySelector(".launcher-preview-card + .launcher-preview-meta .launcher-preview-key")!.textContent).toBe("|");
+    expect(document.querySelector(".launcher-row-meta[data-mono]")!.textContent).toBe("|");
+  });
+
+  it("una nota torna al foglio, e il quadro sparisce", () => {
+    world.answer = () => listed([{ kind: "command", key: "c:1", entry: command("shell.note.new", "Mod-N") }, note("Uno.md")]);
+    launcher.open("all");
+    expect(card().hidden).toBe(false);
+    press(field(), "ArrowDown");
+    expect(card().hidden).toBe(true);
+  });
+
+  it("a 700 px non c'è anteprima, né foglio né quadro", () => {
+    resizeTo(700, 800);
+    world.answer = () => listed([{ kind: "command", key: "c:1", entry: command("shell.note.new", "Mod-N") }]);
+    launcher.open("commands");
+    expect(pane().hidden).toBe(true);
   });
 });

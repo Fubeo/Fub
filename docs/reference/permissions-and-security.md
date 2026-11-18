@@ -49,8 +49,17 @@ copie divergenti delle regole.
 | tempo e random | quantità e disponibilità |
 | impostazioni | livello scrivibile e chiave dichiarata |
 | transfer | handle e contenuto, non path arbitrari |
+| notifiche | `fub:notifications` dichiarato e non spento |
 
 L'elenco esatto delle funzioni vive nel contratto.
+
+### Le notifiche del sistema
+
+`fub:notifications` non sta in `PluginPermissions::core()`: lo dichiara solo
+«Compiti» (`fub.tasks`), con l'interruttore `fub.tasks:permissions.notifications`
+in **Componenti**, acceso di serie. Senza funzione WIT nessun plugin WASM
+notifica: lo fa l'app (`fub-app/src/promemoria.rs`), dopo aver chiesto al `Guard`
+(`Host::component_allows`): se è spento, i promemoria restano nella nota.
 
 ## Path fence
 
@@ -113,7 +122,7 @@ manifest): il nome di un asset JSON accanto al manifest (`<nome>.json`, in
 minuscolo, mai `manifest.json`), `{ "<nome>": ["<d>", …] }`. Un tema porta
 soltanto i `d` dei tracciati, mai markup: ogni `d` ammette solo i comandi e i
 numeri di un tracciato SVG e gli spazi ASCII, quindi niente `<`, virgolette,
-`url(` o riferimenti. Al massimo 512 nomi, 8 tracciati e 4 KiB di tracciati per
+`url(` o riferimenti. Al massimo 1024 nomi, 8 tracciati e 4 KiB di tracciati per
 nome, 256 KiB per il file. La regola sta in `fub_abi::rules::theme_icons` e la
 applica l'host (all'installazione, all'inventario e alla lettura del tema) come
 il loader della shell, con lo stesso mirror delle regole; la stessa regola dei
@@ -122,8 +131,7 @@ ogni `<svg>` la shell lo costruisce da sé, coi soli `d` validati, nel costrutto
 di tutte le icone (griglia 24, tratto, `currentColor`), e `ui/icons.ts`
 ripassa ogni voce dalla regola prima di disegnarla. Un tema non aggiunge nomi:
 un nome che nessuno disegna non rifiuta il tema ma non si vede. Cambiato tema,
-o annullata l'anteprima, il set si sostituisce e le icone già nella pagina si
-ridisegnano.
+o annullata l'anteprima, il set cambia e le icone nella pagina si ridisegnano.
 
 Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
 `a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con
@@ -134,28 +142,15 @@ documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazio
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
-Un tema si installa anche da una cartella scelta dalla persona, o si collega
-da una cartella in sviluppo, solo con la modalità sviluppatore accesa e con la
-cartella scelta nella finestra nativa dell'app. Il permesso, le porte sulla
-sorgente e sulla staging, la sostituzione di un id già installato e il tema
-collegato sono in [Temi da una cartella](theme-folder-security.md).
+Un tema si installa anche da una cartella scelta dalla persona, o si collega da
+una cartella in sviluppo, solo in modalità sviluppatore e con la cartella scelta
+nella finestra nativa: permesso, porte, sostituzione di un id installato e tema
+collegato in [Temi da una cartella](theme-folder-security.md).
 
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
 un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
 Una preview non cambia la scelta persistente: annullarla o chiuderla rimonta il
 tema autorevole; un bundle illeggibile o rifiutato non si monta a metà.
-
-Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
-colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,
-`--logo-cartella-ombra`, `--logo-foglio-1` e `--logo-foglio-2`. La serie li
-ricava dall'accento (`logoColors` in `recipe.ts`) con la cartella tenuta alla
-soglia dei segni su `--bg` e `--bg-elev`. Un tema installato che non dichiara
-nessun ruolo del logo li riceve prima della validazione, calcolati dal suo
-`--accent` per la stessa luce e lo stesso contrasto (`completeSheet` della
-serie); un tema che ne dichiara anche uno solo resta com'è, e i ruoli mancanti
-cadono sull'accento e su `--sheet-2`. Il gufo tiene i suoi colori. Con i colori
-forzati il logo diventa una sagoma nei colori di sistema, regola in
-`structure.css`, che un tema non tocca.
 
 Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
 colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,
@@ -322,6 +317,11 @@ o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
 va al browser di sistema; ogni altro schema non si apre, con o senza visore
 montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
 incornicia soltanto un indirizzo `https:`.
+
+Una pagina incorporata in una nota (`![](https://…)` di un sito di `WEB_EMBED_SITES`,
+in `editors/text/profiles/markdown/web-embed.ts`) è un segnaposto che non chiede
+niente alla rete. «Carica» la apre soltanto nel visore, con lo stesso consenso,
+mai nel browser di sistema; nessun iframe entra nella shell.
 
 Le letture del client con `fetch` (asset del vault, file dell'app, tessere
 della mappa) non seguono redirect e non portano credenziali né referrer:

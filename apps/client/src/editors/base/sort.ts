@@ -34,9 +34,23 @@ export function parseOrder(raw: unknown): string[] {
   return raw as string[];
 }
 
+/// Il nome della proprietà della nota che una chiave nomina: `prop.stato` e
+/// `stato` sono `stato`, il nome del frontmatter. È quello che il comando di
+/// scrittura riceve, non la chiave di colonna della vista.
+export function propertyName(key: string): string {
+  return key.replace(/^prop\./, "");
+}
+
+/// Una colonna che non è una proprietà della nota: `file.*` (il file), `formula.*`
+/// (una formula della Base) e `container.*` (il file che ospita la Base). Si
+/// legge e non si scrive: la sua cella è testo, e una scrittura è rifiutata.
+export function readOnlyColumn(key: string): boolean {
+  return key.startsWith("file.") || key.startsWith("formula.") || key.startsWith("container.");
+}
+
 /// Due chiavi nominano la stessa proprietà? `prop.stato` e `stato` sì.
 export function sameKey(left: string, right: string): boolean {
-  return left.replace(/^prop\./, "") === right.replace(/^prop\./, "");
+  return propertyName(left) === propertyName(right);
 }
 
 /// Ordina per `key` nel verso detto: la chiave passa in testa, le altre

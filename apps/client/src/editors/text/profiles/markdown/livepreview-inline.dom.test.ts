@@ -208,4 +208,36 @@ describe("le righe nascoste dopo i blocchi resi", () => {
     finish(view);
     check();
   });
+
+  // #411, A-01: col cursore su una riga vuota dopo un blocco reso la riga si
+  // vede, e la prima riga dopo il blocco porta `cm-markdown-gap-lead`, su cui
+  // la pelle toglie lo stacco del blocco: il testo sotto non si sposta.
+  it("col cursore su una di loro la prima riga dopo il blocco ne prende lo stacco", () => {
+    const text = "Prima.\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n\nDopo.\n\n> [!tip] Consiglio\n> Il tram 28.\n\nFine.\n";
+    const firstBlank = text.indexOf("| 1 | 2 |\n") + "| 1 | 2 |\n".length;
+    const view = liveView(text, "mai", text.indexOf("Prima"));
+    const lead = () => [...view.contentDOM.querySelectorAll(".cm-line.cm-markdown-gap-lead")].map((line) => ({
+      at: view.posAtDOM(line),
+      hidden: line.classList.contains("cm-markdown-gap"),
+      after: line.previousElementSibling?.className ?? "",
+    }));
+    expect(lead()).toEqual([]);
+    // Sulla prima riga vuota: si vede, e porta il segno lei.
+    view.dispatch({ selection: { anchor: firstBlank } });
+    finish(view);
+    expect(lead()).toEqual([{ at: firstBlank, hidden: false, after: expect.stringContaining("markdown-rendered") }]);
+    // Sulla seconda: la prima resta nascosta e porta il segno per lei.
+    view.dispatch({ selection: { anchor: firstBlank + 1 } });
+    finish(view);
+    expect(lead()).toEqual([{ at: firstBlank, hidden: true, after: expect.stringContaining("markdown-rendered") }]);
+    // Dopo un richiamo reso, lo stesso.
+    const calloutBlank = text.indexOf("tram 28.\n") + "tram 28.\n".length;
+    view.dispatch({ selection: { anchor: calloutBlank } });
+    finish(view);
+    expect(lead()).toEqual([{ at: calloutBlank, hidden: false, after: expect.stringContaining("markdown-rendered") }]);
+    // Il cursore se ne va: nessun segno, le righe tornano nascoste.
+    view.dispatch({ selection: { anchor: text.indexOf("Fine") } });
+    finish(view);
+    expect(lead()).toEqual([]);
+  });
 });

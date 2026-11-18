@@ -9,8 +9,8 @@ use fub_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
 use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext};
 
 use super::{
-    changed_keys, dep_keys, file_name, first_of, insert_sorted, names_an_attachment, remove_sorted,
-    DocKeys, GraphSource, LinkGraph, LinkRef, ProseFormats, RefKind, ResolvedDoc,
+    changed_keys, dep_keys, file_name, first_of, insert_sorted, names_an_attachment, precedence,
+    remove_sorted, DocKeys, GraphSource, LinkGraph, LinkRef, ProseFormats, RefKind, ResolvedDoc,
 };
 
 impl LinkGraph {
@@ -384,6 +384,12 @@ impl LinkGraph {
             {
                 return Some(id);
             }
+            // Il percorso parziale, come in Obsidian: `[[Progetti/Alpha]]`
+            // raggiunge `Note/Progetti/Alpha.md` quando dalla radice non c'è
+            // niente. Viene dopo il percorso dalla radice, che resta il primo.
+            if let Some(id) = self.resolve_path_suffix(key, exact) {
+                return Some(id);
+            }
         }
         // Il nome pagina è il nome senza estensione, e una chiave che finisce
         // con l'estensione di un allegato non lo è (`names_an_attachment`).
@@ -424,6 +430,52 @@ impl LinkGraph {
         // l'utente intendesse. Lì l'ambiguità è genuina e la priorità resta la
         // risposta.
         first_of(&self.alias_index, key)
+    }
+
+    /// Il documento il cui percorso **finisce** con la chiave di un wikilink
+    /// con `/`, a confine di cartella: `progetti/alpha` è la coda di
+    /// `note/progetti/alpha`, non di `note/xprogetti/alpha`.
+    ///
+    /// I candidati sono i documenti col nome dell'ultimo segmento, quindi il
+    /// costo è quello degli omonimi, non del vault. Fra più code vince la
+    /// stessa priorità degli omonimi per nome — il più vicino alla radice, poi
+    /// l'ordine dei path — e prima ancora, come dalla radice, chi combacia
+    /// esattamente (estensione e caso), poi chi combacia nel caso.
+    ///
+    /// La chiave si prova intera e senza estensione, come fa il percorso dalla
+    /// radice: `progetti/v1.2` è la coda di `note/progetti/v1.2.md`, e
+    /// `progetti/alpha.md` quella di `note/progetti/alpha.md`.
+    fn resolve_path_suffix(&self, key: &str, exact: &str) -> Option<DocId> {
+        let stem = strip_ext(key);
+        let path_of = |id: &DocId| resolution_key(&strip_ext(id.as_str()));
+        let mut candidates: Vec<&DocId> = Vec::new();
+        for form in [key, stem.as_str()] {
+            let tail = format!("/{form}");
+            let Some(ids) = self.name_index.get(file_name(form)) else {
+                continue;
+            };
+            for id in ids {
+                if path_of(id).ends_with(&tail) && !candidates.contains(&id) {
+                    candidates.push(id);
+                }
+            }
+        }
+        if candidates.is_empty() {
+            return None;
+        }
+        candidates.sort_by(|a, b| precedence(&self.prose, a, b));
+        let exact_tail = format!("/{exact}");
+        let exact_stem_tail = format!("/{}", strip_ext(exact));
+        candidates
+            .iter()
+            .find(|id| exact_key(id.as_str()).ends_with(&exact_tail))
+            .or_else(|| {
+                candidates
+                    .iter()
+                    .find(|id| exact_key(&strip_ext(id.as_str())).ends_with(&exact_stem_tail))
+            })
+            .or_else(|| candidates.first())
+            .map(|id| (*id).clone())
     }
 
     /// Fra i candidati di una chiave vince chi **combacia esattamente** con ciò

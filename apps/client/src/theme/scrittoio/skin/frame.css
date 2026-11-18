@@ -852,3 +852,45 @@
   background: color-mix(in oklab, black 9%, transparent);
   transition: opacity var(--duration-slow) var(--ease);
 }
+
+/* La barra del titolo si attenua e torna piena al passaggio del puntatore, o
+   quando il fuoco ci entra da tastiera. Si attenua nei colori e non con
+   un'opacità: un velo porterebbe il nome del vault e l'invito della pillola
+   sotto 2:1, mentre il grigio quieto (`--muted`) tiene 4,5:1 sul fondo della
+   barra in tutte e due le luci. Il nome del vault e il titolo scendono al
+   grigio, la pillola perde il pozzetto e il marchio, che è un disegno e non
+   un testo, si vela a metà (le sue parti chiare restano sopra 3:1); la
+   durata è quella del velo. */
+[data-focus-mode] .titlebar :is(.vault-chip, .pill-title) {
+  transition: color var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar .pill {
+  transition: transform var(--duration-state) var(--ease), background-color var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar .brand-glyph {
+  transition: opacity var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) :is(.vault-chip, .pill-title) {
+  color: var(--muted);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) .pill {
+  background: var(--bg);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) .brand-glyph {
+  opacity: 0.5;
+}
+
+/* «Esci dalla concentrazione», in testa alla parte destra della banda: il
+   gesto che si cerca, nella tinta dell'accento e in grassetto, come nel
+   prototipo. */
+.status-item--button.status-focus-exit {
+  min-height: 24px;
+  padding: 0 9px;
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+  font-weight: var(--weight-bold);
+}
+.status-item--button.status-focus-exit:hover {
+  background: var(--accent-wash);
+  color: var(--text);
+}

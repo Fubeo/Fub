@@ -17,6 +17,7 @@ import { linkDialog } from "./link-dialog";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
 import { cursorElements } from "./cursor-elements";
 import { markdownPaste } from "./paste";
+import { formulaPaste } from "./math/paste";
 import { openLinkKeymap } from "./open-link";
 import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
@@ -24,6 +25,7 @@ import { blockIdMarks } from "./block-id";
 import { transformKeymap } from "./blocks/transform";
 import { commentSource } from "./comments/source";
 import type { NoteFactsExtensions } from "./note-facts";
+import { italianTypography } from "./typography";
 
 const typography = Prec.high(EditorView.theme({
   ".cm-content": {
@@ -179,6 +181,10 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
   // Sorgente) tiene la stessa istanza del plugin, e con lei le parole
   // ignorate in questa sessione.
   let proof: Extension = [];
+  // La tipografia italiana (`editor.typography`), in Sorgente e in Scrittura:
+  // un'istanza sola, che tiene l'impostazione letta fra un `reconfigure` e
+  // l'altro.
+  const quotes = italianTypography({ forms: () => syntaxForms });
 
   return {
     extensions() {
@@ -187,7 +193,11 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         monospaceCode,
         frontmatter,
         markdownEditingExtensions(),
+        // Le formule incollate coi loro delimitatori (T65), prima dell'incolla
+        // del Markdown.
+        formulaPaste,
         markdownPaste,
+        quotes,
         openLinkKeymap(options.callbacks),
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         cursorElements,

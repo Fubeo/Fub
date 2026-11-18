@@ -814,7 +814,6 @@ const RECORD_KEYS: Record<string, string[]> = {
   DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true }),
   DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true }),
   Span: keysOf<Span>({ start: true, end: true }),
-  VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
   NeighborRef: keysOf<NeighborRef>({ doc: true, via: true, depth: true }),
   BacklinkRef: keysOf<BacklinkRef>({ source: true, context: true }),
   TrashEntry: keysOf<TrashEntry>({ id: true, original: true, deleted_at: true, size: true }),
@@ -924,6 +923,11 @@ const RECORD_KEYS: Record<string, string[]> = {
 /// ci siano, non che ci siano tutte. Un campo aggiunto in Rust e non qui resta
 /// comunque rosso — arriva nella fixture e non è fra le chiavi dichiarate.
 const PARTIAL_RECORD_KEYS: Record<string, { all: string[]; required: string[] }> = {
+  // La nota c'è solo sui testi conservati (`version.keep`), assente altrove.
+  VersionRef: {
+    all: keysOf<Required<VersionRef>>({ ts: true, hash: true, size: true, note: true }),
+    required: ["ts", "hash", "size"],
+  },
   DocumentMatch: {
     all: keysOf<Required<DocumentMatch>>({
       doc: true,

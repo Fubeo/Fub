@@ -146,6 +146,13 @@
     padding-right: 18px;
     padding-left: 18px;
   }
+  /* Al tocco, coi Blocchi, il «+» e la maniglia stanno a sinistra del
+     blocco del cursore: il margine resta quello del gradino prima (40 px),
+     sempre, così il testo non si sposta quando compaiono. */
+  .pane-editor[data-markdown-mode="live_preview"] .cm-editor.cm-fub-blocks-touch .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-editor.cm-fub-blocks-touch .cm-content {
+    padding-left: 40px;
+  }
 }
 
 /* ── Il corpo ────────────────────────────────────────────────────────────── */
@@ -238,6 +245,11 @@
 }
 .cm-editor .cm-content .cm-markdown-block > :last-child {
   margin-bottom: 0;
+}
+/* Col cursore su una riga vuota dopo il widget la riga si vede, alta quanto
+   lo stacco: lo stacco le cede il posto e il testo sotto resta dov'era. */
+.cm-editor .cm-content .cm-markdown-block:has(+ .cm-markdown-gap-lead) {
+  padding-bottom: 0;
 }
 
 /* ── I titoli ────────────────────────────────────────────────────────────── */
@@ -492,17 +504,20 @@
 .cm-editor .cm-content .cm-fub-link-card-fetch:disabled {
   color: var(--doc-gutter-fg);
 }
-/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link» e
-   «Scheda», due pulsanti piccoli nei toni del margine. Quello scelto è premuto. */
+/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link»,
+   «Scheda» e, per un sito dell'elenco chiuso, «Incorpora» (T37); pulsanti
+   piccoli nei toni del margine. Quello scelto è premuto. */
 .cm-editor .cm-content .cm-fub-address-choice {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin: var(--space-1) 0;
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link,
-.cm-editor .cm-content .cm-fub-address-choice-card {
+.cm-editor .cm-content .cm-fub-address-choice-card,
+.cm-editor .cm-content .cm-fub-address-choice-embed {
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--doc-rule-soft);
   border-radius: var(--radius-control);
@@ -511,17 +526,20 @@
   font: inherit;
 }
 .cm-editor .cm-content .cm-fub-address-choice-link:hover,
-.cm-editor .cm-content .cm-fub-address-choice-card:hover {
+.cm-editor .cm-content .cm-fub-address-choice-card:hover,
+.cm-editor .cm-content .cm-fub-address-choice-embed:hover {
   background: var(--doc-fill-soft);
   color: var(--doc-fg);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link[aria-pressed="true"],
-.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"] {
+.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"],
+.cm-editor .cm-content .cm-fub-address-choice-embed[aria-pressed="true"] {
   color: var(--doc-fg);
   border-color: var(--doc-fg);
 }
 .cm-editor .cm-content .cm-fub-address-choice-link:focus-visible,
-.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible {
+.cm-editor .cm-content .cm-fub-address-choice-card:focus-visible,
+.cm-editor .cm-content .cm-fub-address-choice-embed:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -566,18 +584,17 @@
    blocchi selezionati. Con un puntatore i pulsanti non si vedono a riposo e
    compaiono, nel grigio pieno della pagina (il --muted del prototipo
    tradotto nella tavolozza del documento), sul blocco sotto il puntatore;
-   senza passaggio restano sul blocco del cursore. La maniglia sotto il
-   puntatore prende l'accento e gli occhi crescono appena. */
+   al tocco (`cm-fub-blocks-touch`, nessun puntatore che passi sopra)
+   restano sul blocco del cursore. La maniglia sotto il puntatore prende
+   l'accento e gli occhi crescono appena. */
 .cm-editor .cm-fub-block-add,
 .cm-editor .cm-fub-block-grip {
   color: var(--doc-gutter-fg);
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
-@media (hover: hover) {
-  .cm-editor .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-add,
-  .cm-editor .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-grip {
-    opacity: 0;
-  }
+.cm-editor:not(.cm-fub-blocks-touch) .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-add,
+.cm-editor:not(.cm-fub-blocks-touch) .cm-fub-block-handles:not([data-active="true"]):not(:focus-within) .cm-fub-block-grip {
+  opacity: 0;
 }
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-add,
 .cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-grip,
@@ -1168,9 +1185,102 @@ button.cm-fub-page-icon:focus-visible {
   font-weight: var(--weight-bold);
   line-height: 1;
 }
-.cm-fub-page-prop[data-mismatch] .cm-fub-page-prop-value {
+.cm-fub-page-prop[data-mismatch] .cm-fub-page-prop-value,
+.cm-fub-page-prop[data-outside] .cm-fub-page-prop-value {
   text-decoration: underline wavy var(--doc-wavy) 1px;
   text-underline-offset: 3px;
+}
+/* L'indirizzo (T9): il testo è un link, che il clic apre; la matita accanto
+   lo modifica in riga. */
+.cm-fub-prop-url {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+/* La Relazione (T35, `.lnk` del prototipo): i nomi delle note legate, color
+   inchiostro e sottolineati d'accento; il nome apre la nota, il resto del
+   valore il riquadro. Un valore che non è un link resta testo. */
+.cm-fub-prop-rels {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cm-fub-prop-rel {
+  color: var(--doc-fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 50%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cm-fub-prop-rel:hover {
+  text-decoration-color: var(--doc-link);
+}
+.cm-fub-prop-rel-text {
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-relation {
+  width: 300px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.cm-fub-prop-relation .cm-fub-prop-note {
+  margin: var(--space-4) var(--space-5);
+}
+.cm-fub-prop-relation [role="option"] > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--doc-ghost);
+}
+.cm-fub-prop-relation .cm-fub-prop-menu-label {
+  display: grid;
+  min-width: 0;
+}
+.cm-fub-prop-relation .cm-fub-prop-menu-label > span,
+.cm-fub-prop-relation .cm-fub-prop-menu-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-prop-url-cell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+.cm-fub-prop-url-cell > .cm-fub-page-prop-value {
+  flex: 1;
+}
+.cm-fub-prop-url-edit {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--doc-gutter-fg);
+  cursor: pointer;
+}
+.cm-fub-prop-url-edit > svg {
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-url-edit:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.cm-fub-prop-url-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Mentre il campo è aperto la matita non serve. */
+.cm-fub-page-prop-value[data-editing] + .cm-fub-prop-url-edit {
+  display: none;
 }
 .cm-fub-prop-mismatch {
   color: var(--doc-gutter-fg);
@@ -1365,6 +1475,13 @@ button.cm-fub-page-icon:focus-visible {
   font: inherit;
   cursor: pointer;
 }
+/* L'orologio davanti al testo di «Aggiungi l'ora»: 14 px, 4 px dal testo,
+   sulla linea di base come nel prototipo. */
+.cm-fub-prop-date-action > svg {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-2);
+}
 .cm-fub-prop-date-nav:hover,
 .cm-fub-prop-date-day:not([data-selected]):hover,
 .cm-fub-prop-date-action:hover,
@@ -1407,7 +1524,8 @@ button.cm-fub-page-icon:focus-visible {
   cursor: pointer;
 }
 /* Le persone: la ricerca in cima (`.m-s` del prototipo), le proposte sotto. */
-.cm-fub-prop-people {
+.cm-fub-prop-people,
+.cm-fub-prop-choices {
   width: 300px;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -1435,8 +1553,58 @@ button.cm-fub-page-icon:focus-visible {
   font-size: 12.5px;
   line-height: var(--leading-normal);
 }
-.cm-fub-prop-people .cm-fub-prop-note {
+.cm-fub-prop-people .cm-fub-prop-note,
+.cm-fub-prop-choices .cm-fub-prop-note {
   margin: var(--space-4) var(--space-5);
+}
+/* Selezione e Stato (T9, `propEditor` del prototipo): i gruppi dello Stato
+   come intestazioni (`.m-h`), «Crea» col nome e, sotto, dove va (`.lb
+   small`), in fondo la riga sul registro (`.m-foot`). */
+.cm-fub-prop-group[aria-disabled="true"] {
+  min-height: 0;
+  padding: 9px var(--space-4) var(--space-2);
+  color: var(--doc-ghost);
+  font-size: 11.5px;
+  font-weight: var(--weight-bold);
+  opacity: 1;
+  cursor: default;
+}
+.cm-fub-prop-create > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.cm-fub-prop-create .cm-fub-prop-menu-label {
+  display: grid;
+  min-width: 0;
+}
+.cm-fub-prop-create .cm-fub-prop-menu-hint {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-fub-prop-empty {
+  margin: 0;
+  padding: 14px var(--space-5);
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-prop-empty[hidden] {
+  display: none;
+}
+.cm-fub-prop-foot {
+  margin: 0;
+  padding: 7px var(--space-5);
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.cm-fub-prop-foot > svg {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-2);
+  vertical-align: -2px;
 }
 .cm-fub-prop-note[hidden] {
   display: none;
@@ -1493,6 +1661,56 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
+/* Il tipo che la nota nomina non c'è, non si legge o non è un nome (E5):
+   un avviso come quello del frontmatter che non si legge, nel colore
+   dell'attenzione e non del guasto (la nota va), con i gesti che lo
+   risolvono in fondo alla riga. */
+.cm-fub-page-type-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.cm-fub-page-type-notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--warning);
+}
+.cm-fub-page-type-text {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+.cm-fub-page-type-action {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cm-fub-page-type-action:hover {
+  background: var(--doc-block-hover);
+}
+/* L'icona del tipo, al posto di quella che la nota non ha: la stessa, un
+   po' più quieta, perché non è della nota. */
+.cm-fub-page-icon[data-from-type] {
+  opacity: 0.85;
+}
+
 /* La riga dei dati chiude la testata, con un filo che la stacca dal testo.
    Le misure di `.facts` del prototipo (12.5/1.4), nei colori della carta.
    L'altezza non intera della riga non sposta le maniglie: CodeMirror misura
@@ -1565,6 +1783,11 @@ button.cm-fub-page-icon:focus-visible {
   }
   .cm-fub-page-prop {
     grid-template-columns: minmax(0, 108px) minmax(0, 1fr);
+  }
+  /* Il margine del tocco coi Blocchi (sopra): la copertina resta da bordo a
+     bordo. */
+  .cm-editor.cm-fub-blocks-touch .cm-fub-page-cover {
+    margin-left: -40px;
   }
 }
 /* Il segno della scelta in vigore nel menu «…» della pagina. */
@@ -2256,11 +2479,6 @@ button.cm-fub-page-icon:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* L'avviso sotto il diagramma che si scrive: l'ultima resa buona resta. */
-.cm-editor .cm-content .cm-fub-diagram-notice {
-  color: var(--doc-danger);
-  font-family: var(--font-ui);
-}
 /* Il riquadro della formula (C6): il TeX in carattere fisso, e sotto la resa. */
 .cm-fub-math-field {
   font-family: var(--font-mono);
@@ -2461,9 +2679,14 @@ button.cm-fub-page-icon:focus-visible {
   max-width: 100%;
   vertical-align: baseline;
 }
+/* Una formula larga scorre di lato; in verticale no: i puntelli invisibili di
+   KaTeX sotto una frazione sporgono di qualche pixel, e col solo `overflow-x`
+   il blocco scorrerebbe anche in alto e in basso, diventando una fermata del
+   Tab senza niente da leggere. */
 .markdown-rendered .math-block {
   display: block;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: var(--space-2) 0;
   text-align: center;
 }
@@ -2521,9 +2744,15 @@ button.cm-fub-page-icon:focus-visible {
    destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .embed,
-.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing {
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected [data-web-embed-site] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* Una pagina web incorporata (T37) non ha una larghezza da tirare: il
+   segnaposto è uno solo, e la pagina si vede nel visore. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected:has([data-web-embed-site]) .cm-fub-image-handle {
+  display: none;
 }
 /* La selezione del testo non si stende sotto l'immagine scelta: il contorno
    dice già che è presa, come in Word. */
@@ -2629,7 +2858,8 @@ button.cm-fub-page-icon:focus-visible {
   padding-top: 0;
 }
 /* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
-   ciclo e una catena troppo profonda sono due cose diverse. */
+   ciclo, una catena troppo profonda e un blocco che non c'è più sono cose
+   diverse. */
 .embed-cycle::after,
 .embed-too-deep::after {
   color: var(--muted);
@@ -2641,6 +2871,12 @@ button.cm-fub-page-icon:focus-visible {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
 }
+/* Il blocco sincronizzato il cui blocco non c'è più: la frase, nella lingua
+   della UI, al posto del link. */
+.embed.embed-missing {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
 /* Un'immagine, un audio o un video incorporati sono il media, non una nota
    riportata: niente filo intorno. */
 .embed.embed-media {
@@ -2651,120 +2887,6 @@ button.cm-fub-page-icon:focus-visible {
 .markdown-rendered .embed[data-embed-url],
 .markdown-rendered .embed[data-embed-path] {
   min-height: var(--text-3xl);
-}
-
-/* ── Diagrammi ───────────────────────────────────────────────────────────── */
-
-/* Il renderer condiviso usa immagini SVG inerti, non SVG attivo nella shell.
-   Il diagramma è una tavola appoggiata sulla carta: fondo di un tono, niente
-   bordo. */
-.mermaid-diagram {
-  overflow: auto;
-  margin: 0;
-  padding: var(--space-4) var(--space-5) var(--space-5);
-  border-radius: var(--radius-control);
-  background: var(--sheet-2);
-  color: var(--doc-fg);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  white-space: normal;
-}
-.mermaid-diagram figcaption {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
-  margin-bottom: var(--space-4);
-  color: var(--muted);
-  font-weight: var(--weight-medium);
-}
-/* Stile, esportazione e sorgente: gesti secondari, a voce bassa finché non li
-   si cerca. */
-.mermaid-diagram .mermaid-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-1);
-}
-.mermaid-diagram .mermaid-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 24px;
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-}
-.mermaid-diagram .mermaid-action:hover,
-.mermaid-diagram .mermaid-action:focus-visible {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.mermaid-diagram .mermaid-action:active {
-  background: var(--overlay-active);
-}
-.mermaid-diagram .mermaid-action[aria-expanded="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-/* Tre colori dello stile attivo: lo si riconosce prima di leggerne il nome. */
-.mermaid-diagram .mermaid-swatches {
-  display: inline-flex;
-  overflow: hidden;
-  border-radius: var(--radius-xs);
-  box-shadow: 0 0 0 1px var(--doc-rule-soft);
-}
-.mermaid-diagram .mermaid-swatches span {
-  width: 6px;
-  height: 12px;
-}
-.mermaid-diagram img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin-inline: auto;
-  border-radius: 0;
-}
-/* Uno stile con la sua carta è una tavola appoggiata sulla cornice. Armonia è
-   trasparente e si fonde con la cornice. */
-.mermaid-diagram[data-diagram-style="acquerello"] img,
-.mermaid-diagram[data-diagram-style="aurora"] img,
-.mermaid-diagram[data-diagram-style="blueprint"] img,
-.mermaid-diagram[data-diagram-style="inchiostro"] img {
-  border-radius: var(--radius-chip);
-  box-shadow: var(--shadow-1);
-}
-.mermaid-diagram summary {
-  margin-top: var(--space-4);
-  color: var(--muted);
-  cursor: pointer;
-}
-.mermaid-diagram summary:hover {
-  color: var(--text);
-}
-.mermaid-diagram pre {
-  overflow: auto;
-  max-height: 24em;
-  margin: var(--space-3) 0 0;
-  padding: var(--space-4) var(--space-5);
-  background: var(--sheet);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  white-space: pre;
-}
-.mermaid-diagram[data-state="error"] {
-  background: var(--danger-wash);
-}
-.mermaid-diagram [role="status"] {
-  margin: 0;
-  color: var(--muted);
-  overflow-wrap: anywhere;
 }
 
 /* ── Proprietà, note a piè, blocchi che nessuno disegna ──────────────────── */

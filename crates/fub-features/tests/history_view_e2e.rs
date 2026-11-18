@@ -120,6 +120,16 @@ impl Vault {
     }
 
     fn open(&self) -> Workspace {
+        self.mount(false)
+    }
+
+    /// Come lo monta l'host (`fub_host::mount`): i comandi costruiti sullo
+    /// store aperto, quindi anche `version.keep` e `version.clear`.
+    fn open_keeping(&self) -> Workspace {
+        self.mount(true)
+    }
+
+    fn mount(&self, keeping: bool) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
             .register(MarkdownProvider::boxed())
@@ -134,15 +144,20 @@ impl Vault {
         let store = ws
             .with_host(VERSIONING_ID, VersionStore::open)
             .expect("store versioni");
+        let commands = if keeping {
+            VersioningCommands::over(store.clone())
+        } else {
+            VersioningCommands::default()
+        };
         ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(store)))
             .expect("handler registrato");
-        // …e lo store **finisce qui**: la view e il comando qui sotto non lo
-        // ricevono. È la proprietà che questo banco esiste per provare — chi
-        // disegna rilegge dal proprio spazio dati, e non ha bisogno che qualcuno
-        // gli presti l'esemplare in memoria di chi scrive.
+        // …e lo store **finisce qui**: la view non lo riceve. È la proprietà
+        // che questo banco esiste per provare — chi disegna rilegge dal proprio
+        // spazio dati, e non ha bisogno che qualcuno gli presti l'esemplare in
+        // memoria di chi scrive.
         ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
             .expect("view registrata");
-        ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands::default()))
+        ws.register_command_provider(VERSIONING_ID, Box::new(commands))
             .expect("comando registrato");
         ws.reindex().expect("reindex");
         ws
@@ -887,4 +902,246 @@ fn copying_a_version_hands_its_text_to_the_shell_without_writing() {
         "com'è\n",
         "copiare non tocca la nota"
     );
+}
+
+/// **Il testo conservato e «Annulla» dopo un ripristino**, dal registro vero.
+///
+/// `version.keep` passa dal registro come lo chiama la shell
+/// (`invoke_command`), il pannello mostra la nota sulla versione e lascia
+/// «Versione attuale» sulla fotografia del disco; dopo un «Sì, ripristina»
+/// offre «Annulla», che esegue l'annullamento dichiarato da `version.restore`
+/// e riporta la nota al disco di prima — non al testo conservato, che pure è
+/// la versione più recente.
+#[test]
+fn a_kept_text_shows_its_note_and_a_restore_offers_undo() {
+    const NOTE: &str = "Testo scartato nel conflitto del 18 novembre 2026";
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "uno\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    ws.write_document(&doc, "due\n", WriteBase::Dictated)
+        .expect("riscritta");
+    ws.invoke_command(
+        fub_features::versioning::VERSION_KEEP,
+        serde_json::json!({ "doc": "Uno.md", "text": "scartato\n", "note": NOTE }),
+        fub_abi::command::InvokeMode::Apply,
+        fub_abi::event::Actor::User,
+    )
+    .expect("il testo si conserva");
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "due\n",
+        "il file non cambia"
+    );
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let listed = entries(&tree);
+    assert_eq!(listed[0].1.as_deref(), Some(NOTE), "{listed:?}");
+    assert_eq!(
+        listed[1].1.as_deref(),
+        Some("Versione attuale"),
+        "{listed:?}"
+    );
+    assert!(
+        button(&tree, "Annulla").is_none(),
+        "nessun ripristino, niente da annullare"
+    );
+
+    // Un ripristino della versione più vecchia, con la domanda e il sì.
+    let (_, restore) = restores(&mut ws);
+    let yes = confirms(&mut ws, restore.expect("il bottone c'è"));
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(yes.action.0).with_payload(yes.payload),
+        )
+        .expect("ripristinata")
+    else {
+        panic!("il pannello si ridisegna")
+    };
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "uno\n"
+    );
+    assert!(
+        said(&root).contains("Ripristinata la versione del"),
+        "{}",
+        said(&root)
+    );
+    let undo = button(&root, "Annulla").expect("«Annulla» dopo il ripristino");
+    // L'offerta sopravvive al ridisegno che segue la scrittura.
+    let redrawn = ws.render_view(&instance()).unwrap();
+    assert!(button(&redrawn, "Annulla").is_some());
+
+    ws.view_action(
+        &instance(),
+        UiAction::new(undo.action.0).with_payload(undo.payload),
+    )
+    .expect("annullato");
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "due\n",
+        "si torna al disco di prima del ripristino, non al testo conservato"
+    );
+    let after = ws.render_view(&instance()).unwrap();
+    assert!(
+        button(&after, "Annulla").is_none(),
+        "annullato una volta, l'offerta sparisce"
+    );
+    assert!(
+        entries(&after)
+            .iter()
+            .any(|(_, sub)| sub.as_deref() == Some(NOTE)),
+        "il testo conservato resta nella cronologia"
+    );
+}
+
+/// L'offerta di «Annulla» vale finché la nota è quella del ripristino: una
+/// scrittura dopo la toglie, perché disfare il ripristino non sarebbe più il
+/// contrario dell'ultima cosa successa.
+#[test]
+fn a_write_after_the_restore_withdraws_the_undo() {
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "uno\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    ws.write_document(&doc, "due\n", WriteBase::Dictated)
+        .expect("riscritta");
+    let (_, restore) = restores(&mut ws);
+    let yes = confirms(&mut ws, restore.expect("il bottone c'è"));
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(yes.action.0.clone()).with_payload(yes.payload.clone()),
+        )
+        .expect("ripristinata")
+    else {
+        panic!("il pannello si ridisegna")
+    };
+    let undo = button(&root, "Annulla").expect("offerta");
+
+    ws.write_document(&doc, "tre\n", WriteBase::Dictated)
+        .expect("scritta dopo");
+    assert!(button(&ws.render_view(&instance()).unwrap(), "Annulla").is_none());
+    // E il clic arrivato prima del ridisegno non fa niente.
+    ws.view_action(
+        &instance(),
+        UiAction::new(undo.action.0).with_payload(undo.payload),
+    )
+    .expect("ignorato");
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "tre\n"
+    );
+}
+
+/// Gli avvisi della cronologia arrivati sul bus, in ordine: `true` per un
+/// invito a ridisegnare il pannello, `false` per una scrittura del documento.
+fn history_notices(events: &fub_kernel::Subscription) -> Vec<bool> {
+    events
+        .try_iter()
+        .filter_map(|notice| match notice.event {
+            fub_abi::event::Event::ViewInvalidated { view, instance } if view == HISTORY_VIEW => {
+                assert!(instance.is_none(), "la storia cambia per ogni esemplare");
+                Some(true)
+            }
+            fub_abi::event::Event::DocumentChanged { .. } => Some(false),
+            _ => None,
+        })
+        .collect()
+}
+
+/// IMP-136: **il testo conservato da un conflitto si vede subito.**
+///
+/// `version.keep` scrive lo spazio dati della cronologia e non la nota: niente
+/// `document-changed`, e un lotto senza documenti non chiude con un
+/// `batch-ended`. Senza un invito esplicito il pannello già aperto restava
+/// fermo su «Nessuna versione.», e la voce compariva solo riaprendo la nota.
+#[test]
+fn a_kept_text_invites_the_open_panel_to_redraw() {
+    const NOTE: &str = "Testo scartato nel conflitto del 18 novembre 2026";
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "disco\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    let events = ws.bus().subscribe();
+
+    ws.invoke_command(
+        fub_features::versioning::VERSION_KEEP,
+        serde_json::json!({ "doc": "Uno.md", "text": "mio testo\n", "note": NOTE }),
+        fub_abi::command::InvokeMode::Apply,
+        fub_abi::event::Actor::User,
+    )
+    .expect("il testo si conserva");
+
+    assert_eq!(
+        history_notices(&events),
+        vec![true],
+        "il pannello è invitato a ridisegnarsi, senza fingere una scrittura della nota"
+    );
+    // E il ridisegno che segue l'invito trova la voce.
+    let listed = entries(&ws.render_view(&instance()).unwrap());
+    assert_eq!(listed[0].1.as_deref(), Some(NOTE), "{listed:?}");
+}
+
+/// Una fotografia nasce **dopo** che il `document-changed` è già sul bus: il
+/// bus consegna subito a chi ascolta, l'handler che fotografa gira dopo. Il
+/// ridisegno chiesto da quell'evento poteva leggere l'indice di prima: nel
+/// collaudo di IMP-136 nemmeno il file cambiato da fuori compariva. L'invito
+/// che segue la fotografia arriva quando l'indice è già sul disco.
+#[test]
+fn an_external_change_invites_the_redraw_after_the_snapshot() {
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "disco\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    let events = ws.bus().subscribe();
+
+    let path = vault.root.join("Uno.md");
+    std::fs::write(&path, "cambiato da fuori\n").expect("scrittura esterna");
+    assert!(ws.sync_path(&path).expect("il watcher la vede"));
+
+    let notices = history_notices(&events);
+    let changed = notices
+        .iter()
+        .position(|n| !n)
+        .unwrap_or_else(|| panic!("document-changed: {notices:?}"));
+    assert!(
+        notices[changed..].contains(&true),
+        "l'invito segue la scrittura: {notices:?}"
+    );
+    let listed = entries(&ws.render_view(&instance()).unwrap());
+    assert_eq!(listed.len(), 2, "{listed:?}");
+}
+
+/// Svuotare la cronologia non scrive nessuna nota: anche qui il pannello
+/// aperto è invitato a ridisegnarsi, o resterebbe sulla lista di prima.
+#[test]
+fn clearing_the_history_invites_the_redraw() {
+    let vault = Vault::new();
+    let mut ws = vault.open_keeping();
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "disco\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    let events = ws.bus().subscribe();
+
+    ws.invoke_command(
+        fub_features::versioning::VERSION_CLEAR,
+        serde_json::json!({}),
+        fub_abi::command::InvokeMode::Apply,
+        fub_abi::event::Actor::User,
+    )
+    .expect("svuotata");
+
+    assert_eq!(history_notices(&events), vec![true]);
+    assert!(said(&ws.render_view(&instance()).unwrap()).contains("Nessuna versione"));
 }

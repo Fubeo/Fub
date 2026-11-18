@@ -346,9 +346,8 @@ pulsanti del kit sotto (`.canvas-card-missing`):
 
 Le regole:
 
-- La tela ascolta il file con `watch` finché la scheda è mancante. Quando il
-  file torna o cambia, la scheda si rimonta da sé con la sua vista; se il
-  renderer dice di nuovo che manca, torna mancante.
+- Tutto sta dentro la scheda (IMP-045): ciò che non ci sta esce in basso, mai in alto (`justify-content: safe center`), e la scheda lo taglia. Il segnaposto è un contenitore (`container-type: size`): fino a 120 px di altezza (un file nasce 200×100) il messaggio va su una riga coi puntini e i due pulsanti, più piccoli, si stringono accanto; il testo intero sta nel suggerimento (`title`).
+- La tela ascolta il file con `watch` finché la scheda è mancante. Quando il file torna o cambia, la scheda si rimonta da sé con la sua vista; se il renderer dice di nuovo che manca, torna mancante.
 - Se il file torna, o la scheda cambia, mentre il selettore di «Ritrova…» è
   aperto, la scelta è vecchia e non tocca niente.
 - Il segnaposto si rifà quando cambiano la lingua o la sola lettura, e quando

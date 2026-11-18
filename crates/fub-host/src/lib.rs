@@ -172,6 +172,19 @@ mod legacy_tests;
 #[cfg(test)]
 mod quiet_panic;
 
+/// I promemoria dei compiti per chi li notifica fuori dal kernel, cioè l'app:
+/// la domanda e la risposta della rotta, la regola di quando suonano e le
+/// parole della notifica. Passano di qui perché chi monta è il solo che
+/// raggiunge le feature ufficiali (`the_glue_does_not_bypass_the_mounter`).
+#[cfg(feature = "tasks")]
+pub mod reminders {
+    pub use fub_features::tasks::reminders::{
+        notification_more, notification_words, NotificationWords, ReminderEntry, ReminderList,
+        ReminderWatch, RemindersQuery, WatchStep,
+    };
+    pub use fub_features::TASKS_ID;
+}
+
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};
 pub use jobs::JobHost;

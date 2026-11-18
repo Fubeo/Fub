@@ -54,8 +54,9 @@ describe("il costrutto delle icone", () => {
     // di «Copia come» (Markdown, HTML, testo senza formattazione); poi le
     // dieci figure del tipo di una proprietà della testata (testo, numero,
     // selezione, stato, data, casella, persone, indirizzo, etichette,
-    // elenco).
-    expect(names).toHaveLength(77);
+    // elenco); infine i tre segni di «Copia come» della formula (LaTeX,
+    // immagine, equazione).
+    expect(names).toHaveLength(80);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

@@ -20,6 +20,7 @@ export const SETTINGS_WITH_THEIR_OWN_GESTURE: readonly string[] = [
   "chrome.rail.hidden",
   "properties.types",
   "appearance.theme-id",
+  "chrome.formatbar.visible",
   "developer.theme-folder",
 ];
 

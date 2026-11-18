@@ -94,13 +94,15 @@ import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { DiagramLiveWidget, fenceBody } from "./diagram-live";
+import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
+import { dayPage, type DayPageSource } from "./day-page";
+import { typePage, type TypePageSource } from "./type-page";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
-import { blockTex, MathBlockLiveWidget, mathPopovers, type LiveFormula } from "./math-live";
+import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, type LiveFormula } from "./math-live";
 import { imageGestures } from "./image-live";
 import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code-block";
 import { blockPrefixes } from "./block-prefix";
@@ -159,6 +161,12 @@ export interface LivePreviewCallbacks {
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
+  /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
+  readonly dayPage?: DayPageSource;
+  /// La nota del tipo aperta, per la pagina del tipo dopo l'ultima riga (E5,
+  /// `./type-page`). Assente, o `null`, la pagina non c'è.
+  readonly typePage?: TypePageSource;
 }
 
 /// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
@@ -1978,7 +1986,10 @@ function realignMounted(view: EditorView, root: HTMLElement): void {
 
 function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
   if (!target) return false;
-  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], .tag[data-tag]")) return true;
+  // L'editor di una trasclusione viva (`transclusion.ts`) ha cursore e
+  // selezione suoi: la nota che ospita non sposta il suo. Il testo di un
+  // blocco sincronizzato (T30) apre quell'editor al clic.
+  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], [data-transclusion-editing], [data-transclusion-direct] > .transclusion-body, .tag[data-tag]")) return true;
   // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
   // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
   // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.
@@ -2235,6 +2246,11 @@ class MarkdownWidget extends WidgetType {
 }
 
 const GAP = Decoration.line({ class: "cm-markdown-gap" });
+/// La prima riga dopo un blocco reso quando il cursore sta su una delle sue
+/// righe vuote: la riga del cursore si vede, e lo stacco sotto il blocco (il
+/// suo padding, `cm-markdown-block` e `tb-frame` nella pelle) le cede il
+/// posto, così il testo che segue non si sposta (#411, A-01).
+const GAP_LEAD = Decoration.line({ class: "cm-markdown-gap-lead" });
 
 /// Se `position` cade in uno degli intervalli, ordinati e disgiunti, che un
 /// blocco reso copre.
@@ -2700,10 +2716,19 @@ export function livePreview(
       return { decision: `k${card.kind}`, ranges };
     }
     const block = movedBlock(mark.block, from + mark.offset);
-    if (!grid && touched(state, from, to)) {
-      // Un diagramma toccato si scrive come codice, e il disegno resta
-      // sotto (C5).
-      if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
+    if (!grid && block.kind === "math" && touched(state, from, to) && mathTouchable(state) && blockTexRange(state, from)) {
+      // Un blocco `$$` toccato si modifica sul posto, senza il suo LaTeX (T60).
+      ranges.push(Decoration.replace({ block: true, widget: new MathBlockEditWidget(from, blockTex(block.source)) }).range(from, to));
+      return { decision: "mx", ranges };
+    }
+    const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
+    // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
+    // scrive (E26).
+    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+      // Un diagramma toccato si scrive come codice, e il disegno gli sta
+      // accanto (C5, E26).
+      if (mermaid) {
+        ranges.push(...diagramSourceLines(state, from, to));
         ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
       } else if (block.kind === "math") {
         // Così anche un blocco `$$` (C6).
@@ -2718,18 +2743,24 @@ export function livePreview(
     const { source } = document;
     const after = source.indexOf("\n", to);
     let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
+    const first = lineFrom;
+    let open = false;
     while (lineFrom !== -1 && lineFrom < next) {
       const end = source.indexOf("\n", lineFrom);
       const lineTo = end === -1 ? source.length : end;
-      if (!/\S/.test(source.slice(lineFrom, lineTo)) && !touched(state, lineFrom, lineTo)) {
+      const blank = !/\S/.test(source.slice(lineFrom, lineTo));
+      if (blank && !touched(state, lineFrom, lineTo)) {
         ranges.push(GAP.range(lineFrom));
         decision += "g";
       } else {
-        decision += "-";
+        // Una riga vuota col cursore si vede e prende lo stacco del blocco.
+        if (blank) open = true;
+        decision += blank ? "o" : "-";
       }
       if (end === -1) break;
       lineFrom = end + 1;
     }
+    if (open) ranges.push(GAP_LEAD.range(first));
     return { decision, ranges };
   }
   /// Candidati e decorazioni di tutto il documento: quando la Live parte, e
@@ -3182,5 +3213,8 @@ export function livePreview(
     commentEditing(forms), commentCopy(forms),
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
     noteHolds,
+    diagramBlockKeys,
+    callbacks.dayPage ? dayPage(callbacks.dayPage) : [],
+    callbacks.typePage ? typePage(callbacks.typePage) : [],
   ];
 }

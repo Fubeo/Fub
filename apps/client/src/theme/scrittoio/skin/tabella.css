@@ -18,6 +18,12 @@
 .cm-editor .cm-content .tb-frame {
   padding: 0 0 calc(19px + var(--text-reading) * var(--leading-relaxed) / 2);
 }
+/* Col cursore sulla riga vuota dopo la tabella la riga si vede: prende la
+   mezza riga d'aria e sale fin sotto la barra «Aggiungi una riga», così il
+   testo che segue non si sposta. */
+.cm-editor .cm-content .tb-frame:has(+ .cm-markdown-gap-lead) {
+  padding-bottom: calc(19px - var(--text-reading) * var(--leading-relaxed) / 2);
+}
 .cm-editor .cm-content .tb-grid {
   margin-top: -15px;
   margin-left: calc(-1 * var(--space-7));
@@ -318,6 +324,14 @@
   min-height: 0;
   padding: 0;
   pointer-events: none;
+}
+.cm-editor .cm-content .tb-frame:has(+ .cm-markdown-gap-lead) .tb-adders {
+  bottom: calc(19px - var(--text-reading) * var(--leading-relaxed) / 2);
+}
+/* Col puntatore sulla tabella la barra «Aggiungi una riga» compare sopra
+   quella riga: il segnaposto le lascia il posto. */
+.cm-editor .cm-content .tb-frame:hover + .cm-markdown-gap-lead .cm-fub-placeholder {
+  visibility: hidden;
 }
 .cm-editor .cm-content .tb-add {
   position: absolute;

@@ -651,7 +651,7 @@ export type ThemeIconFault = "name" | "paths" | "path_data" | "bytes";
 /// I limiti della regola delle icone. La fixture porta i valori di Rust
 /// (`theme_icon_limit`), e il mirror pretende che siano questi.
 export const THEME_ICON_LIMITS = {
-  icons: 512,
+  icons: 1024,
   paths: 8,
   icon_bytes: 4 * 1024,
   set_bytes: 256 * 1024,

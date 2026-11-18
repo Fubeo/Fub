@@ -1109,6 +1109,39 @@ describe("il moto del menu", () => {
     expect(play.timing.duration).toBeLessThanOrEqual(200);
   });
 
+  it("la barra sopra il menu esce con la sua immagine intera, smontata solo dopo", () => {
+    // jsdom non misura: senza un riquadro l'uscita non lascerebbe immagini.
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const width = this.classList.contains("context-strip") ? 16 + 30 * this.childElementCount : 120;
+      return DOMRect.fromRect({ x: 40, y: 150, width, height: 36 });
+    });
+    const seenAtUnmount: string[] = [];
+    try {
+      showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }], {
+        strip: (host) => {
+          const bar = document.createElement("div");
+          bar.className = "mini-bar";
+          bar.append(document.createElement("button"), document.createElement("button"));
+          host.append(bar);
+          return () => {
+            const ghost = document.querySelector('.context-strip[aria-hidden="true"]');
+            seenAtUnmount.push(ghost?.querySelectorAll(".mini-bar button").length.toString() ?? "senza immagine");
+            bar.remove();
+          };
+        },
+      });
+      closeContextMenu();
+      const ghost = document.querySelector<HTMLElement>('.context-strip[aria-hidden="true"]');
+      expect(ghost).not.toBeNull();
+      expect(ghost!.style.width).toBe("46px");
+      expect(ghost!.querySelectorAll(".mini-bar button")).toHaveLength(2);
+      expect(seenAtUnmount).toEqual(["2"]);
+      expect(document.querySelector('.context-strip:not([aria-hidden="true"])')).toBeNull();
+    } finally {
+      measure.mockRestore();
+    }
+  });
+
   it("col moto ridotto non si muove affatto, e una parte premuta si fa subito", () => {
     setMotionPreference("reduced");
     const run = vi.fn();
@@ -1141,6 +1174,30 @@ describe("«Copia come» nella riga", () => {
   afterEach(() => {
     closeContextMenu();
     vi.useRealTimers();
+  });
+
+  it("la formula tiene in riga i suoi segni, anche quando le scelte sono due", () => {
+    const formula = (withImage: boolean) => ({
+      label: "Copia come",
+      items: [
+        { label: "LaTeX", icon: "copy-latex", run: () => {} },
+        ...(withImage ? [{ label: "immagine", icon: "copy-image", run: () => {} }] : []),
+        { label: "equazione", icon: "copy-equation", run: () => {} },
+      ],
+    });
+    for (const [withImage, names] of [
+      [true, ["Copia come LaTeX", "Copia come immagine", "Copia come equazione"]],
+      [false, ["Copia come LaTeX", "Copia come equazione"]],
+    ] as const) {
+      showContextMenu(clickEvent(), [{ label: "Modifica", run: () => {} }, formula(withImage)], { pointer: false });
+      const signs = [...document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-choices .menu-choice")];
+      expect(signs.map((b) => b.getAttribute("aria-label"))).toEqual(names);
+      expect(signs.map((b) => b.querySelector("svg")?.getAttribute("data-icon"))).toEqual(
+        withImage ? ["copy-latex", "copy-image", "copy-equation"] : ["copy-latex", "copy-equation"],
+      );
+      expect(document.querySelector("#context-menu [aria-haspopup]"), "niente sottomenu").toBeNull();
+      closeContextMenu();
+    }
   });
 
   it("tiene i tre segni nella riga, col nome del formato per chi ascolta e per chi guarda la riga accesa", () => {

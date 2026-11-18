@@ -15,6 +15,7 @@ import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
 import { readPageMark } from "../ui/page-mark";
+import { primaryClicksOnly } from "../ui/primary-clicks";
 import { modeIcon, openModeMenu } from "../state/mode-menu";
 import type { SurfaceMode } from "../editors/core/registry";
 import { FORMAT_ICON, formatKindOf, formatNameOf } from "../ui/format-kind";
@@ -54,6 +55,7 @@ import {
 import { $ } from "../ui/dom";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../ui/menu";
 import { confirm } from "../platform/confirm";
+import { discardBody } from "../state/conflict-keep";
 import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing, type CommandEntry } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
@@ -63,7 +65,7 @@ import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
 import { distinctiveTails } from "./tab-names";
 import { tabIndexForKey } from "../ui/tab-keys";
-import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
+import { createFormatBar, currentToolbarForm, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
@@ -81,6 +83,7 @@ import {
   describeTab,
   docTitle,
   exportWindow,
+  loadPaneTools,
   mountDocumentController,
   nameTab,
   offeredExports,
@@ -362,14 +365,27 @@ function focusedTab(): { pane: string; index: number } | null {
 /// e si riappendono, i contenitori delle divisioni si rifanno.
 function layoutTree(tree: LayoutNode): void {
   const onboarding = document.getElementById("onboarding");
-  panesEl.replaceChildren(node(tree));
+  // I divisori si rifanno a ogni cambio dell'albero, anche quando cambiano solo
+  // le proporzioni: quello mosso con le frecce perdeva il fuoco alla prima, e
+  // la seconda non lo spostava più (IMP-016). Il fuoco passa al divisore nuovo
+  // nello stesso posto dell'albero.
+  const focused = document.activeElement;
+  const divider = focused instanceof HTMLElement && focused.matches(".pane-divider") && panesEl.contains(focused)
+    ? focused.dataset.divider
+    : undefined;
+  panesEl.replaceChildren(node(tree, "0"));
+  if (divider !== undefined) {
+    panesEl.querySelector<HTMLElement>(`.pane-divider[data-divider="${CSS.escape(divider)}"]`)?.focus({ preventScroll: true });
+  }
   // La schermata senza vault vive nell'HTML statico dentro #panes: il layout
   // la spazzerebbe via a ogni synchronize, quindi la si rimette in fondo —
   // `hidden` resta padrone della visibilità (A01, syncOnboarding in shell).
   if (onboarding) panesEl.append(onboarding);
 }
 
-function node(n: LayoutNode): HTMLElement {
+/// `path` è il posto del nodo nell'albero (gli indici dei figli dalla radice):
+/// nomina i divisori fra un disegno e l'altro.
+function node(n: LayoutNode, path: string): HTMLElement {
   if (n.k === "leaf") {
     // Un riquadro riusato può venire da una divisione: fuori da lì la sua
     // frazione non vale più, e un `flex-grow` rimasto lo stringerebbe.
@@ -379,11 +395,15 @@ function node(n: LayoutNode): HTMLElement {
   }
   const el = document.createElement("div");
   el.className = `pane-split ${n.dir}`;
-  const items = n.children.map(node);
+  const items = n.children.map((child, index) => node(child, `${path}.${index}`));
   const sizes = n.sizes ?? items.map(() => 1 / items.length);
   items.forEach((item, index) => {
     item.style.flexGrow = String(sizes[index]);
-    if (index > 0) el.append(splitDivider(n, index, el, items));
+    if (index > 0) {
+      const handle = splitDivider(n, index, el, items);
+      handle.dataset.divider = `${path}:${index}`;
+      el.append(handle);
+    }
     el.append(item);
   });
   return el;
@@ -493,6 +513,13 @@ function createPane(id: string): PaneElements {
     })));
   });
   tabsShell.append(tabMenuEl);
+  // Il tasto centrale chiude la scheda sotto il puntatore, sulla linguetta come
+  // sulla ×, come nei browser; non la attiva mai (IMP-012). La striscia resta
+  // la stessa per tutta la vita del riquadro: si ascolta una volta.
+  primaryClicksOnly(tabsShell, {
+    onMiddle: (target) => target.closest(".tab-entry")?.querySelector<HTMLElement>(".tab-close")?.click(),
+  });
+  sameControlForClickRuns(tabsShell);
 
   const contentEl = document.createElement("div");
   contentEl.setAttribute("role", "tabpanel");
@@ -542,10 +569,12 @@ function createPane(id: string): PaneElements {
     focusPane: () => focusPane(id),
     runCommand: (command: string) => deps.runCommand(command),
   };
-  const formatBar = createFormatBar(barHost);
+  // La barra del riquadro segue il blocco del cursore, nella forma che
+  // `editor.toolbar` sceglie; la bolla e la mini-barra restano intere.
+  const formatBar = createFormatBar({ ...barHost, blocks: true, form: currentToolbarForm });
   const selectionBubble: SelectionBubble = createSelectionBubble({
     ...barHost,
-    wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),
+    wanted: () => bubbleWanted(miniBarMode(), currentToolbarForm(), barHost.surface()?.ownBar === true),
     active: () => root.contains(document.activeElement) || selectionBubble.element.contains(document.activeElement),
   });
   const modeCurrent = createModeCurrent(id);
@@ -611,6 +640,33 @@ function createPane(id: string): PaneElements {
   };
   frames.set(id, r);
   return { root, editorEl, viewEl };
+}
+
+/// Il secondo clic di un doppio clic vale solo sul controllo del primo (IMP-013).
+///
+/// Chiusa una scheda con la ×, la vicina (o il «+») scorre sotto il puntatore
+/// prima del secondo clic: il doppio clic sulla × attivava la vicina, o creava
+/// una nota. Un clic che continua una serie (`detail` > 1) e cade su un
+/// controllo diverso da quello della prima pressione non arriva a nessuno, e
+/// nemmeno il suo `dblclick`. Il vuoto della striscia è un controllo anche lui:
+/// il doppio clic lì crea una nota (`tab-strip.ts`), ma solo se ci comincia.
+function sameControlForClickRuns(strip: HTMLElement): void {
+  const controlOf = (target: EventTarget | null): Element =>
+    (target instanceof Element ? target.closest(".tab, .tab-close, .tab-new, [data-tab-menu]") : null) ?? strip;
+  let first: Element = strip;
+  strip.addEventListener("mousedown", (event) => {
+    if (event.detail <= 1) first = controlOf(event.target);
+    // La seconda pressione su un altro controllo non sceglie nemmeno la
+    // parola che le capita sotto.
+    else if (controlOf(event.target) !== first) event.preventDefault();
+  }, { capture: true });
+  const guard = (event: MouseEvent): void => {
+    if (event.detail <= 1 || controlOf(event.target) === first) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  strip.addEventListener("click", guard, { capture: true });
+  strip.addEventListener("dblclick", guard, { capture: true });
 }
 
 function panePanelId(id: string): string {
@@ -788,16 +844,6 @@ function buildTab(r: PaneFrame, target: Tab, index: number): HTMLElement {
   close.addEventListener("click", (event) => {
     event.stopPropagation();
     event.preventDefault();
-    remove();
-  });
-  // Il clic centrale chiude la tab, come nei browser.
-  tab.addEventListener("mousedown", (event) => {
-    if (event.button === 1) event.preventDefault();
-  });
-  tab.addEventListener("auxclick", (event) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
-    event.stopPropagation();
     remove();
   });
   // Invio/Spazio sul Chiudi non devono anche attivare la tab: l'attivazione
@@ -1361,6 +1407,9 @@ function hostPaneStatus(slot: HTMLElement): void {
 /// dove la mano le cerca. Registratore, slide e stampa seguono le capacità
 /// che la superficie montata dichiara.
 function openPaneMenu(r: Pane, event: MouseEvent): void {
+  // La stampa, le slide e il registratore arrivano con un `import()`: si
+  // chiedono adesso, e quando se ne sceglie uno il codice c'è già.
+  loadPaneTools();
   const command = (id: string): CommandEntry | undefined => allCommands().find((entry) => entry.id === id);
   const chord = (id: string): string | undefined => displayBinding(command(id)?.binding ?? null) || undefined;
   const runCommand = (id: string): void => {
@@ -1403,6 +1452,21 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   // Le scelte di Scrittura, sulle note: per prima i blocchi (`editor.blocks`),
   // la stessa chiave delle Impostazioni, che cambia senza riaprire la nota.
   const blocksOn = blocksPreferred();
+  // Poi la concentrazione: il comando della shell, lo stesso del menu Vista e
+  // di Ctrl O. La macchina da scrivere del prototipo non entra: il menu sta
+  // nel bilancio di nove voci (`shell.e2e.test.ts`), e la preferenza
+  // `editor.typewriter` sta nelle Impostazioni › Editor.
+  const focusCommand = command("shell.focus.toggle");
+  const writingRest: MenuItem[] = [
+    ...(focusCommand ? [{
+      label: t("pane.menu.focus"),
+      description: t("pane.menu.focus.desc"),
+      hint: chord("shell.focus.toggle"),
+      icon: "eye",
+      group: t("pane.menu.writing"),
+      run: () => runCommand("shell.focus.toggle"),
+    }] : []),
+  ];
   const writing: MenuItem[] = doc && surface?.family === "text" && surface.profile === "markdown" ? [{
     label: t("pane.menu.blocks"),
     description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
@@ -1416,7 +1480,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         (error: unknown) => notify(t("pane.menu.blocks.failed", { reason: errorText(error) }), "guasto"),
       );
     },
-  }] : [];
+  }, ...writingRest] : [];
   const items: MenuItem[] = [
     ...writing,
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),
@@ -1546,7 +1610,7 @@ function fillConflict(box: HTMLElement, doc: string | null, readingMode: boolean
   const ask = async (choice: "mine" | "theirs"): Promise<void> => {
     const doc = pageName(current);
     const ok = await confirm(
-      t(choice === "mine" ? "document.conflict.mine.body" : "document.conflict.theirs.body", { doc }),
+      t(choice === "mine" ? "document.conflict.mine.body" : discardBody(current), { doc }),
       {
         title: t(choice === "mine" ? "document.conflict.mine.title" : "document.conflict.theirs.title"),
         okLabel: t(choice === "mine" ? "document.conflict.keep_mine" : "document.conflict.use_disk"),
