@@ -656,14 +656,6 @@ impl RootedFsStorage {
                 file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
             })
         }
-        #[cfg(not(any(unix, windows)))]
-        {
-            let _ = file;
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "identità di un handle non disponibile",
-            ))
-        }
     }
 
     /// Il nome `lock` porta ancora al file `held` appena acquisito?
