@@ -246,7 +246,11 @@ Limiti attuali:
   colore, rientri, spazi e interlinea che il file scrive sul paragrafo o sul
   tratto; quelli che vengono dallo stile non si disegnano (valgono i
   predefiniti di Word), e un campo vuoto della spaziatura non dice quanto
-  valgono. I bordi delle tabelle del file non si disegnano;
+  valgono. In una cella conta anche lo stile della tabella, fra i valori
+  predefiniti del documento e lo stile del paragrafo (ECMA-376 §17.7.2): le
+  celle di una «Griglia tabella» di Word si disegnano strette, come in Word e
+  in LibreOffice, e il salvataggio non copia lo stile della tabella nei
+  paragrafi. I bordi delle tabelle del file non si disegnano;
 - un foglio il cui testo non ci sta si allunga e non si spezza, quindi le
   **Pagine** della banda di stato contano i fogli, non le pagine che Word
   stamperebbe. Una sezione che comincia a pagina pari o dispari apre un foglio

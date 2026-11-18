@@ -86,7 +86,9 @@ l'IPC.
   il ritorno al documento ne fa formattazione diretta, o la toglie quando
   basta toglierla. Allo stesso modo un paragrafo porta l'allineamento
   risolto (`align`), la disposizione (`p`: rientri, prima riga, spazi,
-  interlinea, in punti) dove differisce da quella del suo stile, e lo stile
+  interlinea, in punti) dove differisce da quella del suo stile (in una cella
+  con lo stile della tabella dentro, fra i valori predefiniti e lo stile del
+  paragrafo: ciò che dà conta come una differenza), e lo stile
   di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
   la galleria degli stili (`styles`) e l'aspetto di ogni ruolo (`roles`:
   titoli, citazione, elenco) sono suggerimenti di resa che il ritorno
