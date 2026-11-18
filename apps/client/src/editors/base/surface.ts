@@ -622,15 +622,17 @@ export function mountBaseSurface(
   };
   // Un gesto che non ha scritto lo dice dove si vede: nella Base aperta a modo
   // suo (`onScreen`), a Base chiusa con un avviso.
-  const unwritten = (message: string, onScreen: () => void): void => {
-    if (destroyed) notify(message, "guasto");
-    else onScreen();
+  const unwritten = (message: string, onScreen: () => void, quiet = false): void => {
+    if (!destroyed) onScreen();
+    else if (!quiet) notify(message, "guasto");
   };
   const editCell = async (row: BaseRow, column: string, value: string | null): Promise<void> => {
     if (!plan || readOnlyColumn(column)) return;
     const expected = expectedProperty(row, column);
     const view = plan.view;
     const definition = source;
+    // Il motivo di una scrittura di prima non resta sotto quella nuova.
+    notice = null;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
       for (const mutation of mutations) await writeProperty(mutation);
@@ -639,10 +641,13 @@ export function mountBaseSurface(
       const message = t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) });
       // No optimistic overwrite. The original observation stays on screen and
       // the next explicit reload will fetch the conflicting authoritative note.
-      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      // Il motivo resta nella riga di stato (`notice`) anche dopo la
+      // rilettura che l'evento della nota cambiata fa partire (#484).
+      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { notice = message; draw(); status.textContent = message; });
       else if (isErrorKind(failure, "conflict")) {
+        notice = errorText(failure);
         draw();
-        status.textContent = errorText(failure);
+        status.textContent = notice;
       } else presentError(failure);
     }
   };
@@ -794,7 +799,7 @@ export function mountBaseSurface(
     attempt?.finish(written);
     if (!busy) return;
     busy = false;
-    pushModel();
+    if (!destroyed) pushModel();
   };
   const maybeSettle = (): void => {
     if (writing && writing.answered && writing.after !== null && writing.planned) settle(true);
@@ -877,7 +882,8 @@ export function mountBaseSurface(
     if (forgotten !== undefined) {
       forgetGroupChoice(view);
       await persistQueue;
-      if (destroyed) return;
+      // La Base chiusa intanto: il gesto non parte più, e lo dice (#484).
+      if (destroyed) { notify(t("base.write.closed"), "guasto"); return; }
     }
     const written = await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base));
     if (forgotten !== undefined && !written && !destroyed && !groupChoices.has(view)) {
@@ -889,16 +895,21 @@ export function mountBaseSurface(
   const run = async (attempt: WriteAttempt, invoke: (base: string | null) => Promise<BaseViewWrite>, quiet: boolean): Promise<void> => {
     const writes = deps.documentWrites;
     let withdraw: (() => void) | undefined;
+    // Un gesto partito va fino in fondo anche se intanto la Base si chiude
+    // (#484): il conflitto lo dice la revisione del comando. Un passo che non
+    // scrive lo dice sotto la barra, a Base chiusa con un avviso; un passo di
+    // un gesto più lungo (`quiet`) lo lascia dire al gesto.
+    const said = (message: string): void => unwritten(message, () => { status.textContent = message; }, quiet);
     try {
       // Il `.base` aperto anche come testo, con modifiche non ancora sul
       // disco: prima si salvano. Se restano non salvate il gesto si ferma,
       // perché scriverebbe sopra un file che non è quello sullo schermo.
       if (writes) {
         const unsaved = await writes.flush();
-        if (destroyed || writing !== attempt) return;
+        if (writing !== attempt) return;
         if (unsaved.includes(context.documentId)) {
           notice = t("base.write.unsaved");
-          status.textContent = notice;
+          said(notice);
           settle();
           return;
         }
@@ -915,7 +926,9 @@ export function mountBaseSurface(
           : undefined);
       }
       lastWrite = written;
-      if (destroyed || writing !== attempt) return;
+      if (writing !== attempt) return;
+      // A Base chiusa nessun testo nuovo arriverà: il gesto finisce qui.
+      if (destroyed) { settle(written.revision !== null || written.undo !== null); return; }
       // Niente scritto, niente testo nuovo da aspettare: la barra si riaccende.
       if (written.revision === null && written.undo === null) { settle(); return; }
       attempt.answered = true;
@@ -926,11 +939,11 @@ export function mountBaseSurface(
       if (writing === attempt) settleTimer = window.setTimeout(() => { settleTimer = 0; settle(true); }, WRITE_SETTLE_MS);
     } catch (failure) {
       withdraw?.();
-      if (destroyed || writing !== attempt) return;
+      if (writing !== attempt) return;
       // Niente è stato scritto: il comando ha rifiutato il valore, o il file
       // è cambiato altrove. La vista resta quella del file com'è.
-      notice = isErrorKind(failure, "conflict") ? t("base.write.conflict") : t("base.write.rejected", { reason: errorText(failure) });
-      status.textContent = notice;
+      notice = isErrorKind(failure, "conflict") && !destroyed ? t("base.write.conflict") : t("base.write.rejected", { reason: errorText(failure) });
+      said(notice);
       settle();
     }
   };
@@ -1022,20 +1035,25 @@ export function mountBaseSurface(
       for (const [key, value] of keys) {
         if (!await perform((base) => setBaseViewKey(deps, context.documentId, name, key, value, base), { quiet: true, before: start })) { complete = false; break; }
       }
-      if (destroyed) return;
-      const undo = {
+      // A Base chiusa la vista aggiunta si dice lo stesso, ma senza «Annulla»:
+      // la barra che la toglierebbe non c'è più (#484).
+      // Un «Annulla» premuto quando la Base si è già chiusa lo dice.
+      const undo = destroyed ? undefined : {
         label: t("app.undo"), hint: t("base.view.remove_hint", { name }),
-        run: () => void perform((base) => removeBaseView(deps, context.documentId, name, base)),
+        run: () => {
+          if (destroyed) notify(t("base.write.closed"), "guasto");
+          else void perform((base) => removeBaseView(deps, context.documentId, name, base));
+        },
       };
       // Un passo rifiutato: la vista c'è ma non ha tutto. Il motivo resta
       // sotto la barra (la vista aperta non cambia), e l'avviso lo dice.
       if (!complete) {
-        notify(t("base.view.added_partly", { name }), "guasto", undo);
+        notify(t(destroyed ? "base.view.added_closed" : "base.view.added_partly", { name }), "guasto", undo);
         return;
       }
-      if (names.includes(name)) chooseView(name);
+      if (!destroyed && names.includes(name)) chooseView(name);
       notify(added?.notify ?? t("base.view.added", { name }), "info", undo);
-    } finally { sequencing--; pushModel(); }
+    } finally { sequencing--; if (!destroyed) pushModel(); }
   };
 
   // ---- Il menu della colonna -------------------------------------------
@@ -1100,12 +1118,12 @@ export function mountBaseSurface(
         const outcome = await deps.invokeCommand(PROPERTY_RENAME, { old_key: from, new_key: to });
         said = typeof outcome?.notify === "string" && outcome.notify ? outcome.notify : null;
       } catch (failure) {
-        if (destroyed) return;
-        notice = t("base.rename.failed", { reason: errorText(failure) });
-        status.textContent = notice;
+        const message = t("base.rename.failed", { reason: errorText(failure) });
+        unwritten(message, () => { notice = message; status.textContent = message; });
         return;
       }
-      if (destroyed) return;
+      // Le note hanno il nome nuovo: anche a Base chiusa si contano le viste
+      // che lo nominano, e quelle rimaste col nome vecchio si dicono (#484).
       // Le viste riscritte per intero, e quelle rimaste col nome vecchio in
       // tutto o in parte.
       const done: string[] = [];
@@ -1115,31 +1133,28 @@ export function mountBaseSurface(
       for (const view of [...names]) {
         let viewPlan: BasePlan;
         try { viewPlan = await planBaseView(deps, source, view); } catch (failure) {
-          if (destroyed) return;
           missed.push(view);
           reason ??= errorText(failure);
           continue;
         }
-        if (destroyed) return;
         const keys = renamedInView(viewPlan, from, to);
         if (keys.length === 0) continue;
         let whole = true;
         for (const [key, value] of keys) {
           if (!await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base), { quiet: true, before: start })) { whole = false; break; }
         }
-        if (destroyed) return;
         if (whole) done.push(view);
-        else { missed.push(view); reason ??= notice; }
+        else { missed.push(view); reason ??= notice ?? (destroyed ? t("base.write.closed") : null); }
       }
-      if (destroyed) return;
       if (missed.length) {
         // L'errore resta: le note hanno il nome nuovo, queste viste no.
-        notice = t("base.rename.views_missed", { views: missed.join(", "), reason: reason ?? "" });
-        status.textContent = notice;
-        notify(t("base.rename.partly", { from, to }), "guasto");
+        const message = t("base.rename.views_missed", { views: missed.join(", "), reason: reason ?? "" });
+        if (!destroyed) { notice = message; status.textContent = message; }
+        notify(destroyed ? `${t("base.rename.partly", { from, to })}. ${message}` : t("base.rename.partly", { from, to }), "guasto");
         return;
       }
       notify(said ?? t("base.rename.done", { from, to }), "info");
+      if (destroyed) return;
       notice = done.length ? t("base.rename.views", { count: done.length }) : null;
       if (notice) status.textContent = notice;
     } finally { sequencing--; if (!destroyed) pushModel(); }
@@ -1152,9 +1167,8 @@ export function mountBaseSurface(
       if (typeof outcome?.notify === "string" && outcome.notify) notify(outcome.notify, "info");
       if (!destroyed) void reload(false);
     } catch (failure) {
-      if (destroyed) return;
-      notice = t("base.type.failed", { reason: errorText(failure) });
-      status.textContent = notice;
+      const message = t("base.type.failed", { reason: errorText(failure) });
+      unwritten(message, () => { notice = message; status.textContent = message; });
     }
   };
   function chooseView(name: string): void {
@@ -1193,7 +1207,7 @@ export function mountBaseSurface(
     try {
       await deps.invokeCommand(TEMPLATE_COMMAND, { template });
       if (!destroyed) await reload(true);
-    } catch (failure) { if (!destroyed) presentError(failure); }
+    } catch (failure) { unwritten(errorText(failure), () => presentError(failure)); }
     finally { creating = false; if (!destroyed) pushModel(); }
   }
   const editable = (row: BaseRow, column: string): HTMLElement => {
@@ -1787,7 +1801,8 @@ export function mountBaseSurface(
       await deps.invokeCommand(PROPERTY_OPTION_SET, { key: property, option: name, color: freeColor(optionsOf(propertyTypes, property)), ...(kind === "status" ? { group: "todo" } : {}) });
       await readPropertyTypes();
     } catch (failure) {
-      if (!destroyed) status.textContent = errorText(failure);
+      const message = errorText(failure);
+      unwritten(message, () => { status.textContent = message; });
     }
   };
   /// Rilegge il registro dei tipi; se cambia, la Bacheca si ridisegna.
@@ -2180,7 +2195,7 @@ export function mountBaseSurface(
       await deps.invokeCommand("note.create", Object.keys(defaults).length ? { properties: JSON.stringify(defaults) } : {});
       if (!destroyed) await reload(true);
     }
-    catch (failure) { presentError(failure); }
+    catch (failure) { unwritten(errorText(failure), () => presentError(failure)); }
     finally { creating = false; if (!destroyed) pushModel(); }
   }
   async function copyResults(): Promise<void> {
@@ -2372,6 +2387,9 @@ export function mountBaseSurface(
       }
       closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
+      // Un gesto della barra già scritto non aspetta più il testo nuovo, che
+      // a Base chiusa non arriva: finisce, e un gesto di più passi sa com'è andato.
+      if (writing?.answered) settle(true);
       window.clearTimeout(settleTimer);
       for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
       undoGraces.clear();

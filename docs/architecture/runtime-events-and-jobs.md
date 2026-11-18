@@ -318,6 +318,14 @@ La localizzazione della frase avviene prima della presentazione, ma il tipo non
 viene perso. La shell non decide il comportamento cercando sottostringhe in un
 messaggio.
 
+Una scrittura che chi usa Fub ha chiesto va fino in fondo, oppure chi l'ha
+chiesta sa che non è passata. Un evento del vault, una rilettura o una
+superficie chiusa nel frattempo servono a non ridisegnare con dati vecchi, mai a
+non mandare un comando già chiesto o a tacerne il rifiuto: il conflitto vero lo
+dice la revisione attesa del comando. A superficie chiusa il rifiuto arriva come
+avviso della shell, e un gesto di più passi rimasto a metà dice che cosa è
+scritto e che cosa no (la Base, #484).
+
 ## Shutdown
 
 Lo spegnimento avviene dal livello proprietario verso l'interno:
