@@ -670,7 +670,10 @@ fn carry_over(
     } else {
         None
     };
-    for doc in skipped.iter().filter_map(|failure| failure.subject.as_ref()) {
+    for doc in skipped
+        .iter()
+        .filter_map(|failure| failure.subject.as_ref())
+    {
         let path = doc.as_str();
         let kept = || {
             PluginError::Io(Text::message(

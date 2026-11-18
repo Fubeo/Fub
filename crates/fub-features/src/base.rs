@@ -350,7 +350,10 @@ fn linked_notes(linked: Vec<InputLinked>) -> Result<LinkedByFolder, PluginError>
             props,
         };
         match input.folder {
-            Some(folder) => by_folder.entry(folder).or_default().insert(input.target, note),
+            Some(folder) => by_folder
+                .entry(folder)
+                .or_default()
+                .insert(input.target, note),
             None => notes.insert(input.target, note),
         };
     }
@@ -2477,7 +2480,11 @@ mod tests {
         };
         assert_eq!(cell("A/Scaffale.md"), number(1.0));
         assert_eq!(cell("B/Scaffale.md"), number(2.0));
-        assert_eq!(cell("Radice.md"), number(600.0), "senza cartella vale per tutte");
+        assert_eq!(
+            cell("Radice.md"),
+            number(600.0),
+            "senza cartella vale per tutte"
+        );
     }
 
     #[test]
