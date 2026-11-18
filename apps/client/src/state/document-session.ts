@@ -182,7 +182,11 @@ type DiskReloadResult = Exclude<ReloadResult, { kind: "missing" } | { kind: "dir
 export type ConflictResolutionResult =
   | { kind: "none" }
   | { kind: "kept" }
-  | { kind: "discarded"; reload: ReloadResult }
+  // `kept`: il testo dell'utente (quello che c'era alla scelta) è nella
+  // Cronologia, conservato adesso o da un «Usa disco» di prima sullo stesso
+  // testo. Con la rilettura mancata è ciò che dice all'utente che il testo è
+  // salvo anche se il conflitto resta aperto.
+  | { kind: "discarded"; reload: ReloadResult; kept: boolean }
   // Il testo dell'utente non si è potuto mettere in salvo: niente è stato
   // scartato, il conflitto resta aperto e la scelta si può ripetere.
   | { kind: "keep-failed"; error: unknown };
@@ -296,6 +300,10 @@ export class DocumentSession implements DraftBuffer {
   #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
+  /// Il testo che «Usa disco» ha già messo in salvo in questo conflitto: se la
+  /// rilettura è mancata e la scelta si ripete sullo stesso testo, non si
+  /// conserva una seconda volta.
+  #keptInConflict: string | undefined;
   readonly #api: SessionPort;
   readonly #hooks: SessionHooks;
   /// Le superfici sottoscritte, per identità di registrazione. È ownership di
@@ -639,16 +647,22 @@ export class DocumentSession implements DraftBuffer {
     if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     if (choice === "mine") {
+      this.#keptInConflict = undefined;
       await this.saveKeepingMine();
       return { kind: "kept" };
     }
     let kept: string | undefined;
     if (keep && !this.#hooks.journal()) {
       kept = this.#state.text;
-      try {
-        await keep(kept);
-      } catch (error) {
-        return { kind: "keep-failed", error };
+      // Lo stesso testo già in salvo da un «Usa disco» la cui rilettura è
+      // mancata: una seconda versione uguale non serve a nessuno.
+      if (this.#keptInConflict !== kept) {
+        try {
+          await keep(kept);
+        } catch (error) {
+          return { kind: "keep-failed", error };
+        }
+        this.#keptInConflict = kept;
       }
       if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     }
@@ -659,8 +673,11 @@ export class DocumentSession implements DraftBuffer {
       this.discardChanges();
       return true;
     });
-    if (reload.kind === "reloaded") await this.discardDraft();
-    return { kind: "discarded", reload };
+    if (reload.kind === "reloaded") {
+      this.#keptInConflict = undefined;
+      await this.discardDraft();
+    }
+    return { kind: "discarded", reload, kept: kept !== undefined };
   }
 
   /**
@@ -1222,9 +1239,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// A pending open reserves this owner before any flush/read `await`.
   readonly #openIntents = new Map<string, number>();
   /// Le bozze scritte per un file cancellato da fuori con testo non salvato,
-  /// per vault e id: «Ricrea la nota» le toglie dopo la riscrittura
-  /// (`discardRemovedDraft`), aspettando che la loro scrittura sia finita.
-  readonly #removedDrafts = new Map<string, Promise<void>>();
+  /// per vault e id, col testo che tengono: «Ricrea la nota» le toglie dopo la
+  /// riscrittura (`discardRemovedDraft`), aspettando che la loro scrittura sia
+  /// finita, e soltanto se tengono il testo ricreato. Una sessione che si
+  /// riapre sull'id toglie la voce: da lì la bozza è sua.
+  readonly #removedDrafts = new Map<string, { text: string; saving: Promise<void> }>();
   /// Il vault in cui è nata ciascuna sessione (FUB-001), `null` se nessun vault
   /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
   /// quando l'host ha già aperto un altro vault.
@@ -1708,7 +1727,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const saving = this.#api.saveDraft(session.id, text, base, ...vaultArg(vault)).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
-    this.#removedDrafts.set(removedDraftKey(session.id, vault), saving);
+    this.#removedDrafts.set(removedDraftKey(session.id, vault), { text, saving });
     return { kind: "removed", dirty, text };
   }
 
@@ -1718,14 +1737,20 @@ export class DocumentSessionCollection implements DraftBufferStore {
    * lasciata lì alla riapertura farebbe un conflitto falso, perché la sua
    * base è la revisione del file cancellato e non quella ricreata (IMP-047).
    * Si aspetta che la sua scrittura sia finita, così non arriva dopo lo
-   * scarto. Una sessione nel frattempo riaperta sull'id tiene la sua bozza.
+   * scarto. Si scarta soltanto la bozza che tiene `text`, il testo ricreato:
+   * una sessione nel frattempo riaperta sull'id tiene la sua bozza, e una
+   * rimozione più nuova (un «Ricrea» rimasto su un avviso di prima) tiene la
+   * bozza col testo più nuovo.
    */
-  async discardRemovedDraft(id: string, vault: string | null | undefined): Promise<void> {
+  async discardRemovedDraft(id: string, vault: string | null | undefined, text: string): Promise<void> {
     const key = removedDraftKey(id, vault ?? null);
-    const saving = this.#removedDrafts.get(key);
+    const entry = this.#removedDrafts.get(key);
+    if (!entry || entry.text !== text) return;
     this.#removedDrafts.delete(key);
-    await saving;
-    if (this.#sessions.has(id)) return;
+    await entry.saving;
+    // Nell'attesa la nota si è riaperta, o è sparita un'altra volta con una
+    // bozza sua: quella non è la bozza di questo testo.
+    if (this.#sessions.has(id) || this.#removedDrafts.has(key)) return;
     await this.#api.discardDraft(id, ...vaultArg(vault));
   }
   async release(id: string): Promise<CloseResult> {
@@ -2021,6 +2046,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
     this.#vaults.set(session, vault);
     this.#keys.set(session, open ?? newOpenKey());
     this.#sessions.set(id, session);
+    // La bozza di una rimozione di prima è adesso di questa sessione: un
+    // «Ricrea» rimasto sul vecchio avviso non la deve toccare.
+    this.#removedDrafts.delete(removedDraftKey(id, vault));
     return session;
   }
 

@@ -2777,6 +2777,8 @@ export const IT = { // --- la scocca -------------------------------------------
 // La nota della versione conservata: si legge nel pannello Cronologia.
 "document.conflict.kept_note": "Testo scartato nel conflitto del {when}",
 "document.conflict.kept": "Il tuo testo su {doc} è nella Cronologia: lo ritrovi lì quando serve.",
+"document.conflict.kept_reload_failed":
+  "Il tuo testo su {doc} è nella Cronologia, ma il file non si è riletto dal disco: il conflitto resta aperto. Riprova «Usa la versione su disco»: il testo non si salva una seconda volta.",
 "document.conflict.keep_failed":
   "Il tuo testo su {doc} non è entrato nella Cronologia, quindi non è stato scartato: {reason}. Riprova, oppure tieni il tuo testo.",
 "panes.redraw_failed": "I riquadri non si sono ridisegnati: {reason}",
@@ -7007,6 +7009,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "Discards the unsaved changes and reloads the file as it is on disk: your text cannot be recovered.",
 "document.conflict.kept_note": "Text discarded in the conflict of {when}",
 "document.conflict.kept": "Your text on {doc} is in History: you can find it there whenever you need it.",
+"document.conflict.kept_reload_failed":
+  "Your text on {doc} is in History, but the file could not be reread from disk: the conflict stays open. Try “Use the version on disk” again: the text will not be saved a second time.",
 "document.conflict.keep_failed":
   "Your text on {doc} did not get into History, so it was not discarded: {reason}. Try again, or keep your text.",
 "panes.redraw_failed": "The panes did not redraw: {reason}",

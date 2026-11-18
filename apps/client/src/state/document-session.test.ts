@@ -424,13 +424,62 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
     const outcome = await sessions.resolveConflict("nota.md", "theirs");
 
-    expect(outcome).toEqual({ kind: "discarded", reload: { kind: "unavailable" } });
+    expect(outcome).toEqual({ kind: "discarded", reload: { kind: "unavailable" }, kept: false });
     expect(sessions.inspect("nota.md")).toMatchObject({
       text: "testo locale",
       dirty: true,
       result: "conflitto",
     });
     expect(api.discardDraft).not.toHaveBeenCalled();
+  });
+
+  it("«usa disco» col testo in salvo e la lettura fallita lo dice, e ripetuto non lo conserva due volte", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "conflict", message: "revisione superata" };
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo locale");
+    await sessions.flush("nota.md");
+    const read = api.readDocument;
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => {
+      throw new Error("disco non leggibile");
+    });
+    const keep = vi.fn(async () => {});
+
+    const first = await sessions.resolveConflict("nota.md", "theirs", keep);
+
+    expect(first).toEqual({ kind: "discarded", reload: { kind: "unavailable" }, kept: true });
+    expect(sessions.inspect("nota.md")).toMatchObject({ text: "testo locale", result: "conflitto" });
+
+    api.readDocument = read;
+    const second = await sessions.resolveConflict("nota.md", "theirs", keep);
+
+    expect(second).toMatchObject({ kind: "discarded", reload: { kind: "reloaded" }, kept: true });
+    expect(keep).toHaveBeenCalledTimes(1);
+    expect(sessions.inspect("nota.md")).toMatchObject({ dirty: false, result: "ok" });
+  });
+
+  it("«usa disco» ripetuto dopo un tasto conserva il testo nuovo", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "conflict", message: "revisione superata" };
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo locale");
+    await sessions.flush("nota.md");
+    const read = api.readDocument;
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => {
+      throw new Error("disco non leggibile");
+    });
+    const keep = vi.fn(async (_text: string) => {});
+    await sessions.resolveConflict("nota.md", "theirs", keep);
+    acceptText(sessions, "nota.md", "testo locale e altro");
+    api.readDocument = read;
+
+    await sessions.resolveConflict("nota.md", "theirs", keep);
+
+    expect(keep.mock.calls.map(([text]) => text)).toEqual(["testo locale", "testo locale e altro"]);
   });
 
   it("«usa disco» scarta il mio testo solo dopo che è stato messo in salvo", async () => {
@@ -498,7 +547,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
       acceptText(sessions, "nota.md", "testo locale e altro");
     });
 
-    expect(outcome).toEqual({ kind: "discarded", reload: { kind: "stale" } });
+    expect(outcome).toEqual({ kind: "discarded", reload: { kind: "stale" }, kept: true });
     expect(sessions.inspect("nota.md")).toMatchObject({ text: "testo locale e altro", result: "conflitto" });
     expect(api.discardDraft).not.toHaveBeenCalled();
   });
@@ -837,7 +886,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     acceptText(sessions, "sparita.md", "lavoro ricreato");
     sessions.handleExternalRemoval("sparita.md");
 
-    const discarding = sessions.discardRemovedDraft("sparita.md", undefined);
+    const discarding = sessions.discardRemovedDraft("sparita.md", undefined, "lavoro ricreato");
     await Promise.resolve();
     expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
     finishDraft();
@@ -852,8 +901,29 @@ describe("decisioni del ciclo di vita della sessione", () => {
     sessions.handleExternalRemoval("sparita.md");
     await sessions.read("sparita.md");
 
-    await sessions.discardRemovedDraft("sparita.md", undefined);
+    await sessions.discardRemovedDraft("sparita.md", undefined, "lavoro ricreato");
     expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
+  });
+
+  it("«Ricrea» sul primo avviso non cancella la bozza di una rimozione più nuova", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("sparita.md");
+    acceptText(sessions, "sparita.md", "primo testo");
+    sessions.handleExternalRemoval("sparita.md");
+    // La nota torna (da fuori), si riapre, si scrive altro e sparisce di nuovo:
+    // la bozza su disco adesso tiene il testo nuovo.
+    await sessions.read("sparita.md");
+    acceptText(sessions, "sparita.md", "testo più nuovo");
+    sessions.handleExternalRemoval("sparita.md");
+
+    // «Ricrea» del primo avviso: la nota torna col primo testo, ma la bozza è
+    // della seconda rimozione e resta.
+    await sessions.discardRemovedDraft("sparita.md", undefined, "primo testo");
+    expect(vi.mocked(api.discardDraft)).not.toHaveBeenCalled();
+
+    // «Ricrea» del secondo avviso: è la sua bozza, e si scarta.
+    await sessions.discardRemovedDraft("sparita.md", undefined, "testo più nuovo");
+    expect(vi.mocked(api.discardDraft)).toHaveBeenCalledWith("sparita.md");
   });
 
   it("riserva l'identità durante la cancellazione e non ricrea il buffer", async () => {

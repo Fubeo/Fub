@@ -270,7 +270,10 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   il testo va in bozza e il riquadro offre «Ricrea la nota». Ricreata la nota
   col testo, la bozza se ne va (`discardRemovedDraft`, dopo che la sua
   scrittura è finita): alla riapertura non c'è un conflitto con un disco che
-  le è uguale. Se la scrittura del file fallisce, la bozza resta.
+  le è uguale. Se la scrittura del file fallisce, la bozza resta. Si scarta
+  soltanto la bozza che tiene il testo ricreato: una sessione riaperta sull'id
+  si prende la bozza (la voce della rimozione se ne va), e un «Ricrea» rimasto
+  su un avviso di prima non tocca la bozza di una rimozione più nuova.
 - **La scrittura annunciata di un comando.** Chi lancia un comando che
   riscrive un documento aperto (un gesto della barra di una Base con
   `base.view.set`) lo annuncia prima con `expectWrite(id)`, e ritira
