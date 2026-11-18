@@ -150,8 +150,8 @@ describe("noteHeadingOf", () => {
 });
 
 describe("noteCardRenderer", () => {
-  it("mostra note e documenti", () => {
-    expect(noteCardRenderer(new FakePort()).kinds).toEqual(["note", "document"]);
+  it("mostra le note (i documenti sono di `document.ts`, T44)", () => {
+    expect(noteCardRenderer(new FakePort()).kinds).toEqual(["note"]);
   });
 
   it("da viva dice «Apro…» e poi mostra la resa, con i suoi ascoltatori", async () => {

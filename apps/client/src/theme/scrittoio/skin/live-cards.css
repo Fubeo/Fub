@@ -241,3 +241,120 @@
 :root[data-client-shell="mobile"] .live-card-body {
   height: 260px;
 }
+
+/* ── La scheda di documento ──────────────────────────────────────────────
+   (E20, T44; il prototipo `.docw` e `.docp`, passo 17.) Un `.docx` o un
+   `.odt` nella nota: a riposo il testo reso in continuo, senza pagine, nel
+   carattere di lettura a 14 px; da attiva l'editor dei documenti in
+   Scrittura, compatto, con la stessa misura, così il testo non salta
+   quando la scheda si attiva. Il testo scorre solo da attiva; la riga
+   «Apri» di un documento lungo resta in fondo, sempre a vista. */
+.live-card[data-card-kind="document"] .canvas-card-document {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 18px 18px;
+  color: var(--doc-fg);
+  font: 14px/1.6 var(--font-reading);
+  /* La scheda sta dentro il testo della nota, che tiene gli a capo: gli a
+     capo fra i blocchi della resa non sono righe. */
+  white-space: normal;
+}
+.live-card[data-card-kind="document"][data-card-active="true"] .canvas-card-document-content {
+  overflow: auto;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(p, ul, ol, blockquote, table) {
+  margin: 0 0 9px;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(ul, ol) {
+  padding-inline-start: 1.4em;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 12px 0 8px;
+  color: var(--doc-fg);
+  font: 600 15px/1.35 var(--font-reading);
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content > :first-child {
+  margin-top: 0;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content table {
+  border-collapse: collapse;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(td, th) {
+  padding: 3px 8px;
+  border: 1px solid var(--doc-rule-soft);
+  text-align: start;
+  vertical-align: top;
+}
+/* Un documento lungo si ferma a 200 blocchi (`DOCUMENT_CARD_MAX_BLOCKS` di
+   `kinds/document.ts`): gli altri non si disegnano, e la riga in fondo
+   offre «Apri». */
+.canvas-card-document-content[data-card-truncated="true"] > :nth-child(n + 201) {
+  display: none;
+}
+.canvas-card-document-more {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+}
+
+/* Da attiva: la superficie dei documenti nel corpo, senza il suo fondo (la
+   carta è quella della scheda) e con la misura del riposo. */
+.live-card[data-card-kind="document"] .canvas-card-document .rich-surface,
+.live-card[data-card-kind="document"] .canvas-card-document .rich-page {
+  background: transparent;
+}
+/* Gli avvisi della sessione (il conflitto, la bozza) in cima, il testo sotto
+   che scorre. */
+.live-card[data-card-kind="document"] .canvas-card-document > * {
+  flex: none;
+}
+.live-card[data-card-kind="document"] .canvas-card-document > .rich-surface,
+.live-card[data-card-kind="document"] .canvas-card-document > .canvas-card-document-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-content {
+  max-width: none;
+  margin: 0;
+  padding: 16px 18px 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-para {
+  margin-block: 0 9px;
+}
+/* Le voci di un elenco stanno strette come nella resa; lo spazio viene dopo
+   l'ultima. */
+.live-card[data-card-kind="document"] .look-tema .rich-para.rich-list {
+  margin-block: 0;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-list + :not(.rich-list) {
+  margin-top: 9px;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-heading {
+  margin: 12px 0 8px;
+  padding: 0;
+  border: 0;
+  color: var(--doc-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: normal;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-content > :first-child {
+  margin-top: 0;
+}

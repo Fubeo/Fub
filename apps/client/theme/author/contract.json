@@ -1550,6 +1550,9 @@
     "live-card-message",
     "live-card-hint",
     "live-card-actions",
+    "canvas-card-document",
+    "canvas-card-document-content",
+    "canvas-card-document-more",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -3774,6 +3777,9 @@
     "live-card-message": "cornice",
     "live-card-hint": "cornice",
     "live-card-actions": "cornice",
+    "canvas-card-document": "cornice",
+    "canvas-card-document-content": "cornice",
+    "canvas-card-document-more": "cornice",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -8228,6 +8234,27 @@
       ]
     },
     {
+      "name": "live-card-document",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-document",
+        "canvas-card-document-content",
+        "canvas-card-document-more",
+        "rich-surface",
+        "rich-page",
+        "rich-content",
+        "rich-para",
+        "rich-heading",
+        "rich-list",
+        "look-tema"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11614,10 +11641,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2222,
+    "hooks": 2225,
     "state_names": 7,
-    "assigned_states": 998,
-    "components": 296,
+    "assigned_states": 1001,
+    "components": 297,
     "preference_tokens": 196
   }
 }

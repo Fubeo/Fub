@@ -193,7 +193,10 @@ describe("quali embed sono schede", () => {
     expect(isLiveCardFile("Conti.xlsx")).toBe(true);
     expect(isLiveCardFile("Logo.vectorcraft")).toBe(true);
     expect(isLiveCardFile("dati.zip")).toBe(true);
-    for (const page of ["Nota", "Nota.md", "Viste.base", "Lavagna.canvas", "Foto.png", "Voce.mp3", "Clip.mp4", "Relazione.docx", "Relazione.odt", "Logo.svg", "Scatto.xmp"]) {
+    // I documenti di Word e ODT sono schede (T44).
+    expect(isLiveCardFile("Relazione.docx")).toBe(true);
+    expect(isLiveCardFile("Relazione.odt")).toBe(true);
+    for (const page of ["Nota", "Nota.md", "Viste.base", "Lavagna.canvas", "Foto.png", "Voce.mp3", "Clip.mp4", "Logo.svg", "Scatto.xmp"]) {
       expect(isLiveCardFile(page), page).toBe(false);
     }
     expect(liveCardEmbed("![[Contratto.pdf#page=3]]")).toEqual({ page: "Contratto.pdf", subpath: "#page=3", alias: null });

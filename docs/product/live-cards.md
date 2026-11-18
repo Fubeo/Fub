@@ -17,8 +17,7 @@ la riporta com'era).
 
 Non sono schede le note (la [trasclusione viva](editor-transclusion.md)), le
 immagini, i suoni, i video, le Basi e i disegni SVG, che la nota mostra già a
-modo suo; per ora neanche i documenti di Word e le lavagne, che restano la
-resa di sempre. Un embed in mezzo a una frase resta un embed.
+modo suo; per ora neanche le lavagne, che restano la resa di sempre. Un embed in mezzo a una frase resta un embed.
 
 ## Tre stati
 
@@ -40,6 +39,23 @@ guardano e si attivano, ma non si scrive.
 
 Il gruppo **Scheda** del menu del blocco ha **Apri**, **Attiva** e **Togli
 dalla nota**.
+
+## La scheda di documento
+
+Un documento (`.docx`, `.odt`) incorporato da solo nel paragrafo è una scheda
+anche lui. A riposo mostra il testo reso in continuo, senza pagine, nel
+carattere di lettura: titoli, paragrafi, elenchi e tabelle. Da attiva si
+scrive **nel documento**, con l'editor dei documenti in Scrittura (compatto:
+senza barra delle pagine né pannello) sulla stessa sessione della sua
+linguetta; stili e impaginazione restano quelli del file, e il salvataggio va
+al documento, mai alla nota. La barra della scheda è quella dei documenti.
+
+- Una parte (`![[Relazione.docx#Bilancio]]`) resta scritta nell'embed e nella
+  testata, ma la scheda mostra il documento intero: il modello dei documenti
+  non tiene le posizioni dei titoli, e una sezione non si ritaglia.
+- Un documento lungo si ferma a 200 blocchi: in fondo «Il documento continua»,
+  con **Apri**.
+- Sulla lavagna la scheda di documento si guarda e non si scrive.
 
 ## I limiti
 

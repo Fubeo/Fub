@@ -75,10 +75,10 @@ function extensionOf(page: string): string | null {
 ///
 /// No per ciò che la nota mostra già a modo suo: una nota (la trasclusione
 /// viva, T29), una Base, un'immagine, un suono, un video, un disegno SVG. No,
-/// per ora, per i documenti di testo e per la lavagna: le loro schede nella
-/// nota sono T44 e T47, e fino ad allora restano la resa di sempre. Il resto
-/// (un PDF, un foglio, un file Craft, un formato che la nota non sa mostrare)
-/// è una scheda; quale specie lo dice l'ospite, quando arriva.
+/// per ora, per la lavagna: la sua scheda nella nota è T47, e fino ad allora
+/// resta la resa di sempre. Il resto (un PDF, un foglio, un documento di
+/// Word o ODT, un file Craft, un formato che la nota non sa mostrare) è una
+/// scheda; quale specie lo dice l'ospite, quando arriva.
 export function isLiveCardFile(page: string): boolean {
   const extension = extensionOf(page);
   if (extension === null) return false;
@@ -86,7 +86,7 @@ export function isLiveCardFile(page: string): boolean {
   const media = mediaKindOfId(page);
   if (media === "image" || media === "audio" || media === "video") return false;
   const format = formatKindOf(page);
-  if (format === "word" || format === "odt" || format === "note") return false;
+  if (format === "note") return false;
   // L'XMP di LightCraft e le foto RAW sono dati di una foto, non una scheda.
   if (format === "photo" && extension !== "pcraft") return false;
   return true;
