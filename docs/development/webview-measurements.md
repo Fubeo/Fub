@@ -28,6 +28,18 @@ Da fuori la si guida con `window.__fubProbe`: `start()`, `stop()`, che rende
 il referto, e `waitFor(nome, selettore, ms, testo?)`. Spenta, la sonda non
 ascolta niente e non chiede fotogrammi.
 
+## I tasti del driver
+
+Gli scenari, e le sonde che guidano l'app vera, parlano col driver attraverso
+`apps/client/bench/webview/driver.mjs`. `session.keys(testo)` segue l'«Element
+Send Keys» del W3C: un modificatore nel testo resta premuto fino alla fine,
+quindi `keys(KEY.control + "f")` è Ctrl+F (`keyActions`, provato da
+`driver.test.mjs`). Per un accordo con un ordine preciso di pressioni e
+rilasci si usa `session.actions`. I tasti speciali hanno un nome in `KEY`:
+attenzione ai tasti funzione, perché `` è F1 e F2 è ``. Se una
+scorciatoia sembra rotta solo sotto il driver, prima di cercare il difetto in
+Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
+
 ## Gli scenari
 
 | Scenario | Gesto | Valore |
