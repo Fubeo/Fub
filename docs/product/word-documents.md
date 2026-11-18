@@ -344,20 +344,11 @@ La scheda «Disegna» (`editors/rich/ink.ts`) mette un velo sopra la pagina
 quando è scelto uno strumento che disegna, e raccoglie i tratti con
 l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`). I tratti di una
 sessione diventano un oggetto `ink` davanti al testo, ancorato al paragrafo
-più vicino, in un passo di Annulla; la geometria pura (riquadro, gomma, lazo,
-contorno) sta in `editors/rich/ink-shape.ts`. In un documento OpenDocument la
-sessione entra come `drawing`. Un inchiostro del file che non si legge resta
-opaco, e il chip dello stato lo dice in «Che cosa manca?».
-
-La sessione si chiude dopo una pausa di un secondo e mezzo, cambiando
-strumento o con Esc. Un tratto porta il fuoco sul velo, che sta nel riquadro:
-`Ctrl+Z` va al documento anche se prima il fuoco era sulla barra. Annulla e
-Ripeti con la sessione ancora aperta la fanno entrare prima del loro passo
-(`RichEngine.holdPending`): Annulla toglie l'ultimo tratto, entrato da solo
-come passo suo, e lascia gli altri della sessione; `Ctrl+Maiusc+Z` e `Ctrl+Y`
-lo rimettono. Nel `.docx` un tratto sono due elementi, come in Word:
-l'InkML in `mc:Choice` (`w:drawing`) e l'immagine di ripiego in `mc:Fallback`
-(`w:pict`).
+più vicino, in un passo di Annulla, che toglie l'ultimo tratto anche a sessione
+aperta (`RichEngine.holdPending`); la geometria pura (riquadro, gomma, lazo,
+contorno) sta in `editors/rich/ink-shape.ts`. Un documento OpenDocument ha un
+`drawing`. Un inchiostro del file che non si legge resta opaco, e il chip
+dello stato lo dice in «Che cosa manca?».
 
 Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
 ([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
@@ -434,13 +425,7 @@ oggetti non interpretati. Ciò che manca o diminuisce è un avviso, con il
 numero. Impaginazione, caratteri, colori e stili dei paragrafi non si misurano,
 e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
 `.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
-testo semplice i commenti si possono mettere in fondo alla copia.
-
-**Anteprima…** nel modulo è la simulazione del comando: la copia si scrive in
-memoria e si misura come la misura l'export, e il piano dice che cosa il
-confronto ha trovato, con gli stessi avvisi che l'attività mostrerà. Niente si
-accoda: la copia parte con **Applica**. Il campo «Documento» vuole il percorso
-del documento, che i suggerimenti del campo danno; il nome solo non basta.
+testo semplice i commenti vanno, a scelta, in fondo. **Anteprima…** dà gli avvisi.
 
 `.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
 modificano come sorgente, anche quando sono nati da una copia.
