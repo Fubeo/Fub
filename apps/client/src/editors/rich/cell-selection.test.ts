@@ -395,6 +395,52 @@ describe("la forma della tabella resta", () => {
     });
   });
 
+  // Taglia e Invio su una selezione che esce dalla tabella: prima copiavano
+  // soltanto, o non facevano niente, perché la guardia rifiuta l'unione.
+  it("Taglia su una selezione che esce dalla tabella copia e svuota come Canc, in un passo", () => {
+    const e = engine(NINE);
+    e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+    const data = new Map<string, string>();
+    const event = new Event("cut", { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, "clipboardData", {
+      value: { clearData: () => data.clear(), setData: (type: string, value: string) => void data.set(type, value) },
+    });
+    document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(data.get("text/plain")).toContain("ff");
+    expect(data.get("text/plain")).toContain("do");
+    expect(data.get("text/html")).toContain("gg");
+    expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e", ""], ["", "", ""]]);
+    const blocks = parseProjection(e.getDoc()).blocks;
+    expect(((blocks[blocks.length - 1] as Para).c?.[0] as TextInline).x).toBe("po");
+    expect(press("z", { ctrlKey: true })).toBe(true);
+    expect(grid(e)).toEqual(NINE);
+  });
+
+  it("Invio su una selezione che esce dalla tabella svuota come Canc e va a capo dove cominciava", () => {
+    const e = engine(NINE);
+    e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+    expect(press("Enter")).toBe(true);
+    // La cella dove cominciava ha due paragrafi, «e» e quello nuovo, col cursore.
+    expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e+", ""], ["", "", ""]]);
+    const here = cellAt(e.state.selection.$head);
+    expect(here && [here.box.row, here.box.column]).toEqual([1, 1]);
+    expect(e.state.selection.$head.parent.textContent).toBe("");
+    expect(e.state.selection.$head.index(e.state.selection.$head.depth - 1)).toBe(1);
+    const blocks = parseProjection(e.getDoc()).blocks;
+    expect(((blocks[blocks.length - 1] as Para).c?.[0] as TextInline).x).toBe("po");
+    // Un passo solo d'annullamento.
+    expect(press("z", { ctrlKey: true })).toBe(true);
+    expect(grid(e)).toEqual(NINE);
+  });
+
+  it("Maiusc+Invio su una selezione che esce dalla tabella svuota e va a capo nella cella", () => {
+    const e = engine(NINE);
+    e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+    expect(press("Enter", { shiftKey: true })).toBe(true);
+    expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e\n", ""], ["", "", ""]]);
+  });
+
   it("nessuna transazione unisce due celle, e la cronologia e il disco passano", () => {
     const e = engine(NINE);
     // Una cancellazione grezza da una cella al paragrafo dopo la tabella.
