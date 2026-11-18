@@ -103,6 +103,11 @@ derivato.
 Wikilink e path seguono regole diverse: il primo risolve per path con slash,
 nome, nome con l'estensione (`[[board.canvas]]`) e alias con priorità
 deterministica fra omonimi; il secondo solo per path relativo al documento.
+Un wikilink con slash che dalla radice non trova niente si legge come path
+parziale, come in Obsidian: `[[Progetti/Alpha]]` porta a
+`Note/Progetti/Alpha.md`, la coda del path a confine di cartella (fra più
+code il più vicino alla radice). Backlink, uscenti, rinomina e riferimento più
+corto passano dalla stessa risoluzione.
 Fra omonimi vince il più vicino alla radice, poi l'ordine dei path; fra
 formati diversi dello stesso path (`Progetto.md`, `Progetto.canvas`) il nome
 nudo porta prima al formato che dichiara un sorgente di prosa

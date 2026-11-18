@@ -294,15 +294,30 @@ fn changed_keys(before: &DocKeys, after: &DocKeys) -> HashSet<String> {
 /// Le voci d'indice da cui dipende la risoluzione di una chiave di link.
 /// `resolve_key` guarda `path_index[strip_ext(key)]`, `name_index[key]` e
 /// `alias_index[key]`; `resolve_path_key` guarda `path_index` su entrambe. In
-/// tutti i casi: al più due chiavi distinte, ed è lo stesso paio — per questo
-/// wikilink e link markdown condividono `watchers` senza doversi distinguere.
+/// tutti i casi le stesse chiavi — per questo wikilink e link markdown
+/// condividono `watchers` senza doversi distinguere.
+///
+/// Una chiave con `/` dipende anche dal **nome** del suo ultimo segmento
+/// (intero e senza estensione): è la voce di `name_index` da cui
+/// `resolve_path_suffix` prende i candidati del percorso parziale, e un
+/// documento che arriva o se ne va in una cartella qualunque tocca proprio
+/// quel nome. Per un link markdown è una dipendenza in più che non cambia la
+/// risposta: costa una rilettura, non un errore.
 fn dep_keys(key: &str) -> Vec<String> {
     let stripped = strip_ext(key);
-    if stripped == key {
-        vec![key.to_string()]
-    } else {
-        vec![key.to_string(), stripped]
+    let mut deps = vec![key.to_string()];
+    if stripped != key {
+        deps.push(stripped.clone());
     }
+    if key.contains('/') {
+        for form in [key, stripped.as_str()] {
+            let name = file_name(form).to_string();
+            if !deps.contains(&name) {
+                deps.push(name);
+            }
+        }
+    }
+    deps
 }
 
 fn first_of(index: &HashMap<String, Vec<DocId>>, key: &str) -> Option<DocId> {

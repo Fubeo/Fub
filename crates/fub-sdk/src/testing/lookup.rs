@@ -73,6 +73,31 @@ impl MemoryHost {
                     }) {
                         return Some(id);
                     }
+                    // Il path parziale, come nel grafo: la coda del path a
+                    // confine di cartella, prima chi combacia in tutto, poi
+                    // nel caso, poi il più vicino alla radice.
+                    let (key_tail, stem_tail) = (format!("/{key}"), format!("/{stem}"));
+                    let suffixes: Vec<&DocId> = ids
+                        .iter()
+                        .filter(|id| {
+                            let path = by_path(id);
+                            path.ends_with(&key_tail) || path.ends_with(&stem_tail)
+                        })
+                        .collect();
+                    let exact_tail = format!("/{exact}");
+                    let exact_stem_tail = format!("/{}", strip_ext(&exact));
+                    if let Some(id) = suffixes
+                        .iter()
+                        .find(|id| exact_key(id.as_str()).ends_with(&exact_tail))
+                        .or_else(|| {
+                            suffixes.iter().find(|id| {
+                                exact_key(&strip_ext(id.as_str())).ends_with(&exact_stem_tail)
+                            })
+                        })
+                        .or_else(|| suffixes.first())
+                    {
+                        return Some((*id).clone());
+                    }
                 }
                 let by_name = |id: &DocId| resolution_key(id.page_name());
                 if let Some(id) = pick(&key, &exact, &by_name, &|id| exact_key(id.page_name())) {
