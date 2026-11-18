@@ -33,11 +33,11 @@ import {
   residue,
 } from "./motion-rules.mjs";
 
-/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti, dei Blocchi e del menu, come Vite li vede: il percorso dalla
+/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti, dei Blocchi e del menu, e della griglia, come Vite li vede: il percorso dalla
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/ui/motion.ts", "../src/ui/menu.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/editors/grid/**/*.ts", "../src/ui/motion.ts", "../src/ui/menu.ts"], {
       eager: true,
       query: "?raw",
       import: "default",
@@ -47,7 +47,7 @@ const sources = new Map(
 
 /// Un file «si muove» se importa `moto` e chiama una delle sue partenze.
 const IMPORTS_MOTO = /from\s+"(\.\.?\/)+moto(\/[\w-]+)?"/;
-const STARTS = /\b(animate|springValue|flip|exitGhost|prepareExit|stagger|enter|drag)\(/;
+const STARTS = /\b(animate|springValue|flip|exitGhost|prepareExit|stagger|enter|drag|onFrame)\(/;
 const moving = [...sources]
   .filter(([path, text]) => !path.endsWith(".test.ts") && IMPORTS_MOTO.test(text) && STARTS.test(text))
   .map(([path]) => path)

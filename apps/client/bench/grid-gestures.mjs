@@ -49,7 +49,7 @@ import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 /// I cantieri chiusi: i loro controlli decidono l'esito del banco.
-const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2"]);
+const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3"]);
 
 const REPORT = join(OUTPUT, "grid-gestures.json");
 const SHOTS = join(OUTPUT, "grid-gestures");
@@ -230,6 +230,39 @@ async function pick(page, a1) {
 const editorLabel = (s) => (s.editorOpen ? `editor aperto con «${s.editorText.replace(/\n/g, "⏎")}»` : "editor chiuso");
 const seen = (s) => `cella ${s.name ?? "?"}, ${editorLabel(s)}, fuoco su ${s.focusInEditor ? "campo della cella" : s.focus}`;
 
+/// I segni della selezione che si vedono nel riquadro col fuoco (i pezzi di
+/// `grid-motion.ts`: quelli che non servono restano nascosti): quanti
+/// rettangoli, il riquadro dei lati del rettangolo principale, gli anelli e
+/// i quadratini, coi rettangoli dello schermo.
+const marksLook = (page) =>
+  page.evaluate(() => {
+    const root = document.querySelector(".pane.focus .grid-viewport");
+    const shown = (kind) => [...root.querySelectorAll(`.grid-mark-${kind}`)].filter((mark) => !mark.hidden && mark.getClientRects().length > 0);
+    const box = (element) => {
+      const r = element.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const edges = shown("edge");
+    const rect = edges.filter((mark) => mark.dataset.mark.startsWith("rect-")).map(box);
+    const union = rect.length
+      ? { left: Math.min(...rect.map((r) => r.left)), top: Math.min(...rect.map((r) => r.top)), right: Math.max(...rect.map((r) => r.right)), bottom: Math.max(...rect.map((r) => r.bottom)) }
+      : null;
+    return {
+      ranges: new Set(edges.map((mark) => mark.dataset.mark.replace(/-(top|bottom|left|right)$/, ""))).size,
+      rect: union,
+      rings: shown("ring").length,
+      handles: shown("handle").map((mark) => ({ ...box(mark), layer: mark.parentElement.className })),
+    };
+  });
+
+/// Il centro del quadratino che si vede, o `null`. Il quadratino non prende
+/// il puntatore: la griglia lo prende per geometria, dove si vede l'angolo.
+async function handleCenter(page) {
+  const look = await marksLook(page);
+  const handle = look.handles[0];
+  return handle ? { x: handle.left + handle.width / 2, y: handle.top + handle.height / 2 } : null;
+}
+
 // ---------------------------------------------------------------------------
 // I controlli.
 // ---------------------------------------------------------------------------
@@ -286,11 +319,13 @@ const CONTROLS = [
     expected: "edit.autoFill chiesto all'host (B2 → B4, fin dove arriva la colonna A)",
     run: async (page) => {
       await pick(page, "B2");
-      if ((await page.locator(".pane.focus .grid-fill-handle").count()) === 0) {
+      await settle(page);
+      const grip = await handleCenter(page);
+      if (!grip) {
         return { skip: "la sessione non serve edit.autoFill: il quadratino non c'è" };
       }
       const before = (await readState(page)).calls;
-      await page.dblclick(".pane.focus .grid-fill-handle");
+      await page.mouse.dblclick(grip.x, grip.y);
       await settle(page);
       const calls = await callsSince(page, before);
       const fill = calls.find((call) => call.gate === "gridBytesCommand" && call.args.includes("edit.autoFill"));
@@ -465,25 +500,24 @@ const CONTROLS = [
       await settle(page);
       const b2 = cellSelector("B2");
       const c5 = cellSelector("C5");
-      const look = await page.evaluate(({ b2, c5 }) => {
+      const marks = await marksLook(page);
+      const look = await page.evaluate(({ b2, c5, mark }) => {
         const box = (element) => element?.getBoundingClientRect();
-        const marks = [...document.querySelectorAll(".grid-selection")];
-        const mark = box(marks[0]);
         const first = box(document.querySelector(b2));
         const last = box(document.querySelector(c5));
         const near = (a, b) => Math.abs(a - b) <= 2;
         const viewport = document.querySelector(".grid-viewport");
         const ring = getComputedStyle(viewport);
-        const active = document.querySelector(".grid-cell.active");
         return {
-          marks: marks.length,
           covers: Boolean(mark && first && last && near(mark.left, first.left) && near(mark.top, first.top)
             && near(mark.right, last.right) && near(mark.bottom, last.bottom)),
           ring: ring.boxShadow !== "none" || ring.outlineStyle !== "none",
-          activeBorder: active ? getComputedStyle(active).boxShadow !== "none" : false,
           hiddenTick: [...document.querySelectorAll(".grid-column-header.after-hidden")].map((header) => header.textContent),
         };
-      }, { b2, c5 });
+      }, { b2, c5, mark: marks.rect });
+      // Il bordo della cella attiva è il suo anello: quattro lati sottili.
+      look.marks = marks.ranges;
+      look.activeBorder = marks.rings === 4;
       return {
         ok: look.marks === 1 && look.covers && !look.ring && look.activeBorder && look.hiddenTick.includes("E"),
         seen: `rettangoli ${look.marks}, copre B2:C5 ${look.covers}, anello ${look.ring}, bordo della cella attiva ${look.activeBorder}, tacche ${look.hiddenTick.join(" ") || "nessuna"}`,
@@ -541,14 +575,15 @@ const CONTROLS = [
       await page.mouse.click(x, y);
       await page.keyboard.up("Control");
       await settle(page);
-      const count = () => page.evaluate(() => document.querySelectorAll(".pane.focus .grid-selection").length);
+      const count = async () => (await marksLook(page)).ranges;
       const chosen = (a1s) => page.evaluate((selectors) => selectors.map((selector) => document.querySelector(selector)?.classList.contains("selected")), a1s);
       const two = await count();
       const both = await chosen([cellSelector("B2"), cellSelector("C5")]);
       await pick(page, "E2");
       const after = await count();
       return {
-        ok: two === 2 && both.every(Boolean) && after === 0,
+        // Una cella sola ha il suo rettangolo: dopo il clic ne resta uno.
+        ok: two === 2 && both.every(Boolean) && after === 1,
         seen: `rettangoli ${two}, B2 e C5 scelte ${both.join(" ")}, dopo il clic ${after}`,
       };
     },
@@ -810,15 +845,15 @@ const CONTROLS = [
         };
         // I segni non si toccano col puntatore: per leggerli con
         // `elementsFromPoint` lo si accende un momento.
-        const probe = document.createElement("style");
-        probe.textContent = ".grid-selection { pointer-events: auto !important; }";
-        document.head.append(probe);
-        const covers = (element) => element.matches(".grid-cell, .grid-row-header, .grid-column-header, .grid-corner, .grid-freeze");
+        const probe = new CSSStyleSheet();
+        probe.replaceSync(".grid-mark-edge, .grid-mark-ring, .grid-mark-veil { pointer-events: auto !important; }");
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, probe];
+        const covers = (element) => element.matches(".grid-cell, .grid-row-header, .grid-column-header, .grid-corner, .grid-mark-freeze");
         // In (x, y) si vede un pezzo del rettangolo se sta sopra a ogni cella
         // e intestazione che ci passa.
         const markOnTop = (x, y) => {
           for (const element of document.elementsFromPoint(x, y)) {
-            if (element.classList.contains("grid-selection")) return true;
+            if (element.matches(".grid-mark-edge, .grid-mark-ring, .grid-mark-veil")) return true;
             if (covers(element)) return false;
           }
           return false;
@@ -848,9 +883,9 @@ const CONTROLS = [
             if (markOnTop(x, y + 0.5)) over.push(`${Math.round(x - v.left)},${Math.round(y - v.top)}`);
           }
         }
-        probe.remove();
+        document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== probe);
         return {
-          marks: document.querySelectorAll(".pane.focus .grid-selection").length,
+          marks: [...document.querySelectorAll(".pane.focus .grid-mark")].filter((mark) => !mark.hidden).length,
           seenHeight,
           expected: Math.round(top + body),
           over: over.slice(0, 6),
@@ -881,12 +916,16 @@ const CONTROLS = [
           top: parseFloat(plane.style.getPropertyValue("--grid-top-h")),
           left: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
         };
-        const handles = [...document.querySelectorAll(".pane.focus .grid-fill-handle")];
+        const handles = [...document.querySelectorAll(".pane.focus .grid-mark-handle")].filter((mark) => !mark.hidden);
         const box = handles[0]?.getBoundingClientRect();
         // Intero: ai quattro angoli, appena dentro, il quadratino sta sopra
-        // a tutto.
+        // a tutto. Non prende il puntatore: per leggerlo lo si accende.
+        const probe = new CSSStyleSheet();
+        probe.replaceSync(".grid-mark-handle { pointer-events: auto !important; }");
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, probe];
         const whole = Boolean(box) && [[1, 1], [box.width - 1, 1], [1, box.height - 1], [box.width - 1, box.height - 1]]
           .every(([dx, dy]) => document.elementsFromPoint(box.left + dx, box.top + dy)[0] === handles[0]);
+        document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== probe);
         return {
           count: handles.length,
           size: box ? `${Math.round(box.width)}×${Math.round(box.height)}` : "niente",
@@ -937,6 +976,229 @@ const CONTROLS = [
     title: `${G2_STEPS} passi di rotella da ${G2_STEP_PX} px in giù`,
     expected: "in ogni fotogramma il riquadro coperto da righe disegnate; ogni passo aggiunge le sole righe entrate nel margine e toglie le sole uscite, e nessuna riga o cella di una riga rimasta è rifatta",
     run: (page) => rowsAtEdges(page),
+  },
+  // **I segni che restano e scivolano** (griglia T3): una freccia sposta i
+  // pezzi dei segni e non li rifà, il rettangolo è simmetrico sui fili, i
+  // segni si leggono in ogni luce, il quadratino si prende dove si vede, e
+  // il mouse fitto non rompe mai la selezione.
+  {
+    id: "g3-frecce-senza-nodi",
+    cantiere: "G3",
+    title: "cinque frecce e cinque Maiusc+freccia da B2, con un MutationObserver sui livelli dei segni e sulle intestazioni",
+    expected: "zero nodi aggiunti o tolti",
+    run: async (page) => {
+      await pick(page, "B2");
+      await settle(page, 500);
+      await page.evaluate(() => {
+        const plane = document.querySelector(".pane.focus .grid-plane");
+        const watched = (node) => node instanceof Element
+          && (node.matches(".grid-mark, .grid-header, .grid-corner") || Boolean(node.parentElement?.closest("[class^='grid-marks-'], [class^='grid-lift-']")));
+        window.__g3Nodes = { added: 0, removed: 0, names: [] };
+        window.__g3Observer = new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) if (watched(node)) { window.__g3Nodes.added += 1; window.__g3Nodes.names.push(`+${node.className}`); }
+            for (const node of record.removedNodes) if (watched(node) || record.target.closest?.("[class^='grid-marks-'], [class^='grid-lift-']")) { window.__g3Nodes.removed += 1; window.__g3Nodes.names.push(`-${node.className}`); }
+          }
+        });
+        window.__g3Observer.observe(plane, { childList: true, subtree: true });
+      });
+      for (const key of ["ArrowRight", "ArrowDown", "ArrowRight", "ArrowDown", "ArrowLeft"]) {
+        await page.keyboard.press(key);
+        await settle(page, 60);
+      }
+      for (const key of ["Shift+ArrowDown", "Shift+ArrowRight", "Shift+ArrowDown", "Shift+ArrowRight", "Shift+ArrowUp"]) {
+        await page.keyboard.press(key);
+        await settle(page, 60);
+      }
+      await settle(page, 400);
+      const nodes = await page.evaluate(() => {
+        window.__g3Observer.disconnect();
+        return window.__g3Nodes;
+      });
+      const s = await readState(page);
+      return {
+        ok: nodes.added === 0 && nodes.removed === 0 && s.name === "C4",
+        seen: `${nodes.added} nodi aggiunti, ${nodes.removed} tolti${nodes.names.length ? ` (${nodes.names.slice(0, 6).join(" ")})` : ""}; ${seen(s)}`,
+      };
+    },
+  },
+  {
+    id: "g3-lati-simmetrici",
+    cantiere: "G3",
+    title: "B2:C5 scelto con Maiusc+clic, i quattro lati del rettangolo",
+    expected: "quattro lati larghi uguale, ognuno sul filo della sua cella e un pixel dentro (distanza dai fili uguale entro 0,5 px)",
+    run: async (page) => {
+      await pick(page, "B2");
+      const { x, y } = await centerOf(page, cellSelector("C5"));
+      await page.keyboard.down("Shift");
+      await page.mouse.click(x, y);
+      await page.keyboard.up("Shift");
+      await settle(page, 500);
+      const look = await page.evaluate(({ b2, c5 }) => {
+        const first = document.querySelector(b2).getBoundingClientRect();
+        const last = document.querySelector(c5).getBoundingClientRect();
+        const side = (name) => {
+          const pieces = [...document.querySelectorAll(`.pane.focus .grid-mark-edge[data-mark="rect-${name}"]`)].filter((mark) => !mark.hidden);
+          return pieces.map((mark) => mark.getBoundingClientRect());
+        };
+        const [top] = side("top");
+        const [bottom] = side("bottom");
+        const [left] = side("left");
+        const [right] = side("right");
+        if (!top || !bottom || !left || !right) return null;
+        // Il filo di una cella è il suo ultimo pixel: quello a sinistra di B2
+        // è l'ultimo di A, quello a destra di C5 l'ultimo di C. Un lato copre
+        // il filo e il pixel dentro: la sua distanza dal filo è zero.
+        return {
+          widths: [top.height, bottom.height, left.width, right.width],
+          gaps: [
+            top.top - (first.top - 1),
+            last.bottom - bottom.bottom,
+            left.left - (first.left - 1),
+            last.right - right.right,
+          ],
+        };
+      }, { b2: cellSelector("B2"), c5: cellSelector("C5") });
+      if (!look) return { ok: false, seen: "il rettangolo non ha i suoi quattro lati" };
+      const sameWidth = look.widths.every((w) => Math.abs(w - look.widths[0]) <= 0.5);
+      const sameGap = look.gaps.every((gap) => Math.abs(gap - look.gaps[0]) <= 0.5);
+      return {
+        ok: sameWidth && sameGap && Math.abs(look.gaps[0]) <= 0.5,
+        seen: `larghezze ${look.widths.join(" ")} px (sopra, sotto, sinistra, destra), distanze dai fili ${look.gaps.map((g) => Math.round(g * 10) / 10).join(" ")} px`,
+      };
+    },
+  },
+  {
+    id: "g3-contrasto-dei-segni",
+    cantiere: "G3",
+    title: "B2:C3 scelto; nelle quattro luci (chiara, scura, ciascuna normale e ad alto contrasto) e coi due aspetti (carta del file, adattato), il colore di un lato contro la carta",
+    expected: "contrasto ≥ 3:1 in ogni luce e aspetto",
+    run: async (page) => {
+      await pick(page, "B2");
+      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("Shift+ArrowRight");
+      await settle(page, 500);
+      const rows = [];
+      for (const colorScheme of ["light", "dark"]) {
+        for (const contrast of ["no-preference", "more"]) {
+          await page.emulateMedia({ colorScheme, contrast });
+          await settle(page, 400);
+          for (const look of ["file", "adattato"]) {
+            rows.push(await page.evaluate(({ look, label }) => {
+              const root = document.querySelector(".pane.focus .grid-viewport").closest(".look-file, .look-adattato, .look-tema");
+              const before = root ? [...root.classList].filter((name) => name.startsWith("look-")) : [];
+              if (root) {
+                for (const name of before) root.classList.remove(name);
+                root.classList.add(`look-${look}`);
+              }
+              // Il colore calcolato in rgba, attraverso una tela: legge ogni
+              // sintassi di colore che il motore restituisce.
+              const canvas = document.createElement("canvas");
+              canvas.width = canvas.height = 1;
+              const context = canvas.getContext("2d", { willReadFrequently: true });
+              const rgba = (color) => {
+                context.clearRect(0, 0, 1, 1);
+                context.fillStyle = "#000";
+                context.fillStyle = color;
+                context.fillRect(0, 0, 1, 1);
+                return [...context.getImageData(0, 0, 1, 1).data];
+              };
+              const luminance = ([r, g, b]) => {
+                const lin = (c) => {
+                  const v = c / 255;
+                  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+                };
+                return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+              };
+              const edge = [...document.querySelectorAll(".pane.focus .grid-mark-edge")].find((mark) => !mark.hidden);
+              const paper = document.querySelector(".pane.focus .grid-paper");
+              const mark = rgba(getComputedStyle(edge).backgroundColor);
+              const sheet = rgba(getComputedStyle(paper).backgroundColor);
+              const [a, b] = [luminance(mark), luminance(sheet)].sort((x, y) => y - x);
+              const ratio = (a + 0.05) / (b + 0.05);
+              if (root) {
+                root.classList.remove(`look-${look}`);
+                for (const name of before) root.classList.add(name);
+              }
+              return { label: `${label} ${look}`, ratio: Math.round(ratio * 100) / 100, mark: mark.slice(0, 3).join(","), sheet: sheet.slice(0, 3).join(",") };
+            }, { look, label: `${colorScheme}${contrast === "more" ? " alto" : ""}` }));
+          }
+        }
+      }
+      await page.emulateMedia({ colorScheme: "dark", contrast: "no-preference" });
+      const low = rows.filter((row) => !(row.ratio >= 3));
+      return {
+        ok: low.length === 0,
+        seen: rows.map((row) => `${row.label} ${row.ratio}:1`).join("; "),
+        rows,
+      };
+    },
+  },
+  {
+    id: "g3-quadratino-coperto",
+    cantiere: "G3",
+    scene: LARGE_SCENE_ID,
+    title: "B5 scelta, scorsa di lato finché l'angolo del quadratino è 2 px oltre il filo della colonna ferma, si tira dall'angolo; poi finché l'angolo è 20 px sotto la fascia, stesso gesto",
+    expected: "a 2 px il gesto riempie (edit.autoFill); a 20 px sotto la fascia parte dalla cella della colonna ferma e non riempie",
+    run: async (page) => {
+      const tryAt = async (beyond) => {
+        await page.evaluate(() => {
+          const v = document.querySelector(".pane.focus .grid-viewport");
+          v.scrollLeft = 0;
+          v.scrollTop = 0;
+        });
+        await settle(page);
+        await pick(page, "B5");
+        await settle(page, 400);
+        const geometry = await page.evaluate((b5) => {
+          const viewport = document.querySelector(".pane.focus .grid-viewport");
+          const plane = viewport.querySelector(".grid-plane");
+          const v = viewport.getBoundingClientRect();
+          const cell = document.querySelector(b5).getBoundingClientRect();
+          return {
+            left: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
+            corner: cell.right - v.left - viewport.clientLeft,
+            bottom: cell.bottom,
+            vLeft: v.left + viewport.clientLeft,
+          };
+        }, cellSelector("B5"));
+        if (!(await handleCenter(page))) return null;
+        // L'angolo si vede a `left + beyond` dall'orlo del riquadro.
+        const scroll = geometry.corner - geometry.left - beyond;
+        await page.evaluate((left) => {
+          const v = document.querySelector(".pane.focus .grid-viewport");
+          v.scrollLeft = left;
+          v.dispatchEvent(new Event("scroll"));
+        }, scroll);
+        await settle(page, 400);
+        const before = (await readState(page)).calls;
+        const x = geometry.vLeft + geometry.left + beyond - 1;
+        const y = geometry.bottom - 1;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x, y + 30, { steps: 3 });
+        await page.mouse.move(x, y + 90, { steps: 3 });
+        await page.mouse.up();
+        await settle(page);
+        const calls = await callsSince(page, before);
+        return calls.some((call) => call.gate === "gridBytesCommand" && call.args.includes("edit.autoFill"));
+      };
+      const near = await tryAt(2);
+      if (near === null) return { skip: "la sessione non serve edit.autoFill: il quadratino non c'è" };
+      const under = await tryAt(-20);
+      return {
+        ok: near === true && under === false,
+        seen: `a 2 px oltre il filo ${near ? "riempie" : "non riempie"}; a 20 px sotto la fascia ${under ? "riempie" : "non riempie"}`,
+      };
+    },
+  },
+  {
+    id: "g3-mouse-fitto",
+    cantiere: "G3",
+    scene: LARGE_SCENE_ID,
+    title: "il mouse dal CDP a 1000 Hz senza aspettare: trascinamenti avanti e indietro dentro e fuori dalla riga e dalla colonna bloccate, la rotella durante il trascinamento, Maiusc+clic, frecce svelte; a 1280 e 390 px, CPU 1× e 4×, moto vero",
+    expected: "in ogni fotogramma i pezzi di ogni lato d'accordo (0,5 px), nessun lato oltre il bersaglio o all'indietro, anello e velo dentro il bordo, il quadratino un pezzo solo 8×8 nel livello della zona del suo angolo; a gesto finito la cella attiva sotto il puntatore",
+    run: (page) => denseMouse(page),
   },
 ];
 
@@ -1400,6 +1662,352 @@ async function rowsAtEdges(page) {
 // ---------------------------------------------------------------------------
 // La corsa.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// G3: il mouse fitto.
+// ---------------------------------------------------------------------------
+
+/// I quattro giri di `g3-mouse-fitto`: larghezza della finestra e
+/// rallentamento della CPU.
+const G3_ROUNDS = [
+  { width: 1280, cpu: 1 },
+  { width: 1280, cpu: 4 },
+  { width: 390, cpu: 1 },
+  { width: 390, cpu: 4 },
+];
+/// Un `mouseMoved` ogni millisecondo, come un mouse a 1000 Hz.
+const G3_MOVE_MS = 1;
+/// Quanto può sbagliare un lato, fra pezzi e contro il bersaglio.
+const G3_TOLERANCE = 0.5;
+
+/// Installa nella pagina il lettore dei fotogrammi: un `ResizeObserver` su
+/// una sentinella che un rAF cambia, quindi dopo i rAF (anche quello del
+/// motore dei segni) e prima del dipinto, legge ogni pezzo visibile.
+async function installMarksRecorder(page) {
+  await page.evaluate((tolerance) => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const state = { frames: 0, moving: 0, disagree: [], overshoot: [], backward: [], outside: [], corner: [], prev: {} };
+    const note = (list, text) => {
+      if (list.length < 8) list.push(`f${state.frames}: ${text}`);
+      list.count = (list.count ?? 0) + 1;
+    };
+    const sample = () => {
+      state.frames += 1;
+      const v = viewport.getBoundingClientRect();
+      const bands = {
+        top: parseFloat(plane.style.getPropertyValue("--grid-top-h")),
+        left: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
+      };
+      const shown = [...viewport.querySelectorAll(".grid-mark")].filter((mark) => !mark.hidden);
+      if (shown.some((mark) => mark.style.transform)) state.moving += 1;
+      // 1. I pezzi di ogni lato del rettangolo, sullo schermo, d'accordo.
+      // Ciò che di un pezzo si vede: un pezzo del corpo sotto una fascia
+      // ferma, o della testa sotto la colonna ferma, è coperto.
+      const visible = (mark) => {
+        const r = mark.getBoundingClientRect();
+        const layer = mark.parentElement.className;
+        const minX = layer === "grid-marks-body" || layer === "grid-marks-top" ? v.left + viewport.clientLeft + bands.left : -Infinity;
+        const minY = layer === "grid-marks-body" || layer === "grid-marks-left" ? v.top + viewport.clientTop + bands.top : -Infinity;
+        const left = Math.max(r.left, minX, v.left);
+        const top = Math.max(r.top, minY, v.top);
+        const right = Math.min(r.right, v.right);
+        const bottom = Math.min(r.bottom, v.bottom);
+        return right > left && bottom > top ? { left, top, right, bottom, width: right - left, height: bottom - top } : null;
+      };
+      const sides = { top: [], bottom: [], left: [], right: [] };
+      const now = {};
+      for (const mark of shown) {
+        const match = /^rect-(top|bottom|left|right)$/.exec(mark.dataset.mark ?? "");
+        if (!match) continue;
+        const side = match[1];
+        const r = mark.getBoundingClientRect();
+        const seenRect = visible(mark);
+        if (!seenRect) continue;
+        const thick = side === "top" || side === "bottom" ? seenRect.height : seenRect.width;
+        if (thick < 1.5) continue;
+        sides[side].push(side === "top" ? r.top : side === "bottom" ? r.bottom : side === "left" ? r.left : r.right);
+        // 2. Il bersaglio: dove sta un pezzo del corpo al suo arrivo, nelle
+        // coordinate del suo livello, contro dove si vede.
+        if (mark.parentElement.classList.contains("grid-marks-body") && mark.hasAttribute("data-arrive")) {
+          const layer = mark.parentElement.getBoundingClientRect();
+          const left = parseFloat(mark.style.left);
+          const top = parseFloat(mark.style.top);
+          const width = parseFloat(mark.style.width);
+          const height = parseFloat(mark.style.height);
+          now[side] = side === "top"
+            ? { target: top, seen: r.top - layer.top }
+            : side === "bottom"
+              ? { target: top + height, seen: r.bottom - layer.top }
+              : side === "left"
+                ? { target: left, seen: r.left - layer.left }
+                : { target: left + width, seen: r.right - layer.left };
+        }
+      }
+      for (const [side, values] of Object.entries(sides)) {
+        if (values.length > 1 && Math.max(...values) - Math.min(...values) > tolerance) {
+          note(state.disagree, `${side} ${values.map((x) => Math.round(x * 10) / 10).join("/")}`);
+        }
+      }
+      for (const [side, at] of Object.entries(now)) {
+        const before = state.prev[side];
+        if (!before) continue;
+        const was = before.seen - at.target;
+        const is = at.seen - at.target;
+        if (was * is < -tolerance * tolerance && Math.abs(is) > tolerance) note(state.overshoot, `${side} ${Math.round(was * 10) / 10} → ${Math.round(is * 10) / 10}`);
+        if (Math.abs(is) > Math.abs(was) + tolerance) note(state.backward, `${side} ${Math.round(was * 10) / 10} → ${Math.round(is * 10) / 10}`);
+      }
+      state.prev = now;
+      // 3. L'anello e il velo dentro il bordo.
+      const all = Object.values(sides);
+      if (all.every((values) => values.length > 0)) {
+        const box = { top: Math.min(...sides.top), bottom: Math.max(...sides.bottom), left: Math.min(...sides.left), right: Math.max(...sides.right) };
+        for (const mark of shown) {
+          if (!mark.matches(".grid-mark-ring, .grid-mark-veil")) continue;
+          const r = visible(mark);
+          if (!r) continue;
+          if (r.left < box.left - tolerance || r.right > box.right + tolerance || r.top < box.top - tolerance || r.bottom > box.bottom + tolerance) {
+            note(state.outside, `${mark.dataset.mark}`);
+          }
+        }
+      }
+      // 4. Il quadratino: uno solo, intero, nel livello della zona del suo
+      // angolo.
+      const handles = shown.filter((mark) => mark.matches(".grid-mark-handle"));
+      if (handles.length > 1) note(state.corner, `${handles.length} quadratini`);
+      for (const handle of handles) {
+        const r = handle.getBoundingClientRect();
+        if (Math.abs(r.width - 8) > tolerance || Math.abs(r.height - 8) > tolerance) note(state.corner, `quadratino ${r.width}×${r.height}`);
+        const x = r.left + 5 - v.left - viewport.clientLeft;
+        const y = r.top + 5 - v.top - viewport.clientTop;
+        const layer = handle.parentElement.className;
+        if (x > bands.left + 1 && y > bands.top + 1 && layer !== "grid-marks-body") note(state.corner, `angolo nel corpo, livello ${layer}`);
+        if ((layer === "grid-lift-left" || layer === "grid-lift-corner") && x > bands.left + 1) note(state.corner, `angolo a destra del filo, livello ${layer}`);
+        if ((layer === "grid-lift-top" || layer === "grid-lift-corner") && y > bands.top + 1) note(state.corner, `angolo sotto il filo, livello ${layer}`);
+      }
+    };
+    // La cella sotto il puntatore al rilascio: dove il gesto finisce. Dopo,
+    // ciò che sta sopra la griglia può cambiare misura e spostarla.
+    window.__g3Release = null;
+    window.addEventListener("pointerup", (event) => {
+      const cell = document.elementsFromPoint(event.clientX, event.clientY).find((node) => node.matches?.(".pane.focus .grid-cell"));
+      window.__g3Release = cell ? { row: cell.dataset.row, column: cell.dataset.column } : null;
+    }, true);
+    const sentinel = document.createElement("div");
+    sentinel.style.position = "fixed";
+    sentinel.style.left = "0";
+    sentinel.style.top = "0";
+    sentinel.style.height = "1px";
+    sentinel.style.pointerEvents = "none";
+    document.body.append(sentinel);
+    const observer = new ResizeObserver(sample);
+    observer.observe(sentinel);
+    let flip = false;
+    let frame = 0;
+    const tick = () => {
+      flip = !flip;
+      sentinel.style.width = flip ? "1px" : "2px";
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    window.__g3Stop = () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      sentinel.remove();
+      const count = (list) => ({ count: list.count ?? 0, first: list });
+      return {
+        frames: state.frames,
+        moving: state.moving,
+        disagree: count(state.disagree),
+        overshoot: count(state.overshoot),
+        backward: count(state.backward),
+        outside: count(state.outside),
+        corner: count(state.corner),
+      };
+    };
+  }, G3_TOLERANCE);
+}
+
+/// Se la cella sotto il puntatore al rilascio (o, senza rilascio, sotto
+/// x, y) è un angolo della selezione: scelta, e su ogni asse con una vicina
+/// non scelta. Dove un gesto finisce, la selezione finisce.
+async function cellUnderIsCorner(page, x, y) {
+  const cell = await page.evaluate(([px, py]) => {
+    const released = window.__g3Release;
+    const element = released
+      ? document.querySelector(`.pane.focus .grid-cell[data-row="${released.row}"][data-column="${released.column}"]`)
+      : document.elementsFromPoint(px, py).find((node) => node.matches?.(".pane.focus .grid-cell"));
+    window.__g3Release = null;
+    if (!element) return null;
+    const row = Number(element.dataset.row);
+    const column = Number(element.dataset.column);
+    const chosen = (r, c) => document.querySelector(`.pane.focus .grid-cell[data-row="${r}"][data-column="${c}"]`)?.classList.contains("selected") ?? false;
+    return {
+      name: `${row},${column}`,
+      selected: element.classList.contains("selected"),
+      rowEdge: !chosen(row - 1, column) || !chosen(row + 1, column),
+      columnEdge: !chosen(row, column - 1) || !chosen(row, column + 1),
+    };
+  }, [x, y]);
+  if (!cell) return { ok: false, text: `niente sotto ${Math.round(x)},${Math.round(y)}` };
+  const ok = cell.selected && cell.rowEdge && cell.columnEdge;
+  return { ok, text: `cella ${cell.name} ${ok ? "è" : "non è"} un angolo` };
+}
+
+/// I gesti di un giro, col mouse del CDP che non aspetta le risposte.
+async function denseGestures(page, cdp) {
+  const box = await page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const v = viewport.getBoundingClientRect();
+    return {
+      left: v.left + viewport.clientLeft,
+      top: v.top + viewport.clientTop,
+      width: viewport.clientWidth,
+      height: viewport.clientHeight,
+      bandLeft: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
+      bandTop: parseFloat(plane.style.getPropertyValue("--grid-top-h")),
+    };
+  });
+  const sent = [];
+  const send = (params) => sent.push(cdp.send("Input.dispatchMouseEvent", params).catch(() => {}));
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let at = { x: 0, y: 0 };
+  /// Da dove si è a (x, y) in `ms`, un `mouseMoved` per millisecondo.
+  const sweep = async (x, y, ms, buttons = 1) => {
+    const from = at;
+    const steps = Math.max(1, Math.round(ms / G3_MOVE_MS));
+    for (let step = 1; step <= steps; step += 1) {
+      const t = step / steps;
+      at = { x: from.x + (x - from.x) * t, y: from.y + (y - from.y) * t };
+      send({ type: "mouseMoved", x: at.x, y: at.y, button: buttons ? "left" : "none", buttons });
+      await pause(G3_MOVE_MS);
+    }
+  };
+  const press = (x, y, modifiers = 0) => {
+    at = { x, y };
+    send({ type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1, modifiers });
+  };
+  const release = (modifiers = 0) => send({ type: "mouseReleased", x: at.x, y: at.y, button: "left", buttons: 0, clickCount: 1, modifiers });
+  const wheel = (dx, dy) => send({ type: "mouseWheel", x: at.x, y: at.y, deltaX: dx, deltaY: dy });
+  // I punti: nel corpo, nella colonna ferma, nella riga ferma.
+  const body = (fx, fy) => ({ x: box.left + box.bandLeft + (box.width - box.bandLeft) * fx, y: box.top + box.bandTop + (box.height - box.bandTop) * fy });
+  const inColumn = (fy) => ({ x: box.left + box.bandLeft * 0.6, y: box.top + box.bandTop + (box.height - box.bandTop) * fy });
+  const inRow = (fx) => ({ x: box.left + box.bandLeft + (box.width - box.bandLeft) * fx, y: box.top + box.bandTop - 6 });
+  /// Un punto dove premere comincia una selezione: non sul bordo della
+  /// selezione di prima (che la sposterebbe) né sul quadratino (che
+  /// riempirebbe). Lo dice il cursore che la griglia mette al passaggio.
+  const clear = async (point) => {
+    let p = point;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      at = p;
+      await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y, button: "none", buttons: 0 });
+      await settle(page, 40);
+      const busy = await page.evaluate(() => {
+        const viewport = document.querySelector(".pane.focus .grid-viewport");
+        return ["move-selection", "fill-handle", "resize-column", "resize-row"].some((name) => viewport.classList.contains(name));
+      });
+      if (!busy) return p;
+      p = { x: p.x + 14, y: p.y + 14 };
+    }
+    return p;
+  };
+  const ends = [];
+  const finish = async () => {
+    await Promise.all(sent.splice(0));
+    await settle(page, 450);
+    ends.push(await cellUnderIsCorner(page, at.x, at.y));
+  };
+
+  // Un trascinamento avanti e indietro, dentro e fuori dalla colonna e dalla
+  // riga ferme, con la rotella a metà.
+  const start = await clear(body(0.15, 0.2));
+  press(start.x, start.y);
+  for (const [point, ms] of [[body(0.8, 0.7), 220], [inColumn(0.5), 160], [body(0.5, 0.3), 120], [inRow(0.4), 140], [body(0.3, 0.6), 160], [body(0.9, 0.2), 90], [body(0.2, 0.25), 90]]) {
+    await sweep(point.x, point.y, ms);
+  }
+  wheel(0, 240);
+  await sweep(at.x + 20, at.y + 10, 80);
+  wheel(160, 0);
+  await sweep(at.x - 30, at.y + 30, 80);
+  // Lo scorrimento della rotella può durare oltre l'ultimo movimento: col
+  // tasto giù la selezione lo segue, e si rilascia a griglia ferma.
+  await Promise.all(sent.splice(0));
+  await page.waitForFunction(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const now = `${viewport.scrollLeft},${viewport.scrollTop}`;
+    const still = window.__g3Scroll === now;
+    window.__g3Scroll = now;
+    return still;
+  }, null, { polling: 120, timeout: 5_000 }).catch(() => {});
+  release();
+  await finish();
+  // Inversioni fitte: avanti e indietro di molte celle, svelte.
+  const second = await clear(body(0.5, 0.5));
+  press(second.x, second.y);
+  for (let turn = 0; turn < 6; turn += 1) {
+    const far = turn % 2 === 0 ? body(0.95, 0.9) : inColumn(0.1);
+    await sweep(far.x, far.y, 40);
+  }
+  const last = body(0.6, 0.55);
+  await sweep(last.x, last.y, 30);
+  release();
+  await finish();
+  // Maiusc+clic.
+  const shift = body(0.7, 0.75);
+  await sweep(shift.x, shift.y, 20, 0);
+  press(shift.x, shift.y, 8);
+  release(8);
+  await finish();
+  // Frecce svelte, poi un clic: la selezione finisce sotto il puntatore.
+  for (const key of ["ArrowRight", "ArrowRight", "ArrowDown", "Shift+ArrowRight", "Shift+ArrowDown", "Control+ArrowRight", "ArrowLeft", "Control+ArrowLeft"]) {
+    await page.keyboard.press(key);
+  }
+  const click = await clear(body(0.4, 0.4));
+  await sweep(click.x, click.y, 10, 0);
+  press(click.x, click.y);
+  release();
+  await finish();
+  return ends;
+}
+
+/// g3-mouse-fitto: i quattro giri, ognuno col suo lettore dei fotogrammi.
+async function denseMouse(page) {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const cdp = await page.context().newCDPSession(page);
+  const size = page.viewportSize();
+  const lines = [];
+  let ok = true;
+  try {
+    for (const round of G3_ROUNDS) {
+      await page.setViewportSize({ width: round.width, height: size.height });
+      await gridSteady(page);
+      await page.evaluate(() => {
+        const v = document.querySelector(".pane.focus .grid-viewport");
+        v.scrollLeft = 0;
+        v.scrollTop = 0;
+      });
+      await settle(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: round.cpu });
+      await installMarksRecorder(page);
+      const ends = await denseGestures(page, cdp);
+      const seen = await page.evaluate(() => window.__g3Stop());
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+      const bad = ["disagree", "overshoot", "backward", "outside", "corner"].filter((key) => seen[key].count > 0);
+      const missed = ends.filter((end) => !end.ok);
+      const good = bad.length === 0 && missed.length === 0 && seen.moving > 0;
+      ok = ok && good;
+      lines.push(
+        `${round.width} px, CPU ${round.cpu}×: ${seen.frames} fotogrammi (${seen.moving} in moto); disaccordo ${seen.disagree.count}, oltre ${seen.overshoot.count}, indietro ${seen.backward.count}, fuori dal bordo ${seen.outside.count}, angoli ${seen.corner.count}; ${ends.map((end) => end.text).join(", ")}`
+          + (bad.length ? ` [${bad.map((key) => `${key}: ${seen[key].first.join("; ")}`).join(" | ")}]` : ""),
+      );
+    }
+  } finally {
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
+    await page.setViewportSize(size);
+  }
+  return { ok, seen: lines.join(" — ") };
+}
 
 const cantieri = (control) => (Array.isArray(control.cantiere) ? control.cantiere : [control.cantiere]);
 const isOn = (control) => cantieri(control).every((sigla) => ACCESI.has(sigla));

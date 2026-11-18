@@ -10,7 +10,7 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich` e dei Blocchi
+// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich`, della griglia e dei Blocchi
 // che fa partire una corsa di `moto` è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
@@ -534,6 +534,17 @@ const light = (theme) => (page) =>
 
 /// La barra dei fogli del riquadro col fuoco.
 const GRID_RIBBON = ".pane.focus .grid-ribbon";
+/// Una cella della griglia col fuoco (riga e colonna da zero), con le classi
+/// in più che deve avere.
+const gridCell = (row, column, extra = "") => `.pane.focus .grid-cell${extra}[data-row="${row}"][data-column="${column}"]`;
+/// Il lato alto del rettangolo della selezione, nel livello del corpo.
+const GRID_EDGE = '.pane.focus .grid-marks-body .grid-mark-edge[data-mark="rect-top"]';
+/// Sceglie una cella con un clic vero e aspetta che sia la cella attiva.
+const pickCell = async (page, row, column) => {
+  const at = await centre(page, gridCell(row, column));
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector(gridCell(row, column, ".active"));
+};
 /// La cella scelta cinque colonne più a destra, fuori dalla tabella della
 /// scena `grid-ribbon-table`.
 const stepRight = async (page) => {
@@ -1329,6 +1340,65 @@ export const CHOREOGRAPHIES = [
     arrived: has(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
     undo: stepRight,
     returned: lacks(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
+  },
+  // **I segni della griglia** (`grid-motion.ts`): un motore solo li fa
+  // scivolare dai dieci numeri della selezione, per i tasti e per il
+  // puntatore allo stesso modo. Il motore scrive il `transform` in linea a
+  // ogni fotogramma: `track` lo guarda sul lato alto del rettangolo.
+  {
+    id: "griglia-freccia",
+    title: "Griglia: una freccia, e il rettangolo scivola sulla cella accanto",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: (page) => page.keyboard.press("ArrowRight"),
+    arrived: has(gridCell(1, 2, ".active")),
+    undo: (page) => page.keyboard.press("ArrowLeft"),
+    returned: has(gridCell(1, 1, ".active")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-maiusc-freccia",
+    title: "Griglia: Maiusc+freccia, e il rettangolo si allarga dal bordo; anello e velo crescono da lì",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: (page) => page.keyboard.press("Shift+ArrowDown"),
+    arrived: has(gridCell(2, 1, ".selected")),
+    undo: (page) => page.keyboard.press("Shift+ArrowUp"),
+    returned: lacks(gridCell(2, 1, ".selected")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-ctrl-freccia",
+    title: "Griglia: Ctrl+freccia, un salto lontano che scivola senza passare la cella d'arrivo",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 0, 0),
+    act: (page) => page.keyboard.press("Control+ArrowDown"),
+    arrived: lacks(gridCell(0, 0, ".active")),
+    undo: (page) => page.keyboard.press("Control+ArrowUp"),
+    returned: has(gridCell(0, 0, ".active")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-trascina",
+    title: "Griglia: trascinando col puntatore il rettangolo si allarga e segue, nello stesso modo dei tasti",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: async (page) => {
+      const from = await centre(page, gridCell(1, 1));
+      const to = await centre(page, gridCell(3, 2));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 8 });
+      await page.mouse.up();
+    },
+    arrived: has(gridCell(3, 2, ".selected")),
+    undo: (page) => pickCell(page, 1, 1),
+    returned: lacks(gridCell(3, 2, ".selected")),
+    track: [GRID_EDGE],
   },
 ];
 
