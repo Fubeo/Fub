@@ -1640,7 +1640,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       await write(text, at);
       // La nota è tornata: uno scarto non riuscito non la fa sembrare persa,
       // e alla riapertura il confronto mostra due testi uguali.
-      await documentSessions.discardRemovedDraft(id, at).catch((error: unknown) => console.error(error));
+      await documentSessions.discardRemovedDraft(id, at, text).catch((error: unknown) => console.error(error));
     };
     const shownIn = panesWithDoc(id);
     const outcome = documentSessions.handleExternalRemoval(id);
