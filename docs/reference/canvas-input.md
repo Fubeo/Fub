@@ -258,11 +258,7 @@ diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
 (`Maiusc` 32, `Alt+Maiusc` 1); Tab e `Alt`+frecce muovono il fuoco ([la vista](canvas-view.md#da-tastiera-e-col-lettore-di-schermo)). Come nel disegno, i tasti della lavagna non si cambiano ancora.
 Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
 con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
-`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.
-I tasti dello zoom (`+`, `-`, `0`, e «Mostra tutto» con `Maiusc+1` o `Ctrl+0`)
-valgono anche col fuoco su un pulsante fuori dalla vista (la riga delle
-opzioni, la colonna, il navigatore), come i tasti degli strumenti sulla
-colonna; in un campo che scrive non valgono (IMP-040).
+`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`. I tasti dello zoom (`+`, `-`, `0`, «Mostra tutto») valgono anche col fuoco su un pulsante della riga, della colonna o del navigatore; in un campo che scrive valgono solo con Ctrl (IMP-040).
 
 ### Il menu della scheda
 
