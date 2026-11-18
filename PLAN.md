@@ -853,7 +853,7 @@ mentre la guardavi»).
 Fatto quando: `cargo test -p fub-app --test lean_ipc --test ipc_permissions --test ts_mirror_app`
 verdi; `npm run typecheck` e `npx vitest run src/host/mirror.test.ts` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · fc2ecc56c · check --rapido 32/33, unico rosso il tema per ENOSPC (rilanciato con polling: verde). Differenze: recipes_list → RecipeList { recipes, problems }; porte async con spawn_blocking, vault facoltativo, args della prova facoltativo ({}); impronta SHA-256 esadecimale; host finto con recipeChangedFromOutside per T12; errori not_found/conflict/bad_args.
 
 ## T11 · La CLI, l'MCP e la guida per chi costruisce con l'AI
 
