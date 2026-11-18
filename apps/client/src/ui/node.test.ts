@@ -1795,3 +1795,97 @@ describe("un elenco lungo mostra una pagina di voci", () => {
     expect(more()).toBeNull();
   });
 });
+
+// IMP-110: la domanda prima di un ripristino non si chiudeva con Esc. È un
+// nodo `fub.confirm`: il fallback è la domanda, il payload dice qual è il «no».
+describe("la domanda prima di un gesto distruttivo (fub.confirm)", () => {
+  let host: HTMLElement;
+  const yes: ActionRef = { action: "restore_confirm", payload: { doc: "Uno.md", ts: "7" } };
+  const no: ActionRef = { action: "restore_cancel", payload: null };
+  const opener: ActionRef = { action: "restore", payload: { doc: "Uno.md", ts: "7" } };
+  const compare: ActionRef = { action: "compare", payload: null };
+  const row = (first: UiNode): UiNode =>
+    ({
+      node: "stack", dir: "row", gap: 4, children: [
+        first,
+        { node: "button", label: "Confronta", intent: "neutral", action: compare },
+      ],
+    }) as UiNode;
+  const asking = (): UiNode =>
+    row({
+      key: "restore",
+      node: "custom",
+      ns: "fub.confirm",
+      payload: { cancel: no },
+      fallback: [
+        { node: "text", content: "Riportare la nota a questa versione?" },
+        { node: "button", label: "Sì, ripristina", intent: "danger", action: yes },
+        { node: "button", label: "Annulla", intent: "neutral", action: no },
+      ],
+    } as UiNode);
+  const button = (): UiNode =>
+    row({ key: "restore", node: "button", label: "Ripristina", intent: "primary", action: opener } as UiNode);
+  const labelled = (text: string): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text)!;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    host.className = "declared-view";
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+  });
+
+  it("disegna la domanda nella fila, e porta il fuoco al «no»", async () => {
+    mountTree(host, button(), async () => {});
+    labelled("Ripristina").focus();
+    mountTree(host, asking(), async () => {});
+    await Promise.resolve();
+    expect(host.querySelector(".ui-custom.ui-confirm")).not.toBeNull();
+    expect(labelled("Sì, ripristina")).toBeDefined();
+    expect(document.activeElement).toBe(labelled("Annulla"));
+  });
+
+  it("Esc manda il «no», e il fuoco torna al bottone che l'aveva aperta", async () => {
+    const sent: ActionRef[] = [];
+    const handler = async (action: ActionRef, _fields: FieldValue[]): Promise<void> => {
+      sent.push(action);
+      // Il provider risponde al «no» ridisegnando il bottone di prima.
+      mountTree(host, button(), handler);
+    };
+    mountTree(host, asking(), handler);
+    await Promise.resolve();
+    const outside = vi.fn();
+    document.addEventListener("keydown", outside);
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(escape);
+    document.removeEventListener("keydown", outside);
+    await vi.waitFor(() => expect(sent).toEqual([no]));
+    expect(escape.defaultPrevented).toBe(true);
+    expect(outside, "Esc non chiude anche ciò che contiene la domanda").not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.activeElement).toBe(labelled("Ripristina")));
+    expect(host.querySelector(".ui-confirm")).toBeNull();
+  });
+
+  it("Esc da qualunque bottone della domanda, anche dal sì, è il «no»", async () => {
+    const sent: ActionRef[] = [];
+    mountTree(host, asking(), async (action) => {
+      sent.push(action);
+    });
+    labelled("Sì, ripristina").focus();
+    labelled("Sì, ripristina").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await vi.waitFor(() => expect(sent).toEqual([no]));
+  });
+
+  it("non ruba il fuoco a chi sta scrivendo altrove", async () => {
+    const elsewhere = document.createElement("input");
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    mountTree(host, asking(), async () => {});
+    await Promise.resolve();
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+  });
+});
