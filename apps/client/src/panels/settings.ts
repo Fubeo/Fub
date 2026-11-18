@@ -84,6 +84,8 @@ import {
 } from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
 import { mountComponentsPage, type ComponentsPage } from "./components-page";
+import { RECIPES_SECTION_ID, mountRecipesSection, recipesFolder, registerRecipesOpener, type RecipesSection } from "./recipes";
+import { activeDoc } from "../state/layout";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { icon } from "../ui/icons";
 import { marcuzzoElement } from "../ui/marcuzzo";
@@ -390,6 +392,27 @@ function tabOfSetting(key: string): SettingsTab {
 /// pannello già aperto cambia scheda come col clic; chiuso si apre su quella
 /// scheda. Un `id` che la mappa non ha apre la scheda e basta; un pannello
 /// chiuso prima che la riga arrivi non si riapre.
+/// Apre le impostazioni sulla sezione «Ricette» della scheda «Componenti»
+/// (l'azione «Guarda» dell'avviso delle ricette), come chi la sceglie
+/// dall'indice: la sezione in cima e il fuoco sul suo titolo.
+async function openRecipesSection(): Promise<void> {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed) return;
+  if (release) {
+    if (tab !== "components") await changeTab("components");
+  } else {
+    if (tab !== "components") {
+      tab = "components";
+      pinnedRow = null;
+      componentsGeneration++;
+      syncToolbar();
+    }
+    await open();
+  }
+  if (owner.closed || owner !== settingsLifetime || !release || tab !== "components") return;
+  jumpTo(RECIPES_SECTION_ID);
+}
+
 async function openComponentRow(id: string): Promise<void> {
   const owner = settingsLifetime;
   if (!owner || owner.closed) return;
@@ -605,6 +628,18 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     reloadProvider: () => settingsHooks.reloadProvider(),
   });
   lifetime.add(registerComponentRow((id) => void openComponentRow(id)));
+  recipesSection = mountRecipesSection(lifetime, {
+    visible: () => !lifetime.closed && !panelEl.hidden && tab === "components",
+    closeSettings: () => close(),
+    openNote: () => activeDoc(),
+    // Dinamico: `document-controller` importa già questo pannello.
+    openDocument: async (doc) => {
+      const { openDocument } = await import("../state/document-controller");
+      await openDocument(doc);
+    },
+    notify: (message, tone) => notify(message, tone),
+  });
+  lifetime.add(registerRecipesOpener(() => void openRecipesSection()));
   lifetime.add(() => {
     cancelCssSnippetsPreview();
     race.cancel();
@@ -616,6 +651,9 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
 }
 
 let mountedTeardown: Teardown | null = null;
+/// La sezione «Ricette» della scheda dei componenti: vive quanto il pannello,
+/// come la pagina dei componenti.
+let recipesSection: RecipesSection;
 /// La pagina «Componenti»: vive quanto il pannello, così la sua ricerca e il suo
 /// avviso non si ricostruiscono a ogni ridisegno della scheda.
 let componentsPage: ComponentsPage;
@@ -681,6 +719,7 @@ function close(): void {
   void cancelThemePreview();
   componentsGeneration++;
   componentsPage?.reset();
+  recipesSection?.reset();
   pendingRows.clear();
   blockedRows.clear();
   nextWrites.clear();
@@ -2948,11 +2987,13 @@ async function renderComponents(): Promise<HTMLElement[]> {
     Promise.resolve().then(() => api.pluginBudgetSnapshot()),
     Promise.resolve().then(() => api.pluginLimitedMode()),
     componentsPage.show(),
+    recipesSection.show(),
   ]);
   const installed = installedResult.status === "fulfilled" ? installedResult.value : [];
   const bundles = bundleResult.status === "fulfilled" ? bundleResult.value : [];
   const entries = entryResult.status === "fulfilled" ? entryResult.value : [];
   const forKey = new Map(entries.map((entry) => [entry.spec.key, entry]));
+  recipesSection.setFolder(recipesFolder(entries));
   // `runtime_known` è la prova del claim dell'installazione. Un filtro per solo
   // id nasconderebbe invece una feature ufficiale omonima, proprio quando
   // l'installazione è stata rifiutata per collisione.
@@ -2988,7 +3029,7 @@ async function renderComponents(): Promise<HTMLElement[]> {
     status.append(row("setting-source", t("settings.read_failed", { reason: errorText(entryResult.reason) })));
   }
   notes.append(status);
-  const nodes: HTMLElement[] = [componentsPage.element, notes];
+  const nodes: HTMLElement[] = [componentsPage.element, notes, recipesSection.element];
   let index = 0;
 
   const add = sectionBlock(t("settings.components.add"), index++, { card: false });

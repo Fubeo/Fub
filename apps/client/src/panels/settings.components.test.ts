@@ -86,6 +86,7 @@ vi.mock("../ui/commands", async (importOriginal) => {
     keybindingKey: (id: string) => id,
     newKinds: () => ["note"],
     registerComponentRow: actual.registerComponentRow,
+    hasKernelCommand: () => false,
     showComponent: actual.showComponent,
   };
 });

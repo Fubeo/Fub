@@ -26,6 +26,7 @@ import { loadOrganization } from "./organization";
 import { preferredPaneMode } from "./pane-mode";
 import { emit, loadActiveSpace, loadExpanded, loadExplorerSort, state } from "./store";
 import { beforeNote, loadCommandSpecs } from "./vault";
+import { watchRecipeNotices, type RecipeNotices } from "../panels/recipes";
 
 /// Ciò che l'apertura di un vault chiede alla shell che la compone.
 ///
@@ -75,6 +76,14 @@ export interface VaultSession {
 }
 
 export function createVaultSession(ports: VaultSessionPorts): VaultSession {
+  /// Gli avvisi delle ricette del vault aperto: nascono con l'apertura e se ne
+  /// vanno con la prossima, o con la chiusura del vault.
+  let recipeNotices: RecipeNotices | null = null;
+  const stopRecipeNotices = (): void => {
+    recipeNotices?.stop();
+    recipeNotices = null;
+  };
+
   /// Chiude nell'host il vault che la finestra ha lasciato. Non ferma
   /// l'apertura: il vault nuovo è già aperto, e un guasto chiudendo il vecchio
   /// non deve lasciare la shell a metà. Si dice, voce per voce.
@@ -111,6 +120,7 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     const left = state.vaultRoot;
     const info = await api.openVault(dir);
     if (!alive()) return;
+    stopRecipeNotices();
     // **Ciò che è stato battuto mentre l'host apriva il vault nuovo** (FUB-001).
     // Il vault di prima resta aperto nell'host finché non lo si chiude, e ogni
     // sessione scrive nel vault in cui è nata (`document-session.ts`): questo
@@ -232,6 +242,10 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // ne propone tre» farebbe leggere l'avviso dei conflitti come se le riguardasse.
     await warnIfVaultProvidesKeys();
     if (!alive()) return;
+    // Le ricette che il vault propone, sullo stesso modello: le nomina, e la
+    // risposta sta nelle impostazioni. **Non attesa**: leggere le ricette
+    // rilegge tutta la loro cartella, e la prima nota non aspetta l'avviso.
+    warnIfVaultProposesRecipes(alive);
 
     await warnIfUnwatched();
     if (!alive()) return;
@@ -301,6 +315,26 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
       // qualcuno non risponde, quindi ciò che si perde è la domanda, non il
       // presidio.
     }
+  }
+
+  /// Se questo vault propone ricette che nessuno ha guardato, **dirlo**, e
+  /// continuare a dirlo finché il vault resta aperto (piano A1, T12).
+  ///
+  /// Come le scorciatoie: una ricetta proposta non gira finché la persona non
+  /// l'ha guardata e accesa nelle impostazioni, e l'avviso la nomina con una
+  /// sola azione, «Guarda», che porta lì. Dopo l'apertura, una nota della
+  /// cartella delle ricette creata o cambiata fa lo stesso avviso, al massimo
+  /// uno per ricetta in tutta la sessione.
+  function warnIfVaultProposesRecipes(alive: () => boolean): void {
+    stopRecipeNotices();
+    const notices = watchRecipeNotices((message, tone, action) => {
+      if (alive()) ports.notify(message, tone, action);
+    });
+    recipeNotices = notices;
+    void notices.atOpen().then(() => {
+      // La finestra se n'è andata durante la lettura: niente ascoltatori orfani.
+      if (!alive() && recipeNotices === notices) stopRecipeNotices();
+    });
   }
 
   /// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).
