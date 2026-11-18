@@ -209,7 +209,10 @@ export type MarkGeometry = readonly number[];
 export const MARK_NUMBERS = 10;
 
 /// Che cosa è un pezzo: dà il nome alla sua classe (`grid-mark-<kind>`).
-export type MarkKind = "edge" | "ring" | "veil" | "band-col" | "band-row" | "handle" | "freeze";
+/// `copy` e `cut` sono i lati del tratteggio di ciò che si è copiato o
+/// tagliato, `ants` quelli delle formiche (il riempimento tirato o in attesa
+/// del foglio, un taglio incollato), `flash` il velo del battito di una copia.
+export type MarkKind = "edge" | "ring" | "veil" | "band-col" | "band-row" | "handle" | "freeze" | "copy" | "cut" | "ants" | "flash";
 
 /// Un pezzo di un segno, nelle coordinate del piano.
 export interface MarkPart {
@@ -229,8 +232,11 @@ export interface MarkPart {
   /// cella sola), e si vede solo mentre esce o rientra.
   readonly rest?: boolean;
   /// Falso: non scivola, sta sempre al suo posto (i fili del blocco, i
-  /// rettangoli degli altri intervalli).
+  /// rettangoli degli altri intervalli, il tratteggio della copia).
   readonly glide?: boolean;
+  /// Vero: quando non serve più esce con una dissolvenza in
+  /// `DURATION.swap` invece di sparire (il contorno di un riempimento).
+  readonly fade?: boolean;
   /// Un segno d'angolo non si taglia: è intero nel livello «lift» della zona
   /// di questo angolo.
   readonly corner?: { readonly x: number; readonly y: number; readonly start: boolean };
@@ -244,7 +250,7 @@ export function edgeParts(
   kind: MarkKind,
   box: { readonly L: number; readonly T: number; readonly R: number; readonly B: number },
   thickness: number,
-  extra: Partial<Pick<MarkPart, "rest" | "glide">> = {},
+  extra: Partial<Pick<MarkPart, "rest" | "glide" | "fade">> = {},
 ): MarkPart[] {
   const width = box.R - box.L + 1;
   const height = box.B - box.T + 1;

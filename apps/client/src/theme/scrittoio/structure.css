@@ -2094,6 +2094,27 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .grid-mark-freeze {
   z-index: 7;
 }
+/* Le formiche (griglia T6): un nastro tratteggiato dentro il lato, più lungo
+   di un passo (`ANTS_STEP`, 8 px), che camminando si sposta di un passo; il
+   lato lo taglia. Il velo del battito di una copia sta sopra i lati. */
+.grid-mark-ants {
+  overflow: hidden;
+}
+.grid-ants {
+  position: absolute;
+  top: 0;
+  left: -8px;
+}
+.grid-mark-ants[data-dir="h"] > .grid-ants {
+  width: calc(100% + 8px);
+  height: 100%;
+}
+.grid-mark-ants[data-dir="v"] > .grid-ants {
+  top: -8px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 8px);
+}
 
 /* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
    cella. */
@@ -2255,10 +2276,8 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
    prendono il puntatore: il quadratino si prende per geometria. Il contorno
    `.grid-selection` è quello della scheda di un foglio (`card.ts`). */
 .grid-selection,
-.grid-fill-preview,
 .grid-move-preview,
-.grid-formula-ref,
-.grid-cut-mark {
+.grid-formula-ref {
   position: absolute;
   z-index: 3;
   box-sizing: border-box;
@@ -2298,10 +2317,8 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 
 .grid-selection,
-.grid-fill-preview,
 .grid-move-preview,
-.grid-formula-ref,
-.grid-cut-mark {
+.grid-formula-ref {
   pointer-events: none;
 }
 

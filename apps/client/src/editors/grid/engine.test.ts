@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
+import { createManualDriver, setMotionDriver, type ManualDriver } from "../../moto";
+import { DURATION } from "../../moto/spring";
 import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
@@ -551,9 +553,9 @@ describe("GridEngine", () => {
     key("ArrowRight", { shiftKey: true });
     send("cut");
     expect(written(engine.getDoc())).toEqual({});
-    expect(host.querySelector(".grid-cut-mark")).not.toBeNull();
+    expect(host.querySelector(".grid-mark-cut:not([hidden])")).not.toBeNull();
     key("Escape");
-    expect(host.querySelector(".grid-cut-mark")).toBeNull();
+    expect(host.querySelector(".grid-mark-cut:not([hidden])")).toBeNull();
 
     send("cut");
     key("ArrowDown");
@@ -561,7 +563,7 @@ describe("GridEngine", () => {
     key("ArrowRight");
     send("paste");
     expect(written(engine.getDoc())).toEqual({ "0,0": "", "0,1": "", "2,1": "1", "2,2": "2" });
-    expect(host.querySelector(".grid-cut-mark")).toBeNull();
+    expect(host.querySelector(".grid-mark-cut:not([hidden])")).toBeNull();
     engine.undo();
     expect(written(engine.getDoc())).toEqual({});
     engine.destroy();
@@ -1055,5 +1057,208 @@ describe("la misura di un bordo tirato e le anteprime delle misure", () => {
     ];
     expect(previewSizes(lines, "width", previews)).toEqual([{ hidden: false, width: 30 }, { hidden: false, width: 40 }, { hidden: true, width: 5 }]);
     expect(lines[0].width).toBe(10);
+  });
+});
+
+describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () => {
+  const FRAME = 1000 / 60;
+  let driver: ManualDriver;
+  afterEach(() => {
+    setMotionDriver(null);
+  });
+  const rounds = async (count: number) => {
+    for (let round = 0; round < count; round += 1) await settle();
+  };
+  const shown = (host: HTMLElement, selector: string) => host.querySelectorAll<HTMLElement>(`${selector}:not([hidden])`).length;
+  const walkingAnts = () => driver.plays.filter((play) => play.state === "running" && (play.el as HTMLElement).classList.contains("grid-ants"));
+  async function mountedWithMotion(grid = workbookHost()) {
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    const made = await workbookMounted(grid);
+    const copied = new Map<string, string>();
+    const send = (type: string) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { getData: (kind: string) => copied.get(kind) ?? "", setData: (kind: string, text: string) => { copied.set(kind, text); } },
+      });
+      made.viewport.dispatchEvent(event);
+    };
+    const key = (name: string) => made.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+    return { ...made, grid, send, key, copied };
+  }
+
+  it("un riempimento aspetta il foglio con le formiche in cammino attorno al bersaglio; poi i valori entrano dalla sorgente", async () => {
+    const { engine, host, grid, go } = await mountedWithMotion();
+    go(1, 1);
+    await settle();
+    grid.hold(true);
+    expect(engine.command("edit.autoFill", JSON.stringify({ source: "B2", target: "B2:B4" }))).toBe(true);
+    await settle();
+    // Il contorno resta, le formiche camminano, il quadratino non c'è e la
+    // selezione resta sulla sorgente.
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    expect(walkingAnts().length).toBe(4);
+    expect(shown(host, ".grid-mark-handle")).toBe(0);
+    expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 1, column: 1 } });
+    driver.advance(1000);
+    await settle();
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    expect(walkingAnts().length).toBe(4);
+
+    const before = driver.plays.length;
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    // La risposta ferma le formiche; il provider seleziona il riempimento.
+    expect(walkingAnts()).toHaveLength(0);
+    expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 3, column: 1 } });
+    // I valori nuovi (B3, B4) entrano uno dopo l'altro, dalla sorgente.
+    const entering = driver.plays.slice(before).filter((play) => (play.el as HTMLElement).classList.contains("grid-cell-text"));
+    const rows = entering.map((play) => Number((play.el as HTMLElement).closest<HTMLElement>(".grid-cell")!.dataset.row));
+    expect(rows).toEqual([2, 3]);
+    expect(entering[1]!.timing.delay).toBeGreaterThan(entering[0]!.timing.delay);
+    expect(entering.every((play) => Number(play.keyframes[0]!.opacity) === 0)).toBe(true);
+    // Le formiche escono con una dissolvenza, poi non c'è più niente.
+    driver.advance(DURATION.swap + FRAME * 2);
+    await rounds(2);
+    expect(shown(host, ".grid-mark-ants")).toBe(0);
+    engine.destroy();
+  });
+
+  it("un riempimento che il foglio rifiuta toglie le formiche, e l'avviso dice perché", async () => {
+    const { engine, host, grid, go, notice } = await mountedWithMotion();
+    go(1, 1);
+    await settle();
+    grid.hold(true);
+    grid.failCommand({ kind: "bad_args", message: "fill refused" });
+    engine.command("edit.fillDown");
+    await settle();
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(walkingAnts()).toHaveLength(0);
+    driver.advance(DURATION.swap + FRAME * 2);
+    await rounds(2);
+    expect(shown(host, ".grid-mark-ants")).toBe(0);
+    expect(notice().textContent).toContain("fill refused");
+    // Il quadratino torna.
+    expect(shown(host, ".grid-mark-handle")).toBe(1);
+    engine.destroy();
+  });
+
+  it("lo smontaggio durante l'attesa ferma le formiche", async () => {
+    const { engine, grid, go } = await mountedWithMotion();
+    go(1, 1);
+    await settle();
+    grid.hold(true);
+    engine.command("edit.fillRight");
+    await settle();
+    expect(walkingAnts().length).toBeGreaterThan(0);
+    engine.destroy();
+    expect(walkingAnts()).toHaveLength(0);
+    grid.hold(false);
+    grid.release();
+    await rounds(4);
+    driver.advance(1000);
+    expect(walkingAnts()).toHaveLength(0);
+  });
+
+  it("ciò che si è copiato ha il tratteggio largo e un battito; Esc, scrivere o un'altra copia lo spostano", async () => {
+    const { engine, host, viewport, send, key, go } = await mountedWithMotion();
+    go(1, 1);
+    send("copy");
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    expect(shown(host, ".grid-mark-flash")).toBeGreaterThan(0);
+    // Sul tratteggio il bordo pieno della selezione non c'è.
+    expect(shown(host, ".grid-mark-edge")).toBe(0);
+    driver.advance(DURATION.swap + FRAME * 2);
+    await settle();
+    expect(shown(host, ".grid-mark-flash")).toBe(0);
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    key("Escape");
+    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    expect(shown(host, ".grid-mark-edge")).toBe(4);
+
+    // Due copie: il segno segue l'ultima, e lascia la selezione di prima.
+    send("copy");
+    const first = host.querySelector<HTMLElement>('.grid-mark-copy[data-mark="clip-top"]:not([hidden])')!.style.cssText;
+    go(2, 0);
+    send("copy");
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    expect(host.querySelector<HTMLElement>('.grid-mark-copy[data-mark="clip-top"]:not([hidden])')!.style.cssText).not.toBe(first);
+
+    // Scrivere toglie il segno.
+    go(8, 1);
+    typeInActiveCell(host, viewport, "7");
+    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    engine.destroy();
+  });
+
+  it("il segno di una copia resta sul suo foglio", async () => {
+    const { engine, host, send, go } = await mountedWithMotion();
+    go(1, 1);
+    send("copy");
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
+    tabs[1]!.click();
+    await settle();
+    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    tabs[0]!.click();
+    await settle();
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    engine.destroy();
+  });
+
+  it("incollare mostra i valori subito; la risposta del foglio vince, e un no rimette le celle com'erano", async () => {
+    const { engine, grid, send, go, cell, notice, host } = await mountedWithMotion();
+    go(1, 1);
+    send("copy");
+    grid.hold(true);
+    go(6, 2);
+    send("paste");
+    // Dal primo disegno, prima della risposta.
+    expect(cell(6, 2)!.textContent).toBe("800");
+    expect(shown(host, ".grid-mark-copy")).toBe(0);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    // Il finto non scrive le celle: la sua cella vuota vince sull'anteprima.
+    expect(cell(6, 2)!.textContent).toBe("");
+
+    grid.hold(true);
+    grid.failCommand({ kind: "bad_args", message: "paste refused" });
+    go(7, 2);
+    send("paste");
+    expect(cell(7, 2)!.textContent).toBe("800");
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(cell(7, 2)!.textContent).toBe("");
+    expect(notice().textContent).toContain("paste refused");
+    engine.destroy();
+  });
+
+  it("un taglio incollato ha le formiche attorno a ciò che si sposta finché il foglio non risponde", async () => {
+    const { engine, grid, send, go, cell, host } = await mountedWithMotion();
+    go(1, 1);
+    send("cut");
+    expect(shown(host, ".grid-mark-cut")).toBe(4);
+    grid.hold(true);
+    go(7, 1);
+    send("paste");
+    expect(shown(host, ".grid-mark-cut")).toBe(0);
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    expect(walkingAnts().length).toBe(4);
+    // L'anteprima: il valore sulla destinazione, la sorgente vuota.
+    expect(cell(7, 1)!.textContent).toBe("800");
+    expect(cell(1, 1)!.textContent).toBe("");
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(walkingAnts()).toHaveLength(0);
+    driver.advance(DURATION.swap + FRAME * 2);
+    await rounds(2);
+    expect(shown(host, ".grid-mark-ants")).toBe(0);
+    engine.destroy();
   });
 });
