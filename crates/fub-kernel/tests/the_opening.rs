@@ -308,6 +308,63 @@ fn every_discard_exits_as_fault_after_that_the_vault_is_and_said_open() {
     );
 }
 
+/// **Un documento che il parser rifiuta esce con la porta del formato**
+/// (IMP-117): il messaggio è la prosa del codec («parse failed: …», in
+/// inglese), e chi mostra il guasto lo sostituisce con la sua frase solo se sa
+/// che è entrato da lì. Un file che non si legge nemmeno non ha un provider in
+/// mezzo, e la porta resta vuota.
+#[test]
+fn a_document_the_parser_rejects_comes_out_through_the_format_gate() {
+    let (mut bench, _) = bench_from_open();
+    std::fs::write(bench.root().join("rifiutata.md"), "BOOM").expect("semina");
+
+    let rx = bench.bus().subscribe();
+    let opening = bench.reindex().expect("apre");
+
+    let gates: Vec<(String, Option<fub_abi::Gate>)> = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|n| match n.event {
+            Event::Trouble {
+                subject: Some(id),
+                gate,
+                ..
+            } => Some((id.to_string(), gate)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        gates,
+        [("rifiutata.md".to_string(), Some(fub_abi::Gate::FormatParse))],
+        "il rifiuto del parser dice da che porta è entrato"
+    );
+    assert_eq!(opening.discarded[0].gate, Some(fub_abi::Gate::FormatParse));
+}
+
+/// Lo stesso quando una nota già aperta diventa illeggibile sul disco: il
+/// guasto della sincronizzazione dice la porta del formato, non solo la prosa.
+#[test]
+fn a_document_that_stops_parsing_on_sync_comes_out_through_the_format_gate() {
+    let (mut bench, _) = bench_from_open();
+    std::fs::write(bench.root().join("nota.md"), "sto bene").expect("semina");
+    bench.reindex().expect("apre");
+
+    std::fs::write(bench.root().join("nota.md"), "BOOM").expect("rovina");
+    let rx = bench.bus().subscribe();
+    let abs = bench.root().join("nota.md");
+    let _ = bench.sync_path(&abs);
+
+    let gates: Vec<Option<fub_abi::Gate>> = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|n| match n.event {
+            Event::Trouble { gate, .. } => Some(gate),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        gates,
+        [Some(fub_abi::Gate::FormatParse)],
+        "il guasto dice da che porta è entrato"
+    );
+}
+
 // --- il confine: cosa resta fatale -----------------------------------------
 
 #[cfg(unix)]
