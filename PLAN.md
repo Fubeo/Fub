@@ -2453,7 +2453,7 @@ Fatto quando: una scena del banco nei tre stati; un test che disegnare nella
 scheda salva il disegno e non la nota.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/core/cards
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (77a14771b, 2026-11-19), in attesa del main
 
 ## T47 · La lavagna nella nota
 
