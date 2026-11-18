@@ -101,6 +101,13 @@ function key(target: Element | null, init: KeyboardEventInit): void {
   (target ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
 }
 
+/** La cattura del puntatore della vista, spiata: happy-dom non la fa, il browser sì. */
+function captureOf(host: HTMLElement) {
+  const capture = vi.fn();
+  Object.defineProperty(viewportOf(host), "setPointerCapture", { value: capture, configurable: true });
+  return capture;
+}
+
 describe("il fuoco dopo un pulsante della lavagna (IMP-040)", () => {
   it("dopo un clic su un pulsante della colonna, il clic sulla testata di una scheda riporta il fuoco sulla lavagna: Canc la toglie e Ctrl+Z la riporta", async () => {
     const { engine, host, changes } = mounted(BOARD);
@@ -301,6 +308,64 @@ describe("lo spostamento dal corpo di una scheda (IMP-041)", () => {
     engine.destroy();
   });
 
+});
+
+describe("il corpo prende il puntatore solo oltre 3 px (IMP-053, il doppio clic sul corpo)", () => {
+  it("un clic fermo sul corpo non prende il puntatore; il trascinamento sì, oltre 3 px", () => {
+    const { engine, host } = mounted(BOARD);
+    const capture = captureOf(host);
+    const body = bodyOf(host, "a");
+    pointer(body, "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 100, 60) });
+    pointer(body, "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 102, 60) });
+    expect(capture).not.toHaveBeenCalled();
+    pointer(body, "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 110, 60) });
+    expect(capture).toHaveBeenCalledWith(1);
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 110, 60) });
+    engine.destroy();
+  });
+
+  it("il doppio clic sul corpo di una scheda di testo la mette in modifica, senza crearne un'altra", () => {
+    const { engine, host } = mounted(BOARD);
+    const capture = captureOf(host);
+    const body = bodyOf(host, "a");
+    const at = screenOf(host, 100, 60);
+    // Il browser manda i clic e il doppio clic a chi ha il puntatore: al corpo se non l'ha preso, alla vista se sì.
+    const aim = (): HTMLElement => (capture.mock.calls.length > 0 ? viewportOf(host) : body);
+    for (const pointerId of [1, 2]) {
+      pointer(body, "pointerdown", { pointerId, button: 0, buttons: 1, ...at });
+      pointer(aim(), "pointerup", { pointerId, button: 0, buttons: 0, ...at });
+      aim().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, clientX: at.clientX, clientY: at.clientY }));
+    }
+    // Sotto il puntatore c'è il corpo della scheda: è lui che il doppio clic trova.
+    const under = vi.spyOn(document, "elementFromPoint").mockReturnValue(body);
+    aim().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: at.clientX, clientY: at.clientY }));
+    under.mockRestore();
+    expect(bornAfter(engine, ["a", "b"])).toEqual([]);
+    // In modifica: il campo semplice, o l'editor Live che la scheda di testo monta nel browser, col fuoco dentro la scheda.
+    expect(cardOf(host, "a").querySelector(".canvas-text-editor, .cm-editor")).not.toBeNull();
+    expect(cardOf(host, "a").contains(document.activeElement)).toBe(true);
+    engine.destroy();
+  });
+
+  it("un trascinamento di 2 px non sposta la scheda: il documento non cambia", () => {
+    const { engine, host, changes } = mounted(BOARD);
+    pointer(bodyOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 100, 60) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 102, 60) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 102, 60) });
+    expect(changes).toEqual([]);
+    expect(nodeOf(engine, "a")).toMatchObject({ x: 0, y: 0 });
+    engine.destroy();
+  });
+
+  it("un trascinamento di 10 px sposta la scheda", () => {
+    const { engine, host, changes } = mounted(BOARD);
+    pointer(bodyOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 100, 60) });
+    pointer(viewportOf(host), "pointermove", { pointerId: 1, buttons: 1, ...screenOf(host, 110, 60) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 110, 60) });
+    expect(changes).toHaveLength(1);
+    expect(nodeOf(engine, "a")!.x).not.toBe(0);
+    engine.destroy();
+  });
 });
 
 // Una scheda sola: la vista si apre centrata su di lei.

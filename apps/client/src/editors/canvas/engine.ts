@@ -10110,7 +10110,8 @@ export class CanvasEngine {
     }
     const ids = this.#selection.filter((id) => origin.has(id));
     this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ids, origin, moved: false, dx: 0, dy: 0, aimDx: 0, aimDy: 0 };
-    this.#viewport.setPointerCapture?.(event.pointerId);
+    // La cattura arriva con lo spostamento (`#moveDrag`), non qui: un clic fermo
+    // resta un clic, e il suo doppio clic arriva alla scheda, non alla vista (IMP-053).
     event.preventDefault();
   }
 
@@ -10962,8 +10963,10 @@ export class CanvasEngine {
     if (!drag || !doc) return;
     const dx = (at.clientX - drag.startX) / this.#camera.zoom;
     const dy = (at.clientY - drag.startY) / this.#camera.zoom;
-    if (Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
+    if (!drag.moved && Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
       drag.moved = true;
+      // Lo spostamento prende il puntatore adesso: così non lo perde se esce dalla vista.
+      this.#viewport.setPointerCapture?.(drag.pointerId);
     }
     const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
     // Le schede seguono il puntatore 1:1, in unità intere (#411 C-05): niente
