@@ -24,7 +24,9 @@ plugin e automazioni non la scrivono, ma la webview sì, con `set_setting`,
 come ogni impostazione della persona. Per questo la cartella la sceglie la
 persona nella finestra **nativa** che l'app apre dentro `check_theme_folder`,
 solo per la shell principale, col titolo scritto dall'host: la webview non
-passa né il path né il titolo.
+passa né il path né il titolo. Su Android e iOS il plugin del dialogo non
+sceglie cartelle: `check_theme_folder` e `link_theme_folder` rispondono
+`unserved` (`host.theme_folder.desktop_only`) e non si apre niente.
 
 L'host tiene la cartella controllata, l'impronta dei suoi byte e il manifest
 letto da quei byte, ed è un permesso che vale **una volta e per un esito**: `install_theme_from_folder`
