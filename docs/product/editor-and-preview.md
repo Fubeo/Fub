@@ -18,8 +18,7 @@ banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è l
 Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre
 **Scrittura** (con i [blocchi](editor-blocks.md) dentro), **Sorgente** e
 **Lettura**: sono descritte in [Scrittura](editor-writing.md), coi livelli di
-presenza degli elementi sul foglio. Dove questa pagina dice «Live» intende
-Scrittura, la modalità `live_preview`. La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
+presenza degli elementi sul foglio. La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
 come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
 o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
 dell'host. L'anteprima si ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
@@ -52,8 +51,8 @@ voce scelta si legge dal fondo, senza tacche d'accento. Le superfici che si
 aprono si posano con un moto lento e morbido; con il moto ridotto compaiono
 subito. I titoli usano l'inchiostro del documento in tutte e tre le modalità —
 solo i `#` restano sintassi colorata — e i link resi usano lo stesso inchiostro
-dei wikilink. Il ritmo verticale è lo stesso in Live e Lettura: un passo sotto
-ogni blocco, due passi sopra i titoli di sezione. In Live il ritmo vive sui
+dei wikilink. Il ritmo verticale è lo stesso in Scrittura e Lettura: un passo sotto
+ogni blocco, due passi sopra i titoli di sezione. In Scrittura il ritmo vive sui
 widget (i margini dei figli non escono dal blocco isolato). Testo, codice e
 interfaccia hanno caratteri propri; corpo, interlinea e misura sono preferenze.
 
@@ -76,16 +75,16 @@ automatica per riga e la misura leggibile riusa la preferenza di aspetto.
 ## Codice e diagrammi Mermaid
 
 I blocchi di codice dichiarano il linguaggio dopo i backtick di apertura.
-Sorgente e Live caricano la colorazione del linguaggio quando serve, senza
+Sorgente e Scrittura caricano la colorazione del linguaggio quando serve, senza
 caricare tutti i parser all'avvio.
 
-In Live i recinti non si vedono: c'è una testata con la lingua (un menu con
+In Scrittura i recinti non si vedono: c'è una testata con la lingua (un menu con
 filtro, che riscrive soltanto l'info string), «A capo» (della vista, non del
 file) e «Copia». ↑ e ↓ escono dal blocco, Backspace lo toglie se è vuoto; con
 `elemento` i recinti tornano col cursore nel blocco, con `riga` restano.
 
-Un blocco con linguaggio `mermaid` mostra un diagramma in Live e Lettura,
-anche dentro una nota trasclusa. In Live, portare il cursore nel blocco o usare
+Un blocco con linguaggio `mermaid` mostra un diagramma in Scrittura e Lettura,
+anche dentro una nota trasclusa. In Scrittura, portare il cursore nel blocco o usare
 **Apri sorgente** rende nuovamente modificabile il testo, e il disegno resta
 sotto: si rifà dopo 300 ms di quiete e, se il sorgente ha un errore, resta
 l'ultimo buono con un avviso. Selezioni e multi-cursori mantengono visibili i
@@ -132,7 +131,7 @@ I link espliciti del diagramma diventano controlli adiacenti, soltanto per
 ## Formule
 
 Le formule inline usano `$…$`; quelle a blocco `$$…$$`, sole nel paragrafo.
-Lettura, anteprima dal vivo e stampa seguono la regola di `math_dollars` del
+Lettura, Scrittura e stampa seguono la regola di `math_dollars` del
 provider: una formula va a capo nel paragrafo, un `$` prima di una cifra non
 chiude, `$$…$$` fra il testo resta in riga e il codice in riga vince. Codice,
 dollari escapati e delimitatori incompleti non sono formule; dentro una formula
@@ -145,7 +144,7 @@ di espansione e dimensione mostra un errore leggibile e conserva il testo.
 La resa condivisa supporta task, highlight, callout annidati e ripiegabili, wikilink con alias,
 heading e block id, tabelle, note a piè di pagina etichettate e inline. Nelle immagini Markdown il
 suffisso dell'alt `|larghezza` o `|larghezzaxaltezza` è una dimensione, non testo alternativo. I
-commenti `%%…%%` restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore. Dei
+commenti `%%…%%` restano nel file, non nella resa; in Scrittura sono attenuati sulla riga del cursore. Dei
 [commenti con la discussione](../reference/note-conventions.md) la resa mostra il passo, non i messaggi.
 Evidenziati e commenti non attraversano link, wikilink, tag, codice, enfasi,
 formule o note in riga; una nota attraversata si perde.
@@ -180,7 +179,7 @@ al visualizzatore; un media incorporato non ha la cornice delle trasclusioni.
 Un clic su un'immagine del vault in Lettura apre la lightbox, una finestra
 modale su fondo scuro: rotella, pizzico, `+` e `−` ingrandiscono, `0` adatta,
 `1` mostra le dimensioni reali, trascinamento e frecce spostano, `R` ruota di
-90°, `Esc` chiude. In Live un'immagine resta resa: un clic la seleziona, con
+90°, `Esc` chiude. In Scrittura un'immagine resta resa: un clic la seleziona, con
 contorno e maniglia, e la maniglia scrive `|larghezza` al rilascio, un passo di
 annulla. Con `mai` Invio o il doppio clic aprono «Immagine» (testo alternativo,
 file, larghezza), con `elemento` la sorgente; `Mod`-clic apre la lightbox. Sola
@@ -188,13 +187,13 @@ nel paragrafo è una figura con la didascalia dal testo alternativo, anche in
 Lettura e nell'export. `data:` resta sorgente; una remota è un
 [segnaposto](../reference/permissions-and-security.md#immagini-remote).
 
-In Live un callout col cursore dentro resta un riquadro: la pastiglia del tipo
+In Scrittura un callout col cursore dentro resta un riquadro: la pastiglia del tipo
 apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco (e le righe che
 ne continuano il paragrafo) vanno a capo sotto il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
-(`<kbd>`, `<u>`, i [colori](editor-blocks.md#i-colori)) si vede senza tag. I
+(`<kbd>`, `<u>`, i [colori](editor-note-extras.md#i-colori)) si vede senza tag. I
 recinti con info string dichiarata (Mermaid, formule) tornano sorgente col
 cursore dentro, con la resa sotto. Con `mai` una formula si modifica
-toccandola, senza vedere il LaTeX ([Formule in Live](editor-math.md)); con
+toccandola, senza vedere il LaTeX ([le formule](editor-math.md)); con
 «Mostra il LaTeX delle formule», o con Vim, un clic o le frecce aprono invece il
 riquadro col TeX e l'anteprima. Con `elemento` torna la sorgente, con
 l'anteprima sopra la riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
@@ -251,7 +250,7 @@ L'editor offre due piani distinti:
 
 Nel piano del contenuto `Mod-z` annulla e `Mod-y` rifà, come `Mod-Shift-z` su
 macOS e `Ctrl-Shift-z` su Linux. `Mod-u` annulla l'ultima selezione e `Alt-u`
-la rifà; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
+la rifà, tranne nelle note Markdown, dove `Mod-u` sottolinea come in Word; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
 modificatore della piattaforma.
 
 Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica del
@@ -365,8 +364,10 @@ proprietà da mostrare, e `fub-cli wordcount` rifiuta il file come argomento.
 
 ## Barra di formattazione
 
-Sopra il testo di una nota Markdown aperta in scrittura (Sorgente o Live) c'è
-una barra con le funzioni testuali: annulla e ripeti, lo stile del paragrafo
+Sopra il testo di una nota Markdown in Scrittura o in Sorgente c'è la barra
+di formato. La forma compatta, di serie, il gruppo del blocco del cursore e
+«+ Inserisci» sono in [La barra di formato](editor-toolbar.md); la forma
+completa (`editor.toolbar` a `completa`) ha tutte le funzioni testuali: annulla e ripeti, lo stile del paragrafo
 (testo normale, titoli da 1 a 6), grassetto, corsivo, sottolineato, barrato,
 apice, pedice, evidenziato, codice e formula in riga, commento `%%`, cancella
 formattazione, link, link a una nota, immagine, nota a piè di pagina, elenchi
@@ -383,13 +384,13 @@ grassetto, lo stile dice «Titolo 2» su un titolo di secondo livello, la tabell
 è spenta fuori da una tabella e il formato in riga dentro il codice; in sola
 lettura tutto è spento. Il tasto destro toglie una nota e i suoi richiami.
 
-La barra è la fila di serie, in un vassoio un tono sotto la carta coi gruppi
+La barra sta in un vassoio un tono sotto la carta coi gruppi
 come foglietti (al telefono una fila piatta); ciò che non entra va in «…». Un
 solo arresto di tabulazione: dall'editor, dove Tab rientra, Escape e poi
 Maiusc+Tab risalgono. Le frecce girano ai capi, Home ed End vanno al primo e
 all'ultimo pulsante acceso, Escape torna al testo; il suggerimento dice il tasto.
 
-La barra è il plugin ufficiale `fub.formatting` («Formatting bar»): si spegne e
+La barra è il componente ufficiale `fub.formatting` («Barra di formattazione»): si spegne e
 si riaccende dal pannello dei componenti, e ogni suo pulsante è anche un
 comando della palette, a cui si può assegnare una scorciatoia. Invocato dalla
 palette, il comando agisce nel riquadro col fuoco; se lì non c'è una nota
@@ -398,9 +399,9 @@ Markdown in scrittura, un avviso lo dice.
 Il tasto destro, la mini-barra e il menu «/» nel testo sono descritti in
 [Tasto destro, mini-barra e «/»](editor-menus.md).
 
-## Tabelle in Live
+## Tabelle nelle note
 
-In Live ogni tabella è una griglia da foglio di calcolo, coi gesti della
+In Scrittura ogni tabella è una griglia da foglio di calcolo, coi gesti della
 Tabella condivisi con i documenti e i fogli: sono descritti in
 [Tabelle](editor-tables.md).
 

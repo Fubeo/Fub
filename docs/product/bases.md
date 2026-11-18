@@ -9,7 +9,7 @@ tocca, e lascia il resto com'è.
 flowchart LR
     NOTE["note del vault"] --> FILTRI["filtri e colonne"]
     FILE[".base"] --> FILTRI
-    FILTRI --> VISTA["vista: tabella, schede, elenco, bacheca, mappa"]
+    FILTRI --> VISTA["vista: tabella, schede, elenco, bacheca, mappa, calendario, linea del tempo"]
     COMANDO["comando base.view.*"] --> FILE
 ```
 
@@ -67,7 +67,7 @@ stanno nel blocco `fub:` della vista:
 
 Il nome della proprietà si scrive con o senza il prefisso `prop.` (`due` e
 `prop.due` sono la stessa cosa). Solo le proprietà contano: `file.*` e le
-formule non sono ancora date del calendario. Una vista senza la sua chiave si
+formule non sono date del calendario. Una vista senza la sua chiave si
 legge, e il piano dice che la chiave manca (`date_key` o `start_key` vuoti).
 
 **La forma su disco.** Obsidian non conosce `calendar` e `timeline`, quindi

@@ -98,7 +98,7 @@ metà o con un guasto la frase dice quello, e non si crea niente.
 |---|---|
 | Invio | apre la riga attiva qui, o esegue il comando, o inserisce il blocco |
 | Ctrl-Invio (Cmd-Invio su Mac) | apre a lato, in un riquadro accanto a quello col fuoco |
-| Alt-Invio | apre una nota nella [sbirciata](editor-writing.md#la-sbirciata); un altro file a lato |
+| Alt-Invio | apre una nota nella [sbirciata](editor-links.md#la-sbirciata); un altro file a lato |
 | Maiusc-Invio | apre come Invio; quando la risposta offre di creare, crea la nota col nome scritto |
 | Tab | mostra le azioni della riga attiva, se è una nota o una persona |
 | Esc | dalle azioni torna all'elenco; altrimenti chiude il lanciatore |
@@ -193,12 +193,12 @@ Il codice è in `apps/client/src/shells/scrittoio/launcher/`:
 
 Le parole sono in `i18n/catalog.ts`, con la chiave `launcher.*`.
 
-## Che cosa non c'è ancora
+## Limiti
 
-- Il modo Persone non elenca ancora i giorni (la pagina del giorno).
-- Il modo Aiuto elenca i comandi che hanno un tasto, non ancora quelli del punto
-  in cui si è: la riga dei suggerimenti li porterà.
-- Dal lanciatore non si apre più una nota in una finestra nuova: quella resta
-  nel menu della scheda e in quello dell'albero.
-- L'anteprima di un comando non dice ancora in quale menu dell'app sta: il
-  registro dei comandi non lo sa; dice il gruppo.
+- Il modo Persone elenca le persone, non i giorni.
+- Il modo Aiuto elenca i comandi che hanno un tasto, non quelli del punto in
+  cui si è: quelli li dice la [riga dei suggerimenti](editor-writing.md#la-riga-dei-suggerimenti).
+- Dal lanciatore non si apre una nota in una finestra nuova: quella resta nel
+  menu della scheda e in quello dell'albero.
+- L'anteprima di un comando dice il gruppo, non il menu dell'app in cui sta: il
+  registro dei comandi non lo sa.

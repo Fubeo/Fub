@@ -8,15 +8,25 @@
 In cima alla nota, in Scrittura e in Lettura, sta la stessa testata, in
 quest'ordine: la copertina, l'icona, il titolo (il nome del file), le
 proprietà in evidenza, «Altre N proprietà», «Aggiungi una proprietà» e la
-[riga dei dati](editor-note-facts.md). Un filo la stacca dal testo. Che cosa
-sono icona, copertina, titolo e menu «⋯» lo dice la
-[pagina dei blocchi](editor-blocks.md#la-testata-della-pagina).
+[riga dei dati](editor-note-facts.md). Un filo la stacca dal testo. La
+testata c'è coi blocchi accesi e spenti; non c'è nel testo di una scheda della
+lavagna, che non è una pagina. Icona, copertina e classi sono righe del
+frontmatter, scritte come le altre proprietà, e in Sorgente si vedono così:
 
-- **Il titolo** è il nome del file (della cartella, per `_index.md`). In
-  Scrittura si scrive in riga: Invio o l'uscita dal campo rinominano il file
-  coi link, Esc torna al nome di prima; una rinomina che non riesce (un nome
-  preso, caratteri che il file system rifiuta) lo dice e il titolo torna. In
-  sola lettura non si modifica.
+```yaml
+icon: 🧳            # o una figura: icon: fub:book (o book)
+cover: ../Risorse/mare.png
+cover-y: 30         # dove sta la copertina, da 0 (in cima) a 100
+cssclasses: [wide, sans]
+```
+
+- **Il titolo** è il nome del file; per la pagina di una cartella
+  (`Viaggio/_index.md`, vedi [Esplora e cartelle](explorer-and-folders.md)) è
+  il nome della cartella. In Scrittura si scrive in riga: Invio o l'uscita dal
+  campo rinominano il file, o la cartella, coi link; Esc torna al nome di
+  prima; una rinomina che non riesce (un nome preso, caratteri che il file
+  system rifiuta) lo dice e il titolo torna. Invio dal titolo porta al testo.
+  In sola lettura non si modifica.
 - **Il primo H1.** Se la prima riga che si legge dopo il frontmatter (righe
   vuote e commenti `%%` o `<!-- -->` a parte) è un H1 che, a parte maiuscole,
   spazi, punteggiatura e formattazione, dice il nome (l'id di blocco `^x` e i
@@ -50,10 +60,12 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   nudi), numero, data (`aaaa-mm-gg` che esiste), data e ora, indirizzo,
   elenco, persone (un elenco di soli `[[link]]`), testo. Un valore che non
   torna col tipo dichiarato resta testo, sottolineato, e dice «Non è numero:
-  resta testo»; non si riscrive niente per farlo tornare. Selezione e Stato si
-  scrivono intanto come testo; un valore che è un'opzione del registro
-  (`options`) si legge come la pastiglia del suo colore, col pallino per lo
-  Stato, e uno fuori dalle opzioni resta testo. La data si legge per esteso nella lingua
+  resta testo»; non si riscrive niente per farlo tornare. Un valore di
+  Selezione o di Stato che è un'opzione del registro (`options`) si legge come
+  la pastiglia del suo colore, col pallino per lo Stato, e uno fuori dalle
+  opzioni resta testo; una Relazione mostra i nomi delle note legate. I loro
+  editor sono in [I tipi delle proprietà](../reference/property-types.md#nella-testata-della-nota).
+  La data si legge per esteso nella lingua
   dell'interfaccia; le persone hanno il tondo delle iniziali, le voci di un
   elenco e le etichette sono pastiglie.
 - **`editor.properties`** decide quanto se ne vede: `visible` (il default) le
@@ -117,7 +129,28 @@ sono icona, copertina, titolo e menu «⋯» lo dice la
   sposta con ↑ ↓ (Shift per un passo fine, Home e Fine ai bordi); Invio o
   «Salva la posizione» scrivono `cover-y:` (da 0 a 100, 50 il centro), Esc o
   «Annulla» tornano dov'era, e il fuoco torna a «Riposiziona». Un'immagine che
-  non si trova lascia il segnaposto col suo path.
+  non si trova lascia il segnaposto col suo path. Un'immagine usa lo stesso
+  path di un'immagine nel testo.
+- **L'icona** è un'emoji, cercata per nome in italiano o in inglese, o una
+  delle figure monocrome dell'esplora, prima delle emoji, scritte
+  `icon: fub:book`; si legge, senza riscriverlo, anche il nome nudo dei [tipi
+  di nota](../reference/note-conventions.md#i-tipi-di-nota), `icon: book`. Una
+  figura prende il colore del testo. Un nome sconosciuto o un testo che non è
+  un carattere solo (una parola, un path) non si mostra, e torna «Aggiungi
+  un'icona». L'icona si vede anche fuori dalla pagina, quando l'indice ha
+  letto la nota salvata: nella sua riga dell'esplora (e della cartella di cui
+  è la pagina, se non ne ha una sua), nella scheda e prima dei `[[wikilink]]`
+  che la nominano in Scrittura, se due omonime non ne hanno diverse.
+- **Nuova sottopagina** chiede il nome, dice se la pagina sta per diventare
+  quella di una cartella, crea la nota con `note.subpage` e scrive `[[Nome]]`
+  in una riga vuota o in un paragrafo dopo il blocco del cursore.
+- **Il menu «⋯»** degli strumenti: «Larghezza piena», «Testo piccolo» e il
+  carattere (quello del tema, con grazie, senza grazie, monospaziato)
+  scrivono `cssclasses` (`wide`, `small`, `serif`, `sans`, `mono`) e lasciano
+  le altre classi della nota. Il tema le applica al riquadro quando l'indice
+  ha letto la nota salvata. Classi scritte con un commento o in una forma che
+  la riscrittura perderebbe non si toccano: il menu apre lo YAML sulla loro
+  riga.
 - **La misura.** Il titolo è di 40 px su 46 in «Comoda» e 34 su 40 in
   «Compatta» (31 su 37 al telefono); la colonna dei nomi è larga 150 px (124
   con la finestra sotto i 940 px, 108 al telefono). La pagina ha 104 px di
@@ -169,5 +202,9 @@ Le scene `testata-*` e `mobile-testata` del banco la fotografano.
   le scrive con un passo d'annullamento e controlla l'impronta
   (`writePropertyChecked`), `surface.ts` legge il registro e cabla «Tipo» e la
   ricerca delle persone;
+- `apps/client/src/state/page-rename.ts`: la rinomina dal titolo;
+  `apps/client/src/state/page-icons.ts`: le icone fuori dalla pagina;
+  `apps/client/src/ui/page-mark.ts`: che cosa vuol dire un valore d'icona
+  (un'emoji o una figura `fub:<nome>`);
 - `apps/client/bench/scene.mjs`: le scene `testata-*`, `mobile-testata` e
   `proprieta-*` (gli editor dei tipi).

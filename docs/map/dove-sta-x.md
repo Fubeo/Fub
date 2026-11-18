@@ -49,6 +49,15 @@
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
 | la porta dei suggerimenti (`openHintSource`) e la riga della banda | `apps/client/src/editors/core/hints.ts`; la riga in `apps/client/src/shells/scrittoio/frame/hints-row.ts` |
+| le preferenze dell'editor delle note (`editor.blocks`, `editor.toolbar`, `editor.hints`, `editor.link-click`, `editor.typewriter`, `editor.typography`, `editor.minibar`, `editor.slash`) | `crates/fub-host/src/settings.rs`; `editor.blocks` letta in `apps/client/src/state/editor-blocks.ts` |
+| i livelli di presenza sul foglio (`markPresence`) | `apps/client/src/editors/core/presence.ts` |
+| la sbirciata (`createNotePeek`) | `apps/client/src/state/note-peek.ts` |
+| i gruppi del blocco nella barra di formato | `apps/client/src/editors/text/profiles/markdown/block-groups.ts`, dalla porta `blockGroup` di `apps/client/src/editors/core/registry.ts` |
+| il lanciatore (Ctrl O) | `apps/client/src/shells/scrittoio/launcher/` |
+| i commenti nelle note (CriticMarkup) | `apps/client/src/editors/text/profiles/markdown/comments/`; la grammatica del provider in `crates/fub-format-markdown/src/parse/comments.rs` |
+| il registro dei tipi delle proprietà (`properties.types`) | `crates/fub-kernel/src/properties.rs`; i comandi in `crates/fub-features/src/properties/commands.rs`, le Relazioni in `relation.rs` |
+| le toppe mirate del `.base` | `crates/fub-format-base/src/patch.rs`; il modello e la forma su disco (`disk_form`) in `model.rs` |
+| la Tabella (i gesti comuni a note, documenti e fogli) | `apps/client/src/tabella/` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
 | `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
