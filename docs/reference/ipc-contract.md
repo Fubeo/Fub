@@ -244,9 +244,9 @@ Nel client la regola è una e sta in `host/errors.ts`. Una riga d'errore dice
     (aprire, creare, rinominare, leggere i modelli o i tipi, ridisegnare un
     pannello, cercare) e per quelli del motore della webview (appunti,
     `import()`): lì il messaggio non è una frase per chi legge.
-- Anche col default, `not_found`, `already_exists` e `conflict` dicono la
-  specie, perché il loro messaggio è l'id del documento, e così `io`, il cui
-  messaggio è la prosa del sistema operativo.
+- La scelta è di chi chiama, non della specie: lo stesso `conflict` è l'id
+  di una nota quando esce da una primitiva e «La nota è cambiata: riprova»
+  quando lo scrive un comando.
 - Un messaggio che non è una stringa (una chiave non risolta) e ogni oggetto
   che non è un errore del contratto danno la frase della specie, mai
   «[object Object]» né JSON.

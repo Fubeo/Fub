@@ -165,7 +165,7 @@ describe("il primo H1 in Scrittura", () => {
 });
 
 describe("il titolo e la rinomina", () => {
-  it("una rinomina che l'host rifiuta dice la specie dell'errore, e il titolo torna quello di prima", async () => {
+  it("una rinomina che l'host rifiuta dice che cosa non è riuscito e la specie dell'errore, e il titolo torna quello di prima", async () => {
     const doc = "---\na: 1\n---\n# Mostra\n\nTesto";
     const note = { ...page("Mostra"), refusal: { kind: "permission_denied", message: "il vault è di sola lettura" } };
     const notices: Array<[string, string]> = [];
@@ -175,7 +175,7 @@ describe("il titolo e la rinomina", () => {
     title.value = "Mostra d'estate";
     press(title, "Enter");
     await settled();
-    expect(notices).toEqual([["non è permesso", "guasto"]]);
+    expect(notices).toEqual([["Non ho potuto rinominare la pagina in «Mostra d'estate»: non è permesso", "guasto"]]);
     expect(view.state.doc.toString()).toBe(doc);
     expect(titleOf(view).value).toBe("Mostra");
   });

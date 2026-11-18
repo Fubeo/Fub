@@ -55,11 +55,9 @@ export function isErrorKind(e: unknown, kind: PluginErrorKind): boolean {
 // comando, una view, un servizio di un componente escono dal kernel già
 // tradotti col catalogo di chi li ha scritti (§12.1), e un `Error` della
 // webview è uno dei nostri, scritto con `t()`. Qui non si traduce niente.
-// Con un'eccezione per specie, non per chiamante: `not_found`,
-// `already_exists` e `conflict` portano l'id del documento (è così che il
-// kernel e i comandi li costruiscono, quasi senza eccezioni), `io` la prosa
-// del sistema operativo. Lì il messaggio non è mai un motivo, e anche col
-// default si dice la specie.
+// La scelta è di chi chiama e non della specie: lo stesso `conflict` è l'id
+// di una nota quando esce da una primitiva e «La nota è cambiata: riprova»
+// quando lo scrive un comando.
 //
 // `"specie"` è la frase della specie dell'errore (`error.kind.*`), nella lingua
 // di chi guarda. È per gli errori delle **primitive dell'host su un
@@ -82,17 +80,13 @@ export function isErrorKind(e: unknown, kind: PluginErrorKind): boolean {
 // di qui: lì serve il messaggio intero, in qualunque lingua sia.
 export type ErrorReason = "messaggio" | "specie";
 
-// Le specie il cui messaggio è un dato (un id, la prosa del sistema) e non un
-// motivo da leggere.
-const DATUM_KINDS: ReadonlySet<PluginErrorKind> = new Set<PluginErrorKind>(["not_found", "already_exists", "conflict", "io"]);
-
 export function errorText(e: unknown, reason: ErrorReason = "messaggio"): string {
   if (reason === "specie") {
     const kind = typeof e === "object" && e !== null ? (e as { kind?: unknown }).kind : undefined;
     return kindPhrase(typeof kind === "string" ? kind : "internal");
   }
   const plugin = asPluginError(e);
-  if (plugin) return DATUM_KINDS.has(plugin.kind) ? kindPhrase(plugin.kind) : plugin.message;
+  if (plugin) return plugin.message;
   if (e instanceof Error) return e.message;
   if (typeof e === "object" && e !== null) {
     const kind = (e as { kind?: unknown }).kind;

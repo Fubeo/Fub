@@ -195,7 +195,7 @@ describe("la sbirciata", () => {
   // errore tipizzato, mai l'id o la prosa del kernel.
   it("un errore tipizzato dell'host si legge con la specie, nelle tre righe della sbirciata", async () => {
     const refused = { kind: "internal", message: "parse failed: rich codec: invalid Zip archive" };
-    const said = (s: ReturnType<typeof setup>) => String((s.deps.failed as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]);
+    const said = (s: ReturnType<typeof setup>) => String((s.deps.failed as ReturnType<typeof vi.fn>).mock.calls.slice(-1)[0]?.[0]);
     const expected = errorText(refused, "specie");
 
     const resolving = setup({ kind: "note", doc: "Nota.md" });

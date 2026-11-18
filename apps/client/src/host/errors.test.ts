@@ -23,14 +23,12 @@ describe("errorText", () => {
     expect(errorText({ kind: "permission_denied", message: "La cartella è di sola lettura" })).toBe("La cartella è di sola lettura");
   });
 
-  // `not_found`, `already_exists` e `conflict` portano l'id del documento,
-  // `io` la prosa del sistema: il messaggio non è un motivo, anche col default.
-  it("says the kind when the message is a datum, not a reason", () => {
-    speak("it-IT");
-    expect(errorText({ kind: "already_exists", message: "Viaggi/Tappe.md" })).toBe("esiste già qualcosa con lo stesso nome");
-    expect(errorText({ kind: "not_found", message: "Viaggi/Tappe.md" })).toBe("non esiste più");
-    expect(errorText({ kind: "conflict", message: "Viaggi/Tappe.md" })).toBe("nel frattempo è cambiato");
-    expect(errorText({ kind: "io", message: "Permission denied (os error 13)" })).toBe("il file non si è potuto leggere o scrivere");
+  // Anche `not_found`, `io` e `conflict`: col default il motivo è di chi l'ha
+  // scritto (un comando che dice «La nota è cambiata: riprova»). Chi chiama una
+  // primitiva dell'host chiede la specie.
+  it("returns the message of every kind with the default", () => {
+    expect(errorText({ kind: "conflict", message: "La nota è cambiata: riprova." })).toBe("La nota è cambiata: riprova.");
+    expect(errorText({ kind: "io", message: "disco pieno" })).toBe("disco pieno");
   });
 
   it("returns the message of a webview Error without the prefix", () => {

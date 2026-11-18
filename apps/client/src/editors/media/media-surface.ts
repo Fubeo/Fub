@@ -202,7 +202,7 @@ export function mountMediaSurface(
       showPhotoData();
     } catch (error) {
       if (!active) return;
-      status.textContent = t("viewer.show_failed", { reason: errorText(error, "specie") });
+      status.textContent = t("viewer.show_failed", { reason: errorText(error) });
       // Una foto che la vista non sa mostrare (un TIFF, un HEIC) ha la sua
       // frase, e sotto i dati del suo XMP.
       showPhotoData();
