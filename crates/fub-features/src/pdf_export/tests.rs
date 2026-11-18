@@ -301,6 +301,34 @@ fn pdf_export_il_vettore_resta_un_vettore() {
     assert_eq!(immagini, 0);
 }
 
+/// Le etichette di un diagramma: testo vero dentro il vettore, coi caratteri
+/// di serie di Fub (quelli dei diagrammi), non tracciati e non spariti.
+#[test]
+fn pdf_export_il_testo_del_vettore_resta_testo() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" viewBox="0 0 200 50"><text x="10" y="35" font-family="&quot;Inter Variable&quot;, Inter, sans-serif" font-size="24" fill="#000">Vista</text></svg>"##;
+    let pezzi = vec![Pezzo::Vettore {
+        x: 0.0,
+        y: 0.0,
+        w: 200.0,
+        h: 50.0,
+        svg: svg.into(),
+    }];
+    let scritto = scrivi(&elenco(vec![], vec![pezzi]), &Banco::default()).unwrap();
+    assert!(scritto.avvisi.is_empty(), "{:?}", scritto.avvisi);
+    let img = ridisegna(&scritto.pdf, 0);
+    assert!(inchiostro(&img, 0, 0, 200, 50) > 50, "le lettere si vedono");
+    // Un carattere incorporato e la sua ToUnicode: il testo si seleziona.
+    let doc = lopdf::Document::load_mem(&scritto.pdf).unwrap();
+    let caratteri = doc
+        .objects
+        .values()
+        .filter_map(|o| o.as_dict().ok())
+        .filter(|d| d.get(b"Type").and_then(|v| v.as_name()).ok() == Some(b"Font"))
+        .filter(|d| d.has(b"ToUnicode"))
+        .count();
+    assert!(caratteri >= 1, "il testo del vettore non è testo");
+}
+
 fn png(w: u32, h: u32, colore: [u8; 3]) -> Vec<u8> {
     let mut out = Vec::new();
     {

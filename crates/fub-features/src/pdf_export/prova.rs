@@ -651,7 +651,14 @@ impl<'a> Scrittore<'a> {
     }
 
     fn vettore(&mut self, svg: &str) -> Option<Ref> {
-        let albero = match usvg::Tree::from_str(svg, &usvg::Options::default()) {
+        // Il testo del vettore (le etichette di un diagramma) resta testo, coi
+        // caratteri di serie di Fub, che sono quelli dei diagrammi; `svg2pdf`
+        // li incorpora in sotto-insieme.
+        let opzioni = usvg::Options {
+            fontdb: per_il_pdf::caratteri_di_serie(),
+            ..usvg::Options::default()
+        };
+        let albero = match usvg::Tree::from_str(svg, &opzioni) {
             Ok(albero) => albero,
             Err(errore) => {
                 self.avvisi.push(Avviso::VettoreIlleggibile {

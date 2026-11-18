@@ -394,6 +394,12 @@ pub(crate) mod per_il_pdf {
     #[cfg(test)]
     pub(crate) use super::fonts::tests::with_fs_type;
     pub(crate) use super::fonts::{decode, embeddable, instance, Coordinate};
+
+    /// I caratteri di serie di Fub (Inter, Literata, JetBrains Mono), per il
+    /// testo dentro un vettore: sono quelli dei diagrammi.
+    pub(crate) fn caratteri_di_serie() -> std::sync::Arc<resvg::usvg::fontdb::Database> {
+        std::sync::Arc::clone(super::embed::fub_fonts())
+    }
 }
 
 /// La famiglia di `serif` fra quelle di [`facce`].
