@@ -60,6 +60,16 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
   `task_due`; l'indice tiene le scadenze delle task aperte lette come la vista [Compiti](tasks-and-reminders.md) (schema v10).
 
+Una parola è fatta di lettere, cifre e segni combinanti (la «é» scritta come
+`e` più accento è una lettera sola), in qualunque scrittura, CJK compreso.
+Emoji, bandiere e simboli non sono parole: in una riga stanno fra le parole come
+la punteggiatura, e da soli non trovano niente, senza errore. `match-case:` e
+`line:`/`block:`/`section:`, che leggono il testo grezzo, usano le stesse parole
+e mettono il confine solo dal lato in cui il testo cercato comincia o finisce
+con una lettera, così una frase che finisce con un'emoji combacia. L'indice non
+normalizza (NFC): una lettera precomposta non trova la stessa lettera scritta
+con l'accento combinante.
+
 Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
 sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e
 conta le altre. Il testo del documento resta il recinto.

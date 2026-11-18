@@ -411,6 +411,109 @@ fn an_emoji_being_typed_is_searched_and_not_a_regex_error() {
     }
 }
 
+/// La riga del cassetto (IMP-113) compilata dalla regola del contratto, come
+/// la compila la shell mentre si scrive, sui caratteri di più byte: emoji
+/// semplici, composte con ZWJ, bandiere, lettere con l'accento combinante e
+/// CJK. Nessuna risposta è un errore; dove resta una parola che il tokenizer
+/// tiene la nota si trova, e ogni evidenziazione cade su confini di carattere.
+///
+/// I simboli da soli (`🗺`, `🇮🇹`) non sono parole per il tokenizer `default`:
+/// cercarli dà nessun risultato e non un errore. Lo stesso vale per una lettera
+/// precomposta contro la stessa lettera scritta con l'accento combinante: oggi
+/// l'indice non normalizza (NFC), e quella è una regola di schema, non di query.
+#[test]
+fn the_drawer_line_with_multibyte_characters_finds_and_never_fails() {
+    let v = Vault::new();
+    v.put("Mappa.md", "La mappa è qui 🗺 e <ancora>.\n");
+    v.put("Famiglia.md", "Foto di famiglia 👨‍👩‍👧 in Italia 🇮🇹.\n");
+    v.put("Bar.md", "Un caffe\u{301} al bar.\n");
+    v.put("Tokyo.md", "東京タワー の 夜景.\n");
+    let ws = v.open();
+
+    let answer = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, true)
+            .unwrap_or_else(|fault| panic!("«{line}» è una riga valida: {fault:?}"));
+        let hits = match ws.query_index(IndexQuery::Documents {
+            matching: expr,
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+            excerpts: Excerpts::Attach,
+        }) {
+            Ok(IndexResult::Documents(hits)) => hits.items,
+            other => panic!("«{line}»: attesi documenti, trovato {other:?}"),
+        };
+        for hit in &hits {
+            let snippet = hit.snippet.as_deref().unwrap_or_default();
+            for span in &hit.highlights {
+                assert!(
+                    snippet.get(span.start..span.end).is_some(),
+                    "«{line}»: evidenziazione {span:?} fuori dai confini di carattere in «{snippet}»"
+                );
+            }
+        }
+        let mut ids: Vec<String> = hits.into_iter().map(|h| h.doc.to_string()).collect();
+        ids.sort();
+        ids
+    };
+
+    // Il caso del collaudo, e i suoi pezzi.
+    assert_eq!(answer("è 🗺"), ["Mappa.md"]);
+    assert_eq!(answer("è"), ["Mappa.md"]);
+    assert_eq!(answer("mappa 🗺"), ["Mappa.md"]);
+    assert_eq!(answer("🗺 mappa"), ["Mappa.md"]);
+    assert_eq!(answer("\"è qui 🗺\""), ["Mappa.md"]);
+    assert!(answer("🗺").is_empty());
+    assert_eq!(answer("è🗺"), ["Mappa.md"]);
+    // ZWJ e bandiere: la sequenza intera, a metà, e accanto a una parola.
+    assert_eq!(answer("famiglia 👨‍👩‍👧"), ["Famiglia.md"]);
+    assert_eq!(answer("👨‍👩"), Vec::<String>::new());
+    assert_eq!(answer("🇮🇹 italia"), ["Famiglia.md"]);
+    assert_eq!(answer("ital 🇮"), ["Famiglia.md"]);
+    // L'accento combinante, anche da solo e come ultimo carattere scritto.
+    assert_eq!(answer("caffe\u{301}"), ["Bar.md"]);
+    assert_eq!(answer("caffe\u{301} bar"), ["Bar.md"]);
+    assert!(answer("\u{301}").is_empty());
+    // La lettera precomposta contro quella combinata: nessun errore, e oggi
+    // nessun risultato, perché l'indice non normalizza (vedi sopra).
+    assert!(answer("caffè").is_empty());
+    // CJK: una parola per il tokenizer, cercata come prefisso mentre si scrive.
+    assert_eq!(answer("東京"), ["Tokyo.md"]);
+    assert_eq!(answer("夜景 東"), ["Tokyo.md"]);
+    // Gli stessi caratteri dentro gli operatori della barra.
+    assert_eq!(answer("(è OR 東京) mappa"), ["Mappa.md"]);
+    assert_eq!(answer("(è OR 夜景) (🗺 OR の)"), ["Tokyo.md"]);
+    // Un simbolo che resta da solo in una foglia (qui dopo un gruppo) non ha
+    // parole per l'indice: la foglia non seleziona niente, ma non è un errore.
+    assert!(answer("(è OR 東京) 🗺").is_empty());
+    assert_eq!(answer("-🗺 famiglia"), ["Famiglia.md"]);
+    assert_eq!(answer("match-case:è mappa"), ["Mappa.md"]);
+    assert_eq!(answer("match-case:\"è qui 🗺\""), ["Mappa.md"]);
+    assert_eq!(answer("match-case:\"🗺 e\""), ["Mappa.md"]);
+    assert_eq!(answer("match-case:\"famiglia 👨‍👩‍👧\""), ["Famiglia.md"]);
+    assert_eq!(answer("match-case:\"caffe\u{301}\""), ["Bar.md"]);
+    assert_eq!(answer("match-case:caffe\u{301} bar"), ["Bar.md"]);
+    assert!(answer("match-case:🗺").is_empty());
+    // L'ambito (riga, blocco, sezione) confronta il testo grezzo come le
+    // maiuscole esatte: stesse parole, stessi confini.
+    assert_eq!(answer("line:(è 🗺)"), ["Mappa.md"]);
+    assert_eq!(answer("line:(caffe\u{301} bar)"), ["Bar.md"]);
+    assert_eq!(answer("block:\"famiglia 👨‍👩‍👧 in\""), ["Famiglia.md"]);
+}
+
+/// Una riga davvero sbagliata resta un guasto tipizzato della sintassi, con il
+/// suo motivo e la colonna, anche dopo caratteri di più byte: non arriva
+/// all'indice e non diventa un errore generico della ricerca.
+#[test]
+fn a_wrong_line_stays_a_typed_fault_after_multibyte_characters() {
+    use fub_abi::rules::search_syntax::{parse, SearchFaultKind};
+    let fault = parse("\\ * ? (", true).expect_err("una parentesi aperta");
+    assert_eq!(fault.kind, SearchFaultKind::UnclosedGroup);
+    let fault = parse("🗺 è \"aperta", true).expect_err("una virgolette aperta");
+    assert_eq!(fault.kind, SearchFaultKind::UnclosedQuote);
+    assert_eq!(fault.at, "🗺 è ".len(), "la colonna è in byte, sul confine");
+}
+
 #[test]
 fn editing_a_notes_updates_what_is_findable() {
     let v = Vault::new();
