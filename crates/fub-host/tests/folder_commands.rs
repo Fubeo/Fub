@@ -1,6 +1,6 @@
-//! Spostare e cestinare una cartella **dall'host vero**: la strada della shell,
-//! dove il comando gira fuori dalla guardia del workspace e ogni `mkdir` e
-//! `rmdir` passa dal suo turno di scrittura.
+//! Spostare e cestinare una cartella, e crearci una nota, **dall'host vero**:
+//! la strada della shell, dove il comando gira fuori dalla guardia del
+//! workspace e ogni `mkdir` e `rmdir` passa dal suo turno di scrittura.
 
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
@@ -68,4 +68,28 @@ fn a_folder_goes_to_the_trash_through_the_host() {
         std::fs::read_to_string(root.join("Progetti/Piano.md")).unwrap(),
         "# Piano\n"
     );
+}
+
+/// «Nuova nota qui» dal menu di una cartella (IMP-144): la shell manda la
+/// cartella a `note.create`, e la nota nasce lì sul disco, non alla radice.
+#[test]
+fn a_new_note_is_born_in_the_chosen_folder_on_disk() {
+    let (_dir, root) = vault(&[("Note/Prima.md", "# Prima\n")]);
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&root).unwrap();
+    host.wait_indexed(None).unwrap();
+
+    run(
+        &host,
+        "note.create",
+        serde_json::json!({ "folder": "Note" }),
+    );
+    run(
+        &host,
+        "note.create",
+        serde_json::json!({ "folder": "Note" }),
+    );
+    assert!(root.join("Note/Senza titolo.md").is_file());
+    assert!(root.join("Note/Senza titolo 1.md").is_file());
+    assert!(!root.join("Senza titolo.md").exists());
 }

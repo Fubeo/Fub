@@ -220,6 +220,15 @@ export function mountExplorer(lifetime: Lifetime): void {
     // Una riga ha già aperto il suo menu.
     if (e.defaultPrevented) return;
     e.preventDefault();
+    // Un contestuale arrivato sulla voce e non sulla sua riga (il tasto Menu
+    // lo manda al `treeitem` a fuoco, un clic sul margine della voce pure) è
+    // della voce: il menu della radice creerebbe fuori dalla cartella
+    // (IMP-144).
+    const item = e.target instanceof Element ? e.target.closest<HTMLElement>('[role="treeitem"][data-path]') : null;
+    if (item && fileListEl.contains(item)) {
+      rowMenuAt(e, item);
+      return;
+    }
     rootMenu(e);
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
@@ -1401,8 +1410,21 @@ function openRowMenu(li: HTMLElement): void {
     bubbles: true,
     cancelable: true,
   });
-  if (row.classList.contains("folder")) folderMenu(at, path);
-  else noteMenu(at, row, path);
+  rowMenuAt(at, li);
+}
+
+/// Il contestuale della voce `li` aperto in `at`: lo chiede alla sua riga,
+/// così cartella, nota e allegato aprono il menu del clic destro e non uno
+/// scelto qui. L'evento non risale: l'albero non lo riceve una seconda volta.
+function rowMenuAt(at: MouseEvent, li: HTMLElement): void {
+  const row = li.querySelector<HTMLElement>(":scope > .tree-row");
+  if (!row || !li.dataset.path) return;
+  row.dispatchEvent(new MouseEvent("contextmenu", {
+    clientX: at.clientX,
+    clientY: at.clientY,
+    bubbles: false,
+    cancelable: true,
+  }));
 }
 
 /// Una cartella senza niente dentro: né sottocartelle né file, di nessuna

@@ -101,6 +101,19 @@ describe("newNoteInActiveSpace", () => {
     expect(calls.refreshed).toBe(1);
   });
 
+  // «Nuova nota qui» dal menu di una cartella (IMP-144): la cartella passa
+  // per la domanda del tipo. Un tipo con la sua cartella resta là
+  // (`docs/product/editor-note-types.md`); uno senza nasce nella cartella scelta.
+  it("la cartella scelta da un menu arriva attraverso la scelta del tipo", async () => {
+    state.activeSpace = "Progetti";
+    const SENZA_CARTELLA: NoteType = { ...LIBRO, doc: "Tipi/Idea.md", link: "Tipi/Idea", name: "Idea", folder: null };
+    await newNoteInActiveSpace({ choose: () => Promise.resolve(SENZA_CARTELLA), anchor, folder: "Note" });
+    await newNoteInActiveSpace({ choose: () => Promise.resolve(null), anchor, folder: "Note" });
+    await newNoteInActiveSpace({ choose: () => Promise.resolve(LIBRO), anchor, folder: "Note" });
+    expect(calls.created).toEqual([["type:Tipi/Idea", "Note"], ["plain", "Note"], ["type:Tipi/Libro", "Note"]]);
+    expect(calls.opened).toEqual(["Note/Senza titolo.md", "Senza titolo.md", "Biblioteca/Senza titolo.md"]);
+  });
+
   it("Esc (il menu chiuso senza scelta) non crea niente e non sposta il fuoco", async () => {
     await newNoteInActiveSpace({ choose: () => Promise.resolve(undefined), anchor });
     expect(calls.created).toEqual([]);

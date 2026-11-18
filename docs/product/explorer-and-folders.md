@@ -159,6 +159,11 @@ trascinata su un'altra, o sul fondo del pannello, ci entra con `folder.rename`, 
 dentro sé stessa. Prima del comando la shell salva i buffer aperti; le cartelle
 espanse e lo spazio attivo seguono il path nuovo, e l'esito offre «Annulla».
 
+Il menu di una voce dell'albero, cartella, nota o allegato, è lo stesso dalla
+sua riga e dalla voce intera: tasto destro, tasto Menu o Maiusc+F10 sulla voce
+a fuoco. Solo il titolo del pannello e lo spazio sotto l'ultima voce aprono
+il menu della radice, che crea nello spazio attivo.
+
 ## Trascinare
 
 Dentro l'albero una nota, un file o una cartella lasciati su una cartella ci

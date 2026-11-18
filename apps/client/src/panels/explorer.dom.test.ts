@@ -234,6 +234,63 @@ describe("i tasti del mouse sulle righe", () => {
   });
 });
 
+describe("il contestuale di una voce dell'albero", () => {
+  /// Un contestuale con le coordinate di un puntatore, su `target`.
+  const contextOn = (target: Element): void => {
+    const box = target.getBoundingClientRect();
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: box.left + 10, clientY: box.top + 5 }));
+  };
+  const item = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${CSS.escape(path)}"]`)!;
+  const labels = (): string[] =>
+    [...document.querySelectorAll<HTMLElement>('#context-menu [role="menuitem"]')].map((entry) => entry.querySelector(".menu-label")?.textContent ?? "");
+  const choose = (label: string): void =>
+    [...document.querySelectorAll<HTMLElement>('#context-menu [role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")?.textContent === label)!.click();
+  /// La cartella di ogni `note.create` chiesto al kernel.
+  const createdIn = (host: FakeHost): unknown[] =>
+    host.calls.filter((call) => call.gate === "invokeCommand" && call.args[0] === "note.create")
+      .map((call) => (call.args[1] as Record<string, string> | undefined)?.folder);
+
+  // Il contestuale che arriva sul `treeitem` e non sulla sua riga (il tasto
+  // Menu della tastiera lo manda alla voce a fuoco, un clic sul margine della
+  // voce pure) è quello della voce, non quello della radice (IMP-144).
+  it("sulla voce di una cartella apre il menu della cartella, e «Nuova nota qui» nasce lì", async () => {
+    const host = await start();
+    contextOn(item("Guida"));
+    await quiet();
+    expect(labels()).toContain("Nuova nota qui");
+    expect(labels()).not.toContain("Comprimi tutto");
+    choose("Nuova nota qui");
+    await waitFor("la nota nuova si chiede", () => createdIn(host).length === 1);
+    expect(createdIn(host)).toEqual(["Guida"]);
+  });
+
+  it("sulla riga di una cartella, come col puntatore, la nota nasce nella cartella", async () => {
+    const host = await start();
+    contextOn(row("Progetti")!.querySelector(".row-name")!);
+    await quiet();
+    choose("Nuova nota qui");
+    await waitFor("la nota nuova si chiede", () => createdIn(host).length === 1);
+    expect(createdIn(host)).toEqual(["Progetti"]);
+  });
+
+  it("sulla voce di una nota apre il menu della nota, con «Sposta in…»", async () => {
+    await start();
+    contextOn(item("Benvenuto.md"));
+    await quiet();
+    expect(labels()).toContain("Sposta in…");
+    expect(labels()).toContain("Rinomina");
+    expect(labels()).not.toContain("Comprimi tutto");
+  });
+
+  it("sotto l'ultima voce resta il menu della radice", async () => {
+    await start();
+    document.getElementById("file-list")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    await quiet();
+    expect(labels()).toContain("Comprimi tutto");
+    expect(labels()).not.toContain("Nuova nota qui");
+  });
+});
+
 describe("le appuntate", () => {
   it("una nota appuntata dal menu compare subito fra le appuntate (IMP-009)", async () => {
     await start();
