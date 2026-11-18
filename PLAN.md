@@ -1087,4 +1087,4 @@ fuori dalle scene `grid-*` e da quelle di K3 con la griglia cambia; lo
 scripts/check.sh completo verde.
 Prova: scripts/check.sh, poi `npm run bench:verify`, `npm run bench:a11y`,
 `npm run bench:grid` e `npm run bench:motion`
-Stato: [~] in corso (coder griglia/t8 da c315a60a5, 2026-11-18)
+Stato: [x] fatto (2026-11-18, 86238e5ed, unito in 405ae1e35: 14 scene nuove confrontate col prototipo nelle due luci; bench:grid 52/52, bench:a11y pulito sulle scene della griglia (rossi fuori piano: concentration, diagramma-07, settings-external-apps); theme:verify verde. Differenze: la cella aperta si legge con aria-owns, la guida della misura col colore dei segni; foto piene a 1308×820. Resta: la barra della formula non segue la bozza (T4), numeri all'inglese nelle celle (fuori piano))
