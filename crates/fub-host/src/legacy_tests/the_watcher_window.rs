@@ -92,7 +92,7 @@ struct Registered {
 }
 
 impl EventSink for Registered {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
         let _ = self.output.send(notice.clone());
         Delivery::Done
     }

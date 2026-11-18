@@ -200,7 +200,8 @@ pub use resources::{
 };
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{
-    doc_id, document_text, Delivery, DocumentText, EventSink, Host, SnapshotHostError, VaultSession,
+    doc_id, document_text, Delivery, DocumentText, EventSink, Host, ShellNotice, SnapshotHostError,
+    VaultSession,
 };
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use theme::{ThemeInfo, ThemePayload};

@@ -47,6 +47,7 @@ use fub_abi::{
 };
 use fub_host::{
     componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey,
+    ShellNotice,
 };
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
@@ -318,7 +319,7 @@ where
 struct WebviewEvents(std::sync::OnceLock<AppHandle>);
 
 impl EventSink for WebviewEvents {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, vault: Option<&str>) -> Delivery {
         let Some(app) = self.0.get() else {
             tracing::warn!(
                 target: "fub.app",
@@ -330,7 +331,11 @@ impl EventSink for WebviewEvents {
         };
         // Events can contain vault data: never broadcast them to a document
         // surface or a remote viewer. The main webview is the only host.
-        match app.emit_to("main", "fub://event", notice) {
+        // Il vault viaggia col fatto (#216): l'host tiene aperti anche vault
+        // che la shell non mostra (la demo lascia aperto quello di prima, e un
+        // vault lasciato chiude dopo che il nuovo è già aperto), e la shell
+        // scarta da sé ciò che non è del vault che mostra.
+        match app.emit_to("main", "fub://event", ShellNotice { notice, vault }) {
             Ok(()) => Delivery::Done,
             Err(and) => {
                 // Un notice che non attraversa l'IPC è un **bug del programma**,

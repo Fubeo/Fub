@@ -1094,6 +1094,12 @@ const APP_OPTIONAL_KEYS = {
       "installation", "version", "enabled", "consent", "runtime_known", "revoked",
     ],
   },
+  // Il notice come lo manda l'app su `fub://event` (#216): col vault del
+  // fatto, e senza per un fatto della macchina.
+  ShellNotice: {
+    all: keysOf<Required<KernelNotice>>({ event: true, origin: true, vault: true }),
+    required: ["event", "origin"],
+  },
   // Senza indirizzo la sessione ascolta su quello della rotta predefinita.
   LiveStart: {
     all: keysOf<Required<LiveStart>>({ document: true, snapshot: true, address: true }),

@@ -50,7 +50,7 @@ impl Vault {
 struct Collected(Arc<Mutex<Vec<Notice>>>);
 
 impl EventSink for Collected {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
         self.0.lock().unwrap().push(notice.clone());
         Delivery::Done
     }

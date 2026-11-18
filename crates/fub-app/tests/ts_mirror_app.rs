@@ -612,6 +612,30 @@ fn expected() -> Value {
             to_value(RecoverOutcome { backup: None,
                 detail: "nothing to back up".into(), restart_required: false }),
         ],
+        // Il notice come l'app lo manda su `fub://event` (#216): un fatto di un
+        // vault porta la sua radice, uno della macchina no.
+        "ShellNotice": [
+            to_value(fub_host::ShellNotice {
+                notice: &fub_abi::Notice::new(
+                    fub_abi::Event::DocumentChanged {
+                        id: fub_abi::model::DocId::new("Nota.md"),
+                        changes: None,
+                    },
+                    fub_abi::event::Origin::by(fub_abi::event::Actor::Watcher),
+                ),
+                vault: Some("/vault"),
+            }),
+            to_value(fub_host::ShellNotice {
+                notice: &fub_abi::Notice::new(
+                    fub_abi::Event::SettingChanged {
+                        key: "appearance.theme".into(),
+                        scope: fub_abi::settings::SettingScope::Machine,
+                    },
+                    fub_abi::event::Origin::by(fub_abi::event::Actor::User),
+                ),
+                vault: None,
+            }),
+        ],
         // La ricevuta di `resource_write`: un file scritto e un file che c'era
         // già con gli stessi byte (`reuse: "same-content"`).
         "ResourceWriteReceipt": [
@@ -1112,7 +1136,7 @@ fn component_samples() -> serde_json::Map<String, Value> {
 struct Uscita(std::sync::Mutex<Vec<fub_abi::Event>>);
 
 impl fub_host::EventSink for Uscita {
-    fn emit(&self, notice: &fub_abi::Notice) -> fub_host::Delivery {
+    fn emit(&self, notice: &fub_abi::Notice, _vault: Option<&str>) -> fub_host::Delivery {
         self.0.lock().unwrap().push(notice.event.clone());
         fub_host::Delivery::Done
     }
