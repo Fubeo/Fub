@@ -139,7 +139,7 @@ pub fn listed(workbook: &Workbook) -> Vec<(PartKind, String)> {
     sheets
         .chain(names)
         .chain(tables)
-        .filter(|(kind, name)| !name.is_empty() && seen.insert((*kind, name.to_lowercase())))
+        .filter(|(kind, name)| !name.is_empty() && seen.insert((*kind, name_key(name))))
         .take(MAX_LISTED_PARTS)
         .collect()
 }
@@ -217,13 +217,20 @@ fn bounded(workbook: &Workbook, sheet: usize, range: RangeRef) -> RangeRef {
     RangeRef::new(CellRef::new(rows.0, cols.0), CellRef::new(rows.1, cols.1))
 }
 
+/// La chiave con cui due nomi della cartella (fogli, nomi definiti, tabelle)
+/// sono lo stesso: Excel li confronta senza badare alle maiuscole, anche
+/// fuori dall'ASCII («Città» e «CITTÀ» sono un foglio solo).
+fn name_key(name: &str) -> String {
+    name.to_lowercase()
+}
+
 /// Il foglio di nome `name`, senza badare alle maiuscole.
 fn sheet_named(workbook: &Workbook, name: &str) -> Option<usize> {
-    let wanted = name.to_lowercase();
+    let wanted = name_key(name);
     workbook
         .sheets
         .iter()
-        .position(|sheet| sheet.name.to_lowercase() == wanted)
+        .position(|sheet| name_key(&sheet.name) == wanted)
 }
 
 /// `Foglio!A1:B2` (o `'Il foglio'!$A$1`): il foglio e il rettangolo. Senza
@@ -282,12 +289,12 @@ fn reference(
 /// Il nome definito `name`: prima quello della cartella, poi quello di un
 /// foglio.
 fn defined_name(workbook: &Workbook, name: &str) -> Option<(usize, RangeRef)> {
-    let wanted = name.to_lowercase();
+    let wanted = name_key(name);
     let mut candidates: Vec<_> = workbook
         .names
         .iter()
         .filter(|defined| {
-            shown_name(&defined.name, defined.hidden) && defined.name.to_lowercase() == wanted
+            shown_name(&defined.name, defined.hidden) && name_key(&defined.name) == wanted
         })
         .collect();
     candidates.sort_by_key(|defined| defined.scope.is_some());
@@ -298,7 +305,7 @@ fn defined_name(workbook: &Workbook, name: &str) -> Option<(usize, RangeRef)> {
 
 /// La tabella `name` del file e il suo foglio.
 fn table_named(workbook: &Workbook, name: &str) -> Option<(usize, RangeRef)> {
-    let wanted = name.to_lowercase();
+    let wanted = name_key(name);
     workbook
         .sheets
         .iter()
@@ -307,7 +314,7 @@ fn table_named(workbook: &Workbook, name: &str) -> Option<(usize, RangeRef)> {
             sheet
                 .tables
                 .iter()
-                .find(|table| table.name.to_lowercase() == wanted)
+                .find(|table| name_key(&table.name) == wanted)
                 .map(|table| (index, table.range))
         })
 }

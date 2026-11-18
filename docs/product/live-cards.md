@@ -65,9 +65,15 @@ tabella seguono un intervallo che cresce: un intervallo scritto resta quello.
   riscrive la parte nell'embed (un passo d'annullamento). In sola lettura il
   pulsante non c'è.
 
-La parte la trova il provider del foglio col comando che legge soltanto
-`fub.part` (`crates/fub-format-xlsx/src/parts.rs`); la scheda è
-`apps/client/src/editors/grid/card.ts`.
+La parte la trova il provider del foglio col comando composto `fub.part`
+(`{part?: "Budget!A1:E7"}`, `crates/fub-format-xlsx/src/parts.rs`), che legge
+la cartella mostrata e basta: niente facciata, giornale e revisione come
+prima. Risponde `{found: true, kind, sheet, range}` con l'id del foglio della
+sessione, o `{found: false, parts}` con i fogli visibili, i nomi e le tabelle;
+un nome definito vale se è un solo rettangolo. La scheda lo chiede a ogni
+apertura della sua sessione: è `apps/client/src/editors/grid/card.ts`. Venti
+fogli vivi in una nota non pesano sulla battuta: lo misura la nota
+`battuta-schede-20` di `node bench/interaction.mjs --only=battuta`.
 
 ## I limiti
 

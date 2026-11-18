@@ -220,7 +220,7 @@ quando cambia il moto, non prima.
 ### La battuta
 
 Quanto costa un carattere scritto in una nota grande: dalla transazione al
-layout forzato, senza il disegno. Lo stesso banco la misura su due note
+layout forzato, senza il disegno. Lo stesso banco la misura su tre note
 sintetiche (`live-fixture.ts`, sezioni da diciotto righe con titolo, stili,
 wikilink, tag, codice, apice, evidenziato, compito, voce, recinto, callout e
 tabella), con trenta battute e venti spostamenti del cursore di 200 caratteri:
@@ -248,13 +248,6 @@ lavori).
 | 7.201 righe | Sorgente | 4,2 · 6,0 · 13,5 ms | 2,1 · 2,8 · 3,7 ms | 3,6 · 5,8 · 17,4 ms |
 | 7.201 righe | Live | 5,7 · 8,4 · 38,0 ms | 3,0 · 3,9 · 4,2 ms | 6,8 · 11,5 · 29,1 ms |
 | 7.201 righe | Blocchi | 5,5 · 9,6 · 24,2 ms | 3,1 · 4,4 · 5,2 ms | 7,6 · 11,9 · 37,8 ms |
-
-La terza nota (`battuta-schede-20`) è quella di cinquanta sezioni con venti
-fogli vivi incorporati, la stessa parte della cartella del banco: le schede
-non devono pesare sulla battuta. Il 18 novembre 2026, un giro con carico
-basso: Sorgente 1,4 · 2,1 · 5,4 ms, Scrittura 2,4 · 4,2 · 13,8 ms, contro
-1,2 · 1,4 · 4,7 e 2,0 · 3,3 · 12,0 ms della nota di 901 righe senza schede
-nello stesso giro.
 
 **Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che fa
 soltanto il lavoro di CodeMirror e della sessione, sta già intorno ai 4 ms, e

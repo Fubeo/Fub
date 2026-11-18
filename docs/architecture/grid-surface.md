@@ -191,16 +191,6 @@ input. `fub.copyHtml` legge il testo e la tabella HTML di GridCraft di un
 intervallo senza cambiare niente. Senza `fub.pasteFrom` nel catalogo gli
 appunti portano gli input.
 
-`fub.part` (`{part?: "Budget!A1:E7"}`) dice dove sta la parte che una nota
-incorpora (`crates/fub-format-xlsx/src/parts.rs`): un intervallo col foglio o
-sul foglio attivo, un foglio, un nome definito di un solo rettangolo, una
-tabella; vuota, il foglio attivo dalla prima cella usata. Risponde
-`{found: true, kind, sheet, range}` con l'id del foglio della sessione, o
-`{found: false, parts}` con i fogli visibili, i nomi e le tabelle. Legge la
-cartella mostrata e basta: niente facciata, niente modalità a comandi, il
-giornale e la revisione come prima. La scheda di foglio nella nota lo chiede
-a ogni apertura della sua sessione ([schede vive](../product/live-cards.md)).
-
 Il bordo della selezione, preso a 3 px fuori dal quadratino, si tira quando
 la cartella serve `fub.pasteFrom`: il contorno segue il puntatore e al
 rilascio un solo `fub.pasteFrom` sposta l'intervallo (con Ctrl tenuto lo
