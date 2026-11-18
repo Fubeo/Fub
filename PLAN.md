@@ -1655,7 +1655,7 @@ lo dice); il moto ridotto; la lingua inglese.
 Fatto quando: quaranta compiti e2e verdi nel banco.
 Prova: scripts/check.sh --rapido; cd apps/client && FUB_BENCH_PORT=1460 npm
 run bench:giro
-Stato: [ ] da fare
+Stato: [~] in corso (coder test/giro-scrittura da integra/editor-2, 2026-11-18)
 
 ## T27 · La prova con cinque persone
 
