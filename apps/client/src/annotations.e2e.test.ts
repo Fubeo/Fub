@@ -276,5 +276,12 @@ describe("«Esporta…» sulle annotazioni", () => {
       selection: { kind: "documents", value: [NOTES] },
       options: { suffix: "redatto" },
     });
+    // Il lavoro nel centro attività si chiama come lo direbbe chi l'ha
+    // chiesto, nella lingua dell'interfaccia: non «import.transfer» né «export».
+    const rows = () => [...document.querySelectorAll<HTMLElement>("#activity-list .activity-label")].map((el) => el.textContent);
+    await waitFor("il lavoro ha il suo nome", () => rows().some((text) => text?.startsWith("Esportazione di «") === true));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatch(/^Esportazione di «Bando di gara[^»]*» come /);
+    expect(rows()[0]).toContain(t("pdf.export.redacted"));
   });
 });

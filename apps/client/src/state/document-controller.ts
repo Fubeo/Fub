@@ -153,7 +153,7 @@ import { registerShellCommand, showComponent, type CommandEntry } from "../ui/co
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { trashWithConfirm } from "../panels/trash";
-import { showActivity } from "../panels/activity";
+import { nameJob, queuedJob, showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
@@ -4557,7 +4557,11 @@ export async function runExport(doc: string, chosen: SurfaceExport): Promise<voi
     options: chosen.options?.() ?? {},
   };
   try {
-    await api.invokeCommand(EXPORT_COMMAND, { request_json: JSON.stringify(request) }, "apply");
+    const outcome = await api.invokeCommand(EXPORT_COMMAND, { request_json: JSON.stringify(request) }, "apply");
+    // Il nome del lavoro nel centro attività: il job dei trasferimenti non sa
+    // dire in che lingua parla chi guarda, la shell sì.
+    const id = queuedJob(outcome);
+    if (id !== null) nameJob(id, () => t("activity.job.export", { doc: docTitle(doc), what: chosen.label() }));
   } catch (error) {
     notify(t("document.export.failed", { reason: errorText(error) }), "guasto");
     return;

@@ -12714,7 +12714,9 @@ impl Workspace {
             }
         });
         self.dispatch_pending();
-        report
+        // L'errore dell'importer, nel catalogo di chi l'ha scritto (§12.2),
+        // come quello di un exporter.
+        report.map_err(|error| self.localized(&owner, error))
     }
 
     /// Le destinazioni di export offerte dai provider registrati.
