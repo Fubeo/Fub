@@ -1631,11 +1631,9 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   display: none !important;
 }
 
-/* La cornice si attenua e torna al passaggio, o quando il fuoco ci entra da
-   tastiera. Si muove la sola opacità; la durata è della pelle. */
-#app[data-focus-mode] #topbar:not(:hover):not(:focus-within) {
-  opacity: 0.3;
-}
+/* La barra del titolo si attenua e torna piena al passaggio, o quando il
+   fuoco ci entra da tastiera: è una questione di colori, quindi della pelle
+   (`skin/frame.css`, «La concentrazione»). */
 
 /* Il blocco del cursore resta acceso, gli altri si attenuano: nel foglio che
    ha il fuoco, mentre si scrive. Il blocco (le righe fino alla riga vuota
