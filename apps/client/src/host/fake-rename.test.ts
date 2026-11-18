@@ -54,3 +54,59 @@ describe("note.rename nell'host finto", () => {
     expect(await api.readDocument("Senza.md")).toEqual(before);
   });
 });
+
+// L'organizzazione (icone, appuntate, ordine, spazi) il finto la tiene come il
+// kernel: la rinomina di una nota, quella da un'altra app e lo spostamento di
+// una cartella la portano con sé. Un finto che la perde a ogni rinomina fa
+// sparire l'appuntata dalla scrivania, e il banco mostrerebbe un difetto che
+// l'host vero non ha.
+describe("l'organizzazione nell'host finto", () => {
+  const ORG = {
+    icons: { "Cucina/Pane.md": "🍞" },
+    pinned: ["Cucina/Pane.md", "Diario.md"],
+    order: {},
+    spaces: [],
+  };
+
+  async function organizationOf(api: ReturnType<typeof createFakeHost>["module"]["api"]) {
+    const result = await api.queryIndex({ kind: "organization" });
+    if (result.kind !== "organization") throw new Error(`risposta inattesa: ${result.kind}`);
+    return result.value;
+  }
+
+  it("risponde quella del vault con cui è nato", async () => {
+    const { module } = createFakeHost({ file: FILE, organization: ORG });
+    expect(await organizationOf(module.api)).toEqual(ORG);
+  });
+
+  it("una nota appuntata e rinominata da Fub resta appuntata col nome nuovo, con la sua icona", async () => {
+    const { module } = createFakeHost({ file: FILE, organization: ORG });
+    await module.api.invokeCommand("note.rename", { doc: "Cucina/Pane.md", to: "Cucina/Pagnotta.md" }, "apply");
+
+    const org = await organizationOf(module.api);
+    expect(org.pinned).toEqual(["Cucina/Pagnotta.md", "Diario.md"]);
+    expect(org.icons).toEqual({ "Cucina/Pagnotta.md": "🍞" });
+  });
+
+  it("una nota appuntata rinominata da un'altra app resta appuntata col nome nuovo", async () => {
+    const host = createFakeHost({ file: FILE, organization: ORG });
+
+    host.renameFromOutside("Diario.md", "Archivio/Diario.md");
+
+    expect((await organizationOf(host.module.api)).pinned).toEqual(["Cucina/Pane.md", "Archivio/Diario.md"]);
+  });
+
+  it("spostare una cartella porta con sé le appuntate che stanno dentro", async () => {
+    const { module } = createFakeHost({ file: FILE, organization: ORG });
+    await module.api.invokeCommand("folder.rename", { folder: "Cucina", to: "Dispensa" }, "apply");
+
+    expect((await organizationOf(module.api)).pinned).toEqual(["Dispensa/Pane.md", "Diario.md"]);
+  });
+
+  it("un'appuntata messa nel finto resta quando si rilegge l'organizzazione", async () => {
+    const { module } = createFakeHost({ file: FILE, organization: ORG });
+    await module.api.setPinned("Senza.md", true);
+
+    expect((await organizationOf(module.api)).pinned).toEqual(["Cucina/Pane.md", "Diario.md", "Senza.md"]);
+  });
+});

@@ -72,7 +72,7 @@ import {
 } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
-import { errorText } from "../host/errors";
+import { errorKindPhrase, errorText } from "../host/errors";
 import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, resolvedLanguage, t, type Key } from "../i18n/strings";
 import {
   MOTION_KEY,
@@ -1566,10 +1566,23 @@ function renderCssSnippets(entry: SettingEntry): HTMLElement {
   return panel;
 }
 
+/// Il profilo che il kernel crea di serie: il suo nome è un id (`Default`, come
+/// `default_profile_name` in `settings.rs`), e si mostra nella lingua di chi
+/// guarda. L'id resta quello che si manda all'host.
+const DEFAULT_PROFILE = "Default";
+
+function profileLabel(profile: string): string {
+  return profile === DEFAULT_PROFILE ? t("settings.profiles.default") : profile;
+}
+
 /// I profili: una sezione in fondo alla configurazione, una scheda per
 /// ambito. In vista resta il gesto comune — quale profilo è attivo e come
 /// cambiarlo —; quelli rari (duplicare, esportare, importare, azzerare) stanno
 /// in un riquadro che si apre.
+///
+/// Un errore dell'host qui dice **che cosa** non è riuscito, con la frase della
+/// sua specie (`errorKindPhrase`): il suo messaggio è in inglese e lo scrive il
+/// kernel per chi lo cerca nel registro, non per chi guarda il pannello.
 async function renderProfiles(index: number): Promise<HTMLElement> {
   const scopes: { scope: SettingScope; vault?: string }[] = [{ scope: "machine" }];
   if (state.vaultRoot) scopes.push({ scope: "vault", vault: state.vaultRoot });
@@ -1597,11 +1610,11 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     parts.body.append(box);
     const result = results[position]!;
     if (result.status === "rejected") {
-      text.append(row("muted", t("settings.profiles.unavailable", { reason: errorText(result.reason) })));
+      text.append(row("muted", t("settings.profiles.unavailable", { reason: errorKindPhrase(result.reason) })));
       continue;
     }
     const { active, names } = result.value;
-    text.append(row("setting-source", t("settings.profiles.active", { profile: active })));
+    text.append(row("setting-source", t("settings.profiles.active", { profile: profileLabel(active) })));
     const feedback = row("setting-source", t("settings.profiles.hint"));
     feedback.setAttribute("role", "status");
     text.append(feedback);
@@ -1610,7 +1623,7 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     for (const profile of names) {
       const option = document.createElement("option");
       option.value = profile;
-      option.textContent = profile;
+      option.textContent = profileLabel(profile);
       option.selected = profile === active;
       choice.append(option);
     }
@@ -1650,7 +1663,7 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
           await render();
         }
       } catch (error) {
-        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorText(error) });
+        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorKindPhrase(error) });
       } finally {
         busy = false;
         for (const button of box.querySelectorAll<HTMLButtonElement>("button")) button.disabled = false;
@@ -1687,11 +1700,11 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     });
     button(transfer, t("settings.profiles.reset"), () => {
       void (async () => {
-        const accepted = await confirm(t("settings.profiles.reset_confirm", { profile: choice.value }), {
+        const accepted = await confirm(t("settings.profiles.reset_confirm", { profile: profileLabel(choice.value) }), {
           title: t("settings.profiles.reset_title"), okLabel: t("settings.profiles.reset_ok"), danger: true,
         });
         if (accepted && box.isConnected) await perform(() => api.resetSettingsProfile(scope, choice.value, vault));
-      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorText(error) }); });
+      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorKindPhrase(error) }); });
     }, true);
     inside.append(duplicateRow, json, transfer, row("muted", t("settings.profiles.frame_hint")));
   }

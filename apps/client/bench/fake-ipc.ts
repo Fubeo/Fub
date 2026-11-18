@@ -1675,8 +1675,9 @@ const ICONS: Record<string, string> =
     ? { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" }
     : { Guida: "fub:book", Diario: "fub:calendar" };
 
-/// L'organizzazione del vault: due note appuntate, le icone, uno spazio. Il
-/// finto risponde tutto vuoto — che è onesto e invisibile.
+/// L'organizzazione del vault con cui il banco parte: due note appuntate, le
+/// icone, uno spazio. Il finto la tiene (`createFakeHost`) e la fa seguire alle
+/// rinomine come il kernel: un'appuntata rinominata resta appuntata.
 const ORGANIZATION: Organization = {
   icons: ICONS,
   pinned: ["Benvenuto.md", "Guida/Sintassi di Fub.md"],
@@ -1894,7 +1895,6 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     }
     return { kind: "outline", value };
   },
-  organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
 
@@ -2230,6 +2230,8 @@ const options: Options = {
   }),
   // Il bundle `fub.craft` acceso: le miniature le dice `treeScenePreview`.
   ...(TREE_SCENE === null ? {} : { craft: { docs: {} } }),
+  // L'organizzazione con cui il vault si apre: il finto la tiene da qui in poi.
+  organization: ORGANIZATION,
   // La pagina «Componenti» non è scenografia: sono le risposte registrate
   // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
   // scelta che lo scenario non ha la porta la rifiuta, come nei test.
@@ -2669,6 +2671,10 @@ export const api: typeof host.module.api = {
     const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
     return { kind: "replace" as const, root };
   },
+  // Il profilo di serie di un vault appena aperto, come lo dà l'host («Default»,
+  // `default_profile_name` del kernel): il pannello Profili si fotografa col suo
+  // stato vero, non con l'errore del finto che non ha un servizio di profili.
+  settingsProfiles: async () => ({ active: "Default", names: ["Default"] }),
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
   // La cartella del gruppo «editor» del giro (`giro-fixture.ts`): risponde
