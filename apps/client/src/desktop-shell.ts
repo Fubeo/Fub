@@ -80,6 +80,7 @@ import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
+import { hostRemindersPort, mountReminders } from "./panels/reminders";
 import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { fallito, fase, pronta } from "./avvio/consegna";
@@ -1003,6 +1004,9 @@ async function init(): Promise<Teardown> {
   // va montato prima che il router parta.
   mountNotifications(pageWindowLifetime);
   mountActivity(pageWindowLifetime);
+  // I promemoria passati, quando il vault si apre e il suo indice è pronto
+  // (T36), e il permesso delle notifiche per la pastiglia nella nota.
+  mountReminders(pageWindowLifetime, hostRemindersPort((doc, at) => void reveal(doc, { span: { start: at, end: at } }).catch(() => {})));
   // La tastiera rilegge gli accordi quando una scorciatoia cambia (§18.2): anche
   // lei si iscrive a `setting_changed`, quindi anche lei prima del router.
   mountKeyOverrides(pageWindowLifetime);
