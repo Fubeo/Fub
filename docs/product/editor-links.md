@@ -201,7 +201,7 @@ contenuto:
 ## Dove sta nel codice
 
 - `apps/client/src/state/note-peek.ts`: la sbirciata (`createNotePeek`), con
-  l'editor montato dalla porta delle schede (`state/card-editors.ts`);
+  l'editor montato dalla porta delle schede (`editors/core/cards/editor-port.ts`);
   `state/document-controller.ts` la cabla al riquadro col fuoco e legge
   `editor.link-click`;
 - `apps/client/src/editors/text/profiles/markdown/link-gesture.ts`: il

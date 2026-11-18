@@ -3,12 +3,11 @@
 > **Ambito:** il contratto fra la lavagna e chi mostra il contenuto di una
 > scheda di file: le specie, le misure con cui nascono, i due modi di una
 > scheda, le regole che scelgono le schede vive e le immagini ferme.
-> **Fonti autorevoli:** `apps/client/src/editors/canvas/cards.ts` e le prove
-> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita
-> e la griglia, `crates/fub-canvas-core/src/layout.rs`; per l'ordine dei file
-> lasciati cadere, `apps/client/src/editors/canvas/drop-layout.ts`; per le
-> estensioni, `apps/client/src/ui/format-kind.ts` e
-> `apps/client/src/editors/media/media-types.ts`.
+> **Fonti autorevoli:** `apps/client/src/editors/core/cards/contract.ts` e le
+> prove in `apps/client/src/editors/core/cards/contract.test.ts`; per le
+> misure di nascita e la griglia, `crates/fub-canvas-core/src/layout.rs`; per
+> l'ordine dei file lasciati cadere, `editors/canvas/drop-layout.ts`; per le estensioni,
+> `apps/client/src/ui/format-kind.ts` e `apps/client/src/editors/media/media-types.ts`.
 
 Questa pagina serve a chi scrive un renderer di scheda (la parte che mostra
 una nota, un foglio, un PDF, un'immagine o una pagina web dentro la scheda) e
@@ -16,6 +15,8 @@ a chi lavora sul motore della lavagna che li monta.
 Come si entra in una scheda, la rotella e i comandi con i loro tasti stanno in
 [I tasti e i gesti della lavagna](canvas-input.md); come ci si muove e la
 vista che torna riaprendo la lavagna, in [La vista della lavagna](canvas-view.md).
+L'ospite (contratto, specie in `kinds/`, `editor-port.ts`) è uno, in
+`editors/core/cards/`: la lavagna non ne tiene copie (`structure.test.ts`).
 
 ## Schede vive e ferme
 
@@ -163,7 +164,7 @@ in `editors/media/transport.ts`, uno per finestra in `host/ipc.ts`).
 
 ## Il contratto
 
-I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
+I tipi stanno in `contract.ts`, con i commenti sui loro campi. In breve:
 
 - `CardRenderer` dichiara le specie che sa mostrare (`kinds`) e monta una
   scheda con `mount(node, host, mode, context)`, che dà una `CardView`.
@@ -267,7 +268,7 @@ nessuna scheda cambia modo.
 - se un `setMode` lancia, le altre schede cambiano lo stesso, quella resta
   col modo di prima e l'errore esce alla fine del lavoro.
 
-`quiet` è un tipo strutturale di `cards.ts`, `CardQuiet`, con il solo
+`quiet` è un tipo strutturale di `contract.ts`, `CardQuiet`, con il solo
 `defer(key, work)`: la lavagna non dipende dal modulo della penna.
 
 ## Come la tela tiene le schede
@@ -453,10 +454,10 @@ da quello in cui la cache si è riempita: lo stesso percorso è un altro file.
 Chi scrive dentro una scheda usa l'editor vero del file, sulla stessa
 `DocumentSession` di un riquadro: stesse bozze, conflitti e salvataggio. La
 tela non importa nessun editor (il confine di CodeMirror): riceve
-`CardEditorPort` (`editors/canvas/cards.ts`), che la shell costruisce in
-`state/card-editors.ts` (al primo uso, con un `import()`) con le sessioni e
-il registro delle superfici della finestra e passa con `canvasCards.editors`
-e `surface.ts` (`CardEditing`). Senza porta le schede restano in lettura.
+`CardEditorPort` (`editors/core/cards/contract.ts`), che la shell costruisce
+in `editors/core/cards/editor-port.ts` (al primo uso, con un `import()`) con
+le sessioni e il registro delle superfici della finestra e passa con
+`canvasCards.editors` e `surface.ts` (`CardEditing`). Senza porta le schede restano in lettura.
 
 `open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
 porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato

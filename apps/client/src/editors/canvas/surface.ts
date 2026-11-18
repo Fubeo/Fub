@@ -16,7 +16,7 @@ import type {
   SurfaceMountContext,
 } from "../core/registry";
 import { CanvasEngine, type CanvasCards, type CanvasChange, type CanvasEngineOptions } from "./engine";
-import type { CardEditing, CardEditorPort } from "./cards";
+import type { CardEditing, CardEditorPort } from "../core/cards/contract";
 import { canvasCoreLoaded, canvasCoreReady } from "./wasm/core";
 import { t } from "../../i18n/strings";
 import { errorText } from "../../host/errors";

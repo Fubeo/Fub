@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n/strings";
 import { openLifetime } from "../../../ui/lifetime";
 import { CardCache } from "../card-cache";
-import { createCardRegistry, type CardEditorPort, type CardTextEditor } from "../cards";
+import { createCardRegistry, type CardEditorPort, type CardTextEditor } from "../../core/cards/contract";
 import { CanvasEngine, type CanvasEngineOptions } from "../engine";
 import { DEFAULT_PREFERENCES, type CanvasPreferences, type WorkspaceMode } from "../preferences";
 import { canvasCoreReady } from "../wasm/core";

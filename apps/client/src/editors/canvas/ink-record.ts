@@ -33,7 +33,7 @@ import { buildStroke } from "../../ink/tools/stroke";
 import { closedAtLimit } from "../../ink/tools/tool";
 import { decodeInk, encodeInk, inkFromQuantized, inkToQuantized, INK_MAX_BYTES, unknownChannels } from "../spatial/ink/codec";
 import { isCellAddress } from "./anchor";
-import type { CardPageBox, Rect } from "./cards";
+import type { CardPageBox, Rect } from "../core/cards/contract";
 import type { InkEraserMode } from "./ink-erase";
 import type { InkLook } from "./ink-layer";
 import type { DryStroke, InkPathCache, InkRef } from "./ink-paint";

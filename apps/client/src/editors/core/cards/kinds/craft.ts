@@ -31,14 +31,14 @@
 // generazione: una risposta che arriva dopo `destroy`, dopo un cambio di modo
 // o dopo che il file è cambiato non tocca il DOM.
 
-import type { CraftPreview, CraftPreviewImage } from "../../../host/craft";
-import { errorText, isErrorKind } from "../../../host/errors";
-import { t, type Key } from "../../../i18n/strings";
-import type { CraftPreviewAnswer } from "../../../state/craft-previews";
-import type { Lifetime } from "../../../ui/lifetime";
-import { formatTagOf } from "../../../ui/format-kind";
-import { craftInfoText, fileName } from "../../craft/index";
-import { snapshotPart, type CardContext, type CardMode, type CardRenderer, type CardSnapshot, type CardView } from "../cards";
+import type { CraftPreview, CraftPreviewImage } from "../../../../host/craft";
+import { errorText, isErrorKind } from "../../../../host/errors";
+import { t, type Key } from "../../../../i18n/strings";
+import type { CraftPreviewAnswer } from "../../../../state/craft-previews";
+import type { Lifetime } from "../../../../ui/lifetime";
+import { formatTagOf } from "../../../../ui/format-kind";
+import { craftInfoText, fileName } from "../../../craft";
+import { snapshotPart, type CardContext, type CardMode, type CardRenderer, type CardSnapshot, type CardView } from "../contract";
 
 /// La riga del componente spento che il file richiede (`offRowFor` della
 /// mappa): l'id per aprirla in «Accendi…», il nome nella lingua del vault

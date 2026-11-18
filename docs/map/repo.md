@@ -69,6 +69,7 @@ prova sono nella tabella qui sotto.
 | il moto | `src/moto/` | molle, FLIP, gesti, i tre livelli di movimento |
 | il tema | `src/theme/` | la serie `theme-2`: foglio, pelle, anatomia, contrasti |
 | gli editor | `src/editors/` | testo (CodeMirror), ricco (ProseMirror), fogli, media, lavagna, disegni |
+| le schede | `src/editors/core/cards/` | l'ospite delle schede: il contratto (`contract.ts`), le specie (`kinds/`) e la porta per scriverci dentro (`editor-port.ts`); lo usa la lavagna, senza copie (`structure.test.ts`) |
 | l'inchiostro caldo | `src/ink/` | la copia TypeScript di `fub-ink`, tenuta uguale da una fixture |
 | il grafo | `src/graph/` | il motore fisico e il pittore della Graph View |
 | le regole | `src/rules/` | le regole di ricerca e sintassi lato shell, gemelle di Rust |

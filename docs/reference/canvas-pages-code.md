@@ -107,7 +107,7 @@ accanto a `near`, o con `in_place` la scheda stessa.
   `in_place` con `near`, `side` o `content_size` è `Invalid`; anche
   `content_size` con `sections`.
 - **Nella GUI.** Gli estratti di un PDF la GUI li mostra solo da N6 T82: finché
-  `cards/pdf.ts` non legge `context.parts`, la scheda mostra la pagina del
+  `editors/core/cards/kinds/pdf.ts` non legge `context.parts`, la scheda mostra la pagina del
   `subpath`, o la prima. Gli estratti di note e immagini si vedono già.
 
 ## Gli errori

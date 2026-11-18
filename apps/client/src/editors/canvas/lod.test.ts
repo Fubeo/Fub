@@ -2,7 +2,7 @@
 // I livelli di dettaglio della lavagna (N6 T54, A-22): le soglie, l'attributo
 // di una scheda, il titolo grande e il giro che scrive solo dove cambia.
 import { describe, expect, it } from "vitest";
-import { LIVE_ZOOM_MIN } from "./cards";
+import { LIVE_ZOOM_MIN } from "../core/cards/contract";
 import {
   applyCardDetails,
   BLOCK_ZOOM_MAX,

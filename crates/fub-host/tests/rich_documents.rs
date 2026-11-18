@@ -25,9 +25,19 @@ struct Vault {
 
 impl Vault {
     fn with_docx(paragraphs: &[&str]) -> Self {
+        Vault::with_docx_and(paragraphs, &[])
+    }
+
+    /// Come [`Vault::with_docx`], con altri file scritti prima dell'apertura.
+    fn with_docx_and(paragraphs: &[&str], others: &[(&str, Vec<u8>)]) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).expect("utf8");
         std::fs::write(root.join("Lettera.docx"), docx(paragraphs)).unwrap();
+        for (name, bytes) in others {
+            let path = root.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
         std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
         let config = tempfile::tempdir().expect("config");
         let host = Host::without_watcher()
@@ -678,6 +688,66 @@ fn l_anteprima_della_copia_dice_che_cosa_il_formato_non_porta() {
     assert!(plan.docs.is_empty() && plan.edits.is_empty(), "{plan:?}");
     assert!(outcome.notify.is_none(), "{outcome:?}");
     assert_eq!(vault.on_disk(), before);
+}
+
+/// Nel campo «Documento» si può scrivere il nome invece di sceglierlo
+/// dall'elenco: «lettera» è `Lettera.docx`, e la nota omonima non conta.
+#[test]
+fn il_documento_scritto_per_nome_e_quello_di_videoscrittura() {
+    let vault = Vault::with_docx_and(&["Primo."], &[("Lettera.md", b"# Lettera\n".to_vec())]);
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "lettera", "format": "txt"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the name names the document");
+    let fub_abi::command::CommandEffect::Plan(plan) = &outcome.effect else {
+        panic!("the preview is a plan: {outcome:?}");
+    };
+    let summary = plan.summary.to_string();
+    assert!(summary.contains("«Lettera.docx»"), "{summary}");
+}
+
+/// Un nome che non c'è, o che hanno due documenti, si dice con una frase del
+/// catalogo, non con l'errore di un id che non è un documento.
+#[test]
+fn un_nome_che_non_c_e_o_che_hanno_in_due_si_dice() {
+    let vault = Vault::with_docx_and(
+        &["Primo."],
+        &[("Archivio/Lettera.docx", docx(&["Vecchia."]))],
+    );
+    let refused = |name: &str| {
+        let error = vault
+            .host
+            .invoke_user_command(
+                None,
+                "rich.export-copy",
+                serde_json::json!({"doc": name, "format": "txt"}),
+                fub_abi::InvokeMode::DryRun,
+            )
+            .expect_err("the name is refused");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        error.to_string()
+    };
+    let missing = refused("Preventivo");
+    assert!(missing.contains("«Preventivo»"), "{missing}");
+    assert!(!missing.contains("word-processing"), "{missing}");
+    let both = refused("Lettera");
+    assert!(both.contains("Archivio/Lettera.docx"), "{both}");
+    assert!(both.contains("«Lettera»"), "{both}");
+    // Il percorso intero resta la via per sceglierne uno.
+    vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "Archivio/Lettera.docx", "format": "txt"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the path names one");
 }
 
 #[test]

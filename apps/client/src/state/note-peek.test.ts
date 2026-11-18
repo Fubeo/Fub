@@ -4,7 +4,7 @@
 // non perdono testo (prima l'editor porta il testo alla sessione, poi si
 // smonta; prima il riquadro prende la nota, poi la sbirciata la lascia).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CardEditor, CardEditorOptions, CardEditorState } from "../editors/canvas/cards";
+import type { CardEditor, CardEditorOptions, CardEditorState } from "../editors/core/cards/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import type { PeekLink } from "../editors/text/profiles/markdown/link-gesture";
 import { errorText } from "../host/errors";

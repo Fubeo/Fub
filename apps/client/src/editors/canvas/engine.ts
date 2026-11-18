@@ -21,7 +21,7 @@ import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bou
 import { parseTsv } from "../core/tsv";
 import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
-import type { PdfPagesReader } from "./cards/pdf";
+import type { PdfPagesReader } from "../core/cards/kinds/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
   cardKindOf,
@@ -44,7 +44,7 @@ import {
   type CardView,
   type CardWriting,
   type Rect,
-} from "./cards";
+} from "../core/cards/contract";
 import { textCardName } from "./card-name";
 import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
 import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
@@ -155,7 +155,7 @@ import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts
 import { cardTarget } from "./sources";
 import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
-import { noteHeadingOf } from "./cards/note";
+import { noteHeadingOf } from "../core/cards/kinds/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
 import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";

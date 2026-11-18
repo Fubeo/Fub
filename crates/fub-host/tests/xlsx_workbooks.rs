@@ -485,6 +485,86 @@ fn esportare_in_pdf_accoda_l_export_e_la_cartella_resta() {
     assert_eq!(vault.on_disk("Conti.xlsx"), before);
 }
 
+/// «Anteprima…» del modulo mostra ciò che il modulo promette, cioè che cosa
+/// la stampa non porta, e non accoda niente: prima diceva soltanto
+/// «export.run: would queue import.transfer».
+#[test]
+fn l_anteprima_del_pdf_dice_che_cosa_la_stampa_non_porta() {
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    let before = vault.on_disk("Conti.xlsx");
+    let events = vault.host.subscribe(None).unwrap();
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "xlsx.export-pdf",
+            serde_json::json!({"doc": "Conti.xlsx", "sheets": "all"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the preview answers");
+    let fub_abi::command::CommandEffect::Plan(plan) = &outcome.effect else {
+        panic!("the preview is a plan: {outcome:?}");
+    };
+    let summary = plan.summary.to_string();
+    assert!(summary.contains("«Conti.xlsx»"), "{summary}");
+    // La nota su ciò che un PDF non porta mai.
+    assert!(summary.contains("formule, convalide"), "{summary}");
+    assert!(!summary.contains("would queue"), "{summary}");
+    assert!(plan.docs.is_empty() && plan.edits.is_empty(), "{plan:?}");
+    assert!(outcome.notify.is_none(), "{outcome:?}");
+    // Niente si accoda: nessun job di trasferimento parte.
+    assert!(
+        events
+            .recv_timeout(std::time::Duration::from_millis(300))
+            .map_or(true, |notice| !matches!(
+                notice.event,
+                fub_abi::Event::JobStarted { .. } | fub_abi::Event::JobDone { .. }
+            )),
+        "the preview queues nothing"
+    );
+    assert_eq!(vault.on_disk("Conti.xlsx"), before);
+}
+
+/// Nel campo «Cartella» si può scrivere il nome invece di sceglierlo
+/// dall'elenco; un nome che non c'è, o che hanno due cartelle, si dice con una
+/// frase del catalogo.
+#[test]
+fn la_cartella_scritta_per_nome_si_trova_o_si_dice_perche_no() {
+    let vault = Vault::with(&[
+        ("Conti.xlsx", &conti()),
+        ("Lavoro/Spese.xlsx", &conti()),
+        ("Archivio/Spese.xlsx", &conti()),
+    ]);
+    let preview = |name: &str| {
+        vault.host.invoke_user_command(
+            None,
+            "xlsx.export-pdf",
+            serde_json::json!({"doc": name}),
+            fub_abi::InvokeMode::DryRun,
+        )
+    };
+    let outcome = preview("conti").expect("the name names the workbook");
+    let fub_abi::command::CommandEffect::Plan(plan) = &outcome.effect else {
+        panic!("the preview is a plan: {outcome:?}");
+    };
+    assert!(
+        plan.summary.to_string().contains("«Conti.xlsx»"),
+        "{plan:?}"
+    );
+    let missing = preview("Preventivo").expect_err("no workbook is called so");
+    assert!(missing.to_string().contains("«Preventivo»"), "{missing}");
+    assert!(
+        !missing.to_string().contains("is not an .xlsx"),
+        "{missing}"
+    );
+    let both = preview("Spese").expect_err("two workbooks are called so");
+    let both = both.to_string();
+    assert!(
+        both.contains("Archivio/Spese.xlsx") && both.contains("Lavoro/Spese.xlsx"),
+        "{both}"
+    );
+}
+
 #[test]
 fn una_nota_non_si_esporta_in_pdf_come_cartella() {
     let vault = Vault::with(&[("Conti.xlsx", &conti())]);

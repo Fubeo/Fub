@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Spot } from "../../ink/tools/sweep";
-import type { CardCellBox, CardPageBox } from "./cards";
+import type { CardCellBox, CardPageBox } from "../core/cards/contract";
 import { cutInk, erasableInk, pieceRecords } from "./ink-erase";
 import { decodeStroke, type DrawableStroke, type InkLayerState } from "./ink-record";
 import type { CanvasNode } from "./model";

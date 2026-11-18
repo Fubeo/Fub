@@ -39,15 +39,15 @@
 // della tela, `CardContext.excerpt`). Un estratto in v1 si legge e basta:
 // per scriverci si apre la nota a lato (S8).
 
-import { isErrorKind } from "../../../host/errors";
-import { t } from "../../../i18n/strings";
-import { formatKindOf, formatNameOf } from "../../../ui/format-kind";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { notify } from "../../../ui/notify";
-import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../cards";
-import { excerptSections, sectionHeading, sectionLabel } from "../excerpt";
-import type { CanvasNode } from "../model";
-import { watchWholeLines, type WholeLines } from "../whole-lines";
+import { isErrorKind } from "../../../../host/errors";
+import { t } from "../../../../i18n/strings";
+import { formatKindOf, formatNameOf } from "../../../../ui/format-kind";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
+import { notify } from "../../../../ui/notify";
+import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../contract";
+import { excerptSections, sectionHeading, sectionLabel } from "../../../canvas/excerpt";
+import type { CanvasNode } from "../../../canvas/model";
+import { watchWholeLines, type WholeLines } from "../../../canvas/whole-lines";
 
 /// Ciò che la scheda di nota chiede alla shell.
 export interface NoteCardPort {

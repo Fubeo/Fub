@@ -33,9 +33,10 @@ const SWITCHABLE_FILE = "switchable-chunks.json";
 const NOT_AT_STARTUP: readonly { readonly what: string; readonly chunk?: RegExp; readonly module?: RegExp }[] = [
   { what: "pdfjs", module: /\/node_modules\/pdfjs-dist\// },
   { what: "editors/canvas", module: /\/src\/editors\/canvas\// },
-  // La porta per scrivere nelle schede della lavagna: serve solo a lei, e
-  // `document-controller.ts` la carica con un `import()` al primo uso.
-  { what: "state/card-editors", module: /\/src\/state\/card-editors\.ts$/ },
+  // L'ospite delle schede (il contratto, le specie e la porta per scrivere
+  // dentro una scheda): arriva con la lavagna, e `document-controller.ts`
+  // carica la porta con un `import()` al primo uso.
+  { what: "editors/core/cards", module: /\/src\/editors\/core\/cards\// },
   { what: "drawing-*", chunk: /^drawing-/ },
   { what: "editors/spatial", module: /\/src\/editors\/spatial\// },
   { what: "editors/rich", module: /\/src\/editors\/rich\// },

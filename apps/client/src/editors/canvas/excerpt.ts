@@ -7,13 +7,13 @@
 // § Media») e ↗, che apre la fonte accanto alla prima sezione; Ctrl+clic
 // (Cmd+clic) su ↗ la apre nel riquadro. Qui stanno le regole pure (quali
 // sezioni mostra una scheda, come si chiamano, dove porta ↗) e la testata;
-// il corpo lo rende la scheda di nota (`cards/note.ts`), i gesti e «Mostra
+// il corpo lo rende la scheda di nota (`editors/core/cards/kinds/note.ts`), i gesti e «Mostra
 // tutto il file» li fa la tela (`engine.ts`).
 //
 // In v1 gli estratti sono delle note; quelli dei PDF arrivano con T82.
 
 import { t } from "../../i18n/strings";
-import { cardKindOf } from "./cards";
+import { cardKindOf } from "../core/cards/contract";
 import type { CanvasNode } from "./model";
 import { nodeParts, type CanvasParts } from "./parts";
 import { partsSections, sectionOfKey, type PartsHeading } from "./parts-picker";

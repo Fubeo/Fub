@@ -143,7 +143,7 @@ export function pageAnchorAt<B extends PageBounds>(
 
 /**
  * La pagina che una scheda mostra, come la vede questo modulo: la forma di
- * `CardPageBox` di `cards.ts` (il numero da 1, la misura in punti PDF, il
+ * `CardPageBox` di `editors/core/cards/contract.ts` (il numero da 1, la misura in punti PDF, il
  * rettangolo in unità della lavagna dall'angolo della scheda), scritta per
  * struttura così il confine resta il solo modello.
  */

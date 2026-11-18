@@ -412,22 +412,21 @@ apre.
 di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o XML
 (un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
 Il documento non si tocca: la copia arriva nell'attività e si salva dove si
-vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un
-`.odt` in OpenDocument) non si fa: sarebbe il file riscritto da un modello che
-ne porta meno.
+vuole. Una copia nello stesso formato (un `.rtf` in RTF) non si fa. Il
+documento si sceglie dall'elenco o si scrive per nome (nome, nome del file o
+percorso, senza distinzione di maiuscole) se un solo documento di
+videoscrittura lo porta; altrimenti il comando dice che non c'è o elenca gli
+omonimi.
 
 Accanto alla copia l'attività dice **cosa non porta**. La copia si rilegge con
 l'importatore del suo formato e si confronta con il documento: parole, titoli,
 voci d'elenco, tabelle, link, enfasi, note, commenti, intestazioni e piè di
 pagina, immagini, grafici, forme, equazioni, campi, segnalibri, revisioni e
 oggetti non interpretati. Ciò che manca o diminuisce è un avviso, con il
-numero. Impaginazione, caratteri, colori e stili dei paragrafi non si misurano,
-e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
-`.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
-testo semplice i commenti vanno, a scelta, in fondo. **Anteprima…** dà gli avvisi.
-
-`.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
-modificano come sorgente, anche quando sono nati da una copia.
+numero; impaginazione, caratteri, colori e stili non si misurano, e un avviso
+lo dice, come per un documento letto da un importatore (`.rtf`, `.doc`, `.odt`).
+In HTML e nel testo semplice i commenti vanno, a scelta, in fondo. **Anteprima…**
+dà gli avvisi. `.html`, `.txt`, `.tex` e `.xml` restano file di testo.
 
 ## Dove si trova
 

@@ -10,13 +10,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { craftCardRenderer, type CraftCardPort } from "./craft";
-import { CardCache } from "../card-cache";
-import type { CardContext, CardMode, CardView } from "../cards";
-import type { CanvasNode } from "../model";
-import type { CraftPreview, CraftRenderConsent } from "../../../host/craft";
-import type { CraftPreviewAnswer } from "../../../state/craft-previews";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { t } from "../../../i18n/strings";
+import { CardCache } from "../../../canvas/card-cache";
+import type { CardContext, CardMode, CardView } from "../contract";
+import type { CanvasNode } from "../../../canvas/model";
+import type { CraftPreview, CraftRenderConsent } from "../../../../host/craft";
+import type { CraftPreviewAnswer } from "../../../../state/craft-previews";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
+import { t } from "../../../../i18n/strings";
 import type { CraftOffComponent } from "./craft";
 
 const PATH = "Fisica/schema-pendolo.vectorcraft";
