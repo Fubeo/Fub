@@ -984,7 +984,7 @@ describe("la Cronologia con un testo conservato", () => {
           event: { type: "view_invalidated", view: "history", instance: null },
           origin: { actor: { kind: "kernel" }, batch: null },
         });
-        await vi.waitFor(() => expect(renderView.mock.calls.at(-1)?.[0]).toBe("history"));
+        await vi.waitFor(() => expect(renderView.mock.calls[renderView.mock.calls.length - 1]?.[0]).toBe("history"));
         await new Promise((resolve) => setTimeout(resolve, 0));
       };
 
