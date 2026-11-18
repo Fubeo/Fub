@@ -1087,4 +1087,4 @@ fuori dalle scene `grid-*` e da quelle di K3 con la griglia cambia; lo
 scripts/check.sh completo verde.
 Prova: scripts/check.sh, poi `npm run bench:verify`, `npm run bench:a11y`,
 `npm run bench:grid` e `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [~] in corso (coder griglia/t8 da c315a60a5, 2026-11-18)
