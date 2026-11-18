@@ -24263,6 +24263,17 @@ h6.ui-heading {
   grid-row: 1;
   margin-right: calc(-1 * var(--space-3));
 }
+/* Le azioni di un file esportato («Salva…», «Stampa…»): un gruppo in fila nel
+   posto delle azioni, uno accanto all'altro anche quando il centro è stretto;
+   il nome del file si accorcia, i pulsanti no. */
+.activity-actions {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-right: calc(-1 * var(--space-3));
+}
 .activity-row > span[role="status"] {
   grid-column: 1 / -1;
   grid-row: 2;

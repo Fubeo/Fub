@@ -72,7 +72,10 @@ in fondo alla sua barra; la palette offre lo stesso comando, «Annota il PDF»
 (`pdf.annotate`). La prima volta il comando crea `X.pdf.fubann` accanto a
 `X.pdf` e lo apre; dopo lo apre soltanto. Il PDF non si scrive mai: le
 annotazioni stanno nel loro file, che segue il PDF quando cambia nome. Senza
-la feature il pulsante non c'è. Il comando è descritto in
+la feature il pulsante non c'è. Il pulsante segue l'elenco dei comandi anche
+dopo che il visore si è aperto: una scheda ripristinata all'avvio, montata
+prima che l'elenco arrivi, lo prende appena arriva, con l'interruttore delle
+annotazioni. Il comando è descritto in
 [Vault e file](vault-and-files.md).
 
 Il file `.fubann` si apre come le annotazioni del suo PDF: il profilo `pdf`
@@ -188,13 +191,15 @@ dei due tocca il PDF del vault.
 Il file si chiama come il PDF, con una parola fra parentesi nella lingua
 dell'interfaccia: «Bando (annotato).pdf», «Bando (redatto).pdf». Prima
 dell'export le modifiche in coda si salvano. Il file compare nel centro
-attività, che si apre da sé, e «Salva…» chiede dove metterlo.
+attività, che si apre da sé: «Salva…» chiede dove metterlo, e accanto
+«Stampa…» lo passa al lettore di PDF del sistema.
 
 Se il PDF è cambiato da quando è stato annotato, il PDF annotato esce lo
 stesso, mentre il PDF redatto no: una copertura potrebbe non stare più su ciò
 che nasconde. Prima si controllano le annotazioni e si conferma la versione.
 Un PDF che manca, che non si legge o che chiede una password non si esporta, e
-il messaggio dice perché.
+il messaggio dice perché: l'errore dell'exporter esce con la frase del suo
+catalogo, nella lingua dell'interfaccia, e il centro attività la mostra.
 
 Il formato dei due file è nel [formato delle
 annotazioni](../reference/annotation-format.md#9-export).

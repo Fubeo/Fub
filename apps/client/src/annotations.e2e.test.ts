@@ -197,6 +197,27 @@ describe("«Annota» dal visore del PDF", () => {
     expect(saved).toContain('fub:tool="highlighter"');
   });
 
+  // IMP-131: una scheda ripristinata all'avvio monta il visore prima che
+  // l'elenco dei comandi arrivi; «Annota» mancava finché non la si chiudeva e
+  // riapriva. Qui il visore si monta con l'elenco vuoto, e l'elenco arriva
+  // dopo.
+  it("«Annota» arriva anche sul visore montato prima dell'elenco dei comandi", async () => {
+    const host = await start();
+    const store = await import("./state/store");
+    const specs = store.state.commandSpecs;
+    store.setCommandSpecs([]);
+    await open(PDF);
+    await waitFor("il visore è montato", () => focusedPane().querySelector(".media-pdf-toolbar") !== null);
+    await settle();
+    expect(annotateButton(), "senza il comando non c'è").toBeNull();
+    store.setCommandSpecs(specs);
+    await waitFor("il visore offre «Annota»", () => annotateButton() !== null);
+    expect(focusedPane().querySelectorAll(".media-pdf-annotate")).toHaveLength(1);
+    annotateButton()!.click();
+    await waitFor("le annotazioni si aprono", () => focusedPane().querySelector(".pdf-surface") !== null);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args)).toEqual([["pdf.annotate", { pdf: PDF }, "apply"]]);
+  });
+
   it("la seconda volta apre soltanto, e la Lettura elenca le annotazioni", async () => {
     const host = await start();
     await open(PDF);

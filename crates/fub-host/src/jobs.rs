@@ -1825,6 +1825,12 @@ impl HostServices for JobHost {
     /// di sola lettura: un export del vault intero non tiene in fila chi
     /// scrive. I byte tornano nel rapporto, col tetto di
     /// [`PLUGIN_EXPORT_LIMIT`].
+    ///
+    /// L'errore dell'exporter esce nel catalogo di **chi l'ha scritto** (§12.2),
+    /// come ogni errore di un provider: il job che lo chiama è di un altro
+    /// bundle, e il suo catalogo quella chiave non ce l'ha. Senza, la chiave
+    /// arrivava al centro attività non risolta e si leggeva «bad_args»
+    /// (IMP-130).
     fn run_export(&mut self, request: &ExportRequest) -> Result<ExportReport, PluginError> {
         self.stopped()?;
         let prepared = {
@@ -1833,9 +1839,19 @@ impl HostServices for JobHost {
             ws.prepare_export()
         };
         let at = prepared.choose(&request.target)?;
-        let host = self.for_provider(prepared.owner(at), self.mode);
+        let owner = prepared.owner(at).to_owned();
+        let host = self.for_provider(owner.as_str(), self.mode);
         let mut sink = MemorySink::bounded(PLUGIN_EXPORT_LIMIT);
-        prepared.invoke(at, request, &host, &mut sink)
+        prepared
+            .invoke(at, request, &host, &mut sink)
+            .map_err(|mut error| {
+                // Il workspace si riprende solo per le parole, dopo l'export:
+                // l'exporter ha girato fuori dal prestito.
+                if let Ok(ws) = self.workspace.read() {
+                    ws.localize_as(&owner, &mut error);
+                }
+                error
+            })
     }
 
     /// L'importer gira fuori dal prestito e senza il turno di scrittura: un

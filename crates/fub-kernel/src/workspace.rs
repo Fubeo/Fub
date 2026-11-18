@@ -12752,8 +12752,12 @@ impl Workspace {
     ) -> std::result::Result<ExportReport, PluginError> {
         let prepared = self.prepare_export();
         let at = prepared.choose(&request.target)?;
-        let host = self.read_host_for(prepared.owner(at));
-        prepared.invoke(at, request, &host, out)
+        let owner = prepared.owner(at);
+        let host = self.read_host_for(owner);
+        // L'errore dell'exporter, nel catalogo di chi l'ha scritto (§12.2).
+        prepared
+            .invoke(at, request, &host, out)
+            .map_err(|error| self.localized(owner, error))
     }
 
     // --- eventi ------------------------------------------------------------

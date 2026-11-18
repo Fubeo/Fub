@@ -2032,6 +2032,7 @@
     "notify-ora",
     "activity-row",
     "activity-label",
+    "activity-actions",
     "draw-new-overlay",
     "draw-import-overlay",
     "palette-color-row",
@@ -4190,6 +4191,7 @@
     "notify-ora": "cornice",
     "activity-row": "cornice",
     "activity-label": "cornice",
+    "activity-actions": "cornice",
     "draw-new-overlay": "cornice",
     "draw-import-overlay": "cornice",
     "palette-color-row": "cornice",
@@ -9444,7 +9446,8 @@
       "part": "centres",
       "hooks": [
         "activity-row",
-        "activity-label"
+        "activity-label",
+        "activity-actions"
       ],
       "states": [
         "rest"
@@ -11329,7 +11332,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2156,
+    "hooks": 2157,
     "state_names": 7,
     "assigned_states": 981,
     "components": 288,

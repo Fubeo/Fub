@@ -322,6 +322,11 @@ export interface PdfView {
    * che non si legge), o `null`.
    */
   setAnnotations(layers: PdfAnnotationLayers | null, note: string | null): void;
+  /**
+   * «Annota» in fondo alla barra, con chi lo esegue, o `null` per toglierlo:
+   * il comando può arrivare dopo che il visore si è montato.
+   */
+  setAnnotate(run: (() => void | Promise<void>) | null): void;
   destroy(): void;
 }
 
@@ -756,17 +761,28 @@ export function mountPdfView(
   // Il foglietto di «Annota», con prima di lui l'interruttore delle
   // annotazioni; senza «Annota» l'interruttore sta da solo.
   const marksSheet = sheet(marksButton);
-  if (options.onAnnotate) {
-    const annotate = document.createElement("button");
-    annotate.type = "button";
-    annotate.className = "media-pdf-annotate kit-bar-button";
-    annotate.tabIndex = -1;
-    annotate.textContent = t("media.pdf.annotate");
-    life.listen(annotate, "click", () => invokeAction(() => options.onAnnotate?.()));
-    marksSheet.append(annotate);
-  } else {
-    marksSheet.hidden = true;
+  // «Annota» c'è quando c'è chi lo esegue, e può arrivare dopo: il comando
+  // del kernel si conosce soltanto quando l'elenco dei comandi è arrivato, e
+  // una scheda ripristinata all'avvio si monta prima (IMP-131).
+  let onAnnotate = options.onAnnotate ?? null;
+  let annotateButton: HTMLButtonElement | null = null;
+  function placeAnnotate(): void {
+    if (onAnnotate && !annotateButton) {
+      const annotate = document.createElement("button");
+      annotate.type = "button";
+      annotate.className = "media-pdf-annotate kit-bar-button";
+      annotate.tabIndex = -1;
+      annotate.textContent = t("media.pdf.annotate");
+      life.listen(annotate, "click", () => invokeAction(() => onAnnotate?.()));
+      marksSheet.append(annotate);
+      annotateButton = annotate;
+    } else if (!onAnnotate && annotateButton) {
+      annotateButton.remove();
+      annotateButton = null;
+    }
+    marksSheet.hidden = marksButton.hidden && !annotateButton;
   }
+  placeAnnotate();
   toolbar.append(marksSheet);
   // «…»: aprire con un'altra app e copiare il link alla pagina, i gesti che
   // non si fanno ogni volta. Senza nessuno dei due, «…» non c'è.
@@ -901,7 +917,7 @@ export function mountPdfView(
     if (destroyed) return;
     layers = next;
     marksButton.hidden = next === null;
-    marksSheet.hidden = next === null && !options.onAnnotate;
+    marksSheet.hidden = next === null && !annotateButton;
     marksNote.textContent = text ?? "";
     marksNote.hidden = !text;
     const focused = document.activeElement === marksButton;
@@ -928,6 +944,15 @@ export function mountPdfView(
     search: async (needle: string) => (engine && !destroyed ? engine.search(needle, 20) : []),
     pageCount: () => counted,
     setAnnotations,
+    setAnnotate(run: (() => void | Promise<void>) | null) {
+      if (destroyed) return;
+      onAnnotate = run;
+      const focused = annotateButton !== null && document.activeElement === annotateButton;
+      placeAnnotate();
+      // Il punto di Tab della barra non resta su un pulsante che non c'è più.
+      const current = keys.refresh();
+      if (focused && !annotateButton && current) keys.focus(current);
+    },
     destroy: () => life.close(),
   };
 }

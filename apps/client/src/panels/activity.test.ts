@@ -16,6 +16,7 @@ import samples from "../__fixtures__/mirror-samples.json";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { clearHistory, recentNotices } from "../ui/notify";
 import { t } from "../i18n/strings";
+import centres from "../theme/scrittoio/skin/centres.css?raw";
 
 function notice(event: KernelEvent): KernelNotice {
   return { event, origin: { actor: { kind: "kernel" }, batch: null } };
@@ -127,6 +128,23 @@ describe("l'esito di un lavoro lungo", () => {
       notice({ type: "job_done", id: "7", job: "export", result: { Err: { Cancelled: "" } } }),
     );
     expect(noticeResult?.text).toContain("Cancelled");
+  });
+
+  // IMP-130: una chiave che nessuno ha risolto si leggeva come la sigla
+  // «bad_args». Il motivo lo risolve il kernel; se una chiave scappa lo
+  // stesso, resta la frase della specie, mai la sigla né la chiave.
+  it("un errore con una chiave non risolta dice la sua specie a parole", () => {
+    const noticeResult = noticeOf(notice({
+      type: "job_done", id: "7", job: "export",
+      result: { Err: { kind: "bad_args", message: { key: "e_annotated_pdf_missing", args: [] } } },
+    }));
+    expect(noticeResult?.tone).toBe("guasto");
+    expect(noticeResult?.text).toBe(`«export» non è riuscito: ${t("error.kind.bad_args")}`);
+    expect(noticeResult?.text).not.toContain("bad_args");
+    const empty = noticeOf(notice({
+      type: "job_done", id: "7", job: "export", result: { Err: { kind: "bad_args", message: " " } },
+    }));
+    expect(empty?.text).toBe(`«export» non è riuscito: ${t("error.kind.bad_args")}`);
   });
 
   it("gli altri eventi non sono avvisi", () => {
@@ -388,7 +406,63 @@ describe("export artifacts from completed transfer jobs", () => {
     print.mockRestore();
     query.mockRestore();
   });
+
+  // IMP-129: «Salva…» e «Stampa…» erano due figli della riga nello stesso
+  // posto della griglia (la colonna dell'azione), uno sopra l'altro, e il
+  // clic su «Salva…» arrivava a «Stampa…». Ora stanno in un gruppo in fila,
+  // che occupa da solo il posto delle azioni.
+  it("keeps Save and Print side by side in one group, each doing its own action", async () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const save = vi.spyOn(api, "saveArtifact").mockResolvedValue({ status: "cancelled" });
+    const print = vi.spyOn(api, "printArtifact").mockResolvedValue({ status: "opened" });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(complete({
+      path: "atti/Lungo (annotated).pdf", media_type: "application/pdf",
+      content: { kind: "bytes", value: [37, 80, 68, 70] },
+    }));
+    document.getElementById("activity-button")!.click();
+    const row = document.querySelector<HTMLElement>("#activity-list > .activity-row")!;
+    expect(row.querySelectorAll(":scope > .link-button"), "nessun pulsante nel posto dell'azione dei lavori").toHaveLength(0);
+    const group = row.querySelector<HTMLElement>(":scope > .activity-actions")!;
+    expect([...group.children].map((child) => child.textContent)).toEqual(["Salva…", "Stampa…"]);
+    (group.children[0] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(print, "il clic su «Salva…» non stampa").not.toHaveBeenCalled();
+    lifetime.close();
+    save.mockRestore();
+    print.mockRestore();
+    query.mockRestore();
+  });
+
+  it("the skin gives the group the whole place of the actions, in a row", () => {
+    const actions = declarations(centres, ".activity-actions");
+    expect(actions["grid-column"]).toBe("2 / -1");
+    expect(actions["grid-row"]).toBe("1");
+    expect(actions.display).toBe("flex");
+    // Il posto dell'azione dei lavori in corso resta uno: chi ci mettesse due
+    // pulsanti li rimetterebbe uno sopra l'altro.
+    expect(declarations(centres, ".activity-row > .link-button")["grid-column"]).toBe("3");
+  });
 });
+
+/// Le dichiarazioni della regola il cui selettore è esattamente `selector`.
+function declarations(css: string, selector: string): Record<string, string> {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const out: Record<string, string> = {};
+  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!rule[1]!.split(",").some((each) => each.trim() === selector)) continue;
+    for (const line of rule[2]!.split(";")) {
+      const [name, ...value] = line.split(":");
+      if (name && value.length > 0) out[name.trim()] = value.join(":").trim();
+    }
+  }
+  return out;
+}
 
 describe("the notes of an export report", () => {
   const PNG = { path: "casa.png", media_type: "image/png", content: { kind: "bytes", value: [1] } };
