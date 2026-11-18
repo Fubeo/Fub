@@ -300,6 +300,13 @@ per offset nella tabella), perché la resa HTML della tabella salta le celle
 vuote. La griglia a fuoco riceve le azioni dell'editor della superficie
 (`editorActions`) finché il fuoco non torna al testo.
 
+Un widget di Scrittura che contiene un pulsante tiene i tasti del pulsante
+fuori dall'editor: o il widget ignora gli eventi di tastiera (`ignoreEvent`),
+o il pulsante tiene Invio, Spazio e Tab con `keepButtonKeys`
+(`profiles/markdown/button-keys.ts`). L'immagine in riga lascia arrivare la
+tastiera all'editor, e i pulsanti della sua resa («Scarica nel vault» di
+un'immagine remota, «Carica» di una pagina incorporata) usano l'aiuto.
+
 Risorse native ed embed in `apps/client/src/ui/markdown-resources.ts` sono
 condivisi per `DocumentSession`, con conteggio dei riferimenti, controllo delle
 esecuzioni superate e invalidazione. I renderer nativi arricchiscono soltanto

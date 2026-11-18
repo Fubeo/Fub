@@ -10,6 +10,7 @@
 import { icon } from "../../../../ui/icons";
 import type { Lifetime } from "../../../../ui/lifetime";
 import { openWebEmbed, viewerSite, type EmbedOpening } from "../../../../ui/web-viewer";
+import { keepButtonKeys } from "./button-keys";
 import { liveStrings } from "./strings";
 
 /// Che cosa mostra un sito dell'elenco: dà la parola e l'icona del segnaposto.
@@ -147,9 +148,6 @@ export function webEmbedOf(address: string): WebEmbed | null {
 /// Che cosa si aspetta il segnaposto da chi apre la pagina.
 export type WebEmbedOpener = (url: string) => Promise<EmbedOpening>;
 
-/// I tasti che un pulsante fa da sé: il clic e il passo di fuoco.
-const BUTTON_KEYS = new Set(["Enter", " ", "Tab"]);
-
 const KIND_ICON: Record<WebEmbedKind, string> = {
   video: "monitor",
   map: "publish",
@@ -222,15 +220,10 @@ export function webEmbedPlaceholder(embed: WebEmbed, life: Lifetime, open: WebEm
     );
   });
   // Il gesto è del pulsante: il puntatore non porta il cursore dentro la
-  // sorgente dell'immagine, e non apre la lightbox. Anche i tasti: nella Live
-  // il pulsante sta dentro l'editor, e Invio, Spazio o Tab col fuoco qui sono
-  // il clic e il passo di fuoco del browser, non un a capo o un rientro
-  // scritti nella nota.
+  // sorgente dell'immagine, e non apre la lightbox. Anche i tasti
+  // (`button-keys.ts`).
   life.listen(button, "mousedown", (event) => event.stopPropagation());
-  // Le scorciatoie della finestra (Ctrl+P, Esc…) passano.
-  life.listen(button, "keydown", (event) => {
-    if (BUTTON_KEYS.has(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) event.stopPropagation();
-  });
+  keepButtonKeys(button, life);
 
   box.append(mark, text, button);
   return box;

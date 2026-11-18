@@ -29,6 +29,7 @@ import { parseWikilinkInner } from "../../../../rules/syntax";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
 import { REMOTE_SRC_ATTRIBUTE, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
+import { keepButtonKeys } from "./button-keys";
 import { webEmbedOf, webEmbedPlaceholder, type WebEmbedOpener } from "./web-embed";
 
 /// Ciò che serve a idratare, iniettabile nei banchi.
@@ -304,6 +305,9 @@ export function showRemoteImages(
           if (!life.closed) button.disabled = false;
         });
       });
+      // Nella Live il pulsante sta dentro l'editor: Invio, Spazio e Tab
+      // sono suoi, non un a capo o un rientro nella nota (#454).
+      keepButtonKeys(button, life);
       box.append(button);
     }
     img.hidden = true;
