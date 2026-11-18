@@ -2311,7 +2311,7 @@ venti schede vive con la battuta nel budget; le foto del banco per stato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/live-cards.test.ts
 src/canvas-edit.e2e.test.ts
-Stato: [~] in corso (coder da integra/editor-2 258022562, 2026-11-18)
+Stato: [~] integrato in `integra/editor-2` (5f463e7fa, merge 6cd5c0636, 2026-11-18), in attesa del pacchetto 2. Scostamenti: il contesto della scheda in una riga sotto la sua testata, non nella barra di formato; Word e lavagna aspettano T44 e T47; le scene nota-pdf passano in Lettura; in Scrittura un PDF incorporato si disegna con pdf.js senza il consenso alle anteprime di Craft, come sulla lavagna.
 
 ## T42 · Misura, «Mostra come», affiancare con le colonne
 
