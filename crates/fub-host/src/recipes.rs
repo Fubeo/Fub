@@ -30,11 +30,92 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use fub_abi::command::{CommandReach, CommandSurface};
+use fub_abi::error::PluginError;
+use fub_abi::locale::Locale;
 use fub_abi::model::DocId;
-use fub_abi::text::Text;
+use fub_abi::text::{Arg, StringCatalog, Strings, Text};
 use serde::Serialize;
 
 use crate::registry::BundleClaim;
+use crate::Host;
+
+/// Le frasi degli errori dell'host sulle ricette: chiave, italiano, inglese.
+/// Le frasi dei problemi, degli avvisi e della prova sono del catalogo delle
+/// ricette (`fub_features::recipes::catalog`); queste sono di chi custodisce
+/// il vault.
+const STRINGS: &[(&str, &str, &str)] = &[
+    (
+        E_ABSENT,
+        "Questo Fub è compilato senza le ricette.",
+        "This Fub was built without recipes.",
+    ),
+    (
+        E_NOT_FOUND,
+        "Nessuna ricetta con id «{id}» in questo vault.",
+        "No recipe with id “{id}” in this vault.",
+    ),
+    (
+        E_CHANGED,
+        "La ricetta «{id}» è cambiata dopo che l'hai guardata: rileggila prima di accenderla.",
+        "The recipe “{id}” changed after you looked at it: read it again before turning it on.",
+    ),
+    (
+        E_NOT_MOUNTED,
+        "La ricetta «{id}» non si è accesa: i dettagli sono nel log.",
+        "The recipe “{id}” did not turn on: the details are in the log.",
+    ),
+    (
+        E_BUSY,
+        "Le ricette di questo vault non rispondono: riapri il vault.",
+        "This vault's recipes are not responding: reopen the vault.",
+    ),
+    (
+        E_OFF_TOPIC,
+        "L'elenco delle note ha risposto un'altra cosa: riprova.",
+        "The list of notes answered something else: try again.",
+    ),
+];
+
+const E_ABSENT: &str = "recipes.host.absent";
+const E_NOT_FOUND: &str = "recipes.host.not-found";
+const E_CHANGED: &str = "recipes.host.changed";
+const E_NOT_MOUNTED: &str = "recipes.host.not-mounted";
+const E_BUSY: &str = "recipes.host.busy";
+const E_OFF_TOPIC: &str = "recipes.host.off-topic";
+
+fn catalog() -> Vec<StringCatalog> {
+    let mut it = StringCatalog::new("it");
+    let mut en = StringCatalog::new("en");
+    for (key, it_text, en_text) in STRINGS {
+        it = it.with(*key, *it_text);
+        en = en.with(*key, *en_text);
+    }
+    vec![it, en]
+}
+
+/// Il testo della chiave `key`, con l'id della ricetta se c'è.
+fn text(key: &str, id: Option<&str>) -> Text {
+    match id {
+        Some(id) => Text::message(key, vec![Arg::text("id", id)]),
+        None => Text::key(key),
+    }
+}
+
+/// L'errore detto nella lingua `locale`: esce dall'host già come frase.
+fn in_locale(locale: &Locale, mut error: PluginError) -> PluginError {
+    let catalogs = catalog();
+    Strings::new(&catalogs, "it", locale).localize(&mut error);
+    error
+}
+
+/// L'errore detto nella lingua di chi guarda il vault (quella di serie se il
+/// vault non risponde).
+fn localized(host: &Host, vault: Option<&str>, error: PluginError) -> PluginError {
+    let locale = host
+        .recipes_read(vault, |ws| Ok(ws.locale()))
+        .unwrap_or_default();
+    in_locale(&locale, error)
+}
 
 /// A che punto è una ricetta su questa macchina.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -156,11 +237,11 @@ mod off {
     use fub_abi::command::CommandPlan;
     use fub_abi::error::PluginError;
 
-    use super::RecipeList;
+    use super::{localized, text, RecipeList, E_ABSENT};
     use crate::Host;
 
-    fn absent() -> PluginError {
-        PluginError::NotFound("Questo Fub è compilato senza le ricette.".into())
+    fn absent(host: &Host, vault: Option<&str>) -> PluginError {
+        localized(host, vault, PluginError::NotFound(text(E_ABSENT, None)))
     }
 
     pub(crate) fn list(host: &Host, vault: Option<&str>) -> Result<RecipeList, PluginError> {
@@ -169,29 +250,25 @@ mod off {
     }
 
     pub(crate) fn adopt(
-        _host: &Host,
-        _vault: Option<&str>,
+        host: &Host,
+        vault: Option<&str>,
         _id: &str,
         _fingerprint: &str,
     ) -> Result<(), PluginError> {
-        Err(absent())
+        Err(absent(host, vault))
     }
 
-    pub(crate) fn discard(
-        _host: &Host,
-        _vault: Option<&str>,
-        _id: &str,
-    ) -> Result<(), PluginError> {
-        Err(absent())
+    pub(crate) fn discard(host: &Host, vault: Option<&str>, _id: &str) -> Result<(), PluginError> {
+        Err(absent(host, vault))
     }
 
     pub(crate) fn simulate(
-        _host: &Host,
-        _vault: Option<&str>,
+        host: &Host,
+        vault: Option<&str>,
         _id: &str,
         _args: serde_json::Value,
     ) -> Result<CommandPlan, PluginError> {
-        Err(absent())
+        Err(absent(host, vault))
     }
 
     pub(crate) fn reconcile_at_open(_host: &Host, _root: &Utf8Path) {}
@@ -218,7 +295,8 @@ mod live {
     use fub_kernel::Trust;
 
     use super::{
-        RecipeInfo, RecipeList, RecipeProblem, RecipeStatus, RecipeStepInfo, SessionRecipes,
+        in_locale, localized, text, RecipeInfo, RecipeList, RecipeProblem, RecipeStatus,
+        RecipeStepInfo, SessionRecipes, E_BUSY, E_CHANGED, E_NOT_FOUND, E_NOT_MOUNTED, E_OFF_TOPIC,
     };
     use crate::registry::{Bundle, BundleKind, Registrar};
     use crate::{Host, OnlyProviders};
@@ -350,9 +428,11 @@ mod live {
                     page.items.into_iter().map(|entry| entry.id).collect()
                 }
                 other => {
-                    return Err(PluginError::Internal(
-                        format!("l'anagrafe ha risposto fuori tema: {other:?}").into(),
-                    ))
+                    tracing::error!(target: "fub.host", "recipe folder query answered off-topic: {other:?}");
+                    return Err(in_locale(
+                        &ws.locale(),
+                        PluginError::Internal(text(E_OFF_TOPIC, None)),
+                    ));
                 }
             };
             Ok(Snapshot {
@@ -635,18 +715,20 @@ mod live {
         }
     }
 
-    fn turn(
-        recipes: &SessionRecipes,
-    ) -> Result<std::sync::MutexGuard<'_, BTreeMap<String, String>>, PluginError> {
+    fn turn<'r>(
+        host: &Host,
+        vault: Option<&str>,
+        recipes: &'r SessionRecipes,
+    ) -> Result<std::sync::MutexGuard<'r, BTreeMap<String, String>>, PluginError> {
         recipes
             .mounted
             .lock()
-            .map_err(|_| PluginError::Internal("il turno delle ricette è avvelenato".into()))
+            .map_err(|_| localized(host, vault, PluginError::Internal(text(E_BUSY, None))))
     }
 
     pub(crate) fn list(host: &Host, vault: Option<&str>) -> Result<RecipeList, PluginError> {
         let recipes = state(host, vault)?;
-        let mut mounted = turn(&recipes)?;
+        let mut mounted = turn(host, vault, &recipes)?;
         let (reads, problems) = reconcile(host, vault, &recipes, &mut mounted)?;
         Ok(RecipeList {
             recipes: reads.into_iter().map(|read| read.info).collect(),
@@ -660,17 +742,26 @@ mod live {
         }
     }
 
-    fn not_found(id: &str) -> PluginError {
-        PluginError::NotFound(format!("Nessuna ricetta con id `{id}` in questo vault.").into())
+    fn not_found(host: &Host, vault: Option<&str>, id: &str) -> PluginError {
+        localized(
+            host,
+            vault,
+            PluginError::NotFound(text(E_NOT_FOUND, Some(id))),
+        )
     }
 
     /// La ricetta del vault con questo `id`. Se sono due, tutte e due hanno
     /// `id-ripetuto`, e la prima basta a rifiutare.
-    fn the_one<'r>(reads: &'r [Read], id: &str) -> Result<&'r Read, PluginError> {
+    fn the_one<'r>(
+        host: &Host,
+        vault: Option<&str>,
+        reads: &'r [Read],
+        id: &str,
+    ) -> Result<&'r Read, PluginError> {
         reads
             .iter()
             .find(|read| read.info.id.as_deref() == Some(id))
-            .ok_or_else(|| not_found(id))
+            .ok_or_else(|| not_found(host, vault, id))
     }
 
     /// Una ricetta con problemi non si adotta e non si prova: l'errore è il
@@ -690,17 +781,16 @@ mod live {
     ) -> Result<(), PluginError> {
         let root = host.session_root(vault)?;
         let recipes = state(host, vault)?;
-        let mut mounted = turn(&recipes)?;
+        let mut mounted = turn(host, vault, &recipes)?;
         // Spento il componente l'elenco è vuoto, quindi la ricetta non c'è.
         let (reads, _) = reconcile(host, vault, &recipes, &mut mounted)?;
-        let read = the_one(&reads, id)?;
+        let read = the_one(host, vault, &reads, id)?;
         refuse_problems(read)?;
         if read.info.fingerprint.as_deref() != Some(seen) {
-            return Err(PluginError::Conflict(
-                format!(
-                    "La ricetta `{id}` è cambiata dopo che l'hai guardata: rileggila prima di accenderla."
-                )
-                .into(),
+            return Err(localized(
+                host,
+                vault,
+                PluginError::Conflict(text(E_CHANGED, Some(id))),
             ));
         }
         let before = adopted(host, &root).get(id).cloned();
@@ -724,8 +814,10 @@ mod live {
         }
         if !mounted.contains_key(id) {
             undo(host, &mut mounted);
-            return Err(PluginError::Internal(
-                format!("La ricetta `{id}` non si è montata: i dettagli sono nel log.").into(),
+            return Err(localized(
+                host,
+                vault,
+                PluginError::Internal(text(E_NOT_MOUNTED, Some(id))),
             ));
         }
         // Adottare è il consenso: il permesso del bundle si accende dalla
@@ -745,10 +837,10 @@ mod live {
     pub(crate) fn discard(host: &Host, vault: Option<&str>, id: &str) -> Result<(), PluginError> {
         let root = host.session_root(vault)?;
         let recipes = state(host, vault)?;
-        let mut mounted = turn(&recipes)?;
+        let mut mounted = turn(host, vault, &recipes)?;
         let was_adopted = adopted(host, &root).contains_key(id);
         if !was_adopted && !mounted.contains_key(id) {
-            return Err(not_found(id));
+            return Err(not_found(host, vault, id));
         }
         if was_adopted {
             host.vault_registry().forget_recipe(&root, id)?;
@@ -768,11 +860,14 @@ mod live {
     ) -> Result<CommandPlan, PluginError> {
         let (recipe, commands) = {
             let recipes = state(host, vault)?;
-            let mut mounted = turn(&recipes)?;
+            let mut mounted = turn(host, vault, &recipes)?;
             let (reads, _) = reconcile(host, vault, &recipes, &mut mounted)?;
-            let read = the_one(&reads, id)?;
+            let read = the_one(host, vault, &reads, id)?;
             refuse_problems(read)?;
-            let recipe = read.recipe.clone().ok_or_else(|| not_found(id))?;
+            let recipe = read
+                .recipe
+                .clone()
+                .ok_or_else(|| not_found(host, vault, id))?;
             (recipe, host.recipes_read(vault, |ws| Ok(ws.commands()))?)
         };
         // Gli argomenti come li controllerebbe il registro davanti al comando

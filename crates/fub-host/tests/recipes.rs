@@ -245,6 +245,13 @@ fn l_impronta_vista_non_e_quella_di_ora_e_rifiutata() {
         matches!(refused, Err(PluginError::Conflict(_))),
         "{refused:?}"
     );
+    let said = refused.unwrap_err();
+    assert!(
+        said.message()
+            .as_literal()
+            .is_some_and(|s| s.contains("archivia")),
+        "l'errore è già una frase, non una chiave: {said:?}"
+    );
     assert!(adopted(&host, &vault.root).is_empty(), "niente è adottato");
     let now = only(&host);
     assert_eq!(now.status, RecipeStatus::Proposed);
