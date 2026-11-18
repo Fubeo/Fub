@@ -307,11 +307,8 @@ fn copy_of<H: VaultRead + ?Sized>(
         .and_then(|bytes| codec.read(&bytes).map_err(|error| read_error(doc, error)))
         .map_err(|error| TransferNote::warning(error.to_string()).about(entry.clone()))?;
     let bytes = target.write(&document, comments).map_err(|error| {
-        TransferNote::warning(format!(
-            "la copia {} non si scrive: {error}",
-            target.name()
-        ))
-        .about(entry.clone())
+        TransferNote::warning(format!("la copia {} non si scrive: {error}", target.name()))
+            .about(entry.clone())
     })?;
     let losses = losses(&document, codec, target, comments, &bytes, &entry);
     Ok(WrittenCopy { bytes, losses })
@@ -717,8 +714,9 @@ impl CommandProvider for RichCommands {
             .get(OPTION_COMMENTS)
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
-        let request = ExportRequest::new(target.id(), ExportSelection::Documents(vec![doc.clone()]))
-            .with_options(serde_json::json!({ OPTION_COMMENTS: comments }));
+        let request =
+            ExportRequest::new(target.id(), ExportSelection::Documents(vec![doc.clone()]))
+                .with_options(serde_json::json!({ OPTION_COMMENTS: comments }));
         let request_json = serde_json::to_string(&request)
             .map_err(|error| PluginError::BadArgs(error.to_string().into()))?;
         // Il modo (prova o esecuzione) è dell'host, e passa con l'invocazione:
@@ -761,10 +759,12 @@ fn preview<H: VaultRead + ?Sized>(
             .join("\n");
         Text::message(T_PREVIEW, vec![doc_arg, Arg::text("losses", losses)])
     };
-    Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
-        summary,
-        Vec::new(),
-    ))))
+    Ok(
+        CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+            summary,
+            Vec::new(),
+        ))),
+    )
 }
 
 /// Le stringhe del comando.

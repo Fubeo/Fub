@@ -390,10 +390,18 @@ fn annullato_il_tratto_il_file_salvato_torna_ai_disegni_di_prima() {
     let mut one = before.clone();
     stroke(&mut one, 4.0);
     let first = saved(&file, &one);
-    assert_eq!(drawings(&first), base + 2, "un tratto: l'inchiostro e il suo ripiego");
+    assert_eq!(
+        drawings(&first),
+        base + 2,
+        "un tratto: l'inchiostro e il suo ripiego"
+    );
     let xml = main_xml(&first);
     assert_eq!(xml.matches("<mc:Choice Requires=\"wpi\">").count(), 1);
-    assert_eq!(xml.matches("<v:imagedata").count(), 1, "il ripiego è un'immagine VML");
+    assert_eq!(
+        xml.matches("<v:imagedata").count(),
+        1,
+        "il ripiego è un'immagine VML"
+    );
 
     let mut two = one.clone();
     stroke(&mut two, 40.0);
