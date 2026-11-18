@@ -117,10 +117,13 @@ prototipo è obbligatoria, e se ne devia solo con un motivo scritto. Vive in
 
 La mappa `mappa-<prototipo>.mjs`, scritta a mano, dice per ogni pezzo la vista
 (come ci si arriva nel prototipo e quale scena del banco), gli stati, il
-selettore del prototipo dentro `#win`, quello dell'app e le proprietà: di base
-padding, margin, gap, bordi, raggi, ombre, carattere, colore, fondo e opacità,
-più dimensioni e allineamenti dove sono fissi. Gli elementi si identificano per
-classi e struttura, mai a occhio. Le tolleranze sono mezzo pixel per le
+selettore del prototipo dentro la sua cornice, quello dell'app e le proprietà: di
+base padding, margin, gap, bordi, raggi, ombre, carattere, colore, fondo e
+opacità, più dimensioni e allineamenti dove sono fissi. La cornice è `#win` per
+l'editor; un prototipo che ne ha un'altra la dichiara in `PROTOTIPO.radice`, e
+uno stato che non si sceglie coi pulsanti dell'editor dichiara `imposta(page)`
+(le ricette: `radice: "body"`, perché il colore ereditato sta fuori da `#stage`).
+Gli elementi si identificano per classi e struttura, mai a occhio. Le tolleranze sono mezzo pixel per le
 lunghezze, due punti per canale (0–255) e un centesimo d'alfa per i colori, le
 ombre e i gradienti parte per parte, i caratteri per famiglia principale (il
 taglio «Variable» è lo stesso carattere); il perché sta in `confronto.mjs`.
