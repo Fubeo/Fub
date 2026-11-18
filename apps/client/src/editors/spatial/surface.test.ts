@@ -1458,6 +1458,10 @@ describe("in una scheda della nota (T46, `compact`)", () => {
     let asked = 0;
     await card(SOURCE, { onExport: () => (asked += 1) });
     expect(parent.querySelector(".draw-export")).toBeNull();
+    // Senza «Esporta» il foglietto di destra della testa è vuoto: non si vede.
+    const end = parent.querySelector<HTMLElement>(".draw-header > .draw-top:last-child")!;
+    expect(end.childElementCount === 0 || [...end.children].every((child) => (child as HTMLElement).hidden)).toBe(true);
+    expect(end.hidden).toBe(true);
     for (const { surface } of mounted) surface.destroy();
     mounted = [];
     parent.replaceChildren();
