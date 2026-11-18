@@ -611,7 +611,9 @@ export async function askVaultProfile(root: string, hooks: VaultProfileHooks, pa
   });
   // Esc vale «Studio»: applica il consigliato e apre, come «Continua» su di lui.
   lifetime.add(trapFocus(screen, () => void apply(recommended.nome)));
-  row.querySelector<HTMLElement>(`[data-profile="${CSS.escape(chosen)}"]`)?.focus();
+  // Senza scorrere: la schermata si legge dal titolo, anche quando la fila
+  // dei profili sta sotto la piega (finestra bassa).
+  row.querySelector<HTMLElement>(`[data-profile="${CSS.escape(chosen)}"]`)?.focus({ preventScroll: true });
   return finished;
 }
 

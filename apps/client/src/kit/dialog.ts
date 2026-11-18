@@ -207,7 +207,9 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
     if (event.target === scrim && !inside) finish(options.dismissValue);
   });
 
-  own.add(trapFocus(dialog, () => finish(options.dismissValue)));
+  // Il fuoco lo mette il dialogo, qui sotto, senza scorrere: con le azioni in
+  // fondo a un corpo lungo il dialogo si apre comunque dall'inizio.
+  own.add(trapFocus(dialog, () => finish(options.dismissValue), { moveFocus: false }));
   const kinds = options.actions.map((action) => action.kind ?? "normal");
   const wanted = options.actions.findIndex((action) => action.autofocus);
   const field = body ? focusableElements(body)[0] : undefined;

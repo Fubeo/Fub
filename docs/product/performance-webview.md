@@ -151,7 +151,7 @@ che non erano di chi le apre. Tre regole le tolgono dal fotogramma del gesto:
   primo elemento e subito dopo il menu o il lanciatore lo rimettevano dove
   volevano loro. Chi sa già dove va il fuoco passa `{ moveFocus: false }` e lo
   mette lui, dentro la superficie: il menu contestuale e i suoi sottomenu, il
-  selettore di icona, il lanciatore. La trappola resta la stessa (Tab che non
+  selettore di icona, il lanciatore, il dialogo del kit. La trappola resta la stessa (Tab che non
   esce, Escape, fuoco restituito alla chiusura). Le guardie sono `a11y.test.ts`,
   `menu.test.ts` («aprendosi sposta il fuoco una volta sola») e
   `launcher.test.ts` («aprendosi mette il fuoco nel campo una volta sola»);

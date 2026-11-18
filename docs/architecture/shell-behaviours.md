@@ -13,6 +13,14 @@
 
 Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 
+- **Le finestre si aprono dall'inizio.** Le superfici modali (il dialogo del
+  kit, i dialoghi della shell, la palette, le preferenze) tengono il fuoco con
+  `trapFocus` di `ui/a11y.ts`: il fuoco iniziale va dove deve andare senza far
+  scorrere la superficie (`preventScroll`), anche quando quel comando sta in
+  fondo a un corpo lungo e resta fuori vista. Il giro del Tab invece scorre, e
+  alla chiusura il fuoco torna al comando che ha aperto la superficie. Le
+  guardie sono `ui/a11y.test.ts`, `kit/dialog.test.ts` e la scena
+  `dialog-long` del banco.
 - **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
   «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
   centro attività tiene lo storico dei lavori. Ogni lavoro ha un nome nella

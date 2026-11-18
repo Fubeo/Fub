@@ -653,7 +653,10 @@ export async function openSlashPalette(
         actions.append(apply, cancel);
         box.replaceChildren(heading, summary, details, actions);
         box.hidden = false;
-        apply.focus();
+        // Il piano si legge dall'inizio: «Applica» sta in fondo, e il fuoco
+        // non deve portarcelo né lasciare la scatola scorsa dall'elenco.
+        apply.focus({ preventScroll: true });
+        box.scrollTop = 0;
         return;
       }
       closeSlashPalette(owner);
@@ -1350,7 +1353,10 @@ function showLayer(
   cancel.addEventListener("click", closeCommandPalette);
   actions.append(apply, cancel);
   box.appendChild(actions);
-  apply.focus();
+  // Dall'inizio, come il dialogo del kit: il fuoco va su «Applica», in fondo,
+  // senza far scorrere il piano; e la scatola non resta scorsa dall'elenco.
+  apply.focus({ preventScroll: true });
+  box.scrollTop = 0;
 }
 
 /// Consegna l'esito di un comando come lo fa la palette: l'avviso (di un colore

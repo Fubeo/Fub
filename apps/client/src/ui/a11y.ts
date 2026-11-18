@@ -187,6 +187,11 @@ export function focusZone(zone: HTMLElement): void {
 /// WebKit ogni `focus()` ricalcola lo stile della pagina, e cercare il primo
 /// elemento raggiungibile ne forza il layout (`offsetParent`): due spostamenti
 /// del fuoco all'apertura costavano due ricalcoli nel fotogramma del gesto.
+///
+/// **Si apre in cima.** Il fuoco iniziale non fa scorrere la superficie
+/// (`preventScroll`), e chi lo mette da sé con `moveFocus: false` fa lo stesso:
+/// il primo comando può stare in fondo, e chi apre deve leggere dall'inizio.
+/// Il giro del Tab, invece, scorre: lì il fuoco lo sposta chi guarda.
 export function trapFocus(root: HTMLElement, close: () => void, options: TrapOptions = {}): Teardown {
   const lifetime = openLifetime();
   // *Questa* trappola nella pila: conta la sua identità (due trappole sulla
@@ -257,7 +262,11 @@ export function trapFocus(root: HTMLElement, close: () => void, options: TrapOpt
 
   if (options.moveFocus !== false) {
     const inside = focusableElements(root);
-    (inside[0] ?? root).focus();
+    // Senza scorrere: una superficie si apre dall'inizio. Il browser porta in
+    // vista chi prende il fuoco, e se il primo comando sta in fondo (i pulsanti
+    // di un dialogo lungo) chi guarda la vedrebbe già a metà, con l'inizio
+    // saltato. Il fuoco resta lì: Tab e le frecce lo mostrano quando si muove.
+    (inside[0] ?? root).focus({ preventScroll: true });
   }
 
   return () => lifetime.close();
