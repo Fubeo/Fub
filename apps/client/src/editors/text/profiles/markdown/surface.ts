@@ -358,18 +358,21 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// colonna si chiedono per la nota di questo vault, non per lo stesso
   /// percorso in un altro.
   const vault = openVaultRoot();
-  /// Il documento di questa superficie, letto a ogni gesto: una rinomina lo
-  /// cambia mentre la superficie è montata. I link si risolvono da qui, non
-  /// dal riquadro col fuoco (una sbirciata, una scheda della lavagna).
-  const linkSource = (): string => resources?.documentId ?? documentId;
+  /// Il documento di questa superficie, letto a ogni gesto: una rinomina
+  /// cambia l'id della sessione mentre la superficie resta montata, e
+  /// `context.documentId` resta il nome di quando la nota si è aperta. Ogni
+  /// confronto col documento del riquadro (il «/», i link, la pagina) passa da
+  /// qui. I link si risolvono da qui, non dal riquadro col fuoco (una
+  /// sbirciata, una scheda della lavagna).
+  const docId = (): string => resources?.documentId ?? documentId;
   const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
-    opts.onOpenWikilink(page, heading ?? null, block ?? null, linkSource());
+    opts.onOpenWikilink(page, heading ?? null, block ?? null, docId());
   /// Come si segue un link da questa superficie: aprire, sbirciare, e la
   /// regola del clic (`open-link.ts`).
   const follow: WikilinkFollow = {
     openWikilink: (page, heading, block) => openWikilink(page, heading, block),
-    openPath: (path) => opts.onOpenPath(path, linkSource()),
-    ...(opts.onPeekLink ? { peekLink: (link: PeekLink) => opts.onPeekLink!(link, linkSource()) } : {}),
+    openPath: (path) => opts.onOpenPath(path, docId()),
+    ...(opts.onPeekLink ? { peekLink: (link: PeekLink) => opts.onPeekLink!(link, docId()) } : {}),
     ...(opts.linkClick ? { linkClick: () => opts.linkClick!() } : {}),
   };
   /// Il clic su un link della resa (la Lettura, un blocco reso): Alt sbircia,
@@ -385,8 +388,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     view: (url) => cards.view(url),
     request: (url) => cards.request(url),
     watch: (changed) => cards.watch(changed),
-    ...(cards.note ? { note: (page: string) => cards.note!(page, linkSource()) } : {}),
-    ...(cards.holdNote ? { holdNote: (page: string) => cards.holdNote!(page, linkSource()) } : {}),
+    ...(cards.note ? { note: (page: string) => cards.note!(page, docId()) } : {}),
+    ...(cards.holdNote ? { holdNote: (page: string) => cards.holdNote!(page, docId()) } : {}),
   };
   /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
   /// sulle sue celle invece che sul cursore del testo.
@@ -397,7 +400,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const slashHost = opts.slash?.menu;
   const slashMenu: SlashMenuSource | undefined = slashHost && {
     enabled: () =>
-      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === documentId && !tableGrid,
+      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === docId() && !tableGrid,
     panel: (events, transform) => slashHost.panel({
       ...events,
       outline: () => engine.readState(outlineOf),
@@ -433,9 +436,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (creatingBase) return;
     creatingBase = true;
     const port: NewBasePort = {
-      note: linkSource(),
+      note: docId(),
       taken: async (file) =>
-        (await resolvedReference({ kind: "wiki", value: { page: file } }, linkSource()).catch(() => null)) !== null,
+        (await resolvedReference({ kind: "wiki", value: { page: file } }, docId()).catch(() => null)) !== null,
       ask: (proposal, taken) => promptText({
         title: liveStrings.t("base.new.title"),
         label: taken === null ? liveStrings.t("base.new.name") : liveStrings.t("base.new.taken", { name: taken }),
@@ -466,7 +469,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     };
     void import("./blocks/sync-to")
       .then((sync) => sync.syncedBlockHere(view, from, to, port, {
-        doc: linkSource(),
+        doc: docId(),
         writable: () => editable() && !tableGrid,
         notify: say,
       }))
@@ -493,7 +496,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let currentTheme: Theme = getCurrentTheme();
   const transclusions = new Transclusions({
     deps: opts.transclusion ?? null,
-    hostDoc: linkSource,
+    hostDoc: docId,
     editable: () => editable(),
     open: (page, heading, block) => void openWikilink(page, heading, block),
     theme: () => currentTheme,
@@ -527,7 +530,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // e un documento che non c'è lo dice invece di tacere.
       openPath: (path) => {
         void Promise.resolve()
-          .then(() => opts.onOpenPath(path, resources?.documentId ?? documentId))
+          .then(() => opts.onOpenPath(path, docId()))
           .catch((error: unknown) => {
             if (!life.closed) notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
           });
@@ -541,7 +544,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       ...(opts.completions.dates?.dailyDate ? {
         dayPage: {
           current: () => {
-            const doc = resources?.documentId ?? documentId;
+            const doc = docId();
             const date = opts.completions.dates?.dailyDate?.(doc) ?? null;
             return date === null ? null : { doc, date };
           },
@@ -563,7 +566,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       },
       mountRendered: (container, html, actions) => mountMarkdown(container, html, {
         ...actions,
-        get documentId() { return resources?.documentId ?? documentId; },
+        get documentId() { return docId(); },
         resources,
         openWikilink: clickWikilink,
         openPath: clickPath,
@@ -661,7 +664,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // suo tratto: il `/` è testo.
       event.target.closest(".tb-frame, [data-transclusion-editing]")
     ) return;
-    if (slash.currentDoc() !== documentId) return;
+    if (slash.currentDoc() !== docId()) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
     // una selezione oppure a inizio parola, fuori da codice e link.
     const cursor = engine.cursorContext();
@@ -684,7 +687,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       parent,
       engine.selections().primary.text,
       () => !life.closed && parent.isConnected && engine.getDoc() === text &&
-        slash.currentDoc() === documentId,
+        slash.currentDoc() === docId(),
       slash,
       // Chiusa senza scelta, la palette restituisce la battuta.
       typed ? () => {
@@ -790,16 +793,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
   };
   const pageOptions: PageOptions = {
-    page: () => pageName(resources?.documentId ?? documentId),
+    page: () => pageName(docId()),
     notify: (message, tone) => notify(message, tone),
-    folderPage: () => isFolderPage(resources?.documentId ?? documentId),
-    renamedPage: (name) => renamedPageName(resources?.documentId ?? documentId, name),
+    folderPage: () => isFolderPage(docId()),
+    renamedPage: (name) => renamedPageName(docId(), name),
     // La rinomina riuscita riscrive l'H1 ripiegato (T7) sulla vista viva
     // della superficie: rinominare può rifare la vista, e quella che ha
     // aperto il campo del titolo non è più nella pagina.
     rename: opts.onRenamePage
       ? async (name) => {
-        const from = resources?.documentId ?? documentId;
+        const from = docId();
         const to = renamedPagePath(from, name);
         const problem = await opts.onRenamePage!(from, name);
         // La superficie che mostra la pagina adesso, in questo riquadro: se
@@ -812,7 +815,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // larghezza e «Sostituisci»: la resa non apre il suo.
     mountImage: (root, html) => mountMarkdown(root, html, { ...renderedOptions(), imageMenu: false }),
     subpage: opts.onNewSubpage
-      ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
+      ? (name) => opts.onNewSubpage!(docId(), name)
       : undefined,
     propertyTypes: () => propertyTypes,
     noteType: (raw) => {
@@ -821,7 +824,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return known;
     },
     listTypes: () => listNoteTypes(),
-    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, linkSource())).catch((error: unknown) => notify(errorText(error), "guasto")),
+    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, docId())).catch((error: unknown) => notify(errorText(error), "guasto")),
     featureInType: (type, key, on) => void featureTyped(type, key, on),
     // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
     // comando del registro (`property.type.set`) a scriverlo.
@@ -858,7 +861,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     ...pageOptions,
     // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
     // Blocchi, la testata non li usa.
-    document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
+    document: () => ({ documentId: docId(), vault }),
     ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
     ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
@@ -928,7 +931,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // torna in Scrittura.
   const titleKeeper = {
     root: parent,
-    documentId: () => resources?.documentId ?? documentId,
+    documentId: () => docId(),
     retitle: (before: string, after: string) => {
       if (life.closed) return;
       engine.runViewCommand((view) => retitleView(view, before, after));
@@ -967,7 +970,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// sparisce. Una risposta vecchia non copre una più nuova.
   function checkTypePage(): void {
     const asked = ++typePageAsked;
-    const doc = resources?.documentId ?? documentId;
+    const doc = docId();
     void listNoteTypes().then((list) => {
       if (life.closed || asked !== typePageAsked) return;
       const next = list.types.some((type) => type.doc === doc) ? doc : null;
@@ -1026,7 +1029,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     placeReadingFacts();
   };
   if (opts.noteFacts) {
-    life.add(opts.noteFacts.follow(() => resources?.documentId ?? documentId, (next) => {
+    life.add(opts.noteFacts.follow(() => docId(), (next) => {
       facts = next;
       drawFacts();
     }));
@@ -1065,7 +1068,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   void readSurfaceSettings();
   checkTypePage();
   life.add(onEvent("document_renamed", (event) => {
-    if (event.to === (resources?.documentId ?? documentId)) checkTypePage();
+    if (event.to === (docId())) checkTypePage();
   }));
   life.add(onEvent("setting_changed", (event) => {
     if (event.key === TYPES_FOLDER_SETTING) checkTypePage();
@@ -1197,7 +1200,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const download = opts.onImportRemoteImage;
     if (readOnly || !download) return;
     try {
-      const link = await download(url, resources?.documentId ?? documentId);
+      const link = await download(url, docId());
       if (link === null || life.closed || readOnly) return;
       engine.runCommand(relinkImage(url, link));
     } catch (error) {
@@ -1239,7 +1242,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// a ogni richiesta: una rinomina lo cambia mentre la resa è montata.
   function renderedOptions(toggleTask?: (sourceOffset: number) => void): MarkdownMountOptions {
     return {
-      get documentId() { return resources?.documentId ?? documentId; },
+      get documentId() { return docId(); },
       resources,
       openWikilink: clickWikilink,
       openPath: clickPath,
@@ -1587,8 +1590,6 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       engine.paste(text ?? "", plain ? null : html);
     }).catch(() => notify(t("editor_menu.paste_failed"), "guasto"));
   };
-
-  const docId = (): string => resources?.documentId ?? documentId;
 
   /// «Seleziona tutto» del tasto destro fa ciò che fa Mod-a, che la voce
   /// mostra: in Scrittura coi blocchi il blocco e poi tutti, senza il corpo

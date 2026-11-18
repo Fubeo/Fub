@@ -8,6 +8,8 @@ import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type Markd
 import { api } from "../../../../host/ipc";
 import { NOTE_TYPE_READS, withoutTypeReads } from "../../../../state/note-type-commands";
 import { state } from "../../../../state/store";
+import { documentSessions } from "../../../../state/document-session";
+import type { DocumentSource } from "../../../../host/contract";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { trapFocus } from "../../../../ui/a11y";
@@ -465,6 +467,48 @@ describe("la superficie Markdown", () => {
       ed.destroy();
       parent.remove();
       closeCommandPalette();
+      state.currentDoc = previousDoc;
+      vi.restoreAllMocks();
+    }
+  });
+  it("dopo una rinomina il / si apre ancora: la superficie si confronta col nome nuovo della nota", async () => {
+    const previousDoc = state.currentDoc;
+    const source = (): DocumentSource => ({
+      text: "prima ", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source",
+    });
+    vi.spyOn(api, "readDocument").mockImplementation(async () => source());
+    vi.spyOn(api, "openDocument").mockImplementation(async () => source());
+    vi.spyOn(api, "documentClosed").mockResolvedValue(undefined);
+    vi.spyOn(api, "listCommands").mockResolvedValue([]);
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "settings", value: [] });
+    await documentSessions.read("notes/current.md");
+    state.currentDoc = "notes/current.md";
+    const slash = {
+      currentDoc: vi.fn(() => state.currentDoc),
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+    } satisfies EditorSlashHost;
+    const { ed, parent, view } = editor(() => {}, slash);
+    const press = () => view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }),
+    );
+    try {
+      // La nota si rinomina dal titolo: la sessione e il riquadro passano al
+      // nome nuovo, la superficie resta montata.
+      expect(documentSessions.rename("notes/current.md", "notes/Viaggio.md").kind).toBe("renamed");
+      state.currentDoc = "notes/Viaggio.md";
+      ed.buffer.setDoc("prima ");
+      view().dispatch({ selection: { anchor: 6 } });
+      // Il «/» a inizio parola apre la palette: la battuta non resta testo.
+      expect(press()).toBe(false);
+      await vi.waitFor(() => expect(document.querySelector("#command-palette:not([data-shell-motion=exit]) input")).not.toBeNull());
+    } finally {
+      ed.destroy();
+      parent.remove();
+      closeCommandPalette();
+      documentSessions.get("notes/Viaggio.md")?.close(true);
       state.currentDoc = previousDoc;
       vi.restoreAllMocks();
     }
