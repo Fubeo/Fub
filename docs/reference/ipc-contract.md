@@ -28,6 +28,7 @@ test usano un fake.
 | eventi | ascolto del canale tipizzato |
 | sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
 | componenti | leggere la mappa dei componenti di un vault e applicare una scelta |
+| ricette | elencare le ricette del vault, accenderne una, spegnerla, provarla |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -123,6 +124,43 @@ principale: lo stato dei componenti non è `program_writable`, e un componente
 non deve poter spegnere gli altri. Le forme, i rifiuti tipati, l'avviso del
 rimontaggio e lo scenario dell'host finto sono nel
 [contratto dei componenti](components-contract.md).
+
+## Ricette
+
+Le ricette del vault ([il formato e gli stati](ricette.md)) hanno quattro
+porte dedicate in `allow-shell`, solo per la finestra principale. Ognuna
+delega a un metodo di `Host` e gira fuori dal thread principale, perché ogni
+chiamata rilegge la cartella delle ricette (è anche la riconciliazione) e con
+duecento note la finestra smetterebbe di presentare fotogrammi.
+
+| Porta | Argomenti | Risposta |
+|---|---|---|
+| `recipes_list` | `vault?` | `RecipeList { recipes, problems }` |
+| `recipe_adopt` | `id`, `fingerprint`, `vault?` | niente |
+| `recipe_discard` | `id`, `vault?` | niente |
+| `recipe_simulate` | `id`, `args?` (di serie `{}`), `vault?` | `CommandPlan` |
+
+- `RecipeInfo` porta `id`, `title`, `description`, `doc`, `status`
+  (`proposta` · `adottata` · `cambiata` · `problemi`), `fingerprint` (opaca:
+  lo SHA-256 del blocco in esadecimale, da rimandare tale e quale a
+  `recipe_adopt`), `problems`, `steps` (con titolo, portata e annullabilità
+  del comando, `null` se il registro non lo conosce), `command`,
+  `keybinding`, `surfaces`, `mounted` e `allowed`. I problemi del vault intero
+  (`troppe`) stanno in `RecipeList.problems`. Le frasi arrivano già nella
+  lingua di chi guarda.
+- Gli errori sono `PluginError` tipizzati: `not_found` per un vault chiuso o
+  un id che non c'è (e per `recipe_discard` di una ricetta mai accesa),
+  `conflict` se l'impronta non è più quella della nota (la ricetta è cambiata
+  mentre la persona la guardava), `bad_args` per una ricetta con problemi (il
+  messaggio è il primo problema) o per argomenti della prova che il comando
+  della ricetta rifiuterebbe.
+- Non sono comandi del registro né porte del canale di controllo: accendere è
+  il consenso della persona davanti allo schermo, e lo stato «accesa» sta nel
+  registro dei vault di questa macchina, che nessun `IndexQuery` di un vault
+  legge.
+- L'host finto (`apps/client/src/host/fake.ts`, opzione `recipes`) tiene le
+  ricette in memoria con le stesse regole viste da fuori;
+  `recipeChangedFromOutside` simula la nota riscritta da un altro programma.
 
 ## Apri con e anteprime Craft
 
