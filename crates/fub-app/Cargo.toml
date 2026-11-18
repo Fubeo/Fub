@@ -103,7 +103,9 @@ libc = { workspace = true }
 # workspace, già nell'albero con la stessa feature (la accende
 # `winapi-util`): il grafo non cresce, si aggiunge un nome.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_System_SystemInformation"] }
+# `AttachConsole` (`riga_di_comando.rs`): `fub --version` e `--help` scrivono
+# nella console del terminale anche dal binario a finestra di rilascio.
+windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_System_SystemInformation"] }
 
 [features]
 # Vuoto: le feature di `fub-app` servono al banco, non all'app che si usa.
