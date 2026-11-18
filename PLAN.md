@@ -854,7 +854,7 @@ e l'avviso; d43 verde; `npm run bench:motion` verde; `engine.test.ts` prova
 l'anteprima, il ritorno e la risposta vecchia che non scrive sopra.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, 3090a016e: bench:grid 5/5 G5, bench:motion griglia-bordo-* verdi; classe .pending in structure.css; scena grid-large-misure; apply_failed per il rifiuto. Resta: menu-punto rosso già alla base, toast del finto su throttle+fault nelle altre scene)
 
 ## T6 · Riempire, copiare, tagliare, incollare
 
