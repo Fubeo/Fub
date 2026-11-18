@@ -2117,7 +2117,7 @@ Fatto quando: test della pastiglia e dell'inserimento; un e2e dal «/» al
 file; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown
-Stato: [~] in corso (coder feat/promemoria-editor da integra/editor-2, 2026-11-18)
+Stato: [~] integrato in `integra/editor-2` (ea5d5da7f, merge f3b315405, 2026-11-18), in attesa del pacchetto 2. Differenze: parseDateInput e saidReminder in markdown/dates.ts; l'elenco all'avvio è un dialogo del kit (panels/reminders.ts), una volta per vault e finestra; pastiglia solo in Scrittura, misura in em. Rischi: un promemoria passato di un compito aperto torna a ogni apertura; pastiglia senza role=button (da tastiera: barra o «/»)
 
 ## T37 · Incorporare pagine web
 
