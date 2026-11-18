@@ -11733,7 +11733,10 @@ export class CanvasEngine {
     if (event.defaultPrevented || !this.#doc || this.#isSceneOversized()) return;
     if (event.target instanceof Node && this.#viewport.contains(event.target)) return;
     const zoom = this.commands().filter((command) => VIEW_ZOOM_COMMANDS.has(command.id));
-    const command = commandForKey(zoom, event, { writing: isTextTarget(event.target), onBoard: false });
+    // In una casella a discesa (i campi del filo nella barra della selezione) un
+    // numero o un segno cerca l'opzione, come in un campo: solo Ctrl zooma.
+    const writing = isTextTarget(event.target) || event.target instanceof HTMLSelectElement;
+    const command = commandForKey(zoom, event, { writing, onBoard: false });
     if (command) this.#runKey(event, command);
   }
 

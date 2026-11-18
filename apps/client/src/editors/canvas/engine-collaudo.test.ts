@@ -151,6 +151,21 @@ describe("il fuoco dopo un pulsante della lavagna (IMP-040)", () => {
     expect(document.activeElement).toBe(zoomOut);
     engine.destroy();
   });
+
+  it("in una casella a discesa della barra del filo il segno cerca l'opzione e non zooma; Ctrl++ zooma ancora", () => {
+    const { engine, host } = mounted(LINKED);
+    const picker = host.querySelector<HTMLSelectElement>('select[data-canvas-field="select-edge"]')!;
+    picker.value = "e";
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    const field = host.querySelector<HTMLSelectElement>('[data-canvas-field="edge-fromNode"]')!;
+    expect(field).not.toBeNull();
+    const before = cameraOf(host).zoom;
+    key(field, { key: "+" });
+    expect(cameraOf(host).zoom).toBeCloseTo(before, 6);
+    key(field, { key: "+", ctrlKey: true });
+    expect(cameraOf(host).zoom).toBeGreaterThan(before);
+    engine.destroy();
+  });
 });
 
 /** Due schede unite da un filo: il suo punto di mezzo è (300, 50). */
