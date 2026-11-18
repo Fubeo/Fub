@@ -1653,12 +1653,13 @@ export const SCENE = touchLast(onPage("shell", [
   // di quattro pagine del giro, dalla pagina 2 con «2 / 4». A riposo; scelta
   // (un clic sulla testata, i Blocchi accesi); attiva, col puntatore sopra
   // (le frecce accanto al numero) e una riga del testo della pagina scelta;
-  // la stessa nota a riposo a 700 px.
+  // la stessa nota a riposo nella finestra minima (i 700 px del prototipo li
+  // guarda la conformità).
   ...[
     ["schede-pdf-01-riposo", "La scheda PDF a riposo: la pagina 2 sulla carta, «2 / 4» sotto", null],
     ["schede-pdf-02-scelta", "La scheda PDF scelta coi Blocchi: il filo della selezione la circonda", "choose"],
     ["schede-pdf-03-attiva", "La scheda PDF attiva: bordo d'accento, le frecce accanto al numero, una riga del testo scelta", "activate"],
-    ["schede-pdf-04-stretta", "La scheda PDF a 700 px: la pagina si stringe con la carta", null, { width: 700, height: 800 }],
+    ["schede-pdf-04-stretta", "La scheda PDF nella finestra minima, 800 px: la pagina si stringe con la carta", null, NOTE_NARROW],
   ].map(([id, title, gesture, viewport]) => ({
     id,
     title,
