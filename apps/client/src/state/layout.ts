@@ -346,15 +346,28 @@ export function openIn(id: string, doc: string, l: Layout = layout): void {
   openTabIn(id, { k: "doc", doc }, l);
 }
 
-/// Mette una **view dichiarata** in un riquadro e la rende attiva (§3.3).
+/// Mette una **view dichiarata** in vista e la rende attiva (§3.3).
 ///
-/// Stessa regola del documento — se c'è già ci si sposta sopra — e per una
-/// ragione più forte: due tab sullo stesso grafo sarebbero due simulazioni che
-/// girano insieme sullo stesso vault, cioè il doppio del lavoro per due disegni
-/// che convergono allo stesso posto. Con `params` la linguetta che c'è già
-/// passa a quegli argomenti; senza, tiene i suoi.
+/// Stessa regola del documento — se c'è già ci si sposta sopra — ma per la
+/// **finestra** e non per il solo riquadro, e per una ragione più forte: due
+/// tab sullo stesso grafo sarebbero due simulazioni che girano insieme sullo
+/// stesso vault, cioè il doppio del lavoro per due disegni che convergono allo
+/// stesso posto. Se la view è già aperta in un altro riquadro il fuoco va lì,
+/// invece di aprirne una seconda in `id` (IMP-114: il pulsante Graph della
+/// rail, dopo una nota aperta dal grafo nel riquadro accanto, apriva un
+/// secondo grafo). Con `params` la linguetta che c'è già passa a quegli
+/// argomenti; senza, tiene i suoi.
 export function openViewIn(id: string, view: string, l: Layout = layout, params?: unknown): void {
-  openTabIn(id, { k: "view", view, ...(params === undefined || params === null ? {} : { params }) }, l);
+  const tab: Tab = { k: "view", view, ...(params === undefined || params === null ? {} : { params }) };
+  openTabIn(paneHolding(tab, id, l) ?? id, tab, l);
+}
+
+/// Il riquadro che tiene già `tab`: `preferred` se ce l'ha, altrimenti il primo
+/// nell'ordine dei riquadri, o `null` se nessuno.
+function paneHolding(tab: Tab, preferred: string, l: Layout): string | null {
+  const holds = (id: string): boolean => l.panes[id]?.tabs.some((each) => sameTab(each, tab)) ?? false;
+  if (holds(preferred)) return preferred;
+  return panes(l).find(holds) ?? null;
 }
 
 function openTabIn(id: string, tab: Tab, l: Layout): void {
@@ -1032,7 +1045,46 @@ export function parseLayout(v: unknown): Layout | null {
   if (Object.keys(panes).length !== ids.size) return null;
   const focus = typeof o.focus === "string" && ids.has(o.focus) ? o.focus : null;
   if (!focus) return null;
-  return { tree, panes, focus };
+  const l: Layout = { tree, panes, focus };
+  dropRepeatedViews(l);
+  return l;
+}
+
+/// Toglie le copie di una view già aperta in un riquadro prima (IMP-114).
+///
+/// Una view si apre una volta per finestra (`openViewIn`), ma le versioni di
+/// prima aprivano un secondo grafo accanto al primo e lo ricordavano: quel
+/// layout è già sul disco di chi usa Fub. Si legge senza il doppione invece di
+/// rifiutarlo — rifiutarlo costerebbe tutte le altre linguette — e resta la
+/// copia del primo riquadro nell'ordine. Fa eccezione la copia in un riquadro
+/// **collegato** a quello che tiene la prima: lì il doppione è lo specchio che
+/// il collegamento chiede (`propagateToLinked`), non un errore.
+function dropRepeatedViews(l: Layout): void {
+  const holders = new Map<string, string | null>();
+  for (const id of panes(l)) {
+    const p = l.panes[id]!;
+    const link = p.link ?? null;
+    const before = p.tabs;
+    const front = p.active >= 0 ? before[p.active] : undefined;
+    const kept = before.filter((tab) => {
+      if (tab.k !== "view") return true;
+      if (!holders.has(tab.view)) {
+        holders.set(tab.view, link);
+        return true;
+      }
+      return link !== null && link === holders.get(tab.view);
+    });
+    if (kept.length === before.length) continue;
+    p.tabs = kept;
+    if (front && kept.includes(front)) {
+      p.active = kept.indexOf(front);
+    } else {
+      // Il doppione era davanti: ci va la linguetta che gli stava prima, come
+      // quando lo si chiude, o la prima se prima non c'era niente.
+      const earlier = before.slice(0, Math.max(p.active, 0)).filter((tab) => kept.includes(tab)).length;
+      p.active = kept.length === 0 ? -1 : Math.min(Math.max(earlier - 1, 0), kept.length - 1);
+    }
+  }
 }
 
 function parseNode(v: unknown): LayoutNode | null {

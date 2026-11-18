@@ -129,6 +129,11 @@ lontane dai cambiamenti e dichiara quante righe non mostra oltre il limite del
 pannello. Se una delle due versioni non è testo, o la parte diversa è troppo
 grande, il pannello lo dice invece di calcolarlo.
 
+«Ripristina» chiede prima di scrivere: «Sì, ripristina» o «Annulla», al posto
+del bottone. Esc vale come «Annulla» e riporta il fuoco su «Ripristina». La
+domanda non si ricorda: l'anteprima aperta torna al riavvio, la domanda no, e
+la cronologia si riapre con il solo bottone.
+
 Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.

@@ -21,13 +21,13 @@ use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
 use fub_abi::traits::ViewInstance;
-use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate, CONFIRM_NS};
 use fub_abi::PluginError;
 use fub_features::versioning::{HistoryView, VersioningCommands, HISTORY_VIEW, VERSION_RESTORE};
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Workspace, MAIN_PANE};
+use fub_kernel::{FormatRegistry, MachineSettings, ViewStates, Workspace, MAIN_PANE};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Barrier, OnceLock,
@@ -130,11 +130,23 @@ impl Vault {
     }
 
     fn mount(&self, keeping: bool) -> Workspace {
+        self.mount_on(keeping, ViewStates::in_memory())
+    }
+
+    /// Come lo monta l'app a un avvio: lo stato di vista è quello della
+    /// macchina, che un avvio dopo rilegge dallo stesso file.
+    fn open_on(&self, states: Arc<ViewStates>) -> Workspace {
+        self.mount_on(false, states)
+    }
+
+    fn mount_on(&self, keeping: bool, states: Arc<ViewStates>) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
+        let mut ws = Workspace::new(&self.root, registry)
+            .expect("l'apertura del vault riesce")
+            .with_view_states(states);
         ws.register_plugin(
             fub_abi::traits::PluginManifest::core(VERSIONING_ID, VERSIONING_ID)
                 .speaking("it", fub_features::versioning::catalog()),
@@ -155,7 +167,7 @@ impl Vault {
         // che questo banco esiste per provare — chi disegna rilegge dal proprio
         // spazio dati, e non ha bisogno che qualcuno gli presti l'esemplare in
         // memoria di chi scrive.
-        ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
+        ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView::default()))
             .expect("view registrata");
         ws.register_command_provider(VERSIONING_ID, Box::new(commands))
             .expect("comando registrato");
@@ -181,7 +193,7 @@ impl Vault {
             .expect("store versioni");
         ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(store)))
             .expect("handler registrato");
-        ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
+        ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView::default()))
             .expect("view registrata");
         ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands::default()))
             .expect("comando registrato");
@@ -522,6 +534,172 @@ fn a_restore_asked_and_cancelled_leaves_the_note_alone() {
     assert_eq!(
         std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
         "com'è\n"
+    );
+}
+
+/// Il nodo [`CONFIRM_NS`] della domanda, se l'albero ne ha uno.
+fn confirmation(tree: &UiNode) -> Option<&UiNode> {
+    if matches!(&tree.kind, UiKind::Custom { ns, .. } if ns == CONFIRM_NS) {
+        return Some(tree);
+    }
+    tree.children().into_iter().find_map(confirmation)
+}
+
+/// **Esc chiude la domanda** (IMP-110): la domanda è un nodo `CONFIRM_NS`, che
+/// dice alla shell quale azione mandare per Esc, e quell'azione la chiude senza
+/// toccare la nota. La chiave è quella del bottone che l'ha aperta: chiusa la
+/// domanda, la shell ci rimette il fuoco.
+#[test]
+fn escape_sends_the_no_that_the_question_declares() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, "Uno.md");
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+
+    let (_, restore) = restores(&mut ws);
+    let before = ws.render_view(&instance()).unwrap();
+    let opener_key = {
+        fn key_of(node: &UiNode) -> Option<String> {
+            if let UiKind::Button { label, .. } = &node.kind {
+                if label == "Ripristina" {
+                    return node.key.clone();
+                }
+            }
+            node.children().into_iter().find_map(key_of)
+        }
+        key_of(&before).expect("il bottone ha una chiave")
+    };
+    let restore = restore.expect("il bottone c'è");
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(restore.action.0).with_payload(restore.payload),
+        )
+        .expect("la domanda")
+    else {
+        panic!("la domanda si disegna")
+    };
+    let node = confirmation(&root).expect("la domanda è un nodo di conferma");
+    assert_eq!(node.key.as_deref(), Some(opener_key.as_str()));
+    let UiKind::Custom { payload, .. } = &node.kind else {
+        unreachable!()
+    };
+    let escape: ActionRef =
+        serde_json::from_value(payload["cancel"].clone()).expect("il no per Esc");
+    assert_eq!(
+        Some(escape.clone()),
+        button(node, "Annulla"),
+        "Esc è il no che la domanda disegna"
+    );
+
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(escape.action.0).with_payload(escape.payload),
+        )
+        .expect("Esc")
+    else {
+        panic!("il pannello si ridisegna")
+    };
+    assert!(confirmation(&root).is_none(), "la domanda sparisce");
+    assert!(button(&root, "Ripristina").is_some(), "torna il bottone");
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "com'è\n"
+    );
+}
+
+/// **Una domanda aperta non sopravvive al riavvio** (IMP-110).
+///
+/// Lo stato di vista dura fra un avvio e l'altro, e la domanda ci stava: al
+/// riavvio la cronologia si riapriva con «Sì, ripristina» pronto, a un clic da
+/// una sovrascrittura che nessuno ricordava di aver chiesto. L'anteprima invece
+/// resta: riaprire la cronologia dov'era è un favore, non un rischio.
+#[test]
+fn an_open_question_does_not_survive_a_restart() {
+    let vault = Vault::new();
+    let config = tempfile::tempdir().expect("tempdir");
+    let file = Utf8PathBuf::from_path_buf(config.path().join("view-states.json")).expect("utf8");
+    {
+        let (states, warning) = ViewStates::open(&file);
+        assert!(warning.is_none());
+        let mut ws = vault.open_on(states);
+        ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
+            .expect("creata");
+        watches(&mut ws, "Uno.md");
+        ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
+            .expect("riscritta");
+        let restore = restores(&mut ws).1.expect("il bottone c'è");
+        confirms(&mut ws, restore);
+        // La domanda è aperta, e si chiude l'app senza rispondere.
+    }
+    let saved = std::fs::read_to_string(&file).expect("lo stato di vista è sul disco");
+    assert!(saved.contains("preview"), "l'anteprima si ricorda: {saved}");
+    assert!(!saved.contains("restore_confirm"), "la domanda no: {saved}");
+
+    let (states, _) = ViewStates::open(&file);
+    let mut ws = vault.open_on(states);
+    watches(&mut ws, "Uno.md");
+    let tree = ws.render_view(&instance()).unwrap();
+    assert!(
+        said(&tree).contains("com'era"),
+        "l'anteprima torna: {}",
+        said(&tree)
+    );
+    assert!(confirmation(&tree).is_none(), "{}", said(&tree));
+    assert!(button(&tree, "Sì, ripristina").is_none());
+    assert!(
+        button(&tree, "Ripristina").is_some(),
+        "c'è il bottone, non la domanda"
+    );
+}
+
+/// Una domanda che le versioni di prima hanno lasciato nello stato di vista
+/// non si disegna, e al primo gesto sul pannello se ne va dal disco.
+#[test]
+fn a_question_left_by_an_older_version_is_ignored_and_removed() {
+    let vault = Vault::new();
+    let states = ViewStates::in_memory();
+    let mut ws = vault.open_on(states.clone());
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, "Uno.md");
+    ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+    let tree = ws.render_view(&instance()).unwrap();
+    let oldest = last_ts(&tree);
+    // Come la lasciava la versione di prima: l'istante dell'anteprima aperta.
+    ws.set_view_state(
+        VERSIONING_ID,
+        HISTORY_VIEW,
+        "preview",
+        Some(serde_json::Value::from(oldest)),
+    )
+    .unwrap();
+    ws.set_view_state(
+        VERSIONING_ID,
+        HISTORY_VIEW,
+        "restore_confirm",
+        Some(serde_json::Value::from(oldest)),
+    )
+    .unwrap();
+
+    let tree = ws.render_view(&instance()).unwrap();
+    assert!(said(&tree).contains("com'era"), "{}", said(&tree));
+    assert!(confirmation(&tree).is_none(), "{}", said(&tree));
+    assert!(button(&tree, "Ripristina").is_some());
+
+    ws.view_action(
+        &instance(),
+        UiAction::new("compare").with_payload(serde_json::json!({ "doc": "Uno.md", "ts": oldest })),
+    )
+    .expect("confronto");
+    assert_eq!(
+        ws.view_state(VERSIONING_ID, HISTORY_VIEW, "restore_confirm"),
+        None
     );
 }
 

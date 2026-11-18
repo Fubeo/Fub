@@ -274,6 +274,17 @@ Una view può rispondere a un'azione con `ViewUpdate::Custom` di `ns`
 non c'è. Non è privilegiato, perché cambia solo quale scheda si guarda; lo usa
 «e altri N» sotto la Struttura per portare ai Collegamenti.
 
+Una domanda prima di un gesto distruttivo è un **nodo** `UiKind::Custom` di
+`ns` `fub.confirm` (`fub_abi::ui::CONFIRM_NS`, costruito da
+`UiNode::confirmation`): il `fallback` è la domanda con i suoi bottoni, il
+payload è `{ "cancel": ActionRef }`, l'azione del «no». La shell disegna il
+`fallback` nella fila del nodo che sostituisce, porta il fuoco al «no» quando
+la domanda compare, preme il «no» con Esc e, quando la domanda sparisce, rende
+il fuoco al nodo con la sua stessa chiave (il bottone che l'ha aperta). Una
+shell che non conosce il `ns` disegna il solo `fallback`. Non è privilegiato.
+La domanda è stato del momento: il provider la tiene in memoria e non nello
+stato di vista, che sopravvive al riavvio.
+
 ## Barra di formattazione e azioni dell'editor
 
 Un comando con `CommandSurface::Toolbar` (`"toolbar"` in JSON) si offre come

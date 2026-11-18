@@ -635,6 +635,12 @@ h6.ui-heading {
   line-height: var(--leading-normal);
   overflow-wrap: anywhere;
 }
+/* La domanda prima di un gesto distruttivo (`fub.confirm`) non è un riquadro:
+   la domanda e i suoi bottoni stanno nella fila del bottone che sostituisce,
+   come se l'involucro non ci fosse. L'involucro serve solo a Esc e al fuoco. */
+.ui-custom.ui-confirm {
+  display: contents;
+}
 /* Il markup porta i suoi elementi nudi: un collegamento e un frammento di
    codice senza queste righe prendono i colori del browser. */
 .ui-html a {

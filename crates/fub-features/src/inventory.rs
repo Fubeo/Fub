@@ -276,7 +276,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // quelle di chiunque altro. Ciò che resta dell'host è **quando** si
         // registrano — insieme all'handler e sotto l'interruttore del
         // versioning — e lo dice `wiring`.
-        view: Some(|| Box::new(HistoryView)),
+        view: Some(|| Box::new(HistoryView::default())),
         // Senza store: lo svuotamento lo aggiunge chi monta, che lo store ce
         // l'ha (`VersioningCommands::over`).
         commands: Some(|| Box::new(VersioningCommands::default())),

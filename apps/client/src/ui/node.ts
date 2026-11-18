@@ -391,6 +391,95 @@ function unmount(el: Element): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// La domanda prima di un gesto distruttivo (`fub_abi::ui::CONFIRM_NS`)
+// ---------------------------------------------------------------------------
+//
+// Un `Custom` che questa shell non disegna da sé: il `fallback` è la domanda,
+// testo e bottoni, e si disegna e si riconcilia come ogni altro albero. Ciò
+// che il nodo aggiunge è quello che una fila di bottoni non sa dire (IMP-110):
+// il fuoco va al «no» quando la domanda compare, Esc preme il «no», e quando
+// la domanda sparisce il fuoco torna al nodo con la sua stessa chiave — il
+// bottone che l'ha aperta. Non è un registro di `ui/custom.ts` perché lì un
+// renderer disegna da sé e non riceve il `fallback`, che qui è tutto.
+
+/// Il `ns` del nodo, gemello di `fub_abi::ui::CONFIRM_NS`.
+export const CONFIRM_NS = "fub.confirm";
+
+/// Il «no» di ogni domanda disegnata, letto al momento dell'Esc: la
+/// riconciliazione lo aggiorna senza rifare l'ascoltatore.
+const confirmCancels = new WeakMap<HTMLElement, ActionRef | null>();
+
+/// Il «no» dal payload `{ cancel: ActionRef }`, o `null` se non regge la forma.
+function confirmCancel(payload: unknown): ActionRef | null {
+  if (!payload || typeof payload !== "object") return null;
+  const cancel = (payload as { cancel?: unknown }).cancel;
+  if (!cancel || typeof cancel !== "object") return null;
+  const action = (cancel as { action?: unknown }).action;
+  return typeof action === "string" && action !== "" ? (cancel as ActionRef) : null;
+}
+
+function sameAction(a: ActionRef, b: ActionRef): boolean {
+  return a.action === b.action && JSON.stringify(a.payload ?? null) === JSON.stringify(b.payload ?? null);
+}
+
+/// Il bottone del «no» fra i figli della domanda, se il provider l'ha disegnato.
+function cancelButton(el: HTMLElement): HTMLElement | null {
+  const cancel = confirmCancels.get(el);
+  if (!cancel) return null;
+  for (const child of el.children) {
+    const node = rendered.get(child as HTMLElement)?.node;
+    if (node?.node === "button" && sameAction(node.action, cancel)) return child as HTMLElement;
+  }
+  return null;
+}
+
+/// Il fuoco non sta da nessuna parte: l'elemento che lo aveva è stato tolto.
+function focusLost(): boolean {
+  const active = document.activeElement;
+  return active === null || active === document.body || active === document.documentElement;
+}
+
+function wireConfirm(el: HTMLElement, payload: unknown, onAction: Port): void {
+  el.classList.add("ui-confirm");
+  confirmCancels.set(el, confirmCancel(payload));
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.isComposing || e.defaultPrevented) return;
+    const cancel = confirmCancels.get(el);
+    if (!cancel) return;
+    // Esc qui è la risposta alla domanda, e basta: non chiude anche la barra
+    // o il dialogo che la contiene.
+    e.preventDefault();
+    e.stopPropagation();
+    // Il bottone, quando c'è, così Esc passa dalla stessa strada del clic
+    // (anche dal suo «occupato» se il «no» è già in volo).
+    const button = cancelButton(el);
+    if (button) button.click();
+    else void onAction(cancel, []);
+  });
+  // La domanda compare al posto del bottone che l'ha aperta, e quel bottone se
+  // n'è andato col fuoco: il fuoco va al «no», così Esc e Invio arrivano alla
+  // domanda e la scelta sicura è quella sotto il dito. Solo se il fuoco era
+  // perso o stava già in questo pannello: una domanda non lo ruba altrove.
+  queueMicrotask(() => {
+    if (!el.isConnected) return;
+    const scope = el.closest(".declared-view") ?? el.parentElement;
+    if (!focusLost() && !scope?.contains(document.activeElement)) return;
+    cancelButton(el)?.focus();
+  });
+  // Quando la domanda se ne va col fuoco dentro, il fuoco torna al nodo con
+  // la sua chiave, che il ridisegno ha messo al suo posto.
+  disposers.set(el, () => {
+    const key = el.dataset.key;
+    const scope = el.closest(".declared-view") ?? el.parentElement;
+    if (!key || !scope || !el.contains(document.activeElement)) return;
+    queueMicrotask(() => {
+      if (!focusLost()) return;
+      scope.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus();
+    });
+  });
+}
+
 function findByKey(root: HTMLElement, key: string): HTMLElement | null {
   const matches: HTMLElement[] = [];
   if (rendered.get(root)?.node.key === key) matches.push(root);
@@ -601,6 +690,7 @@ function update(
           && drawnIn.get(el)?.container === contextOf(onAction).container;
       }
       children(el, next.fallback, onAction);
+      if (next.ns === CONFIRM_NS) confirmCancels.set(el, confirmCancel(next.payload));
       return true;
     }
     // **I campi non hanno un elenco da riallineare qui.** Ce l'avevano — il
@@ -1307,6 +1397,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
         if (unmount) disposers.set(el, unmount);
       } else {
         for (const child of node.fallback) el.appendChild(renderUiNode(child, onAction));
+        if (node.ns === CONFIRM_NS) wireConfirm(el, node.payload, onAction);
       }
       return el;
     }

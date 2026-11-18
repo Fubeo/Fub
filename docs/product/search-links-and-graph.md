@@ -283,8 +283,8 @@ gruppi sono stato della vista, come gli altri filtri.
 
 Il grafo non ha un posto riservato nella shell. Si apre con il comando
 `graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
-Vista o dalla rail, che mostrano ogni view principale apribile senza argomenti.
-Con il componente spento spariscono anche comando, voce di menu e icona.
+Vista o dalla rail (ogni view principale senza argomenti), e uno per finestra:
+se è aperto, lo mettono a fuoco. Spento il componente, spariscono anche loro.
 
 Questo confine deve restare stabile:
 

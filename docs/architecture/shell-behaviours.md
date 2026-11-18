@@ -108,6 +108,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 - **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
   insieme di interruttori di visibilità per gruppo, che si compone con la
   maschera della linea del tempo.
+- **Una view principale per finestra.** Rail, palette, menu Vista e
+  `OpenView` aprono una view principale (il grafo) una volta sola: se è già
+  in un riquadro il fuoco va lì, anche dopo una nota aperta dal grafo nel
+  riquadro accanto (`openViewIn` in `state/layout.ts`). Lo specchio di un
+  riquadro collegato resta. Un layout salvato con due grafi dalle versioni di
+  prima si rilegge col solo primo, e le altre schede restano (`parseLayout`).
 - **Linguette.** Rilasciata sul corpo di un foglio, una linguetta si
   divide (quattro bordi) o si sposta in coda al riquadro (centro);
   `splitWithTab` in `state/layout.ts` è la regola pura. Fuori dalla finestra
