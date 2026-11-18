@@ -249,8 +249,9 @@ pub use handler::VersioningHandler;
 #[cfg(test)]
 use persist::fresh_dir;
 use persist::{
-    blob, cap_in_mib, entries, load_index, meta_names, over_the_cap, prune, read_index,
-    rebuild_from_store, relocate, snapshot_name, sweep, unread_over_the_cap, write_index, Batch,
+    blob, cap_in_mib, entries, history_changed, load_index, meta_names, over_the_cap, prune,
+    read_index, rebuild_from_store, relocate, snapshot_name, sweep, unread_over_the_cap,
+    write_index, Batch,
 };
 #[cfg(test)]
 use store::BAND_DAILY;

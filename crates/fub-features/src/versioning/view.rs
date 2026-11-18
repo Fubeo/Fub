@@ -157,9 +157,12 @@ pub struct HistoryView;
 impl ViewProvider for HistoryView {
     fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
         ViewInterests {
-            // Una versione nasce da una scrittura, e da niente altro: la
-            // maschera è più stretta di quella dei pannelli che leggono
-            // l'indice.
+            // Una fotografia nasce da una scrittura: la maschera è più
+            // stretta di quella dei pannelli che leggono l'indice. Non basta
+            // da sola — un testo conservato non scrive la nota, e la
+            // fotografia arriva dopo il suo `document-changed` — e per questo
+            // lo store, a scrittura riuscita, invita anche a ridisegnare
+            // ([`history_changed`]).
             refresh: EventMask::of([
                 EventKind::DocumentChanged,
                 EventKind::EntryChanged,

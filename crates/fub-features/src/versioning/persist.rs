@@ -211,8 +211,38 @@ impl Inner {
                 }
             }
         }
+        // Dentro un lotto l'invito lo manda [`VersionStore::in_batch`], una
+        // volta sola in fondo: uno per nota riempirebbe la coda degli handler
+        // di una passata intera.
+        if !self.batch {
+            history_changed(host);
+        }
         Ok(())
     }
+}
+
+/// **La cronologia sul disco è cambiata: il pannello si ridisegni.**
+///
+/// Il pannello rilegge l'indice a ogni disegno, ma qualcuno deve dirgli
+/// quando. La sua maschera ([`HistoryView`]) non basta, per due ragioni che il
+/// collaudo di IMP-136 ha visto entrambe:
+///
+/// - `version.keep` scrive lo spazio dati e non la nota: nessun
+///   `document-changed`, e un lotto senza documenti non chiude con un
+///   `batch-ended`;
+/// - una fotografia nasce nell'handler, **dopo** che il `document-changed`
+///   che l'ha causata è già arrivato alla shell: il ridisegno chiesto da
+///   quell'evento può leggere l'indice di prima.
+///
+/// Si chiama a scrittura riuscita, quindi l'invito parte quando ciò che il
+/// pannello rileggerà è già sul disco. Non afferma niente: è un
+/// `view-invalidated`, accodato come ogni evento, e un invito di troppo costa
+/// un ridisegno (la shell ne fa uno per giro).
+pub(super) fn history_changed(host: &mut dyn HostApi) {
+    host.emit(Event::ViewInvalidated {
+        view: HISTORY_VIEW.to_string(),
+        instance: None,
+    });
 }
 
 /// Il lotto aperto: finché vive, l'indice non si riscrive a ogni fotografia.

@@ -1471,7 +1471,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       // La Cronologia conserva un testo (`version.keep`) solo se il test la
-      // monta fra i comandi, come il registro vero; il file non cambia.
+      // monta fra i comandi, come il registro vero; il file non cambia, e
+      // come lo store vero invita la Cronologia a ridisegnarsi (IMP-136).
       case "version.keep": {
         if (!listedCommands().some((spec) => spec.id === id)) {
           throw { kind: "unknown_command", message: id } satisfies PluginError;
@@ -1479,6 +1480,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (typeof args?.text !== "string" || typeof args?.note !== "string" || !docs.has(String(args?.doc))) {
           throw { kind: "bad_args", message: "host fake: version.keep vuole doc, text e note" } satisfies PluginError;
         }
+        emit({ type: "view_invalidated", view: "history", instance: null });
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       }
       case "note.create": {

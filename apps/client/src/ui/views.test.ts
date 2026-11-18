@@ -963,6 +963,60 @@ describe("la Cronologia con un testo conservato", () => {
     ],
   };
 
+  /// IMP-136: conservare un testo non scrive la nota, quindi nessun
+  /// `document_changed` invecchia il pannello. Lo invita il kernel, con un
+  /// `view_invalidated` della Cronologia: la scheda già aperta si ridisegna, e
+  /// quella chiusa mostra la voce nuova appena si apre — non «Nessuna
+  /// versione.», l'albero che aveva prima del conflitto.
+  it("un invito del kernel porta la voce conservata nella scheda aperta e in quella chiusa", async () => {
+    let current: UiNode = emptyTree("Nessuna versione.");
+    renderView.mockImplementation(async (view) => (view === "history" ? current : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("outline", "right_sidebar"), spec("history", "right_sidebar")]);
+      const views = await loadViews();
+      const { forwardNotice } = await import("../state/kernel");
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const lifetime = openLifetime();
+      views.mountViewInvalidation(lifetime);
+      const invite = async (): Promise<void> => {
+        forwardNotice({
+          event: { type: "view_invalidated", view: "history", instance: null },
+          origin: { actor: { kind: "kernel" }, batch: null },
+        });
+        await vi.waitFor(() => expect(renderView.mock.calls.at(-1)?.[0]).toBe("history"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      };
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="history"]')!;
+      tabs[1]!.click();
+      expect(content.textContent).toContain("Nessuna versione.");
+
+      // Aperta durante il conflitto: si ridisegna all'invito.
+      current = tree;
+      renderView.mockClear();
+      await invite();
+      expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+
+      // Chiusa durante il conflitto: alla riapertura c'è l'albero dell'invito.
+      current = emptyTree("Nessuna versione.");
+      await panelHost.refreshPanel("history");
+      expect(content.textContent).toContain("Nessuna versione.");
+      tabs[0]!.click();
+      current = tree;
+      renderView.mockClear();
+      await invite();
+      expect(content.textContent, "chiusa, non si disegna").toContain("Nessuna versione.");
+      tabs[1]!.click();
+      expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+      lifetime.close();
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
   it("mostra la nota sulla versione e «Annulla» manda l'annullamento del ripristino", async () => {
     viewAction.mockClear();
     const { state } = await import("../state/store");
