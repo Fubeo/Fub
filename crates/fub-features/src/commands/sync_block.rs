@@ -154,22 +154,27 @@ fn caret_error(error: PluginError) -> PluginError {
     PluginError::BadArgs(Text::key(key))
 }
 
-/// Un id di blocco come il kernel lo legge: lettere, cifre e trattini.
+/// Un id di blocco come il kernel lo legge: la regola del contratto
+/// ([`valid_anchor`](fub_abi::model::valid_anchor): lettere anche non ASCII,
+/// cifre, `-` e `_`), più un tetto alla lunghezza.
 fn valid_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= ID_MAX
-        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    id.len() <= ID_MAX && fub_abi::model::valid_anchor(id)
 }
 
-/// `^id` compare in `source` come segno di un blocco: seguito da un carattere
-/// che non sta in un id (o dalla fine).
+/// `^id` compare in `source` come segno di un blocco, letto come lo legge il
+/// kernel: il segno prende tutti i caratteri che stanno in un id, e due id
+/// sono lo stesso se coincidono in forma canonica
+/// ([`canonical_anchor`](fub_abi::model::canonical_anchor)). Così `Riunione`
+/// trova `^riunione`, e `ab` non è preso da `^ab_c`.
 fn id_used(source: &str, id: &str) -> bool {
-    let marker = format!("^{id}");
-    source.match_indices(&marker).any(|(at, _)| {
-        source[at + marker.len()..]
-            .bytes()
-            .next()
-            .is_none_or(|b| !(b.is_ascii_alphanumeric() || b == b'-'))
+    let wanted = canonical(id);
+    source.match_indices('^').any(|(at, _)| {
+        let rest = &source[at + 1..];
+        let len = rest
+            .char_indices()
+            .find(|&(_, c)| !(c.is_alphanumeric() || matches!(c, '-' | '_')))
+            .map_or(rest.len(), |(end, _)| end);
+        len > 0 && canonical(&rest[..len]) == wanted
     })
 }
 
@@ -209,7 +214,10 @@ fn plan_sync(
         }
         (Some(own), _) => (own, None),
         (None, Some(asked)) => {
-            if id_used(&from.source, &asked) {
+            let taken = canonical(&asked);
+            if id_used(&from.source, &asked)
+                || from.model.anchors.iter().any(|anchor| anchor.id == taken)
+            {
                 return Err(PluginError::Conflict(Text::message(
                     E_SYNC_ID_TAKEN,
                     vec![
