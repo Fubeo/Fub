@@ -369,8 +369,7 @@ vista ricordata o alla prima del file.
 
 ### Il menu della colonna
 
-Un clic sull'intestazione di una colonna (o il tasto destro, con le stesse
-voci) apre il suo menu:
+Un clic sull'intestazione di una colonna (o il tasto destro, con le stesse voci) apre il suo menu:
 
 | Voce | Che cosa fa | Che cosa scrive |
 |---|---|---|
@@ -388,7 +387,7 @@ scelto dal menu è uno per colonna, senza nome e senza formula; quello di una
 Relazione è un `rollup` ([Le Relazioni](../reference/property-types.md#il-riepilogo-in-una-base))
 nell'`expression`, col nome («Somma di pagine»): spento se la chiave ha spazi.
 Gli altri scritti a mano restano. La colonna della nota ha solo Ordina e
-Copia; le colonne `file.*` e le formule non si rinominano e non hanno un tipo.
+Copia; le colonne `file.*`, `container.*` e le formule non si rinominano e non hanno un tipo.
 In sola lettura e in una Base dentro una nota le voci che scrivono il `.base`
 sono spente col perché; in una Base dentro una nota anche Rinomina e Tipo (il
 blocco resterebbe sulla chiave vecchia): la voce dice di farlo dal `.base`.
@@ -412,7 +411,8 @@ casella, lista, collegamento), letta dalle righe come per i riepiloghi, e un
 filo divide le colonne. Le date si leggono come giorno e mese («2 mar», con
 l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
 è solo da guardare, perché il campo di una cella col fuoco torna al valore
-com'è, e la ricerca, il CSV e le copie usano il valore. In fondo alle righe
+com'è, e la ricerca, il CSV e le copie usano il valore. Le colonne `file.*`,
+`container.*` e le formule sono di sola lettura: la loro cella è testo. In fondo alle righe
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
 
 Ogni valore sta su una riga sola e le colonne prendono la misura del loro

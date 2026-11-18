@@ -237,6 +237,9 @@ export function mountBaseSurface(
   let settleTimer = 0;
   // Gli annunci di «Annulla» che aspettano il loro evento (`UNDO_EVENT_GRACE_MS`).
   const undoGraces = new Map<number, () => void>();
+  // Le scritture di una cella che aspettano che il fuoco sia arrivato (`change`
+  // in `editable`): `destroy` le disdice.
+  const pendingWrites = new Set<number>();
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
@@ -1045,7 +1048,8 @@ export function mountBaseSurface(
       // non cade sulla cella verso cui il fuoco sta andando (IMP-124).
       control.addEventListener("change", () => {
         const next = control.value === "" ? null : JSON.stringify(control.value);
-        window.setTimeout(() => void editCell(row, column, next), 0);
+        const timer = window.setTimeout(() => { pendingWrites.delete(timer); void editCell(row, column, next); }, 0);
+        pendingWrites.add(timer);
       });
       // Un numero si legge coi separatori della lingua; col fuoco il campo
       // torna al valore com'è, quello che si scrive.
@@ -2109,6 +2113,8 @@ export function mountBaseSurface(
       window.clearTimeout(settleTimer);
       for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
       undoGraces.clear();
+      for (const timer of pendingWrites) window.clearTimeout(timer);
+      pendingWrites.clear();
       toolbar.destroy();
       for (const stop of stopEvents) stop();
       for (const [url, timer] of downloads) { window.clearTimeout(timer); URL.revokeObjectURL(url); }
