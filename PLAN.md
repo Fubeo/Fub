@@ -793,7 +793,7 @@ coreografia nuova; i test di `editors/text/` verdi; `npm run typecheck` e
 `check-codemirror-boundary` verdi.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, 9f1a172e7: g4-testo-fermo, g4-cresce, g4-luce-scura e tutto bench:grid verdi; bench:motion griglia-cella-aperta verde, menu-edge e menu-punto rossi già alla base. Differenze: g4-cresce su A5 di grid-large con testo aggiunto; openSpan in engine-geometry.ts; cella allineata a destra cresce a sinistra; in fondo al riquadro il testo scorre dentro; conformità col prototipo della griglia rimandata a T8. Da guardare: la barra della formula non segue la bozza mentre si scrive nella cella, già alla base)
 
 ## T5 · Ciò che si scrive o si tira si vede subito
 
@@ -854,7 +854,7 @@ e l'avviso; d43 verde; `npm run bench:motion` verde; `engine.test.ts` prova
 l'anteprima, il ritorno e la risposta vecchia che non scrive sopra.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, 3090a016e: bench:grid 5/5 G5, bench:motion griglia-bordo-* verdi; classe .pending in structure.css; scena grid-large-misure; apply_failed per il rifiuto. Resta: menu-punto rosso già alla base, toast del finto su throttle+fault nelle altre scene)
 
 ## T6 · Riempire, copiare, tagliare, incollare
 

@@ -2826,6 +2826,15 @@ export const GESTURE_SCENE = onPage("shell", [
     query: "workbook=large",
     prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
   },
+  // **Le misure tirate** (griglia T5): la stessa cartella, col finto che dice
+  // sì a `home.columnWidth` e `home.rowHeight` come l'host vero
+  // (`?misure=si`). I controlli G5 ci tirano i bordi.
+  {
+    id: "grid-large-misure",
+    title: "Grid v2: la cartella grande, che accetta le misure tirate",
+    query: "workbook=large&misure=si",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
 ]);
 
 function onPage(page, scenes) {

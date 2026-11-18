@@ -28,6 +28,7 @@ import {
 import { adapter, type Adapter, type Paper } from "../../theme/adapt";
 import type { Theme } from "../../theme/theme";
 import type { PdfEngineLoader } from "../media/pdf-view";
+import type { Spring } from "../../moto/spring";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
 import { createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
@@ -65,7 +66,16 @@ import {
   type GridRange,
 } from "./merges";
 import { attachCommentCards, commentDescription } from "./comment-card";
-import { createMarksMotion, type MarksMotion } from "./grid-motion";
+import {
+  createMarksMotion,
+  fadeInValue,
+  fadeOutResizeLabel,
+  hideEditorFrame,
+  showEditorFrame,
+  slideLines,
+  SLIDE,
+  type MarksMotion,
+} from "./grid-motion";
 import {
   cornerSeen,
   edgeParts,
@@ -95,6 +105,7 @@ import {
   validateBytesWindow,
   workbookView,
   WORKBOOK_SCALE,
+  writtenValue,
   type WorkbookCell,
   type WorkbookView,
 } from "./workbook";
@@ -110,8 +121,12 @@ import {
   marginWindow,
   mergeCovers,
   MOVE_SLOP,
+  openSpan,
   pixelsToChars,
+  previewSizes,
+  RESIZE_LABEL_GAP,
   RESIZE_SLOP,
+  resizeLabelAt,
   samePosition,
   sameRange,
   tableRange,
@@ -120,9 +135,11 @@ import {
   type CellDrag,
   type ObjectGesture,
   type ObjectRect,
+  type OpenSpan,
   type Pointing,
   type ResizeDrag,
   type ResizeEdge,
+  type SizePreview,
 } from "./engine-geometry";
 import {
   applySourceEdit,
@@ -137,7 +154,7 @@ import {
   type GridRun,
 } from "./engine-host";
 
-export { fillTarget, gestureRect, pixelsToChars } from "./engine-geometry";
+export { fillTarget, gestureRect, openSpan, pixelsToChars } from "./engine-geometry";
 export type { GridChange, GridCommandEffect, GridEngineOptions, GridHost, GridRun } from "./engine-host";
 
 /// Oltre queste celle un intervallo non viaggia nel contesto: rifarne il
@@ -333,6 +350,37 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
   return !composing && event.key.length === 1 ? "seed" : null;
 }
 
+/// Com'è vestita la cella aperta (`#dressEditor`): `key` dice da che cella e
+/// con che stile, `font` è il carattere per misurare il testo, `padLeft` e
+/// `padRight` i margini del testo, gli stessi della cella.
+interface EditorDress {
+  readonly key: string;
+  readonly font: string;
+  readonly size: number;
+  readonly padLeft: number;
+  readonly padRight: number;
+}
+/// Quanto il testo della cella aperta ha di margine oltre la sua misura: il
+/// cursore alla fine, e gli arrotondamenti della misura sulla tela.
+const EDITOR_SLACK = 4;
+/// Le proprietà in linea della cella (`paint.ts`) che la cella aperta prende:
+/// la carta e l'inchiostro del file, e la loro versione adattata.
+const EDITOR_PAPER = ["--file-fill", "--file-color", "--file-fill-a", "--file-color-a"] as const;
+
+/// La tela su cui la cella aperta misura il suo testo, fatta una volta;
+/// `null` dove non c'è (un DOM di prova).
+let measureCanvas: CanvasRenderingContext2D | null | undefined;
+function measureContext(): CanvasRenderingContext2D | null {
+  if (measureCanvas === undefined) {
+    try {
+      measureCanvas = document.createElement("canvas").getContext("2d");
+    } catch {
+      measureCanvas = null;
+    }
+  }
+  return measureCanvas;
+}
+
 /// La zona del piano di ciò che sta su una colonna e una riga, bloccate o no.
 function zoneOf(frozenColumn: boolean, frozenRow: boolean): Zone {
   return frozenColumn && frozenRow ? "corner" : frozenRow ? "top" : frozenColumn ? "left" : "body";
@@ -390,6 +438,14 @@ interface DrawnRow {
   readonly cells: Map<string, DrawnCell>;
 }
 
+/// Una cella scritta che aspetta il provider (griglia T5): dove sta, e
+/// l'anteprima messa nella sua finestra.
+interface WrittenCell {
+  readonly sheet: string;
+  readonly position: GridPosition;
+  readonly shown: GridBytesCell;
+}
+
 /// Se `element` è una riga di celle, nella testa o nel corpo (non la riga
 /// delle intestazioni di colonna).
 function isDataRow(element: Element): element is HTMLElement {
@@ -442,7 +498,20 @@ export class GridEngine {
   #refills = Infinity;
   #rowsBehind = false;
   readonly #corner: HTMLElement;
+  /// La cella aperta (griglia T4): sta nel livello «lift» della zona della
+  /// sua cella, non dentro la cella, così ne esce e cresce. Dentro, la
+  /// cornice (un pezzo a parte, attorno) e il campo di CodeMirror.
   readonly #cellEditorHost: HTMLElement;
+  readonly #cellEditorFrame: HTMLElement;
+  readonly #cellEditorField: HTMLElement;
+  /// Com'è vestita la cella aperta: la cella da cui ha preso il carattere, la
+  /// carta e i margini, il carattere che misura il testo e i margini letti.
+  #editorDress: EditorDress | null = null;
+  /// La misura del testo della cella aperta, rifatta a ogni cambio della
+  /// bozza: la riga più larga (margini compresi) e quante righe.
+  #editorNeed: { readonly width: number; readonly lines: number } | null = null;
+  /// L'altezza del testo andato a capo, letta per la larghezza `width`.
+  #editorHeight: { readonly width: number; readonly height: number } | null = null;
   readonly #notice: HTMLElement;
   readonly #ribbonHost: HTMLElement;
   readonly #sheetBar: HTMLElement;
@@ -604,6 +673,23 @@ export class GridEngine {
   /// dall'host. Anche il cambio di foglio salta (`#marksSheet`).
   #marksJump = true;
   #marksSheet: string | null = null;
+  /// La molla del prossimo disegno dei segni, se non è `GLIDE`: `SLIDE`
+  /// quando una misura tirata sposta le colonne o le righe (griglia T5).
+  #marksSpring: Spring | null = null;
+  /// Le celle scritte che aspettano il provider (griglia T5), per foglio,
+  /// riga e colonna: l'anteprima che `#showWritten` ha messo nella finestra.
+  #written = new Map<string, WrittenCell>();
+  /// Le anteprime di una formula scritta: tenui finché il provider non le
+  /// rilegge (la sua cella è un oggetto nuovo).
+  #pendingCells = new WeakSet<GridBytesCell>();
+  /// Le misure tirate che aspettano il provider (griglia T5), dalla più
+  /// vecchia: valgono subito nelle misure della griglia, e la più nuova vince.
+  #sizePreviews: SizePreview[] = [];
+  #sizeTickets = 0;
+  /// La misura dell'etichetta di un bordo tirato all'ultimo disegno, nel
+  /// verso del bordo, per metterla dentro il riquadro senza misurarla prima
+  /// che ci sia.
+  #resizeLabelSize = 0;
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
@@ -682,6 +768,9 @@ export class GridEngine {
     this.#cellEditorHost.className = "grid-cell-editor";
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
+    this.#cellEditorFrame = part("grid-cell-editor-frame");
+    this.#cellEditorField = part("grid-cell-editor-text", false);
+    this.#cellEditorHost.append(this.#cellEditorFrame, this.#cellEditorField);
     this.#plane.append(this.#sheetPaper, this.#head, this.#body, body, this.#paperLeft, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
     this.#viewport.append(this.#plane);
     this.#objectsSummary = document.createElement("p");
@@ -728,7 +817,7 @@ export class GridEngine {
         point: (move, extend) => this.#pointByKey(move, extend),
       },
     });
-    this.#cellEditor = createTextEngine(this.#cellEditorHost, {
+    this.#cellEditor = createTextEngine(this.#cellEditorField, {
       onChange: (change) => this.#draftFromEditor("cell", change.text),
       onSelectionChange: () => {},
       theme: options.theme,
@@ -1955,25 +2044,29 @@ export class GridEngine {
     return lock ? t("grid.workbook.locked", { reason: t(LOCK_KEYS[lock] ?? "grid.workbook.lock.other") }) : null;
   }
 
-  /// La cella come la griglia la mostra finché il provider non la rilegge.
+  /// La cella come la griglia la mostra finché il provider non la rilegge
+  /// (griglia T5): un numero semplice subito a destra, come un numero; una
+  /// formula com'è scritta, tenue (`pending`), finché il foglio non dà il
+  /// valore. È un'anteprima: la cella che il provider rilegge prende il suo
+  /// posto e vince sempre (`#settleWritten`).
   #showWritten(position: GridPosition, input: string): void {
     const window = this.#windowAt(position);
     const key = coordinateAt(this.#sheet(), position);
     if (!window || !key) return;
     const same = (cell: GridBytesCell) => cell.key.row === key.row && cell.key.column === key.column;
     const previous = window.cells.find(same);
-    const display = input.startsWith("'") ? input.slice(1) : localInput(input, this.#decimal);
+    const { value, display } = writtenValue(input, this.#decimal);
     // Una cella nuova prende lo stile di serie, che la finestra può non avere.
     let style = previous?.style;
     if (style === undefined) {
       style = window.styles.length;
       window.styles = [...window.styles, PLAIN_STYLE];
     }
-    window.cells = [...window.cells.filter((cell) => !same(cell)), {
+    const shown: GridBytesCell = {
       key: { sheet: key.sheet, row: key.row, column: key.column },
       input,
       style,
-      value: input ? { kind: "text", value: display } : { kind: "blank" },
+      value,
       display,
       lock: null,
       stale: false,
@@ -1982,7 +2075,33 @@ export class GridEngine {
       icon: null,
       comment: null,
       link: null,
-    }];
+    };
+    window.cells = [...window.cells.filter((cell) => !same(cell)), shown];
+    if (input.startsWith("=")) this.#pendingCells.add(shown);
+    this.#written.set(`${key.sheet}\u0000${position.row}\u0000${position.column}`, { sheet: key.sheet, position, shown });
+  }
+
+  /// Le celle scritte che il provider ha riletto: la sua cella ha preso il
+  /// posto dell'anteprima. Se mostra altro (il valore di una formula, un
+  /// numero nel formato del file, il valore di prima dopo un rifiuto), il
+  /// testo nuovo compare con una dissolvenza. Una cella non ancora ridisegnata
+  /// aspetta il disegno dopo; quelle di un altro foglio si dimenticano.
+  #settleWritten(): void {
+    if (!this.#written.size) return;
+    const sheet = this.#sheet().id;
+    for (const [key, written] of this.#written) {
+      if (written.sheet !== sheet) {
+        this.#written.delete(key);
+        continue;
+      }
+      const bytes = this.#workbookCell(written.position)?.bytes;
+      if (bytes === written.shown) continue;
+      const display = bytes?.display ?? "";
+      const text = this.#findCell(written.position)?.querySelector<HTMLElement>(".grid-cell-text") ?? null;
+      if (text && text.textContent !== display) continue;
+      this.#written.delete(key);
+      if (text && display && display !== written.shown.display) fadeInValue(text, this.#life);
+    }
   }
 
   /// Scrive le celle nel giornale. La sessione del documento lo riceve
@@ -2284,8 +2403,10 @@ export class GridEngine {
     const sheet = this.#sheet();
     const view = this.#sheetView();
     const zoom = view.zoom / 100;
-    this.#rows = axisLayout(sheet.rows, DEFAULT_ROW_HEIGHT, "height", zoom);
-    this.#columns = axisLayout(sheet.columns, DEFAULT_COLUMN_WIDTH, "width", zoom);
+    // Una misura tirata vale subito, finché il provider non risponde.
+    const previews = this.#sizePreviews.filter((preview) => preview.sheet === sheet.id);
+    this.#rows = axisLayout(previewSizes(sheet.rows, "height", previews.filter((preview) => preview.axis === "row")), DEFAULT_ROW_HEIGHT, "height", zoom);
+    this.#columns = axisLayout(previewSizes(sheet.columns, "width", previews.filter((preview) => preview.axis === "column")), DEFAULT_COLUMN_WIDTH, "width", zoom);
     const frozenRows = Math.min(view.frozen_rows, this.#rows.sizes.length);
     const frozenColumns = Math.min(view.frozen_columns, this.#columns.sizes.length);
     this.#frame = {
@@ -2396,6 +2517,7 @@ export class GridEngine {
     else if (this.#rowsBehind) this.#renderRows(range, true, this.#scrollView, GRID_FRAME_REFILLS, GRID_FRAME_NEW_ROWS);
     if (loaded) this.#scheduleRender();
     else this.#fitPending();
+    this.#settleWritten();
     // I segni, ognuno nel livello della zona dove cade.
     const drawing: Drawing = new Map();
     this.#objectElements(drawing);
@@ -2409,23 +2531,20 @@ export class GridEngine {
     this.#viewport.classList.toggle("moving", this.#drag?.kind === "move");
 
     // Ciò che non cambia resta: la cella sotto il puntatore riceve il clic e
-    // il doppio clic, e l'editor aperto non perde il fuoco.
-    const focused = this.#cellEditorHost.contains(document.activeElement);
-    // I pezzi dei segni che restano (`#marks`) non passano di qui.
+    // il doppio clic. I pezzi dei segni che restano (`#marks`) non passano di
+    // qui, né la cella aperta, che sta in fondo al suo livello «lift» e non
+    // perde il fuoco: ciò che si disegna ci va prima.
+    const host = this.#cellEditorHost;
     for (const container of new Set([...Object.values(this.#layers), ...Object.values(this.#lifts), this.#fixed])) {
-      const drawn = [...container.children].filter((element) => !this.#marks.owns(element)) as HTMLElement[];
-      this.#reconcile(container, drawn, drawing.get(container) ?? []);
+      const drawn = [...container.children].filter((element) => !this.#marks.owns(element) && element !== host) as HTMLElement[];
+      this.#reconcile(container, drawn, drawing.get(container) ?? [], host.parentElement === container ? host : null);
     }
+    this.#fitResizeLabel();
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
     if (editing) {
       const cell = this.#findCell(editing.position);
       if (cell && this.#isVisiblePosition(editing.position)) {
-        if (this.#cellEditorHost.parentElement !== cell) {
-          cell.append(this.#cellEditorHost);
-          if (focused) this.#cellEditor.focus();
-        }
-        this.#cellEditorHost.hidden = false;
-        this.#cellEditorHost.removeAttribute("aria-hidden");
+        this.#mountCellEditor(editing.position, cell);
         this.#positionEditor(editing.position);
       } else {
         this.#editing = null;
@@ -2728,12 +2847,11 @@ export class GridEngine {
 
   /// Rifà sul posto la cella `target` com'è `fresh`: gli attributi e il
   /// contenuto, nello stesso elemento, così il clic e il doppio clic che ci
-  /// stanno sopra arrivano. La cella aperta, se ci sta dentro, resta dov'è e
-  /// non perde il fuoco.
+  /// stanno sopra arrivano. La cella aperta non ci sta dentro: sta nel
+  /// livello «lift» della sua zona.
   #refillCell(target: HTMLElement, fresh: HTMLElement): void {
     syncAttributes(target, fresh);
-    const editor = this.#cellEditorHost.parentElement === target ? this.#cellEditorHost : null;
-    morphChildren(target, fresh, editor);
+    morphChildren(target, fresh, null);
   }
 
   /// Ciò che la cella in `position`, disegnata nella riga `hostRow`, mostra:
@@ -2942,6 +3060,8 @@ export class GridEngine {
     if (this.#marksSheet !== sheet) this.#grips = false;
     this.#marksJump = false;
     this.#marksSheet = sheet;
+    const spring = this.#marksSpring;
+    this.#marksSpring = null;
     const frame = this.#frame;
     const cut = this.#cutMark;
     const look: SelectionLook = {
@@ -2967,6 +3087,7 @@ export class GridEngine {
       still,
       fill: this.#drag?.kind === "fill",
       glide,
+      ...(spring ? { spring } : {}),
     });
   }
 
@@ -3039,24 +3160,45 @@ export class GridEngine {
     label.setAttribute("aria-hidden", "true");
     const pixels = Math.round(resize.now / (WORKBOOK_SCALE * frame.zoom));
     const number = (value: number) => new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 2 }).format(value);
-    // Nel riquadro: una colonna o una riga bloccata non è scorsa.
+    // Nel riquadro: una colonna o una riga bloccata non è scorsa. La misura
+    // sta dentro il riquadro, dalla parte del bordo dove c'è posto (griglia
+    // T5): la sua misura è quella dell'ultimo disegno, e `#fitResizeLabel`
+    // la corregge appena l'etichetta c'è.
+    label.style.position = "absolute";
     if (resize.axis === "column") {
       const x = this.#columnLeft(resize.index) + resize.now - this.#zoneScroll(resize.index < frame.frozenColumns, true).left;
       this.#place(guide, x - 1, 0, 2, this.#viewport.clientHeight);
       label.textContent = t("grid.resize.width", { chars: number(pixelsToChars(pixels)), px: String(pixels) });
-      label.style.position = "absolute";
-      label.style.left = `${x + 6}px`;
-      label.style.top = `${frame.columnHeader + 4}px`;
+      label.dataset.edge = String(x);
+      label.style.left = `${resizeLabelAt(x, this.#resizeLabelSize, this.#viewport.clientWidth)}px`;
+      label.style.top = `${frame.columnHeader + RESIZE_LABEL_GAP}px`;
     } else {
       const y = frame.columnHeader + this.#rows.offsets[resize.index] + resize.now - this.#zoneScroll(true, resize.index < frame.frozenRows).top;
       this.#place(guide, 0, y - 1, this.#viewport.clientWidth, 2);
       label.textContent = t("grid.resize.height", { points: number(pixels * 0.75), px: String(pixels) });
-      label.style.position = "absolute";
-      label.style.left = `${frame.rowHeader + 4}px`;
-      label.style.top = `${y + 6}px`;
+      label.dataset.edge = String(y);
+      label.style.left = `${frame.rowHeader + RESIZE_LABEL_GAP}px`;
+      label.style.top = `${resizeLabelAt(y, this.#resizeLabelSize, this.#viewport.clientHeight)}px`;
     }
     this.#draw(drawing, this.#fixed, guide);
     this.#draw(drawing, this.#fixed, label);
+  }
+
+  /// L'etichetta della misura disegnata, con la sua misura vera nel verso del
+  /// bordo: se non è quella con cui `#resizeMarks` l'ha messa, la rimette
+  /// dentro il riquadro.
+  #fitResizeLabel(): void {
+    const resize = this.#resize;
+    if (!resize) return;
+    const label = this.#fixed.querySelector<HTMLElement>(".grid-resize-label");
+    if (!label?.dataset.edge) return;
+    const column = resize.axis === "column";
+    const size = column ? label.offsetWidth : label.offsetHeight;
+    if (size === this.#resizeLabelSize) return;
+    this.#resizeLabelSize = size;
+    const at = `${resizeLabelAt(Number(label.dataset.edge), size, column ? this.#viewport.clientWidth : this.#viewport.clientHeight)}px`;
+    if (column) label.style.left = at;
+    else label.style.top = at;
   }
 
   /// Il bordo fra due intestazioni sotto il punto, se si può misurare: un
@@ -3096,35 +3238,133 @@ export class GridEngine {
     return null;
   }
 
-  /// Le linee che una misura tocca: tutte quelle scelte intere, se `index` è
-  /// fra loro, come in Excel; altrimenti `index` sola. In A1 per GridCraft.
-  #resizeLines(edge: ResizeEdge): string {
+  /// Le linee che una misura tocca, la prima e l'ultima: tutte quelle
+  /// scelte intere, se `index` è fra loro, come in Excel; altrimenti `index`
+  /// sola.
+  #resizeSpan(edge: ResizeEdge): readonly [number, number] {
     const range = this.#selectedRange();
     const sheet = this.#sheet();
     if (edge.axis === "column") {
       const whole = range.rowStart === 0 && range.rowEnd >= sheet.rows.length - 1;
-      const [a, b] = whole && edge.index >= range.columnStart && edge.index <= range.columnEnd
+      return whole && edge.index >= range.columnStart && edge.index <= range.columnEnd
         ? [range.columnStart, range.columnEnd]
         : [edge.index, edge.index];
-      return `${columnLabel(a)}:${columnLabel(b)}`;
     }
     const whole = range.columnStart === 0 && range.columnEnd >= sheet.columns.length - 1;
-    const [a, b] = whole && edge.index >= range.rowStart && edge.index <= range.rowEnd
+    return whole && edge.index >= range.rowStart && edge.index <= range.rowEnd
       ? [range.rowStart, range.rowEnd]
       : [edge.index, edge.index];
-    return `${a + 1}:${b + 1}`;
   }
 
+  /// Le linee di `#resizeSpan`, in A1 per GridCraft.
+  #resizeLines(edge: ResizeEdge): string {
+    const [a, b] = this.#resizeSpan(edge);
+    return edge.axis === "column" ? `${columnLabel(a)}:${columnLabel(b)}` : `${a + 1}:${b + 1}`;
+  }
+
+  /// Il rilascio di un bordo tirato (griglia T5). La misura nuova vale
+  /// subito, come anteprima (`#sizePreviews`), e le linee dopo scivolano al
+  /// posto nuovo; il comando va al provider come prima. Quando il provider ha
+  /// risposto, e la griglia ha riletto le finestre, l'anteprima esce: se ha
+  /// detto sì le misure lette sono già quelle, se ha detto no tornano com'erano
+  /// scivolando, e l'avviso dice perché (`#giveNow`).
   #endResize(commit: boolean): void {
     const resize = this.#resize;
     if (!resize) return;
     this.#resize = null;
-    this.#render();
-    if (!commit || Math.round(resize.now) === Math.round(resize.size)) return;
+    const label = this.#fixed.querySelector<HTMLElement>(".grid-resize-label");
+    if (label) fadeOutResizeLabel(label);
+    if (!commit || Math.round(resize.now) === Math.round(resize.size)) {
+      this.#render();
+      return;
+    }
     const pixels = Math.round(resize.now / (WORKBOOK_SCALE * this.#frame.zoom));
     const lines = this.#resizeLines(resize);
-    if (resize.axis === "column") this.command("home.columnWidth", JSON.stringify({ cols: lines, width: pixels }));
-    else this.command("home.rowHeight", JSON.stringify({ rows: lines, height: pixels }));
+    const id = resize.axis === "column" ? "home.columnWidth" : "home.rowHeight";
+    const params = JSON.stringify(resize.axis === "column" ? { cols: lines, width: pixels } : { rows: lines, height: pixels });
+    const state = this.#commands.find((command) => command.id === id);
+    if (!this.#bytes || !this.#allowed(id) || !state?.enabled) {
+      // Niente anteprima: `command` dice perché il comando non si dà.
+      this.#render();
+      this.command(id, params);
+      return;
+    }
+    const [first, last] = this.#resizeSpan(resize);
+    const preview: SizePreview = {
+      ticket: ++this.#sizeTickets,
+      sheet: this.#sheet().id,
+      axis: resize.axis,
+      first,
+      last,
+      size: pixels * WORKBOOK_SCALE,
+    };
+    this.#slideSizes(resize.axis, first, () => this.#sizePreviews.push(preview));
+    this.#give(id, params, false);
+    // La coda del protocollo è in fila: questo passo parte quando il comando
+    // ha avuto la sua risposta e le finestre sono rilette.
+    this.#enqueueProtocol(async () => this.#dropSizePreview(preview));
+  }
+
+  /// L'anteprima `preview` ha avuto la risposta: esce. Un'anteprima più
+  /// nuova sulle stesse linee resta, e vince ancora.
+  #dropSizePreview(preview: SizePreview): void {
+    const index = this.#sizePreviews.indexOf(preview);
+    if (index < 0 || this.#destroyed) return;
+    const drop = () => {
+      this.#sizePreviews.splice(this.#sizePreviews.indexOf(preview), 1);
+    };
+    if (!this.#view || preview.sheet !== this.#sheet().id) {
+      drop();
+      return;
+    }
+    this.#slideSizes(preview.axis, preview.first, drop);
+  }
+
+  /// Cambia le misure con `mutate` e ridisegna: ciò che sta dopo la linea
+  /// `index` scivola dal posto di prima (`slideLines`), e i segni con la
+  /// stessa molla.
+  #slideSizes(axis: "column" | "row", index: number, mutate: () => void): void {
+    slideLines(this.#linesAfter(axis, index), () => {
+      mutate();
+      this.#marksSpring = SLIDE;
+      this.#rebuildLayout();
+      this.#render();
+    }, this.#life);
+  }
+
+  /// I pezzi disegnati che una misura della linea `index` sposta, nelle righe
+  /// che si vedono: per una colonna le celle dopo (coi loro bordi), le
+  /// intestazioni e i fili della carta; per una riga le righe dopo.
+  #linesAfter(axis: "column" | "row", index: number): HTMLElement[] {
+    const frame = this.#frame;
+    const top = this.#viewport.scrollTop + frame.frozenHeight;
+    const bottom = this.#viewport.scrollTop + this.#viewport.clientHeight - frame.columnHeader;
+    const seen = (row: number) => row < frame.frozenRows || (this.#rows.offsets[row + 1] > top && this.#rows.offsets[row] < bottom);
+    const out: HTMLElement[] = [];
+    for (const parent of [this.#head, this.#body]) {
+      for (const element of parent.children) {
+        if (!isDataRow(element)) continue;
+        const row = Number(element.dataset.row);
+        if (!seen(row)) continue;
+        if (axis === "row") {
+          if (row > index) out.push(element);
+          continue;
+        }
+        for (const [slot, drawn] of this.#drawnRows.get(element)?.cells ?? []) {
+          const column = slot.startsWith("merge:") ? Number(slot.split(":")[2]) : Number(slot);
+          if (column <= index) continue;
+          out.push(drawn.cell);
+          if (drawn.border) out.push(drawn.border);
+        }
+      }
+    }
+    if (axis === "column") {
+      for (const header of this.#head.querySelectorAll<HTMLElement>(".grid-column-header")) {
+        if (Number(header.getAttribute("aria-colindex")) - 2 > index) out.push(header);
+      }
+      for (const [column, rule] of this.#paperRules) if (column >= index) out.push(rule.element);
+    }
+    return out;
   }
 
   /// Mentre si tira il bordo della selezione: il contorno di dove andrà.
@@ -3661,6 +3901,7 @@ export class GridEngine {
       element.title = bytes.link.tooltip ?? bytes.link.target;
     }
     if (bytes?.stale) element.classList.add("stale");
+    if (bytes && this.#pendingCells.has(bytes)) element.classList.add("pending");
     if (bytes?.conflict) {
       element.classList.add("conflict");
       element.setAttribute("aria-invalid", "true");
@@ -3806,7 +4047,14 @@ export class GridEngine {
   }
 
   #detachCellEditor(): void {
-    if (this.#cellEditorHost.parentElement !== this.#plane) this.#plane.append(this.#cellEditorHost);
+    const host = this.#cellEditorHost;
+    if (host.parentElement !== this.#plane) this.#plane.append(host);
+    host.classList.remove("wraps");
+    delete host.dataset.row;
+    delete host.dataset.column;
+    this.#editorDress = null;
+    this.#editorNeed = null;
+    this.#editorHeight = null;
   }
 
   /// La cella che l'elemento disegna, dai suoi `data-row`/`data-column`.
@@ -4225,14 +4473,29 @@ export class GridEngine {
         this.#editing = null;
         return;
       }
-      cell.append(this.#cellEditorHost);
-      this.#cellEditorHost.hidden = false;
-      this.#cellEditorHost.removeAttribute("aria-hidden");
-      this.#positionEditor(position);
+      // La cella aperta è la cella: il suo carattere, la sua carta, il testo
+      // dove stava. Il resto è subito al suo posto; la cornice compare.
+      this.#editorDress = null;
+      this.#mountCellEditor(position, cell);
       this.#cellEditor.setDoc(this.#editing.draft);
+      this.#positionEditor(position, true);
+      showEditorFrame(this.#cellEditorFrame, this.#life);
+      // La maniglia del riempimento se ne va (`#fillServed`): resterebbe
+      // sopra il testo della cella aperta, che ora si allarga oltre l'angolo.
+      this.#updateMarks(this.#selectedRange());
       // Il cursore va in fondo, come nei fogli di calcolo: la battuta che ha
-      // aperto la cella è già scritta, e le altre la seguono.
-      this.#cellEditor.revealByteOffset(new TextEncoder().encode(this.#editing.draft).length);
+      // aperto la cella è già scritta, e le altre la seguono. Non con
+      // `revealByteOffset`: porterebbe la riga del cursore in cima scorrendo
+      // anche la griglia, che invece resta dov'è (la cella è già in vista, e
+      // la cella aperta sta sopra di lei). Scorre solo il testo nel campo.
+      const editor = this.#cellEditor;
+      if (editor.placeCursor(editor.getDoc().length)) {
+        editor.focus();
+        const scroller = this.#cellEditorField.querySelector<HTMLElement>(".cm-scroller");
+        if (scroller && scroller.scrollHeight > scroller.clientHeight) scroller.scrollTop = scroller.scrollHeight;
+      } else {
+        editor.revealByteOffset(new TextEncoder().encode(this.#editing.draft).length);
+      }
     } else {
       this.#formulaEditor.setDoc(this.#editing.draft);
     }
@@ -4347,6 +4610,9 @@ export class GridEngine {
     const formula = draft.startsWith("=") || editing.draft.startsWith("=");
     editing.draft = draft;
     this.#pendingChanged();
+    // La cella aperta si misura a ogni cambio della bozza, senza chiedere
+    // niente all'host.
+    if (owner === "cell" && !this.#cellEditorHost.hidden) this.#positionEditor(editing.position, true);
     if (formula) this.#scheduleRender();
   }
 
@@ -4473,6 +4739,9 @@ export class GridEngine {
     this.#editing = null;
     this.#pointing = null;
     this.#draftNotice.hidden = true;
+    // La cornice esce da dov'è (anche a metà della sua entrata); il campo
+    // sparisce subito, e la cella sotto ha già il valore.
+    if (editing.owner === "cell" && !this.#cellEditorHost.hidden) hideEditorFrame(this.#cellEditorFrame);
     this.#detachCellEditor();
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
@@ -4533,18 +4802,171 @@ export class GridEngine {
     this.#finishEditing(false, "input");
   }
 
-  #positionEditor(position: GridPosition): void {
-    const inCell = this.#cellEditorHost.parentElement?.classList.contains("grid-cell") ?? false;
+  /// La zona del piano della cella aperta: quella della sua cella.
+  #editorZone(position: GridPosition): Zone {
+    return zoneOf(position.column < this.#frame.frozenColumns, position.row < this.#frame.frozenRows);
+  }
+
+  /// Mette la cella aperta in fondo al livello «lift» della zona della sua
+  /// cella, la mostra e la veste come la cella. Spostandola, il fuoco resta
+  /// nel campo.
+  #mountCellEditor(position: GridPosition, cell: HTMLElement): void {
+    const host = this.#cellEditorHost;
+    const lift = this.#lifts[this.#editorZone(position)];
+    if (host.parentElement !== lift) {
+      const focused = host.contains(document.activeElement);
+      lift.append(host);
+      if (focused) this.#cellEditor.focus();
+    }
+    host.dataset.row = String(position.row);
+    host.dataset.column = String(position.column);
+    host.hidden = false;
+    host.removeAttribute("aria-hidden");
+    this.#dressEditor(position, cell);
+  }
+
+  /// Veste la cella aperta come la cella `cell`: la carta e l'inchiostro del
+  /// file, il carattere (`--field-font`, che il tema del campo dà a
+  /// `.cm-content`), il peso, la misura, l'allineamento e i margini, così il
+  /// testo non si sposta di un pixel. In «Inserisci» il testo parte da
+  /// sinistra; in «Modifica» tiene l'allineamento della cella. Si rifà solo
+  /// quando la cella o lo stile cambiano: legge le misure.
+  #dressEditor(position: GridPosition, cell: HTMLElement): void {
+    const workbookCell = this.#workbookCell(position);
+    const horizontal = this.#editing?.mode === "insert" || !workbookCell?.bytes
+      ? "start"
+      : horizontalOf(workbookCell.style, workbookCell.bytes.value);
+    const align = horizontal === "center" || horizontal === "end" ? horizontal : "start";
+    const key = `${position.row},${position.column}|${align}|${this.#frame.zoom}|${cell.style.cssText}`;
+    if (this.#editorDress?.key === key) return;
+    const style = this.#cellEditorHost.style;
+    for (const name of EDITOR_PAPER) {
+      const value = cell.style.getPropertyValue(name);
+      if (value) style.setProperty(name, value);
+      else style.removeProperty(name);
+    }
+    style.fontWeight = cell.style.fontWeight;
+    style.fontStyle = cell.style.fontStyle;
+    style.fontSize = cell.style.fontSize;
+    style.textAlign = align;
+    style.setProperty("--field-font", cell.style.fontFamily || this.#gridFont() || "inherit");
+    const computed = getComputedStyle(cell);
+    const padLeft = parseFloat(computed.paddingLeft) || 0;
+    const padRight = parseFloat(computed.paddingRight) || 0;
+    style.setProperty("--field-pad-top", `${Math.max(0, this.#textTop(cell, computed))}px`);
+    style.setProperty("--field-pad-left", `${padLeft}px`);
+    style.setProperty("--field-pad-right", `${padRight}px`);
+    const content = this.#cellEditorField.querySelector<HTMLElement>(".cm-content");
+    const font = content ? getComputedStyle(content) : computed;
+    this.#editorDress = {
+      key,
+      font: font.font || `${font.fontStyle} ${font.fontWeight} ${font.fontSize} ${font.fontFamily}`,
+      size: parseFloat(font.fontSize) || 13,
+      padLeft,
+      padRight,
+    };
+    this.#editorNeed = null;
+    this.#editorHeight = null;
+  }
+
+  /// Dove comincia il testo nella cella, dal suo bordo alto: la prima riga
+  /// del testo, o, per una cella vuota, dove la riga starebbe secondo
+  /// l'allineamento in verticale (`paint.ts`, `alignContent`).
+  #textTop(cell: HTMLElement, computed: CSSStyleDeclaration): number {
+    const text = cell.querySelector<HTMLElement>(".grid-cell-text");
+    if (!text) return parseFloat(computed.paddingTop) || 0;
+    const box = cell.getBoundingClientRect();
+    const at = text.getBoundingClientRect();
+    if (at.height > 0) return at.top - box.top;
+    const line = parseFloat(computed.lineHeight) || (parseFloat(computed.fontSize) || 13) * 1.3;
+    switch (computed.alignContent) {
+      case "start": return at.top - box.top;
+      case "center": return at.top - box.top - line / 2;
+      default: return at.bottom - box.top - line;
+    }
+  }
+
+  /// La misura del testo della bozza: la riga più larga col carattere della
+  /// cella, sulla tela, più i margini; e quante righe.
+  #measureEditorText(): { readonly width: number; readonly lines: number } {
+    const dress = this.#editorDress;
+    const lines = (this.#editing?.draft ?? "").split("\n");
+    let widest = 0;
+    const context = dress ? measureContext() : null;
+    if (context && dress) {
+      context.font = dress.font;
+      for (const line of lines) widest = Math.max(widest, context.measureText(line).width);
+    } else {
+      // Senza tela (un DOM di prova): una stima larga.
+      for (const line of lines) widest = Math.max(widest, line.length * (dress?.size ?? 13) * 0.6);
+    }
+    return { width: Math.ceil(widest) + (dress?.padLeft ?? 0) + (dress?.padRight ?? 0) + EDITOR_SLACK, lines: lines.length };
+  }
+
+  /// L'altezza del testo della cella aperta larga `width`: dalla cima del
+  /// campo al fondo dell'ultima riga. Si rilegge quando il testo cambia o la
+  /// larghezza è un'altra.
+  #editorTextHeight(width: number, measure: boolean): number {
+    const known = this.#editorHeight;
+    if (!measure && known?.width === width) return known.height;
+    const content = this.#cellEditorField.querySelector<HTMLElement>(".cm-content");
+    const last = content?.querySelector<HTMLElement>(".cm-line:last-child");
+    const height = content && last ? last.getBoundingClientRect().bottom - content.getBoundingClientRect().top : 0;
+    this.#editorHeight = { width, height };
+    return height;
+  }
+
+  /// Il posto e la misura della cella aperta (B2): parte dalla cella e cresce
+  /// a colonne intere verso dove il testo va (a destra, o a sinistra per una
+  /// cella allineata a destra) finché il testo ci sta, fino al bordo del
+  /// riquadro; dall'altra parte no, perché il testo resti dov'era. Se non ci
+  /// sta va a capo (`wraps`) e cresce in giù a righe intere fino a metà del
+  /// riquadro e non oltre il suo fondo, poi il testo scorre dentro. Sta nel
+  /// livello della sua zona, che scorre con le celle: una cella di una colonna
+  /// bloccata cresce dentro la sua zona e oltre. `measure` rimisura il testo.
+  #positionEditor(position: GridPosition, measure = false): void {
+    const host = this.#cellEditorHost;
+    const frame = this.#frame;
+    const rows = this.#rows;
     const merge = mergeAt(this.#merges(), position);
     const lastRow = merge ? merge.row + merge.rows - 1 : position.row;
     const lastColumn = merge ? merge.column + merge.columns - 1 : position.column;
-    this.#place(
-      this.#cellEditorHost,
-      inCell ? 0 : this.#columnLeft(position.column),
-      inCell ? 0 : this.#frame.columnHeader + this.#rows.offsets[position.row],
-      this.#columns.offsets[lastColumn + 1] - this.#columns.offsets[position.column],
-      this.#rows.offsets[lastRow + 1] - this.#rows.offsets[position.row],
+    if (measure || !this.#editorNeed) this.#editorNeed = this.#measureEditorText();
+    const need = this.#editorNeed;
+    const view = this.#readView();
+    const bands = this.#bands();
+    const frozenColumn = position.column < frame.frozenColumns;
+    const frozenRow = position.row < frame.frozenRows;
+    // I confini delle colonne e delle righe sullo schermo, dall'angolo del
+    // riquadro: quelli di una fascia ferma non scorrono.
+    const x = (index: number) => this.#columnLeft(index) - (frozenColumn && index <= frame.frozenColumns ? 0 : view.scrollLeft);
+    const y = (index: number) => frame.columnHeader + rows.offsets[index] - (frozenRow && index <= frame.frozenRows ? 0 : view.scrollTop);
+    const across = openSpan(
+      x,
+      this.#columns.sizes.length,
+      position.column,
+      lastColumn + 1,
+      need.width,
+      frozenColumn ? frame.rowHeader : bands.left,
+      view.width,
+      host.style.textAlign === "end" ? ["before"] : ["after"],
     );
+    const width = Math.max(0, x(across.end) - x(across.start) - 1);
+    const left = this.#columnLeft(position.column) - (x(position.column) - x(across.start));
+    const wraps = !across.fits;
+    host.classList.toggle("wraps", wraps);
+    let down: OpenSpan = { start: position.row, end: lastRow + 1, fits: true };
+    if (wraps || need.lines > 1) {
+      host.style.width = `${width}px`;
+      const height = this.#editorTextHeight(width, measure);
+      const cap = Math.max(rows.offsets[lastRow + 1] - rows.offsets[position.row] - 1, view.height / 2);
+      const low = frozenRow ? frame.columnHeader : bands.top;
+      down = openSpan(y, rows.sizes.length, position.row, lastRow + 1, height, low, Math.min(view.height, y(position.row) + cap + 1), ["after"]);
+    }
+    const height = Math.max(0, y(down.end) - y(down.start) - 1);
+    const top = frame.columnHeader + rows.offsets[position.row] - (y(position.row) - y(down.start));
+    const at = wholeRect(this.#editorZone(position), { x: left, y: top, w: width, h: height }, bands);
+    this.#place(host, at.x, at.y, at.w, at.h);
   }
 
   /// Riscrive le celle di `patches` della history: annullare e rifare.

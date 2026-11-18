@@ -9,8 +9,9 @@
 
 ## La griglia
 
-Il confine della pagina in una figura: i byte non lasciano il provider, e la
-shell parla soltanto col giornale e con le finestre.
+Il confine della pagina in una figura: i byte non lasciano il provider, la
+shell parla soltanto col giornale e con le finestre, e il salvataggio riparte
+dai byte del file, non dalla griglia (il giornale non è una copia).
 
 ```mermaid
 flowchart LR
@@ -22,9 +23,6 @@ flowchart LR
     PROVIDER --> SALVA["salvataggio: innesto o riscrittura misurata"]
     SALVA --> BYTE
 ```
-
-Il salvataggio riparte sempre dai byte del file, non dalla griglia: il
-giornale non è una copia della cartella.
 
 La famiglia `grid` ha un profilo, `workbook`, che apre una cartella di Excel
 con la versione 2 del protocollo: la sorgente a byte resta nell'host, e il
@@ -98,25 +96,32 @@ nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle fasce
 ferme), grande e ferma quanto il riquadro: fili delle righe sull'altezza di
 serie (`--grid-row`), un filo per colonna, celle opache, e la griglia vuota
 dove lo scorrimento precede il disegno. In G2 (quattro giri) la fascia
-uniforme più alta è 1 px (prima 424); gestore p90 6–9 ms, peggiore 17–20,
-fotogramma p90 11–13, peggiore 15–17 (prima 0,4 e 28–40, 16–20 e 23–26).
+uniforme più alta è 1 px; p90 (peggiore) del gestore 6–9 ms (17–20), del
+fotogramma 11–13 ms (15–17).
 
 ## Scrivere nelle celle
 
 Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»: Invio e
 Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab (anche
 `Unidentified` da GTK) confermano e vanno a destra o a sinistra, le frecce
-confermano e si spostano. Invio dopo una serie di Tab torna alla colonna da
-cui la serie è partita. F2 e il doppio clic aprono in «Modifica», dove le
-frecce muovono il cursore; F2 alterna i due modi, e la banda di stato dice il
-modo («Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio
-scrive la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella,
-o il fuoco che lascia l'editor, conferma; dalla cella alla barra della formula
-la bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
-attiva senza aprirla, dentro l'intervallo se è più di una cella. La regola
-pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
-del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
-ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+confermano e si spostano; Invio dopo una serie di Tab torna alla colonna di
+partenza. F2 e il doppio clic aprono in «Modifica» (le frecce muovono il
+cursore); F2 alterna i modi, che la banda di stato dice («Pronto»,
+«Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio scrive in tutta la
+selezione, Esc annulla; un clic altrove o il fuoco che esce conferma, e verso
+la barra della formula la bozza passa col fuoco. Sulla selezione Invio e Tab
+spostano la cella attiva senza aprirla, dentro l'intervallo. Dove andare sta
+in `apps/client/src/tabella/navigation.ts`, il riempimento in
+`tabella/selection.ts` (`fillRange`): regole di ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+Ciò che si conferma si vede prima della risposta (`writtenValue`): un numero
+semplice va a destra, una formula resta scritta e tenue (`.pending`) finché
+il valore compare in `DURATION.state`; vince la risposta, un no torna com'era.
+
+La cella aperta è la cella: il campo sta nel livello «lift» della sua zona,
+con carta, inchiostro, carattere (`--field-font`), allineamento e margini
+della cella; la cornice (2 px di `--grid-mark`) compare in `DURATION.state` e
+la maniglia se ne va. A ogni bozza cresce a colonne intere fino al bordo
+(`openSpan`), poi va a capo e scende fino a metà riquadro, poi scorre dentro.
 
 Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
 il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
@@ -126,18 +131,14 @@ punto dello schermo; Alt+PagSu e Alt+PagGiù fanno lo stesso di lato,
 Ctrl+Backspace riporta in vista la cella attiva, da cui partono le frecce
 senza Maiuscolo.
 
-Nelle formule si punta come nei fogli di calcolo. Dove la formula aspetta un
-operando (`operandSlot` in `profiles/formula.ts`: dopo `=`, un operatore,
-`(`, `,` o `;`), un clic su una cella scrive il suo riferimento, un
-trascinamento lo allarga a un intervallo, e un altro clic lo sostituisce
-finché il cursore resta alla sua fine. La cella aperta e la selezione non
-cambiano, e il fuoco resta nel campo. In «Inserisci» le frecce muovono il
-riferimento puntato, partendo dalla cella aperta, e con Maiuscolo lo
-allargano. F4 alterna i `$` del riferimento al cursore. Ogni riferimento ha
-uno di sei colori (`--doc-author-1…6`), lo stesso nel testo e nel contorno
-del suo intervallo sulla griglia; un riferimento a un altro foglio si
-contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
-ancora: il riferimento si scrive a mano.
+Nelle formule si punta. Dove la formula aspetta un operando (`operandSlot`
+in `profiles/formula.ts`: dopo `=`, un operatore, `(`, `,` o `;`) un clic
+scrive il riferimento della cella, un trascinamento lo allarga, un altro clic
+lo sostituisce finché il cursore resta alla sua fine; cella aperta, selezione
+e fuoco non cambiano. In «Inserisci» le frecce muovono il riferimento (con
+Maiuscolo lo allargano), F4 alterna i `$`. Ogni riferimento ha uno di sei
+colori (`--doc-author-1…6`), nel testo e nel contorno sulla griglia, solo sul
+suo foglio; le celle di un altro foglio si scrivono a mano.
 
 ## La selezione e il riempimento
 
@@ -172,13 +173,12 @@ scorrimento. Un tocco altrove, il mouse o la penna le tolgono. Col dito il
 quadratino non c'è (il riempimento si fa dal menu) e il tocco lungo non apre
 menu. Il mouse e la penna fanno ciò che fanno sempre.
 
-Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
-serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
-segue il puntatore con la misura nelle unità di Excel e in pixel del file, e
-al rilascio parte un solo comando. Il doppio clic sul bordo dà
-`home.autofitColumnWidth` (o `home.autofitRowHeight`). Se la colonna sta fra
-quelle scelte intere, la misura vale per tutte. Senza il comando servito il
-bordo non si prende.
+Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella serve
+`home.columnWidth` (o `home.rowHeight`): una guida segue il puntatore con la
+misura nel riquadro. Al rilascio parte un comando e la misura vale già
+(`SizePreview`): ciò che segue scivola con `SLIDE`, su un no torna e l'avviso
+lo dice, una risposta vecchia non toglie un gesto più nuovo. Il doppio clic dà
+`home.autofit…`; con una colonna fra le scelte intere la misura vale per tutte.
 
 Ctrl+clic e Ctrl+trascina aggiungono un intervallo a quelli scelti;
 Maiuscolo estende l'ultimo, un clic semplice ricomincia. Da tastiera

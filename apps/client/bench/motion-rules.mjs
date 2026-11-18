@@ -580,6 +580,30 @@ const dragGrip = async (page, row, column) => {
   }
   await touch(page, "touchEnd", []);
 };
+/// Tira di `by` px il bordo destro dell'intestazione di colonna `label` e lo
+/// rilascia. Il bordo si legge dalla misura della colonna, non dal disegno:
+/// a metà di una corsa le colonne dopo sono ancora spostate.
+const pullColumnEdge = async (page, label, by) => {
+  const edge = await page.evaluate((name) => {
+    const header = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === name);
+    const box = header.getBoundingClientRect();
+    return { x: box.right - 1, y: box.top + box.height / 2 };
+  }, label);
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + by / 2, edge.y);
+  await page.mouse.move(edge.x + by, edge.y);
+  await page.mouse.up();
+};
+const columnWidthOf = (page, label) => page.evaluate((name) => {
+  const header = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === name);
+  return header ? parseFloat(header.style.width) : 0;
+}, label);
+const columnWider = (label, width) => async (page) => (await columnWidthOf(page, label)) > width;
+const columnNarrower = (label, width) => async (page) => {
+  const now = await columnWidthOf(page, label);
+  return now > 0 && now < width;
+};
 /// La cella scelta cinque colonne più a destra, fuori dalla tabella della
 /// scena `grid-ribbon-table`.
 const stepRight = async (page) => {
@@ -1469,6 +1493,47 @@ export const CHOREOGRAPHIES = [
     undo: (page) => dragGrip(page, 1, 1),
     returned: lacks(gridCell(3, 2, ".selected")),
     track: [GRID_EDGE, GRID_GRIP_B],
+  },
+  // **La cella aperta** (griglia T4): F2 su B4, la cui formula è più lunga
+  // della cella. La cella aperta è subito al suo posto, cresciuta a colonne
+  // intere; compare soltanto la cornice, una dissolvenza in `DURATION.state`.
+  {
+    id: "griglia-cella-aperta",
+    title: "Griglia: F2 su una cella col testo lungo, la cella aperta è già al suo posto e la cornice compare",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 3, 1),
+    act: (page) => page.keyboard.press("F2"),
+    arrived: has(".pane.focus .grid-cell-editor:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: has(".pane.focus .grid-cell-editor[hidden]"),
+    track: [".pane.focus .grid-cell-editor-frame"],
+  },
+  // **Il bordo tirato** (griglia T5): al rilascio la misura nuova vale già,
+  // e le colonne dopo scivolano col `flip` di SLIDE. Nella prima il provider
+  // resta in volo (`throttle`) e il bordo si ritira: l'anteprima nuova parte
+  // da dov'è la corsa. Nella seconda il finto rifiuta la misura (non la
+  // serve), e le colonne tornano indietro scivolando.
+  {
+    id: "griglia-bordo-tirato",
+    title: "Griglia: il bordo di B tirato di 40 px e rilasciato, le colonne dopo scivolano al posto nuovo",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => page.evaluate(() => { window.bench.throttle("gridBytesCommand"); }),
+    act: (page) => pullColumnEdge(page, "B", 40),
+    arrived: columnWider("B", 110),
+    undo: (page) => pullColumnEdge(page, "B", -40),
+    returned: columnNarrower("B", 95),
+  },
+  {
+    id: "griglia-bordo-no",
+    title: "Griglia: il provider rifiuta la larghezza tirata, le colonne tornano scivolando e l'avviso dice perché",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    act: (page) => pullColumnEdge(page, "B", 40),
+    arrived: has(".pane.focus .grid-notice:not([hidden])"),
+    undo: null,
+    irreversible: "il ritorno è la risposta del provider: tirare di nuovo è un altro gesto, con la sua anteprima",
   },
 ];
 

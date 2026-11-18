@@ -523,6 +523,11 @@ export function workbookView(
 const FILE_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u;
 const LOCAL_NUMBER = /^[+-]?(?:\d+(?:,\d*)?|,\d+)(?:[eE][+-]?\d+)?$/u;
 
+/// Un numero semplice come lo scrive il file: un segno, delle cifre, un
+/// punto decimale. Niente esponente: quello, le date, le percentuali e le
+/// valute li riconosce il motore.
+const PLAIN_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u;
+
 /// Il separatore decimale di `language`.
 export function decimalSeparator(language: string): "." | "," {
   const part = new Intl.NumberFormat(language).formatToParts(1.5).find((candidate) => candidate.type === "decimal");
@@ -544,4 +549,23 @@ export function fileInput(draft: string, decimal: "." | ","): string {
   if (LOCAL_NUMBER.test(draft)) return draft.replace(",", ".");
   if (FILE_NUMBER.test(draft) && draft.includes(".")) return `'${draft}`;
   return draft;
+}
+
+/// Come la griglia mostra la cella scritta con `input` (nella forma del
+/// file, quella di `fileInput`) finché il provider non la rilegge: un numero
+/// semplice è un numero, e si allinea come un numero; una cella vuota è
+/// vuota; tutto il resto è il testo scritto, senza l'apostrofo che dice
+/// «testo». Una formula resta com'è scritta: il valore lo dà il motore.
+export function writtenValue(input: string, decimal: "." | ","): Pick<GridBytesCell, "value" | "display"> {
+  if (!input) return { value: { kind: "blank" }, display: "" };
+  if (input.startsWith("'")) {
+    const text = input.slice(1);
+    return { value: { kind: "text", value: text }, display: text };
+  }
+  const display = localInput(input, decimal);
+  if (PLAIN_NUMBER.test(input)) {
+    const value = Number(input);
+    if (Number.isFinite(value)) return { value: { kind: "number", value }, display };
+  }
+  return { value: { kind: "text", value: display }, display };
 }
