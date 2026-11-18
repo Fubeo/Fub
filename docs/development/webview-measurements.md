@@ -86,10 +86,14 @@ scenario, col buco più lungo visto.
 finestre: sotto Xvfb, senza gestore, è quella; un gestore a tessere (niri,
 sway) la cambia, per esempio in 800 × 1896 su una colonna di niri. Per
 questo il gesto di S3 e S9 si calcola sulla pagina vera
-(`bench/webview/gesture.mjs`, prova in `gesture.test.mjs`): il punto è il
-centro della parte visibile di `.canvas-viewport`, e lo spostamento va
-±400 px se la vista ha posto, altrimenti tanto quanto ci sta a 8 px dai
-bordi della vista e della pagina. Sotto i 100 px lo scenario fallisce col
+(`bench/webview/gesture.mjs`, prova in `gesture.test.mjs`). Il gesto
+comincia sulla lavagna e può uscirne, perché la lavagna tiene il puntatore
+finché il pulsante è premuto, ma non può uscire dalla pagina: WebDriver
+rifiuta il punto. Il punto è il centro della parte visibile di
+`.canvas-viewport` e lo spostamento va ±400 px, come nella CI, se da lì ci
+sta nella pagina a 8 px dai bordi; altrimenti il punto è quello della vista
+più vicino al centro della pagina e lo spostamento va quanto ci sta (±391 px
+nella colonna di niri larga 800). Sotto i 100 px lo scenario fallisce col
 motivo: non sarebbe più una misura dello scorrimento. Il referto di ogni
 scenario dà la pagina e la misura chiesta (`window`), e il gesto di S3 e S9
 (`gesture`, con `reduced`); una pagina diversa da quella chiesta e un gesto

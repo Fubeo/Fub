@@ -21,10 +21,13 @@ export const PAN_MIN_DX = 100;
 
 /// Il gesto di spostamento nella vista `view` (il rettangolo della lavagna,
 /// `getBoundingClientRect`) di una pagina larga `page.width` e alta
-/// `page.height` (`innerWidth`, `innerHeight`). Il punto è il centro della
-/// parte visibile della vista; l'ampiezza è `want`, o meno se la vista non ha
-/// posto: ogni punto del gesto, `x ± dx`, resta dentro la vista e dentro la
-/// pagina, a `margin` px dai bordi. Torna `{ x, y, dx, want, reduced }`;
+/// `page.height` (`innerWidth`, `innerHeight`). Il gesto comincia sulla
+/// lavagna, e poi il puntatore può uscirne (la lavagna tiene il puntatore
+/// finché il pulsante è premuto) ma non dalla pagina: WebDriver rifiuta un
+/// punto fuori. Il punto è il centro della parte visibile della vista, come
+/// nella CI, se da lì `x ± want` sta nella pagina a `margin` px dai bordi;
+/// altrimenti è il punto della vista più vicino al centro della pagina, e
+/// l'ampiezza è quanta ci sta. Torna `{ x, y, dx, want, reduced }`;
 /// `reduced` dice che l'ampiezza è minore di quella chiesta. Lancia se la
 /// vista non si vede o se l'ampiezza scende sotto `min`.
 export function panGesture({ view, page, want = PAN_DX, margin = PAN_MARGIN, min = PAN_MIN_DX }) {
@@ -32,16 +35,19 @@ export function panGesture({ view, page, want = PAN_DX, margin = PAN_MARGIN, min
   const right = Math.min(view.right, page.width);
   const top = Math.max(view.top, 0);
   const bottom = Math.min(view.bottom, page.height);
-  if (!(right - left > 0 && bottom - top > 0)) {
+  if (!(right - left > 2 * margin && bottom - top > 0)) {
     throw new Error(`la vista della lavagna non si vede nella pagina: vista ${JSON.stringify(view)}, pagina ${page.width} × ${page.height}`);
   }
-  const x = Math.round((left + right) / 2);
   const y = Math.round((top + bottom) / 2);
   // L'ultimo pixel della pagina è `width - 1`: WebDriver rifiuta `width`.
-  const room = Math.min(x - left, right - 1 - x) - margin;
-  const dx = Math.max(0, Math.min(want, Math.floor(room)));
+  const room = (x) => Math.floor(Math.min(x, page.width - 1 - x) - margin);
+  let x = Math.round((left + right) / 2);
+  if (room(x) < want) {
+    x = Math.min(Math.max(Math.round(page.width / 2), Math.ceil(left + margin)), Math.floor(right - 1 - margin));
+  }
+  const dx = Math.max(0, Math.min(want, room(x)));
   if (dx < min) {
-    throw new Error(`la vista della lavagna è troppo stretta per lo spostamento: ${Math.round(right - left)} px nella pagina di ${page.width} × ${page.height}, il gesto avrebbe ${dx} px invece di ${want} (al minimo ${min})`);
+    throw new Error(`la pagina è troppo stretta per lo spostamento: ${page.width} × ${page.height}, vista della lavagna da ${Math.round(left)} a ${Math.round(right)} px; il gesto avrebbe ${dx} px invece di ${want} (al minimo ${min})`);
   }
   return { x, y, dx, want, reduced: dx < want };
 }
