@@ -6,10 +6,8 @@
 > **Fonti autorevoli:** `apps/client/src/editors/core/cards/contract.ts` e le
 > prove in `apps/client/src/editors/core/cards/contract.test.ts`; per le
 > misure di nascita e la griglia, `crates/fub-canvas-core/src/layout.rs`; per
-> l'ordine dei file lasciati cadere,
-> `apps/client/src/editors/canvas/drop-layout.ts`; per le estensioni,
-> `apps/client/src/ui/format-kind.ts` e
-> `apps/client/src/editors/media/media-types.ts`.
+> l'ordine dei file lasciati cadere, `editors/canvas/drop-layout.ts`; per le estensioni,
+> `apps/client/src/ui/format-kind.ts` e `apps/client/src/editors/media/media-types.ts`.
 
 Questa pagina serve a chi scrive un renderer di scheda (la parte che mostra
 una nota, un foglio, un PDF, un'immagine o una pagina web dentro la scheda) e
@@ -17,12 +15,8 @@ a chi lavora sul motore della lavagna che li monta.
 Come si entra in una scheda, la rotella e i comandi con i loro tasti stanno in
 [I tasti e i gesti della lavagna](canvas-input.md); come ci si muove e la
 vista che torna riaprendo la lavagna, in [La vista della lavagna](canvas-view.md).
-
-L'ospite delle schede è uno solo e sta in `apps/client/src/editors/core/cards/`:
-il contratto (`contract.ts`), le specie (`kinds/`: nota, immagine, PDF, pagina
-web, Craft) e la porta per scrivere dentro una scheda (`editor-port.ts`). La
-scheda di foglio resta del foglio (`editors/grid/card.ts`). La lavagna li
-importa da lì e non ne tiene copie: lo controlla `structure.test.ts`, accanto.
+L'ospite (contratto, specie in `kinds/`, `editor-port.ts`) è uno, in
+`editors/core/cards/`: la lavagna non ne tiene copie (`structure.test.ts`).
 
 ## Schede vive e ferme
 
@@ -170,8 +164,7 @@ in `editors/media/transport.ts`, uno per finestra in `host/ipc.ts`).
 
 ## Il contratto
 
-I tipi stanno in `editors/core/cards/contract.ts`, con i commenti sui loro
-campi. In breve:
+I tipi stanno in `contract.ts`, con i commenti sui loro campi. In breve:
 
 - `CardRenderer` dichiara le specie che sa mostrare (`kinds`) e monta una
   scheda con `mount(node, host, mode, context)`, che dà una `CardView`.
