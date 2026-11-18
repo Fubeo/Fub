@@ -229,6 +229,16 @@ Ogni gesto si dice anche nella regione viva dei Blocchi («Posizione 3 di 5, in
 cursore fra le righe quando ci si muove senza scrivere; vale soltanto in
 Scrittura, e mai col moto ridotto.
 
+Nei fogli di calcolo due preferenze dell'editor dicono come si muovono i
+segni della griglia, e una scelta vale dal gesto dopo, in tutte le griglie
+aperte, senza riaprire il foglio. **Segno della copia nei fogli di calcolo**
+(`editor.grid.copy-mark`): «Tratteggio e battito» (di norma), «Solo il
+tratteggio» o «Solo il battito»; il taglio resta un tratteggio fitto.
+**Velocità della selezione nei fogli di calcolo**
+(`editor.grid.selection-speed`): «Svelta», «Come di norma» (di norma),
+«Morbida» o «A scatti», coi tasti, coi comandi e col puntatore. Col moto
+ridotto la selezione si ferma subito con ogni scelta.
+
 ## Gli id di blocco
 
 Con la rivelazione `mai` un `^id` in coda a un blocco, o su una riga sua, non si

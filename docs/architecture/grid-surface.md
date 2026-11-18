@@ -152,7 +152,13 @@ I segni restano e scivolano (`grid-motion.ts`): rettangolo (2 px sul filo),
 anello della cella attiva, velo e quadratino sono pezzi creati una volta per
 zona e mossi col `transform` da dieci numeri che vanno al bersaglio con la
 molla `GLIDE`, mai oltre né all'indietro, anello e velo dentro il bordo; con
-«ridotto», cambio di foglio o scelta dall'host saltano. Colore `--grid-mark`,
+«ridotto», cambio di foglio o scelta dall'host saltano. La molla la sceglie
+`editor.grid.selection-speed` (`selectionMotion`): `quick` `GLIDE_QUICK`,
+`normal` `GLIDE`, `soft` `SLIDE`, `none` a scatti (un bersaglio nuovo si
+vede subito, lo stesso lascia finire la corsa); le colonne che scivolano
+portano i segni con `SLIDE` con ogni scelta. La griglia legge le due
+preferenze all'apertura e le rilegge a ogni `setting_changed` delle loro
+chiavi; un valore sconosciuto vale quello di serie. Colore `--grid-mark`,
 in colori forzati `Highlight`; il quadratino si prende dove si vede (6 px). Il
 fuoco è la cella attiva (`aria-activedescendant`). Le intestazioni scelte
 hanno velo e filo d'accento, e dopo righe o colonne nascoste una tacca doppia.
@@ -205,7 +211,8 @@ Excel, LibreOffice, Sheets o Word quando c'è (le celle unite lasciano celle
 vuote), altrimenti il TSV; quella di Fub cede al TSV accanto. Un valore, o un
 blocco che la selezione contiene un numero intero di volte, la riempie
 dall'angolo, e dopo è selezionato ciò che si è scritto. Copia lascia un
-tratteggio largo e un battito; Taglia non svuota, segna con un tratteggio
+tratteggio largo e un battito (`editor.grid.copy-mark`: `dash-pulse`, `dash`
+o `pulse`, letta alla copia); Taglia non svuota, segna con un tratteggio
 fitto, e l'incolla dopo sposta gli input e svuota il resto in un passo di
 Annulla. Il segno resta sul suo foglio e segue l'ultima copia; Esc, una
 scrittura, un comando o un incolla lo tolgono, ma non un'altra app che cambia

@@ -17,6 +17,8 @@ import type {
 } from "../../host/contract";
 import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
 import { errorText, isErrorKind } from "../../host/errors";
+import { settings } from "../../host/query";
+import { onEvent } from "../../state/kernel";
 import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
   gridJournalEntry,
@@ -67,15 +69,22 @@ import {
 } from "./merges";
 import { attachCommentCards, commentDescription } from "./comment-card";
 import {
+  COPY_MARK_KEY,
+  copyMarkOf,
   createMarksMotion,
   enterValues,
   fadeInValue,
   fadeOutResizeLabel,
   hideEditorFrame,
+  SELECTION_SPEED_KEY,
+  selectionMotion,
+  selectionSpeedOf,
   showEditorFrame,
   slideLines,
   SLIDE,
+  type CopyMark,
   type MarksMotion,
+  type SelectionSpeed,
 } from "./grid-motion";
 import {
   cornerSeen,
@@ -596,6 +605,14 @@ export class GridEngine {
   /// all'intervallo, sul suo foglio, finché non si incolla, si scrive o si
   /// preme Esc (griglia T6).
   #copyMark: { readonly sheet: string; readonly range: GridRange } | null = null;
+  /// Le due preferenze della griglia (griglia T9): il segno di una copia e
+  /// come la selezione va alla cella nuova. Di serie come il prototipo finché
+  /// l'host non le dice; valgono dal gesto dopo che cambiano.
+  #copyMarkStyle: CopyMark = "dash-pulse";
+  #selectionSpeed: SelectionSpeed = "normal";
+  /// L'ultima lettura delle preferenze: una risposta più vecchia non scrive
+  /// sopra una più nuova.
+  #preferencesRead = 0;
   /// L'ultimo gesto che aspetta il foglio (un riempimento, un taglio
   /// incollato): le formiche attorno camminano finché non risponde.
   #waiting: Waiting | null = null;
@@ -817,6 +834,12 @@ export class GridEngine {
     this.#objectsAnnounce.setAttribute("role", "status");
     this.#root.append(this.#ribbonHost, this.#notice, this.#draftNotice, formula, this.#viewport, this.#objectsSummary, this.#objectsAnnounce, this.#sheetBar);
     parent.replaceChildren(this.#root);
+    // Le preferenze si rileggono quando una delle due cambia: tutte le
+    // griglie aperte, dal gesto dopo, senza riaprire il foglio.
+    this.#life.add(onEvent("setting_changed", (event) => {
+      if (event.key === COPY_MARK_KEY || event.key === SELECTION_SPEED_KEY) void this.#loadPreferences();
+    }));
+    void this.#loadPreferences();
     this.#stopLanguage = onLanguage(() => {
       this.#cellEpoch += 1;
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
@@ -1654,6 +1677,24 @@ export class GridEngine {
     }
     entering.sort((a, b) => a.order - b.order);
     enterValues(entering.map((item) => item.text), this.#life);
+  }
+
+  /// Legge le due preferenze della griglia, come `TextEngine` legge le sue.
+  /// Le tiene soltanto: il segno che scivola finisce la sua corsa, e la scelta
+  /// nuova vale dal gesto dopo. Senza un vault, o se la lettura fallisce,
+  /// restano quelle di prima.
+  async #loadPreferences(): Promise<void> {
+    const read = ++this.#preferencesRead;
+    let entries: Awaited<ReturnType<typeof settings>>;
+    try {
+      entries = await settings();
+    } catch {
+      return;
+    }
+    if (this.#destroyed || read !== this.#preferencesRead) return;
+    const value = (key: string) => entries.find((entry) => entry.spec.key === key)?.value;
+    this.#copyMarkStyle = copyMarkOf(value(COPY_MARK_KEY));
+    this.#selectionSpeed = selectionSpeedOf(value(SELECTION_SPEED_KEY));
   }
 
   /// Toglie il tratteggio di ciò che si è copiato, se c'è.
@@ -3195,7 +3236,7 @@ export class GridEngine {
     if (this.#marksSheet !== sheet) this.#grips = false;
     this.#marksJump = false;
     this.#marksSheet = sheet;
-    const spring = this.#marksSpring;
+    const motion = selectionMotion(this.#selectionSpeed, this.#marksSpring);
     this.#marksSpring = null;
     const frame = this.#frame;
     const clip = this.#clipMark(sheet);
@@ -3233,7 +3274,8 @@ export class GridEngine {
       fill: this.#drag?.kind === "fill",
       glide,
       walk: ants?.walk ?? false,
-      ...(spring ? { spring } : {}),
+      spring: motion.spring,
+      snap: motion.snap,
     });
   }
 
@@ -5152,11 +5194,14 @@ export class GridEngine {
   #copy(event: ClipboardEvent): void {
     if (!this.#takeCopy(event)) return;
     const range = this.#selectedRange();
+    const style = this.#copyMarkStyle;
     this.#cutMark = null;
-    this.#copyMark = { sheet: this.#sheet().id, range };
+    // «Solo il battito»: niente tratteggio da ricordare, e il bordo della
+    // selezione resta.
+    this.#copyMark = style === "pulse" ? null : { sheet: this.#sheet().id, range };
     this.#render();
     const box = this.#rangeBox(range);
-    if (box) this.#marks.pulse({ x: box.left, y: box.top, w: box.width, h: box.height });
+    if (box && style !== "dash") this.#marks.pulse({ x: box.left, y: box.top, w: box.width, h: box.height });
   }
 
   /// Mette negli appunti la selezione e la ricorda (`#copied`). Falso se non
