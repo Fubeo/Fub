@@ -248,9 +248,33 @@ describe("smartListEnter", () => {
   });
 
   it("voce vuota: toglie il marcatore e chiude la lista", () => {
-    expect(run(smartListEnter, "- uno\n- |").out).toBe("- uno\n|");
     expect(run(smartListEnter, "- [ ] |").out).toBe("|");
     expect(run(smartListEnter, "1. |").out).toBe("|");
+  });
+
+  // Senza la riga vuota il testo scritto dopo sarebbe una riga pigra della
+  // voce (`- tre\nquattro`), e resterebbe dentro di lei in ogni lettore.
+  it("voce vuota in fondo a un elenco: ne esce con un paragrafo vero, staccato da una riga vuota", () => {
+    expect(run(smartListEnter, "- tre\n- |").out).toBe("- tre\n\n|");
+    expect(run(smartListEnter, "1. tre\n2. |").out).toBe("1. tre\n\n|");
+    expect(run(smartListEnter, "- [ ] tre\n- [ ] |").out).toBe("- [ ] tre\n\n|");
+    // Già staccata da una riga vuota (un elenco largo): non ne serve un'altra.
+    expect(run(smartListEnter, "- tre\n\n- |").out).toBe("- tre\n\n|");
+    // Dentro una citazione si esce dall'elenco, non dalla citazione.
+    expect(run(smartListEnter, "> - tre\n> - |").out).toBe("> - tre\n>\n> |");
+  });
+
+  it("riga vuota in fondo a un riquadro: ne esce con un paragrafo vero", () => {
+    expect(run(smartListEnter, "> [!note] Viaggio\n> Portare il passaporto\n> |").out)
+      .toBe("> [!note] Viaggio\n> Portare il passaporto\n\n|");
+    expect(run(smartListEnter, "> > dentro\n> > |").out).toBe("> > dentro\n>\n> |");
+  });
+
+  it("voce annidata vuota: sale di un livello, col marcatore della voce che la conteneva", () => {
+    expect(run(smartListEnter, "- a\n  - b\n  - |").out).toBe("- a\n  - b\n- |");
+    expect(run(smartListEnter, "- [ ] a\n  - [ ] |").out).toBe("- [ ] a\n- [ ] |");
+    expect(run(smartListEnter, "1. a\n   1. b\n   2. |\n2. c").out).toBe("1. a\n   1. b\n2. |\n3. c");
+    expect(run(smartListEnter, "- a\n  - b\n    - |").out).toBe("- a\n  - b\n  - |");
   });
 
   it("fuori lista, dentro il marcatore o con selezione lascia il default", () => {
@@ -315,7 +339,8 @@ describe("smartListEnter", () => {
       extensions: [markdown({ base: markdownLanguage }), EditorState.allowMultipleSelections.of(true)],
     });
     smartListEnter({ state, dispatch: (tr) => { state = tr.state; } });
-    expect(state.sliceDoc()).toBe("1. a\n2. \n\n3. b");
+    // La voce svuotata esce dall'elenco con la sua riga vuota sopra.
+    expect(state.sliceDoc()).toBe("1. a\n2. \n\n\n3. b");
   });
 
   it("in sola lettura lascia il default", () => {

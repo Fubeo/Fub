@@ -36,6 +36,39 @@ async function popup(view: EditorView): Promise<void> {
   await vi.waitFor(() => expect(completionStatus(view.state)).toBe("active"));
 }
 
+function escape(view: EditorView): boolean {
+  return view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+}
+
+describe("Esc e il completamento", () => {
+  it("con un completamento ancora in attesa, senza menu a vista, Esc passa a chi ospita l'editor", () => {
+    const { engine, view } = editor();
+    try {
+      engine.setDoc("");
+      view.dispatch({ changes: { from: 0, insert: "Riletta" }, selection: EditorSelection.cursor(7), userEvent: "input.type" });
+      expect(completionStatus(view.state)).toBe("pending");
+      // Non prevenuto: la sbirciata lo riceve libero e si chiude.
+      expect(escape(view)).toBe(true);
+      expect(completionStatus(view.state)).toBeNull();
+    } finally {
+      engine.destroy();
+    }
+  });
+
+  it("col menu a vista Esc lo chiude e resta dell'editor", async () => {
+    const { engine, view } = editor();
+    try {
+      engine.setDoc("nota #pro");
+      view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length) });
+      await popup(view);
+      expect(escape(view)).toBe(false);
+      expect(completionStatus(view.state)).toBeNull();
+    } finally {
+      engine.destroy();
+    }
+  });
+});
+
 describe("Tab nel completamento dei tag", () => {
   it("completa un segmento alla volta e tiene aperto il popup; senza popup rientra", async () => {
     const { engine, view } = editor();

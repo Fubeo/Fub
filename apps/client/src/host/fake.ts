@@ -1456,10 +1456,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   /// Un documento è di tipo `document` se ha un'estensione che il vault
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
-  /// legge dalla risposta e non dalla propria testa.
+  /// legge dalla risposta e non dalla propria testa. Un `.base` è un
+  /// documento come nell'host vero (`fub-format-base` registra `base`):
+  /// l'albero lo apre col clic, come una nota.
   function entryKind(id: string): VaultEntry["kind"] {
     const format = formatOf(id);
-    return format !== null && format !== "canvas" && format !== "base" ? "document" : "asset";
+    return format !== null && format !== "canvas" ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {

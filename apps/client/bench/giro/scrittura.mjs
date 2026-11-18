@@ -40,7 +40,7 @@ const COMMENTI = "live=commenti";
 const BASE = "base=1";
 
 /// La nota nuova del primo capitolo: «Nuova nota» la crea così, e il nome
-/// cambia soltanto all'ultimo compito del capitolo.
+/// cambia con `titolo-rinomina`; i compiti dopo scrivono in `RINOMINATA`.
 const NUOVA = "Senza titolo.md";
 const TITOLO = "Viaggio a Lisbona";
 /// La nota che il banco apre per prima, e quella che nomina (`corpus.ts`).
@@ -211,7 +211,7 @@ const nuovaNota = {
   id: "nuova-nota",
   nome: "«Nuova nota» apre una nota vuota col fuoco nel testo, e quello che si scrive si salva",
   async fai(pagina, giro) {
-    console.log(`  saltati, coi motivi in scrittura.mjs: ${SALTATI.map((c) => c.id).join(", ")}`);
+    if (SALTATI.length > 0) console.log(`  saltati, coi motivi in scrittura.mjs: ${SALTATI.map((c) => c.id).join(", ")}`);
     await riparti(pagina, giro, FORMATO);
     await pagina.click("#new-note");
     await pagina.click('#context-menu [role^="menuitem"]:has-text("Nota")');
@@ -279,9 +279,8 @@ const slashData = {
   id: "slash-data",
   nome: "«/venerdì» mette il link alla pagina di venerdì",
   async fai(pagina) {
-    // Una riga vuota chiude l'elenco: la data è un paragrafo suo.
+    // Invio sulla voce vuota esce dall'elenco: la data è un paragrafo suo.
     await rigaInFondo(pagina);
-    await pagina.keyboard.press("Enter");
     await pagina.keyboard.press("Enter");
     await barra(pagina, "venerdì", "venerdì");
     await pagina.keyboard.press("Enter");
@@ -289,7 +288,12 @@ const slashData = {
     await salvato(pagina);
   },
   async controlla(pagina, host) {
-    await testoCon(host, NUOVA, (t) => t.includes(`[[Daily/${VENERDI}|21 agosto 2026]]`), "il link a venerdì non c'è");
+    await testoCon(
+      host,
+      NUOVA,
+      (t) => t.includes(`- [x] Comprare i biglietti\n\n[[Daily/${VENERDI}|21 agosto 2026]]`),
+      "il link a venerdì non è un paragrafo suo, staccato dall'elenco",
+    );
   },
 };
 
@@ -367,16 +371,20 @@ const linkANota = {
   id: "link-a-nota",
   nome: "«[[» propone le note, e quella scelta diventa un link",
   async fai(pagina) {
-    // Una riga vuota chiude il riquadro.
+    // Invio sulla riga vuota del riquadro ne esce con un paragrafo vero.
     await rigaInFondo(pagina);
-    await pagina.keyboard.press("Enter");
     await pagina.keyboard.press("Enter");
     await pagina.keyboard.type("Prima leggere [[Benv");
     await sceglieCompletamento(pagina, "Benvenuto");
     await salvato(pagina);
   },
   async controlla(pagina, host) {
-    await testoCon(host, NUOVA, (t) => t.includes("Prima leggere [[Benvenuto]]"), "il link non c'è");
+    await testoCon(
+      host,
+      NUOVA,
+      (t) => t.includes("Portare il passaporto\n\nPrima leggere [[Benvenuto]]"),
+      "il link non è un paragrafo suo, fuori dal riquadro",
+    );
   },
 };
 
@@ -485,39 +493,75 @@ const titoloRinomina = {
 };
 
 // ---------------------------------------------------------------------------
-// I compiti saltati (vedi in cima): il motivo e i passi del difetto.
+// Dopo la rinomina, nella stessa nota: il «/» la segue col nome nuovo.
 // ---------------------------------------------------------------------------
 
-const SALTATI = [
-  {
-    id: "slash-dopo-rinomina",
-    motivo:
-      "difetto: dopo aver rinominato una nota il «/» non si apre più in lei. Passi: Nuova nota, nome nuovo dal " +
-      "titolo (o dall'albero), «/h2» nel testo: nessun menu. La superficie confronta la nota del «/» col nome " +
-      "di quando è nata (`profiles/markdown/surface.ts`, `documentId` del contesto invece di quello delle risorse).",
+/// La nota del capitolo col nome che il titolo le ha dato.
+const RINOMINATA = `${TITOLO}.md`;
+
+const slashDopoRinomina = {
+  id: "slash-dopo-rinomina",
+  nome: "Nella nota appena rinominata «/h2» apre ancora il menu e mette il titolo",
+  async fai(pagina) {
+    // Il fuoco è nel testo, dove l'ha portato Invio del titolo: una riga sua.
+    await pagina.keyboard.press("End");
+    await pagina.keyboard.press("Enter");
+    await barra(pagina, "h2", "Titolo 2");
+    await pagina.keyboard.press("Enter");
+    await pagina.waitForSelector(".slash-panel", { state: "detached" });
+    await pagina.keyboard.type("Dopo il nome");
+    await salvato(pagina);
   },
-  {
-    id: "slash-compito",
-    motivo:
-      "difetto: «/compito» non trova niente, eppure la barra di formato chiama quel blocco «Compito». I " +
-      "sinonimi di `markdown.list.task` (`panels/slash/entries.ts`) non hanno la parola.",
+  async controlla(pagina, host) {
+    await testoCon(host, RINOMINATA, (t) => /^## Dopo il nome$/m.test(t), "il titolo non è nella nota rinominata");
   },
-  {
-    id: "sbirciata-un-esc",
-    motivo:
-      "difetto rispetto al flusso E11 («Esc chiude»): col cursore nel testo della sbirciata un Esc non la " +
-      "chiude, ne servono due. Passi: in «Benvenuto» Alt+clic su «Sintassi di Fub», Ctrl+Fine, Invio, " +
-      "scrivere una frase, Esc: la sbirciata resta aperta col fuoco nel testo; il secondo Esc la chiude.",
+};
+
+const slashCompito = {
+  id: "slash-compito",
+  nome: "«/compito» trova l'elenco di attività, come la barra chiama quel blocco",
+  async fai(pagina) {
+    await pagina.keyboard.press("Enter");
+    await barra(pagina, "compito", "Elenco di attività");
+    await pagina.keyboard.press("Enter");
+    await pagina.waitForSelector(".slash-panel", { state: "detached" });
+    await pagina.keyboard.type("Prenotare l'albergo");
+    await salvato(pagina);
   },
-  {
-    id: "esci-dall-elenco",
-    motivo:
-      "difetto: Invio su una voce vuota esce dall'elenco, ma la riga dopo resta attaccata alla voce di sopra. " +
-      "Passi: «- tre», Invio, Invio sulla voce vuota, «quattro»: il file dice «- tre\\nquattro», e «quattro» si " +
-      "vede rientrato dentro «tre», in Fub e in ogni lettore Markdown. Serve una riga vuota in più; lo stesso " +
-      "dopo l'ultima riga di un riquadro. I compiti qui sotto premono Invio una volta di più.",
+  async controlla(pagina, host) {
+    await testoCon(host, RINOMINATA, (t) => /^- \[ \] Prenotare l'albergo$/m.test(t), "il compito non c'è");
   },
-];
+};
+
+const esciDallElenco = {
+  id: "esci-dall-elenco",
+  nome: "Invio su una voce vuota esce dall'elenco con un paragrafo vero, staccato da una riga vuota",
+  async fai(pagina) {
+    // Dal compito: Invio, Invio sulla voce vuota; poi un elenco puntato.
+    await pagina.keyboard.press("Enter");
+    await pagina.keyboard.press("Enter");
+    await pagina.keyboard.type("- tre");
+    await pagina.keyboard.press("Enter");
+    await pagina.keyboard.press("Enter");
+    await pagina.keyboard.type("quattro");
+    await salvato(pagina);
+  },
+  async controlla(pagina, host) {
+    await testoCon(
+      host,
+      RINOMINATA,
+      (t) => /^- \[ \] Prenotare l'albergo\n\n- tre\n\nquattro$/m.test(t),
+      "«quattro» non è un paragrafo suo dopo gli elenchi",
+    );
+  },
+};
+
+// ---------------------------------------------------------------------------
+// I compiti saltati (vedi in cima): `{ id, motivo }`, col motivo e i passi del
+// difetto. Oggi nessuno.
+// ---------------------------------------------------------------------------
+
+const SALTATI = [];
 
 // ---------------------------------------------------------------------------
 // I blocchi (E5), su «Benvenuto».
@@ -761,9 +805,11 @@ const rispondi = {
     await salvato(pagina);
   },
   async controlla(pagina, host) {
-    // La firma della risposta non si guarda: il finto host non dichiara
-    // `profile.name`, e il nome scelto al primo commento non vi si salva.
-    await testoCon(host, LIVE, (t) => t.includes(`2026-08-19 09:30: ${RISPOSTA}<<}`), "la risposta non c'è");
+    // La risposta porta la firma del nome scelto al primo commento, che
+    // `profile.name` ha tenuto.
+    await testoCon(host, LIVE, (t) => t.includes(`@Sara Neri 2026-08-19 09:30: ${RISPOSTA}<<}`), "la risposta non c'è, o non è firmata");
+    const nomi = await host.chiamate("setSetting");
+    verifica(nomi.some((a) => a[0] === "profile.name" && a[1] === "Sara Neri"), `il nome non si è salvato: ${JSON.stringify(nomi)}`);
   },
 };
 
@@ -887,7 +933,7 @@ const AGGIUNTA = "Riletta dalla sbirciata. ";
 
 const sbirciata = {
   id: "sbirciata",
-  nome: "Alt+clic su un link apre la nota accanto, scrivibile; chiusa, quello che vi si è scritto resta",
+  nome: "Alt+clic su un link apre la nota accanto, scrivibile, e quello che vi si scrive si salva",
   async fai(pagina, giro) {
     await riparti(pagina, giro, "");
     const link = pagina.locator('.pane.focus .pane-editor .cm-content :text-is("Sintassi di Fub")').first();
@@ -899,15 +945,35 @@ const sbirciata = {
     await pagina.keyboard.press("Enter");
     await pagina.keyboard.type(AGGIUNTA);
     await giro.foto("aperta");
-    // Oggi il primo Esc resta all'editor della sbirciata e solo il secondo la
-    // chiude (vedi `sbirciata-un-esc` fra i saltati).
+  },
+  async controlla(pagina, host) {
+    await testoCon(host, SINTASSI, (t) => t.includes(AGGIUNTA), "quello scritto nella sbirciata non si è salvato");
+    verifica(await pagina.isVisible(".note-peek"), "la sbirciata si è chiusa da sola");
+  },
+};
+
+const sbirciataUnEsc = {
+  id: "sbirciata-un-esc",
+  nome: "Nella sbirciata Esc chiude prima il menu «[[» aperto; col cursore nel testo un Esc solo la chiude",
+  async fai(pagina) {
+    // Un menu aperto nella sbirciata: il completamento di «[[». Il «/» qui
+    // non si apre: segue la nota della linguetta attiva (`slashContextDoc`).
+    await pagina.keyboard.type("[[Benv");
+    await pagina.waitForSelector('.cm-tooltip-autocomplete li:has-text("Benvenuto")');
     await pagina.keyboard.press("Escape");
-    await pagina.waitForTimeout(200);
+    await pagina.waitForSelector(".cm-tooltip-autocomplete", { state: "detached" });
+    verifica(await pagina.isVisible(".note-peek"), "l'Esc del menu «[[» ha chiuso anche la sbirciata");
+    // Esc lascia «[[Benv» nel testo (e «]]», se chiuse da sole): sei
+    // Backspace lo tolgono, le parentesi a coppie.
+    for (let volta = 0; volta < 6; volta++) await pagina.keyboard.press("Backspace");
+    // Appena scritta la frase il completamento ha appena interrogato le sue
+    // fonti e non mostra niente: il primo Esc è della sbirciata.
+    await pagina.keyboard.type("Fine.");
     await pagina.keyboard.press("Escape");
     await pagina.waitForSelector(".note-peek", { state: "hidden" });
   },
   async controlla(pagina, host) {
-    await testoCon(host, SINTASSI, (t) => t.includes(AGGIUNTA), "quello scritto nella sbirciata non si è salvato");
+    await testoCon(host, SINTASSI, (t) => t.includes(`${AGGIUNTA}Fine.`), "quello scritto nella sbirciata non si è salvato");
     await linguetta(pagina, "Benvenuto");
   },
 };
@@ -1066,6 +1132,9 @@ const COMPITI = [
   slashTabella,
   tabellaRiga,
   titoloRinomina,
+  slashDopoRinomina,
+  slashCompito,
+  esciDallElenco,
   manigliaMenu,
   spostaDaTastiera,
   duplica,
@@ -1085,6 +1154,7 @@ const COMPITI = [
   baseBacheca,
   baseSchede,
   sbirciata,
+  sbirciataUnEsc,
   ctrlONota,
   ctrlOSbircia,
   ctrlOEtichette,

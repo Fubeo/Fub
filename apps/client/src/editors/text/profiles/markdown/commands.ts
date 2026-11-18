@@ -21,7 +21,7 @@ import { smartLists } from "../../smart-lists";
 import { addProperty, moveProperty } from "./properties";
 import { frontmatterRange } from "./render";
 import { toggleFormat } from "./format-toggle";
-import { renumberLists } from "./renumber";
+import { renumberChanges, renumberLists } from "./renumber";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
@@ -368,17 +368,23 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
   }
   const inserted = new Map<number, number>();
   const removed = new Set<number>();
+  const outdented: number[] = [];
   for (let index = 0; index < owned.length; index++) {
     const { line, item } = owned[index];
     if (emptied.has(line.number)) {
       if (!removed.has(line.number)) {
-        // Una citazione vuota scende di un livello (`> > ` → `> `, `> ` → la
-        // riga nuda): il contenuto da togliere non c'è, il marcatore sì.
-        if (item.kind === "quote") {
-          const outer = item.quote.replace(/\s*>\s?$/, "");
-          edits.push({ from: line.from, to: line.to, insert: outer === "" ? "" : `${outer} ` });
+        const parent = item.kind === "quote" ? null : parentItem(state, line, item);
+        if (parent) {
+          // Una voce annidata vuota sale di un livello: diventa la sorella
+          // della voce che la conteneva, col suo marcatore.
+          edits.push({ from: line.from + item.quote.length, to: line.to, insert: nextMarker(parent).slice(parent.quote.length) });
+          outdented.push(line.number);
         } else {
-          edits.push({ from: line.from + item.quote.length, to: line.to });
+          // Una citazione vuota scende di un livello (`> > ` → `> `, `> ` → la
+          // riga nuda); una voce vuota esce dall'elenco e resta nella sua
+          // citazione, se c'è.
+          const outer = item.kind === "quote" ? item.quote.replace(/\s*>\s?$/, "") : item.quote.trimEnd();
+          edits.push({ from: line.from, to: line.to, insert: leaveBlock(state, line, outer) });
         }
         removed.add(line.number);
       }
@@ -393,6 +399,13 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
   }
   edits.sort((a, b) => a.from - b.from);
   const changes = state.changes(edits);
+  // Una voce salita in un elenco numerato prende il suo numero, e le sorelle
+  // dopo di lei si rinumerano.
+  const after = changes.apply(state.doc);
+  const renumber = renumberChanges(
+    after,
+    outdented.map((n) => ({ line: after.lineAt(changes.mapPos(state.doc.line(n).from, 1)).number })),
+  );
   dispatch(state.update({
     changes,
     selection: EditorSelection.create(
@@ -401,9 +414,41 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     ),
     scrollIntoView: true,
     userEvent: "input",
-  }));
+  }, ...(renumber.length ? [{ changes: renumber, sequential: true }] : [])));
   return true;
 };
+
+/// La voce che contiene `item` (una voce annidata), cercata verso l'alto
+/// nella stessa citazione: la prima voce meno rientrata. Una riga di testo
+/// meno rientrata, o una citazione diversa, dice che la voce non ha genitore.
+function parentItem(state: EditorState, line: Line, item: ListEntry): ListEntry | null {
+  if (item.indent === "") return null;
+  for (let n = line.number - 1; n >= 1; n--) {
+    const text = state.doc.line(n).text;
+    if (!text.startsWith(item.quote)) return null;
+    const body = text.slice(item.quote.length);
+    if (body.trim() === "") continue;
+    const entry = listItem(text);
+    if (entry && entry.kind !== "quote" && entry.quote === item.quote) {
+      if (entry.indent.length < item.indent.length) return entry;
+      continue;
+    }
+    if (/^\s*/.exec(body)![0].length < item.indent.length) return null;
+  }
+  return null;
+}
+
+/// La riga che prende il posto di una voce o di una citazione vuota quando
+/// Invio ne esce, nel livello `outer` (il prefisso di citazione che resta,
+/// `""` fuori da ogni citazione). Una riga vuota la separa da ciò che sta
+/// sopra: senza, il testo scritto dopo sarebbe una riga pigra della voce o
+/// della citazione, e resterebbe dentro di loro (CommonMark). Se la riga sopra
+/// è già vuota, non serve.
+function leaveBlock(state: EditorState, line: Line, outer: string): string {
+  const here = outer === "" ? "" : `${outer} `;
+  if (line.number === 1 || /^[\s>]*$/.test(state.doc.line(line.number - 1).text)) return here;
+  return `${outer}${state.lineBreak}${here}`;
+}
 
 /// Le righe toccate dalla selezione, una volta sola ciascuna. Un capolinea
 /// posato esattamente a inizio riga non "seleziona" quella riga: è la stessa
