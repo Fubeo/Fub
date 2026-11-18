@@ -242,5 +242,50 @@ export const SETTINGS: PartAnatomy = {
         "settings-banner",
       ],
     },
+    // Le ricette del vault (piano A1, T12): la sezione in `panels/recipes.ts`.
+    // Lo stato sta in `data-status` sulla parola, la portata in `data-reach`.
+    {
+      name: "recipes-section",
+      states: REST,
+      hooks: [
+        "recipe-new",
+        "recipe-list",
+        "recipe-name",
+        "recipe-status",
+        "recipe-where",
+        "recipe-problems",
+        "recipe-problem",
+        "recipe-problem-code",
+        "recipe-problem-message",
+        "recipe-ask",
+        "recipe-limit",
+      ],
+    },
+    // La finestra in cui si guarda una ricetta prima di accenderla
+    // (`panels/recipe-dialog.ts`): un `openDialog` del kit con la classe
+    // `recipe-dialog`, vestito qui perché le sue classi sono di questo pezzo.
+    {
+      name: "recipe-dialog",
+      states: REST,
+      hooks: [
+        "recipe-dialog",
+        "recipe-origin",
+        "recipe-block",
+        "recipe-block-title",
+        "recipe-steps",
+        "recipe-step",
+        "recipe-step-n",
+        "recipe-step-title",
+        "recipe-step-args",
+        "recipe-facts",
+        "recipe-fact",
+        "recipe-fact-label",
+        "recipe-try-list",
+        "recipe-try-item",
+        "recipe-try-note",
+        "recipe-stale",
+        "recipe-stale-text",
+      ],
+    },
   ],
 };
