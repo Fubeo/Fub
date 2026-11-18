@@ -73,8 +73,10 @@ variabili di dato (`--file-fill`, `--file-color` e le versioni `-a`), e la
 regola dell'aspetto sta in `theme/scrittoio/structure.css`. Una pelle non
 veste le celle: il gate del contenuto rifiuta `.grid-cell` e `.no-gridlines`,
 e i segni (selezione, cella attiva, valore non ricalcolato, conflitto) si
-scrivono dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono
-ancora sotto il gate.
+scrivono dalla riga, `.grid-row .selected`. La pelle di casa disegna la
+selezione e la cella attiva coi pezzi del motore dei segni («La selezione e il
+riempimento»), e dalla riga solo il valore non ricalcolato e il conflitto. Gli
+oggetti del foglio non sono ancora sotto il gate.
 
 Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
 righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
@@ -122,6 +124,9 @@ con carta, inchiostro, carattere (`--field-font`), allineamento e margini
 della cella; la cornice (2 px di `--grid-mark`) compare in `DURATION.state` e
 la maniglia se ne va. A ogni bozza cresce a colonne intere fino al bordo
 (`openSpan`), poi va a capo e scende fino a metà riquadro, poi scorre dentro.
+Per chi legge lo schermo il campo sta nella sua cella (`aria-owns`), e il
+suo livello «lift» è leggibile solo finché la cella è aperta: gli altri
+livelli restano `aria-hidden`.
 
 Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
 il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
@@ -180,7 +185,7 @@ quadratino non c'è (il riempimento si fa dal menu) e il tocco lungo non apre
 menu. Il mouse e la penna fanno ciò che fanno sempre.
 
 Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella serve
-`home.columnWidth` (o `home.rowHeight`): una guida segue il puntatore con la
+`home.columnWidth` (o `home.rowHeight`): una guida (`--grid-mark`) segue il puntatore con la
 misura nel riquadro. Al rilascio parte un comando e la misura vale già
 (`SizePreview`): ciò che segue scivola con `SLIDE`, su un no torna e l'avviso
 lo dice, una risposta vecchia non toglie un gesto più nuovo. Il doppio clic dà
@@ -396,3 +401,15 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
   `risultato.ts`, `motivi.ts`, `ribbon/` (`tabs/`), `dialogs/`, `palette/`
 - `apps/client/src/kit/ribbon/`; `crates/fub-format-xlsx/src/`: `grid.rs`,
   `export.rs`, `objects.rs`
+- la pelle: `apps/client/src/theme/scrittoio/structure.css` (il piano, le
+  zone, la carta, i livelli dei segni, la cella aperta),
+  `theme/scrittoio/skin/editors.css` (sezione «Il foglio di calcolo»: i
+  colori dei segni, delle formiche e della cella aperta) e gli hook in
+  `theme/scrittoio/anatomia/editors.ts` (voce `grid-surface`)
+- il banco: le scene `grid-*` di `apps/client/bench/scene.mjs` (sulla
+  cartella grande `?workbook=large`, gli stati del prototipo delle celle nel
+  foglio pieno: l'intervallo, oltre la riga bloccata, la cella aperta e la
+  colonna tirata, anche a 700 px; il riempimento in attesa, la copia nelle tre
+  scelte del segno e il taglio; `mobile-grid-tocco-lungo` al telefono), i
+  controlli dei gesti G1–G7 in `bench/grid-gestures.mjs` (`npm run
+  bench:grid`) e le coreografie `griglia-*` in `bench/motion-rules.mjs`

@@ -620,6 +620,31 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("la cella aperta non sta dentro un aria-hidden, e il suo livello torna nascosto quando si chiude", async () => {
+    const { engine, host, viewport } = await mounted();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const editorHost = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    expect(editorHost.hidden).toBe(false);
+    // Un lettore di schermo non legge niente dentro un `aria-hidden`: il campo
+    // col fuoco sparirebbe (axe `aria-hidden-focus`, scena `grid-large-cella-aperta`).
+    expect(editorHost.closest("[aria-hidden]")).toBeNull();
+    // Il campo sta nel livello, e per chi legge è dentro la sua cella: una
+    // griglia contiene solo righe e celle.
+    expect(editorHost.id).not.toBe("");
+    expect(cellAt(host, 0, 0)!.getAttribute("aria-owns")).toBe(editorHost.id);
+    const lift = editorHost.parentElement!;
+    // I segni che il livello porta restano nascosti da sé.
+    for (const mark of lift.querySelectorAll(".grid-mark")) expect(mark.getAttribute("aria-hidden")).toBe("true");
+    editorHost.querySelector<HTMLElement>(".cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await Promise.resolve();
+    expect(editorHost.hidden).toBe(true);
+    expect(lift.getAttribute("aria-hidden")).toBe("true");
+    expect(host.querySelector("[aria-owns]")).toBeNull();
+    for (const other of host.querySelectorAll(".grid-lift-top, .grid-lift-left, .grid-lift-corner")) expect(other.getAttribute("aria-hidden")).toBe("true");
+    engine.destroy();
+  });
+
   it("la cella aperta è la cella: nel livello della sua zona, col suo carattere, e cresce a colonne intere", async () => {
     const long = "x".repeat(40);
     const { engine, host, viewport } = await mounted(bytesHost({ cells: { "0,0": long } }));
