@@ -1949,7 +1949,7 @@ fn expected() -> Value {
         ],
         // `hash` è un u64 pieno: sul confine JSON è una STRINGA (regola in
         // `fub_abi::ipc`) — il campione oltre 2^53 lo dimostra nella fixture.
-        "VersionRef": [to_value(VersionRef { ts: 1, hash: u64::MAX, size: 3 })],
+        "VersionRef": [to_value(VersionRef { ts: 1, hash: u64::MAX, size: 3, note: None }), to_value(VersionRef { ts: 2, hash: 7, size: 5, note: Some("Testo scartato".into()) })],
         // La riga di una risposta: quella "nuda" (una selezione senza
         // pertinenza) e quella piena, perché i campi opzionali sono **omessi**
         // dalla serializzazione e il mirror TS deve reggere entrambe le forme.

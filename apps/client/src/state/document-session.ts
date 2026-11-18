@@ -182,7 +182,15 @@ type DiskReloadResult = Exclude<ReloadResult, { kind: "missing" } | { kind: "dir
 export type ConflictResolutionResult =
   | { kind: "none" }
   | { kind: "kept" }
-  | { kind: "discarded"; reload: ReloadResult };
+  | { kind: "discarded"; reload: ReloadResult }
+  // Il testo dell'utente non si è potuto mettere in salvo: niente è stato
+  // scartato, il conflitto resta aperto e la scelta si può ripetere.
+  | { kind: "keep-failed"; error: unknown };
+
+/// Mette in salvo il testo che «Usa disco» sta per scartare (la shell lo
+/// conserva nella cronologia con `version.keep`). Una promessa rifiutata
+/// ferma lo scarto.
+export type KeepDiscarded = (text: string) => Promise<void>;
 
 export type RenameResult =
   | { kind: "renamed"; from: string; to: string }
@@ -616,8 +624,14 @@ export class DocumentSession implements DraftBuffer {
    * «Usa disco» scarta il buffer e la bozza soltanto dopo che il disco è stato
    * letto: se la lettura manca, il conflitto resta aperto con il testo
    * dell'utente e la sua bozza, e la scelta si può ripetere.
+   *
+   * Con `keep` il testo dell'utente va prima in salvo: se la conservazione
+   * fallisce non si scarta niente, e lo scarto vale solo per il testo
+   * conservato — un tasto premuto nel frattempo rende la lettura superata e
+   * lascia il conflitto aperto. Un documento a giornale (la griglia,
+   * `grid_journal`) non ha un testo da conservare: lì `keep` non si chiama.
    */
-  async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
+  async resolveConflict(choice: ConflictChoice, keep?: KeepDiscarded): Promise<ConflictResolutionResult> {
     const held = this.settled();
     if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
@@ -625,8 +639,20 @@ export class DocumentSession implements DraftBuffer {
       await this.saveKeepingMine();
       return { kind: "kept" };
     }
+    let kept: string | undefined;
+    if (keep && !this.#hooks.journal()) {
+      kept = this.#state.text;
+      try {
+        await keep(kept);
+      } catch (error) {
+        return { kind: "keep-failed", error };
+      }
+      if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
+    }
     const reload = await this.#reloadFromDisk(++this.#externalGeneration, () => {
       if (this.#state.result !== "conflitto") return false;
+      // Si scarta soltanto il testo che è stato messo in salvo.
+      if (kept !== undefined && this.#state.text !== kept) return false;
       this.discardChanges();
       return true;
     });
@@ -1759,8 +1785,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return outcome;
   }
 
-  async resolveConflict(id: string, choice: ConflictChoice): Promise<ConflictResolutionResult> {
-    return (await this.#sessions.get(id)?.resolveConflict(choice)) ?? { kind: "none" };
+  async resolveConflict(id: string, choice: ConflictChoice, keep?: KeepDiscarded): Promise<ConflictResolutionResult> {
+    return (await this.#sessions.get(id)?.resolveConflict(choice, keep)) ?? { kind: "none" };
+  }
+  /// Se «Usa disco» su `id` ha un testo da conservare: no per i documenti a
+  /// giornale (la griglia), dove il buffer non è il file.
+  keepsDiscardedText(id: string): boolean {
+    const session = this.#sessions.get(id);
+    return session !== undefined && !this.#journals.has(session);
   }
   async renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
     const pendingAlias = this.#pendingDeletionOwners.get(from);

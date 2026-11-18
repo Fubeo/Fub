@@ -843,3 +843,74 @@ describe("il vault di una view (FUB-001)", () => {
     expect(renderView).toHaveBeenLastCalledWith("graph", "main", null);
   });
 });
+
+describe("la Cronologia con un testo conservato", () => {
+  /// La forma è quella che disegna `fub_features::versioning::view` (le
+  /// stringhe come le scrive il catalogo italiano): la nota del testo
+  /// conservato al posto della variazione, la riga «Conservata: …» in
+  /// anteprima, e dopo un ripristino la riga con «Annulla».
+  const tree: UiNode = {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      { node: "text", content: "Versioni: 3" },
+      {
+        node: "stack",
+        dir: "row",
+        gap: 4,
+        key: "restore-undo",
+        children: [
+          { node: "text", content: "Ripristinata la versione del 18 novembre 2026, 10:12." },
+          { node: "button", label: "Annulla", intent: "neutral", action: { action: "undo_restore", payload: { doc: "Nota.md" } } },
+        ],
+      },
+      {
+        node: "list",
+        items: [
+          { node: "list_item", key: "3", title: "18 novembre 2026, 10:40", subtitle: "Testo scartato nel conflitto del 18 novembre 2026, 10:40", action: { action: "preview", payload: { doc: "Nota.md", ts: 3 } }, selected: true },
+          { node: "list_item", key: "2", title: "18 novembre 2026, 10:12", subtitle: "Versione attuale", action: { action: "preview", payload: { doc: "Nota.md", ts: 2 } }, selected: false },
+        ],
+      },
+      {
+        node: "section",
+        title: "Versione del 18 novembre 2026, 10:40",
+        collapsed: false,
+        key: "preview:3",
+        children: [
+          { node: "text", content: "Conservata: Testo scartato nel conflitto del 18 novembre 2026, 10:40" },
+          { node: "stack", dir: "row", gap: 4, children: [
+            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { doc: "Nota.md", ts: 3 } } },
+          ] },
+        ],
+      },
+    ],
+  };
+
+  it("mostra la nota sulla versione e «Annulla» manda l'annullamento del ripristino", async () => {
+    viewAction.mockClear();
+    const { state } = await import("../state/store");
+    state.vaultRoot = "";
+    listViews.mockResolvedValueOnce([spec("history", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    renderView.mockImplementationOnce(async () => tree);
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("history", "main", pane);
+
+    const kept = [...pane.querySelectorAll<HTMLElement>(".ui-list-item")][0]!;
+    expect(kept.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+    expect(pane.textContent).toContain("Conservata: Testo scartato nel conflitto");
+    expect(pane.textContent).toContain("Ripristinata la versione del 18 novembre 2026");
+    const undo = [...pane.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Annulla");
+    expect(undo, "«Annulla» dopo il ripristino").toBeDefined();
+
+    undo!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    const args = viewAction.mock.calls[0] as unknown as unknown[];
+    expect(args[0]).toBe("history");
+    expect(args[3]).toBe("undo_restore");
+    expect(args[4]).toEqual({ doc: "Nota.md" });
+  });
+});

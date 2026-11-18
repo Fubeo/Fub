@@ -498,7 +498,7 @@ fn a_blob_altered_before_the_rebuild_is_still_refused() {
     store
         .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
         .unwrap();
-    let version = store.list(&id("a.md"))[0];
+    let version = store.list(&id("a.md"))[0].clone();
     let path = blob(
         &store.inner.lock().unwrap().docs["a.md"].dir,
         &snapshot_name(version.ts, "a.md"),
@@ -511,7 +511,7 @@ fn a_blob_altered_before_the_rebuild_is_still_refused() {
 
     assert_eq!(
         store.list(&id("a.md")),
-        vec![version],
+        vec![version.clone()],
         "la ricostruzione ridà l'impronta registrata, non quella dei byte di adesso"
     );
     let refused = store.read(&id("a.md"), version.ts, &host);
@@ -587,14 +587,14 @@ fn opening_registers_the_fingerprints_a_legacy_history_never_had() {
     store
         .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
         .unwrap();
-    let version = store.list(&id("a.md"))[0];
+    let version = store.list(&id("a.md"))[0].clone();
     let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
     make_legacy(&mut host, &dir, "a.md");
     assert!(registered_versions(&host, &dir).is_empty());
     assert!(!index_says_registered(&host));
 
     let _store = VersionStore::open(&mut host).unwrap();
-    assert_eq!(registered_versions(&host, &dir), vec![version]);
+    assert_eq!(registered_versions(&host, &dir), vec![version.clone()]);
     assert!(index_says_registered(&host));
 
     // Il blob cambia sul disco e l'indice si perde: la ricostruzione ridà
@@ -603,7 +603,7 @@ fn opening_registers_the_fingerprints_a_legacy_history_never_had() {
     host.data_write(&path, "alterato!".as_bytes()).unwrap();
     host.data_remove(INDEX_FILE).unwrap();
     let store = VersionStore::open(&mut host).unwrap();
-    assert_eq!(store.list(&id("a.md")), vec![version]);
+    assert_eq!(store.list(&id("a.md")), vec![version.clone()]);
     let refused = store.read(&id("a.md"), version.ts, &host);
     assert!(
         matches!(&refused, Err(PluginError::Internal(_))),

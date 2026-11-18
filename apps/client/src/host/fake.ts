@@ -1467,6 +1467,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
       }
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
+      // La Cronologia conserva un testo (`version.keep`) solo se il test la
+      // monta fra i comandi, come il registro vero; il file non cambia.
+      case "version.keep": {
+        if (!listedCommands().some((spec) => spec.id === id)) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        if (typeof args?.text !== "string" || typeof args?.note !== "string" || !docs.has(String(args?.doc))) {
+          throw { kind: "bad_args", message: "host fake: version.keep vuole doc, text e note" } satisfies PluginError;
+        }
+        return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
+      }
       case "note.create": {
         const name = typeof args?.name === "string" && args.name ? args.name : "Senza titolo";
         const doc = `${name}.md`;
