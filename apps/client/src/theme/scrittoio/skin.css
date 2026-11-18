@@ -15098,6 +15098,12 @@ input.canvas-toolbar-item {
   border-color: var(--focus-ring);
   background: var(--bg-elev);
 }
+/* Una cella in conflitto (la nota è cambiata mentre si scriveva): il bordo
+   rosso resta, anche senza il passaggio, finché la scelta sopra le righe non la
+   chiude (IMP-137). */
+.base-cell input:where(:not([type="checkbox"]))[aria-invalid="true"] {
+  border-color: var(--danger);
+}
 .base-cell-error {
   color: var(--danger);
 }
