@@ -369,7 +369,9 @@ gli stessi limiti. Il codec non porta la sua pagina, quindi in Pagina sta su
 un A4 con i margini di 2 cm, che il riquadro **Pagina** dice senza
 cambiarli; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
-bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
+bordo sottile (lo stile automatico `FubC…`). Ogni cella nuova si scrive col
+suo paragrafo, anche vuoto, come in LibreOffice, e la tabella riaperta è
+quella salvata; una cella vuota del file resta senza paragrafo. Le colonne si aggiungono o si
 tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
 uniscono o si dividono soltanto in una tabella senza celle unite in altezza;
 altrimenti il salvataggio lo rifiuta e il testo resta nel buffer. Il

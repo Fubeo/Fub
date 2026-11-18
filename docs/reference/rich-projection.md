@@ -103,6 +103,12 @@ la superficie la numera e la mostra al passaggio. Il ritorno al documento li
 ignora, perché vale la nota tenuta nel `k`; su un'altra specie tenuta sono una
 proiezione malformata.
 
+Una cella vuota del file si legge con `blocks` vuoto. Nell'`.odt`, al ritorno,
+una cella con `k` che porta un solo paragrafo vuoto senza `k` (quello che
+ProseMirror vi mette) vale come la cella vuota e si riscrive com'era; una
+cella nuova, senza `k`, si scrive coi suoi blocchi, il paragrafo vuoto
+compreso, e si rilegge uguale.
+
 Un blocco del corpo (paragrafo o tabella, non i blocchi dentro una cella)
 che il codec non riscriverebbe senza perdite porta `"locked": true`, subito
 dopo `role` nel paragrafo e dopo `t` nella tabella: il salvataggio lo lascia
