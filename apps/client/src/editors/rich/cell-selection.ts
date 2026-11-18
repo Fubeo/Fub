@@ -21,6 +21,11 @@
 // documento, ogni selezione nuova dalla tastiera e ogni clic le spengono. Il
 // segno del taglio lo spengono soltanto le modifiche. Ogni gesto è una
 // transazione sola: Ctrl+Z lo annulla in un passo.
+//
+// Una selezione di testo da una cella all'altra della stessa tabella diventa
+// di celle (`appendTransaction`); una che esce dalla cella si toglie a pezzi
+// (`deleteAcross`), senza unire celle. La guardia che ciò che resta non tolga
+// mai una cella da una riga sta in `table-structure.ts` (`tableShapeGuard`).
 // Il perché di non usare `prosemirror-tables` sta nell'ADR 0225.
 
 import { Fragment, type Node as PmNode, type ResolvedPos } from "prosemirror-model";
@@ -113,7 +118,16 @@ interface CellState {
   readonly cells: ChosenCells | null;
   /// Le celle tagliate in attesa di un incolla, nella tabella `tablePos`.
   readonly cut: (CutMark & { readonly tablePos: number }) | null;
+  /// Fino a quando (`Date.now()`) le celle scelte col trascinamento restano
+  /// anche se la selezione di testo cambia senza il puntatore: il browser
+  /// rilegge la sua selezione del trascinamento anche dopo il rilascio, e
+  /// a volte con un'àncora sua (IMP-134).
+  readonly hold?: number;
 }
+
+/// Quanto restano le celle del trascinamento dopo l'ultimo movimento o il
+/// rilascio, contro le selezioni che il browser rilegge in ritardo.
+const DRAG_HOLD_MS = 400;
 
 const cellKey = new PluginKey<CellState>("rich-cell-selection");
 const NONE: CellState = { cells: null, cut: null };
@@ -161,12 +175,12 @@ function tableSize(table: PmNode, boxes: readonly CellBox[]): { readonly rows: n
 /// Le celle scelte diventano `cells`, col cursore nella cella attiva (di
 /// solito l'àncora, come nei fogli di calcolo). Il segno del taglio resta,
 /// se `tr` non cambia il documento.
-function chooseCells(state: EditorState, cells: ChosenCells, tr: Transaction = state.tr): Transaction {
+function chooseCells(state: EditorState, cells: ChosenCells, tr: Transaction = state.tr, hold?: number): Transaction {
   const table = tr.doc.nodeAt(cells.tablePos)!;
   const active = cells.active ?? cells.anchor;
   const box = boxCovering(cellBoxes(table, cells.tablePos), active.row, active.column);
   const cut = tr.docChanged ? null : cellKey.getState(state)?.cut ?? null;
-  tr.setMeta(cellKey, { cells, cut } satisfies CellState);
+  tr.setMeta(cellKey, { cells, cut, ...(hold === undefined ? {} : { hold }) } satisfies CellState);
   if (box) tr.setSelection(TextSelection.near(tr.doc.resolve(box.pos + 1)));
   return tr;
 }
@@ -222,18 +236,101 @@ function withToday(cell: PmNode, text: string): PmNode {
 /// Svuota le celle scelte, in tutti gli intervalli: ognuna resta, con un
 /// paragrafo vuoto come il suo primo, e resta scelta.
 export function clearCells(state: EditorState, dispatch?: (tr: Transaction) => void): boolean {
-  const selected = selectedCells(state);
-  if (!selected) return false;
-  if (dispatch) {
-    const all = cellBoxes(selected.table, selected.tablePos);
-    const chosen = all.filter((box) => [selected.range, ...selected.others]
-      .some((range) => touches(range, box.row, box.column, box.row, box.column + box.span - 1)));
-    const tr = state.tr;
-    rewriteCells(tr, selected.tablePos, chosen, emptied, selected.active);
-    // Come nei fogli di calcolo le celle restano scelte.
-    dispatch(keepCells(tr, cellKey.getState(state)?.cells ?? null).scrollIntoView());
-  }
+  const cells = cellKey.getState(state)?.cells;
+  if (!cells || !selectedCells(state)) return false;
+  if (dispatch) dispatch(emptyChosen(state, cells).scrollIntoView());
   return true;
+}
+
+/// La transazione che svuota le celle `cells`, che restano scelte.
+function emptyChosen(state: EditorState, cells: ChosenCells): Transaction {
+  const table = state.doc.nodeAt(cells.tablePos)!;
+  const ranges = [rangeBetween(cells.anchor, cells.head), ...cells.others];
+  const chosen = cellBoxes(table, cells.tablePos)
+    .filter((box) => ranges.some((range) => touches(range, box.row, box.column, box.row, box.column + box.span - 1)));
+  const tr = state.tr;
+  rewriteCells(tr, cells.tablePos, chosen, emptied, cells.active ?? cells.anchor);
+  // Come nei fogli di calcolo le celle restano scelte.
+  return keepCells(tr, cells);
+}
+
+/// Una selezione di testo che va da una cella a un'altra della stessa
+/// tabella: sono celle scelte, dall'àncora alla testa. Il browser la fa col
+/// trascinamento o con Maiusc+clic; Canc, una lettera o un incolla su di lei
+/// unirebbero le celle.
+function spannedCells(state: EditorState): ChosenCells | null {
+  const selection = state.selection;
+  if (!(selection instanceof TextSelection) || selection.empty) return null;
+  const anchor = cellAt(selection.$anchor);
+  const head = cellAt(selection.$head);
+  if (!anchor || !head || anchor.tablePos !== head.tablePos || anchor.box.pos === head.box.pos) return null;
+  return {
+    tablePos: anchor.tablePos,
+    anchor: { row: anchor.box.row, column: anchor.box.column },
+    head: { row: head.box.row, column: head.box.column },
+    others: [],
+    adding: false,
+  };
+}
+
+/// La selezione comincia o finisce in una cella, e l'altro capo sta fuori da
+/// lei (fuori dalla tabella, o in un'altra tabella).
+function crossesCells(state: EditorState): boolean {
+  const { $from, $to, empty } = state.selection;
+  if (empty) return false;
+  const from = cellAt($from);
+  const to = cellAt($to);
+  return (from !== null || to !== null) && from?.box.pos !== to?.box.pos;
+}
+
+/// I tratti di `[from, to]` che si tolgono senza rompere una tabella: il
+/// testo fuori dalle tabelle, le tabelle intere, e dentro una tabella toccata
+/// in parte il pezzo scelto di ogni cella. In ordine di documento.
+function deletionPieces(doc: PmNode, from: number, to: number): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  let cursor = from;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isTextblock) return false;
+    if (node.type !== tableType) return true;
+    const end = pos + node.nodeSize;
+    if (from <= pos && end <= to) return false;
+    const pieces: { from: number; to: number }[] = [];
+    let inside = false;
+    for (const box of cellBoxes(node, pos)) {
+      const start = box.pos + 1;
+      const stop = box.pos + box.node.nodeSize - 1;
+      // Tutto dentro una cella: si guarda dentro, come nel documento.
+      if (start <= from && to <= stop) inside = true;
+      const a = Math.max(from, start);
+      const b = Math.min(to, stop);
+      if (a < b) pieces.push({ from: a, to: b });
+    }
+    if (inside) return true;
+    if (cursor < pos) out.push({ from: cursor, to: pos });
+    for (const piece of pieces) out.push(...deletionPieces(doc, piece.from, piece.to));
+    cursor = Math.max(cursor, Math.min(end, to));
+    return false;
+  });
+  if (cursor < to) out.push({ from: cursor, to });
+  return out;
+}
+
+/// Toglie la selezione che attraversa le celle ([`crossesCells`]) senza
+/// toccare la forma delle tabelle: una cella scelta tutta resta, vuota.
+function deleteAcross(state: EditorState): Transaction {
+  const { from, to } = state.selection;
+  const tr = state.tr;
+  for (const piece of deletionPieces(state.doc, from, to).reverse()) {
+    const $start = state.doc.resolve(piece.from);
+    const cell = $start.parent.type === cellType ? $start.parent : null;
+    if (cell && piece.from === $start.start() && piece.to === $start.end()) {
+      const first = cell.firstChild;
+      tr.replaceWith(piece.from, piece.to, para.create(first?.type === para ? first.attrs : null));
+    } else {
+      tr.delete(piece.from, piece.to);
+    }
+  }
+  return tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(from, -1))));
 }
 
 /// Il testo di una cella, coi blocchi a capo.
@@ -266,8 +363,19 @@ function onKey(view: EditorView, event: KeyboardEvent): boolean {
   const state = view.state;
   const plugin = cellKey.getState(state) ?? NONE;
   const chosen = plugin.cells;
-  if (chosen && (event.key === "Delete" || event.key === "Backspace") && !event.ctrlKey && !event.metaKey && !event.altKey) {
-    return clearCells(state, view.dispatch);
+  const erase = (event.key === "Delete" || event.key === "Backspace") && !event.ctrlKey && !event.metaKey && !event.altKey;
+  if (chosen && erase) return clearCells(state, view.dispatch);
+  // Una selezione di testo da una cella all'altra sono celle scelte: Canc e
+  // Backspace le svuotano. Una che esce dalla cella si toglie a pezzi, e le
+  // celle restano.
+  const spanned = erase ? spannedCells(state) : null;
+  if (spanned) {
+    if (view.editable) view.dispatch(emptyChosen(state, spanned).scrollIntoView());
+    return true;
+  }
+  if (erase && crossesCells(state)) {
+    if (view.editable) view.dispatch(deleteAcross(state).scrollIntoView());
+    return true;
   }
   const here = cellAt(state.selection.$head);
   if (!here) {
@@ -496,7 +604,7 @@ class CellDrag {
     const adding = (event.ctrlKey || event.metaKey) && before !== null && from !== null && before.tablePos === from.tablePos;
     // Un clic nuovo spegne le celle (non il segno del taglio): le selezioni
     // del puntatore dopo, no.
-    if (plugin.cells && !adding) view.dispatch(view.state.tr.setMeta(cellKey, { ...plugin, cells: null } satisfies CellState));
+    if (plugin.cells && !adding) view.dispatch(view.state.tr.setMeta(cellKey, { cells: null, cut: plugin.cut } satisfies CellState));
     if (!from) return;
     const others = adding ? withRange(before.others, before.range) : [];
     this.#drag?.close();
@@ -505,23 +613,46 @@ class CellDrag {
     const doc = view.dom.ownerDocument;
     const anchor = { row: from.box.row, column: from.box.column };
     let celled = false;
-    drag.listen(doc, "mousemove", (move) => {
-      const over = view.posAtCoords({ left: move.clientX, top: move.clientY });
+    let head = anchor;
+    /// La cella della stessa tabella sotto il puntatore, oltre la partenza.
+    const cellUnder = (event: MouseEvent): Cell | null => {
+      const over = view.posAtCoords({ left: event.clientX, top: event.clientY });
       const to = over ? cellAt(view.state.doc.resolve(over.pos)) : null;
-      if (!to || to.tablePos !== from.tablePos) return;
-      if (!celled && to.box.pos === from.box.pos && others.length === 0) return;
-      const head = { row: to.box.row, column: to.box.column };
+      if (!to || to.tablePos !== from.tablePos) return null;
+      if (!celled && to.box.pos === from.box.pos && others.length === 0) return null;
+      return { row: to.box.row, column: to.box.column };
+    };
+    // Le celle del trascinamento le decide il puntatore, dalla cella di
+    // partenza a quella sotto il puntatore: la selezione di testo che il
+    // browser intanto allarga, e che rilegge anche dopo il rilascio, non le
+    // cambia.
+    const choose = (hold: number) => view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head, others, adding: false }, undefined, hold));
+    drag.listen(doc, "mousemove", (move) => {
+      const to = cellUnder(move);
+      if (!to) return;
       const current = cellKey.getState(view.state)?.cells;
-      if (celled && current && current.head.row === head.row && current.head.column === head.column) return;
+      if (celled && current && current.head.row === to.row && current.head.column === to.column) return;
       celled = true;
-      view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head, others, adding: false }));
+      head = to;
+      choose(Date.now() + DRAG_HOLD_MS);
     });
-    drag.listen(doc, "mouseup", () => {
+    drag.listen(doc, "mouseup", (up) => {
       drag.close();
       if (this.#drag === drag) this.#drag = null;
+      // Il rilascio dice dove finisce, anche se nessun movimento è arrivato
+      // sopra quella cella.
+      const to = cellUnder(up);
+      if (to) {
+        celled = true;
+        head = to;
+      }
+      if (celled) {
+        choose(Date.now() + DRAG_HOLD_MS);
+        return;
+      }
       // Mod+clic su una cella sola, senza trascinare: la cella è un intervallo
       // in più, come nei fogli di calcolo.
-      if (adding && !celled) view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head: anchor, others, adding: false }));
+      if (adding) view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head: anchor, others, adding: false }));
     });
   }
 
@@ -542,13 +673,37 @@ export const cellSelectionPlugin = new Plugin<CellState>({
       // trascina il browser allarga la sua selezione di testo: le selezioni
       // del puntatore non spengono le celle, il clic dopo sì.
       if (tr.docChanged) return value === NONE ? value : NONE;
-      if (tr.selectionSet && !tr.getMeta("pointer") && value.cells) return { ...value, cells: null };
+      if (tr.selectionSet && !tr.getMeta("pointer") && value.cells) {
+        // Appena dopo il trascinamento la selezione che il browser rilegge
+        // non spegne le celle che il puntatore ha scelto.
+        if (value.hold !== undefined && Date.now() < value.hold) return value;
+        return { cells: null, cut: value.cut };
+      }
       return value;
     },
+  },
+  // Una selezione di testo da una cella all'altra della stessa tabella
+  // diventa di celle, chiunque l'abbia fatta (il trascinamento del browser,
+  // Maiusc+clic): su di lei valgono i gesti delle celle, e nessuna modifica
+  // del testo unisce due celle.
+  appendTransaction(transactions, _old, state) {
+    if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
+    if (cellKey.getState(state)?.cells) return null;
+    const spanned = spannedCells(state);
+    return spanned ? chooseCells(state, spanned) : null;
   },
   view: (view) => new CellDrag(view),
   props: {
     handleKeyDown: onKey,
+    // Una lettera su una selezione che esce da una cella: prima si toglie la
+    // selezione a pezzi ([`deleteAcross`]), poi la lettera, in un passo. Il
+    // browser non la scrive da sé: unirebbe le celle nel DOM.
+    handleKeyPress(view, event) {
+      if (event.ctrlKey || event.metaKey || [...event.key].length !== 1 || !crossesCells(view.state)) return false;
+      if (!view.editable) return true;
+      view.dispatch(deleteAcross(view.state).insertText(event.key).scrollIntoView());
+      return true;
+    },
     handleDOMEvents: {
       copy: (view, event) => copyCells(view, event, false),
       cut: (view, event) => copyCells(view, event, true),

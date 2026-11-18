@@ -113,7 +113,10 @@ riscriverebbe senza perdite qualcosa fuori dal corpo, o che un blocco è
 chiuso: si salvano soltanto i blocchi del corpo, per innesto, e un
 salvataggio che tocca altro (pagina, intestazioni, commenti, note) o che
 l'innesto non sa trattare viene rifiutato (`host.rich.locked.outside`).
-Entrambi sono assenti quando sono falsi.
+Entrambi i rifiuti sono `BadArgs`: il file si scrive, quella modifica no.
+Con `body_only` una tabella nuova non aggiunge lo stile `TableGrid`: lo
+prende se il file lo ha, altrimenti ne porta i bordi come formattazione
+diretta. Entrambi i campi sono assenti quando sono falsi.
 
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,

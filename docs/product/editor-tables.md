@@ -189,6 +189,16 @@ modo foglio, dentro la loro tabella, e l'incolla le sposta in un passo solo;
 Escape toglie prima il segno, poi gli intervalli aggiunti, poi le celle. Ogni
 gesto è un passo d'annullamento, e le celle restano scelte.
 
+Nessuna modifica toglie una cella da una riga. Una selezione di testo che va
+da una cella a un'altra della stessa tabella (il trascinamento del browser,
+Maiusc+clic) diventa celle scelte, dall'àncora alla testa, e Canc o Backspace
+le svuotano. Una selezione che esce dalla tabella si toglie a pezzi: il testo
+fuori, le tabelle intere che contiene, e in ogni cella toccata il pezzo
+scelto, con le celle che restano (vuote, se scelte tutte); una lettera scritta
+sopra va dove cominciava. Ciò che unirebbe due celle o lascerebbe una riga più
+corta delle altre non si applica; una tabella del file che ha già righe di
+lunghezze diverse resta com'è, e Ctrl+Z passa sempre.
+
 Alcuni gesti del foglio nel documento mancano apposta, e la prova comune lo
 dice col perché: Mod con una freccia, che nel testo salta di parola; la cella
 da aprire, riscrivere o annullare, perché il cursore è già nel testo della

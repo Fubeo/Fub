@@ -816,7 +816,7 @@ fn un_paragrafo_chiuso_non_si_scrive_e_gli_altri_sì() {
         &changed.to_json().unwrap(),
         WriteBase::DescendsFrom(revision.clone()),
     );
-    let Err(PluginError::PermissionDenied(fub_abi::Text::Message(message))) = result else {
+    let Err(PluginError::BadArgs(fub_abi::Text::Message(message))) = result else {
         panic!("{result:?}")
     };
     assert_eq!(message.key, "host.rich.locked.block");

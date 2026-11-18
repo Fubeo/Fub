@@ -2,10 +2,13 @@
 // comandi della barra e del menu (`commands.ts`) e per i gesti della Tabella
 // sulle celle scelte (`cell-selection.ts`, Ctrl+«+», Ctrl+«−» e Alt con le
 // frecce). Qui non c'è
-// cursore né selezione: chi chiama sa dove rimetterli.
+// cursore né selezione: chi chiama sa dove rimetterli. In fondo, la guardia
+// che nessuna modifica lasci una riga con meno colonne delle altre.
 
-import type { Node as PmNode } from "prosemirror-model";
-import type { Transaction } from "prosemirror-state";
+import type { Node as PmNode, ResolvedPos } from "prosemirror-model";
+import { isHistoryTransaction } from "prosemirror-history";
+import { Plugin, type Transaction } from "prosemirror-state";
+import { ReplaceAroundStep, ReplaceStep } from "prosemirror-transform";
 import type { TableEdit } from "../../tabella/adapter";
 import { BODY } from "./projection";
 import { richSchema } from "./schema";
@@ -107,3 +110,103 @@ function shifted<T>(items: readonly T[], from: number, to: number, by: number): 
   next.splice(from + by, 0, ...block);
   return next;
 }
+
+// ── La forma delle tabelle ───────────────────────────────────────────────────
+
+/// Il segno di una transazione che cambia la forma delle tabelle senza
+/// passare dalla guardia ([`tableShapeGuard`]): il documento riletto dal
+/// disco, che vale com'è.
+export const SHAPE_FREE = "rich-table-shape-free";
+
+/// La cella più interna che contiene `$pos`, come posizione; -1 fuori da ogni
+/// cella.
+function innerCell($pos: ResolvedPos): number {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type === cellType) return $pos.before(depth);
+  }
+  return -1;
+}
+
+/// Un passo di `tr` toglie o sostituisce un tratto che comincia in una cella
+/// e finisce fuori da lei: ProseMirror unirebbe le due celle (o la cella e il
+/// paragrafo dopo la tabella), e la riga resterebbe con una cella in meno.
+/// Sostituire celle, righe o tabelle intere si può: i loro capi stanno fuori
+/// dalle celle.
+export function splitsCells(tr: Transaction): boolean {
+  return tr.steps.some((step, index) => {
+    if (!(step instanceof ReplaceStep || step instanceof ReplaceAroundStep)) return false;
+    const { from, to } = step as unknown as { from: number; to: number };
+    if (from === to) return false;
+    const doc = tr.docs[index]!;
+    return innerCell(doc.resolve(from)) !== innerCell(doc.resolve(to));
+  });
+}
+
+/// Le righe di `table` non coprono tutte le stesse colonne: una cella unita
+/// conta per le colonne che copre.
+function ragged(table: PmNode): boolean {
+  let width = -1;
+  let even = true;
+  table.forEach((row) => {
+    let columns = 0;
+    row.forEach((cell) => {
+      columns += (cell.attrs.span as number | undefined) ?? 1;
+    });
+    if (width < 0) width = columns;
+    even &&= columns === width;
+  });
+  return !even;
+}
+
+/// Quante tabelle di `doc` hanno righe di larghezze diverse.
+function raggedTables(doc: PmNode): number {
+  let count = 0;
+  doc.descendants((node) => {
+    if (node.type === tableType && ragged(node)) count += 1;
+    return !node.isTextblock;
+  });
+  return count;
+}
+
+/// Una tabella che `tr` ha toccato ha righe di larghezze diverse. Guarda
+/// soltanto dove la transazione ha cambiato qualcosa, e le tabelle intorno:
+/// un tasto in un documento lungo non rilegge tutto il documento.
+function touchesRagged(tr: Transaction): boolean {
+  const doc = tr.doc;
+  const size = doc.content.size;
+  let found = false;
+  const check = (node: PmNode) => {
+    if (!found && node.type === tableType && ragged(node)) found = true;
+  };
+  tr.mapping.maps.forEach((map, index) => {
+    const after = tr.mapping.slice(index + 1);
+    map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+      if (found) return;
+      const from = Math.min(after.map(newStart, -1), size);
+      const to = Math.min(Math.max(after.map(newEnd, 1), from), size);
+      const $from = doc.resolve(from);
+      for (let depth = $from.depth; depth > 0; depth -= 1) check($from.node(depth));
+      doc.nodesBetween(from, to, (node) => {
+        check(node);
+        return !found && !node.isTextblock;
+      });
+    });
+  });
+  return found;
+}
+
+/// La guardia della forma delle tabelle: una modifica non lascia mai una
+/// riga con meno colonne delle altre. Rifiuta i passi che unirebbero celle
+/// ([`splitsCells`]) e le modifiche dopo cui le tabelle con righe di
+/// larghezze diverse sono più di prima (una tabella di un file che le ha già
+/// così resta com'è). I gesti delle tabelle non la toccano: Canc sulle celle
+/// scelte le svuota, «Unisci celle» allarga la prima, righe e colonne si
+/// rifanno intere. La cronologia passa sempre (Ctrl+Z rimette ciò che
+/// c'era), e così il documento riletto dal disco ([`SHAPE_FREE`]).
+export const tableShapeGuard = new Plugin({
+  filterTransaction(tr, state) {
+    if (!tr.docChanged || tr.getMeta(SHAPE_FREE) || isHistoryTransaction(tr)) return true;
+    if (splitsCells(tr)) return false;
+    return !touchesRagged(tr) || raggedTables(tr.doc) <= raggedTables(state.doc);
+  },
+});

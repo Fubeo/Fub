@@ -60,6 +60,12 @@
     "E7": {
       "error": "fidelity",
       "message": "rich document would not read back as written"
-    }
+    },
+    "E8": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E9": "n/a"
   }
 }

@@ -1,5 +1,5 @@
 //! **Il banco del corpus.** Ogni file di `tests/corpus/` passa dall'apertura,
-//! dalle esportazioni e dalle modifiche standard della shell (E0–E7); l'esito
+//! dalle esportazioni e dalle modifiche standard della shell (E0–E9); l'esito
 //! si confronta con `tests/corpus/expected/<file>.json`.
 //!
 //! I risultati attesi committati sono il comportamento del motore di oggi: in
@@ -261,6 +261,26 @@ fn text_inline(x: &str) -> Inline {
     }
 }
 
+/// Un paragrafo nuovo del corpo, vuoto, come lo crea la shell.
+fn empty_para() -> Para {
+    Para {
+        role: Role::Body,
+        locked: false,
+        align: None,
+        k: None,
+        sect: None,
+        page: None,
+        header: None,
+        footer: None,
+        p: Layout::default(),
+        s: None,
+        f: Box::default(),
+        ins: None,
+        del: None,
+        c: Vec::new(),
+    }
+}
+
 fn marker(id: u32, end: bool) -> Inline {
     Inline::Atom {
         k: None,
@@ -362,20 +382,8 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
                 .splice(b..=b, [Block::Para(first), Block::Para(second)]);
         }
         "E3" => p.blocks.push(Block::Para(Para {
-            role: Role::Body,
-            locked: false,
-            align: None,
-            k: None,
-            sect: None,
-            page: None,
-            header: None,
-            footer: None,
-            p: Layout::default(),
-            s: None,
-            f: Box::default(),
-            ins: None,
-            del: None,
             c: vec![text_inline("Un paragrafo aggiunto in fondo.")],
+            ..empty_para()
         })),
         "E4" => {
             let (b, i) = first_text(&mut p, false)?;
@@ -439,6 +447,50 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             })?;
             para.c.push(text_inline(" In fondo."));
         }
+        // Inserisci › Tabella dopo l'ultimo paragrafo, come la shell
+        // (`insertTable`): una griglia 3×3 nuova, senza dati opachi, e un
+        // paragrafo vuoto dopo, perché il corpo finisce con un paragrafo.
+        "E8" => {
+            let cell = || fub_format_rich::projection::Cell {
+                k: None,
+                span: None,
+                blocks: vec![Block::Para(empty_para())],
+            };
+            let row = || fub_format_rich::projection::Row {
+                k: None,
+                cells: vec![cell(), cell(), cell()],
+            };
+            p.blocks
+                .push(Block::Table(fub_format_rich::projection::Table {
+                    locked: false,
+                    k: None,
+                    rows: vec![row(), row(), row()],
+                }));
+            p.blocks.push(Block::Para(empty_para()));
+        }
+        // Canc sulle prime due celle scelte di una tabella aperta, come la
+        // shell (`clearCells`): le celle restano, con un paragrafo vuoto che
+        // tiene i dati del loro primo; la riga non perde celle.
+        "E9" => {
+            let table = p.blocks.iter_mut().find_map(|block| match block {
+                Block::Table(table)
+                    if !table.locked && table.rows.first().is_some_and(|r| r.cells.len() > 1) =>
+                {
+                    Some(table)
+                }
+                _ => None,
+            })?;
+            for cell in table.rows[0].cells.iter_mut().take(2) {
+                let first = match cell.blocks.first() {
+                    Some(Block::Para(para)) => Para {
+                        c: Vec::new(),
+                        ..para.clone()
+                    },
+                    _ => empty_para(),
+                };
+                cell.blocks = vec![Block::Para(first)];
+            }
+        }
         // Ciò che la shell non fa: cambiare un blocco chiuso.
         "E6" => {
             let (b, i) = first_text(&mut p, true)?;
@@ -449,7 +501,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
     Some(p)
 }
 
-const EDITS: [&str; 8] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7"];
+const EDITS: [&str; 10] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"];
 
 /// Salva una modifica, riapre i byte e confronta la proiezione riaperta con
 /// quella voluta, a meno dei dati opachi.

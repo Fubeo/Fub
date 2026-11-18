@@ -60,7 +60,10 @@ Si modificano:
 - le tabelle: una nuova dal pulsante **Tabella** di **Inserisci**, scegliendo
   righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
   del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
-  colonne uguali e con i bordi.
+  colonne uguali e con i bordi. In un documento che si scrive soltanto nel
+  corpo (parti chiuse, «Solo il testo») gli stili del file non cambiano: se
+  il file non ha già lo stile «Griglia tabella», la tabella nuova ne prende i
+  bordi come formattazione sua, e si salva come ogni paragrafo.
   Righe e colonne si aggiungono, si spostano e si tolgono dalla scheda
   **Tabella** o con le scorciatoie della tabella Markdown; una colonna nuova
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
