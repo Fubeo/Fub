@@ -9,10 +9,16 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type CommentView } from "./projection";
 import { mountRichSide, RICH_SIDE_VIEWS, type RichSide } from "./side";
 import { lineFeeds, tryApplyOperation, type EditorChange } from "../core/text-operation";
+import { mountKeyboard } from "../../ui/keyboard";
+import { revisions } from "./review";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
 
 let engines: RichEngine[] = [];
 let sides: RichSide[] = [];
+let lifetimes: Lifetime[] = [];
 afterEach(() => {
+  for (const life of lifetimes) life.close();
+  lifetimes = [];
   for (const side of sides) side.destroy();
   for (const engine of engines) engine.destroy();
   sides = [];
@@ -36,10 +42,15 @@ function engine(blocks: readonly Block[], comments: readonly CommentView[] = [],
   return made;
 }
 
-/// Il pannello con un ispettore che monta la scheda chiesta.
+/// Il pannello con un ispettore che monta la scheda chiesta. L'ispettore è
+/// legato al documento come nella shell: col fuoco su un suo pulsante,
+/// Ctrl+Z va alla storia del documento (`ui/off-sheet-keys.ts`).
 function side(e: RichEngine, review = true) {
   const host = document.createElement("div");
   document.body.append(host);
+  const keys = openLifetime();
+  lifetimes.push(keys);
+  mountKeyboard(keys, () => {}, { owns: (target) => host.contains(target), history: (step) => e.history(step) });
   const unmounts = new Map<string, () => void>();
   const made = mountRichSide(e, { review }, (viewId) => {
     if (unmounts.has(viewId)) return;
@@ -221,11 +232,12 @@ describe("la scheda Revisioni", () => {
     const name = field(host, t("rich.comment.author"));
     expect(key(name, { key: "z" }).defaultPrevented).toBe(false);
     expect(items().map((el) => el.dataset.kind)).toEqual(["del"]);
-    // Smontata la scheda, il contenitore della shell non tiene il tasto.
+    // Smontata la scheda, l'ispettore resta legato al documento: da lì
+    // Ctrl+Z annulla ancora, senza un ascoltatore della scheda.
     unmount(RICH_SIDE_VIEWS.revisions);
-    expect(key(host, { key: "z" }).defaultPrevented).toBe(false);
     expect(items()).toHaveLength(0);
-    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
+    expect(key(host, { key: "z" }).defaultPrevented).toBe(true);
+    expect(revisions(e.state.doc).map((change) => change.kind)).toEqual(["ins", "del"]);
   });
 
   it("dopo Rifiuta e Rifiuta tutte il fuoco resta nella scheda, e Ctrl+Z da lì li annulla (IMP-126)", () => {

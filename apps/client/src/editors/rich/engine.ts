@@ -603,6 +603,12 @@ export class RichEngine {
     return done;
   }
 
+  /// Un passo della storia del documento senza portare il fuoco nel testo:
+  /// Ctrl+Z da un pannello resta sul pannello (`ui/off-sheet-keys.ts`).
+  history(step: "undo" | "redo"): boolean {
+    return this.apply(step === "undo" ? undo : redo, false);
+  }
+
   /// Un gesto che sposta soltanto la selezione, come andare a una revisione o
   /// a un commento: vale anche in sola lettura. Se il comando toccasse il
   /// documento non si applica.

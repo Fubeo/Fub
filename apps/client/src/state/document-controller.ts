@@ -1028,6 +1028,15 @@ export function findInFocusedSurface(): boolean {
   return commandTarget()?.surface.find?.() ?? false;
 }
 
+/// Ctrl+Z da un pannello del documento, col fuoco fuori dal foglio: un passo
+/// della storia della superficie del riquadro col fuoco, senza spostare il
+/// fuoco. `null` se lì non c'è una superficie con una storia da guidare
+/// (`ui/off-sheet-keys.ts`).
+export function focusedDocumentHistory(step: "undo" | "redo"): boolean | null {
+  const surface = commandTarget()?.surface;
+  return surface?.history ? surface.history(step) : null;
+}
+
 /// F6 dentro il riquadro col fuoco: la superficie passa alla sua zona seguente
 /// (la barra, il foglio). `null` se non ha zone sue, `false` se in quel verso
 /// sono finite.

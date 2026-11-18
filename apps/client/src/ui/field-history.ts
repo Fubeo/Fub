@@ -11,10 +11,9 @@
 // dell'app lo ha preso.
 //
 // CodeMirror e gli editor ricchi (`contenteditable`) hanno la loro pila e i
-// loro tasti, e non passano di qui. I pannelli di un documento che agiscono
-// su di lui (Sostituisci, Revisioni) usano lo stesso riconoscimento per dare
-// il tasto alla pila del documento quando il fuoco non è in un campo
-// (`editors/rich/history-keys.ts`).
+// loro tasti, e non passano di qui. Fuori da un campo, lo stesso tasto su un
+// pannello del documento (Sostituisci, Revisioni, l'ispettore) va alla pila
+// del documento attivo (`ui/off-sheet-keys.ts`).
 import type { KeyboardPlatform } from "./commands";
 
 export type FieldHistoryStep = "undo" | "redo";
@@ -49,6 +48,13 @@ export function isPlainTextField(target: EventTarget | null, textInputs: Readonl
   if (target instanceof HTMLTextAreaElement) return !target.readOnly && !target.disabled;
   if (target instanceof HTMLInputElement) return textInputs.has(target.type.toLowerCase()) && !target.readOnly && !target.disabled;
   return false;
+}
+
+/// Un campo in cui si scrive: `input` di testo, `textarea`, `contenteditable`
+/// (CodeMirror e il foglio ricco compresi).
+export function isWritingField(target: EventTarget | null): boolean {
+  if (isPlainTextField(target, TEXT_INPUT_TYPES)) return true;
+  return target instanceof HTMLElement && target.isContentEditable;
 }
 
 /// Esegue il passo sulla pila del campo col fuoco. Vero se il documento lo ha
