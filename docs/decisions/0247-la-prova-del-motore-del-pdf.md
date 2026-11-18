@@ -1,6 +1,6 @@
 # 0247 — La prova del motore del PDF: la vista compone, Fub scrive
 
-- **Stato:** proposta
+- **Stato:** accettata
 - **Data:** 2026-11-18
 - **Ambito:** contratto
 - **Sostituisce:** —
@@ -46,10 +46,8 @@ Playwright, in una corsa del 2026-11-18.
 | Pixel diversi, pagine 1 / 2 / 3 / 4 | 2,43 / 0,30 / 0,59 / 0,84 % | 1 % |
 | Pixel diversi col testo spostato apposta di 1 px | 3,9 % | deve superare l'1 % |
 
-I tempi sono di una corsa con la coda dei controlli pesanti occupata: valgono
-come ordine di grandezza. La prima corsa (gli stessi pezzi, prima della
-correzione dei caratteri qui sotto) aveva dato 36,5 ms di misura e 37 ms di
-scrittura.
+I tempi, presi con la coda dei controlli occupata, valgono come ordine di
+grandezza (la prima corsa: 36,5 ms di misura, 37 ms di scrittura).
 
 ### Da dove viene lo scarto della pagina 1
 
@@ -94,7 +92,7 @@ della griglia.
 
 ## Decisione
 
-Proposta, da confermare da chi coordina il piano:
+Accettata da chi coordina il piano (2026-11-18): si va avanti con la strada A.
 
 - La strada A regge per il testo: le lettere arrivano nel PDF uguali e allo
   stesso posto della vista, il testo si estrae uguale, e il banco vede uno
@@ -107,6 +105,11 @@ Proposta, da confermare da chi coordina il piano:
   caratteri incorporati, e lascia le etichette al testo vero che la prova già
   scrive coi caratteri di serie. Questo chiude insieme lo scarto dei colori e
   degli angoli e il peso della pagina 1.
+- L'SVG già risolto dei diagrammi (gli stili calcolati scritti come
+  attributi, senza `<style>` e senza caratteri incorporati) è lavoro di
+  `export/vectors.ts`, nel task dei diagrammi e delle formule in vettoriale
+  del piano dell'esportazione: lì il confronto della pagina col diagramma
+  deve scendere sotto l'1 %. La prova si ferma al testo, che regge.
 - La soglia del confronto resta all'1 % con soglia di colore 0,1: è quella
   che vede lo spostamento di un pixel. Non si alza per far passare la
   pagina 1.
