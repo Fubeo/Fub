@@ -27,11 +27,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fub_abi::command::{
-    Choice, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind,
-    ParamSpec,
+    Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
+    InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::model::DocId;
-use fub_abi::text::{StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi, ReadApi, VaultRead};
 use fub_abi::transfer::{
     copy_names, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -246,40 +246,19 @@ impl ExportProvider for RichExport {
         }
         let ids: Vec<DocId> = chosen.iter().map(|(doc, _)| doc.clone()).collect();
         for ((doc, codec), name) in chosen.iter().zip(copy_names(&ids, target.extension())) {
-            let entry = doc.to_string();
-            let document = match host
-                .read_document_bytes(doc)
-                .and_then(|bytes| codec.read(&bytes).map_err(|error| read_error(doc, error)))
-            {
-                Ok(document) => document,
-                Err(error) => {
-                    report
-                        .log
-                        .push(TransferNote::warning(error.to_string()).about(entry));
-                    continue;
-                }
-            };
-            let bytes = match target.write(&document, comments) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    report.log.push(
-                        TransferNote::warning(format!(
-                            "la copia {} non si scrive: {error}",
-                            target.name()
-                        ))
-                        .about(entry),
-                    );
+            let copy = match copy_of(host, doc, *codec, target, comments) {
+                Ok(copy) => copy,
+                Err(note) => {
+                    report.log.push(note);
                     continue;
                 }
             };
             let handle = out.open_artifact(&name, target.media_type())?;
-            for chunk in bytes.chunks(64 * 1024) {
+            for chunk in copy.bytes.chunks(64 * 1024) {
                 out.write_artifact(handle, chunk)?;
             }
             report.artifacts.push(out.close_artifact(handle)?);
-            report
-                .log
-                .extend(losses(&document, *codec, target, comments, &bytes, &entry));
+            report.log.extend(copy.losses);
         }
         if report.artifacts.is_empty() {
             return Err(PluginError::BadArgs(
@@ -303,6 +282,36 @@ pub fn codec_of<H: VaultRead + ?Sized>(host: &H, doc: &DocId) -> Option<Codec> {
 
 fn read_error(doc: &DocId, error: crate::RichError) -> PluginError {
     PluginError::BadArgs(format!("`{doc}` cannot be read: {error}").into())
+}
+
+/// La copia di un documento, scritta in memoria, con gli avvisi su ciò che
+/// non porta.
+struct WrittenCopy {
+    bytes: Vec<u8>,
+    losses: Vec<TransferNote>,
+}
+
+/// Scrive la copia di `doc` e la misura. L'export la consegna; l'anteprima
+/// del comando ne mostra soltanto le perdite. Un documento che non si legge,
+/// o una copia che non si scrive, è l'avviso che lo dice.
+fn copy_of<H: VaultRead + ?Sized>(
+    host: &H,
+    doc: &DocId,
+    codec: Codec,
+    target: Target,
+    comments: bool,
+) -> Result<WrittenCopy, TransferNote> {
+    let entry = doc.to_string();
+    let document = host
+        .read_document_bytes(doc)
+        .and_then(|bytes| codec.read(&bytes).map_err(|error| read_error(doc, error)))
+        .map_err(|error| TransferNote::warning(error.to_string()).about(entry.clone()))?;
+    let bytes = target.write(&document, comments).map_err(|error| {
+        TransferNote::warning(format!("la copia {} non si scrive: {error}", target.name()))
+            .about(entry.clone())
+    })?;
+    let losses = losses(&document, codec, target, comments, &bytes, &entry);
+    Ok(WrittenCopy { bytes, losses })
 }
 
 /// Gli avvisi su ciò che la copia non porta.
@@ -630,6 +639,8 @@ const T_DOC: &str = "cmd.rich.export-copy.doc";
 const T_FORMAT: &str = "cmd.rich.export-copy.format";
 const T_COMMENTS: &str = "cmd.rich.export-copy.comments";
 const T_COMMENTS_DESC: &str = "cmd.rich.export-copy.comments.desc";
+const T_PREVIEW: &str = "cmd.rich.export-copy.preview";
+const T_PREVIEW_NONE: &str = "cmd.rich.export-copy.preview.none";
 
 fn format_key(target: Target) -> String {
     format!("{T_FORMAT}.{}", target.key())
@@ -673,7 +684,7 @@ impl CommandProvider for RichCommands {
         &self,
         command: &str,
         args: serde_json::Value,
-        _mode: InvokeMode,
+        mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         if command != EXPORT_COPY {
@@ -686,7 +697,7 @@ impl CommandProvider for RichCommands {
             .as_str()
             .and_then(|key| Target::ALL.into_iter().find(|t| t.key() == key))
             .ok_or_else(|| PluginError::BadArgs("`format` is not an export format".into()))?;
-        match codec_of(&*host, &doc) {
+        let codec = match codec_of(&*host, &doc) {
             None => {
                 return Err(PluginError::BadArgs(
                     format!("`{doc}` is not a word-processing document").into(),
@@ -697,20 +708,63 @@ impl CommandProvider for RichCommands {
                     format!("`{doc}` is already a {} document", target.name()).into(),
                 ))
             }
-            Some(_) => {}
-        }
-        let request = ExportRequest::new(target.id(), ExportSelection::Documents(vec![doc]))
-            .with_options(serde_json::json!({
-                OPTION_COMMENTS: args.get(OPTION_COMMENTS).and_then(serde_json::Value::as_bool).unwrap_or(false),
-            }));
+            Some(codec) => codec,
+        };
+        let comments = args
+            .get(OPTION_COMMENTS)
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let request =
+            ExportRequest::new(target.id(), ExportSelection::Documents(vec![doc.clone()]))
+                .with_options(serde_json::json!({ OPTION_COMMENTS: comments }));
         let request_json = serde_json::to_string(&request)
             .map_err(|error| PluginError::BadArgs(error.to_string().into()))?;
-        // Il modo (prova o esecuzione) è dell'host, e passa con l'invocazione.
-        host.run_command(
+        // Il modo (prova o esecuzione) è dell'host, e passa con l'invocazione:
+        // anche in prova `export.run` controlla la richiesta.
+        let queued = host.run_command(
             EXPORT_RUN,
             serde_json::json!({ "request_json": request_json }),
-        )
+        )?;
+        if !mode.is_dry_run() {
+            return Ok(queued);
+        }
+        preview(&*host, &doc, codec, target, comments)
     }
+}
+
+/// L'anteprima del comando (IMP-139): ciò che il modulo promette, cioè
+/// l'elenco di ciò che il formato non porta. La copia si scrive in memoria e
+/// si misura come la misura l'export; niente si accoda e niente si scrive.
+/// Il piano non tocca documenti: si approva il sommario.
+fn preview<H: VaultRead + ?Sized>(
+    host: &H,
+    doc: &DocId,
+    codec: Codec,
+    target: Target,
+    comments: bool,
+) -> Result<CommandOutcome, PluginError> {
+    let copy = copy_of(host, doc, codec, target, comments)
+        .map_err(|note| PluginError::BadArgs(note.message.into()))?;
+    let doc_arg = Arg::text("doc", doc.as_str());
+    let summary = if copy.losses.is_empty() {
+        Text::message(T_PREVIEW_NONE, vec![doc_arg])
+    } else {
+        // Un avviso per riga, come nell'attività: il sommario si mostra con
+        // i suoi a capo.
+        let losses = copy
+            .losses
+            .iter()
+            .map(|note| format!("– {}", note.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Text::message(T_PREVIEW, vec![doc_arg, Arg::text("losses", losses)])
+    };
+    Ok(
+        CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+            summary,
+            Vec::new(),
+        ))),
+    )
 }
 
 /// Le stringhe del comando.
@@ -740,6 +794,16 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 T_COMMENTS_DESC,
                 "In HTML e nel testo semplice, i commenti in fondo alla copia.",
+            )
+            .with(
+                T_PREVIEW,
+                "La copia di «{doc}» arriverà nell'attività, da salvare dove vuoi. Il confronto \
+                 con il documento:\n{losses}",
+            )
+            .with(
+                T_PREVIEW_NONE,
+                "La copia di «{doc}» arriverà nell'attività, da salvare dove vuoi. Il confronto \
+                 con il documento non trova niente che il formato non porti.",
             ),
         named(StringCatalog::new("en"), "Plain text")
             .with(T_TITLE, "Export a copy")
@@ -755,6 +819,16 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 T_COMMENTS_DESC,
                 "In HTML and plain text, the comments at the end of the copy.",
+            )
+            .with(
+                T_PREVIEW,
+                "The copy of “{doc}” will appear in Activity, to save wherever you like. What the \
+                 comparison with the document finds:\n{losses}",
+            )
+            .with(
+                T_PREVIEW_NONE,
+                "The copy of “{doc}” will appear in Activity, to save wherever you like. The \
+                 comparison with the document finds nothing the format does not carry.",
             ),
     ]
 }

@@ -341,3 +341,77 @@ fn un_inchiostro_o_un_disegno_senza_i_suoi_dati_è_rifiutato() {
         assert!(matches!(result, Err(RichError::Malformed(_))), "{result:?}");
     }
 }
+
+/// La parte principale di un `.docx`, come testo.
+fn main_xml(docx: &[u8]) -> String {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(docx)).unwrap();
+    let mut xml = String::new();
+    zip.by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut xml)
+        .unwrap();
+    xml
+}
+
+/// Gli oggetti di disegno del file come li conta chi lo apre: `w:drawing` e
+/// `w:pict`.
+fn drawings(docx: &[u8]) -> usize {
+    let xml = main_xml(docx);
+    ["<w:drawing>", "<w:drawing ", "<w:pict>", "<w:pict "]
+        .iter()
+        .map(|tag| xml.matches(tag).count())
+        .sum()
+}
+
+/// IMP-138, sul file. Un tratto è un inchiostro di Word, cioè **due**
+/// elementi: l'InkML in `mc:Choice` (`w:drawing`) e l'immagine di ripiego in
+/// `mc:Fallback` (`w:pict`), come li scrive Word. Annullato il tratto, il
+/// buffer torna al testo di prima, e salvarlo sul file che lo aveva lo toglie.
+#[test]
+fn annullato_il_tratto_il_file_salvato_torna_ai_disegni_di_prima() {
+    use fub_format_rich::projection::{Place, PlaceWrap};
+    let file = bytes(&sample());
+    // L'esempio ha già un'immagine: si conta da lì.
+    let base = drawings(&file);
+    let before = projection(&file);
+    let stroke = |p: &mut Projection, y: f32| {
+        para_mut(p, 1).c.push(new_atom(
+            AtomKind::Ink,
+            Some(ink_shape()),
+            None,
+            Some(Place {
+                wrap: PlaceWrap::Front,
+                x: 12.0,
+                y,
+            }),
+        ));
+    };
+    let mut one = before.clone();
+    stroke(&mut one, 4.0);
+    let first = saved(&file, &one);
+    assert_eq!(
+        drawings(&first),
+        base + 2,
+        "un tratto: l'inchiostro e il suo ripiego"
+    );
+    let xml = main_xml(&first);
+    assert_eq!(xml.matches("<mc:Choice Requires=\"wpi\">").count(), 1);
+    assert_eq!(
+        xml.matches("<v:imagedata").count(),
+        1,
+        "il ripiego è un'immagine VML"
+    );
+
+    let mut two = one.clone();
+    stroke(&mut two, 40.0);
+    let second = saved(&first, &two);
+    assert_eq!(drawings(&second), base + 4);
+
+    // Annulla: il buffer è quello di un tratto solo, e il file ne ha due.
+    let undone = saved(&second, &one);
+    assert_eq!(drawings(&undone), base + 2);
+    // Annulla ancora: nessun tratto.
+    let empty = saved(&undone, &before);
+    assert_eq!(drawings(&empty), base);
+}

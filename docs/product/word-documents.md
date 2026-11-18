@@ -344,10 +344,10 @@ La scheda «Disegna» (`editors/rich/ink.ts`) mette un velo sopra la pagina
 quando è scelto uno strumento che disegna, e raccoglie i tratti con
 l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`). I tratti di una
 sessione diventano un oggetto `ink` davanti al testo, ancorato al paragrafo
-più vicino, in un passo di Annulla; la geometria pura (riquadro, gomma, lazo,
-contorno) sta in `editors/rich/ink-shape.ts`. In un documento OpenDocument la
-sessione entra come `drawing`. Un inchiostro del file che non si legge resta
-opaco, e il chip dello stato lo dice in «Che cosa manca?».
+più vicino, in un passo di Annulla, che toglie l'ultimo tratto anche a sessione
+aperta (`RichEngine.holdPending`); la geometria pura (riquadro, gomma, lazo,
+contorno) sta in `editors/rich/ink-shape.ts`. In OpenDocument è un `drawing`.
+Un inchiostro illeggibile resta opaco; il chip dello stato lo dice in «Che cosa manca?».
 
 Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
 ([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
@@ -424,7 +424,7 @@ oggetti non interpretati. Ciò che manca o diminuisce è un avviso, con il
 numero. Impaginazione, caratteri, colori e stili dei paragrafi non si misurano,
 e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
 `.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
-testo semplice i commenti si possono mettere in fondo alla copia.
+testo semplice i commenti vanno, a scelta, in fondo. **Anteprima…** dà gli avvisi.
 
 `.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
 modificano come sorgente, anche quando sono nati da una copia.
