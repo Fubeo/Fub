@@ -76,6 +76,7 @@ import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
 import { Transclusions, type TransclusionDeps } from "./transclusion";
+import { LiveCards, type LiveCardsPort } from "./live-cards";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
@@ -226,6 +227,9 @@ export interface MarkdownSurfaceOptions {
   /// un riquadro, per scrivere dentro `![[Nota#^id]]`. Senza, le note
   /// riportate si leggono soltanto.
   transclusion?: TransclusionDeps;
+  /// Le schede vive (E19, T41): l'ospite delle schede della lavagna, caricato
+  /// alla prima scheda. Senza, l'embed di un file resta la resa di sempre.
+  liveCards?: LiveCardsPort;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -536,6 +540,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       completions: { searchNotes: opts.completions.searchNotes, listTags: opts.completions.listTags },
     }).extensions(),
   });
+  /// Le schede vive della nota (T41): una sola attiva, le vive contate.
+  const liveCards = opts.liveCards ? new LiveCards({
+    port: opts.liveCards,
+    hostDoc: linkSource,
+    editable: () => editable(),
+  }) : null;
   const profile = createMarkdownProfile({
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
@@ -556,6 +566,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
       linkCard: linkCards,
+      ...(liveCards ? { liveCards } : {}),
       // La pagina del giorno (E17): in fondo alla giornaliera, se questa nota
       // lo è con la cartella e il formato di adesso.
       ...(opts.completions.dates?.dailyDate ? {
@@ -2448,6 +2459,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         copy: (text) => copyText(text, t("editor_menu.copied")),
         openLink: (page, heading, block) => void openWikilink(page, heading, block),
         editHere: (start) => engine.runViewCommand((view) => transclusions.editAt(view, start)),
+        ...(liveCards ? { activateCard: (start: number) => engine.runViewCommand((view) => liveCards.activateAt(view, start)) } : {}),
       }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
@@ -2474,6 +2486,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       unmountReading = null;
       reading.remove();
       engine.destroy();
+      // Dopo l'editor, che smonta i widget: le schede rimaste se ne vanno qui.
+      liveCards?.destroy();
       resources?.release();
       delete parent.dataset.markdownMode;
     },

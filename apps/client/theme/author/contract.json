@@ -1533,6 +1533,23 @@
     "transclusion-editing",
     "transclusion-editor",
     "transclusion-synced",
+    "live-card",
+    "live-card-body",
+    "live-card-tools",
+    "live-card-head",
+    "live-card-title",
+    "live-card-name",
+    "live-card-spacer",
+    "live-card-escape",
+    "live-card-done",
+    "live-card-open",
+    "live-card-full",
+    "live-card-label",
+    "live-card-missing",
+    "live-card-unsupported",
+    "live-card-message",
+    "live-card-hint",
+    "live-card-actions",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -3740,6 +3757,23 @@
     "transclusion-editing": "contenuto",
     "transclusion-editor": "contenuto",
     "transclusion-synced": "contenuto",
+    "live-card": "cornice",
+    "live-card-body": "cornice",
+    "live-card-tools": "cornice",
+    "live-card-head": "cornice",
+    "live-card-title": "cornice",
+    "live-card-name": "cornice",
+    "live-card-spacer": "cornice",
+    "live-card-escape": "cornice",
+    "live-card-done": "cornice",
+    "live-card-open": "cornice",
+    "live-card-full": "cornice",
+    "live-card-label": "cornice",
+    "live-card-missing": "cornice",
+    "live-card-unsupported": "cornice",
+    "live-card-message": "cornice",
+    "live-card-hint": "cornice",
+    "live-card-actions": "cornice",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -8141,6 +8175,59 @@
       ]
     },
     {
+      "name": "live-card",
+      "part": "live-cards",
+      "hooks": [
+        "live-card",
+        "live-card-body",
+        "live-card-tools"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-head",
+      "part": "live-cards",
+      "hooks": [
+        "live-card-head",
+        "live-card-title",
+        "live-card-name",
+        "live-card-spacer",
+        "live-card-escape",
+        "live-card-done",
+        "live-card-open",
+        "live-card-full",
+        "live-card-label"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-notice",
+      "part": "live-cards",
+      "hooks": [
+        "live-card-missing",
+        "live-card-unsupported",
+        "live-card-message",
+        "live-card-hint",
+        "live-card-actions",
+        "kit-button"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11527,10 +11614,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2205,
+    "hooks": 2222,
     "state_names": 7,
-    "assigned_states": 987,
-    "components": 293,
+    "assigned_states": 998,
+    "components": 296,
     "preference_tokens": 196
   }
 }

@@ -121,6 +121,7 @@ import {
   type LinkCardSource,
 } from "./link-card";
 import { markPresence } from "../../../core/presence";
+import { liveCardEmbed, LiveCardWidget, type LiveCardEmbed, type LiveCards } from "./live-cards";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -162,6 +163,10 @@ export interface LivePreviewCallbacks {
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// Le schede vive (E19, T41, `./live-cards`): un paragrafo che è soltanto
+  /// l'embed di un file (un PDF, un foglio, un file Craft) si mostra con
+  /// l'ospite delle schede. Senza, l'embed resta la resa di sempre.
+  readonly liveCards?: LiveCards;
   /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
   /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
   readonly dayPage?: DayPageSource;
@@ -2367,6 +2372,8 @@ class CandidateMark extends RangeValue {
     /// Un paragrafo che è soltanto un indirizzo o un wikilink: la sua scheda
     /// (K8, E11).
     readonly linkCard: CardTarget | undefined,
+    /// Un paragrafo che è soltanto l'embed di un file: la sua scheda viva (T41).
+    readonly liveCard: LiveCardEmbed | undefined,
     /// La scelta che la selezione ha dettato: blocco reso o sorgente, righe
     /// vuote dopo nascoste o no. Uguale, il candidato resta quello di prima.
     readonly decision: string,
@@ -2374,7 +2381,7 @@ class CandidateMark extends RangeValue {
     super();
   }
   decided(decision: string): CandidateMark {
-    return new CandidateMark(this.block, this.offset, this.length, this.grid, this.linkCard, decision);
+    return new CandidateMark(this.block, this.offset, this.length, this.grid, this.linkCard, this.liveCard, decision);
   }
 }
 
@@ -2751,13 +2758,14 @@ export function livePreview(
     const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
     const note = !rendered && !url && callbacks.linkCard?.note && block.kind === "paragraph" ? bareWikilink(block.source) : null;
     const card: CardTarget | undefined = url ? { kind: "web", url } : note ? { kind: "note", ...note } : undefined;
-    if (!card) {
+    const live = rendered && callbacks.liveCards && block.kind === "paragraph" ? liveCardEmbed(block.source) ?? undefined : undefined;
+    if (!card && !live) {
       if (!rendered) return null;
       if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) return null;
     }
     const from = lineStart(source, block.from);
     const next = following ? lineStart(source, following.from) : source.length;
-    const mark = new CandidateMark(block, block.from - from, block.to - block.from, card ? false : grid, card, "");
+    const mark = new CandidateMark(block, block.from - from, block.to - block.from, card || live ? false : grid, card, live, "");
     return mark.range(from, Math.max(next, block.to));
   }
   /// La scelta di un candidato per la selezione di adesso, con le sue
@@ -2771,7 +2779,14 @@ export function livePreview(
   ): { decision: string; ranges: Range<Decoration>[] } {
     const ranges: Range<Decoration>[] = [];
     const to = from + mark.offset + mark.length;
-    const { linkCard, grid } = mark;
+    const { linkCard, grid, liveCard } = mark;
+    if (liveCard !== undefined && callbacks.liveCards) {
+      // Col cursore dentro l'embed si scrive com'è; scelta coi Blocchi la
+      // scheda resta scheda, come un diagramma (E19).
+      if (touched(state, from, to) && !choosingBlocks(state)) return { decision: "s", ranges };
+      ranges.push(Decoration.replace({ block: true, widget: new LiveCardWidget(liveCard, callbacks.liveCards) }).range(from, to));
+      return { decision: "c", ranges };
+    }
     if (linkCard !== undefined) {
       // Col cursore dentro, l'indirizzo (o il wikilink) si scrive com'è.
       if (touched(state, from, to) || !callbacks.linkCard) return { decision: "s", ranges };
@@ -3293,6 +3308,7 @@ export function livePreview(
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
     commentEditing(forms), commentCopy(forms),
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
+    callbacks.liveCards ? callbacks.liveCards.extension() : [],
     noteHolds,
     diagramBlockKeys,
     callbacks.dayPage ? dayPage(callbacks.dayPage) : [],

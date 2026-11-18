@@ -53,6 +53,10 @@ export const LEXICON: readonly LexiconEntry[] = [
   // Il blocco sincronizzato (T30): lo stesso blocco in più note, cioè la
   // trasclusione viva di un blocco mostrata come blocco della nota.
   { say: "Blocco sincronizzato", instead: ["Blocco condiviso", "Blocco replicato", "Blocco specchio"], why: "È il nome che chi viene da Notion conosce, e dice che cambia ovunque quando cambia" },
+  // La scheda viva (T41): un file (un PDF, un foglio, un file Craft) mostrato
+  // nella nota con la scheda della lavagna. «Togli dalla nota» toglie l'embed,
+  // mai il file.
+  { say: "Scheda viva", instead: ["Embed interattivo", "Anteprima incorporata", "Widget del file"], why: "La stessa scheda della lavagna, e si usa dove sta: «viva» come la trasclusione" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

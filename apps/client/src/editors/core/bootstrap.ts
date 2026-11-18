@@ -1,5 +1,6 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
+import type { LiveCardKit, LiveCardsPort } from "../text/profiles/markdown/live-cards";
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
@@ -44,7 +45,7 @@ import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } 
 import type { CardCitations } from "../canvas/card-head";
 import type { NoteCardPort } from "./cards/kinds/note";
 import type { PartsPickerPort } from "../canvas/parts-picker";
-import { backlinkSources, documentOutline, existingDocuments, linkedFrom } from "../../host/query";
+import { backlinkSources, documentOutline, existingDocuments, linkedFrom, resolvedReference } from "../../host/query";
 import type { WebCardPort } from "./cards/kinds/web";
 import type { PdfCardPort } from "./cards/kinds/pdf";
 import type { CraftCardPort } from "./cards/kinds/craft";
@@ -529,6 +530,39 @@ const CANVAS_CITATIONS: CardCitations = {
   },
 };
 
+/// Le schede vive di una nota (E19, T41): lo stesso ospite delle schede della
+/// lavagna (le specie, il registro, le immagini ferme della finestra, la porta
+/// per scrivere dentro una scheda), caricato con un `import()` alla prima
+/// scheda che la nota mostra, mai all'apertura della nota. Un `import()`
+/// fallito si riprova alla scheda dopo.
+function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts, context: SurfaceMountContext): LiveCardsPort {
+  let kit: Promise<LiveCardKit | null> | null = null;
+  return {
+    load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract")]).then(
+      ([cardsFor, contract]): LiveCardKit => {
+        const cards = cardsFor(context);
+        return {
+          registry: cards.registry,
+          snapshots: cards.snapshots,
+          watch: cards.watch,
+          ...(ports.editors ? { editors: ports.editors } : {}),
+          kindOf: (path) => contract.cardKindOf({ id: "", type: "file", file: path, x: 0, y: 0, width: 0, height: 0 }) ?? "file",
+          maxLive: contract.MAX_LIVE_CARDS,
+        };
+      },
+      (error: unknown) => {
+        kit = null;
+        console.warn("note: l'ospite delle schede non si carica", error);
+        return null;
+      },
+    )),
+    resolve: async (page, from) =>
+      (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from))?.doc ?? null,
+    open: (path, subpath) => ports.open(path, subpath),
+    ...(options.onPickCanvasFile ? { pick: (name: string) => options.onPickCanvasFile!(name) } : {}),
+  };
+}
+
 /// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
 /// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione
 /// con la stessa porta della scheda di nota. Nessuna porta nuova.
@@ -720,6 +754,7 @@ export function createDocumentSurfaceRegistry(
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
             ...(options.transclusion ? { transclusion: options.transclusion } : {}),
+            ...(options.canvasCards ? { liveCards: noteLiveCards(options, options.canvasCards, context) } : {}),
             noteFacts,
             completions: options.completions,
             slash: options.slash,

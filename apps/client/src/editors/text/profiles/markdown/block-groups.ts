@@ -25,6 +25,7 @@ import { parseImage, widthWritable, rewriteImage, openImageAt, type ImageSource 
 import { codeBlockAt, linkAt, tableRowAt, taskAt } from "./menu";
 import { REMINDER_ACTION } from "./slash";
 import { liveStrings } from "./strings";
+import { liveCardEmbed, removeEmbedAt } from "./live-cards";
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri si
 /// scrivono con «Altro…». Gli stessi nel menu del tasto destro e nella barra.
@@ -59,6 +60,7 @@ export type MarkdownBlock =
   | { readonly kind: "image"; readonly start: number; readonly from: number; readonly to: number; readonly image: ImageSource }
   | { readonly kind: "base"; readonly start: number; readonly page: string }
   | { readonly kind: "transclusion"; readonly start: number; readonly page: string; readonly heading: string | null; readonly block: string | null }
+  | { readonly kind: "card"; readonly start: number; readonly page: string; readonly subpath: string | null }
   | { readonly kind: "task"; readonly start: number; readonly end: number };
 
 export type BlockKind = MarkdownBlock["kind"];
@@ -92,6 +94,9 @@ export function blockAt(state: EditorState, pos: number): MarkdownBlock | null {
     return { kind: "image", start: line.from, from, to: from + trimmed.length, image };
   }
   if (EMBED_LINE.test(line.text)) {
+    // Un file che si mostra come scheda viva (T41): il gruppo «Scheda».
+    const card = liveCardEmbed(line.text);
+    if (card) return { kind: "card", start: line.from, page: card.page, subpath: card.subpath };
     const link = linkAt(state, line.from + line.text.indexOf("!"));
     if (link?.kind === "wikilink" && link.embed && link.page !== "") {
       if (/\.base$/i.test(link.page)) return { kind: "base", start: line.from, page: link.page };
@@ -155,6 +160,9 @@ export interface BlockGroupHost {
   /// «Modifica qui» sulla trasclusione del blocco che comincia in `start`
   /// (`transclusion.ts`): `false` se lì non si scrive. Senza, la voce non c'è.
   editHere?(start: number): boolean;
+  /// Attiva la scheda viva del blocco che comincia in `start` (`live-cards.ts`):
+  /// `false` se lì non c'è una scheda che si attiva. Senza, la voce non c'è.
+  activateCard?(start: number): boolean;
 }
 
 /// I nomi dei gruppi, nella lingua dell'interfaccia.
@@ -163,6 +171,7 @@ const LABELS = {
   callout: "blockgroup.callout",
   base: "blockgroup.base",
   transclusion: "blockgroup.transclusion",
+  card: "blockgroup.card",
   table: "blockgroup.table",
   code: "blockgroup.code",
   image: "blockgroup.image",
@@ -236,6 +245,26 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
       // Il blocco sincronizzato (T30) si scrive dove sta: niente «Modifica qui».
       label: liveStrings.t(block.block !== null ? "blockgroup.synced.edit" : "blockgroup.transclusion.edit"),
       run: () => void host.editHere?.(block.start),
+    }] : []),
+  ],
+  // La scheda viva (T41): «Apri» e «Attiva» come in testata, e «Togli dalla
+  // nota», che toglie l'embed e mai il file.
+  card: (block, host, writable) => [
+    {
+      id: "markdown.link.open",
+      label: liveStrings.t("blockgroup.card.open"),
+      icon: "fmt-open",
+      run: () => host.openLink(block.page, block.subpath === null ? null : block.subpath.slice(1), null),
+    },
+    ...(host.activateCard ? [{
+      id: "markdown.card.activate",
+      label: liveStrings.t("blockgroup.card.activate"),
+      run: () => void host.activateCard?.(block.start),
+    }] : []),
+    ...(writable ? [{
+      id: "markdown.card.remove",
+      label: liveStrings.t("blockgroup.card.remove"),
+      run: () => void host.write((state) => removeEmbedAt(state, block.start)),
     }] : []),
   ],
   // Le azioni della tabella, coi nomi corti della barra: le spegne la

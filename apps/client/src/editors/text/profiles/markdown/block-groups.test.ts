@@ -137,8 +137,21 @@ describe("i gruppi", () => {
     expect(group?.label).toBe("Blocco sincronizzato");
     item(group, "markdown.link.open").run?.();
     expect(opened).toEqual([["Riunioni/2026-11-04", null, "decisioni"]]);
-    // Un PDF incorporato non è una trasclusione.
-    expect(markdownBlockGroup(hostOf("![[Atto.pdf]]\n", 3).host, null)).toBeNull();
+    // Un PDF incorporato non è una trasclusione: è una scheda viva (T41).
+    expect(markdownBlockGroup(hostOf("![[Atto.pdf]]\n", 3).host, null)?.id).toBe("card");
+    // Un'immagine non è né l'una né l'altra.
+    expect(markdownBlockGroup(hostOf("![[foto.png]]\n", 3).host, null)?.id).not.toBe("card");
+  });
+
+  it("Scheda: «Apri» alla parte, «Togli dalla nota» toglie l'embed e non il file", () => {
+    const { host, opened, text } = hostOf("Prima\n\n![[Conti.xlsx#Budget]]\n\nDopo\n", 8);
+    const group = markdownBlockGroup(host, null);
+    expect(group?.label).toBe("Scheda");
+    expect(ids(group)).toEqual(["markdown.link.open", "markdown.card.remove"]);
+    item(group, "markdown.link.open").run?.();
+    expect(opened).toEqual([["Conti.xlsx", "Budget", null]]);
+    item(group, "markdown.card.remove").run?.();
+    expect(text()).toBe("Prima\n\nDopo\n");
   });
 
   it("Trasclusione: «Modifica qui» c'è per una sezione o un blocco, dove si scrive", () => {
