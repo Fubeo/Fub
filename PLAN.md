@@ -3108,7 +3108,7 @@ Fatto quando: il PDF della nota di prova passa il confronto con `hayro` e il
 testo estratto; l'ADR c'è coi numeri.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [~] in corso (coder da integra/editor-2 258022562, 2026-11-18)
+Stato: [~] integrato in `integra/editor-2` (e4742418d, 2026-11-18), in attesa del pacchetto 2. Scelta: strada A (ADR 0247 accettata); la prova sta dietro la feature `draw`, non una `pdf-export` sua (nessuna crate nuova); la pagina col diagramma Mermaid resta al 2,4 % per il CSS che usvg non applica: lo chiude T75 con l'SVG risolto.
 
 ## T68 · Il modello: profilo, tema di stampa, colori, memoria per nota
 
