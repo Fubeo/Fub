@@ -2311,7 +2311,7 @@ venti schede vive con la battuta nel budget; le foto del banco per stato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/live-cards.test.ts
 src/canvas-edit.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (coder da integra/editor-2 258022562, 2026-11-18)
 
 ## T42 · Misura, «Mostra come», affiancare con le colonne
 
@@ -3108,7 +3108,7 @@ Fatto quando: il PDF della nota di prova passa il confronto con `hayro` e il
 testo estratto; l'ADR c'è coi numeri.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [ ] da fare
+Stato: [~] in corso (coder da integra/editor-2 258022562, 2026-11-18)
 
 ## T68 · Il modello: profilo, tema di stampa, colori, memoria per nota
 
