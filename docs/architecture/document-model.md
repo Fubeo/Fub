@@ -263,7 +263,10 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - **La scrittura annunciata di un comando.** Chi lancia un comando che
   riscrive un documento aperto (un gesto della barra di una Base con
   `base.view.set`) lo annuncia prima con `expectWrite(id)`, e ritira
-  l'annuncio se il comando non scrive. Il primo evento dell'utente su quel
+  l'annuncio se il comando non scrive. Un'azione di una view dichiarata (una
+  proprietà cambiata dall'ispettore, una versione ripristinata) annuncia la
+  nota a fuoco (`ui/views.ts`) e ritira l'annuncio 1,5 s dopo la risposta,
+  perché non sa se ha scritto. Il primo evento dell'utente su quel
   documento (non l'eco di un salvataggio in volo) lo consuma: a buffer pulito
   la sessione ricarica e l'esito è `reloaded` con `quiet`, che il controller
   non dice; a buffer sporco vale la regola di sempre. Un evento di un'altra
