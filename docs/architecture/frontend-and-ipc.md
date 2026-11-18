@@ -235,6 +235,25 @@ o togliere una voce di lista), perché una seconda scrittura partita dallo
 stesso disegno perderebbe la prima. Un ridisegno intero porta le righe in volo
 com'erano, con la scelta della persona.
 
+Un valore che non è quello scritto non parte, e la riga lo dice come un rifiuto
+dell'host: il controllo torna al valore salvato, sotto restano il motivo nella
+lingua dell'interfaccia e l'input provato (`refuseRow`). Il campo numerico è un
+testo letto da `parseSettingNumber` (`panels/settings-model.ts`) con la regola
+dei campi del kit (`kit/quantity.ts`: virgola e punto per i decimali, niente
+separatore delle migliaia), non un `input[type=number]`, che in WebKit leggeva
+«1,5» come 15. Si rifiutano il campo vuoto, il testo, un numero non finito o
+con più di 15 cifre significative (non resterebbe esatto), uno che nella lingua
+si leggerebbe anche come migliaia (`1,500` in inglese) e uno fuori dagli
+estremi dello schema, che il kernel verifica comunque. Una scorciatoia si
+riconosce dalla forma della chiave (`commandOfKeybindingKey`) e passa da
+`validateKeybinding` in ogni scheda. Le forme che la specie `text` non sa dire le
+controlla l'host prima di scrivere (`settings::user_value_problem`, chiamato da
+`set_setting_for_user`): `locale.timezone` dev'essere un fuso del database o
+vuoto, `sync.server_url` e `publish.server_url` un indirizzo che
+`validate_base_url` accetta o vuoti; il rifiuto è un `BadArgs` già nella lingua
+di chi guarda. Tornare a scrivere in una riga rifiutata toglie il motivo di
+prima.
+
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la

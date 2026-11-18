@@ -32,7 +32,7 @@ vi.mock("../host/ipc", () => ({
 vi.mock("../host/dialog", () => ({ confirm: fake.confirm, pickFile: vi.fn(), pickFolder: vi.fn() }));
 vi.mock("../host/query", () => ({ settings: () => fake.readSettings() }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, registerComponentRow: () => () => {} }));
+vi.mock("../ui/commands", () => ({ allCommands: () => [], commandOfKeybindingKey: () => null, keybindingKey: (id: string) => id, registerComponentRow: () => () => {} }));
 vi.mock("../ui/permissions", () => ({
   TRUST_LABELS: {},
   isPermissionKey: () => false,
@@ -315,7 +315,7 @@ describe("il controllo nasce dalla forma del dato", () => {
     const slider = document.getElementById("setting-appearance.body-range") as HTMLInputElement;
     const field = document.getElementById("setting-appearance.body") as HTMLInputElement;
     expect([slider.type, slider.min, slider.max, slider.step]).toEqual(["range", "12", "28", "1"]);
-    expect(field.type).toBe("number");
+    expect([field.type, field.inputMode]).toEqual(["text", "decimal"]);
     slider.value = "20";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
     expect(field.value).toBe("20");
@@ -856,5 +856,65 @@ describe("il perché delle animazioni ridotte di partenza", () => {
     await openPanel([motion("", "")]);
     expect(rowOf().textContent).not.toContain(why);
     expect(document.getElementById("setting-appearance.motion-default-why")).toBeNull();
+  });
+});
+
+describe("un numero si scrive com'è, o la riga dice perché no (IMP-019…022)", () => {
+  const KEEP = "backup.keep";
+  const keep = (value: number) => entry(KEEP, { kind: "number", default: 10, min: 0, max: null }, value, "machine");
+  const field = () => document.getElementById(`setting-${KEEP}`) as HTMLInputElement;
+  const rowOf = () => document.querySelector<HTMLElement>(`#settings-body [data-setting-key="${KEEP}"]`)!;
+
+  function typeAndConfirm(text: string): void {
+    const input = field();
+    input.focus();
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  it("«1,5» è uno e mezzo, come «1.5»: mai quindici", async () => {
+    await openPanel([keep(5)]);
+    typeAndConfirm("1,5");
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(KEEP, 1.5));
+    expect(fake.setSetting).not.toHaveBeenCalledWith(KEEP, 15);
+    await vi.waitFor(() => expect(field().value).toBe("1.5"));
+    expect(rowOf().querySelector(".setting-error")).toBeNull();
+  });
+
+  it.each([
+    ["", "scrivi un numero"],
+    ["abc", "non è un numero"],
+    ["1e400", "troppo grande"],
+    ["99999999999999999999", "troppe cifre"],
+    ["1.500", "migliaia"],
+    ["-7", "il valore più piccolo ammesso è 0"],
+  ])("«%s» non si scrive: il campo torna al salvato e la riga dice perché", async (typed, why) => {
+    await openPanel([keep(5)]);
+    typeAndConfirm(typed);
+    await vi.waitFor(() => expect(rowOf().querySelector(".setting-error")).not.toBeNull());
+    expect(fake.setSetting).not.toHaveBeenCalled();
+    const error = rowOf().querySelector(".setting-error")!;
+    expect(error.getAttribute("role")).toBe("alert");
+    expect(error.querySelector(".setting-error-message")?.textContent).toContain(why);
+    if (typed !== "") expect(error.querySelector(".setting-attempted")?.textContent).toBe(typed);
+    // Il valore che vale, non un campo vuoto che sembra non avere valore.
+    expect(field().value).toBe("5");
+    expect(fake.entries[0]!.value).toBe(5);
+  });
+
+  it("tornare a scrivere toglie il motivo del tentativo di prima (IMP-022)", async () => {
+    await openPanel([keep(5)]);
+    typeAndConfirm("-7");
+    await vi.waitFor(() => expect(rowOf().querySelector(".setting-error")).not.toBeNull());
+    const input = field();
+    input.value = "abc";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(rowOf().querySelector(".setting-error")).toBeNull();
+    // E «abc» confermato ha il suo motivo, non quello di -7.
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(rowOf().querySelector(".setting-error")).not.toBeNull());
+    expect(rowOf().querySelector(".setting-error-message")?.textContent).toContain("non è un numero");
+    expect(rowOf().querySelector(".setting-error-message")?.textContent).not.toContain("più piccolo");
   });
 });
