@@ -981,7 +981,7 @@ Fatto quando: `g7-trascinare-scorre` vede lo scorrimento senza intervallo
 d36, d45, q14) verdi; `npm run bench:motion` verde; `check-listeners` verde.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, c46c1e96e: bench:grid G1–G5 e G7 verdi dopo l'unione con T4 e T5; bench:motion tocco-lungo e maniglia-tirata verdi; la barra multifunzione spostata in docs/architecture/grid-ribbon.md. Resta: menu-edge e menu-punto rossi già alla base)
 
 ## T9 · Le due preferenze della griglia
 
