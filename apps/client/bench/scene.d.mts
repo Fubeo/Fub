@@ -49,6 +49,8 @@ export interface Scene {
 }
 
 export declare const SCENE: readonly Scene[];
+/// Le scene dei gesti, senza foto di riferimento (la cartella grande).
+export declare const GESTURE_SCENE: readonly Scene[];
 export declare const LIGHTS: readonly Light[];
 export declare function photoFilename(scene: Scene, light: Light): string;
 export declare function sceneUrl(base: string, scene: Scene, light: Light): string;
