@@ -64,9 +64,11 @@ async function salvato(pagina) {
   });
 }
 
-/// La linguetta attiva del riquadro a fuoco, se ha questo nome.
+/// La linguetta attiva del riquadro a fuoco, se ha questo nome. `:text-is`
+/// prende l'elemento più piccolo col testo: il nome sta in `.tab-name-head`
+/// (e `-tail` quando è lungo), non direttamente in `.tab-name`.
 function aFuoco(nome) {
-  return `.pane.focus .tab[aria-selected="true"] .tab-name:text-is("${nome}")`;
+  return `.pane.focus .tab[aria-selected="true"] :text-is("${nome}")`;
 }
 
 /// Il riquadro la cui linguetta attiva ha questo nome.
@@ -128,7 +130,11 @@ const tabellaEManiglia = {
     await chooseMode(pagina, "live_preview");
 
     // Il «/» si chiude se il fuoco scappa: prima il fuoco nel testo, in fondo.
-    await pagina.click(".pane.focus .cm-content");
+    // Il riquadro tiene montate, nascoste, le superfici delle altre linguette:
+    // il clic va su una riga della nota che si vede, all'inizio, lontano
+    // dai collegamenti.
+    await pagina.click('.pane.focus .cm-content .cm-line:has-text("La voce") >> visible=true', { position: { x: 4, y: 8 } });
+    await pagina.waitForSelector(".pane.focus .cm-editor.cm-focused");
     await pagina.keyboard.press("Control+End");
     await pagina.keyboard.press("Enter");
     await pagina.keyboard.press("Enter");
@@ -145,15 +151,15 @@ const tabellaEManiglia = {
     await salvato(pagina);
     await giro.foto("tabella");
 
-    // Nei Blocchi: l'etichetta presa per la maniglia e portata sopra il
-    // paragrafo.
-    await chooseMode(pagina, "blocks");
+    // La Scrittura ha i Blocchi dentro: l'etichetta presa per la
+    // maniglia e portata sopra il paragrafo.
     // La testata della pagina arriva dopo e sposta la nota in giù: le
-    // misure si prendono quando c'è.
-    await pagina.waitForSelector(".pane.focus .cm-fub-page-title");
+    // misure si prendono quando c'è. Le superfici nascoste delle altre
+    // linguette hanno la loro testata: si guarda quella che si vede.
+    await pagina.waitForSelector(".pane.focus .cm-fub-page-title >> visible=true");
     await pagina.hover(`.pane.focus .cm-content .cm-line:has-text("${ETICHETTA}")`);
-    await pagina.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"]');
-    const maniglia = await pagina.locator(".pane.focus .cm-fub-block-grip").boundingBox();
+    await pagina.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"] >> visible=true');
+    const maniglia = await pagina.locator(".pane.focus .cm-fub-block-grip >> visible=true").first().boundingBox();
     const sopra = await pagina.locator('.pane.focus .cm-content .cm-line:has-text("La voce")').boundingBox();
     const x = maniglia.x + maniglia.width / 2;
     const y = maniglia.y + maniglia.height / 2;
@@ -164,8 +170,6 @@ const tabellaEManiglia = {
     await pagina.mouse.up();
     await pagina.waitForSelector(".pane.focus .cm-fub-blocks-dragging", { state: "detached" });
     await salvato(pagina);
-    // Il gruppo continua in Live.
-    await chooseMode(pagina, "live_preview");
   },
   async controlla(pagina, host) {
     const testo = await host.testo(NOTA);
@@ -222,7 +226,13 @@ const palette = {
     // dei comandi. Ctrl+K nel testo è «Collega a una nota».
     await pagina.keyboard.press("Control+Shift+P");
     await pagina.waitForSelector(".launcher-input:focus");
-    const modo = (await pagina.textContent('.launcher-modes [aria-selected="true"]'))?.trim() ?? "";
+    // Il nome del modo, senza il quadratino col prefisso («>») che gli sta
+    // davanti.
+    const modo = await pagina.evaluate(() => {
+      const scelto = document.querySelector('.launcher-modes [aria-selected="true"]');
+      const tessera = scelto?.querySelector(".launcher-mode-tile")?.textContent ?? "";
+      return (scelto?.textContent ?? "").slice(tessera.length).trim();
+    });
     verifica(modo.startsWith("Comandi"), `la palette si apre nel modo «${modo}», non in «Comandi»`);
     await pagina.keyboard.type(CERCA_COMANDO);
     await pagina.waitForSelector(`.launcher-row:has-text("${COMANDO}")`);
@@ -251,7 +261,7 @@ const dueRiquadri = {
     // Il fuoco è nella nota appena aperta, a destra.
     verifica(await haLaTastiera(riquadroDi(pagina, NOME_ACCANTO)), "aperta a lato, la nota non ha la tastiera");
     // Un clic nel testo di sinistra porta lì il fuoco.
-    await riquadroDi(pagina, NOME).locator(".cm-content").click();
+    await riquadroDi(pagina, NOME).locator(".cm-content >> visible=true").click();
     await pagina.waitForSelector(aFuoco(NOME));
   },
   async controlla(pagina) {
@@ -301,7 +311,7 @@ const rinomina = {
     // La nota di destra la nomina, e lo mostra senza riaprirla. Il riquadro
     // dice anche che il file è cambiato su disco: è vero, l'ha riscritto la
     // rinomina (il dubbio sulla frase è nel resoconto di PA T26).
-    const destra = await riquadroDi(pagina, NOME_ACCANTO).locator(".cm-content").elementHandle();
+    const destra = await riquadroDi(pagina, NOME_ACCANTO).locator(".cm-content >> visible=true").elementHandle();
     await pagina.waitForFunction(
       ([testo, nuovo, vecchio]) => testo.innerText.includes(`in ${nuovo}.`) && !testo.innerText.includes(vecchio),
       [destra, NUOVO, VECCHIO],

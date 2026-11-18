@@ -1,7 +1,7 @@
 // **Il giro, gruppo «avvio»** (compiti 1–5): la prima volta di una persona.
 // Fub parte senza un vault, lei apre quello del banco, sceglie una nota
 // dall'albero, ci scrive in Live un titolo, una lista e un grassetto, e la
-// guarda nelle quattro modalità.
+// guarda nelle tre modalità.
 //
 // La forma di un compito e ciò che `giro` e `host` portano sono in
 // `bench/giro.mjs`. I compiti dipendono l'uno dall'altro: il quarto scrive
@@ -26,13 +26,13 @@ const TITOLO = "Titolo del giro";
 const VOCI = ["prima voce", "seconda voce"];
 const GRASSETTO = "grassetto";
 
-/// Le quattro modalità, con il nome che hanno nel menu. Si torna alla Live per
-/// ultima: il gruppo dopo trova la nota com'era.
+/// Le tre modalità, con il nome che hanno nel menu (i Blocchi sono dentro la
+/// Scrittura). Si torna alla Scrittura per ultima: il gruppo dopo trova la
+/// nota com'era.
 const MODALITA = [
-  ["blocks", "Blocchi"],
   ["source", "Sorgente"],
   ["reading", "Lettura"],
-  ["live_preview", "Live"],
+  ["live_preview", "Scrittura"],
 ];
 
 function verifica(condizione, messaggio) {
@@ -144,7 +144,9 @@ const scriviInLive = {
   telefono: true,
   async fai(pagina) {
     await chooseMode(pagina, "live_preview");
-    await pagina.click(".pane.focus .cm-content");
+    // Il riquadro tiene montate, nascoste, le superfici delle altre linguette:
+    // il clic va nel testo che si vede.
+    await pagina.click(".pane.focus .cm-content >> visible=true");
     await pagina.keyboard.press("Control+End");
     const tasti = pagina.keyboard;
     await tasti.press("Enter");
@@ -152,14 +154,11 @@ const scriviInLive = {
     await tasti.type(`## ${TITOLO}`);
     await tasti.press("Enter");
     await tasti.press("Enter");
-    // La lista continua da sé a ogni Invio, e Invio su una voce vuota la
-    // chiude lasciando una riga senza segno; il terzo Invio stacca il
-    // paragrafo dalla lista (senza la riga vuota, nel Markdown sarebbe il
-    // seguito dell'ultima voce).
+    // La lista continua da sé a ogni Invio, e Invio su una voce vuota ne
+    // esce con un paragrafo vero, staccato da una riga vuota.
     await tasti.type(`- ${VOCI[0]}`);
     await tasti.press("Enter");
     await tasti.type(VOCI[1]);
-    await tasti.press("Enter");
     await tasti.press("Enter");
     await tasti.press("Enter");
     // Il grassetto come in Word: Ctrl+B, la parola, Ctrl+B.
@@ -201,9 +200,9 @@ const scriviInLive = {
   },
 };
 
-const quattroModalita = {
-  id: "quattro-modalita",
-  nome: "le quattro modalità sulla stessa nota",
+const treModalita = {
+  id: "tre-modalita",
+  nome: "le tre modalità sulla stessa nota",
   async fai(pagina, giro) {
     for (const [modo, etichetta] of MODALITA) {
       await chooseMode(pagina, modo, etichetta);
@@ -236,5 +235,5 @@ export const avvio = {
   // Il primo compito carica la pagina da sé: da solo, il gruppo non ha
   // niente da preparare.
   prepara: async () => {},
-  compiti: [primoAvvio, apriVault, albero, scriviInLive, quattroModalita],
+  compiti: [primoAvvio, apriVault, albero, scriviInLive, treModalita],
 };
