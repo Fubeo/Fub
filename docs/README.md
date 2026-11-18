@@ -88,7 +88,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Workflow](development/workflow.md), [test e qualità](development/testing-and-quality.md) e [il banco visivo](development/visual-bench.md)
 - Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
 - [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
-- [Creare un plugin](development/plugin-authoring.md)
+- [Creare un plugin](development/plugin-authoring.md) e [costruire su Fub con un'AI](development/costruire-con-ai.md): le porte, ricetta o componente, la CLI e l'MCP delle ricette
 - [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 

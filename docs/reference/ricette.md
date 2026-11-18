@@ -299,6 +299,9 @@ macchina**:
 
 Accendere e spegnere esistono soltanto nell'app, mai come comandi del registro
 né per la CLI o il server MCP: un programma non si dà il consenso da solo.
+Controllare e provare, invece, si fanno anche da fuori, con `fub-cli ricette`
+e gli strumenti MCP `fub_recipe_check` e `fub_recipe_try`: vedi
+[Costruire su Fub con un'AI](../development/costruire-con-ai.md).
 
 ## `recipes.new`
 
