@@ -35,6 +35,9 @@ import { mountMarkdown } from "./mount";
 import { embedSize } from "./media";
 import { removeColumnAt } from "./callout";
 import { blockModel } from "./blocks/model";
+import { blocksMode } from "./blocks";
+import { blockSelection } from "./blocks/selection";
+import { mountMarkdownSurface } from "./surface";
 
 /// Una specie finta: ogni vista tiene il suo modo, ascolta il documento finché
 /// è montata (per contare chi resta) e scrive in un «file» suo.
@@ -150,6 +153,8 @@ function rig(text: string, options: {
   readonly renderers?: readonly CardKind[];
   readonly pick?: LiveCardsPort["pick"];
   readonly resolve?: LiveCardsPort["resolve"];
+  /// I Blocchi accesi, come nella Scrittura di serie: la scheda si sceglie.
+  readonly blocks?: boolean;
 } = {}): Rig {
   const species = new FakeSpecies();
   const parent = document.createElement("div");
@@ -196,7 +201,7 @@ function rig(text: string, options: {
         ...actions,
         liveCard: (slot, life) => cards.hostSlot(slot, life),
       }),
-    })],
+    }), ...(options.blocks ? [blocksMode({ page: () => "Nota" })] : [])],
   });
   engine.setDoc(text);
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
@@ -411,6 +416,120 @@ describe("la scheda nella Live", () => {
     expect(before.every((one) => !one.destroyed)).toBe(true);
     // La battuta non passa dalle schede: il budget della battuta della Live.
     expect(perKey).toBeLessThan(16);
+  });
+});
+
+describe("la scheda scelta è un oggetto", () => {
+  const ESC = (): KeyboardEvent => new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+
+  /// La Scrittura vera (la superficie Markdown, Blocchi accesi di serie) con
+  /// le schede: la bolla del testo scelto chiede a lei `selectionBox`.
+  function surface(text: string) {
+    const species = new FakeSpecies();
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const kit: LiveCardKit = {
+      registry: { rendererFor: () => species.renderer } as unknown as LiveCardKit["registry"],
+      snapshots: {} as LiveCardKit["snapshots"],
+      watch: () => () => {},
+      kindOf,
+      maxLive: 40,
+    };
+    const ed = mountMarkdownSurface({ paneId: "riquadro", documentId: "Note.md", parent }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+      liveCards: { load: async () => kit, resolve: async (page) => `Archivio/${page}`, open: () => {} },
+    });
+    ed.buffer.setDoc(text);
+    const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
+    rigs.push({
+      parent, view, species, opened: [],
+      engine: null as unknown as TextEngine,
+      cards: null as unknown as LiveCards,
+      destroy() {
+        ed.destroy();
+        parent.remove();
+      },
+    });
+    return { ed, parent, view, species };
+  }
+
+  it("scelta dalla testata o con Esc dall'interno, la bolla del testo non c'è; sul testo scelto sì", async () => {
+    // jsdom non impagina: ogni posizione ha un rettangolo finto, così la sola
+    // regola che resta è quella della superficie.
+    const coords = vi.spyOn(EditorView.prototype, "coordsAtPos").mockReturnValue({ left: 10, right: 20, top: 30, bottom: 40 });
+    try {
+      const { ed, parent, view } = surface("Prima riga\n\n![[Contratto.pdf]]\n\nDopo\n");
+      await settle();
+      const box = (): unknown => ed.editorActions.selectionBox?.() ?? null;
+      const card = cardsIn(parent)[0]!;
+      expect(card).toBeDefined();
+      expect(view.state.field(blockSelection, false)).not.toBeUndefined();
+      // Il testo scelto ha la bolla.
+      view.dispatch({ selection: { anchor: 0, head: 5 } });
+      expect(box()).not.toBeNull();
+      // Un clic sulla testata sceglie la scheda: è un oggetto, niente bolla.
+      card.querySelector<HTMLElement>(".live-card-head")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      expect(card.dataset.cardChosen).toBe("true");
+      expect(view.state.selection.main.empty).toBe(false);
+      expect(box()).toBeNull();
+      // Attiva e poi Esc: di nuovo scelta, e di nuovo senza bolla.
+      card.querySelector<HTMLElement>(".live-card-body")!.click();
+      expect(card.dataset.cardActive).toBe("true");
+      card.dispatchEvent(ESC());
+      expect(card.dataset.cardActive).toBeUndefined();
+      expect(card.dataset.cardChosen).toBe("true");
+      expect(box()).toBeNull();
+      // Un paragrafo scelto coi Blocchi resta testo: la bolla c'è.
+      view.dispatch({ selection: { anchor: 1 } });
+      view.contentDOM.dispatchEvent(ESC());
+      expect(view.state.field(blockSelection)).not.toBeNull();
+      expect(box()).not.toBeNull();
+    } finally {
+      coords.mockRestore();
+    }
+  });
+
+  it("Esc da una scheda attiva la lascia scelta; il secondo Esc torna al testo e la scheda resta scheda", async () => {
+    const { parent, view, cards, species } = rig("Prima\n\n![[Conti.xlsx]]\n\nDopo\n", { blocks: true });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    card.querySelector<HTMLElement>(".live-card-body")!.click();
+    expect(cards.activeCard()?.root).toBe(card);
+    card.dispatchEvent(ESC());
+    expect(cards.activeCard()).toBeNull();
+    expect(species.views[0]!.left).toBe(1);
+    expect(card.dataset.cardChosen).toBe("true");
+    expect(cards.objectsChosen(view)).toBe(true);
+    // Il secondo Esc: il cursore nella riga dopo la scheda, non nell'embed.
+    view.contentDOM.dispatchEvent(ESC());
+    expect(view.state.field(blockSelection)).toBeNull();
+    expect(view.state.selection.main.empty).toBe(true);
+    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(4);
+    expect(cardsIn(parent)).toEqual([card]);
+    expect(card.dataset.cardChosen).toBeUndefined();
+  });
+
+  it("Esc da un foglio attivo in una colonna sceglie le colonne, e le schede restano schede", async () => {
+    const doc = "Prima\n\n> [!columns]\n> > [!column]\n> > ![[Contratto.pdf]]\n>\n> > [!column]\n> > ![[Conti.xlsx]]\n\nDopo\n";
+    const { parent, view, cards } = rig(doc, { blocks: true });
+    await settle();
+    const sheet = parent.querySelector<HTMLElement>('.fub-column > .live-card[data-card-kind="sheet"]')!;
+    sheet.querySelector<HTMLElement>(".live-card-body")!.click();
+    expect(cards.activeCard()?.root).toBe(sheet);
+    sheet.dispatchEvent(ESC());
+    expect(cards.activeCard()).toBeNull();
+    expect(view.state.field(blockSelection)).not.toBeNull();
+    // Le colonne scelte restano rese: le due schede ci sono ancora, scelte.
+    const inColumns = [...parent.querySelectorAll<HTMLElement>(".fub-column > .live-card")];
+    expect(inColumns.map((one) => one.dataset.cardKind)).toEqual(["pdf", "sheet"]);
+    expect(inColumns.every((one) => one.dataset.cardChosen === "true")).toBe(true);
+    expect(cards.objectsChosen(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
   });
 });
 
