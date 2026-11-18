@@ -305,13 +305,18 @@ fn pdf_export_il_vettore_resta_un_vettore() {
 /// di serie di Fub (quelli dei diagrammi), non tracciati e non spariti.
 #[test]
 fn pdf_export_il_testo_del_vettore_resta_testo() {
-    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" viewBox="0 0 200 50"><text x="10" y="35" font-family="&quot;Inter Variable&quot;, Inter, sans-serif" font-size="24" fill="#000">Vista</text></svg>"##;
+    // Le virgolette del nome del carattere escapate come le scrive il
+    // serializzatore della WebView, con l'unica tabella di `fub_abi::html`.
+    let famiglia = fub_abi::html::attr("font-family", "\"Inter Variable\", Inter, sans-serif");
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50" viewBox="0 0 200 50"><text x="10" y="35"{famiglia} font-size="24" fill="#000">Vista</text></svg>"##
+    );
     let pezzi = vec![Pezzo::Vettore {
         x: 0.0,
         y: 0.0,
         w: 200.0,
         h: 50.0,
-        svg: svg.into(),
+        svg,
     }];
     let scritto = scrivi(&elenco(vec![], vec![pezzi]), &Banco::default()).unwrap();
     assert!(scritto.avvisi.is_empty(), "{:?}", scritto.avvisi);
