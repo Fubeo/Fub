@@ -2260,7 +2260,7 @@ Fatto quando: `canvas-edit.e2e.test.ts` e i test di N6 passano senza cambiare
 asserzioni; `check-listeners` verde; la guardia c'è.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/canvas-edit.e2e.test.ts src/editors/core src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso (coder feat/schede-in-core da integra/editor-2 d2e0db381, 2026-11-18; N6 in main con #302, onda 1 nel pacchetto 1)
 
 ## T41 · L'ospite delle schede nella nota
 
