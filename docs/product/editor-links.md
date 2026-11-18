@@ -215,3 +215,7 @@ contenuto:
   di `crates/fub-host/src/link_card.rs` in `apps/client/src/state/link-cards.ts`);
 - `apps/client/src/editors/text/profiles/markdown/web-embed.ts`: l'elenco dei
   siti (`WEB_EMBED_SITES`) e il segnaposto delle pagine incorporate.
+- `apps/client/src/editors/text/profiles/markdown/button-keys.ts`: Invio,
+  Spazio e Tab su «Carica» e su «Scarica nel vault» restano del pulsante:
+  l'immagine in riga della Scrittura lascia arrivare la tastiera all'editor,
+  e senza questa regola scriverebbero nella nota (#454).
