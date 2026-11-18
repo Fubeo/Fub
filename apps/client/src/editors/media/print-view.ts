@@ -165,8 +165,9 @@ export function markUndrawn(container: HTMLElement): number {
   return elements.length;
 }
 
-/// Il riquadro di ciò che non è arrivato: alto e largo il giusto per leggerlo,
-/// coi colori del documento. Chi mostra le pagine può vestirlo meglio.
+/// Il riquadro di ciò che non è arrivato: la forma, alta e larga il giusto per
+/// leggerlo, col colore del testo che lo circonda. I colori del tema li dà la
+/// pelle di chi mostra le pagine (lo spazio dell'esportazione, T70).
 const UNDRAWN_CSS = `
   .print-undrawn {
     display: flex;
@@ -174,13 +175,13 @@ const UNDRAWN_CSS = `
     gap: 0.6em;
     margin: 0.66em 0;
     padding: 0.9em 1em;
-    border: 1px dashed var(--doc-rule, rgb(135 135 135 / 45%));
+    border: 1px dashed color-mix(in srgb, currentColor 45%, transparent);
     border-radius: 6px;
-    color: var(--muted, #605c56);
     font-size: 0.9em;
     line-height: 1.4;
   }
-  .print-undrawn-name { font-weight: 600; color: var(--doc-fg, #2a2826); overflow-wrap: anywhere; }`;
+  .print-undrawn-name { font-weight: 600; overflow-wrap: anywhere; }
+  .print-undrawn-state { opacity: 0.72; }`;
 
 /// Una resa per la stampa montata in un contenitore: il titolo e il corpo,
 /// idratati da `mount` se c'è. `settled` si risolve quando ciò che arriva
