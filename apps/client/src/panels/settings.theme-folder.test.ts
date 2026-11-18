@@ -55,6 +55,7 @@ vi.mock("../ui/commands", () => ({
   newKindLabel: () => "Nota",
   registerComponentRow: () => () => {},
   showComponent: () => false,
+  hasKernelCommand: () => false,
 }));
 vi.mock("../ui/motion", () => ({
   enterSurface: () => {},
