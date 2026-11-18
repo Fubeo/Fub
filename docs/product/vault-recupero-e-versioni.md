@@ -132,11 +132,30 @@ grande, il pannello lo dice invece di calcolarlo.
 Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
+Dopo un «Sì, ripristina» il pannello lo offre come «Annulla», accanto alla
+riga «Ripristinata la versione del …»: esegue quel ripristino inverso, non un
+meccanismo suo, e torna al contenuto che il disco aveva prima. L'offerta vale
+finché la nota resta quella del ripristino: una scrittura dopo la toglie.
+
+Una versione può anche nascere a mano, con `version.keep`: conserva un testo
+dato (`doc`, `text`, `note`) senza toccare il file, con una nota obbligatoria
+che dice perché c'è. È ciò che fa «Usa la versione su disco» in un conflitto:
+prima di scartare il testo dell'utente lo conserva con la nota «Testo scartato
+nel conflitto del …», e rilegge il disco solo dopo che la conservazione è
+riuscita. Se la conservazione fallisce non si scarta niente, il conflitto resta
+aperto e l'avviso dice perché; senza la Cronologia montata, o su un foglio di
+calcolo (dove il testo in Fub è un giornale, non il file), la conferma avverte
+che il testo andrà perso. Il pannello mostra la nota al posto della
+variazione e in cima all'anteprima. Un testo conservato
+non è il disco: «Versione attuale» resta sull'ultima fotografia del file, e il
+ripristino inverso torna a quella. `version.keep` funziona anche a versioning
+spento.
 
 Le versioni si diradano a ogni nuova versione della nota: nelle ultime 24 ore
 tutte, o una per `versioning.interval` (minuti, 0 di serie); fino a 7 giorni una
 per ora, poi una al giorno fino a `versioning.retention` (giorni: 90 di serie, 0
-per sempre); oltre, solo la più recente. `version.clear` svuota la cronologia
+per sempre); oltre, solo la più recente. I testi conservati con una nota non
+si diradano mai e non contano nelle fasce. `version.clear` svuota la cronologia
 del vault anche a versioning spento, con conferma rafforzata e senza ritorno.
 
 Un file oltre 64 MiB non ha versioni: il versioning non lo apre e non lo

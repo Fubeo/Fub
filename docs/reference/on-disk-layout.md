@@ -259,6 +259,32 @@ convertire BOM o terminatori di riga. Nessuno snapshot supera 64 MiB
 aprirlo, e oltre il tetto il file non si fotografa. Il nome riprende l'estensione del file;
 se manca, contiene soltanto il timestamp.
 
+Una versione può portare il campo facoltativo `note` (testo, al più 200
+caratteri, senza caratteri di controllo), nel `VersionRef` dell'indice e nella
+sua voce in `versions` del `meta.json`. C'è solo sui testi conservati a mano
+con `version.keep` (`doc`, `text`, `note`, tutti obbligatori: lo usa «Usa la
+versione su disco» per non perdere il testo scartato), mai sulle fotografie
+del disco. È un'aggiunta compatibile: lo schema resta 1, il campo assente si
+legge come nessuna nota e non si scrive, quindi una cronologia scritta prima
+si legge e si riscrive byte per byte uguale. L'autorità è il `meta.json`, come
+per dimensione e impronta: la ricostruzione dell'indice riprende la nota da
+lì. Una versione di Fub precedente ignora il campo e lo perde alla prima
+riscrittura del `meta.json`, ma la versione resta. Un testo conservato:
+
+- non si pota mai e non occupa posto nelle fasce;
+- non deduplica e non è deduplicato: la fotografia successiva si confronta con
+  l'ultima versione senza nota, perché il disco non ha mai avuto quei byte;
+- non è «l'ultima versione = il disco»: «Versione attuale» nel pannello, la
+  preimmagine dichiarata dal ripristino inverso e il confronto delle
+  variazioni guardano l'ultima versione senza nota.
+
+`version.keep` scrive il blob, poi il `meta.json`, poi l'indice. Se il
+`meta.json` non si scrive il blob si toglie e il comando restituisce l'errore:
+non resta niente che una ricostruzione scambierebbe per una fotografia. Se
+fallisce solo l'indice la versione c'è già, e la ricostruzione la ritrova con
+la sua nota. Rispetta il tetto di 64 MiB (oltre rifiuta con un errore) e non
+tocca il documento.
+
 La lettura verifica che il `VersionRef` esista, che il blob sia leggibile e che
 dimensione e impronta corrispondano ai byte dello snapshot. L'anteprima mostra
 il testo quando è UTF-8, altrimenti indica la dimensione del contenuto binario.
