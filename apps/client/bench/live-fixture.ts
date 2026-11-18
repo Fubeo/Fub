@@ -62,7 +62,11 @@ const LIVE_CARDS_NOTE = [
   "",
   "I conti della casa, da tenere aggiornati:",
   "",
-  "![[Conti.xlsx]]",
+  "![[Conti.xlsx#Conti!A1:C4]]",
+  "",
+  "Il budget dell'anno scorso, un intervallo che non c'è più:",
+  "",
+  "![[Conti.xlsx#Budget!A1:E7]]",
   "",
   "La versione vecchia, spostata chissà dove:",
   "",
@@ -192,6 +196,15 @@ function section(i: number): string {
 /// **forte**» dopo la metà: è il punto in cui si scrive.
 export function typingNote(sections: number): LiveCase {
   const text = `${Array.from({ length: sections }, (_, i) => section(i)).join("\n")}\nFine.`;
+  return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
+}
+
+/// La nota della battuta con le schede (T43, A-5): `sections` sezioni come
+/// in `typingNote`, e dopo ciascuna delle prime `cards` un foglio vivo, la
+/// stessa parte della cartella del banco.
+export function typingCardsNote(sections: number, cards: number): LiveCase {
+  const parts = Array.from({ length: sections }, (_, i) => (i < cards ? `${section(i)}\n![[Conti.xlsx#Conti!A1:C4]]\n` : section(i)));
+  const text = `${parts.join("\n")}\nFine.`;
   return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
 }
 
@@ -565,6 +578,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "schede-vive": { text: LIVE_CARDS_NOTE, cursor: null, files: { "Casa/foto-appartamento.zip": "" } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
+  "battuta-schede-20": typingCardsNote(50, 20),
   "lunga-4000": longNote(4000),
 };
 

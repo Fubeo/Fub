@@ -41,6 +41,34 @@ guardano e si attivano, ma non si scrive.
 Il gruppo **Scheda** del menu del blocco ha **Apri**, **Attiva** e **Togli
 dalla nota**.
 
+## Il foglio nella nota
+
+`![[Conti.xlsx#Budget!A1:E7]]` mostra soltanto quella parte del foglio. La
+parte può essere un intervallo (`Budget!A1:E7`, o `A1:E7` sul foglio attivo),
+un nome definito della cartella, una tabella o un foglio intero; senza parte
+si vede il foglio attivo dalla sua prima cella usata. Solo un nome o una
+tabella seguono un intervallo che cresce: un intervallo scritto resta quello.
+
+- **A riposo** si vedono i valori salvati nel file: aprire la nota non
+  ricalcola e non scrive. Un valore che Fub non ha ricalcolato ha il filo a
+  puntini del foglio. La scheda è alta quanto le righe della parte (oltre
+  sedici righe si scorre dentro), senza lettere né numeri.
+- **Da attiva** compaiono le lettere delle colonne e i numeri delle righe, e
+  si scrive nelle celle come nel foglio: Invio, F2, il doppio clic o un
+  carattere aprono la cella, la selezione si copia con Ctrl+C come testo a
+  tabulazioni. Confermata la cella, il foglio ricalcola e il file si salva.
+  La griglia comincia dalla prima cella della parte. Il gruppo **Foglio**
+  della barra di formato dice la cella attiva e la sua formula, e ha
+  **Apri**. Righe, colonne, formati e grafici si cambiano nel foglio aperto.
+- Una parte che non c'è più dice «Intervallo non trovato: Budget!A1:E7»;
+  **Scegli di nuovo** elenca i fogli, i nomi e le tabelle della cartella e
+  riscrive la parte nell'embed (un passo d'annullamento). In sola lettura il
+  pulsante non c'è.
+
+La parte la trova il provider del foglio col comando che legge soltanto
+`fub.part` (`crates/fub-format-xlsx/src/parts.rs`); la scheda è
+`apps/client/src/editors/grid/card.ts`.
+
 ## I limiti
 
 - Fuori dalla vista le schede sono immagini ferme; vive ce ne sono al più
@@ -51,7 +79,7 @@ dalla nota**.
 - Un formato senza vista (un componente spento, un plugin che manca) dice la
   specie e il percorso, con **Apri**.
 - Il file è lo stesso che si apre nella sua linguetta: le modifiche fatte da
-  una parte si vedono dall'altra.
+  una parte si vedono dall'altra, anche quelle non ancora salvate.
 
 ## Dove sta
 

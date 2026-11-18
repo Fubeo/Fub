@@ -249,6 +249,13 @@ lavori).
 | 7.201 righe | Live | 5,7 · 8,4 · 38,0 ms | 3,0 · 3,9 · 4,2 ms | 6,8 · 11,5 · 29,1 ms |
 | 7.201 righe | Blocchi | 5,5 · 9,6 · 24,2 ms | 3,1 · 4,4 · 5,2 ms | 7,6 · 11,9 · 37,8 ms |
 
+La terza nota (`battuta-schede-20`) è quella di cinquanta sezioni con venti
+fogli vivi incorporati, la stessa parte della cartella del banco: le schede
+non devono pesare sulla battuta. Il 18 novembre 2026, un giro con carico
+basso: Sorgente 1,4 · 2,1 · 5,4 ms, Scrittura 2,4 · 4,2 · 13,8 ms, contro
+1,2 · 1,4 · 4,7 e 2,0 · 3,3 · 12,0 ms della nota di 901 righe senza schede
+nello stesso giro.
+
 **Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che fa
 soltanto il lavoro di CodeMirror e della sessione, sta già intorno ai 4 ms, e
 fra un giro e l'altro la stessa nota varia più di una correzione: il numero da

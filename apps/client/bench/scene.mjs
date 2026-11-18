@@ -1567,13 +1567,14 @@ export const SCENE = touchLast(onPage("shell", [
   // formato che la nota non sa mostrare; la stessa nota nella finestra minima.
   ...[
     ["schede-vive-01-riposo", "Le schede vive a riposo: il contratto in PDF e il foglio dei conti, col nome del file in testata", "top", null],
-    ["schede-vive-02-attiva", "Il foglio attivo: bordo d'accento, «Esc per uscire», «Apri» e «A tutta pagina»", "top", "sheet"],
+    ["schede-vive-02-attiva", "Il foglio attivo: bordo d'accento, «Esc per uscire», «Apri» e «A tutta pagina»; le lettere e i numeri, e la cella attiva nel gruppo «Foglio» della barra", "top", "sheet", null, "&formatbar=1"],
     ["schede-vive-03-mancante", "Un file mancante («Ritrova…», «Togli dalla nota») e un formato che la nota non mostra («Apri»)", "bottom", null],
     ["schede-vive-04-stretta", "Le schede vive nella finestra minima, 800 px", "top", null, NOTE_NARROW],
-  ].map(([id, title, scroll, activate, viewport]) => ({
+    ["schede-vive-05-parte-persa", "Il foglio di cui l'intervallo non c'è più: «Intervallo non trovato: Budget!A1:E7» e «Scegli di nuovo» (T43)", "lost", null],
+  ].map(([id, title, scroll, activate, viewport, extra]) => ({
     id,
     title,
-    query: "live=schede-vive&pdf-scena=domanda&workbook=1",
+    query: `live=schede-vive&pdf-scena=domanda&workbook=1${extra ?? ""}`,
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], scroll === "bottom" ? "bottom" : "top");
@@ -1581,6 +1582,9 @@ export const SCENE = touchLast(onPage("shell", [
         const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
         return cards.length > 0 && cards.every((card) => card.dataset.cardState !== "loading");
       });
+      // I fogli hanno letto la loro parte e preso l'altezza delle righe vere.
+      await page.waitForFunction(() => [...document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet')]
+        .every((sheet) => sheet.dataset.cardState === "content" || sheet.dataset.cardState === "lost"));
       if (scroll === "bottom") {
         await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
         const last = '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]';
@@ -1595,10 +1599,19 @@ export const SCENE = touchLast(onPage("shell", [
           return card !== undefined && card.bottom <= window.innerHeight;
         }, last);
       }
+      if (scroll === "lost") {
+        // La parte persa sta sotto il foglio: la si porta in alto nella vista.
+        const lost = '.pane.focus .pane-editor .live-card .canvas-card-lost';
+        await page.waitForSelector(lost);
+        await page.evaluate((selector) => document.querySelector(selector)?.closest(".live-card")?.scrollIntoView({ block: "center" }), lost);
+      }
       if (activate) {
         const body = `.pane.focus .pane-editor .live-card[data-card-kind="${activate}"] .live-card-body`;
         await page.click(body);
         await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="${activate}"][data-card-active="true"]`);
+        // La griglia scrive dalla prima cella della parte, e la barra lo dice
+        // (sotto i 760 px la cella non si vede: c'è, senza `hidden`).
+        if (extra) await page.waitForSelector(".format-bar-context .format-bar-context-cell:not([hidden])", { state: "attached" });
       }
     },
   })),

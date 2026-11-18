@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 0174408cb6bf919908882a4f630a199496603ee3.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 3eb59e4fbf5e8feb387540b42a2d60f7d0025f15.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "0174408cb6bf919908882a4f630a199496603ee3",
+  "commit": "3eb59e4fbf5e8feb387540b42a2d60f7d0025f15",
   "file": "PLAN-ui/editor.html",
   "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {
@@ -19393,6 +19393,112 @@
           ],
           "color": [
             "var(--doc-fg)"
+          ]
+        }
+      }
+    },
+    "foglio-nella-nota.cella": {
+      "chiaro-1280": {
+        "prototipo": "#fx-sheet",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "12px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "padding-top": "0px",
+          "padding-right": "6px",
+          "padding-bottom": "0px",
+          "padding-left": "2px",
+          "max-width": "168px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": "#fx-sheet",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          "font-size": "12px",
+          "font-weight": "400",
+          "line-height": "12px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "padding-top": "0px",
+          "padding-right": "6px",
+          "padding-bottom": "0px",
+          "padding-left": "2px",
+          "max-width": "168px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      }
+    },
+    "foglio-nella-nota.lettere": {
+      "chiaro-1280": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(139, 150, 143)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(111, 122, 116)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(139, 150, 143)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard .gr-let",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "10.5px",
+          "font-weight": "600",
+          "color": "rgb(111, 122, 116)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
           ]
         }
       }

@@ -459,6 +459,21 @@ export const VISTE = {
     },
     app: { scena: "trasclusione-viva-02-scrive" },
   },
+  /// Il foglio nella nota da attivo (T43): il prototipo al passo «Il foglio
+  /// nella nota» (`activateSheet(true)`, la cella C3 scelta), l'app dalla
+  /// scena col foglio attivo e la barra di formato, che aspetta la cella nel
+  /// gruppo «Foglio». A 700 px la cella del gruppo non c'è dai due lati
+  /// (riga 784 del prototipo), e i suoi pezzi stanno solo nei larghi.
+  "foglio-nella-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il foglio nella nota");
+        await page.waitForSelector("#win .scard.active");
+      },
+    },
+    app: { scena: "schede-vive-02-attiva" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1578,6 +1593,25 @@ export const PEZZI = [
     prototipo: ".tx-band",
     app: ".transclusion-band",
     proprieta: ["padding", "margin", "gap", "border-radius", "background-color", "font", "color", ...ALLINEAMENTO],
+  },
+  // ── il foglio nella nota (T43) ──────────────────────────────────────────
+  // La cella attiva e la sua formula nel gruppo «Foglio» della barra (`.fxr`).
+  {
+    id: "foglio-nella-nota.cella",
+    vista: "foglio-nella-nota",
+    stati: LARGHI,
+    prototipo: "#fx-sheet",
+    app: ".format-bar-context .format-bar-context-cell",
+    proprieta: ["font", "color", "padding", "max-width", "white-space"],
+  },
+  // Le lettere delle colonne, che a scheda attiva compaiono piccole e senza fondo.
+  {
+    id: "foglio-nella-nota.lettere",
+    vista: "foglio-nella-nota",
+    contesto: "documento",
+    prototipo: ".scard .gr-let",
+    app: '.live-card[data-card-active="true"] .canvas-card-sheet .grid-column-header',
+    proprieta: ["font-size", "font-weight", "color"],
   },
   // ── il promemoria (T36) ───────────────────────────────────────────────────
   // Il colore, il fondo, la forma e il peso della `.rem`. La misura (12 px,
