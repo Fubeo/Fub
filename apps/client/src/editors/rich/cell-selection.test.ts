@@ -298,6 +298,80 @@ describe("le tabelle del documento", () => {
   });
 });
 
+// IMP-132: il trascinamento del browser lascia una selezione di testo da una
+// cella all'altra; Canc e Backspace su di lei toglievano una cella dalla riga.
+describe("la forma della tabella resta", () => {
+  const NINE = [["aa", "bb", "cc"], ["dd", "ee", "ff"], ["gg", "hh", "ii"]];
+  const keyCode = (key: string) => (key === "Backspace" ? 8 : 46);
+
+  for (const key of ["Delete", "Backspace"]) {
+    it(`${key} su una selezione di testo da una cella all'altra svuota le celle, in ogni riga`, () => {
+      const e = engine(NINE);
+      // Due celle della prima riga, come il trascinamento della scheda.
+      e.select(at(e, "aa") + 1, at(e, "bb") + 1);
+      expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 0, r1: 0, c1: 1 });
+      expect(press(key, { keyCode: keyCode(key) })).toBe(true);
+      expect(grid(e)).toEqual([["", "", "cc"], ["dd", "ee", "ff"], ["gg", "hh", "ii"]]);
+      // Le due celle dell'ultima riga, la colonna di mezzo.
+      e.select(at(e, "hh") + 1, at(e, "ii") + 1);
+      press(key, { keyCode: keyCode(key) });
+      e.select(at(e, "ee"), at(e, "ff") + 2);
+      press(key, { keyCode: keyCode(key) });
+      expect(grid(e)).toEqual([["", "", "cc"], ["dd", "", ""], ["gg", "", ""]]);
+      expect(press("z", { ctrlKey: true })).toBe(true);
+      expect(press("z", { ctrlKey: true })).toBe(true);
+      expect(press("z", { ctrlKey: true })).toBe(true);
+      expect(grid(e)).toEqual(NINE);
+    });
+
+    it(`${key} su una selezione che esce dalla tabella toglie il testo e svuota le celle, senza unirle`, () => {
+      const e = engine(NINE);
+      e.select(at(e, "ee") + 1, at(e, "dopo") + 2);
+      expect(selectedCells(e.state)).toBeNull();
+      expect(press(key, { keyCode: keyCode(key) })).toBe(true);
+      expect(grid(e)).toEqual([["aa", "bb", "cc"], ["dd", "e", ""], ["", "", ""]]);
+      const blocks = parseProjection(e.getDoc()).blocks;
+      const after = blocks[blocks.length - 1] as Para;
+      expect((after.c?.[0] as TextInline).x).toBe("po");
+    });
+  }
+
+  it("una lettera su una selezione che esce dalla tabella va al posto del testo scelto", () => {
+    const e = engine([["aa", "bb"]]);
+    e.select(at(e, "bb") + 1, at(e, "dopo") + 2);
+    const editable = document.querySelector<HTMLElement>(".rich-content")!;
+    const keypress = new KeyboardEvent("keypress", { key: "x", bubbles: true, cancelable: true });
+    Object.defineProperty(keypress, "charCode", { value: 120 });
+    const typed = !editable.dispatchEvent(keypress);
+    expect(typed).toBe(true);
+    expect(grid(e)).toEqual([["aa", "bx"]]);
+    const blocks = parseProjection(e.getDoc()).blocks;
+    const after = blocks[blocks.length - 1] as Para;
+    expect((after.c?.[0] as TextInline).x).toBe("po");
+  });
+
+  it("nessuna transazione unisce due celle, e la cronologia e il disco passano", () => {
+    const e = engine(NINE);
+    // Una cancellazione grezza da una cella al paragrafo dopo la tabella.
+    e.select(at(e, "ii") + 1, at(e, "dopo") + 2);
+    const tr = e.state.tr.deleteSelection();
+    e.dispatch(tr);
+    expect(grid(e)).toEqual(NINE);
+    // Una cella in meno in una riga, da un comando che ne togliesse una.
+    const firstCell = cellBoxes(e.state.doc.nodeAt(0)!, 0)[0]!;
+    e.dispatch(e.state.tr.delete(firstCell.pos, firstCell.pos + firstCell.node.nodeSize));
+    expect(grid(e)[0]).toHaveLength(3);
+    // Il documento riletto dal disco vale com'è, anche con righe diverse.
+    const ragged: Block = { t: "table", k: "T", rows: [{ k: "R0", cells: [{ k: "K0", blocks: [para("x")] }] }, { k: "R1", cells: [{ k: "K1", blocks: [para("y")] }, { k: "K2", blocks: [para("z")] }] }] } as Block;
+    e.syncDoc(JSON.stringify({ format: "fub-rich", version: 1, blocks: [ragged, para("dopo")] }));
+    expect(grid(e)).toEqual([["x"], ["y", "z"]]);
+    // E una tabella che era già così si scrive.
+    e.select(at(e, "y") + 1);
+    e.dispatch(e.state.tr.insertText("!"));
+    expect(grid(e)).toEqual([["x"], ["y!", "z"]]);
+  });
+});
+
 describe("la prova comune della Tabella, sul documento", () => {
   const target: ConformanceTarget = { mode: "document", caps: DOCUMENT_TABLE_CAPS, bounded: true, delegates: false };
 

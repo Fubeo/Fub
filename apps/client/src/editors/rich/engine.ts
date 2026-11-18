@@ -50,6 +50,7 @@ import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
 import { cellSelectionPlugin } from "./cell-selection";
+import { SHAPE_FREE, tableShapeGuard } from "./table-structure";
 import { GO_TO, lineBoxes, RichMotion, type Rect } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -231,6 +232,7 @@ export class RichEngine {
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
       history(),
+      tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
       findPlugin,
@@ -366,7 +368,7 @@ export class RichEngine {
       this.#notify();
       return;
     }
-    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true));
+    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true).setMeta(SHAPE_FREE, true));
     this.#notify();
   }
 
