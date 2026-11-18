@@ -993,10 +993,16 @@ describe("GridEngine: l'anteprima di ciò che si scrive o si tira", () => {
 
   it("un no torna com'era, e l'avviso dice perché", async () => {
     const grid = workbookHost();
-    grid.host.gridBytesCommand = async () => {
-      throw { kind: "permission_denied", message: "il foglio è protetto" };
+    const refusing = {
+      ...grid,
+      host: {
+        ...grid.host,
+        gridBytesCommand: async () => {
+          throw { kind: "permission_denied", message: "il foglio è protetto" };
+        },
+      },
     };
-    const { engine, host, viewport, notice } = await workbookMounted(grid);
+    const { engine, host, viewport, notice } = await workbookMounted(refusing);
     const before = widthOf(host, "B");
     pull(host, viewport, "B", 28);
     expect(widthOf(host, "B")).toBeGreaterThan(before);

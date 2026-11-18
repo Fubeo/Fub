@@ -49,6 +49,10 @@ import type {
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
+  GridBytesWindow,
+  GridCommand,
+  GridCommandOutcome,
+  GridCommandRequest,
   Heading,
   IndexQuery,
   IndexResult,
@@ -62,6 +66,7 @@ import type {
   ViewSpec,
 } from "../src/host/contract";
 import { inShellLanguage } from "./fake-english";
+import { gridJournalText } from "../src/state/grid-journal";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
@@ -436,6 +441,77 @@ function largeWindow(start: number) {
     objects: [],
   };
 }
+/// `?misure=si`, con `?workbook=large`: il finto dice sì alle misure tirate
+/// (`home.columnWidth`, `home.rowHeight`) invece di rifiutarle perché non le
+/// serve, come l'host vero: la revisione cambia, il giornale prende il
+/// comando e le finestre rilette hanno la misura nuova. La scena
+/// `grid-large-misure` dei controlli G5 (griglia T5). Il giornale qui è
+/// soltanto quello delle misure: la scena non scrive celle. Una porta resa
+/// guasta o frenata dal banco (`fault`, `throttle`) vale anche qui, perché la
+/// risposta passa prima dal finto.
+const SIZES_ANSWER = WORKBOOK === "large" && params.get("misure") === "si";
+const SIZE_COMMANDS: ReadonlySet<string> = new Set(["home.columnWidth", "home.rowHeight"]);
+/// Le misure di ogni revisione data dal finto: colonna (o riga) → misura
+/// nei pixel della cartella.
+const sizedRevisions = new Map<string, { readonly columns: ReadonlyMap<number, number>; readonly rows: ReadonlyMap<number, number> }>();
+/// I comandi del giornale che la shell tiene dall'ultima apertura: il diff
+/// della risposta parte da quelli.
+let sizedCommands: GridCommand[] = [];
+/// L'ultima revisione data dal finto, e quella che il salvataggio ha messo
+/// nel file: riaperto senza giornale, il file ha quelle misure.
+let lastSized: string | null = null;
+let savedSized: string | null = null;
+
+/// L'indice da zero di una colonna in A1 («C» → 2).
+function columnIndex(letters: string): number {
+  let index = 0;
+  for (const letter of letters) index = index * 26 + (letter.charCodeAt(0) - 64);
+  return index - 1;
+}
+
+/// La risposta del provider a una misura tirata, su `revision`.
+function sizedOutcome(revision: string, request: GridCommandRequest): GridCommandOutcome {
+  const { id, params: text } = request.command;
+  const params = JSON.parse(text) as { cols?: string; rows?: string; width?: number; height?: number };
+  const known = sizedRevisions.get(revision);
+  const columns = new Map(known?.columns);
+  const rows = new Map(known?.rows);
+  if (id === "home.columnWidth") {
+    const [a, b] = params.cols!.split(":").map(columnIndex);
+    for (let index = a!; index <= b!; index += 1) columns.set(index, params.width!);
+  } else {
+    const [a, b] = params.rows!.split(":").map((row) => Number(row) - 1);
+    for (let index = a!; index <= b!; index += 1) rows.set(index, params.height!);
+  }
+  const deleted = sizedCommands.length ? gridJournalText({ entries: [], commands: sizedCommands }) : "";
+  sizedCommands = [...sizedCommands, request.command];
+  const inserted = gridJournalText({ entries: [], commands: sizedCommands });
+  const next = `sha256:grande-misure-${sizedRevisions.size + 1}`;
+  sizedRevisions.set(next, { columns, rows });
+  lastSized = next;
+  return {
+    commit: { revision: next, edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted }, invalidation: { kind: "all" } },
+    sheets: LARGE_SESSION.sheets,
+    hidden: [],
+    selection: { sheet: request.command.sheet, selection: request.command.selection, active: request.command.active },
+    result: null,
+    dialog: null,
+    commands: LARGE_SESSION.commands,
+    book: LARGE_SESSION.book,
+  } as GridCommandOutcome;
+}
+
+/// La finestra della revisione `revision` con le misure che il finto ha dato.
+function sizedWindow(window: GridBytesWindow, revision: string): GridBytesWindow {
+  const sized = sizedRevisions.get(revision);
+  if (!sized) return window;
+  return {
+    ...window,
+    columns: window.columns.map((column) => (sized.columns.has(column.index) ? { ...column, width: sized.columns.get(column.index)! } : column)),
+    rows: window.rows.map((row) => (sized.rows.has(row.index) ? { ...row, height: sized.rows.get(row.index)! } : row)),
+  };
+}
+
 /// Le finestre si fanno solo se la scena le chiede.
 const LARGE_WINDOWS = WORKBOOK === "large"
   ? Array.from({ length: Math.ceil(LARGE_ROWS / LARGE_BLOCK) }, (_, block) => largeWindow(block * LARGE_BLOCK))
@@ -2228,10 +2304,33 @@ declare global {
   }
 }
 
+/// Le porte di `gridBytesCommand` frenate o guaste dal banco, viste anche da
+/// chi risponde alle misure tirate (`?misure=si`) al posto del finto.
+const sizeGates: { held: Promise<void> | null; fault: boolean } = { held: null, fault: false };
+
 globalThis.window.bench = {
   emit: host.emit,
-  fault: host.fault,
-  throttle: host.throttle,
+  fault: (gate, reason) => {
+    const restore = host.fault(gate, reason);
+    if (gate !== "gridBytesCommand") return restore;
+    sizeGates.fault = true;
+    return () => {
+      sizeGates.fault = false;
+      restore();
+    };
+  },
+  throttle: (gate) => {
+    const release = host.throttle(gate);
+    if (gate !== "gridBytesCommand") return release;
+    let open = () => {};
+    const held = new Promise<void>((resolve) => { open = resolve; });
+    sizeGates.held = held;
+    return () => {
+      if (sizeGates.held === held) sizeGates.held = null;
+      open();
+      release();
+    };
+  },
   calls: host.calls,
   light: LIGHT,
 };
@@ -2390,6 +2489,32 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
 
 export const api: typeof host.module.api = {
   ...behind,
+  ...(SIZES_ANSWER ? {
+    gridBytesCommand: async (surface, instance, request) => {
+      // Le misure le serve il banco; il resto, e una porta resa guasta, il
+      // finto. La chiamata si registra come la registra il finto, e una
+      // porta frenata tiene in volo anche la risposta del banco.
+      if (!SIZE_COMMANDS.has(request.command.id) || sizeGates.fault) return behind.gridBytesCommand(surface, instance, request);
+      host.calls.push({ gate: "gridBytesCommand", args: [instance, request] });
+      if (sizeGates.held) await sizeGates.held;
+      return sizedOutcome(request.revision, request);
+    },
+    gridBytesWindow: async (surface, instance, request) =>
+      sizedWindow(await behind.gridBytesWindow(surface, instance, request), request.revision),
+    // Il salvataggio scrive le misure nel file e riapre la cartella senza
+    // giornale: come l'host vero, il finto la riapre con le misure salvate.
+    writeDocument: async (id, source, base, ...rest) => {
+      const written = await behind.writeDocument(id, source, base, ...rest);
+      if (id === WORKBOOK_DOC && lastSized !== null) savedSized = lastSized;
+      return written;
+    },
+    openGridBytes: async (surface, doc, journal, base) => {
+      const session = await behind.openGridBytes(surface, doc, journal, base);
+      if (journal !== "" || savedSized === null) return session;
+      sizedCommands = [];
+      return { ...session, revision: savedSized };
+    },
+  } satisfies Partial<typeof host.module.api> : {}),
   invokeCommand: async (id, args, ...rest) => {
     // L'anteprima del RAW della scena: il finto non sa leggere un RAW.
     const doc = (args as { doc?: unknown } | null)?.doc;

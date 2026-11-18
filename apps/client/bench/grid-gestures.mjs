@@ -49,7 +49,7 @@ import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 /// I cantieri chiusi: i loro controlli decidono l'esito del banco.
-const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3", "G4"]);
+const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1", "G2", "G3", "G4", "G5"]);
 
 const REPORT = join(OUTPUT, "grid-gestures.json");
 const SHOTS = join(OUTPUT, "grid-gestures");
@@ -1315,6 +1315,207 @@ const CONTROLS = [
       return {
         ok: look.fill === look.paper && look.others.length === 0 && look.ratio >= 4.5,
         seen: `fondo ${look.fill}, carta ${look.paper}, testo ${look.ratio}:1${look.others.length ? `; altri fondi: ${look.others.slice(0, 3).join(", ")}` : ""}`,
+      };
+    },
+  },  // **Ciò che si scrive o si tira si vede subito** (griglia T5): un numero
+  // scritto va a destra dal primo fotogramma, una misura tirata vale dal
+  // rilascio e resta, la misura dal vivo sta nel riquadro e un no torna
+  // indietro con l'avviso.
+  {
+    id: "g5-numero-a-destra",
+    cantiere: "G5",
+    title: "«42» scritto in B8 e Invio, col provider che non ha ancora risposto",
+    expected: "dal primo fotogramma dopo Invio B8 mostra 42, allineato a destra",
+    run: async (page) => {
+      await pick(page, "B8");
+      await page.evaluate(() => { window.__g5Hold = window.bench.throttle("applyGridBytes"); });
+      await page.keyboard.type("42");
+      await settle(page, 200);
+      // Il fotogramma dopo Invio: un ascolto in cattura prima della griglia,
+      // un fotogramma, e la lettura dopo che quel fotogramma si è dipinto.
+      await page.evaluate((selector) => {
+        window.__g5Frame = new Promise((resolve) => {
+          document.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter") return;
+            requestAnimationFrame(() => setTimeout(() => {
+              const cell = document.querySelector(selector);
+              const text = cell?.querySelector(".grid-cell-text");
+              const box = cell?.getBoundingClientRect();
+              // L'inchiostro, non la scatola del testo: quella è larga
+              // quanto la cella.
+              const range = document.createRange();
+              if (text) range.selectNodeContents(text);
+              const ink = text ? range.getBoundingClientRect() : null;
+              resolve({
+                text: text?.textContent ?? null,
+                align: cell ? getComputedStyle(cell).textAlign : null,
+                // A destra vuol dire più vicino al lato destro che al sinistro.
+                right: box && ink && ink.width > 0 ? box.right - ink.right < ink.left - box.left : false,
+              });
+            }, 0));
+          }, { capture: true, once: true });
+        });
+      }, cellSelector("B8"));
+      await page.keyboard.press("Enter");
+      const frame = await page.evaluate(() => window.__g5Frame);
+      await page.evaluate(() => window.__g5Hold?.());
+      return {
+        ok: frame.text === "42" && frame.right && (frame.align === "end" || frame.align === "right"),
+        seen: `al primo fotogramma B8 mostra «${frame.text}», ${frame.right ? "a destra" : "non a destra"} (text-align ${frame.align})`,
+      };
+    },
+  },
+  {
+    id: "g5-larghezza-subito",
+    cantiere: "G5",
+    scene: "grid-large-misure",
+    title: "il bordo destro dell'intestazione C tirato di 60 px e rilasciato, col provider che risponde dopo 400 ms",
+    expected: "la colonna C più larga di almeno 40 px dal primo fotogramma dopo il rilascio, la stessa in ogni fotogramma dopo, e ancora così dopo la risposta; nessun avviso",
+    run: async (page) => {
+      const look = () => page.evaluate(() => {
+        const header = (label) => [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === label);
+        const c = header("C").getBoundingClientRect();
+        const d = header("D")?.getBoundingClientRect();
+        return { right: c.right, width: c.width, y: c.top + c.height / 2, d: d ? d.left : null };
+      });
+      const before = await look();
+      await page.mouse.move(before.right - 1, before.y);
+      await settle(page);
+      await page.mouse.down();
+      await page.mouse.move(before.right + 29, before.y);
+      await page.mouse.move(before.right + 59, before.y);
+      await settle(page, 100);
+      await page.evaluate(() => {
+        window.__g5Release = window.bench.throttle("gridBytesCommand");
+        setTimeout(() => window.__g5Release(), 400);
+        const header = (label) => [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === label);
+        const frames = [];
+        window.__g5Frames = frames;
+        const started = performance.now();
+        const tick = () => {
+          const c = header("C")?.getBoundingClientRect();
+          const d = header("D")?.getBoundingClientRect();
+          frames.push({ width: c?.width ?? 0, gap: c && d ? d.left - c.right : null });
+          if (performance.now() - started < 900) requestAnimationFrame(tick);
+        };
+        document.addEventListener("pointerup", () => requestAnimationFrame(tick), { capture: true, once: true });
+      });
+      await page.mouse.up();
+      await page.waitForFunction(() => window.bench.calls.some((call) => call.gate === "gridBytesWindow" && call.args[1]?.revision?.startsWith("sha256:grande-misure-")), null, { timeout: 5_000 })
+        .catch(() => {});
+      await settle(page, 1_000);
+      const frames = await page.evaluate(() => window.__g5Frames);
+      const after = await look();
+      // La misura del rilascio: il primo fotogramma dopo. Durante il
+      // trascinamento la colonna non cambia, si muove solo la guida.
+      const held = { width: frames[0]?.width ?? 0 };
+      const notice = await page.evaluate(() => {
+        const element = document.querySelector(".pane.focus .grid-notice");
+        return element && !element.hidden ? element.textContent : "";
+      });
+      const given = await page.evaluate(() => window.bench.calls.filter((call) => call.gate === "gridBytesCommand").map((call) => call.args[1]?.command?.id));
+      // La misura si arrotonda ai pixel della cartella (× 1,4): 1 px di
+      // tolleranza.
+      const near = (width) => Math.abs(width - held.width) <= 1;
+      const wrong = frames.filter((frame) => !near(frame.width));
+      const ok = held.width > before.width + 40 && frames.length > 10 && wrong.length === 0 && near(after.width)
+        && given.length === 1 && given[0] === "home.columnWidth" && !notice;
+      return {
+        ok,
+        seen: `C da ${Math.round(before.width)} a ${Math.round(held.width)} px al rilascio; ${frames.length} fotogrammi dopo, ${wrong.length} con un'altra larghezza${wrong.length ? ` (${Math.round(wrong[0].width)})` : ""}; dopo la risposta ${Math.round(after.width)} px; comandi: ${given.join(" ") || "nessuno"}${notice ? `; avviso «${notice}»` : ""}`,
+      };
+    },
+  },
+  {
+    id: "g5-misura-dentro",
+    cantiere: "G5",
+    scene: "grid-large-misure",
+    title: "a 700 px, il bordo di una colonna vicino al lato destro del riquadro tirato di 10 px",
+    expected: "la misura dal vivo tutta dentro il riquadro, a sinistra del bordo",
+    run: async (page) => {
+      await page.setViewportSize({ width: 700, height: 700 });
+      await gridSteady(page);
+      await settle(page, 300);
+      const edge = await page.evaluate(() => {
+        const viewport = document.querySelector(".pane.focus .grid-viewport").getBoundingClientRect();
+        const near = [...document.querySelectorAll(".pane.focus .grid-column-header")]
+          .map((element) => element.getBoundingClientRect())
+          .filter((box) => box.right <= viewport.right - 4 && box.right >= viewport.right - 140)
+          .sort((a, b) => b.right - a.right)[0];
+        return near ? { x: near.right - 1, y: near.top + near.height / 2, right: viewport.right } : null;
+      });
+      if (!edge) return { ok: false, seen: "nessun bordo vicino al lato destro" };
+      await page.mouse.move(edge.x, edge.y);
+      await settle(page);
+      await page.mouse.down();
+      await page.mouse.move(edge.x - 5, edge.y);
+      await page.mouse.move(edge.x - 10, edge.y);
+      await settle(page, 200);
+      const label = await page.evaluate(() => {
+        const viewport = document.querySelector(".pane.focus .grid-viewport").getBoundingClientRect();
+        const element = document.querySelector(".pane.focus .grid-resize-label");
+        if (!element || element.hidden) return null;
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, viewLeft: viewport.left, viewRight: viewport.right, text: element.textContent };
+      });
+      // Torna al bordo e rilascia: nessuna misura cambia.
+      await page.mouse.move(edge.x, edge.y);
+      await page.mouse.up();
+      await settle(page);
+      if (!label) return { ok: false, seen: "la misura dal vivo non si vede" };
+      const inside = label.left >= label.viewLeft && label.right <= label.viewRight;
+      const leftOf = label.right <= edge.x - 9;
+      return {
+        ok: inside && leftOf,
+        seen: `«${label.text}» da ${Math.round(label.left - label.viewLeft)} a ${Math.round(label.right - label.viewLeft)} px su un riquadro di ${Math.round(label.viewRight - label.viewLeft)}, il bordo a ${Math.round(edge.x - 10 - label.viewLeft)}`,
+      };
+    },
+  },
+  {
+    id: "g5-un-no-torna",
+    cantiere: "G5",
+    title: "il finto rifiuta home.columnWidth (il bordo di B tirato di 40 px) e poi la scrittura di «5» in B2",
+    expected: "la colonna B più larga al rilascio e poi di nuovo com'era, B2 di nuovo 800; ogni volta l'avviso dice che il comando o la modifica non è entrata",
+    run: async (page) => {
+      const header = () => page.evaluate(() => {
+        const box = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === "B").getBoundingClientRect();
+        return { right: box.right, width: box.width, y: box.top + box.height / 2 };
+      });
+      const notice = () => page.evaluate(() => {
+        const element = document.querySelector(".pane.focus .grid-notice");
+        return element && !element.hidden ? element.textContent : "";
+      });
+      const before = await header();
+      await page.evaluate(() => { window.__g5Release = window.bench.throttle("gridBytesCommand"); });
+      await page.mouse.move(before.right - 1, before.y);
+      await settle(page);
+      await page.mouse.down();
+      await page.mouse.move(before.right + 19, before.y);
+      await page.mouse.move(before.right + 39, before.y);
+      await page.mouse.up();
+      await settle(page, 100);
+      const preview = (await header()).width;
+      await page.evaluate(() => window.__g5Release());
+      await settle(page, 800);
+      const back = (await header()).width;
+      const widthNotice = await notice();
+      await page.evaluate(() => { window.__g5Fault = window.bench.fault("applyGridBytes"); });
+      await pick(page, "B2");
+      await page.keyboard.type("5");
+      await page.keyboard.press("Enter");
+      // L'avviso del rifiuto dura fino al salvataggio dopo, che riapre la
+      // cartella: si legge appena compare.
+      await page.waitForFunction(() => /non è entrata/.test(document.querySelector(".pane.focus .grid-notice")?.textContent ?? ""), null, { timeout: 3_000 })
+        .catch(() => {});
+      const writeNotice = await notice();
+      await settle(page, 800);
+      const value = await page.evaluate((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent ?? null, cellSelector("B2"));
+      await page.evaluate(() => window.__g5Fault());
+      const ok = preview > before.width + 20 && Math.abs(back - before.width) <= 0.5 && /non è entrato/.test(widthNotice)
+        && value === "800" && /non è entrata/.test(writeNotice);
+      return {
+        ok,
+        seen: `B ${Math.round(before.width)} → ${Math.round(preview)} → ${Math.round(back)} px, avviso «${widthNotice}»; B2 «${value}», avviso «${writeNotice}»`,
       };
     },
   },
