@@ -217,6 +217,9 @@ jobs:
     name: Flatpak (build)
     needs: flatpak-sorgenti
     runs-on: ubuntu-24.04
+    # Senza cache il manifest compila anche WebKitGTK (il primo modulo):
+    # il tetto è quello massimo dei runner ospitati, scritto per chiarezza.
+    timeout-minutes: 360
     permissions:
       contents: read
     container:
@@ -248,7 +251,12 @@ jobs:
           manifest-path: packaging/flatpak/io.github.Fubeo.Fub.yml
           bundle: ${{ steps.nome.outputs.bundle }}
           arch: x86_64
-          cache-key: flatpak-builder-${{ hashFiles('Cargo.lock', 'apps/client/package-lock.json', 'packaging/flatpak/io.github.Fubeo.Fub.yml') }}
+          # Il prefisso `flatpak-builder-x86_64` è quello che l'azione usa
+          # quando la chiave esatta non c'è: così una release riparte dalla
+          # cache della precedente, e il modulo di WebKitGTK (ore di build su
+          # questo runner) si ricompila solo quando cambia il suo pezzo di
+          # manifest.
+          cache-key: flatpak-builder-x86_64-${{ hashFiles('Cargo.lock', 'apps/client/package-lock.json', 'packaging/flatpak/io.github.Fubeo.Fub.yml', 'packaging/flatpak/patches/**') }}
           upload-artifact: false
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

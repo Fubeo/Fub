@@ -229,6 +229,17 @@ EGL, con due attese di fotogramma per fotogramma), e lo sfarfallio non è
 stato guardato: numeri e condizioni in
 [Il vblank emulato su NVIDIA](../misure/2026-11-17-linux-vblank-emulato.md#la-proposta).
 
+### WebKitGTK nel Flatpak
+
+Il Flatpak non usa la WebKitGTK del runtime GNOME 51 (la 2.54.1) ma una
+costruita nel suo manifest, dai sorgenti di webkitgtk.org, e installata in
+`/app` ([Flatpak](../development/versioning-and-releases.md#flatpak)): la
+versione la scegliamo noi, e con lei la correzione dei fotogrammi vecchi che
+ricompaiono dopo un'animazione, appena WebKitGTK ne ha una. Quella copia non
+ha la patch NVIDIA di Debian descritta sopra, come non ce l'ha il runtime
+GNOME; il vblank emulato vale anche lì, perché guarda la versione della
+libreria caricata e il Flatpak ha `--device=dri`.
+
 ## Come si verifica
 
 - La riga `WebKitGTK emulated vblank` dice se l'emulazione è attiva o

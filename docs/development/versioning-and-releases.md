@@ -195,8 +195,9 @@ Per verificarne uno: `gh attestation verify <file> --repo Fubeo/Fub`.
 ### Flatpak
 
 Su Linux la release allega anche `Fub-<versione>-linux-x86_64.flatpak`: Fub
-sul runtime GNOME 51, quindi lo stesso WebKitGTK su ogni distribuzione. Non
-sostituisce `.deb`, `.rpm` e AppImage, e non è su Flathub.
+sul runtime GNOME 51, con una WebKitGTK costruita nel manifest, quindi la
+stessa su ogni distribuzione. Non sostituisce `.deb`, `.rpm` e AppImage, e non
+è su Flathub.
 
 - **L'id** è `io.github.Fubeo.Fub`, e resta questo: cambiarlo vorrebbe dire
   perdere gli aggiornamenti di chi l'ha installato. Flathub accetta un id
@@ -215,6 +216,19 @@ sostituisce `.deb`, `.rpm` e AppImage, e non è su Flathub.
   le sorgenti, costruisce in un contenitore col builder di Flatpak e allega
   il file con il suo `.sha256` e l'attestazione, come ogni altro installer. I
   comandi per una build a mano sono nel README di `packaging/flatpak/`.
+- **WebKitGTK** non è quella del runtime (la 2.54.1, con i fotogrammi vecchi
+  che ricompaiono dopo un'animazione: vedi
+  [`desktop-webview.md`](../architecture/desktop-webview.md)) ma il primo
+  modulo del manifest, `webkit2gtk-4.1`: il tarball ufficiale di
+  webkitgtk.org con la sua impronta, costruito col SDK GNOME 51 e installato
+  in `/app`, che nella sandbox viene prima di `/usr`. Le opzioni sono quelle
+  del runtime (gnome-build-meta, ramo `gnome-51`), senza MiniBrowser,
+  documentazione e introspezione. **Gli aggiornamenti di sicurezza di
+  WebKitGTK sono a carico nostro**: a ogni release stabile si cambiano `url` e
+  `sha256` del modulo (l'impronta è nel file `.sums` accanto al tarball) e si
+  fa una release di Fub; i passi sono nel README di `packaging/flatpak/`. Il
+  job della release riusa la cache di flatpak-builder della release
+  precedente, e WebKitGTK si ricompila solo quando cambia il suo modulo.
 
 I permessi, e perché:
 
