@@ -267,7 +267,7 @@ destra gli attrezzi:
 |---|---|---|
 | Filtro | compone il filtro della vista a vista (proprietà, operatore, valore) o come riga di ricerca (`[stato:Arrivata]`); le due forme mostrano lo stesso filtro | `filters` |
 | Ordina | le chiavi dell'ordinamento con la direzione, e il raggruppamento di questa finestra | `sort` |
-| Proprietà | quali colonne mostrare e in che ordine: si trascinano, o Alt+↑ e Alt+↓ dalla tastiera | `order` |
+| Proprietà | quali colonne mostrare e in che ordine: si trascinano, o Alt+↑ e Alt+↓ dalla tastiera. In cima c'è sempre la colonna della nota, spuntata e fissa («sempre la prima»): non si sposta e non si nasconde, e un `file.name` scritto in `order` resta al suo posto. Sotto, le colonne della vista e poi le proprietà delle note non mostrate; se le note non hanno proprietà, il pannello lo dice | `order` |
 | Cerca | filtra le righe mentre scrivi | niente |
 | «…» | copia ed esporta le righe come CSV | niente |
 | Nuova | crea una nota con le proprietà iniziali della vista; la freccia accanto la crea da un modello della cartella `Templates` | la nota nuova |
