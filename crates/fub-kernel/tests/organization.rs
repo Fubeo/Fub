@@ -131,6 +131,26 @@ fn even_a_rename_by_another_app_brings_it_along() {
     assert!(!org.icons.contains_key("Nota.md"));
 }
 
+/// Un'appuntata spostata da un'altra app in una cartella resta appuntata, col
+/// path nuovo. Il pin è dell'identità come l'icona, e passa dallo stesso punto
+/// (`migrate_side_data`): una rinomina da fuori non lo perde.
+#[test]
+fn a_pinned_note_moved_by_another_app_stays_pinned() {
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+    ws.write_document(&DocId::new("Nota.md"), "body", WriteBase::Dictated)
+        .expect("writes");
+    ws.set_pinned("Nota.md", true).expect("writes");
+
+    std::fs::create_dir_all(root.join("Cartella")).expect("folder");
+    std::fs::rename(root.join("Nota.md"), root.join("Cartella/Spostata.md")).expect("move");
+    assert!(ws
+        .sync_renamed_path(&root.join("Nota.md"), &root.join("Cartella/Spostata.md"))
+        .expect("syncs"));
+
+    assert_eq!(organization(&ws).pinned, ["Cartella/Spostata.md"]);
+}
+
 /// Il file resta **dentro il vault**, e ci resta perché l'organizzazione viaggia
 /// col vault: chi lo sincronizza si porta dietro il modo in cui lo ha messo in
 /// ordine. È la differenza con lo stato di vista (§11.2), che sta nella cartella
