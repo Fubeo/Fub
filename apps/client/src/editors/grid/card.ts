@@ -955,6 +955,14 @@ class SheetCard implements CardView {
     return sheet ? { rows: sheet.row_count, columns: sheet.column_count } : null;
   }
 
+  /// Un avviso al posto della griglia (parte persa, cartella che non si
+  /// legge) ha l'altezza sua: la scheda smette di chiedere quella delle righe.
+  #unfit(): void {
+    if (this.#fitted === null) return;
+    this.#fitted = null;
+    this.#context.fitHeight?.(null);
+  }
+
   /// Le righe e le colonne in vista, dalla prima in alto a sinistra fino a
   /// riempire la scheda, con le misure delle finestre lette o quelle di serie.
   #layout(): void {
@@ -1314,6 +1322,7 @@ class SheetCard implements CardView {
   #showUnavailable(): void {
     this.#grid = null;
     this.#windows = [];
+    this.#unfit();
     this.#entered = false;
     delete this.#root.dataset.cardEntered;
     const children: Node[] = [this.#placeholder(), this.#message(t("canvas.card.sheet_unavailable"), "canvas-card-message")];
@@ -1345,10 +1354,7 @@ class SheetCard implements CardView {
     this.#entered = false;
     delete this.#root.dataset.cardEntered;
     this.#closeSession();
-    if (this.#fitted !== null) {
-      this.#fitted = null;
-      this.#context.fitHeight?.(null);
-    }
+    this.#unfit();
     const box = document.createElement("div");
     box.className = "canvas-card-lost";
     const message = this.#message(t("canvas.card.part_lost", { part: lost.text }), "canvas-card-message");

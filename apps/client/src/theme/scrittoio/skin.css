@@ -17253,11 +17253,12 @@ input.canvas-toolbar-item {
   font-size: 10.5px;
   font-weight: var(--weight-bold);
 }
+/* Come nel prototipo, la lettera della colonna scelta non si accende: il
+   segno della selezione è nelle celle. */
 .live-card .canvas-card-sheet .grid-header.selected {
   box-shadow: none;
-  color: var(--accent);
 }
-.live-card .canvas-card-sheet .grid-cell.stale .grid-cell-text {
+.live-card .canvas-card-sheet .stale {
   text-decoration: underline dotted var(--doc-gutter-fg);
   text-underline-offset: 3px;
 }
@@ -17277,11 +17278,14 @@ input.canvas-toolbar-item {
 }
 .live-card[data-card-kind="sheet"]:has(.canvas-card-lost) .live-card-body {
   height: auto;
+  min-height: 0;
+  cursor: default;
 }
 /* La cella attiva nel gruppo «Foglio» della barra di formato (`.fxr`): il
    nome e la formula in una riga a spaziatura fissa, tagliata. */
 .format-bar-context .format-bar-context-cell {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: var(--space-3);
   max-width: 168px;
@@ -17295,6 +17299,13 @@ input.canvas-toolbar-item {
 .format-bar-context .format-bar-context-cell[hidden] {
   display: none;
 }
+/* Nella finestra stretta la cella lascia il posto ai gesti (prototipo, riga
+   784: `.fxr` sparisce sotto i 760 px della finestra). */
+@media (max-width: 760px) {
+  .format-bar-context .format-bar-context-cell {
+    display: none;
+  }
+}
 .format-bar-context-cell .grid-cell-name {
   flex: none;
   border: 0;
@@ -17302,6 +17313,7 @@ input.canvas-toolbar-item {
   font-size: inherit;
 }
 .format-bar-context-cell .grid-formula-editor {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

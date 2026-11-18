@@ -116,6 +116,9 @@ export function liveCardPart(subpath: string | null): string | null {
   const page = /^#page=(\d{1,6})$/.exec(subpath);
   if (page) return liveStrings.t("live_card.page", { page: page[1]! });
   const text = subpath.replace(/^#/, "").trim();
+  // Un intervallo col suo foglio (T43, prototipo passo 16): «Budget · A1:E7».
+  const range = /^(?:'((?:[^']|'')+)'|([^!'"\s][^!]*))!(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)$/.exec(text);
+  if (range) return `${range[1]?.replaceAll("''", "'") ?? range[2]!} · ${range[3]!}`;
   return text === "" ? null : text;
 }
 

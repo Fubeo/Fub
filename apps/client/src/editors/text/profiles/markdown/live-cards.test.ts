@@ -213,6 +213,9 @@ describe("quali embed sono schede", () => {
   it("la testata dice la pagina, o la parte nominata", () => {
     expect(liveCardPart("#page=3")).toBe("p. 3");
     expect(liveCardPart("#Budget")).toBe("Budget");
+    expect(liveCardPart("#Budget!A1:E7")).toBe("Budget · A1:E7");
+    expect(liveCardPart("#'Conti 2024'!B2")).toBe("Conti 2024 · B2");
+    expect(liveCardPart("#A1:E7")).toBe("A1:E7");
     expect(liveCardPart(null)).toBeNull();
   });
 

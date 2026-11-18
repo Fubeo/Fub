@@ -1435,6 +1435,17 @@ describe("la parte di un foglio (T43)", () => {
     expect(b.root().querySelector('[data-card-action="choose-part"]')).toBeNull();
   });
 
+  it("nella nota, una cartella che non si legge lascia l'altezza delle righe: l'avviso ha la sua", async () => {
+    const b = bench({ note: true, subpath: "#A1:B2", part: () => found("s1", "A1:B2") });
+    (b.grid as { -readonly [K in keyof FakeHost]: FakeHost[K] }).gridBytesWindow = async () => {
+      throw new Error("boom");
+    };
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("unavailable");
+    expect(b.fits).toEqual([SHEET_NOTE_COLUMN_HEADER + 2 * SHEET_CARD_ROW_HEIGHT, null]);
+  });
+
   it("un provider che non serve `fub.part` mostra il foglio attivo dall'inizio", async () => {
     const b = bench({ note: true, subpath: "#Budget!B2:C3" });
     b.mount("live");
