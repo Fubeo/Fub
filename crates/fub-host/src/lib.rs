@@ -126,6 +126,9 @@ pub mod open_with;
 #[cfg(feature = "http-client")]
 pub mod publish;
 mod query;
+/// Le ricette del vault viste dall'host: quali ci sono, quali sono adottate su
+/// questa macchina, il montaggio delle sole adottate e la prova.
+pub mod recipes;
 pub mod records;
 pub mod registry;
 pub mod regular_file;
@@ -174,6 +177,7 @@ pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
+pub use recipes::{RecipeInfo, RecipeList, RecipeProblem, RecipeStatus, RecipeStepInfo};
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};
 pub use registry::{
     Bundle, BundleClaim, BundleError, BundleInfo, BundleRegistry, OnlyProviders, StartupBundle,

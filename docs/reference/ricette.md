@@ -5,7 +5,8 @@
 > **Fonte autorevole:** `crates/fub-features/src/recipes.rs` e, per la
 > lettura e i controlli, `crates/fub-features/src/recipes/format.rs`, per
 > l'esecuzione, l'annullamento e la prova `crates/fub-features/src/recipes/run.rs`;
-> le date dei segnaposto in `crates/fub-features/src/vocabulary.rs`.
+> le date dei segnaposto in `crates/fub-features/src/vocabulary.rs`; per
+> l'elenco, l'adozione, lo scarto e la prova nel vault `crates/fub-host/src/recipes.rs`.
 > **Presidi:** i test di `recipes.rs` (l'esempio di questa pagina è quello che
 > scrive `recipes.new`, e si rilegge come YAML) e di `recipes/run.rs` (l'ordine
 > dell'annullamento, il passo senza annullamento, la fusione dei piani),
@@ -15,7 +16,9 @@
 > attraverso il kernel e il `Guard`: i passi, l'annullamento, l'esito a metà,
 > la prova), `tests/command_conformance.rs` (il comando di una ricetta passa la
 > conformità dei comandi), `tests/componenti.rs` e `tests/censimento.rs` per
-> la riga della mappa, tutti in `crates/fub-features`.
+> la riga della mappa, tutti in `crates/fub-features`; `crates/fub-host/tests/recipes.rs`
+> per gli stati, il consenso di questa macchina, la riconciliazione e la prova
+> dall'host.
 
 Una ricetta è una nota che dice a Fub quali comandi fare, in fila, sulla nota
 su cui la si usa: «segna la data e sposta in Archivio», «chiudi le attività e
@@ -29,10 +32,9 @@ Comandi, e spento lui le note della cartella restano note come le altre.
 
 Questa pagina dice dove vive una ricetta, com'è fatto il blocco, i suoi campi
 e i limiti, i segnaposto, i controlli con i loro codici, come gira, si annulla
-e si prova, e che cosa fa `recipes.new`. Il componente sa leggere, controllare,
-eseguire e provare una ricetta, ma l'host
-non le cerca ancora nel vault: una ricetta scritta in un vault **non** compare
-fra i comandi.
+e si prova, come la persona la accende su questa macchina, e che cosa fa
+`recipes.new`. Una ricetta scritta in un vault compare fra i comandi soltanto
+dopo che la persona l'ha accesa (vedi «Accendere e spegnere»).
 
 ## Dove vive
 
@@ -186,7 +188,7 @@ significato.
 | `impostazioni` | il comando di un passo cambia le impostazioni |
 | `argomenti` | il comando rifiuta gli `args` del passo (uno che non conosce, uno che manca, un tipo sbagliato) |
 | `id-ripetuto` | due ricette del vault con lo stesso `id`: su tutte e due, e nessuna si accende |
-| `id-occupato` | l'`id` è già di un comando che non è questa ricetta |
+| `id-occupato` | l'`id` è già di un comando che non è questa ricetta: un bundle installato si chiama già `recipe.<id>`, e resta com'è |
 | `troppe` | il vault ha più di 200 ricette: uno per vault, senza campo né riga |
 
 ## L'impronta
@@ -251,6 +253,52 @@ La prova è **approssimata** quando un passo dipende da un altro: in simulazione
 niente si sposta, quindi un passo dopo una rinomina vede la nota dov'era. La
 prova è `recipes::plan`, generica su chi esegue i passi in simulazione: la usa
 il comando, ed è quella che serve anche all'host prima di adottare e alla CLI.
+
+## Accendere e spegnere
+
+Chi custodisce il vault (l'host) legge le note della cartella, in ordine di
+percorso, e dice per ognuna che ha un blocco in che stato è **su questa
+macchina**:
+
+| Stato | Che cosa vuol dire | Gira? |
+|---|---|---|
+| `proposta` | la persona non l'ha mai accesa qui | no |
+| `adottata` | accesa con l'impronta del testo di adesso, senza problemi | sì |
+| `cambiata` | accesa, ma la nota è cambiata dopo: va riguardata | no |
+| `problemi` | non si legge o non passa i controlli, accesa o no | no |
+
+- **Accendere** vuol dire guardare la ricetta e dire di sì a quel testo:
+  l'host rifiuta se l'impronta che la persona ha visto non è più quella della
+  nota (la ricetta è cambiata mentre la guardava), poi scrive l'impronta nel
+  registro dei vault di questa macchina (`vaults.json`, campo
+  `recipes_adopted`), monta il bundle `recipe.<id>` e ne accende il permesso
+  `fub:run-command`. Se un passo non riesce, quelli prima si disfano.
+- Il bundle `recipe.<id>` è di fiducia `Community`, dichiara soltanto
+  `fub:run-command` con i comandi dei passi, e non scrive le impostazioni del
+  vault: aprire un vault con ricette accese non riscrive `.fub/settings.json`.
+  Non compare fra i componenti, e la loro pagina non lo accende né lo spegne.
+- **Spegnere** toglie l'impronta e smonta il bundle.
+- **La riconciliazione** gira all'apertura del vault e a ogni elenco: monta le
+  ricette adottate con l'impronta giusta e smonta le altre. Ciò che gira è
+  sempre il testo letto e acceso: una nota cambiata smette di girare finché la
+  persona non la riguarda, e una ricetta il cui comando sparisce (un componente
+  spento) ha il problema `comando-sconosciuto`, resta accesa nel registro e non
+  si monta finché il comando non torna.
+- Il consenso è di **questa** macchina e di questo vault: lo stesso vault
+  aperto su un altro computer ha le ricette fra le proposte. Un Fub che non
+  conosce il campo e riscrive `vaults.json` lo perde, e le ricette tornano
+  proposte (il verso sicuro).
+- Il permesso spento a mano dalla persona lascia la ricetta montata, ma il
+  `Guard` ne rifiuta i passi, e l'elenco lo dice; accenderla di nuovo è di nuovo
+  il consenso.
+- Spento il componente **Ricette**, l'elenco è vuoto e nessuna ricetta gira; le
+  adozioni restano scritte.
+- La prova si fa anche su una ricetta non accesa: ogni passo in simulazione,
+  come lo farebbe la persona (vedi «La prova»). Una ricetta con problemi non si
+  accende e non si prova.
+
+Accendere e spegnere esistono soltanto nell'app, mai come comandi del registro
+né per la CLI o il server MCP: un programma non si dà il consenso da solo.
 
 ## `recipes.new`
 
