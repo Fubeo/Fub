@@ -1,6 +1,7 @@
 import type { Theme } from "../../theme/theme";
 import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
+import { errorText } from "../../host/errors";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
@@ -6122,7 +6123,10 @@ export class CanvasEngine {
 
   #showIntakeError(error: unknown): void {
     if (this.#destroyed) return;
-    this.#intakeError = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+    // Qui arrivano anche i messaggi che l'editor scrive di proposito (il
+    // deposito, un allegato troppo grande): `errorText` li tiene, e legge
+    // l'errore tipizzato dell'host senza «[object Object]».
+    this.#intakeError = errorText(error).slice(0, 300);
     this.#drawToolbar();
   }
 
