@@ -168,6 +168,17 @@ vuota un segnaposto. Le righe vuote dopo un blocco reso (tabella, richiamo, embe
 alte zero, e lo stacco è del blocco; col cursore su una di loro la riga si vede e prende
 lo stacco, così il testo sotto non si sposta. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
+In un elenco Invio continua la voce (puntata, numerata o compito, rinumerando
+quelle dopo). Invio su una voce vuota esce dall'elenco con un paragrafo vero:
+toglie il segno e lascia una riga vuota sopra, così il testo scritto dopo non
+resta la riga pigra dell'ultima voce (`- tre` poi `quattro` dà `- tre`, una
+riga vuota, `quattro`). Lo stesso fa Invio sulla riga vuota in fondo a una
+citazione o a un riquadro; in una citazione annidata, o in un elenco dentro una
+citazione, si sale di un livello e si resta nella citazione di fuori. Una voce
+annidata vuota sale di un livello e diventa la sorella della voce che la
+conteneva, col suo segno. Sopra una riga già vuota la riga in più non si
+aggiunge.
+
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
 si cerca per nome. I byte arrivano dal protocollo `fub-asset`

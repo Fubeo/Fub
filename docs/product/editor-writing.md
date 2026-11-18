@@ -301,8 +301,10 @@ cursore, scorrimento e annulla sono della sbirciata.
 - Finché il fuoco è nella sbirciata, i comandi dell'editor, la barra, la
   ricerca nella nota e il contesto parlano della nota sbirciata.
 - **Esc** salva e chiude, e il fuoco torna dov'era. Un Esc che l'editor usa
-  già (il menu «/», un completamento, il modo normale di vim) resta suo:
-  allora serve un secondo Esc, subito dopo, per chiudere.
+  già (il menu «/» aperto, un completamento a vista, il modo normale di vim)
+  resta suo: allora serve un secondo Esc, subito dopo, per chiudere. Un
+  completamento che le battute hanno appena chiesto e che non si vede ancora
+  non conta: il primo Esc chiude.
 - Dal lanciatore, `Alt+Invio` o l'azione **Sbircia** aprono una nota nella
   sbirciata; un file che non è una nota si apre a lato.
 - Promuovere o chiudere non perde testo: prima l'editor consegna quello che

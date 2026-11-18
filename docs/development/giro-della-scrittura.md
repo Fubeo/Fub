@@ -27,18 +27,21 @@ Scrivere e dare forma, in una nota nuova (`?formatbar=1&slash=1`):
 - `slash-titolo`: «/h2» e Invio → `## Tappe` nel file, la barra dice «Titolo 2».
 - `slash-attivita`: «/attività» → `- [ ] …`, la barra sul blocco «task», la banda dice «Ctrl+Enter spunta».
 - `spunta`: Ctrl+Enter → `- [x] …`.
-- `slash-data`: «/venerdì» → `[[Daily/2026-08-21|21 agosto 2026]]`.
+- `slash-data`: Invio sulla voce vuota, «/venerdì» → `[[Daily/2026-08-21|21 agosto 2026]]`, un paragrafo staccato dall'elenco da una riga vuota.
 - `slash-nessuno`: «/qwzx» → «Nessun blocco per «qwzx»», Esc lascia `/qwzx` nel testo.
 - `grassetto-e-annulla`: doppio clic, la banda dice Ctrl+B, Ctrl+B → `**treno**`; Ctrl+Z lo toglie.
 - `mini-barra-corsivo`: il corsivo della mini-barra → `*parte*`.
 - `inserisci-riquadro`: «+ Inserisci», «Riquadro» → `> [!note]` col testo dentro.
-- `link-a-nota`: «[[Benv» e la voce scelta → `[[Benvenuto]]`.
+- `link-a-nota`: Invio sulla riga vuota del riquadro, «[[Benv» e la voce scelta → `[[Benvenuto]]`, un paragrafo fuori dal riquadro.
 - `data-con-chiocciola`: «@ven» e la data scelta → un link a venerdì, senza `@ven`.
 - `incolla-su-scelta`: un indirizzo incollato su una parola → `[mostra](https://…)`.
 - `incolla-scheda`: un indirizzo su una riga vuota → «Link | Scheda»; Scheda lo lascia solo sulla riga.
 - `slash-tabella`: «/tab 3x4» → una tabella di quattro colonne.
 - `tabella-riga`: «+ Riga» della barra → una riga in più nel file.
 - `titolo-rinomina`: il titolo in cima, Invio → `note.rename` in `Viaggio a Lisbona.md`, il fuoco nel testo.
+- `slash-dopo-rinomina`: nella nota rinominata «/h2» apre ancora il menu → `## Dopo il nome` in `Viaggio a Lisbona.md`.
+- `slash-compito`: «/compito» sceglie «Elenco di attività» → `- [ ] Prenotare l'albergo`.
+- `esci-dall-elenco`: Invio sulla voce vuota del compito, «- tre», Invio, Invio, «quattro» → `- [ ] Prenotare l'albergo`, riga vuota, `- tre`, riga vuota, `quattro`.
 
 I blocchi e le modalità, su «Benvenuto»:
 
@@ -59,7 +62,7 @@ La testata e le proprietà, su `Guida/Live.md` (`?live=proprieta`, poi `?live=op
 I commenti, su `Guida/Live.md` (`?live=commenti`):
 
 - `commenta`: Ctrl+Alt+M chiede il nome, Ctrl+Enter → `{==inaugurazione==}{>>@Sara Neri …<<}`.
-- `rispondi`: il segno della discussione, una risposta → la risposta è nel file.
+- `rispondi`: il segno della discussione, una risposta → la risposta è nel file, firmata `@Sara Neri`; `setSetting profile.name`.
 - `risolvi`: «Risolvi» → un segno in meno nella nota, la discussione resta nel file.
 
 La Base, `Opere.base` (`?base=1`):
@@ -72,7 +75,8 @@ La Base, `Opere.base` (`?base=1`):
 
 La sbirciata, Ctrl O e la concentrazione, da «Benvenuto»:
 
-- `sbirciata`: Alt+clic su un link, una frase, chiusa → la frase è nella nota sbirciata.
+- `sbirciata`: Alt+clic su un link, una frase → la frase è nella nota sbirciata, che resta aperta.
+- `sbirciata-un-esc`: «[[Benv» nella sbirciata, Esc → si chiude il completamento e la sbirciata resta; una frase, un Esc solo → la sbirciata si chiude. Il «/» nella sbirciata non si apre: segue la nota della linguetta attiva.
 - `ctrl-o-nota`: Ctrl O, «Frammenti», Invio → la linguetta «Frammenti di codice».
 - `ctrl-o-sbircia`: Alt+Invio su un risultato → la sbirciata di quella nota.
 - `ctrl-o-etichette`: «#» → la tessera «Etichette», righe con «N note».
@@ -89,21 +93,15 @@ In inglese (`localStorage["fub.locale.language"] = "en"`, come Impostazioni):
 Il corridore non ha un «rosso atteso». Un compito che fallisce per un
 difetto di Fub sta in `SALTATI`, nello stesso file, col motivo e i passi; il
 primo compito ne stampa i nomi. Corretto il difetto, il compito torna fra gli
-altri. Sono saltati `slash-dopo-rinomina` (il «/» non si apre in una nota
-rinominata), `slash-compito` («/compito» non trova il compito),
-`sbirciata-un-esc` (servono due Esc per chiudere la sbirciata) ed
-`esci-dall-elenco` (la riga dopo un elenco chiuso con Invio resta attaccata
-alla sua ultima voce).
+altri. Oggi non ne è saltato nessuno.
 
 ## Che cosa il gruppo non prova
 
 - **La tastiera dei completamenti.** L'orologio del palco è fermo, e
   CodeMirror accetta un completamento dalla tastiera solo dopo un attimo
   misurato con l'orologio: le voci di «[[» e «@» si scelgono col mouse.
-- **La firma delle risposte.** Il finto host non dichiara `profile.name`: il
-  nome scelto al primo commento non si salva, e il compito guarda la
-  risposta senza la firma.
 - **La Base del core.** Righe, filtri e Bacheca li dà la scenografia
   `bench/base-fixture.ts`: il compito guarda i file, non le colonne
-  ricalcolate. La Base si apre da Ctrl O.
+  ricalcolate. La Base si apre da Ctrl O; il finto host la tiene per un
+  documento come l'host vero, e dall'albero si apre col clic.
 - **Gli appunti del sistema.** L'incolla è un evento `paste` col testo.

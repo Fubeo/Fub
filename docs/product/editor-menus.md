@@ -204,7 +204,9 @@ scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
   pertinenza, con la parte trovata in evidenza, e in fondo «Cerca fra tutti i
   comandi». Con due lettere valgono gli inizi di parola, dei nomi in italiano
   e in inglese e dei sinonimi, e le iniziali («/ea» trova Elenco di attività);
-  mai lettere sparse. Da tre lettere conta anche l'interno delle parole, da
+  mai lettere sparse. Più parole valgono se ognuna è l'inizio di una parola del
+  nome o dei sinonimi: Elenco di attività si trova anche con «/compito»,
+  «/da fare», «/checkbox» o «/todo». Da tre lettere conta anche l'interno delle parole, da
   quattro si perdona un errore («/tabela» trova Tabella). Al massimo 12
   risultati. I comandi rapidi vanno in cima: «/tab 3x4», «/col 3», «/code
   py», «/h2», «/domani», «/venerdì», «/fra una settimana».
