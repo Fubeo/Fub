@@ -25,7 +25,7 @@ import { dequantizeSample, quantizeInk, type QuantizedInk } from "../../ink/samp
 import { cutBrush, splitInk } from "../../ink/tools/split";
 import type { EraseSource, Erasable, Spot } from "../../ink/tools/sweep";
 import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
-import type { CardCellBox, CardPageBox } from "./cards";
+import type { CardCellBox, CardPageBox } from "../core/cards/contract";
 import { fitPoint, inkFit, inkFitMode, type InkFit } from "./ink-fit";
 import { pageFit, type DrawableStroke, type InkLayerRef, type InkLayerState } from "./ink-record";
 import type { CanvasDocument } from "./model";

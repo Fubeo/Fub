@@ -25,7 +25,7 @@ import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
 import { lentTo, unlend } from "../state/lend";
 import { saveStateKey } from "../state/saving";
-import type { CardNotices } from "../state/card-editors";
+import type { CardNotices } from "../editors/core/cards/editor-port";
 import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
 import { openDocument as openRecreated, peekSurfaceIn } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";

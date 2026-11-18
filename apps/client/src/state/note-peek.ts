@@ -3,7 +3,7 @@
 // «Apri qui» e «A lato» la promuovono a un riquadro; Esc salva e chiude.
 //
 // La sbirciata non ha un editor suo: monta l'editor vero della nota con la
-// porta delle schede (`state/card-editors.ts`), sulla stessa
+// porta delle schede (`editors/core/cards/editor-port.ts`), sulla stessa
 // `DocumentSession` di un riquadro. Se la nota è aperta anche in un riquadro
 // il buffer è lo stesso; cursore, scorrimento e annulla sono della superficie
 // della sbirciata. La sessione non sa niente della sbirciata: la vede come una
@@ -15,7 +15,7 @@
 // lo dice la shell (`NotePeekDeps`, cablate in `state/document-controller.ts`).
 // La pagina è `docs/product/editor-writing.md`, sezione «La sbirciata».
 
-import type { CardEditor, CardEditorPort } from "../editors/canvas/cards";
+import type { CardEditor, CardEditorPort } from "../editors/core/cards/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import type { PeekLink } from "../editors/text/profiles/markdown/link-gesture";
 import type { Span } from "../host/contract";

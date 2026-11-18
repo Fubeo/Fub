@@ -15,9 +15,9 @@ import {
   type CardRenderer,
   type CardView,
   type Rect,
-} from "./cards";
-import type { CanvasNode } from "./model";
-import { formatKindOf, formatTagOf } from "../../ui/format-kind";
+} from "./contract";
+import type { CanvasNode } from "../../canvas/model";
+import { formatKindOf, formatTagOf } from "../../../ui/format-kind";
 
 function fileNode(file: string, extra: Partial<CanvasNode> = {}): CanvasNode {
   return { id: file, type: "file", x: 0, y: 0, width: 100, height: 100, file, ...extra };

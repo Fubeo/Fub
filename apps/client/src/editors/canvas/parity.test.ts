@@ -13,7 +13,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenu, SurfaceMenuEntry } from "../core/editor-menu";
 import { CardCache } from "./card-cache";
 import { CARD_PANEL_ID, createCanvasInspector } from "./chrome/inspector";
-import { createCardRegistry, type CardCellBox, type CardPageBox, type CardRenderer } from "./cards";
+import { createCardRegistry, type CardCellBox, type CardPageBox, type CardRenderer } from "../core/cards/contract";
 import type { CanvasEngine, CanvasEngineOptions, CanvasNotesPort } from "./engine";
 import type { PartsPickerPort } from "./parts-picker";
 import { mountCanvas } from "./test-mount";

@@ -12,7 +12,7 @@
 // la posizione della scheda fra le schede lette (`boardCards`), che dà il
 // byte dove comincia il suo oggetto.
 
-import { cardKindOf, type CardKind } from "./cards";
+import { cardKindOf, type CardKind } from "../core/cards/contract";
 import { sectionHeading } from "./excerpt";
 import type { CanvasNode } from "./model";
 import { cardParts } from "./parts";

@@ -11,13 +11,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IMAGE_CARD_MAX_BYTES, imageCardRenderer, rasterSize, shownAspect, type ImageCardPort, type ImageCardRead } from "./image";
-import { CardCache } from "../card-cache";
-import type { CardContext, CardMode, CardSnapshot, CardView } from "../cards";
-import type { CanvasParts } from "../parts";
-import type { CanvasNode } from "../model";
-import type { ResourceDescriptor } from "../../media/media-types";
-import { openLifetime } from "../../../ui/lifetime";
-import { t } from "../../../i18n/strings";
+import { CardCache } from "../../../canvas/card-cache";
+import type { CardContext, CardMode, CardSnapshot, CardView } from "../contract";
+import type { CanvasParts } from "../../../canvas/parts";
+import type { CanvasNode } from "../../../canvas/model";
+import type { ResourceDescriptor } from "../../../media/media-types";
+import { openLifetime } from "../../../../ui/lifetime";
+import { t } from "../../../../i18n/strings";
 
 function descriptor(id: string, mime: string, len = 0): ResourceDescriptor {
   return { id, mime, len, handle: "1", kind: "image", revision: "1" } as unknown as ResourceDescriptor;

@@ -16,7 +16,7 @@
 //   solo quando il documento cambia, mai a ogni resa.
 
 import { t } from "../../i18n/strings";
-import { cardKindOf } from "./cards";
+import { cardKindOf } from "../core/cards/contract";
 import { cardName } from "./chrome/inspector";
 import { colorName } from "./colors";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";

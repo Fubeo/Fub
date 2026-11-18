@@ -34,7 +34,7 @@ import { iconEl } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { createColorPicker, numberField, openPopover, type NumberField, type PopoverHandle } from "../../../kit";
 import { textCardName } from "../card-name";
-import { cardKindOf } from "../cards";
+import { cardKindOf } from "../../core/cards/contract";
 import { colorChoiceOf, colorLook, colorMenuLabel, colorName, colorValueOf, NOTE_COLORS, writeColor, type CanvasColorChoice } from "../colors";
 import { DROP_MIN_SIZE } from "../drop-layout";
 import { edgeEnd, reversedEdge, type CanvasDocument, type CanvasEdge, type CanvasEdgeSide, type CanvasNode } from "../model";

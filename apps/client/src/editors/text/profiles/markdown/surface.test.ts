@@ -1427,7 +1427,7 @@ describe("i commenti nella superficie (T21)", () => {
 
   it("nella nota dentro una scheda della lavagna valgono le stesse regole", () => {
     // La scheda monta questa superficie, compatta e con Esc che esce
-    // (`state/card-editors.ts`).
+    // (`editors/core/cards/editor-port.ts`).
     const parent = document.createElement("div");
     document.body.appendChild(parent);
     const ed = mountMarkdownSurface({ paneId: "card:1", documentId: "notes/scheda.md", parent, compact: true, escapeLeaves: true }, {

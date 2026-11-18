@@ -30,7 +30,7 @@ import type {
   CardMode,
   CardView,
   CardWriting,
-} from "../canvas/cards";
+} from "../core/cards/contract";
 import { COMPONENT_EDITORS, type SurfaceBootstrapOptions } from "../core/bootstrap";
 import { GRID_PROFILE, UI_GRID } from "../core/component-surfaces";
 import type { EditorSurface, LazySurfaceFactory } from "../core/registry";

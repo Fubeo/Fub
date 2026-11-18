@@ -13,7 +13,7 @@
 // qui dentro con la scelta di un riquadro (`TransclusionDeps.conflict`).
 //
 // Il ciclo di vita della sessione è quello di una scheda della lavagna
-// (`state/card-editors.ts`): `retain` finché si scrive, e uscendo, se nessun
+// (`editors/core/cards/editor-port.ts`): `retain` finché si scrive, e uscendo, se nessun
 // riquadro la mostra, `release`, che salva e chiude; se non si salva, la
 // domanda di un riquadro (`unsaved`). Mentre si scrive la resa della nota che
 // ospita resta ferma (`hold`): una resa nuova smonterebbe l'editor sotto le

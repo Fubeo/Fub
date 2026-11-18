@@ -6,32 +6,32 @@
 // (`shell-layout.ts`, `document-bridge.ts`) le lascia dalla collezione delle
 // schede (T96): qui la loro `documentSessions` è la collezione della prova.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type * as SessionModule from "./document-session";
+import type * as SessionModule from "../../../state/document-session";
 
-import type { CardEditorOptions, CardEditorState } from "../editors/canvas/cards";
+import type { CardEditorOptions, CardEditorState } from "./contract";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
   type SurfaceActiveCell,
   type SurfaceMode,
   type SurfaceMountContext,
-} from "../editors/core/registry";
-import { operationFromText, type EditorChange } from "../editors/core/text-operation";
-import { createFakeHost, type FakeHost } from "../host/fake";
-import { openLifetime, type Lifetime } from "../ui/lifetime";
-import { createCardEditorPort, headingOffset, type CardEditorHub } from "./card-editors";
+} from "../registry";
+import { operationFromText, type EditorChange } from "../text-operation";
+import { createFakeHost, type FakeHost } from "../../../host/fake";
+import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { createCardEditorPort, headingOffset, type CardEditorHub } from "./editor-port";
 import {
   DocumentSessionCollection,
   type DocumentSessionApi,
   type DocumentSurfaceUpdate,
-} from "./document-session";
-import { defaultLayout, openIn, setLayout } from "./layout";
-import { state as store } from "./store";
+} from "../../../state/document-session";
+import { defaultLayout, openIn, setLayout } from "../../../state/layout";
+import { state as store } from "../../../state/store";
 
 /// La collezione della prova, dietro la `documentSessions` della finestra.
 const live = vi.hoisted(() => ({ sessions: null as object | null }));
 
-vi.mock("./document-session", async (importOriginal) => {
+vi.mock("../../../state/document-session", async (importOriginal) => {
   const real = await importOriginal<typeof SessionModule>();
   const documentSessions = new Proxy({}, {
     get: (_target, key) => {
@@ -45,7 +45,7 @@ vi.mock("./document-session", async (importOriginal) => {
 });
 
 // `applyShellLayout` ridisegna la shell a layout pubblicato: qui non c'è.
-vi.mock("./document-controller", () => ({
+vi.mock("../../../state/document-controller", () => ({
   synchronize: async () => {},
   publishContext: async () => {},
 }));
@@ -628,7 +628,7 @@ describe("la porta per scrivere dentro le schede", () => {
     openIn(before.focus, "Altra.md", before);
     setLayout(before);
 
-    const { applyShellLayout } = await import("./shell-layout");
+    const { applyShellLayout } = await import("../../../state/shell-layout");
     await applyShellLayout(defaultLayout());
 
     expect(sessions.get("Altra.md")?.snapshot().lifecycle).toBe("open");
@@ -647,7 +647,7 @@ describe("la porta per scrivere dentro le schede", () => {
     const editor = await hub.open("Nota.md", document.createElement("div"), options());
     expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
 
-    const { attachRemoteSurface } = await import("./document-bridge");
+    const { attachRemoteSurface } = await import("../../../state/document-bridge");
     const { handle } = await attachRemoteSurface("Altra.md", VAULT, () => "markdown");
     await handle.dispose();
 

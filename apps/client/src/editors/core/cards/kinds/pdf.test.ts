@@ -4,13 +4,13 @@
 // ferme, il motore chiuso da ferma, il file mancante, il PDF rotto, le rese
 // interrotte e le risposte tardive dopo `destroy`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { t } from "../../../i18n/strings";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { makePdfJsLoader, PDFJS_VERSION, type PdfEngine, type PdfJsModule } from "../../media/pdf-view";
-import { CardCache } from "../card-cache";
-import { snapshotPart, type CardContext, type CardMode, type CardView } from "../cards";
-import type { CanvasNode } from "../model";
-import { contentBox } from "../ink-fit";
+import { t } from "../../../../i18n/strings";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
+import { makePdfJsLoader, PDFJS_VERSION, type PdfEngine, type PdfJsModule } from "../../../media/pdf-view";
+import { CardCache } from "../../../canvas/card-cache";
+import { snapshotPart, type CardContext, type CardMode, type CardView } from "../contract";
+import type { CanvasNode } from "../../../canvas/model";
+import { contentBox } from "../../../canvas/ink-fit";
 import { PDF_CARD_MAX_SCALE, pdfCardFirstPage, pdfCardRenderer, pdfCardStartPage, pdfPagesReader, type PdfCardPort } from "./pdf";
 
 const PATH = "Corsi/manuale.pdf";

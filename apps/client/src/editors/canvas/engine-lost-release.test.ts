@@ -8,7 +8,7 @@
 // puntatore non chiude quello di un altro. Il tratto della penna non è qui: lo
 // chiude l'adattatore di N4 (`ink/dom/pointer-adapter.ts`).
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createCardRegistry, type CardMode, type CardRenderer, type CardSnapshot, type CardSnapshots, type CardView } from "./cards";
+import { createCardRegistry, type CardMode, type CardRenderer, type CardSnapshot, type CardSnapshots, type CardView } from "../core/cards/contract";
 import { CanvasEngine, type CanvasCards, type CanvasChange } from "./engine";
 import type { CanvasNode } from "./model";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";

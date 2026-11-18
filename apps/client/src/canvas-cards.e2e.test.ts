@@ -19,7 +19,7 @@
 // vera. Il foglio non si apre (il finto non ha le celle): la prova conta il
 // file, non le celle.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CardRegistry, CardRenderer, CardView } from "./editors/canvas/cards";
+import type { CardRegistry, CardRenderer, CardView } from "./editors/core/cards/contract";
 import type { SettingEntry } from "./host/contract";
 import type { FakeHost, FakeResource } from "./host/fake";
 import { t } from "./i18n/strings";
@@ -71,8 +71,8 @@ vi.mock("./host/dialog", () => ({
 }));
 
 // Il registro vero, avvolto per tenere le viste che monta.
-vi.mock("./editors/canvas/cards", async (importOriginal) => {
-  const real = await importOriginal<typeof import("./editors/canvas/cards")>();
+vi.mock("./editors/core/cards/contract", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./editors/core/cards/contract")>();
   const createCardRegistry = (renderers: readonly CardRenderer[]): CardRegistry => {
     const registry = real.createCardRegistry(renderers);
     return {

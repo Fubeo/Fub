@@ -3,7 +3,7 @@
 // uso senza montare niente dopo che la shell se n'è andata.
 
 import { describe, expect, it, vi } from "vitest";
-import type { CardEditorHub } from "./card-editors";
+import type { CardEditorHub } from "../editors/core/cards/editor-port";
 import { cardStopped, cardWrites, cardWriting, lazyCardEditorHub, releaseSession } from "./card-writes";
 
 /// Una porta finta: ricorda le chiamate, e `open` dà un editor finto.

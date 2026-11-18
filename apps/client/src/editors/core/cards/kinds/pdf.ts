@@ -29,9 +29,9 @@
 // contenuto (`contentAspect`, la proporzione della pagina, T39): la stessa
 // regola che un altro programma rifà con i soli dati del file.
 
-import { t } from "../../../i18n/strings";
-import { pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../media/pdf-view";
-import type { CanvasNode } from "../model";
+import { t } from "../../../../i18n/strings";
+import { pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../../media/pdf-view";
+import type { CanvasNode } from "../../../canvas/model";
 import {
   snapshotPart,
   type CardContext,
@@ -41,7 +41,7 @@ import {
   type CardSize,
   type CardView,
   type Rect,
-} from "../cards";
+} from "../contract";
 
 /// Ciò che la scheda PDF chiede a chi la monta.
 export interface PdfCardPort {

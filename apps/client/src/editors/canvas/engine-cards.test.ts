@@ -18,10 +18,10 @@ import {
   type CardSnapshot,
   type CardSnapshots,
   type CardView,
-} from "./cards";
+} from "../core/cards/contract";
 import type { CanvasNode } from "./model";
 import { CITATIONS_SETTLE_MS } from "./card-head";
-import { pdfCardRenderer, type PdfCardPort } from "./cards/pdf";
+import { pdfCardRenderer, type PdfCardPort } from "../core/cards/kinds/pdf";
 import type { PdfEngine } from "../media/pdf-view";
 import { canvasCoreReady, openCoreNow } from "./wasm/core";
 import { canvasViewKey, createCanvasViewMemory } from "./view-state";

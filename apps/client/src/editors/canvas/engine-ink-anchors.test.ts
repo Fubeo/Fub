@@ -4,14 +4,14 @@
 // fuori dalla pagina l'ancora `card` di N4. Il tratto di pagina si vede solo
 // quando la scheda mostra la sua pagina: voltata la pagina sparisce, tornati
 // ricompare. La scheda PDF è finta: dice la pagina e dove sta (`pageBox`), e
-// avvisa con `pageShown` come la vera (`cards/pdf.ts`). Sopra la griglia di
+// avvisa con `pageShown` come la vera (`editors/core/cards/kinds/pdf.ts`). Sopra la griglia di
 // una scheda di foglio (T38, D-6 b) il tratto è della cella e la segue quando
 // il foglio scorre; la scheda di foglio è finta allo stesso modo (`cellAt`,
 // `cellRect`, `cellsShown`, come `grid/card.ts`).
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { parseInkBrush } from "../../ink/brush";
 import { CanvasEngine, type CanvasChange, type CanvasCorePort } from "./engine";
-import { createCardRegistry, type CardCellBox, type CardContext, type CardPageBox, type CardRenderer, type CardSnapshot, type CardSnapshots } from "./cards";
+import { createCardRegistry, type CardCellBox, type CardContext, type CardPageBox, type CardRenderer, type CardSnapshot, type CardSnapshots } from "../core/cards/contract";
 import { canvasCoreReady, openCoreNow, type CanvasIntentOp } from "./wasm/core";
 
 beforeAll(async () => {
