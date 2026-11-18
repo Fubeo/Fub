@@ -253,7 +253,19 @@ impl CommandProvider for CraftCommands {
     ) -> Result<CommandOutcome, PluginError> {
         if command == PHOTO_COMMAND {
             let args = Args::new(&args);
-            let named = args.named_document("doc", &*host, |_| true, crate::doc_names::KEYS)?;
+            // Le foto sono allegati, e un allegato non sta nell'elenco dei
+            // documenti: un percorso che non c'è e che nessun documento porta
+            // come nome resta il «non trovato» della foto (`photo.missing`),
+            // che dice quale file manca. Un nome che portano in tanti resta
+            // la frase che li elenca.
+            let named = match args.named_document("doc", &*host, |_| true, crate::doc_names::KEYS) {
+                Err(PluginError::BadArgs(Text::Message(message)))
+                    if message.key == crate::doc_names::KEYS.missing =>
+                {
+                    args.document("doc")
+                }
+                other => other?,
+            };
             let Some(doc) = named else {
                 return Err(PluginError::BadArgs(Text::message(
                     "photo.missing",
