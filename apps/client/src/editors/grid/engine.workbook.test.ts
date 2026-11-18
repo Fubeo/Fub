@@ -499,6 +499,15 @@ describe("GridEngine con una cartella di Excel", () => {
     key("ArrowRight");
     await frames(40);
     expect(shownMarks(host, "handle").map((mark) => mark.parentElement!.className)).toEqual(["grid-lift-top"]);
+    // Aprendo la cella il quadratino se ne va subito (starebbe sopra il testo
+    // della cella aperta), e torna quando si chiude.
+    key("F2");
+    expect(shownMarks(host, "handle")).toHaveLength(0);
+    host
+      .querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await frames(40);
+    expect(shownMarks(host, "handle")).toHaveLength(1);
     engine.destroy();
   });
 

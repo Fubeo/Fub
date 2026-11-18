@@ -186,3 +186,12 @@ describe("le classi della sintassi nell'editor", () => {
     });
   }
 });
+
+describe("il carattere del contenuto", () => {
+  it("è quello del codice, salvo un campo che dice il suo con --field-font", () => {
+    const view = mount("x", editorTheme("light"));
+    const rules = view.state.facet(EditorView.styleModule).map((module) => module.getRules()).join("\n");
+    const content = /\.cm-content\s*\{([^}]*)\}/.exec(rules)?.[1] ?? "";
+    expect(content).toContain("font-family: var(--field-font, var(--font-mono))");
+  });
+});

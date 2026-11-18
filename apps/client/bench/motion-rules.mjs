@@ -1400,6 +1400,21 @@ export const CHOREOGRAPHIES = [
     returned: lacks(gridCell(3, 2, ".selected")),
     track: [GRID_EDGE],
   },
+  // **La cella aperta** (griglia T4): F2 su B4, la cui formula è più lunga
+  // della cella. La cella aperta è subito al suo posto, cresciuta a colonne
+  // intere; compare soltanto la cornice, una dissolvenza in `DURATION.state`.
+  {
+    id: "griglia-cella-aperta",
+    title: "Griglia: F2 su una cella col testo lungo, la cella aperta è già al suo posto e la cornice compare",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 3, 1),
+    act: (page) => page.keyboard.press("F2"),
+    arrived: has(".pane.focus .grid-cell-editor:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: has(".pane.focus .grid-cell-editor[hidden]"),
+    track: [".pane.focus .grid-cell-editor-frame"],
+  },
 ];
 
 /// I file che fanno partire corse di `moto` e che il banco non guarda, con la

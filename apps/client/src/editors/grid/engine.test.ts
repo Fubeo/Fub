@@ -4,7 +4,7 @@ import { findTextEditorOrThrow } from "../text/test-support";
 import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
-import { fillTarget, typingOpens, type GridHost } from "./engine";
+import { fillTarget, openSpan, typingOpens, type GridHost } from "./engine";
 import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, written } from "./test-support";
 
 afterEach(() => {
@@ -606,12 +606,51 @@ describe("GridEngine", () => {
     viewport.dispatchEvent(new Event("scroll"));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(editorHost.hidden).toBe(false);
-    expect(editorHost.parentElement).toBe(cellAt(host, 0, 0));
+    // La cella aperta scorre con la sua zona: sta nel suo livello, non nella cella.
+    expect(editorHost.parentElement?.classList.contains("grid-marks-body")).toBe(true);
+    expect([editorHost.dataset.row, editorHost.dataset.column]).toEqual(["0", "0"]);
 
     viewport.focus();
     await settle();
     expect(editorHost.hidden).toBe(true);
     expect(written(engine.getDoc())).toEqual({ "0,0": "q" });
+    engine.destroy();
+  });
+
+  it("la cella aperta è la cella: nel livello della sua zona, col suo carattere, e cresce a colonne intere", async () => {
+    const long = "x".repeat(40);
+    const { engine, host, viewport } = await mounted(bytesHost({ cells: { "0,0": long } }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const editorHost = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    expect(editorHost.hidden).toBe(false);
+    // Non dentro la cella: in fondo al livello «lift» del corpo, sopra i segni.
+    expect(cellAt(host, 0, 0)!.contains(editorHost)).toBe(false);
+    expect(editorHost.parentElement?.classList.contains("grid-marks-body")).toBe(true);
+    expect(editorHost.parentElement?.lastElementChild).toBe(editorHost);
+    // La cornice è un pezzo a parte, e il campo scrive col carattere della cella.
+    expect(editorHost.querySelector(":scope > .grid-cell-editor-frame")?.getAttribute("aria-hidden")).toBe("true");
+    expect(editorHost.querySelector(":scope > .grid-cell-editor-text .cm-content")).not.toBeNull();
+    expect(editorHost.style.getPropertyValue("--field-font")).not.toBe("");
+    // Senza tela il testo si stima a 0,6 em per carattere: la cella (120 px)
+    // cresce a destra di colonne intere, meno il filo, dentro il riquadro.
+    expect(editorHost.style.left).toBe("52px");
+    const width = parseFloat(editorHost.style.width) + 1;
+    expect(width % 120).toBe(0);
+    expect(width).toBeGreaterThan(120);
+    expect(52 + width).toBeLessThanOrEqual(600);
+    expect(editorHost.style.height).toBe(`${28 - 1}px`);
+    expect(editorHost.classList.contains("wraps")).toBe(false);
+    // Un testo più lungo del riquadro (600 px) arriva al suo bordo e va a capo.
+    findTextEditorOrThrow(editorHost).dispatch({ changes: { from: long.length, insert: "y".repeat(60) } });
+    expect(editorHost.style.width).toBe(`${4 * 120 - 1}px`);
+    expect(editorHost.classList.contains("wraps")).toBe(true);
+    // Chiusa, torna fuori dalle zone e non porta niente della cella.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    editorHost.querySelector<HTMLElement>(".cm-content")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await settle();
+    expect(editorHost.hidden).toBe(true);
+    expect(editorHost.classList.contains("wraps")).toBe(false);
+    expect(editorHost.dataset.row).toBeUndefined();
     engine.destroy();
   });
 
@@ -820,6 +859,28 @@ describe("GridEngine", () => {
     await settle();
     // Dopo il teardown niente: il riquadro può già mostrare un altro documento.
     expect(changes).toHaveLength(1);
+  });
+});
+
+describe("openSpan", () => {
+  // Cinque colonne da 100 px, la prima a 50 px dal bordo del riquadro.
+  const edge = (index: number) => 50 + index * 100;
+  it("cresce a colonne intere finché il testo ci sta", () => {
+    expect(openSpan(edge, 5, 1, 2, 99, 0, 600, ["after", "before"])).toEqual({ start: 1, end: 2, fits: true });
+    expect(openSpan(edge, 5, 1, 2, 150, 0, 600, ["after", "before"])).toEqual({ start: 1, end: 3, fits: true });
+    // Allineata a destra cresce a sinistra.
+    expect(openSpan(edge, 5, 2, 3, 150, 0, 600, ["before", "after"])).toEqual({ start: 1, end: 3, fits: true });
+  });
+  it("si ferma al bordo del riquadro, poi cresce dall'altra parte, poi non ci sta", () => {
+    expect(openSpan(edge, 5, 3, 4, 250, 0, 460, ["after", "before"])).toEqual({ start: 1, end: 4, fits: true });
+    expect(openSpan(edge, 5, 3, 4, 900, 120, 460, ["after", "before"])).toEqual({ start: 1, end: 4, fits: false });
+  });
+  it("salta i confini nascosti sotto una fascia ferma", () => {
+    // Le colonne dopo la prima sono scorse di 180 px: i confini 2 e 3 stanno
+    // sotto la fascia ferma, che finisce a 150.
+    const scrolled = (index: number) => (index <= 1 ? edge(index) : edge(index) - 180);
+    expect(openSpan(scrolled, 5, 0, 1, 250, 150, 600, ["after"])).toEqual({ start: 0, end: 5, fits: true });
+    expect(openSpan(scrolled, 5, 0, 1, 110, 150, 600, ["after"])).toEqual({ start: 0, end: 3, fits: true });
   });
 });
 
