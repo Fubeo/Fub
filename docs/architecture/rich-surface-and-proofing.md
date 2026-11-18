@@ -80,15 +80,13 @@ l'IPC.
   `MAX_SHOWN_BYTES` in `projection.rs`): la superficie la disegna. Le altre
   restano segnaposti col nome e la misura. Il ritorno al documento ignora
   quei byte: vale l'immagine tenuta in `k`. Il codec ODT non li porta ancora.
-  L'enfasi (`m`) e l'aspetto
-  del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
-  sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
-  il ritorno al documento ne fa formattazione diretta, o la toglie quando
-  basta toglierla. Allo stesso modo un paragrafo porta l'allineamento
-  risolto (`align`), la disposizione (`p`: rientri, prima riga, spazi,
-  interlinea, in punti) dove differisce da quella del suo stile (in una cella
-  con lo stile della tabella dentro, fra i valori predefiniti e lo stile del
-  paragrafo: ciò che dà conta come una differenza), e lo stile
+  L'enfasi (`m`) e l'aspetto del carattere (`f`: tipo, dimensione, colore,
+  colore dell'evidenziatore) sono marche **risolte**, scritte soltanto dove
+  differiscono dal paragrafo; il ritorno al documento ne fa formattazione
+  diretta, o la toglie quando basta toglierla. Allo stesso modo un paragrafo
+  porta l'allineamento risolto (`align`), la disposizione (`p`: rientri, prima
+  riga, spazi, interlinea, in punti) dove differisce da quella del suo stile
+  (in una cella conta lo stile della tabella, ECMA-376 §17.7.2), e lo stile
   di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
   la galleria degli stili (`styles`) e l'aspetto di ogni ruolo (`roles`:
   titoli, citazione, elenco) sono suggerimenti di resa che il ritorno
