@@ -386,6 +386,16 @@ pub fn facce() -> &'static [&'static [u8]] {
     &embed::FACES
 }
 
+/// I pezzi dei caratteri che l'esportazione delle note in PDF prende da qui:
+/// decodificare un WOFF o un WOFF2, fissare un carattere variabile in un punto
+/// dei suoi assi, sapere se la licenza lascia incorporarlo. Sono gli stessi
+/// dell'export dei disegni, perché un carattere si legge in un modo solo.
+pub(crate) mod per_il_pdf {
+    #[cfg(test)]
+    pub(crate) use super::fonts::tests::with_fs_type;
+    pub(crate) use super::fonts::{decode, embeddable, instance, Coordinate};
+}
+
 /// La famiglia di `serif` fra quelle di [`facce`].
 pub const FAMIGLIA_SERIF: &str = SERIF;
 /// La famiglia di `sans-serif` fra quelle di [`facce`].
