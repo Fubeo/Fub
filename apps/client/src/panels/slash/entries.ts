@@ -90,7 +90,8 @@ const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
 
 /// Altri nomi con cui si cerca la stessa voce, in tutte e due le lingue: chi
 /// scrive «h2», «todo» o «table» trova ciò che vuole senza conoscerne il
-/// titolo.
+/// titolo. Le parole sono separate da spazi; un nome di più parole («da
+/// fare») si trova scrivendole tutte, ciascuna come inizio di una parola.
 const ALIASES: Readonly<Record<string, string>> = {
   "markdown.paragraph": "testo paragrafo normale text paragraph plain",
   "markdown.heading.1": "h1 titolo heading",
@@ -103,7 +104,7 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.callout": "riquadro callout avviso admonition box",
   "markdown.list.bullet": "puntato lista bullet list ul",
   "markdown.list.ordered": "numerato lista ordered numbered list ol",
-  "markdown.list.task": "todo task attività checkbox casella spunta",
+  "markdown.list.task": "todo task compito compiti attività checkbox checklist casella spunta da fare",
   "markdown.table": "tabella table griglia grid",
   "markdown.rule": "separatore linea divider rule hr",
   "markdown.codeblock": "codice code blocco block",

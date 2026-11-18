@@ -74,6 +74,12 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "qwerty", ALL).entries).toEqual([]);
   });
 
+  it("la voce dei compiti si trova con le parole di chi la cerca: compito, attività, da fare, checkbox", () => {
+    for (const query of ["compito", "compiti", "attività", "attivita", "da fare", "checkbox", "checklist", "todo", "task"]) {
+      expect(slashMenuEntries(LIST, query, ALL).entries[0]?.id, query).toBe("markdown.list.task");
+    }
+  });
+
   it("un errore di battitura da quattro lettere: «/tabela» è Tabella, «forse»", () => {
     expect(slashMenuEntries(LIST, "tabela", ALL).entries[0]).toMatchObject({ id: "markdown.table", why: "forse" });
   });

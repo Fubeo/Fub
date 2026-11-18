@@ -22,6 +22,7 @@
 import {
   acceptCompletion,
   autocompletion,
+  closeCompletion,
   completionStatus,
   selectedCompletion,
   type Completion,
@@ -852,6 +853,17 @@ export function mentionSource(sources: { people?: PeopleSource; dates?: DateSour
   };
 }
 
+/// Esc mentre un completamento è ancora in attesa (le sorgenti interrogate,
+/// nessun menu a vista) non è del completamento: lo si chiude in silenzio e
+/// il tasto prosegue, verso i Blocchi o verso chi ospita l'editor (la
+/// sbirciata si chiude al primo Esc, E11). Col menu a vista Esc resta suo e
+/// lo chiude. `closeCompletion` di CodeMirror, da solo, consuma il tasto
+/// anche quando la persona non vede niente.
+function escapeWhilePending(view: EditorView): boolean {
+  if (completionStatus(view.state) === "pending") closeCompletion(view);
+  return false;
+}
+
 /// L'estensione CM6 dell'autocompletamento: attiva durante la digitazione, ma
 /// SOLO dentro i suoi contesti (fuori, le sorgenti rispondono null e nessun
 /// popup compare). `override` scavalca le sorgenti di default del linguaggio:
@@ -862,6 +874,9 @@ export function markdownCompletions(sources: CompletionSources): Extension {
     // Il «/» ha il suo pannello, non un completamento: prima, perché i suoi
     // tasti vengono prima di quelli del completamento.
     ...(sources.slash ? [slashMenuExtension(sources.slash)] : []),
+    // Prima dei tasti del completamento, che `autocompletion` mette qui sotto
+    // con la stessa precedenza.
+    Prec.highest(keymap.of([{ key: "Escape", run: escapeWhilePending }])),
     autocompletion({
       override: [
         wikilinkSource(sources.searchNotes),

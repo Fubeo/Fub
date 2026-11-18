@@ -144,7 +144,7 @@ const schedeEFilo = {
       await pagina.waitForSelector(`${cartella}[aria-expanded="true"]`);
     }
     await pagina.click(`#file-list .tree-row[data-path="${LAVAGNA}"]`);
-    await pagina.waitForSelector(`.pane.focus .tab[aria-selected="true"] .tab-name:text-is("${NOME}")`);
+    await pagina.waitForSelector(`.pane.focus .tab[aria-selected="true"] :text-is("${NOME}")`);
     const vuota = ".pane.focus .canvas-blank:not([hidden])";
     await pagina.waitForSelector(vuota);
     await giro.foto("vuota");

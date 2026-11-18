@@ -7437,6 +7437,14 @@ impl Workspace {
         self.drafts.discard(doc)
     }
 
+    /// La porta delle bozze staccata dal workspace: chi la tiene scrive e butta
+    /// bozze senza prestito né turno di scrittura (#485), così una bozza non
+    /// aspetta il salvataggio lento che deve coprire. Le mutazioni delle bozze
+    /// restano in fila fra loro e con le migrazioni della rinomina.
+    pub fn draft_port(&self) -> crate::drafts::DraftPort {
+        crate::drafts::DraftPort::new(Arc::clone(&self.drafts), Arc::clone(&self.clock))
+    }
+
     /// Le bozze di questo vault, **e quante non si sono lette**.
     ///
     /// Dal disco e non da una cache, per la ragione del registro: dopo un crash

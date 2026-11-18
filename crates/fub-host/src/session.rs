@@ -4689,6 +4689,14 @@ impl Host {
         finish_events(&workspace, deferred)
     }
 
+    /// Scrive la bozza di un documento **senza il turno di scrittura** (#485).
+    ///
+    /// La bozza esiste per coprire il tempo in cui il disco non ha ancora il
+    /// testo: se aspettasse il turno, aspetterebbe proprio il salvataggio lento
+    /// che deve coprire, e un crash in quei secondi perderebbe l'ultimo testo.
+    /// Le bozze non toccano lo stato del workspace, quindi se ne prende la porta
+    /// con un prestito condiviso e la si usa dopo averlo lasciato; l'ordine fra
+    /// le bozze di un documento lo tiene la coda delle bozze della shell.
     pub fn save_draft(
         &self,
         vault: Option<&str>,
@@ -4696,19 +4704,28 @@ impl Host {
         text: &str,
         base: Option<Revision>,
     ) -> Result<(), PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.save_draft(id, text, base).map_err(|error| {
-                PluginError::Internal(format!("draft not written: {error}").into())
-            })
-        })
+        self.draft_port(vault)?
+            .save(id, text, base)
+            .map_err(|error| PluginError::Internal(format!("draft not written: {error}").into()))
     }
 
+    /// Butta la bozza di un documento, senza il turno come [`Self::save_draft`].
     pub fn discard_draft(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.discard_draft(id).map_err(|error| {
-                PluginError::Internal(format!("draft not discarded: {error}").into())
-            })
-        })
+        self.draft_port(vault)?
+            .discard(id)
+            .map_err(|error| PluginError::Internal(format!("draft not discarded: {error}").into()))
+    }
+
+    /// La porta delle bozze del vault, presa con un prestito condiviso breve:
+    /// i reader non guardano il turno, quindi un salvataggio in volo non la
+    /// ferma se non nei tratti in cui tiene il workspace in esclusiva.
+    fn draft_port(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<fub_kernel::drafts::DraftPort, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let port = workspace.read()?.draft_port();
+        Ok(port)
     }
 
     pub fn set_active_context(
