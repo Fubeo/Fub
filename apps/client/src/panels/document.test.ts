@@ -1189,3 +1189,59 @@ describe("il cambio di nota fa il suo lavoro una volta", () => {
     expect(scrolled[0]!.getAttribute("aria-selected")).toBe("true");
   });
 });
+
+describe("chiusa l'ultima nota, il kernel non ne tiene più il contesto (IMP-107)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    (await import("../state/document-session")).documentSessions.closeAll();
+  });
+
+  // Le view che seguono la nota (Struttura, Collegamenti, Statistiche) si
+  // ridisegnano dal contesto che il kernel ha ricevuto per ultimo. Se la × chiude
+  // l'ultima linguetta senza che il contesto venga ripubblicato, il kernel tiene
+  // la nota chiusa e le view continuano a dire i suoi conteggi.
+  it("la × dell'ultima linguetta pubblica un contesto senza nota", async () => {
+    const host = await start("off");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    expect(published()).toMatchObject({ doc: "Benvenuto.md" });
+
+    // Lo startup ha aperto anche un'altra nota: si chiudono tutte le linguette
+    // con la ×, come chi usa l'app, e l'ultima a sparire è quella che resta.
+    const tabs = () => document.querySelectorAll(".pane.focus .tab").length;
+    while (tabs() > 0) {
+      const before = tabs();
+      document.querySelector<HTMLButtonElement>(".pane.focus .tab-close")!.click();
+      await waitFor("una linguetta in meno", () => tabs() === before - 1);
+    }
+    await waitFor("il contesto pubblicato senza nota", () => published()?.doc === null);
+  });
+
+  // Il clic su una linguetta che porta a un'altra nota non passa da `openDocument`:
+  // se il contesto non la segue, le view mostrano ancora la nota di prima.
+  it("la linguetta di un'altra nota pubblica quella nota", async () => {
+    const host = await start("off");
+    await open("Altra.md");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    expect(published()).toMatchObject({ doc: "Benvenuto.md" });
+
+    document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="Altra.md"]')!.click();
+    await waitFor("il contesto segue la linguetta di Altra.md", () => published()?.doc === "Altra.md");
+  });
+});

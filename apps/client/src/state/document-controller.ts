@@ -2449,6 +2449,12 @@ async function render(): Promise<void> {
   if (state.currentDoc !== active) {
     state.currentDoc = active;
     emit("active-doc", active);
+    // Il kernel segue la nota a fuoco. Senza, il contesto resta quello di prima
+    // e le view che seguono il documento (Struttura, Collegamenti, Statistiche)
+    // mostrano i dati di una nota chiusa o della precedente (IMP-107). Il giro
+    // è finito e il testo della nota è già caricato (`show` aspetta il buffer),
+    // come quando `openDocument` pubblica dopo il suo `synchronize`.
+    void publishContext();
   }
   if (failure) throw failure.error;
 }
