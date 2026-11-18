@@ -189,13 +189,25 @@ fn grafted(original: &[u8], out: &[u8]) -> Vec<String> {
             None => rest.push(child.clone()),
         }
     }
-    libreoffice_agrees(original, out, rest.len());
+    // LibreOffice scrive in testo una riga per paragrafo e una per ogni riga
+    // di una tabella: un figlio toccato conta per le righe che diventa.
+    let touched = rest
+        .iter()
+        .map(|child| {
+            if child.starts_with("<w:tbl") {
+                child.matches("<w:tr>").count() + child.matches("<w:tr ").count()
+            } else {
+                1
+            }
+        })
+        .sum();
+    libreoffice_agrees(original, out, touched);
     rest
 }
 
 /// Con `FUB_SOFFICE`, il percorso di `soffice`, LibreOffice legge il file
-/// innestato come il file di partenza, salvo al più `touched` paragrafi
-/// consecutivi, e mostra il testo cambiato. Senza, non fa niente: la CI
+/// innestato come il file di partenza, salvo al più `touched` righe di testo
+/// consecutive (paragrafi e righe di tabella), e mostra il testo cambiato. Senza, non fa niente: la CI
 /// principale non ha LibreOffice.
 fn libreoffice_agrees(original: &[u8], out: &[u8], touched: usize) {
     let Some(soffice) = std::env::var_os("FUB_SOFFICE") else {
