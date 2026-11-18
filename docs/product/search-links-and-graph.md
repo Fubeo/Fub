@@ -44,7 +44,7 @@ TypeScript è legata da una fixture, così la barra della shell, `fub-cli search
 e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
 
 - parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR` maiuscolo fra
-  alternative e `( … )` per raggruppare;
+  alternative e `( … )` per raggruppare; una parola è fatta di lettere, cifre, accenti combinanti e CJK, mentre emoji e simboli separano (da soli non trovano niente, senza errore) e non c'è normalizzazione NFC;
 - `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`, `[chiave:>v]`, `[chiave:<v]`,
   con valori numerici, booleani o date ISO confrontati per specie;
 - gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`, `ext:`, `task:todo`,
@@ -59,7 +59,6 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
   plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
   `task_due`; l'indice tiene le scadenze delle task aperte lette come la vista [Compiti](tasks-and-reminders.md) (schema v10).
-- parole: lettere, cifre, accenti combinanti e CJK; emoji e simboli separano (da soli: nessun risultato, nessun errore). Niente NFC.
 
 Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
 sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e
