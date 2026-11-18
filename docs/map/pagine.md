@@ -142,6 +142,7 @@
 - Come la shell deposita un file nel vault (`resource_write`, il riuso dello stesso contenuto)? → [reference/resource-write.md](../reference/resource-write.md)
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)
+- Come la Cronologia conserva, pota, rinomina e ripristina le versioni (e le note dei testi conservati)? → [reference/versioning-store.md](../reference/versioning-store.md)
 - Come si fidano bundle, capability, confini del vault e runtime WASM? → [reference/permissions-and-security.md](../reference/permissions-and-security.md)
 - Come si proteggono chiavi del vault, ruoli, login e quote dei servizi remoti? → [reference/remote-services-security.md](../reference/remote-services-security.md)
 - Qual è il JSON che `read_document`/`write_document` si scambiano per un documento di videoscrittura? → [reference/rich-projection.md](../reference/rich-projection.md)

@@ -163,6 +163,9 @@ copia, e una scrittura su di lui passa senza fotografia, come a versioning
 spento. Per la stessa ragione il ripristino rifiuta di sostituire una nota
 cresciuta oltre quel limite, e il pannello non la legge per confrontarla.
 
+I file dello store e le loro regole di scrittura sono in
+[versioning-store.md](../reference/versioning-store.md).
+
 
 ## Snapshot globale e backup
 
