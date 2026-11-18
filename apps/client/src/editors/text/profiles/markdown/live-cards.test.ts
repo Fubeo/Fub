@@ -149,6 +149,7 @@ function rig(text: string, options: {
   readonly editable?: boolean;
   readonly renderers?: readonly CardKind[];
   readonly pick?: LiveCardsPort["pick"];
+  readonly resolve?: LiveCardsPort["resolve"];
 } = {}): Rig {
   const species = new FakeSpecies();
   const parent = document.createElement("div");
@@ -165,7 +166,7 @@ function rig(text: string, options: {
   const files = options.files ?? "all";
   const port: LiveCardsPort = {
     load: async () => options.kit === false ? null : kit,
-    resolve: async (page) => files === "all" || files.has(page) ? `Archivio/${page}` : null,
+    resolve: options.resolve ?? (async (page) => files === "all" || files.has(page) ? `Archivio/${page}` : null),
     open: (path, subpath) => opened.push({ path, subpath }),
     ...(options.pick ? { pick: options.pick } : {}),
   };
@@ -365,6 +366,29 @@ describe("la scheda nella Live", () => {
     await settle();
     cardsIn(parent)[0]!.querySelector<HTMLButtonElement>(".live-card-open")!.click();
     expect(opened).toEqual([{ path: "Archivio/Contratto.pdf", subpath: "#page=2" }]);
+  });
+
+  it("«Apri» mentre la scheda si carica apre il file risolto, non il nome scritto", async () => {
+    const answers: ((path: string | null) => void)[] = [];
+    const { parent, opened } = rig("Testo\n\n![[Contratto.pdf#page=2]]\n\nFine\n", {
+      resolve: () => new Promise((done) => answers.push(done)),
+    });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardState).toBe("loading");
+    card.querySelector<HTMLButtonElement>(".live-card-open")!.click();
+    expect(opened).toEqual([]);
+    for (const answer of answers) answer("Archivio/Contratto.pdf");
+    await settle();
+    expect(opened).toEqual([{ path: "Archivio/Contratto.pdf", subpath: "#page=2" }]);
+  });
+
+  it("«Apri» su un file che manca apre il nome com'è", async () => {
+    const { parent, opened } = rig("Testo\n\n![[Sparito.pdf]]\n\nFine\n", { files: new Set() });
+    await settle();
+    cardsIn(parent)[0]!.querySelector<HTMLButtonElement>(".live-card-open")!.click();
+    await settle();
+    expect(opened).toEqual([{ path: "Sparito.pdf", subpath: null }]);
   });
 
   it("20 schede: vive al più quante ne tiene la lavagna, e una battuta non le rimonta", async () => {

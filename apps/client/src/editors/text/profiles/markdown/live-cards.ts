@@ -957,7 +957,18 @@ export class LiveCard {
 
   /// «Apri»: il file nella sua linguetta.
   open(): void {
-    this.#owner.host.port.open(this.#path ?? this.embed.page, this.embed.subpath);
+    const { port } = this.#owner.host;
+    if (this.#path !== null) {
+      port.open(this.#path, this.embed.subpath);
+      return;
+    }
+    // La scheda si sta ancora caricando (o il file manca): il nome scritto
+    // nella nota non è un percorso del vault, e aperto così darebbe una
+    // linguetta vuota. «Apri» lo risolve da sé; se il file non c'è, apre il
+    // nome com'è e la linguetta lo dice.
+    void port.resolve(this.embed.page, this.#owner.host.hostDoc())
+      .catch(() => null)
+      .then((path) => port.open(path ?? this.embed.page, this.embed.subpath));
   }
 
   /// «A tutta pagina»: la scheda alta quanto la vista della nota, e ritorno.

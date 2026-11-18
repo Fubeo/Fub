@@ -160,7 +160,8 @@ const NOTA = "Nota.md";
 const FIGURE = `<figure class="fub-craft" data-embed-kind="craft" data-embed-doc="${LOGO}" data-craft-app="vectorcraft">`
   + "<figcaption>logo.vectorcraft</figcaption></figure>";
 
-async function withFigure(): Promise<FakeHost> {
+/// La nota aperta, senza ancora la Lettura.
+async function withNote(): Promise<FakeHost> {
   const host = await start(null, { [NOTA]: "# Nota\n\n![[logo.vectorcraft]]\n" });
   const api = host.module.api as unknown as Record<string, (...args: unknown[]) => unknown>;
   const query = api.queryIndex.bind(api);
@@ -172,15 +173,43 @@ async function withFigure(): Promise<FakeHost> {
     return query(q, ...rest);
   };
   await open(NOTA);
+  return host;
+}
+
+/// La nota in Lettura, dove l'embed da solo nel paragrafo resta la figura: in
+/// Scrittura, da T41, è una scheda viva (`docs/product/live-cards.md`).
+async function withFigure(): Promise<FakeHost> {
+  const host = await withNote();
+  const pane = document.querySelector<HTMLElement>(".pane")!;
+  pane.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!.click();
+  await settle();
+  const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+  radios.find((item) => item.querySelector(".menu-label")?.textContent === "Lettura")!.click();
+  await waitFor("la nota in Lettura", () => pane.dataset.mode === "reading");
   await waitFor("la figura si può aprire", () => figure() !== null);
   return host;
 }
 
-const figure = () => document.querySelector<HTMLElement>('.markdown-rendered [data-craft-doc] [role="link"]');
+const figure = () => document.querySelector<HTMLElement>('.markdown-preview [data-craft-doc] [role="link"]');
+/// «Apri» della scheda viva del file Craft, in Scrittura.
+const cardOpen = () => document.querySelector<HTMLElement>(".cm-content .live-card .live-card-open");
 const created = (host: FakeHost) =>
   host.calls.filter((call) => /^create/i.test(call.gate) || (call.gate === "invokeCommand" && /create/.test(String(call.args[0]))));
 
 describe("la figura nella nota", () => {
+  it("in Scrittura «Apri» della scheda viva apre la scheda del file col gesto", async () => {
+    const host = await withNote();
+    // Subito, con la scheda che si carica ancora: «Apri» risolve il nome da sé.
+    await waitFor("la scheda viva", () => cardOpen() !== null);
+    cardOpen()!.click();
+    await waitFor("la scheda del file Craft", () => craftTabs() === 1 || document.querySelector(".craft-empty-state") !== null);
+    await quiet();
+    expect(renders(host)).toBe(1);
+    expect(created(host)).toEqual([]);
+    const { activeDoc } = await import("./state/layout");
+    expect(activeDoc()).toBe(LOGO);
+  });
+
   it("una figura che punta a un file che c'è apre la sua scheda col gesto", async () => {
     const host = await withFigure();
     figure()!.click();
