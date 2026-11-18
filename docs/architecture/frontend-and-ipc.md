@@ -229,11 +229,11 @@ della stessa chiave vanno in fila: una sola in volo, e dietro solo l'ultima
 chiesta, che sostituisce quella che aspettava; così all'host arrivano in
 ordine e una vecchia non sovrascrive mai la nuova. L'esito che conta è quello
 dell'ultima: se non va, la riga torna al valore salvato e mette sotto
-l'errore con l'input provato. Si spengono invece, finché l'esito non arriva,
-le righe la cui scrittura è un cambio rispetto al valore disegnato (aggiungere
-o togliere una voce di lista), perché una seconda scrittura partita dallo
-stesso disegno perderebbe la prima. Un ridisegno intero porta le righe in volo
-com'erano, con la scelta della persona.
+l'errore con l'input provato ([chi controlla il valore](setting-values.md)).
+Si spengono invece, finché l'esito non arriva, le righe la cui scrittura cambia
+il valore disegnato (aggiungere o togliere una voce di lista): una seconda
+scrittura dallo stesso disegno perderebbe la prima. Un ridisegno intero porta
+le righe in volo com'erano, con la scelta della persona.
 
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo

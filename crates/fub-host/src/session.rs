@@ -2831,6 +2831,12 @@ impl Host {
         key: &str,
         value: fub_abi::settings::SettingValue,
     ) -> Result<(), PluginError> {
+        // Una forma che lo schema non sa dire (un fuso, un indirizzo): il
+        // valore rifiutato non arriva a nessun livello, e il motivo esce nella
+        // lingua di chi guarda.
+        if let Some(problem) = crate::settings::user_value_problem(key, &value) {
+            return Err(self.localized_error(vault, problem));
+        }
         if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);

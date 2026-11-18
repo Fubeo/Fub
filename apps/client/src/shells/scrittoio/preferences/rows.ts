@@ -29,7 +29,7 @@ export function rowFor(body: HTMLElement, key: string): HTMLElement | null {
 /// Il campo numerico che la vista ha messo nella riga: da solo, o accanto al
 /// suo cursore.
 export function numberField(row: HTMLElement): HTMLInputElement | null {
-  return row.querySelector<HTMLInputElement>('.setting-control input[type="number"]');
+  return row.querySelector<HTMLInputElement>(".setting-control input.setting-number");
 }
 
 /// La tendina che la vista ha messo nella riga.

@@ -72,7 +72,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md),
-  [i comportamenti della shell](architecture/shell-behaviours.md) e
+  [i comportamenti della shell](architecture/shell-behaviours.md), [i valori delle impostazioni](architecture/setting-values.md) e
   [la cornice del telefono](architecture/phone-frame.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), [quelle da parte](architecture/parked-surfaces.md),
   [quella su un tratto](architecture/range-surface.md), la
