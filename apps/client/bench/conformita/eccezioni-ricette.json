@@ -1,0 +1,23 @@
+[
+  {
+    "pezzo": "banner.riga",
+    "proprieta": "column-gap",
+    "stati": ["chiaro-700", "scuro-700"],
+    "motivo": "A 700 px la pelle stringe la colonna della riga a 16 px (column-gap: var(--space-6), sotto i 900 px). Il prototipo a 700 px imita la regola dei 760 px della pelle, ma non questa: la pelle è la verità, e il prototipo ha una spaziatura in più.",
+    "riferimento": "PLAN.md, T12 (il blocco della pelle così com'è); skin/settings.css, @media (max-width: 900px)"
+  },
+  {
+    "pezzo": "riga",
+    "proprieta": "column-gap",
+    "stati": ["chiaro-700", "scuro-700"],
+    "motivo": "Come per la riga del banner: a 700 px la pelle stringe la colonna a 16 px sotto i 900 px, e il prototipo a 700 px non rifà questa regola.",
+    "riferimento": "PLAN.md, T12 (il blocco della pelle così com'è); skin/settings.css, @media (max-width: 900px)"
+  },
+  {
+    "pezzo": "problemi.riga",
+    "proprieta": "column-gap",
+    "stati": ["chiaro-700", "scuro-700"],
+    "motivo": "Come per le righe della sezione: a 700 px la pelle stringe la colonna a 16 px sotto i 900 px, e il prototipo a 700 px non rifà questa regola.",
+    "riferimento": "PLAN.md, T12 (il blocco della pelle così com'è); skin/settings.css, @media (max-width: 900px)"
+  }
+]

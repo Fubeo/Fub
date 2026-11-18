@@ -45,6 +45,9 @@ if (erroriTraduzioni.length) {
   process.exit(2);
 }
 const rev = opzioni.find((o) => o.startsWith("--rev="))?.slice("--rev=".length) ?? `origin/${PROTOTIPO.ramo}`;
+/// La cornice del prototipo dentro cui si leggono i pezzi: la finestra `#win` dell'editor,
+/// o la `radice` che una mappa dichiara (le ricette hanno `#stage`).
+const cornice = PROTOTIPO.radice ?? "#win";
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", cwd: here(".") }).trim();
 /// La radice del repository: `git archive` legge i percorsi da lì.
@@ -93,16 +96,21 @@ try {
         });
         const page = await context.newPage();
         await page.goto(pathToFileURL(sorgente).href);
-        await page.click(`[data-set="light"][data-v="${stato.prototipo.luce}"]`);
-        await page.click(`[data-set="width"][data-v="${stato.prototipo.larghezza}"]`);
-        await page.click('[data-set="motion"][data-v="ridotto"]');
+        // Lo stato lo sceglie la mappa, coi suoi pulsanti; senza, la barra
+        // dell'editor (luce, larghezza e il moto ridotto).
+        if (stato.prototipo.imposta) await stato.prototipo.imposta(page);
+        else {
+          await page.click(`[data-set="light"][data-v="${stato.prototipo.luce}"]`);
+          await page.click(`[data-set="width"][data-v="${stato.prototipo.larghezza}"]`);
+          await page.click('[data-set="motion"][data-v="ridotto"]');
+        }
         await vista.prototipo.prepara(page);
         await fermo(page);
         const leggiPezzo = async (pezzo) => {
           const proprieta = espandi(pezzo.proprieta);
-          if (pezzo.gesto) await gesto(page, "#win", pezzo.gesto.tipo, pezzo.gesto.prototipo);
+          if (pezzo.gesto) await gesto(page, cornice, pezzo.gesto.tipo, pezzo.gesto.prototipo);
           await fermo(page);
-          const [letti] = await leggi(page, "#win", [{ selettore: pezzo.prototipo, proprieta }]);
+          const [letti] = await leggi(page, cornice, [{ selettore: pezzo.prototipo, proprieta }]);
           if (pezzo.gesto) await riposo(page);
           if (!letti) {
             throw new Error(
@@ -117,10 +125,13 @@ try {
         // ogni contesto; ogni pezzo le legge con la traduzione del suo.
         const crudi = [];
         for (const pezzo of pezzi) crudi.push(await leggiPezzo(pezzo));
-        await page.evaluate((sent) => {
-          const win = document.querySelector("#win");
-          for (const [t, [r, g, b]] of Object.entries(sent)) win.style.setProperty(t, `rgb(${r}, ${g}, ${b})`);
-        }, sentinelle(TRADUZIONI[CONTESTO_DI_BASE]));
+        await page.evaluate(
+          ([sent, selettore]) => {
+            const win = document.querySelector(selettore);
+            for (const [t, [r, g, b]] of Object.entries(sent)) win.style.setProperty(t, `rgb(${r}, ${g}, ${b})`);
+          },
+          [sentinelle(TRADUZIONI[CONTESTO_DI_BASE]), cornice],
+        );
         await fermo(page);
         for (const [i, pezzo] of pezzi.entries()) {
           const finti = await leggiPezzo(pezzo);
