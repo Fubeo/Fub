@@ -21,5 +21,6 @@ import { scrivere } from "./scrivere.mjs";
 import { editor } from "./editor.mjs";
 import { lavagna } from "./lavagna.mjs";
 import { guasti } from "./guasti.mjs";
+import { scrittura } from "./scrittura.mjs";
 
-export const GRUPPI = [avvio, scrivere, editor, lavagna, guasti];
+export const GRUPPI = [avvio, scrivere, editor, lavagna, guasti, scrittura];
