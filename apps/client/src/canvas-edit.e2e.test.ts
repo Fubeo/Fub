@@ -379,6 +379,65 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
   });
 });
 
+describe("il conflitto di un foglio nel riquadro (IMP-141)", () => {
+  const paneOf = () => paneGrid()?.closest<HTMLElement>(".pane") ?? null;
+  const notices = () => [...(paneOf()?.querySelectorAll<HTMLElement>(".sheet-notice[data-notice]") ?? [])].map((notice) => notice.dataset.notice);
+  const toasts = () => [...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.textContent ?? "");
+
+  /// B2 scritta senza Invio, poi un'altra app riscrive il file: il conflitto.
+  async function inConflict(): Promise<FakeHost> {
+    const host = await startWithSheet();
+    likeAProvider(host);
+    const { openDocument } = await import("./panels/document");
+    await openDocument(SHEET);
+    await waitFor("il foglio si apre nel riquadro", () => cellIn(paneGrid(), 1, 1)?.textContent === "800", 15_000);
+    const grid = paneGrid()!;
+    cellIn(grid, 1, 1)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    grid.querySelector<HTMLElement>(".grid-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "9", bubbles: true }));
+    await waitFor("B2 si apre", () => grid.querySelector<HTMLElement>(".grid-cell-editor")?.hidden === false);
+    const editor = findTextEditorOrThrow(grid.querySelector<HTMLElement>(".grid-cell-editor")!);
+    editor.dispatch({ changes: { from: editor.state.doc.length, insert: "00" }, userEvent: "input" });
+    await settle();
+    await host.module.api.writeDocument(SHEET, "", { kind: "dictated" });
+    expect(host.emit({ type: "document_changed", id: SHEET })).toBe(true);
+    await waitFor("il riquadro mostra il conflitto", () => conflictShown(), 15_000);
+    return host;
+  }
+
+  const conflictShown = () => paneOf()?.querySelector<HTMLElement>(".conflict-banner")?.hidden === false;
+  /// Gli avvisi a galla che dicono ancora di scegliere un testo.
+  const choiceToasts = () => toasts().filter((text) => /sceglierai quale testo|scegli quale testo/i.test(text));
+
+  /// La scelta dalla barra del conflitto, confermata.
+  async function choose(choice: "mine" | "theirs"): Promise<void> {
+    paneOf()!.querySelector<HTMLButtonElement>(`.conflict-banner [data-choice="${choice}"]`)!.click();
+    await waitFor("la shell chiede conferma", () => document.querySelector('.kit-dialog [data-action="confirm"]') !== null);
+    document.querySelector<HTMLButtonElement>('.kit-dialog [data-action="confirm"]')!.click();
+    await waitFor("la scelta toglie la barra del conflitto", () => !conflictShown(), 15_000);
+    await settle();
+  }
+
+  // La fascia «cambiato da un'altra applicazione» e gli avvisi «scegli quale
+  // testo tenere» descrivono il conflitto: deciso, non sono più veri. Li
+  // possiede il controller dei documenti, per le note e per i fogli.
+  it("«Usa la versione sul disco» toglie la fascia e gli avvisi del conflitto", async () => {
+    await inConflict();
+    await choose("theirs");
+    expect(notices()).not.toContain("overwritten");
+    expect(notices()).not.toContain("changed_on_disk");
+    expect(choiceToasts()).toEqual([]);
+    expect(cellIn(paneGrid(), 1, 1)?.textContent, "la griglia mostra il disco").toBe("800");
+  });
+
+  it("«Tieni il mio testo» toglie la fascia e gli avvisi del conflitto", async () => {
+    await inConflict();
+    await choose("mine");
+    expect(notices()).not.toContain("overwritten");
+    expect(notices()).not.toContain("changed_on_disk");
+    expect(choiceToasts()).toEqual([]);
+  });
+});
+
 describe("la scheda di testo in Live (T43)", () => {
   it("il doppio clic monta l'editor delle note vero, in Live, e il testo arriva al .canvas", async () => {
     const card = "Un **testo** con [[Nota]]\r\nsu due righe";

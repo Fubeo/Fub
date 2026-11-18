@@ -414,3 +414,71 @@ fn la_superficie_segue_il_lifecycle_condiviso_della_versione_2() {
         },
     );
 }
+
+#[test]
+fn una_formula_sotto_le_righe_usate_non_cambia_la_misura_dei_fogli() {
+    // IMP-142: «=(1» scritta in D6 di una cartella di tre righe. La formula
+    // si chiude da sola, come in Excel; la misura dei fogli resta quella
+    // della sessione, che il `GridCommit` non porta e su cui la shell
+    // controlla ogni finestra.
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let rows = session.sheets[0].row_count;
+    let columns = session.sheets[0].column_count;
+    assert!(
+        rows < 10 + 100,
+        "la prova deve scrivere oltre il margine: {rows}"
+    );
+    // Una costante sotto le righe usate, nel giornale di celle: entrando nei
+    // comandi conta anche lei.
+    let constant = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("A8", "5")],
+    )
+    .unwrap();
+    let opened = apply(
+        &mut provider,
+        &session,
+        &constant.revision,
+        vec![patch("D6", "=(1")],
+    )
+    .unwrap();
+    let shown = whole_window(&mut provider, &session, &opened.revision);
+    assert_eq!((shown.total_rows, shown.total_columns), (rows, columns));
+    let d6 = find(&shown.cells, "D6");
+    assert_eq!(d6.input, "=(1)");
+    assert_eq!(d6.value, GridValue::Number(1.0));
+    // Già nei comandi, una formula ancora più in basso.
+    let lower = apply(
+        &mut provider,
+        &session,
+        &opened.revision,
+        vec![patch("A10", "=1+2")],
+    )
+    .unwrap();
+    let shown = whole_window(&mut provider, &session, &lower.revision);
+    assert_eq!((shown.total_rows, shown.total_columns), (rows, columns));
+    assert_eq!(find(&shown.cells, "A10").value, GridValue::Number(3.0));
+    // Il primo comando dopo porta i fogli contati di nuovo, con il margine
+    // sotto l'ultima formula.
+    let outcome = provider
+        .command(
+            &session.instance,
+            fub_abi::GridCommandRequest {
+                revision: lower.revision.clone(),
+                command: fub_abi::GridCommand {
+                    id: "range.setValues".into(),
+                    params: r#"{"range":"B5","values":[["7"]]}"#.into(),
+                    sheet: "s1".into(),
+                    selection: "B5".into(),
+                    active: "B5".into(),
+                },
+            },
+        )
+        .unwrap();
+    assert_eq!(outcome.sheets[0].row_count, 10 + 100);
+    let grown = whole_window(&mut provider, &session, &outcome.commit.revision);
+    assert_eq!(grown.total_rows, 10 + 100);
+}
