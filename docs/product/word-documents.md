@@ -346,9 +346,8 @@ l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`). I tratti di una
 sessione diventano un oggetto `ink` davanti al testo, ancorato al paragrafo
 più vicino, in un passo di Annulla, che toglie l'ultimo tratto anche a sessione
 aperta (`RichEngine.holdPending`); la geometria pura (riquadro, gomma, lazo,
-contorno) sta in `editors/rich/ink-shape.ts`. Un documento OpenDocument ha un
-`drawing`. Un inchiostro del file che non si legge resta opaco, e il chip
-dello stato lo dice in «Che cosa manca?».
+contorno) sta in `editors/rich/ink-shape.ts`. In OpenDocument è un `drawing`.
+Un inchiostro illeggibile resta opaco; il chip dello stato lo dice in «Che cosa manca?».
 
 Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
 ([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
