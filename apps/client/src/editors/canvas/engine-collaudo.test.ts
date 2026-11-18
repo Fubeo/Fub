@@ -204,11 +204,14 @@ describe("il doppio clic su una porta non crea niente (IMP-053)", () => {
     const on = screenOf(host, 0, 50);
     // Il primo clic sulla porta fa partire un filo, che cattura il puntatore:
     // il doppio clic arriva alla vista, non alla porta (lo misura WebKitGTK).
+    // Sotto il puntatore, però, c'è la porta: è lei che il doppio clic trova.
     for (const pointerId of [1, 2]) {
       pointer(port, "pointerdown", { pointerId, button: 0, buttons: 1, ...on });
       pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...on });
     }
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(port);
     viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: on.clientX, clientY: on.clientY }));
+    hit.mockRestore();
     expect(JSON.parse(engine.getDoc()).nodes).toHaveLength(2);
     expect(host.querySelector(".canvas-text-editor")).toBeNull();
     // Nel vuoto della lavagna il doppio clic mette la scheda, come prima.
@@ -217,6 +220,16 @@ describe("il doppio clic su una porta non crea niente (IMP-053)", () => {
       pointer(viewportOf(host), "pointerdown", { pointerId, button: 0, buttons: 1, ...empty });
       pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...empty });
     }
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: empty.clientX, clientY: empty.clientY }));
+    expect(bornAfter(engine, ["a", "b"])).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("un clic su una scheda e poi il doppio clic nel vuoto mettono la scheda lì: conta il punto, non l'ultimo bersaglio", () => {
+    const { engine, host } = mounted(BOARD);
+    pointer(handleOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 20, 10) });
+    const empty = screenOf(host, 600, 300);
     viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: empty.clientX, clientY: empty.clientY }));
     expect(bornAfter(engine, ["a", "b"])).toHaveLength(1);
     engine.destroy();

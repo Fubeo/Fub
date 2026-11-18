@@ -1851,8 +1851,6 @@ export class CanvasEngine {
   #lastTap: { readonly x: number; readonly y: number; readonly at: number } | null = null;
   /** L'ultimo appoggio sulla vista era di un dito: il `dblclick` che ne nasce non è del mouse. */
   #downByTouch = false;
-  /** Il bersaglio dell'ultimo mouse giù o penna giù: il doppio clic che ne nasce conta da lì (IMP-053). */
-  #pressTarget: Element | null = null;
   /**
    * Il puntatore che ha preso un gesto della lavagna, finché è giù: la penna
    * col tasto laterale che non cancella, il dito del tocco lungo.
@@ -9652,7 +9650,6 @@ export class CanvasEngine {
   #pointerDown(event: PointerEvent): void {
     // Sotto il velo della croce (T20d) vale ciò che c'è sotto.
     const target = this.#targetOf(event);
-    this.#pressTarget = target instanceof Element ? target : null;
     // Un clic fuori dal ritaglio lo applica, come «Fatto» (il ritaglio del
     // disegno fa lo stesso, A-27). I gesti dentro il ritaglio non arrivano qui.
     const crop = this.#crop;
@@ -11621,11 +11618,12 @@ export class CanvasEngine {
     // che il browser ne fa non ne mette un'altra.
     if (this.#downByTouch) return;
     // Il doppio clic su una porta, su un filo o su un controllo non mette
-    // niente, come il doppio tocco (IMP-053). Conta dove è sceso il clic: con la
-    // cattura del puntatore (il filo che parte da una porta) il `dblclick`
-    // arriva alla vista, non alla porta.
-    const press = this.#pressTarget ?? target;
-    if (!(press instanceof Element) || !this.#emptyTarget(press)) return;
+    // niente, come il doppio tocco (IMP-053). Conta ciò che è sotto il punto del
+    // clic, non il bersaglio: con la cattura del puntatore (il filo che parte da
+    // una porta) il `dblclick` arriva alla vista, ma la porta è lì sotto.
+    const under = this.#elementAt(event.clientX, event.clientY);
+    const at = under !== null && this.#viewport.contains(under) ? under : target;
+    if (!(at instanceof Element) || !this.#emptyTarget(at)) return;
     // Nel punto del clic, già in scrittura, come il doppio tocco (T63, T100).
     this.#placeText(event.clientX, event.clientY);
   }
