@@ -524,3 +524,41 @@ fn un_filtro_su_una_data_e_su_un_numero_scritto_dalla_barra_trova_le_righe() {
         "contiene non distingue le maiuscole"
     );
 }
+
+/// Il campo «Documento» si compila anche a mano (#486): «progetti» è la sola
+/// Base con quel nome, e la nota omonima non la rende ambigua perché i comandi
+/// delle viste vogliono un `.base`.
+#[test]
+fn a_base_written_by_name_is_the_one_the_command_changes() {
+    let (_vault, mut ws) = with_base(BEFORE);
+    std::fs::write(_vault.root.join("Progetti.md"), "# Omonima\n").expect("la nota si scrive");
+    ws.reindex().expect("reindex");
+    invoke(
+        &mut ws,
+        BASE_VIEW_ADD,
+        json!({ "doc": "progetti", "name": "Liste", "type": "list" }),
+        InvokeMode::Apply,
+    )
+    .expect("il nome nomina la sola Base");
+    assert!(
+        source(&ws, BASE_FILE).ends_with("  - name: Liste\n    type: list\n"),
+        "{}",
+        source(&ws, BASE_FILE)
+    );
+
+    let missing = invoke(
+        &mut ws,
+        BASE_VIEW_ADD,
+        json!({ "doc": "Clienti", "name": "Liste" }),
+        InvokeMode::Apply,
+    )
+    .expect_err("nessuna Base si chiama così");
+    let PluginError::BadArgs(text) = missing else {
+        panic!("atteso BadArgs, arrivato {missing:?}")
+    };
+    assert_eq!(
+        text,
+        "Nessun documento che questo comando può usare si chiama «Clienti». Sceglilo \
+         dall'elenco del campo."
+    );
+}

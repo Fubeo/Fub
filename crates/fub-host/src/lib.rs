@@ -103,6 +103,7 @@ pub mod craft;
 /// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
 pub mod craft_render;
 mod custody;
+mod doc_names;
 /// I disegni aperti nel motore del disegno e le sei porte lato host (K5).
 mod drawing;
 mod engines;

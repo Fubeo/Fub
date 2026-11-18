@@ -324,10 +324,10 @@ fn rename_heading(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document(DOC)
-        .or_else(|| host.active_context().and_then(|c| c.doc))
-        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
+    let doc =
+        crate::formats::document_with(&args, DOC, &*host, fub_abi::options::syntax::WIKILINKS)?
+            .or_else(|| host.active_context().and_then(|c| c.doc))
+            .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
     crate::formats::require(host, &doc, fub_abi::options::syntax::WIKILINKS)?;
     let query = args.text(HEADING).unwrap_or("").trim().to_string();
     let wanted = new_name(args.text(NEW_HEADING).unwrap_or(""))

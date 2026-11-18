@@ -19,8 +19,7 @@ pub(super) fn merge(
     if sources.is_empty() {
         return Err(PluginError::BadArgs(Text::key(E_NO_SOURCES)));
     }
-    let into = args
-        .document(INTO)
+    let into = crate::formats::document_with(&args, INTO, &*host, fub_abi::options::source::PROSE)?
         .or_else(|| host.active_context().and_then(|c| c.doc))
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
     if sources.iter().any(|s| s == &into) {

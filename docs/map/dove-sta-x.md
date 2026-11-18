@@ -68,6 +68,7 @@
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
 | le quattordici impostazioni della lavagna, `canvas.*` (`ink_mouse_remember`, `finger_moves_card`, `finger_writes`, `pen_button`, `wheel`, `drag_empty`, `workspace`, `toolbar`, `grid`, `snap`, `snap_step`, `parts_picker`, `drop_folder`, `drop_folder_path`) | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le chiavi, i valori di serie e la lettura in `apps/client/src/rules/canvas-settings.ts`, le legge e le segue `apps/client/src/editors/canvas/preferences.ts` |
 | dove vanno i file trascinati dal computer sulla lavagna (`canvas.drop_folder`) | `apps/client/src/state/canvas-intake.ts` (`dropFolderFor`, `depositCanvasFiles`); la cartella delle note è `files.attachment-folder`, letta in `apps/client/src/state/document-controller.ts` |
+| la regola del documento scritto per nome in un campo «Documento» | `document_named` e `Args::named_document` in `crates/fub-abi/src/command.rs`; per le feature `crates/fub-features/src/formats.rs`, per l'host `crates/fub-host/src/doc_names.rs`; `docs/reference/ipc-contract.md` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |

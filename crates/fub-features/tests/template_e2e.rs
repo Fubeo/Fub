@@ -1088,3 +1088,49 @@ fn extract_refuses_to_move_relative_embedded_assets_across_folders() {
     );
     assert!(!ws.documents().contains(&DocId::new("other/new.md")));
 }
+
+/// Il campo «Documento» scritto a mano (#486): la destinazione dell'unione è
+/// la sola nota che si chiama così, maiuscole o no.
+#[test]
+fn a_merge_into_a_note_written_by_name() {
+    let vault = Vault::new();
+    vault.put("source.md", "source text");
+    vault.put("Cartella/Target.md", "target text");
+    let mut ws = vault.open();
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il nome nomina la sola nota");
+    assert_eq!(
+        ws.read_source(&DocId::new("Cartella/Target.md")).unwrap(),
+        "target text\n\nsource text"
+    );
+}
+
+/// Le proprietà vanno nel frontmatter: per nome vale la sola nota che ne ha
+/// uno, e il testo omonimo (prosa senza frontmatter) non la rende ambigua.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn a_property_set_on_a_note_written_by_name() {
+    let vault = Vault::new();
+    vault.put("Idea.md", "# Idea\n");
+    vault.put("Idea.txt", "testo");
+    let mut ws = vault.open_with_properties();
+    ws.invoke_command(
+        fub_features::NOTES_PROPERTY_SET,
+        serde_json::json!({"doc":"idea", "key":"stato", "value":"bozza"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il nome nomina la sola nota con frontmatter");
+    let model = ws.read_model(&DocId::new("Idea.md")).unwrap();
+    assert!(
+        model.frontmatter.get("stato").is_some(),
+        "{:?}",
+        model.frontmatter
+    );
+    assert_eq!(ws.read_source(&DocId::new("Idea.txt")).unwrap(), "testo");
+}

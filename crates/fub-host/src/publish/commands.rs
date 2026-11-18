@@ -471,8 +471,18 @@ impl CommandProvider for PublishCommands {
 }
 
 /// La nota: quella dell'argomento, o quella aperta.
+///
+/// Scritta per nome vale fra le sole note con un frontmatter: è lì che la
+/// pubblicazione scrive `publish: true`.
 fn note_of(args: &Args, host: &dyn HostApi) -> Result<fub_abi::model::DocId, PluginError> {
-    args.document("doc")
+    let with_frontmatter = |doc: &fub_abi::model::DocId| {
+        host.format_of(doc).is_some_and(|format| {
+            format
+                .capabilities
+                .supports(fub_abi::options::syntax::FRONTMATTER)
+        })
+    };
+    args.named_document("doc", host, with_frontmatter, crate::doc_names::KEYS)?
         .or_else(|| host.active_context().and_then(|context| context.doc))
         .ok_or_else(|| PluginError::BadArgs(Text::key("e.no_note")))
 }

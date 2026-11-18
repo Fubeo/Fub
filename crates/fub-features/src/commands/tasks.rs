@@ -41,8 +41,7 @@ pub(super) fn notes_task_toggle(
     let state = |text: Text| PluginError::BadArgs(text);
     let context = host.active_context();
 
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::document_with(&args, "doc", &*host, fub_abi::options::source::PROSE)?
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| state(Text::key(AND_TASK_NO_NOTES)))?;
     // Il simbolo che si scrive nel marcatore è testo del sorgente: vale solo

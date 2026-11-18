@@ -5043,7 +5043,24 @@ impl Host {
             .get("doc")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| PluginError::BadArgs("doc obbligatorio".into()))?;
+        // Il recinto prima di tutto, come per un id scelto dall'elenco; poi il
+        // nome scritto a mano, fra tutti i documenti: che cosa si può
+        // cestinare lo dicono i permessi e il cestino, qui sotto.
         let id = fenced_doc_id(&DocId::new(id))?;
+        let id = {
+            let ws = workspace.read()?;
+            fub_abi::command::resolve_document_name(
+                id.as_str(),
+                |doc| {
+                    &ws.free_name(doc) != doc
+                        && (ws.format_of(doc).is_some() || ws.document_revision(doc).is_ok())
+                },
+                || Ok(ws.documents()),
+                |_| true,
+                crate::doc_names::CORE_KEYS,
+            )?
+        };
+        let id = fenced_doc_id(&id)?;
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
@@ -6517,6 +6534,40 @@ mod os_trash_command_tests {
             &r.op,
             JournalOp::Trashed { doc, .. } if doc.as_str() == "Nota.md"
         )));
+    }
+
+    /// Il campo «Documento» scritto a mano (#486): «nota» è la sola nota che
+    /// si chiama così; un nome che nessuno porta si dice con una frase.
+    #[test]
+    fn os_trash_takes_a_note_written_by_name() {
+        let (vault, os, host) = fixture(false);
+        let missing = host
+            .invoke_user_command(
+                None,
+                OS_TRASH_COMMAND,
+                serde_json::json!({ "doc": "Preventivo" }),
+                InvokeMode::Apply,
+            )
+            .expect_err("nessun documento si chiama così");
+        let PluginError::BadArgs(text) = missing else {
+            panic!("atteso BadArgs, arrivato {missing:?}")
+        };
+        assert!(
+            text.as_literal()
+                .is_some_and(|t| t.contains("«Preventivo»") && t.contains("elenco del campo")),
+            "{text:?}"
+        );
+        assert!(vault.path().join("Nota.md").exists());
+
+        host.invoke_user_command(
+            None,
+            OS_TRASH_COMMAND,
+            serde_json::json!({ "doc": "nota" }),
+            InvokeMode::Apply,
+        )
+        .expect("il nome nomina la sola nota");
+        assert!(!vault.path().join("Nota.md").exists());
+        assert!(os.path().join("Nota.md").exists());
     }
 }
 

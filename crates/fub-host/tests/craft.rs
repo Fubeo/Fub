@@ -647,3 +647,27 @@ fn with_the_component_off_the_photo_command_goes() {
     assert!(!commands.iter().any(|spec| spec.id == PHOTO_COMMAND));
     assert!(ask_photo(&host, &root, "Foto/A.jpg").is_err());
 }
+
+/// Il campo «Documento» scritto a mano (#486): «logo» è il solo file con
+/// un'anteprima che si chiama così; «img_0001» lo portano la foto e il suo XMP,
+/// e la frase li elenca invece di sceglierne uno.
+#[test]
+fn a_craft_file_written_by_name_has_its_preview() {
+    let (_dir, root) = vault(&[]);
+    let host = opened(&root);
+    let out = ask(&host, &root, "logo", "small").expect("il nome nomina il solo file");
+    assert_eq!(out.doc, "Disegni/logo.vectorcraft");
+    let error = ask(&host, &root, "img_0001", "small").unwrap_err();
+    let PluginError::BadArgs(text) = &error else {
+        panic!("{error:?}")
+    };
+    let said = text.to_string();
+    assert!(
+        said.contains("Foto/IMG_0001.CR3") && said.contains("Foto/IMG_0001.xmp"),
+        "{said}"
+    );
+    assert!(
+        !said.contains("Edit.psd"),
+        "un file senza anteprima non conta: {said}"
+    );
+}

@@ -141,3 +141,23 @@ fn without_a_site_the_note_commands_say_where_to_choose_one() {
         "{error:?}"
     );
 }
+
+/// Il campo «Documento» scritto a mano (#486): «una pagina» è la sola nota
+/// con quel nome, e l'indirizzo è il suo.
+#[test]
+fn a_note_written_by_name_has_its_public_address() {
+    let (_dir, host) = vault(&[(
+        "Diario/Una pagina.md",
+        "---\npublish: true\n---\n# Pubblica\n",
+    )]);
+    let copied = run(&host, PUBLISH_NOTE_COPY_URL, "una pagina").unwrap();
+    assert_eq!(
+        custom(&copied).1,
+        json!({ "text": "https://pub.example.org/s/blog/diario/una-pagina.html" })
+    );
+    let missing = run(&host, PUBLISH_NOTE_COPY_URL, "Altrove").unwrap_err();
+    assert!(
+        matches!(&missing, PluginError::BadArgs(text) if text.to_string().contains("«Altrove»")),
+        "{missing:?}"
+    );
+}
