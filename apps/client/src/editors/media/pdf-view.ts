@@ -84,7 +84,30 @@ export interface PdfEngine {
    * se una resa successiva l'ha interrotta, e allora il canvas è a metà.
    */
   renderArea(index: number, canvas: HTMLCanvasElement, scale: number, area: PdfArea): Promise<boolean>;
+  /**
+   * Il testo della pagina `index` (da 0) in `container`, come lo dispone
+   * pdf.js: pezzi trasparenti sopra la pagina, che si scelgono e si copiano
+   * (la scheda PDF nella nota, T45). Le posizioni sono in percento della
+   * pagina; la misura dei caratteri la dà `--total-scale-factor` (pixel CSS
+   * per punto PDF), che scrive chi ospita lo strato, come la sua misura.
+   * Facoltativo: senza, il testo non si sceglie.
+   */
+  renderText?(index: number, container: HTMLElement): Promise<void>;
   destroy(): void;
+}
+
+/** Il nome dell'errore di pdf.js per un PDF che chiede una password. */
+const PDF_PASSWORD_ERROR = "PasswordException";
+
+/** Se `error` dice che il PDF è protetto da una password (pdf.js non lo apre senza). */
+export function isPdfPasswordError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { name?: unknown }).name === PDF_PASSWORD_ERROR;
+}
+
+/** Lo strato del testo di pdf.js (`TextLayer`), stretto a ciò che serve. */
+export interface PdfJsTextLayer {
+  render(): Promise<unknown>;
+  cancel(): void;
 }
 
 export type PdfEngineLoader = (bytes: Uint8Array) => Promise<PdfEngine>;
@@ -112,6 +135,8 @@ export interface PdfJsModule {
     }>;
     destroy(): Promise<void>;
   };
+  /** Lo strato del testo; senza, il motore non offre `renderText`. */
+  TextLayer?: new (options: { textContentSource: unknown; container: HTMLElement; viewport: unknown }) => PdfJsTextLayer;
 }
 
 /** Una voce del sommario come la dà pdf.js. */
@@ -148,6 +173,8 @@ export function makePdfJsLoader(
     let activeRender: { cancel(): void } | null = null;
     let renderGeneration = 0;
     const thumbnails = new Set<{ cancel(): void }>();
+    const texts = new Set<PdfJsTextLayer>();
+    const TextLayer = pdfjs.TextLayer;
     // La pagina di una destinazione: per nome o già scritta, il cui primo
     // elemento è il riferimento alla pagina. Una che non si risolve non porta
     // da nessuna parte, e la voce resta senza pagina.
@@ -272,12 +299,37 @@ export function makePdfJsLoader(
           if (activeRender === task) activeRender = null;
         }
       },
+      ...(TextLayer ? {
+        async renderText(index: number, container: HTMLElement) {
+          if (destroyed || index < 0 || index >= document.numPages) throw new Error("PDF page is unavailable");
+          const page = await document.getPage(index + 1);
+          if (destroyed) throw new Error("PDF page is unavailable");
+          const textContentSource = await page.getTextContent();
+          if (destroyed) throw new Error("PDF page is unavailable");
+          // La scala 1 basta: pdf.js misura i pezzi in proporzione, e la
+          // misura vera la dà `--total-scale-factor` di chi ospita.
+          const layer = new TextLayer({ textContentSource, container, viewport: page.getViewport({ scale: 1 }) });
+          // pdf.js scrive la misura dello strato con le variabili del suo
+          // visore (`--scale-round-x`): qui la misura è di chi lo ospita.
+          container.style.removeProperty("width");
+          container.style.removeProperty("height");
+          texts.add(layer);
+          try {
+            await layer.render();
+          } catch (error) {
+            if (!destroyed) throw error;
+          } finally {
+            texts.delete(layer);
+          }
+        },
+      } : {}),
       destroy() {
         if (destroyed) return;
         destroyed = true;
         renderGeneration++;
         activeRender?.cancel();
         for (const task of thumbnails) task.cancel();
+        for (const layer of texts) layer.cancel();
         // Il task di caricamento chiude il documento e il suo worker (pdf.js 6:
         // `PDFDocumentProxy` non ha `destroy`). T91, rotta 6.
         void loading.destroy();

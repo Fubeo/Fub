@@ -28,9 +28,17 @@
 // intera al centro fa sì che il rettangolo misurato sia il riquadro del
 // contenuto (`contentAspect`, la proporzione della pagina, T39): la stessa
 // regola che un altro programma rifà con i soli dati del file.
+//
+// Il testo della pagina (T45): sulla pagina viva, appena il puntatore o il
+// fuoco ci arrivano, la scheda chiede a pdf.js il testo della pagina in vista
+// (`renderText`) e lo stende in uno strato trasparente sopra il canvas,
+// `canvas-card-pdf-text`, che si sceglie e si copia dove chi ospita lo
+// lascia fare (la nota, da attiva; sulla lavagna resta inerte). Lo strato è
+// della pagina che si vede: cambiata la pagina, o fermata la scheda, va via.
+// Un PDF protetto da una password lo dice col suo nome, senza aprirlo.
 
 import { t } from "../../../../i18n/strings";
-import { pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../../media/pdf-view";
+import { isPdfPasswordError, pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../../media/pdf-view";
 import type { CanvasNode } from "../../../canvas/model";
 import {
   snapshotPart,
@@ -113,6 +121,14 @@ function mountPdfCard(
   status.hidden = true;
   root.append(screen, message, previous, next, status);
   host.append(root);
+  /// Lo strato del testo della pagina in vista (T45), quando c'è.
+  let text: HTMLElement | null = null;
+  /// La pagina che lo strato del testo mostra, o che si sta stendendo.
+  let textPage: number | null = null;
+  /// Cresce a ogni strato chiesto e a ogni strato tolto: risponde solo l'ultimo.
+  let texting = 0;
+  /// Il puntatore o il fuoco sono arrivati sulla scheda: il testo serve.
+  let wantText = false;
 
   let mode: CardMode = initialMode;
   let destroyed = false;
@@ -139,6 +155,14 @@ function mountPdfCard(
   next.hidden = true;
   lifetime.listen(previous, "click", () => void go(page - 1));
   lifetime.listen(next, "click", () => void go(page + 1));
+  // Il testo serve a chi lo sceglie: si stende quando il puntatore o il fuoco
+  // arrivano, mai da solo su tutte le schede vive.
+  const wanted = (): void => {
+    wantText = true;
+    showText();
+  };
+  lifetime.listen(root, "pointerenter", wanted);
+  lifetime.listen(root, "focusin", wanted);
   // Smettere di ascoltare il file è di `destroy`, che la vita della scheda
   // chiama anche se la tela la chiude senza passare da `destroy`.
   const unwatch = port.watch(path, changed);
@@ -198,6 +222,7 @@ function mountPdfCard(
     say(null);
     showing("content");
     seePage(n, size);
+    showText();
   }
 
   function blank(): void {
@@ -215,6 +240,7 @@ function mountPdfCard(
     const same = n === shownPage && sameSize(size, shownSize);
     shownPage = n;
     shownSize = size;
+    if (textPage !== null && textPage !== n) dropText();
     if (!same && !destroyed) context.pageShown?.();
   }
 
@@ -226,6 +252,51 @@ function mountPdfCard(
     if (!cached) return false;
     present(cached.bitmap, part, n, pointSize(cached.pageSize?.width, cached.pageSize?.height));
     return true;
+  }
+
+  /// Stende il testo della pagina in vista sopra il canvas (T45), se serve e
+  /// se si può: la scheda viva, una pagina in vista con la sua misura, un
+  /// motore che sa farlo. Uno strato chiesto per una pagina che nel frattempo
+  /// è cambiata non entra.
+  function showText(): void {
+    const loaded = engine;
+    const n = shownPage;
+    if (!wantText || destroyed || mode !== "live" || loaded === null || !loaded.renderText || n === null || shownSize === null) return;
+    if (textPage === n) {
+      scaleText();
+      return;
+    }
+    dropText();
+    const ticket = ++texting;
+    textPage = n;
+    const layer = document.createElement("div");
+    layer.className = "canvas-card-pdf-text";
+    void loaded.renderText(n - 1, layer).then(() => {
+      if (ticket !== texting || destroyed || engine !== loaded || shownPage !== n) return;
+      text = layer;
+      screen.after(layer);
+      scaleText();
+    }, () => {
+      // Senza testo la pagina si guarda lo stesso.
+      if (ticket === texting) textPage = null;
+    });
+  }
+
+  /// La misura dello strato del testo: quella del canvas in vista, e i
+  /// caratteri in proporzione (`--total-scale-factor`, pixel per punto).
+  function scaleText(): void {
+    if (!text || !shownSize) return;
+    const ratio = shownSize.width / shownSize.height;
+    text.style.setProperty("--page-ratio", String(ratio));
+    const width = screen.clientWidth;
+    if (width > 0) text.style.setProperty("--total-scale-factor", String(width / shownSize.width));
+  }
+
+  function dropText(): void {
+    texting++;
+    textPage = null;
+    text?.remove();
+    text = null;
   }
 
   /// La pagina che si vede e dove sta nella scheda (T19); `null` se non se
@@ -294,8 +365,8 @@ function mountPdfCard(
     let loaded: PdfEngine;
     try {
       loaded = await port.load(bytes);
-    } catch {
-      if (ticket === opening) unreadable();
+    } catch (error) {
+      if (ticket === opening) unreadable(isPdfPasswordError(error));
       return;
     }
     if (ticket !== opening) {
@@ -325,7 +396,11 @@ function mountPdfCard(
     if (loaded === null || mode !== "live") return;
     const ticket = ++drawing;
     const n = page;
-    if (fromCache(n)) return;
+    if (fromCache(n)) {
+      // L'immagine c'era già; il motore adesso c'è, e col motore il testo.
+      showText();
+      return;
+    }
     const part = partOf(n);
     try {
       const [width, height] = await loaded.pageSize(n - 1);
@@ -344,9 +419,11 @@ function mountPdfCard(
     }
   }
 
-  function unreadable(): void {
+  /// Il file non si mostra: rotto, o protetto da una password (`locked`).
+  function unreadable(locked = false): void {
     blank();
-    say(t("canvas.card.unreadable", { name: path.split("/").pop() || path }));
+    const name = path.split("/").pop() || path;
+    say(t(locked ? "canvas.card.pdf_locked" : "canvas.card.unreadable", { name }));
     showing("unreadable");
   }
 
@@ -363,6 +440,7 @@ function mountPdfCard(
   function closeEngine(): void {
     opening++;
     drawing++;
+    dropText();
     const loaded = engine;
     engine = null;
     loaded?.destroy();
@@ -401,9 +479,11 @@ function mountPdfCard(
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false;
     switch (event.key) {
       case "PageUp":
+      case "ArrowLeft":
         void go(page - 1);
         return true;
       case "PageDown":
+      case "ArrowRight":
         void go(page + 1);
         return true;
       case "Home":
@@ -421,6 +501,7 @@ function mountPdfCard(
     if (destroyed) return;
     if (mode === "live") void draw();
     else fromCache(page);
+    scaleText();
   }
 
   function destroy(): void {

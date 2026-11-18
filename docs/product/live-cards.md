@@ -66,6 +66,26 @@ immagini tengono la misura di sempre: non sono schede.
   resta la colonna dell'altra, e con una sola si torna all'embed da solo. Sul
   telefono le colonne stanno una sotto l'altra.
 
+## La scheda PDF
+
+Un PDF mostra una pagina intera, in alto al centro sulla carta della scheda,
+e sotto «2 / 6»: la pagina e quante sono. La pagina di partenza è la parte
+dell'embed (`![[Contratto.pdf#page=3]]`); senza parte, o con una pagina oltre
+la fine, è la prima. La testata dice sempre la pagina in vista («p. 3»).
+
+- **Sfogliare**: al passaggio e da attiva compaiono **‹** e **›** accanto al
+  numero; da attiva anche **PgSu**, **PgGiù**, le frecce a sinistra e a
+  destra, **Home** e **Fine**. La riga dei suggerimenti lo ricorda.
+- **Scegliere il testo**: da attiva il testo della pagina si sceglie col
+  puntatore e si copia, come in un visore. A riposo il clic attiva la scheda.
+- **Stato della vista**: la pagina dove sei non si scrive da nessuna parte.
+  L'embed resta com'era (`#page=3` è la pagina di partenza), e il PDF non
+  cambia. Finché la nota è aperta la scheda ricorda la pagina: uscita dalla
+  vista e tornata, riparte da lì.
+- Un PDF protetto da una password dice che Fub non lo apre, col suo nome;
+  un PDF rotto dice che non si può mostrare. Un PDF di mille pagine ne
+  disegna una sola, quella in vista.
+
 ## I limiti
 
 - Fuori dalla vista le schede sono immagini ferme; vive ce ne sono al più
@@ -84,3 +104,11 @@ L'ospite è `apps/client/src/editors/text/profiles/markdown/live-cards.ts`, che
 monta le specie di `editors/core/cards/` come widget di blocco; arriva con un
 `import()` alla prima scheda, mai all'apertura dell'app. Il file Markdown non
 cambia: l'embed si legge e si scrive com'è.
+
+La scheda PDF è quella della lavagna (`editors/core/cards/kinds/pdf.ts`). Il
+testo della pagina in vista lo stende pdf.js (`renderText` del motore in
+`editors/media/pdf-view.ts`) in uno strato trasparente sopra la pagina,
+`canvas-card-pdf-text`, quando il puntatore o il fuoco arrivano sulla scheda;
+si sceglie solo nella scheda attiva della nota, e sulla lavagna resta inerte.
+La pagina ricordata sta nell'ospite della superficie (`LiveCards`), per file
+e parte, e se ne va con la nota.

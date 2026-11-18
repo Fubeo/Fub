@@ -373,3 +373,156 @@
 .fub-column > .live-card[data-card-state="view"]:not(:hover):not(:focus-within):not([data-card-active="true"]) .live-card-head button {
   display: none;
 }
+
+/* ── La scheda PDF (T45) ─────────────────────────────────────────────────
+   (E20; il prototipo `.pdfw`, `.pdfp` e `.pdfn`, passo 17.) Una pagina
+   intera sul vassoio della scheda (`--doc-fill-soft`, il `--tray` del
+   prototipo sulla pagina), in alto al centro, con 16
+   px di margine; sotto, in una fascia di 40 px, «‹ 2 / 6 ›»: il numero c'è
+   sempre, le frecce compaiono al passaggio, col fuoco e da attiva (una
+   freccia che non porta oltre resta velata). Sopra la pagina sta il testo
+   di pdf.js (`canvas-card-pdf-text`): pezzi trasparenti nei punti della
+   pagina, che da attiva si scelgono e si copiano; a riposo è inerte, e
+   sulla lavagna anche. Lo strato prende la misura della pagina e la scala
+   dei caratteri dalla scheda (`--page-ratio`, `--total-scale-factor`), e
+   ogni pezzo la sua misura da pdf.js (`--min-font-size`, `--font-height`,
+   `--scale-x`, `--rotate`, scritte sull'elemento). */
+.canvas-card-pdf-text {
+  position: absolute;
+  width: min(100cqw, 100cqh * var(--page-ratio, 0.7071));
+  height: min(100cqh, 100cqw / var(--page-ratio, 0.7071));
+  overflow: clip;
+  line-height: 1;
+  letter-spacing: normal;
+  text-align: initial;
+  pointer-events: none;
+  user-select: none;
+}
+.canvas-card-pdf-text span,
+.canvas-card-pdf-text br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.canvas-card-pdf-text > :not(.markedContent),
+.canvas-card-pdf-text .markedContent span:not(.markedContent) {
+  font-size: calc(var(--total-scale-factor, 1) * var(--min-font-size, 1) * var(--font-height, 0px));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1)) scale(calc(1 / var(--min-font-size, 1)));
+}
+.canvas-card-pdf-text .markedContent {
+  display: contents;
+}
+.canvas-card-pdf-text ::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: transparent;
+}
+/* Nella nota la scheda attiva ha il fuoco dentro il contenuto di CodeMirror,
+   che lì dà la selezione di sistema, piena, con `!important`
+   (`hideNativeSelection`): coprirebbe le parole scelte. Soltanto un
+   `!important` più specifico la batte, come per la tabella. */
+.cm-editor .cm-content .live-card .canvas-card-pdf-text ::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent) !important;
+}
+
+.live-card .canvas-card-pdf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 40px;
+  column-gap: 4px;
+  padding: 16px 16px 0;
+  background: var(--doc-fill-soft);
+}
+.live-card .canvas-card-pdf-page,
+.live-card .canvas-card-pdf-text {
+  grid-area: 1 / 1 / 2 / -1;
+  align-self: start;
+  justify-self: center;
+  width: min(100cqw, (100cqh - 40px) * var(--page-ratio, 0.7071));
+  height: min(100cqh - 40px, 100cqw / var(--page-ratio, 0.7071));
+}
+.live-card .canvas-card-pdf-page {
+  border-radius: 2px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 18%),
+    0 8px 22px -12px rgb(0 0 0 / 40%);
+}
+.live-card .canvas-card-pdf-message {
+  grid-area: 1 / 1 / 2 / -1;
+  align-self: center;
+  justify-self: center;
+  max-width: 44ch;
+  margin: 0;
+  color: var(--doc-gutter-fg);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.live-card .canvas-card-pdf-previous,
+.live-card .canvas-card-pdf-next,
+.live-card .canvas-card-pdf-status {
+  position: static;
+  grid-row: 2;
+  align-self: center;
+  transform: none;
+}
+.live-card .canvas-card-pdf-previous {
+  grid-column: 2;
+}
+.live-card .canvas-card-pdf-status {
+  grid-column: 3;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--doc-gutter-fg);
+  font: 12px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.live-card .canvas-card-pdf-next {
+  grid-column: 4;
+}
+.live-card .canvas-card-pdf-previous,
+.live-card .canvas-card-pdf-next {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  color: var(--doc-gutter-fg);
+  font-size: 16px;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 0.12s;
+}
+.live-card:hover .canvas-card-pdf-previous,
+.live-card:hover .canvas-card-pdf-next,
+.live-card:focus-within .canvas-card-pdf-previous,
+.live-card:focus-within .canvas-card-pdf-next,
+.live-card[data-card-active="true"] .canvas-card-pdf-previous,
+.live-card[data-card-active="true"] .canvas-card-pdf-next {
+  opacity: 1;
+}
+.live-card .canvas-card-pdf-previous:hover,
+.live-card .canvas-card-pdf-next:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.live-card .canvas-card-pdf-previous:focus-visible,
+.live-card .canvas-card-pdf-next:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.live-card .canvas-card-pdf-previous:disabled,
+.live-card .canvas-card-pdf-next:disabled {
+  background: none;
+  color: var(--doc-gutter-fg);
+  opacity: 0.25;
+}
+.live-card[data-card-active="true"] .canvas-card-pdf-text,
+.live-card[data-card-active="true"] .canvas-card-pdf-text span {
+  pointer-events: auto;
+  user-select: text;
+}

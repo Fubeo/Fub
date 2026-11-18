@@ -1551,6 +1551,9 @@
     "live-card-message",
     "live-card-hint",
     "live-card-actions",
+    "canvas-card-pdf-text",
+    "markedContent",
+    "canvas-card-pdf-message",
     "draw-export",
     "draw-export-text",
     "draw-rail",
@@ -3776,6 +3779,9 @@
     "live-card-message": "cornice",
     "live-card-hint": "cornice",
     "live-card-actions": "cornice",
+    "canvas-card-pdf-text": "contenuto",
+    "markedContent": "contenuto",
+    "canvas-card-pdf-message": "contenuto",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-rail": "cornice",
@@ -8255,6 +8261,30 @@
       ]
     },
     {
+      "name": "live-card-pdf",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-pdf",
+        "canvas-card-pdf-page",
+        "canvas-card-pdf-text",
+        "markedContent",
+        "canvas-card-pdf-message",
+        "canvas-card-pdf-previous",
+        "canvas-card-pdf-next",
+        "canvas-card-pdf-status",
+        "cm-editor",
+        "cm-content"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11641,10 +11671,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2223,
+    "hooks": 2226,
     "state_names": 7,
-    "assigned_states": 1003,
-    "components": 298,
+    "assigned_states": 1009,
+    "components": 299,
     "preference_tokens": 196
   }
 }
