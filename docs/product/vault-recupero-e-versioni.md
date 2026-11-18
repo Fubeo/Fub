@@ -203,9 +203,9 @@ l'esito è parziale e il pannello nomina ogni file saltato con il perché; uno
 snapshot parziale non fa ruotare via i precedenti. Gli snapshot prendono il
 nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
 precedente soltanto a copia finita. Se quel backup salta dei file, la copia che
-lo snapshot di oggi aveva di ciascuno passa (verificata sull'inventario) nello
+lo snapshot sostituito aveva di ciascuno passa (verificata sull'inventario) nello
 snapshot nuovo: nessun file perde la sua copia. Se quella copia non si rilegge,
-il backup si ferma con un errore che nomina il file e lo snapshot di oggi resta
+il backup si ferma con un errore che nomina il file e lo snapshot di prima dello stesso giorno resta
 com'era. La copia nuova si scrive nell'altra cartella
 del giorno (`<data>.1/`), il manifest `snapshots.json` passa a lei e solo allora
 la vecchia si cancella: un guasto a metà lascia intero lo snapshot precedente.
