@@ -39,3 +39,24 @@ export interface ComboboxFacts {
 export declare function alpha(color: string): number | null;
 
 export declare function modalComboboxGap(facts: ComboboxFacts | null): string | null;
+
+export interface FrameAfter {
+  content: string;
+  display: string;
+  position: string;
+  top: string;
+  right: string;
+  bottom: string;
+  left: string;
+  outlineStyle: string;
+  outlineWidth: string;
+  boxShadow: string;
+}
+
+export interface EditorFrameFacts {
+  focusVisible: boolean;
+  frame: boolean;
+  after: FrameAfter | null;
+}
+
+export declare function editorFrameRingGap(facts: EditorFrameFacts | null): string | null;
