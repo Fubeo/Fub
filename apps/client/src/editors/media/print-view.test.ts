@@ -4,7 +4,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenderedDocument } from "../../host/contract";
-import { printRendered, settlePrint } from "./print-view";
+import { copyRenderedText, printRendered, settlePrint } from "./print-view";
+import { writeClipboardText } from "../../platform/clipboard";
+import { errorText } from "../../host/errors";
+import { t } from "../../i18n/strings";
+
+vi.mock("../../platform/clipboard", async (original) => ({
+  ...(await original<typeof import("../../platform/clipboard")>()),
+  writeClipboardText: vi.fn(async () => {}),
+}));
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -100,5 +108,19 @@ describe("la stampa di una resa montata", () => {
       .rejects.toThrow("resa non montabile");
     expect(print).not.toHaveBeenCalled();
     expect(document.querySelector(".print-host")).toBeNull();
+  });
+});
+
+describe("copiare il testo reso", () => {
+  // Gli appunti che dicono di no arrivano con la prosa inglese del motore
+  // («NotAllowedError…»): la riga dice che cosa non è riuscito e la specie,
+  // nella lingua di chi legge.
+  it("un rifiuto degli appunti dice che cosa non è riuscito, senza la prosa del motore", async () => {
+    const refused = new DOMException("Write permission denied.", "NotAllowedError");
+    vi.mocked(writeClipboardText).mockRejectedValue(refused);
+    const said = await copyRenderedText("ciao").then(() => "", (error: Error) => error.message);
+    expect(said).toBe(t("errors.print.copy_failed", { reason: errorText(refused, "specie") }));
+    expect(said).not.toContain("cannot copy");
+    expect(said).not.toContain("permission denied");
   });
 });

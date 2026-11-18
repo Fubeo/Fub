@@ -25,6 +25,7 @@ import { EditorView } from "prosemirror-view";
 import type { PaperFit } from "../core/registry";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
+import { errorText } from "../../host/errors";
 import {
   applyFormat,
   backspace,
@@ -402,7 +403,7 @@ export class RichEngine {
     } catch (error) {
       this.#head = { version: this.#head.version, opaque_schema: this.#head.opaque_schema };
       this.#closed = [];
-      this.#intake = { kind: "invalid", reason: error instanceof Error ? error.message : String(error) };
+      this.#intake = { kind: "invalid", reason: errorText(error) };
       return null;
     }
   }

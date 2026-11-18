@@ -53,6 +53,7 @@
 // test del banco (`theme/loader.test.ts`) guardano qui dentro.
 
 import type { ThemeManifest, ThemeLight } from "../host/contract";
+import { errorText } from "../host/errors";
 import { reportThemeTrouble, type ThemeTrouble } from "../ui/notify";
 import {
   themeAssetReferences,
@@ -661,7 +662,7 @@ function contrastReasons(sheet: string): string[] {
         );
       }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = errorText(error);
       reasons.push(`contrasto: --${ink} su --${background} non misurabile: ${detail}`);
     }
   }
@@ -877,7 +878,7 @@ export function mountThemeBundle(
   } catch (error) {
     mountedBundle = null;
     replaceThemeIcons(previousIcons);
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = errorText(error);
     return rejectTheme(bundle.manifest.name, [`montaggio atomico fallito: ${detail}`], report);
   }
 }

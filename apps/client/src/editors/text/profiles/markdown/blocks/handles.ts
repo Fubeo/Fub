@@ -16,7 +16,7 @@ import { BlockType, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/
 import { closeContextMenu, menuKeyFoot, showContextMenu, type MenuItem } from "../../../../../ui/menu";
 import { displayBinding } from "../../../../../ui/commands";
 import { writeClipboardText } from "../../../../../platform/clipboard";
-import { errorKindPhrase, errorText } from "../../../../../host/errors";
+import { errorText } from "../../../../../host/errors";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
 import { iconEl } from "../../../../../ui/icons";
 import { attachTooltip } from "../../../../../ui/tooltip";
@@ -1005,7 +1005,7 @@ class HandlesView {
       const now = () => (this.view.state.doc === taken ? bytes : null);
       void import("./sync-to").then(
         (sync) => sync.syncWithQuestions(port, doc, now, say),
-        (error: unknown) => say(liveStrings.t("blocks.sync.failed", { reason: errorText(error) }), "guasto"),
+        (error: unknown) => say(liveStrings.t("blocks.sync.failed", { reason: errorText(error, "specie") }), "guasto"),
       );
     });
   }
@@ -1021,7 +1021,7 @@ class HandlesView {
       const link = blockLink(options.page?.() ?? null, anchor.fragment);
       writeClipboardText(link).then(
         () => options.notify?.(liveStrings.t("blocks.link.copied", { link }), "info"),
-        (error: unknown) => options.notify?.(liveStrings.t("blocks.link.failed", { reason: errorKindPhrase(error) }), "guasto"),
+        (error: unknown) => options.notify?.(liveStrings.t("blocks.link.failed", { reason: errorText(error, "specie") }), "guasto"),
       );
     });
   }

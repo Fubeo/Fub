@@ -223,14 +223,43 @@ l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
 non una frase. L'errore di un indice esterno lo risolve il kernel col
 catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
-Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
-specie (`error.kind.*`), mai «[object Object]». Una riga che dice che cosa non
-è riuscito (un documento che non si apre, un pannello che non si ridisegna, una
-ricerca) usa `errorKindPhrase`: la specie e non il messaggio, perché il messaggio
-di un `FormatError` uscito come `internal` è prosa in inglese del codec, finché
-il kernel non la traduce. Un errore nuovo destinato
-all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
-letterali per crate e ne impedisce la crescita.
+Un errore nuovo destinato all'utente usa una chiave del catalogo invece di un
+letterale. Il guard `check-error-literals.mjs` conta i letterali per crate e ne
+impedisce la crescita.
+
+### Un errore davanti a chi usa Fub
+
+Nel client la regola è una e sta in `host/errors.ts`. Una riga d'errore dice
+**che cosa** non è riuscito e **perché**: «Non ho potuto creare la sottopagina
+«Tappe»: esiste già qualcosa con lo stesso nome».
+
+- **Il soggetto lo dà chi chiama**, con una chiave sua del catalogo che ha il
+  segnaposto `{reason}`. Un avviso con il solo motivo («non esiste più») non si
+  manda: chi legge non saprebbe che cosa è fallito.
+- **Il motivo lo dà `errorText(e, motivo)`**, che ha un solo parametro:
+  - `"messaggio"` (il default) per gli errori di comandi, view e servizi dei
+    componenti, che escono dal kernel già tradotti, e per i nostri `Error`
+    scritti con `t()`;
+  - `"specie"` per gli errori delle primitive dell'host su un documento
+    (aprire, creare, rinominare, leggere i modelli o i tipi, ridisegnare un
+    pannello, cercare) e per quelli del motore della webview (appunti,
+    `import()`): lì il messaggio non è una frase per chi legge.
+- Anche col default, `not_found`, `already_exists` e `conflict` dicono la
+  specie, perché il loro messaggio è l'id del documento, e così `io`, il cui
+  messaggio è la prosa del sistema operativo.
+- Un messaggio che non è una stringa (una chiave non risolta) e ogni oggetto
+  che non è un errore del contratto danno la frase della specie, mai
+  «[object Object]» né JSON.
+- Ciò che va **solo nel registro** (`console.warn`, lo stato interno di un
+  registratore, l'analisi della riga di un errore di Mermaid) tiene il
+  messaggio intero e non passa di qui.
+
+Un documento che il provider di formato rifiuta (all'apertura del vault o
+quando cambia sul disco) esce come `trouble` con `gate: "format_parse"`. Il
+centro notifiche lo legge così: dice che il documento non si apre, col suo
+nome, e non la prosa del codec («parse failed: rich codec…»). La barra di
+stato di un documento che non si apre dice la stessa cosa, una volta, e non
+parla di parole da contare.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 

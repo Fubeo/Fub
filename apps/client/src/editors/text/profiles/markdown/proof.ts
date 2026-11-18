@@ -34,6 +34,7 @@ import {
 } from "../../../core/proof";
 import { inlineDelimiters, scanTags, spans, wikilink, type SyntaxForm } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
+import { errorText } from "../../../../host/errors";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { declaredLanguage, frontmatterRange } from "./render";
 
@@ -421,7 +422,7 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
                 (message) => {
                   if (message) options.notify?.(message);
                 },
-                (error: unknown) => options.notify?.(error instanceof Error ? error.message : String(error)),
+                (error: unknown) => options.notify?.(t("proof.add_word_failed", { word: text, reason: errorText(error, "specie") })),
               );
             },
           });

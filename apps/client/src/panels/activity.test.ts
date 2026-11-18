@@ -295,7 +295,8 @@ describe("la lista dopo una riconciliazione fallita (#237 R05)", () => {
     <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
   `;
   const FAILURE = { kind: "io", message: "Vault non raggiungibile" };
-  const staleText = () => t("activity.stale", { reason: FAILURE.message });
+  // Un errore `io` dice la sua specie, non la prosa del sistema (`errorText`).
+  const staleText = () => t("activity.stale", { reason: t("error.kind.io") });
   const listText = () => document.getElementById("activity-list")!.textContent ?? "";
   const retryButton = () =>
     [...document.querySelectorAll<HTMLButtonElement>("#activity-list button")]

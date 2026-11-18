@@ -38,7 +38,7 @@ import type { EventMask, KernelEvent, KernelNotice, ViewSpec } from "../host/con
 import { maskWants } from "../rules/mirrored";
 import { onAnyEvent, onEvent } from "../state/kernel";
 import { on } from "../state/store";
-import { errorKindPhrase } from "../host/errors";
+import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
 import { notify } from "./notify";
@@ -176,7 +176,7 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
   } catch (e) {
     if (failing.has(id)) return;
     failing.add(id);
-    notify(t("panel.render_failed", { panel: panel.title || id, reason: errorKindPhrase(e) }), "guasto");
+    notify(t("panel.render_failed", { panel: panel.title || id, reason: errorText(e, "specie") }), "guasto");
     return;
   }
   failing.delete(id);

@@ -13,6 +13,7 @@ import { notify } from "../../ui/notify";
 import type { Lifetime } from "../../ui/lifetime";
 import { openLifetime } from "../../ui/lifetime";
 import { onLanguage, t, type Key } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 import { MEDIA_MAX_INLINE_BYTES, mediaKindOfId, type MediaKind, type ResourceDescriptor } from "./media-types";
 import { openResourcePort, readAllResource, type ResourcePort, type ResourceTransport } from "./resource-port";
 import { decodeImage, mountImageView, type ImageView } from "./image-view";
@@ -201,7 +202,7 @@ export function mountMediaSurface(
       showPhotoData();
     } catch (error) {
       if (!active) return;
-      status.textContent = error instanceof Error ? error.message : t("viewer.unavailable");
+      status.textContent = t("viewer.show_failed", { reason: errorText(error, "specie") });
       // Una foto che la vista non sa mostrare (un TIFF, un HEIC) ha la sua
       // frase, e sotto i dati del suo XMP.
       showPhotoData();

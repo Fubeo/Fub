@@ -4,7 +4,7 @@
 // guarda.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { errorKindPhrase, errorText } from "./errors";
+import { errorText } from "./errors";
 // Caricare le stringhe registra chi traduce le frasi delle specie.
 import "../i18n/strings";
 
@@ -19,7 +19,18 @@ describe("errorText", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("returns the resolved message of a contract error", () => {
-    expect(errorText({ kind: "io", message: "«a.md» non si legge" })).toBe("«a.md» non si legge");
+    expect(errorText({ kind: "bad_args", message: "Scrivi un nome" })).toBe("Scrivi un nome");
+    expect(errorText({ kind: "permission_denied", message: "La cartella è di sola lettura" })).toBe("La cartella è di sola lettura");
+  });
+
+  // `not_found`, `already_exists` e `conflict` portano l'id del documento,
+  // `io` la prosa del sistema: il messaggio non è un motivo, anche col default.
+  it("says the kind when the message is a datum, not a reason", () => {
+    speak("it-IT");
+    expect(errorText({ kind: "already_exists", message: "Viaggi/Tappe.md" })).toBe("esiste già qualcosa con lo stesso nome");
+    expect(errorText({ kind: "not_found", message: "Viaggi/Tappe.md" })).toBe("non esiste più");
+    expect(errorText({ kind: "conflict", message: "Viaggi/Tappe.md" })).toBe("nel frattempo è cambiato");
+    expect(errorText({ kind: "io", message: "Permission denied (os error 13)" })).toBe("il file non si è potuto leggere o scrivere");
   });
 
   it("returns the message of a webview Error without the prefix", () => {
@@ -42,7 +53,7 @@ describe("errorText", () => {
   });
 });
 
-describe("errorKindPhrase", () => {
+describe("errorText con la specie", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   // Una riga che dice che cosa non è riuscito (un documento che non si apre, un
@@ -51,14 +62,14 @@ describe("errorKindPhrase", () => {
   it("says the kind of a failure, never the English message of the kernel", () => {
     speak("it-IT");
     const codec = { kind: "internal", message: "parse failed: rich codec: not a valid zip package" };
-    expect(errorKindPhrase(codec)).toBe("si è verificato un problema imprevisto");
-    expect(errorKindPhrase({ kind: "not_found", message: "a/Uno.md" })).toBe("non esiste più");
-    expect(errorKindPhrase(new TypeError("rotto"))).toBe("si è verificato un problema imprevisto");
+    expect(errorText(codec, "specie")).toBe("si è verificato un problema imprevisto");
+    expect(errorText({ kind: "not_found", message: "a/Uno.md" }, "specie")).toBe("non esiste più");
+    expect(errorText(new TypeError("rotto"), "specie")).toBe("si è verificato un problema imprevisto");
     speak("en-US");
-    expect(errorKindPhrase(codec)).toBe("an unexpected problem occurred");
+    expect(errorText(codec, "specie")).toBe("an unexpected problem occurred");
     for (const e of [codec, unresolved("internal"), { qualunque: 1 }, "stringa"]) {
-      expect(errorKindPhrase(e)).not.toContain("parse failed");
-      expect(errorKindPhrase(e)).not.toContain("[object");
+      expect(errorText(e, "specie")).not.toContain("parse failed");
+      expect(errorText(e, "specie")).not.toContain("[object");
     }
   });
 });

@@ -321,7 +321,7 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
   const showDiagnostics = () => void run(support.status, async () => {
     const errors = await api.startupDiagnostics(shell.currentVault() || null);
     if (lifetime.closed) return;
-    const message = errors.length ? errors.map(errorText).join("\n") : t("support.no_diagnostics");
+    const message = errors.length ? errors.map((error) => errorText(error)).join("\n") : t("support.no_diagnostics");
     status(support.status, message);
     if (isDemo()) notify(message, errors.length ? "guasto" : "info");
   });

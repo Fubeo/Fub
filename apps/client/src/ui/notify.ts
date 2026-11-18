@@ -247,7 +247,7 @@ export function failureNotice(e: Extract<KernelEvent, { type: "trouble" }>): {
   // failed: rich codec…», in inglese) non arriva allo schermo (IMP-117). Il
   // suffisso «da parsando…» non si aggiunge: direbbe la stessa cosa in gergo.
   const unreadable = e.gate === "format_parse";
-  const reason = unreadable ? t("trouble.unreadable") : e.error.message;
+  const reason = unreadable ? t("trouble.unreadable") : errorText(e.error);
   // Prima che cosa è successo, poi a quale nota: per nome, non per percorso.
   const base = e.subject
     ? t("trouble.about", { doc: pageName(e.subject), reason: reason.charAt(0).toLocaleUpperCase() + reason.slice(1) })
