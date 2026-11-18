@@ -266,6 +266,11 @@ fn export_run_queues_the_job_for_real() {
         let notice = events
             .recv_timeout(std::time::Duration::from_secs(30))
             .expect("the job ends");
+        // Il job non scrive frasi d'avanzamento: non sa in che lingua parla
+        // chi guarda, e un «export» arrivava così al centro attività.
+        if let fub_abi::Event::JobProgress { progress, .. } = &notice.event {
+            assert_eq!(progress.label, None, "{progress:?}");
+        }
         if let fub_abi::Event::JobDone { job, result, .. } = notice.event {
             if job == TRANSFER_JOB {
                 break result;

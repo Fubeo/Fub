@@ -695,6 +695,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const leases = new Map<string, Lease>();
   let nextLease = 0;
   let nextJob = 0;
+  /// I lavori accodati e mai finiti: la risposta di `jobs`, come quella del
+  /// kernel, o il centro attività che riconcilia li perderebbe.
+  const liveJobs: { id: string; job: string; plugin: string; since: number; progress: null }[] = [];
 
   function write(id: string, text: string): string {
     revision += 1;
@@ -1300,7 +1303,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return { kind: "vault_health", value: paginate(issues, q.page) };
       }
       case "jobs":
-        return { kind: "jobs", value: [] };
+        return { kind: "jobs", value: [...liveJobs] };
       case "resolve": {
         const target = q.target;
         if (target.kind === "path") {
@@ -1608,13 +1611,22 @@ export function createFakeHost(options: Options = {}): FakeHost {
       }
       case "export.run": {
         // Come il comando del kernel: un target che non è registrato si
-        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese. Qui il
-        // lavoro non gira, e il file non arriva.
+        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese, con
+        // l'id del job nell'esito tipizzato. Qui il lavoro parte e non
+        // finisce, e il file non arriva.
         const request = JSON.parse(String(args?.request_json)) as { target?: unknown };
         const drawTarget = typeof request.target === "string" && request.target.startsWith("draw.");
         if (!drawTarget || options.draw !== true) throw new Error(`host fake: unknown export target \`${String(request.target)}\``);
         nextJob += 1;
-        return { notify: `export.run queued (job ${nextJob})`, effect: { kind: "done" as const }, undo: null, partial: null };
+        const id = String(nextJob);
+        liveJobs.push({ id, job: "import.transfer", plugin: "fub.importers", since: Date.now(), progress: null });
+        emit({ type: "job_started", id, job: "import.transfer" });
+        return {
+          notify: `export.run queued (job ${id})`,
+          effect: { kind: "custom" as const, ns: "fub.transfer.queued", payload: { job_id: id, op: "export" } },
+          undo: null,
+          partial: null,
+        };
       }
       case "folder.create": {
         const path = String(args?.path ?? "");

@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, exportArtifacts, exportNotes, mountActivity, noticeOf, labelOf, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
+import { apply, exportArtifacts, exportNotes, mountActivity, nameJob, noticeOf, labelOf, queuedJob, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
 import { api } from "../host/ipc";
 import { state } from "../state/store";
 import samples from "../__fixtures__/mirror-samples.json";
@@ -98,7 +98,7 @@ describe("l'esito di un lavoro lungo", () => {
     const noticeResult = noticeOf(
       notice({ type: "job_done", id: "7", job: "export", result: { Ok: null } }),
     );
-    expect(noticeResult).toEqual({ text: "«export» è finito.", tone: "info" });
+    expect(noticeResult).toMatchObject({ text: "export: finito.", tone: "info" });
   });
 
   it("nomina il lavoro con ciò che ha detto di sé, non col suo entry point", () => {
@@ -107,7 +107,7 @@ describe("l'esito di un lavoro lungo", () => {
       notice({ type: "job_done", id: "7", job: "export", result: { Ok: null } }),
       rows,
     );
-    expect(noticeResult?.text).toBe("«Esporta «Diario» in PDF» è finito.");
+    expect(noticeResult?.text).toBe("Esporta «Diario» in PDF: finito.");
   });
 
   it("quando fallisce dice **perché**, e con un altro tono", () => {
@@ -139,17 +139,82 @@ describe("l'esito di un lavoro lungo", () => {
       result: { Err: { kind: "bad_args", message: { key: "e_annotated_pdf_missing", args: [] } } },
     }));
     expect(noticeResult?.tone).toBe("guasto");
-    expect(noticeResult?.text).toBe(`«export» non è riuscito: ${t("error.kind.bad_args")}`);
+    expect(noticeResult?.text).toBe(`export: non riuscito. ${t("error.kind.bad_args")}`);
     expect(noticeResult?.text).not.toContain("bad_args");
     const empty = noticeOf(notice({
       type: "job_done", id: "7", job: "export", result: { Err: { kind: "bad_args", message: " " } },
     }));
-    expect(empty?.text).toBe(`«export» non è riuscito: ${t("error.kind.bad_args")}`);
+    expect(empty?.text).toBe(`export: non riuscito. ${t("error.kind.bad_args")}`);
   });
 
   it("gli altri eventi non sono avvisi", () => {
     expect(noticeOf(STARTED)).toBeNull();
     expect(noticeOf(step("7", 1))).toBeNull();
+  });
+});
+
+// Il job dei trasferimenti non sa in che lingua parla chi guarda: la sigla
+// «import.transfer» e la frase «export» arrivavano così al centro attività.
+describe("il nome di un lavoro di import o export", () => {
+  const PANEL = `
+    <button id="activity-button"></button>
+    <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+  `;
+  const queued = (id: string) => ({
+    notify: "export.run queued", undo: null, partial: null,
+    effect: { kind: "custom", ns: "fub.transfer.queued", payload: { job_id: id, op: "export" } },
+  }) as Parameters<typeof queuedJob>[0];
+  const labels = () => [...document.querySelectorAll<HTMLElement>("#activity-list .activity-label")].map((el) => el.textContent);
+
+  it("senza un nome dato, è quello del job nella lingua dell'interfaccia, mai la sigla", () => {
+    const row: JobRow = { id: "9", job: ARTIFACT_JOB, progress: { done: 0, total: 2, label: "export" } };
+    expect(labelOf(row)).toBe(t("activity.job.transfer"));
+    expect(labelOf(row)).toBe("Importazione o esportazione");
+    const done = noticeOf(notice({ type: "job_done", id: "9", job: ARTIFACT_JOB, result: { Ok: null } }));
+    expect(done?.text).toBe("Importazione o esportazione: finito.");
+    expect(done?.text).not.toContain(ARTIFACT_JOB);
+  });
+
+  it("col nome che gli dà chi l'ha chiesto, nella riga, nel suggerimento e nell'esito", () => {
+    document.body.innerHTML = PANEL;
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      document.getElementById("activity-button")!.click();
+      forwardNotice(notice({ type: "job_started", id: "11", job: ARTIFACT_JOB }));
+      forwardNotice(notice({ type: "job_progress", id: "11", progress: { done: 0, total: 2, label: null } }));
+      expect(labels()).toEqual(["Importazione o esportazione"]);
+      expect(queuedJob(queued("11"))).toBe("11");
+      nameJob("11", () => t("activity.job.export", { doc: "Rossi", what: "PDF" }));
+      expect(labels()).toEqual(["Esportazione di «Rossi» come PDF"]);
+      const label = document.querySelector<HTMLElement>("#activity-list .activity-label")!;
+      expect(label.outerHTML).not.toContain(ARTIFACT_JOB);
+      forwardNotice(notice({ type: "job_done", id: "11", job: ARTIFACT_JOB, result: { Ok: null } }));
+      expect(labels()).toEqual(["Esportazione di «Rossi» come PDF: finito."]);
+      expect(recentNotices().some((item) => item.text === "Esportazione di «Rossi» come PDF: finito.")).toBe(true);
+    } finally {
+      lifetime.close();
+    }
+  });
+
+  it("un nome che arriva dopo l'esito ridice l'esito ricordato", () => {
+    document.body.innerHTML = PANEL;
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      document.getElementById("activity-button")!.click();
+      forwardNotice(notice({
+        type: "job_done", id: "12", job: ARTIFACT_JOB,
+        result: { Err: { kind: "bad_args", message: "Il PDF «a.pdf» non è nel vault." } },
+      }));
+      expect(labels()).toEqual(["Importazione o esportazione: non riuscito. Il PDF «a.pdf» non è nel vault."]);
+      nameJob("12", () => t("activity.job.import", { name: "Diario.enex" }));
+      expect(labels()).toEqual(["Importazione di «Diario.enex»: non riuscito. Il PDF «a.pdf» non è nel vault."]);
+    } finally {
+      lifetime.close();
+    }
   });
 });
 

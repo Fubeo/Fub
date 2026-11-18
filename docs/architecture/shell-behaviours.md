@@ -15,7 +15,14 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 
 - **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
   «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
-  centro attività tiene lo storico dei lavori. Cestinare più note insieme non
+  centro attività tiene lo storico dei lavori. Ogni lavoro ha un nome nella
+  lingua dell'interfaccia: lo dà chi l'ha chiesto, appena l'esito del comando
+  porta l'id del job (`fub.transfer.queued`), come «Esportazione di «Rossi»
+  come PDF» o «Importazione di «Diario.enex»»; un nome che arriva dopo la fine
+  del lavoro ridice l'esito ricordato. Il job dei trasferimenti senza un nome
+  dato si chiama «Importazione o esportazione» e non scrive frasi
+  d'avanzamento, che non saprebbe in che lingua dire; gli altri job si
+  chiamano con la loro frase d'avanzamento, o col loro entry point. Cestinare più note insieme non
   ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
   le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
   «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).

@@ -213,10 +213,15 @@ pub fn run_job(
         return Err(PluginError::UnknownJob(job.to_string().into()));
     }
     let op = required(&payload, "op")?;
+    // Niente frase d'avanzamento: è prosa per chi guarda, e questo job non sa
+    // in che lingua parla (l'etichetta è una `String`, che nessun catalogo
+    // risolve). Il nome del lavoro lo dà la shell, che l'ha chiesto e conosce
+    // la lingua dell'interfaccia; un `op` scritto qui arrivava al centro
+    // attività come «export» o «prepare complete».
     host.report_progress(JobProgress {
         done: 0,
         total: Some(2),
-        label: Some(op.to_string()),
+        label: None,
     });
     let value = match op {
         "prepare" => {
@@ -268,7 +273,7 @@ pub fn run_job(
     host.report_progress(JobProgress {
         done: 2,
         total: Some(2),
-        label: Some(format!("{op} complete")),
+        label: None,
     });
     Ok(value)
 }
