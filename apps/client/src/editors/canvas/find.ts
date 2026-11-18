@@ -33,7 +33,7 @@
 import type { QueryExpr } from "../../host/contract";
 import { matchingDocuments, searchExpression } from "../../host/query";
 import { resolutionKey } from "../../rules/mirrored";
-import { cardKindOf } from "./cards";
+import { cardKindOf } from "../core/cards/contract";
 import type { CanvasDocument, CanvasNode } from "./model";
 import { readingOrder } from "./reading-order";
 

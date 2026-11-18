@@ -92,7 +92,7 @@ import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import type { CardEditorHub, CardNotices } from "./card-editors";
+import type { CardEditorHub, CardNotices } from "../editors/core/cards/editor-port";
 import { lazyCardEditorHub } from "./card-writes";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
@@ -741,7 +741,7 @@ function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
 /// arriva allora con un `import()`: serve solo a una lavagna, che arriva anche
 /// lei così, e non pesa sull'avvio di nessuna finestra (`lazyCardEditorHub`).
 const cardEditors: CardEditorHub = lazyCardEditorHub(async () => {
-  const { createCardEditorPort } = await import("./card-editors");
+  const { createCardEditorPort } = await import("../editors/core/cards/editor-port");
   return () => createCardEditorPort({
     sessions: documentSessions,
     surfaces: () => surfaceRegistry ?? null,

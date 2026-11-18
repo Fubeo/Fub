@@ -52,7 +52,7 @@ import { markLook } from "../../theme/content-look";
 import { formatKindOf, formatNameOf } from "../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
-import type { CardCellBox, CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../canvas/cards";
+import type { CardCellBox, CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../core/cards/contract";
 import type { CanvasNode } from "../canvas/model";
 import { tsvRows } from "../core/tsv";
 import { editCellIn } from "./compact";

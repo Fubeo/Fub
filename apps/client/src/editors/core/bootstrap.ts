@@ -40,14 +40,14 @@ import { pdfIdWithoutFragment } from "../media/pdf-ids";
 import type { PdfEngineLoader, PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
-import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
+import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "./cards/contract";
 import type { CardCitations } from "../canvas/card-head";
-import type { NoteCardPort } from "../canvas/cards/note";
+import type { NoteCardPort } from "./cards/kinds/note";
 import type { PartsPickerPort } from "../canvas/parts-picker";
 import { backlinkSources, documentOutline, existingDocuments, linkedFrom } from "../../host/query";
-import type { WebCardPort } from "../canvas/cards/web";
-import type { PdfCardPort } from "../canvas/cards/pdf";
-import type { CraftCardPort } from "../canvas/cards/craft";
+import type { WebCardPort } from "./cards/kinds/web";
+import type { PdfCardPort } from "./cards/kinds/pdf";
+import type { CraftCardPort } from "./cards/kinds/craft";
 import type { SheetCardPort } from "../grid/card";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
 import {
@@ -392,13 +392,13 @@ type CanvasCardsFor = (context: SurfaceMountContext) => CanvasCards;
 /// al primo foglio.
 async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
   const [cards, { CardCache }, note, image, pdf, web, craft] = await Promise.all([
-    import("../canvas/cards"),
+    import("./cards/contract"),
     import("../canvas/card-cache"),
-    import("../canvas/cards/note"),
-    import("../canvas/cards/image"),
-    import("../canvas/cards/pdf"),
-    import("../canvas/cards/web"),
-    import("../canvas/cards/craft"),
+    import("./cards/kinds/note"),
+    import("./cards/kinds/image"),
+    import("./cards/kinds/pdf"),
+    import("./cards/kinds/web"),
+    import("./cards/kinds/craft"),
   ]);
   windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
   const snapshots = windowSnapshots.cache;

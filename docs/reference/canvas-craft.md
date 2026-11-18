@@ -2,11 +2,11 @@
 
 > **Ambito:** come una scheda di un `.canvas` mostra un disegno di
 > VectorCraft, un progetto di FigCraft o un'immagine di PhotoCraft.
-> **Fonti autorevoli:** `apps/client/src/editors/canvas/cards/craft.ts`
+> **Fonti autorevoli:** `apps/client/src/editors/core/cards/kinds/craft.ts`
 > (`craftCardRenderer`, `CraftCardPort`), `CRAFT_EXTENSIONS` in
-> `apps/client/src/editors/canvas/cards.ts`, il lato della shell in
+> `apps/client/src/editors/core/cards/contract.ts`, il lato della shell in
 > `apps/client/src/state/document-controller.ts` (`canvasCards.craft`,
-> `openCardWith`); le prove in `cards/craft.test.ts` e `cards.test.ts`.
+> `openCardWith`); le prove in `kinds/craft.test.ts` e `contract.test.ts`.
 
 Un file `.vectorcraft`, `.figcraft` o `.pcraft` è una scheda di specie
 `craft` ([le specie](canvas-cards.md#le-specie)). L'XMP di LightCraft no:

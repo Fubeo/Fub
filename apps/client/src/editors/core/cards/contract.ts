@@ -15,14 +15,14 @@
 // usano senza montare niente. La pagina di riferimento è
 // `docs/reference/canvas-cards.md`.
 
-import { formatKindOf } from "../../ui/format-kind";
-import type { SyntaxForm } from "../../host/contract";
-import type { SaveState } from "../../state/saving";
-import type { Lifetime } from "../../ui/lifetime";
-import type { EditorSurface } from "../core/registry";
-import { mediaKindOfId } from "../media/media-types";
-import type { CanvasNode } from "./model";
-import type { CanvasParts } from "./parts";
+import { formatKindOf } from "../../../ui/format-kind";
+import type { SyntaxForm } from "../../../host/contract";
+import type { SaveState } from "../../../state/saving";
+import type { Lifetime } from "../../../ui/lifetime";
+import type { EditorSurface } from "../registry";
+import { mediaKindOfId } from "../../media/media-types";
+import type { CanvasNode } from "../../canvas/model";
+import type { CanvasParts } from "../../canvas/parts";
 
 /// Viva: il renderer ha aperto il file. Ferma: nessuna risorsa aperta.
 export type CardMode = "live" | "snapshot";

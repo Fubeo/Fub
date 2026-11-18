@@ -99,7 +99,7 @@ minimo è 1/100, in un solo commit che toglie il `subpath` e dà alla scheda
 le proporzioni della zona ruotata a parità di larghezza; «Togli il
 ritaglio» toglie il campo; Esc non scrive. Il file dell'immagine non si
 tocca mai, e l'inchiostro resta attaccato alla scheda. La scheda dipinge la
-zona dall'immagine vera (`editors/canvas/crop.ts`, `cards/image.ts`), e
+zona dall'immagine vera (`editors/canvas/crop.ts`, `editors/core/cards/kinds/image.ts`), e
 l'immagine ferma ha la zona nel nome della parte.
 
 ## Lettura
@@ -197,7 +197,7 @@ file (la scheda del file mancante) o solo le sezioni (l'avviso da solo).
 `Ctrl+Z` annulla. In sola lettura la voce non c'è, il comando è spento col
 perché e l'avviso non ha pulsanti. Da lontano la scheda mostra il titolo
 grande, come le altre. Nel codice: `excerpt.ts` (le regole e la testata),
-`cards/note.ts` (il corpo), `engine.ts` (i gesti).
+`editors/core/cards/kinds/note.ts` (il corpo), `engine.ts` (i gesti).
 
 ## Il lettore
 

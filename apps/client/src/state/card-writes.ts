@@ -2,12 +2,12 @@
 // della lavagna che scrivono adesso, l'unica strada per lasciare una sessione
 // fuori dal controllore (T96) e la porta che arriva al primo uso.
 //
-// Sta fuori da `card-editors.ts` perché la usano la disposizione dei
+// Sta fuori da `editors/core/cards/editor-port.ts` perché la usano la disposizione dei
 // riquadri, il ponte dei documenti e il controllore, che le finestre caricano
 // all'avvio, mentre la porta arriva con un `import()` quando una lavagna ci
 // scrive: così non pesa sull'avvio (`NOT_AT_STARTUP` in `vite.config.ts`).
 
-import type { CardEditorHub } from "./card-editors";
+import type { CardEditorHub } from "../editors/core/cards/editor-port";
 import { documentSessions, type CloseResult, type DocumentSessionCollection } from "./document-session";
 
 /// Ciò che la porta pigra usa della finestra mentre il modulo arriva.

@@ -68,7 +68,7 @@ const MAX_SIDE: f64 = MAX_SAFE_INTEGER as f64;
 ///
 /// `Craft` è la specie di un file di VectorCraft, FigCraft o PhotoCraft: le
 /// estensioni sono quelle di `CRAFT_EXTENSIONS` in
-/// `apps/client/src/editors/canvas/cards.ts` (N6 T18).
+/// `apps/client/src/editors/core/cards/contract.ts` (N6 T18).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CardKind {
     /// Un testo scritto nella scheda.

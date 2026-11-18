@@ -3,8 +3,8 @@
 // file mancante, cambio del file da ferma e da viva, e le risposte tardive
 // (dopo `destroy`, dopo un cambio di modo, fra due rese) che non toccano il DOM.
 import { afterEach, describe, expect, it } from "vitest";
-import { t } from "../../../i18n/strings";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { t } from "../../../../i18n/strings";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import type {
   CardContext,
   CardEditor,
@@ -14,8 +14,8 @@ import type {
   CardMode,
   CardView,
   CardWriting,
-} from "../cards";
-import type { CanvasNode } from "../model";
+} from "../contract";
+import type { CanvasNode } from "../../../canvas/model";
 import { noteCardRenderer, noteHeadingOf, type NoteCardPort } from "./note";
 
 interface ShowCall {
@@ -738,7 +738,7 @@ describe("scrivere nella scheda di nota (T41)", () => {
   it("un avviso che la porta mette in cima all'editor si vede nella scheda", async () => {
     const port = new FakePort();
     // La porta vera disegna gli avvisi di un riquadro nel contenitore
-    // dell'editor (`state/card-editors.ts`): qui li mette a mano.
+    // dell'editor (`editors/core/cards/editor-port.ts`): qui li mette a mano.
     const editors: CardEditorPort = {
       open: (_path, host, options) => {
         const notices = document.createElement("div");

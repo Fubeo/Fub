@@ -96,7 +96,7 @@ Una nota Markdown sulla lavagna si scrive sul posto, con l'editor Live vero
 e sulla stessa `DocumentSession` di un riquadro (la porta è in
 [Scrivere dentro una scheda](canvas-cards.md#scrivere-dentro-una-scheda)). La
 tela chiede alla vista `edit()` prima di `enter()`; la nota
-(`cards/note.ts`) dice `true` solo per un `.md` viva, con la resa arrivata.
+(`editors/core/cards/kinds/note.ts`) dice `true` solo per un `.md` viva, con la resa arrivata.
 
 - **Entrare.** Invio con la nota scelta, o il doppio clic sulla nota (scelta,
   attiva per leggere o no). La scheda prima diventa attiva, poi la nota
@@ -137,7 +137,7 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
 - **Uscire.** Esc, un clic fuori o la scheda che si spegne: l'editor registra
   il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
   testo nuovo. Con Esc la scheda resta scelta, col fuoco. La shell monta
-  l'editor con `escapeLeaves` (`state/card-editors.ts`): in Scrittura Esc
+  l'editor con `escapeLeaves` (`editors/core/cards/editor-port.ts`): in Scrittura Esc
   sul testo non seleziona il blocco del cursore come in un riquadro, e una
   selezione di blocchi già fatta si chiude col primo Esc.
 

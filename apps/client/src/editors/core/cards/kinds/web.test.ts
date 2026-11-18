@@ -4,9 +4,9 @@
 // dopo lo smontaggio, e che la scheda non vada mai in rete da sé (niente
 // `fetch`, niente `XMLHttpRequest`, niente iframe, niente immagini remote).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import type { CardContext, CardMode, CardSnapshot, CardView } from "../cards";
-import type { CanvasNode } from "../model";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
+import type { CardContext, CardMode, CardSnapshot, CardView } from "../contract";
+import type { CanvasNode } from "../../../canvas/model";
 import { webCardAddress, webCardIcon, webCardRenderer, type WebCardPort, type WebCardView } from "./web";
 
 const URL_PAGE = "https://www.esempio.it/articoli/lavagna?x=1";

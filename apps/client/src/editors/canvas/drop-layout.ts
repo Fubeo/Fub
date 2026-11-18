@@ -11,7 +11,7 @@
 //
 // Solo funzioni pure, senza DOM.
 
-import type { CardKind, CardSize, Rect } from "./cards";
+import type { CardKind, CardSize, Rect } from "../core/cards/contract";
 
 /// Il passo a cui la tela aggancia le posizioni e le misure ridimensionate a
 /// mano. È `CANVAS_SNAP` di `engine.ts`, ripetuto qui perché `engine.ts` tira

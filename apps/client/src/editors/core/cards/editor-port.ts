@@ -7,7 +7,7 @@
 // `attachSurface`. Bozze, conflitti e salvataggio restano della sessione;
 // cursore, scorrimento e annulla della superficie (A-21). La tela non vede
 // niente di tutto questo: riceve la porta (`CardEditorPort`, in
-// `editors/canvas/cards.ts`) e non importa nessun editor. Il testo di una
+// `editors/core/cards/contract.ts`) e non importa nessun editor. Il testo di una
 // scheda di testo, che sta nel `.canvas` e non in un file, si scrive con
 // l'editor delle note in Live senza sessione (`openText`, T43).
 //
@@ -22,19 +22,19 @@ import type {
   CardEditorState,
   CardTextEditor,
   CardTextOptions,
-} from "../editors/canvas/cards";
-import type { EditorSurface, SurfaceActiveCell, SurfaceRequest } from "../editors/core/registry";
-import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import type { SyntaxForm } from "../host/contract";
-import type { Theme } from "../theme/theme";
-import { openLifetime, type Lifetime } from "../ui/lifetime";
-import { cardStopped, cardWriting } from "./card-writes";
+} from "./contract";
+import type { EditorSurface, SurfaceActiveCell, SurfaceRequest } from "../registry";
+import { rebaseStaleChange, type EditorChange } from "../text-operation";
+import type { SyntaxForm } from "../../../host/contract";
+import type { Theme } from "../../../theme/theme";
+import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { cardStopped, cardWriting } from "../../../state/card-writes";
 import type {
   CloseResult,
   DocumentSession,
   DocumentSessionCollection,
   DocumentSurfaceUpdate,
-} from "./document-session";
+} from "../../../state/document-session";
 
 /// Ciò che la porta usa della collezione delle sessioni: la stessa di ogni
 /// riquadro della finestra.
@@ -54,7 +54,7 @@ export type CardEditorSessions = Pick<
 
 /// Ciò che la porta usa del registro delle superfici della finestra.
 export type CardEditorSurfaces = Pick<
-  import("../editors/core/registry").DocumentSurfaceRegistry,
+  import("../registry").DocumentSurfaceRegistry,
   "resolve" | "isLoaded" | "load" | "mount"
 >;
 

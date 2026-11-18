@@ -14,7 +14,7 @@
 // come Obsidian. Scrivere dà il `subpath` della prima parte e il valore del
 // campo, `null` quando il `subpath` dice già tutto; `JSON.stringify` del
 // valore dà gli stessi byte di `js::encode` nel nucleo.
-import { cardKindOf } from "./cards";
+import { cardKindOf } from "../core/cards/contract";
 import type { CanvasNode } from "./model";
 
 /// La chiave degli estratti, su una scheda `file`.

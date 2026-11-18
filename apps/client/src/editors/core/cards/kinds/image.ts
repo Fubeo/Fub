@@ -38,10 +38,10 @@
 // arriva dopo `destroy`, dopo un cambio di modo o dopo che il file è cambiato
 // non tocca il DOM, e ciò che aveva aperto si chiude.
 
-import { t } from "../../../i18n/strings";
-import type { ResourceDescriptor } from "../../media/media-types";
-import { decodeImage, type DecodedImage } from "../../media/image-view";
-import { isWholeZone, zoneKey, zoneOf, type ImageZone } from "../crop";
+import { t } from "../../../../i18n/strings";
+import type { ResourceDescriptor } from "../../../media/media-types";
+import { decodeImage, type DecodedImage } from "../../../media/image-view";
+import { isWholeZone, zoneKey, zoneOf, type ImageZone } from "../../../canvas/crop";
 import {
   snapshotPart,
   type CardContext,
@@ -49,7 +49,7 @@ import {
   type CardRenderer,
   type CardSnapshot,
   type CardView,
-} from "../cards";
+} from "../contract";
 
 /// Ciò che la porta legge: i byte del file e il suo descrittore (il tipo MIME
 /// decide come si decodifica, non il nome).

@@ -17,10 +17,10 @@
 // un errore da mostrare in rosso: restano indirizzo e dominio, e si può
 // chiedere di nuovo.
 
-import { t, onLanguage } from "../../../i18n/strings";
-import { isAllowedLink } from "../../../ui/sanitize";
-import type { CanvasNode } from "../model";
-import type { CardContext, CardMode, CardRenderer, CardView } from "../cards";
+import { t, onLanguage } from "../../../../i18n/strings";
+import { isAllowedLink } from "../../../../ui/sanitize";
+import type { CanvasNode } from "../../../canvas/model";
+import type { CardContext, CardMode, CardRenderer, CardView } from "../contract";
 
 /// La scheda di una pagina, come la consegna `fub.linkcard` (la forma di
 /// `LinkCard` delle note).

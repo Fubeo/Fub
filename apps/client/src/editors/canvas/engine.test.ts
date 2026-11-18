@@ -36,7 +36,7 @@ import {
   type CardTextEditor,
   type CardTextOptions,
   type CardView,
-} from "./cards";
+} from "../core/cards/contract";
 import { CardCache } from "./card-cache";
 import { declareClipboard } from "../../platform/clipboard";
 import { quantizeInk, type InkSample } from "../../ink/sample";
