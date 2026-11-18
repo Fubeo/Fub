@@ -1837,7 +1837,7 @@ Fatto quando: un test del completamento con l'id che c'è e con quello che
 manca; un test del conflitto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/completions.test.ts
-Stato: [~] in corso (coder feat/cerca-blocchi da 6d36cfc71, 2026-11-17)
+Stato: [~] integrato in `integra/editor-2` (81afe99bc, 2026-11-18), in attesa del pacchetto 2
 
 ## T32a · Un piano su più documenti, tutto o niente
 
@@ -3067,7 +3067,7 @@ matrice vuota; al telefono.
 Fatto quando: test della scelta e della matrice; le scene al tocco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [ ] da fare
+Stato: [~] in corso (coder feat/formule-pezzi da integra/editor-2, 2026-11-18)
 
 ## T67 · La prova del motore
 
