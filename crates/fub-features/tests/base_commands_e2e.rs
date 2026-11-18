@@ -231,6 +231,53 @@ fn una_vista_si_aggiunge_e_si_toglie_e_ciascun_passo_si_annulla() {
     );
 }
 
+/// #97 sul `.base`: un file con BOM, CRLF o tutti e due si modifica dalla
+/// barra, e i byte sul disco tengono il BOM in testa e i terminatori del file.
+/// L'annulla riporta i byte di prima. `views:` sta sulla prima riga, subito
+/// dopo il BOM: è la riga che la toppa deve riconoscere.
+#[test]
+fn bom_e_crlf_restano_sul_disco_dopo_una_modifica_e_l_annulla() {
+    const PLAIN: &str =
+        "views:\n  - name: Tutti   # la tabella\n    type: table\n  - name: Stato\n    type: kanban\n";
+    for (name, bom, eol) in [
+        ("CRLF", "", "\r\n"),
+        ("BOM", "\u{feff}", "\n"),
+        ("BOM+CRLF", "\u{feff}", "\r\n"),
+    ] {
+        let before = format!("{bom}{}", PLAIN.replace('\n', eol));
+        let (vault, mut ws) = with_base(&before);
+        let on_disk = || std::fs::read(vault.root.join(BASE_FILE)).expect("si legge dal disco");
+
+        let set = invoke(
+            &mut ws,
+            BASE_VIEW_SET,
+            json!({ "doc": BASE_FILE, "view": "Stato", "key": "limit", "value": "5" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_or_else(|error| panic!("{name}: la chiave si scrive: {error:?}"));
+        let expected = format!("{before}    limit: 5{eol}");
+        assert_eq!(on_disk(), expected.as_bytes(), "{name}: la chiave nuova");
+
+        let added = invoke(
+            &mut ws,
+            BASE_VIEW_ADD,
+            json!({ "doc": BASE_FILE, "name": "Liste", "type": "list" }),
+            InvokeMode::Apply,
+        )
+        .unwrap_or_else(|error| panic!("{name}: la vista si aggiunge: {error:?}"));
+        let expected = format!("{expected}  - name: Liste{eol}    type: list{eol}");
+        assert_eq!(on_disk(), expected.as_bytes(), "{name}: la vista nuova");
+
+        undo(&mut ws, added);
+        undo(&mut ws, set);
+        assert_eq!(
+            on_disk(),
+            before.as_bytes(),
+            "{name}: l'annulla ridà i byte"
+        );
+    }
+}
+
 /// Un calendario si aggiunge nella forma di ripiego (`type: table` con
 /// `fub.view`), la sua data si scrive dentro `fub:`, e ogni passo si annulla.
 #[test]

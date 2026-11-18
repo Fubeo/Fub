@@ -210,7 +210,7 @@ del file resta byte per byte:
   il titolo di un gruppo di colonne), vanno con la loro voce;
 - l'ordine delle chiavi che non si toccano;
 - le virgolette, i rientri e le righe vuote;
-- le fini di riga (`\n` o `\r\n`) e l'assenza dell'a capo in fondo al file;
+- le fini di riga (`\n` o `\r\n`), il BOM in testa e l'a capo che manca in fondo;
 - le chiavi che Fub non conosce.
 
 Una chiave nuova va al suo posto, prima della prima chiave che la segue nella
