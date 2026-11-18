@@ -3268,6 +3268,132 @@
       "out": "later"
     }
   ],
+  "task_reminder": [
+    {
+      "text": "Chiamare ⏰ 2026-11-13 09:30 📅 2026-11-14",
+      "out": {
+        "span": "⏰ 2026-11-13 09:30",
+        "when": "2026-11-13 09:30",
+        "timed": true
+      }
+    },
+    {
+      "text": "Affitto ⏰ 2026-12-01",
+      "out": {
+        "span": "⏰ 2026-12-01",
+        "when": "2026-12-01 09:00",
+        "timed": false
+      }
+    },
+    {
+      "text": "Affitto ⏰ 2026-12-01 e poi",
+      "out": {
+        "span": "⏰ 2026-12-01",
+        "when": "2026-12-01 09:00",
+        "timed": false
+      }
+    },
+    {
+      "text": "Senza promemoria",
+      "out": null
+    },
+    {
+      "text": "Ora sbagliata ⏰ 2026-11-13 25:00",
+      "out": {
+        "span": "⏰ 2026-11-13 25:00",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Minuti sbagliati ⏰ 2026-11-13 09:60",
+      "out": {
+        "span": "⏰ 2026-11-13 09:60",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Una cifra ⏰ 2026-11-13 9:30",
+      "out": {
+        "span": "⏰ 2026-11-13 9:30",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Cifra di troppo ⏰ 2026-11-13 09:300",
+      "out": {
+        "span": "⏰ 2026-11-13 09:300",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Data lunga ⏰ 2026-11-133",
+      "out": {
+        "span": "⏰ 2026-11-133",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Refuso ⏰ 2026-02-30 09:00",
+      "out": {
+        "span": "⏰ 2026-02-30",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Vuoto ⏰",
+      "out": {
+        "span": "⏰",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Parola ⏰ domani",
+      "out": {
+        "span": "⏰ domani",
+        "when": null,
+        "timed": false
+      }
+    },
+    {
+      "text": "Due ⏰ 2026-11-01 08:00 poi ⏰ 2026-11-02 18:15",
+      "out": {
+        "span": "⏰ 2026-11-02 18:15",
+        "when": "2026-11-02 18:15",
+        "timed": true
+      }
+    },
+    {
+      "text": "Tabulazione ⏰\t2026-11-13\t07:05",
+      "out": {
+        "span": "⏰\t2026-11-13\t07:05",
+        "when": "2026-11-13 07:05",
+        "timed": true
+      }
+    },
+    {
+      "text": "Attaccata ⏰2026-11-13 09:30,",
+      "out": {
+        "span": "⏰2026-11-13 09:30",
+        "when": "2026-11-13 09:30",
+        "timed": true
+      }
+    },
+    {
+      "text": "Emoji 🎉🎉 prima ⏰ 2026-11-13 23:59 dopo",
+      "out": {
+        "span": "⏰ 2026-11-13 23:59",
+        "when": "2026-11-13 23:59",
+        "timed": true
+      }
+    }
+  ],
   "topic_matches": [
     {
       "prefix": "com.acme",
