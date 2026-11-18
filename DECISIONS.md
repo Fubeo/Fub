@@ -104,6 +104,17 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-18 · A1 · T12-bis · Il limite delle ricette è quello dell'host:
+  `RECIPES_MAX = 200` (`fub-features/src/recipes/format.rs`). L'host smette di
+  leggere alla duecentunesima ricetta, quindi sa che sono «più di 200» ma non
+  quante: la riga della sezione è il problema `troppe` com'è nel catalogo
+  («Il vault ha più di 200 ricette: Fub legge soltanto le prime 200, in ordine
+  di percorso.»), e il prototipo segue quella (prima diceva «ci sono 500
+  ricette … le altre 300»). Sempre in T12-bis: l'avviso nomina tre ricette e
+  conta le altre, il banner ne mostra cinque; `--z-toast` passa sopra
+  `--z-modal` (92), perché un avviso sotto il velo di un dialogo era spento e non
+  si chiudeva, e non intrappola il fuoco · fonte: brief dell'orchestratore,
+  punti 1 e 4 di T12-bis.
 - 2026-11-15 · manutenzione · La revisione del merge: `erase_along` su un
   tratto di pagina o di cella non taglia (la pagina che la scheda mostra e il
   riquadro della cella li sa solo la resa) e scrive la nota `ink_kept` con la
