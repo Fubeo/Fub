@@ -80,9 +80,8 @@ ancora sotto il gate.
 
 Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
 righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
-a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Le
-quattro zone hanno un livello di segni ciascuna: `editors/grid/marks.ts`
-taglia un rettangolo per zona; il quadratino e gli oggetti stanno interi.
+a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Ogni
+zona ha un livello di segni: `marks.ts` taglia un rettangolo per zona.
 
 Le righe restano (`#drawRow`): ognuna ricorda per indice la sua misura e le
 sue celle, e una cella si rifà solo quando cambia ciò che mostra; se l'HTML è
@@ -148,13 +147,14 @@ estende dall'àncora, che resta la cella attiva. Fuori dal bordo la griglia scor
 quanto più il puntatore è lontano. Con righe o colonne intere la cella
 attiva resta sulla prima colonna o sulla prima riga.
 
-Un intervallo si disegna con un rettangolo solo, a bordo d'accento, sopra le
-celle velate; la cella attiva resta senza velo, con un filo. Con una cella
-sola il bordo è quello della cella attiva. Il riquadro non ha un anello,
-salvo quando nessuna cella si vede: il fuoco è la cella attiva, che la
-griglia indica con `aria-activedescendant`.
-Le intestazioni della selezione prendono il velo e un filo d'accento verso
-le celle; quella che segue righe o colonne nascoste ha una tacca doppia.
+I segni restano e scivolano (`grid-motion.ts`): rettangolo (2 px sul filo),
+anello della cella attiva, velo e quadratino sono pezzi creati una volta per
+zona e mossi col `transform` da dieci numeri che vanno al bersaglio con la
+molla `GLIDE`, mai oltre né all'indietro, anello e velo dentro il bordo; con
+«ridotto», cambio di foglio o scelta dall'host saltano. Colore `--grid-mark`,
+in colori forzati `Highlight`; il quadratino si prende dove si vede (6 px). Il
+fuoco è la cella attiva (`aria-activedescendant`). Le intestazioni scelte
+hanno velo e filo d'accento, e dopo righe o colonne nascoste una tacca doppia.
 
 Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
 serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
@@ -442,8 +442,8 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 ## Dove si trova
 
 - `apps/client/src/editors/grid/`: `engine.ts`, `engine-geometry.ts`,
-  `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `workbook.ts`, `objects.ts`,
-  `comment-card.ts`, `menu-comandi.ts`, `risultato.ts`, `motivi.ts`, e le
-  cartelle `ribbon/` (schede in `tabs/`), `dialogs/` e `palette/`
+  `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `grid-motion.ts`,
+  `workbook.ts`, `objects.ts`, `comment-card.ts`, `menu-comandi.ts`,
+  `risultato.ts`, `motivi.ts`, `ribbon/` (`tabs/`), `dialogs/`, `palette/`
 - `apps/client/src/kit/ribbon/`; `crates/fub-format-xlsx/src/`: `grid.rs`,
   `export.rs`, `objects.rs`
