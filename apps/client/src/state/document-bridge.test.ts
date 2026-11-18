@@ -4,7 +4,7 @@ import type * as SessionModule from "./document-session";
 import { operationFromText, type TextOperation } from "../editors/core/text-operation";
 import { state } from "./store";
 import { documentSessions } from "./document-session";
-import { attachChildBridge, attachRemoteSurface, DocumentWindowUnsupported, isRemoteMessage, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
+import { attachChildBridge, attachRemoteSurface, DocumentWindowUnsupported, isRemoteMessage, setDocumentWindowKeeper, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
 import { mount } from "../theme/loader";
 import { emit } from "./store";
 
@@ -197,6 +197,103 @@ describe("document-window protocol", () => {
     await settle();
     expect(documentSessions.text(doc)).toBe("aYc");
     expect(right).toBe("aYc");
+  });
+
+  // «Scarta» nella finestra a parte: il testo della finestra va prima nella
+  // Cronologia (lo conserva la finestra principale, col custode del ponte), e
+  // si scarta soltanto dopo la risposta. Una conservazione mancata non scarta.
+  describe("scartare il testo della finestra", () => {
+    /// Una finestra il cui testo non è entrato nella sessione: «aYc» resta lì,
+    /// la sessione ha «aXc».
+    async function heldWindow(name: string): Promise<{ doc: string; child: ChildBridge; text: () => string }> {
+      const doc = `${number}-${name}.md`;
+      const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+      const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+      handles.push(first.handle, second.handle);
+      let left = "", right = "";
+      children.push(attachChildBridge(first.request, (value) => { left = value; }, () => left, observeState));
+      const child = attachChildBridge(second.request, (value) => { right = value; }, () => right, observeState);
+      children.push(child);
+      await settle();
+      const leftEdit = operationFromText(left, "aXc");
+      const rightEdit = operationFromText(right, "aYc");
+      left = "aXc";
+      right = "aYc";
+      children[0].sendEdit(left, leftEdit);
+      child.sendEdit(right, rightEdit);
+      await settle();
+      expect(documentSessions.text(doc)).toBe("aXc");
+      expect(right).toBe("aYc");
+      return { doc, child, text: () => right };
+    }
+    afterEach(() => setDocumentWindowKeeper(null));
+
+    it("con la Cronologia il testo va conservato prima, e solo dopo si scarta", async () => {
+      const { doc, child, text } = await heldWindow("keep");
+      let release: () => void = () => {};
+      const kept: Array<{ doc: string; text: string; shown: string }> = [];
+      setDocumentWindowKeeper({
+        keeps: () => true,
+        keep: (owner, value) => {
+          kept.push({ doc: owner, text: value, shown: text() });
+          return new Promise<void>((resolve) => { release = resolve; });
+        },
+      });
+      expect(await child.discardKeeps()).toBe(true);
+      const discarding = child.discardKeeping();
+      await settle();
+      expect(kept).toEqual([{ doc, text: "aYc", shown: "aYc" }]);
+      // Finché la conservazione non risponde, il testo resta nella finestra.
+      expect(text()).toBe("aYc");
+      release();
+      await discarding;
+      await settle();
+      expect(text()).toBe("aXc");
+      expect(documentSessions.text(doc)).toBe("aXc");
+    });
+
+    it("una conservazione fallita non scarta niente e dice perché", async () => {
+      const { doc, child, text } = await heldWindow("keep-failed");
+      setDocumentWindowKeeper({ keeps: () => true, keep: () => Promise.reject(new Error("spazio dati pieno")) });
+      await expect(child.discardKeeping()).rejects.toThrow("spazio dati pieno");
+      await settle();
+      expect(text()).toBe("aYc");
+      expect(documentSessions.text(doc)).toBe("aXc");
+      // Il conflitto resta da decidere: «Conserva» porta il testo nella sessione.
+      child.resolveConflict("mine");
+      await settle();
+      expect(documentSessions.text(doc)).toBe("aYc");
+    });
+
+    it("senza la Cronologia la finestra lo sa, e la conservazione chiesta lo stesso non scarta", async () => {
+      const { doc, child, text } = await heldWindow("no-history");
+      expect(await child.discardKeeps()).toBe(false);
+      await expect(child.discardKeeping()).rejects.toThrow();
+      await settle();
+      expect(text()).toBe("aYc");
+      setDocumentWindowKeeper({ keeps: () => false, keep: () => Promise.resolve() });
+      expect(await child.discardKeeps()).toBe(false);
+      await expect(child.discardKeeping()).rejects.toThrow();
+      expect(text()).toBe("aYc");
+      // Lo scarto senza conservare resta quello di sempre, dopo la conferma.
+      child.resolveConflict("theirs");
+      await settle();
+      expect(text()).toBe("aXc");
+      expect(documentSessions.text(doc)).toBe("aXc");
+    });
+
+    it("i messaggi della conservazione hanno la loro forma", () => {
+      const id = { v: 1, doc: "a.md", vault: "v", session: "s", surfaceId: "w" };
+      expect(isRemoteMessage({ ...id, kind: "keep-probe", token: "t" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-probe", token: "" })).toBe(false);
+      expect(isRemoteMessage({ ...id, kind: "keep-mode", token: "t", keeps: true })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-mode", token: "t", keeps: "sì" })).toBe(false);
+      expect(isRemoteMessage({ ...id, kind: "keep", token: "t", text: "" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep", token: "t" })).toBe(false);
+      expect(isRemoteMessage({ ...id, kind: "kept", token: "t" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-failed", token: "t", reason: "x" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-failed", token: "t" })).toBe(false);
+    });
   });
 
   // La finestra a parte non ha IPC: il profilo lo decide il registro della

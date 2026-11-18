@@ -3,9 +3,11 @@
 //
 // La conservazione è il comando `version.keep` della Cronologia, chiesto con
 // la porta generica dei comandi: c'è soltanto quando la Cronologia è montata.
-// Il controller lo esegue (`resolveDiscardingMine`); le due conferme (il
-// banner del riquadro e il foglio dello stato di salvataggio) scelgono qui la
-// frase, così dicono com'è davvero se il testo resterà o andrà perso.
+// Il controller lo esegue (`resolveDiscardingMine`, e per la finestra
+// staccata il custode del ponte, `setDocumentWindowKeeper`); le conferme (il
+// banner del riquadro, il foglio dello stato di salvataggio) e la descrizione
+// del comando nella palette scelgono qui la frase, così dicono com'è davvero
+// se il testo resterà o andrà perso.
 import type { Key } from "../i18n/strings";
 import { hasKernelCommand } from "../ui/commands";
 import { documentSessions } from "./document-session";
@@ -20,7 +22,10 @@ export function keepsDiscardedText(doc: string): boolean {
   return hasKernelCommand(VERSION_KEEP) && documentSessions.keepsDiscardedText(doc);
 }
 
-/// La frase della conferma di «Usa la versione su disco» su `doc`.
-export function discardDescription(doc: string): Key {
-  return keepsDiscardedText(doc) ? "commands.doc.conflict.theirs.desc" : "commands.doc.conflict.theirs.desc_lost";
+/// La frase della conferma di «Usa la versione su disco» su `doc`, e della
+/// sua descrizione nella palette: senza un documento (la palette senza una
+/// nota attiva) conta soltanto se il comando c'è.
+export function discardDescription(doc: string | null): Key {
+  const keeps = doc === null ? hasKernelCommand(VERSION_KEEP) : keepsDiscardedText(doc);
+  return keeps ? "commands.doc.conflict.theirs.desc" : "commands.doc.conflict.theirs.desc_lost";
 }

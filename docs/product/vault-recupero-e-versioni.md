@@ -145,7 +145,11 @@ nel conflitto del …», e rilegge il disco solo dopo che la conservazione è
 riuscita. Se la conservazione fallisce non si scarta niente, il conflitto resta
 aperto e l'avviso dice perché; senza la Cronologia montata, o su un foglio di
 calcolo (dove il testo in Fub è un giornale, non il file), la conferma avverte
-che il testo andrà perso. Il pannello mostra la nota al posto della
+che il testo andrà perso, e così la descrizione del comando nella palette.
+Lo stesso vale nella finestra documento a parte: «Scarta le modifiche locali»
+conserva prima nella Cronologia il testo della finestra, attraverso la
+finestra principale, e lo scarta solo a conservazione riuscita; la conferma,
+dentro la finestra, dice se il testo resterà o andrà perso. Il pannello mostra la nota al posto della
 variazione e in cima all'anteprima. Un testo conservato
 non è il disco: «Versione attuale» resta sull'ultima fotografia del file, e il
 ripristino inverso torna a quella. `version.keep` funziona anche a versioning

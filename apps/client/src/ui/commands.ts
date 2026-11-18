@@ -88,7 +88,10 @@ export interface ShellCommand {
   /// (0081). Un comando nuovo non compila finché non si dichiara di là.
   id: ShellCommandId;
   title: Key;
-  description: Key;
+  /// La frase sotto il titolo. Una funzione quando la frase dipende da com'è
+  /// adesso (`shell.doc.conflict.theirs`: il testo resta nella Cronologia
+  /// soltanto se c'è): si legge ogni volta che la palette chiede i comandi.
+  description: Key | (() => Key);
   layer: CommandLayer;
   available?: () => boolean;
   run: () => void | Promise<void>;
@@ -477,7 +480,7 @@ export function allCommands(): CommandEntry[] {
     .map((command) => ({
       id: command.id,
       title: t(command.title),
-      description: t(command.description),
+      description: t(typeof command.description === "function" ? command.description() : command.description),
       layer: command.layer,
       // La stessa riga dei comandi del kernel, e da questa voce lo è per davvero
       // (§16.3): l'accordo riconfigurato se c'è, il dichiarato se no.
