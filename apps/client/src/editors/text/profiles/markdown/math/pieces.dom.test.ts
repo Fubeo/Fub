@@ -115,7 +115,7 @@ describe("scegliere un pezzo", () => {
     root.press("ArrowLeft", { shiftKey: true });
     expect(root.editor.insert(SYMBOLS.find((symbol) => symbol.template === "\\sqrt{}")!)).toBe(true);
     expect(root.editor.tex).toBe("a+\\sqrt{bc}");
-    expect(root.changes.at(-1)).toBe("a+\\sqrt{bc}");
+    expect(root.changes[root.changes.length - 1]).toBe("a+\\sqrt{bc}");
   });
 
   it("un segno sostituisce il pezzo, e Ctrl Z lo rimette in un passo solo; Backspace lo toglie", async () => {
