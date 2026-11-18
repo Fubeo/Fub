@@ -2265,6 +2265,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Per installare un tema da una cartella accendi la modalità sviluppatore.",
         )
         .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
+        .with(
+            "host.theme_folder.desktop_only",
+            "Su questo dispositivo non si sceglie una cartella: i temi da cartella si installano da Fub sul computer.",
+        )
         .with("host.theme_folder.pick_title", "Scegli la cartella del tema")
         .with("host.theme_folder.link_title", "Scegli la cartella del tema da collegare")
         .with(
@@ -2970,6 +2974,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "To install a theme from a folder, turn on developer mode.",
         )
         .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
+        .with(
+            "host.theme_folder.desktop_only",
+            "A folder cannot be chosen on this device: themes from a folder are installed from Fub on a computer.",
+        )
         .with("host.theme_folder.pick_title", "Choose the theme folder")
         .with("host.theme_folder.link_title", "Choose the theme folder to link")
         .with(

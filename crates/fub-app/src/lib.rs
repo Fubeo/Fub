@@ -1577,6 +1577,47 @@ fn read_theme(
     host.read_theme(&id, light)
 }
 
+/// La scelta di una cartella di tema arriva da qui.
+type ThemeFolderPick = std::sync::mpsc::Receiver<Option<tauri_plugin_dialog::FilePath>>;
+
+/// Apre la finestra nativa per scegliere la cartella di un tema, col titolo
+/// scritto dall'host, e restituisce dove arriverà la scelta (`None`: la
+/// persona l'ha chiusa). Sul desktop la finestra ha per genitore quella della
+/// shell.
+///
+/// Su Android e iOS il plugin del dialogo non ha la scelta di una cartella
+/// (`pick_folder` esiste solo sul desktop): il comando risponde `Unserved`,
+/// e niente si apre. I temi da cartella sono un attrezzo da sviluppatore sul
+/// computer; sul telefono la cartella condivisa passa da `tree_access`.
+#[cfg(desktop)]
+fn pick_theme_folder(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    title: String,
+) -> Result<ThemeFolderPick, PluginError> {
+    use tauri_plugin_dialog::DialogExt;
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.dialog()
+        .file()
+        .set_parent(window)
+        .set_title(title)
+        .pick_folder(move |selection| {
+            let _ = sender.send(selection);
+        });
+    Ok(receiver)
+}
+
+#[cfg(mobile)]
+fn pick_theme_folder(
+    _app: &AppHandle,
+    _window: &tauri::WebviewWindow,
+    _title: String,
+) -> Result<ThemeFolderPick, PluginError> {
+    Err(PluginError::Unserved(fub_abi::Text::key(
+        "host.theme_folder.desktop_only",
+    )))
+}
+
 /// «Installa da cartella…»: la persona sceglie la cartella di un tema nella
 /// finestra **nativa**, aperta qui, e l'host la legge senza installarla
 /// (`Host::check_theme_folder`): il manifest, il fascio di ogni luce e
@@ -1597,7 +1638,6 @@ async fn check_theme_folder(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<fub_host::theme::ThemeFolderCheck, PluginError> {
-    use tauri_plugin_dialog::DialogExt;
     guard_main_shell(&window, "install themes from a folder")?;
     let title = {
         let host = app.state::<Host>();
@@ -1606,14 +1646,10 @@ async fn check_theme_folder(
         for_the_shell(&host, None, allowed)?;
         host.theme_folder_pick_title()
     };
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    let dialog = app.dialog().file();
-    // Il genitore della finestra di dialogo esiste solo sul desktop.
-    #[cfg(desktop)]
-    let dialog = dialog.set_parent(&window);
-    dialog.set_title(title).pick_folder(move |selection| {
-        let _ = sender.send(selection);
-    });
+    let receiver = {
+        let host = app.state::<Host>();
+        for_the_shell(&host, None, pick_theme_folder(&app, &window, title))?
+    };
     off_main(app, move |host| {
         let result = receiver
             .recv()
@@ -1688,7 +1724,6 @@ async fn link_theme_folder(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<fub_host::theme::ThemeFolderLink, PluginError> {
-    use tauri_plugin_dialog::DialogExt;
     guard_main_shell(&window, "link a theme folder")?;
     let title = {
         let host = app.state::<Host>();
@@ -1696,13 +1731,10 @@ async fn link_theme_folder(
         for_the_shell(&host, None, allowed)?;
         host.theme_link_pick_title()
     };
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    let dialog = app.dialog().file();
-    #[cfg(desktop)]
-    let dialog = dialog.set_parent(&window);
-    dialog.set_title(title).pick_folder(move |selection| {
-        let _ = sender.send(selection);
-    });
+    let receiver = {
+        let host = app.state::<Host>();
+        for_the_shell(&host, None, pick_theme_folder(&app, &window, title))?
+    };
     off_main(app, move |host| {
         let result = receiver
             .recv()
