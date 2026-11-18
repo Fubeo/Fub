@@ -1612,6 +1612,49 @@ fn service_settings() -> Vec<SettingSpec> {
     ]
 }
 
+/// **Il cancello della persona**: le chiavi il cui valore ha una forma che la
+/// specie dello schema non sa dire, controllata prima che arrivi al suo livello.
+///
+/// Lo schema dice «testo» per un fuso e per un indirizzo, e il kernel accetta
+/// quindi qualunque testo; chi sa se un nome è un fuso, o un testo un indirizzo
+/// a cui l'host accetta di collegarsi, è l'host — il database dei fusi sta in
+/// [`crate::wall`], la regola degli indirizzi in
+/// [`validate_base_url`](crate::remote::validate_base_url). Senza questo
+/// cancello `Mars/Olympus` si salvava, e le sveglie a un orario di parete
+/// smettevano di suonare senza che nessuno lo dicesse; un server di
+/// sincronizzazione `ftp://…` si salvava, e falliva soltanto alla prima replica.
+///
+/// Vuoto resta ammesso: per il fuso vuol dire «come il sistema», per un server
+/// «nessun server configurato». Il rifiuto è un [`PluginError::BadArgs`] con una
+/// chiave del catalogo del core, che chi lo porta alla shell risolve nella
+/// lingua di chi guarda.
+pub fn user_value_problem(
+    key: &str,
+    value: &fub_abi::settings::SettingValue,
+) -> Option<fub_abi::PluginError> {
+    let text = value.as_text()?;
+    if key == fub_kernel::locale::TIMEZONE {
+        if text.is_empty() || crate::wall::known_zone(text) {
+            return None;
+        }
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_TIMEZONE,
+            vec![Arg::text("name", text)],
+        )));
+    }
+    #[cfg(feature = "http-client")]
+    if key == SYNC_SERVER_URL || key == PUBLISH_SERVER_URL {
+        if text.trim().is_empty() || crate::remote::validate_base_url(text).is_ok() {
+            return None;
+        }
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_SERVER_URL,
+            vec![Arg::text("value", text)],
+        )));
+    }
+    None
+}
+
 /// Il visore web: di macchina, perché fidarsi di un sito è una scelta di chi
 /// usa questo PC, non un dato del vault che si sincronizza altrove.
 fn viewer_settings() -> Vec<SettingSpec> {
@@ -2028,6 +2071,8 @@ const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
+const C_REJECTED_TIMEZONE: &str = "core.settings.rejected.timezone";
+const C_REJECTED_SERVER_URL: &str = "core.settings.rejected.server_url";
 const C_GROUP_VIEWER: &str = "core.group.viewer";
 const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
 const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
@@ -2744,6 +2789,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
         )
+        .with(
+            C_REJECTED_TIMEZONE,
+            "«{name}» non è un fuso orario conosciuto. Scrivi un nome IANA come Europe/Rome, \
+             oppure lascia vuoto per usare quello del sistema.",
+        )
+        .with(
+            C_REJECTED_SERVER_URL,
+            "«{value}» non è un indirizzo di server valido. Scrivi un indirizzo https://, \
+             oppure http:// solo verso 127.0.0.1, ::1 o localhost; vuoto vuol dire nessun server.",
+        )
         .with(C_GROUP_VIEWER, "Visore web")
         .with(C_VIEWER_HOSTS, "Siti approvati")
         .with(
@@ -3420,6 +3475,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(
+            C_REJECTED_TIMEZONE,
+            "“{name}” is not a known time zone. Write an IANA name such as Europe/Rome, \
+             or leave it empty to use the system one.",
+        )
+        .with(
+            C_REJECTED_SERVER_URL,
+            "“{value}” is not a valid server address. Write an https:// address, \
+             or http:// only towards 127.0.0.1, ::1 or localhost; empty means no server.",
         )
         .with(C_GROUP_VIEWER, "Web viewer")
         .with(C_VIEWER_HOSTS, "Approved sites")
