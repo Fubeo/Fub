@@ -121,7 +121,7 @@ import {
   type LinkCardSource,
 } from "./link-card";
 import { markPresence } from "../../../core/presence";
-import { liveCardEmbed, LiveCardWidget, type LiveCardEmbed, type LiveCards } from "./live-cards";
+import { holdsLiveCard, liveCardEmbed, LiveCardWidget, type LiveCardEmbed, type LiveCards } from "./live-cards";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -2812,7 +2812,11 @@ export function livePreview(
     const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
     // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
     // scrive (E26).
-    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+    // Così le colonne (o una citazione) con dentro una scheda viva (T41): il
+    // testo si guarda solo se il blocco è toccato da una scelta di blocchi.
+    const chosenObject = (): boolean => choosingBlocks(state)
+      && (mermaid || (callbacks.liveCards !== undefined && holdsLiveCard(block.source)));
+    if (!grid && touched(state, from, to) && !chosenObject()) {
       // Un diagramma toccato si scrive come codice, e il disegno gli sta
       // accanto (C5, E26).
       if (mermaid) {
