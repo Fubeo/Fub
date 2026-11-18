@@ -464,6 +464,120 @@ async function measureSwitch(stage) {
   };
 }
 
+/// Ciò che `measurePagination` fa nella pagina: impagina la nota sintetica
+/// e torna le mediane dei giri.
+const paginationProbe = async ({ target, rounds }) => {
+  const { PrintPaginator } = await import("/src/export/paginate/slices.ts");
+  const { A4 } = await import("/src/export/probe.ts");
+  const { renderMarkdown } = await import("/src/editors/text/profiles/markdown/render.ts");
+  const { MARKDOWN_SYNTAX } = await import("/src/rules/syntax.generated.ts");
+  const words = ("la nota si scrive in markdown e resta un file che ogni programma legge mentre fub la impagina " +
+    "per la stampa con titoli tabelle codice e formule senza perdere niente di quello che chi scrive ha messo").split(" ");
+  let seed = 7;
+  const word = () => words[(seed = (seed * 1103515245 + 12345) % 2147483648) % words.length];
+  const sentence = (n) => Array.from({ length: n }, word).join(" ");
+  // Una sezione: un titolo, paragrafi lunghi e corti, un elenco, e ogni
+  // tanto una tabella o un blocco di codice.
+  const note = (sections) => {
+    seed = 7;
+    const out = ["# Nota lunga", ""];
+    for (let s = 0; s < sections; s++) {
+      out.push(`## Sezione ${s + 1}`, "", sentence(90), "", sentence(40), "", `- ${sentence(12)}`, `- ${sentence(20)}`, `- ${sentence(8)}`, "", sentence(140), "");
+      if (s % 3 === 1) out.push("```js", ...Array.from({ length: 8 }, (_, k) => `const riga${k} = ${k} * ${s};`), "```", "");
+      if (s % 5 === 2) out.push("| Voce | Valore | Nota |", "|---|---|---|", ...Array.from({ length: 6 }, (_, k) => `| ${word()} | ${k * s} | ${sentence(4)} |`), "");
+    }
+    return out.join("\n");
+  };
+  const settings = (margin, link = "#145785") => ({
+    layout: { page: { ...A4, margin: { top: margin, right: margin, bottom: margin, left: margin } }, columns: 1, columnGap: 24, breaks: { everyHeading2: false, separator: false }, type: {}, excluded: [] },
+    look: { colors: { "--doc-link": link } },
+  });
+  const longest = { value: 0, on: false };
+  new PerformanceObserver((list) => {
+    if (longest.on) for (const entry of list.getEntries()) longest.value = Math.max(longest.value, entry.duration);
+  }).observe({ type: "longtask" });
+  /// Un'apertura: torna i tempi e il paginatore, a lavoro finito.
+  const open = (md) => new Promise((resolve, reject) => {
+    const times = { first: null, final: null, pages: 0, render: 0 };
+    let waiter = null;
+    const start = performance.now();
+    const p = new PrintPaginator({
+      doc: "nota.md",
+      title: "Nota lunga",
+      render: async () => {
+        // La resa la fa il core nell'app vera: qui è il Markdown del client, e si conta a parte.
+        const t = performance.now();
+        const html = renderMarkdown(md, MARKDOWN_SYNTAX).html;
+        times.render = performance.now() - t;
+        return { html, parts: [] };
+      },
+      settings: settings(72),
+      onUpdate: (result) => {
+        const now = performance.now();
+        if (times.first === null && result.ready > 0) times.first = now - start;
+        if (result.final && times.final === null) {
+          times.final = now - start;
+          times.pages = result.total;
+          resolve({ p, times, start });
+        }
+        waiter?.(result, now);
+      },
+      onError: reject,
+    });
+    p.waitOn = (fn) => { waiter = fn; };
+    p.open().catch(reject);
+  });
+  const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  // La taratura: quante sezioni fanno `target` pagine.
+  let sections = Math.max(1, Math.round(target * 1.2));
+  for (let k = 0; k < 2; k++) {
+    const { p, times } = await open(note(sections));
+    p.dispose();
+    sections = Math.max(1, Math.round((sections * target) / times.pages));
+  }
+  const md = note(sections);
+  const samples = [];
+  for (let round = 0; round < rounds; round++) {
+    longest.value = 0;
+    longest.on = true;
+    const { p, times } = await open(md);
+    longest.on = false;
+    const far = Math.max(0, Math.floor(times.pages * 0.8) - 1);
+    p.setVisible({ first: far, last: far });
+    // Il cambio di margini mentre si guarda la pagina lontana.
+    const underEyes = await new Promise((resolve) => {
+      const t0 = performance.now();
+      p.waitOn((result, now) => {
+        if (result.ready > far) resolve(now - t0);
+      });
+      p.update(settings(90));
+    });
+    // Il resto finisce prima del colore, perché il colore si misuri da solo
+    // (su una nota corta la pubblicazione che arriva sotto gli occhi è già
+    // quella finale, e non ne verrà un'altra).
+    if (!p.result?.final) await new Promise((resolve) => p.waitOn((result) => { if (result.final) resolve(); }));
+    const layouts = p.layouts;
+    const t1 = performance.now();
+    p.update(settings(90, "#aa0000"));
+    const color = performance.now() - t1;
+    const relayout = p.layouts !== layouts;
+    p.dispose();
+    samples.push({ ...times, underEyes, color, relayout, longest: longest.value });
+  }
+  const round1 = (n) => Math.round(n * 10) / 10;
+  return {
+    pages: samples[0].pages,
+    blocks: md.split("\n\n").length,
+    first: round1(median(samples.map((s) => s.first))),
+    render: round1(median(samples.map((s) => s.render))),
+    final: round1(median(samples.map((s) => s.final))),
+    underEyes: round1(median(samples.map((s) => s.underEyes))),
+    color: round1(median(samples.map((s) => s.color))),
+    relayoutOnColor: samples.some((s) => s.relayout),
+    longest: round1(median(samples.map((s) => s.longest))),
+  };
+};
+
 /// Impagina una nota sintetica di circa `target` pagine, a ogni giro da capo,
 /// e misura dall'apertura: la prima pagina pronta, tutte le pagine col loro
 /// totale, il compito più lungo; poi, guardando una pagina all'80 %, quanto ci
@@ -475,115 +589,7 @@ async function measurePagination(stage, target) {
   try {
     await prepareScene(page, scene, "light", stage.base, sceneUrl);
     if (cpu > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: cpu });
-    return await page.evaluate(async ({ target, rounds }) => {
-      const { PrintPaginator } = await import("/src/export/paginate/slices.ts");
-      const { A4 } = await import("/src/export/probe.ts");
-      const { renderMarkdown } = await import("/src/editors/text/profiles/markdown/render.ts");
-      const { MARKDOWN_SYNTAX } = await import("/src/rules/syntax.generated.ts");
-      const words = ("la nota si scrive in markdown e resta un file che ogni programma legge mentre fub la impagina " +
-        "per la stampa con titoli tabelle codice e formule senza perdere niente di quello che chi scrive ha messo").split(" ");
-      let seed = 7;
-      const word = () => words[(seed = (seed * 1103515245 + 12345) % 2147483648) % words.length];
-      const sentence = (n) => Array.from({ length: n }, word).join(" ");
-      // Una sezione: un titolo, paragrafi lunghi e corti, un elenco, e ogni
-      // tanto una tabella o un blocco di codice.
-      const note = (sections) => {
-        seed = 7;
-        const out = ["# Nota lunga", ""];
-        for (let s = 0; s < sections; s++) {
-          out.push(`## Sezione ${s + 1}`, "", sentence(90), "", sentence(40), "", `- ${sentence(12)}`, `- ${sentence(20)}`, `- ${sentence(8)}`, "", sentence(140), "");
-          if (s % 3 === 1) out.push("```js", ...Array.from({ length: 8 }, (_, k) => `const riga${k} = ${k} * ${s};`), "```", "");
-          if (s % 5 === 2) out.push("| Voce | Valore | Nota |", "|---|---|---|", ...Array.from({ length: 6 }, (_, k) => `| ${word()} | ${k * s} | ${sentence(4)} |`), "");
-        }
-        return out.join("\n");
-      };
-      const settings = (margin, link = "#145785") => ({
-        layout: { page: { ...A4, margin: { top: margin, right: margin, bottom: margin, left: margin } }, columns: 1, columnGap: 24, breaks: { everyHeading2: false, separator: false }, type: {}, excluded: [] },
-        look: { colors: { "--doc-link": link } },
-      });
-      const longest = { value: 0, on: false };
-      new PerformanceObserver((list) => {
-        if (longest.on) for (const entry of list.getEntries()) longest.value = Math.max(longest.value, entry.duration);
-      }).observe({ type: "longtask" });
-      /// Un'apertura: torna i tempi e il paginatore, a lavoro finito.
-      const open = (md) => new Promise((resolve, reject) => {
-        const times = { first: null, final: null, pages: 0, render: 0 };
-        let waiter = null;
-        const start = performance.now();
-        const p = new PrintPaginator({
-          doc: "nota.md",
-          title: "Nota lunga",
-          render: async () => {
-            // La resa la fa il core nell'app vera: qui è il Markdown del client, e si conta a parte.
-            const t = performance.now();
-            const html = renderMarkdown(md, MARKDOWN_SYNTAX).html;
-            times.render = performance.now() - t;
-            return { html, parts: [] };
-          },
-          settings: settings(72),
-          onUpdate: (result) => {
-            const now = performance.now();
-            if (times.first === null && result.ready > 0) times.first = now - start;
-            if (result.final && times.final === null) {
-              times.final = now - start;
-              times.pages = result.total;
-              resolve({ p, times, start });
-            }
-            waiter?.(result, now);
-          },
-          onError: reject,
-        });
-        p.waitOn = (fn) => { waiter = fn; };
-        p.open().catch(reject);
-      });
-      const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
-      // La taratura: quante sezioni fanno `target` pagine.
-      let sections = Math.max(1, Math.round(target * 1.2));
-      for (let k = 0; k < 2; k++) {
-        const { p, times } = await open(note(sections));
-        p.dispose();
-        sections = Math.max(1, Math.round((sections * target) / times.pages));
-      }
-      const md = note(sections);
-      const samples = [];
-      for (let round = 0; round < rounds; round++) {
-        longest.value = 0;
-        longest.on = true;
-        const { p, times } = await open(md);
-        longest.on = false;
-        const far = Math.max(0, Math.floor(times.pages * 0.8) - 1);
-        p.setVisible({ first: far, last: far });
-        // Il cambio di margini mentre si guarda la pagina lontana.
-        const underEyes = await new Promise((resolve) => {
-          const t0 = performance.now();
-          p.waitOn((result, now) => {
-            if (result.ready > far) resolve(now - t0);
-          });
-          p.update(settings(90));
-        });
-        // Il resto finisce prima del colore, perché il colore si misuri da solo.
-        await new Promise((resolve) => p.waitOn((result) => { if (result.final) resolve(); }));
-        const layouts = p.layouts;
-        const t1 = performance.now();
-        p.update(settings(90, "#aa0000"));
-        const color = performance.now() - t1;
-        const relayout = p.layouts !== layouts;
-        p.dispose();
-        samples.push({ ...times, underEyes, color, relayout, longest: longest.value });
-      }
-      const round1 = (n) => Math.round(n * 10) / 10;
-      return {
-        pages: samples[0].pages,
-        blocks: md.split("\n\n").length,
-        first: round1(median(samples.map((s) => s.first))),
-        render: round1(median(samples.map((s) => s.render))),
-        final: round1(median(samples.map((s) => s.final))),
-        underEyes: round1(median(samples.map((s) => s.underEyes))),
-        color: round1(median(samples.map((s) => s.color))),
-        relayoutOnColor: samples.some((s) => s.relayout),
-        longest: round1(median(samples.map((s) => s.longest))),
-      };
-    }, { target, rounds });
+    return await page.evaluate(paginationProbe, { target, rounds });
   } finally {
     await page.context().close();
   }
