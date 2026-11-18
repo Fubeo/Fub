@@ -433,6 +433,8 @@ export function mountRecipesSection(lifetime: Lifetime, hooks: RecipesSectionHoo
 
   function loading(): HTMLElement {
     const card = el("div", "settings-card");
+    // Uno stato che cambia, col suo nome: il ruolo che regge un nome è quello di stato.
+    card.setAttribute("role", "status");
     card.setAttribute("aria-busy", "true");
     card.setAttribute("aria-label", t("recipes.loading"));
     const rows = el("div", "skeleton-rows");

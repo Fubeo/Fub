@@ -391,6 +391,8 @@ export function openRecipeDialog(options: RecipeDialogOptions): RecipeDialog {
       return;
     }
     const loading = el("div", "skeleton-rows");
+    // La prova che si fa: uno stato, col suo nome (il ruolo che regge un nome).
+    loading.setAttribute("role", "status");
     loading.setAttribute("aria-busy", "true");
     loading.setAttribute("aria-label", t("recipes.dialog.try.loading"));
     loading.append(el("span", "skeleton-line"), el("span", "skeleton-line"));
