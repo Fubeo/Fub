@@ -1605,6 +1605,39 @@ export const SCENE = touchLast(onPage("shell", [
       }
     },
   })),
+  // La scheda di documento (T44, il prototipo `.docw`, passo 17): il verbale
+  // in ODT a riposo, in continuo e senza pagine; scelto coi Blocchi (attivo,
+  // poi Esc); attivo, con l'editor dei documenti in Scrittura e la sua barra.
+  // In fondo la relazione di cento pagine, tronca con «Apri».
+  ...[
+    ["scheda-documento-01-riposo", "Il verbale in ODT a riposo: il testo reso in continuo, senza pagine", "top", "rest"],
+    ["scheda-documento-02-scelta", "Il verbale scelto coi Blocchi, dopo Esc", "top", "chosen"],
+    ["scheda-documento-03-attiva", "Il verbale attivo: si scrive nel documento, con la barra dei documenti", "top", "active"],
+    ["scheda-documento-04-lunga", "Un documento di cento pagine: la scheda si ferma e offre «Apri»", "bottom", "rest"],
+  ].map(([id, title, scroll, state]) => ({
+    id,
+    title,
+    query: "live=scheda-documento",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const cards = '.pane.focus .pane-editor .live-card[data-card-kind="document"]';
+      await page.waitForFunction((selector) => {
+        const all = [...document.querySelectorAll(selector)];
+        return all.length === 2 && all.every((card) => card.dataset.cardState === "view");
+      }, cards);
+      if (scroll === "bottom") {
+        await page.waitForSelector(`${cards} .canvas-card-document-more`);
+        await page.evaluate((selector) => document.querySelectorAll(selector)[1]?.scrollIntoView({ block: "end" }), cards);
+      }
+      if (state === "rest") return;
+      await page.click(`.pane.focus .pane-editor .live-card[data-card-kind="document"] .live-card-body`);
+      // Il fuoco nel testo del documento: si scrive lì.
+      await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="document"][data-card-active="true"] .rich-content.ProseMirror-focused`);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="document"][data-card-chosen="true"]`);
+    },
+  })),
   // La misura e il posto delle schede (T42, il prototipo `.pair` e la lavagna
   // a tutta pagina, passo 17): due schede affiancate in un `[!columns]`, una
   // a tutta pagina e bassa, una come riga; il bordo che si trascina sotto il

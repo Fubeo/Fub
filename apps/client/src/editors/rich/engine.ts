@@ -79,7 +79,28 @@ export interface RichEngineOptions {
   /// un a capo, una cancellazione che lo tocca. La battuta non entra; chi
   /// mostra la superficie lo dice (una volta, non a ogni tasto).
   readonly onClosedWrite?: () => void;
+  /// Esc non è del documento (una scheda nella nota, `escapeLeaves` del
+  /// registro): il motore lo tiene solo per chiudere ciò che ha aperto (il
+  /// pennello, il taglio fra le celle), e sennò lo lascia passare a chi lo
+  /// ospita, senza il `preventDefault` che ProseMirror mette a ogni Esc.
+  readonly escapeLeaves?: boolean;
 }
+
+/// Esc che lascia il documento (`escapeLeaves`): i tasti del motore lo
+/// provano prima; se nessuno lo prende, ProseMirror non lo tocca e l'evento
+/// sale intatto a chi ospita la superficie (la scheda, che esce). Senza,
+/// ProseMirror lo segna sempre come preso (`captureKeyDown`).
+const escapePassesThrough = new Plugin({
+  props: {
+    handleDOMEvents: {
+      keydown: (view, event) => {
+        if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return false;
+        if (view.someProp("handleKeyDown", (handle) => handle(view, event))) event.preventDefault();
+        return true;
+      },
+    },
+  },
+});
 
 /// Ciò che il motore sa del testo che ha ricevuto.
 export type Intake =
@@ -274,6 +295,7 @@ export class RichEngine {
         }),
       );
     }
+    if (this.#options.escapeLeaves) plugins.unshift(escapePassesThrough);
     return plugins;
   }
 

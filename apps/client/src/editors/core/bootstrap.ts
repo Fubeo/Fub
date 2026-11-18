@@ -385,14 +385,19 @@ const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(byte
 /// montata in un altro vault la svuota: lo stesso percorso è un altro file.
 let windowSnapshots: { readonly cache: CardSnapshots & { clear(): void }; vault: string | undefined } | null = null;
 
-/// Le schede di una superficie della lavagna, dato il suo contenitore.
-type CanvasCardsFor = (context: SurfaceMountContext) => CanvasCards;
+/// Chi ospita le schede: la lavagna, o una nota (T41). Lo stesso registro, con
+/// una differenza sola: nella nota un documento si scrive (T44), sulla
+/// lavagna si legge (D-14 (a)).
+type CardHost = "canvas" | "note";
+
+/// Le schede di una superficie, dato il suo contenitore e chi le ospita.
+type CanvasCardsFor = (context: SurfaceMountContext, host?: CardHost) => CanvasCards;
 
 /// I renderer delle schede, caricati col codice della lavagna (A-14): non
 /// pesano sull'avvio di Fub. La scheda di foglio arriva con un suo `import()`
 /// al primo foglio.
 async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
-  const [cards, { CardCache }, note, image, pdf, web, craft] = await Promise.all([
+  const [cards, { CardCache }, note, image, pdf, web, craft, documents] = await Promise.all([
     import("./cards/contract"),
     import("../canvas/card-cache"),
     import("./cards/kinds/note"),
@@ -400,6 +405,7 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     import("./cards/kinds/pdf"),
     import("./cards/kinds/web"),
     import("./cards/kinds/craft"),
+    import("./cards/kinds/document"),
   ]);
   windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
   const snapshots = windowSnapshots.cache;
@@ -455,13 +461,16 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     );
   }
   const grid = options.gridHost;
-  return (context) => {
+  return (context, host = "canvas") => {
     const vault = openVaultRoot();
     if (windowSnapshots && windowSnapshots.vault !== vault) {
       windowSnapshots.cache.clear();
       windowSnapshots.vault = vault;
     }
-    const renderers = [...fixed];
+    const renderers = [
+      ...fixed,
+      documents.documentCardRenderer({ show: ports.note.show, watch, open, writes: host === "note" }),
+    ];
     if (grid) {
       renderers.push(lazySheetRenderer(async () => {
         const { sheetCardRenderer } = await import("../grid/card");
@@ -540,7 +549,7 @@ function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts,
   return {
     load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract")]).then(
       ([cardsFor, contract]): LiveCardKit => {
-        const cards = cardsFor(context);
+        const cards = cardsFor(context, "note");
         return {
           registry: cards.registry,
           snapshots: cards.snapshots,

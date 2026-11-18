@@ -19397,6 +19397,118 @@
         }
       }
     },
+    "scheda-documento.testo": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docw",
+        "contesto": "documento",
+        "proprieta": {
+          "padding-top": "16px",
+          "padding-right": "18px",
+          "padding-bottom": "18px",
+          "padding-left": "18px"
+        },
+        "fub": {}
+      }
+    },
+    "scheda-documento.paragrafo": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(52, 65, 58)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(199, 207, 202)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(52, 65, 58)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"doc\"] .docp p:not(.r)",
+        "contesto": "documento",
+        "proprieta": {
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "9px",
+          "margin-left": "0px",
+          "color": "rgb(199, 207, 202)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      }
+    },
     "schede.affiancate": {
       "chiaro-1280": {
         "prototipo": ".pair",
