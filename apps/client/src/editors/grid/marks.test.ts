@@ -201,6 +201,21 @@ describe("i pezzi della selezione", () => {
     expect(lone.some((part) => part.kind === "edge" || part.kind === "handle")).toBe(false);
   });
 
+  it("le maniglie del tocco sono due segni d'angolo di 14 px, col centro sugli angoli dei fili", () => {
+    const g = [140, 52, 240, 108, 140, 52, 240, 80, 240, 108];
+    const look = { lone: false, edges: true, handle: false, grips: true, header: { width: 0, height: 0 } };
+    const grips = selectionParts(g, look).filter((part) => part.kind === "touch");
+    expect(grips.map((part) => part.grip)).toEqual(["a", "b"]);
+    expect(grips.every((part) => part.pop)).toBe(true);
+    const [a, b] = grips;
+    expect(a!.rect).toEqual({ x: 132, y: 44, w: 14, h: 14 });
+    expect(a!.corner).toEqual({ x: 140, y: 52, start: true });
+    expect(b!.rect).toEqual({ x: 232, y: 100, w: 14, h: 14 });
+    expect(b!.corner).toEqual({ x: 240, y: 108, start: false });
+    // Senza il tocco lungo non ci sono.
+    expect(selectionParts(g, { ...look, grips: false }).some((part) => part.kind === "touch")).toBe(false);
+  });
+
   it("un pezzo fuori dalla zona diventa una riga vuota sul suo bordo, da cui entra", () => {
     // Un lato del corpo che sta tutto sotto la testa ferma: nella testa è una
     // riga vuota sul filo, non un pezzo grande.

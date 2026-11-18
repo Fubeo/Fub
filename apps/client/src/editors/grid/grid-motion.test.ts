@@ -367,6 +367,86 @@ describe("il motore dei segni", () => {
     life.close();
   });
 
+  describe("le maniglie del tocco", () => {
+    const withGrips = (grips: boolean) => (geometry: MarkGeometry) => selectionParts(geometry, { ...LOOK, handle: false, grips });
+    const gripsIn = (lifts: Record<Zone, HTMLElement>) =>
+      ZONES.flatMap((zone) => [...lifts[zone].querySelectorAll<HTMLElement>(".grid-mark-touch:not([hidden])")]);
+    const scaleOf = (el: HTMLElement) => Number(/scale\(([\d.]+)/.exec(el.style.transform)?.[1] ?? "1");
+
+    it("compaiono crescendo dal centro da ENTER_SCALE con `SLIDE`, nel fotogramma del motore, e poi stanno ferme", () => {
+      const { host, life, lifts } = makeHost();
+      const marks = createMarksMotion(host);
+      const g = geometryOf(2, 2, 4, 3, 2, 2);
+      marks.update({ geometry: g, parts: withGrips(false), glide: false });
+      expect(gripsIn(lifts)).toHaveLength(0);
+      const plays = driver.plays.length;
+      marks.update({ geometry: g, parts: withGrips(true) });
+      const shown = gripsIn(lifts);
+      expect(shown.map((el) => el.dataset.handle).sort()).toEqual(["a", "b"]);
+      // Nessuna corsa a parte: le fa crescere il fotogramma del motore.
+      expect(driver.plays.length).toBe(plays);
+      expect(marks.moving()).toBe(true);
+      const b = shown.find((el) => el.dataset.handle === "b")!;
+      // Il posto d'arrivo: 14 × 14 col centro sull'angolo dei fili.
+      expect([b.style.left, b.style.top, b.style.width, b.style.height]).toEqual([`${g[2]! - 8}px`, `${g[3]! - 8}px`, "14px", "14px"]);
+      expect(scaleOf(b)).toBeCloseTo(0.96, 6);
+      expect(b.style.opacity).toBe("0");
+      let last = scaleOf(b);
+      for (let frame = 0; frame < 6; frame += 1) {
+        driver.advance(FRAME);
+        // Cresce senza mai passare la misura vera, e il centro resta fermo.
+        expect(scaleOf(b)).toBeGreaterThanOrEqual(last);
+        expect(scaleOf(b)).toBeLessThanOrEqual(1);
+        last = scaleOf(b);
+      }
+      driver.advance(1000);
+      expect(b.style.transform).toBe("");
+      expect(b.style.opacity).toBe("");
+      expect(marks.moving()).toBe(false);
+      expect(frameListeners()).toBe(0);
+      life.close();
+    });
+
+    it("con «ridotto» si dissolvono soltanto, senza crescere", () => {
+      setMotionPreference("reduced");
+      const { host, life, lifts } = makeHost();
+      const marks = createMarksMotion(host);
+      const g = geometryOf(2, 2, 4, 3, 2, 2);
+      marks.update({ geometry: g, parts: withGrips(false), glide: false });
+      const plays = driver.plays.length;
+      marks.update({ geometry: g, parts: withGrips(true) });
+      const shown = gripsIn(lifts);
+      expect(shown).toHaveLength(2);
+      expect(shown.every((el) => el.style.transform === "" && el.style.opacity === "")).toBe(true);
+      expect(driver.plays.length).toBe(plays + 2);
+      expect(frameListeners()).toBe(0);
+      life.close();
+    });
+
+    it("seguono la selezione con gli altri pezzi; tolte, spariscono subito", () => {
+      const { host, life, lifts } = makeHost();
+      const marks = createMarksMotion(host);
+      marks.update({ geometry: geometryOf(2, 2, 2, 2, 2, 2), parts: withGrips(true), glide: false });
+      const next = geometryOf(2, 2, 6, 5, 2, 2);
+      marks.update({ geometry: next, parts: withGrips(true) });
+      for (let frame = 0; frame < 30; frame += 1) {
+        driver.advance(FRAME);
+        const shown = marks.shown()!;
+        const b = gripsIn(lifts).find((el) => el.dataset.handle === "b")!;
+        // Il centro della maniglia sta sull'angolo che si vede, in ogni fotogramma.
+        const m = /translate\(([-\d.e]+)px, ([-\d.e]+)px\)/.exec(b.style.transform);
+        const tx = m ? Number(m[1]) : 0;
+        const ty = m ? Number(m[2]) : 0;
+        const k = scaleOf(b);
+        expect(parseFloat(b.style.left) + tx + 7 * k).toBeCloseTo(shown[2]! - 1, 3);
+        expect(parseFloat(b.style.top) + ty + 7 * k).toBeCloseTo(shown[3]! - 1, 3);
+      }
+      marks.update({ geometry: next, parts: withGrips(false) });
+      expect(gripsIn(lifts)).toHaveLength(0);
+      life.close();
+    });
+  });
+
   let motion: MarksMotion | null = null;
   afterEach(() => {
     motion = null;

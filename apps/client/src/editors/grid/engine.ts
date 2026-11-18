@@ -343,6 +343,24 @@ function zoneOf(frozenColumn: boolean, frozenRow: boolean): Zone {
 const MARK_BLEED = 3;
 /// Il quadratino si prende entro tanti px dall'angolo dei fili.
 const FILL_SLOP = 6;
+/// Col dito: oltre tanti px il dito scorre, e il gesto non è più un tocco.
+const TAP_MOVE = 8;
+/// Col dito: fermo tanto (ms) è un tocco lungo, che mette le due maniglie.
+const LONG_PRESS_MS = 450;
+/// Col dito: due tocchi sulla stessa cella entro tanto (ms) la aprono.
+const DOUBLE_TAP_MS = 300;
+/// La presa di una maniglia del tocco: un cerchio di tanti px attorno al
+/// suo angolo, che copre il tondo e il suo bordo.
+const GRIP_R = 9;
+/// Un dito sulla griglia, finché non si alza, scorre o diventa lungo.
+interface TouchPress {
+  readonly pointerId: number;
+  readonly x: number;
+  readonly y: number;
+  readonly hit: { readonly row: number | null; readonly column: number | null };
+  timer: ReturnType<typeof setTimeout> | null;
+  long: boolean;
+}
 /// Ciò che un disegno mette in ogni livello del piano, nell'ordine.
 type Drawing = Map<HTMLElement, HTMLElement[]>;
 /// Una cella disegnata in una riga che resta: l'elemento, il suo bordo, la
@@ -518,6 +536,15 @@ export class GridEngine {
   /// fermo può essere un'altra.
   #dragSeen: { readonly left: number; readonly top: number } | null = null;
   #resize: ResizeDrag | null = null;
+  /// Il dito giù, finché non è un tocco, un tocco lungo o uno scorrimento.
+  #touch: TouchPress | null = null;
+  /// L'ultimo puntatore è stato un dito: il quadratino non si mostra, perché
+  /// col dito il riempimento si fa dal menu.
+  #touchLast = false;
+  /// Le due maniglie del tocco lungo, agli angoli della selezione.
+  #grips = false;
+  /// L'ultimo tocco su una cella, per il doppio tocco che la apre.
+  #lastTap: { readonly at: number; readonly position: GridPosition } | null = null;
   /// Gli altri intervalli di una selezione a più intervalli, sul foglio
   /// mostrato; quello in cui si lavora è `#selection`.
   #others: GridRange[] = [];
@@ -735,20 +762,39 @@ export class GridEngine {
     this.#viewport.addEventListener("pointerdown", grid((event) => this.#pointerDown(event)), { signal });
     this.#viewport.addEventListener("pointermove", grid((event) => this.#pointerMove(event)), { signal });
     this.#viewport.addEventListener("pointerup", (event) => {
+      this.#endTouch(event, true);
       this.#endResize(true);
       this.#endDrag(true, event.ctrlKey || event.metaKey, { x: event.clientX, y: event.clientY });
       this.#endObjectGesture(event, true);
     }, { signal });
     this.#viewport.addEventListener("pointercancel", (event) => {
+      this.#endTouch(event, false);
       this.#endResize(false);
       this.#endDrag(false, false);
       this.#endObjectGesture(event, false);
     }, { signal });
+    // Col dito chi decide se il foglio scorre è `touch-action` (la griglia
+    // dice `pan-x pan-y`); la presa di una maniglia invece è geometrica, e
+    // la si ferma qui: un dito solo sulla maniglia la tira, non fa scorrere.
+    // Due dita (lo zoom del sistema) passano.
+    this.#viewport.addEventListener("touchstart", (event) => {
+      const finger = event.touches.length === 1 ? event.touches[0] : null;
+      if (finger && this.#gripAt(finger.clientX, finger.clientY)) event.preventDefault();
+    }, { signal, passive: false });
+    // Il tocco lungo mette le maniglie, non il menu: né quello del sistema né
+    // quello dell'editor. Il mouse e la tastiera aprono il menu come sempre.
+    this.#viewport.addEventListener("contextmenu", (event) => {
+      if (this.#touch || ("pointerType" in event && (event as PointerEvent).pointerType === "touch")) event.preventDefault();
+    }, { signal });
     this.#life.add(() => this.#stopDragScroll());
+    this.#life.add(() => this.#cancelTouch());
     this.#viewport.addEventListener("copy", grid((event) => this.#copy(event)), { signal });
     this.#viewport.addEventListener("cut", grid((event) => this.#cut(event)), { signal });
     this.#viewport.addEventListener("paste", grid((event) => this.#paste(event)), { signal });
     this.#viewport.addEventListener("dblclick", grid((event) => {
+      // Col dito apre il doppio tocco (`#tap`), non il doppio clic che il
+      // browser ne ricava.
+      if (this.#touchLast) return;
       // Sul bordo di un'intestazione il doppio clic adatta la misura.
       const edge = this.#resizeEdge(event.clientX, event.clientY);
       if (edge) {
@@ -2892,6 +2938,8 @@ export class GridEngine {
     }
     const sheet = this.#sheet().id;
     const glide = !this.#marksJump && this.#marksSheet === sheet;
+    // Le maniglie del tocco sono della selezione su cui sono nate.
+    if (this.#marksSheet !== sheet) this.#grips = false;
     this.#marksJump = false;
     this.#marksSheet = sheet;
     const frame = this.#frame;
@@ -2900,7 +2948,9 @@ export class GridEngine {
       lone: this.#lone(range) && !this.#others.length,
       // Sulle formiche di un taglio il bordo pieno le coprirebbe.
       edges: !(cut && cut.sheet === sheet && sameRange(cut.range, range)),
-      handle: this.#fillServed(),
+      // Col dito il riempimento si fa dal menu: il quadratino non c'è.
+      handle: this.#fillServed() && !this.#touchLast,
+      grips: this.#grips,
       header: { width: frame.rowHeader, height: frame.columnHeader },
     };
     const still: MarkPart[] = [...this.#freezeParts()];
@@ -2948,7 +2998,8 @@ export class GridEngine {
   /// copre, e mai quando l'angolo è passato sotto la fascia. Decide questa
   /// prova, non il bersaglio del DOM, che sul filo dipende da chi copre chi.
   #onFillHandle(x: number, y: number): boolean {
-    if (!this.#fillServed()) return false;
+    // Dopo un dito il quadratino non si mostra, e non si prende.
+    if (!this.#fillServed() || this.#touchLast) return false;
     const box = this.#rangeBox(this.#selectedRange());
     if (!box) return false;
     const seen = cornerSeen(box.left + box.width, box.top + box.height, false, this.#bands(), {
@@ -4678,6 +4729,19 @@ export class GridEngine {
     if (this.#editing?.owner === "cell") this.#finishEditing(true, "input", false);
     const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
     if (object && this.#objectPointerDown(event, object)) return;
+    // Col dito trascinare scorre e basta: la griglia sceglie solo al tocco.
+    if (event.pointerType === "touch") {
+      this.#touchDown(event);
+      return;
+    }
+    // Il mouse e la penna fanno ciò che fanno sempre; tolgono le maniglie del
+    // tocco e rimettono il quadratino.
+    if (this.#touchLast || this.#grips) {
+      this.#touchLast = false;
+      this.#grips = false;
+      this.#lastTap = null;
+      this.#render();
+    }
     const edge = this.#resizeEdge(event.clientX, event.clientY);
     if (edge) {
       event.preventDefault();
@@ -4754,7 +4818,161 @@ export class GridEngine {
     this.#selectionChanged();
   }
 
+  /// Un dito giù sulla griglia (B4). Sulla presa di una maniglia del tocco
+  /// lungo comincia a tirarla; altrove aspetta: alzato entro `TAP_MOVE` è un
+  /// tocco (`#tap`), fermo per `LONG_PRESS_MS` un tocco lungo, e oltre
+  /// `TAP_MOVE` scorre, col browser, senza scegliere niente. Non chiama
+  /// `preventDefault`, che fermerebbe lo scorrimento.
+  #touchDown(event: PointerEvent): void {
+    this.#cancelTouch();
+    this.#touchLast = true;
+    const grip = this.#gripAt(event.clientX, event.clientY);
+    if (grip) {
+      event.preventDefault();
+      const range = this.#selectedRange();
+      const fixed = grip === "b"
+        ? { row: range.rowStart, column: range.columnStart }
+        : { row: range.rowEnd, column: range.columnEnd };
+      this.#drag = { kind: "handle", fixed, x: event.clientX, y: event.clientY };
+      this.#dragSeen = this.#viewportAt();
+      this.#viewport.setPointerCapture?.(event.pointerId);
+      this.#viewport.focus({ preventScroll: true });
+      return;
+    }
+    const cell = this.#eventPosition(event);
+    const hit = cell ?? this.#hit(event.clientX, event.clientY, false);
+    if (!hit) return;
+    const touch: TouchPress = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, hit, timer: null, long: false };
+    touch.timer = setTimeout(() => this.#longPress(touch), LONG_PRESS_MS);
+    this.#touch = touch;
+  }
+
+  /// Il tocco lungo su una cella: la sceglie, se non è già nella selezione,
+  /// e mette le due maniglie agli angoli della selezione.
+  #longPress(touch: TouchPress): void {
+    if (this.#touch !== touch) return;
+    touch.timer = null;
+    touch.long = true;
+    const { row, column } = touch.hit;
+    if (row === null || column === null) return;
+    const position = this.#anchorOf({ row, column });
+    const range = this.#selectedRange();
+    const inside = position.row >= range.rowStart && position.row <= range.rowEnd
+      && position.column >= range.columnStart && position.column <= range.columnEnd;
+    if (!inside) {
+      this.#others = [];
+      this.#tabStart = null;
+      this.#selection = { anchor: position, focus: position };
+      this.#syncFormulaBar();
+    }
+    if (this.#selectedObject !== null) this.#selectObject(null);
+    this.#grips = true;
+    this.#lastTap = null;
+    this.#viewport.focus({ preventScroll: true });
+    this.#render();
+    if (!inside) this.#selectionChanged();
+  }
+
+  /// Il dito si alza (`commit`) o il browser se lo prende per scorrere.
+  #endTouch(event: PointerEvent, commit: boolean): void {
+    const touch = this.#touch;
+    if (!touch || event.pointerId !== touch.pointerId) return;
+    this.#cancelTouch();
+    if (commit && !touch.long) this.#tap(touch.hit);
+  }
+
+  #cancelTouch(): void {
+    const touch = this.#touch;
+    if (!touch) return;
+    if (touch.timer !== null) clearTimeout(touch.timer);
+    touch.timer = null;
+    this.#touch = null;
+  }
+
+  /// Un tocco: sceglie la cella, la colonna, la riga o il foglio, come un
+  /// clic, e toglie le maniglie; un secondo tocco sulla stessa cella entro
+  /// `DOUBLE_TAP_MS` la apre.
+  #tap(hit: { readonly row: number | null; readonly column: number | null }): void {
+    this.#grips = false;
+    if (this.#selectedObject !== null) this.#selectObject(null);
+    const sheet = this.#sheet();
+    const lastRow = Math.max(0, sheet.rows.length - 1);
+    const lastColumn = Math.max(0, sheet.columns.length - 1);
+    const kind = hit.row === null && hit.column === null ? "all" : hit.row === null ? "columns" : hit.column === null ? "rows" : "cells";
+    const position = this.#anchorOf({ row: hit.row ?? 0, column: hit.column ?? 0 });
+    if (kind === "cells") {
+      const now = performance.now();
+      const last = this.#lastTap;
+      if (last && now - last.at < DOUBLE_TAP_MS && samePosition(last.position, position)) {
+        this.#lastTap = null;
+        this.#beginEditing("cell", position, undefined, "edit");
+        return;
+      }
+      this.#lastTap = { at: now, position };
+    } else {
+      this.#lastTap = null;
+    }
+    this.#others = [];
+    this.#tabStart = null;
+    this.#selection = kind === "all"
+      ? {
+          anchor: { row: lastRow, column: lastColumn },
+          focus: { row: 0, column: 0 },
+          active: { row: this.#edgeVisible("row", false), column: this.#edgeVisible("column", false) },
+        }
+      : this.#dragSelection(kind, position, position);
+    this.#viewport.focus({ preventScroll: true });
+    this.#syncFormulaBar();
+    this.#render();
+    this.#selectionChanged();
+  }
+
+  /// La maniglia del tocco sotto il punto (dello schermo): `"a"` all'inizio
+  /// della selezione, `"b"` alla fine, o `null`. La presa è un cerchio di
+  /// `GRIP_R` attorno al suo angolo, come si vede adesso, anche dove una
+  /// fascia ferma copre metà maniglia; non quando l'angolo stesso è passato
+  /// sotto la fascia. Le maniglie non prendono il puntatore: decide questa
+  /// prova.
+  #gripAt(x: number, y: number): "a" | "b" | null {
+    if (!this.#grips) return null;
+    const geometry = this.#marks.shown() ?? this.#markGeometry(this.#selectedRange());
+    if (!geometry) return null;
+    const rect = this.#viewport.getBoundingClientRect();
+    const px = x - rect.left - this.#viewport.clientLeft;
+    const py = y - rect.top - this.#viewport.clientTop;
+    const bands = this.#bands();
+    const scroll = { left: this.#viewport.scrollLeft, top: this.#viewport.scrollTop };
+    const corners: readonly (readonly ["a" | "b", number, number, boolean])[] = [
+      ["b", geometry[2], geometry[3], false],
+      ["a", geometry[0], geometry[1], true],
+    ];
+    for (const [grip, cx, cy, start] of corners) {
+      const seen = cornerSeen(cx, cy, start, bands, scroll);
+      if (seen && Math.hypot(px - (seen.x - 1), py - (seen.y - 1)) <= GRIP_R) return grip;
+    }
+    return null;
+  }
+
+  /// La cella attiva di una selezione da `anchor` a `focus` tirata con una
+  /// maniglia: resta dov'era se ci sta dentro, sennò va al primo angolo.
+  #activeWithin(anchor: GridPosition, focus: GridPosition): GridPosition {
+    const active = this.#active();
+    const rowStart = Math.min(anchor.row, focus.row);
+    const rowEnd = Math.max(anchor.row, focus.row);
+    const columnStart = Math.min(anchor.column, focus.column);
+    const columnEnd = Math.max(anchor.column, focus.column);
+    const inside = active.row >= rowStart && active.row <= rowEnd && active.column >= columnStart && active.column <= columnEnd;
+    return inside ? active : { row: rowStart, column: columnStart };
+  }
+
   #pointerMove(event: PointerEvent): void {
+    const touch = this.#touch;
+    if (touch && event.pointerId === touch.pointerId) {
+      // Oltre `TAP_MOVE` il dito scorre il foglio (lo fa il browser): non è
+      // più un tocco. Dopo un tocco lungo il dito non sceglie altro.
+      if (!touch.long && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) > TAP_MOVE) this.#cancelTouch();
+      return;
+    }
     if (this.#objectGesture) {
       this.#objectPointerMove(event, this.#objectGesture);
       return;
@@ -4821,6 +5039,14 @@ export class GridEngine {
       if (sameRange(target, drag.target)) return;
       drag.target = target;
       this.#render();
+      return;
+    }
+    if (drag.kind === "handle") {
+      if (samePosition(position, this.#selection.focus) && samePosition(drag.fixed, this.#selection.anchor)) return;
+      this.#selection = { anchor: drag.fixed, focus: position, active: this.#activeWithin(drag.fixed, position) };
+      this.#syncFormulaBar();
+      this.#render();
+      this.#selectionChanged();
       return;
     }
     const next = this.#dragSelection(drag.kind, drag.anchor, position);

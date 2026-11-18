@@ -610,6 +610,12 @@
 .grid-mark-handle {
   box-shadow: 0 0 0 1px var(--doc-bg, #ffffff);
 }
+/* Le maniglie del tocco lungo: un tondo pieno col bordo della carta. */
+.grid-mark-touch {
+  border-radius: 50%;
+  background: var(--grid-mark, var(--accent));
+  box-shadow: 0 0 0 2px var(--doc-bg, #ffffff), var(--shadow-2);
+}
 /* Le intestazioni della selezione: il velo e il filo d'accento del tema,
    perché le intestazioni sono cornice e non carta. */
 .grid-mark-band-col {
@@ -623,7 +629,8 @@
 @media (forced-colors: active) {
   .grid-mark-edge,
   .grid-mark-ring,
-  .grid-mark-handle {
+  .grid-mark-handle,
+  .grid-mark-touch {
     border: 1px solid Highlight;
   }
   .grid-mark-veil,

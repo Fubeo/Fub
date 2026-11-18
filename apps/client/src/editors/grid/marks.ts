@@ -209,7 +209,7 @@ export type MarkGeometry = readonly number[];
 export const MARK_NUMBERS = 10;
 
 /// Che cosa è un pezzo: dà il nome alla sua classe (`grid-mark-<kind>`).
-export type MarkKind = "edge" | "ring" | "veil" | "band-col" | "band-row" | "handle" | "freeze";
+export type MarkKind = "edge" | "ring" | "veil" | "band-col" | "band-row" | "handle" | "touch" | "freeze";
 
 /// Un pezzo di un segno, nelle coordinate del piano.
 export interface MarkPart {
@@ -234,6 +234,12 @@ export interface MarkPart {
   /// Un segno d'angolo non si taglia: è intero nel livello «lift» della zona
   /// di questo angolo.
   readonly corner?: { readonly x: number; readonly y: number; readonly start: boolean };
+  /// Una maniglia del tocco lungo: quella dell'angolo d'inizio (`a`) o di
+  /// fine (`b`) della selezione. Il nome va nell'attributo `data-handle`.
+  readonly grip?: "a" | "b";
+  /// Compare crescendo dal centro (da `ENTER_SCALE`, con la molla `SLIDE`)
+  /// invece di dissolversi dentro.
+  readonly pop?: boolean;
 }
 
 /// I quattro lati, spessi `thickness`, del rettangolo `box` (bordi come in
@@ -265,6 +271,8 @@ export interface SelectionLook {
   readonly edges: boolean;
   /// Il quadratino di riempimento.
   readonly handle: boolean;
+  /// Le due maniglie del tocco lungo, agli angoli della selezione.
+  readonly grips?: boolean;
   /// L'altezza della riga delle intestazioni di colonna e la larghezza della
   /// colonna dei numeri di riga, per le fasce della selezione; zero se sono
   /// nascoste.
@@ -273,6 +281,9 @@ export interface SelectionLook {
 
 /// Il quadratino: 8 × 8 px, centrato sull'angolo dei fili.
 export const HANDLE_SIZE = 8;
+
+/// Una maniglia del tocco: 14 × 14 px, centrata sull'angolo dei fili.
+export const GRIP_SIZE = 14;
 
 /// I pezzi della selezione dai suoi dieci numeri. L'anello e il velo ci
 /// sono anche su una cella sola, dove l'anello sta sotto il bordo e il velo è
@@ -300,6 +311,30 @@ export function selectionParts(geometry: MarkGeometry, look: SelectionLook): Mar
       rect: { x: hR - 1 - half, y: hB - 1 - half, w: HANDLE_SIZE, h: HANDLE_SIZE },
       corner: { x: hR, y: hB, start: false },
     });
+  }
+  if (look.grips) {
+    // Segni d'angolo come il quadratino (B7): interi, nel livello della zona
+    // del loro angolo; l'inizio prende la zona della cella dopo il suo
+    // angolo, la fine quella della cella prima.
+    const half = GRIP_SIZE / 2;
+    parts.push(
+      {
+        name: "grip-a",
+        kind: "touch",
+        rect: { x: b.L - 1 - half, y: b.T - 1 - half, w: GRIP_SIZE, h: GRIP_SIZE },
+        corner: { x: b.L, y: b.T, start: true },
+        grip: "a",
+        pop: true,
+      },
+      {
+        name: "grip-b",
+        kind: "touch",
+        rect: { x: b.R - 1 - half, y: b.B - 1 - half, w: GRIP_SIZE, h: GRIP_SIZE },
+        corner: { x: b.R, y: b.B, start: false },
+        grip: "b",
+        pop: true,
+      },
+    );
   }
   if (look.header.height > 0) {
     parts.push({ name: "band-col", kind: "band-col", rect: { x: b.L, y: 0, w: b.R - b.L, h: look.header.height }, zones: ["top", "corner"], band: true });

@@ -68,7 +68,9 @@ export type CellDrag =
   | { readonly kind: "cells" | "rows" | "columns"; readonly anchor: GridPosition; x: number; y: number }
   | { readonly kind: "fill"; readonly source: GridRange; target: GridRange; x: number; y: number }
   | { readonly kind: "move"; readonly source: GridRange; readonly grab: GridPosition; target: GridRange; x: number; y: number }
-  | { readonly kind: "point"; readonly anchor: GridPosition; x: number; y: number };
+  | { readonly kind: "point"; readonly anchor: GridPosition; x: number; y: number }
+  /// Una maniglia del tocco lungo tirata: l'angolo opposto (`fixed`) resta.
+  | { readonly kind: "handle"; readonly fixed: GridPosition; x: number; y: number };
 
 /// Il riferimento puntato in una formula aperta: dove sta nel testo, che
 /// testo c'era dopo averlo scritto, e le celle che dice. Vale finché il testo
