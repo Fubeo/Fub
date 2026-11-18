@@ -290,6 +290,22 @@ const TRAVEL_TYPE_FILES: Readonly<Record<string, string>> = {
   "Tipi/Viaggio.md": "---\nicon: 🧳\nproperties:\n  stato: stato\n  partenza: data\n  persone: persone\n  luogo: testo\n  budget: numero\nfeatured: [stato, partenza, persone]\n---\n## Itinerario\n",
 };
 
+/// Il tipo «Progetto» della nota delle scene `proprieta-*` (T8): la nota lo
+/// nomina, e senza il suo file la testata mostrerebbe l'avviso del tipo che
+/// non c'è. È il «Progetto» dei tipi (E5): in evidenza `tipo` e le tre che
+/// la nota mette prima, così le righe e «Altre 4» restano com'erano. L'icona
+/// del tipo non si vede, la nota ha la sua.
+const PROJECT_TYPE_FILES: Readonly<Record<string, string>> = {
+  "Tipi/Progetto.md": TYPE_FILES["Tipi/Progetto.md"]!,
+};
+
+/// Lo stesso tipo per le scene `opzioni-*` (T9), con in evidenza le tre
+/// proprietà che la nota mette prima: Stato, Selezione e Url restano in
+/// vista e la fase fuori dalle opzioni resta dietro «Altre».
+const OPTIONS_TYPE_FILES: Readonly<Record<string, string>> = {
+  "Tipi/Progetto.md": "---\nicon: 🌱\nproperties: [stato, sala, sito, fase]\nfeatured: [stato, sala, sito]\nfolder: Progetti\n---\n## Obiettivo\n",
+};
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
@@ -357,12 +373,14 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   proprieta: {
     text: "---\nicon: 📚\ntipo: Progetto\nstato: In corso\nscadenza: 2027-03-20\npersone: [\"[[Anna Bianchi]]\", \"[[Luca Ferri]]\"]\nluogo: Biblioteca civica\nbudget: 4800\nfatto: false\nluoghi: [Torino, Lisbona, Porto]\n---\n" + NOTE,
     cursor: null,
+    files: PROJECT_TYPE_FILES,
   },
   // Selezione, Stato e Url (T9), col registro dei tipi di `?tipi=1`: uno
   // Stato, una Selezione, un indirizzo e uno Stato fuori dalle sue opzioni.
   opzioni: {
     text: "---\nicon: 📚\ntipo: Progetto\nstato: In viaggio\nsala: Grande\nsito: https://example.org/mostra\nfase: Rivista\n---\n" + NOTE,
     cursor: null,
+    files: OPTIONS_TYPE_FILES,
   },
   // I tipi di nota (T33, E5): tre tipi nella cartella `Tipi`, due note che
   // li usano; la nota della Live è un libro, poi una nota il cui tipo non
