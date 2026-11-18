@@ -10303,6 +10303,12 @@ button.cm-fub-page-icon:focus-visible {
   border: 1px solid currentColor;
   vertical-align: -0.05em;
 }
+/* Il pezzo scelto (T66), con Maiusc e le frecce o trascinando: il colore
+   della selezione delle note; il cursore intanto non si vede. */
+.cm-fub-mx-surface [data-fubsel] {
+  border-radius: 3px;
+  background: var(--doc-selection);
+}
 /* Il comando che si scrive per nome, finché non è finito. */
 .cm-fub-mx-surface [data-fubcmd] {
   padding: 0 0.2em;
@@ -10423,7 +10429,14 @@ button.cm-fub-page-icon:focus-visible {
   cursor: pointer;
   transition: background var(--duration-state), transform var(--duration-state);
 }
-.cm-fub-mx-tile:hover,
+/* Il velo del passaggio solo dove c'è un puntatore: al tocco (T66) resterebbe
+   acceso sull'ultimo pezzo toccato. Così per ogni pulsante del riquadro. */
+@media (hover: hover) {
+  .cm-fub-mx-tile:hover {
+    background: var(--overlay-hover);
+    color: var(--text);
+  }
+}
 .cm-fub-mx-tile:focus-visible {
   background: var(--overlay-hover);
   color: var(--text);
@@ -10451,7 +10464,12 @@ button.cm-fub-page-icon:focus-visible {
   white-space: nowrap;
   cursor: pointer;
 }
-.cm-fub-mx-all:hover,
+@media (hover: hover) {
+  .cm-fub-mx-all:hover {
+    background: var(--overlay-hover);
+    color: var(--text);
+  }
+}
 .cm-fub-mx-all[aria-expanded="true"] {
   background: var(--overlay-hover);
   color: var(--text);
@@ -10531,8 +10549,10 @@ button.cm-fub-page-icon:focus-visible {
   font-size: 12px;
   cursor: pointer;
 }
-.cm-fub-mx-group:hover {
-  background: var(--overlay-hover);
+@media (hover: hover) {
+  .cm-fub-mx-group:hover {
+    background: var(--overlay-hover);
+  }
 }
 .cm-fub-mx-group[aria-selected="true"] {
   background: var(--accent-veil);
@@ -10697,8 +10717,10 @@ button.cm-fub-page-icon:focus-visible {
   white-space: nowrap;
   cursor: pointer;
 }
-.cm-fub-mx-error-fix:hover {
-  background: color-mix(in oklch, var(--accent) 88%, var(--text));
+@media (hover: hover) {
+  .cm-fub-mx-error-fix:hover {
+    background: color-mix(in oklch, var(--accent) 88%, var(--text));
+  }
 }
 .cm-fub-mx-error-fix:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -10746,7 +10768,12 @@ button.cm-fub-page-icon:focus-visible {
   width: 16px;
   height: 16px;
 }
-.cm-fub-mx-more:hover,
+@media (hover: hover) {
+  .cm-fub-mx-more:hover {
+    background: var(--overlay-hover);
+    color: var(--text);
+  }
+}
 .cm-fub-mx-more[aria-expanded="true"] {
   background: var(--overlay-hover);
   color: var(--text);
@@ -10777,7 +10804,12 @@ button.cm-fub-page-icon:focus-visible {
 .cm-fub-mx-palette-toggle[hidden] {
   display: none;
 }
-.cm-fub-mx-palette-toggle:hover,
+@media (hover: hover) {
+  .cm-fub-mx-palette-toggle:hover {
+    background: var(--overlay-hover);
+    color: var(--text);
+  }
+}
 .cm-fub-mx-palette-toggle[aria-expanded="true"] {
   background: var(--overlay-hover);
   color: var(--text);
@@ -10826,8 +10858,10 @@ button.cm-fub-page-icon:focus-visible {
   white-space: nowrap;
   cursor: pointer;
 }
-.cm-fub-mx-segment:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .cm-fub-mx-segment:hover {
+    color: var(--text);
+  }
 }
 .cm-fub-mx-segment[aria-pressed="true"] {
   background: var(--sheet);

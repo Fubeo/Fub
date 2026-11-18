@@ -1,7 +1,8 @@
 import katex from "katex";
 import { describe, expect, it } from "vitest";
 import { readOptions } from "../math";
-import { arrow, backspace, deleteForward, dropPair, edge, finishCommand, inTextGroup, insertTemplate, insertText, openPair, QUICK_WORDS, quickWrite, sourceHoles, sourceTab, space, stack, stepOver, tab, typeChar, undoQuick, type MathState, type Outcome, type QuickOptions, type QuickUndo } from "./edit";
+import { arrow, backspace, cellEnter, choosePiece, deleteForward, dropPair, edge, emptyCells, finishCommand, inTextGroup, insertTemplate, insertText, openPair, pieceText, QUICK_WORDS, quickWrite, removePiece, sourceHoles, sourceTab, space, stack, stepOver, stepPiece, tab, typeChar, undoQuick, wrapPair, wrapPiece, type MathState, type Outcome, type QuickOptions, type QuickUndo } from "./edit";
+import { mapFormula } from "./points";
 import { SYMBOLS } from "./symbols";
 
 // Le regole dei tasti nella formula toccata (T60, E27), senza DOM. Il cursore
@@ -341,5 +342,184 @@ describe("il campo del LaTeX", () => {
     expect(show(insertTemplate(s("|"), "\\alpha", 0))).toBe("\\alpha|");
     // Una selezione se ne va.
     expect(show(insertTemplate({ tex: "abc", caret: 0 }, "\\sqrt{}", 0, 3))).toBe("\\sqrt{|}");
+  });
+});
+
+// ── Scegliere un pezzo, le celle delle matrici (T66) ────────────────────────
+//
+// Una scelta si scrive fra quadre nel TeX: `a+[bc]` è la formula `a+bc` col
+// pezzo `bc` scelto. `chosen` ne dà le due punte (l'àncora e la punta).
+
+const chosen = (marked: string) => {
+  const anchor = marked.indexOf("[");
+  const head = marked.indexOf("]") - 1;
+  return { tex: marked.replace("[", "").replace("]", ""), anchor, head };
+};
+const showPiece = (tex: string, piece: { from: number; to: number } | null) =>
+  piece ? `${tex.slice(0, piece.from)}[${tex.slice(piece.from, piece.to)}]${tex.slice(piece.to)}` : "nessuno";
+const choose = (marked: string) => {
+  const { tex, anchor, head } = chosen(marked);
+  return showPiece(tex, choosePiece(tex, anchor, head));
+};
+const wrap = (marked: string, template: string) => {
+  const { tex, anchor, head } = chosen(marked);
+  return result({ tex, caret: 0 }, wrapPiece(tex, { from: anchor, to: head }, template, renders));
+};
+
+describe("scegliere un pezzo", () => {
+  it("prende pezzi interi: una scelta a metà di una frazione si allarga alla frazione", () => {
+    expect(choose("a+\\frac{b[c}{d}+]e")).toBe("a+[\\frac{bc}{d}+]e");
+    expect(choose("a+\\frac{[b}{d]}")).toBe("a+[\\frac{b}{d}]");
+    // Dentro lo stesso tratto resta lì.
+    expect(choose("\\frac{[bc]}{d}")).toBe("\\frac{[bc]}{d}");
+    expect(choose("\\sqrt{x[+]1}")).toBe("\\sqrt{x[+]1}");
+  });
+
+  it("un esponente non si sceglie senza ciò che lo porta, né la base senza l'esponente", () => {
+    expect(choose("x[^{2}+]y")).toBe("[x^{2}+]y");
+    expect(choose("[x]^{2}+y")).toBe("[x^{2}]+y");
+    expect(choose("[\\sum_{i}]^{n} x")).toBe("[\\sum_{i}^{n}] x");
+  });
+
+  it("da una cella all'altra prende la matrice intera; un \\middle, la coppia di parentesi", () => {
+    expect(choose("\\begin{pmatrix} a [& b \\\\ c] & d \\end{pmatrix}")).toBe("[\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}]");
+    expect(choose("\\begin{pmatrix} [ab] & c \\end{pmatrix}")).toBe("\\begin{pmatrix} [ab] & c \\end{pmatrix}");
+    expect(choose("\\left( a [\\middle| b] \\right)")).toBe("[\\left( a \\middle| b \\right)]");
+  });
+
+  it("senza spazi ai capi, e vuota quando le due punte coincidono", () => {
+    expect(choose("\\alpha [b] c")).toBe("\\alpha [b] c");
+    expect(choose("a[ ]b")).toBe("nessuno");
+    expect(choosePiece("ab", 1, 1)).toBeNull();
+  });
+
+  it("Maiusc → allarga un pezzo alla volta, con i suoi esponenti; in fondo al tratto prende il pezzo che lo contiene", () => {
+    const tex = "a+\\frac{b}{c}+x^{2}";
+    const seen: string[] = [];
+    for (let head: number | null = 0; head !== null && seen.length < 8;) {
+      head = stepPiece(tex, head, 1);
+      seen.push(head === null ? "fine" : showPiece(tex, choosePiece(tex, 0, head)));
+    }
+    expect(seen).toEqual([
+      "[a]+\\frac{b}{c}+x^{2}",
+      "[a+]\\frac{b}{c}+x^{2}",
+      "[a+\\frac{b}{c}]+x^{2}",
+      "[a+\\frac{b}{c}+]x^{2}",
+      "[a+\\frac{b}{c}+x^{2}]",
+      "fine",
+    ]);
+    // Dal numeratore: prima il pezzo dopo, poi la frazione intera.
+    const inside = "a+\\frac{bc}{d}";
+    const anchor = inside.indexOf("bc") + 1;
+    const first = stepPiece(inside, anchor, 1)!;
+    expect(showPiece(inside, choosePiece(inside, anchor, first))).toBe("a+\\frac{b[c]}{d}");
+    const second = stepPiece(inside, first, 1)!;
+    expect(showPiece(inside, choosePiece(inside, anchor, second))).toBe("a+[\\frac{bc}{d}]");
+    // E Maiusc ← all'indietro, saltando la base con l'esponente.
+    expect(stepPiece("a+x^{2}", 7, -1)).toBe(2);
+  });
+
+  it("si copia il suo LaTeX, e si toglie lasciando la formula buona", () => {
+    expect(pieceText("a+\\frac{b}{c}", { from: 2, to: 13 })).toBe("\\frac{b}{c}");
+    expect(result(s("a+\\frac{b}{c}|"), removePiece("a+\\frac{b}{c}", { from: 2, to: 13 }))).toBe("a+|");
+    // Un comando di lettere non si incolla alla lettera che resta.
+    expect(result(s("|"), removePiece("\\alpha xb", { from: 7, to: 8 }))).toBe("\\alpha |b");
+  });
+});
+
+describe("il pezzo scelto in un pezzo nuovo", () => {
+  it("va sotto la radice, nel numeratore, nell'esponente; il cursore nello spazio vuoto dopo", () => {
+    expect(wrap("a+[bc]", "\\sqrt{}")).toBe("a+\\sqrt{bc}|");
+    expect(wrap("a+[bc]", "\\frac{}{}")).toBe("a+\\frac{bc}{|}");
+    expect(wrap("x+[ab]", "^{}")).toBe("x+^{ab}|");
+    expect(wrap("[ab]", "\\left(§\\right)")).toBe("\\left(ab\\right)|");
+    expect(wrap("[ab]", "\\begin{pmatrix} § &  \\\\  &  \\end{pmatrix}")).toBe("\\begin{pmatrix} ab &  \\\\  &  \\end{pmatrix}|");
+  });
+
+  it("un secondo esponente sullo stesso pezzo entra su una base vuota", () => {
+    expect(wrap("x^{2}[b]", "^{}")).toBe("x^{2}{}^{b}|");
+  });
+
+  it("dove il modello non ha posto per lui il modello va davanti; un simbolo lo sostituisce", () => {
+    expect(wrap("a+[bc]", "\\sum_{}^{}")).toBe("a+\\sum_{|}^{}bc");
+    expect(wrap("a+[b^{2}]", "\\text{}")).toBe("a+\\text{|}b^{2}");
+    expect(wrap("a+[bc]", "\\alpha")).toBe("a+\\alpha|");
+  });
+
+  it("fra parentesi", () => {
+    expect(result(s("|"), wrapPair("a+bc", { from: 2, to: 4 }, "("))).toBe("a+(bc)|");
+    expect(result(s("|"), wrapPair("\\alpha b", { from: 0, to: 6 }, "["))).toBe("[\\alpha] |b");
+  });
+});
+
+describe("le celle di una matrice", () => {
+  const matrix = "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}";
+  const at = (marked: string) => s(marked);
+
+  it("Tab passa alla cella dopo, in fondo a ciò che c'è scritto; dall'ultima esce", () => {
+    let state = at("\\begin{pmatrix} a| & b \\\\ c & d \\end{pmatrix}");
+    const seen: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const outcome = tab(state, false);
+      seen.push(result(state, outcome));
+      if (outcome.kind !== "move") break;
+      state = { tex: state.tex, caret: outcome.caret };
+    }
+    expect(seen).toEqual([
+      "\\begin{pmatrix} a & b |\\\\ c & d \\end{pmatrix}",
+      "\\begin{pmatrix} a & b \\\\ c |& d \\end{pmatrix}",
+      "\\begin{pmatrix} a & b \\\\ c & d |\\end{pmatrix}",
+      `${matrix}|`,
+      "leave:after",
+    ]);
+    expect(result(at("\\begin{pmatrix} a & b \\\\ c |& d \\end{pmatrix}"), tab(at("\\begin{pmatrix} a & b \\\\ c |& d \\end{pmatrix}"), true)))
+      .toBe("\\begin{pmatrix} a & b |\\\\ c & d \\end{pmatrix}");
+  });
+
+  it("dentro una cella Tab passa prima per i suoi spazi vuoti", () => {
+    const state = at("\\begin{pmatrix} |\\frac{}{} & b \\end{pmatrix}");
+    expect(result(state, tab(state, false))).toBe("\\begin{pmatrix} \\frac{|}{} & b \\end{pmatrix}");
+    const last = at("\\begin{pmatrix} \\frac{}{|} & b \\end{pmatrix}");
+    expect(result(last, tab(last, false))).toBe("\\begin{pmatrix} \\frac{}{} & b |\\end{pmatrix}");
+  });
+
+  it("una matrice vuota: Tab va da un quadretto all'altro", () => {
+    const empty = "\\begin{pmatrix}  &  \\\\  &  \\end{pmatrix}";
+    expect(emptyCells(mapFormula(empty)).map((point) => show({ tex: empty, caret: point }))).toEqual([
+      "\\begin{pmatrix}  |&  \\\\  &  \\end{pmatrix}",
+      "\\begin{pmatrix}  &  |\\\\  &  \\end{pmatrix}",
+      "\\begin{pmatrix}  &  \\\\  |&  \\end{pmatrix}",
+      "\\begin{pmatrix}  &  \\\\  &  |\\end{pmatrix}",
+    ]);
+    const first = { tex: empty, caret: emptyCells(mapFormula(empty))[0]! };
+    expect(result(first, tab(first, false))).toBe("\\begin{pmatrix}  &  |\\\\  &  \\end{pmatrix}");
+    // Senza celle: un quadretto solo, e Invio ne fa una riga.
+    const none = "\\begin{pmatrix}\\end{pmatrix}";
+    expect(emptyCells(mapFormula(none))).toEqual([15]);
+    const entered = cellEnter({ tex: none, caret: 15 });
+    expect(entered?.kind).toBe("edit");
+    if (entered?.kind === "edit") expect(renders(entered.state.tex)).toBe(true);
+  });
+
+  it("Invio passa alla riga dopo nella stessa colonna; dall'ultima riga ne aggiunge una vuota", () => {
+    const a = at("\\begin{pmatrix} a| & b \\\\ c & d \\end{pmatrix}");
+    expect(result(a, cellEnter(a)!)).toBe("\\begin{pmatrix} a & b \\\\ c |& d \\end{pmatrix}");
+    const b = at("\\begin{pmatrix} a & b| \\\\ c & d \\end{pmatrix}");
+    expect(result(b, cellEnter(b)!)).toBe("\\begin{pmatrix} a & b \\\\ c & d |\\end{pmatrix}");
+    const d = at("\\begin{pmatrix} a & b \\\\ c & d| \\end{pmatrix}");
+    const grown = cellEnter(d)!;
+    expect(result(d, grown)).toBe("\\begin{pmatrix} a & b \\\\ c & d \\\\ |& \\end{pmatrix}");
+    if (grown.kind === "edit") expect(renders(grown.state.tex)).toBe(true);
+    // Una riga più corta: l'ultima cella di quella riga.
+    const short = at("\\begin{pmatrix} a & b| \\\\ c \\end{pmatrix}");
+    expect(result(short, cellEnter(short)!)).toBe("\\begin{pmatrix} a & b \\\\ c |\\end{pmatrix}");
+  });
+
+  it("Invio in un allineamento, o fuori da una tabella, resta quello di sempre", () => {
+    expect(cellEnter(at("\\begin{aligned} a &= b| \\end{aligned}"))).toBeNull();
+    expect(cellEnter(at("a+b|"))).toBeNull();
+    // In una matrice dentro una cella conta la matrice più interna.
+    const nested = at("\\begin{pmatrix} \\begin{matrix} x| & y \\end{matrix} & b \\end{pmatrix}");
+    expect(result(nested, tab(nested, false))).toBe("\\begin{pmatrix} \\begin{matrix} x & y |\\end{matrix} & b \\end{pmatrix}");
   });
 });
