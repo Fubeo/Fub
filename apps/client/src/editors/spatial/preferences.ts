@@ -252,7 +252,9 @@ export function saveGrid(grid: Grid): void {
   saves += 1;
   saving = saving
     .then(() => api.setViewState(GRID_KEY, grid))
-    .catch((error: unknown) => notify(t("vector.grid.save_failed", { reason: errorText(error) }), "guasto"));
+    .catch((error: unknown) => {
+      notify(t("vector.grid.save_failed", { reason: errorText(error) }), "guasto");
+    });
 }
 
 /// `value` come colori recenti, dal più recente: i codici `#rrggbb` del suo

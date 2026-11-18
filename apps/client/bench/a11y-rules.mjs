@@ -113,3 +113,41 @@ export function modalComboboxGap(facts) {
   if (!own && !slid) return "la riga attiva non si distingue dalle altre";
   return null;
 }
+
+// # L'anello dell'editor di testo
+//
+// Lo scroller di CodeMirror (`.cm-scroller`) prende il fuoco, ma riempie
+// l'editor: un anello suo rientrato finirebbe sotto i numeri di riga, che
+// stanno fermi col loro fondo e lo coprirebbero. La pelle lo disegna allora
+// sull'editor, suo padre, con un velo vuoto `::after` grande quanto lui
+// (`structure.css`, `.cm-editor:has(> .cm-scroller:focus-visible)::after`).
+//
+// L'eccezione è stretta: vale solo per uno scroller di CodeMirror con
+// `:focus-visible`, figlio diretto di un `.cm-editor`, il cui `::after` c'è
+// davvero (un contenuto, non `display: none`), copre tutto l'editor (assoluto,
+// a zero dai quattro lati) e dipinge un contorno o un'ombra. Un altro
+// elemento che lasci l'anello a un antenato resta rosso: il banco raccoglie
+// questi fatti solo per `.cm-scroller`.
+
+/// Perché lo scroller **non** mostra il fuoco con l'anello del suo editor;
+/// `null` se lo mostra. I fatti (`null` se l'elemento non è uno scroller):
+///
+/// - `focusVisible`: lo scroller ha `:focus-visible`;
+/// - `frame`: il padre diretto è un `.cm-editor`;
+/// - `after`: lo stile calcolato del `::after` del padre, `{ content,
+///   display, position, top, right, bottom, left, outlineStyle,
+///   outlineWidth, boxShadow }`.
+export function editorFrameRingGap(facts) {
+  if (!facts) return "non è uno scroller dell'editor";
+  if (!facts.focusVisible) return "senza :focus-visible";
+  if (!facts.frame) return "il padre non è un editor";
+  const after = facts.after;
+  if (!after) return "nessun velo";
+  if (after.content === "none" || after.content === "normal" || after.display === "none") return "il velo non c'è";
+  if (after.position !== "absolute") return "il velo non sta sull'editor";
+  if ([after.top, after.right, after.bottom, after.left].some((side) => side !== "0px")) return "il velo non copre l'editor";
+  const outlined = after.outlineStyle !== "none" && parseFloat(after.outlineWidth) > 0;
+  const shadowed = after.boxShadow !== "none";
+  if (!outlined && !shadowed) return "il velo non dipinge un anello";
+  return null;
+}

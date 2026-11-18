@@ -5,10 +5,11 @@
 // «Ogni componente in ogni stato» è una promessa che si mantiene o si perde, e
 // perderla è silenzioso: un nodo nuovo del contratto compare, nessuno lo mette
 // in catalogo, e il catalogo continua a sembrare completo. Quindi l'elenco sta
-// in un modulo di dati che due lettori guardano: `catalog.ts`, che lo disegna,
-// e `scene.test.ts`, che confronta le specie coperte qui con i `case` che
-// `src/ui/node.ts` sa disegnare davvero — cioè con la sola definizione di
-// «tutti» che esista in questo repo.
+// in un modulo di dati che tre lettori guardano: il catalogo del banco
+// (`bench/catalog.ts`) e la pagina «Tutti i componenti» (`pagina.ts`), che lo
+// disegnano, e `bench/scene.test.ts`, che confronta le specie coperte qui con
+// i `case` che `src/ui/node.ts` sa disegnare davvero — cioè con la sola
+// definizione di «tutti» che esista in questo repo.
 //
 // # Cosa vuol dire «stato»
 //
@@ -22,7 +23,7 @@
 // Gli stati che il DOM porta e il contratto no — `:hover`, `:focus-visible`,
 // `:disabled` — non sono qui: non si dichiarano, si **provocano**, e a
 // provocarli è il fotografo (`foto.mjs`) sulla scena `componenti-fuoco`.
-import type { UiKind, UiNode } from "../src/host/contract";
+import type { UiKind, UiNode } from "../../host/contract";
 
 /// La specie di un nodo, cioè il tag del contratto.
 export type Kind = UiKind["node"];

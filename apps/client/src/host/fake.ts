@@ -80,6 +80,15 @@ import type {
   SettingValue,
   SyntaxForm,
   TextEdit,
+  DiskCause,
+  ThemeBlock,
+  ThemeFolderCheck,
+  ThemeFolderInstall,
+  ThemeFolderLight,
+  ThemeFolderLink,
+  ThemeFolderRefusal,
+  ThemeLink,
+  ThemeLinkState,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -323,6 +332,29 @@ export interface Options {
   themes?: ThemeInfo[];
   /// Fascio per luce, indicizzato come `${id}:${light}`.
   themePayloads?: Record<string, ThemePayload>;
+  /// Le cartelle che «Installa da cartella…» può scegliere, per path: il tema
+  /// che la cartella contiene, il rifiuto tipizzato con cui l'host vero la
+  /// rifiuterebbe (manifest assente, link simbolico, stato del catalogo), o il
+  /// `PluginError` del disco. L'impronta è dei fasci: cambiarli fra il
+  /// controllo e l'installazione è la cartella cambiata.
+  themeFolders?: Record<string, ThemeFolderFake | ThemeFolderRefusal | PluginError>;
+  /// La finestra nativa di scelta della cartella: il path scelto, `null` se la
+  /// persona la chiude. Senza, la finestra si chiude sempre.
+  pickThemeFolder?: () => string | null;
+  /// La cartella del tema collegato all'avvio (la chiave
+  /// `developer.theme-folder`), un path di `themeFolders`. Una cartella che
+  /// `themeFolders` non ha è sparita (`missing`).
+  linkedThemeFolder?: string | null;
+  /// L'osservatore della cartella collegata non parte (il sistema non ne ha
+  /// più): `watched` resta falso, e i salvataggi non arrivano.
+  themeWatchFails?: boolean;
+  /// Temi installati revocati dal catalogo: non stanno in `themes` (l'host non
+  /// li elenca), e «Installa da cartella…» con lo stesso id è `revoked`.
+  revokedThemes?: string[];
+  /// Ciò che nella cartella dei temi blocca un id (`blocked`): il file della
+  /// versione che non si legge, un collegamento, una forma che non è una
+  /// cartella. Lo dice la sonda, prima di leggere la cartella scelta.
+  blockedThemes?: Record<string, ThemeBlock>;
   /// Inventario installato della macchina, compresi elementi spenti o senza
   /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
@@ -506,6 +538,11 @@ export interface FakeHost {
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
   emit(event: KernelEvent): boolean;
+  /// La cartella del tema collegato è cambiata (`fub://theme-changed`): manda
+  /// a chi ascolta lo stato di adesso, coi file salvati. Chi prova modifica
+  /// prima `themeFolders` (un fascio nuovo, un rifiuto, la cartella tolta).
+  /// `false` se nessuna cartella è collegata o nessuno ascolta.
+  themeFolderChanged(changed?: string[]): boolean;
   /// Manda alla shell un gruppo di eventi di una sessione live, come farebbe
   /// l'host quando lo scrittore entra, scrive o esce.
   ///
@@ -584,6 +621,45 @@ function resolveAgainst(from: string, raw: string): string | null {
   return segments.length ? segments.join("/") : null;
 }
 
+/// Il documento che la pagina di un wikilink nomina, fra `ids`: una nota per
+/// nome, poi un file per nome (`![[foto.png]]`). È la risoluzione del finto,
+/// più povera di quella del kernel: niente omonimi in ordine, niente path
+/// relativi.
+function wikiPageDoc(ids: Iterable<string>, page: string): string | undefined {
+  const all = [...ids];
+  const expected = `${page}.md`;
+  return all.find((id) => id === expected || id.endsWith(`/${expected}`))
+    ?? all.find((id) => id === page || id.endsWith(`/${page}`));
+}
+
+/// Un wikilink (anche incorporato, `![[…]]`): la pagina, poi il frammento e
+/// l'alias, che la rinomina lascia com'erano.
+const WIKILINK = /(!?\[\[)([^\]|#\n]*)([^\]\n]*)\]\]/g;
+
+/// I testi riscritti da una rinomina di `from` in `to`, per documento: i soli
+/// wikilink che nominavano `from` cambiano pagina, nella forma in cui erano
+/// scritti (per nome o per path, con l'estensione se c'era), col frammento e
+/// l'alias intatti. È la parte di `link_retarget_edits` che il banco usa; i
+/// link Markdown `[testo](path)` il finto non li riscrive.
+function renameRewrites(texts: ReadonlyMap<string, string>, from: string, to: string): Map<string, string> {
+  const dot = from.lastIndexOf(".");
+  const ext = dot > from.lastIndexOf("/") ? from.slice(dot) : "";
+  const stem = (id: string): string => (ext && id.endsWith(ext) ? id.slice(0, -ext.length) : id);
+  const rewritten = new Map<string, string>();
+  for (const [id, text] of texts) {
+    const next = text.replace(WIKILINK, (whole, open: string, page: string, rest: string) => {
+      const name = page.trim();
+      if (name === "" || wikiPageDoc(texts.keys(), name) !== from) return whole;
+      const withExt = ext !== "" && name.toLowerCase().endsWith(ext.toLowerCase());
+      const byPath = name.includes("/");
+      const target = byPath ? stem(to) : stem(to).slice(stem(to).lastIndexOf("/") + 1);
+      return `${open}${target}${withExt ? ext : ""}${rest}]]`;
+    });
+    if (next !== text) rewritten.set(id, next);
+  }
+  return rewritten;
+}
+
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
@@ -638,8 +714,202 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
-  const themes = options.themes ?? [];
-  const themePayloads = options.themePayloads ?? {};
+  const themes = [...(options.themes ?? [])];
+  const themePayloads: Record<string, ThemePayload> = { ...options.themePayloads };
+  const themeFolders = options.themeFolders ?? {};
+  /// Gli id dei temi installati che il catalogo ha revocato: l'host non li
+  /// elenca, e una cartella non li sostituisce.
+  const revokedThemes = new Set(options.revokedThemes ?? []);
+
+  /// La cartella collegata (`developer.theme-folder`), e chi ascolta il suo
+  /// campanello.
+  let linkedSource: string | null = options.linkedThemeFolder ?? null;
+  /// L'ultimo id e nome letti, come li ricorda il custode dell'host.
+  let linkedKnown: { id: string | null; name: string | null } = { id: null, name: null };
+  const themeChanged = new Set<(link: ThemeLink) => void>();
+  /// Un osservatore vivo guarda `linkedSource`: come l'host, lo si monta solo
+  /// su una cartella pronta, e solo se parte.
+  let watching = false;
+
+  function developerIsOn(): boolean {
+    return settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY)?.value === true;
+  }
+
+  /// Lo stato della cartella collegata, come `fub_host::theme::theme_link`.
+  function readLink(source: string): ThemeLink {
+    const folder = themeFolders[source];
+    let state: ThemeLinkState;
+    let manifest: ThemeInfo["manifest"] | null = null;
+    if (folder === undefined) state = { state: "missing" };
+    else if ("kind" in folder) state = { state: "unreadable", error: folder };
+    else if ("reason" in folder) state = { state: "refused", refusal: folder };
+    else {
+      manifest = folder.info.manifest;
+      state = themes.some((theme) => theme.manifest.id === manifest!.id) ? { state: "collision" } : { state: "ready" };
+    }
+    if (manifest) linkedKnown = { id: manifest.id, name: manifest.name };
+    const watched = watching && source === linkedSource;
+    return { folder: source, id: linkedKnown.id, name: linkedKnown.name, changed: [], watched, ...state };
+  }
+
+  /// La cartella collegata pronta, se la modalità sviluppatore è accesa.
+  function linkedReady(): ThemeFolderFake | null {
+    if (linkedSource === null || !developerIsOn()) return null;
+    const folder = themeFolders[linkedSource];
+    if (folder === undefined || "kind" in folder || "reason" in folder) return null;
+    const id = folder.info.manifest.id;
+    return themes.some((theme) => theme.manifest.id === id) ? null : folder;
+  }
+
+  function listedThemes(): ThemeInfo[] {
+    const linked = linkedReady();
+    return linked ? [...themes, { ...linked.info, trust: "development" }] : [...themes];
+  }
+
+  /// «Collega una cartella…», come `Host::link_theme_folder`.
+  function linkThemeFolder(): ThemeFolderLink {
+    developerOn();
+    const source = options.pickThemeFolder?.() ?? null;
+    if (source === null) return { outcome: "cancelled" };
+    const previous = linkedKnown;
+    linkedKnown = { id: null, name: null };
+    const link = readLink(source);
+    if (link.state !== "ready") {
+      linkedKnown = previous;
+      return { outcome: "refused", link };
+    }
+    linkedSource = source;
+    watching = options.themeWatchFails !== true;
+    return { outcome: "linked", link: { ...link, watched: watching } };
+  }
+
+  function developerOn(): void {
+    const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
+    if (developer?.value !== true) {
+      throw { kind: "permission_denied", message: "Per installare un tema da una cartella accendi la modalità sviluppatore." };
+    }
+  }
+
+  /// La cartella controllata, come la tiene l'host: il permesso, che vale una
+  /// volta, di installarla. Dopo una collisione vale solo per «Sostituisci».
+  let checkedFolder: { source: string; digest: string; manifest: ThemeInfo["manifest"]; replaceOnly: boolean } | null =
+    null;
+
+  function themeFolder(source: string): ThemeFolderFake | ThemeFolderRefusal {
+    const folder = themeFolders[source];
+    if (folder === undefined) throw { kind: "io", message: `I/O error: ${source}: no such folder` };
+    if ("kind" in folder) throw folder;
+    return folder;
+  }
+
+  /// Gli asset che il cancello della shell legge da sé (caratteri, icone),
+  /// come `fub_host::theme::discover::shell_assets`.
+  function shellAssets(manifest: ThemeInfo["manifest"]): Set<string> {
+    return new Set([
+      ...(manifest.fonts ?? []).map((font) => `${manifest.asset_namespace}${font.file}`),
+      ...(manifest.icons ? [`${manifest.asset_namespace}${manifest.icons}`] : []),
+    ]);
+  }
+
+  /// Ciò che di una luce cambia: il foglio e gli altri asset per nome, come
+  /// `fub_host::theme::ThemeFolderLight`.
+  function folderLight(manifest: ThemeInfo["manifest"], payload: ThemePayload): ThemeFolderLight {
+    const read = shellAssets(manifest);
+    const named = Object.keys(payload.assets).filter((name) => !read.has(name));
+    return { light: payload.light, sheet: payload.sheet, named };
+  }
+
+  /// La finestra di scelta e la lettura senza installare, come
+  /// `check_theme_folder`: aprirla scarta il permesso di prima, la modalità si
+  /// controlla prima della finestra, poi un fascio per luce dichiarata e
+  /// l'impronta, o il rifiuto tipizzato. Una cartella pronta diventa la
+  /// cartella controllata.
+  function checkThemeFolder(): ThemeFolderCheck {
+    checkedFolder = null;
+    developerOn();
+    const source = options.pickThemeFolder?.() ?? null;
+    if (source === null) return { outcome: "cancelled" };
+    const folder = themeFolder(source);
+    if ("reason" in folder) return { outcome: "refused", folder: source, refusal: folder };
+    const { manifest } = folder.info;
+    const payloads = manifest.lights.map((light) => {
+      const payload = folder.payloads[`${manifest.id}:${light}`];
+      if (payload === undefined) throw { kind: "bad_args", message: `missing sheet for ${light}` };
+      return payload;
+    });
+    const read = shellAssets(manifest);
+    // La pelle e i byte che il cancello legge, una volta per tutte le luci.
+    const assets: Record<string, readonly number[]> = {};
+    for (const payload of payloads) {
+      for (const [name, bytes] of Object.entries(payload.assets)) if (read.has(name)) assets[name] = bytes;
+    }
+    const lights = payloads.map((payload) => folderLight(manifest, payload));
+    const skin = payloads[0]?.skin ?? null;
+    const digest = folderDigest(folder);
+    checkedFolder = { source, digest, manifest, replaceOnly: false };
+    return { outcome: "ready", folder: source, manifest, skin, assets, lights, digest };
+  }
+
+  /// L'installazione da cartella come la fa l'host
+  /// (`Host::install_theme_from_folder`): la modalità sviluppatore si rilegge
+  /// a ogni chiamata, il permesso del controllo si consuma (un'impronta che
+  /// non è la sua è `unchecked` e non lo tocca), una collisione senza
+  /// `replace` lo rinnova solo per «Sostituisci».
+  function installThemeFolder(replace: boolean, digest: string): ThemeFolderInstall {
+    developerOn();
+    const checked = checkedFolder;
+    if (checked === null || checked.digest !== digest) return { outcome: "unchecked" };
+    checkedFolder = null;
+    if (checked.replaceOnly && !replace) return { outcome: "unchecked" };
+    const outcome = publishThemeFolder(checked.source, checked.manifest, replace, digest);
+    if (outcome.outcome === "collision" && !replace && checkedFolder === null) {
+      checkedFolder = { ...checked, replaceOnly: true };
+    }
+    return outcome;
+  }
+
+  /// Come `fub_host::theme::install_theme_from_folder`: **prima** la sonda
+  /// della destinazione col manifest del controllo (ciò che blocca, la revoca,
+  /// la collisione), poi la cartella e la sua impronta. Una cartella che non
+  /// si legge più non ha i byte del controllo (`changed`). Una sostituzione
+  /// che si ferma (`replaceError`) lascia il vecchio, ed è `failed` col suo
+  /// perché (`replaceCause`); con `replaceLost` il vecchio non torna, ed è
+  /// `replace_failed`.
+  function publishThemeFolder(
+    source: string,
+    manifest: ThemeInfo["manifest"],
+    replace: boolean,
+    digest: string,
+  ): ThemeFolderInstall {
+    const { id, name, version } = manifest;
+    const block = options.blockedThemes?.[id];
+    if (block !== undefined) return { outcome: "blocked", why: block, path: `/config/themes/${id}`, installed: true };
+    const at = themes.findIndex((theme) => theme.manifest.id === id);
+    if (at < 0 && revokedThemes.has(id)) return { outcome: "revoked", id, name, version };
+    if (at >= 0 && !replace) {
+      return { outcome: "collision", id, name, version, installed_version: themes[at]!.manifest.version };
+    }
+    const folder = themeFolders[source];
+    if (folder === undefined || "kind" in folder || "reason" in folder || digest !== folderDigest(folder)) {
+      return { outcome: "changed" };
+    }
+    if (folder.installRefusal) return { outcome: "refused", refusal: folder.installRefusal };
+    if (at >= 0 && folder.replaceError) {
+      if (!folder.replaceLost) {
+        return { outcome: "failed", cause: folder.replaceCause ?? "other", error: folder.replaceError };
+      }
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+      return { outcome: "replace_failed", id, name, version, kept: ".tmp-old-1-2", error: folder.replaceError };
+    }
+    if (at >= 0) {
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+    }
+    themes.push(folder.info);
+    Object.assign(themePayloads, folder.payloads);
+    return { outcome: "installed", id, name, version, replaced: at >= 0 };
+  }
   const installedPlugins = new Map(
     (options.installedPlugins ?? []).map((plugin) => [
       plugin.installation,
@@ -1210,6 +1480,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     spec: { ...e.spec },
   }));
   const syntaxForms = (options.syntaxForms ?? []).map((form) => ({ ...form }));
+  // All'avvio l'host guarda la cartella collegata se è pronta.
+  watching = linkedReady() !== null && options.themeWatchFails !== true;
 
   /// Scrive, e **lo dice**: il backend vero emette `setting_changed` da tutte e
   /// due le porte — dal `Workspace` con un vault aperto, dall'host senza
@@ -1322,10 +1594,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (page.trim() === "" && (heading !== null || block !== null)) {
           return { kind: "resolved", value: q.from ? { doc: q.from } : null };
         }
-        const expected = `${page}.md`;
-        // Una nota per nome, poi un allegato per nome: `![[foto.png]]`.
-        const hit = [...docs.keys()].find((id) => id === expected || id.endsWith(`/${expected}`))
-          ?? [...docs.keys()].find((id) => id === page || id.endsWith(`/${page}`));
+        const hit = wikiPageDoc(docs.keys(), page);
         return { kind: "resolved", value: hit ? { doc: hit } : null };
       }
       case "tags":
@@ -1511,9 +1780,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const to = String(args?.to);
         const before = docs.get(from);
         if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        // Come il kernel, la rinomina si porta dietro i wikilink che la
+        // nominavano (anche quelli della nota stessa): le note toccate
+        // cambiano revisione e lo dicono con `document_changed`.
+        const rewritten = renameRewrites(new Map([...docs].map(([id, entry]) => [id, entry.text])), from, to);
         docs.delete(from);
         docs.set(to, before);
+        const own = rewritten.get(from);
+        if (own !== undefined) write(to, own);
         emit({ type: "document_renamed", from, to });
+        for (const [id, text] of rewritten) {
+          if (id === from) continue;
+          write(id, text);
+          emit({ type: "document_changed", id });
+        }
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       }
       case "trash.os": {
@@ -2137,9 +2417,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
       frameCapabilities: () => unavailable("frameCapabilities", []),
       settingRequiresReopen: (key) => unavailable("settingRequiresReopen", [key]),
       listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
-      listThemes: () => gate("listThemes", [], Promise.resolve(themes)),
+      listThemes: () => gate("listThemes", [], Promise.resolve(listedThemes())),
       readTheme: (id, light) => {
-        const payload = themePayloads[`${id}:${light}`];
+        const linked = linkedReady();
+        const payload = linked && linked.info.manifest.id === id
+          ? linked.payloads[`${id}:${light}`]
+          : themePayloads[`${id}:${light}`];
         if (!payload) {
           return gate(
             "readTheme",
@@ -2148,6 +2431,41 @@ export function createFakeHost(options: Options = {}): FakeHost {
           );
         }
         return gate("readTheme", [id, light], Promise.resolve(payload));
+      },
+      checkThemeFolder: () =>
+        gate(
+          "checkThemeFolder",
+          [],
+          new Promise<ThemeFolderCheck>((resolve) => resolve(checkThemeFolder())),
+        ),
+      discardThemeFolder: () => {
+        checkedFolder = null;
+        return gate("discardThemeFolder", [], Promise.resolve());
+      },
+      installThemeFromFolder: (replace, digest) =>
+        gate(
+          "installThemeFromFolder",
+          [replace, digest],
+          new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(replace, digest))),
+        ),
+      linkThemeFolder: () =>
+        gate("linkThemeFolder", [], new Promise<ThemeFolderLink>((resolve) => resolve(linkThemeFolder()))),
+      unlinkThemeFolder: () => {
+        linkedSource = null;
+        watching = false;
+        linkedKnown = { id: null, name: null };
+        return gate("unlinkThemeFolder", [], Promise.resolve());
+      },
+      themeLink: () =>
+        gate(
+          "themeLink",
+          [],
+          Promise.resolve(linkedSource === null || !developerIsOn() ? null : readLink(linkedSource)),
+        ),
+      onThemeChanged: (handler) => {
+        calls.push({ gate: "onThemeChanged", args: [] });
+        themeChanged.add(handler);
+        return Promise.resolve(() => { themeChanged.delete(handler); });
       },
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
@@ -2497,6 +2815,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const event: KernelEvent = kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind };
       listener?.({ event, origin: { actor: { kind: "watcher" }, batch: null } });
     },
+    themeFolderChanged: (changed = []) => {
+      if (linkedSource === null || !developerIsOn() || themeChanged.size === 0) return false;
+      if (options.themeWatchFails === true) return false;
+      const link = { ...readLink(linkedSource), changed, watched: true };
+      for (const handler of [...themeChanged]) handler(link);
+      return true;
+    },
     requestDocumentWindowClose: (label) => {
       const request = documentWindows.get(label);
       if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
@@ -2627,6 +2952,86 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// La chiave della modalità sviluppatore (`fub_host::settings::DEVELOPER_MODE`).
+const DEVELOPER_MODE_KEY = "developer.mode";
+
+/// Una cartella di tema per `themeFolders`: ciò che `extendingTheme` e i suoi
+/// fratelli restituiscono, più l'errore di una sostituzione fallita a metà.
+export interface ThemeFolderFake {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  /// La sostituzione si ferma con questo errore, e il vecchio resta.
+  replaceError?: PluginError;
+  /// Il perché tipizzato di `replaceError` (`failed.cause`); di default
+  /// `other`.
+  replaceCause?: DiskCause;
+  /// Le porte dell'installazione rifiutano i byte controllati (`refused`).
+  installRefusal?: ThemeFolderRefusal;
+  /// Con `replaceError`: il vecchio non torna (`replace_failed`).
+  replaceLost?: boolean;
+}
+
+/// L'impronta finta di una cartella: cambia quando cambiano i suoi fasci.
+function folderDigest(folder: ThemeFolderFake): string {
+  const text = JSON.stringify(folder.payloads);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return `fake-${hash.toString(16)}`;
+}
+
+/// La riga di `developer.mode` come la dichiara il core: interruttore della
+/// macchina, spento di default, nel gruppo «Sviluppo».
+export function developerModeSetting(on: boolean): SettingEntry {
+  return {
+    spec: {
+      key: DEVELOPER_MODE_KEY,
+      label: "Modalità sviluppatore",
+      description:
+        "Per chi scrive un tema: in «Temi installati» compaiono «Installa da cartella…», che lo controlla e lo installa dalla sua cartella, «Collega una cartella…», che lo rimonta a ogni salvataggio, e «Tutti i componenti», che mostra ogni componente in ogni stato.",
+      group: "Sviluppo",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: on,
+    source: on ? "machine" : "default",
+  };
+}
+
+/// Una cartella di tema che il loader accetta: parte dalla serie senza fogli
+/// suoi (le due luci prendono quelli di serie) e la pelle ritocca un pezzo.
+export function folderTheme(id = "acme.carta", name = "Carta", version = "1.0.0"): ThemeFolderFake {
+  const manifest: ThemeInfo["manifest"] = { ...extendingTheme(id).info.manifest, name, version };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// Un tema che il loader della shell rifiuta: passa le porte dell'host (il
+/// finto non le ha), ma la pelle usa un hook che l'anatomia non dichiara e un
+/// `@font-face`, e il manifest parla `theme-1`. La diagnosi ha una riga per
+/// motivo.
+export function rejectedTheme(id = "acme.rotto", version = "1.0.0"): ThemeFolderFake {
+  const base = extendingTheme(id);
+  const manifest: ThemeInfo["manifest"] = { ...base.info.manifest, name: "Rotto", version, engine: "theme-1" };
+  const skin = ".rotto-titolo { color: red; }\n@font-face { font-family: Rotto; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
 }
 
 /// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni

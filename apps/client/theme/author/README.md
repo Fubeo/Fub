@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2157 hook**, **7 stati** (981 assegnazioni su 288 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2186 hook**, **7 stati** (984 assegnazioni su 291 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,9 +10,9 @@ Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1635 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
-- **segno** (148 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (374 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **cornice** (1643 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **segno** (152 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
+- **contenuto** (391 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -153,3 +153,5 @@ La shell valida ogni luce prima di mostrarla nel catalogo. Se un tema installato
 ## Ciclo autore
 
 Da `apps/client`: eseguire `npm run theme:generate`, poi `npm run theme:verify`; per la resa usare anche `npm run bench:verify` e `npm run bench:a11y`. Non modificare a mano `contract.json`, questo README o i file del campione: sono derivati e la verifica byte-per-byte deve restare verde.
+
+Nell'app, con la modalità sviluppatore accesa, Impostazioni › Aspetto › «Tutti i componenti» apre una pagina con ogni componente che il tema veste, in ogni suo stato, poi la tavolozza, i caratteri e i primitivi del kit. Vale il tema in uso o quello in anteprima; i due interruttori in testa provano l'altra luce e il contrasto alto senza salvare niente, un clic su un componente ne mostra gli hook da copiare, e un tema rifiutato mostra lì la sua diagnosi.

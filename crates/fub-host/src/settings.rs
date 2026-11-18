@@ -145,6 +145,11 @@ pub const APPEARANCE_THEME: &str = "appearance.theme";
 pub const APPEARANCE_THEME_ID: &str = "appearance.theme-id";
 pub const APPEARANCE_CONTRAST: &str = "appearance.contrast";
 pub const APPEARANCE_DENSITY: &str = "appearance.density";
+/// Il vassoio sotto le schede, le barre dei comandi e la colonna degli
+/// strumenti: `light` (di serie, appena più chiaro della carta) o `marked`
+/// (il tono di `--sheet-2`, che si stacca di più). Lo legge `theme.ts`, che
+/// mette l'attributo `data-bars` sulla radice; la pelle fa il resto.
+pub const APPEARANCE_BARS: &str = "appearance.bars";
 pub const APPEARANCE_BODY: &str = "appearance.body";
 pub const APPEARANCE_LINE_HEIGHT: &str = "appearance.line-height";
 pub const APPEARANCE_MEASURE: &str = "appearance.measure";
@@ -557,6 +562,27 @@ pub const LOG_VERBOSE: &str = "log.verbose";
 /// niente esce dall'app.
 pub const PERF_PROBE: &str = "perf.probe";
 
+/// La modalità sviluppatore: apre a chi scrive un tema i gesti che un tema
+/// finito non chiede, a cominciare da «Installa da cartella…». Di **macchina**
+/// (è uno strumento di questo PC, non una preferenza su un vault), spenta di
+/// default, e **non** scrivibile da un programma: un componente che potesse
+/// accenderla aprirebbe da sé la porta che lei tiene chiusa. La regola la
+/// applica l'host (`Host::install_theme_from_folder`), non il bottone nascosto.
+pub const DEVELOPER_MODE: &str = "developer.mode";
+
+/// La cartella del tema collegato, in sviluppo (vedi
+/// [`Host::link_theme_folder`](crate::Host::link_theme_folder)): il percorso
+/// che la persona ha scelto nella finestra nativa di «Collega una cartella…»,
+/// vuoto se nessuna è collegata. Di **macchina** come la modalità che la apre,
+/// e **non** scrivibile da un programma; nemmeno la webview la scrive
+/// (`Host::set_setting_for_user` la rifiuta): la scrive solo l'host quando
+/// collega, e azzerarla è scollegare. **Non viaggia coi profili** di macchina:
+/// un'importazione o una copia la scartano, un'esportazione non la porta
+/// fuori, e cambiare o azzerare un profilo lascia il valore di prima
+/// (`PROFILE_LOCAL_KEYS` in `session.rs`). L'host la rilegge con le stesse
+/// porte di un'installazione, e guarda la cartella solo se è un tema pronto.
+pub const DEVELOPER_THEME_FOLDER: &str = "developer.theme-folder";
+
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
 pub const SYNC_SERVER_URL: &str = "sync.server_url";
 pub const SYNC_PAUSED: &str = "sync.paused";
@@ -765,6 +791,8 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
     settings.push(perf_probe_spec());
+    settings.push(developer_mode_spec());
+    settings.push(developer_theme_folder_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
@@ -1211,6 +1239,16 @@ fn appearance_settings_on(webview: Option<Webview>) -> Vec<SettingSpec> {
                 UiOption::new("compact", Text::key(C_DENSITY_COMPACT)),
                 UiOption::new("comfortable", Text::key(C_DENSITY_COMFORTABLE)),
                 UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
+            ],
+        ),
+        choice(
+            APPEARANCE_BARS,
+            C_BARS,
+            C_BARS_DESC,
+            "light",
+            vec![
+                UiOption::new("light", Text::key(C_BARS_LIGHT)),
+                UiOption::new("marked", Text::key(C_BARS_MARKED)),
             ],
         ),
         number(
@@ -1790,6 +1828,32 @@ fn perf_probe_spec() -> SettingSpec {
     .for_machine()
 }
 
+/// La modalità sviluppatore come [`SettingSpec`]: vedi [`DEVELOPER_MODE`].
+fn developer_mode_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_MODE,
+        Text::key(C_DEVELOPER_MODE),
+        SettingKind::Toggle { default: false },
+    )
+    .describing(Text::key(C_DEVELOPER_MODE_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
+/// La cartella collegata come [`SettingSpec`]: vedi [`DEVELOPER_THEME_FOLDER`].
+fn developer_theme_folder_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_THEME_FOLDER,
+        Text::key(C_DEVELOPER_THEME_FOLDER),
+        SettingKind::Text {
+            default: String::new(),
+        },
+    )
+    .describing(Text::key(C_DEVELOPER_THEME_FOLDER_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
@@ -1979,6 +2043,10 @@ const C_CSS_SNIPPETS: &str = "core.css_snippets";
 const C_CSS_SNIPPETS_DESC: &str = "core.css_snippets.desc";
 const C_DENSITY_COMFORTABLE: &str = "core.density.comfortable";
 const C_DENSITY_RELAXED: &str = "core.density.relaxed";
+const C_BARS: &str = "core.bars";
+const C_BARS_DESC: &str = "core.bars.desc";
+const C_BARS_LIGHT: &str = "core.bars.light";
+const C_BARS_MARKED: &str = "core.bars.marked";
 const C_BODY: &str = "core.body";
 const C_BODY_DESC: &str = "core.body.desc";
 const C_LINE_HEIGHT: &str = "core.line_height";
@@ -2060,6 +2128,11 @@ const C_LOG_VERBOSE: &str = "core.log.verbose";
 const C_LOG_VERBOSE_DESC: &str = "core.log.verbose.desc";
 const C_PERF_PROBE: &str = "core.perf.probe";
 const C_PERF_PROBE_DESC: &str = "core.perf.probe.desc";
+const C_GROUP_DEVELOPMENT: &str = "core.group.development";
+const C_DEVELOPER_MODE: &str = "core.developer.mode";
+const C_DEVELOPER_MODE_DESC: &str = "core.developer.mode.desc";
+const C_DEVELOPER_THEME_FOLDER: &str = "core.developer.theme_folder";
+const C_DEVELOPER_THEME_FOLDER_DESC: &str = "core.developer.theme_folder.desc";
 const C_GROUP_SYNC: &str = "core.group.sync";
 const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
 const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
@@ -2337,6 +2410,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
         .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
+        .with(
+            "host.theme_folder.developer_off",
+            "Per installare un tema da una cartella accendi la modalità sviluppatore.",
+        )
+        .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
+        .with(
+            "host.theme_folder.desktop_only",
+            "Su questo dispositivo non si sceglie una cartella: i temi da cartella si installano da Fub sul computer.",
+        )
+        .with("host.theme_folder.pick_title", "Scegli la cartella del tema")
+        .with("host.theme_folder.link_title", "Scegli la cartella del tema da collegare")
+        .with(
+            "host.theme_folder.link_only",
+            "La cartella collegata si sceglie con «Collega una cartella…» in Aspetto.",
+        )
+        .with(
+            "host.theme_folder.pick_failed",
+            "La finestra per scegliere la cartella non ha risposto: riprova.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub non sa leggere il percorso di questa cartella: spostala in una con un nome semplice.",
+        )
         .with(
             "host.craft_render.over_limit",
             "Il file supera il peso massimo per un'anteprima fatta dall'app.",
@@ -2695,6 +2791,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY_COMPACT, "Compatta")
         .with(C_DENSITY_COMFORTABLE, "Comoda")
         .with(C_DENSITY_RELAXED, "Rilassata")
+        .with(C_BARS, "Le barre")
+        .with(
+            C_BARS_DESC,
+            "Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.",
+        )
+        .with(C_BARS_LIGHT, "Chiare")
+        .with(C_BARS_MARKED, "Marcate")
         .with(C_BODY, "Corpo del testo (px)")
         .with(
             C_BODY_DESC,
@@ -2837,6 +2940,21 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Misura quanto passa da un tasto, un clic o un tratto di penna al \
              fotogramma che lo mostra, e conta i fotogrammi lunghi. I numeri \
              restano su questo computer: servono ai banchi di misura.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Sviluppo")
+        .with(C_DEVELOPER_MODE, "Modalità sviluppatore")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "Per chi scrive un tema: in «Temi installati» compaiono «Installa da \
+             cartella…», che lo controlla e lo installa dalla sua cartella, \
+             «Collega una cartella…», che lo rimonta a ogni salvataggio, e \
+             «Tutti i componenti», che mostra ogni componente in ogni stato.",
+        )
+        .with(C_DEVELOPER_THEME_FOLDER, "Cartella collegata")
+        .with(
+            C_DEVELOPER_THEME_FOLDER_DESC,
+            "La cartella del tema in sviluppo: Fub la guarda e rimonta il tema a \
+             ogni salvataggio. Si sceglie e si scollega da «Temi installati».",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -3033,6 +3151,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
         .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
+        .with(
+            "host.theme_folder.developer_off",
+            "To install a theme from a folder, turn on developer mode.",
+        )
+        .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
+        .with(
+            "host.theme_folder.desktop_only",
+            "A folder cannot be chosen on this device: themes from a folder are installed from Fub on a computer.",
+        )
+        .with("host.theme_folder.pick_title", "Choose the theme folder")
+        .with("host.theme_folder.link_title", "Choose the theme folder to link")
+        .with(
+            "host.theme_folder.link_only",
+            "The linked folder is chosen with «Link a folder…» in Appearance.",
+        )
+        .with(
+            "host.theme_folder.pick_failed",
+            "The window to choose the folder did not answer: try again.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub cannot read the path of this folder: move it to one with a plain name.",
+        )
         .with(
             "host.craft_render.over_limit",
             "The file is over the maximum size for a preview made by the app.",
@@ -3388,6 +3529,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY_COMPACT, "Compact")
         .with(C_DENSITY_COMFORTABLE, "Comfortable")
         .with(C_DENSITY_RELAXED, "Relaxed")
+        .with(C_BARS, "Bars")
+        .with(
+            C_BARS_DESC,
+            "The tray under the tabs, the command bars and the tools column: light, close to the paper, or marked, standing out more.",
+        )
+        .with(C_BARS_LIGHT, "Light")
+        .with(C_BARS_MARKED, "Marked")
         .with(C_BODY, "Text size (px)")
         .with(C_BODY_DESC, "Text size on reading surfaces.")
         .with(C_LINE_HEIGHT, "Line height")
@@ -3524,6 +3672,21 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Measures the time from a key, a click or a pen stroke to the frame \
              that shows it, and counts the long frames. The numbers stay on this \
              computer: they feed the measurement benches.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Development")
+        .with(C_DEVELOPER_MODE, "Developer mode")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "For theme authors: «Install from folder…» appears under \
+             «Installed themes», and checks and installs a theme from its folder, \
+             with «Link a folder…», which remounts it at every save, and with \
+             «All components», which shows every component in every state.",
+        )
+        .with(C_DEVELOPER_THEME_FOLDER, "Linked folder")
+        .with(
+            C_DEVELOPER_THEME_FOLDER_DESC,
+            "The folder of the theme in development: Fub watches it and remounts \
+             the theme at every save. It is chosen and unlinked under «Installed themes».",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
@@ -3764,6 +3927,8 @@ fn set_log_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::settings::{SettingSource, SettingValue};
+    use fub_kernel::MachineSettings;
 
     /// Senza la feature `craft` nessuna delle cinque di «App esterne» c'è.
     #[cfg(not(feature = "craft"))]
@@ -3889,6 +4054,41 @@ mod tests {
         assert!(core_machine_settings()
             .iter()
             .any(|spec| spec.key == PERF_PROBE));
+    }
+
+    #[test]
+    fn developer_mode_is_a_machine_switch_off_by_default_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_MODE)
+            .expect("il core dichiara la modalità sviluppatore");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(spec.kind, SettingKind::Toggle { default: false });
+        // Un programma che potesse accenderla aprirebbe da sé
+        // l'installazione da cartella.
+        assert!(!spec.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == DEVELOPER_MODE));
+    }
+
+    #[test]
+    fn the_linked_theme_folder_is_machine_text_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_THEME_FOLDER)
+            .expect("il core dichiara la cartella del tema collegato");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(
+            spec.kind,
+            SettingKind::Text {
+                default: String::new()
+            }
+        );
+        // Un programma che potesse scriverla sceglierebbe da sé la cartella
+        // che l'host legge.
+        assert!(!spec.program_writable);
+        assert!(crate::shell::SETTINGS_WITH_THEIR_OWN_GESTURE.contains(&DEVELOPER_THEME_FOLDER));
     }
 
     #[test]
@@ -4270,6 +4470,76 @@ mod tests {
         assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
         assert_eq!(frame_rate_cap("59"), None);
         assert_eq!(frame_rate_cap("veloce"), None);
+    }
+
+    /// Le barre sono una scelta di macchina fra due, di serie il vassoio
+    /// chiaro, e la riga sta subito dopo «Densità», come nel prototipo.
+    #[test]
+    fn the_bars_are_a_machine_choice_of_light_or_marked_after_density() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(at(APPEARANCE_BARS), at(APPEARANCE_DENSITY).map(|i| i + 1));
+        let spec = &machine[at(APPEARANCE_BARS).expect("le barre sono dichiarate")];
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("le barre sono una scelta");
+        };
+        assert_eq!(default, "light");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["light", "marked"]);
+        assert!(!spec.program_writable);
+    }
+
+    fn bars_file(dir: &tempfile::TempDir) -> camino::Utf8PathBuf {
+        camino::Utf8PathBuf::from_path_buf(dir.path().join("settings.json"))
+            .expect("una cartella di prova con un percorso UTF-8")
+    }
+
+    /// La scelta sopravvive al riavvio: la macchina la scrive sul suo file, e
+    /// aprendolo di nuovo la rilegge, senza che la shell la ricordi.
+    #[test]
+    fn the_marked_tray_survives_a_restart() {
+        let dir = tempfile::tempdir().expect("una cartella di prova");
+        let path = bars_file(&dir);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine
+                .declare(&core_machine_settings())
+                .expect("lo schema della macchina");
+            machine
+                .set(APPEARANCE_BARS, SettingValue::Text("marked".into()))
+                .expect("la scelta si scrive");
+        }
+        let (reopened, warning) = MachineSettings::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        reopened
+            .declare(&core_machine_settings())
+            .expect("lo schema della macchina");
+        assert_eq!(
+            reopened.effective(APPEARANCE_BARS).expect("dichiarata"),
+            (SettingValue::Text("marked".into()), SettingSource::Machine)
+        );
+    }
+
+    /// Un valore che non è né `light` né `marked` (un file scritto a mano, o una
+    /// versione futura con un'altra scelta) vale il predefinito: non spegne il
+    /// vassoio, come per ogni scelta di macchina.
+    #[test]
+    fn an_unknown_bars_value_falls_back_to_the_light_tray() {
+        let dir = tempfile::tempdir().expect("una cartella di prova");
+        let path = bars_file(&dir);
+        std::fs::write(
+            &path,
+            r#"{"version":2,"values":{"appearance.bars":"neon"}}"#,
+        )
+        .expect("il file di prova");
+        let (machine, _) = MachineSettings::open(&path);
+        machine
+            .declare(&core_machine_settings())
+            .expect("lo schema della macchina");
+        assert_eq!(
+            machine.effective(APPEARANCE_BARS).expect("dichiarata"),
+            (SettingValue::Text("light".into()), SettingSource::Default)
+        );
     }
 
     fn motion_spec(webview: Option<Webview>) -> SettingSpec {

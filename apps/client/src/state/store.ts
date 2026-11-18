@@ -63,6 +63,10 @@ export interface Signals {
   /// **Senza payload**: chi lo rispecchia in un'altra finestra legge gli
   /// strati montati da `theme/loader.ts`.
   theme: [];
+  /// Il tema collegato (modalità sviluppatore) ha un esito nuovo: rimontato,
+  /// rifiutato, sparito, collegato o scollegato. **Senza payload**: lo stato
+  /// lo legge chi disegna da `theme/theme.ts` (`linkedTheme`).
+  "theme-link": [];
   /// Una cartella del percorso nella testata è stata premuta: l'esplora la
   /// apre e la porta in vista. Il verso è questo perché la testata è della
   /// vista del documento e l'albero dell'esplora, che non si conoscono.

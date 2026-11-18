@@ -290,6 +290,9 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     // `editor.toolbar` = `nascosta` finché quella non c'è, e la sceglie
     // `editor.toolbar` nel modulo, una fonte sola.
     crate::settings::CHROME_FORMATBAR_VISIBLE,
+    // «Collega una cartella…» e «Scollega», in Aspetto: il percorso lo dà
+    // solo la finestra nativa.
+    crate::settings::DEVELOPER_THEME_FOLDER,
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export

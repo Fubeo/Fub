@@ -220,7 +220,9 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   mathSource: false,
   mathHelp: "piene",
 };
-const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
+// Un campo è una riga sola che non si piega: niente numeri e niente margine
+// delle pieghe, che lascerebbe una striscia vuota a sinistra del testo.
+const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false, foldGutter: false };
 
 /// Il segno di piega: «⌄» dove la riga si può piegare, «›» dove è piegata.
 /// La pelle lo tiene nascosto finché non si passa sul margine, tranne quando

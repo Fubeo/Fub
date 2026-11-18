@@ -92,6 +92,11 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   Compatta: "Compact",
   Comoda: "Comfortable",
   Rilassata: "Relaxed",
+  "Le barre": "Bars",
+  "Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.":
+    "The tray under the tabs, the command bars and the tools column: light, close to the paper, or marked, standing out more.",
+  Chiare: "Light",
+  Marcate: "Marked",
   "Corpo del testo (px)": "Text size (px)",
   "Dimensione del testo nelle superfici di lettura.": "Size of the text on reading surfaces.",
   Interlinea: "Line height",
