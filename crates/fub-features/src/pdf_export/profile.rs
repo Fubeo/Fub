@@ -40,6 +40,7 @@ use std::fmt;
 
 use fub_abi::error::PluginError;
 use fub_abi::rules::doc_data;
+use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{DataRead, DataWrite};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -1043,10 +1044,11 @@ fn nome_pulito(nome: &str) -> Result<String, ErroreProfilo> {
     Ok(nome.to_owned())
 }
 
-/// Due nomi sono lo stesso nome se differiscono solo per maiuscole o spazi
-/// ai lati.
+/// Due nomi sono lo stesso nome se differiscono solo per maiuscole, forma
+/// Unicode o spazi ai lati: la stessa chiave dei nomi dei documenti
+/// ([`resolution_key`]), così «uguale» vuol dire una cosa sola in tutto Fub.
 fn stesso_nome(a: &str, b: &str) -> bool {
-    a.trim().to_lowercase() == b.trim().to_lowercase()
+    resolution_key(a) == resolution_key(b)
 }
 
 /// Gli id dei file nella cartella dei profili, in ordine.
@@ -1184,6 +1186,7 @@ pub fn salva(
     }
     let mut profilo = profilo.clone();
     profilo.nome = nome;
+    profilo.versione = VERSIONE_PROFILO;
     scrivi(host, id, &profilo)
 }
 
@@ -1203,7 +1206,9 @@ fn id_libero(host: &dyn DataRead, nome: &str) -> Result<IdProfilo, ErroreProfilo
     let preso = |id: &IdProfilo| {
         presi
             .iter()
-            .any(|p| p.0.to_lowercase() == id.0.to_lowercase())
+            // Due file che differiscono solo per le maiuscole sono lo stesso
+            // file su macOS e Windows: la chiave dei nomi dei documenti.
+            .any(|p| resolution_key(&p.0) == resolution_key(&id.0))
     };
     let mut id = IdProfilo(base.clone());
     let mut n = 2u32;

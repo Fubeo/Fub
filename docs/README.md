@@ -102,11 +102,9 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Il formato della scena](reference/scene-format.md) con le sue
   pagine di dettaglio, e le
   [operazioni sulla scena](reference/scene-operations.md)
-- [Le annotazioni PDF](reference/annotation-format.md), la
+- [Le annotazioni PDF](reference/annotation-format.md), [l'esportazione in PDF](reference/pdf-export-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
-- [L'esportazione in PDF](reference/pdf-export-format.md): i profili e la
-  memoria d'esportazione di ogni nota
 - Le porte del [disegno](reference/drawing-ipc.md), della [griglia](reference/grid-ipc.md) e dei [temi](reference/theme-ipc.md): l'IPC dei loro motori
 - [Il formato della lavagna](reference/canvas-format.md) (`fub-canvas-core`),
   le [toppe](reference/canvas-operations.md) con la loro inversa,
