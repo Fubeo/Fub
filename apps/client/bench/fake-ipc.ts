@@ -579,6 +579,10 @@ function trashWithThree(asking = false): UiNode {
   };
 }
 
+/// Una Live con un disegno incorporato (la scheda di disegno, T46): il banco
+/// accende la feature `draw`, come l'host col componente dei disegni.
+const LIVE_DRAWS = Object.keys(LIVE?.files ?? {}).some((id) => /\.svg$/i.test(id));
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
   ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
@@ -2224,7 +2228,7 @@ const options: Options = {
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
     ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
@@ -2237,7 +2241,7 @@ const options: Options = {
       ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
-  ...(DRAWING === null && PDF_SCENE !== "annotato" ? {} : { draw: true }),
+  ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? {} : { draw: true }),
   // Il motore del disegno (`drawing`) c'è solo con `?drawing=`: senza, le
   // porte del disegno rispondono `unserved` come l'host senza il componente,
   // e gli strumenti del disegno restano quelli del client.

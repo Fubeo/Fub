@@ -102,7 +102,8 @@ export function blockAt(state: EditorState, pos: number): MarkdownBlock | null {
   }
   const trimmed = line.text.trim();
   const image = trimmed === "" ? null : parseImage(trimmed);
-  if (image && (image.syntax === "markdown" || IMAGE_FILE.test(image.file))) {
+  // Un disegno incorporato col wikilink è una scheda (T46), non un'immagine.
+  if (image && (image.syntax === "markdown" || (IMAGE_FILE.test(image.file) && !liveCardEmbed(trimmed)))) {
     const from = line.from + line.text.indexOf(trimmed);
     return { kind: "image", start: line.from, from, to: from + trimmed.length, image };
   }

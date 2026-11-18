@@ -17480,6 +17480,91 @@ input.canvas-toolbar-item {
   display: none;
 }
 
+/* ── La scheda di disegno ────────────────────────────────────────────────
+   (E20, T46, ADR 0248; il passo 17 del prototipo non ne ha un disegno: è
+   la riga «Disegno .svg» della tabella delle specie.) Un `.svg` di Fub nella
+   nota: a riposo il disegno fermo, intero e al centro, come la scheda
+   d'immagine; da attiva l'editor dei disegni sopra di lui, alto quanto il
+   corpo, con gli strumenti e la barra in una fila sopra il foglio
+   (`cardChrome`) e niente colonna di lato. Il pannello delle proprietà (il
+   testo da scrivere) si apre sopra il foglio, sul lato destro, e non lo
+   stringe. Un SVG qualunque resta l'immagine. */
+.live-card[data-card-kind="drawing"] .canvas-card-drawing {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+/* Il disegno fermo sta sulla carta, bianca in tutti e due i temi come il
+   foglio dell'editor (`skin/draw.css`): l'inchiostro scuro di uno schizzo si
+   legge anche al buio. Un SVG qualunque ha la sua carta, se ne ha una. */
+.live-card[data-card-kind="drawing"] .canvas-card-drawing[data-card-drawing="fub"] {
+  background: #ffffff;
+}
+.live-card[data-card-kind="drawing"] .canvas-card-drawing[data-card-state="editing"] > .canvas-card-image {
+  visibility: hidden;
+}
+.live-card[data-card-kind="drawing"] .canvas-card-drawing-editor {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--doc-bg);
+}
+.live-card[data-card-kind="drawing"] .canvas-card-drawing-editor[hidden] {
+  display: none;
+}
+/* La fila sopra il foglio: gli strumenti, poi la barra (menu, Annulla,
+   Ripeti, le opzioni dello strumento), che prende lo spazio che resta e
+   manda in «…» ciò che non ci sta. Se le restano meno di 12rem va a capo,
+   sotto gli strumenti; gli strumenti scorrono di lato solo in una scheda
+   più stretta di loro. */
+.live-card[data-card-kind="drawing"] .draw-card-bar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  border-width: 0;
+  border-bottom-width: 1px;
+  border-style: solid;
+  border-color: var(--doc-rule);
+  background: var(--bg-elev);
+}
+.live-card[data-card-kind="drawing"] .draw-card-bar > .draw-rail {
+  flex: 0 1 auto;
+  max-width: 100%;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-width: 0;
+  border-right-width: 1px;
+  border-style: solid;
+  border-color: var(--doc-rule-soft);
+  background: transparent;
+}
+.live-card[data-card-kind="drawing"] .draw-card-bar > .draw-header {
+  flex: 1 1 12rem;
+  min-width: 0;
+  border-width: 0;
+  background: transparent;
+}
+.live-card[data-card-kind="drawing"] .draw-editor[data-compact] .draw-body {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+}
+.live-card[data-card-kind="drawing"] .draw-editor[data-compact] .draw-dock {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 2;
+  width: min(18rem, 70%);
+  background: var(--bg-elev);
+  box-shadow: -8px 0 20px -14px rgb(0 0 0 / 40%);
+}
+
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 
 /* L'editor del disegno (FubDraw): la barra e il foglio. La geometria e i

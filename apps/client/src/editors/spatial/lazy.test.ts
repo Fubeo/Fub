@@ -44,12 +44,12 @@ let parent: HTMLElement;
 let surface: EditorSurface | null;
 let loader: { resolve(module: SurfaceModule): void; reject(error: unknown): void };
 
-function mount(): EditorSurface {
+function mount(compact = false): EditorSurface {
   const promise = new Promise<SurfaceModule>((resolve, reject) => {
     loader = { resolve, reject };
   });
   surface = mountVectorSurfaceLazily(
-    { paneId: "p1", documentId: "disegni/casa.svg", parent },
+    { paneId: "p1", documentId: "disegni/casa.svg", parent, ...(compact ? { compact: true } : {}) },
     { onChange: () => {}, onSelectionChange: () => {} },
     () => promise,
   );
@@ -120,6 +120,20 @@ describe("prima che il codice arrivi", () => {
     lazy.setMode("draw");
     // In sola lettura un SVG estraneo non offre «Modifica».
     expect(root.querySelector<HTMLElement>(".vector-notice-action")!.hidden).toBe(true);
+  });
+
+  it("in una scheda (T46) «A tutta pagina» aspetta la superficie e le passa", async () => {
+    expect(mount().setFullPage).toBeUndefined();
+    surface!.destroy();
+    const lazy = mount(true);
+    lazy.buffer!.setDoc(SOURCE);
+    lazy.setFullPage!(true);
+    await arrive();
+    const editor = parent.querySelector<HTMLElement>(".draw-editor")!;
+    expect(editor.dataset.compact).toBe("");
+    expect(editor.dataset.workspace).toBe("full");
+    lazy.setFullPage!(false);
+    expect(editor.dataset.workspace).toBe("simple");
   });
 
   it("un rimando aspetta la scena, e la sceglie", async () => {

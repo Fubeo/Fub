@@ -48,13 +48,14 @@ export function columnOf(ctx: EditorContext, toolbar: readonly ToolId[]): ToolId
 export function installWorkspace(ctx: EditorContext): void {
   const { options } = ctx;
   ctx.root.dataset.workspace = ctx.workspace;
-  // Nel Semplice le caselle sono bersagli da 44 px, anche col mouse.
-  ctx.rail.element.dataset.size = ctx.workspace === "simple" ? "large" : "normal";
-
   // In una scheda (T46) gli strumenti sono sempre una fila sopra il foglio:
   // la scheda è larga quanto la colonna del testo, e una colonna di lato le
   // ruberebbe il disegno.
   const compact = options.compact === true;
+  // Nel Semplice le caselle sono bersagli da 44 px, anche col mouse; non in
+  // una scheda, dove la fila deve stare accanto alla barra.
+  const sizeOf = (workspace: Workspace): string => (workspace === "simple" && !compact ? "large" : "normal");
+  ctx.rail.element.dataset.size = sizeOf(ctx.workspace);
   if (compact) {
     ctx.root.dataset.compact = "";
     ctx.rail.setOrientation("horizontal");
@@ -92,7 +93,7 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.workspace = next;
     if (toolbar !== undefined) ctx.column = toolbar;
     ctx.root.dataset.workspace = next;
-    ctx.rail.element.dataset.size = next === "simple" ? "large" : "normal";
+    ctx.rail.element.dataset.size = sizeOf(next);
     full.hidden = fullHidden(next);
     ctx.offer(ctx.featuresOf(next));
     ctx.syncRail(ctx.editable());

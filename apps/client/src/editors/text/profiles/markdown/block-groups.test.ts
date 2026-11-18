@@ -141,6 +141,8 @@ describe("i gruppi", () => {
     expect(markdownBlockGroup(hostOf("![[Atto.pdf]]\n", 3).host, null)?.id).toBe("card");
     // Un'immagine non è né l'una né l'altra.
     expect(markdownBlockGroup(hostOf("![[foto.png]]\n", 3).host, null)?.id).not.toBe("card");
+    // Un disegno SVG sì (T46): si disegna sul posto.
+    expect(markdownBlockGroup(hostOf("![[Schizzo.svg]]\n", 3).host, null)?.id).toBe("card");
   });
 
   it("Scheda: «Apri» alla parte, «Togli dalla nota» toglie l'embed e non il file", () => {

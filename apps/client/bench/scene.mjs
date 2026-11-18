@@ -2493,6 +2493,39 @@ export const SCENE = touchLast(onPage("shell", [
       document.activeElement?.id === "avvio-riprova",
     prepare: async () => {},
   },
+  // La scheda di disegno (T46, ADR 0248; la riga «Disegno .svg» del passo 17
+  // del prototipo): la pianta del soggiorno a riposo, il disegno fermo;
+  // scelta coi Blocchi (attiva, poi Esc); attiva, con la penna, le forme e il
+  // testo in una fila sopra il foglio; attiva nella finestra minima. Sotto,
+  // il logo fatto altrove resta un'immagine ferma.
+  ...[
+    ["scheda-disegno-01-riposo", "La pianta a riposo: il disegno fermo, e sotto un SVG fatto altrove", "rest"],
+    ["scheda-disegno-02-scelta", "La pianta scelta coi Blocchi, dopo Esc", "chosen"],
+    ["scheda-disegno-03-attiva", "La pianta attiva: la penna, le forme e il testo in una fila sopra il foglio", "active"],
+    ["scheda-disegno-04-attiva-stretta", "La pianta attiva nella finestra minima: gli strumenti scorrono di lato", "active", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-disegno",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const cards = '.pane.focus .pane-editor .live-card[data-card-kind="drawing"]';
+      // Le due schede mostrano il loro disegno: la pianta di Fub, il logo estraneo.
+      await page.waitForFunction((selector) => {
+        const all = [...document.querySelectorAll(selector)];
+        return all.length === 2 && all.every((card) => card.dataset.cardState === "view" && card.querySelector(".canvas-card-drawing[data-card-drawing] img.canvas-card-picture")?.complete === true);
+      }, cards);
+      // La pianta intera nella vista, col testo prima e dopo.
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), cards);
+      if (state === "rest") return;
+      await page.click(`${cards} .live-card-body`);
+      await page.waitForSelector(`${cards}[data-card-active="true"] .canvas-card-drawing-editor:not([hidden]) .draw-surface`);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`${cards}[data-card-chosen="true"]`);
+    },
+  })),
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
