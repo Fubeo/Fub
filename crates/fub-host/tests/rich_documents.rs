@@ -651,6 +651,35 @@ fn esportare_una_copia_accoda_l_export_e_il_documento_resta() {
     assert_eq!(vault.on_disk(), before);
 }
 
+/// IMP-139: «Anteprima…» del modulo mostra ciò che il modulo promette, cioè
+/// che cosa la copia non porta, e non accoda niente.
+#[test]
+fn l_anteprima_della_copia_dice_che_cosa_il_formato_non_porta() {
+    let vault = Vault::with_docx(&["Primo paragrafo.", "Secondo."]);
+    let before = vault.on_disk();
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "Lettera.docx", "format": "html"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the preview answers");
+    let fub_abi::command::CommandEffect::Plan(plan) = &outcome.effect else {
+        panic!("the preview is a plan: {outcome:?}");
+    };
+    let summary = plan.summary.to_string();
+    assert!(summary.contains("Lettera.docx"), "{summary}");
+    // Il rapporto che l'export scriverebbe: qui niente manca, e resta ciò
+    // che il confronto non misura.
+    assert!(summary.contains("HTML"), "{summary}");
+    assert!(!summary.contains("would queue"), "{summary}");
+    assert!(plan.docs.is_empty() && plan.edits.is_empty(), "{plan:?}");
+    assert!(outcome.notify.is_none(), "{outcome:?}");
+    assert_eq!(vault.on_disk(), before);
+}
+
 #[test]
 fn una_nota_non_si_esporta_come_copia_di_videoscrittura() {
     let vault = Vault::with_docx(&["Word."]);

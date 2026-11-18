@@ -436,6 +436,12 @@ e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
 `.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
 testo semplice i commenti si possono mettere in fondo alla copia.
 
+**Anteprima…** nel modulo è la simulazione del comando: la copia si scrive in
+memoria e si misura come la misura l'export, e il piano dice che cosa il
+confronto ha trovato, con gli stessi avvisi che l'attività mostrerà. Niente si
+accoda: la copia parte con **Applica**. Il campo «Documento» vuole il percorso
+del documento, che i suggerimenti del campo danno; il nome solo non basta.
+
 `.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
 modificano come sorgente, anche quando sono nati da una copia.
 

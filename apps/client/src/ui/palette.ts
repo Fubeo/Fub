@@ -651,7 +651,9 @@ export async function openSlashPalette(
         cancel.addEventListener("click", returnToList);
         apply.addEventListener("click", () => void run(entry, args, true));
         actions.append(apply, cancel);
-        box.replaceChildren(heading, summary, details, actions);
+        // Un piano senza note (una copia, una cartella nuova) è il sommario:
+        // niente riquadro vuoto sotto.
+        box.replaceChildren(heading, summary, ...(details.childElementCount > 0 ? [details] : []), actions);
         box.hidden = false;
         // Il piano si legge dall'inizio: «Applica» sta in fondo, e il fuoco
         // non deve portarcelo né lasciare la scatola scorsa dall'elenco.
@@ -1330,7 +1332,9 @@ function showLayer(
     li.textContent = row;
     list.appendChild(li);
   }
-  box.appendChild(list);
+  // Un piano senza note (una copia, una cartella nuova) è il sommario: niente
+  // riquadro vuoto sotto.
+  if (list.childElementCount > 0) box.appendChild(list);
 
   const actions = document.createElement("div");
   actions.className = "palette-actions";
