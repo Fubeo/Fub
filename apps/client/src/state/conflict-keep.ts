@@ -29,3 +29,10 @@ export function discardDescription(doc: string | null): Key {
   const keeps = doc === null ? hasKernelCommand(VERSION_KEEP) : keepsDiscardedText(doc);
   return keeps ? "commands.doc.conflict.theirs.desc" : "commands.doc.conflict.theirs.desc_lost";
 }
+
+/// Il testo della conferma di «Usa la versione su disco» nella barra del
+/// conflitto: dice in una frase che cosa succede al testo non salvato, se
+/// resta nella Cronologia o se si perde.
+export function discardBody(doc: string): Key {
+  return keepsDiscardedText(doc) ? "document.conflict.theirs.body_kept" : "document.conflict.theirs.body";
+}

@@ -22,6 +22,15 @@
 // Due domande insieme non si sovrappongono: la seconda aspetta la risposta
 // alla prima, nell'ordine in cui sono arrivate. Una domanda appartiene al
 // presentatore che c'era quando è stata fatta, e se ne va con lui.
+//
+// # Ritirare una domanda
+//
+// Chi domanda può ritirarla con un `AbortSignal`, quando un fatto nuovo la
+// rende vecchia (un cambio da fuori sulla nota di cui si chiede). Ritirata
+// vale «no», come una domanda senza risposta: la superficie se ne va, e se la
+// domanda aspettava in fila non arriva mai a schermo. Il dialogo di sistema
+// non si può chiudere da qui: resta finché non risponde, ma la sua risposta
+// non conta più.
 import { confirm as systemConfirm, type ConfirmOptions } from "../host/dialog";
 import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
 
@@ -105,11 +114,31 @@ export function declareConfirm(presenter: ConfirmPresenter): Teardown {
 }
 
 /// Una domanda sì/no all'utente. `true` = ha detto di sì.
-export function confirm(message: string, opts: ConfirmOptions): Promise<boolean> {
+///
+/// `withdraw`, se c'è, ritira la domanda: da lì la risposta è «no».
+export function confirm(message: string, opts: ConfirmOptions, withdraw?: AbortSignal): Promise<boolean> {
+  if (withdraw?.aborted) return Promise.resolve(false);
   const declaration = declared[declared.length - 1];
-  if (!declaration) return systemConfirm(message, opts);
+  if (!declaration) {
+    const asked = systemConfirm(message, opts);
+    if (!withdraw) return asked;
+    return new Promise<boolean>((resolve, reject) => {
+      const withdrawn = () => resolve(false);
+      withdraw.addEventListener("abort", withdrawn, { once: true });
+      asked.then(resolve, reject).finally(() => withdraw.removeEventListener("abort", withdrawn));
+    });
+  }
   return new Promise<boolean>((answer) => {
-    declaration.questions.push({ message, opts, life: null, answer });
+    const question: Question = { message, opts, life: null, answer };
+    if (withdraw) {
+      const withdrawn = () => settle(declaration, question, false);
+      withdraw.addEventListener("abort", withdrawn, { once: true });
+      question.answer = (yes) => {
+        withdraw.removeEventListener("abort", withdrawn);
+        answer(yes);
+      };
+    }
+    declaration.questions.push(question);
     present(declaration);
   });
 }

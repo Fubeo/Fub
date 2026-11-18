@@ -56,12 +56,10 @@ L'elenco esatto delle funzioni vive nel contratto.
 ### Le notifiche del sistema
 
 `fub:notifications` non sta in `PluginPermissions::core()`: lo dichiara solo
-«Compiti» (`fub.tasks`, per i promemoria) dalla sua riga dell'inventario, con
-l'interruttore `fub.tasks:permissions.notifications` in **Componenti**, acceso
-di serie. Non ha una funzione WIT, quindi un plugin WASM non può notificare:
-notifica l'app (`crates/fub-app/src/promemoria.rs`), che prima di ognuna chiede
-al `Guard` (`Host::component_allows`). Spento l'interruttore o il componente, la
-notifica dopo non parte e i promemoria restano nella nota (prova in `switches.rs`).
+«Compiti» (`fub.tasks`), con l'interruttore `fub.tasks:permissions.notifications`
+in **Componenti**, acceso di serie. Senza funzione WIT nessun plugin WASM
+notifica: lo fa l'app (`fub-app/src/promemoria.rs`), dopo aver chiesto al `Guard`
+(`Host::component_allows`): se è spento, i promemoria restano nella nota.
 
 ## Path fence
 
@@ -133,8 +131,7 @@ ogni `<svg>` la shell lo costruisce da sé, coi soli `d` validati, nel costrutto
 di tutte le icone (griglia 24, tratto, `currentColor`), e `ui/icons.ts`
 ripassa ogni voce dalla regola prima di disegnarla. Un tema non aggiunge nomi:
 un nome che nessuno disegna non rifiuta il tema ma non si vede. Cambiato tema,
-o annullata l'anteprima, il set si sostituisce e le icone già nella pagina si
-ridisegnano.
+o annullata l'anteprima, il set cambia e le icone nella pagina si ridisegnano.
 
 Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
 `a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con
@@ -144,6 +141,11 @@ sceglie chiave né livello. Il client porta il valore corrente sulla radice del
 documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazione avviene da staging con rename atomico e non
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
+
+Un tema si installa anche da una cartella scelta dalla persona, o si collega da
+una cartella in sviluppo, solo in modalità sviluppatore e con la cartella scelta
+nella finestra nativa: permesso, porte, sostituzione di un id installato e tema
+collegato in [Temi da una cartella](theme-folder-security.md).
 
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
 un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
@@ -316,12 +318,10 @@ va al browser di sistema; ogni altro schema non si apre, con o senza visore
 montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
 incornicia soltanto un indirizzo `https:`.
 
-Una pagina incorporata in una nota (`![](https://…)` di un sito dell'elenco
-chiuso, `WEB_EMBED_SITES` in
-`apps/client/src/editors/text/profiles/markdown/web-embed.ts`) è un segnaposto
-che non chiede niente alla rete. «Carica» la apre soltanto nel visore, con lo
-stesso consenso; senza visore, o per un indirizzo che il visore non apre, non
-va al browser di sistema. Nessun iframe entra nella shell.
+Una pagina incorporata in una nota (`![](https://…)` di un sito di `WEB_EMBED_SITES`,
+in `editors/text/profiles/markdown/web-embed.ts`) è un segnaposto che non chiede
+niente alla rete. «Carica» la apre soltanto nel visore, con lo stesso consenso,
+mai nel browser di sistema; nessun iframe entra nella shell.
 
 Le letture del client con `fetch` (asset del vault, file dell'app, tessere
 della mappa) non seguono redirect e non portano credenziali né referrer:

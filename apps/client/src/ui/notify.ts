@@ -146,12 +146,47 @@ export function notify(
   message: string,
   tone: Tone = "info",
   action?: NoticeAction | readonly NoticeAction[],
-): void {
+): NoticeHandle {
   history = collect(history, { text: message, tone, when: Date.now(), times: 1 });
   if (!open) unreadCount += 1;
   announce(history[0]!);
-  show(history[0]!, action === undefined ? [] : "label" in action ? [action] : action);
+  const toast = show(history[0]!, action === undefined ? [] : "label" in action ? [action] : action);
   redraw();
+  if (!toast) return { withdraw: () => {}, rewrite: () => {} };
+  holders.set(toast, (holders.get(toast) ?? 0) + 1);
+  let held = true;
+  return {
+    withdraw: () => {
+      if (!held) return;
+      held = false;
+      const left = (holders.get(toast) ?? 1) - 1;
+      holders.set(toast, left);
+      if (left <= 0) dismissToast(toast);
+    },
+    rewrite: (next: string) => {
+      if (!held || !toast.isConnected) return;
+      toast.dataset["text"] = next;
+      const text = toast.querySelector(".toast-text");
+      if (text) text.textContent = next;
+    },
+  };
+}
+
+/// Quanti `NoticeHandle` tengono ancora un toast: un avviso uguale all'ultimo
+/// rinnova quel toast invece di aprirne un altro (`show`), e allora due
+/// handle puntano allo stesso. Il toast se ne va col ritiro dell'ultimo.
+const holders = new WeakMap<HTMLElement, number>();
+
+/// Ciò che `notify` rende a chi ha detto qualcosa su uno **stato** (un
+/// salvataggio che non riesce, un file cambiato da fuori): quando lo stato
+/// finisce, l'avviso a galla se ne va. Lo storico tiene il testo, come per
+/// ogni avviso: è successo.
+export interface NoticeHandle {
+  withdraw(): void;
+  /// Riscrive il testo del toast ancora a galla, senza rifarlo: niente nuovo
+  /// annuncio, niente riga in più nello storico (la nota ha cambiato nome, il
+  /// fatto è lo stesso).
+  rewrite(message: string): void;
 }
 
 /// Un gesto che l'avviso offre accanto al testo: «Annulla», «Apri», «Riprova».
@@ -337,15 +372,15 @@ export const TOAST_STACK_LIMIT = 3;
 /// occupano lo stesso angolo e dicono la stessa cosa: a pannello aperto la riga
 /// nuova compare in cima da sé, e un rettangolo sopra la lista coprirebbe
 /// proprio ciò che l'utente è andato a leggere.
-function show(notice: Notice, actions: readonly NoticeAction[]): void {
-  if (open || !hasDom()) return;
+function show(notice: Notice, actions: readonly NoticeAction[]): HTMLElement | null {
+  if (open || !hasDom()) return null;
   const stack = toastStack();
   const newest = stack.querySelector<HTMLElement>(".toast:last-of-type");
   if (newest && actions.length === 0 && newest.dataset["text"] === notice.text && newest.dataset.tone === notice.tone) {
     const text = newest.querySelector(".toast-text");
     if (text) text.textContent = lineOf(notice);
     armToast(newest, notice);
-    return;
+    return newest;
   }
   const toast = document.createElement("div");
   toast.className = "toast";
@@ -399,6 +434,7 @@ function show(notice: Notice, actions: readonly NoticeAction[]): void {
   }
   armToast(toast, notice);
   drawMore(stack);
+  return toast;
 }
 
 /// Il contenitore della pila, creato alla prima necessità e tolto quando si

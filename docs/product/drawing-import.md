@@ -19,7 +19,7 @@ draw.io, c'è [Disegni, esportare](drawing-export.md#i-formati).
 «Importa disegno» c'è dove si crea un disegno nuovo, quando la feature `draw`
 è accesa:
 
-- nel menu dell'app, accanto a «Nuovo disegno…», come «Importa disegno…»,
+- nel menu File dell'app, dopo «Nuovo ▸», come «Importa disegno…»,
   che sceglie il file dal disco;
 - nella palette dei comandi, «Importa disegno», senza tasti suoi;
 - nel menu di una cartella dell'esplorazione e in quello del titolo dei file,

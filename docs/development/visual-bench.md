@@ -171,8 +171,8 @@ colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
 il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che
 le stanno sopra, col suo colore, e il contrasto del testo sul foglio diventa un
 esito invece di un «da verificare».
-Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
-le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
+Il catalogo (cuore in `src/dev/catalogo/`, come «Tutti i componenti») ha i
+campioni nei loro riquadri; le regioni che scorrono hanno nome e un Tab.
 Il controllo del focus distingue i discendenti di un `details` chiuso
 dagli elementi realmente visibili e raggiungibili. In ogni scena con la
 modalità nella banda, Invio su `#status-mode` apre il menu (che prende il
@@ -180,6 +180,10 @@ fuoco) ed Esc lo chiude riportando il fuoco sulla banda; la barra di formato e
 quella del PDF sono un solo punto di Tab ciascuna.
 Il combobox modale (il lanciatore) mostra il fuoco col cursore e la riga
 attiva, senza anello: eccezione stretta e casi in `bench/a11y-rules.mjs`.
+Lo scroller dell'editor di testo (`.cm-scroller`) ha l'anello dipinto dal
+velo `::after` del suo `.cm-editor`, sopra i numeri di riga: il banco lo conta
+solo se il velo c'è, copre tutto l'editor e dipinge un contorno o un'ombra
+(`editorFrameRingGap`, stesso file).
 
 Regole:
 

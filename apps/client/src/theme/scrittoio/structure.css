@@ -205,6 +205,30 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
+/* Una superficie che riempie il suo riquadro (l'editor, l'anteprima, il
+   grafo) avrebbe l'anello fuori dal bordo, e il riquadro lo taglierebbe su
+   tutti e quattro i lati: l'anello rientra della sua larghezza e sta dentro. */
+.pane-preview:focus-visible,
+.graph-main:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+/* Nell'editor l'anello rientrato dello scroller finirebbe sotto i numeri di
+   riga, che stanno fermi a sinistra col loro fondo e lo coprirebbero. Lo
+   disegna allora l'editor, sopra i numeri: un velo vuoto grande quanto lui,
+   che non prende i clic. Resta un `outline`, così si vede anche coi colori
+   forzati. */
+.cm-editor:has(> .cm-scroller:focus-visible)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 201;
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  pointer-events: none;
+}
+.cm-editor > .cm-scroller:focus-visible {
+  outline: none;
+}
 
 /* In un dialogo il pulsante col fuoco è quello che Invio preme. L'anello si
    vede anche quando il dialogo è nato da un clic: lì il browser, da solo, non
@@ -2853,6 +2877,43 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
      l'inchiostro verso la carta, a 5,5:1 sul bianco. */
   --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #131715) 60%, var(--paper-bg, #ffffff));
+}
+/* L'anello del fuoco e la sintassi stanno sulle superfici di carta (il testo
+   del documento, l'intestazione e il piè in scrittura, le celle del foglio),
+   non sul fondo del tema: al buio l'accento chiaro del tema sul bianco
+   starebbe a 2,2:1, il «=» e i numeri di una formula a 1,8:1. Non su tutta la
+   scrivania: l'editor di un disegno ci galleggia col fondo del tema, e lì
+   l'anello del tema regge. L'anello prende l'accento della carta; la formula
+   l'inchiostro, come in Excel, dove hanno colore solo i riferimenti (i loro,
+   `--doc-author-*`, sono già della carta). */
+.look-file .rich-content,
+.look-file .rich-running,
+.look-file .grid-viewport {
+  --focus-ring: var(--paper-link, #007249);
+  --syn-keyword: var(--doc-fg);
+  --syn-name: var(--doc-fg);
+  --syn-function: var(--doc-fg);
+  --syn-literal: var(--doc-fg);
+  --syn-type: var(--doc-fg);
+  --syn-operator: var(--doc-fg);
+  --syn-string: var(--doc-fg);
+  --syn-heading: var(--doc-fg);
+  --syn-comment: var(--doc-gutter-fg);
+  --syn-invalid: var(--doc-danger);
+}
+/* I segni della griglia sulla carta: la cella attiva, la selezione, il
+   riempimento, lo spostamento, il taglio, la cella in modifica, gli oggetti,
+   il segno dei commenti. Erano dell'accento del tema, e al buio il verde
+   chiaro sul bianco sta a 2,2:1: la cella attiva quasi non si vede. Sui segni
+   l'accento è quello della carta, e il velo della selezione con lui. Le
+   intestazioni sono cornice, sul fondo del tema, e tengono l'accento del
+   tema: la regola va sulle celle e non sulla riga (`.grid-row`), che contiene
+   anche l'intestazione. Solo nella vista della griglia: la scheda di un
+   foglio sulla lavagna ha `look-file` ma la carta del tema, e lì l'accento
+   del tema regge. */
+.look-file .grid-viewport :is(.grid-cell, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-move-preview, .grid-cut-mark, .grid-cell-editor, .grid-object, .grid-object-handle, .grid-object-text-editor, .grid-comment-mark) {
+  --accent: var(--paper-link, #007249);
+  --accent-veil: color-mix(in srgb, var(--paper-link, #007249) 12%, transparent);
 }
 /* Il testo del file: carattere, misura, colore, spazi e interlinea risolti
    dal formato, come variabili di dato sull'elemento (`--file-*`,

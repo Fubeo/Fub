@@ -1,8 +1,7 @@
 ---
 name: coder
 description: Implements exactly one task of PLAN.md in its own git worktree and closes only when `scripts/check.sh --rapido` is green, then returns a short fixed-form report. Launched by the /orchestra skill with a brief; not for open-ended work.
-tools: Read, Edit, Write, Bash, Grep, Glob
-disallowedTools: Agent
+tools: Read, Edit, Write, Bash, Grep, Glob, Agent
 model: opus
 effort: medium
 isolation: worktree
@@ -31,7 +30,19 @@ expected.
 
 - **Your copy, your branch.** You work in your worktree, on the branch it was
   created with. Never push, open a PR, look at or start CI, switch branch,
-  rebase, reset or rewrite history. Never start other agents.
+  rebase, reset or rewrite history. Start no agents but the helpers below.
+- **Haiku helpers.** You may start at most **two** helpers for the whole task
+  (`Agent` with `model: "haiku"` and `effort: "max"`), only for mechanical
+  parts of your task: reading a long red log down to the errors, rerunning a
+  test that timed out under load, a probe or screenshots of the real app or
+  the bench, a wide search, regenerating a generated file. They never start
+  agents, never commit, push or touch git, and never edit a file outside the
+  paths you give them. Brief each one like a peer: the absolute path of your
+  worktree (they don't share your directory), the exact goal, its own bench
+  port or scratch folder, the queue rule for heavy checks, and what to return.
+  You stay responsible: check what a helper did before you rely on it, and
+  write the code, the tests and the commits yourself. Name each helper and
+  what it did in the report.
 - **Your files.** Touch only the paths under `Tocca`, plus the tests, the
   callers, the generated files and the `docs/` page that sit with them: name
   each extra file in the report. Anything listed under `Non toccare` is off

@@ -402,8 +402,8 @@ describe("il riquadro «Fub con questi componenti»", () => {
     expect(aside.hidden).toBe(false);
     expect(aside.getAttribute("aria-live")).toBeNull();
     expect(document.getElementById(aside.getAttribute("aria-labelledby")!)!.textContent).toBe("Fub con questi componenti");
-    // Senza `drawing.create` il kernel non fa disegni: il menu dice solo «Nota».
-    expect(newItems()).toEqual(["Nota"]);
+    // Senza i comandi di creazione il kernel fa soltanto note e cartelle.
+    expect(newItems()).toEqual(["Nota", "Cartella"]);
     expect(opens()).toEqual({
       ".md": "in «Note»",
       ".canvas": "in «Lavagna»",
@@ -418,12 +418,15 @@ describe("il riquadro «Fub con questi componenti»", () => {
     ]);
     // I comandi arrivano anche dopo la mappa: il riquadro segue.
     setCommandSpecs([drawingCreateSpec()]);
-    expect(newItems()).toEqual(["Nota", "Disegno"]);
+    expect(newItems()).toEqual(["Nota", "Disegno (.svg)", "Cartella"]);
   });
 
   it("con «Solo note»: PDF, lavagna, documenti e fogli restano file", async () => {
     await mount("solo-note");
-    expect(newItems()).toEqual(["Nota"]);
+    expect(newItems()).toEqual(["Nota", "Cartella"]);
+    // Una lavagna non si crea a lavagna spenta, anche se il kernel ha il comando.
+    setCommandSpecs([{ ...drawingCreateSpec(), id: "canvas.create" }]);
+    expect(newItems()).toEqual(["Nota", "Cartella"]);
     expect(opens()).toEqual({
       ".md": "in «Note»",
       ".canvas": "solo come file",

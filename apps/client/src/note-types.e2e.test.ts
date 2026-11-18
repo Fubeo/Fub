@@ -94,6 +94,18 @@ const shown = () => [...document.querySelectorAll<HTMLElement>(".cm-fub-page .cm
 const keyButton = (key: string) => document.querySelector<HTMLElement>(`.cm-fub-page-prop[data-key="${key}"] .cm-fub-page-prop-key`)!;
 const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>(".cm-fub-prop-menu [role^=menuitem]")].find((row) => row.textContent?.includes(label));
 
+/// «Nuova nota» dal «+» dell'albero: il «+» apre il menu «Nuovo» (S34), e la
+/// sua voce «Nota» è il gesto della nota nuova, che coi tipi chiede il tipo.
+async function newNoteFromPlus(): Promise<void> {
+  document.querySelector<HTMLButtonElement>("#new-note")!.click();
+  await waitFor("il menu «Nuovo» si apre", () => document.getElementById("context-menu") !== null);
+  const note = [...document.getElementById("context-menu")!.querySelectorAll<HTMLElement>("button")]
+    .find((b) => (b.querySelector(".menu-label")?.textContent ?? b.textContent) === "Nota");
+  if (!note) throw new Error("nel menu «Nuovo» non c'è «Nota»");
+  note.click();
+  await settle();
+}
+
 beforeEach(() => {
   stopShell();
   document.body.innerHTML = "";
@@ -103,7 +115,7 @@ beforeEach(() => {
 describe("«Nuova nota» coi tipi", () => {
   it("chiede il tipo; la nota nasce dal tipo nella sua cartella, e riletta dice le sue proprietà", async () => {
     const host = await start({ "Tipi/Libro.md": LIBRO, "Leggere.md": "Da leggere.\n" });
-    document.querySelector<HTMLButtonElement>("#new-note")!.click();
+    await newNoteFromPlus();
     await waitFor("il menu dei tipi si apre", () => menuRows().length === 2);
     const rows = menuRows();
     expect(rows.map((row) => row.querySelector(".note-type-menu-name")?.textContent)).toEqual(["Nota", "Libro"]);
@@ -133,14 +145,14 @@ describe("«Nuova nota» coi tipi", () => {
   it("Invio a menu appena aperto tiene la nota semplice; Esc non crea niente", async () => {
     const host = await start({ "Tipi/Libro.md": LIBRO });
     const before = Object.keys(host.files()).length;
-    document.querySelector<HTMLButtonElement>("#new-note")!.click();
+    await newNoteFromPlus();
     await waitFor("il menu dei tipi si apre", () => menuRows().length === 2);
     press(document.activeElement!, "Escape");
     await waitFor("il menu si chiude", () => menuRows().length === 0);
     await settle();
     expect(Object.keys(host.files())).toHaveLength(before);
 
-    document.querySelector<HTMLButtonElement>("#new-note")!.click();
+    await newNoteFromPlus();
     await waitFor("il menu dei tipi si riapre", () => menuRows().length === 2);
     press(document.activeElement!, "Enter");
     await waitFor("nasce una nota semplice", () => Object.keys(host.files()).length === before + 1);
@@ -150,7 +162,7 @@ describe("«Nuova nota» coi tipi", () => {
 
   it("senza tipi nel vault la domanda non c'è", async () => {
     const host = await start({ "Leggere.md": "Da leggere.\n" });
-    document.querySelector<HTMLButtonElement>("#new-note")!.click();
+    await newNoteFromPlus();
     await waitFor("la nota nasce subito", () => Object.keys(host.files()).length === 2);
     expect(document.querySelector(".note-type-popover")).toBeNull();
   });
@@ -158,7 +170,7 @@ describe("«Nuova nota» coi tipi", () => {
   it("una nota che non nasce lascia il disco com'era e lo dice", async () => {
     const host = await start({ "Tipi/Libro.md": LIBRO });
     const before = host.files();
-    document.querySelector<HTMLButtonElement>("#new-note")!.click();
+    await newNoteFromPlus();
     await waitFor("il menu dei tipi si apre", () => menuRows().length === 2);
     const release = host.fault("invokeCommand", { kind: "permission_denied", message: "La cartella Biblioteca è di sola lettura" });
     menuRows()[1]!.click();

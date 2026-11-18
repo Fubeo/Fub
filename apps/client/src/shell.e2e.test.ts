@@ -2506,11 +2506,11 @@ describe("nuova cartella", () => {
       ["folder.create", { path: "note/Progetti" }],
     ]);
 
-    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("Archivio");
     await waitFor("la cartella di radice compare", () => !!folderRow("Archivio"));
 
-    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("note");
     await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
     expect(withoutTypeReads(host.atGate("invokeCommand"))).toHaveLength(3);

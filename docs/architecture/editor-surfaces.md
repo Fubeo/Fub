@@ -382,7 +382,11 @@ foglio di calcolo.
 
 Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
-`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
+`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora. Il
+tema di CodeMirror (`editors/text/theme.ts`) dà solo la luce e le classi
+`fub-syn-*`; colori e carattere stanno nella pelle sotto `.cm-*`, con gli
+hook nel contratto. CodeMirror mette i suoi stili prima della pelle, che vince
+a parità di peso: ogni regola pesa quanto quella del tema che sostituisce.
 
 La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
@@ -425,14 +429,10 @@ dei fogli sono descritti nella [superficie dei fogli](grid-surface.md).
 ## Confine CodeMirror
 
 Gli import `@codemirror/*` della shell sono confinati a
-`apps/client/src/editors/text/`. `TextEngine`, i tre profili, le loro
-estensioni, la superficie Markdown e i test del seam vivono sotto questo
-percorso; `panels/document.ts` usa il contratto `EditorSurface` e i tipi senza
-importare CodeMirror.
-
-`node .github/scripts/check-codemirror-boundary.mjs` percorre
-`apps/client/src` e segnala ogni import CodeMirror fuori da
-`apps/client/src/editors/text/`. Il confine impedisce copie incompatibili e
+`apps/client/src/editors/text/` (`TextEngine`, i profili, le estensioni, la
+superficie Markdown, i test del seam); `panels/document.ts` usa `EditorSurface`
+senza importare CodeMirror. `.github/scripts/check-codemirror-boundary.mjs`
+segnala ogni import fuori da lì: il confine impedisce copie incompatibili e
 mantiene CodeMirror un servizio della shell testuale.
 
 ## Dove si trova

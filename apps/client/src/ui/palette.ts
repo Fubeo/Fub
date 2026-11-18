@@ -786,6 +786,12 @@ function placeAtCaret(box: HTMLElement, anchor: SelectionBox): void {
   }
 }
 
+/// Il menu «/» aperto da `owner` contiene `node`: il fuoco lì è ancora di
+/// chi l'ha aperto.
+export function slashPaletteHolds(owner: HTMLElement, node: Node): boolean {
+  return slashOwner === owner && (document.getElementById(OVERLAY_ID)?.contains(node) ?? false);
+}
+
 export function closeSlashPalette(owner: HTMLElement): void {
   if (slashOwner === owner) closeCommandPalette();
 }
