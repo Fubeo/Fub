@@ -633,7 +633,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     closeSettings: () => close(),
     openNote: () => activeDoc(),
     // Dinamico: `document-controller` importa già questo pannello.
-    openDocument: async (doc) => {
+    showDocument: async (doc) => {
       const { openDocument } = await import("../state/document-controller");
       await openDocument(doc);
     },

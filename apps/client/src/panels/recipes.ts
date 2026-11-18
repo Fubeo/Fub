@@ -212,7 +212,7 @@ export interface RecipesSectionHooks {
   /// La nota aperta adesso, su cui la finestra prova la ricetta.
   openNote(): string | null;
   /// Apre una nota del vault.
-  openDocument(doc: string): Promise<void>;
+  showDocument(doc: string): Promise<void>;
   /// Un avviso del gesto.
   notify(message: string, tone?: Tone): void;
 }
@@ -307,7 +307,7 @@ export function mountRecipesSection(lifetime: Lifetime, hooks: RecipesSectionHoo
 
   function openNote(doc: string): void {
     hooks.closeSettings();
-    hooks.openDocument(doc).catch((error: unknown) => {
+    hooks.showDocument(doc).catch((error: unknown) => {
       hooks.notify(t("recipes.open_note.failed", { doc, reason: errorText(error) }), "guasto");
     });
   }

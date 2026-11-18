@@ -86,7 +86,7 @@ const hooks = {
   visible: vi.fn(() => true),
   closeSettings: vi.fn(),
   openNote: vi.fn((): string | null => null),
-  openDocument: vi.fn(async (_doc: string) => {}),
+  showDocument: vi.fn(async (_doc: string) => {}),
   notify: vi.fn(),
 };
 
@@ -200,7 +200,7 @@ describe("gli stati della sezione", () => {
     expect(buttons(root, "Guarda")).toHaveLength(0);
     buttons(root, "Apri la nota")[0]!.click();
     expect(hooks.closeSettings).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(hooks.openDocument).toHaveBeenCalledWith("Recipes/attivita.md"));
+    await vi.waitFor(() => expect(hooks.showDocument).toHaveBeenCalledWith("Recipes/attivita.md"));
   });
 
   it("in errore lo dice, e «Riprova» rilegge", async () => {
