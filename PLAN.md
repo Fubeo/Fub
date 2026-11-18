@@ -1655,7 +1655,7 @@ lo dice); il moto ridotto; la lingua inglese.
 Fatto quando: quaranta compiti e2e verdi nel banco.
 Prova: scripts/check.sh --rapido; cd apps/client && FUB_BENCH_PORT=1460 npm
 run bench:giro
-Stato: [~] in corso (coder test/giro-scrittura da integra/editor-2, 2026-11-18)
+Stato: [~] integrato in `integra/editor-2` (857e32eb4, merge e4485a3cf, 2026-11-18), in attesa del pacchetto 2. 42 compiti verdi con `bench:giro --solo=scrittura`; elenco in docs/development/giro-della-scrittura.md (testing-and-quality.md era al limite). Quattro compiti in SALTATI per difetti di Fub (slash dopo la rinomina, «/compito», sbirciata con due Esc, uscita dall'elenco): coder fix/giro-scrittura-difetti
 
 ## T27 · La prova con cinque persone
 
