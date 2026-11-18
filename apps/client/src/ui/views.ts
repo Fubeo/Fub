@@ -44,7 +44,7 @@ import { activatable, stableIdentifier, trapFocus } from "./a11y";
 import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
-import { flushPendingSave } from "../state/document-session";
+import { expectDocumentWrite, flushPendingSave } from "../state/document-session";
 import { openVaultRoot, vaultArg } from "../state/store";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
@@ -119,6 +119,27 @@ interface Mounted {
 /// stesso pannello, anche quando il contenitore DOM viene riutilizzato.
 let mountedEpoch = 0;
 const mounted = new Map<string, Mounted>();
+
+/// Quanto resta l'annuncio di una scrittura dopo la risposta di un'azione di
+/// view. L'evento della scrittura parte mentre il comando scrive, prima della
+/// risposta, ma attraversa un altro canale: questa è l'attesa per lui. Oltre,
+/// l'annuncio si ritira, perché l'azione forse non ha scritto niente (un
+/// filtro, un'apertura) e un annuncio rimasto zittirebbe un cambio vero.
+/// Uguale all'attesa di «Annulla» della Base (`editors/base/surface.ts`).
+const VIEW_WRITE_GRACE_MS = 1500;
+
+/// Annuncia alla sessione della nota a fuoco che un'azione di view sta per
+/// riscriverla (`expectDocumentWrite`), e torna come ritirare l'annuncio.
+/// La nota a fuoco è quella che l'ispettore segue: le sue view scrivono lì.
+/// Il ritiro aspetta `VIEW_WRITE_GRACE_MS` ed è idempotente.
+function announceViewWrite(): () => void {
+  const doc = activeDoc();
+  if (doc === null) return () => {};
+  const withdraw = expectDocumentWrite(doc);
+  return () => {
+    window.setTimeout(withdraw, VIEW_WRITE_GRACE_MS);
+  };
+}
 
 // # Le righe che nominano un posto di un documento
 //
@@ -819,21 +840,36 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
     // toglie l'unico caso in cui la corsa la perdeva sempre lo stesso.
     await flushPendingSave();
     if (!isAuthoritative()) return;
-    // **Qui non c'è un `try`, ed è deliberato.** Un'azione che va storta la dice
+    // **La scrittura si annuncia.** Un'azione di view che riscrive la nota
+    // aperta — una proprietà cambiata dall'ispettore, una versione ripristinata
+    // — è un gesto di chi la guarda, non un cambio da fuori: senza annuncio la
+    // sessione la diceva con «è cambiato su disco ed è stato ricaricato»
+    // (IMP-109). Annunciata prima, perché l'evento parte mentre il comando
+    // scrive; ritirata poco dopo la risposta, perché qui non si sa se l'azione
+    // ha scritto, e un annuncio rimasto zittirebbe un cambio vero.
+    const withdraw = announceViewWrite();
+    // **Qui non c'è un `catch`, ed è deliberato.** Un'azione che va storta la dice
     // la `Port` di `ui/node.ts` — l'unica strada che un'azione ha per uscire da
     // un albero montato — e scriverne uno anche qui vorrebbe dire due frasi per
     // lo stesso guasto, o una qui e nessuna per il prossimo `mountTree`. Il
     // difetto misurato nominava questa riga: era il testimone, non l'autore.
-    const update = await api.viewAction(
-      // La view, non il pannello: vedi la nota su `renderDeclaredView`.
-      mountedView.view,
-      mountedView.instance,
-      mountedView.params,
-      action.action,
-      action.payload,
-      fields,
-      ...vaultArg(mountedView.vault),
-    );
+    // Il `finally` ritira l'annuncio anche quando l'azione fallisce; non
+    // cattura niente.
+    let update: Awaited<ReturnType<typeof api.viewAction>>;
+    try {
+      update = await api.viewAction(
+        // La view, non il pannello: vedi la nota su `renderDeclaredView`.
+        mountedView.view,
+        mountedView.instance,
+        mountedView.params,
+        action.action,
+        action.payload,
+        fields,
+        ...vaultArg(mountedView.vault),
+      );
+    } finally {
+      withdraw();
+    }
     if (!isAuthoritative()) return;
     if (update.kind === "replace") {
       draw(id, mountedView, update.root);

@@ -52,7 +52,24 @@ vi.mock("../host/ipc", () => ({
 }));
 // `state/document-session` possiede il flush senza trascinare qui CodeMirror
 // e il pannello del documento.
-vi.mock("../state/document-session", () => ({ flushPendingSave: async () => {} }));
+const writeWithdrawn = vi.fn();
+const expectDocumentWrite = vi.fn((_doc: string) => writeWithdrawn);
+vi.mock("../state/document-session", () => ({
+  flushPendingSave: async () => {},
+  get expectDocumentWrite() {
+    return expectDocumentWrite;
+  },
+}));
+// La nota a fuoco: la decide il test che la scrive, gli altri leggono il layout.
+let focusedDoc: string | null | undefined;
+vi.mock("../state/layout", async (original) => {
+  const layout = await original<typeof import("../state/layout")>();
+  return {
+    ...layout,
+    activeDoc: (...args: Parameters<typeof layout.activeDoc>) =>
+      focusedDoc === undefined ? layout.activeDoc(...args) : focusedDoc,
+  };
+});
 
 function spec(id: string, surface: ViewSpec["surface"]): ViewSpec {
   return {
@@ -787,6 +804,65 @@ describe("lifecycle delle view dichiarate", () => {
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
     );
     expect(modal.hidden).toBe(true);
+  });
+});
+
+describe("la scrittura di un'azione di view (IMP-109)", () => {
+  /// Una proprietà cambiata dall'ispettore riscrive la nota aperta: è un gesto
+  /// di chi la guarda, e la sessione non deve dirlo con «è cambiato su disco ed
+  /// è stato ricaricato». L'annuncio parte **prima** della chiamata (l'evento
+  /// arriva mentre il comando scrive) e si ritira poco dopo la risposta.
+  it("annuncia la scrittura della nota a fuoco prima dell'azione, e la ritira dopo la risposta", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      expectDocumentWrite.mockClear();
+      writeWithdrawn.mockClear();
+      focusedDoc = "index.md";
+      listViews.mockResolvedValueOnce([spec("graph", "main")]);
+      const views = await loadViews();
+      await views.mountDeclaredViews();
+      renderView.mockImplementationOnce(async () => ({
+        node: "list_item", title: "voce", subtitle: null, action: { action: "set", payload: null }, selected: false,
+      }));
+      const pane = document.createElement("div");
+      document.body.appendChild(pane);
+      await views.mountViewInPane("graph", "main", pane);
+
+      let calledAfterAnnouncement = false;
+      viewAction.mockImplementationOnce(async () => {
+        calledAfterAnnouncement = expectDocumentWrite.mock.calls.length === 1;
+        return { kind: "none" };
+      });
+      pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+      await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+      expect(expectDocumentWrite).toHaveBeenCalledWith("index.md");
+      expect(calledAfterAnnouncement, "annunciata prima della chiamata").toBe(true);
+      await Promise.resolve();
+      expect(writeWithdrawn, "l'evento può arrivare dopo la risposta").not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(writeWithdrawn).toHaveBeenCalledTimes(1);
+    } finally {
+      focusedDoc = undefined;
+      vi.useRealTimers();
+    }
+  });
+
+  it("senza una nota a fuoco non annuncia niente", async () => {
+    expectDocumentWrite.mockClear();
+    focusedDoc = null;
+    listViews.mockResolvedValueOnce([spec("graph", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    renderView.mockImplementationOnce(async () => ({
+      node: "list_item", title: "voce", subtitle: null, action: { action: "set", payload: null }, selected: false,
+    }));
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
+    pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    expect(expectDocumentWrite).not.toHaveBeenCalled();
+    focusedDoc = undefined;
   });
 });
 
