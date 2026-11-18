@@ -1638,8 +1638,8 @@ const CONTROLS = [
     id: "g6-incolla-subito",
     cantiere: "G6",
     scene: "grid-large-appunti",
-    title: "C4:C5 copiata con Ctrl+C, G20 scelta e incollata, col provider che risponde dopo 400 ms",
-    expected: "dal primo fotogramma dopo l'incolla G20 mostra 10 e G21 20, prima della risposta; dopo la risposta gli stessi, il tratteggio della copia via, nessun avviso",
+    title: "C4:C5 copiata con Ctrl+C, D8 scelta e incollata, col provider che risponde dopo 400 ms",
+    expected: "dal primo fotogramma dopo l'incolla D8 mostra 10 e D9 20, prima della risposta; dopo la risposta gli stessi, il tratteggio della copia via, nessun avviso",
     run: async (page) => {
       await pick(page, "C4");
       await page.keyboard.press("Shift+ArrowDown");
@@ -1649,7 +1649,7 @@ const CONTROLS = [
       });
       await page.keyboard.press("Control+c");
       await settle(page);
-      await pick(page, "G20");
+      await pick(page, "D8");
       // L'incolla come lo manda il browser, con il testo copiato: il primo
       // fotogramma dopo, prima che il provider risponda.
       const first = await page.evaluate((selectors) => {
@@ -1660,11 +1660,11 @@ const CONTROLS = [
         document.activeElement?.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
         return new Promise((resolve) => requestAnimationFrame(() => setTimeout(() => resolve(selectors.map((selector) =>
           document.querySelector(`${selector} .grid-cell-text`)?.textContent ?? "")), 0)));
-      }, [cellSelector("G20"), cellSelector("G21")]);
+      }, [cellSelector("D8"), cellSelector("D9")]);
       const given = await page.evaluate(() => window.bench.calls.filter((call) => call.gate === "gridBytesCommand").map((call) => call.args[1]?.command?.id));
       await settle(page, 1_000);
       const after = await page.evaluate((selectors) => selectors.map((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent ?? ""),
-        [cellSelector("G20"), cellSelector("G21")]);
+        [cellSelector("D8"), cellSelector("D9")]);
       const copyMarks = await page.evaluate(() => [...document.querySelectorAll(".pane.focus .grid-mark-copy")].filter((mark) => !mark.hidden).length);
       const notice = await page.evaluate(() => {
         const element = document.querySelector(".pane.focus .grid-notice");
@@ -1673,7 +1673,7 @@ const CONTROLS = [
       const ok = first.join(",") === "10,20" && after.join(",") === "10,20" && given.includes("fub.pasteFrom") && copyMarks === 0 && !notice;
       return {
         ok,
-        seen: `al primo fotogramma G20, G21 «${first.join(" ")}»; dopo la risposta «${after.join(" ")}»; comandi ${given.join(" ") || "nessuno"}; tratteggi ${copyMarks}${notice ? `; avviso «${notice}»` : ""}`,
+        seen: `al primo fotogramma D8, D9 «${first.join(" ")}»; dopo la risposta «${after.join(" ")}»; comandi ${given.join(" ") || "nessuno"}; tratteggi ${copyMarks}${notice ? `; avviso «${notice}»` : ""}`,
       };
     },
   },
