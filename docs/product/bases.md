@@ -415,6 +415,22 @@ com'è, e la ricerca, il CSV e le copie usano il valore. Le colonne `file.*`,
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
 Una modifica chiesta (cella, colonna della bacheca, nota spostata nel calendario o nella linea del tempo) passa anche se il vault cambia o la Base si chiude; se la nota è cambiata o la Base è in sola lettura no, e lo dice la riga di stato o, a Base chiusa, un avviso.
 
+Il testo che si sta scrivendo in una cella, prima di Invio, non si perde
+quando le righe si ridisegnano (un'altra nota salvata, la stessa nota
+cambiata da fuori, lo scorrimento): il campo tiene il testo e il fuoco. Alla
+conferma (Invio, Tab, un clic fuori) la cella si scrive contro il valore che
+aveva quando si è cominciato a scrivere. Se intanto quella proprietà della
+nota è cambiata, niente si scrive: la cella resta col tuo testo, bordata di
+rosso, e sopra le righe la Base dice «“Nota” è cambiata mentre scrivevi in
+“colonna”» con due scelte: «Mantieni il mio testo» (si scrive sopra il valore
+di adesso, ancora col confronto: se la nota cambia di nuovo, si richiede) e
+«Usa la versione su disco». Un cambio di un'altra proprietà della stessa nota
+non è un conflitto. Esc lascia perdere il tuo testo e mostra il valore del disco. Se la
+nota cambiata non è più nella vista, l'avviso riporta il testo scritto, con
+«Copia il mio testo». Chiudere la Base scrive le celle ancora in modifica; una
+cella in conflitto non si scrive sopra la nota cambiata, e l'avviso di
+chiusura ne riporta il testo.
+
 Ogni valore sta su una riga sola e le colonne prendono la misura del loro
 contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando
 non ci sta, scorre di lato dentro la scatola.
