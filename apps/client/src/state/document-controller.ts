@@ -3836,8 +3836,8 @@ function followRenameInPanes(from: string, to: string): void {
   }
 }
 
-/// Il cursore di una superficie che lo dice, in byte del sorgente: la testa
-/// della selezione principale se è vuota, il suo inizio altrimenti. `null`
+/// Il cursore di una superficie che lo dice, in byte del sorgente: l'inizio
+/// della selezione principale (il cursore stesso, se è vuota). `null`
 /// per chi non ha intervalli del sorgente (un documento di Word, una tela).
 function caretOf(surface: EditorSurface): number | null {
   try {
