@@ -1845,6 +1845,251 @@
       }
     },
     {
+      "input": "è 🗺",
+      "typing": true,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "è 🗺",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": true,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "è🗺 (👨‍👩‍👧 OR 🇮🇹) -東京",
+      "typing": true,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "è🗺",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "👨‍👩‍👧",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "東京",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            },
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "è🗺",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "🇮🇹",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "東京",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "caffé \"è qui 🗺\"",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "caffé",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "è qui 🗺",
+                    "mode": "phrase",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "tag:🗺 [città:🇮🇹] line:(東京 タワー)",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "tag",
+                    "name": "🗺",
+                    "descendants": true
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "property",
+                    "filter": {
+                      "key": "città",
+                      "test": {
+                        "op": "contains",
+                        "kind": "text",
+                        "value": "🇮🇹"
+                      }
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "line",
+                    "text": {
+                      "text": "東京 タワー",
+                      "mode": "terms",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "🗺 è \"aperta",
+      "typing": true,
+      "out": {
+        "fault": {
+          "kind": "unclosed-quote",
+          "at": 5
+        }
+      }
+    },
+    {
+      "input": "👨‍👩 (東京",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-group",
+          "at": 9
+        }
+      }
+    },
+    {
+      "input": "🇮🇹 )",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unexpected-close",
+          "at": 5
+        }
+      }
+    },
+    {
+      "input": "\\ * ? (",
+      "typing": true,
+      "out": {
+        "fault": {
+          "kind": "unclosed-group",
+          "at": 7
+        }
+      }
+    },
+    {
       "input": "((((((((((((((((((((((((((((((((a))))))))))))))))))))))))))))))))",
       "typing": false,
       "out": {
