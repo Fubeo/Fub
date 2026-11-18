@@ -41,6 +41,7 @@ const REGISTRARS = [
   "../editors/text/profiles/markdown/comments/thread.ts",
   "../editors/text/profiles/markdown/transclusion.ts",
   "../editors/text/profiles/markdown/blocks/move-to.ts",
+  "../editors/text/profiles/markdown/live-cards.ts",
   "../panels/format-bar.ts",
   "../panels/mini-bar.ts",
   "../kit/color/picker.ts",
