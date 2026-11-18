@@ -393,16 +393,6 @@ e la shell lo dice. Dal bridge del documento arrivano anche il tema, come
 strati montati (`theme/loader.ts`), e tornano indietro i link e i tag cliccati
 nella finestra, che la finestra principale apre.
 
-Quando un testo della finestra non entra nella sessione, la finestra mostra
-«Conserva le mie modifiche» e «Scarta le modifiche locali». Lo scarto si
-conferma nella pagina, in due tempi (la finestra non ha i dialoghi di sistema):
-la prima pressione chiede alla finestra principale se il testo resterà nella
-Cronologia (`keep-probe`) e lo dice, la seconda («Sì, scarta») glielo manda
-(`keep`). La finestra principale lo conserva con la stessa regola di «Usa la
-versione su disco» (`state/conflict-keep.ts`, `setDocumentWindowKeeper`), e la
-finestra scarta soltanto dopo `kept`; un `keep-failed`, o nessuna risposta, non
-scarta niente e la finestra dice perché.
-
 La tastiera è ordinata per contesto: il popup di completamento e le keymap
 CodeMirror precedono il layer della superficie; poi vengono profilo, documento,
 riquadro e globale. La shell monta un solo listener globale e lo rimuove al
