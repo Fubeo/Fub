@@ -193,6 +193,8 @@ pub fn catalog() -> Vec<StringCatalog> {
         .with("confirm", "Yes, go ahead")
         .with("cancel", "Cancel");
     let (it, en) = super::commands::catalog_rows(it, en);
+    // I comandi leggono il campo «Documento» anche scritto per nome.
+    let (it, en) = crate::doc_names::speaking(crate::doc_names::KEYS, it, en);
     vec![it, en]
 }
 

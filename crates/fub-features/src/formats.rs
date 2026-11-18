@@ -7,6 +7,7 @@
 //! il provider dichiara ([`format_of`](fub_abi::traits::VaultRead::format_of)),
 //! mai dall'estensione.
 
+use fub_abi::command::{Args, DocumentNameKeys};
 use fub_abi::error::PluginError;
 use fub_abi::format::LinkInsert;
 use fub_abi::model::{DocId, LinkTarget};
@@ -68,24 +69,90 @@ pub(crate) fn wikilink(page: &str, label: Option<&str>, embed: bool) -> LinkInse
     }
 }
 
-/// Aggiunge ai cataloghi di una feature la stringa dell'errore di formato.
+/// Le chiavi delle due frasi con cui un comando delle feature dice perché il
+/// nome scritto in un campo «Documento» non basta. Ogni feature che usa questo
+/// modulo le porta nel proprio catalogo con [`speaking`].
+pub(crate) const E_DOC_MISSING: &str = "e_doc_missing";
+pub(crate) const E_DOC_AMBIGUOUS: &str = "e_doc_ambiguous";
+
+const DOC_NAMES: DocumentNameKeys<'static> = DocumentNameKeys {
+    missing: E_DOC_MISSING,
+    ambiguous: E_DOC_AMBIGUOUS,
+};
+
+/// Il documento del campo `name`, scelto dall'elenco o scritto per nome, fra
+/// **tutti** i documenti del vault: per i comandi che ne accettano uno
+/// qualunque (rinominare, duplicare, cestinare, ripristinare una versione).
+/// La regola è [`Args::named_document`].
+pub(crate) fn any_document(
+    args: &Args<'_>,
+    name: &str,
+    host: &(impl VaultRead + ?Sized),
+) -> Result<Option<DocId>, PluginError> {
+    args.named_document(name, host, |_| true, DOC_NAMES)
+}
+
+/// Come [`any_document`], fra i soli documenti il cui formato dichiara la
+/// capacità `capability` ([`understands`]): un nome che porta anche un
+/// documento di un altro tipo non diventa per questo ambiguo.
+pub(crate) fn document_with(
+    args: &Args<'_>,
+    name: &str,
+    host: &(impl VaultRead + ?Sized),
+    capability: &str,
+) -> Result<Option<DocId>, PluginError> {
+    args.named_document(
+        name,
+        host,
+        |doc| understands(host, doc, capability),
+        DOC_NAMES,
+    )
+}
+
+/// Come [`any_document`], fra i soli documenti che `accepts` vuole: per i
+/// comandi il cui filtro non è una capacità del formato (una lavagna, un
+/// `.base`, un PDF).
+pub(crate) fn document_named_by(
+    args: &Args<'_>,
+    name: &str,
+    host: &(impl VaultRead + ?Sized),
+    accepts: impl Fn(&DocId) -> bool,
+) -> Result<Option<DocId>, PluginError> {
+    args.named_document(name, host, accepts, DOC_NAMES)
+}
+
+/// Le chiavi che [`speaking`] aggiunge, nell'ordine dei suoi testi.
+pub(crate) const SPOKEN: [&str; 4] = [
+    E_FORMAT_UNSUPPORTED,
+    E_NO_NEW_NOTE_FORMAT,
+    E_DOC_MISSING,
+    E_DOC_AMBIGUOUS,
+];
+
+/// Aggiunge ai cataloghi di una feature le stringhe di questo modulo: l'errore
+/// di formato e le due frasi del nome scritto in un campo «Documento».
 pub(crate) fn speaking(mut catalogs: Vec<StringCatalog>) -> Vec<StringCatalog> {
     for catalog in &mut catalogs {
         let templates = match catalog.locale.as_str() {
             "it" => [
                 "Il formato di {doc} non supporta questa operazione.",
                 "Nessun formato installato serve l'estensione «{ext}» scelta per le note nuove.",
+                "Nessun documento che questo comando può usare si chiama «{doc}». Sceglilo \
+                 dall'elenco del campo.",
+                "Più documenti si chiamano «{doc}»: {docs}. Scegli dall'elenco del campo quello \
+                 giusto.",
             ],
             "en" => [
                 "The format of {doc} does not support this operation.",
                 "No installed format serves the extension \"{ext}\" chosen for new notes.",
+                "No document this command can use is called “{doc}”. Pick it from the field's \
+                 list.",
+                "More than one document is called “{doc}”: {docs}. Pick the right one from the \
+                 field's list.",
             ],
             _ => continue,
         };
-        for (key, template) in [E_FORMAT_UNSUPPORTED, E_NO_NEW_NOTE_FORMAT]
-            .into_iter()
-            .zip(templates)
-        {
+        for (key, template) in SPOKEN.into_iter().zip(templates) {
             catalog
                 .entries
                 .insert(key.to_string(), template.to_string());

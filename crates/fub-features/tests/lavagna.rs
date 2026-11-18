@@ -2294,3 +2294,37 @@ mod con_draw {
         assert_eq!(group_label(&ws), json!("13 pages"));
     }
 }
+
+/// Il campo «Documento» scritto a mano (#486): il nome della lavagna, senza
+/// estensione e senza maiuscole, è la lavagna; la nota omonima non conta,
+/// perché i comandi della lavagna vogliono una lavagna.
+#[test]
+fn una_lavagna_scritta_per_nome_si_legge() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let name = BOARD.trim_end_matches(".canvas");
+    ws.write_document(
+        &DocId::new(format!("{name}.md")),
+        "# Omonima\n",
+        WriteBase::Dictated,
+    )
+    .expect("la nota si scrive");
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": name.to_lowercase() }),
+        InvokeMode::Apply,
+    )
+    .expect("il nome nomina la sola lavagna");
+    assert_eq!(custom(&outcome)["doc"], BOARD);
+
+    let error = plugin_error(
+        read_cmd(&mut ws, json!({ "doc": "Altrove" }), InvokeMode::Apply)
+            .expect_err("nessuna lavagna si chiama così"),
+    );
+    let PluginError::BadArgs(text) = error else {
+        panic!("atteso BadArgs, arrivato {error:?}")
+    };
+    assert!(
+        text.as_literal().is_some_and(|t| t.contains("«Altrove»")),
+        "{text:?}"
+    );
+}

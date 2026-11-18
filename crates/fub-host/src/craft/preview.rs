@@ -276,6 +276,12 @@ fn store(host: &mut dyn HostApi, preview: &CraftPreview, size: PreviewSize) {
 /// Il soggetto di `doc`: dal formato, se è di un provider Craft, o
 /// dall'estensione del nome. Un nome senza estensione, o che è solo
 /// un'estensione (`.pdf`), non ne ha.
+/// `doc` ha un'anteprima di questo bundle? È la domanda con cui il comando
+/// sceglie fra gli omonimi di un nome scritto a mano.
+pub(super) fn previewable(host: &dyn HostApi, doc: &DocId) -> bool {
+    subject_of(host, doc).is_some()
+}
+
 fn subject_of(host: &dyn HostApi, doc: &DocId) -> Option<PreviewSubject> {
     if let Some(app) = host
         .format_of(doc)

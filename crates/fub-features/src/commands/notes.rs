@@ -156,8 +156,7 @@ pub(super) fn notes_duplicate(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::any_document(&args, "doc", &*host)?
         .expect("l'host ha convalidato un parametro obbligatorio");
     // «Incolla» nell'esplora risorse: la copia va in un'altra cartella e lì
     // tiene il suo nome; nella stessa cartella diventa «Nota copia».
@@ -197,8 +196,7 @@ pub(super) fn notes_rename(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::any_document(&args, "doc", &*host)?
         .expect("l'host ha convalidato un parametro obbligatorio");
     let to = args
         .text("to")
@@ -265,8 +263,7 @@ pub(super) fn notes_folder_page(
     _mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::any_document(&args, "doc", &*host)?
         .or_else(|| host.active_context().and_then(|c| c.doc))
         .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
     if doc.is_folder_page() {
@@ -334,8 +331,7 @@ pub(super) fn notes_subpage(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::any_document(&args, "doc", &*host)?
         .or_else(|| host.active_context().and_then(|c| c.doc))
         .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
     let name = args
@@ -424,8 +420,7 @@ pub(super) fn notes_trash(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::any_document(&args, "doc", &*host)?
         .or_else(|| host.active_context().and_then(|c| c.doc))
         .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
 

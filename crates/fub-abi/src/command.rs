@@ -1187,6 +1187,105 @@ pub fn document_named(
     }
 }
 
+/// Le due chiavi di catalogo con cui un comando dice perché il nome scritto in
+/// un campo [`ParamKind::Document`] non basta. Le frasi sono del componente che
+/// possiede il comando, perché è il suo catalogo a risolverle; i due argomenti
+/// che ricevono sono `{doc}` (il testo scritto) e, per `ambiguous`, `{docs}`
+/// (gli omonimi in una riga).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocumentNameKeys<'k> {
+    /// Nessun documento fra quelli che il comando accetta si chiama così.
+    pub missing: &'k str,
+    /// Più documenti fra quelli che il comando accetta si chiamano così.
+    pub ambiguous: &'k str,
+}
+
+impl<'a> Args<'a> {
+    /// Il documento del campo `name`, scelto dall'elenco **o scritto per
+    /// nome**: la lettura di un [`ParamKind::Document`] per un comando.
+    ///
+    /// È [`document_named`] fra i documenti del vault, con l'errore già
+    /// scritto: un nome che nessun documento accettato porta, o che ne portano
+    /// più d'uno, è un [`PluginError::BadArgs`] con la frase di `keys`. Il
+    /// filtro `accepts` resta del comando: lo sa soltanto lui quali documenti
+    /// vuole, e un nome che ne indica uno solo fra quelli giusti non diventa
+    /// ambiguo perché un documento di un altro tipo si chiama uguale.
+    ///
+    /// Un id che c'è si riconosce di solito senza elencare il vault: è il caso
+    /// di chi sceglie dall'elenco del campo, cioè il più comune. Assente resta
+    /// `Ok(None)`, come in [`Args::document`]: che cosa fare senza documento
+    /// (la nota aperta, un errore) lo decide il comando.
+    pub fn named_document<H: crate::traits::VaultRead + ?Sized>(
+        &self,
+        name: &str,
+        host: &H,
+        accepts: impl Fn(&DocId) -> bool,
+        keys: DocumentNameKeys<'_>,
+    ) -> Result<Option<DocId>, PluginError> {
+        let Some(raw) = self.text(name) else {
+            return Ok(None);
+        };
+        // Un id che c'è. Di solito si riconosce senza leggerlo: il nome è
+        // occupato ([`VaultRead::free_name`](crate::traits::VaultRead::free_name)
+        // non lo restituisce) e un formato lo serve, quindi non è una cartella.
+        // Un allegato senza formato (una foto RAW, un `.png`) non sta
+        // nell'elenco dei documenti: per lui decide la revisione, che legge il
+        // file. Lo stesso id lo leggerà comunque il comando.
+        resolve_document_name(
+            raw,
+            |doc| {
+                &host.free_name(doc) != doc
+                    && (host.format_of(doc).is_some() || host.document_revision(doc).is_ok())
+            },
+            || Ok(host.list_documents(None)?.items),
+            accepts,
+            keys,
+        )
+        .map(Some)
+    }
+}
+
+/// Il cuore di [`Args::named_document`], per chi i documenti li conosce da un
+/// altro varco che l'[`HostApi`](crate::traits::HostApi) (l'host, che legge il
+/// workspace): `exists` riconosce, a buon mercato, un id che c'è senza elencare
+/// il vault (un `false` costa solo l'elenco), `docs` lo elenca soltanto quando
+/// serve. La regola è [`document_named`], e
+/// l'errore è quello di `keys`.
+pub fn resolve_document_name(
+    raw: &str,
+    exists: impl FnOnce(&DocId) -> bool,
+    docs: impl FnOnce() -> Result<Vec<DocId>, PluginError>,
+    accepts: impl Fn(&DocId) -> bool,
+    keys: DocumentNameKeys<'_>,
+) -> Result<DocId, PluginError> {
+    let given = DocId::new(raw);
+    if exists(&given) {
+        return Ok(given);
+    }
+    let written = || crate::text::Arg::text("doc", raw.trim());
+    match document_named(raw, docs()?, accepts) {
+        DocumentNamed::One(doc) => Ok(doc),
+        DocumentNamed::None => Err(PluginError::BadArgs(Text::message(
+            keys.missing,
+            vec![written()],
+        ))),
+        DocumentNamed::Many(docs) => Err(PluginError::BadArgs(Text::message(
+            keys.ambiguous,
+            vec![written(), crate::text::Arg::text("docs", homonyms(&docs))],
+        ))),
+    }
+}
+
+/// Gli omonimi in una riga: i primi cinque, e i puntini se sono di più.
+fn homonyms(docs: &[DocId]) -> String {
+    const SHOWN: usize = 5;
+    let mut names: Vec<&str> = docs.iter().take(SHOWN).map(DocId::as_str).collect();
+    if docs.len() > SHOWN {
+        names.push("…");
+    }
+    names.join(", ")
+}
+
 /// La modifica che un comando propone per **un** documento.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlannedEdit {
@@ -1706,6 +1805,66 @@ mod tests {
         assert_eq!(
             document_named("Relazione.md", vault(), word),
             DocumentNamed::One(DocId::new("Relazione.md"))
+        );
+    }
+
+    const KEYS: DocumentNameKeys<'static> = DocumentNameKeys {
+        missing: "doc.missing",
+        ambiguous: "doc.ambiguous",
+    };
+
+    fn message(error: PluginError) -> crate::text::Message {
+        match error {
+            PluginError::BadArgs(text) => {
+                text.as_message().cloned().expect("una frase del catalogo")
+            }
+            other => panic!("atteso BadArgs, arrivato {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_written_name_resolves_and_a_chosen_id_does_not_list_the_vault() {
+        let resolved = resolve_document_name("relazione", |_| false, || Ok(vault()), word, KEYS);
+        assert_eq!(resolved.unwrap(), DocId::new("Lavoro/Relazione.docx"));
+        // Chi sceglie dall'elenco passa un id che c'è: il vault non si elenca.
+        let chosen = resolve_document_name(
+            "Relazione.md",
+            |doc| doc.as_str() == "Relazione.md",
+            || panic!("un id che c'è non elenca il vault"),
+            word,
+            KEYS,
+        );
+        assert_eq!(chosen.unwrap(), DocId::new("Relazione.md"));
+    }
+
+    #[test]
+    fn a_name_that_fits_none_or_many_is_the_phrase_of_the_command() {
+        let none = resolve_document_name(" Preventivo ", |_| false, || Ok(vault()), word, KEYS);
+        let none = message(none.unwrap_err());
+        assert_eq!(none.key, "doc.missing");
+        assert_eq!(
+            none.arg("doc"),
+            Some(&crate::text::ArgValue::Text("Preventivo".into()))
+        );
+        let many = resolve_document_name("bilancio", |_| false, || Ok(vault()), word, KEYS);
+        let many = message(many.unwrap_err());
+        assert_eq!(many.key, "doc.ambiguous");
+        assert_eq!(
+            many.arg("docs"),
+            Some(&crate::text::ArgValue::Text(
+                "Archivio/Bilancio.docx, Bilancio.odt".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn many_homonyms_are_cut_after_five() {
+        let docs: Vec<DocId> = (1..=7)
+            .map(|n| DocId::new(format!("c{n}/Nota.md")))
+            .collect();
+        assert_eq!(
+            homonyms(&docs),
+            "c1/Nota.md, c2/Nota.md, c3/Nota.md, c4/Nota.md, c5/Nota.md, …"
         );
     }
 

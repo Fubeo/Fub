@@ -647,3 +647,25 @@ fn with_the_component_off_the_photo_command_goes() {
     assert!(!commands.iter().any(|spec| spec.id == PHOTO_COMMAND));
     assert!(ask_photo(&host, &root, "Foto/A.jpg").is_err());
 }
+
+/// Il campo «Documento» scritto a mano (#486): «logo» è il solo file con
+/// un'anteprima che si chiama così. «img_0001» lo portano la foto RAW e il suo
+/// XMP, ma la foto è un allegato e non sta nell'elenco dei documenti: il nome
+/// trova l'XMP, e la foto si raggiunge col suo percorso.
+#[test]
+fn a_craft_file_written_by_name_has_its_preview() {
+    let (_dir, root) = vault(&[]);
+    let host = opened(&root);
+    let out = ask(&host, &root, "logo", "small").expect("il nome nomina il solo file");
+    assert_eq!(out.doc, "Disegni/logo.vectorcraft");
+    let out = ask(&host, &root, "img_0001", "small").expect("l'XMP è il solo nell'elenco");
+    assert_eq!(out.doc, "Foto/IMG_0001.xmp");
+    let out = ask(&host, &root, "Foto/IMG_0001.CR3", "small").expect("la foto col percorso");
+    assert_eq!(out.doc, "Foto/IMG_0001.CR3");
+    let error = ask(&host, &root, "nessuno", "small").unwrap_err();
+    let PluginError::BadArgs(text) = &error else {
+        panic!("{error:?}")
+    };
+    let said = text.to_string();
+    assert!(said.contains("«nessuno»"), "{said}");
+}
