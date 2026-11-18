@@ -2072,6 +2072,38 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(".kit-dialog");
     },
   },
+  {
+    id: "dialog-long",
+    title: "Un dialogo lungo si apre in cima: il fuoco sull'azione in fondo non lo fa scorrere",
+    prepare: async (page) => {
+      // Il dialogo del kit con un corpo più alto della finestra e le azioni in
+      // fondo: è il caso in cui il fuoco iniziale trascinava la vista a metà.
+      await page.evaluate(async () => {
+        const { openDialog } = await import("/src/kit/dialog.ts");
+        const { openLifetime } = await import("/src/ui/lifetime.ts");
+        const list = document.createElement("ol");
+        for (let step = 1; step <= 60; step++) {
+          const item = document.createElement("li");
+          item.textContent = `Passo ${step}: imposta la proprietà «stato» della nota a «letta».`;
+          list.append(item);
+        }
+        openDialog({
+          title: "Accendere la ricetta «Segna come letta»?",
+          description: "Ecco i passi che farà, dall'inizio alla fine.",
+          body: list,
+          actions: [
+            { id: "later", label: "Non ora", value: false },
+            { id: "adopt", label: "Accendi", kind: "primary", value: true },
+          ],
+          dismissValue: false,
+          lifetime: openLifetime(),
+        });
+      });
+      await page.waitForSelector('.kit-dialog [data-action="adopt"]:focus');
+      const top = await page.$eval(".kit-dialog", (dialog) => dialog.scrollTop);
+      if (top !== 0) throw new Error(`il dialogo lungo si apre scorso di ${top} px`);
+    },
+  },
   // Il lanciatore: una superficie sola, e una foto per ciò che cambia da un
   // modo all'altro. Si apre sempre dalla pillola, che è la strada che non
   // dipende da un accordo riconfigurabile; il modo lo sceglie il prefisso

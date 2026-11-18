@@ -232,6 +232,31 @@ describe("una modale non lascia uscire il fuoco", () => {
     expect(document.activeElement?.id, "e torna da dove era partito").toBe("fuori");
   });
 
+  it("si apre in cima: il primo comando in fondo prende il fuoco senza far scorrere", () => {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="modale" tabindex="-1"><p>Un testo lungo.</p><button id="fondo">Ok</button></div>`;
+    const outside = document.querySelector<HTMLElement>("#fuori")!;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    outside.focus();
+    // happy-dom non scorre: il finto porta in vista come il browser quando il
+    // fuoco arriva senza `preventScroll`.
+    const focus = HTMLElement.prototype.focus;
+    const spy = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      focus.call(this, options);
+      if (modal.contains(this) && !options?.preventScroll) modal.scrollTop = 900;
+    });
+    try {
+      const releaseTrap = trapFocus(modal, () => releaseTrap());
+      expect(document.activeElement?.id).toBe("fondo");
+      expect(modal.scrollTop, "la modale resta all'inizio").toBe(0);
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.activeElement?.id, "il fuoco torna da dove era partito").toBe("fuori");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("con `moveFocus: false` il fuoco lo mette il chiamante, una volta sola", () => {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
