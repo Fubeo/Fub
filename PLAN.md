@@ -1046,7 +1046,7 @@ runner.
 Prova: `cargo test -p fub-host --test catalogs`, `npx vitest run
 src/editors/grid`, `npm run bench:grid`, `npm run bench:motion`,
 scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-18, df73ec87b, unito in 7614555db; bench:grid 52/52; differenze nel rapporto: «Solo il battito» tiene il bordo della selezione, il segno vale dalla copia dopo, «A scatti» = snap, pagina di prodotto editor-and-preview.md)
 
 ## T8 · Le foto del banco e il confronto col prototipo
 
