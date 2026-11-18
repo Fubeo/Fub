@@ -236,7 +236,7 @@ if [ "$MODE" = rapido ]; then
   # un cambio ai due crate si prova anche dalla parte di TypeScript.
   if [ "$(val canvaswasm)" = 1 ]; then
     if has_target wasm32-unknown-unknown; then
-      run "la lavagna attraverso il .wasm" bash -c 'cd apps/client && npx vitest run src/editors/canvas build'
+      run "la lavagna attraverso il .wasm" bash -c 'cd apps/client && npx vitest run src/editors/canvas src/editors/core/cards build'
     else
       skip "la lavagna attraverso il .wasm" "target mancante: rustup target add wasm32-unknown-unknown"
     fi
