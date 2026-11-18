@@ -2835,6 +2835,16 @@ export const GESTURE_SCENE = onPage("shell", [
     query: "workbook=large&misure=si",
     prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
   },
+  // **Riempire, copiare, incollare** (griglia T6): la stessa cartella, col
+  // finto che dice sì ai riempimenti e a `fub.pasteFrom` (`?risposte=si`);
+  // C4 vale 10 e C5 20, come nel prototipo. I controlli G6 ci riempiono e ci
+  // copiano, e la coreografia del riempimento ci aspetta la risposta.
+  {
+    id: "grid-large-appunti",
+    title: "Grid v2: la cartella grande, che accetta riempimenti e incolla",
+    query: "workbook=large&risposte=si",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
 ]);
 
 function onPage(page, scenes) {

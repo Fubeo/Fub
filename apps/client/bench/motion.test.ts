@@ -14,7 +14,7 @@
 // legherebbe il presidio ai numeri di riga.
 import { describe, expect, it } from "vitest";
 
-import { SCENE as scenes } from "./scene.mjs";
+import { GESTURE_SCENE, SCENE } from "./scene.mjs";
 import {
   ALLOWED,
   CHOREOGRAPHIES as choreographies,
@@ -32,6 +32,10 @@ import {
   perFrame,
   residue,
 } from "./motion-rules.mjs";
+
+/// Le scene da cui una coreografia può partire: quelle con le foto e quelle
+/// dei gesti (la cartella grande che accetta i riempimenti, griglia T6).
+const scenes = [...SCENE, ...GESTURE_SCENE];
 
 /// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti, dei Blocchi e del menu, e della griglia, come Vite li vede: il percorso dalla
 /// radice del client e il testo.
