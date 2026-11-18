@@ -1,10 +1,10 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit e46ebd485db061dba6603210b8cd5db48035e408.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 0174408cb6bf919908882a4f630a199496603ee3.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "e46ebd485db061dba6603210b8cd5db48035e408",
+  "commit": "0174408cb6bf919908882a4f630a199496603ee3",
   "file": "PLAN-ui/editor.html",
-  "sha256": "36be544b4bd1827e97eaeb3fbf606f6ff2ea697dafc409e1e9b6b60ee40ea188",
+  "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {
     "interfaccia": {
       "--sheet": [
@@ -64,6 +64,12 @@
       ],
       "--c-orange-b": [
         "--doc-tint-orange"
+      ],
+      "--c-blue": [
+        "--doc-color-blue"
+      ],
+      "--c-blue-b": [
+        "--doc-tint-blue"
       ]
     },
     "documento": {
@@ -125,6 +131,12 @@
       ],
       "--c-orange-b": [
         "--doc-tint-orange"
+      ],
+      "--c-blue": [
+        "--doc-color-blue"
+      ],
+      "--c-blue-b": [
+        "--doc-tint-blue"
       ]
     }
   },
@@ -6711,6 +6723,170 @@
           ],
           "color": [
             "var(--muted)"
+          ]
+        }
+      }
+    },
+    "promemoria.pastiglia": {
+      "chiaro-1280": {
+        "prototipo": ".rem",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(31, 79, 143)",
+          "background-color": "rgb(220, 232, 248)",
+          "background-image": "none",
+          "box-shadow": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-weight": "500",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "white-space": "nowrap",
+          "display": "inline-flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ],
+          "background-color": [
+            "var(--doc-tint-blue)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".rem",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(158, 195, 245)",
+          "background-color": "rgb(24, 42, 68)",
+          "background-image": "none",
+          "box-shadow": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-weight": "500",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "white-space": "nowrap",
+          "display": "inline-flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ],
+          "background-color": [
+            "var(--doc-tint-blue)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".rem",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(31, 79, 143)",
+          "background-color": "rgb(220, 232, 248)",
+          "background-image": "none",
+          "box-shadow": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-weight": "500",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "white-space": "nowrap",
+          "display": "inline-flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ],
+          "background-color": [
+            "var(--doc-tint-blue)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".rem",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(158, 195, 245)",
+          "background-color": "rgb(24, 42, 68)",
+          "background-image": "none",
+          "box-shadow": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "font-weight": "500",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "white-space": "nowrap",
+          "display": "inline-flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ],
+          "background-color": [
+            "var(--doc-tint-blue)"
+          ]
+        }
+      }
+    },
+    "promemoria.sveglia": {
+      "chiaro-1280": {
+        "prototipo": ".rem svg",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(31, 79, 143)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".rem svg",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(158, 195, 245)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".rem svg",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(31, 79, 143)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".rem svg",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(158, 195, 245)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-color-blue)"
           ]
         }
       }

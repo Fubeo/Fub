@@ -60,7 +60,6 @@ describe("la pastiglia del promemoria", () => {
       const pills = [...view.dom.querySelectorAll<HTMLElement>(".cm-fub-reminder")];
       expect(pills.map((each) => each.textContent)).toEqual(["ven 13 nov, 09:00", "15:30"]);
       expect(pill()!.querySelector("svg.cm-fub-reminder-figure")).not.toBeNull();
-      expect(pill()!.getAttribute("role")).toBe("button");
       // Il testo del file resta quello: la pastiglia è soltanto come si vede.
       expect(view.state.doc.toString()).toContain("⏰ 2026-11-13 09:00");
     } finally {
@@ -76,7 +75,6 @@ describe("la pastiglia del promemoria", () => {
       setReminderNotifications(false);
       pill()!.dispatchEvent(new PointerEvent("pointerenter"));
       expect(pill()!.title).toMatch(/Le notifiche dei promemoria sono spente/);
-      expect(pill()!.getAttribute("aria-label")).toBe(pill()!.title);
     } finally {
       view.destroy();
     }

@@ -1670,14 +1670,12 @@ class ReminderWidget extends WidgetType {
     const when = reminderTimeOf(written);
     const el = document.createElement("span");
     el.className = look === "done" ? "cm-fub-reminder cm-fub-reminder-done" : "cm-fub-reminder";
-    el.setAttribute("role", "button");
     el.dataset.reminder = written;
     const text = document.createElement("span");
     text.textContent = when ? reminderLabel(when, new Date(), resolvedLanguage()) : written;
     el.append(alarmFigure(), text);
     const describe = () => {
       el.title = reminderTitle(look === "done", when);
-      el.setAttribute("aria-label", el.title);
     };
     describe();
     el.addEventListener("pointerenter", describe);

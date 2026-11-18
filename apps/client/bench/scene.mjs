@@ -1413,6 +1413,8 @@ export const SCENE = touchLast(onPage("shell", [
     ["live-24-ripiegabile", "ripiegabile", "La Live con un ripiegabile chiuso e uno aperto con un altro dentro"],
     ["live-25-colonne", "colonne", "La Live con due e tre colonne, a 900 px", [], { width: 900, height: 800 }],
     ["live-27-indice", "indice", "La Live con l'indice dei titoli in cima alla nota"],
+    ["live-28-promemoria", "promemoria", "La Live coi promemoria: le pastiglie blu con l'ora, il giorno se non è oggi, grigia col compito fatto"],
+    ["live-29-promemoria-stretta", "promemoria", "I promemoria nella finestra minima, 800 px", [], { width: 800, height: 800 }],
     ["live-26-colonne-stretta", "colonne", "La Live con le colonne nella finestra minima, 800 px", [], { width: 800, height: 800 }],
   ].map(([id, live, title, keys = [], viewport]) => ({
     id,
@@ -1420,6 +1422,29 @@ export const SCENE = touchLast(onPage("shell", [
     query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
+  })),
+  // La scelta del promemoria (T36): il clic sulla pastiglia la apre sotto di
+  // lei, coi giorni vicini, il mese col giorno scelto e l'ora; il piede
+  // toglie il promemoria. Ciò che non è un giorno resta scritto e lo dice.
+  ...[
+    ["promemoria-01-scelta", "La scelta del promemoria aperta dalla pastiglia: le parole, i giorni vicini, il mese e l'ora", null],
+    ["promemoria-02-parole", "Le parole nella scelta del promemoria: «Non capisco» per ciò che non è un giorno", "quando capita"],
+  ].map(([id, title, words]) => ({
+    id,
+    title,
+    query: "live=promemoria",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.locator(".cm-content .cm-fub-reminder").nth(1).click();
+      await page.waitForSelector(".cm-fub-reminder-picker");
+      if (words !== null) {
+        const field = page.locator(".cm-fub-reminder-picker input").first();
+        await field.fill(words);
+        await field.press("Enter");
+        await page.waitForSelector(".cm-fub-reminder-picker .cm-fub-prop-note:not([hidden])");
+      }
+      await page.mouse.move(0, 0);
+    },
   })),
   // La formula che si modifica toccandola (T60, E27): → davanti alla formula
   // in riga apre sotto di lei il riquadro con la formula grande, il cursore
