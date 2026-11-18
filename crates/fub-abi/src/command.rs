@@ -1138,8 +1138,9 @@ pub enum DocumentNamed {
 /// 1. un id che c'è è sé stesso, anche se il comando non lo accetta: il
 ///    rifiuto, con la sua ragione, è del comando;
 /// 2. altrimenti contano i documenti che `accepts` vuole e il cui nome, nome
-///    del file, percorso o percorso senza estensione è il testo, senza
-///    distinzione di maiuscole: uno è la risposta, nessuno o più di uno lo
+///    del file, percorso o percorso senza estensione è il testo, con la chiave
+///    di [`resolution_key`](crate::rules::path::resolution_key) (NFC, senza
+///    distinzione di maiuscole): uno è la risposta, nessuno o più di uno lo
 ///    dice, e la frase la scrive il comando.
 ///
 /// Non è la risoluzione dei wikilink
@@ -1155,8 +1156,10 @@ pub fn document_named(
     if text.is_empty() {
         return DocumentNamed::None;
     }
-    let wanted = text.to_lowercase();
-    let same = |candidate: &str| candidate.to_lowercase() == wanted;
+    // Due nomi sono lo stesso nome con la chiave della risoluzione, e con
+    // nessun'altra.
+    let wanted = crate::rules::path::resolution_key(text);
+    let same = |candidate: &str| crate::rules::path::resolution_key(candidate) == wanted;
     let mut found = Vec::new();
     for doc in docs {
         if doc.as_str() == text {
