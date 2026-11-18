@@ -178,7 +178,7 @@ generi: []
 - Un tipo che non c'è, che è di più o che non si legge (frontmatter rotto, un
   campo della forma sbagliata) lascia la nota com'è: il pannello delle
   proprietà dice che cosa non va, e i due comandi non scrivono niente.
-- Rinominare o spostare un tipo non aggiorna ancora i `tipo` delle note: i link
+- Rinominare o spostare un tipo non aggiorna i `tipo` delle note: i link
   del frontmatter non sono nel grafo dei link, e la nota dice che il tipo non
   c'è finché `tipo` non lo nomina di nuovo.
 

@@ -143,7 +143,7 @@ propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
 percorso quando due note hanno lo stesso nome. Dopo `[[Nota#^` e `[[#^` si
 propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
 letti dalla sessione aperta se c'è, altrimenti dal file. `[[^^parole` cerca un
-blocco in tutto il vault: [Blocchi di altre note](editor-writing.md#blocchi-di-altre-note).
+blocco in tutto il vault: [Blocchi di altre note](editor-links.md#blocchi-di-altre-note).
 
 Il pannello Struttura mostra i titoli della nota aperta come un albero. Il campo
 in cima lo filtra: restano i titoli che contengono il testo, con i titoli sopra
@@ -179,7 +179,7 @@ sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
 link che non si risolve non apre niente.
 
 Nell'editor, Scrittura o Sorgente, `Alt+Invio` su un wikilink apre la nota, alla
-sezione o al blocco che nomina, nella [sbirciata](editor-writing.md#la-sbirciata)
+sezione o al blocco che nomina, nella [sbirciata](editor-links.md#la-sbirciata)
 (Ctrl/Cmd+click la apre come dice `editor.link-click`); su un indirizzo esterno
 lo apre solo se la policy di Lettura lo permette. Dentro il codice il tasto non apre niente. In Scrittura `Maiusc+Alt+Invio`
 su un wikilink apre la sua scheda col fuoco sulle azioni; Esc torna al testo.

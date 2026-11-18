@@ -6,19 +6,19 @@ dice che cosa sa fare. La prova comune (`tabella/conformance.ts`) esegue ogni
 gesto sui tre adattatori: la tabella Markdown, la tabella del documento e il
 foglio.
 
-I tasti hanno due modi. Nel modo **foglio** (le note in Live e i fogli) la
+I tasti hanno due modi. Nel modo **foglio** (le note in Scrittura e i fogli) la
 tabella ha il fuoco e una cella attiva. Nel modo **documento** (le tabelle del
 docx) il cursore resta nel testo della cella.
 
-## Tabelle in Live
+## Tabelle nelle note
 
-In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
+In Scrittura ogni tabella è una griglia da foglio di calcolo, anche col cursore
 dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
 mostra resa. Quando la griglia ha il fuoco compaiono le lettere delle colonne
 e i numeri delle righe; la prima riga è l'intestazione della tabella. In tutte
 e due la tabella sta in una cornice arrotondata, con un filo fra le celle,
 riempie la colonna del testo e non va a capo nelle celle: quando il contenuto
-non ci sta, scorre in orizzontale (in Live i numeri delle righe restano fermi
+non ci sta, scorre in orizzontale (in Scrittura i numeri delle righe restano fermi
 nel margine e, solo con la griglia scorsa, prendono il fondo del foglio per
 coprire le celle che passano sotto). La griglia non è una
 fermata del Tab: ci si entra dal testo con le frecce, come in una riga. Sulle
@@ -33,7 +33,7 @@ celle il puntatore resta la freccia.
   rettangolo, la lettera una colonna, il numero una riga (con Maiusc fin lì),
   l'angolo tutta la tabella. Una lettera o un numero già scelti si
   trascinano, come nei fogli di Google: una linea d'accento segna dove
-  arriveranno, e al rilascio le colonne o le righe scelte si spostano in un
+  cadono, e al rilascio le colonne o le righe scelte si spostano in un
   passo solo; un clic senza trascinare sceglie soltanto quella. Le righe non
   passano sopra l'intestazione, e in sola lettura non si spostano.
 - Mod+clic, Mod+trascina e Maiusc+F8 aggiungono un intervallo agli altri; di
@@ -234,14 +234,14 @@ della somma, il quadratino tirato o cliccato due volte continua la serie
 (anche i giorni e i mesi) e le intestazioni scelgono la colonna o la riga,
 sempre col catalogo del foglio. Il completamento, Mod+;, Alt con le frecce e
 le intestazioni da trascinare per spostare righe e colonne il foglio non li
-ha ancora: sono un lavoro sul motore dei fogli, e la prova comune lo dice.
+ha, e la prova comune lo dice.
 Nel foglio trascinare le intestazioni allarga la scelta, come in Excel. La
 griglia dei fogli è descritta in
 [Editor e anteprima](editor-and-preview.md#la-griglia).
 
 ## La somma nella banda
 
-Con due o più celle numeriche scelte in una tabella della nota in Live o nella
+Con due o più celle numeriche scelte in una tabella della nota in Scrittura o nella
 tabella di una Base, la banda in fondo mostra «Somma · Media · Conteggio» al
 posto del conto delle parole; con una cella sola, o senza numeri, torna il
 conto. Il conto si fa nella shell, senza chiamate al core, in un passo solo
@@ -259,7 +259,7 @@ anche su diecimila celle.
   mai.
 - Il conteggio è quello delle celle numeriche. I risultati si scrivono nella
   lingua delle celle, al più con le cifre dopo la virgola delle celle (la
-  media almeno due) e senza zeri in fondo, come il prototipo: «1,50» e «1,00»
+  media almeno due) e senza zeri in fondo: «1,50» e «1,00»
   fanno «2,5».
 - Se tutte le celle contate sono percentuali, somma, media, minimo e massimo
   si scrivono in percento: «10%» e «20%» fanno «Somma 30%». Se sono miste, una

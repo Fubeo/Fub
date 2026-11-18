@@ -161,7 +161,9 @@ Scrittura (`livepreview.ts`, che chiede `comments/mask.ts` come disegnarle);
 la cancellazione e l'avviso stanno in `comments/mask.ts`, la copia e il taglio
 che porta il commento in `comments/copy.ts` (l'incolla in `paste.ts`, i gesti
 del menu in `surface.ts`), la Sorgente in `comments/source.ts`, la Lettura in
-`render-inline.ts`, l'allargamento dei gesti di formato in `format-toggle.ts`.
+`render-inline.ts`, l'allargamento dei gesti di formato in `format-toggle.ts`;
+`comments/threads.ts` legge dall'albero i commenti di un tratto per chi lavora
+fuori dalla resa.
 Il segno, la discussione e il pannello stanno in `comments/`: `model.ts`
 (leggere le discussioni, la firma, dove va un commento nuovo), `resolve.ts`
 (Risolvi, Elimina, l'archivio), `margin.ts` (il margine, il segno nel testo,

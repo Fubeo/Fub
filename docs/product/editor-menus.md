@@ -121,7 +121,7 @@ Il tasto destro fuori dalla selezione porta lì il cursore; dentro, la lascia.
 In Lettura il menu offre «Modifica qui», che porta il cursore nel punto
 cliccato, «Copia il link a questo punto» e «Copia la nota come», coi tre
 formati nella riga. Il tasto
-destro su un link in Live lascia il cursore dov'è, così la sintassi del link
+destro su un link in Scrittura lascia il cursore dov'è, così la sintassi del link
 resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e niente è
 acceso: la prima freccia sceglie la prima voce, o l'ultima con la freccia su.
 Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla prima voce, non alla
@@ -145,8 +145,8 @@ Sottolineato, Barrato, Codice in riga, Collega, Colore e «Commenta». Ogni
 pulsante esegue l'azione della sua scorciatoia, con lo stesso passo
 d'annullamento, e la sua didascalia dice la scorciatoia vera della persona
 (Ctrl B, Ctrl K, Ctrl Alt M…). «Collega» fa ciò che fa Ctrl K: il riquadro
-«Collegamento» in Live e in Blocchi, il wikilink in Sorgente. «Colore» apre
-le due righe dei nove colori dei Blocchi, Testo e Sfondo; il colore già dato
+«Collegamento» in Scrittura, il wikilink in Sorgente. «Colore» apre
+le due righe dei nove [colori](editor-note-extras.md#i-colori), Testo e Sfondo; il colore già dato
 alla selezione è segnato, e un clic lo toglie. «Commenta» apre il primo
 messaggio della discussione sulla selezione, come Ctrl Alt M: su più blocchi
 il commento va nel primo, nel codice o in una formula subito dopo il blocco.
@@ -159,7 +159,7 @@ Sul testo scelto compare da sola, con la barra di formattazione compatta o
 nascosta: sopra la selezione (sotto se sopra non c'è posto) e senza uscire
 dalla finestra; mentre il suo menu Trasforma o Colore è aperto resta ferma.
 Con la barra completa, che ha già tutti i pulsanti, no. Se si apre il menu
-del tasto destro, la mini-barra ne prende la testa (E29). L'impostazione
+del tasto destro, la mini-barra ne prende la testa. L'impostazione
 «Mini-barra di formattazione» (`editor.minibar`) sceglie fra `auto` (così),
 `always` (su ogni selezione, anche con la barra completa), `menu` (solo col
 tasto destro) e `off`. Le scene `mini-barra-*` del banco la
@@ -181,8 +181,8 @@ alla finestra, sopra la tastiera, con righe da 44 px. Vale in ogni modalità di
 scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
 
 - **In alto, i sei più usati**, come tessere con l'icona e una parola. In un
-  vault nuovo: Attività, Titolo, Riquadro, Tabella, Base (con le Basi accese),
-  poi Punti e Codice (Scheda la aggiunge il suo lavoro). L'uso li riordina: prima i Preferiti,
+  vault nuovo: Attività, Titolo, Riquadro, Tabella, Base (con le Basi accese)
+  e Punti; senza Base, Codice prende il sesto posto. L'uso li riordina: prima i Preferiti,
   poi i blocchi scelti di recente, poi l'ordine scritto; una voce nascosta
   lascia il posto alla seguente, e stili e comandi del vault non diventano
   tessere (`byUse` in `panels/slash/rank.ts`). A menu appena aperto Invio mette
@@ -250,7 +250,7 @@ componente delle Basi accesa e in una nota che si può scrivere.
    il vault.
 3. Scrive `![[Nome.base#Tabella]]` al posto del «/base», da solo e staccato
    da una riga vuota dal testo intorno (se il «/» seguiva del testo, in un
-   paragrafo sotto), e porta il cursore oltre, perché in Live si veda la Base.
+   paragrafo sotto), e porta il cursore oltre, perché in Scrittura si veda la Base.
 
 Se il file non nasce (cartella in sola lettura, disco pieno) la nota non
 cambia, il «/base» resta e un avviso dice perché; rinunciare al nome lascia la
@@ -273,8 +273,7 @@ allegato.
 In Scrittura la maniglia di un blocco apre il suo menu col clic e col
 tasto destro. In cima, al posto della testata, il campo «Cerca un'azione…»
 col fuoco; sotto, quieto, il nome del blocco («Testo», «Riquadro», «3
-blocchi»); poi Trasforma in ▸, Colore ▸ (Testo e Fondo, coi nove colori dei
-Blocchi), Duplica (Ctrl D), Copia il link al blocco, ed Elimina (Canc) per
+blocchi»); poi Trasforma in ▸, Colore ▸ (Testo e Fondo, coi nove colori), Duplica (Ctrl D), Copia il link al blocco, ed Elimina (Canc) per
 ultimo; in fondo il piede «↵ sceglie · → apre · Esc chiude». La prima voce è
 accesa, e scrivendo nel campo l'elenco si filtra e si accende la prima
 trovata: Invio sceglie l'accesa, ↓ va alla voce dopo, ↑ dalla prima torna al
@@ -285,7 +284,7 @@ casa. Per chi ascolta la superficie è un piccolo dialogo modale col nome del
 blocco, che tiene il campo e, sotto, il menu delle voci: un menu ha soltanto
 voci, e il campo non ci può stare dentro. Sposta su e giù (che hanno Ctrl Maiusc ↑ ↓ e il trascinamento) e
 Affianca in colonne (che è anche il trascinamento accanto a un blocco) non
-rubano un posto: si trovano scrivendo, sotto «Altri comandi». La griglia delle tabelle in Live ha la testata «Tabella», la barra
+rubano un posto: si trovano scrivendo, sotto «Altri comandi». La griglia delle tabelle in Scrittura ha la testata «Tabella», la barra
 degli appunti, Inserisci ▸, Sposta ▸, Ordina la colonna ▸, Allinea la colonna
 ▸, Svuota la cella, e in fondo Elimina la riga e Elimina la colonna.
 
@@ -366,8 +365,8 @@ tornare. Scegliere un'app Craft per un documento che ha una scheda aperta lo
 presta all'app ([Il prestito](craft-files.md#il-prestito)).
 
 Il disegno ha i suoi menu ([Disegni, selezione](drawing-selection.md)); la
-griglia delle tabelle in Live ha il suo
-([Tabelle](editor-tables.md#tabelle-in-live)).
+griglia delle tabelle in Scrittura ha il suo
+([Tabelle](editor-tables.md#tabelle-nelle-note)).
 
 ## Dove si trova
 
