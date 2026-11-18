@@ -1,5 +1,5 @@
-# Il Flatpak di Fub: lo stesso WebKitGTK, quello del runtime GNOME, su ogni
-# distribuzione. Si costruisce dai sorgenti, senza rete: le dipendenze di Cargo
+# Il Flatpak di Fub: lo stesso WebKitGTK su ogni distribuzione, quello del
+# modulo `webkit2gtk-4.1` qui sotto (non quello del runtime GNOME). Si costruisce dai sorgenti, senza rete: le dipendenze di Cargo
 # e di npm sono sorgenti dichiarate qui sotto, che `genera-sorgenti.sh` ricava
 # da `Cargo.lock` e da `apps/client/package-lock.json` (vedi README.md e
 # docs/development/versioning-and-releases.md, sezione «Flatpak»).
@@ -48,6 +48,53 @@ finish-args:
   - --own-name=dev.fub.app.SingleInstance
 
 modules:
+  # WebKitGTK scelto da noi, non quello del runtime. Il runtime GNOME 51 ha la
+  # 2.54.1, che dopo un'animazione rimette sullo schermo per un istante pezzi
+  # di un fotogramma vecchio (docs/architecture/desktop-webview.md). Questo
+  # modulo installa libwebkit2gtk-4.1 e i suoi processi in /app: il linker di
+  # Flatpak cerca in /app/lib prima che in /usr/lib, e WebKit avvia i processi
+  # dal percorso con cui è compilato (/app/libexec/webkit2gtk-4.1), quindi Fub
+  # usa solo questa copia, anche in fase di build (pkg-config trova prima
+  # /app/lib/pkgconfig). Gli aggiornamenti di sicurezza di WebKitGTK sono a
+  # carico nostro: a ogni release di webkitgtk.org si cambiano `url` e `sha256`
+  # (il file `.sums` accanto al tarball), come spiega packaging/flatpak/README.md.
+  #
+  # Le opzioni sono quelle di gnome-build-meta per il runtime GNOME 51
+  # (elements/sdk/webkit2gtk-4.1.bst e webkitgtk.inc, ramo gnome-51), con
+  # queste differenze: niente MiniBrowser, documentazione e introspezione, che
+  # Fub non usa; unifdef è quello incluso nei sorgenti (il SDK non lo ha); il
+  # compilatore è il GCC del SDK invece di clang, che nel SDK non c'è; niente
+  # simboli di debug, che per WebKit sono gigabyte.
+  - name: webkit2gtk-4.1
+    buildsystem: cmake-ninja
+    builddir: true
+    build-options:
+      no-debuginfo: true
+      cflags: -g0
+      cxxflags: -g0
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DPORT=GTK
+      - -DENABLE_SPEECH_SYNTHESIS=OFF
+      - -DENABLE_WEBDRIVER=OFF
+      - -DUSE_LIBBACKTRACE=OFF
+      - -DUSE_GTK4=OFF
+      - -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
+      - -DENABLE_MINIBROWSER=OFF
+      - -DENABLE_DOCUMENTATION=OFF
+      - -DENABLE_INTROSPECTION=OFF
+      - -DUSE_SYSTEM_UNIFDEF=OFF
+    # Le intestazioni e i .pc servono solo alla build di Fub, che viene dopo:
+    # la pulizia toglie tutto alla fine. `jsc` è la shell di JavaScriptCore.
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /libexec/webkit2gtk-4.1/jsc
+    sources:
+      - type: archive
+        url: https://webkitgtk.org/releases/webkitgtk-2.54.3.tar.xz
+        sha256: 2779c1b46f88762e8400650271ba14452dc4e30b37059981552d8b562b7d0862
+
   - name: fub
     buildsystem: simple
     build-options:
