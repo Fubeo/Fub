@@ -85,6 +85,7 @@ import {
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
 import { baseFixture } from "./base-fixture";
+import { RECIPE_COMMAND_IDS, RECIPE_COMMANDS, recipeCase, recipesOf, recipeTrouble } from "./recipe-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
@@ -430,6 +431,19 @@ if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE 
 /// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
 /// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
 const TRASH_FULL = params.get("cestino") === "3";
+
+/// Le ricette delle scene `settings-recipes-*` e `recipe-dialog-*`
+/// (`?recipes=vuota|piena|problemi|limite|venti`, vedi `recipe-fixture.ts`). Le
+/// altre scene non ne hanno: il vault è senza ricette, come prima.
+const RECIPE_CASE = recipeCase(params.get("recipes"));
+
+/// Le ricette e i comandi dei loro passi, con il comando che la sezione offre
+/// (`recipes.new`). Prendono il posto dei comandi del banco con lo stesso id:
+/// `note.rename` qui ha i parametri che la finestra usa per dire gli argomenti.
+function withRecipeCommands(commands: CommandSpec[]): CommandSpec[] {
+  if (RECIPE_CASE === null) return commands;
+  return [...commands.filter((spec) => !RECIPE_COMMAND_IDS.has(spec.id)), ...RECIPE_COMMANDS];
+}
 
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
@@ -1759,11 +1773,12 @@ const options: Options = {
   },
   root: ROOT,
   view: VIEWS,
-  commands: [
+  commands: withRecipeCommands([
     ...(ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
-  ],
+  ]),
+  ...(RECIPE_CASE === null ? {} : { recipes: recipesOf(RECIPE_CASE) }),
   settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
@@ -2087,6 +2102,13 @@ export const api: typeof host.module.api = {
       }
     }
     return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
+  },
+  // Il limite delle ricette lette è un problema del vault intero (`RecipeList.problems`):
+  // il finto di `src/host/fake.ts` non ne dà, e la scena `settings-recipes-limit` sì.
+  recipesList: async (vault) => {
+    const list = await behind.recipesList(vault);
+    const trouble = RECIPE_CASE === null ? [] : recipeTrouble(RECIPE_CASE);
+    return trouble.length === 0 ? list : { ...list, problems: [...list.problems, ...trouble] };
   },
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
   listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),

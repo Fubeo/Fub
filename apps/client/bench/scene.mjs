@@ -347,6 +347,187 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector("#settings-body");
     },
   },
+  // **Le ricette** (T13, `?recipes=<caso>`, vedi `recipe-fixture.ts`): la sezione
+  // «Ricette» della scheda «Componenti» nei suoi stati del prototipo
+  // `PLAN-ui/ricette.html`, poi l'avviso e la finestra in cui si guarda una ricetta
+  // prima di accenderla. Il finto dà le ricette; gli stati che nascono da un'attesa
+  // o da un guasto si provocano dalla sua porta, e la sezione si porta in cima come
+  // fa il suo indice.
+  {
+    id: "settings-recipes",
+    title: "Le preferenze: le ricette, con le due da guardare in cima",
+    query: "recipes=piena",
+    prepare: (page) => openRecipes(page, ".recipe-list"),
+  },
+  {
+    id: "settings-recipes-empty",
+    title: "Le preferenze: le ricette, nessuna ancora, con l'esempio da chiedere a un'AI",
+    query: "recipes=vuota",
+    prepare: (page) => openRecipes(page, ".settings-empty"),
+  },
+  {
+    id: "settings-recipes-problems",
+    title: "Le preferenze: le ricette con problemi, ognuna col suo codice e il suo posto",
+    query: "recipes=problemi",
+    prepare: (page) => openRecipes(page, ".recipe-problems"),
+  },
+  {
+    id: "settings-recipes-loading",
+    title: "Le preferenze: le ricette mentre si leggono",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      // La lettura non torna: la porta tiene in volo `recipesList`.
+      await page.evaluate(() => {
+        window.bench.throttle("recipesList");
+      });
+      await openRecipes(page, '[aria-busy="true"]');
+    },
+  },
+  {
+    id: "settings-recipes-error",
+    title: "Le preferenze: le ricette che non si leggono, con «Riprova»",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await page.evaluate((error) => {
+        window.bench.fault("recipesList", error);
+      }, { kind: "permission_denied", message: "La cartella «Recipes» non si apre: permesso negato." });
+      await openRecipes(page, '[role="alert"]');
+    },
+  },
+  {
+    id: "settings-recipes-limit",
+    title: "Le preferenze: le ricette oltre il limite, con la riga che lo dice",
+    query: "recipes=limite",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await openRecipes(page, ".recipe-limit");
+      await page.waitForFunction(() => document.querySelectorAll("#settings-recipes .recipe-list > li").length === 200);
+    },
+  },
+  {
+    id: "settings-recipes-narrow",
+    title: "Le preferenze: le ricette nella finestra minima, 800 px (il foglio di 700 del prototipo)",
+    query: "recipes=piena",
+    viewport: NOTE_NARROW,
+    prepare: (page) => openRecipes(page, ".recipe-list"),
+  },
+  {
+    id: "recipes-notice",
+    title: "L'avviso all'apertura: il vault propone due ricette da guardare, con «Guarda»",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await page.waitForSelector('#toasts .toast:has-text("Il vault propone 2 ricette da guardare")');
+    },
+  },
+  {
+    id: "recipes-notice-limite",
+    title: "L'avviso con ottanta ricette da guardare: il nome di ognuna, in un avviso che copre la finestra",
+    query: "recipes=limite",
+    prepare: async (page) => {
+      await page.waitForSelector('#toasts .toast:has-text("Il vault propone 80 ricette da guardare")');
+    },
+  },
+  {
+    id: "recipe-dialog",
+    title: "La ricetta da guardare: che cosa fa, la prova sulla nota aperta, «Non ora» e «Accendi»",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await openRecipeWindow(page);
+      await page.waitForSelector(".recipe-dialog .recipe-try-list");
+    },
+  },
+  {
+    id: "recipe-dialog-narrow",
+    title: "La ricetta da guardare nella finestra minima, 800 px (il foglio di 700 del prototipo)",
+    query: "recipes=piena",
+    viewport: NOTE_NARROW,
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await openRecipeWindow(page);
+      await page.waitForSelector(".recipe-dialog .recipe-try-list");
+    },
+  },
+  {
+    id: "recipe-dialog-trial-loading",
+    title: "La ricetta: la prova sulla nota aperta mentre si fa",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await page.evaluate(() => {
+        window.bench.throttle("recipeSimulate");
+      });
+      await openRecipeWindow(page);
+      await page.waitForSelector('.recipe-dialog .skeleton-rows[aria-busy="true"]');
+    },
+  },
+  {
+    id: "recipe-dialog-trial-error",
+    title: "La ricetta: la prova non si può fare, con «Riprova»",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await page.evaluate((error) => {
+        window.bench.fault("recipeSimulate", error);
+      }, { kind: "already_exists", message: "«Archivio/Benvenuto.md» esiste già." });
+      await openRecipeWindow(page);
+      await page.waitForSelector(".recipe-dialog .setting-error");
+    },
+  },
+  {
+    id: "recipe-dialog-no-note",
+    title: "La ricetta senza una nota aperta: la prova lo chiede, e non cambia niente",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      // Chiuse le linguette, non resta nessuna nota su cui provarla.
+      const close = page.locator(".pane.focus .tab-close");
+      while ((await close.count()) > 0) await close.first().click();
+      await openRecipeWindow(page);
+      await page.waitForSelector('.recipe-dialog .recipe-try-note:has-text("Apri una nota")');
+    },
+  },
+  {
+    id: "recipe-dialog-twenty",
+    title: "La ricetta con venti passi e una nota fissa: com'è la finestra quando si apre, in fondo",
+    query: "recipes=venti",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await openRecipeWindow(page);
+      await page.waitForSelector(".recipe-dialog .recipe-step:nth-child(20)");
+      await page.waitForSelector(".recipe-dialog .recipe-try-list");
+    },
+  },
+  {
+    id: "recipe-dialog-twenty-top",
+    title: "La ricetta con venti passi e una nota fissa: dall'inizio, col titolo e i primi passi",
+    query: "recipes=venti",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await openRecipeWindow(page);
+      await page.waitForSelector(".recipe-dialog .recipe-step:nth-child(20)");
+      // La finestra scorre da sé: la si riporta in cima, com'è scritta.
+      await page.$eval(".recipe-dialog", (dialog) => {
+        dialog.scrollTop = 0;
+      });
+    },
+  },
+  {
+    id: "recipe-dialog-changed",
+    title: "La ricetta cambiata mentre la guardi: «Accendi» è fermo finché non la rileggi",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await noticeOfOpening(page);
+      await openRecipeWindow(page);
+      // La nota della ricetta cambia sotto la finestra: l'evento arriva dal kernel.
+      await page.evaluate(() => {
+        window.bench.emit({ type: "document_changed", id: "Recipes/Archivia.md" });
+      });
+      await page.waitForSelector(".recipe-dialog .recipe-stale:not([hidden])");
+    },
+  },
   {
     id: "activity",
     title: "Il centro attività",
@@ -2560,6 +2741,35 @@ async function openLentDocx(page) {
 /// Apre `Opere.base` delle scene `base-*` e aspetta la tabella con le sue
 /// righe e la barra ferma. Dalla porta della shell e non dall'albero: il
 /// finto elenca un `.base` come file, e l'albero non lo apre.
+/// L'avviso che il vault mette in cima all'apertura (le sue ricette da guardare)
+/// non è dello stato che le scene delle ricette fotografano, e il prototipo lo
+/// tiene fuori da ogni stato che non sia la sezione piena. Si aspetta che sia
+/// arrivato (la lettura delle ricette parte con l'apertura), e si chiude come
+/// nelle scene delle notifiche: il contenitore se ne deve andare.
+async function noticeOfOpening(page) {
+  await page.waitForSelector("#toasts .toast");
+  await page.evaluate(() => document.querySelectorAll(".toast-close").forEach((close) => close.click()));
+  await page.waitForSelector("#toasts", { state: "detached", timeout: 15_000 });
+}
+
+/// La sezione «Ricette» della scheda «Componenti», in cima, quando lo stato che
+/// `state` nomina (dentro la sezione) è a schermo. La scheda si apre come dal
+/// pulsante, e la sezione si porta in cima come fa il suo indice.
+async function openRecipes(page, state) {
+  await page.click("#open-settings");
+  await page.click('#settings-tabs button[data-tab="components"]');
+  await page.waitForSelector(`#settings-recipes ${state}`);
+  await page.$eval("#settings-recipes", (section) => section.scrollIntoView({ block: "start" }));
+}
+
+/// La finestra della prima ricetta da guardare, aperta dal suo «Guarda» in cima
+/// alla sezione: la stessa strada di chi la apre dall'elenco.
+async function openRecipeWindow(page) {
+  await openRecipes(page, ".settings-banner");
+  await page.click("#settings-recipes .settings-banner .settings-btn >> nth=0");
+  await page.waitForSelector(".kit-dialog.recipe-dialog");
+}
+
 async function openBase(page) {
   await page.evaluate(async () => {
     const { openDocument } = await import("/src/state/document-controller.ts");
