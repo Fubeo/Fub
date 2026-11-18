@@ -81,6 +81,31 @@ fotogrammi dentro l'apertura (`S3.apertura.buco`); non hanno soglia. Una
 lavagna che non si ferma entro 15 s dalla prima scheda fa fallire lo
 scenario, col buco più lungo visto.
 
+**La misura della finestra.** L'app chiede una finestra di 1280 × 840
+(`crates/fub-app/tauri.conf.json`), ma la misura la decide il gestore di
+finestre: sotto Xvfb, senza gestore, è quella; un gestore a tessere (niri,
+sway) la cambia, per esempio in 800 × 1896 su una colonna di niri. Per
+questo il gesto di S3 e S9 si calcola sulla pagina vera
+(`bench/webview/gesture.mjs`, prova in `gesture.test.mjs`): il punto è il
+centro della parte visibile di `.canvas-viewport`, e lo spostamento va
+±400 px se la vista ha posto, altrimenti tanto quanto ci sta a 8 px dai
+bordi della vista e della pagina. Sotto i 100 px lo scenario fallisce col
+motivo: non sarebbe più una misura dello scorrimento. Il referto di ogni
+scenario dà la pagina e la misura chiesta (`window`), e il gesto di S3 e S9
+(`gesture`, con `reduced`); una pagina diversa da quella chiesta e un gesto
+ridotto finiscono anche fra le note stampate, perché un gesto più corto è
+più lento e una pagina più alta mostra più schede e più righe: quei numeri
+non si confrontano uno a uno con quelli della CI.
+
+**Il selettore e l'indice.** Il primo avvio sul vault del banco indicizza
+diecimila note, e la shell risponde prima che abbia finito. Il riscaldamento
+aspetta l'indice (`vault_status`) prima di cercare «Lunga», e ogni ricerca
+per nome preme Invio solo quando la prima voce è un documento: nel selettore
+comune, finché l'indice non conosce ancora il documento, la prima voce è
+«Crea questa nota» col nome scritto, e Invio creava una `Lunga.md` vuota
+alla radice del vault. Il riscaldamento scadeva su quella nota vuota, e S1
+dopo di lui, perché il selettore metteva la nota vuota davanti alla vera.
+
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto
 e il disegno senza motore (`tiles.mjs`). Il tempo del motore per un fotogramma
