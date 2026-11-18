@@ -137,7 +137,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   a fuoco; si rifanno soltanto quando cambia quali sono, e la scelta si
   ricorda anche mentre manca. `onShow` ne chiede una (la barra apre
   Commenti); `covers` toglie le view che sostituiscono. Il disegno ne dà
-  cinque (`chrome/hosts.ts`), e nello `status` la vista e le misure;
+  cinque (`editors/spatial/tools/editor/chrome/hosts.ts`), e nello `status` la vista e le misure;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,

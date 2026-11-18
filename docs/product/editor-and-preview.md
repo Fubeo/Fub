@@ -250,7 +250,7 @@ L'editor offre due piani distinti:
 
 Nel piano del contenuto `Mod-z` annulla e `Mod-y` rifà, come `Mod-Shift-z` su
 macOS e `Ctrl-Shift-z` su Linux. `Mod-u` annulla l'ultima selezione e `Alt-u`
-la rifà; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
+la rifà, tranne nelle note Markdown, dove `Mod-u` sottolinea come in Word; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
 modificatore della piattaforma.
 
 Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica del
@@ -390,7 +390,7 @@ solo arresto di tabulazione: dall'editor, dove Tab rientra, Escape e poi
 Maiusc+Tab risalgono. Le frecce girano ai capi, Home ed End vanno al primo e
 all'ultimo pulsante acceso, Escape torna al testo; il suggerimento dice il tasto.
 
-La barra è il plugin ufficiale `fub.formatting` («Formatting bar»): si spegne e
+La barra è il componente ufficiale `fub.formatting` («Barra di formattazione»): si spegne e
 si riaccende dal pannello dei componenti, e ogni suo pulsante è anche un
 comando della palette, a cui si può assegnare una scorciatoia. Invocato dalla
 palette, il comando agisce nel riquadro col fuoco; se lì non c'è una nota

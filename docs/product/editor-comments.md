@@ -176,8 +176,8 @@ in `crates/fub-host/src/settings.rs`. Il numero di parole della nota (la banda, 
 sul sorgente senza i segni e i messaggi dei commenti; allo stesso modo la riga
 «Selezione» del pannello, sul testo selezionato che la shell gli passa com'è
 scritto. I colori sono della
-pelle (`skin/editors.css`, componente `note-comments` dell'anatomia; il segno,
-la discussione e il pannello in `skin/document.css`, componenti
+pelle (`theme/scrittoio/skin/editors.css`, componente `note-comments` dell'anatomia; il segno,
+la discussione e il pannello in `theme/scrittoio/skin/document.css`, componenti
 `document-comment-margin`, `document-comment-discussion` e
 `document-comments-panel`).
 
