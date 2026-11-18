@@ -583,6 +583,16 @@ export interface EditorSurface {
   setMode(mode: string): void;
   /** The document text, when this surface edits it. */
   readonly buffer?: SurfaceBuffer;
+  /**
+   * The document changed its path (a rename or a move, from this window or
+   * from outside) and kept its extension: the surface stays mounted and from
+   * now on reads by `documentId` what it read by the old path (images and
+   * links relative to the document). Its text, cursor, selection, scroll,
+   * focus and local undo do not change. Without it the pane remounts the
+   * surface on the new path; a text surface that reads its identity from the
+   * document session follows without it.
+   */
+  followRename?(documentId: string): void;
   focus?(): void;
   /**
    * Opens the surface's own find bar, the one its editor offers inside the

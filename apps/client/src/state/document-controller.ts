@@ -339,6 +339,11 @@ export interface Pane {
   /// recente: nascoste, non smontate (`parkSurface`). Tornare su una di quelle
   /// la rimostra invece di ricostruire l'editor.
   parked: ParkedSurface[];
+  /// Una rinomina che rimonta la superficie mostrata (`followRenameInPanes`)
+  /// mentre aveva il fuoco: il nome nuovo e il cursore in byte, se la
+  /// superficie lo diceva. Il montaggio nuovo li riprende
+  /// (`restoreRenameCaret`); il giro di disegno lo dimentica comunque.
+  renameCaret: { readonly doc: string; readonly at: number | null } | null;
 }
 
 /// La superficie di una scheda di testo che il riquadro tiene da parte mentre
@@ -2531,6 +2536,11 @@ async function render(): Promise<void> {
     } catch (error) {
       failure ??= { error };
     }
+    // Il cursore di una rinomina vale per il montaggio del nome nuovo e basta:
+    // resta solo se questo giro non l'ha ancora visto (un giro partito prima
+    // della rinomina).
+    const caret = r.renameCaret;
+    if (caret && !(activeDoc(id) === caret.doc && r.shown?.k === "doc" && r.shown.doc !== caret.doc)) r.renameCaret = null;
     markMode(r, selectedMode(r)?.id ?? null);
     view.drawToolbar(r);
     const shownDoc = activeDoc(id);
@@ -2689,6 +2699,7 @@ export function renderPane(id: string): Pane {
     sourceView: null,
     bytes: false,
     parked: [],
+    renameCaret: null,
   };
   panes.set(id, r);
   return r;
@@ -3163,6 +3174,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     surface.setMode("view");
     markMode(r, "view");
     if (theme) surface.setTheme?.(theme);
+    restoreRenameCaret(r, tab.doc);
     return;
   }
 
@@ -3255,6 +3267,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   attachSurface(r, tab.doc);
   refreshNoteClasses(r, tab.doc);
   mountDocumentAttachments(r, tab.doc);
+  restoreRenameCaret(r, tab.doc);
 }
 
 /// La scelta di una scheda porta davvero alla vista sorgente che la superficie
@@ -3760,15 +3773,18 @@ function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSu
 
 // --- la rinomina sotto una superficie montata --------------------------------
 
-/// Una superficie di testo (Markdown o testo semplice) che segue la sessione
-/// anche quando il file cambia nome: la sessione è la stessa (`rename`) e la
-/// superficie legge l'identità da lei. Un cambio di estensione può chiedere
-/// un'altra superficie, e un file di un componente segue i componenti: in quei
-/// casi il riquadro rimonta come prima.
+/// Una superficie che resta montata quando il file cambia nome. Una di testo
+/// (Markdown o testo semplice) segue la sessione: la sessione è la stessa
+/// (`rename`) e la superficie legge l'identità da lei. Un'altra lo dichiara
+/// (`followRename`, il documento di Word): un file di un componente resta coi
+/// componenti di prima, perché l'estensione è la stessa. Un cambio di
+/// estensione può chiedere un'altra superficie: lì il riquadro rimonta, e
+/// `renameCaret` riporta fuoco e cursore.
 function surfaceFollowsRename(surface: EditorSurface, from: string, to: string): boolean {
+  if (extensionOf(from) !== extensionOf(to)) return false;
+  if (surface.followRename) return true;
   if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
-  if (uisForFile(from).length > 0 || uisForFile(to).length > 0) return false;
-  return extensionOf(from) === extensionOf(to);
+  return uisForFile(from).length === 0 && uisForFile(to).length === 0;
 }
 
 function extensionOf(doc: string): string {
@@ -3784,6 +3800,10 @@ function extensionOf(doc: string): string {
 /// il cursore, la cronologia locale e lo scorrimento. La registrazione nella
 /// sessione si rifà col nome nuovo, perché gli aggiornamenti e le battute
 /// cercano la sessione per nome. Lo stesso per le superfici da parte.
+///
+/// Una superficie che non regge il nome nuovo si rimonta al giro di disegno
+/// che `rename` annuncia: se aveva il fuoco, il riquadro si segna il cursore
+/// (`renameCaret`) e il montaggio nuovo lo riprende.
 function followRenameInPanes(from: string, to: string): void {
   for (const r of panes.values()) {
     const shown = r.shown;
@@ -3793,6 +3813,7 @@ function followRenameInPanes(from: string, to: string): void {
       // La scheda prima, poi lo stacco: il testo che la superficie registra
       // staccandosi va alla sessione col nome nuovo, l'unico che c'è ancora.
       r.shown = { ...shown, doc: to };
+      surface.followRename?.(to);
       detachSurface(r);
       // Gli allegati e il registratore scrivono nel documento per nome.
       r.disposeAttachments?.();
@@ -3802,12 +3823,46 @@ function followRenameInPanes(from: string, to: string): void {
       attachSurface(r, to);
       refreshNoteClasses(r, to);
       mountDocumentAttachments(r, to);
+    } else if (shown?.k === "doc" && shown.doc === from && surface) {
+      // Il giro di disegno rimonta questa superficie: chi ci scriveva ritrova
+      // fuoco e cursore nel montaggio nuovo. Chi stava altrove resta dov'è.
+      r.renameCaret = r.editorEl.contains(document.activeElement) ? { doc: to, at: caretOf(surface) } : null;
     }
-    r.parked = r.parked.map((entry) =>
-      entry.tab.doc === from && surfaceFollowsRename(entry.surface, from, to)
-        ? { ...entry, tab: { ...entry.tab, doc: to } }
-        : entry);
+    r.parked = r.parked.map((entry) => {
+      if (entry.tab.doc !== from || !surfaceFollowsRename(entry.surface, from, to)) return entry;
+      entry.surface.followRename?.(to);
+      return { ...entry, tab: { ...entry.tab, doc: to } };
+    });
   }
+}
+
+/// Il cursore di una superficie che lo dice, in byte del sorgente: l'inizio
+/// della selezione principale (il cursore stesso, se è vuota). `null`
+/// per chi non ha intervalli del sorgente (un documento di Word, una tela).
+function caretOf(surface: EditorSurface): number | null {
+  try {
+    return surface.selections?.()?.primary.start ?? null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+/// Dopo una rinomina che ha rimontato la superficie: se chi scriveva aveva il
+/// fuoco lì, il montaggio nuovo lo riprende, col cursore dove la superficie
+/// sa metterlo (`reveal`). Un fuoco andato intanto altrove (un altro
+/// pannello, un dialogo) non si tocca. Vale una volta, per quel documento.
+function restoreRenameCaret(r: Pane, doc: string): void {
+  const caret = r.renameCaret;
+  r.renameCaret = null;
+  const surface = r.surface;
+  if (!caret || caret.doc !== doc || !surface) return;
+  const now = document.activeElement;
+  if (now instanceof HTMLElement && now !== document.body && now.isConnected && !r.root.contains(now)) return;
+  if (caret.at !== null && surface.reveal?.({ span: { start: caret.at, end: caret.at } })) {
+    if (focusedVisiblyIn(r.editorEl)) return;
+  }
+  surface.focus?.();
 }
 
 /// La stessa scheda di una superficie da parte: lo stesso documento con la

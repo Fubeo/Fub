@@ -193,6 +193,9 @@ export interface RichSurfaceCallbacks {
 export function mountRichSurface(profile: string, context: SurfaceMountContext, callbacks: RichSurfaceCallbacks): EditorSurface {
   if (profile !== RICH_PROFILE) throw new Error(`rich surface profile ${profile} is not registered`);
   const parent = context.parent;
+  /// Il percorso del documento: cambia con una rinomina (`followRename`), che
+  /// non rimonta la pagina.
+  let documentId = context.documentId;
   parent.replaceChildren();
   const root = document.createElement("div");
   root.className = "rich-surface";
@@ -255,10 +258,12 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     const pick = images?.pick;
     if (!images || !pick) return undefined;
     return async () => {
-      const doc = await pick(context.documentId);
+      const doc = await pick(documentId);
       if (doc === null) return null;
-      const ref = relativeRef(context.documentId, doc);
-      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, context.documentId, RICH_IMAGE_LIMIT);
+      // Il nome di adesso: durante la scelta il documento può aver cambiato nome.
+      const from = documentId;
+      const ref = relativeRef(from, doc);
+      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, from, RICH_IMAGE_LIMIT);
       return blob ?? "unreadable";
     };
   }
@@ -612,6 +617,13 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         else pending = text;
       },
       getDoc: () => (engine ? engine.getDoc() : pending ?? ""),
+    },
+    // Una rinomina con la stessa estensione è lo stesso documento: la pagina
+    // resta col suo fuoco, cursore e annulla; cambia solo da dove si leggono
+    // le immagini scelte nel vault. Le battute arrivano alla shell per
+    // riquadro, non per nome.
+    followRename(next) {
+      documentId = next;
     },
     focus: () => engine?.focus(),
     // La barra multifunzione è della superficie: la barra di formattazione

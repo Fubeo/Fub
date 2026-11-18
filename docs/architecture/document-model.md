@@ -260,12 +260,19 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   versione (la fotografia prima della scrittura), e la Cronologia lo rimette
   come ogni altra.
 - **Una rinomina, da questa finestra o da fuori.** La sessione cambia nome e
-  tiene buffer, bozza e salvataggio in attesa. Un riquadro che mostra il
-  documento con una superficie di testo (Markdown o testo semplice) che regge
-  il nome nuovo (stessa estensione, nessun componente) non la rimonta:
-  `followRenameInPanes` in `state/document-controller.ts` passa la superficie
-  alla scheda col nome nuovo e la riattacca alla sessione, così fuoco,
-  cursore, annulla e scorrimento restano. Le altre superfici si rimontano.
+  tiene buffer, bozza e salvataggio in attesa: il salvataggio successivo va
+  sul nome nuovo. Con la stessa estensione un riquadro non rimonta la
+  superficie che mostra il documento: `followRenameInPanes` in
+  `state/document-controller.ts` passa la superficie alla scheda col nome
+  nuovo e la riattacca alla sessione, così fuoco, cursore, selezione, annulla
+  e scorrimento restano. Vale per una superficie di testo (Markdown o testo
+  semplice, che legge l'identità dalla sessione) e per una che dichiara
+  `followRename` (il documento di Word, `editors/rich/surface.ts`, che da lì
+  legge le immagini relative al nome nuovo). Le altre superfici, e ogni
+  cambio di estensione, si rimontano: se il fuoco era in quella superficie,
+  il montaggio nuovo lo riprende e rimette il cursore dove la superficie sa
+  metterlo (`renameCaret`, con `selections` e `reveal`). Un fuoco che stava
+  in un altro pannello non si sposta.
 - **Una cancellazione da fuori con testo non salvato.** La sessione si chiude,
   il testo va in bozza e il riquadro offre «Ricrea la nota». Ricreata la nota
   col testo della bozza, la bozza se ne va (`discardRemovedDraft`, dopo che la

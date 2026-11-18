@@ -4181,7 +4181,162 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
       host.atGate("writeDocument").some((w) => w.args[0] === "Fuori.md" && String(w.args[1]).includes("dopo")));
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
   });
+
+  it("con il fuoco in un altro pannello, la rinomina non lo sposta (IMP-046)", async () => {
+    const host = await start(VAULT);
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    expect(document.activeElement).toBe(rail);
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+
+  it("cambiata l'estensione l'editor si rimonta, e fuoco e cursore tornano dov'erano (IMP-046)", async () => {
+    // `.md` → `.markdown`: un'altra estensione chiede un montaggio nuovo, ma
+    // per chi scrive la nota è la stessa: la battuta dopo deve entrarci.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    typeInEditorAt(before, 3, "prima");
+
+    host.renameFromOutside("Benvenuto.md", "Benvenuto.markdown");
+    await waitFor("l'editor si rimonta sul nome nuovo", () => {
+      const now = editorViews();
+      return now.length === 1 && now[0] !== before;
+    });
+    await settle();
+    const after = editorViews()[0]!;
+    expect(document.activeElement?.closest(".cm-content")).toBe(after.contentDOM);
+    expect(after.state.selection.main.head).toBe(3 + "prima".length);
+
+    after.dispatch({ changes: { from: after.state.selection.main.head, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("tutto il testo arriva al nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.markdown" && String(w.args[1]).includes("primadopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("cambiata l'estensione col fuoco altrove, il montaggio nuovo non lo prende (IMP-046)", async () => {
+    const host = await start(VAULT);
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    const before = editorViews()[0]!;
+
+    host.renameFromOutside("Benvenuto.md", "Benvenuto.markdown");
+    await waitFor("l'editor si rimonta sul nome nuovo", () => {
+      const now = editorViews();
+      return now.length === 1 && now[0] !== before;
+    });
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
 });
+
+describe("un documento Word rinominato da fuori", () => {
+  const RICH = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
+
+  /// Apre il Word dall'albero e aspetta che la pagina si possa scrivere.
+  async function openLetter(): Promise<FakeHost> {
+    const host = await start({ ...VAULT, "Lettera.docx": RICH });
+    const row = () => document.querySelector<HTMLElement>('#file-list li[data-path="Lettera.docx"] > .tree-row');
+    await waitFor("il Word è nell'albero", () => !!row());
+    row()!.click();
+    await waitFor("la pagina del Word si scrive", () =>
+      document.querySelector<HTMLElement>(".pane.focus .rich-page [contenteditable=true]") !== null);
+    await settle();
+    return host;
+  }
+
+  const richPage = () => document.querySelector<HTMLElement>(".pane.focus .rich-page [contenteditable=true]");
+
+  /// Il cursore all'inizio del testo della pagina, come dopo un clic lì.
+  function caretAtStart(page: HTMLElement): void {
+    const text = document.createTreeWalker(page, NodeFilter.SHOW_TEXT).nextNode()!;
+    window.getSelection()!.collapse(text, 0);
+    document.dispatchEvent(new Event("selectionchange"));
+  }
+
+  /// Una battuta come la dà il browser a una pagina scrivibile: il carattere
+  /// entra nel nodo di testo dove sta la selezione del documento, e il motore
+  /// lo legge dal DOM. Senza fuoco nella pagina (sul body) non entra da
+  /// nessuna parte, come nell'app.
+  function press(char: string): void {
+    const editable = document.activeElement?.closest<HTMLElement>("[contenteditable=true]");
+    if (!editable) return;
+    const selection = window.getSelection()!;
+    let node = selection.focusNode;
+    let offset = selection.focusOffset;
+    if (!node || !editable.contains(node)) return;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      const text = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode();
+      if (!text) return;
+      node = text;
+      offset = 0;
+    }
+    (node as Text).insertData(offset, char);
+    selection.collapse(node, offset + char.length);
+  }
+
+  it("la pagina resta quella, col fuoco e il cursore, e la battuta dopo va sul nome nuovo (IMP-046)", async () => {
+    const host = await openLetter();
+    const page = richPage()!;
+    page.focus();
+    caretAtStart(page);
+    press("a");
+    await waitFor("la battuta entra", () => page.textContent?.includes("aciao") === true);
+
+    host.renameFromOutside("Lettera.docx", "Lettera nuova.docx");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Lettera nuova"));
+    await settle();
+
+    expect(richPage()).toBe(page);
+    expect(page.isConnected).toBe(true);
+    expect(page.contains(document.activeElement)).toBe(true);
+
+    press("b");
+    await waitFor("la battuta dopo entra al cursore di prima", () => page.textContent?.includes("abciao") === true);
+    await waitFor("il salvataggio va al nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Lettera nuova.docx" && String(w.args[1]).includes("abciao")));
+    expect(Object.keys(host.files())).not.toContain("Lettera.docx");
+  });
+
+  it("il testo non salvato prima della rinomina arriva sul disco col nome nuovo", async () => {
+    const host = await openLetter();
+    const unlock = host.throttle("writeDocument");
+    const page = richPage()!;
+    page.focus();
+    caretAtStart(page);
+    press("z");
+    await waitFor("la battuta entra", () => page.textContent?.includes("zciao") === true);
+
+    host.renameFromOutside("Lettera.docx", "Archivio.docx");
+    await settle();
+    unlock();
+    await waitFor("il testo arriva al nome nuovo", () => host.files()["Archivio.docx"]?.includes("zciao") === true);
+    expect(Object.keys(host.files())).not.toContain("Lettera.docx");
+  });
+
+  it("con il fuoco in un altro pannello, la rinomina non lo sposta", async () => {
+    const host = await openLetter();
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    host.renameFromOutside("Lettera.docx", "Lettera nuova.docx");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Lettera nuova"));
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+});
+
+/// Scrive `text` a `at` come una battuta della persona, nella vista data.
+function typeInEditorAt(view: ReturnType<typeof editorViews>[number], at: number, text: string): void {
+  view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length }, userEvent: "input.type" });
+}
 
 describe("una nota cancellata da fuori con testo non salvato", () => {
   it("«Ricrea la nota» riscrive il testo e toglie la bozza che lo teneva (IMP-047)", async () => {
