@@ -70,6 +70,7 @@
 - Come si misurano i tempi di Fub nella WebView vera? → [development/webview-measurements.md](../development/webview-measurements.md)
 - Come si misura la memoria dell'app vera (R1, raccolta forzata `bench-gc`)? → [development/webview-memory.md](../development/webview-memory.md)
 - Come si lancia il giro della pre-alpha sul banco, e che cosa non prova? → [development/bench-giro.md](../development/bench-giro.md)
+- Che cosa prova ciascun compito del gruppo `scrittura` del giro, e quali sono saltati? → [development/giro-della-scrittura.md](../development/giro-della-scrittura.md)
 - Quale stile deve avere ogni file Markdown canonico della repository? → [development/documentation-style.md](../development/documentation-style.md)
 - Quali versioni esistono, chi proteggono e come si prepara un rilascio? → [development/versioning-and-releases.md](../development/versioning-and-releases.md)
 

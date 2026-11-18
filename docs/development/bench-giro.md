@@ -28,7 +28,9 @@ finto non dà i comandi di formato. `editor` (non al telefono): una frase in un 
 un Excel, un rettangolo in un SVG, una ricerca in un PDF; `giro=editor` (`bench/giro-fixture.ts`) dà il
 PDF e un foglio che serve solo quei comandi. `lavagna` (non al telefono, `?lavagna=1`): schede, un filo,
 la penna (`pointerType: "pen"`, con la pressione) e la Gomma, visti nel `.canvas`. `guasti` (non al
-telefono): conflitti, errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
+telefono): conflitti, errori, cestino, tastiera. `scrittura` (non al telefono): quarantadue compiti
+dell'editor, dal «/» alla Base, alla sbirciata e all'inglese, elencati in
+[Il giro della scrittura](giro-della-scrittura.md) coi saltati e il perché. Al primo compito che fallisce il giro si ferma, dice
 quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto (`giro.json`) in `--out` (di
 serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
 
