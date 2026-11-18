@@ -218,11 +218,18 @@ fn pdf(given: Option<&str>, host: &dyn HostApi) -> Result<DocId, PluginError> {
     // La convalida della spec ha già chiesto una stringa: qui si scrive nella
     // forma dei nomi del vault.
     let written = path_policy::from_outside(given.unwrap_or_default());
-    let pdf = DocId::new(written);
-    // Un PDF è ciò che il vault chiama così: la regola che dà il tipo di
-    // contenuto a un allegato, senza badare al caso (`Bando.PDF`) e con un nome
-    // prima del punto. Una seconda grafia della stessa domanda divergerebbe.
-    if media::mime_of(&pdf) != Some("application/pdf") {
+    // Il PDF si sceglie dall'elenco o si scrive per nome («Bando di gara»):
+    // la regola di `Args::named_document`, fra i soli PDF del vault. Un PDF è
+    // un allegato, quindi i candidati sono i file dell'anagrafe. Un percorso
+    // con l'estensione di un file (`Altro.pdf`, `Appunti.md`) che non c'è e
+    // che nessun PDF porta come nome resta la frase del comando su quel file.
+    let pdf = match crate::formats::written_file_named_by(&written, host, is_pdf) {
+        Ok(Some(found)) => found,
+        Ok(None) => DocId::new(written),
+        Err(error) if crate::formats::missing_file(&error, &written, host) => DocId::new(written),
+        Err(error) => return Err(error),
+    };
+    if !is_pdf(&pdf) {
         return Err(PluginError::BadArgs(one(E_NOT_PDF, &pdf)));
     }
     match host.document_revision(&pdf) {
@@ -230,6 +237,13 @@ fn pdf(given: Option<&str>, host: &dyn HostApi) -> Result<DocId, PluginError> {
         Err(PluginError::NotFound(_)) => Err(PluginError::NotFound(one(E_NO_PDF, &pdf))),
         Err(other) => Err(other),
     }
+}
+
+/// Un PDF è ciò che il vault chiama così: la regola che dà il tipo di
+/// contenuto a un allegato, senza badare al caso (`Bando.PDF`) e con un nome
+/// prima del punto. Una seconda grafia della stessa domanda divergerebbe.
+fn is_pdf(doc: &DocId) -> bool {
+    media::mime_of(doc) == Some("application/pdf")
 }
 
 /// Il documento nuovo, scritto dal provider delle annotazioni: il modello porta
@@ -439,6 +453,65 @@ mod tests {
         let mut upper = host.with_binary_document("SCAN.PDF", b"%PDF-1.4\n");
         let outcome = run(&mut upper, json!({ "pdf": "SCAN.PDF" }), InvokeMode::Apply).unwrap();
         assert_eq!(opened(&outcome).as_str(), "SCAN.PDF.fubann");
+    }
+
+    #[test]
+    fn the_pdf_can_be_written_by_name() {
+        // Chi scrive «Bando di gara» nel campo intende il PDF: un allegato,
+        // che l'elenco dei documenti non ha, trovato fra i soli PDF del vault.
+        // Un'immagine omonima non lo rende ambiguo.
+        let mut host = host().with_binary_document("Bando di gara.png", b"\x89PNG\r\n");
+        for written in [
+            "Bando di gara",
+            "bando di gara",
+            "Gare/Bando di gara",
+            "Bando di gara.pdf",
+        ] {
+            let outcome = run(&mut host, json!({ "pdf": written }), InvokeMode::DryRun)
+                .unwrap_or_else(|error| panic!("{written}: {error:?}"));
+            let CommandEffect::Plan(plan) = &outcome.effect else {
+                panic!("{written}: un piano, non {:?}", outcome.effect);
+            };
+            assert_eq!(plan.docs, [DocId::new(NOTE)], "{written}");
+        }
+        let outcome = run(
+            &mut host,
+            json!({ "pdf": "Bando di gara" }),
+            InvokeMode::Apply,
+        )
+        .unwrap();
+        assert_eq!(opened(&outcome).as_str(), NOTE);
+    }
+
+    #[test]
+    fn a_name_no_pdf_or_many_pdfs_carry_is_said() {
+        let mut host = host()
+            .with_binary_document("A/Doppio.pdf", b"%PDF-1.7\n")
+            .with_binary_document("B/Doppio.pdf", b"%PDF-1.7\n");
+        for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+            let error = run(&mut host, json!({ "pdf": "Doppio" }), mode).unwrap_err();
+            assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+            assert_eq!(
+                message(&error),
+                "Più documenti si chiamano «Doppio»: A/Doppio.pdf, B/Doppio.pdf. Scegli \
+                 dall'elenco del campo quello giusto."
+            );
+            let error = run(&mut host, json!({ "pdf": "Manca" }), mode).unwrap_err();
+            assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+            assert_eq!(
+                message(&error),
+                "Nessun documento che questo comando può usare si chiama «Manca». Sceglilo \
+                 dall'elenco del campo."
+            );
+            assert_eq!(
+                rendered(error.message(), "en"),
+                "No document this command can use is called “Manca”. Pick it from the \
+                 field's list."
+            );
+        }
+        assert!(host
+            .read_document(&DocId::new("A/Doppio.pdf.fubann"))
+            .is_err());
     }
 
     #[test]

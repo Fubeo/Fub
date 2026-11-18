@@ -42,7 +42,13 @@ Leggono il campo così le note (`note.rename`, `note.duplicate`, `note.trash`,
 `note.block.sync`), le proprietà, `base.view.*`, i comandi della lavagna,
 `version.restore`, `heading.rename`, `note.insert_template`, `note.insert_datetime`, `note.merge`,
 le due esportazioni, `craft.preview`, `craft.photo`, i comandi delle note
-pubblicate e `trash.os`. Restano sull'id: `version.keep` (conserva il testo di
-un documento che può non esserci più), `mention.link` (lo chiama il pannello
-dei collegamenti con posizioni e revisione) e i comandi della sincronizzazione
-(un documento che c'è solo sul server è un argomento giusto).
+pubblicate e `trash.os`. Anche `drawing.create` (il campo «Da», fra i soli
+disegni) e `pdf.annotate` (il campo «PDF», fra i soli PDF: un allegato, che
+non sta in `list_documents`, quindi i candidati vengono dall'anagrafe,
+`IndexQuery::Entries`, con `formats::written_file_named_by`); per tutti e due
+un percorso con l'estensione di un file che non c'è resta la frase del comando
+su quel file («Il PDF «Altro.pdf» non c'è nel vault»). Restano sull'id:
+`version.keep` (conserva il testo di un documento che può non esserci più),
+`mention.link` (lo chiama il pannello dei collegamenti con posizioni e
+revisione) e i comandi della sincronizzazione (un documento che c'è solo sul
+server è un argomento giusto).
