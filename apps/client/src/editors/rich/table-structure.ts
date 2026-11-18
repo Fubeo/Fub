@@ -10,10 +10,24 @@ import { isHistoryTransaction } from "prosemirror-history";
 import { Plugin, type Transaction } from "prosemirror-state";
 import { ReplaceAroundStep, ReplaceStep } from "prosemirror-transform";
 import type { TableEdit } from "../../tabella/adapter";
-import { BODY } from "./projection";
+import { BODY, type Layout } from "./projection";
 import { richSchema } from "./schema";
 
 const { para, row: rowType, cell: cellType, table: tableType } = richSchema.nodes;
+
+/// La disposizione dei paragrafi di una tabella nuova: spazio dopo 0 e
+/// interlinea singola, quella che lo stile «Griglia tabella» di Word dà alle
+/// celle. È formattazione del paragrafo come le altre: si vede, si salva e si
+/// rilegge in ogni formato; dove lo stile del documento la dà già, il formato
+/// non la scrive.
+export const NEW_CELL_LAYOUT: Layout = Object.freeze({ after: 0, line: Object.freeze({ multiple: 1 }) });
+
+/// Una cella di una tabella nuova: un paragrafo vuoto con la disposizione
+/// della griglia. Righe e colonne aggiunte dopo copiano la cella accanto
+/// (`emptyCellLike`), e la tengono.
+export function newCell(): PmNode {
+  return cellType.create(null, para.create({ p: NEW_CELL_LAYOUT }));
+}
 
 /// Una cella vuota come `cell`: stesse proprietà di cella e del paragrafo,
 /// con il ruolo del testo normale.
