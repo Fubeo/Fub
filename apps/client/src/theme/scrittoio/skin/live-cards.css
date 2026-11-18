@@ -1,0 +1,243 @@
+/* ── La scheda viva nella nota ───────────────────────────────────────────
+   (E19, T41; il prototipo `.scard`, passi 16–18.) Un file incorporato da
+   solo nel paragrafo (un PDF, un foglio, un file Craft) si mostra con
+   l'ospite delle schede della lavagna: una testata alta 34 px (icona della
+   specie, nome del file, parte mostrata; «Apri» e «A tutta pagina» al
+   passaggio e da attiva) sopra il corpo della specie. Sta nella pagina e ne
+   prende la tavolozza: il foglio `--doc-bg`, i fili `--doc-rule` e
+   `--doc-rule-soft`, il grigio `--doc-gutter-fg`, l'inchiostro `--doc-fg`, il
+   passaggio `--doc-block-hover`. Attiva, il bordo è d'accento. L'interno del
+   corpo è della specie (`canvas-card-*`), e non si veste qui. */
+.live-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: var(--space-3) 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  transition: box-shadow 0.15s;
+}
+/* Il filo, sopra il corpo: la specie disegna fino al bordo. */
+.live-card::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  content: "";
+  pointer-events: none;
+  transition: box-shadow 0.15s;
+}
+.live-card:focus {
+  outline: none;
+}
+.live-card[data-card-active="true"] {
+  box-shadow: 0 12px 28px -18px rgb(0 0 0 / 40%);
+}
+.live-card[data-card-active="true"]::after {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Scelta coi Blocchi: il filo della selezione dei blocchi la circonda. */
+.live-card[data-card-chosen="true"]::after,
+.live-card:focus-visible::after {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.live-card-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  height: 34px;
+  padding: 0 var(--space-4) 0 12px;
+  border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: default;
+}
+.live-card-head > svg,
+.live-card-head button > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.live-card-title {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+.live-card-name {
+  color: var(--doc-fg);
+  font-weight: 600;
+}
+.live-card-spacer {
+  flex: 1;
+}
+/* «Esc per uscire»: solo da attiva, e mai al tocco (lì c'è «Fine»). */
+.live-card-escape {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+}
+.live-card-escape kbd {
+  padding: 2px 4px 1px;
+  border-radius: 5px;
+  background: var(--doc-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--doc-rule),
+    0 1px 0 var(--doc-rule);
+  color: var(--doc-gutter-fg);
+  font: var(--weight-medium) 10px/1 var(--font-mono);
+}
+.live-card[data-card-active="true"] .live-card-escape {
+  display: inline-flex;
+}
+.live-card-head button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.live-card:hover .live-card-head button,
+.live-card:focus-within .live-card-head button,
+.live-card[data-card-active="true"] .live-card-head button,
+.live-card[data-card-state="missing"] .live-card-head button,
+.live-card[data-card-state="unsupported"] .live-card-head button {
+  opacity: 1;
+}
+.live-card-head button:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.live-card-head button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.live-card-head .live-card-done {
+  display: none;
+}
+/* «A tutta pagina» c'è solo dove c'è una vista da allargare. */
+.live-card:not([data-card-state="view"]) .live-card-full {
+  display: none;
+}
+/* Un file che manca non si apre: le sue voci stanno nel corpo. */
+.live-card[data-card-state="missing"] .live-card-open {
+  display: none;
+}
+.live-card-full[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+/* La barra della specie mentre si scrive nel suo file (un foglio: la
+   formula, il nastro corto). */
+.live-card-tools {
+  flex: none;
+  border-bottom: 1px solid var(--doc-rule-soft);
+}
+
+/* Il corpo: alto quanto basta alla specie, entro la colonna. A riposo è
+   inerte (la rotella scorre la nota, il clic la attiva); da attiva è suo. */
+.live-card-body {
+  position: relative;
+  min-height: 120px;
+  height: 360px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.live-card[data-card-kind="sheet"] .live-card-body {
+  height: 300px;
+}
+.live-card:not([data-card-active="true"]) .live-card-body > * {
+  pointer-events: none;
+}
+.live-card:not([data-card-active="true"]) .live-card-body .kit-button {
+  pointer-events: auto;
+}
+.live-card[data-card-active="true"] .live-card-body {
+  cursor: default;
+}
+.live-card[data-card-full="true"] .live-card-body {
+  height: calc(var(--live-card-full, 80vh) - 36px);
+}
+.live-card[data-card-state="missing"] .live-card-body,
+.live-card[data-card-state="unsupported"] .live-card-body,
+.live-card[data-card-state="loading"] .live-card-body {
+  height: auto;
+  min-height: 0;
+  cursor: default;
+}
+
+/* Il file mancante, il formato senza vista, l'attesa: una riga che dice
+   che cosa e una che dice che fare. */
+.live-card-missing,
+.live-card-unsupported {
+  display: grid;
+  gap: var(--space-3);
+  padding: 14px 16px;
+}
+.live-card-message {
+  overflow: hidden;
+  padding: 0;
+  color: var(--doc-fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card[data-card-state="loading"] .live-card-message {
+  padding: 14px 16px;
+  color: var(--doc-gutter-fg);
+}
+.live-card-hint {
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+}
+.live-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+.live-card[data-card-state="missing"]::after {
+  box-shadow: inset 0 0 0 1px var(--doc-danger);
+}
+.live-card[data-card-state="missing"] .live-card-message {
+  color: var(--doc-danger);
+}
+
+/* Al tocco: niente Esc da dire, «Fine» per uscire; le voci della testata
+   restano a vista, senza la parola, per stare nella riga. */
+@media not (any-hover: hover) {
+  .live-card[data-card-active="true"] .live-card-escape {
+    display: none;
+  }
+  .live-card[data-card-active="true"] .live-card-head .live-card-done {
+    display: inline-flex;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .live-card-head button {
+    opacity: 1;
+  }
+  .live-card-head button:not(.live-card-done) .live-card-label {
+    display: none;
+  }
+}
+
+/* Il telefono: il corpo più basso. */
+:root[data-client-shell="mobile"] .live-card-body {
+  height: 260px;
+}

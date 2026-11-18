@@ -28,6 +28,7 @@ export const ORDER = [
   "tabella",
   "math",
   "editors",
+  "live-cards",
   "draw",
   "media",
   "nodes",

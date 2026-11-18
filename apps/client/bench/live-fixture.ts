@@ -50,6 +50,31 @@ const TRANSCLUSION_MEETING = [
   "",
 ].join("\n");
 
+/// Le schede vive (T41): il contratto in PDF e la cartella di Excel del banco
+/// (`pdf-scena`, `workbook=1`) incorporati da soli nel paragrafo, poi un
+/// file che non c'è più e un formato che la nota non sa mostrare.
+const LIVE_CARDS_NOTE = [
+  "# Affitto di via Roma",
+  "",
+  "Il contratto, così com'è arrivato dall'agenzia:",
+  "",
+  "![[contratto-affitto.pdf]]",
+  "",
+  "I conti della casa, da tenere aggiornati:",
+  "",
+  "![[Conti.xlsx]]",
+  "",
+  "La versione vecchia, spostata chissà dove:",
+  "",
+  "![[Contratto vecchio.pdf]]",
+  "",
+  "Le foto dell'appartamento, in un archivio:",
+  "",
+  "![[foto-appartamento.zip]]",
+  "",
+  "Da chiedere all'agenzia: chi paga la caldaia.",
+].join("\n");
+
 /// Il blocco sincronizzato (T30): la nota riporta un blocco della riunione
 /// col suo id, che si scrive dove sta, e uno il cui blocco non c'è più.
 const SYNCED_NOTE = [
@@ -537,6 +562,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
   sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
+  "schede-vive": { text: LIVE_CARDS_NOTE, cursor: null, files: { "Casa/foto-appartamento.zip": "" } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "lunga-4000": longNote(4000),

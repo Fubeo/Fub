@@ -281,13 +281,13 @@ export const SCENE = touchLast(onPage("shell", [
   // prestito e la domanda.
   {
     id: "nota-pdf",
-    title: "Una nota con un PDF che ha l'anteprima: la prima pagina, il nome sotto",
+    title: "Una nota con un PDF che ha l'anteprima, in Lettura: la prima pagina, il nome sotto",
     query: "pdf-scena=nota",
     prepare: (page) => openPdfNote(page, true),
   },
   {
     id: "nota-pdf-senza",
-    title: "La stessa nota, il PDF senza anteprima: il link",
+    title: "La stessa nota in Lettura, il PDF senza anteprima: il link",
     query: "pdf-scena=nota-senza",
     prepare: (page) => openPdfNote(page, false),
   },
@@ -1560,6 +1560,47 @@ export const SCENE = touchLast(onPage("shell", [
         await page.waitForFunction((selector) => getComputedStyle(document.querySelector(selector)).opacity === "1", `${SYNCED_BLOCK} > .transclusion-head`);
       },
     }),
+  })),
+  // Le schede vive nella nota (T41, il prototipo `.scard`, passi 16–18): il
+  // PDF e il foglio a riposo, col nome del file in testata; il foglio attivo,
+  // col bordo d'accento e «Esc per uscire»; in fondo un file mancante e un
+  // formato che la nota non sa mostrare; la stessa nota nella finestra minima.
+  ...[
+    ["schede-vive-01-riposo", "Le schede vive a riposo: il contratto in PDF e il foglio dei conti, col nome del file in testata", "top", null],
+    ["schede-vive-02-attiva", "Il foglio attivo: bordo d'accento, «Esc per uscire», «Apri» e «A tutta pagina»", "top", "sheet"],
+    ["schede-vive-03-mancante", "Un file mancante («Ritrova…», «Togli dalla nota») e un formato che la nota non mostra («Apri»)", "bottom", null],
+    ["schede-vive-04-stretta", "Le schede vive nella finestra minima, 800 px", "top", null, NOTE_NARROW],
+  ].map(([id, title, scroll, activate, viewport]) => ({
+    id,
+    title,
+    query: "live=schede-vive&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], scroll === "bottom" ? "bottom" : "top");
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+        return cards.length > 0 && cards.every((card) => card.dataset.cardState !== "loading");
+      });
+      if (scroll === "bottom") {
+        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
+        const last = '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]';
+        await page.waitForSelector(last);
+        // Le schede sopra hanno preso la loro altezza: si va in fondo adesso.
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        });
+        await page.waitForFunction((selector) => {
+          const card = document.querySelector(selector)?.getBoundingClientRect();
+          return card !== undefined && card.bottom <= window.innerHeight;
+        }, last);
+      }
+      if (activate) {
+        const body = `.pane.focus .pane-editor .live-card[data-card-kind="${activate}"] .live-card-body`;
+        await page.click(body);
+        await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="${activate}"][data-card-active="true"]`);
+      }
+    },
   })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
@@ -3778,6 +3819,9 @@ async function openRaw(page, doc, withImage) {
 /// disegnata (`withPreview`) o il link.
 async function openPdfNote(page, withPreview) {
   await fromTreeDrawer(page, () => openNote(page, "Casa/Affitto di via Roma.md"));
+  // In Scrittura il PDF incorporato è una scheda viva (T41, le scene
+  // `schede-vive-*`); l'anteprima di Craft e il link di T31 sono della Lettura.
+  await chooseMode(page, "reading");
   if (withPreview) {
     // Lo slot dell'incorporamento ha già la sua didascalia: l'immagine ci
     // entra da sola, senza un `figure` suo.
