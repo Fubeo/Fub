@@ -3067,7 +3067,7 @@ matrice vuota; al telefono.
 Fatto quando: test della scelta e della matrice; le scene al tocco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/math
-Stato: [~] in corso (coder feat/formule-pezzi da integra/editor-2, 2026-11-18)
+Stato: [~] integrato in `integra/editor-2` (3f29e7d42, merge 8ca49a990, 2026-11-18), in attesa del pacchetto 2. Differenze: il codice in math/editor.ts; touch-action nel codice (il filtro dei temi la rifiuta); Invio dall'ultima riga aggiunge una riga, Tab dall'ultima cella esce; Ctrl C copia il LaTeX senza $; / ^ _ ( [ avvolgono il pezzo scelto
 
 ## T67 · La prova del motore
 
