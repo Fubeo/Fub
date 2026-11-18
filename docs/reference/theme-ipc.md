@@ -60,7 +60,7 @@ campo `outcome`:
 | `installed` | `id`, `name`, `version`, `replaced` | il tema è installato; `replaced` se ha preso il posto di uno con lo stesso id |
 | `collision` | `id`, `name`, `version`, `installed_version` | un id già installato, niente toccato; `installed_version` è `null` se quello installato non si legge (si può sostituire lo stesso) |
 | `revoked` | `id`, `name`, `version` | il tema installato con lo stesso id è revocato dal catalogo: una cartella non lo sostituisce (la copia nuova cancellerebbe la revoca), niente toccato |
-| `blocked` | `why`, `path`, `installed` | ciò che c'è nella cartella dei temi non si tocca, niente toccato; `installed` dice se è il tema già installato con lo stesso id (che resta com'era) o la cartella dei temi stessa; `why` (`ThemeBlock`) è `pointer` (il tema installato con lo stesso id ha il puntatore del catalogo che non si legge: potrebbe dire «revocato»), `link` (un link simbolico al posto del tema installato o della cartella dei temi) o `layout` (non è una cartella che Fub sa usare); `path` è dove, da mostrare |
+| `blocked` | `why`, `path`, `installed` | ciò che c'è nella cartella dei temi non si tocca, niente toccato; `installed` dice se è il tema già installato con lo stesso id (che resta com'era) o la cartella dei temi stessa; `why` (`ThemeBlock`) è `pointer` (il tema installato con lo stesso id ha il puntatore del catalogo che non si legge: potrebbe dire «revocato»), `link` (un link simbolico al posto del tema installato o della cartella dei temi) o `layout` (non è una cartella che Fub sa usare); `path` è dove, da mostrare (su Windows senza il prefisso `\\?\`) |
 | `replace_failed` | `id`, `name`, `version`, `kept`, `error` | con `replace`, il nuovo non è entrato e il vecchio non è tornato al suo nome; `kept` è il nome della cartella, dentro quella dei temi, dove è rimasto (la shell lo dice con le sue parole); `error` (un `PluginError`) è il guasto del disco, per il log e la diagnosi copiata |
 | `unreadable` | `side`, `error` | una lettura non è riuscita e niente è scritto: `side` (`ThemeSide`) è `folder` (la cartella scelta, che ha ancora i byte del controllo) o `themes` (la cartella dei temi di Fub); non è un guasto di scrittura; `error` è il guasto così com'è, mai da mostrare |
 | `refused` | `refusal` | le porte dell'installazione hanno rifiutato i byte controllati (un `ThemeFolderRefusal`, come sopra); niente scritto |
@@ -87,7 +87,8 @@ legge la cartella scelta con le porte dell'installazione, senza scrivere
 niente in `themes/`. La webview non passa né il path né il titolo. Gli altri
 errori sono `bad_args` (un path che non è UTF-8) e `internal` (la finestra di
 scelta non ha risposto). `unlink_theme_folder` non chiede la modalità
-sviluppatore. `ThemeLink` porta `folder` (il path canonico, da mostrare),
+sviluppatore. `ThemeLink` porta `folder` (il path canonico nella forma da mostrare: su
+Windows senza il prefisso `\\?\`),
 `id` e `name` dell'ultimo manifest letto (`null` se non se n'è letto uno),
 `changed`, `watched` e lo stato, nel campo `state`. `watched` dice se un
 osservatore vivo guarda la cartella: l'host la guarda solo se è `ready`, e
