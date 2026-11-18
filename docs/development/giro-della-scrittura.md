@@ -86,10 +86,10 @@ In inglese (`localStorage["fub.locale.language"] = "en"`, come Impostazioni):
 
 ## I compiti saltati
 
-Il corridore non ha un «rosso atteso». Un compito che oggi fallisce per un
+Il corridore non ha un «rosso atteso». Un compito che fallisce per un
 difetto di Fub sta in `SALTATI`, nello stesso file, col motivo e i passi; il
 primo compito ne stampa i nomi. Corretto il difetto, il compito torna fra gli
-altri. Oggi: `slash-dopo-rinomina` (il «/» non si apre in una nota
+altri. Sono saltati `slash-dopo-rinomina` (il «/» non si apre in una nota
 rinominata), `slash-compito` («/compito» non trova il compito),
 `sbirciata-un-esc` (servono due Esc per chiudere la sbirciata) ed
 `esci-dall-elenco` (la riga dopo un elenco chiuso con Invio resta attaccata
