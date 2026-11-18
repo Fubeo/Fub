@@ -90,6 +90,13 @@ export interface MarkdownMountOptions {
    * riportata non la ricevono: si scrive un livello solo.
    */
   readonly transclude?: TranscludeSlot;
+  /**
+   * Le schede affiancate (T42, `live-cards.ts`): riceve ogni embed da solo nel
+   * suo paragrafo dentro una colonna di `[!columns]`, appena reso, con la vita
+   * della resa. Se lo prende (`true`) al suo posto c'è una scheda viva, e la
+   * resa non lo idrata. Le note riportate non la ricevono.
+   */
+  readonly liveCard?: (slot: HTMLElement, life: Lifetime) => boolean;
 }
 
 /// Una nota riportata, come la trasclusione viva la riceve: il documento che
@@ -574,6 +581,7 @@ async function hydrateEmbeds(
       navigateFragment: undefined,
       // Si scrive un livello solo: una nota riportata dentro questa resta da leggere.
       transclude: undefined,
+      liveCard: undefined,
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),
     };
@@ -698,6 +706,15 @@ export function mountMarkdown(
     const queries = claimQueryBlocks(container);
     embedTasksBlocks(container, mountedLife);
     enhanceContent(container, parts, options, mountedLife);
+    if (options.liveCard) {
+      for (const slot of container.querySelectorAll<HTMLElement>(".fub-column > p > .embed[data-embed-page]")) {
+        try {
+          options.liveCard(slot, mountedLife);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    }
     hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
     const hasImages = !!container.querySelector("img[data-vault-src]");
     const documentId = options.documentId;

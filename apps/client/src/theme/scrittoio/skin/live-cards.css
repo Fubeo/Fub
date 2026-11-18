@@ -241,3 +241,135 @@
 :root[data-client-shell="mobile"] .live-card-body {
   height: 260px;
 }
+
+/* ── La misura, la riga, le schede affiancate (T42) ──────────────────────
+   (E19; il prototipo `.pair` e `.blk[data-t="lavagna"] .scard`, passo 17.)
+   La misura scritta nell'embed (`![[Conti.xlsx|640x300]]`) arriva come
+   `--live-card-width` e `--live-card-height`. Una larghezza minore della
+   colonna stringe la scheda; una maggiore la allarga oltre il testo, prima a
+   destra fino a 64 px («Larga», come la Base) e poi anche a sinistra fino ad
+   altri 64 («Tutta la pagina», come la lavagna del prototipo). Sotto i 1180
+   px di finestra resta il margine di destra, sotto i 940 nessuno: la scheda
+   torna nella colonna. L'altezza è di tutta la scheda, testata compresa. */
+.live-card[data-card-width="set"] {
+  width: min(var(--live-card-width), calc(100% + 128px));
+  margin-left: calc(-1 * max(0px, min(var(--live-card-width), calc(100% + 128px)) - 100% - 64px));
+}
+@media (max-width: 1180px) {
+  .live-card[data-card-width="set"] {
+    width: min(var(--live-card-width), calc(100% + 64px));
+    margin-left: 0;
+  }
+}
+@media (max-width: 940px) {
+  .live-card[data-card-width="set"] {
+    width: min(var(--live-card-width), 100%);
+  }
+}
+@container sheet (max-width: 560px) {
+  .live-card[data-card-width="set"] {
+    width: min(var(--live-card-width), 100%);
+    margin-left: 0;
+  }
+}
+:root[data-client-shell="mobile"] .live-card[data-card-width="set"] {
+  width: min(var(--live-card-width), 100%);
+  margin-left: 0;
+}
+.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body {
+  height: min(calc(var(--live-card-height) - 35px), 80vh);
+  min-height: 60px;
+}
+
+/* Il bordo in basso: si trascina per cambiare l'altezza. Una lineetta al
+   centro lo dice al passaggio; mentre si trascina è d'accento. */
+.live-card-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: none;
+  height: 10px;
+  cursor: ns-resize;
+}
+.live-card[data-card-resizable="true"] .live-card-resize {
+  display: block;
+}
+.live-card-resize::after {
+  position: absolute;
+  bottom: 3px;
+  left: calc(50% - 16px);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--doc-rule);
+  content: "";
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.live-card:hover .live-card-resize::after,
+.live-card-resize:focus-visible::after,
+.live-card[data-card-resizing="true"] .live-card-resize::after {
+  opacity: 1;
+}
+.live-card-resize:hover::after,
+.live-card-resize:focus-visible::after,
+.live-card[data-card-resizing="true"] .live-card-resize::after {
+  background: var(--accent);
+}
+.live-card-resize:focus-visible {
+  outline: none;
+}
+
+/* «Mostra come: riga»: l'icona e il nome, in una riga sola. */
+.live-card[data-card-display="row"] {
+  margin: var(--space-2) 0;
+  border-radius: 8px;
+}
+.live-card[data-card-display="row"]::after {
+  border-radius: 8px;
+}
+.live-card[data-card-state="row"] .live-card-head {
+  border-bottom: 0;
+}
+.live-card[data-card-state="row"] .live-card-tools,
+.live-card[data-card-state="row"] .live-card-body {
+  display: none;
+}
+
+/* Le schede affiancate: le colonne di K3 (`[!columns]`) con le schede alla
+   pari, alte uguali, 14 px fra l'una e l'altra; come la scheda «Tutta la
+   pagina» escono di 64 px dai due lati del testo finché la finestra ne ha il
+   margine. Nel foglio stretto e al telefono stanno una sotto l'altra (la
+   regola delle colonne, `document.css`). */
+.markdown-rendered .fub-columns[data-live-cards="true"] {
+  column-gap: 14px;
+  align-items: stretch;
+  margin-inline: -64px;
+}
+@media (max-width: 1180px) {
+  .markdown-rendered .fub-columns[data-live-cards="true"] {
+    margin-inline: 0;
+  }
+}
+:root[data-client-shell="mobile"] .markdown-rendered .fub-columns[data-live-cards="true"] {
+  margin-inline: 0;
+}
+.markdown-rendered .fub-columns[data-live-cards="true"] > .fub-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fub-column > .live-card {
+  flex: 1 0 auto;
+  margin: 0;
+}
+.fub-column > .live-card[data-card-state="view"] .live-card-body {
+  flex: 1 0 auto;
+}
+/* In una colonna la testata è stretta: «Apri» e «A tutta pagina» non tengono
+   il posto finché non si mostrano, così il nome del file si legge intero. */
+.fub-column > .live-card[data-card-state="view"]:not(:hover):not(:focus-within):not([data-card-active="true"]) .live-card-head button {
+  display: none;
+}
