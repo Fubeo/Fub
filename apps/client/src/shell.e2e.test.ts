@@ -4466,6 +4466,59 @@ describe("i riquadri dopo un'attesa", () => {
     expect(host.files()["Benvenuto.md"]).toBe("disco A\n");
   });
 
+  it("la finestra staccata conserva il suo testo con la stessa regola, e un guasto lo dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    const { attachRemoteSurface } = await import("./state/document-bridge");
+    const { state } = await import("./state/store");
+    const { request, handle } = await attachRemoteSurface("Benvenuto.md", state.vaultRoot, () => "plain-text");
+    // La finestra staccata, com'è vista dal canale: chiede e aspetta.
+    const child = new BroadcastChannel(request.channel);
+    const replies: Array<{ kind: string; token?: string; keeps?: boolean; reason?: string }> = [];
+    child.onmessage = (event: MessageEvent) => replies.push(event.data);
+    const id = { v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId };
+    try {
+      child.postMessage({ ...id, kind: "hello" });
+      await waitFor("la finestra è collegata", () => replies.some((r) => r.kind === "snapshot"));
+      child.postMessage({ ...id, kind: "keep-probe", token: "domanda" });
+      await waitFor("la finestra sa se conserva", () => replies.some((r) => r.kind === "keep-mode"));
+      expect(replies.find((r) => r.kind === "keep-mode")?.keeps).toBe(true);
+
+      const before = host.calls.length;
+      child.postMessage({ ...id, kind: "keep", token: "uno", text: "testo della finestra" });
+      await waitFor("il testo è conservato", () => replies.some((r) => r.kind === "kept" && r.token === "uno"));
+      const kept = host.calls.slice(before).find((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+      const args = kept?.args[1] as { doc: string; text: string; note: string } | undefined;
+      expect(args?.doc).toBe("Benvenuto.md");
+      expect(args?.text).toBe("testo della finestra");
+      expect(args?.note).toMatch(/^Testo scartato nel conflitto del /);
+      expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+
+      const repair = host.fault("invokeCommand", "spazio dati pieno");
+      child.postMessage({ ...id, kind: "keep", token: "due", text: "testo della finestra" });
+      await waitFor("il guasto torna alla finestra", () => replies.some((r) => r.token === "due"));
+      repair();
+      const failed = replies.find((r) => r.token === "due");
+      expect(failed?.kind).toBe("keep-failed");
+      expect(failed?.reason).toContain("spazio dati pieno");
+    } finally {
+      child.close();
+      await handle.dispose();
+    }
+  });
+
+  it("la palette dice che il testo resta nella Cronologia solo quando c'è chi lo conserva", async () => {
+    const { IT } = await import("./i18n/catalog");
+    const describe = async (): Promise<string | undefined> => {
+      const registry = await import("./ui/commands");
+      return registry.allCommands().find((entry) => entry.id === "shell.doc.conflict.theirs")?.description;
+    };
+    await start(VAULT);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc_lost"]);
+    await start(VAULT, [], undefined, null, [specVersionKeep]);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc"]);
+  });
+
   it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {
     const host = await start(VAULT);
     const { setMode } = await import("./panels/document");

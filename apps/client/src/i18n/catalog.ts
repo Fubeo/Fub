@@ -3011,6 +3011,17 @@ export const IT = { // --- la scocca -------------------------------------------
   "windows.saving": "Salvataggio delle modifiche in corso…",
   "windows.keep_local": "Conserva le mie modifiche",
   "windows.discard_local": "Scarta le modifiche locali",
+  // Lo scarto si conferma nella finestra stessa (non ha i dialoghi di sistema):
+  // la frase dice com'è davvero, con la Cronologia accesa o senza.
+  "windows.discard_confirm": "Sì, scarta",
+  "windows.discard.kept":
+    "Il testo di questa finestra resta nella Cronologia, con la data del conflitto, e la finestra riprende il testo della finestra principale.",
+  "windows.discard.lost":
+    "Le modifiche di questa finestra andranno perse: la finestra riprende il testo della finestra principale e il tuo testo non si potrà ritrovare.",
+  "windows.discard.checking": "Controllo se il testo può restare nella Cronologia…",
+  "windows.discard.keeping": "Metto il testo di questa finestra nella Cronologia…",
+  "windows.discard.keep_failed":
+    "Il testo di questa finestra non è entrato nella Cronologia, quindi non è stato scartato: {reason}. Riprova, oppure conserva le tue modifiche.",
   "windows.not_text": "{doc} non si apre in una finestra a parte: la finestra mostra soltanto note e file di testo.",
   "windows.error.session_gone": "Sessione documento non più disponibile",
   "windows.error.bad_identity": "Identità finestra non valida",
@@ -3675,6 +3686,9 @@ export const IT = { // --- la scocca -------------------------------------------
   "errors.bridge.not_ready": "Finestra non pronta alla modifica",
   "errors.bridge.bad_operation": "Operazione locale incoerente",
   "errors.bridge.drain_conflict": "Conflitto non recuperabile mentre si salvano le modifiche in sospeso",
+  "errors.bridge.keep_unavailable": "la Cronologia non è accesa",
+  "errors.bridge.no_answer": "la finestra principale non risponde",
+  "errors.bridge.text_changed": "il testo della finestra è cambiato nel frattempo",
   "errors.theme.unavailable": "Tema non disponibile",
   "errors.theme.preview_unavailable": "Anteprima del tema non disponibile",
   "errors.theme.token_not_allowed": "Il token --{token} non è una preferenza ammessa",
@@ -7055,6 +7069,15 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "windows.saving": "Saving changes…",
   "windows.keep_local": "Keep my changes",
   "windows.discard_local": "Discard local changes",
+  "windows.discard_confirm": "Yes, discard",
+  "windows.discard.kept":
+    "The text of this window stays in History, with the date of the conflict, and the window takes back the text of the main window.",
+  "windows.discard.lost":
+    "The changes in this window will be lost: the window takes back the text of the main window and your text cannot be recovered.",
+  "windows.discard.checking": "Checking whether the text can stay in History…",
+  "windows.discard.keeping": "Putting the text of this window in History…",
+  "windows.discard.keep_failed":
+    "The text of this window did not get into History, so it was not discarded: {reason}. Try again, or keep your changes.",
   "windows.not_text": "{doc} does not open in a separate window: the window shows only notes and text files.",
   "windows.error.session_gone": "The document session is no longer available",
   "windows.error.bad_identity": "The window identity is not valid",
@@ -7715,6 +7738,9 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "errors.bridge.not_ready": "The window is not ready for editing",
   "errors.bridge.bad_operation": "Inconsistent local operation",
   "errors.bridge.drain_conflict": "Unrecoverable conflict while saving pending changes",
+  "errors.bridge.keep_unavailable": "History is not turned on",
+  "errors.bridge.no_answer": "the main window does not answer",
+  "errors.bridge.text_changed": "the text of the window changed in the meantime",
   "errors.theme.unavailable": "Theme not available",
   "errors.theme.preview_unavailable": "Theme preview not available",
   "errors.theme.token_not_allowed": "The token --{token} is not an allowed preference",

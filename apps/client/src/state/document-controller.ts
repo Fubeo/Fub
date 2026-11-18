@@ -106,8 +106,8 @@ import {
   type ExternalChangeResult,
   type DocumentSurfaceSource,
 } from "./document-session";
-import { keepsDiscardedText, VERSION_KEEP } from "./conflict-keep";
-import { setDocumentWindowNavigation, type NavigateTarget } from "./document-bridge";
+import { discardDescription, keepsDiscardedText, VERSION_KEEP } from "./conflict-keep";
+import { setDocumentWindowKeeper, setDocumentWindowNavigation, type NavigateTarget } from "./document-bridge";
 import {
   openIn,
   closePane,
@@ -1247,6 +1247,17 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
   lifetime.add(() => setDocumentWindowNavigation(null));
+  // Né può conservare da sé il testo che sta per scartare: lo conserva qui la
+  // stessa regola di «Usa la versione su disco», e la finestra scarta soltanto
+  // dopo la risposta.
+  setDocumentWindowKeeper({
+    keeps: keepsDiscardedText,
+    keep: async (doc, text) => {
+      await keepDiscardedText(doc, text);
+      notify(t("document.conflict.kept", { doc }), "info");
+    },
+  });
+  lifetime.add(() => setDocumentWindowKeeper(null));
   lifetime.add(() => scrollLinks.close());
   // Il giro di Ctrl+Tab finisce quando si lascia il modificatore.
   lifetime.listen(document, "keyup", (event) => {
@@ -1991,7 +2002,8 @@ function registerCommands(): void {
   registerShellCommand({
     id: "shell.doc.conflict.theirs",
     title: "commands.doc.conflict.theirs",
-    description: "commands.doc.conflict.theirs.desc",
+    // Dice se il testo resterà nella Cronologia come lo dice la conferma.
+    description: () => discardDescription(activeDoc()),
     layer: "document",
     run: () => void resolveDiscardingMine(activeDoc()),
   });

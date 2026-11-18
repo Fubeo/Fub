@@ -271,6 +271,17 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
   dopo averlo messo in bozza: se la bozza non si scrive restituisce
   `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.
+- **Lo scarto nella finestra del documento a parte.** Quando un testo della
+  finestra non entra nella sessione, la finestra offre «Conserva le mie
+  modifiche» e «Scarta le modifiche locali». Lo scarto si conferma nella
+  pagina, in due tempi (la finestra non ha IPC né dialoghi di sistema): la
+  prima pressione chiede alla finestra principale se il testo resterà nella
+  Cronologia (`keep-probe`) e lo dice, la seconda («Sì, scarta») glielo manda
+  (`keep`). La principale lo conserva con la regola di «Usa la versione su
+  disco» (`state/conflict-keep.ts`, `setDocumentWindowKeeper` in
+  `state/document-bridge.ts`), e la finestra scarta soltanto dopo `kept`; un
+  `keep-failed`, o nessuna risposta, non scarta niente e la finestra dice
+  perché.
 
 ## Invarianti
 
