@@ -24,6 +24,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
+import { createServer } from "vite";
 import { openStage, OUTPUT } from "./stage.mjs";
 
 /// Quanto la pagina del PDF può differire dalla foto della vista: le lettere
@@ -151,7 +152,17 @@ async function round(page, base, variant) {
 }
 
 const share = (value) => `${(value * 100).toFixed(3)}%`;
-const { base, browser, close } = await openStage(port === undefined ? {} : { port });
+// Un giro solo, senza ricaricare: il server non guarda i file. Così il banco
+// non consuma gli osservatori di inotify della macchina, che altri server di
+// Vite possono avere esaurito (ENOSPC)
+// (`mergeConfig` scarta il `null` della configurazione in linea: lo mette un
+// plugin, a configurazione risolta.)
+const noWatch = { name: "pdf-prova:no-watch", configResolved: (config) => void (config.server.watch = null) };
+const unwatched = (config) => createServer({ ...config, plugins: [noWatch] });
+const { base, browser, close } = await openStage({
+  createServer: unwatched,
+  ...(port === undefined ? {} : { port }),
+});
 let failed = false;
 try {
   const page = await browser.newPage({ viewport: { width: 1000, height: 1400 }, deviceScaleFactor: SCALE });

@@ -74,7 +74,7 @@ async function run(): Promise<void> {
   // Il sorgente dei diagrammi, letto prima: la misura non aspetta.
   const vectors = new Map<string, string>();
   for (const [url, blob] of blobs) if (blob.type === "image/svg+xml") vectors.set(url, await blob.text());
-  const result = measureNote(nota, A4, NOTA_TITOLO, { vectorOf: (img) => vectors.get(img.currentSrc) ?? null });
+  const result = measureNote(nota, A4, NOTA_TITOLO, { vectorOf: (img) => vectors.get(img.currentSrc) ?? null, fontFaces: [SCRITTOIO_SERIES.fonts] });
   if (variant === "spostato") {
     for (const page of result.elenco.pagine) {
       page.pezzi = page.pezzi.map((p) => (p.tipo === "testo" ? { ...p, x: p.x + 1 } : p));
@@ -88,8 +88,10 @@ async function run(): Promise<void> {
     if (img.currentSrc && !vectors.has(img.currentSrc) && !(file in immagini))immagini[file] = await base64(img);
   }
   // Il testo della nota come si legge: senza la copia MathML delle formule,
-  // che KaTeX tiene per i lettori di schermo e non si vede.
-  const hidden = [...nota.querySelectorAll<HTMLElement>(".katex-mathml")];
+  // che KaTeX tiene per i lettori di schermo, e senza il bottone «Copia
+  // codice», trasparente finché il puntatore non va sul blocco. Nessuno dei due
+  // si vede.
+  const hidden = [...nota.querySelectorAll<HTMLElement>(".katex-mathml, .markdown-code-copy")];
   for (const node of hidden) node.hidden = true;
   const testoVista = nota.innerText.replace(/\s+/gu, "");
   for (const node of hidden) node.hidden = false;

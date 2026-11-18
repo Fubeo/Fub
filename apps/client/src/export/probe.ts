@@ -114,6 +114,11 @@ export interface ProbeOptions {
   /// `mermaid.ts` mostra da un URL `blob:`): la CSP non lascia rileggere
   /// l'URL, lo sa chi l'ha creato. Senza, l'immagine passa come immagine.
   readonly vectorOf?: (img: HTMLImageElement) => string | null;
+  /// Il CSS delle regole `@font-face` montate dal tema (`SCRITTOIO_SERIES.fonts`
+  /// e i caratteri del tema): il caricatore (`theme/loader.ts`) le toglie dai
+  /// suoi fogli e le passa a `document.fonts` come `FontFace`, che non dice il
+  /// suo file. Senza, la misura trova solo le regole rimaste nei fogli.
+  readonly fontFaces?: readonly string[];
 }
 
 /// Misura la nota resa in `root` (larga quanto lo spazio fra i margini della
@@ -149,7 +154,7 @@ export function measureNote(root: HTMLElement, page: PageGeometry = A4, title = 
 
 class Probe {
   readonly items: Measured[] = [];
-  readonly faces = new FaceTable();
+  readonly faces: FaceTable;
   letters = "";
   private readonly origin: DOMRect;
   private readonly range = document.createRange();
@@ -157,6 +162,7 @@ class Probe {
   private readonly baselines = new BaselineReader();
 
   constructor(private readonly root: HTMLElement, private readonly options: ProbeOptions) {
+    this.faces = new FaceTable(options.fontFaces ?? []);
     this.origin = root.getBoundingClientRect();
   }
 
@@ -428,15 +434,22 @@ export function paginate(items: Measured[], page: PageGeometry): { pages: { pezz
 
 /// Le facce dei caratteri della pagina: le regole `@font-face` dei fogli, e
 /// quale file il browser ha preso per uno stile.
-class FaceTable {
+export class FaceTable {
   readonly list: ProbeFace[] = [];
   private readonly keys = new Map<string, number>();
   private readonly rules = new Map<string, FontRule[]>();
   private readonly cache = new Map<string, number>();
 
-  constructor() {
+  constructor(fontFaces: readonly string[]) {
     const sheets = [...document.styleSheets, ...(document.adoptedStyleSheets ?? [])];
     for (const sheet of sheets) collectRules(sheet, this.rules);
+    // Un foglio costruito e mai adottato: si leggono le regole, il documento
+    // non cambia e nessun carattere si carica.
+    for (const css of fontFaces) {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(css);
+      collectRules(sheet, this.rules);
+    }
   }
 
   index(style: CSSStyleDeclaration): number {
@@ -491,7 +504,8 @@ function collectRules(sheet: CSSStyleSheet, into: Map<string, FontRule[]>): void
     return;
   }
   for (const rule of rules) {
-    if (rule instanceof CSSImportRule && rule.styleSheet) collectRules(rule.styleSheet, into);
+    // (`CSSImportRule` manca in happy-dom, dove girano le prove.)
+    if (typeof CSSImportRule !== "undefined" && rule instanceof CSSImportRule && rule.styleSheet) collectRules(rule.styleSheet, into);
     if (!(rule instanceof CSSFontFaceRule)) continue;
     const family = unquote(rule.style.getPropertyValue("font-family")).toLowerCase();
     const url = /url\(\s*["']?([^"')]+)["']?\s*\)/u.exec(rule.style.getPropertyValue("src"))?.[1];
