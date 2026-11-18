@@ -137,4 +137,18 @@ describe("le righe", () => {
     expect(bands.reduce((a, b) => a + b)).toBe(50);
     expect(bandsOf([], 100, 40)).toEqual([40]);
   });
+
+  it("le lettere sopra il centro della riga: il taglio va sul confine delle righe, come la stima", () => {
+    // Righe da 29,7 px con le lettere 0,9 px più in alto del centro: a metà
+    // fra le lettere i tagli cadrebbero a 28,8 e 58,5.
+    const rows = [0, 1, 2].map((k) => ({ top: 100 + k * 29.7 + 4, bottom: 100 + k * 29.7 + 24 }));
+    const grid = { lineHeight: 29.7, before: 0, after: 0, pitch: 29.7 };
+    expect(bandsOf(rows, 100, 89.1).map((b) => Math.round(b * 10) / 10)).toEqual([28.8, 29.7, 30.6]);
+    expect(bandsOf(rows, 100, 89.1, grid).map((b) => Math.round(b * 10) / 10)).toEqual([29.7, 29.7, 29.7]);
+    // Una riga più alta (una formula in linea) sposta le righe dopo: il primo
+    // confine (29,7) sta fra le due righe e si prende; il secondo (59,4) cade
+    // dentro la riga alta, e il taglio resta a metà fra le lettere (70).
+    const tall = [{ top: 104, bottom: 124 }, { top: 130, bottom: 166 }, { top: 174, bottom: 194 }];
+    expect(bandsOf(tall, 100, 100, grid).map((b) => Math.round(b * 10) / 10)).toEqual([29.7, 40.3, 30]);
+  });
 });

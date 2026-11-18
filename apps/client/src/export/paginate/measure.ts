@@ -81,7 +81,7 @@ export function printBlocks(root: Element): HTMLElement[] {
 export class PrintMeasure {
   readonly blocks: readonly HTMLElement[];
   private readonly origin: number;
-  private readonly lineHeights = new Map<string, number>();
+  private readonly lineHeights = new Map<string, Omit<Grid, "pitch">>();
   private readonly range = document.createRange();
 
   constructor(root: HTMLElement) {
@@ -126,34 +126,55 @@ export class PrintMeasure {
     this.range.detach();
   }
 
-  /// Le righe uguali che l'interlinea fa stare nel blocco. La stima è esatta
-  /// per un paragrafo di solo testo alto un multiplo dell'interlinea.
+  /// Le righe uguali che l'interlinea fa stare fra il bordo e il riquadro
+  /// interno del blocco: il bordo e lo spazio interno di sopra stanno nella
+  /// prima, quelli di sotto nell'ultima. La stima è esatta per un blocco di
+  /// solo testo alto un multiplo dell'interlinea: lì le righe sono quelle.
   private estimateLines(element: HTMLElement, height: number, code: boolean): { lines: number[]; exact: boolean } {
-    const lineHeight = this.lineHeight(element);
-    const ratio = lineHeight > 0 ? height / lineHeight : 1;
-    const count = Math.max(1, Math.round(ratio));
-    const exact = !code && Math.abs(ratio - count) < 0.02 && textHost(element).querySelector(IRREGULAR) === null;
-    return { lines: Array.from({ length: count }, () => height / count), exact };
+    const { grid, count, uniform } = this.grid(element, height);
+    const lines = Array.from({ length: count }, () => grid.pitch);
+    lines[0] += grid.before;
+    lines[count - 1] += grid.after;
+    // Nel codice i colori della sintassi non cambiano le righe: conta solo ciò
+    // che ha un'altezza sua.
+    const regular = code ? element.querySelector(ATOMIC) === null : textHost(element).querySelector(IRREGULAR) === null;
+    return { lines, exact: uniform && regular };
   }
 
-  private lineHeight(element: HTMLElement): number {
+  /// La griglia delle righe di un blocco: interlinea, bordo e spazio interno.
+  private grid(element: HTMLElement, height: number): { grid: Grid; count: number; uniform: boolean } {
+    const metrics = this.metrics(element);
+    const content = Math.max(0, height - metrics.before - metrics.after);
+    const ratio = metrics.lineHeight > 0 ? content / metrics.lineHeight : 1;
+    const count = Math.max(1, Math.round(ratio));
+    return { grid: { ...metrics, pitch: content / count }, count, uniform: Math.abs(ratio - count) < 0.02 };
+  }
+
+  private metrics(element: HTMLElement): Omit<Grid, "pitch"> {
     const key = `${element.parentElement?.tagName ?? ""}>${element.tagName}.${element.className}`;
     const known = this.lineHeights.get(key);
     if (known !== undefined) return known;
     const style = getComputedStyle(element);
     const value = parseFloat(style.lineHeight);
-    const lineHeight = Number.isFinite(value) && value > 0 ? value : (parseFloat(style.fontSize) || 16) * 1.2;
-    this.lineHeights.set(key, lineHeight);
-    return lineHeight;
+    const px = (v: string) => parseFloat(v) || 0;
+    const metrics = {
+      lineHeight: Number.isFinite(value) && value > 0 ? value : (parseFloat(style.fontSize) || 16) * 1.2,
+      before: px(style.paddingTop) + px(style.borderTopWidth),
+      after: px(style.paddingBottom) + px(style.borderBottomWidth),
+    };
+    this.lineHeights.set(key, metrics);
+    return metrics;
   }
 
   /// Le righe vere: i rettangoli del testo e di ciò che sta nella riga,
-  /// raggruppati per riga. Ogni taglio cade a metà fra il fondo di una riga e
-  /// la cima della successiva; la prima riga comincia col blocco e l'ultima
-  /// finisce con lui, così la somma è l'altezza del blocco.
+  /// raggruppati per riga. Ogni taglio cade fra il fondo di una riga e la cima
+  /// della successiva: sul confine delle righe dell'interlinea se cade lì in
+  /// mezzo (così un blocco di righe uguali dà le righe della stima), se no a
+  /// metà. La prima riga comincia col blocco e l'ultima finisce con lui, così
+  /// la somma è l'altezza del blocco.
   private lines(element: HTMLElement, top: number, height: number): number[] {
     const rows = lineRows(this.rects(element));
-    return bandsOf(rows, top, height);
+    return bandsOf(rows, top, height, this.grid(element, height).grid);
   }
 
   private rects(element: HTMLElement): { top: number; bottom: number }[] {
@@ -225,14 +246,36 @@ export function lineRows(rects: readonly { top: number; bottom: number }[]): { t
   return rows;
 }
 
+/// La griglia delle righe di un blocco, dal suo bordo alto: `before` (il
+/// bordo e lo spazio interno di sopra), poi una riga ogni `pitch`, poi
+/// `after`. `lineHeight` è l'interlinea calcolata.
+export interface Grid {
+  readonly lineHeight: number;
+  readonly before: number;
+  readonly after: number;
+  readonly pitch: number;
+}
+
 /// Dalle righe (nelle coordinate dello schermo) alle altezze delle fasce del
-/// blocco che comincia in `top` ed è alto `height`.
-export function bandsOf(rows: readonly { top: number; bottom: number }[], top: number, height: number): number[] {
+/// blocco che comincia in `top` ed è alto `height`. Il taglio fra due righe
+/// cade a metà fra loro, o sul confine della griglia se sta fra le due: le
+/// lettere non stanno al centro della loro riga (l'ascendente del carattere
+/// non è il discendente), e il confine è dove la riga finisce davvero. Un
+/// pixel di tolleranza, perché il riquadro di una lettera può uscire di poco
+/// dalla sua riga senza che l'inchiostro lo faccia.
+export function bandsOf(rows: readonly { top: number; bottom: number }[], top: number, height: number, grid?: Grid): number[] {
   if (rows.length === 0) return [height];
   const cuts = [0];
   for (let k = 1; k < rows.length; k++) {
-    const middle = (Math.max(rows[k - 1].bottom, cuts[cuts.length - 1] + top) + rows[k].top) / 2 - top;
-    cuts.push(clamp(middle, cuts[cuts.length - 1], height));
+    const above = Math.max(rows[k - 1].bottom - top, cuts[cuts.length - 1]);
+    const below = rows[k].top - top;
+    let cut = (above + below) / 2;
+    if (grid && grid.pitch > 0) {
+      const j = Math.round((cut - grid.before) / grid.pitch);
+      const line = grid.before + j * grid.pitch;
+      if (j > 0 && line >= above - 1 && line <= below + 1) cut = line;
+    }
+    cuts.push(clamp(cut, cuts[cuts.length - 1], height));
   }
   cuts.push(height);
   const bands: number[] = [];
