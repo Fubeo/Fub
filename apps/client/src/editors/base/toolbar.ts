@@ -26,6 +26,7 @@ import {
   type FilterDef, type SearchProblem, type ValueKind, type ValueTyping, type VisualCondition, type VisualOp,
 } from "./filter";
 import { useBaseIcons, viewIcon } from "./icons";
+import { errorKindPhrase } from "../../host/errors";
 import { moveColumn, sameColumns, sameKey, sortValue, sortedBy, toggleColumn, withoutSort, type SortEntry } from "./sort";
 
 /// Perché il file `.base` non si riscrive da qui: la superficie è in sola
@@ -618,7 +619,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
         ? templates.map((each) => ({ label: each.label, icon: "template", run: () => actions.createFrom(each.path) }))
         : [{ label: t("base.new.no_templates"), disabled: true }];
     } catch (failure) {
-      items = [{ label: failure instanceof Error ? failure.message : String(failure), disabled: true }];
+      items = [{ label: errorKindPhrase(failure), disabled: true }];
     }
     if (!lifetime.closed && templateButton.isConnected) showContextMenu(templateButton, items, { label: t("base.new.template") });
   };

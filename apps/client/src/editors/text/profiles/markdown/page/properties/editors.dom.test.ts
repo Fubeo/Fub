@@ -14,6 +14,7 @@ import type { BlocksOptions } from "../../blocks/handles";
 import { parsePropertyTypes } from "./kind";
 import { parseDateInput } from "./editors";
 import { loadLazyParts } from "../../../../../../ui/lazy-part";
+import "../../../../../../i18n/strings";
 
 // I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
 // come dopo il riscaldamento: i gesti si guardano col loro codice.
@@ -539,6 +540,19 @@ describe("la Relazione (T35)", () => {
     expect(text(view)).toBe("---\nlibri: [\"[[Libri/Ubik]]\", \"[[Libri/Neuromante]]\"]\n---\n");
   });
 
+  it("una nota che non si crea lo dice con la specie dell'errore, e il valore non cambia", async () => {
+    const refusing = { ...port(), create: async (): Promise<never> => { throw { kind: "conflict", message: "il registro è cambiato" }; } };
+    const { view } = mount("---\nlibri: [\"[[Libri/Dune]]\"]\n---\n", { propertyTypes: () => types, relations: refusing });
+    valueOf(view, "libri").click();
+    await settle();
+    type(popover().querySelector<HTMLInputElement>(".cm-fub-prop-search input")!, "Neuromante");
+    await settle();
+    options().find((element) => element.textContent?.includes("Crea «Neuromante»"))!.click();
+    await vi.waitFor(() => expect(popover().querySelector<HTMLElement>(".cm-fub-prop-note")!.hidden).toBe(false));
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toBe("La nota «Neuromante» non è stata creata: nel frattempo è cambiato");
+    expect(text(view)).toBe("---\nlibri: [\"[[Libri/Dune]]\"]\n---\n");
+  });
+
   it("il bersaglio senza note lo dice; un link solo resta un link solo", async () => {
     const empty = { search: async () => [], open: () => {} };
     const { view } = mount("---\nautore: \"[[Mario]]\"\n---\n", { relations: empty });
@@ -876,6 +890,19 @@ describe("Selezione e Stato: l'editor delle opzioni (prototipo, `propEditor`, pa
     key(search(), "Enter");
     await vi.waitFor(() => expect(popover().querySelector<HTMLElement>(".cm-fub-prop-note")!.hidden).toBe(false));
     expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toBe("L'opzione «Rivista» non è stata creata: il registro dei tipi non si legge, e non si riscrive");
+    expect(text(view)).toBe("---\nstato: Fatto\n---\n");
+  });
+
+  it("un registro che rifiuta con un errore tipizzato dice la specie, non «[object Object]»", async () => {
+    const addPropertyOption = vi.fn(async (): Promise<string | null> => {
+      throw { kind: "already_exists", message: "L'opzione c'è già nel registro" };
+    });
+    const { view } = mount("---\nstato: Fatto\n---\n", { propertyTypes: registry, addPropertyOption });
+    valueOf(view, "stato").click();
+    type(search(), "Rivista");
+    key(search(), "Enter");
+    await vi.waitFor(() => expect(popover().querySelector<HTMLElement>(".cm-fub-prop-note")!.hidden).toBe(false));
+    expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toBe("L'opzione «Rivista» non è stata creata: esiste già qualcosa con lo stesso nome");
     expect(text(view)).toBe("---\nstato: Fatto\n---\n");
   });
 

@@ -34,6 +34,7 @@ import { entryStamp, type WriteOutcome } from "../page/properties/row";
 import { liveStrings } from "../strings";
 import { typedChanges } from "../page/note-type";
 import type { NoteType } from "../../../../../state/note-types";
+import { errorKindPhrase } from "../../../../../host/errors";
 
 export { PAGE_FONTS, pageClassesWith, type PageData, type PageFont } from "../page/header";
 
@@ -266,7 +267,7 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     } : undefined,
     notify: options.notify,
     subpage: subpage ? async (name) => {
-      const problem = await subpage(name).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+      const problem = await subpage(name).catch((error: unknown) => errorKindPhrase(error));
       if (problem) {
         view.state.facet(blocksOptions).notify?.(problem, "guasto");
         return;

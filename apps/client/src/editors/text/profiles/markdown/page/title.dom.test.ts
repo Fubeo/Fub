@@ -16,6 +16,7 @@ import { mountReadingHeader } from "./header";
 import { firstHeading } from "./title";
 import { renamedPageName } from "../../../../../state/page-rename";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
+import "../../../../../i18n/strings";
 
 // Il titolo e il primo H1 (T7): il titolo è il nome del file, e un primo H1
 // che dice la stessa cosa si ripiega nel titolo, in Scrittura e in Lettura.
@@ -34,14 +35,22 @@ interface Page {
   renames: string[];
   /// La risposta della rinomina: `null` riuscita, una frase se no.
   answer: string | null;
+  /// Il rifiuto dell'host: la rinomina lancia invece di rispondere.
+  refusal?: unknown;
 }
 
-function mount(doc: string, page: Page, options: { readOnly?: boolean; plain?: boolean; renamedPage?: (name: string) => string } = {}): EditorView {
+function mount(
+  doc: string,
+  page: Page,
+  options: { readOnly?: boolean; plain?: boolean; renamedPage?: (name: string) => string; notify?: (message: string, tone: string) => void } = {},
+): EditorView {
   const pageOptions = {
     page: () => page.name,
     ...(options.renamedPage ? { renamedPage: options.renamedPage } : {}),
+    ...(options.notify ? { notify: options.notify } : {}),
     rename: async (name: string) => {
       page.renames.push(name);
+      if (page.refusal !== undefined) throw page.refusal;
       if (page.answer === null) page.name = name;
       return page.answer;
     },
@@ -156,6 +165,21 @@ describe("il primo H1 in Scrittura", () => {
 });
 
 describe("il titolo e la rinomina", () => {
+  it("una rinomina che l'host rifiuta dice la specie dell'errore, e il titolo torna quello di prima", async () => {
+    const doc = "---\na: 1\n---\n# Mostra\n\nTesto";
+    const note = { ...page("Mostra"), refusal: { kind: "permission_denied", message: "il vault è di sola lettura" } };
+    const notices: Array<[string, string]> = [];
+    const view = mount(doc, note, { notify: (message, tone) => notices.push([message, tone]) });
+    const title = titleOf(view);
+    title.focus();
+    title.value = "Mostra d'estate";
+    press(title, "Enter");
+    await settled();
+    expect(notices).toEqual([["non è permesso", "guasto"]]);
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(titleOf(view).value).toBe("Mostra");
+  });
+
   it("Invio rinomina e riscrive l'H1 ripiegato nello stesso gesto: un annulla lo riporta", async () => {
     const doc = "---\na: 1\n---\n# Mostra\n\nTesto";
     const note = page("Mostra");
