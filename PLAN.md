@@ -2117,7 +2117,7 @@ Fatto quando: test della pastiglia e dell'inserimento; un e2e dal «/» al
 file; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown
-Stato: [ ] da fare
+Stato: [~] in corso (coder feat/promemoria-editor da integra/editor-2, 2026-11-18)
 
 ## T37 · Incorporare pagine web
 
