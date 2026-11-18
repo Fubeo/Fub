@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
-// I difetti della lavagna trovati dal collaudo dell'app (IMP-040…043) e dal
-// giro dell'issue #411 (C-05, C-06): il fuoco dopo un pulsante della colonna,
-// lo spostamento dal corpo di una scheda, «Aggiungi testo» che apre in
-// scrittura in un posto libero, la scheda nuova lasciata vuota, l'aggancio
-// solo al rilascio e la barra della scelta durante lo zoom.
+// I difetti della lavagna trovati dal collaudo dell'app (IMP-040…043, 052,
+// 053) e dal giro dell'issue #411 (C-05, C-06): il fuoco dopo un pulsante
+// della colonna o della riga (e i tasti dello zoom), il fuoco dopo il clic su
+// un filo, il doppio clic su una porta, lo spostamento dal corpo di una
+// scheda, «Aggiungi testo» che apre in scrittura in un posto libero, la scheda
+// nuova lasciata vuota, l'aggancio solo al rilascio e la barra della scelta
+// durante lo zoom.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CanvasEngine, type CanvasChange } from "./engine";
 import { DEFAULT_PREFERENCES, type CanvasPreferences } from "./preferences";
@@ -127,6 +129,110 @@ describe("il fuoco dopo un pulsante della lavagna (IMP-040)", () => {
     pointer(viewport, "pointerdown", { pointerId: 2, button: 0, buttons: 1, ...screenOf(host, 300, 400) });
     pointer(viewport, "pointerup", { pointerId: 2, button: 0, buttons: 0, ...screenOf(host, 300, 400) });
     expect(viewport.contains(document.activeElement)).toBe(true);
+    engine.destroy();
+  });
+
+  it("dopo il pulsante «−» della riga delle opzioni il fuoco resta sul pulsante, e + − 0 zoomano lo stesso (IMP-040, lo zoom)", async () => {
+    const { engine, host } = mounted(BOARD);
+    const start = cameraOf(host).zoom;
+    const zoomOut = host.querySelector<HTMLButtonElement>('[data-command="canvas.zoom_out"]')!;
+    zoomOut.click();
+    const out = cameraOf(host).zoom;
+    expect(out).toBeLessThan(start);
+    zoomOut.focus();
+    expect(document.activeElement).toBe(zoomOut);
+    key(document.activeElement, { key: "+" });
+    expect(cameraOf(host).zoom).toBeCloseTo(start, 6);
+    key(document.activeElement, { key: "-" });
+    expect(cameraOf(host).zoom).toBeCloseTo(out, 6);
+    // Il 100% è un volo: arriva sui fotogrammi, come nella vista.
+    key(document.activeElement, { key: "0" });
+    await vi.waitFor(() => expect(cameraOf(host).zoom).toBeCloseTo(1, 6));
+    expect(document.activeElement).toBe(zoomOut);
+    engine.destroy();
+  });
+});
+
+/** Due schede unite da un filo: il suo punto di mezzo è (300, 50). */
+const LINKED = JSON.stringify({
+  nodes: [
+    { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "uno" },
+    { id: "b", type: "text", x: 400, y: 0, width: 200, height: 100, text: "due" },
+  ],
+  edges: [{ id: "e", fromNode: "a", fromSide: "right", toNode: "b", toSide: "left" }],
+});
+
+describe("il fuoco dopo il clic su un filo (IMP-052)", () => {
+  /**
+   * Il fuoco che il browser dà al mouse giù dopo i gestori del pointerdown, se
+   * nessuno l'ha annullato: sul bersaglio o sul suo antenato con `tabindex`. Se
+   * il bersaglio non sta più nel documento (la tela l'ha rifatto mentre il clic
+   * scendeva), il fuoco va su BODY. È quello che WebKitGTK fa, misurato con
+   * WebDriver; happy-dom non lo fa da sé.
+   */
+  function browserFocusAfterPress(press: PointerEvent, target: Element): void {
+    if (press.defaultPrevented) return;
+    if (!target.isConnected) {
+      (document.activeElement as HTMLElement | null)?.blur();
+      return;
+    }
+    target.closest<HTMLElement>("[tabindex]")?.focus({ preventScroll: true });
+  }
+
+  it("il clic sulla linea sceglie il filo e il fuoco resta sulla lavagna: Canc lo toglie, Ctrl+Z lo riporta", async () => {
+    const { engine, host, changes } = mounted(LINKED);
+    host.querySelector<HTMLButtonElement>(".canvas-tool")!.focus();
+    const line = host.querySelector<SVGElement>(".canvas-edge-hit")!;
+    const at = screenOf(host, 300, 50);
+    browserFocusAfterPress(pointer(line, "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...at }), line);
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...at });
+    expect(engine.selection().edges).toEqual(["e"]);
+    expect(document.activeElement).toBe(viewportOf(host));
+    key(document.activeElement, { key: "Delete" });
+    expect(changes).toHaveLength(1);
+    expect(JSON.parse(engine.getDoc()).edges).toEqual([]);
+    key(document.activeElement, { key: "z", ctrlKey: true });
+    await vi.waitFor(() => expect(JSON.parse(engine.getDoc()).edges).toHaveLength(1));
+    engine.destroy();
+  });
+});
+
+describe("il doppio clic su una porta non crea niente (IMP-053)", () => {
+  it("il doppio clic sulla porta di una scheda non mette una scheda di testo; nel vuoto della lavagna sì", () => {
+    const { engine, host } = mounted(BOARD);
+    const port = cardOf(host, "a").querySelector<HTMLElement>('.canvas-port[data-side="left"]')!;
+    const on = screenOf(host, 0, 50);
+    // Il primo clic sulla porta fa partire un filo, che cattura il puntatore:
+    // il doppio clic arriva alla vista, non alla porta (lo misura WebKitGTK).
+    for (const pointerId of [1, 2]) {
+      pointer(port, "pointerdown", { pointerId, button: 0, buttons: 1, ...on });
+      pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...on });
+    }
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: on.clientX, clientY: on.clientY }));
+    expect(JSON.parse(engine.getDoc()).nodes).toHaveLength(2);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    // Nel vuoto della lavagna il doppio clic mette la scheda, come prima.
+    const empty = screenOf(host, 600, 300);
+    for (const pointerId of [3, 4]) {
+      pointer(viewportOf(host), "pointerdown", { pointerId, button: 0, buttons: 1, ...empty });
+      pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...empty });
+    }
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: empty.clientX, clientY: empty.clientY }));
+    expect(bornAfter(engine, ["a", "b"])).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("il doppio clic su un filo non mette niente: il filo non è il vuoto, come per il doppio tocco", () => {
+    const { engine, host } = mounted(LINKED);
+    const on = screenOf(host, 300, 50);
+    // Ogni clic sceglie il filo, e la scelta rifà i fili: il bersaglio si cerca a ogni clic.
+    for (const pointerId of [1, 2]) {
+      pointer(host.querySelector<SVGElement>(".canvas-edge-hit")!, "pointerdown", { pointerId, button: 0, buttons: 1, ...on });
+      pointer(viewportOf(host), "pointerup", { pointerId, button: 0, buttons: 0, ...on });
+    }
+    host.querySelector<SVGElement>(".canvas-edge-hit")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: on.clientX, clientY: on.clientY }));
+    expect(JSON.parse(engine.getDoc()).nodes).toHaveLength(2);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
     engine.destroy();
   });
 });
