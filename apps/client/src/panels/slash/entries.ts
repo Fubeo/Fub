@@ -46,6 +46,12 @@ export const BASE_ENTRY = "markdown.base";
 /// `SYNC_BLOCK_ACTION` in `editors/text/profiles/markdown/slash.ts`.
 export const SYNC_BLOCK_ENTRY = "markdown.syncblock";
 
+/// «Promemoria» (E10, T36): fa della riga un compito, se non lo è, e gli
+/// mette un promemoria `⏰`, detto («/promemoria venerdì 9») o scelto nel
+/// riquadro del giorno e dell'ora. Un'azione della superficie, come la Base;
+/// lo stesso id è `REMINDER_ACTION` in `editors/text/profiles/markdown/slash.ts`.
+export const REMINDER_ENTRY = "markdown.reminder";
+
 /// Un comando che c'è soltanto con la componente delle Basi accesa.
 const BASE_COMMAND = "base.view.add";
 
@@ -79,6 +85,7 @@ const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
   "markdown.linkcard": "https://",
   // Non ha una forma Markdown sua: si chiama scrivendo il suo nome.
   [BASE_ENTRY]: "/base",
+  [REMINDER_ENTRY]: "⏰",
 };
 
 /// Altri nomi con cui si cerca la stessa voce, in tutte e due le lingue: chi
@@ -118,6 +125,7 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.underline": "sottolineato underline",
   [BASE_ENTRY]: "base database dati data vista view raccolta collection",
   [SYNC_BLOCK_ENTRY]: "sincronizzato sincronizza synced sync blocco block altra nota other note trasclusione transclusion",
+  [REMINDER_ENTRY]: "promemoria ricordami ricorda sveglia avviso notifica reminder remind alarm alert notification",
   [COLOR_ENTRY]: "colore color colori colors evidenzia fondo testo",
 };
 
@@ -139,6 +147,7 @@ const SLASH_ICONS: Readonly<Record<string, string>> = {
   // La figura delle Basi nell'app (la componente `fub.base`).
   [BASE_ENTRY]: "collection",
   [SYNC_BLOCK_ENTRY]: "search",
+  [REMINDER_ENTRY]: "fmt-alarm",
 };
 
 /// La scorciatoia Markdown di una voce, se ne ha una; `null` per un accordo.
@@ -169,7 +178,7 @@ function sectionOf(id: string): SlashSection {
   if (id.startsWith("markdown.list.")) return "lists";
   if (["markdown.callout", "markdown.details", "markdown.columns", "markdown.table", BASE_ENTRY, "markdown.rule"].includes(id)) return "blocks";
   if (["markdown.codeblock", "markdown.mathblock", "markdown.diagram"].includes(id)) return "code";
-  if (["markdown.mention", "markdown.date"].includes(id)) return "people";
+  if (["markdown.mention", "markdown.date", REMINDER_ENTRY].includes(id)) return "people";
   if (id === "markdown.underline" || id === COLOR_ENTRY || isColorAction(id)) return "style";
   if (["markdown.toc", "markdown.property.add", "markdown.comment", "markdown.footnote"].includes(id)) return "page";
   return "media";
@@ -280,6 +289,20 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
     });
     const embed = listed.findIndex((each) => each.id === "markdown.embed");
     listed.splice(embed < 0 ? listed.length : embed + 1, 0, synced);
+  }
+  // Il promemoria subito dopo la data, dove la superficie lo sa fare.
+  if (has(REMINDER_ENTRY) && !hidden.has(REMINDER_ENTRY) && !listed.some((each) => each.id === REMINDER_ENTRY)) {
+    const reminder = entry({
+      id: REMINDER_ENTRY,
+      label: t("slash.reminder"),
+      description: t("slash.reminder.desc"),
+      icon: SLASH_ICONS[REMINDER_ENTRY]!,
+      hint: MARKDOWN_HINTS[REMINDER_ENTRY]!,
+      section: sectionOf(REMINDER_ENTRY),
+      action: true,
+    });
+    const date = listed.findIndex((each) => each.id === "markdown.date");
+    listed.splice(date < 0 ? listed.length : date + 1, 0, reminder);
   }
   if (colors.length > 0) {
     listed.push(entry({ id: COLOR_ENTRY, label: t("slash.color"), description: t("slash.color.desc"), icon: "fmt-color", hint: null, section: "style", action: true }));

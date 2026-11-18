@@ -130,6 +130,12 @@ export const EDITORS: PartAnatomy = {
     // segno di Fub sulla carta; il recinto ```tasks``` è la vista del
     // componente dei compiti, vestita da blocco della carta.
     { name: "task-due", layer: "segno", layers: { "cm-fub-code": "contenuto" }, states: REST, hooks: ["cm-fub-due", "cm-fub-due-near", "cm-fub-due-overdue", "cm-fub-due-bad", "task-due", "task-due-near", "task-due-overdue", "task-due-bad", "cm-fub-code"] },
+    // Il promemoria (T36): la pastiglia blu della sveglia nella Live, e la
+    // sua scelta del giorno e dell'ora, il riquadro della data delle
+    // proprietà con la riga delle notifiche spente.
+    { name: "task-reminder", layer: "segno", layers: { "cm-fub-reminder-picker": "cornice", "cm-fub-prop-date-field": "cornice", "cm-fub-reminder-silent": "cornice" }, states: [S("rest"), S("hover")], hooks: ["cm-fub-reminder", "cm-fub-reminder-figure", "cm-fub-reminder-done", "cm-fub-reminder-text", "cm-fub-reminder-bad", "cm-fub-reminder-picker", "cm-fub-prop-date-field", "cm-fub-reminder-silent"] },
+    // I promemoria passati all'avvio: un dialogo del kit con l'elenco.
+    { name: "reminders-startup", layer: "cornice", states: REST, hooks: ["kit-dialog", "reminders-dialog", "reminders-list", "reminders-row", "reminders-text", "reminders-task", "reminders-where", "reminders-error", "reminders-actions", "reminders-more"] },
     { name: "tasks-block", layer: "segno", layers: { "markdown-rendered": "contenuto", "ui-stack": "cornice", "ui-checkbox": "cornice", "ui-field-label": "cornice", "ui-badge": "cornice", "ui-button": "cornice", "ui-text": "cornice", "ui-empty-state": "cornice", "ui-empty-title": "cornice", "intent-danger": "cornice", "intent-primary": "cornice" }, states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["markdown-rendered", "block-tasks", "block-query-note", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button", "ui-text", "ui-empty-state", "ui-empty-title", "intent-danger", "intent-primary"] },
     // La pagina del giorno (T39): in fondo alla giornaliera, dopo l'ultima
     // riga, la vista `day_page` del componente dei template. È un segno di

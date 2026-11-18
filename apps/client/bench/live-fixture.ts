@@ -459,6 +459,21 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "",
     "§",
   ].join("\n")),
+  // I promemoria (T36), col banco fermo a mercoledì 19 agosto 2026, 9:30:
+  // oggi soltanto l'ora, un altro giorno anche il giorno, un altro anno
+  // anche l'anno; il compito fatto grigio; uno che non si legge resta testo;
+  // la scadenza accanto. Il cursore resta sotto, fuori dai compiti.
+  promemoria: at([
+    "# La settimana",
+    "",
+    "- [ ] Chiamare Anna ⏰ 2026-08-19 15:30",
+    "- [ ] Mandare il preventivo ⏰ 2026-08-21 09:00 📅 2026-08-24",
+    "- [ ] Rinnovare il dominio ⏰ 2027-01-04",
+    "- [x] Prenotare il treno ⏰ 2026-08-14 09:00",
+    "- [ ] Ritirare il pacco ⏰ 2026-02-30",
+    "",
+    "Le altre cose della settimana.§",
+  ].join("\n")),
   // L'indice (K4): i titoli della nota, rientrati per livello.
   indice: at([
     "# Il viaggio",

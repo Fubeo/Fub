@@ -1468,6 +1468,22 @@
     "task-due-near",
     "task-due-overdue",
     "task-due-bad",
+    "cm-fub-reminder",
+    "cm-fub-reminder-figure",
+    "cm-fub-reminder-done",
+    "cm-fub-reminder-text",
+    "cm-fub-reminder-bad",
+    "cm-fub-reminder-picker",
+    "cm-fub-reminder-silent",
+    "reminders-dialog",
+    "reminders-list",
+    "reminders-row",
+    "reminders-text",
+    "reminders-task",
+    "reminders-where",
+    "reminders-error",
+    "reminders-actions",
+    "reminders-more",
     "block-tasks",
     "block-query-note",
     "ui-empty-state",
@@ -3657,6 +3673,22 @@
     "task-due-near": "segno",
     "task-due-overdue": "segno",
     "task-due-bad": "segno",
+    "cm-fub-reminder": "segno",
+    "cm-fub-reminder-figure": "segno",
+    "cm-fub-reminder-done": "segno",
+    "cm-fub-reminder-text": "segno",
+    "cm-fub-reminder-bad": "segno",
+    "cm-fub-reminder-picker": "cornice",
+    "cm-fub-reminder-silent": "cornice",
+    "reminders-dialog": "cornice",
+    "reminders-list": "cornice",
+    "reminders-row": "cornice",
+    "reminders-text": "cornice",
+    "reminders-task": "cornice",
+    "reminders-where": "cornice",
+    "reminders-error": "cornice",
+    "reminders-actions": "cornice",
+    "reminders-more": "cornice",
     "block-tasks": "segno",
     "block-query-note": "segno",
     "ui-empty-state": "cornice",
@@ -7876,6 +7908,43 @@
       ]
     },
     {
+      "name": "task-reminder",
+      "part": "editors",
+      "hooks": [
+        "cm-fub-reminder",
+        "cm-fub-reminder-figure",
+        "cm-fub-reminder-done",
+        "cm-fub-reminder-text",
+        "cm-fub-reminder-bad",
+        "cm-fub-reminder-picker",
+        "cm-fub-prop-date-field",
+        "cm-fub-reminder-silent"
+      ],
+      "states": [
+        "rest",
+        "hover"
+      ]
+    },
+    {
+      "name": "reminders-startup",
+      "part": "editors",
+      "hooks": [
+        "kit-dialog",
+        "reminders-dialog",
+        "reminders-list",
+        "reminders-row",
+        "reminders-text",
+        "reminders-task",
+        "reminders-where",
+        "reminders-error",
+        "reminders-actions",
+        "reminders-more"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "tasks-block",
       "part": "editors",
       "hooks": [
@@ -11452,10 +11521,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2187,
+    "hooks": 2203,
     "state_names": 7,
-    "assigned_states": 984,
-    "components": 291,
+    "assigned_states": 987,
+    "components": 293,
     "preference_tokens": 196
   }
 }

@@ -12,6 +12,7 @@ import {
   scanTags,
   taskChecked,
   taskDue,
+  taskReminder,
   dueUrgency,
   THEME_FONT_LIMITS,
   THEME_ICON_LIMITS,
@@ -71,6 +72,10 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   task_due: (c) => {
     const due = taskDue(c.text);
     return due && { span: (c.text as string).slice(due.from, due.to), date: due.date };
+  },
+  task_reminder: (c) => {
+    const reminder = taskReminder(c.text);
+    return reminder && { span: (c.text as string).slice(reminder.from, reminder.to), when: reminder.when, timed: reminder.timed };
   },
   // Quando una scadenza è vicina: la pastiglia nel testo e quella della
   // vista devono dare lo stesso colore alla stessa data.

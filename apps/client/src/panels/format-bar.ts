@@ -76,6 +76,7 @@ import { showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/m
 import { attachTooltip } from "../ui/tooltip";
 import { slashMenuEntries } from "./slash/entries";
 import { slashPrefs } from "./slash/prefs";
+import { ALARM_PATHS } from "../editors/text/profiles/markdown/task-reminder";
 
 /// I gruppi, nell'ordine in cui si incontrano: un gruppo nuovo comincia dove
 /// cambia quello del pulsante, quindi l'ordine resta del plugin.
@@ -408,6 +409,9 @@ const FORMAT_ICONS: Readonly<Record<string, readonly string[]>> = {
   "fmt-h6": ["M4 6v12M12 6v12M4 12h8", "M19.6 8.4a3 3 0 0 0-4.1 2.1c-.5 1.8-.3 3.6-.3 3.6", "M15.2 15a2.4 2.4 0 1 0 4.8 0 2.4 2.4 0 1 0-4.8 0"],
   "fmt-person": ["M8.4 12a3.6 3.6 0 1 0 7.2 0 3.6 3.6 0 1 0-7.2 0", "M15.6 12v1.6a2.4 2.4 0 0 0 4.8 0V12a8.4 8.4 0 1 0-3.3 6.7"],
   "fmt-date": ["M6.5 5.5h11A2.5 2.5 0 0 1 20 8v9.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5V8a2.5 2.5 0 0 1 2.5-2.5z", "M4 10h16M8.5 3.5v4M15.5 3.5v4"],
+  // La sveglia del promemoria (T36), la figura `i-alarm` del prototipo: la
+  // stessa della pastiglia nella nota.
+  "fmt-alarm": ALARM_PATHS,
   "fmt-webpage": ["M3.5 12a8.5 8.5 0 1 0 17 0 8.5 8.5 0 1 0-17 0", "M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"],
   "fmt-color": [
     "M12 3.5c4.7 0 8.5 3.4 8.5 7.6 0 2.6-2.1 4.2-4.3 4.2h-1.7a1.6 1.6 0 0 0-1.2 2.7 1.6 1.6 0 0 1-1.2 2.6C7.3 20.6 3.5 16.8 3.5 12S7.3 3.5 12 3.5z",

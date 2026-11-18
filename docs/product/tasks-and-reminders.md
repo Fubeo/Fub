@@ -84,8 +84,11 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
   ridisegno costa così circa 70 ms invece di 180.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
-- Il `⏰` nel testo non ha una pastiglia, e i promemoria passati ad app chiusa
-  non hanno un elenco all'avvio: c'è la notifica (vedi sotto).
+- Il `⏰` ha la sua pastiglia soltanto in Live: in Lettura e nel recinto dei
+  compiti (```` ```tasks ````) resta testo.
+- L'elenco dei promemoria passati non ricorda chi li ha già visti: un
+  promemoria passato di un compito aperto torna a ogni apertura del vault,
+  finché il compito non è fatto o il `⏰` non è cambiato.
 
 ## La scadenza nel testo
 
@@ -116,13 +119,42 @@ La data è `AAAA-MM-GG`, l'ora `HH:MM` dalle `00:00` alle `23:59`; senza ora il
 promemoria suona alle **9:00**. Conta l'ultimo `⏰` del compito. L'ora è quella
 **del muro**, cioè dell'orologio di chi guarda: un promemoria delle 9:30 suona
 alle 9:30 anche dopo un volo in un altro fuso o dopo il cambio dell'ora legale.
-Il file non cambia mai: il `⏰` resta scritto com'è.
+Fub non cambia il `⏰` da solo: lo scrive soltanto chi lo sceglie (vedi sotto).
+
+### Nella nota
+
+In Live il `⏰` con la sua data diventa una **pastiglia blu** con la sveglia e
+l'ora: l'ora sola nel giorno stesso, altrimenti anche il giorno breve («ven 13 nov,
+09:00»), e l'anno se non è questo. Col compito fatto la pastiglia è grigia,
+perché non suona più. Col cursore sulla riga il testo torna com'è scritto,
+segnato di blu, e si corregge a mano. Un `⏰` che non si legge resta testo,
+tratteggiato in rosso come la scadenza illeggibile. Passandoci sopra la
+pastiglia dice quando suona, se è già passato e, con le notifiche spente, che
+resta nella nota ma non suona.
+
+Il clic sulla pastiglia apre la **scelta del giorno e dell'ora**: un campo
+che capisce le parole delle date («venerdì 9», «domani alle 18:30», «alle
+17», «2026-11-20 08:15»; senza ora le 9:00), i giorni vicini, il mese e l'ora.
+Ciò che non si capisce resta scritto e lo dice, senza toccare il promemoria.
+«Togli il promemoria» lo cancella con lo spazio prima. La scelta scrive
+sempre `⏰ AAAA-MM-GG HH:MM`: al posto di quello che c'era, se c'era, o in
+fondo al testo del compito; si annulla in un passo.
+
+Lo stesso promemoria si mette:
+
+- dal gruppo **Compito** della barra di formato, accanto a «Scadenza», col
+  cursore in un compito;
+- dal **«/»**: «Promemoria» fa della riga un compito, se non lo è, e apre la
+  scelta; «/promemoria venerdì 9» (anche «/ricordami lunedì», «/reminder
+  friday 7») lo scrive subito, senza la scelta.
+
+### Quando suona
 
 - Con l'app aperta arriva una **notifica del sistema** all'ora scritta.
   Cliccarla apre la nota sulla sezione del compito (il titolo sopra di lui).
-- Ciò che è passato mentre l'app era chiusa **non** arriva come notifica: è il
-  posto dell'elenco dei promemoria passati. Per la stessa ragione un promemoria
-  scritto per un'ora già passata non suona.
+- Ciò che è passato mentre l'app era chiusa **non** arriva come notifica: va
+  nell'elenco dei promemoria passati (vedi sotto). Per la stessa ragione un
+  promemoria scritto per un'ora già passata non suona.
 - Quando l'orologio torna indietro (l'ora legale che finisce, un viaggio verso
   ovest) i promemoria dell'ora ripetuta non suonano due volte. Quando salta
   avanti (verso est, l'ora legale che inizia) suonano subito quelli del salto.
@@ -137,6 +169,22 @@ Può mostrare notifiche del sistema**. Spento, i promemoria restano nella nota e
 non arriva nessuna notifica; riacceso, non arriva la raffica di quelli suonati
 nel frattempo. Se il sistema non mostra notifiche (le ha negate a Fub, o su
 Linux non c'è un servizio di notifiche) l'app lo scrive nel log e va avanti.
+
+### I promemoria passati, all'avvio
+
+Quando il vault si apre e il suo indice è pronto, un dialogo elenca i compiti
+aperti il cui promemoria è già passato, dal più vecchio, al più 50 (oltre, una
+riga dice che ce ne sono altri). Ogni riga ha il testo del compito, l'ora e la
+nota (con la sezione), e due pulsanti: **Apri** chiude il dialogo e porta al
+compito; **Fatto** lo spunta nella nota d'origine e toglie la riga. Prima di
+spuntare il dialogo rilegge l'indice: un compito già spuntato altrove sparisce
+senza essere rovesciato. Se la spunta non riesce lo dice nella riga. Senza
+promemoria passati il dialogo non c'è. Si mostra una volta per vault e per
+finestra (`apps/client/src/panels/reminders.ts`).
+
+È un dialogo e non gli avvisi della barra di stato perché è un elenco con due
+azioni per voce, e gli avvisi sono al più tre e le loro azioni spariscono con
+loro.
 
 L'indice dei promemoria sta in memoria e si ricostruisce dalle note a ogni
 apertura del vault (`crates/fub-features/src/tasks/reminders.rs`); la notifica

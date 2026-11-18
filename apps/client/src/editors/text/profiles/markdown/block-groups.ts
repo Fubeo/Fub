@@ -23,6 +23,7 @@ import { calloutName } from "./callout";
 import { CALLOUT_TYPES } from "./kinds";
 import { parseImage, widthWritable, rewriteImage, openImageAt, type ImageSource } from "./image-live";
 import { codeBlockAt, linkAt, tableRowAt, taskAt } from "./menu";
+import { REMINDER_ACTION } from "./slash";
 import { liveStrings } from "./strings";
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri si
@@ -173,17 +174,27 @@ type Build<K extends BlockKind> = (block: Extract<MarkdownBlock, { kind: K }>, h
 const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
   // La scadenza è la `@` del compito, che in un compito propone `📅` (il
   // comando `markdown.date`), scritta in fondo alla riga. Il promemoria
-  // arriva col suo task (T36).
-  task: (block, host, writable) => writable ? [{
-    id: "markdown.date",
-    label: liveStrings.t("blockgroup.task.due"),
-    icon: "fmt-date",
-    action: "markdown.date",
-    run: () => void host.write((state) => {
+  // (T36) apre la scelta del giorno e dell'ora sul compito (`REMINDER_ACTION`).
+  task: (block, host, writable) => {
+    if (!writable) return [];
+    const toEnd = () => void host.write((state) => {
       const line = state.doc.lineAt(Math.min(block.end, state.doc.length));
       return { selection: { anchor: line.to }, scrollIntoView: true };
-    }),
-  }] : [],
+    });
+    return [{
+      id: "markdown.date",
+      label: liveStrings.t("blockgroup.task.due"),
+      icon: "fmt-date",
+      action: "markdown.date",
+      run: toEnd,
+    }, {
+      id: REMINDER_ACTION,
+      label: liveStrings.t("blockgroup.task.reminder"),
+      icon: "fmt-alarm",
+      action: REMINDER_ACTION,
+      run: toEnd,
+    }];
+  },
   callout: (block, host, writable) => writable ? [
     {
       id: "markdown.callout.type",

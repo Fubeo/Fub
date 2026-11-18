@@ -13,7 +13,11 @@ import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
-import { saidDay } from "../../dates";
+import { parseDateInput, saidDay } from "../../dates";
+
+// La regola del campo sta con quella di `@`, e la usa anche il promemoria
+// (T36): qui la si riesporta per chi la cercava accanto all'editor.
+export { parseDateInput };
 import { firstWeekday } from "../../../../../../state/dates";
 import { liveStrings } from "../../strings";
 import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, targetOf, validDate, type OptionGroup, type PropertyOption, type RelationTarget, type RowKind } from "./kind";
@@ -240,25 +244,6 @@ function addMonths(iso: string, months: number): string {
   const first = new Date(date.getFullYear(), date.getMonth() + months, 1);
   const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   return isoOf(new Date(first.getFullYear(), first.getMonth(), Math.min(day, last)));
-}
-
-/// Una data scritta nel campo, con la regola di `@` (`saidDay`): «venerdì»,
-/// «fra due settimane», «20 marzo», «3/4», `2026-03-20`, `20/3/2026`. Dopo,
-/// un'ora facoltativa: «venerdì 18:30», «domani alle 9», `2026-03-20T10:30`.
-/// `null` se non è un giorno del calendario o l'ora non è un'ora: niente si
-/// indovina.
-export function parseDateInput(text: string, today: Date = new Date(), firstDay = 1, locale = "it"): { date: string; time: string | null } | null {
-  const value = text.trim();
-  const date = saidDay(value, today, firstDay, locale);
-  if (date !== null) return { date, time: null };
-  const clock = /^(.+?)(?:T|\s+(?:alle ore|alle|ore|at)\s+|\s+)(\d{1,2}):(\d{2})$/iu.exec(value)
-    ?? /^(.+?)\s+(?:alle ore|alle|ore|at)\s+(\d{1,2})(?:\.(\d{2}))?$/iu.exec(value);
-  if (!clock) return null;
-  const day = saidDay(clock[1]!, today, firstDay, locale);
-  const hours = Number(clock[2]);
-  const minutes = Number(clock[3] ?? "0");
-  if (day === null || hours > 23 || minutes > 59) return null;
-  return { date: day, time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}` };
 }
 
 /// Data, e Data e ora: il campo per scriverla, i giorni vicini, il mese da

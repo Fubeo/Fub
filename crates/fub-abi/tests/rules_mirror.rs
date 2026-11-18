@@ -44,7 +44,7 @@ use fub_abi::rules::folders::for_note;
 use fub_abi::rules::keys;
 use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
-use fub_abi::rules::tasks::{civil_day, due_urgency, task_due, DueUrgency};
+use fub_abi::rules::tasks::{civil_day, due_urgency, task_due, task_reminder, DueUrgency};
 use fub_abi::rules::theme_font::{
     theme_font_fault, MAX_THEME_FONTS, MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY,
     MAX_THEME_FONT_FILE_NAME, MAX_THEME_FONT_TOTAL_BYTES, RESERVED_FONT_FAMILIES,
@@ -392,6 +392,45 @@ fn task_due_cases() -> Vec<Value> {
             json!({
                 "span": &text[due.from..due.to],
                 "date": due.iso(),
+            })
+        });
+        json!({"text": text, "out": out})
+    })
+    .collect()
+}
+
+/// Il promemoria di un compito: l'ultimo `⏰`, la data, l'ora facoltativa e il
+/// tratto che occupa. I casi ostili: senza ora (le nove), l'ora che non esiste
+/// (`25:00`, `09:60`), l'ora a una cifra, una cifra di troppo dopo l'ora o
+/// dopo la data, la data che non esiste, il segno da solo, un `⏰` prima
+/// dell'ultimo, la tabulazione, l'ora attaccata a ciò che segue, i caratteri
+/// fuori dal BMP prima del segno.
+fn task_reminder_cases() -> Vec<Value> {
+    [
+        "Chiamare ⏰ 2026-11-13 09:30 📅 2026-11-14",
+        "Affitto ⏰ 2026-12-01",
+        "Affitto ⏰ 2026-12-01 e poi",
+        "Senza promemoria",
+        "Ora sbagliata ⏰ 2026-11-13 25:00",
+        "Minuti sbagliati ⏰ 2026-11-13 09:60",
+        "Una cifra ⏰ 2026-11-13 9:30",
+        "Cifra di troppo ⏰ 2026-11-13 09:300",
+        "Data lunga ⏰ 2026-11-133",
+        "Refuso ⏰ 2026-02-30 09:00",
+        "Vuoto ⏰",
+        "Parola ⏰ domani",
+        "Due ⏰ 2026-11-01 08:00 poi ⏰ 2026-11-02 18:15",
+        "Tabulazione ⏰\t2026-11-13\t07:05",
+        "Attaccata ⏰2026-11-13 09:30,",
+        "Emoji 🎉🎉 prima ⏰ 2026-11-13 23:59 dopo",
+    ]
+    .into_iter()
+    .map(|text| {
+        let out = task_reminder(text).map(|reminder| {
+            json!({
+                "span": &text[reminder.from..reminder.to],
+                "when": reminder.text(),
+                "timed": reminder.timed,
             })
         });
         json!({"text": text, "out": out})
@@ -1201,6 +1240,7 @@ fn expected() -> Value {
         "task_checked": task_checked_cases(),
         "task_due": task_due_cases(),
         "due_urgency": due_urgency_cases(),
+        "task_reminder": task_reminder_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
         "folder_for_note": folder_for_note_cases(),

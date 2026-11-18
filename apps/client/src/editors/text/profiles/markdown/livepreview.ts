@@ -27,8 +27,9 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
-import { t } from "../../../../i18n/strings";
+import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
+import { alarmFigure, projectedReminder, reminderLabel, reminderLong, reminderNotificationsOn, reminderPassed, reminderTimeOf } from "./task-reminder";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -221,6 +222,12 @@ export type LiveDecoKind =
   // passata (`data` "overdue"), arancio quando è vicina (`data` "near"),
   // segnata quando la data non si legge (`data` "bad"), grigia altrimenti
   | "task-due"
+  // il promemoria `⏰ AAAA-MM-GG HH:MM` di un compito (T36): fuori dal
+  // cursore una pastiglia blu con l'ora, al posto del testo; col cursore
+  // dentro il testo stesso, segnato. `data` è lo stato («open», «done»,
+  // «bad») e l'ora del muro
+  | "task-reminder"
+  | "task-reminder-source"
   | "quote-mark"
   | "sup"
   | "sub"
@@ -1070,7 +1077,24 @@ export function computeDecorations(
       const tree = syntaxTree(state);
       const taskEnd = liveTaskEnd(tree, boxFrom, row.to);
       const source = taskEnd > row.to ? doc.sliceString(row.from, taskEnd) : text;
-      const due = projectedDue(liveProjection(tree, source, row.from, paragraphEnd, taskEnd));
+      const projection = liveProjection(tree, source, row.from, paragraphEnd, taskEnd);
+      const due = projectedDue(projection);
+      // Il promemoria: una pastiglia al posto del testo, fuori dal cursore,
+      // quando il suo tratto è tutto testo del compito (niente segni in
+      // mezzo che un widget nasconderebbe) e non tocca altre decorazioni;
+      // altrimenti, e col cursore dentro, il testo resta e si segna.
+      const reminder = projectedReminder(projection);
+      if (reminder) {
+        const [from, to] = reminder.source;
+        const look = reminder.when === null ? "bad" : checked ? "done" : "open";
+        const data = `${look} ${reminder.when ?? ""}`;
+        const touched = out.some((d) => !LINE_KINDS.has(d.kind) && d.from < to && from < d.to);
+        if (reminder.when !== null && reminder.whole && !touched && !reveal.marks(from, to, from)) {
+          out.push({ from, to, kind: "task-reminder", data });
+        } else if (!touched) {
+          out.push({ from, to, kind: "task-reminder-source", data });
+        }
+      }
       if (due) {
         const look = dueLook(due, checked, today);
         pills.push({
@@ -1632,6 +1656,47 @@ const commentRangeOn = Decoration.mark({ class: "cm-fub-comment-range cm-fub-com
 const dueMark = Decoration.mark({ class: "cm-fub-due" });
 const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
 const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
+
+/// La pastiglia del promemoria (T36): la sveglia e l'ora, col giorno se non
+/// è oggi. Il clic apre la scelta del giorno e dell'ora (`reminder-picker.ts`,
+/// dal gestore del `mousedown`); il passaggio dice quando suona, se è passato,
+/// se il compito è fatto e se le notifiche sono spente, letto al momento.
+class ReminderWidget extends WidgetType {
+  constructor(readonly data: string) { super(); }
+  eq(other: ReminderWidget) { return other.data === this.data; }
+  toDOM() {
+    const [look, ...rest] = this.data.split(" ");
+    const written = rest.join(" ");
+    const when = reminderTimeOf(written);
+    const el = document.createElement("span");
+    el.className = look === "done" ? "cm-fub-reminder cm-fub-reminder-done" : "cm-fub-reminder";
+    el.dataset.reminder = written;
+    const text = document.createElement("span");
+    text.textContent = when ? reminderLabel(when, new Date(), resolvedLanguage()) : written;
+    el.append(alarmFigure(), text);
+    const describe = () => {
+      el.title = reminderTitle(look === "done", when);
+    };
+    describe();
+    el.addEventListener("pointerenter", describe);
+    return el;
+  }
+  ignoreEvent() { return false; }
+}
+
+/// Ciò che il passaggio dice di un promemoria: quando suona (o che è
+/// passato, o che il compito è fatto) e, con le notifiche spente, che resta
+/// nella nota senza suonare.
+export function reminderTitle(done: boolean, when: { date: string; time: string } | null, now = new Date()): string {
+  if (!when) return liveStrings.t("reminder.unreadable");
+  const long = reminderLong(when, resolvedLanguage());
+  const head = done
+    ? liveStrings.t("reminder.title.done", { when: long })
+    : reminderPassed(when, now)
+      ? liveStrings.t("reminder.title.passed", { when: long })
+      : liveStrings.t("reminder.title", { when: long });
+  return done || reminderNotificationsOn() ? head : `${head} ${liveStrings.t("reminder.title.off")}`;
+}
 const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
@@ -1714,6 +1779,14 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
           ...(target.block ? { "data-wikilink-block": target.block } : {}),
         },
       });
+    }
+    case "task-reminder":
+      return Decoration.replace({ widget: new ReminderWidget(d.data ?? "") });
+    case "task-reminder-source": {
+      const [look, ...rest] = (d.data ?? "").split(" ");
+      const when = reminderTimeOf(rest.join(" "));
+      const variant = look === "bad" ? " cm-fub-reminder-bad" : look === "done" ? " cm-fub-reminder-done" : "";
+      return Decoration.mark({ class: `cm-fub-reminder-text${variant}`, attributes: { title: reminderTitle(look === "done", when) } });
     }
     case "task-due":
       if (d.data === "near") return dueNearMark;
@@ -2898,7 +2971,7 @@ export function livePreview(
           const range = decoration.range(item.from, item.to);
           out.decorations.push(range);
           if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
-            || item.kind === "image" || item.kind === "link-pill" || item.kind === "footnote-back"
+            || item.kind === "image" || item.kind === "link-pill" || item.kind === "footnote-back" || item.kind === "task-reminder"
             || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") out.atomic.push(range);
           // Le righe dei recinti nascosti: la testata, e la chiusura raccolta.
           if (item.kind === "code-header") out.decorations.push(codeHeaderLine.range(state.doc.lineAt(item.from).from));
@@ -3056,6 +3129,14 @@ export function livePreview(
           const at = view.posAtDOM(pill);
           view.dispatch({ selection: { anchor: at }, userEvent: "select.pointer" });
           opener(view);
+          return true;
+        }
+        // La pastiglia del promemoria apre la scelta del giorno e dell'ora.
+        const reminder = target?.closest<HTMLElement>(".cm-fub-reminder");
+        if (reminder && event.button === 0) {
+          event.preventDefault();
+          const at = view.posAtDOM(reminder);
+          void import("./reminder-picker").then((picker) => picker.openReminderPicker(view, at, reminder), () => {});
           return true;
         }
         // Il ↩ di una nota porta il cursore al suo primo rimando.

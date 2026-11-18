@@ -84,11 +84,14 @@ export const TRADUZIONE = {
   // I colori delle etichette (`.k-green`): `--c-<colore>` → `--doc-color-<colore>`
   // e il suo fondo `--doc-tint-<colore>`, come dice la tabella del piano. Per
   // ora il verde (le note del calendario, T17) e l'arancio (lo stato «In
-  // corso» della testata, T9), i due che un pezzo usa.
+  // corso» della testata, T9) e il blu (il promemoria, T36), quelli che un
+  // pezzo usa.
   "--c-green": ["--doc-color-green"],
   "--c-green-b": ["--doc-tint-green"],
   "--c-orange": ["--doc-color-orange"],
   "--c-orange-b": ["--doc-tint-orange"],
+  "--c-blue": ["--doc-color-blue"],
+  "--c-blue-b": ["--doc-tint-blue"],
 };
 
 /// La traduzione dei pezzi dentro la pagina del documento (`contesto:
@@ -121,6 +124,8 @@ export const TRADUZIONE_DOCUMENTO = {
   "--c-green-b": ["--doc-tint-green"],
   "--c-orange": ["--doc-color-orange"],
   "--c-orange-b": ["--doc-tint-orange"],
+  "--c-blue": ["--doc-color-blue"],
+  "--c-blue-b": ["--doc-tint-blue"],
 };
 
 /// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
@@ -201,6 +206,19 @@ export const VISTE = {
       },
     },
     app: { scena: "tipi-01-nuova" },
+  },
+  /// Il promemoria di un compito (T36): il prototipo lo ha a riposo nel
+  /// compito «Chiedere il preventivo» (`remChip`, riga 2717); l'app dalla
+  /// Live coi promemoria, la prima pastiglia aperta.
+  promemoria: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win .rem");
+      },
+    },
+    app: { scena: "live-28-promemoria" },
   },
   /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
   /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
@@ -1560,6 +1578,26 @@ export const PEZZI = [
     prototipo: ".tx-band",
     app: ".transclusion-band",
     proprieta: ["padding", "margin", "gap", "border-radius", "background-color", "font", "color", ...ALLINEAMENTO],
+  },
+  // ── il promemoria (T36) ───────────────────────────────────────────────────
+  // Il colore, il fondo, la forma e il peso della `.rem`. La misura (12 px,
+  // alta 21) no: nella pagina la pastiglia segue il testo in `em`, come la
+  // scadenza accanto (`.px-pg :is(.due, .pill-in)` del prototipo, riga 1090).
+  {
+    id: "promemoria.pastiglia",
+    vista: "promemoria",
+    contesto: "documento",
+    prototipo: ".rem",
+    app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done)",
+    proprieta: ["color", "background", "box-shadow", "border-radius", "font-weight", "font-family", "white-space", ...ALLINEAMENTO],
+  },
+  {
+    id: "promemoria.sveglia",
+    vista: "promemoria",
+    contesto: "documento",
+    prototipo: ".rem svg",
+    app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done) svg",
+    proprieta: ["color"],
   },
 ];
 
