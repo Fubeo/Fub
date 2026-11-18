@@ -1589,7 +1589,7 @@ export const PEZZI = [
     contesto: "documento",
     prototipo: '.pair .scard[data-kind="pdf"] .pdfp',
     app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-page',
-    proprieta: ["border-radius", "box-shadow"],
+    proprieta: ["border-radius", "box-shadow", "filter"],
   },
   {
     id: "schede.pdf.numero",

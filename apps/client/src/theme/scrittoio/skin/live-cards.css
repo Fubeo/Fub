@@ -735,3 +735,20 @@
   pointer-events: auto;
   user-select: text;
 }
+/* Di Notte la pagina bianca si abbassa un poco, come nel prototipo
+   (`.win[data-light="notte"] .pdfp { filter: brightness(0.9) }`). Il
+   vocabolario dei temi non ha `brightness()`: lo stesso effetto, pixel per
+   pixel, è un velo nero al 10% sulla pagina (0,9 × il colore), che sta
+   sopra la pagina e sotto il testo da scegliere (posizionato). La misura è
+   quella della pagina (`--page-ratio`, scritta anche sulla radice). */
+:root[data-theme="dark"] .live-card .canvas-card-pdf[data-card-state="content"]::after {
+  content: "";
+  grid-area: 1 / 1 / 2 / -1;
+  align-self: start;
+  justify-self: center;
+  width: min(100cqw, (100cqh - 40px) * var(--page-ratio, 0.7071));
+  height: min(100cqh - 40px, 100cqw / var(--page-ratio, 0.7071));
+  border-radius: 2px;
+  background: rgb(0 0 0 / 10%);
+  pointer-events: none;
+}

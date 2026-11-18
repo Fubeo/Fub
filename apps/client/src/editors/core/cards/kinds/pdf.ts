@@ -215,8 +215,12 @@ function mountPdfCard(
     screen.getContext("2d")?.drawImage(source, 0, 0);
     // La proporzione della pagina in punti, se si sa; sennò quella della resa.
     const ratio = size ? size.width / size.height : source.width / source.height;
-    if (Number.isFinite(ratio) && ratio > 0) screen.style.setProperty("--page-ratio", String(ratio));
-    else screen.style.removeProperty("--page-ratio");
+    // Anche sulla radice: il velo di Notte della nota (`::after`, T45) sta
+    // sulla pagina con la stessa misura.
+    for (const element of [screen, root]) {
+      if (Number.isFinite(ratio) && ratio > 0) element.style.setProperty("--page-ratio", String(ratio));
+      else element.style.removeProperty("--page-ratio");
+    }
     screen.hidden = false;
     shown = part;
     say(null);

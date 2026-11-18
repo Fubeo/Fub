@@ -89,6 +89,7 @@ la fine, è la prima. La testata dice sempre la pagina in vista («p. 3»).
 - Un PDF protetto da una password dice che Fub non lo apre, col suo nome;
   un PDF rotto dice che non si può mostrare. Un PDF di mille pagine ne
   disegna una sola, quella in vista.
+- Di Notte la pagina bianca è un poco più scura, per non abbagliare.
 
 ## La scheda di documento
 

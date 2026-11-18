@@ -4,5 +4,11 @@
     "proprieta": "color",
     "motivo": "Il prototipo scrive a mano #fff sul suo accento; Fub scrive sull'accento il suo inchiostro, --accent-contrast, che la ricetta del tema genera col contrasto garantito: di notte l'accento è un verde chiaro, e il bianco del prototipo non si leggerebbe.",
     "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent; i colori si prendono dal tema); T17"
+  },
+  {
+    "pezzo": "schede.pdf.pagina",
+    "proprieta": "filter",
+    "motivo": "Di Notte il prototipo abbassa la pagina con filter: brightness(0.9); il vocabolario dei temi (THEME_2_VOCABULARY) non ammette brightness(), e la pelle stende sulla pagina un velo nero al 10% (.canvas-card-pdf::after), che dà lo stesso colore pixel per pixel (0,9 × il colore della pagina). Di Giorno i due valori coincidono (none).",
+    "riferimento": "PLAN.md, T45 «Dal prototipo» (passo 17, .win[data-light=\"notte\"] .pdfp)"
   }
 ]
