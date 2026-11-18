@@ -91,10 +91,10 @@ import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } fro
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
-import { inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
+import { cardChrome, inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
 import { asking } from "./tools/export-plan";
-import { featuresFor } from "./tools/registry";
+import { featuresFor, type Workspace } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
@@ -105,6 +105,10 @@ import { components, onComponents } from "../../state/components";
 import { showComponent } from "../../ui/commands";
 
 type VectorMode = "draw" | "read";
+
+/// Lo spazio di lavoro di un disegno in una scheda (T46): la penna, le forme e
+/// il testo, coi pulsanti grandi. Il resto si trova aprendo il disegno.
+const CARD_WORKSPACE: Workspace = "simple";
 
 export interface VectorSurfaceOptions {
   onChange(change: EditorChange): void;
@@ -238,8 +242,16 @@ function objectList(nodes: readonly OutlineNode[]): HTMLUListElement {
 
 export function mountVectorSurface(context: SurfaceMountContext, options: VectorSurfaceOptions): EditorSurface {
   const life = openLifetime();
+  /// Montata in una scheda (T46, la nota): gli strumenti in una fila sopra il
+  /// foglio, lo spazio Semplice con la barra della selezione, niente «Esporta»
+  /// e niente pannelli nell'ispettore, che è della nota; lo spazio e la
+  /// colonna scelti per i disegni non si leggono e non si scrivono.
+  const compact = context.compact === true;
+  /// Lo spazio della scheda: il Semplice, o il Completo a tutta pagina.
+  let cardWorkspace: Workspace = CARD_WORKSPACE;
   const root = document.createElement("div");
   root.className = "vector-surface";
+  if (compact) root.dataset.compact = "";
   const notice = document.createElement("div");
   notice.className = "vector-notice";
   // Cortese: dice com'è il documento appena aperto, non è un allarme.
@@ -497,13 +509,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const editorLifetime = openLifetime();
     const drawing = openMotore();
-    const made = inspectorChrome();
+    const made = compact ? null : inspectorChrome();
     const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
-      chrome: made,
-      workspace: workspace.workspace,
-      toolbar: workspace.toolbar,
-      onWorkspace: saveWorkspace,
-      onToolbar: saveToolbar,
+      ...(made === null
+        ? { chrome: cardChrome(), compact: true, workspace: cardWorkspace }
+        : { chrome: made, workspace: workspace.workspace, toolbar: workspace.toolbar, onWorkspace: saveWorkspace, onToolbar: saveToolbar }),
       grid,
       onGridChange: (next) => {
         grid = next;
@@ -528,7 +538,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       links,
       ...(images === undefined ? {} : { images }),
       ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
-      ...(options.onExport === undefined
+      ...(options.onExport === undefined || compact
         ? {}
         : {
             onExport: (what?: "selection") => {
@@ -549,17 +559,20 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       onSelectionChange: () => options.onSelectionChange(),
     });
     mounted.setReadOnly(readOnly);
-    editorLifetime.add(made.panels.subscribe(panelsChanged));
     editorLifetime.add(mounted.status.subscribe(statusChanged));
-    editorLifetime.add(
-      made.panels.onShow((id) => {
-        for (const listener of [...panelReveals]) listener(id);
-      }),
-    );
-    editorLifetime.add(() => made.dispose());
-    chrome = made;
-    // Il foglio per la sessione live, finché l'editor c'è.
-    editorLifetime.add(offerStage(context.documentId, { root, stage: mounted.stage, visible: () => !drawHost.hidden }));
+    if (made !== null) {
+      editorLifetime.add(made.panels.subscribe(panelsChanged));
+      editorLifetime.add(
+        made.panels.onShow((id) => {
+          for (const listener of [...panelReveals]) listener(id);
+        }),
+      );
+      editorLifetime.add(() => made.dispose());
+      chrome = made;
+      // Il foglio per la sessione live, finché l'editor c'è. Non quello di
+      // una scheda: la sessione live segue il disegno aperto in un riquadro.
+      editorLifetime.add(offerStage(context.documentId, { root, stage: mounted.stage, visible: () => !drawHost.hidden }));
+    }
     editorLife = editorLifetime;
     editor = mounted;
     return mounted;
@@ -823,10 +836,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       message = unreadableText(state.error);
     } else if (mode === "draw" && state?.kind === "inert") {
       message = t("vector.read_only", { reason: readOnlyText(state.engine.readOnly[0]!), command: t("commands.doc.source.open") });
-    } else if (mode === "draw" && foreign) {
+    } else if (mode === "draw" && foreign && !compact) {
       canAdopt = !readOnly;
       message = t("vector.foreign");
     }
+    // In una scheda un SVG estraneo resta l'immagine che è: adottarlo
+    // riscriverebbe il file da dentro la nota (T46).
     // Chi annulla l'adozione dal foglio non resta col fuoco su un nodo
     // nascosto: passa a «Modifica».
     const hadFocus = drawHost.contains(document.activeElement);
@@ -855,11 +870,15 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   // --- Lo spazio di lavoro e la griglia -------------------------------------
 
-  life.add(watchWorkspace((next) => {
-    workspace = next;
-    editor?.setWorkspace(next.workspace, next.toolbar);
-    paint();
-  }));
+  // In una scheda lo spazio resta il Semplice (`CARD_WORKSPACE`): quello
+  // scelto per i disegni vale nel disegno aperto.
+  if (!compact) {
+    life.add(watchWorkspace((next) => {
+      workspace = next;
+      editor?.setWorkspace(next.workspace, next.toolbar);
+      paint();
+    }));
+  }
   void readGrid().then((next) => {
     if (life.closed || gridChosen) return;
     grid = next;
@@ -1055,6 +1074,18 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       editor?.setReadOnly(next);
       paint();
     },
+    // In una scheda a tutta pagina c'è il resto degli strumenti (T46): lo
+    // spazio Completo, sempre nella fila sopra il foglio.
+    ...(compact
+      ? {
+          setFullPage: (full: boolean) => {
+            const next: Workspace = full ? "full" : CARD_WORKSPACE;
+            if (next === cardWorkspace) return;
+            cardWorkspace = next;
+            editor?.setWorkspace(next);
+          },
+        }
+      : {}),
     destroy: () => life.close(),
   };
 }

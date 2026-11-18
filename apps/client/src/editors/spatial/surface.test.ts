@@ -1386,3 +1386,89 @@ describe("F6 fra le zone del disegno (H3)", () => {
     expect(header.contains(document.activeElement)).toBe(true);
   });
 });
+
+describe("in una scheda della nota (T46, `compact`)", () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const tools = (at: HTMLElement): string[] =>
+    [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).flatMap((control) => control.dataset.tools!.split(" "));
+
+  /// Una superficie in una scheda, con lo spazio Completo scelto per i disegni:
+  /// la scheda non lo segue.
+  async function card(text = SOURCE, shell: Pick<VectorSurfaceOptions, "onExport"> = {}): Promise<{ surface: EditorSurface; host: FakeHost; changes: EditorChange[] }> {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace", "full"), drawSetting("draw.toolbar")] });
+    box.host = host;
+    vi.resetModules();
+    const { mountVectorSurface: mountFresh } = await import("./surface");
+    await (await import("../../state/kernel")).startKernelRouter();
+    const changes: EditorChange[] = [];
+    const surface = mountFresh(
+      { paneId: "scheda-1", documentId: "disegni/casa.svg", parent, compact: true, escapeLeaves: true },
+      { onChange: (change) => changes.push(change), onSelectionChange: () => {}, fonts: NO_FONTS, ...shell },
+    );
+    surface.buffer!.setDoc(text);
+    mounted.push({ surface, changes, selections: { count: 0 }, parent });
+    await settle();
+    return { surface, host, changes };
+  }
+
+  it("gli strumenti in una fila sopra il foglio: la penna, le forme, il testo, senza colonna né «Completo»", async () => {
+    const { surface, host } = await card();
+    const editor = parent.querySelector<HTMLElement>(".draw-editor")!;
+    expect(editor.dataset.compact).toBe("");
+    expect(editor.dataset.workspace).toBe("simple");
+    // La colonna sta nella fila sopra il foglio, mai di lato.
+    const bar = editor.querySelector<HTMLElement>(":scope > .draw-card-bar")!;
+    expect(bar.querySelector(".draw-rail")).not.toBeNull();
+    expect(bar.querySelector(".draw-header")).not.toBeNull();
+    expect(editor.querySelector(".draw-body > .draw-rail")).toBeNull();
+    expect(editor.querySelector(".draw-body .draw-surface")).not.toBeNull();
+    expect(bar.querySelector<HTMLElement>("[aria-orientation]")!.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(editor.querySelector<HTMLElement>(".draw-rail-full")!.hidden).toBe(true);
+    expect(tools(parent)).toEqual(expect.arrayContaining(["pen", "rect", "ellipse", "text"]));
+    // L'ispettore è della nota: niente schede del disegno.
+    expect(surface.panels!.list()).toEqual([]);
+    // Lo spazio scelto per i disegni non si scrive da una scheda.
+    expect(host.atGate("setSetting")).toEqual([]);
+  });
+
+  it("si disegna, e la barra della selezione c'è anche nel Semplice", async () => {
+    const { changes } = await card();
+    drawRect();
+    expect(changes.length).toBeGreaterThan(0);
+    key(parent, { key: "a", ctrlKey: true });
+    const arrange = parent.querySelector<HTMLElement>(".draw-arrange")!;
+    expect(arrange.hidden).toBe(false);
+    expect([...arrange.querySelectorAll("button:not([hidden])")].map((control) => control.getAttribute("aria-label"))).toContain("Duplica");
+  });
+
+  it("«A tutta pagina» offre il resto: lo spazio Completo, sempre in fila", async () => {
+    const { surface } = await card();
+    const editor = parent.querySelector<HTMLElement>(".draw-editor")!;
+    surface.setFullPage!(true);
+    expect(editor.dataset.workspace).toBe("full");
+    // Il Completo: le caselle normali e tutte le parti, anche quelle del menu.
+    expect(editor.querySelector<HTMLElement>("[data-size]")!.dataset.size).toBe("normal");
+    expect(editor.querySelector<HTMLElement>(".draw-rail-full")!.hidden).toBe(true);
+    expect(editor.querySelector(".draw-body > .draw-rail")).toBeNull();
+    surface.setFullPage!(false);
+    expect(editor.dataset.workspace).toBe("simple");
+  });
+
+  it("niente «Esporta» e niente «Modifica» per un SVG estraneo, che resta l'immagine che è", async () => {
+    let asked = 0;
+    await card(SOURCE, { onExport: () => (asked += 1) });
+    expect(parent.querySelector(".draw-export")).toBeNull();
+    for (const { surface } of mounted) surface.destroy();
+    mounted = [];
+    parent.replaceChildren();
+    const { changes } = await card(FOREIGN);
+    expect(shown()).toEqual({ notice: null, adopt: false, draw: false, read: true });
+    expect(changes).toEqual([]);
+    expect(asked).toBe(0);
+  });
+
+  it("una superficie senza `compact` non offre `setFullPage`", () => {
+    const { surface } = mount();
+    expect(surface.setFullPage).toBeUndefined();
+  });
+});

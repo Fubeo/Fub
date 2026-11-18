@@ -339,6 +339,13 @@ export interface DrawEditorOptions {
   /// Dove stanno barra, colonna, foglio e pannelli (default
   /// `inlineChrome()`: tutto dentro l'editor).
   readonly chrome?: DrawChrome;
+  /// L'editor sta in una scheda (T46, `compact` del montaggio): gli strumenti
+  /// sono una fila sopra il foglio e non una colonna, la barra della
+  /// selezione c'è in ogni spazio, il menu non cambia spazio né colonna, e il
+  /// pannello delle proprietà si apre solo quando serve (un testo da
+  /// scrivere, il suo pulsante) senza che la scelta si ricordi. Default
+  /// `false`.
+  readonly compact?: boolean;
 }
 
 /// Ciò che la finestra «Esporta» chiede al disegno.

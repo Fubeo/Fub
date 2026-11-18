@@ -28,7 +28,10 @@ import type { CanvasParts } from "../../canvas/parts";
 export type CardMode = "live" | "snapshot";
 
 /// La specie di una scheda, che sceglie il renderer.
-export type CardKind = "note" | "document" | "sheet" | "pdf" | "image" | "web" | "craft" | "file";
+///
+/// `drawing` è solo della nota (T46): lì un `.svg` è un disegno che si
+/// modifica sul posto (`noteCardKindOf`); sulla lavagna resta `image`.
+export type CardKind = "note" | "document" | "sheet" | "pdf" | "image" | "web" | "craft" | "drawing" | "file";
 
 /// La specie di una scheda dalla sua forma: `null` per testo e gruppi, che
 /// la tela disegna da sé.
@@ -48,6 +51,15 @@ export function cardKindOf(node: CanvasNode): CardKind | null {
     case "file":
       return fileKindOf(typeof node.file === "string" ? node.file : "");
   }
+}
+
+/// La specie di un file incorporato in una nota (T41, T46): quella della
+/// lavagna (`cardKindOf`), tranne l'SVG, che nella nota è `drawing`, il
+/// disegno che si modifica sul posto. Se è davvero un disegno di Fub lo dice
+/// la scheda, dal contenuto: un SVG estraneo resta un'immagine ferma.
+export function noteCardKindOf(path: string): CardKind {
+  if (extensionOf(withoutSubpath(path)) === "svg") return "drawing";
+  return fileKindOf(path);
 }
 
 function fileKindOf(file: string): CardKind {
@@ -194,6 +206,9 @@ export interface CardContext {
   /// La misura della scheda, in unità della lavagna.
   size(): CardSize;
   zoom(): number;
+  /// La scheda sta «A tutta pagina» nella nota (T46): la specie può offrire
+  /// più strumenti; la riletta a ogni `resize()`. Assente (la lavagna): mai.
+  fullPage?(): boolean;
   /// Il file non c'è: la tela mostra la scheda «File mancante»: il nome del file con «Ritrova…» e «Togli dalla lavagna» (T16).
   missing(): void;
   /// La pagina (da 1) che la scheda mostrava l'ultima volta, ricordata su

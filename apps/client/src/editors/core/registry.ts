@@ -658,6 +658,11 @@ export interface EditorSurface {
    */
   selectedText?(): SelectedText | null;
   setReadOnly?(readOnly: boolean): void;
+  /// Montata in una scheda (`SurfaceMountContext.compact`), la scheda va a
+  /// tutta pagina (`true`) o ne torna: la superficie offre il resto dei suoi
+  /// strumenti, o torna a quelli della scheda (T46). Assente: la superficie
+  /// è la stessa a ogni misura.
+  setFullPage?(full: boolean): void;
   setTheme?(theme: Theme): void;
   /** The syntax the vault declares for this document (tags, wikilinks, ...). */
   setSyntaxForms?(forms: readonly SyntaxForm[]): void;

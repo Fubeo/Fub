@@ -48,6 +48,7 @@ import type { PartsPickerPort } from "../canvas/parts-picker";
 import { backlinkSources, documentOutline, existingDocuments, linkedFrom, resolvedReference } from "../../host/query";
 import type { WebCardPort } from "./cards/kinds/web";
 import type { PdfCardPort } from "./cards/kinds/pdf";
+import type { ImageCardPort } from "./cards/kinds/image";
 import type { CraftCardPort } from "./cards/kinds/craft";
 import type { SheetCardPort } from "../grid/card";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
@@ -397,7 +398,7 @@ type CanvasCardsFor = (context: SurfaceMountContext, host?: CardHost) => CanvasC
 /// pesano sull'avvio di Fub. La scheda di foglio arriva con un suo `import()`
 /// al primo foglio.
 async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
-  const [cards, { CardCache }, note, image, pdf, web, craft, documents] = await Promise.all([
+  const [cards, { CardCache }, note, image, pdf, web, craft, documents, drawing] = await Promise.all([
     import("./cards/contract"),
     import("../canvas/card-cache"),
     import("./cards/kinds/note"),
@@ -406,6 +407,7 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     import("./cards/kinds/web"),
     import("./cards/kinds/craft"),
     import("./cards/kinds/document"),
+    import("./cards/kinds/drawing"),
   ]);
   windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
   const snapshots = windowSnapshots.cache;
@@ -438,10 +440,12 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     load: media.pdfLoader ?? loadPdf,
     watch,
   } : null;
+  /// La porta delle immagini: la scheda d'immagine e, nella nota, il disegno
+  /// fermo della scheda di disegno (T46).
+  let imagePort: ImageCardPort | null = null;
   if (media && pdfPort) {
     const transport = media.transport;
-    fixed.push(
-      image.imageCardRenderer({
+    imagePort = {
         read: async (path) => {
           const port = await openCardResource(transport, path);
           if (!port) return null;
@@ -456,9 +460,8 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
         },
         open: (path) => open(path, null),
         watch,
-      }),
-      pdf.pdfCardRenderer(pdfPort),
-    );
+      };
+    fixed.push(image.imageCardRenderer(imagePort), pdf.pdfCardRenderer(pdfPort));
   }
   const grid = options.gridHost;
   return (context, host = "canvas") => {
@@ -471,6 +474,9 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
       ...fixed,
       documents.documentCardRenderer({ show: ports.note.show, watch, open, writes: host === "note" }),
     ];
+    // Il disegno che si modifica sul posto è della nota (T46): sulla lavagna
+    // un `.svg` resta una scheda d'immagine.
+    if (host === "note" && imagePort) renderers.push(drawing.drawingCardRenderer(imagePort));
     if (grid) {
       renderers.push(lazySheetRenderer(async () => {
         const { sheetCardRenderer } = await import("../grid/card");
@@ -555,7 +561,7 @@ function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts,
           snapshots: cards.snapshots,
           watch: cards.watch,
           ...(ports.editors ? { editors: ports.editors } : {}),
-          kindOf: (path) => contract.cardKindOf({ id: "", type: "file", file: path, x: 0, y: 0, width: 0, height: 0 }) ?? "file",
+          kindOf: (path) => contract.noteCardKindOf(path),
           maxLive: contract.MAX_LIVE_CARDS,
         };
       },

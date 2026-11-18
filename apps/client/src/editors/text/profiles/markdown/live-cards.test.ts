@@ -230,7 +230,10 @@ describe("quali embed sono schede", () => {
     // I documenti di Word e ODT sono schede (T44).
     expect(isLiveCardFile("Relazione.docx")).toBe(true);
     expect(isLiveCardFile("Relazione.odt")).toBe(true);
-    for (const page of ["Nota", "Nota.md", "Viste.base", "Lavagna.canvas", "Foto.png", "Voce.mp3", "Clip.mp4", "Logo.svg", "Scatto.xmp"]) {
+    // Un SVG è una scheda (T46): un disegno di Fub ci si disegna sul posto.
+    expect(isLiveCardFile("Schizzo.svg")).toBe(true);
+    expect(isLiveCardFile("Schizzo.SVG")).toBe(true);
+    for (const page of ["Nota", "Nota.md", "Viste.base", "Lavagna.canvas", "Foto.png", "Voce.mp3", "Clip.mp4", "Scatto.xmp"]) {
       expect(isLiveCardFile(page), page).toBe(false);
     }
     expect(liveCardEmbed("![[Contratto.pdf#page=3]]")).toEqual({ page: "Contratto.pdf", subpath: "#page=3", alias: null });
