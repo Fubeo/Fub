@@ -31,6 +31,17 @@ describe("i comandi rapidi del «/»", () => {
     expect(quickCommand("dom", TODAY)).toBeNull();
   });
 
+  it("il promemoria col giorno e l'ora detti a parole, sul testo com'è scritto", () => {
+    expect(quickCommand("promemoria venerdì 9", TODAY)).toMatchObject({
+      id: "markdown.reminder", params: { date: "2026-10-30", time: "09:00" }, label: "Promemoria: venerdì 30 ottobre, 09:00", icon: "fmt-alarm",
+    });
+    expect(quickCommand("Promemoria domani alle 18:30", TODAY)).toMatchObject({ params: { date: "2026-10-30", time: "18:30" } });
+    expect(quickCommand("ricordami lunedì", TODAY)).toMatchObject({ params: { date: "2026-11-02", time: "09:00" } });
+    expect(quickCommand("remind me friday 7", TODAY)).toMatchObject({ params: { date: "2026-10-30", time: "07:00" } });
+    expect(quickCommand("promemoria quando capita", TODAY)).toBeNull();
+    expect(quickCommand("promemoria", TODAY)).toBeNull();
+  });
+
   it("il riquadro col suo tipo, detto in italiano o col nome di Markdown", () => {
     expect(quickCommand("riquadro attenzione", TODAY)).toMatchObject({ id: "markdown.callout", params: { type: "warning" } });
     expect(quickCommand("callout tip", TODAY)).toMatchObject({ params: { type: "tip" } });

@@ -37,6 +37,7 @@ export type SlashPanelCore = Pick<SlashPanelEvents, "choose" | "dismiss" | "acti
 import type { ContextMatch } from "./completions";
 import { loadDiagramTemplates, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { CALLOUT_TYPES, CODE_LANGUAGES } from "./kinds";
+import { reminderTaskAt, reminderTimeOf, writeReminder, type ReminderTime } from "./task-reminder";
 
 export { CALLOUT_TYPES, CODE_LANGUAGES };
 
@@ -550,6 +551,65 @@ export const BASE_ACTION = "markdown.base";
 /// blocco sincronizzato (`blocks/sync-to.ts`). Lo stesso id di
 /// `SYNC_BLOCK_ENTRY` in `panels/slash/entries.ts`.
 export const SYNC_BLOCK_ACTION = "markdown.syncblock";
+
+// ── Il promemoria dal «/» e dalla barra ─────────────────────────────────────
+
+/// L'azione «Promemoria» (E10, T36): lo stesso id di `REMINDER_ENTRY` in
+/// `panels/slash/entries.ts` e della voce del gruppo «Compito» della barra
+/// (`block-groups.ts`). Con `{date, time}` («/promemoria venerdì 9») scrive
+/// il promemoria; senza, apre la scelta del giorno e dell'ora.
+export const REMINDER_ACTION = "markdown.reminder";
+
+/// Gli argomenti dell'azione, se sono un promemoria scritto bene.
+export function reminderParams(params: Readonly<Record<string, unknown>>): ReminderTime | null {
+  const date = params["date"];
+  const time = params["time"];
+  if (typeof date !== "string" || typeof time !== "string") return null;
+  return reminderTimeOf(`${date} ${time}`);
+}
+
+/// Toglie il «/…» fra `from` e `to`, fa della riga un compito se non lo è
+/// (come «Lista di cose da fare») e, con `when`, ci scrive il promemoria:
+/// una modifica sola, un passo d'annullamento. Restituisce la posizione del
+/// compito, per aprirci sopra la scelta; `null` se lì non può esserci un
+/// compito (sola lettura, un blocco di codice), e allora toglie soltanto il
+/// «/…».
+export function reminderHere(view: EditorView, from: number, to: number, when: ReminderTime | null): number | null {
+  if (view.state.readOnly) return null;
+  const removal = view.state.update({ changes: { from, to }, selection: EditorSelection.cursor(from) });
+  let state = removal.state;
+  let changes = removal.changes;
+  if (!reminderTaskAt(state, from)) {
+    let made: Transaction | null = null;
+    const toggle = MARKDOWN_ACTIONS.get("markdown.list.task");
+    const ran = toggle && markdownActionState(toggle, state).enabled
+      && toggle.run({ state, dispatch: (tr) => { made = tr; } });
+    const task = made as Transaction | null;
+    if (!ran || !task) {
+      if (from < to) view.dispatch({ changes: { from, to }, selection: EditorSelection.cursor(from), userEvent: "input.complete" });
+      return null;
+    }
+    state = task.state;
+    changes = changes.compose(task.changes);
+  }
+  const at = changes.mapPos(from, 1);
+  const found = reminderTaskAt(state, at);
+  if (!found) return null;
+  const spec = when ? writeReminder(state, found, when) : null;
+  if (spec) {
+    const written = state.update(spec);
+    changes = changes.compose(written.changes);
+    state = written.state;
+  }
+  const cursor = when ? state.doc.lineAt(changes.mapPos(from, 1)).to : changes.mapPos(from, 1);
+  view.dispatch({
+    changes,
+    selection: EditorSelection.cursor(Math.min(cursor, state.doc.length)),
+    scrollIntoView: true,
+    userEvent: "input.complete",
+  });
+  return view.state.doc.lineAt(Math.min(changes.mapPos(from, 1), view.state.doc.length)).from;
+}
 
 /// Quanti nomi si provano, al più, per trovarne uno libero.
 const BASE_NAME_TRIES = 100;

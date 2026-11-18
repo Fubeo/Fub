@@ -8,7 +8,7 @@
 import type { SlashMenuEntry, SlashTransform } from "../../editors/core/editor-menu";
 import { t, type Key } from "../../i18n/strings";
 import { iconEl } from "../../ui/icons";
-import { COLOR_ENTRY, markdownHint } from "./entries";
+import { COLOR_ENTRY, REMINDER_ENTRY, markdownHint } from "./entries";
 
 /// I colori della tavolozza, nell'ordine dei campioni del passo del colore.
 export const PALETTE = ["default", "gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"] as const;
@@ -80,6 +80,8 @@ const SHAPES: Readonly<Record<string, () => Shape>> = {
   "markdown.image": () => [...R(10, 10, 76, 40, "tray", 5), ...C(26, 22, 4, "accent"), ...P("M12 48l18-18 14 10 12-8 28 16z", "ink", { opacity: 0.5 })],
   "markdown.mention": () => [...R(10, 18, 22), ...R(36, 13, 42, 14, "wash", 7), ...C(44, 20, 3.5, "accent"), ...R(51, 18, 21, 4, "ink"), ...L(10, 36, [76])],
   "markdown.date": () => [...R(10, 18, 26), ...R(40, 13, 44, 14, "wash", 4), ...B(45, 16.5, 7, 7, "stroke-accent", 1.5), ...R(56, 18, 22, 4, "ink"), ...L(10, 36, [60])],
+  // Il compito con la sveglia accanto (T36), come la miniatura del prototipo.
+  [REMINDER_ENTRY]: () => [...B(10, 15, 10, 10), ...R(26, 18, 30), ...C(72, 20, 6.5, "stroke-accent"), ...P("M72 16.5v4l2.5 1.5", "stroke-accent"), ...R(26, 36, 40)],
   // Le voci che il prototipo non disegna, nella stessa lingua.
   "markdown.toc": () => [...R(10, 12, 40, 4, "ink"), ...R(18, 22, 50), ...R(18, 32, 42), ...R(26, 42, 36)],
   "markdown.footnote": () => [...L(10, 15, [70, 52]), ...R(64, 33, 5, 5, "accent", 1), ...P("M10 44h30"), ...R(10, 48, 4, 2, "accent", 1)],
@@ -122,6 +124,7 @@ export function quickHintOf(id: string): string | null {
     "markdown.codeblock": "slash.detail.args.code",
     "markdown.callout": "slash.detail.args.callout",
     "markdown.date": "slash.detail.args.date",
+    [REMINDER_ENTRY]: "slash.detail.args.reminder",
   };
   const key = keys[id];
   const text = key ? t(key) : "";

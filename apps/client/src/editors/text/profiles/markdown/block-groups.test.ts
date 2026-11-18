@@ -81,6 +81,20 @@ describe("i gruppi", () => {
     expect(text()).toBe(doc);
   });
 
+  it("Compito: «Promemoria» porta il cursore in fondo al compito e apre la scelta del giorno e dell'ora", () => {
+    const doc = "- [ ] comprare il pane\naltro\n";
+    const { host, text } = hostOf(doc, 4);
+    const group = markdownBlockGroup(host, null);
+    expect(ids(group)).toEqual(["markdown.date", "markdown.reminder"]);
+    const reminder = item(group, "markdown.reminder");
+    expect(reminder.label).toBe("Promemoria");
+    expect(reminder.icon).toBe("fmt-alarm");
+    expect(reminder.action).toBe("markdown.reminder");
+    reminder.run?.();
+    expect(host.read((state) => state.selection.main.head)).toBe(doc.indexOf("\n"));
+    expect(text()).toBe(doc);
+  });
+
   it("Riquadro: il tipo si sceglie fra quelli noti, e «Ripiegabile» scrive e toglie il segno", () => {
     const doc = "> [!tip] Il punto\n> corpo\n";
     const { host, text } = hostOf(doc, doc.indexOf("corpo"));

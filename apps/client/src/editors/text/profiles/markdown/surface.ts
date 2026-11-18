@@ -68,7 +68,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { BASE_ACTION, SYNC_BLOCK_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, REMINDER_ACTION, SYNC_BLOCK_ACTION, createBaseHere, reminderHere, reminderParams, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
 import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
@@ -82,6 +82,7 @@ import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, re
 import { foldable, foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore, toggleFold } from "../../fold-levels";
 import type { EditorView } from "@codemirror/view";
+import type { ReminderTime } from "./task-reminder";
 import type { EditorState, Extension, Transaction } from "@codemirror/state";
 import {
   ACTION_UNAVAILABLE,
@@ -414,6 +415,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       } else if (entry.id === SYNC_BLOCK_ACTION && !transform) {
         // Come la Base: il «/» resta finché la trasclusione non c'è.
         startSync(view, from, to);
+      } else if (entry.id === REMINDER_ACTION && !transform) {
+        startReminder(view, from, to, reminderParams(params));
       } else if (entry.action && transform) {
         const action = MARKDOWN_ACTIONS.get(entry.id);
         const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
@@ -472,6 +475,23 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       }))
       .catch((error: unknown) => say(errorText(error)))
       .finally(() => { syncing = false; });
+  };
+  /// «Promemoria» dal «/» o dal gruppo «Compito» (T36): la riga diventa un
+  /// compito se non lo è; col giorno detto («/promemoria venerdì 9») il
+  /// promemoria si scrive subito; senza, si apre la scelta, caricata al primo
+  /// uso.
+  const startReminder = (view: EditorView, from: number, to: number, when: ReminderTime | null): boolean => {
+    const at = reminderHere(view, from, to, when);
+    if (at === null) return false;
+    if (when) return true;
+    void import("./reminder-picker").then((picker) => {
+      if (life.closed || !view.dom.isConnected) return;
+      const end = view.state.doc.lineAt(Math.min(at, view.state.doc.length)).to;
+      picker.openReminderPicker(view, at, picker.caretAnchor(view, end));
+    }, (error: unknown) => {
+      if (!life.closed) notify(errorText(error), "guasto");
+    });
+    return true;
   };
   /// Gli argomenti di un'azione come li vuole il profilo: la data detta
   /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
@@ -1429,6 +1449,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const editorActions: SurfaceEditorActions = {
     has: (id) =>
       MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION ||
+      id === REMINDER_ACTION ||
       (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined),
     editable,
     state(id): EditorActionState {
@@ -1436,6 +1457,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
       if (id === SYNC_BLOCK_ACTION) return { enabled: !tableGrid && !syncing && opts.syncBlock !== undefined, active: null };
+      if (id === REMINDER_ACTION) return { enabled: !tableGrid, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -1471,6 +1493,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           const at = view.state.selection.main.head;
           startSync(view, at, at);
           return true;
+        });
+      }
+      if (id === REMINDER_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid) return false;
+        const when = reminderParams(params);
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          return startReminder(view, at, at, when);
         });
       }
       if (id === LINK_EDIT_ACTION) {

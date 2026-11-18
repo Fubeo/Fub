@@ -16398,6 +16398,143 @@ input.canvas-toolbar-item {
   outline-offset: -1px;
   color: var(--doc-danger);
 }
+/* Il promemoria di un compito (`⏰ AAAA-MM-GG HH:MM`, T36): la pastiglia blu
+   con la sveglia e l'ora (`.rem` del prototipo), della misura della
+   scadenza. Grigia quando il compito è fatto, perché non suona più. Col
+   cursore dentro il testo resta e si segna con lo stesso blu; quello che non
+   si legge col tratteggio del refuso, come la scadenza. */
+.cm-editor .cm-content .cm-fub-reminder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.25em;
+  padding: 0.12em 0.5em;
+  border-radius: var(--radius-chip);
+  background: var(--doc-tint-blue);
+  color: var(--doc-color-blue);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  white-space: nowrap;
+  vertical-align: 0.08em;
+  cursor: pointer;
+}
+.cm-editor .cm-content .cm-fub-reminder:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--doc-color-blue) 40%, transparent);
+}
+.cm-editor .cm-content .cm-fub-reminder-figure {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cm-editor .cm-content .cm-fub-reminder-done {
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-reminder-text {
+  border-radius: var(--radius-chip);
+  background: var(--doc-tint-blue);
+  color: var(--doc-color-blue);
+}
+.cm-editor .cm-content .cm-fub-reminder-text.cm-fub-reminder-done {
+  background: var(--doc-fill-soft);
+  box-shadow: none;
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-reminder-bad {
+  background: transparent;
+  outline: 1px dashed var(--doc-danger);
+  outline-offset: -1px;
+  color: var(--doc-danger);
+}
+/* La scelta del promemoria è il riquadro della data delle proprietà
+   (`document.css`), con l'ora sempre in vista; sotto, quando le notifiche
+   sono spente, una riga che lo dice. */
+.cm-fub-reminder-picker .cm-fub-prop-date-field > svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cm-fub-reminder-silent {
+  margin: 8px 2px 0;
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+.cm-fub-reminder-silent[hidden] {
+  display: none;
+}
+/* I promemoria passati all'avvio (`panels/reminders.ts`): un dialogo del
+   kit, un po' più largo, con una riga per compito — il testo, sotto l'ora e
+   la nota, a destra «Apri» e «Fatto». L'elenco lungo scorre dentro il
+   dialogo; stretto, i pulsanti vanno sotto il testo. */
+.kit-dialog.reminders-dialog {
+  width: min(520px, 100%);
+}
+.reminders-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(52vh, 420px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+.reminders-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+.reminders-row:first-child {
+  border-top: 0;
+}
+.reminders-text {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.reminders-task {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.reminders-where {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.reminders-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+.reminders-error[hidden] {
+  display: none;
+}
+.reminders-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-3);
+}
+.reminders-more {
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 /* Il recinto ```tasks```: lo disegna il componente dei compiti (la vista
    `tasks_query`), con i nodi di ogni vista dichiarata. Qui il blocco veste la
    carta: un riquadro sommesso, una riga per compito con la casella e il testo,

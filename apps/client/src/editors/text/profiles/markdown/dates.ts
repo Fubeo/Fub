@@ -5,7 +5,8 @@
 // intera; `mentionDates` propone anche mentre si scrive («@dom» → domani). Il
 // giorno torna come `YYYY-MM-DD`, contato sul calendario locale (mai in UTC);
 // il link alla giornaliera lo fa chi ne conosce cartella e formato
-// (`state/dates.ts`).
+// (`state/dates.ts`). In fondo, il promemoria detto (T36): un giorno e un'ora.
+import { DEFAULT_REMINDER_TIME } from "../../../../rules/mirrored";
 
 /// Una data riconosciuta: il giorno e la parola che l'ha detta.
 export interface SaidDate {
@@ -225,6 +226,25 @@ function saidDate(q: string, today: Date, firstDay: number, locale: string): Dat
   return null;
 }
 
+/// Una data scritta nel campo, con la regola di `@` (`saidDay`): «venerdì»,
+/// «fra due settimane», «20 marzo», «3/4», `2026-03-20`, `20/3/2026`. Dopo,
+/// un'ora facoltativa: «venerdì 18:30», «domani alle 9», `2026-03-20T10:30`.
+/// `null` se non è un giorno del calendario o l'ora non è un'ora: niente si
+/// indovina.
+export function parseDateInput(text: string, today: Date = new Date(), firstDay = 1, locale = "it"): { date: string; time: string | null } | null {
+  const value = text.trim();
+  const date = saidDay(value, today, firstDay, locale);
+  if (date !== null) return { date, time: null };
+  const clock = /^(.+?)(?:T|\s+(?:alle ore|alle|ore|at)\s+|\s+)(\d{1,2}):(\d{2})$/iu.exec(value)
+    ?? /^(.+?)\s+(?:alle ore|alle|ore|at)\s+(\d{1,2})(?:\.(\d{2}))?$/iu.exec(value);
+  if (!clock) return null;
+  const day = saidDay(clock[1]!, today, firstDay, locale);
+  const hours = Number(clock[2]);
+  const minutes = Number(clock[3] ?? "0");
+  if (day === null || hours > 23 || minutes > 59) return null;
+  return { date: day, time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}` };
+}
+
 /// Le date che `query` dice o comincia a dire, rispetto a `today`. `firstDay`
 /// è il primo giorno della settimana (1 = lunedì … 7 = domenica): «prossimo
 /// venerdì» è il venerdì della settimana dopo questa. Senza niente scritto,
@@ -281,4 +301,42 @@ export function mentionDates(query: string, today: Date, firstDay: number, langu
 /// La riga è un compito (`- [ ] …`): `@` offre anche la scadenza 📅.
 export function isTaskLine(text: string): boolean {
   return /^[ \t]*(?:>[ \t]?)*(?:[-*+]|\d+[.)])[ \t]+\[[ xX]\][ \t]/.test(text);
+}
+
+// ── Il promemoria detto a parole (T36) ──────────────────────────────────────
+
+/// Un promemoria: il giorno `AAAA-MM-GG` e l'ora `HH:MM`.
+export interface ReminderTime {
+  readonly date: string;
+  readonly time: string;
+}
+
+function clockOf(hours: number, minutes: number): string | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return hours > 23 || minutes > 59 ? null : `${pad(hours)}:${pad(minutes)}`;
+}
+
+/// Un promemoria detto a parole, con la regola delle date di T10 (`saidDay`,
+/// `parseDateInput`) e un'ora facoltativa: «venerdì 9», «domani alle 18:30»,
+/// «20 marzo 8.15», «3/4», «alle 9». Senza ora, le nove; senza giorno, oggi.
+/// `null` se il giorno non c'è o l'ora non è un'ora: niente si indovina.
+export function saidReminder(text: string, now: Date, firstDay = 1, locale = "it"): ReminderTime | null {
+  const value = text.trim().replace(/\s+/g, " ");
+  if (value === "") return null;
+  const parsed = parseDateInput(value, now, firstDay, locale);
+  if (parsed) return { date: parsed.date, time: parsed.time ?? DEFAULT_REMINDER_TIME };
+  // Il giorno e poi un'ora nuda: «venerdì 9», «domani 18:30», «20 marzo 8.15».
+  const tail = /^(.+?) (?:(?:alle ore|alle|ore|at) )?(\d{1,2})(?:[:.](\d{2}))?$/iu.exec(value);
+  if (tail) {
+    const date = saidDay(tail[1]!, now, firstDay, locale);
+    const time = clockOf(Number(tail[2]), Number(tail[3] ?? "0"));
+    if (date !== null && time !== null) return { date, time };
+  }
+  // Solo l'ora: oggi.
+  const alone = /^(?:(?:alle ore|alle|ore|at) )?(\d{1,2})(?:[:.](\d{2}))?$/iu.exec(value);
+  if (alone && (alone[2] !== undefined || /^\D/u.test(value))) {
+    const time = clockOf(Number(alone[1]), Number(alone[2] ?? "0"));
+    if (time !== null) return { date: isoDay(now), time };
+  }
+  return null;
 }

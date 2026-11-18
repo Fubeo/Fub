@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_ENTRY, COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
+import { BASE_ENTRY, COLOR_ENTRY, REMINDER_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -149,5 +149,29 @@ describe("il blocco di un'altra nota dal «/» (T30)", () => {
   it("scrivendo «sincronizzato» la si trova per prima; non c'è dove la superficie non la sa fare", () => {
     expect(slashMenuEntries(LIST, "sincronizzato", ALL).entries[0]!.id).toBe(SYNC_BLOCK_ENTRY);
     expect(slashMenuEntries(LIST, "", (id) => id !== SYNC_BLOCK_ENTRY && ALL(id)).entries.some((entry) => entry.id === SYNC_BLOCK_ENTRY)).toBe(false);
+  });
+});
+
+describe("il promemoria dal «/» (T36)", () => {
+  it("subito dopo la data, fra persone e date, con la sveglia e il `⏰`", () => {
+    const { entries } = slashMenuEntries(LIST, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.date") + 1]).toBe(REMINDER_ENTRY);
+    expect(entries.find((entry) => entry.id === REMINDER_ENTRY)).toMatchObject({
+      label: "Promemoria", section: "people", action: true, picker: null, icon: "fmt-alarm", hint: "⏰",
+    });
+  });
+
+  it("si trova per nome e per sinonimi; non c'è dove la superficie non lo sa fare, né se è nascosto", () => {
+    expect(slashMenuEntries(LIST, "promemoria", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "sveglia", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "reminder", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "", (id) => id !== REMINDER_ENTRY && ALL(id)).entries.some((entry) => entry.id === REMINDER_ENTRY)).toBe(false);
+    expect(slashMenuEntries(LIST, "", ALL, undefined, { ...use(), hidden: [REMINDER_ENTRY] }).entries.some((entry) => entry.id === REMINDER_ENTRY)).toBe(false);
+  });
+
+  it("«/promemoria venerdì 9» è il comando rapido in cima, col giorno e l'ora", () => {
+    const first = slashMenuEntries(LIST, "promemoria venerdì 9", ALL, undefined, use()).entries[0]!;
+    expect(first).toMatchObject({ id: REMINDER_ENTRY, quick: true, params: { date: "2026-10-30", time: "09:00" } });
   });
 });
