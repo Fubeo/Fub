@@ -546,7 +546,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// Le schede vive della nota (T41): una sola attiva, le vive contate.
   const liveCards = opts.liveCards ? new LiveCards({
     port: opts.liveCards,
-    hostDoc: linkSource,
+    hostDoc: docId,
     editable: () => editable(),
   }) : null;
   const profile = createMarkdownProfile({
