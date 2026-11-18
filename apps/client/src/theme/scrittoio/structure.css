@@ -20,7 +20,9 @@
 
 :root {
   /* I piani. Una superficie che intrappola il fuoco sta su `--z-modal`, e
-     sotto di lei non ne passa un'altra che lo intrappoli. */
+     sotto di lei non ne passa un'altra che lo intrappoli. L'avviso sta sopra:
+     non intrappola niente, e sotto il velo di un dialogo sarebbe spento e non
+     si potrebbe chiudere (il prototipo delle ricette lo dipinge sopra il velo). */
   --z-sheet: 1;
   --z-sheet-active: 2;
   --z-drawer: 40;
@@ -28,8 +30,8 @@
   --z-picker: 60;
   --z-popover: 70;
   --z-dialog: 80;
-  --z-toast: 85;
   --z-modal: 90;
+  --z-toast: 92;
   --z-drag: 95;
 
   /* La cornice al passo 0 di `chrome.compactness`. */

@@ -5,7 +5,7 @@
 // la prova sulla nota aperta, e l'impronta che «Accendi» manda — quella che la
 // finestra ha mostrato, mai un testo cambiato dopo.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommandSpec, RecipeStepInfo } from "../host/contract";
+import type { CommandSpec, ParamSpec, RecipeStepInfo } from "../host/contract";
 import type { FakeHost, FakeRecipe } from "../host/fake";
 import { press } from "../kit/testing";
 
@@ -181,6 +181,29 @@ describe("che cosa mostra", () => {
       .toBe("la nota «Diario/segreto»");
     expect(valueInWords("", undefined)).toBe("niente");
   });
+
+  it("le virgolette annidate: dentro «…» le seconde sono “…”, mai due «» una dentro l'altra", () => {
+    const text: ParamSpec = { name: "to", title: "Nuovo percorso", description: "", kind: { kind: "text" }, required: true };
+    const document: ParamSpec = { name: "doc", title: "Nota", description: "", kind: { kind: "document" }, required: true };
+    // Un parametro della ricetta dentro un percorso: la sua frase ha le sue virgolette.
+    expect(valueInWords("Archivio/{{param.cartella}}/{{title}}.md", text)).toBe(
+      "«Archivio/‹il valore “cartella” che scegli quando la usi›/‹il nome della nota su cui la usi›.md»",
+    );
+    // Un valore fisso che ha già le sue «»: resta com'è scritto, fra “…”.
+    expect(valueInWords("Archivio/«bozza».md", text)).toBe("“Archivio/«bozza».md”");
+    expect(valueInWords("Archivio/«bozza».md", document)).toBe("la nota “Archivio/«bozza»”");
+    // Le «» scritte e un parametro insieme: fuori “…”, e la frase del parametro torna a «».
+    expect(valueInWords("«{{param.titolo}}» del {{date}}", text)).toBe(
+      "“«‹il valore «titolo» che scegli quando la usi›» del ‹la data di oggi›”",
+    );
+  });
+
+  it("una nota fissa con le «» nel nome si nomina fra “…” anche in «Tocca»", async () => {
+    const steps = [step("note.property.set", "Imposta proprietà", { doc: "Archivio/«bozza».md", key: "stato", value: "letto" })];
+    const { element } = await mount(archivia({ steps }));
+    expect(texts(element, ".recipe-step-args")[0]).toBe("Nota: la nota “Archivio/«bozza»”; Proprietà: «stato»; Valore: «letto»");
+    expect(element.querySelector(".recipe-fact")!.textContent).toContain("Sempre “Archivio/«bozza»”, qualunque nota tu abbia aperta.");
+  });
 });
 
 describe("il fuoco e le azioni", () => {
@@ -192,6 +215,26 @@ describe("il fuoco e le azioni", () => {
     press(document.activeElement!, "Escape");
     await expect(result).resolves.toBe("later");
     expect(box.host!.atGate("recipeAdopt")).toEqual([]);
+  });
+
+  it("con venti passi si apre dall'inizio, col fuoco su «Non ora» in fondo", async () => {
+    // Il browser porta in vista l'elemento che prende il fuoco, a meno di
+    // `preventScroll`: happy-dom non scorre, e il finto lo fa come il browser.
+    const focus = HTMLElement.prototype.focus;
+    const spy = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      focus.call(this, options);
+      const scroller = this.closest<HTMLElement>(".kit-dialog");
+      if (scroller && !options?.preventScroll) scroller.scrollTop = 900;
+    });
+    try {
+      const steps = Array.from({ length: 20 }, (_, i) =>
+        step("note.property.set", "Imposta proprietà", { doc: "{{doc}}", key: `campo-${i}`, value: "sì" }));
+      const { element } = await mount(archivia({ steps }));
+      expect(document.activeElement).toBe(action(element, "later"));
+      expect(element.scrollTop).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("«Accendi» manda l'impronta che la finestra ha mostrato", async () => {

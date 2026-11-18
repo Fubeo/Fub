@@ -221,7 +221,14 @@ describe("gli stati della sezione", () => {
     const many = Array.from({ length: 200 }, (_, i) => recipe(`r-${String(i).padStart(3, "0")}`, { status: "adottata", mounted: true, allowed: true }));
     const host = await start(many);
     const original = host.module.api.recipesList;
-    const limit: RecipeProblem = { code: "troppe", field: "", line: null, message: "Nella cartella ci sono 500 ricette: Fub legge le prime 200." };
+    // Il messaggio dell'host (`recipes.problem.troppe` di fub-features): l'host smette
+    // di leggere alla duecentunesima, e sa soltanto che sono «più di 200».
+    const limit: RecipeProblem = {
+      code: "troppe",
+      field: "",
+      line: null,
+      message: "Il vault ha più di 200 ricette: Fub legge soltanto le prime 200, in ordine di percorso.",
+    };
     host.module.api.recipesList = async (vault) => ({ ...(await original(vault)), problems: [limit] });
     const view = mountRecipesSection(lifetime, hooks);
     await view.show();
@@ -229,6 +236,26 @@ describe("gli stati della sezione", () => {
     expect(line.getAttribute("role")).toBe("status");
     expect(line.textContent).toBe(limit.message);
     expect(view.element.querySelectorAll(".recipe-list > .setting-row")).toHaveLength(200);
+  });
+
+  it("il banner con tante ricette da guardare ne mostra cinque e dice quante restano", async () => {
+    const waiting = Array.from({ length: 80 }, (_, i) => recipe(`r-${String(i + 1).padStart(2, "0")}`));
+    const { root } = await section(waiting);
+    const banner = $(root, ".settings-banner");
+    expect($(banner, ".setting-label").textContent).toBe("Il vault propone 80 ricette da guardare");
+    const rows = banner.querySelectorAll(".setting-row");
+    expect(rows).toHaveLength(5);
+    expect(rows[4]!.querySelector(".recipe-name")!.textContent).toBe("Ricetta r-05");
+    expect(banner.lastElementChild!.textContent).toBe("E altre 75 da guardare: le trovi nell'elenco qui sotto.");
+    // Le altre restano raggiungibili: ognuna ha il suo «Guarda» nell'elenco.
+    expect(buttons($(root, ".recipe-list"), "Guarda")).toHaveLength(80);
+  });
+
+  it("il banner con sei ricette da guardare le mostra tutte", async () => {
+    const { root } = await section(Array.from({ length: 6 }, (_, i) => recipe(`r-${i + 1}`)));
+    const banner = $(root, ".settings-banner");
+    expect(banner.querySelectorAll(".setting-row")).toHaveLength(6);
+    expect(banner.textContent).not.toContain("E altre");
   });
 
   it("il permesso spento a mano si dice sulla riga", async () => {
@@ -291,6 +318,41 @@ describe("l'avviso", () => {
     action.run();
     stop();
     expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it("con tante ricette da guardare ne nomina tre e conta le altre", async () => {
+    const waiting = Array.from({ length: 80 }, (_, i) => recipe(`r-${String(i + 1).padStart(2, "0")}`));
+    await start(waiting);
+    const notify = vi.fn();
+    const notices = watchRecipeNotices(notify);
+    lifetime.add(notices.stop);
+    await notices.atOpen();
+    expect(notify.mock.calls[0]![0]).toBe(
+      "Il vault propone 80 ricette da guardare: Ricetta r-01, Ricetta r-02, Ricetta r-03 e altre 77.",
+    );
+  });
+
+  it("con una sola ricetta oltre le tre la nomina, invece di dire «e altre 1»", async () => {
+    await start(Array.from({ length: 4 }, (_, i) => recipe(`r-${i + 1}`)));
+    const notify = vi.fn();
+    const notices = watchRecipeNotices(notify);
+    lifetime.add(notices.stop);
+    await notices.atOpen();
+    expect(notify.mock.calls[0]![0]).toBe(
+      "Il vault propone 4 ricette da guardare: Ricetta r-1, Ricetta r-2, Ricetta r-3, Ricetta r-4.",
+    );
+  });
+
+  it("un titolo lunghissimo nell'avviso si accorcia, col suo «…»", async () => {
+    const long = "Archivia ".repeat(30).trim();
+    await start([recipe("lunga", { title: long })]);
+    const notify = vi.fn();
+    const notices = watchRecipeNotices(notify);
+    lifetime.add(notices.stop);
+    await notices.atOpen();
+    const message: string = notify.mock.calls[0]![0];
+    expect(message.length).toBeLessThan(120);
+    expect(message).toMatch(/^Il vault propone una ricetta da guardare: Archivia .*…\.$/u);
   });
 
   it("una nota della cartella che cambia fa l'avviso una volta sola per ricetta", async () => {

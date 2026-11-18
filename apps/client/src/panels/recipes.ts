@@ -102,10 +102,41 @@ export function showRecipes(): boolean {
 /// Come l'avviso parla alla persona: la porta `notify` della sessione.
 export type RecipeNotify = (message: string, tone?: Tone, action?: NoticeAction) => void;
 
-/// L'avviso che nomina le ricette `fresh`, con «Guarda».
+/// Quante ricette l'avviso nomina: le altre le conta. Un avviso è una riga da
+/// leggere di passaggio, non un elenco; l'elenco intero è nella sezione.
+const NOTICE_NAMES = 3;
+
+/// Quante ricette da guardare il banner in cima alla sezione mostra con il loro
+/// «Guarda»: le altre stanno nell'elenco qui sotto, ognuna col suo.
+const BANNER_ROWS = 5;
+
+/// Quanti caratteri del titolo di una ricetta entrano nell'avviso: il titolo lo
+/// scrive chi ha fatto la ricetta, e può essere lungo quanto vuole.
+const NOTICE_TITLE_CHARS = 60;
+
+/// Le prime `max` voci, e quante ne restano. Se ne resterebbe una sola si
+/// mostra anche quella: il suo nome occupa quanto «e altre 1», e dice di più.
+function firstOf<T>(items: readonly T[], max: number): { shown: T[]; rest: number } {
+  if (items.length <= max + 1) return { shown: [...items], rest: 0 };
+  return { shown: items.slice(0, max), rest: items.length - max };
+}
+
+/// Un titolo accorciato a `max` caratteri (punti di codice, non metà di un
+/// carattere), con «…» se è stato tagliato.
+function shortTitle(title: string, max: number): string {
+  const chars = Array.from(title);
+  return chars.length <= max ? title : `${chars.slice(0, max - 1).join("").trimEnd()}…`;
+}
+
+/// L'avviso che nomina le ricette `fresh` (le prime tre, e quante altre), con
+/// «Guarda».
 function noticeFor(fresh: readonly RecipeInfo[], notify: RecipeNotify): void {
-  const names = fresh.map((recipe) => recipe.title).join(", ");
-  notify(plural(fresh.length, "recipes.notice.one", "recipes.notice", { names }), "info", {
+  const { shown, rest } = firstOf(fresh, NOTICE_NAMES);
+  const names = shown.map((recipe) => shortTitle(recipe.title, NOTICE_TITLE_CHARS)).join(", ");
+  const message = rest > 0
+    ? t("recipes.notice.more", { count: fresh.length, names, rest })
+    : plural(fresh.length, "recipes.notice.one", "recipes.notice", { names });
+  notify(message, "info", {
     label: t("recipes.action.look"),
     hint: t("recipes.notice.look.hint"),
     run: () => void showRecipes(),
@@ -401,7 +432,8 @@ export function mountRecipesSection(lifetime: Lifetime, hooks: RecipesSectionHoo
     heading.id = `${RECIPES_SECTION_ID}-banner`;
     box.setAttribute("aria-labelledby", heading.id);
     box.append(heading, el("span", "muted", t("recipes.banner.hint")));
-    for (const recipe of waiting) {
+    const { shown, rest } = firstOf(waiting, BANNER_ROWS);
+    for (const recipe of shown) {
       const row = el("div", "setting-row");
       const text = el("div", "setting-text");
       text.append(
@@ -415,6 +447,9 @@ export function mountRecipesSection(lifetime: Lifetime, hooks: RecipesSectionHoo
       row.append(text, control);
       box.append(row);
     }
+    // Le altre non spariscono: sono nell'elenco, segnate col loro stato e col
+    // loro «Guarda». Il banner dice quante sono, non le ripete.
+    if (rest > 0) box.append(el("span", "setting-description", t("recipes.banner.more", { count: rest })));
     return box;
   }
 

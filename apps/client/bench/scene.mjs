@@ -423,10 +423,21 @@ export const SCENE = onPage("shell", [
   },
   {
     id: "recipes-notice-limite",
-    title: "L'avviso con ottanta ricette da guardare: il nome di ognuna, in un avviso che copre la finestra",
+    title: "L'avviso con ottanta ricette da guardare: ne nomina tre e conta le altre",
     query: "recipes=limite",
     prepare: async (page) => {
       await page.waitForSelector('#toasts .toast:has-text("Il vault propone 80 ricette da guardare")');
+    },
+  },
+  {
+    id: "recipes-notice-dialog",
+    title: "L'avviso ancora aperto mentre si guarda una ricetta: sta sopra il velo della finestra, non sotto",
+    query: "recipes=piena",
+    prepare: async (page) => {
+      await page.waitForSelector('#toasts .toast:has-text("Il vault propone 2 ricette da guardare")');
+      await openRecipeWindow(page);
+      await page.waitForSelector(".recipe-dialog .recipe-try-list");
+      await page.waitForSelector("#toasts .toast");
     },
   },
   {
@@ -491,26 +502,35 @@ export const SCENE = onPage("shell", [
   },
   {
     id: "recipe-dialog-twenty",
-    title: "La ricetta con venti passi e una nota fissa: com'è la finestra quando si apre, in fondo",
+    title: "La ricetta con venti passi e una nota fissa: com'è quando si apre, dall'inizio, col fuoco su «Non ora»",
     query: "recipes=venti",
     prepare: async (page) => {
       await noticeOfOpening(page);
       await openRecipeWindow(page);
       await page.waitForSelector(".recipe-dialog .recipe-step:nth-child(20)");
       await page.waitForSelector(".recipe-dialog .recipe-try-list");
+      // Nessuno la riporta in cima: si apre così. Il fuoco su «Non ora», in
+      // fondo, non la fa scorrere.
+      const opened = await page.$eval(".recipe-dialog", (dialog) => ({
+        top: dialog.scrollTop,
+        focus: document.activeElement?.getAttribute("data-action") ?? null,
+      }));
+      if (opened.top !== 0 || opened.focus !== "later") {
+        throw new Error(`la finestra dei venti passi si apre scorsa a ${opened.top} px, col fuoco su ${opened.focus}`);
+      }
     },
   },
   {
-    id: "recipe-dialog-twenty-top",
-    title: "La ricetta con venti passi e una nota fissa: dall'inizio, col titolo e i primi passi",
+    id: "recipe-dialog-twenty-end",
+    title: "La ricetta con venti passi e una nota fissa: in fondo, coi fatti, la prova e le azioni",
     query: "recipes=venti",
     prepare: async (page) => {
       await noticeOfOpening(page);
       await openRecipeWindow(page);
       await page.waitForSelector(".recipe-dialog .recipe-step:nth-child(20)");
-      // La finestra scorre da sé: la si riporta in cima, com'è scritta.
+      await page.waitForSelector(".recipe-dialog .recipe-try-list");
       await page.$eval(".recipe-dialog", (dialog) => {
-        dialog.scrollTop = 0;
+        dialog.scrollTop = dialog.scrollHeight;
       });
     },
   },
