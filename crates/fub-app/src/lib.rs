@@ -998,27 +998,34 @@ async fn write_document(
 /// `base` è la revisione del file su cui il buffer sta lavorando — assente per
 /// una nota mai salvata — e la manda **chi ha il buffer**, perché è l'unico a
 /// sapere da quale lettura quel testo si è discostato.
+///
+/// Fuori dal thread principale, e senza il turno di scrittura del workspace
+/// (#485): la bozza parte anche mentre un salvataggio lento è in volo, e
+/// aspettarlo qui fermerebbe la finestra per tutta la sua durata. L'ordine
+/// delle bozze di un documento lo tiene la coda delle bozze della sessione,
+/// che non ne manda mai due insieme.
 #[tauri::command]
-fn save_draft(
-    host: State<Host>,
+async fn save_draft(
+    app: AppHandle,
     id: String,
     text: String,
     base: Option<String>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.save_draft(
-        vault.as_deref(),
-        &doc_id(&id)?,
-        &text,
-        base.map(Revision::new),
-    )
+    let id = doc_id(&id)?;
+    off_main(app, move |host| {
+        host.save_draft(vault.as_deref(), &id, &text, base.map(Revision::new))
+    })
+    .await
 }
 
 /// **Butta la bozza di un documento**: il buffer è tornato pulito, o l'utente ha
-/// scelto di scartare ciò che aveva recuperato.
+/// scelto di scartare ciò che aveva recuperato. Fuori dal thread principale
+/// come [`save_draft`], e nella stessa coda della sessione.
 #[tauri::command]
-fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
-    host.discard_draft(vault.as_deref(), &doc_id(&id)?)
+async fn discard_draft(app: AppHandle, id: String, vault: Option<String>) -> Result<(), PluginError> {
+    let id = doc_id(&id)?;
+    off_main(app, move |host| host.discard_draft(vault.as_deref(), &id)).await
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —

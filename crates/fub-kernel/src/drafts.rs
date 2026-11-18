@@ -90,7 +90,7 @@
 //! dato autorevole non si perde in silenzio, e qui il dato autorevole è il
 //! testo.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::Revision;
@@ -177,6 +177,53 @@ pub struct DraftRead {
 pub(crate) struct Drafts {
     dir: Utf8PathBuf,
     storage: Arc<dyn VaultStorage>,
+    /// Le mutazioni delle bozze una alla volta. La shell scrive le bozze
+    /// **senza** il turno di scrittura del workspace (#485: una bozza non
+    /// aspetta il salvataggio lento che deve coprire), mentre la rinomina le
+    /// migra sotto quel turno: senza questo lucchetto una bozza scritta a metà
+    /// di una migrazione potrebbe finire sotto il nome vecchio dopo che il
+    /// record si è spostato, o essere tolta insieme a lui. Lo si tiene solo
+    /// sul supporto delle bozze, mai attraverso codice esterno.
+    mutating: Mutex<()>,
+}
+
+/// Il lucchetto delle mutazioni delle bozze. Avvelenato vuol dire che un'altra
+/// mutazione è morta a metà: il supporto è atomico per file, quindi si va
+/// avanti invece di perdere anche questa bozza.
+fn mutating(lock: &Mutex<()>) -> MutexGuard<'_, ()> {
+    lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// La porta delle bozze di un vault, staccata dal workspace (#485).
+///
+/// Le bozze non toccano lo stato del workspace — né l'anagrafe, né gli
+/// indici, né gli eventi — quindi la shell le scrive e le butta senza il turno
+/// di scrittura: una bozza parte anche mentre un salvataggio lento tiene il
+/// turno, ed è l'unica copia del testo battuto nel frattempo. Le mutazioni
+/// restano in fila fra loro e con le migrazioni della rinomina (il lucchetto di
+/// [`Drafts`]).
+#[derive(Clone)]
+pub struct DraftPort {
+    drafts: Arc<Drafts>,
+    clock: Arc<dyn crate::time::Clock>,
+}
+
+impl DraftPort {
+    pub(crate) fn new(drafts: Arc<Drafts>, clock: Arc<dyn crate::time::Clock>) -> Self {
+        DraftPort { drafts, clock }
+    }
+
+    /// Scrive (o riscrive) la bozza di un documento: vedi
+    /// [`crate::workspace::Workspace::save_draft`].
+    pub fn save(&self, doc: &DocId, text: &str, base: Option<Revision>) -> std::io::Result<()> {
+        self.drafts.save(doc, text, base, self.clock.now_unix_millis())
+    }
+
+    /// Butta la bozza di un documento: vedi
+    /// [`crate::workspace::Workspace::discard_draft`].
+    pub fn discard(&self, doc: &DocId) -> std::io::Result<()> {
+        self.drafts.discard(doc)
+    }
 }
 
 impl Drafts {
@@ -184,6 +231,7 @@ impl Drafts {
         Drafts {
             dir: drafts_dir(root),
             storage,
+            mutating: Mutex::new(()),
         }
     }
 
@@ -233,6 +281,7 @@ impl Drafts {
         };
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
         let path = self.path(doc);
+        let _mutating = mutating(&self.mutating);
         // Ogni giro che non scrive ha spostato un record estraneo, che non
         // torna: il ciclo finisce quando al posto non ce n'è più nessuno.
         loop {
@@ -269,6 +318,7 @@ impl Drafts {
     /// fuori il lock dello scrittore del vault, preso dall'host all'apertura.
     pub(crate) fn discard(&self, doc: &DocId) -> std::io::Result<()> {
         let path = self.path(doc);
+        let _mutating = mutating(&self.mutating);
         if crate::error::optional(self.storage.stat(&path))?.is_none() {
             return Ok(());
         }
@@ -421,6 +471,7 @@ impl Drafts {
     pub(crate) fn migrate_tracked(&self, from: &DocId, to: &DocId) -> std::io::Result<DraftMove> {
         let old = self.path(from);
         let new = self.path(to);
+        let _mutating = mutating(&self.mutating);
         // Soltanto un «non c'è» del supporto vuol dire «niente da migrare»:
         // ogni altro errore lascerebbe la bozza sotto l'id morto con un Ok.
         if crate::error::optional(self.storage.stat(&old))?.is_none() {
@@ -467,6 +518,7 @@ impl Drafts {
             DraftMove::Moved => self.migrate(to, from),
             DraftMove::Recovered(recovery) => {
                 let old = self.path(from);
+                let _mutating = mutating(&self.mutating);
                 match self.storage.rename_no_replace(recovery, &old) {
                     Ok(()) => Ok(()),
                     // `from` ha ricevuto una bozza nuova nel frattempo: quella

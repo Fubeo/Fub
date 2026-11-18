@@ -6,6 +6,7 @@
 mod backup_restore_drill;
 mod command_service_lock;
 mod concurrency;
+mod draft_without_turn;
 mod event_handler_lock;
 mod flush_is_its_own_phase;
 mod format_source;

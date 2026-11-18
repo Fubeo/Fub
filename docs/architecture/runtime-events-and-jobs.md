@@ -177,6 +177,15 @@ verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
 
+Le bozze della shell non prendono il turno: non toccano anagrafe, indici né
+eventi, e una bozza che aspettasse il turno aspetterebbe proprio il salvataggio
+lento che deve coprire. `save_draft` e `discard_draft` prendono la porta delle
+bozze (`Workspace::draft_port`) con un prestito condiviso e scrivono fuori dal
+workspace; un lucchetto interno alle bozze le tiene in fila con le migrazioni
+della rinomina. Lato shell la `DocumentSession` ha due code, una per le
+scritture del file e una per le bozze: la regola è in
+[Frontend e IPC](frontend-and-ipc.md).
+
 ### Chi prende il turno per un comando
 
 Un comando di un provider (`Host::invoke_user_command` per l'utente,
