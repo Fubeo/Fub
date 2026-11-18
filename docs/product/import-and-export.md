@@ -221,6 +221,11 @@ formule, convalide, filtri e collegamenti fra fogli restano nella cartella, e
 i caratteri diventano quelli standard del PDF. L'anteprima di stampa della barra mostra
 invece la cartella com'è nella sessione, anche prima del salvataggio.
 
+Nella palette, **Anteprima…** di `xlsx.export-pdf` stampa il PDF in memoria e
+mostra lo stesso elenco, senza accodare niente. La cartella si sceglie
+dall'elenco del campo o si scrive per nome, con la regola di «Esporta una
+copia» dei [documenti di videoscrittura](word-documents.md#esportare-una-copia).
+
 ## Il formato Markdown
 
 Il provider Markdown offre due destinazioni: `markdown.files`, un file per
