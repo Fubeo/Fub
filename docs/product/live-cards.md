@@ -243,8 +243,9 @@ si vede il foglio attivo dalla sua prima cella usata. Solo un nome o una
 tabella seguono un intervallo che cresce: un intervallo scritto resta quello.
 
 - **A riposo** si vedono i valori salvati nel file: aprire la nota non
-  ricalcola e non scrive. Un valore che Fub non ha ricalcolato ha il filo a
-  puntini del foglio. La scheda è alta quanto le righe della parte (oltre
+  scrive (una formula che il file ha salvato senza valore si calcola soltanto
+  per mostrarla). Un valore che Fub non sa ricalcolare ha il filo a puntini
+  del foglio. La scheda è alta quanto le righe della parte (oltre
   sedici righe si scorre dentro), senza lettere né numeri.
 - **I colori** sono quelli del file portati sulla carta della nota (l'aspetto
   adattato, `theme/adapt.ts`): la tinta resta, la chiarezza cambia quanto

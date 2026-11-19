@@ -151,8 +151,11 @@ giornale. `crates/fub-format-xlsx/src/grid.rs` legge la cartella con il
 codec di GridCraft e dà le finestre che la shell mostra: per ogni cella
 l'input, il valore già scritto nel formato numerico del file, l'aspetto, il
 blocco e lo stato. I valori sono quelli salvati nel file, comprese le celle
-versate dalle matrici, e niente si ricalcola: una formula che legge una cella
-cambiata tiene il valore del file, segnato come vecchio.
+versate dalle matrici. Una formula che legge una cella cambiata, e una che il
+file ha salvato senza valore, prende il valore che le dà il motore di GridCraft
+(`crates/fub-format-xlsx/src/ricalcolo.rs`), e l'innesto lo salva come valore
+della formula; una formula che il motore non sa calcolare tiene il valore del
+file, segnato come vecchio.
 
 `apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre
 campo per campo e le trasforma nel modello che
