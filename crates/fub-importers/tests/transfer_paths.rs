@@ -10,8 +10,7 @@ use fub_abi::transfer::{
 };
 use fub_importers::pipeline::StagingManifest;
 use fub_importers::{
-    AppleImport, ArchiveImport, CsvExport, EnexImport, JsonImport, OneNoteImport, PdfExport,
-    TextpackImport,
+    AppleImport, ArchiveImport, CsvExport, EnexImport, JsonImport, OneNoteImport, TextpackImport,
 };
 use fub_importers::{ImportCommands, ImportPlugin};
 use fub_sdk::testing::MemoryHost;
@@ -558,127 +557,6 @@ fn csv_has_reversible_source_and_neutralizes_spreadsheet_formulas() {
         .iter()
         .any(|n| n.message.contains("spreadsheet-formula")));
     assert!(report.log.iter().any(|n| n.message.contains("tags")));
-}
-
-/// Il banco non parsa: il modello lo dà il parser vero del formato, come
-/// farebbe l'host.
-fn with_parsed(host: MemoryHost, doc: &str, source: &str) -> MemoryHost {
-    use fub_abi::format::{DocumentSource, FormatProvider, ParseContext};
-    let model = fub_format_markdown::MarkdownProvider
-        .parse(
-            &DocumentSource::Text(source.to_string()),
-            &ParseContext::obsidian(doc),
-        )
-        .unwrap();
-    host.with_document(doc, source).with_model(doc, model)
-}
-
-#[test]
-fn pdf_uses_valid_stream_length_and_explicit_glyph_warning() {
-    let host = with_parsed(MemoryHost::new(), "print.md", "Café 😀\n");
-    let mut sink = CollectSink::default();
-    let request = ExportRequest::new(
-        "importers.pdf.single",
-        ExportSelection::Documents(vec![fub_abi::model::DocId::new("print.md")]),
-    );
-    let report = PdfExport.export(&request, &host, &mut sink).unwrap();
-    let pdf = String::from_utf8_lossy(&sink.bytes);
-    assert!(pdf.starts_with("%PDF-1.4"));
-    assert!(pdf.contains("Caf\\351"));
-    assert!(report.log.iter().any(|n| n.message.contains("glyph")));
-    let length_start = pdf.find("/Length ").unwrap() + "/Length ".len();
-    let length_end = pdf[length_start..].find(' ').unwrap() + length_start;
-    let declared: usize = pdf[length_start..length_end].parse().unwrap();
-    let stream_start = pdf.find("stream\n").unwrap() + "stream\n".len();
-    let stream_end = pdf.find("endstream").unwrap();
-    assert_eq!(declared, stream_end - stream_start);
-}
-
-#[test]
-fn pdf_prints_the_model_the_format_read_not_a_markdown_guess() {
-    let source = "---\ntitle: Diario\n---\n\n# Oggi\n\n```\n# non un titolo\n```\n\n- [x] fatto\n";
-    let host = with_parsed(MemoryHost::new(), "note/oggi.markdown", source);
-    let mut sink = fub_abi::transfer::MemorySink::default();
-    let request = ExportRequest::new(
-        "importers.pdf",
-        ExportSelection::Documents(vec![fub_abi::model::DocId::new("note/oggi.markdown")]),
-    );
-    let report = PdfExport.export(&request, &host, &mut sink).unwrap();
-    assert_eq!(
-        report.artifacts[0].path, "note/oggi.pdf",
-        "l'estensione è quella del documento"
-    );
-    let fub_abi::transfer::ArtifactContent::Bytes(bytes) = &report.artifacts[0].content else {
-        panic!("in memoria l'artefatto porta i byte");
-    };
-    let pdf = String::from_utf8_lossy(bytes).into_owned();
-    assert!(pdf.contains("(note / oggi) Tj"), "{pdf}");
-    assert!(
-        pdf.contains("(title: Diario) Tj"),
-        "la proprietà viene dal modello"
-    );
-    assert!(pdf.contains("(OGGI) Tj"));
-    assert!(
-        pdf.contains("(# non un titolo) Tj"),
-        "il contenuto di un fence resta codice"
-    );
-    assert!(pdf.contains("([x] fatto) Tj"));
-}
-
-/// **Ogni nota ha il suo PDF** (difetto I18).
-///
-/// `Budget.md` e `Budget.markdown` sono due note, entrambe in un formato che il
-/// provider Markdown legge: togliendo l'estensione finivano tutte e due in
-/// `Budget.pdf`, e nella cartella dell'esito restava soltanto l'ultima.
-#[test]
-fn notes_with_the_same_stem_print_to_distinct_pdfs() {
-    // Nell'ordine in cui la selezione li restituisce.
-    let notes = [
-        ("Altro.md", "PRIMA"),
-        ("Budget.markdown.md", "SECONDA"),
-        ("Budget.md", "TERZA"),
-        ("budget.markdown", "QUARTA"),
-    ];
-    let host = notes.iter().fold(MemoryHost::new(), |host, (doc, text)| {
-        with_parsed(host, doc, &format!("{text}\n"))
-    });
-    let mut sink = fub_abi::transfer::MemorySink::default();
-    let request = ExportRequest::new(
-        "importers.pdf",
-        ExportSelection::Documents(notes.iter().map(|(doc, _)| DocId::new(*doc)).collect()),
-    );
-    let report = PdfExport.export(&request, &host, &mut sink).unwrap();
-
-    // Chi collide tiene la sua estensione; ciò che collide ancora prende il
-    // numero di D3. Chi non collide resta com'era.
-    let names = [
-        "Altro.pdf",
-        "Budget.markdown.pdf",
-        "Budget.md.pdf",
-        "budget.markdown 1.pdf",
-    ];
-    let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
-    assert_eq!(paths, [&names[..], &["index.txt"]].concat());
-    for (((_, text), name), artifact) in notes.iter().zip(names).zip(&report.artifacts) {
-        let fub_abi::transfer::ArtifactContent::Bytes(bytes) = &artifact.content else {
-            panic!("in memoria l'artefatto porta i byte");
-        };
-        let pdf = String::from_utf8_lossy(bytes);
-        assert!(
-            pdf.contains(&format!("({text}) Tj")),
-            "{name} is not the PDF of its note"
-        );
-        for (_, other) in notes.iter().filter(|(_, other)| other != text) {
-            assert!(
-                !pdf.contains(&format!("({other}) Tj")),
-                "{name} prints {other}"
-            );
-        }
-    }
-    let fub_abi::transfer::ArtifactContent::Bytes(index) = &report.artifacts[4].content else {
-        panic!("in memoria l'artefatto porta i byte");
-    };
-    assert_eq!(String::from_utf8_lossy(index), names.join("\n"));
 }
 
 #[test]

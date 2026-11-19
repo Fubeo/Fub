@@ -11,6 +11,8 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::event::Event;
+use fub_abi::model::DocId;
+use fub_abi::transfer::{ExportRequest, ExportSelection};
 use fub_abi::PluginError;
 use fub_features::pdf_export::command::{
     NS_RICHIESTA, PDF_EXPORT_LISTEN, PDF_EXPORT_NOTE, PDF_PROFILE_DEFAULT, PDF_PROFILE_SAVE,
@@ -174,4 +176,136 @@ fn con_l_app_aperta_la_richiesta_arriva_alla_shell_e_il_pdf_nel_vault() {
     }
     let pdf = std::fs::read(root.join("Dune.pdf")).expect("il PDF c'è");
     assert!(pdf.starts_with(b"%PDF-"));
+}
+
+/// `export.run` con un id del vecchio PDF di solo testo, come lo manda chi lo
+/// chiamava prima di T80 (un agente via MCP, uno script).
+fn esporta_col_vecchio(
+    host: &Host,
+    target: &str,
+    note: &[&str],
+    mode: InvokeMode,
+) -> Result<CommandEffect, PluginError> {
+    let request = ExportRequest::new(
+        target,
+        ExportSelection::Documents(note.iter().map(|doc| DocId::new(*doc)).collect()),
+    )
+    .with_options(json!({ "with_meta": true }));
+    host.invoke_user_command(
+        None,
+        "export.run",
+        json!({ "request_json": serde_json::to_string(&request).unwrap() }),
+        mode,
+    )
+    .map(|esito| esito.effect)
+}
+
+/// **I due id vecchi sono sinonimi di `pdf.export_note`** (T80): senza l'app
+/// rispondono lo stesso errore tipato del comando nuovo, anche in prova, e
+/// non scrivono niente.
+#[test]
+fn il_vecchio_pdf_senza_l_app_chiede_l_app_aperta() {
+    let (_dir, root) = vault();
+    let host = aperto(&root);
+    for target in ["importers.pdf.single", "importers.pdf"] {
+        for mode in [InvokeMode::Apply, InvokeMode::DryRun] {
+            let errore = esporta_col_vecchio(&host, target, &["Dune.md"], mode)
+                .expect_err("nessuno impagina");
+            assert!(
+                matches!(errore, PluginError::Unserved(_)),
+                "{target}: {errore:?}"
+            );
+        }
+    }
+    assert!(!root.join("Dune.pdf").exists());
+}
+
+/// Con l'app aperta il vecchio id fa ciò che fa il comando nuovo: la
+/// richiesta arriva alla shell col profilo della nota, e il PDF va accanto
+/// alla nota col suo nome, come faceva il vecchio esportatore.
+#[test]
+fn il_vecchio_pdf_con_l_app_aperta_passa_al_comando_nuovo() {
+    let (_dir, root) = vault();
+    let host = aperto(&root);
+    let eventi = host.subscribe(None).unwrap();
+    invoca(&host, PDF_EXPORT_LISTEN, json!({})).expect("la shell c'è");
+
+    // In prova: il piano del comando nuovo, nessuna richiesta alla shell.
+    let piano = esporta_col_vecchio(
+        &host,
+        "importers.pdf.single",
+        &["Dune.md"],
+        InvokeMode::DryRun,
+    )
+    .expect("il piano");
+    assert!(matches!(piano, CommandEffect::Plan(_)), "{piano:?}");
+
+    let CommandEffect::Custom { ns, payload } = esporta_col_vecchio(
+        &host,
+        "importers.pdf.single",
+        &["Dune.md"],
+        InvokeMode::Apply,
+    )
+    .expect("la richiesta parte") else {
+        panic!("il sinonimo risponde come il comando nuovo");
+    };
+    assert_eq!(ns, NS_RICHIESTA);
+    assert_eq!(payload["note"], "Dune.md");
+    assert_eq!(payload["target"], "Dune.pdf");
+    let richiesta = loop {
+        let notizia = eventi
+            .recv_timeout(Duration::from_secs(30))
+            .expect("la richiesta arriva alla shell");
+        if let Event::Custom { topic, payload } = notizia.event {
+            if topic == TOPIC_RICHIESTA {
+                break payload;
+            }
+        }
+    };
+    assert_eq!(richiesta["request"], payload["request"]);
+    assert_eq!(richiesta["note"], "Dune.md");
+
+    // `importers.pdf`, «un PDF per nota», con una nota sola è la stessa cosa.
+    let CommandEffect::Custom { ns, .. } =
+        esporta_col_vecchio(&host, "importers.pdf", &["Dune.md"], InvokeMode::Apply)
+            .expect("la richiesta parte")
+    else {
+        panic!("il sinonimo risponde come il comando nuovo");
+    };
+    assert_eq!(ns, NS_RICHIESTA);
+}
+
+/// Più note, o nessuna, sono un errore tipato che dice che cosa fare: il PDF
+/// di più note lo fa l'app («Esporta in PDF…» su una cartella), e da fuori si
+/// chiede una nota alla volta. Una nota che non c'è è il `NotFound` di sempre.
+#[test]
+fn il_vecchio_pdf_con_piu_note_o_nessuna_e_un_errore_tipato() {
+    let (_dir, root) = vault();
+    std::fs::write(root.join("Arrakis.md"), "# Arrakis\n").unwrap();
+    let host = aperto(&root);
+    invoca(&host, PDF_EXPORT_LISTEN, json!({})).expect("la shell c'è");
+    for target in ["importers.pdf.single", "importers.pdf"] {
+        let errore =
+            esporta_col_vecchio(&host, target, &["Dune.md", "Arrakis.md"], InvokeMode::Apply)
+                .expect_err("una nota alla volta");
+        assert!(
+            matches!(errore, PluginError::BadArgs(_)),
+            "{target}: {errore:?}"
+        );
+        assert!(errore.to_string().contains(PDF_EXPORT_NOTE), "{errore}");
+        let errore = esporta_col_vecchio(&host, target, &[], InvokeMode::Apply)
+            .expect_err("niente da esportare");
+        assert!(
+            matches!(errore, PluginError::BadArgs(_)),
+            "{target}: {errore:?}"
+        );
+    }
+    let errore = esporta_col_vecchio(
+        &host,
+        "importers.pdf.single",
+        &["Manca.md"],
+        InvokeMode::Apply,
+    )
+    .expect_err("la nota non c'è");
+    assert!(matches!(errore, PluginError::NotFound(_)), "{errore:?}");
 }

@@ -13,7 +13,9 @@ stampa).
 
 - Dal menu «…» del riquadro di una nota, «Esporta in PDF…». Su una nota
   Markdown la voce prende il posto di «Stampa», che sta nella barra dello
-  spazio; la lavagna tiene «Stampa».
+  spazio («Stampa…»); la lavagna tiene «Stampa».
+- Dallo stesso menu, «Esporta ▸ PDF…», accanto all'HTML: è il posto dove
+  stava il vecchio PDF di solo testo, che non c'è più.
 - Dallo spazio comandi (Ctrl O), «Esporta in PDF…»
   (`shell.doc.export_pdf`), sulla nota del riquadro attivo.
 - All'apertura la nota si salva; lo spazio copre il riquadro e la banda di
@@ -340,6 +342,13 @@ spazio non si apre:
 - se qualcosa va storto (la nota non si salva, l'impaginazione fallisce) un
   avviso dice quale nota e perché.
 
+Chi chiama ancora `export.run` con i due id del vecchio PDF di solo testo,
+`importers.pdf.single` e `importers.pdf`, non si rompe: con una nota sola la
+richiesta passa a `pdf.export_note` e risponde come lui (anche l'errore che
+chiede l'app aperta); più note, o nessuna, sono un errore che dice di
+chiederne una alla volta o di usare «Esporta in PDF…» su una cartella.
+L'opzione `with_meta` non ha più effetto: le proprietà le decide il profilo.
+
 ## Comportamenti
 
 - Mentre si trascina un controllo il profilo cambia «dal vivo»: le pagine si
@@ -359,3 +368,26 @@ spazio non si apre:
   pannello va sotto le pagine, la barra tiene solo indietro, profilo,
   stampa ed esporta, la banda solo pagine e formato. Con il moto ridotto lo
   spazio entra senza animazione.
+
+## Tempi
+
+L'impaginazione della vista, misurata con
+`node bench/interaction.mjs --only=impagina --rounds=5` in Chromium senza
+schermo, su note sintetiche di titoli, paragrafi, elenchi, tabelle e codice.
+Ogni numero è la mediana di cinque giri, fra parentesi il più basso e il più
+alto; il carico è quello di `uptime` su 20 thread (PC fisso, Intel 13600KF,
+2026-11-19). La resa del Markdown è compresa nella prima pagina: nell'app la
+fa il core.
+
+| Pagine | Prima pagina | Tutte | Pagina sotto gli occhi dopo i margini | Compito più lungo | Carico |
+|---|---|---|---|---|---|
+| 5 | 4,7 ms (4,1–6,7) | 4,9 ms (4,2–6,9) | 0,5 ms (0,4–0,7) | 0 ms | 15,6 |
+| 50 | 31,1 ms (30,2–35,8) | 32,6 ms (31,3–37,9) | 4,7 ms (4,5–5,1) | 0 ms | 15,6 |
+| 200 | 112,9 ms (110,1–125,2) | 121,6 ms (116,9–151,1) | 16,8 ms (9,3–19,4) | 109 ms (107–130) | 15,6 |
+
+Una seconda serie, col carico a 11, ha dato gli stessi numeri a meno di
+qualche millisecondo (200 pagine: tutte 127,7 ms, sotto gli occhi 16,2 ms).
+Il cambio di un colore non impagina di nuovo (0–0,1 ms in ogni giro). Il
+budget del banco è 100 ms per la pagina sotto gli occhi (`PAGINATION` in
+`apps/client/bench/interaction.mjs`). Su 200 pagine la prima impaginazione
+tiene la pagina occupata per un compito solo di circa 110 ms.

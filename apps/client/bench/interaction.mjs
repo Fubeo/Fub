@@ -54,6 +54,7 @@
 // sono quelli di una macchina di chi scrive.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { availableParallelism, loadavg } from "node:os";
 import { SCENE, chooseMode, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
@@ -528,7 +529,7 @@ async function measureSwitch(stage) {
 }
 
 /// Ciò che `measurePagination` fa nella pagina: impagina la nota sintetica
-/// e torna le mediane dei giri.
+/// e torna le mediane dei giri, col più basso e il più alto.
 const paginationProbe = async ({ target, rounds }) => {
   const { PrintPaginator } = await import("/src/export/paginate/slices.ts");
   const { A4 } = await import("/src/export/probe.ts");
@@ -638,6 +639,12 @@ const paginationProbe = async ({ target, rounds }) => {
     color: round1(median(samples.map((s) => s.color))),
     relayoutOnColor: samples.some((s) => s.relayout),
     longest: round1(median(samples.map((s) => s.longest))),
+    // Il giro più basso e il più alto accanto alla mediana: dicono quanto
+    // la misura balla sulla macchina di adesso.
+    spread: Object.fromEntries(["first", "final", "underEyes", "color", "longest"].map((key) => {
+      const values = samples.map((s) => s[key]);
+      return [key, [round1(Math.min(...values)), round1(Math.max(...values))]];
+    })),
   };
 };
 
@@ -664,6 +671,11 @@ const typing = !only || only.includes(TYPING.id);
 const opening = !only || only.includes(OPENING.id);
 const switching = !only || only.includes(SWITCH.id);
 await mkdir(REPORT, { recursive: true });
+/// Il carico della macchina (la media di un minuto, come `uptime`) prima e
+/// dopo: una misura presa sotto carico lo dice accanto ai numeri.
+const load = () => Math.round(loadavg()[0] * 10) / 10;
+const loadBefore = load();
+console.log(`carico ${loadBefore} su ${availableParallelism()} thread`);
 const stage = await openStage();
 const report = [];
 try {
@@ -769,17 +781,21 @@ try {
         console.log(`✗ ${row.id} — ${row.title}\n    non misurata: ${row.error}`);
         continue;
       }
+      const range = (key) => `${row.spread[key][0]}–${row.spread[key][1]}`;
       console.log(
         `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}${row.cpu > 1 ? ` (pagina ${row.cpu} volte più lenta)` : ""}\n` +
           `    prima pagina ${row.first} ms (di cui la resa del Markdown ${row.render} ms, nell'app la fa il core) · tutte ${row.final} ms · sotto gli occhi dopo i margini ${row.underEyes} ms (≤ ${row.budget.underEyes})` +
-          ` · colore ${row.color} ms${row.relayoutOnColor ? " (ha impaginato di nuovo!)" : ""} · compito più lungo ${row.longest} ms`,
+          ` · colore ${row.color} ms${row.relayoutOnColor ? " (ha impaginato di nuovo!)" : ""} · compito più lungo ${row.longest} ms\n` +
+          `    il più basso e il più alto dei giri: prima ${range("first")} · tutte ${range("final")} · sotto gli occhi ${range("underEyes")} · colore ${range("color")} · compito ${range("longest")} ms`,
       );
     }
   }
 } finally {
   await stage.close();
 }
-await writeFile(join(REPORT, "interazione.json"), `${JSON.stringify({ rounds, report }, null, 2)}\n`);
+const loadAfter = load();
+console.log(`carico ${loadAfter} alla fine`);
+await writeFile(join(REPORT, "interazione.json"), `${JSON.stringify({ rounds, load: { before: loadBefore, after: loadAfter, threads: availableParallelism() }, report }, null, 2)}\n`);
 const failed = report.filter((row) => !row.pass);
 console.log(`${report.length - failed.length}/${report.length} interazioni nel budget`);
 process.exit(failed.length > 0 ? 1 : 0);

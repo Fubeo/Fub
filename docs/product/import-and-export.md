@@ -159,7 +159,7 @@ destinazione **nuova**, fuori dal vault, col dialogo di sistema.
 
 - Gli artefatti si scrivono direttamente nella cartella scelta, senza il tetto
   di memoria dell'export di una nota sola. Un formato che produce un file solo
-  (il documento unico Markdown, un PDF unico) lo mette dentro quella cartella.
+  (il documento unico Markdown) lo mette dentro quella cartella.
 - Una cartella che esiste già non si sovrascrive mai, e una destinazione dentro
   il vault si rifiuta.
 - La cartella scelta si apre una volta e ogni file si crea, si rinomina e si
@@ -180,8 +180,8 @@ attività (vedi sotto).
 
 ## Esportare una nota
 
-Il menu del riquadro di una nota ha «Esporta come HTML» ed «Esporta come PDF
-(testo statico)», e «Esporta…» li offre nel launcher. Prima si salva la coda
+Il menu del riquadro di una nota ha «Esporta ▸ HTML…» e «PDF…»; «Esporta…»
+offre l'HTML nel launcher. Prima si salva la coda
 della nota; poi il core esegue l'export sul documento salvato e il file arriva
 al centro attività, da cui lo si salva dove si vuole.
 
@@ -194,10 +194,12 @@ al centro attività, da cui lo si salva dove si vuole.
   (`{==passo==}{>>messaggio<<}`) non entrano; con l'opzione
   `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
   passo e una nota in fondo alla pagina.
-- **PDF** (`importers.pdf.single`): il testo della nota in un PDF statico, col
-  nome della nota. Per diagrammi, formule e immagini c'è
-  [«Esporta in PDF…»](pdf-export.md), che mostra le pagine vere e le manda
-  alla stampa del sistema.
+- **PDF**: «PDF…» apre lo spazio [«Esporta in PDF»](pdf-export.md), con le
+  pagine vere, diagrammi, formule e immagini. Il vecchio PDF di solo testo
+  non c'è più: i suoi id (`importers.pdf.single`, `importers.pdf`) restano
+  sinonimi di `pdf.export_note` per chi li chiama con `export.run`, e non
+  sono più fra i formati di «Esporta il vault…» (più note in un PDF: tasto
+  destro su una cartella).
 
 Ciò che non entra lo dice il rapporto, con la nota a cui si riferisce: una
 parte che solo Fub disegna (un diagramma, una query, una vista), che

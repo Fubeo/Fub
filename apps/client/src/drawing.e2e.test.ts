@@ -707,6 +707,17 @@ describe("«Esporta…» su un disegno", () => {
     ]);
   });
 
+  it("«PDF…» di una nota apre lo spazio «Esporta in PDF», non il vecchio PDF di solo testo", async () => {
+    const host = await start(withExport());
+    await open("Benvenuto.md");
+    const { entries } = await exportEntries();
+    entries[1]!.click();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+    expect(requests(host)).toEqual([]);
+    document.querySelector<HTMLButtonElement>(".export-back")!.click();
+    expect(document.querySelector(".export-space")).toBeNull();
+  });
+
   it("senza `export.run` nel kernel non c'è", async () => {
     await start();
     await open("casa.svg");

@@ -188,6 +188,8 @@ controllo, e l'app impagina e scrive.
 - Senza l'app (il server tiene il vault da solo) è `unavailable`, con un
   testo che chiede di aprire il vault nell'app; anche in prova.
 - `pdf.profiles` con `note` dice i profili e quello che vale per la nota.
+- `export.run` coi vecchi id `importers.pdf.single` o `importers.pdf` su una
+  nota sola è lo stesso `pdf.export_note`; più note sono `bad_args`.
 
 ## Risorse
 

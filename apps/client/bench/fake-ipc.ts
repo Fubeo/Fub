@@ -368,6 +368,9 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
 /// quando servono, cioè dopo che il finto è nato.
 const BASE_PARAM = params.get("base");
 const BASE_IN_NOTE = BASE_PARAM === "nota";
+/// Il menu «Esporta» del riquadro (`?esporta-menu=1`, T80): c'è solo con
+/// `export.run` nel kernel, che il banco di solito non ha.
+const EXPORT_MENU = params.get("esporta-menu") === "1";
 const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
 const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
   ? baseFixture(() => ({
@@ -2677,6 +2680,8 @@ const options: Options = {
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
     ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
+    // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
+    ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
   settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
   syntaxForms: [...MARKDOWN_SYNTAX],
