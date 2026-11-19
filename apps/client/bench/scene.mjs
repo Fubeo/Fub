@@ -573,10 +573,14 @@ export const SCENE = touchLast(onPage("shell", [
   // pagine come usciranno su un fondo neutro, a destra le dieci sezioni
   // chiuse che dicono ciò che vale, in fondo la banda. A 700 px il pannello
   // va sotto le pagine; il telefono sta fra le scene di `mobile.html`.
+  // Con Tema e Colori aperte (T71): gli otto temi, gli undici colori con la
+  // riga dell'accento aperta (i tondi, il selettore, il codice), il
+  // contrasto e i due interruttori, come al passo 28 del prototipo.
   ...[
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» a 700 px: il pannello sotto le pagine", EXPORT_700],
-  ].map(([id, title, viewport]) => ({
+    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, true],
+  ].map(([id, title, viewport, themes]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
@@ -589,6 +593,7 @@ export const SCENE = touchLast(onPage("shell", [
       await openNote(page, "Guida/Sintassi di Fub.md");
       if (size) await page.setViewportSize(size);
       await openExportSpace(page);
+      if (themes) await openThemeSections(page);
     },
   })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
@@ -3160,6 +3165,21 @@ async function openExportSpace(page) {
   }, null, { timeout: 15_000 });
   // L'entrata dello spazio è finita, e il puntatore non sta su un controllo.
   await page.waitForFunction(() => document.querySelector(".export-space")?.getAnimations().length === 0);
+  await page.mouse.move(0, 0);
+}
+
+/// Apre le sezioni Tema e Colori dello spazio «Esporta in PDF» e la riga
+/// dell'accento, poi porta il pannello in cima.
+async function openThemeSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="colori"] .export-section-head');
+  await page.click("#export-color-accento");
+  await page.waitForSelector("#export-color-palette-accento");
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
   await page.mouse.move(0, 0);
 }
 
