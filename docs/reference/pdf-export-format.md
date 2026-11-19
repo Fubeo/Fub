@@ -138,34 +138,20 @@ maiuscole; un colore scritto male a mano nel file resta com'è, conta come
 scelta tua (lo si toglie con «torna al tema») ma non vale: la pagina usa
 quello del tema.
 
-### Due profili con lo stesso nome
+### Nomi uguali, file che non si leggono, versioni più nuove
 
-Copiando il file col gestore dei file nasce un secondo profilo col nome del
-primo. Fub li elenca tutti e due e dice che si chiamano uguale, così la vista
-mostra accanto il nome del file. Fub invece non crea né rinomina un profilo
-col nome di un altro: due nomi sono uguali se differiscono solo per le
-maiuscole o per gli spazi ai lati.
-
-### Un profilo che non si legge
-
-Un file che non è JSON, o non ha la forma di un profilo, o pesa più di
-256 KiB, resta nell'elenco col motivo e non si sostituisce: salvarci sopra
-risponde con l'errore e lascia il file com'era. La persona lo può togliere.
-
-### Un profilo di una versione più nuova
-
-Si legge per ciò che si conosce, e il resto si conserva:
-
-- le chiavi che questa versione non conosce, a ogni livello, restano com'erano
-  e si riscrivono uguali;
-- un valore a elenco che questa versione non conosce (un formato `B5`, un
-  tema nuovo) resta com'è; la vista usa quello di serie e può dire che il
-  profilo ha regolazioni che qui non si vedono.
-
-Il file di un profilo con `versione` più alta di 1 non si riscrive: salvare o
-rinominare risponde con l'errore. Una copia invece si fa, e porta con sé
-anche ciò che questa versione non capisce. Un profilo della versione 1 con un
-campo aggiunto da un Fub più nuovo si salva, e il campo resta.
+- **Nomi uguali.** Un file copiato col gestore dei file fa due profili con lo
+  stesso nome: Fub li elenca tutti e due, e la vista mostra accanto il nome
+  del file. Fub non crea né rinomina un profilo col nome di un altro; due nomi
+  sono uguali se differiscono solo per le maiuscole o per gli spazi ai lati.
+- **Un file che non si legge** (non è JSON, non ha la forma di un profilo,
+  pesa più di 256 KiB) resta nell'elenco col motivo; salvarci sopra risponde
+  con l'errore e lo lascia com'era.
+- **Una versione più nuova** si legge per ciò che si conosce: le chiavi
+  sconosciute, a ogni livello, si riscrivono uguali; un valore a elenco
+  sconosciuto (un formato `B5`, un tema nuovo) resta, e la vista usa quello
+  di serie. Con `versione` più alta di 1 il file non si riscrive (salvare o
+  rinominare è un errore), ma si copia, con tutto ciò che porta.
 
 ## I predefiniti
 
@@ -464,27 +450,23 @@ da sostituire). Il piano (`DryRun`) dice il PDF e le pagine e non accoda
 niente. Altrimenti accoda il lavoro `pdf.write_pages` e torna con l'effetto
 `fub.pdf.queued`, `{ "job_id": "<id>", "path": "<pdf>" }`: l'id è una stringa.
 
-Il lavoro riporta l'avanzamento una pagina per passo (`done` su `total`
-pagine), così il centro attività ne mostra la barra e lo sa annullare. Scrive
-il PDF in memoria e lo deposita nel vault **una volta sola, alla fine**: lo
-storage lo scrive in un file temporaneo e lo rinomina, quindi il file arriva
-intero o non arriva. Un lavoro annullato, scaduto o fallito non lascia
-nessun file; un disco pieno o una cartella in sola lettura sono l'errore
-della scrittura, e un PDF che si stava sostituendo resta quello di prima. La
-sostituzione confronta la revisione del PDF letta un attimo prima: una
-scrittura che arriva in mezzo è un conflitto, mai una sovrascrittura cieca.
-
+Il lavoro avanza una pagina per passo (`done` su `total`), così il centro
+attività ne mostra la barra e lo sa annullare. Deposita il PDF nel vault **una
+volta sola, alla fine**, con un file temporaneo rinominato: arriva intero o
+non arriva. Annullato, scaduto o fallito non lascia file; un disco pieno o una
+cartella in sola lettura sono l'errore della scrittura, e un PDF da sostituire
+resta quello di prima. La sostituzione confronta la revisione letta un attimo
+prima: una scrittura in mezzo è un conflitto, mai una sovrascrittura cieca.
 Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
 
 ### L'esportazione come comando
 
-`pdf.export_note` (`note`, `profile`, `target`, `replace`) esporta una nota
-senza lo spazio e vuole l'app: la shell rinnova ogni 30 s la sua presenza con
-`pdf.export_listen` (scade dopo 120 s). Senza presenza risponde `Unserved`,
-anche in prova; altrimenti manda l'evento `custom` `fub.draw:pdf.export` e
-torna con `fub.pdf.export_requested`. La shell (`export/headless.ts`) salva la
-nota, la impagina fuori dallo schermo e chiama `pdf.write_pages`, una
-richiesta alla volta.
+`pdf.export_note` (`note`, `profile`, `target`, `replace`) vuole l'app: la
+shell rinnova ogni 30 s la presenza con `pdf.export_listen` (scade dopo
+120 s); senza, risponde `Unserved`, anche in prova. Altrimenti manda l'evento
+`custom` `fub.draw:pdf.export` e torna con `fub.pdf.export_requested`; la shell
+(`export/headless.ts`) salva la nota, la impagina fuori dallo schermo con i
+fogli dello spazio (`export/decor.ts`) e chiama `pdf.write_pages`.
 
 ## Più note in un PDF
 

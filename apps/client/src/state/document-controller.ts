@@ -4277,7 +4277,8 @@ const printPdfPages: PdfPagesPorts = {
       await port.close();
     }
   },
-  load: loadPdf,
+  // Letto alla chiamata, non quando il modulo si carica.
+  load: (...args) => loadPdf(...args),
 };
 
 const printVaultFonts: VaultFontSource = {

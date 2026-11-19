@@ -242,8 +242,10 @@ export async function paginateOffscreen(options: OffscreenOptions, pipeline?: Pi
       inFlight--;
       // Arrivato senza niente da rimisurare (nessuna proprietà, un PDF che
       // non si legge): l'ultima impaginazione finale vale. Dopo il `then`
-      // del Contenuto, che può chiedere di rimisurare.
-      window.setTimeout(() => settle(), 0);
+      // del Contenuto, che può chiedere di rimisurare. Il timer lo spegne
+      // `dispose`.
+      window.clearTimeout(settleTimer);
+      if (!done) settleTimer = window.setTimeout(() => settle(), 0);
     });
   };
   const content = new p.ExportContent({
