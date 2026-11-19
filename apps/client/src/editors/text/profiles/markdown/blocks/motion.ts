@@ -20,7 +20,7 @@
 // scorrimento, fuori dal contenuto. Ogni gesto ha la sua frase nella regione
 // viva. La posa di un blocco finisce lì: nessun alone, nessun colore dopo.
 import { type ChangeSet, type EditorState, type Extension, type Range, StateEffect, StateField, type Text } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, layer, type LayerMarker, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { type BlockInfo, BlockType, Decoration, type DecorationSet, EditorView, layer, type LayerMarker, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { animate, halt, liveState, motionLevel, prepareExit, springValue, stagger, STAGGER_MAX, type Ghost, type Motion, type Pose, type SpringValue } from "../../../../../moto";
 import { openLifetime } from "../../../../../ui/lifetime";
 import { softCursor } from "../../../soft-cursor";
@@ -825,6 +825,19 @@ class SelectedMarker implements LayerMarker {
 /// vista: chi c'era già non rientra.
 const lastSelected = new WeakMap<EditorView, ReadonlySet<number>>();
 
+/// Dove sta una riga, in alto e in basso, dall'inizio del documento. Un
+/// widget di blocco che sostituisce la riga (una scheda viva) dice da sé
+/// dove sono i suoi bordi (`coordsAtPos`, cioè `WidgetType.coordsAt`): la
+/// riga di CodeMirror ne comprende anche l'aria intorno, che il velo non
+/// copre.
+function rowExtent(view: EditorView, row: BlockInfo): { top: number; bottom: number } {
+  if (row.type === BlockType.WidgetRange) {
+    const box = view.coordsAtPos(row.from, 1);
+    if (box && box.bottom > box.top) return { top: box.top - view.documentTop, bottom: box.bottom - view.documentTop };
+  }
+  return { top: row.top, bottom: row.bottom };
+}
+
 /// I riquadri dei blocchi selezionati in vista, dall'inizio della prima riga
 /// alla fine dell'ultima e larghi quanto il contenuto; chi entra ora entra
 /// uno dopo l'altro.
@@ -852,8 +865,8 @@ export function selectedMarkers(view: EditorView): readonly LayerMarker[] {
     for (const index of siblingsOf(blocks, run.first).filter((i) => i >= run.first && i <= run.last)) {
       const block = blocks[index]!;
       if (block.to < view.viewport.from || block.from > view.viewport.to) continue;
-      const first = view.lineBlockAt(Math.max(block.from, view.viewport.from));
-      const last = view.lineBlockAt(Math.min(block.to, view.viewport.to));
+      const first = rowExtent(view, view.lineBlockAt(Math.max(block.from, view.viewport.from)));
+      const last = rowExtent(view, view.lineBlockAt(Math.min(block.to, view.viewport.to)));
       now.add(block.from);
       const delay = before.has(block.from) || reduced ? null : Math.min(fresh++, STAGGER_MAX - 1) * EACH_MS;
       out.push(new SelectedMarker(block.from, left + inset, top + first.top, width, last.bottom - first.top, delay));

@@ -22,6 +22,12 @@
   line-height: 1.4;
   transition: box-shadow 0.15s;
 }
+/* Il posto della scheda nella Scrittura: `flow-root` tiene dentro i margini
+   della scheda, così l'altezza che CodeMirror misura (il bordo dell'elemento
+   del widget, margini esclusi) è quella vera, e le righe sotto non salgono. */
+.cm-fub-live-card-slot {
+  display: flow-root;
+}
 /* Il filo, sopra il corpo: la specie disegna fino al bordo. */
 .live-card::after {
   position: absolute;
