@@ -26,6 +26,7 @@ import { transformKeymap } from "./blocks/transform";
 import { commentSource } from "./comments/source";
 import type { NoteFactsExtensions } from "./note-facts";
 import { italianTypography } from "./typography";
+import { taskRecurrence, type NextOccurrence } from "./task-toggle";
 
 const typography = Prec.high(EditorView.theme({
   ".cm-content": {
@@ -152,6 +153,9 @@ export interface MarkdownProfileOptions {
   /// La riga dei dati sotto il titolo: in Scrittura (coi Blocchi la mette
   /// la testata), mai in Sorgente. Senza, la riga non c'è.
   readonly noteFacts?: NoteFactsExtensions;
+  /// La regola della ricorrenza dei compiti (`task-toggle.ts`): senza, la
+  /// spunta di un compito `🔁` non fa nascere il successivo.
+  readonly nextOccurrence?: NextOccurrence;
 }
 
 export interface MarkdownProfile {
@@ -208,6 +212,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         previewOn && blocks !== null ? blocks : [],
         previewOn && options.noteFacts ? [options.noteFacts.field, blocks === null ? options.noteFacts.live : []] : [],
         markdownCompletions(options.completions),
+        options.nextOccurrence ? taskRecurrence.of(options.nextOccurrence) : [],
         proof,
       ];
     },

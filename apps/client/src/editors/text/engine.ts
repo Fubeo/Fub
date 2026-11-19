@@ -533,7 +533,10 @@ export class TextEngine {
   public runCommand(command: StateCommand): boolean {
     if (this.disposed || this.readOnlyEnabled) return false;
     try {
-      return command({ state: this.view.state, dispatch: (transaction) => this.view.dispatch(transaction) });
+      // `state` è letto a ogni accesso: un comando che scrive dopo un'attesa
+      // (la spunta di un compito ricorrente) rilegge lo stato di allora.
+      const view = this.view;
+      return command({ get state() { return view.state; }, dispatch: (transaction) => view.dispatch(transaction) });
     } catch {
       return false;
     }

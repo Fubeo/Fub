@@ -58,7 +58,7 @@ use fub_abi::traits::{
 };
 use serde::{Deserialize, Serialize};
 
-mod recurrence;
+pub(crate) mod recurrence;
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
 pub const COMMANDS_ID: &str = "fub.commands";

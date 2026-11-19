@@ -51,7 +51,18 @@ qualunque altro. Un compito già fatto (`- [x]`) non compare.
 
 Un compito ricorrente (`🔁 every week`, e le altre forme del plugin Tasks)
 mostra la sua scadenza, come è scritta nella nota. Quando lo si spunta, la riga fatta resta nella
-nota e la successiva nasce sopra di lei, come fa il plugin Tasks.
+nota e la successiva nasce sopra di lei, come fa il plugin Tasks. Vale da
+qualunque punto lo si spunti: la vista dei compiti, un recinto ```` ```tasks ````,
+il dialogo dei promemoria, e nella nota la casella (in Scrittura e in Lettura),
+la voce «Fatto» del menu del compito e `Ctrl+Invio`.
+
+Nella nota la spunta è una modifica del testo aperto, non una scrittura del
+file: l'editor chiede la riga successiva al componente dei compiti (la stessa
+regola di `note.task.toggle`, dal canale dati) e scrive spunta e riga nuova
+insieme, come una battuta. Si salvano con il resto della nota, e un solo
+`Ctrl+Z` le toglie tutte e due. Togliere la spunta non cancella la riga nata.
+Se il componente dei compiti è spento la casella si spunta lo stesso, senza
+riga nuova.
 
 ## Come si spunta
 
