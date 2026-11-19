@@ -1944,3 +1944,4 @@ L'utente ha approvato: dal 2026-11-17 i task finiti non hanno più una PR comple
 - 2026-11-19 · T70 · Su una nota Markdown «Esporta in PDF…» prende il posto di «Stampa» nel menu «…» (tetto di 9 voci); «Stampa…» resta dentro lo spazio.
 - 2026-11-19 · T77a · Comando pdf.write_pages e lavoro nel bundle fub.draw (un bundle a parte voleva una cargo feature e cambi alla CI): spegnere «Disegni» spegne anche il PDF delle note; il nome del lavoro nel centro attività lo dà T77b/T70 (oggi l'id grezzo).
 - 2026-11-19 · fuori piano · Storia di annulla: Word e testo a 10.000 passi (prima 100, scartavano in silenzio). Lavagna (100) e foglio (100) hanno lo stesso schema: da provare come perdita.
+- 2026-11-19 · T70 · Finché un task non collega lo scrittore (T77a), «Esporta» passa dalla stampa di sistema con un avviso; due eccezioni di conformità (inchiostro su accento, vassoio --sheet-2).

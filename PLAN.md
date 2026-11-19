@@ -3243,7 +3243,7 @@ Fatto quando: un e2e apre lo spazio, cambia vista e torna; le foto del banco
 nelle due luci, a 700 px e al telefono.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] in corso · coder · base 449255484
+Stato: [x] integrato in integra/editor-2 (900a1143e)
 
 ## T71 · Temi e colori
 
@@ -3275,7 +3275,7 @@ Fatto quando: test dei temi e del contrasto; un test che il colore cambia
 solo variabili; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 900a1143e
 
 ## T72 · Caratteri e pagina
 
@@ -3468,7 +3468,7 @@ Fatto quando: un test della struttura dei tag; un controllo PDF/A sul file
 `Stato`).
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base e53505383
 
 ## T78 · Più note in un PDF
 
