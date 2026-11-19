@@ -14,7 +14,9 @@ flowchart LR
 ```
 
 Le proprietà delle note restano nelle note. Il file `.base` dice soltanto quali
-note vedere e come mostrarle.
+note vedere e come mostrarle. Una Base elenca note, mai i file `.base`: né il
+suo, anche quando sta nella cartella che filtra, né quello di un'altra Base,
+qualunque sia il filtro (lo decide `derive`, in `crates/fub-features/src/base.rs`).
 
 ## Che cosa contiene un file
 
@@ -345,13 +347,17 @@ modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (
 «+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa,
 Calendario, Linea del tempo. La vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
 **eredita il filtro e le colonne** della vista aperta; una bacheca prende come
-corsie il raggruppamento della vista aperta, la sua prima colonna che è una
-proprietà o, se non ne mostra, la prima proprietà delle note dichiarata Stato
-e poi Selezione nel registro dei tipi, una mappa le coordinate della vista aperta o le proprietà `lat` e
+corsie il raggruppamento della vista aperta, la prima proprietà delle note
+dichiarata Stato e poi Selezione nel registro dei tipi o, fra le colonne della
+vista e poi le proprietà delle note, la prima di testo (o lista) con pochi
+valori nelle note della vista: al più 12, con almeno una corsia di due note;
+se nessuna ne ha così pochi, quella che ne ha meno. Mai una data, un numero o
+una casella. Una mappa prende le coordinate della vista aperta o le proprietà `lat` e
 `lon` (`latitude`/`longitude`) delle righe, un calendario la data della vista
-aperta o la prima proprietà delle righe che ha per valori delle date (la
+aperta o la proprietà data che più note della vista hanno (la
 linea del tempo la prende come inizio, e la seconda come fine). Senza
-corsie, senza coordinate o senza date la voce è spenta e dice perché. Sono
+corsie, senza coordinate o senza date la voce è spenta e dice perché. Le
+corsie e la data scelte così si cambiano poi dalla testa della vista (sotto). Sono
 più scritture, una chiave per volta come ogni gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`
 scrive `filters`, `order` e, se servono, `group`, `map`, `date` o `start` ed `end`, ognuna con la
 revisione. Un filtro che la Base non sa ridire (un valore lista, per esempio)
@@ -365,6 +371,18 @@ arrivata da un menu di un piano che non c'è più non scrive niente.
 
 Una vista tolta da un'altra finestra mentre è aperta lascia il posto alla
 vista ricordata o alla prima del file.
+
+### Le corsie della bacheca
+
+Sopra le corsie, «Corsie per» dice la proprietà del raggruppamento e la
+cambia: il menu offre le colonne della vista e poi le proprietà delle note,
+tranne le date. Sceglierne una scrive `group` (`{ key: … }`) con
+`base.view.set`, come lo scriverebbe la mano; le corsie vuote aggiunte dalla
+bacheca erano della proprietà di prima e non restano. Una bacheca il cui file
+non dice `group` lo scrive al posto delle corsie e offre la stessa scelta. In
+sola lettura e in una Base dentro una nota il menu mostra la proprietà ma è
+spento. La data del calendario si cambia allo stesso modo dalla sua testa
+([Il calendario della Base](bases-calendar.md)).
 
 ### Il menu della colonna
 

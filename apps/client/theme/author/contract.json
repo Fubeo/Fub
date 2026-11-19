@@ -1175,6 +1175,10 @@
     "base-kanban",
     "base-kanban-column",
     "base-kanban-card",
+    "base-kanban-head",
+    "base-kanban-empty",
+    "base-view-key",
+    "base-view-key-select",
     "base-calendar",
     "base-cal-head",
     "base-cal-title",
@@ -3604,6 +3608,10 @@
     "base-kanban": "contenuto",
     "base-kanban-column": "contenuto",
     "base-kanban-card": "contenuto",
+    "base-kanban-head": "contenuto",
+    "base-kanban-empty": "contenuto",
+    "base-view-key": "contenuto",
+    "base-view-key-select": "contenuto",
     "base-calendar": "contenuto",
     "base-cal-head": "contenuto",
     "base-cal-title": "contenuto",
@@ -7755,7 +7763,11 @@
       "hooks": [
         "base-kanban",
         "base-kanban-column",
-        "base-kanban-card"
+        "base-kanban-card",
+        "base-kanban-head",
+        "base-kanban-empty",
+        "base-view-key",
+        "base-view-key-select"
       ],
       "states": [
         "rest",
@@ -12603,7 +12615,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2427,
+    "hooks": 2431,
     "state_names": 7,
     "assigned_states": 1087,
     "components": 322,
