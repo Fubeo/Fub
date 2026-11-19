@@ -63,7 +63,21 @@ apposta), e nel suo
 [`README.md`](../../tests/fixtures/prova-obsidian-schede/README.md) i passi
 e che cosa guardare per ogni specie.
 
-**Esito: da provare.** La prova con Obsidian non è ancora stata fatta: per
-ogni specie l'esito (incorporata nella nota, link o errore) si scrive qui
-quando c'è. Una specie che Obsidian non incorpora resta un link nel file, e
-in Fub è comunque una scheda.
+**Esito** (Obsidian 1.13.7 su Linux, modalità di lettura, 2026-11-19):
+
+| Specie | In Obsidian |
+|---|---|
+| PDF intero, PDF `#page=1` | incorporato, col visore a pagine |
+| Passo di PDF (`#page=1&selection=…`) | incorporato; il passo è evidenziato |
+| Foglio intero, intervallo, misura `\|640x300` | riquadro col nome del file: nessuna anteprima, la misura non cambia niente |
+| Valore di una cella in una frase | riquadro col nome del file su una riga sua, la frase si spezza: niente numero |
+| ODT, DOCX | riquadro col nome del file |
+| SVG di Fub, SVG di un altro programma | immagine; senza fondo, il testo nero si legge male col tema scuro |
+| Lavagna (`.canvas`) | incorporata, con le schede e i fili |
+| File di un'app Craft, ZIP | riquadro col nome del file |
+| File che manca | «"Contratto vecchio.pdf" could not be found.» |
+| `[!columns]` | due riquadri «Column» uno sotto l'altro, non affiancati |
+
+Nessuna specie dà un errore: quello che Obsidian non sa mostrare resta il
+riquadro col nome del file, e un clic lo apre. Il testo della nota non
+cambia, e in Fub ogni embed resta una scheda.
