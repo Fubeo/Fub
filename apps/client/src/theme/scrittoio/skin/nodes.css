@@ -391,6 +391,27 @@ h6.ui-heading {
 .ui-table .ui-empty-cell {
   color: var(--muted);
 }
+/* Una tabella di bottoni è una griglia di giorni: le colonne sono uguali (lo
+   dice la struttura) e strette, quindi la cella cede il suo rientro e il
+   bottone sta nella cella invece di allargarla. Una testata più lunga della
+   colonna si tronca con i puntini invece di sovrapporsi alla vicina. */
+.ui-table:has(td > .ui-button) th,
+.ui-table:has(td > .ui-button) td {
+  padding: var(--space-2) var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-table td:has(> .ui-button) {
+  text-align: center;
+}
+.ui-table td > .ui-button {
+  /* Tondo quando la colonna ha posto, più stretto quando non ne ha. */
+  min-width: min(2.5em, 100%);
+  max-width: 100%;
+  padding-right: var(--space-1);
+  padding-left: var(--space-1);
+}
 
 /* ── Schede ──────────────────────────────────────────────────────────────── */
 

@@ -268,6 +268,7 @@ export interface MarkdownSurface extends BufferedSurface {
   setTheme(theme: Theme): void;
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertReferences(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  caretAt(at: SurfacePoint): boolean;
   anchorHere(): SurfaceAnchor | null;
   readonly scrollLink: SurfaceScrollLink;
   mountPresentation(host: HTMLElement): () => void;
@@ -2522,6 +2523,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const text = references.map(markdownReference).join("\n");
       return at ? engine.insertAtPoint(at.x, at.y, text) : engine.insertAtCursor(text);
     },
+    // In lettura il testo a schermo non è quello dell'editor: niente cursore.
+    caretAt: (at) => mode !== "reading" && engine.caretAtPoint(at.x, at.y),
     mountPresentation(host) {
       // In lettura la resa è già a schermo, embed compresi: se ne porta una
       // copia. Negli altri modi si rende il buffer corrente.

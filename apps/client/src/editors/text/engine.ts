@@ -820,6 +820,19 @@ export class TextEngine {
     return this.view.posAtCoords({ x, y });
   }
 
+  /// Mette il cursore sotto un punto dello schermo, come un clic nel testo, e
+  /// non dà il fuoco. Un punto oltre l'ultima riga vale la posizione più
+  /// vicina; uno fuori dal riquadro dell'editor (la testata di una scheda
+  /// della lavagna) non tocca niente e rende `false`.
+  public caretAtPoint(x: number, y: number): boolean {
+    if (this.disposed) return false;
+    const box = this.view.scrollDOM.getBoundingClientRect();
+    if (box.width === 0 || x < box.left || x > box.right || y < box.top || y > box.bottom) return false;
+    const at = this.view.posAtCoords({ x, y }, false);
+    this.view.dispatch({ selection: { anchor: at }, scrollIntoView: true, userEvent: "select.pointer" });
+    return true;
+  }
+
   /// Inserisce testo nel punto dello schermo dove qualcosa è stato lasciato
   /// cadere, come battuta dell'utente; il cursore va dopo il testo. Fuori dal
   /// testo (oltre l'ultima riga) vale la posizione più vicina.

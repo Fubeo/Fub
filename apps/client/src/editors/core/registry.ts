@@ -712,6 +712,12 @@ export interface EditorSurface {
    * write now (read-only, closed).
    */
   insertReferences?(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  /**
+   * Puts the cursor under `at` (client coordinates), as a click in the text
+   * would, without focusing. `false`, changing nothing, when the point is not
+   * on the editable text (outside the editor, or in a reading mode).
+   */
+  caretAt?(at: SurfacePoint): boolean;
   /** Mounts the document rendered for a presentation into `host`; returns its teardown. */
   mountPresentation?(host: HTMLElement): () => void;
   /**

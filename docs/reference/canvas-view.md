@@ -107,7 +107,12 @@ sono spenti.
 - **Il doppio tocco** di un dito nel vuoto (entro 300 ms e 24 px) mette lì
   una scheda di testo già in scrittura, come il doppio clic; sopra una
   scheda, un filo o un controllo no. Il doppio clic del mouse ha la stessa
-  regola: su una porta o su un filo non mette niente (IMP-053).
+  regola: su una porta o su un filo non mette niente (IMP-053). La scheda
+  ha l'angolo in alto a sinistra nel punto, sulla griglia; se lì coprirebbe
+  un'altra scheda va al posto libero più vicino (`nearFreeSpot`, come
+  «Aggiungi testo»), così non nasconde quelle accanto (IMP-3808). Vale anche per il clic
+  dello strumento Testo e per «Aggiungi qui › Testo» del tasto destro. La scheda che nasce collegata
+  (Collega nel vuoto, Ctrl+Maiusc+Invio) resta dove dice il filo.
 - **Dalla tastiera** «Menu radiale» (`canvas.radial`, in fondo al menu del
   tasto destro nel vuoto: `Maiusc+F10`) lo apre al centro della vista, col
   fuoco sulla prima voce; col mouse nel punto del clic.

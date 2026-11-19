@@ -3838,7 +3838,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     ).toEqual([]);
     expect(Object.keys(host.files())).toContain("Benvenuto.md");
     // E chi guarda lo sa: il rifiuto è una frase, non un gesto che non fa niente.
-    expect(document.body.textContent).toContain("Benvenuto.md non è sul disco");
+    expect(document.body.textContent).toContain("Le ultime modifiche di Benvenuto.md non sono ancora salvate");
 
     repair();
   });

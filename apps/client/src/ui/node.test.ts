@@ -946,6 +946,43 @@ describe("controlli statici e righe valide", () => {
     const host = mount({ node: "row", cells: [], action: null } as UiNode);
     expect(host.querySelectorAll("tr > td")).toHaveLength(1);
   });
+
+  it("una tabella ridisegnata tiene ogni cella nella sua colonna, senza una seconda griglia", () => {
+    // IMP-4801: il mese della Scrivania, al secondo disegno, aveva i bottoni dei
+    // giorni attaccati alla riga fuori dalle celle, accanto a quelle vecchie.
+    const day = (n: number, intent: "neutral" | "primary" = "neutral"): UiNode =>
+      ({ node: "button", label: String(n), intent, action: { action: "giorno", payload: n }, key: `d${n}` }) as UiNode;
+    const table = (today: number): UiNode =>
+      ({
+        node: "table",
+        columns: [{ title: "lun", align: "center" }, { title: "mar", align: "center" }],
+        rows: [
+          { node: "row", key: "w1", action: null, cells: [day(1, today === 1 ? "primary" : "neutral"), day(2, today === 2 ? "primary" : "neutral")] },
+          { node: "row", key: "w2", action: null, cells: [day(8), { node: "text", text: "" }] },
+        ],
+      }) as UiNode;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, table(1), async () => {});
+    const firstRow = host.querySelector("tbody > tr");
+    mountTree(host, table(2), async () => {});
+    const rows = Array.from(host.querySelectorAll("tbody > tr"));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(Array.from(row.children).map((c) => c.tagName)).toEqual(["TD", "TD"]);
+    }
+    expect(host.querySelectorAll("button")).toHaveLength(3);
+    // La riga si riusa, e la cella porta il disegno nuovo.
+    expect(host.querySelector("tbody > tr")).toBe(firstRow);
+    expect(host.querySelector('[data-key="d2"]')!.className).toContain("primary");
+    // Una riga che perde celle le perde davvero, una che ne prende le prende.
+    mountTree(host, {
+      node: "table",
+      columns: [{ title: "lun", align: "center" }],
+      rows: [{ node: "row", key: "w1", action: null, cells: [day(1)] }],
+    } as UiNode, async () => {});
+    expect(Array.from(host.querySelectorAll("tbody > tr > *")).map((c) => c.tagName)).toEqual(["TD"]);
+  });
 });
 
 describe("le voci di una lista", () => {

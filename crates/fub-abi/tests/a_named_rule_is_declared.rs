@@ -478,6 +478,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
         (
+            "crates/fub-kernel/src/locale.rs::language_base",
+            (
+                Family::AsciiCase,
+                "prende la lingua di un tag BCP 47 (`it-IT` → `it`) per sapere se la lingua \
+                 scelta è quella del sistema, e se il primo giorno della settimana del sistema \
+                 vale anche per lei (IMP-4801). I sottotag BCP 47 sono ASCII e non badano al \
+                 maiuscolo per definizione (RFC 5646 §2.1.1): non è il nome di una nota, di un \
+                 tag Fub o di un path.",
+            ),
+        ),
+        (
             "crates/fub-format-markdown/src/render.rs::html_tag",
             (
                 Family::AsciiCase,

@@ -298,17 +298,38 @@ pub fn resolve(system: &Locale, mut setting: impl FnMut(&str) -> Option<String>)
         _ => system.utc_offset_minutes,
     };
 
+    // Il primo giorno della settimana del sistema la shell lo legge dalla
+    // **lingua del sistema**: con un'altra lingua scelta dall'utente non è più
+    // il suo (un sistema `en-US` con Fub in italiano darebbe la domenica a chi
+    // legge in italiano). Il kernel non ha un ICU per sapere quello della
+    // lingua scelta, quindi tiene il suo default, il lunedì di ISO 8601, come
+    // fa la shell quando il motore non lo sa: sbagliato al più in modo
+    // dichiarato, e la chiave `locale.first-day-of-week` resta per decidere.
+    let system_first_day = if language_base(&language) == language_base(&system.language) {
+        system.first_day_of_week
+    } else {
+        Weekday::default()
+    };
+
     Locale {
         language,
         timezone: timezone.unwrap_or_else(|| system.timezone.clone()),
         utc_offset_minutes,
         first_day_of_week: selected(FIRST_DAY, &mut setting)
             .and_then(|v| weekday_from_key(&v))
-            .unwrap_or(system.first_day_of_week),
+            .unwrap_or(system_first_day),
         hour_cycle: selected(HOUR_CYCLE, &mut setting)
             .and_then(|v| hour_cycle_from_key(&v))
             .unwrap_or(system.hour_cycle),
     }
+}
+
+/// La lingua senza regione né varianti, in minuscolo: `it-IT` → `it`.
+fn language_base(tag: &str) -> String {
+    tag.split(['-', '_'])
+        .next()
+        .unwrap_or(tag)
+        .to_ascii_lowercase()
 }
 
 /// Il valore di `locale.first-day-of-week` → il giorno. Ignoto = `None`, e chi
@@ -372,6 +393,24 @@ mod tests {
         assert_eq!(r.timezone, "America/New_York");
         assert_eq!(r.utc_offset_minutes, -300);
         assert_eq!(r.hour_cycle, HourCycle::H12);
+    }
+
+    /// IMP-4801: un sistema in inglese americano e Fub in italiano. La
+    /// domenica è il primo giorno della lingua del sistema, non di quella
+    /// scelta: chi legge in italiano comincia dal lunedì.
+    #[test]
+    fn another_language_does_not_inherit_the_system_first_day() {
+        let r = resolve(&system_state(), store(&[(LANGUAGE, "it")]));
+        assert_eq!(r.first_day_of_week, Weekday::Monday);
+        // La stessa lingua con un'altra regione è ancora quella del sistema.
+        let r = resolve(&system_state(), store(&[(LANGUAGE, "EN-gb")]));
+        assert_eq!(r.first_day_of_week, Weekday::Sunday);
+        // Chi sceglie il giorno lo ottiene con qualsiasi lingua.
+        let r = resolve(
+            &system_state(),
+            store(&[(LANGUAGE, "it"), (FIRST_DAY, "sunday")]),
+        );
+        assert_eq!(r.first_day_of_week, Weekday::Sunday);
     }
 
     #[test]
