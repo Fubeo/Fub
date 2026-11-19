@@ -2896,8 +2896,11 @@ export const IT = { // --- la scocca -------------------------------------------
 // il documento né una bozza: chi legge deve sapere che è ancora soltanto qui.
 "document.close_unprotected":
   "Chiusura annullata: {docs} non si è potuto salvare né mettere in bozza, e il testo esiste soltanto in questa finestra. Riprova quando il disco risponde, oppure copialo altrove.",
+// Il file c'è: sono le ultime modifiche a non esserci ancora. «{doc} non è sul
+// disco» si leggeva come un file sparito (IMP-4806), e la ragione nominava uno
+// spostamento anche quando il gesto era un comando che non sposta niente.
 "document.unsaved_blocks":
-  "{doc} non è sul disco: l'operazione si ferma qui, perché spostare il file lascerebbe indietro il testo non salvato.",
+  "Le ultime modifiche di {doc} non sono ancora salvate: l'operazione si ferma qui, così il file resta com'è e il testo non salvato non va perso. Riprova quando il salvataggio è finito.",
 // Dice **che non è stato scritto niente**, e non è un dettaglio tecnico: è la
 // sola frase che distingue questo caso da «non ci sono riuscito», e senza di
 // essa chi legge crede di aver perso il proprio testo.

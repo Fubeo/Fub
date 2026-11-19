@@ -2776,7 +2776,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "document.close_unprotected":
   "Close cancelled: {docs} could not be saved or kept as a draft, and the text exists only in this window. Try again when the disk responds, or copy it elsewhere.",
 "document.unsaved_blocks":
-  "{doc} is not on disk: the operation stops here, because moving the file would leave the unsaved text behind.",
+  "The latest changes to {doc} are not saved yet: the operation stops here, so the file stays as it is and the unsaved text is not lost. Try again once saving has finished.",
 "document.save_conflict":
   "“{doc}” changed on disk since you opened it: nothing was written, and your edits are still here. Choose which text to keep in the bar above the note.",
 "document.conflict_none": "No conflict to resolve for this document.",
