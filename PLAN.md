@@ -3358,7 +3358,7 @@ tabella continua con l'intestazione); un commento in una cella.
 Fatto quando: un test per voce; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 49709f452
 
 ## T75 · Diagrammi e formule in vettoriale
 
