@@ -186,6 +186,23 @@ function script(state: MathState, map: FormulaMap, mark: "^" | "_"): Outcome {
   return put(state, `${mark}{}`, 2);
 }
 
+/// Il segno che chiude un esponente o un pedice scritto col suo tasto, come
+/// nel LaTeX e nella scrittura lineare di Word: `x^2+y^2` è `x^{2}+y^{2}`, e
+/// lo spazio esce anche lui. `x^10` resta `x^{10}`.
+const SCRIPT_ENDERS = new Set([" ", "+", "-", "=", "<", ">", ","]);
+
+/// Dove andare prima di scrivere `ch` alla fine di un esponente o di un
+/// pedice già pieno: subito dopo, o `null` se il segno ci resta dentro.
+export function leaveScript(state: MathState, ch: string): number | null {
+  if (!SCRIPT_ENDERS.has(ch)) return null;
+  const map = mapFormula(state.tex);
+  const around = enclosing(map, state.caret);
+  if (!around || around.atom.kind !== "script" || around.span.to !== state.caret) return null;
+  if (around.span.from === around.span.to) return null;
+  const out = exit(map, state.caret);
+  return out.kind === "move" ? out.caret : null;
+}
+
 /// Un tasto che scrive un segno. Le graffe non si scrivono a mano (restano in
 /// pari): `}` esce dal pezzo. I segni speciali del TeX entrano col loro
 /// comando; `*` è il punto della moltiplicazione; `\` comincia un comando, che

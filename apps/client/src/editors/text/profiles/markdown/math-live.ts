@@ -17,7 +17,7 @@
 // «Posto» nei tre puntini e il tasto destro (T65) passano una formula da riga
 // a blocco e indietro (`math/place.ts`), e la riaprono nel posto nuovo.
 import { syntaxTree } from "@codemirror/language";
-import { Annotation, type ChangeDesc, type EditorState, type Extension, Facet, Prec } from "@codemirror/state";
+import { Annotation, type ChangeDesc, type EditorState, type Extension, Facet, Prec, StateField } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { errorText } from "../../../../host/errors";
 import { api } from "../../../../host/ipc";
@@ -75,6 +75,41 @@ export function blockTex(source: string): string {
 /// Dove sta il TeX di un blocco `$$` che comincia in `from`: fra i dollari,
 /// senza gli spazi e gli a capo che lo circondano. Un blocco vuoto
 /// (`$$\n\n$$`) ha il TeX sulla riga dopo i dollari d'apertura.
+/// Il blocco `$$` che si sta scrivendo a mano nella nota, dall'inizio della
+/// sua riga: finché il cursore ci resta dentro si scrive come testo, con la
+/// chiusura `$$` e tutto, invece di passare a metà parola alla formula da
+/// toccare, che prenderebbe i tasti come scrittura di formule (IMP-719). Il
+/// blocco si disegna quando il cursore ne esce.
+const typedBlock = StateField.define<number | null>({
+  create: () => null,
+  update(value, transaction) {
+    const { state } = transaction;
+    let at = value;
+    if (at !== null && transaction.docChanged) at = transaction.changes.mapPos(at, 1);
+    if (transaction.docChanged && transaction.isUserEvent("input.type")) {
+      let dollar = false;
+      transaction.changes.iterChanges((_fa, _ta, _fb, _tb, inserted) => {
+        if (inserted.toString().includes("$")) dollar = true;
+      });
+      const line = state.doc.lineAt(state.selection.main.head);
+      if (dollar && /^[ \t]*\$\$/.test(line.text)) at ??= line.from;
+    }
+    if (at === null) return null;
+    const { head } = state.selection.main;
+    if (state.selection.ranges.length > 1 || head < at) return null;
+    const range = blockTexRange(state, at);
+    const close = range ? state.sliceDoc(range.to).indexOf("$$") : -1;
+    const end = range && close >= 0 ? range.to + close + 2 : state.doc.lineAt(at).to;
+    return head <= end ? at : null;
+  },
+});
+
+/// Il blocco `$$` che comincia in `from` si sta scrivendo a mano: resta testo.
+export function typingMathBlock(state: EditorState, from: number): boolean {
+  const at = state.field(typedBlock, false);
+  return at !== undefined && at !== null && state.doc.lineAt(from).from === at;
+}
+
 export function blockTexRange(state: EditorState, from: number): { from: number; to: number } | null {
   const text = state.sliceDoc(from, Math.min(state.doc.length, from + 200_000));
   // Prima dei dollari soltanto il rientro: in una citazione o in un elenco
@@ -622,7 +657,10 @@ class MathPlugin {
     if (reason === "before" || reason === "up") {
       if (from === 0) return;
       view.dispatch({ selection: { anchor: from - 1 }, scrollIntoView: true, userEvent: "select" });
-    } else if (end >= view.state.doc.length) {
+    } else if (end >= view.state.doc.length
+      // Chiuso scrivendo `$$`: si continua a scrivere, e una riga che c'è già
+      // non va presa (il testo le finirebbe davanti): ne nasce una vuota.
+      || (reason === "close" && view.state.doc.lineAt(end + 1).length > 0)) {
       view.dispatch({ changes: { from: end, insert: "\n" }, selection: { anchor: end + 1 }, scrollIntoView: true, userEvent: "input" });
     } else {
       view.dispatch({ selection: { anchor: end + 1 }, scrollIntoView: true, userEvent: "select" });
@@ -785,6 +823,7 @@ export function mathPopovers(lookup: FormulaLookup): Extension {
   };
   return [
     formulaLookup.of(lookup),
+    typedBlock,
     mathPlugin,
     mathClicks,
     theme,
