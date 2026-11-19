@@ -62,6 +62,12 @@ pub use fub_host::{
     BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
+/// I tipi degli appunti GTK senza proprietario, che fanno morire WebKitGTK:
+/// il `gtk_clipboard_request_targets` che l'eseguibile esporta (`main.rs`)
+/// chiama [`appunti_gtk::gtk_clipboard_request_targets`].
+#[cfg(target_os = "linux")]
+#[doc(hidden)]
+pub mod appunti_gtk;
 mod avvio;
 #[cfg(feature = "bench-gc")]
 mod bench_gc;
@@ -3243,6 +3249,8 @@ pub fn run() {
     log_the_webview(webview);
     #[cfg(target_os = "linux")]
     vblank::scrivi_nel_log(&vblank);
+    #[cfg(target_os = "linux")]
+    appunti_gtk::scrivi_nel_log();
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
             tracing::info!(

@@ -2,9 +2,11 @@
 
 > **Domanda:** come sceglie Fub il percorso di disegno di WebKitGTK, che cosa
 > dice all'utente quando il driver è un problema e come la pagina supera i
-> 60 Hz dove WebKit lo permette?
+> 60 Hz dove WebKit lo permette? Che cosa ripara Fub degli appunti di
+> WebKitGTK?
 > **Fonti autorevoli:** `crates/fub-app/src/disegno.rs`,
 > `crates/fub-app/src/frame_rate.rs`, `crates/fub-app/src/vblank.rs`,
+> `crates/fub-app/src/appunti_gtk.rs`,
 > `crates/fub-app/src/main.rs`, `crates/fub-app/build.rs`,
 > `crates/fub-app/src/lib.rs` (`run`),
 > `crates/fub-host/src/settings.rs` (`appearance.rendering`),
@@ -229,12 +231,46 @@ EGL, con due attese di fotogramma per fotogramma), e lo sfarfallio non è
 stato guardato: numeri e condizioni in
 [Il vblank emulato su NVIDIA](../misure/2026-11-17-linux-vblank-emulato.md#la-proposta).
 
+## Gli appunti senza proprietario
+
+Quando la pagina legge i tipi degli appunti (`clipboardData.types` di un
+`paste` nativo, cioè Ctrl+V in qualsiasi campo, CodeMirror compreso)
+WebKitGTK li chiede nel processo dell'app con
+`gtk_clipboard_request_targets`. Se la richiesta fallisce, per esempio su
+X11 quando nessun programma possiede gli appunti (una sessione appena
+aperta, o il programma che aveva copiato è stato chiuso), GTK 3 risponde
+con i tipi `NULL` e il loro numero `-1`. WebKitGTK 2.54 non controlla il
+segno e il processo dell'app muore di SIGSEGV: la finestra sparisce e il
+log non scrive niente. Il processo web non c'entra, e nessun controllo in
+JavaScript lo evita: il `paste` arriva, e muore il primo che ne legge i
+tipi.
+
+Come per il vblank, l'eseguibile `fub` esporta un suo
+`gtk_clipboard_request_targets` (`main.rs`, `build.rs`), e la logica sta in
+`appunti_gtk.rs`: chiama sempre quello di GTK (`dlsym(RTLD_NEXT)`), e della
+risposta cambia solo il numero, che diventa 0 quando GTK dice che non ci
+sono tipi. Per WebKit sono appunti vuoti: Ctrl+V non incolla niente e Fub
+resta aperta. I tipi che ci sono passano come sono. Vale per ogni appunto
+GTK del processo, selezione primaria compresa, e non ha interruttore né
+intervallo di versioni, perché «0 tipi» è per ogni chiamante la stessa cosa
+del fallimento.
+
+La sonda: su uno schermo virtuale senza nessun proprietario degli appunti
+(`xvfb-run`, `GDK_BACKEND=x11`), Ctrl+V in una nota, o in un `textarea`
+qualsiasi della pagina, faceva morire la sessione WebDriver («Session
+terminated without a reply», uscita 139); con la correzione la pagina
+risponde e il `paste` vede `types` vuoto. Quando WebKitGTK controllerà il
+numero negativo in una release, la sonda dirà se la correzione si può
+togliere.
+
 ## Come si verifica
 
 - La riga `WebKitGTK emulated vblank` dice se l'emulazione è attiva o
   perché no (`Spenta`, `VersioneFuori`, `VersioneIgnota`, `NonInterposta`);
   `WebKitGTK emulated vblank for CRTC` dice, quando WebKit crea il monitor,
   per quale CRTC e a che frequenza (`emulata_mhz`, 0 se resta il driver).
+- La riga `GTK clipboard targets guard` dice con `interposta` se WebKit
+  chiamerà il `gtk_clipboard_request_targets` di Fub.
 
 - La riga del log `rendering path chosen before GTK` dice che cosa è stato
   scelto.
