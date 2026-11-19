@@ -4,17 +4,12 @@
 > profili d'esportazione, i predefiniti e la memoria d'esportazione di ogni
 > nota), l'elenco delle pagine che la vista passa al core, e i comandi e il
 > lavoro che scrivono il PDF.
-> **Fonti autorevoli:** `crates/fub-features/src/pdf_export/profile.rs`,
-> `crates/fub-features/src/pdf_export/command.rs` (predefiniti, profili ed
-> esportazione come comando),
-> `crates/fub-features/src/pdf_export/memory.rs`,
-> `crates/fub-features/src/pdf_export/aperta.rs`,
-> `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
-> `crates/fub-features/src/pdf_export/writer.rs` (lo scrittore),
-> `crates/fub-features/src/pdf_export/tags.rs` (la struttura del PDF
-> accessibile), `crates/fub-features/src/pdf_export/pdfa.rs` (il PDF/A),
-> `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro),
-> `crates/fub-features/src/pdf_export/book.rs` (più note in un PDF).
+> **Fonti autorevoli:** in `crates/fub-features/src/pdf_export/`,
+> `profile.rs`, `command.rs` (predefiniti, profili ed esportazione come
+> comando), `memory.rs`, `aperta.rs`, `mod.rs` (l'elenco), `writer.rs` (lo
+> scrittore), `tags.rs` (la struttura del PDF accessibile), `pdfa.rs` (il
+> PDF/A), `lavoro.rs` (comando e lavoro), `book.rs` (più note in un PDF);
+> `crates/fub-importers/src/export_pdf.rs` (i sinonimi dei vecchi id).
 
 L'esportazione non scrive niente nella nota. Le regolazioni stanno nello
 spazio dati `fub.draw` del vault, quello del bundle dei disegni che porta i
@@ -160,8 +155,8 @@ profilo sparito lascia il posto al livello dopo, e «Di serie» toglie il file.
 Una `versione` più alta di 1 si legge e non si riscrive. I comandi
 (`fub.draw`): `pdf.profiles` (con `note`, anche `effective`: `id` e `from`),
 `pdf.profile_save`, `pdf.profile_copy`, `pdf.profile_rename` e
-`pdf.profile_default` (`scope` `vault` o `type`); la forma degli argomenti e
-degli effetti sta nelle loro spec (`pdf_export/command.rs`).
+`pdf.profile_default` (`scope` `vault` o `type`); argomenti ed effetti
+nelle loro spec (`pdf_export/command.rs`).
 
 ## La memoria di una nota
 
@@ -466,6 +461,11 @@ shell rinnova ogni 30 s la presenza con `pdf.export_listen` (scade dopo
 `custom` `fub.draw:pdf.export` e torna con `fub.pdf.export_requested`; la shell
 (`export/headless.ts`) salva la nota, la impagina fuori dallo schermo con i
 fogli dello spazio (`export/decor.ts`) e chiama `pdf.write_pages`.
+
+I vecchi id `importers.pdf.single` e `importers.pdf` restano sinonimi:
+`export.run` con una nota sola ne invoca `pdf.export_note` e ne torna l'esito;
+più note o nessuna sono `BadArgs`, senza il comando `Unserved`. Non sono più
+destinazioni registrate, e `with_meta` si ignora.
 
 ## Più note in un PDF
 
