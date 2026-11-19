@@ -19,4 +19,9 @@ export interface ProofPorts {
   /// Chiama `changed` quando la configurazione può essere cambiata: un'impostazione,
   /// la lingua dell'interfaccia, un vault riaperto. Torna come smettere.
   watch(changed: () => void): () => void;
+  /// Il motore ha risposto che sulla macchina manca il dizionario Hunspell
+  /// `dictionary` (`it_IT`) della lingua `language` (`it`): l'ortografia non
+  /// si controlla, restano le regole grammaticali. Il client lo dice una volta
+  /// sola per dizionario finché l'app è aperta.
+  missingDictionary?(dictionary: string, language: string): void;
 }

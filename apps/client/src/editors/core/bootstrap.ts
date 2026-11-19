@@ -256,7 +256,20 @@ function proofPorts(vault: string | null | undefined): ProofPorts {
       ];
       return () => stops.forEach((stop) => stop());
     },
+    missingDictionary: (dictionary, language) => notify(t("proof.missing_dictionary", { language: languageName(language), dictionary }), "info"),
   };
+}
+
+/// Il nome di una lingua nella lingua dell'interfaccia, come un valore che
+/// comincia con la maiuscola: `it` → «Italiano».
+function languageName(code: string): string {
+  let name = code;
+  try {
+    name = new Intl.DisplayNames([resolvedLanguage()], { type: "language" }).of(code) ?? code;
+  } catch {
+    // Un codice che `Intl` non conosce resta il codice.
+  }
+  return name.charAt(0).toLocaleUpperCase(resolvedLanguage()) + name.slice(1);
 }
 
 const PLAIN_TEXT_MODES = [

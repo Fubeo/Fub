@@ -1003,6 +1003,10 @@ fn un_documento_nuovo_nasce_vuoto_si_apre_e_si_salva() {
     assert_eq!(revision, Revision::of_bytes(&bytes));
     let mut projection = Projection::from_json(&text).unwrap();
     assert!(texts(&projection).iter().all(String::is_empty));
+    // Nasce nella lingua di chi lo crea, non in inglese: il correttore
+    // controlla ciò che vi si scrive in italiano (IMP-615).
+    let lang = projection.lang.clone().unwrap_or_default();
+    assert!(lang == "it" || lang.starts_with("it-"), "{lang}");
 
     // Una modifica si salva sul file nato dal comando, e si rilegge.
     projection.blocks = vec![paragraph("Prima riga.")];

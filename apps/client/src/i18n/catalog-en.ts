@@ -579,6 +579,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "proof.add_word_failed": "Could not add «{word}» to the dictionary: {reason}",
 "proof.ignore": "Ignore",
 "proof.ignore_here": "Ignore in this note",
+"proof.missing_dictionary": "A proofing language has no dictionary on this computer: {language} ({dictionary}). Without it, proofing marks grammar but not typos. Install the Hunspell dictionary for the language (from your package manager, or LibreOffice's) and restart Fub.",
 "grid.surface": "Spreadsheet",
 "grid.a11y.superficie": "Spreadsheet",
 "grid.workbook.macros": "The workbook's macros do not run, and stay in the file as they are.",
