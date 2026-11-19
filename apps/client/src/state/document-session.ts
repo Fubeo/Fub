@@ -1555,6 +1555,45 @@ export class DocumentSessionCollection implements DraftBufferStore {
     session.restoreDraft(text, base);
   }
 
+  /**
+   * Le bozze che hanno ancora qualcosa da dire: una bozza con lo **stesso
+   * testo** del file sul disco non protegge niente, e si toglie (IMP-1801).
+   *
+   * Succede quando l'app si chiude mentre un salvataggio è in volo: il file ha
+   * già il testo nuovo, ma la bozza porta la revisione di prima, e le sole
+   * impronte (`base` diversa da `current`) la fanno sembrare un conflitto a
+   * ogni apertura. Qui si confrontano i testi, che la risposta delle bozze non
+   * porta: si legge il file di ogni bozza di una nota che c'è, e sono poche
+   * (ciò che un crash ha lasciato). Una lettura che non riesce, un testo
+   * diverso o una sessione già aperta su quel documento tengono la bozza: si
+   * toglie soltanto ciò che il disco ha già, byte per byte. Uno scarto che non
+   * riesce tiene la bozza fuori dal recupero di adesso, perché il disco ha lo
+   * stesso testo; alla prossima apertura si riprova.
+   */
+  async withoutSuperseded(drafts: DraftInfo[]): Promise<DraftInfo[]> {
+    const vault = this.#currentVault();
+    const checked = await Promise.all(drafts.map(async (draft) => {
+      if (!draft.exists || this.#sessions.has(draft.doc)) return draft;
+      let disk: string;
+      try {
+        disk = (await this.#api.readDocument(draft.doc, ...vaultArg(vault))).text;
+      } catch {
+        return draft;
+      }
+      if (disk !== draft.text) return draft;
+      // Nel frattempo il documento si è aperto, o il vault è cambiato: la
+      // decisione non vale più per questa bozza.
+      if (this.#sessions.has(draft.doc) || this.#currentVault() !== vault) return draft;
+      try {
+        await this.#api.discardDraft(draft.doc, ...vaultArg(vault));
+      } catch {
+        // Lo scarto è pulizia: il testo è già sul disco.
+      }
+      return null;
+    }));
+    return checked.filter((draft): draft is DraftInfo => draft !== null);
+  }
+
   rejoin(drafts: DraftInfo[]): DraftInfo[] {
     const rejoined = rejoinDrafts(drafts, this);
     for (const draft of rejoined) this.#sessions.get(draft.doc)?.scheduleSave();

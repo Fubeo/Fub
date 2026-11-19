@@ -88,7 +88,7 @@ describe("la spunta di un compito ricorrente nella nota", () => {
     expect(asked[0]!.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const done = `# Scadenze\n\n${F24_NEXT}\n- [x] F24 mensile 🔁 every month 📅 2026-11-16\n`;
     expect(ed.buffer.getDoc()).toBe(done);
-    expect(changes.at(-1), "la sessione riceve spunta e riga come una battuta").toBe(done);
+    expect(changes[changes.length - 1], "la sessione riceve spunta e riga come una battuta").toBe(done);
 
     expect(ed.undo()).toBe(true);
     expect(ed.buffer.getDoc(), "un solo passo della cronologia").toBe(`# Scadenze\n\n${F24}\n`);
