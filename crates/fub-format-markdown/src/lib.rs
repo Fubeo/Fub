@@ -895,7 +895,8 @@ mod tests {
     /// Un commento che dice altro resta com'era.
     #[test]
     fn a_page_break_comment_turns_the_page_only_on_paper() {
-        let source = "Prima.\n\n<!-- pagina -->\nDopo.\n\n<!--pagina-->\n\n<!-- pagina, forse -->\n";
+        let source =
+            "Prima.\n\n<!-- pagina -->\nDopo.\n\n<!--pagina-->\n\n<!-- pagina, forse -->\n";
         let model = parse(source);
         let render = |target| {
             MarkdownProvider::new()
@@ -918,7 +919,11 @@ mod tests {
             )),
             "print: {print}"
         );
-        assert_eq!(print.matches("data-page-break").count(), 2, "print: {print}");
+        assert_eq!(
+            print.matches("data-page-break").count(),
+            2,
+            "print: {print}"
+        );
         assert!(print.contains("Dopo."), "il blocco dopo resta suo: {print}");
         assert!(print.contains("pagina, forse"), "print: {print}");
         assert!(
@@ -931,7 +936,10 @@ mod tests {
         ] {
             let html = render(target);
             assert!(!html.contains("page-break"), "{target:?}: {html}");
-            assert!(!html.contains("&lt;!-- pagina --&gt;"), "{target:?}: {html}");
+            assert!(
+                !html.contains("&lt;!-- pagina --&gt;"),
+                "{target:?}: {html}"
+            );
             assert!(!html.contains("&lt;!--pagina--&gt;"), "{target:?}: {html}");
             assert!(html.contains("pagina, forse"), "{target:?}: {html}");
         }
