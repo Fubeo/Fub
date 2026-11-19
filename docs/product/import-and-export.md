@@ -48,11 +48,54 @@ sono. Ogni parte è un import con la sua anteprima e la sua ricevuta:
 - «Annulla l'import» toglie le parti entrate, dall'ultima alla prima.
 
 L'importer degli archivi tratta ogni voce da sola, e il nome nel vault viene
-dal suo path: dividere non cambia ciò che entra. Due voci che diventano lo
+dal suo path: dividere non cambia ciò che entra. L'eccezione è l'export di
+Notion, che si legge per intero (vedi sotto). Due voci che diventano lo
 stesso nome in parti diverse seguono la scelta sui conflitti, come una nota
 che c'è già. Una voce più grande di una parte (oltre 32 MiB decompressa) non
 entra e compare fra le perdite del piano. Un file che non è uno ZIP oltre i
 64 MiB non parte.
+
+### Un export di Notion
+
+Lo ZIP che Notion scrive con «Export → Markdown & CSV» si importa come ogni
+archivio, e l'importer lo riconosce dai nomi: pagine e database con l'id di
+Notion (32 cifre esadecimali) in fondo. Diventa un vault ordinato, in
+Markdown nativo:
+
+- l'id si toglie dai nomi di file e cartelle, e la cartella `Export-…` che
+  Notion mette sopra a tutto sparisce. Due pagine nella stessa cartella con lo
+  stesso titolo diventano `Titolo` e `Titolo 2`. I link fra le pagine, alle
+  immagini e al database seguono il nome nuovo;
+- un database arriva da Notion due volte, il `.csv` e la cartella con una
+  pagina per riga. Il `.csv` entra così com'è, col nome pulito, e si apre
+  come foglio dal link che lo chiama. Ogni riga diventa **una** nota nella
+  cartella del database: la pagina della riga, col suo testo, e le colonne
+  del CSV come proprietà. Le righe `Chiave: valore` che la pagina ripeteva
+  lasciano il corpo; una riga che dice altro resta. Una riga senza pagina
+  diventa una nota con le sole proprietà e il titolo nell'H1;
+- una colonna in cui ogni valore è un numero diventa numeri; una in cui ogni
+  valore è una data come la scrive Notion («December 8, 2026», anche con
+  l'ora) diventa date ISO; una di soli `Yes` e `No` diventa vero o falso.
+  Basta un valore che non si legge e la colonna resta testo, intera: nessun
+  valore cambia di nascosto. La prima colonna è il titolo, che sta nel nome
+  del file e nell'H1;
+- un callout (`<aside>`) diventa il richiamo `> [!note]`, con l'icona in
+  testa al testo.
+
+Il rapporto dice quanti nomi hanno perso l'id, quante righe di ogni database
+si sono unite a una pagina e quante vengono dal solo CSV, e quali colonne
+sono diventate numeri, date o vero/falso. Un CSV che non si legge resta un
+file, e il rapporto dice perché le sue righe non sono diventate note.
+
+Un archivio diviso in parti si importa una parte alla volta: un database il
+cui `.csv` e le cui pagine cadono in parti diverse non si unisce, e i link a
+un file di un'altra parte perdono l'id con la stessa regola, senza sapere se
+il nome ha preso un numero.
+
+In ogni CSV, anche fuori da Notion, una colonna con spazi o accenti nel nome
+(«Stato di lettura», «Città») è una proprietà come le altre; solo le celle
+lunghe o su più righe vanno nel corpo. Una barra nel titolo di una riga
+cambia solo il nome del file (`Fattura 2026-031.md`); il titolo resta intero.
 
 ### Da Notion o da Airtable
 
