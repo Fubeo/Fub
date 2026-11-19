@@ -571,3 +571,131 @@ describe("«Sposta in…» con molte note scelte", () => {
     ]);
   });
 });
+
+describe("la scelta dopo uno spostamento (IMP-1803)", () => {
+  /// Il vault della tester: quattordici progetti alla radice, la cartella
+  /// Progetti che ha già una nota, e una nota sola da archiviare.
+  const PROJECTS = Array.from({ length: 14 }, (_, i) => `Progetto ${String(i + 1).padStart(2, "0")}.md`);
+  const vault = (): Record<string, string> => {
+    const files: Record<string, string> = { "Progetti/Magazzino ricambi 2025.md": "# Magazzino\n", "Home.md": "# Home\n" };
+    for (const name of PROJECTS) files[name] = `# ${name}\n`;
+    return files;
+  };
+  const clickRow = (path: string, init: MouseEventInit = {}): void => {
+    row(path)!.querySelector<HTMLElement>(".row-name")!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1, ...init }),
+    );
+  };
+  const picker = () => document.querySelector<HTMLInputElement>('.shell-dialog input[role="combobox"]');
+  const prompt = () => document.querySelector<HTMLInputElement>('.shell-dialog input[type="text"]');
+  const count = () => document.querySelector<HTMLElement>(".tree-selection-count")!;
+  const bar = () => document.querySelector<HTMLElement>(".tree-selection")!;
+
+  async function moveVia(folder: string): Promise<void> {
+    document.querySelector<HTMLElement>(".tree-selection-move")!.click();
+    await waitFor("il selettore della cartella", () => picker() !== null);
+    picker()!.value = folder;
+    picker()!.dispatchEvent(new Event("input"));
+    picker()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  }
+
+  async function groupVia(name: string, where = "Nuova cartella in Progetti"): Promise<void> {
+    document.querySelector<HTMLElement>(".tree-selection-group")!.click();
+    await waitFor("il nome della cartella nuova", () => prompt() !== null);
+    expect(prompt()!.closest("label")!.textContent, "il dialogo dice dove nasce la cartella").toBe(where);
+    prompt()!.value = name;
+    prompt()!.form!.requestSubmit();
+  }
+
+  /// Ciò che la tester ha fatto: clic sulla nota (la apre), Ctrl-clic (la sceglie).
+  async function pickAlone(path: string): Promise<void> {
+    await waitFor(`la riga di ${path}`, () => row(path) !== null);
+    clickRow(path);
+    await quiet();
+    clickRow(path, { ctrlKey: true });
+    await quiet();
+  }
+
+  it("dopo «Sposta in…» la cartella nuova nasce accanto alla nota scelta e prende solo lei", async () => {
+    const host = await start({ file: vault(), resources: {} });
+    for (const name of PROJECTS) clickRow(name, { ctrlKey: true });
+    await quiet();
+    expect(count().textContent).toBe("14 scelte");
+    await moveVia("Progetti");
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("14 note spostate in Progetti"), 15_000);
+    await quiet();
+    expect(bar().hidden, "le note spostate non restano scelte").toBe(true);
+
+    await pickAlone("Progetti/Magazzino ricambi 2025.md");
+    expect(count().textContent).toBe("1 scelte");
+    await groupVia("Archivio");
+    await waitFor("la nota nella cartella nuova", () => "Progetti/Archivio/Magazzino ricambi 2025.md" in host.files());
+    await quiet();
+    const files = host.files();
+    expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Archivio/"))).toEqual(["Progetti/Archivio/Magazzino ricambi 2025.md"]);
+    expect(PROJECTS.filter((name) => !(`Progetti/${name}` in files)), "i progetti restano dove li ha messi il primo spostamento").toEqual([]);
+  });
+
+  it("uno spostamento lento non cancella la scelta fatta mentre va, e non la mescola con la sua", async () => {
+    const host = await start({ file: vault(), resources: {} });
+    // Progetti aperta: la nota da archiviare si vede mentre i progetti viaggiano.
+    clickRow("Progetti");
+    await quiet();
+    for (const name of PROJECTS) clickRow(name, { ctrlKey: true });
+    await quiet();
+    const release = host.throttle("invokeCommand");
+    await moveVia("Progetti");
+    await waitFor("lo spostamento è partito", () => host.atGate("invokeCommand").length > 0);
+    await quiet();
+    // Il comando ha preso le sue note: la barra non le offre a un secondo gesto.
+    expect(bar().hidden, "le note in viaggio non restano nella scelta").toBe(true);
+
+    await pickAlone("Progetti/Magazzino ricambi 2025.md");
+    expect(count().textContent).toBe("1 scelte");
+    release();
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("14 note spostate in Progetti"), 15_000);
+    await quiet();
+    expect(bar().hidden, "la scelta nuova sopravvive alla fine del primo spostamento").toBe(false);
+    expect(count().textContent).toBe("1 scelte");
+
+    await groupVia("Archivio");
+    await waitFor("la nota nella cartella nuova", () => "Progetti/Archivio/Magazzino ricambi 2025.md" in host.files());
+    await quiet();
+    const files = host.files();
+    expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Archivio/"))).toEqual(["Progetti/Archivio/Magazzino ricambi 2025.md"]);
+    expect(PROJECTS.filter((name) => !(`Progetti/${name}` in files))).toEqual([]);
+  });
+
+  it("la scelta non tiene percorsi spariti: spostata, rinominata o cestinata, una nota ne esce subito", async () => {
+    const host = await start({ file: vault(), resources: {} });
+    const [moved, renamed, trashed, kept] = PROJECTS as [string, string, string, string];
+    for (const name of [moved, renamed, trashed, kept]) clickRow(name, { ctrlKey: true });
+    await quiet();
+    expect(count().textContent).toBe("4 scelte");
+
+    // Spostata e rinominata da un altro programma: la scelta lo sa quando il
+    // kernel lo dice, prima che l'albero si ridisegni.
+    host.renameFromOutside(moved, `Progetti/${moved}`);
+    expect(count().textContent, "spostata").toBe("3 scelte");
+    host.renameFromOutside(renamed, "Nome nuovo.md");
+    expect(count().textContent, "rinominata").toBe("2 scelte");
+    await quiet();
+
+    // Cestinata con Canc dalla sua riga: il gesto di una nota sola.
+    const li = document.querySelector<HTMLElement>(`#file-list li[data-path="${CSS.escape(trashed)}"]`)!;
+    li.focus();
+    li.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
+    await waitFor("la nota nel cestino", () => !(trashed in host.files()));
+    await quiet();
+
+    expect(count().textContent).toBe("1 scelte");
+    // Ciò che resta nella scelta esiste: «Sposta in…» porta solo quella.
+    await moveVia("Progetti");
+    await waitFor("la nota rimasta scelta in Progetti", () => `Progetti/${kept}` in host.files());
+    await quiet();
+    const files = host.files();
+    expect(files["Nome nuovo.md"], "la rinominata resta dov'è").toBeDefined();
+    expect(files[`Progetti/${moved}`]).toBeDefined();
+    expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Progetti/")), "niente si sposta due volte").toEqual([]);
+  });
+});

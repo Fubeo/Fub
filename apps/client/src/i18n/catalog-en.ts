@@ -1191,6 +1191,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "explorer.selection.move": "Move to…",
 "explorer.selection.group": "Into a new folder",
 "explorer.selection.group_menu": "Into a new folder…",
+"explorer.selection.group_where": "New folder in {folder}",
+"explorer.selection.group_where_root": "New folder at the root",
 "explorer.selection.trash": "Move to trash",
 "explorer.selection.clear": "Clear selection",
 "explorer.new_note_here": "New note here",

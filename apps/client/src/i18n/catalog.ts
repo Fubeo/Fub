@@ -1223,6 +1223,8 @@ export const IT = { // --- la scocca -------------------------------------------
 "explorer.selection.move": "Sposta in…",
 "explorer.selection.group": "In una cartella nuova",
 "explorer.selection.group_menu": "In una cartella nuova…",
+"explorer.selection.group_where": "Nuova cartella in {folder}",
+"explorer.selection.group_where_root": "Nuova cartella nella radice",
 "explorer.selection.trash": "Sposta nel cestino",
 "explorer.selection.clear": "Deseleziona",
 "explorer.new_note_here": "Nuova nota qui",

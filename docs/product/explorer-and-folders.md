@@ -35,6 +35,18 @@ e questa, Ctrl-Spazio fa il Ctrl-clic da tastiera. La barra della scelta sta
 sotto l'albero, ferma in fondo alla colonna, così comparendo non sposta le
 righe sotto il puntatore: dice quante note sono scelte e offre «Sposta in…»,
 «In una cartella nuova», «Sposta nel cestino» e «Deseleziona»; Esc la azzera.
+Un clic semplice su una riga azzera la scelta e apre la nota. Un gesto della
+barra, o del menu del gruppo, prende le note scelte nel momento in cui parte:
+la scelta si svuota subito e resta vuota a gesto finito, così le note spostate
+non restano scelte e ciò che si sceglie mentre uno spostamento lungo va è una
+scelta nuova, che la fine del primo non tocca. Se il dialogo si annulla, o la
+cartella nuova non nasce, la scelta torna com'era. Una nota spostata,
+rinominata o cestinata, anche da un altro programma, esce subito dalla scelta:
+la barra non offre mai un percorso che non c'è più. «In una cartella nuova»
+crea la cartella dove stanno le note scelte se sono tutte nella stessa
+cartella, altrimenti nella radice visibile (il vault o lo spazio attivo), e il
+dialogo del nome lo dice prima («Nuova cartella in Progetti», «Nuova cartella
+nella radice»).
 Più note spostate insieme (dalla barra, dal trascinamento o in una cartella
 nuova) vanno una alla volta: un avviso dice a che punto sono («Sposto 60 note
 in Clienti: 12 di 60…»), e alla fine uno solo dice quante sono arrivate. Una
