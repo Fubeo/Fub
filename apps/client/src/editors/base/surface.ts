@@ -30,6 +30,7 @@ import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, c
 import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
 import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
+import { byDatedRows, defaultDateKey, defaultLaneKey, viewKeyPicker } from "./view-keys";
 import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
 import { readOnlyColumn, sameKey, sortedBy } from "./sort";
 import { declaredType, freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
@@ -988,16 +989,24 @@ export function mountBaseSurface(
     return lat && lon ? { lat_key: lat, lon_key: lon } : null;
   };
   // Le corsie di una bacheca nuova: il gruppo della vista aperta, la prima
-  // colonna che è una proprietà o, in una vista che non ne mostra, la prima
   // proprietà delle note dichiarata stato e poi scelta (come lo «Status» di
-  // Notion).
+  // Notion) o, fra le colonne e poi le proprietà delle note, la prima di
+  // testo con pochi valori: mai una data (IMP-3809).
   const declaredLane = (kind: "status" | "select"): string | undefined => rowProperties().find((key) => declaredType(propertyTypes, key) === kind);
-  const lanes = (): string | null => grouping() ?? plan?.group ?? plan?.columns.find((column) => columnProperty(column) !== null) ?? declaredLane("status") ?? declaredLane("select") ?? null;
-  // Le proprietà delle righe i cui valori sono date: la data di un calendario.
-  const dateProperties = (): string[] => rowProperties().filter((key) => kinds(key) === "date");
-  // La data di un calendario nuovo: quella della vista aperta, o la prima
-  // proprietà data delle righe.
-  const calendarDate = (): string | null => plan?.dateKey ?? dateProperties()[0] ?? null;
+  const laneChoices = (): string[] => {
+    const keys: string[] = [];
+    const add = (key: string) => { if (kinds(key) !== "date" && !keys.some((each) => sameKey(each, key))) keys.push(key); };
+    for (const column of plan?.columns ?? []) { const key = columnProperty(column); if (key !== null) add(key); }
+    for (const key of rowProperties()) add(key);
+    return keys;
+  };
+  const lanes = (): string | null => grouping() ?? plan?.group ?? declaredLane("status") ?? declaredLane("select") ?? defaultLaneKey(laneChoices(), rows);
+  // Le proprietà delle righe i cui valori sono date: la data di un
+  // calendario, dalla più presente nelle note della vista.
+  const dateProperties = (): string[] => byDatedRows(rowProperties().filter((key) => kinds(key) === "date"), rows);
+  // La data di un calendario nuovo: quella della vista aperta, o la
+  // proprietà data che più note della vista hanno (IMP-3810).
+  const calendarDate = (): string | null => plan?.dateKey ?? defaultDateKey(dateProperties(), rows);
   // Inizio e fine di una linea del tempo nuova: quelli della vista aperta, o
   // le prime due proprietà data delle righe (con una sola, ogni nota è un
   // punto).
@@ -1651,7 +1660,27 @@ export function mountBaseSurface(
   };
   const drawKanban = (page: BaseRow[]): void => {
     const key = plan?.group, view = plan?.view;
-    if (!key || !view) throw new Error("base: board senza gruppo");
+    if (!view) throw new Error("base: board senza vista");
+    // La testa: la proprietà delle corsie, che si cambia da qui e si scrive
+    // in `group` (IMP-3809). Le corsie aggiunte a mano erano della proprietà
+    // di prima: non restano sulla nuova.
+    const head = document.createElement("div");
+    head.className = "base-kanban-head";
+    head.append(viewKeyPicker({
+      className: "base-kanban-lanes", label: t("base.kanban.lanes_by"),
+      choices: laneChoices(), current: key ?? null,
+      labelOf: (each) => plan?.columnLabels[each] ?? each, same: sameKey,
+      disabled: lock() !== null || busy || sequencing > 0,
+      choose: (next) => { localLanes.set(view, new Set()); saveLanes(view); void writeView("group", { key: next }); },
+    }));
+    body.append(head);
+    if (!key) {
+      const empty = document.createElement("p");
+      empty.className = "base-kanban-empty";
+      empty.textContent = t(lock() === null ? "base.kanban.no_lanes" : "base.kanban.no_lanes_locked");
+      body.append(empty);
+      return;
+    }
     const groups = new Map<string, BaseRow[]>();
     for (const row of page) {
       const name = cellText(row.values[key]);
@@ -2032,6 +2061,7 @@ export function mountBaseSurface(
       movable: (row) => writableKey && !readOnly && /\.md$/i.test(row.doc) && movedDateValue(row.properties[key!], row.day ?? today) !== null,
       busy: moving || busy,
       dateChoices: lock() === null ? dateProperties() : null,
+      labelOf: (key) => plan?.columnLabels[key] ?? key,
       chooseDateKey: (date) => void writeView("date", date),
       open,
       move: (row, day) => void moveNote(row, day),

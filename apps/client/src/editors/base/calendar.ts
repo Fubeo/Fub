@@ -10,6 +10,8 @@
 import { plural, t } from "../../i18n/strings";
 import { iconEl } from "../../ui/icons";
 import type { BaseRow } from "./data";
+import { sameKey } from "./sort";
+import { viewKeyPicker } from "./view-keys";
 
 /// Quante note un giorno mostra prima di raccogliere le altre in «+N».
 export const DAY_LIMIT = 3;
@@ -152,6 +154,8 @@ export interface CalendarInput {
   /// Le proprietà data che le note hanno, per scegliere quella della vista
   /// quando il file non la dice; `null` se la Base non può scrivere il file.
   readonly dateChoices: readonly string[] | null;
+  /// Il nome da mostrare di una proprietà (il `display_name` del file).
+  readonly labelOf?: (key: string) => string;
   readonly chooseDateKey: (key: string) => void;
   readonly open: (doc: string) => void;
   readonly move: (row: BaseRow, day: IsoDay) => void;
@@ -243,6 +247,16 @@ export function renderCalendar(input: CalendarInput): HTMLElement {
     note.textContent = plural(undated, "base.calendar.undated_one", "base.calendar.undated_other", { count: undated });
     head.append(note);
   }
+  // La proprietà della data, che si cambia da qui (IMP-3810): in sola
+  // lettura e in una Base dentro una nota si vede soltanto.
+  const dateKey = input.dateKey;
+  head.append(viewKeyPicker({
+    className: "base-cal-date", label: t("base.calendar.date_key"),
+    choices: input.dateChoices ?? [], current: dateKey,
+    labelOf: input.labelOf ?? ((key) => key), same: sameKey,
+    disabled: input.dateChoices === null || input.busy,
+    choose: input.chooseDateKey,
+  }));
 
   const grid = document.createElement("div");
   grid.className = "base-cal-grid";
@@ -490,7 +504,7 @@ function noDateKey(input: CalendarInput): HTMLElement {
   choose.append(prompt, ...input.dateChoices.map((key) => {
     const option = document.createElement("option");
     option.value = key;
-    option.textContent = key;
+    option.textContent = input.labelOf?.(key) ?? key;
     return option;
   }));
   choose.addEventListener("change", () => { if (choose.value) input.chooseDateKey(choose.value); });

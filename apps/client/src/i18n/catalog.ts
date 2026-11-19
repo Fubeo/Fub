@@ -2003,7 +2003,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "base.view.kind.map": "Mappa",
 "base.view.kind.calendar": "Calendario",
 "base.view.kind.timeline": "Linea del tempo",
-"base.view.needs_lanes": "Serve una proprietà mostrata per le corsie.",
+"base.view.needs_lanes": "Serve una proprietà di testo nelle note, per le corsie.",
 "base.view.needs_coordinates": "Servono le proprietà lat e lon nelle note.",
 "base.view.needs_date": "Serve una proprietà data nelle note.",
 // Il calendario della Base (T17).
@@ -2024,6 +2024,11 @@ export const IT = { // --- la scocca -------------------------------------------
 "base.calendar.no_date_key": "Questo calendario non sa ancora quale proprietà è la sua data.",
 "base.calendar.no_date_props": "Nessuna nota della Base ha una proprietà data: aggiungine una, per esempio «scadenza: 2026-11-20».",
 "base.calendar.choose_date": "Scegli la proprietà data",
+"base.calendar.date_key": "Data",
+"base.view_key.choose": "Scegli…",
+"base.kanban.lanes_by": "Corsie per",
+"base.kanban.no_lanes": "Questa bacheca non sa ancora quale proprietà fa le corsie: sceglila qui sopra.",
+"base.kanban.no_lanes_locked": "Questa bacheca non sa ancora quale proprietà fa le corsie.",
 // La linea del tempo della Base (T34).
 "base.timeline.previous": "Indietro",
 "base.timeline.next": "Avanti",

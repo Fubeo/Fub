@@ -12,7 +12,8 @@ lunedì in italiano, la domenica in inglese americano); i giorni del mese prima
 e del mese dopo che completano le settimane sono più tenui, con le loro note.
 Il giorno corrente ha il numero nel cerchio dell'accento. Sopra la griglia ci
 sono il mese, i due passi («Mese prima», «Mese dopo») e il pulsante che torna
-al mese corrente; a destra, quante note non hanno la data. Un giorno mostra al
+al mese corrente; a destra, quante note non hanno la data e «Data», il menu
+della proprietà data (sotto). Un giorno mostra al
 massimo tre note: le altre sono «+N», che apre il giorno, e «Meno» lo
 richiude. Il calendario mostra tutte le note della vista, senza «Mostra
 altre». Il piede è quello delle altre viste.
@@ -41,12 +42,23 @@ quella col fuoco). Maiusc con le frecce sposta la nota col fuoco, o la prima
 del giorno, di un giorno o di una settimana; il fuoco la segue nel giorno
 nuovo.
 
+## La proprietà della data
+
+«Data», nella testa, dice la proprietà data del calendario e la cambia: il
+menu offre le proprietà delle note che hanno per valori delle date, dalla più
+presente nelle note della vista alla meno. Sceglierne una scrive `date` nel
+blocco `fub:` con `base.view.set`, come lo scriverebbe la mano. In sola
+lettura e in una Base dentro una nota il menu la mostra ma è spento.
+
+Un calendario nuovo, aggiunto con «+», prende la proprietà data che più note
+della vista hanno ([Una vista nuova](bases.md#una-vista-nuova)).
+
 ## Senza la data
 
 Un calendario che non dice la sua proprietà data lo scrive al posto della
-griglia e offre le proprietà data delle note: sceglierne una scrive `date` con
-`base.view.set`. In sola lettura e in una Base dentro una nota la scelta non
-c'è.
+griglia e offre le proprietà data delle note, nello stesso ordine:
+sceglierne una scrive `date` con `base.view.set`. In sola lettura e in una
+Base dentro una nota la scelta non c'è.
 
 ## Al telefono
 

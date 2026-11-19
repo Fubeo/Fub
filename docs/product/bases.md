@@ -14,7 +14,8 @@ flowchart LR
 ```
 
 Le proprietà delle note restano nelle note. Il file `.base` dice soltanto quali
-note vedere e come mostrarle.
+note vedere e come mostrarle. Una Base non elenca mai i file `.base`, il suo
+compreso, qualunque sia il filtro (`derive`, in `crates/fub-features/src/base.rs`).
 
 ## Che cosa contiene un file
 
@@ -344,12 +345,11 @@ modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (
 
 «+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa,
 Calendario, Linea del tempo. La vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
-**eredita il filtro e le colonne** della vista aperta; una bacheca prende come
-corsie il raggruppamento della vista aperta, la sua prima colonna che è una
-proprietà o, se non ne mostra, la prima proprietà delle note dichiarata Stato
-e poi Selezione nel registro dei tipi, una mappa le coordinate della vista aperta o le proprietà `lat` e
+**eredita il filtro e le colonne** della vista aperta; una bacheca prende le
+corsie che dice [La bacheca della Base](bases-kanban.md), mai una data; una
+mappa le coordinate della vista aperta o le proprietà `lat` e
 `lon` (`latitude`/`longitude`) delle righe, un calendario la data della vista
-aperta o la prima proprietà delle righe che ha per valori delle date (la
+aperta o la proprietà data che più note della vista hanno (la
 linea del tempo la prende come inizio, e la seconda come fine). Senza
 corsie, senza coordinate o senza date la voce è spenta e dice perché. Sono
 più scritture, una chiave per volta come ogni gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`

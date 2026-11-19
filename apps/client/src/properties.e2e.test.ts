@@ -120,6 +120,42 @@ describe("le proprietà della testata", () => {
   });
 });
 
+describe("un testo della testata, fino al file (IMP-3811)", () => {
+  // La pratica della tester: otto proprietà, «stato» fra quelle nascoste
+  // sotto «Altre N proprietà». Il valore si sostituisce tutto, poi Invio o
+  // l'uscita dal campo: il file dice il valore nuovo.
+  const PRATICA = "---\ncategoria: pratica\ncliente: Silvestri Consulenze sas\ntipologia: Certificazione unica\nscadenza: 2026-12-16\nstato: da fare\nore: 2\nfatta: false\ncollaboratrice: Serena Lombardi\n---\n## Passi\n\n- [ ] Raccogliere i documenti del cliente 📅 2026-12-16\n";
+  const stato = () => document.querySelector<HTMLElement>('.cm-fub-page-prop[data-key="stato"] .cm-fub-page-prop-value');
+  const edit = async (finish: (input: HTMLInputElement) => void): Promise<FakeHost> => {
+    const host = await start({ "Pratica.md": PRATICA });
+    await open("Pratica.md");
+    document.querySelector<HTMLButtonElement>(".cm-fub-page-props-more")?.click();
+    await waitFor("«stato» si vede", () => stato() !== null);
+    stato()!.click();
+    const input = document.querySelector<HTMLInputElement>(".cm-fub-page-prop[data-key=stato] input")!;
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart === 0 && input.selectionEnd === input.value.length).toBe(true);
+    input.value = "in corso";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    finish(input);
+    await waitFor("il salvataggio arriva al disco", () => host.files()["Pratica.md"] === PRATICA.replace("stato: da fare", "stato: in corso"));
+    return host;
+  };
+
+  it("sostituito con Invio, il file dice il valore nuovo e la nota riaperta lo mostra", async () => {
+    const host = await edit((input) => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    stopShell();
+    await start(host.files());
+    await open("Pratica.md");
+    document.querySelector<HTMLButtonElement>(".cm-fub-page-props-more")?.click();
+    await waitFor("«stato» riletto", () => stato()?.textContent === "in corso");
+  });
+
+  it("sostituito e lasciato il campo, il file dice il valore nuovo", async () => {
+    await edit((input) => input.blur());
+  });
+});
+
 describe("la rinomina dal titolo, fino al file (revisione #421)", () => {
   it("rinominata la nota dalla testata, l'H1 riscritto arriva al file col nome nuovo, e il vecchio non c'è più", async () => {
     const host = await start({ "Mostra.md": "# Mostra\n\nIl testo della nota.\n" });

@@ -15561,6 +15561,55 @@ input.canvas-toolbar-item {
 .base-cal-empty > p:first-child {
   color: var(--text);
 }
+/* La proprietà che regge la vista, nella sua testa: le corsie della
+   bacheca, la data del calendario (IMP-3809, IMP-3810). L'etichetta resta
+   visibile; il menu si accorcia prima di spingere fuori la testa. */
+.base-view-key {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.base-view-key-select {
+  min-width: 0;
+  max-width: 14rem;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.base-view-key-select:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.base-view-key-select:disabled {
+  opacity: 0.6;
+}
+.base-cal-head > .base-view-key {
+  margin-left: auto;
+  padding-left: var(--space-4);
+}
+.base-cal-undated + .base-view-key {
+  margin-left: 0;
+}
+.base-kanban-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+.base-kanban-empty {
+  margin: 0;
+  color: var(--muted);
+}
 /* Al telefono il mese è una colonna di giorni: niente riga dei nomi né giorni
    degli altri mesi, e accanto al numero il nome del giorno. */
 @container sheet (max-width: 560px) {
