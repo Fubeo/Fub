@@ -3358,7 +3358,7 @@ tabella continua con l'intestazione); un commento in una cella.
 Fatto quando: un test per voce; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] in corso · coder · base 49709f452
+Stato: [~] integrato in `integra/editor-2` (01e87d076, 2026-11-19), in attesa del gruppo; i commenti passano il sanificatore come span inerti (inertComments); «Rimetti» e il clic sul blocco a T76; baseline della scena nuova dal runner
 
 ## T75 · Diagrammi e formule in vettoriale
 
