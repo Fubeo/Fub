@@ -173,4 +173,8 @@ Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
 shell nei due versi, e `rich-closed.json` ne porta i blocchi chiusi
-(`crates/fub-format-rich/tests/ts_projection.rs`).
+(`crates/fub-format-rich/tests/ts_projection.rs`). `rich-senza-perdite.json`
+è la proiezione di `Senza perdite.docx` del corpus; su di lei la shell fa una
+raffica di modifiche e l'annulla di tutto, e `rich-annulla.json` (snapshot di
+`apps/client/src/editors/rich/undo.test.ts`) porta le proiezioni salvate per
+strada, che il codec salva in fila tornando al contenuto di partenza.

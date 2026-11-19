@@ -13,7 +13,9 @@ stesso, senza conversioni e senza copie a lato.
 I comandi stanno nella barra multifunzione sopra il foglio, come in Word: le
 schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 **Tabella** quando il cursore sta in una tabella; **Annulla** e **Ripeti**
-accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
+accanto alle schede. La storia tiene fino a 10 000 passi (le lettere scritte
+di fila sono un passo solo): annullando tutto si torna al documento com'era
+all'apertura, e il salvataggio che segue lo riporta nel file. Alt o F10 mostrano le lettere di ogni scheda e di ogni
 comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
 Paragrafo in un pulsante ciascuno, e per ultimo Carattere; un gruppo raccolto si apre sul posto,

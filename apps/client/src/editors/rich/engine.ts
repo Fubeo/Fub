@@ -122,6 +122,14 @@ export interface RichPendingEdit {
 /// Le azioni del catalogo che sono un passo della storia.
 const HISTORY_STEPS: Readonly<Record<string, "undo" | "redo">> = { "text.undo": "undo", "text.redo": "redo" };
 
+/// Quanti passi tiene la storia del documento. Quella di ProseMirror ne tiene
+/// 100 se non le si dice altro, e oltre butta via i più vecchi senza dirlo:
+/// dopo una raffica di tasti l'annulla non tornava più al documento aperto, e
+/// il salvataggio portava sul disco lo stato a metà (IMP-150). Diecimila passi
+/// sono ore di scrittura un gesto alla volta; un passo tiene soltanto ciò che
+/// ha cambiato, e i nodi che non cambiano sono in comune.
+export const RICH_HISTORY_DEPTH = 10_000;
+
 export class RichEngine {
   readonly #view: EditorView;
   readonly #options: RichEngineOptions;
@@ -271,7 +279,7 @@ export class RichEngine {
 
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
-      history(),
+      history({ depth: RICH_HISTORY_DEPTH }),
       tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
