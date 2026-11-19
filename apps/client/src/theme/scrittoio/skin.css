@@ -17655,6 +17655,8 @@ input.canvas-toolbar-item {
   width: min(18rem, 70%);
   background: var(--bg-elev);
   box-shadow: -8px 0 20px -14px rgb(0 0 0 / 40%);
+}
+
 /* ── La scheda PDF (T45) ─────────────────────────────────────────────────
    (E20; il prototipo `.pdfw`, `.pdfp` e `.pdfn`, passo 17.) Una pagina
    intera sul vassoio della scheda (`--doc-fill-soft`, il `--tray` del

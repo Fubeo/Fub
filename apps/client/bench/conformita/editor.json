@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit b11773eb84becb38878897746c5a044f3f2e15ff.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit ebb9d90f49de3611e39e54c262bba59a3c1197af.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "b11773eb84becb38878897746c5a044f3f2e15ff",
+  "commit": "ebb9d90f49de3611e39e54c262bba59a3c1197af",
   "file": "PLAN-ui/editor.html",
   "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {

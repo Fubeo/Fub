@@ -494,6 +494,8 @@ const DRAWING_CARD_FOREIGN_SVG = [
   '  <text x="160" y="74" font-size="40" text-anchor="middle" fill="#ffffff" font-family="sans-serif">FESTA</text>',
   "</svg>",
   "",
+].join("\n");
+
 /// La scheda PDF (T45): il manuale di quattro pagine del giro (`giro=editor`,
 /// `giro-fixture.ts`), un PDF vero col testo che pdf.js stende, mostrato dalla
 /// pagina 2 (`#page=2`).
