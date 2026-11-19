@@ -1522,7 +1522,6 @@
     "canvas-ink-label",
     "canvas-ink-frame",
     "canvas-ink-reflow",
-    "canvas-ink-reflow-text",
     "canvas-ink-reflow-back",
     "canvas-lasso-path",
     "canvas-lasso-frame",
@@ -3952,7 +3951,6 @@
     "canvas-ink-label": "cornice",
     "canvas-ink-frame": "segno",
     "canvas-ink-reflow": "segno",
-    "canvas-ink-reflow-text": "cornice",
     "canvas-ink-reflow-back": "cornice",
     "canvas-lasso-path": "segno",
     "canvas-lasso-frame": "segno",
@@ -8516,7 +8514,6 @@
       "part": "editors",
       "hooks": [
         "canvas-ink-reflow",
-        "canvas-ink-reflow-text",
         "canvas-ink-reflow-back"
       ],
       "states": [
@@ -12606,7 +12603,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2428,
+    "hooks": 2427,
     "state_names": 7,
     "assigned_states": 1087,
     "components": 322,

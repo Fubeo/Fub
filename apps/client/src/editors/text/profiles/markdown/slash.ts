@@ -29,6 +29,7 @@ import { EditorView, keymap, showTooltip, ViewPlugin, type Tooltip, type Tooltip
 import type { SyntaxNode } from "@lezer/common";
 import type { SlashChoice, SlashPanel, SlashPanelEvents, SlashPlace } from "../../../core/editor-menu";
 import { errorText } from "../../../../host/errors";
+import { openLifetime } from "../../../../ui/lifetime";
 import { pageName } from "../../../../rules/mirrored";
 import { liveStrings } from "./strings";
 
@@ -482,7 +483,8 @@ const floatingPanel = ViewPlugin.define((view) => {
   };
   // Il pannello che cambia misura (le voci arrivano, un passo si apre) si
   // riposa, come fa CodeMirror coi suoi tooltip.
-  const resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => place()) : null;
+  let resize: ResizeObserver | null = null;
+  if (typeof ResizeObserver === "function") resize = new ResizeObserver(() => place());
   const hide = (): void => {
     const current = shown;
     if (!current) return;
@@ -507,8 +509,9 @@ const floatingPanel = ViewPlugin.define((view) => {
     resize?.observe(dom);
     place();
   };
-  const resized = (): void => place();
-  window.addEventListener("resize", resized);
+  // La finestra che cambia misura lo riposa; la Vita la chiude con il plugin.
+  const lifetime = openLifetime();
+  lifetime.listen(window, "resize", () => place());
   let destroyed = false;
   // Il «/» già aperto quando il plugin nasce (una riconfigurazione).
   queueMicrotask(() => {
@@ -523,8 +526,9 @@ const floatingPanel = ViewPlugin.define((view) => {
     },
     destroy() {
       destroyed = true;
-      window.removeEventListener("resize", resized);
+      lifetime.close();
       hide();
+      resize?.disconnect();
     },
   };
 });

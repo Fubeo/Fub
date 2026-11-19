@@ -154,9 +154,8 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   scheda, gruppi esclusi, scende sotto di lei al più 20 volte, poi resta sopra.
 - **Una scheda nuova lasciata vuota** (dal Testo, da Ctrl+Invio, da «Aggiungi testo») se ne va uscendo, anche con Esc, coi suoi passi d'annulla; una che c'era già resta.
 - **«Aggiungi testo»** (`canvas.add.text`: la riga delle opzioni, il menu, Ctrl+/) apre la scheda già in scrittura, col fuoco nel testo: dal menu nel punto del clic, se no nel primo posto libero vicino al centro della vista (`free-spot.ts`: anelli di 40 unità, 16 di margine, i gruppi non contano).
-- **Solo il testo.** Il Live di una scheda si monta `pageless`: niente titolo della pagina, proprietà, icona, copertina né sottopagina (IMP-044).
+- **Solo il testo, e il «/».** Il Live di una scheda si monta `pageless`: niente titolo della pagina, proprietà, icona, copertina né sottopagina (IMP-044). Nel Live di una scheda (di testo o di nota) il «/» apre il menu dei blocchi dell'editor: la superficie si monta `hosted`, il menu offre solo le azioni dell'editor (niente comandi del vault, niente palette con Ctrl+/: agirebbero sulla lavagna, il documento del riquadro) e il pannello galleggia sopra la finestra, posato dal cursore, fuori dalla scheda che lo zoom trasforma e che taglia ai bordi. Esc chiude prima il menu, poi esce dalla scheda.
 - **I tasti della shell.** Un tasto con Ctrl (Cmd) che l'editor non usa sale alla shell, e la tela non ne fa un suo comando: Ctrl+W chiude la linguetta. Restano al campo Invio, Esc e Ctrl+A, C, V, X, Y, Z.
-- **Il «/».** Nel Live di una scheda (di testo o di nota) il «/» apre il menu dei blocchi dell'editor: la superficie si monta `hosted`, il menu offre solo le azioni dell'editor (niente comandi del vault, niente palette con Ctrl+/: agirebbero sulla lavagna, il documento del riquadro) e il pannello galleggia sopra la finestra, posato dal cursore, fuori dalla scheda che lo zoom trasforma e che taglia ai bordi. Esc chiude prima il menu, poi esce dalla scheda.
 
 ## La rotella
 

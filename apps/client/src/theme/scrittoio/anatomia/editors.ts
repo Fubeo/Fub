@@ -154,7 +154,7 @@ export const EDITORS: PartAnatomy = {
     { name: "canvas-ink-target", layers: { "canvas-ink-frame": "segno" }, states: REST, hooks: ["canvas-ink-label", "canvas-ink-frame"] },
     // L'avviso sotto una scheda di testo allargata o ristretta dopo i tratti:
     // il testo rifluisce, i tratti no; il pulsante rimette la larghezza.
-    { name: "canvas-ink-reflow", layers: { "canvas-ink-reflow": "segno" }, states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["canvas-ink-reflow", "canvas-ink-reflow-text", "canvas-ink-reflow-back"] },
+    { name: "canvas-ink-reflow", layers: { "canvas-ink-reflow": "segno" }, states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["canvas-ink-reflow", "canvas-ink-reflow-back"] },
     // Il Lazo (T86): il giro, la cornice dei tratti scelti e il loro
     // contorno, segni di Fub sulla lavagna.
     { name: "canvas-lasso", layers: { "canvas-lasso-path": "segno", "canvas-lasso-frame": "segno", "canvas-lasso-chosen": "segno" }, states: REST, hooks: ["canvas-lasso-path", "canvas-lasso-frame", "canvas-lasso-chosen"] },
