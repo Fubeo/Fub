@@ -386,7 +386,11 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 22, "i ventidue comandi ufficiali");
+    // Ventidue comandi ufficiali, più «Trasforma in foglio» quando c'è il
+    // formato dei fogli (la feature `xlsx`, accesa dall'unione delle feature
+    // nel workspace anche quando questo crate si prova da solo senza).
+    let attesi = if cfg!(feature = "xlsx") { 23 } else { 22 };
+    assert_eq!(specs.len(), attesi, "i comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
