@@ -65,7 +65,7 @@
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import type { EditorSurface, SurfaceBlockGroup } from "../editors/core/registry";
 import { MENU_RULE, type SurfaceMenuEntry, type SurfaceMenuItem } from "../editors/core/editor-menu";
-import { cardFormulaBar, type CardFormulaBar } from "../editors/core/cards/formula-bar";
+import { cardFormulaBar, type CardFormulaBar } from "../editors/core/formula-bar";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,

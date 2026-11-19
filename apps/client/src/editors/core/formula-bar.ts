@@ -4,8 +4,13 @@
 // `.grid-formula-editor`). Lo stesso codice lo mostra la lavagna, nella riga
 // delle opzioni, e la nota, nel gruppo «Foglio» della barra di formato: chi
 // lo ospita decide soltanto dove sta e come si veste.
+//
+// Sta fuori da `editors/core/cards/` perché la barra di formato delle note la
+// carica all'avvio, mentre l'ospite delle schede si spegne e arriva soltanto
+// con la lavagna (`NOT_AT_STARTUP` in `vite.config.ts`): dal contratto prende
+// soltanto un tipo, che sparisce nel build.
 
-import type { CardEditorContext } from "./contract";
+import type { CardEditorContext } from "./cards/contract";
 
 /// La barra montata: l'elemento e come cambiarne il testo, senza rifarla.
 export interface CardFormulaBar {

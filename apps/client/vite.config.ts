@@ -487,6 +487,14 @@ export default defineConfig({
           // pannelli e la resa delle note; cambia col protocollo delle viste,
           // non con l'editor. Chiuso verso il basso come la resa.
           if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
+          // L'ospite dei diagrammi Mermaid (`ui/mermaid.ts`): carica la
+          // libreria con un `import()`, disegna, apre il menu e l'anteprima.
+          // Lo montano la shell e la Live; cambia coi diagrammi, non con
+          // l'editor, e da solo tiene il chunk del ponte dei documenti sotto
+          // il budget. Chiuso verso il basso: ciò che importa sta nei chunk
+          // condivisi, e `lazy-part`, che usano anche le note e i media, sta
+          // nel chunk che Rollup gli estrae a parte, non nel ponte.
+          if (/\/src\/ui\/mermaid\.ts$/.test(id)) return "diagram-host";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
