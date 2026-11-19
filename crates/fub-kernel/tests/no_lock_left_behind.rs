@@ -77,7 +77,14 @@ fn collect_locks(root: &Utf8Path, dir: &Utf8Path, out: &mut Vec<String>) {
         }
         let name = path.file_name().unwrap();
         if name.starts_with('.') && name.ends_with(".lock") {
-            out.push(path.strip_prefix(root).unwrap().to_string());
+            // Con `/` su ogni piattaforma: su Windows `to_string` darebbe `\`.
+            let rel = path.strip_prefix(root).unwrap();
+            out.push(
+                rel.components()
+                    .map(|part| part.as_str())
+                    .collect::<Vec<_>>()
+                    .join("/"),
+            );
         }
     }
 }
