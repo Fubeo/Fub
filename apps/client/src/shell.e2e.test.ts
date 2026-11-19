@@ -3399,6 +3399,32 @@ describe("il fuoco dopo un cambio di scheda da tastiera", () => {
     await lands("Riunione", "Appunti della riunione");
   });
 
+  // IMP-152: le scorciatoie globali non agiscono dietro una finestra modale.
+  it("con le Impostazioni aperte Ctrl+W e Ctrl+N tacciono, e dopo Esc tornano (IMP-152)", async () => {
+    await twoTabs();
+    const host = box.host!;
+    const panel = document.querySelector<HTMLElement>("#settings-panel")!;
+    press(",");
+    await waitFor("le Impostazioni si aprono", () => !panel.hidden);
+    await settle();
+    expect(panel.contains(document.activeElement)).toBe(true);
+    const files = Object.keys(host.files()).sort();
+
+    press("w");
+    press("n");
+    await settle();
+    expect(tabs(), "nessuna scheda chiusa dietro la finestra").toHaveLength(2);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort(), "nessuna nota creata dietro la finestra").toEqual(files);
+    expect(panel.hidden).toBe(false);
+
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await waitFor("le Impostazioni si chiudono", () => panel.hidden);
+    editorOf("Appunti della riunione").focus();
+    press("w");
+    await waitFor("chiusa la finestra, Ctrl+W torna a chiudere la scheda", () => tabs().length === 1);
+  });
+
   it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
     await twoTabs();
     press("w");
@@ -3428,6 +3454,40 @@ describe("il fuoco dopo un cambio di scheda da tastiera", () => {
     expect(search.contains(document.activeElement)).toBe(true);
     press("PageDown");
     await lands("Benvenuto", "Il primo documento");
+  });
+});
+
+// Un clic nel testo con un menu aperto chiude il menu e lascia il fuoco nel
+// testo: la chiusura non lo riporta al pulsante che aveva aperto il menu, e la
+// battuta dopo arriva alla sessione del documento (IMP-151). Senza, il fuoco
+// tornava su «Ordina» e le battute si perdevano in silenzio.
+describe("il fuoco dopo un clic fuori da un menu", () => {
+  it("il clic nel testo con «Ordina» aperto lascia il fuoco nell'editor, e la battuta arriva alla sessione", async () => {
+    const host = await start(VAULT);
+    const sort = document.getElementById("explorer-sort") as HTMLButtonElement;
+    sort.focus();
+    sort.click();
+    await waitFor("il menu «Ordina» si apre", () => document.getElementById("context-menu") !== null);
+    await settle();
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+
+    // Il clic del puntatore nel testo: il `mousedown` dà il fuoco all'editor,
+    // poi il `click` arriva al documento e chiude il menu.
+    const view = editorViews().find((each) => each.state.doc.toString().includes("Il primo documento"))!;
+    view.contentDOM.focus();
+    view.contentDOM.click();
+    await settle();
+    expect(sort.getAttribute("aria-expanded"), "il menu si chiude").toBe("false");
+    const focused = editorViews().find((each) => each.contentDOM.contains(document.activeElement));
+    expect(focused, "il fuoco resta nel testo cliccato, non sul pulsante del menu").toBe(view);
+
+    // La battuta va all'editor col fuoco, e da lì alla sessione e al disco.
+    focused!.dispatch({ changes: { from: 0, insert: "QQ" }, userEvent: "input.type" });
+    await settle();
+    const { documentSessions } = await import("./state/document-session");
+    expect(documentSessions.text("Benvenuto.md")).toContain("QQIl primo documento");
+    await waitFor("il salvataggio arriva al disco", () =>
+      host.atGate("writeDocument").some((call) => call.args[0] === "Benvenuto.md" && String(call.args[1]).includes("QQIl primo")));
   });
 });
 

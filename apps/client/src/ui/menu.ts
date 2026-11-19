@@ -7,7 +7,7 @@
 // cui un pannello nuovo non poteva averle senza copiarle.
 
 import { t } from "../i18n/strings";
-import { focusReturnsInto, trapFocus } from "./a11y";
+import { focusReturnsInto, keepFocusWhereItIs, trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
@@ -500,7 +500,16 @@ export function showContextMenu(
   // quella di un sottomenu lo apre.
   const outside = (e: MouseEvent): void => {
     const target = e.target as Element | null;
-    if (target instanceof Element && target.closest(".context-menu, .context-strip, [data-menu-keep]")) return;
+    if (target instanceof Element && target.closest(SURFACE)) return;
+    // Il clic che ha dato il fuoco a qualcosa fuori (il testo della nota, un
+    // campo, un altro pulsante) glielo lascia: il menu e i suoi sottomenu non
+    // lo riportano al pulsante che li aveva aperti. Un clic su ciò che non
+    // prende il fuoco lo lascia al `body`, e allora torna al pulsante, come
+    // con Escape o una voce scelta da tastiera.
+    const taker = document.activeElement;
+    if (taker instanceof HTMLElement && taker !== document.body && !taker.closest(SURFACE)) {
+      keepFocusWhereItIs((root) => root.classList.contains("context-menu"));
+    }
     closeContextMenu();
   };
   setTimeout(() => lifetime.listen(document, "click", outside), 0);
@@ -1599,6 +1608,10 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   menu.style.top = `${at.top}px`;
   growFrom(menu, at.left, at.top, x, y);
 }
+
+/// Ciò che conta come dentro il menu per un clic: il menu e i suoi sottomenu,
+/// la barra che gli sta accanto, e chi si dichiara suo (`data-menu-keep`).
+const SURFACE = ".context-menu, .context-strip, [data-menu-keep]";
 
 /// Quanto un menu sta staccato dal pulsante che lo apre.
 const ANCHOR_GAP = 4;

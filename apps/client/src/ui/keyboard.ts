@@ -20,6 +20,7 @@
 import { t } from "../i18n/strings";
 import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField, isWritingField, runFieldHistory } from "./field-history";
 import type { Lifetime } from "./lifetime";
+import { modalOpen } from "./a11y";
 import { offSheetKey, type OffSheetDocument } from "./off-sheet-keys";
 import {
   WAIT_MS,
@@ -74,6 +75,15 @@ export function mountKeyboard(
     // Popup e editor locali sono già passati: da qui decide l'ordine dei layer
     // nel registro, e ogni esito diverso da `passa` appartiene alla shell.
     e.preventDefault();
+    // Con una finestra modale aperta il fondo non si tocca: Ctrl+N non crea
+    // una nota dietro le Impostazioni, Ctrl+W non chiude la scheda che non si
+    // vede (IMP-152). Il tasto si ferma qui, senza cominciare una sequenza.
+    // Escape e i tasti propri della finestra li ha già presi lei: la trappola
+    // del fuoco in cattura, i suoi ascoltatori prima del documento.
+    if (modalOpen()) {
+      stopWaiting();
+      return;
+    }
     if (result.type === "attende") {
       waitFor(result.waiting);
       return;

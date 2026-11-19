@@ -221,6 +221,54 @@ describe("tastiera e fuoco del menu", () => {
     expect(document.activeElement).toBe(opener);
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  // IMP-151: il clic nel testo con il menu aperto dava il fuoco all'editor, e
+  // la chiusura del menu lo riportava al pulsante che l'aveva aperto. Le
+  // battute dopo andavano al pulsante e si perdevano.
+  it("un clic fuori su ciò che prende il fuoco glielo lascia; su ciò che non lo prende torna al pulsante", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Ordina";
+    const text = document.createElement("div");
+    text.contentEditable = "true";
+    text.tabIndex = 0;
+    const plain = document.createElement("p");
+    plain.textContent = "niente da mettere a fuoco";
+    document.body.append(opener, text, plain);
+
+    // Il menu col sottomenu aperto: nemmeno il sottomenu riporta il fuoco alla
+    // sua voce, che sta per sparire.
+    opener.focus();
+    showContextMenu(opener, [{ label: "Formato", items: [{ label: "Grassetto", run: () => {} }] }]);
+    vi.runAllTimers();
+    const parent = document.querySelector<HTMLButtonElement>("#context-menu [role=menuitem]")!;
+    parent.focus();
+    parent.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    // Il clic del puntatore: il `mousedown` dà il fuoco, poi arriva il `click`.
+    text.focus();
+    text.click();
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.activeElement, "il fuoco resta nel testo cliccato").toBe(text);
+
+    // Un clic su ciò che non prende il fuoco lo lascia al body: torna al pulsante.
+    opener.focus();
+    showContextMenu(opener, [{ label: "Esegui", run: () => {} }]);
+    vi.runAllTimers();
+    (document.activeElement as HTMLElement).blur();
+    plain.click();
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.activeElement, "nessuno l'ha preso: torna al pulsante").toBe(opener);
+
+    // Escape, dopo, torna al pulsante come sempre: la regola è del clic.
+    showContextMenu(opener, [{ label: "Esegui", run: () => {} }]);
+    vi.runAllTimers();
+    document.querySelector<HTMLElement>("#context-menu")!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement).toBe(opener);
+  });
 });
 
 describe("le voci a scelta", () => {

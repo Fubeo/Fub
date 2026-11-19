@@ -164,6 +164,13 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   frecce si rifà a ogni passo e il fuoco passa a quello nuovo nello stesso
   posto (`layoutTree`). Il lanciatore, aprendosi, chiude il menu aperto
   sotto: un Esc lo chiude, e il fuoco torna a chi aveva aperto il menu.
+- **Fuoco dopo un clic fuori da un menu.** Un menu (`showContextMenu` di
+  `ui/menu.ts`: cartella, «Nuovo», «Ordina», vault, riquadro, «…») chiuso
+  da un clic su ciò che prende il fuoco (il testo di una nota, un campo, un
+  altro pulsante) lascia il fuoco lì: né il menu né i suoi sottomenu lo
+  riportano al pulsante d'origine (`keepFocusWhereItIs` in `ui/a11y.ts`).
+  Torna al pulsante con Esc, con una voce scelta e con un clic su ciò che il
+  fuoco non lo prende. Guardie: `ui/menu.test.ts` e `shell.e2e.test.ts`.
 - **Fuoco dopo un cambio di scheda da tastiera.** Un comando che cambia la
   scheda attiva (Ctrl+W, Ctrl+Tab e Ctrl+Maiusc+Tab, Ctrl+PagGiù/PagSu,
   Ctrl+1…9, Ctrl+Maiusc+T, Ctrl+\ e «Dividi sotto», Ctrl+Maiusc+W,
@@ -188,6 +195,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Scorciatoie dietro una finestra modale.** Con una finestra modale aperta
+  (una superficie che intrappola il fuoco e si dichiara `aria-modal`: le
+  Impostazioni, un dialogo, la palette, un menu con la ricerca) le
+  scorciatoie globali tacciono: Ctrl+N non crea una nota e Ctrl+W non chiude
+  la scheda dietro la finestra (`modalOpen` in `ui/a11y.ts`, applicata da
+  `ui/keyboard.ts`). Escape e i tasti propri della finestra restano suoi.
 - **Tasti col fuoco fuori dal foglio.** Una regola sola, nell'unico `keydown`
   della shell, dopo i gestori locali e i comandi (`ui/off-sheet-keys.ts`,
   applicata da `ui/keyboard.ts`). Una lettera, un Backspace o un Canc premuti

@@ -20,6 +20,7 @@ import kernelKeys from "../__fixtures__/command-keys.json";
 import { obsidianKeymap } from "../editors/text/profiles/markdown/commands";
 import { conflicts, normalize, shadowedPrefixes, registerShellCommand, resetShellCommands, type CommandEntry } from "./commands";
 import { mountKeyboard } from "./keyboard";
+import { trapFocus } from "./a11y";
 import { state } from "../state/store";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { SHELL_KEYS } from "./shell-keys.generated";
@@ -296,6 +297,55 @@ describe("popup ed editor locali precedono la shell", () => {
     lifetimes[0]!.close();
     keydown(document.body, "p", true);
     expect(executed).toEqual([]);
+  });
+
+  // IMP-152: con le Impostazioni aperte Ctrl+N creava una nota e Ctrl+W
+  // chiudeva la scheda, dietro la finestra. Con una finestra modale aperta le
+  // scorciatoie globali tacciono; Escape resta della finestra.
+  it("con una finestra modale aperta le scorciatoie globali tacciono, ed Escape la chiude", () => {
+    const executed = mount();
+    const window = document.createElement("div");
+    window.setAttribute("role", "dialog");
+    window.setAttribute("aria-modal", "true");
+    window.innerHTML = '<button id="dentro">Ok</button>';
+    document.body.appendChild(window);
+    let closed = 0;
+    const release = trapFocus(window, () => {
+      closed += 1;
+      release();
+    });
+    const inside = document.getElementById("dentro")!;
+    const event = new KeyboardEvent("keydown", { key: "p", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+    inside.dispatchEvent(event);
+    keydown(document.body, "p", true);
+    expect(executed, "niente agisce sul fondo").toEqual([]);
+    expect(event.defaultPrevented, "e il tasto non va oltre").toBe(true);
+
+    // Un menu non modale sopra la finestra non la toglie di mezzo.
+    const menu = document.createElement("div");
+    document.body.appendChild(menu);
+    const releaseMenu = trapFocus(menu, () => {});
+    keydown(menu, "p", true);
+    expect(executed).toEqual([]);
+    releaseMenu();
+
+    inside.focus();
+    inside.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(closed, "Escape chiude la finestra").toBe(1);
+    // Chiusa la finestra, le scorciatoie tornano.
+    keydown(document.body, "p", true);
+    expect(executed).toEqual(["shell.palette"]);
+  });
+
+  it("un menu non modale aperto non spegne le scorciatoie", () => {
+    const executed = mount();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+    const release = trapFocus(menu, () => {});
+    keydown(menu, "p", true);
+    release();
+    expect(executed).toEqual(["shell.palette"]);
   });
 });
 
