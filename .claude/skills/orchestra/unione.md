@@ -59,9 +59,20 @@ whole task yourself.
 
 ## 4. Clean up
 
-- `git worktree remove <path>` and `git branch -D <coder branch>`: the commits
-  are in the plan branch now. The worktree's `target/` is the biggest thing on
-  disk.
+Right after the push, not at the end of the session:
+
+- `git worktree unlock <path>`, then `git worktree remove <path>` and
+  `git branch -D <coder branch>`: the commits are in the plan branch now. The
+  Agent tool locks the worktrees it creates, so without the unlock `remove`
+  fails and the worktree stays; check the exit code. A `cargo clean` alone is
+  not a clean-up: the worktree and its branch must go too.
+- The same holds for every other branch, local or on GitHub, that has nothing
+  left to give: an experiment that ended, a work-in-progress branch overtaken
+  by the real one, a plan already merged. Before deleting one that is not fully
+  merged (`git merge-base --is-ancestor`, or `git cherry` with only `-` lines),
+  save it with `git bundle`, outside the repository.
+- At every resume, `git ls-remote --heads origin` and `git worktree list`
+  should show only `main`, branches with an open PR and work in progress.
 
 ## Shared build cache
 
