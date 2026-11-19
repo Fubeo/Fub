@@ -2654,7 +2654,7 @@ Fatto quando: andata e ritorno tabella, foglio, tabella coi valori uguali;
 l'annulla sui due file.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features -p
 fub-format-xlsx
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base bc8419ad3
 
 ## T53 · Un valore di cella nel testo
 
@@ -2700,7 +2700,7 @@ Casi limite: un grafico che il file nomina ma non c'è; una tabella senza
 numeri (la voce non c'è); numeri all'italiana.
 Fatto quando: un test della parte grafico; un test del recinto generato.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-xlsx
-Stato: [~] in corso · coder · base 21491084f
+Stato: [x] integrato in integra/editor-2 (09ebbd1b0) · il grafico si chiama col suo titolo (GridCraft non ha il nome della cornice); segue i dati salvati, non il giornale; resta bianco anche al buio come nel foglio; baseline grafici-* dal runner
 
 ## T55 · La somma nella banda
 
@@ -3494,7 +3494,7 @@ Fatto quando: un e2e con tre note e i link interni che portano al posto
 giusto.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [~] in corso · coder · base 21491084f
+Stato: [x] integrato in integra/editor-2 (bc8419ad3) · comando pdf.write_book pronto; «Esporta» del libro passa ancora dalla stampa finché il client non dà l'elenco di pagine al core
 
 ## T79 · I profili e l'esportazione come comando
 
