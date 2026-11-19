@@ -208,16 +208,12 @@ fn chart_name(chart: &gridcraft_model::Chart) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// Il grafico di titolo `name`, senza badare alle maiuscole né agli spazi, come
-/// gli altri nomi della cartella; il primo, nell'ordine dei fogli, se due
-/// hanno lo stesso titolo. Un grafico che il disegno non sa fare (una misura
-/// nulla) non c'è.
+/// Il grafico di titolo `name`, con gli spazi raccolti e senza badare alle
+/// maiuscole, con la stessa chiave degli altri nomi della cartella
+/// (`parts::name_key`); il primo, nell'ordine dei fogli, se due hanno lo stesso
+/// titolo. Un grafico che il disegno non sa fare (una misura nulla) non c'è.
 pub(crate) fn chart_named(workbook: &Workbook, name: &str) -> Option<ChartPart> {
-    let wanted = name
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
+    let wanted = crate::parts::name_key(&name.split_whitespace().collect::<Vec<_>>().join(" "));
     if wanted.is_empty() {
         return None;
     }
@@ -230,7 +226,9 @@ pub(crate) fn chart_named(workbook: &Workbook, name: &str) -> Option<ChartPart> 
                 .charts
                 .iter()
                 .filter(|chart| drawable(chart))
-                .find(|chart| chart_name(chart).is_some_and(|own| own.to_lowercase() == wanted))
+                .find(|chart| {
+                    chart_name(chart).is_some_and(|own| crate::parts::name_key(&own) == wanted)
+                })
                 .map(|chart| ChartPart {
                     sheet: index,
                     id: chart.id,

@@ -144,7 +144,7 @@ describe("«Grafico da questa tabella» nella nota (T54)", () => {
       expect(regenerated.match(/```mermaid/gu)).toHaveLength(1);
       expect(regenerated).toContain('"Stampa" : 300');
       expect(regenerated.endsWith("```\n\nDopo la tabella\n")).toBe(true);
-      expect(notices.at(-1)).toBe(liveStrings.t("table_chart.rewritten"));
+      expect(notices[notices.length - 1]).toBe(liveStrings.t("table_chart.rewritten"));
     } finally {
       cleanup();
     }

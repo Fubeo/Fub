@@ -247,8 +247,9 @@ fn bounded(workbook: &Workbook, sheet: usize, range: RangeRef) -> RangeRef {
 
 /// La chiave con cui due nomi della cartella (fogli, nomi definiti, tabelle)
 /// sono lo stesso: Excel li confronta senza badare alle maiuscole, anche
-/// fuori dall'ASCII («Città» e «CITTÀ» sono un foglio solo).
-fn name_key(name: &str) -> String {
+/// fuori dall'ASCII («Città» e «CITTÀ» sono un foglio solo). Anche i titoli
+/// dei grafici (`objects::chart_named`) si confrontano con questa.
+pub(crate) fn name_key(name: &str) -> String {
     name.to_lowercase()
 }
 
