@@ -3384,7 +3384,7 @@ Casi limite: un diagramma con errore (l'ultimo disegno buono o il riquadro
 Fatto quando: un test dei vettori; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] fatto (t75 @ c05063347), da integrare · lo stile dato a un solo diagramma vale per la sessione dello spazio (nessuna IPC lo salva); togliere lo stile col clic sulla pagina attende T76
+Stato: [x] integrato in integra/editor-2 (d1a7af279) · lo stile di un solo diagramma vale per la sessione dello spazio e non nel libro; togliere lo stile col clic sulla pagina attende T76; vectorOf aspetta il collegamento dello scrittore
 
 ## T76 · Il clic sulla pagina
 
