@@ -4,5 +4,17 @@
     "proprieta": "color",
     "motivo": "Il prototipo scrive a mano #fff sul suo accento; Fub scrive sull'accento il suo inchiostro, --accent-contrast, che la ricetta del tema genera col contrasto garantito: di notte l'accento è un verde chiaro, e il bianco del prototipo non si leggerebbe.",
     "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent; i colori si prendono dal tema); T17"
+  },
+  {
+    "pezzo": "esporta.esporta",
+    "proprieta": "color",
+    "motivo": "Il prototipo scrive a mano l'inchiostro del pulsante «Esporta» (#fff di giorno, #06140c di notte) sul suo accento; Fub scrive sull'accento --accent-contrast, che la ricetta del tema genera col contrasto garantito, come per l'oggi del calendario.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent; i colori si prendono dal tema); T70"
+  },
+  {
+    "pezzo": "esporta.viste",
+    "proprieta": "background-color",
+    "motivo": "Il vassoio delle viste nel prototipo è --tray-2 (#eaf0ec di giorno, #1f2922 di notte), un token che la tavolozza di Fub non ha e che la tabella del piano non traduce; Fub usa il vassoio che il piano dà per --tray, cioè --sheet-2, invece di un colore scritto a mano.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T70"
   }
 ]

@@ -84,6 +84,9 @@ const SHEET_FULL = { width: 1308, height: 800 };
 /// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
 /// computer non si può avere.
 const NOTE_NARROW = { width: 800, height: 800 };
+/// La finestra «700 px» del prototipo dello spazio «Esporta in PDF»: lo spazio
+/// prende la finestra intera, e la sua larghezza è quella.
+const EXPORT_700 = { width: 700, height: 800 };
 /// La testata della trasclusione viva nel riquadro col fuoco.
 const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-head";
 /// Il blocco sincronizzato nel riquadro col fuoco.
@@ -566,6 +569,28 @@ export const SCENE = touchLast(onPage("shell", [
     },
     hover: (page) => page.mouse.move(8, 400),
   },
+  // **Lo spazio «Esporta in PDF»** (T70): dal menu «…» del riquadro, le
+  // pagine come usciranno su un fondo neutro, a destra le dieci sezioni
+  // chiuse che dicono ciò che vale, in fondo la banda. A 700 px il pannello
+  // va sotto le pagine; il telefono sta fra le scene di `mobile.html`.
+  ...[
+    ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
+    ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» a 700 px: il pannello sotto le pagine", EXPORT_700],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // In una finestra stretta l'albero è nel cassetto chiuso: la nota si
+      // apre larga, poi la finestra torna com'era (la scena, o lo stato
+      // della conformità).
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+    },
+  })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
   // cursore sceso con le frecce resta a metà altezza del foglio.
   {
@@ -2576,6 +2601,14 @@ export const SCENE = touchLast(onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // Lo spazio «Esporta in PDF» (T70) sul telefono: la prima forma, col
+    // pannello sotto le pagine.
+    {
+      id: "mobile-esporta-pdf",
+      title: "Il telefono: lo spazio «Esporta in PDF», col pannello sotto le pagine",
+      viewport: PHONE,
+      prepare: (page) => openExportSpace(page),
+    },
     // La formula in riga toccata (T60) sul telefono: il riquadro non esce
     // dallo schermo.
     {
@@ -3030,6 +3063,22 @@ async function openDocumentWindow(page) {
 }
 
 /// Mette ogni scena sulla sua pagina: è dell'elenco, non di ciascuna voce.
+/// Apre lo spazio «Esporta in PDF» dal menu «…» del riquadro col fuoco e
+/// aspetta che l'impaginazione sia finita: la banda dice le pagine e i
+/// fogli visibili hanno le loro fasce.
+async function openExportSpace(page) {
+  await page.click(".pane.focus [data-pane-menu]");
+  await page.click('#context-menu [role=menuitem]:has-text("Esporta in PDF")');
+  await page.waitForSelector(".export-space .export-band-pages");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    return /^\d/.test(pages) && document.querySelector(".export-space .export-slot .export-fascia") !== null;
+  }, null, { timeout: 15_000 });
+  // L'entrata dello spazio è finita, e il puntatore non sta su un controllo.
+  await page.waitForFunction(() => document.querySelector(".export-space")?.getAnimations().length === 0);
+  await page.mouse.move(0, 0);
+}
+
 function onPage(page, scenes) {
   return scenes.map((scene) => ({ query: "", ...scene, page }));
 }
