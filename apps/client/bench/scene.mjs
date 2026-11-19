@@ -1642,7 +1642,8 @@ export const SCENE = touchLast(onPage("shell", [
     ["schede-vive-03-mancante", "Un file mancante («Ritrova…», «Togli dalla nota») e un formato che la nota non mostra («Apri»)", "bottom", null],
     ["schede-vive-04-stretta", "Le schede vive nella finestra minima, 800 px", "top", null, NOTE_NARROW],
     ["schede-vive-05-parte-persa", "Il foglio di cui l'intervallo non c'è più: «Intervallo non trovato: Budget!A1:E7» e «Scegli di nuovo» (T43)", "lost", null],
-  ].map(([id, title, scroll, activate, viewport, extra]) => ({
+    ["schede-vive-06-scelta", "Il foglio scelto coi Blocchi (un clic sulla testata): il filo della selezione lo circonda (T56)", "top", null, null, null, "sheet"],
+  ].map(([id, title, scroll, activate, viewport, extra, choose]) => ({
     id,
     title,
     query: `live=schede-vive&pdf-scena=domanda&workbook=1${extra ?? ""}`,
@@ -1675,6 +1676,11 @@ export const SCENE = touchLast(onPage("shell", [
         const lost = '.pane.focus .pane-editor .live-card .canvas-card-lost';
         await page.waitForSelector(lost);
         await page.evaluate((selector) => document.querySelector(selector)?.closest(".live-card")?.scrollIntoView({ block: "center" }), lost);
+      }
+      if (choose) {
+        const card = `.pane.focus .pane-editor .live-card[data-card-kind="${choose}"]`;
+        await page.click(`${card} .live-card-name`);
+        await page.waitForSelector(`${card}[data-card-chosen="true"]`);
       }
       if (activate) {
         const body = `.pane.focus .pane-editor .live-card[data-card-kind="${activate}"] .live-card-body`;
@@ -1823,10 +1829,12 @@ export const SCENE = touchLast(onPage("shell", [
     ["scheda-documento-02-scelta", "Il verbale scelto coi Blocchi, dopo Esc", "top", "chosen"],
     ["scheda-documento-03-attiva", "Il verbale attivo: si scrive nel documento, con la barra dei documenti", "top", "active"],
     ["scheda-documento-04-lunga", "Un documento di cento pagine: la scheda si ferma e offre «Apri»", "bottom", "rest"],
-  ].map(([id, title, scroll, state]) => ({
+    ["scheda-documento-05-stretta", "Il verbale a riposo nella finestra minima, 800 px (T56)", "top", "rest", NOTE_NARROW],
+  ].map(([id, title, scroll, state, viewport]) => ({
     id,
     title,
     query: "live=scheda-documento",
+    ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
       const cards = '.pane.focus .pane-editor .live-card[data-card-kind="document"]';
@@ -2822,6 +2830,34 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(`${card}[data-card-chosen="true"]`);
     },
   })),
+  // La scheda di un file Craft nella nota (T56): il logo dello studio di
+  // VectorCraft, con le anteprime fatte dalle app spente (`craft-scheda`),
+  // a riposo, scelta, attiva e nella finestra minima.
+  ...[
+    ["scheda-craft-01-riposo", "Il logo di VectorCraft a riposo: il nome, la riga dei dati, perché l'anteprima manca, «Apri» e «Apri con…»", "rest"],
+    ["scheda-craft-02-scelta", "Il logo di VectorCraft scelto coi Blocchi (un clic sulla testata)", "chosen"],
+    ["scheda-craft-03-attiva", "Il logo di VectorCraft attivo: bordo d'accento e «Esc per uscire»", "active"],
+    ["scheda-craft-04-stretta", "Il logo di VectorCraft a riposo nella finestra minima, 800 px", "rest", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-craft&craft-scheda=spente",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="craft"]';
+      await page.waitForSelector(`${card}[data-card-state="view"]`);
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (state === "chosen") {
+        await page.click(`${card} .live-card-name`);
+        await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+      }
+      if (state === "active") {
+        await page.click(`${card} .live-card-body`);
+        await page.waitForSelector(`${card}[data-card-active="true"]`);
+      }
+    },
+  })),
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
@@ -2892,6 +2928,49 @@ export const SCENE = touchLast(onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // Le schede vive nella nota sul telefono (T56), una scena per specie a
+    // riposo: il foglio e il PDF (con il file mancante e il formato senza
+    // vista sotto), il contratto di quattro pagine, il verbale, la pianta,
+    // la zona lavagna e il file Craft.
+    ...[
+      ["mobile-schede-vive", "Il telefono: il contratto e i conti come schede vive", "live=schede-vive&pdf-scena=domanda&workbook=1"],
+      ["mobile-schede-mancante", "Il telefono: un file mancante e un formato che la nota non mostra", "live=schede-vive&pdf-scena=domanda&workbook=1", "unsupported"],
+      ["mobile-scheda-pdf", "Il telefono: la scheda PDF, dalla pagina 2", "live=schede-pdf&giro=editor", "pdf"],
+      ["mobile-scheda-documento", "Il telefono: il verbale in ODT a riposo", "live=scheda-documento", "document"],
+      ["mobile-scheda-disegno", "Il telefono: la pianta a riposo", "live=scheda-disegno", "drawing"],
+      ["mobile-scheda-lavagna", "Il telefono: il percorso della visita a riposo", "live=scheda-lavagna", "canvas"],
+      ["mobile-scheda-craft", "Il telefono: il logo di VectorCraft senza anteprima", "live=scheda-craft&craft-scheda=spente", "craft"],
+    ].map(([id, title, query, focus]) => ({
+      id,
+      title,
+      query,
+      viewport: PHONE,
+      prepare: async (page) => {
+        await openLive(page, [], "top");
+        await page.waitForFunction(() => {
+          const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+          return cards.length > 0 && cards.every((card) => card.dataset.cardState !== "loading")
+            && [...document.querySelectorAll(".pane.focus .pane-editor .canvas-card-sheet")]
+              .every((sheet) => sheet.dataset.cardState === "content" || sheet.dataset.cardState === "lost");
+        });
+        if (!focus) return;
+        if (focus === "unsupported") {
+          // Le schede sopra hanno preso la loro altezza: si va in fondo, dove
+          // CodeMirror monta le ultime.
+          await page.evaluate(() => {
+            const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+            if (scroller) scroller.scrollTop = scroller.scrollHeight;
+          });
+        }
+        const card = focus === "unsupported"
+          ? '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]'
+          : `.pane.focus .pane-editor .live-card[data-card-kind="${focus}"]`;
+        await page.waitForSelector(card);
+        // Il PDF ha la sua pagina sulla carta prima della foto.
+        if (focus === "pdf") await page.waitForSelector(`${card} .canvas-card-pdf[data-card-state="content"]`);
+        await page.evaluate(([selector, block]) => document.querySelector(selector)?.scrollIntoView({ block }), [card, focus === "unsupported" ? "end" : "center"]);
+      },
+    })),
     // Lo spazio «Esporta in PDF» (T70) sul telefono: la prima forma, col
     // pannello sotto le pagine.
     {
