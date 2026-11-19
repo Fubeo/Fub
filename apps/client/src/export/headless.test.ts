@@ -8,7 +8,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CommandOutcome, RenderedDocument } from "../host/contract";
 import { printBlocks } from "./paginate/measure";
 import type { BlockSource, Scheduler } from "./paginate/slices";
-import { LISTEN_COMMAND, loadPipeline, pageListOf, parseRequest, QUEUE_LIMIT, REQUEST_TOPIC, startHeadlessExport, WRITE_COMMAND, type HeadlessDeps } from "./headless";
+import { LISTEN_COMMAND, loadRun, parseRequest, QUEUE_LIMIT, REQUEST_TOPIC, startHeadlessExport, WRITE_COMMAND, type HeadlessDeps } from "./headless";
+import { loadPipeline, pageListOf } from "./headless-run";
 import { defaultProfile } from "./profile";
 import type { measureSheets } from "./probe";
 
@@ -114,7 +115,7 @@ function harness(extra: Partial<HeadlessDeps> = {}): Harness {
 // I pezzi dell'impaginazione si caricano una volta prima delle prove: il
 // primo `import()` dinamico, su una macchina carica, non conta nei tempi.
 beforeAll(async () => {
-  await loadPipeline();
+  await Promise.all([loadRun(), loadPipeline()]);
 }, 60_000);
 
 afterEach(() => {

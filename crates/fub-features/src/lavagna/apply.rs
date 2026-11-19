@@ -163,7 +163,7 @@ fn first_problem(raw: &str) -> String {
 
 /// Un'operazione rifiutata: la posizione si conta da uno, come la legge chi
 /// ha scritto la lista.
-fn operation(error: OpError) -> PluginError {
+pub(super) fn operation(error: OpError) -> PluginError {
     let position = Arg::text("position", (error.index() + 1).to_string());
     let (key, mut args) = match &error {
         OpError::UnknownNode { id, .. } => (E_OP_UNKNOWN_NODE, vec![Arg::text("id", id)]),
@@ -191,7 +191,7 @@ fn operation(error: OpError) -> PluginError {
 
 /// Un commit rifiutato. Una toppa stantia o un sorgente che non si rilegge
 /// sono un difetto del nucleo, non degli argomenti: errori interni.
-fn committing(doc: &DocId, error: CommitError) -> PluginError {
+pub(super) fn committing(doc: &DocId, error: CommitError) -> PluginError {
     let reason = || vec![Arg::text("reason", error.to_string())];
     match &error {
         CommitError::Stale(_) => PluginError::Internal(about(E_COMMIT_STALE, doc, Vec::new())),

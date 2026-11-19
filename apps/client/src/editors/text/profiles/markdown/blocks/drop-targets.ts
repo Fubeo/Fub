@@ -8,8 +8,9 @@
 // in fondo alla sezione di quel titolo, in un passo d'annullamento. Le note
 // del cassetto (T32): «Sposta in «…»» porta il blocco in fondo a quella nota
 // con il comando del nucleo, due scritture e un annulla; al suo posto resta il
-// link. La lavagna a lato (T48) ne aggiungerà altri. Niente DOM: rettangoli e
-// testo.
+// link. Le lavagne aperte a lato (T48): «Porta sulla lavagna «…»» fa del
+// blocco una scheda di quella lavagna, con un altro comando del nucleo, due
+// scritture e un annulla; con Ctrl lo copia. Niente DOM: rettangoli e testo.
 import type { EditorState } from "@codemirror/state";
 import type { SurfaceDropDocument, SurfaceDropOffer, SurfacePlaceOffer, SurfaceRect } from "../../../../core/registry";
 import { byteToNormalizedCharIndices } from "../../../../../rules/offsets";
@@ -31,6 +32,9 @@ export interface DropTarget {
   /// dell'editor ma «Sposta in…» verso di lei, in fondo, col link al posto del
   /// blocco. Chi tiene il blocco chiede lo spostamento (`BlocksOptions.moveBlock`).
   readonly note?: { readonly document: SurfaceDropDocument; readonly title: string };
+  /// Una lavagna aperta a lato: il rilascio è «Porta su una lavagna» verso di
+  /// lei, una scheda per blocco (`BlocksOptions.board`); con Ctrl una copia.
+  readonly board?: { readonly document: SurfaceDropDocument; readonly title: string };
 }
 
 /// Il titolo che un posto della Struttura nomina: quello che comincia dove
@@ -161,6 +165,26 @@ export function noteTargets(offers: readonly SurfaceDropOffer[]): DropTarget[] {
       hover: (on) => offer.hover(on),
       drop: () => null,
       note: { document: offer.document, title },
+    });
+  }
+  return out;
+}
+
+/// I bersagli delle lavagne aperte a lato: uno per riquadro, «Porta sulla
+/// lavagna «Nome»». Il rilascio non tocca il documento: lo dice `board`.
+export function boardTargets(offers: readonly SurfaceDropOffer[]): DropTarget[] {
+  const out: DropTarget[] = [];
+  for (const offer of offers) {
+    if (offer.kind !== "board") continue;
+    const rect = offer.rect;
+    if (!(rect.right > rect.left && rect.bottom > rect.top)) continue;
+    const title = offer.title.trim() || offer.document.documentId;
+    out.push({
+      rect,
+      label: liveStrings.t("blocks.drag.board", { name: title }),
+      hover: (on) => offer.hover(on),
+      drop: () => null,
+      board: { document: offer.document, title },
     });
   }
   return out;

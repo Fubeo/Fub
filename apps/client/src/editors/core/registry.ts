@@ -258,8 +258,11 @@ export interface SurfaceRect {
  * - `note`: a row that names a whole note of the same vault (a note of the
  *   drawer's tree): dropped there, the block goes to that note («Sposta in»,
  *   T32). The note may be the document itself.
+ * - `board`: a whiteboard of the same vault open beside (a pane showing a
+ *   `.canvas`): dropped there, the block becomes a card of it («Porta su una
+ *   lavagna», T48).
  */
-export type SurfaceDropOffer = SurfacePlaceOffer | SurfaceNoteOffer;
+export type SurfaceDropOffer = SurfacePlaceOffer | SurfaceNoteOffer | SurfaceBoardOffer;
 
 /** What every offer has: where it is on screen and how it shows the pointer over it. */
 interface SurfaceDropRow {
@@ -284,6 +287,15 @@ export interface SurfaceNoteOffer extends SurfaceDropRow {
   /** The note the row names, in the vault `vault`. */
   readonly document: SurfaceDropDocument;
   /** Its name as the row shows it. */
+  readonly title: string;
+}
+
+/** A whiteboard open beside, in the same vault: see `SurfaceDropOffer`. */
+export interface SurfaceBoardOffer extends SurfaceDropRow {
+  readonly kind: "board";
+  /** The whiteboard the pane shows, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  /** Its name as the pane's tab shows it. */
   readonly title: string;
 }
 
@@ -326,7 +338,8 @@ export function offerDropTargets(source: SurfaceDropOffers): () => void {
 
 /**
  * The drop places every source offers for `document` now: its own places
- * (same document, same vault) and the notes of its vault. A source that throws
+ * (same document, same vault), the notes of its vault and the whiteboards of
+ * its vault open beside. A source that throws
  * offers nothing: a gesture never breaks for a place it can't reach.
  */
 export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
@@ -335,7 +348,8 @@ export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
     try {
       for (const offer of source.offers(document)) {
         if (offer.document.vault !== document.vault) continue;
-        if (offer.kind === "note" || offer.document.documentId === document.documentId) out.push(offer);
+        const own = offer.document.documentId === document.documentId;
+        if (offer.kind === "board" ? !own : offer.kind === "note" || own) out.push(offer);
       }
     } catch {
       // Una sorgente guasta non toglie le altre.
@@ -445,6 +459,14 @@ export interface SurfaceStatus {
 export interface SurfaceActiveCell {
   readonly name: string;
   readonly formula: string;
+  /**
+   * The sheet of the active cell, by name, and the selected range around it
+   * in A1 (`B2:C4`, or the cell alone): «Estrai» of a sheet card in a note
+   * writes them as the part of a new embed (T49). Absent when the surface
+   * can't tell.
+   */
+  readonly sheet?: string;
+  readonly range?: string;
 }
 
 export interface SurfaceActiveCellSource {

@@ -156,6 +156,8 @@ pub use blocks::{
     COMMENTS_RULE, DIAGRAMS_RULE, DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER,
     MATH_RULE,
 };
+#[cfg(all(feature = "commands", feature = "xlsx"))]
+pub use commands::NOTE_TABLE_SHEET;
 #[cfg(feature = "commands")]
 pub use commands::{
     occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_BLOCK_MOVE,

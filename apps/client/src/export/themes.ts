@@ -69,15 +69,77 @@ export const PALETTES: Readonly<Record<PaletteKind, readonly string[]>> = {
 };
 
 /// I caratteri di stampa di Fub (gli id di `Testo::carattere_testo`), con
-/// la pila CSS. Georgia e Palatino sono del sistema: dove mancano, la pila
-/// ricade su Literata, che Fub porta con sé.
+/// la pila CSS: solo caratteri che Fub porta con sé (`public/fonts`), perché
+/// il PDF incorpora lo stesso file che disegna le pagine
+/// (`crates/fub-features/src/pdf_export/fonts.rs`). Un carattere del sistema
+/// sullo schermo e un altro nel PDF non sarebbero la stessa pagina.
 export const PRINT_FONTS: Readonly<Record<string, { readonly name: string; readonly stack: string }>> = {
-  newsreader: { name: "Newsreader", stack: '"Newsreader Variable", Georgia, "Times New Roman", serif' },
-  hanken: { name: "Hanken Grotesk", stack: '"Hanken Grotesk Variable", system-ui, sans-serif' },
-  georgia: { name: "Georgia", stack: 'Georgia, "Literata Variable", "Times New Roman", serif' },
-  palatino: { name: "Palatino", stack: '"Palatino Linotype", Palatino, "Book Antiqua", "Literata Variable", Georgia, serif' },
-  plex: { name: "IBM Plex Mono", stack: '"IBM Plex Mono", ui-monospace, monospace' },
+  newsreader: { name: "Newsreader", stack: '"Newsreader Variable", "Literata Variable", serif' },
+  literata: { name: "Literata", stack: '"Literata Variable", serif' },
+  hanken: { name: "Hanken Grotesk", stack: '"Hanken Grotesk Variable", "Inter Variable", sans-serif' },
+  inter: { name: "Inter", stack: '"Inter Variable", sans-serif' },
+  plex: { name: "IBM Plex Mono", stack: '"IBM Plex Mono", "JetBrains Mono Variable", monospace' },
 };
+
+/// I caratteri di Fub nell'ordine della sezione «Caratteri»; IBM Plex Mono
+/// solo per i titoli, come nel prototipo.
+export const FUB_TEXT_FONTS = ["newsreader", "literata", "hanken", "inter"] as const;
+export const FUB_HEADING_FONTS = ["newsreader", "literata", "hanken", "inter", "plex"] as const;
+
+/// Gli id di un tempo, che un profilo scritto prima può ancora nominare:
+/// Georgia e Palatino erano caratteri del sistema, che il PDF non poteva
+/// incorporare. Valgono come Literata, il libro di Fub.
+const FONT_ALIASES: Readonly<Record<string, string>> = { georgia: "literata", palatino: "literata" };
+
+/// Se un id è un carattere del vault: il percorso di un file `.ttf`, `.otf`,
+/// `.woff` o `.woff2`, come lo nomina il profilo (`facce[].file`).
+export function isVaultFont(id: string | null | undefined): id is string {
+  return typeof id === "string" && /\.(?:ttf|otf|woff2?)$/iu.test(id) && !id.startsWith("/") && !id.includes("://") && !id.split("/").includes("..");
+}
+
+/// La famiglia CSS di ogni carattere del vault già caricato nel documento
+/// (`sections/fonts.ts` la registra con `FontFace`), per percorso. Finché un
+/// carattere non c'è, le pagine usano quello del tema: lo stesso che lo
+/// scrittore userebbe.
+const vaultFamilies = new Map<string, string>();
+
+/// Dice che il carattere del vault `file` si disegna come la famiglia CSS
+/// `family` (`null`: non più).
+export function setVaultFontFamily(file: string, family: string | null): void {
+  if (family === null) vaultFamilies.delete(file);
+  else vaultFamilies.set(file, family);
+}
+
+/// La famiglia CSS di un carattere del vault caricato, o `null`.
+export function vaultFontFamily(file: string): string | null {
+  return vaultFamilies.get(file) ?? null;
+}
+
+/// L'id di un carattere come la stampa lo usa: uno di Fub, uno del vault o
+/// `null` per uno che questa versione non conosce.
+export function printFontId(id: string | null | undefined): string | null {
+  if (!id) return null;
+  if (id in PRINT_FONTS) return id;
+  if (id in FONT_ALIASES) return FONT_ALIASES[id];
+  return isVaultFont(id) ? id : null;
+}
+
+/// La pila CSS di un carattere: uno del vault caricato davanti, poi
+/// `fallback`, il carattere di Fub che il tema sceglie.
+export function fontStack(id: string, fallback: string): string {
+  if (id in PRINT_FONTS) return PRINT_FONTS[id].stack;
+  const family = isVaultFont(id) ? vaultFontFamily(id) : null;
+  const base = PRINT_FONTS[fallback]?.stack ?? PRINT_FONTS.newsreader.stack;
+  return family ? `"${family}", ${base}` : base;
+}
+
+/// Il nome di un carattere per chi legge: quello di Fub, o il nome del file
+/// del vault senza estensione.
+export function fontName(id: string): string {
+  if (id in PRINT_FONTS) return PRINT_FONTS[id].name;
+  const file = id.split("/").pop() ?? id;
+  return file.replace(/\.[^.]+$/u, "");
+}
 
 /// Ciò che un tema decide del testo, tutto pieno.
 export interface ThemeText {
@@ -130,8 +192,8 @@ const THEMES: readonly PrintTheme[] = [
   theme("classico", ["#fffdf8", "#1c1a17", "#1c1a17", "#8a2b1d", "#8a2b1d", "#6b655c", "#d9d3c7", "#f7e9b0", "#f6f0e3", "#f4efe6", "#f1ebdf"], { carattere_titoli: "newsreader", giustificato: true, paragrafi: "rientro", allineamento_titoli: "centro" }),
   theme("relazione", ["#ffffff", "#1b2430", "#12305c", "#1f4f8f", "#1f4f8f", "#5a6675", "#d3dbe6", "#fff0b3", "#e9f0fa", "#f1f4f8", "#e3ebf6"], { carattere_testo: "hanken", titoli_numerati: true, corpo: 10.5 }),
   theme("rivista", ["#ffffff", "#161616", "#111111", "#c8371f", "#c8371f", "#666666", "#dcdcdc", "#ffe9a8", "#fbeeea", "#f4f4f4", "#f0f0f0"], { colonne: 2, scala_titoli: 1.36, giustificato: true, corpo: 10 }),
-  theme("accademico", ["#ffffff", "#111111", "#111111", "#333333", "#1a3f7a", "#555555", "#bdbdbd", "#f3e7a8", "#f3f3f3", "#f5f5f5", "#ececec"], { carattere_testo: "georgia", carattere_titoli: "georgia", giustificato: true, titoli_numerati: true, paragrafi: "rientro", interlinea: 1.6 }),
-  theme("quaderno", ["#fbf5e9", "#3a2e22", "#2b2018", "#a4552a", "#8a4521", "#7a6a58", "#e2d6c1", "#f6e2a0", "#f3e9d6", "#f1e8d6", "#eee2cc"], { carattere_titoli: "newsreader", carattere_testo: "palatino" }),
+  theme("accademico", ["#ffffff", "#111111", "#111111", "#333333", "#1a3f7a", "#555555", "#bdbdbd", "#f3e7a8", "#f3f3f3", "#f5f5f5", "#ececec"], { carattere_testo: "literata", carattere_titoli: "literata", giustificato: true, titoli_numerati: true, paragrafi: "rientro", interlinea: 1.6 }),
+  theme("quaderno", ["#fbf5e9", "#3a2e22", "#2b2018", "#a4552a", "#8a4521", "#7a6a58", "#e2d6c1", "#f6e2a0", "#f3e9d6", "#f1e8d6", "#eee2cc"], { carattere_titoli: "newsreader", carattere_testo: "literata" }),
   theme("essenziale", ["#ffffff", "#000000", "#000000", "#000000", "#000000", "#444444", "#8f8f8f", "#e6e6e6", "#ffffff", "#ffffff", "#ffffff"], { carattere_testo: "hanken", corpo: 10.5 }),
   theme("notte", ["#131c16", "#e4eae6", "#f1f5f2", "#55c690", "#7fd8ad", "#a0aaa4", "#313d35", "#5c4d16", "#17251c", "#19221c", "#1f2922"]),
 ];
@@ -326,7 +388,7 @@ export function lookVariables(profile: ExportProfile, themeId = profile.tema): R
 export function textOf(profile: ExportProfile, themeId = profile.tema): ThemeText {
   const base = printTheme(themeId).text;
   const own = profile.testo;
-  const font = (value: string | null | undefined, fallback: string) => (value && value in PRINT_FONTS ? value : fallback);
+  const font = (value: string | null | undefined, fallback: string) => printFontId(value) ?? fallback;
   const number = (value: number | null | undefined, fallback: number) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback);
   return {
     carattere_testo: font(own.carattere_testo, base.carattere_testo),
@@ -347,10 +409,13 @@ const round = (value: number) => String(Math.round(value * 1000) / 1000);
 /// Le variabili del testo: cambiano le misure, e rifanno l'impaginazione.
 export function typeVariables(profile: ExportProfile, themeId = profile.tema): Record<string, string> {
   const text = textOf(profile, themeId);
+  const base = printTheme(themeId).text;
   const hs = text.scala_titoli;
   return {
-    "--font-reading": PRINT_FONTS[text.carattere_testo].stack,
-    "--print-font-headings": PRINT_FONTS[text.carattere_titoli].stack,
+    // Un carattere del vault ha dietro quello del tema: dove manca una
+    // lettera, o finché il file non è caricato, si legge quello.
+    "--font-reading": fontStack(text.carattere_testo, base.carattere_testo),
+    "--print-font-headings": fontStack(text.carattere_titoli, base.carattere_titoli),
     // Il corpo in punti, sulla pagina in pixel CSS: 96 per pollice, 72 punti.
     "--text-reading": `${round((text.corpo * 96) / 72)}px`,
     "--leading-relaxed": round(text.interlinea),
@@ -364,6 +429,8 @@ export function typeVariables(profile: ExportProfile, themeId = profile.tema): R
     "--print-paragraph-pull": text.paragrafi === "rientro" ? "1" : "0",
     "--print-indent": text.paragrafi === "rientro" ? "1.5em" : "0",
     "--print-heading-numbers": text.titoli_numerati ? "inline" : "none",
+    // La sillabazione non è del tema: è tua e basta (`Testo::sillabazione`).
+    "--print-hyphens": profile.testo.sillabazione ? "auto" : "manual",
   };
 }
 

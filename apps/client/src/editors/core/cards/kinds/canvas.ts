@@ -80,6 +80,28 @@ export function boardCardCount(text: string): number | null {
   }
 }
 
+/// Il testo della lavagna di «Annota» (T49): JSON Canvas con una sola scheda
+/// di file, `path` con la sua parte, in alto a sinistra e grande `width` ×
+/// `height` (arrotondati, almeno 40). Le chiavi nell'ordine del formato
+/// (`docs/reference/canvas-format.md`) e il testo come lo scrive la lavagna:
+/// `JSON.stringify` a due spazi e un a capo in fondo. L'inchiostro che la
+/// penna ci mette sopra sta nel campo `fub:ink` della scheda, attaccato alla
+/// pagina come sulla lavagna: la nota non lo vede mai.
+export function annotationBoardText(path: string, subpath: string | null, width: number, height: number): string {
+  const size = (value: number): number => (Number.isFinite(value) ? Math.max(40, Math.round(value)) : 400);
+  const node = {
+    id: `annota-${Date.now().toString(36)}`,
+    type: "file",
+    file: path,
+    ...(subpath ? { subpath } : {}),
+    x: 0,
+    y: 0,
+    width: size(width),
+    height: size(height),
+  };
+  return `${JSON.stringify({ nodes: [node], edges: [] }, null, 2)}\n`;
+}
+
 /// Quante zone lavagna contengono già `host`.
 function depthOf(host: HTMLElement): number {
   let depth = 0;

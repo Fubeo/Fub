@@ -536,7 +536,8 @@ function collectRules(sheet: CSSStyleSheet, into: Map<string, FontRule[]>): void
     const url = /url\(\s*["']?([^"')]+)["']?\s*\)/u.exec(rule.style.getPropertyValue("src"))?.[1];
     if (!family || !url) continue;
     const base = sheet.href ?? location.href;
-    const file = new URL(url, base).pathname;
+    // Il percorso com'è nel vault: l'URL scrive uno spazio come `%20`.
+    const file = safeDecode(new URL(url, base).pathname);
     const weights = rule.style.getPropertyValue("font-weight").split(/\s+/u).map(Number).filter((n) => n > 0);
     const weight: [number, number] = weights.length === 0 ? [400, 400] : [weights[0], weights[weights.length - 1]];
     const italic = /italic|oblique/u.test(rule.style.getPropertyValue("font-style"));
@@ -552,6 +553,14 @@ function pick(rules: FontRule[], weight: number, italic: boolean): FontRule {
   const pool = styled.length > 0 ? styled : rules;
   const distance = (r: FontRule) => (weight < r.weight[0] ? r.weight[0] - weight : weight > r.weight[1] ? weight - r.weight[1] : 0);
   return pool.reduce((best, r) => (distance(r) < distance(best) ? r : best));
+}
+
+function safeDecode(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
 }
 
 function unquote(value: string): string {

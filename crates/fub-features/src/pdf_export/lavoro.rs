@@ -34,7 +34,6 @@ use super::writer::{scrivi_con, valida, Controllo, Interruzione, Opzioni, Qualit
 use super::{
     ElencoPagine, ErroreEsportazione, OstacoloPdfa, Risorse, MAX_ELENCO_BYTE, MAX_TEMPO_MS,
 };
-use crate::draw::per_il_pdf;
 
 /// Scrive nel vault il PDF di un elenco di pagine.
 pub const PDF_WRITE_PAGES: &str = "pdf.write_pages";
@@ -357,14 +356,15 @@ pub fn con_le_stringhe(catalogs: Vec<StringCatalog>) -> Vec<StringCatalog> {
     catalogs
         .into_iter()
         .map(|catalog| match catalog.locale.as_str() {
-            "it" => in_italian(catalog),
-            "en" => in_english(catalog),
+            "it" => super::fonts::in_italian(in_italian(catalog)),
+            "en" => super::fonts::in_english(in_english(catalog)),
             _ => catalog,
         })
         .collect()
 }
 
-/// Un fornitore di comandi con in più `pdf.write_pages`.
+/// Un fornitore di comandi con in più `pdf.write_pages` e `pdf.vault_fonts`
+/// (i caratteri del vault per la stampa, [`super::fonts`]).
 ///
 /// Il PDF delle note sta nel bundle dei disegni (ne usa i caratteri e si
 /// accende con la stessa feature), ma il modulo dei disegni non lo nomina:
@@ -376,6 +376,7 @@ impl<P: CommandProvider> CommandProvider for ConIlPdf<P> {
     fn commands(&self) -> Vec<CommandSpec> {
         let mut specs = self.0.commands();
         specs.push(spec());
+        specs.push(super::fonts::spec());
         specs
     }
 
@@ -388,6 +389,9 @@ impl<P: CommandProvider> CommandProvider for ConIlPdf<P> {
     ) -> Result<CommandOutcome, PluginError> {
         if command == PDF_WRITE_PAGES {
             return invoke(args, mode, host);
+        }
+        if command == super::fonts::PDF_VAULT_FONTS {
+            return super::fonts::invoke(&*host);
         }
         self.0.invoke(command, args, mode, host)
     }
@@ -738,12 +742,12 @@ struct Ponte<'h> {
 }
 
 impl Risorse for Ponte<'_> {
-    /// Un carattere di Fub (`/fonts/<nome>`, come l'app lo serve) dal binario;
-    /// ogni altro dal vault.
+    /// Un carattere di Fub (`/fonts/<nome>`, come l'app lo serve) dal binario
+    /// ([`super::fonts::file_dell_app`]); ogni altro dal vault.
     fn carattere(&self, file: &str) -> Option<Vec<u8>> {
         let nome = file.trim_start_matches('/');
         if let Some(nome) = nome.strip_prefix("fonts/") {
-            if let Some(byte) = per_il_pdf::file_di_fub(nome) {
+            if let Some(byte) = super::fonts::file_dell_app(nome) {
                 return Some(byte.to_vec());
             }
         }

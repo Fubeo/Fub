@@ -12,7 +12,13 @@ use super::*;
 /// era italiana per chiunque — compreso chi aveva scelto `en` nelle
 /// impostazioni e vedeva già il resto in inglese.
 pub fn catalog() -> Vec<StringCatalog> {
-    crate::formats::speaking(vec![catalog_it(), catalog_en()])
+    let (it, en) = (catalog_it(), catalog_en());
+    #[cfg(feature = "xlsx")]
+    let (it, en) = (
+        super::table_sheet::catalog_it(it),
+        super::table_sheet::catalog_en(en),
+    );
+    crate::formats::speaking(vec![it, en])
 }
 
 fn catalog_it() -> StringCatalog {

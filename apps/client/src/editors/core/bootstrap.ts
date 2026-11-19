@@ -3,6 +3,9 @@ import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
 import type { LiveCardKit, LiveCardsPort } from "../text/profiles/markdown/live-cards";
 import type { CellValuePort, CellValueReader } from "../text/profiles/markdown/cell-value";
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
+import type { TableSheetPort } from "../text/profiles/markdown/table-sheet";
+import { FUB_CELLS_TYPE, rememberCellsCopy } from "../text/profiles/markdown/cells-clipboard";
+import type { BoardPort } from "../text/profiles/markdown/blocks/to-board";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
@@ -138,6 +141,10 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
   /// «Sposta in…» dal menu del blocco e sulle note del cassetto (T32).
   readonly moveBlock?: MoveBlockPort;
+  /// «Trasforma in foglio» dal menu della tabella (T52).
+  readonly tableSheet?: TableSheetPort;
+  /// «Porta su una lavagna» dal menu del blocco e sulle lavagne a lato (T48).
+  readonly boardBlock?: BoardPort;
   /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
   readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
@@ -380,7 +387,9 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
   return pdfEngine;
 }
 
-const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
+/// Il motore dei PDF, caricato alla prima richiesta: anche per le pagine di
+/// un PDF incorporato che l'esportazione mette in coda (T74).
+export const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
 
 /// Le immagini ferme delle schede: una cache sola per finestra, per tutte le
 /// lavagne che vi si aprono, legata al vault in cui si sono fatte. Una lavagna
@@ -560,8 +569,8 @@ const CANVAS_CITATIONS: CardCitations = {
 function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts, context: SurfaceMountContext): LiveCardsPort {
   let kit: Promise<LiveCardKit | null> | null = null;
   return {
-    load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract")]).then(
-      ([cardsFor, contract]): LiveCardKit => {
+    load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract"), import("./cards/kinds/canvas")]).then(
+      ([cardsFor, contract, zone]): LiveCardKit => {
         const cards = cardsFor(context, "note");
         return {
           registry: cards.registry,
@@ -570,6 +579,8 @@ function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts,
           ...(ports.editors ? { editors: ports.editors } : {}),
           kindOf: (path) => contract.noteCardKindOf(path),
           maxLive: contract.MAX_LIVE_CARDS,
+          // «Annota» (T49): la lavagna con la sola scheda, come la zona la legge.
+          annotationBoard: (path, subpath, width, height) => zone.annotationBoardText(path, subpath, width, height),
         };
       },
       (error: unknown) => {
@@ -798,6 +809,8 @@ export function createDocumentSurfaceRegistry(
             onRenamePage: options.onRenamePage,
             onNewSubpage: options.onNewSubpage,
             ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
+            ...(options.tableSheet ? { tableSheet: options.tableSheet } : {}),
+            ...(options.boardBlock ? { boardBlock: options.boardBlock } : {}),
             ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
@@ -1075,6 +1088,18 @@ function mountGrid(
     // La cella attiva: dati per chi ospita la scheda, e il modo di portare il
     // foglio aperto su una cella (T53: il clic su un valore nel testo).
     activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
+    // Le celle copiate dicono da dove vengono (T52): una nota che le incolla
+    // offre la scheda di quella parte del foglio. Dopo la copia del motore,
+    // che scrive il testo e l'HTML, e solo se l'ha fatta lui.
+    const tellOrigin = (event: ClipboardEvent): void => {
+      if (!event.defaultPrevented || !event.clipboardData) return;
+      const refs = engine.selectionRefs();
+      const origin = { doc: context.documentId, sheet: refs.sheet, range: refs.range };
+      event.clipboardData.setData(FUB_CELLS_TYPE, JSON.stringify(origin));
+      rememberCellsCopy(engine.selectionTsv(), origin);
+    };
+    compactLife.listen(context.parent, "copy", tellOrigin);
+    compactLife.listen(context.parent, "cut", tellOrigin);
     if (!compact) void import("../grid/palette/commands").then(
       ({ mountGridPalette }) => {
         if (!destroyed) palette = mountGridPalette(engine);

@@ -36,7 +36,10 @@ describe("i pezzi della pelle", () => {
   });
 });
 
-describe("i gruppi della pelle", () => {
+// Minimizzano e passano dal cancello tutta la pelle: da soli stanno sotto il
+// secondo, ma sotto il carico di un controllo completo superavano i 5 s di
+// serie (corsa locale del 2026-11-19).
+describe("i gruppi della pelle", { timeout: 30_000 }, () => {
   it("rimessi insieme sono la pelle minimizzata, coi pezzi in ordine e sotto il margine", () => {
     const groups = skinGroups(SKIN, TARGET);
     expect(groups.length).toBeGreaterThan(1);

@@ -225,7 +225,9 @@ impl ChiaveTesto {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Testo {
     /// Il carattere del testo: l'id di un carattere di Fub (`newsreader`,
-    /// `hanken`, `georgia`, `palatino`, `plex`) o il percorso di uno del vault.
+    /// `literata`, `hanken`, `inter`; `plex` solo per i titoli) o il percorso
+    /// di uno del vault. `georgia` e `palatino`, dei profili di prima, si
+    /// leggono `literata`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carattere_testo: Option<String>,
     /// Il carattere dei titoli, come [`Testo::carattere_testo`].

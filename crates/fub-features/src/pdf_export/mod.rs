@@ -20,6 +20,8 @@
 //! - [`writer`]: il controllo dell'elenco, le pagine, i dati del documento e i
 //!   collegamenti;
 //! - `text`: i caratteri, i loro sotto-insiemi e il testo;
+//! - [`fonts`]: i caratteri che la stampa offre, quelli di Fub e quelli del
+//!   vault col permesso d'incorporarli, e il comando che li elenca;
 //! - `images`: i vettori e le immagini, piene o alleggerite;
 //! - `outline`: i segnalibri;
 //! - `tags`: la struttura del PDF accessibile (i tag, l'ordine di lettura, i
@@ -67,6 +69,7 @@ pub mod book;
 #[cfg(test)]
 mod book_tests;
 pub mod command;
+pub mod fonts;
 mod images;
 #[cfg(test)]
 mod images_tests;

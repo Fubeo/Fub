@@ -27,13 +27,18 @@ import {
   repartEmbedAt,
   showEmbedAt,
   sizeEmbedAt,
+  annotateEmbedIn,
+  annotationBoardStem,
+  extractEmbedAt,
+  sheetExcerptPart,
+  type LiveCardBoards,
   type LiveCardKit,
   type LiveCardsPort,
 } from "./live-cards";
 import type { CardContext, CardKind, CardMode, CardRenderer, CardView } from "../../../core/cards/contract";
 import { blockAt, markdownBlockGroup, sheetCardGroup, type BlockGroupHost } from "./block-groups";
 import { mountMarkdown } from "./mount";
-import { embedSize } from "./media";
+import { embedSize, pdfPassage } from "./media";
 import { removeColumnAt } from "./callout";
 import { blockModel } from "./blocks/model";
 import { pdfCardRenderer } from "../../../core/cards/kinds/pdf";
@@ -131,6 +136,7 @@ class FakeView implements CardView {
 function kindOf(path: string): CardKind {
   if (path.endsWith(".pdf")) return "pdf";
   if (path.endsWith(".xlsx")) return "sheet";
+  if (path.endsWith(".canvas")) return "canvas";
   return "file";
 }
 
@@ -161,6 +167,10 @@ function rig(text: string, options: {
   readonly resolve?: LiveCardsPort["resolve"];
   /// I Blocchi accesi, come nella Scrittura di serie: la scheda si sceglie.
   readonly blocks?: boolean;
+  /// «Annota» (T49): le porte della lavagna, l'avviso e il testo della lavagna.
+  readonly boards?: LiveCardBoards;
+  readonly notify?: (message: string) => void;
+  readonly annotationBoard?: LiveCardKit["annotationBoard"];
 } = {}): Rig {
   const species = new FakeSpecies();
   const parent = document.createElement("div");
@@ -173,6 +183,7 @@ function rig(text: string, options: {
     watch: () => () => {},
     kindOf,
     maxLive: options.maxLive ?? 40,
+    ...(options.annotationBoard ? { annotationBoard: options.annotationBoard } : {}),
   };
   const files = options.files ?? "all";
   const port: LiveCardsPort = {
@@ -194,6 +205,8 @@ function rig(text: string, options: {
       return state && to <= state.doc.length ? state.sliceDoc(from, to) : null;
     },
     ...(options.sheetChanged ? { sheetChanged: options.sheetChanged } : {}),
+    ...(options.boards ? { boards: options.boards } : {}),
+    ...(options.notify ? { notify: options.notify } : {}),
   });
   const engine = createTextEngine(parent, {
     onChange() {},
@@ -1060,5 +1073,291 @@ describe("la scheda PDF nella nota (T45)", () => {
     expect(card.querySelector(".live-card-message")?.textContent).toContain("PDF");
     expect(card.querySelector(".live-card-message")?.textContent).toContain("Archivio/Contratto.pdf");
     expect(card.querySelector(".live-card-open")).not.toBeNull();
+  });
+});
+
+// --- Gli estratti e «Annota» (E25, T49) --------------------------------------
+
+describe("gli estratti: la parte dell'embed", () => {
+  it("un passo di PDF si legge come lo scrive Obsidian, col colore o senza", () => {
+    expect(pdfPassage("#page=2&selection=4,0,4,163")).toEqual({ page: 2, selection: "4,0,4,163" });
+    expect(pdfPassage("#page=12&selection=1,2,3,4&color=yellow")).toEqual({ page: 12, selection: "1,2,3,4" });
+    expect(pdfPassage("#page=2")).toBeNull();
+    expect(pdfPassage("#selection=4,0,4,163")).toBeNull();
+    expect(pdfPassage("#page=0&selection=4,0,4,163")).toBeNull();
+    expect(pdfPassage("#page=2&selection=4,0")).toBeNull();
+    expect(pdfPassage("#page=2&selection=4,0,4,163&altro=1")).toBeNull();
+    expect(pdfPassage("#Budget!A1")).toBeNull();
+    expect(pdfPassage(null)).toBeNull();
+    expect(liveCardPart("#page=2&selection=4,0,4,163")).toBe("p. 2 · un passo");
+  });
+
+  it("un estratto di foglio si scrive come in una formula; ciò che romperebbe il collegamento no", () => {
+    expect(sheetExcerptPart("Budget", "B2:C4")).toBe("Budget!B2:C4");
+    expect(sheetExcerptPart("Budget", "$b$2:$c$4")).toBe("Budget!B2:C4");
+    expect(sheetExcerptPart("Conti 2025", "A1")).toBe("'Conti 2025'!A1");
+    expect(sheetExcerptPart("L'anno", "A1")).toBe("'L''anno'!A1");
+    // Un nome che sembra una cella va fra apici.
+    expect(sheetExcerptPart("A1", "B2")).toBe("'A1'!B2");
+    expect(sheetExcerptPart("Conti#2", "A1")).toBeNull();
+    expect(sheetExcerptPart("Conti|2", "A1")).toBeNull();
+    expect(sheetExcerptPart("Budget", "Totali")).toBeNull();
+    expect(sheetExcerptPart("", "A1")).toBeNull();
+  });
+
+  it("«Estrai» scrive sotto la scheda, staccato da righe vuote; dentro un riquadro, sotto il riquadro", () => {
+    const at = (doc: string, line: number, part: string): string => {
+      const state = mdState(doc);
+      // L'embed dove sta nella riga, anche dentro un riquadro `>`.
+      const row = state.doc.line(line);
+      const range = { from: row.from + row.text.indexOf("![["), to: row.from + row.text.lastIndexOf("]]") + 2 };
+      return applied(state, extractEmbedAt(state, range, part));
+    };
+    expect(at("![[Conti.xlsx#Budget]]\n\nDopo\n", 1, "Budget!B2:C4"))
+      .toBe("![[Conti.xlsx#Budget]]\n\n![[Conti.xlsx#Budget!B2:C4]]\n\nDopo\n");
+    expect(at("![[Conti.xlsx|640x300]]\nDopo", 1, "'Conti 2025'!A1"))
+      .toBe("![[Conti.xlsx|640x300]]\n\n![[Conti.xlsx#'Conti 2025'!A1]]\n\nDopo");
+    expect(at("Prima\n\n![[Archivio/Conti.xlsx]]", 3, "A1:B2"))
+      .toBe("Prima\n\n![[Archivio/Conti.xlsx]]\n\n![[Archivio/Conti.xlsx#A1:B2]]");
+    // Un estratto di un estratto: un altro intervallo dello stesso file.
+    expect(at("![[Conti.xlsx#Budget!A1:E7]]\n", 1, "Budget!B2:C3"))
+      .toBe("![[Conti.xlsx#Budget!A1:E7]]\n\n![[Conti.xlsx#Budget!B2:C3]]\n");
+    // Nelle colonne (T42) l'estratto va sotto il riquadro, non dentro.
+    const columns = "> [!columns]\n> ![[Conti.xlsx]]\n>\n> ![[A.pdf]]\n\nDopo";
+    expect(at(columns, 2, "Conti!A1"))
+      .toBe("> [!columns]\n> ![[Conti.xlsx]]\n>\n> ![[A.pdf]]\n\n![[Conti.xlsx#Conti!A1]]\n\nDopo");
+    const state = mdState("![[Conti.xlsx]]");
+    const range = embedRangeAtLine(state, 0)!;
+    expect(extractEmbedAt(state, range, "Bud|get!A1")).toBeNull();
+    expect(extractEmbedAt(state, { from: 0, to: 4 }, "A1")).toBeNull();
+  });
+});
+
+describe("«Estrai» sulla scheda (T49)", () => {
+  it("dal foglio attivo scrive l'estratto delle celle scelte sotto la scheda, in un passo d'annullamento", async () => {
+    const doc = "Testo\n\n![[Conti.xlsx]]\n\nFine\n";
+    const { parent, view, cards, species } = rig(doc);
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    // A riposo «Estrai» non è offerto dalla pelle: c'è solo da attiva.
+    expect(cards.activateAt(view, view.state.doc.line(3).from)).toBe(true);
+    const button = card.querySelector<HTMLButtonElement>(".live-card-extract")!;
+    expect(button.textContent).toContain("Estrai");
+    // Niente celle ancora: spento, e il perché.
+    expect(card.dataset.cardExtract).toBe("off");
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(button.title).toBe("Scegli delle celle nel foglio, poi «Estrai».");
+    species.views[0]!.context.writing!({ toolbar: null, context: { cell: "B2", formula: "800", sheet: "Conti 2025", range: "B2:C3" } });
+    expect(card.dataset.cardExtract).toBe("ready");
+    expect(button.hasAttribute("aria-disabled")).toBe(false);
+    button.click();
+    expect(view.state.doc.toString()).toBe("Testo\n\n![[Conti.xlsx]]\n\n![[Conti.xlsx#'Conti 2025'!B2:C3]]\n\nFine\n");
+    // La scheda è uscita; l'estratto è una scheda anche lui, della stessa
+    // specie, sulla sua parte: segue la fonte (`grid/card.test.ts`).
+    expect(cards.activeCard()).toBeNull();
+    await settle();
+    const excerpt = species.views.find((one) => one.context.subpath === "#'Conti 2025'!B2:C3");
+    expect(excerpt?.path).toBe("Archivio/Conti.xlsx");
+    expect(cardsIn(parent)).toHaveLength(2);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it("un nome di foglio che non si scrive in un collegamento lo dice, e non scrive", async () => {
+    const notes: string[] = [];
+    const doc = "Testo\n\n![[Conti.xlsx]]\n";
+    const { parent, view, cards, species } = rig(doc, { notify: (message) => notes.push(message) });
+    await settle();
+    cards.activateAt(view, view.state.doc.line(3).from);
+    species.views[0]!.context.writing!({ toolbar: null, context: { cell: "A1", formula: "", sheet: "Conti#1", range: "A1" } });
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardExtract).toBe("off");
+    card.querySelector<HTMLButtonElement>(".live-card-extract")!.click();
+    expect(notes).toEqual(["Il nome del foglio «Conti#1» non si scrive in un collegamento: l'estratto non si fa."]);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it("sul PDF è spento e dice che gli estratti di PDF arrivano col motore dei PDF", async () => {
+    const notes: string[] = [];
+    const doc = "Testo\n\n![[Contratto.pdf#page=2]]\n";
+    const { parent, view, cards } = rig(doc, { notify: (message) => notes.push(message) });
+    await settle();
+    cards.activateAt(view, view.state.doc.line(3).from);
+    const card = cardsIn(parent)[0]!;
+    const button = card.querySelector<HTMLButtonElement>(".live-card-extract")!;
+    expect(card.dataset.cardExtract).toBe("off");
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(button.title).toBe("Gli estratti di PDF arrivano col motore dei PDF: per ora la scheda mostra la pagina.");
+    button.click();
+    expect(notes).toEqual([button.title]);
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(cards.activeCard()).not.toBeNull();
+  });
+
+  it("in sola lettura, su un file che manca o su una specie senza estratti non c'è", async () => {
+    const readOnly = rig("Testo\n\n![[Conti.xlsx]]\n", { editable: false });
+    await settle();
+    readOnly.cards.activateAt(readOnly.view, readOnly.view.state.doc.line(3).from);
+    expect(cardsIn(readOnly.parent)[0]!.dataset.cardExtract).toBeUndefined();
+    const missing = rig("Testo\n\n![[Conti.xlsx]]\n", { files: new Set() });
+    await settle();
+    expect(cardsIn(missing.parent)[0]!.dataset.cardExtract).toBeUndefined();
+  });
+});
+
+describe("un passo di PDF nella nota (T49)", () => {
+  it("si mostra come una citazione che aspetta il motore dei PDF, con la fonte e «Vai alla pagina»", async () => {
+    const { parent, opened, species } = rig("Prima\n\n![[Contratto.pdf#page=2&selection=4,0,4,163]]\n\nDopo\n");
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardState).toBe("passage");
+    // Nessuna vista della specie: il testo del passo lo leggerà il motore.
+    expect(species.views).toHaveLength(0);
+    const quote = card.querySelector("blockquote.live-card-excerpt")!;
+    expect(quote.querySelector(".live-card-excerpt-wait")!.textContent).toContain("motore dei PDF");
+    expect(quote.querySelector(".live-card-excerpt-name")!.textContent).toBe("Contratto.pdf · p. 2");
+    const go = quote.querySelector<HTMLButtonElement>(".live-card-excerpt-go")!;
+    expect(go.textContent).toBe("Vai alla pagina");
+    go.click();
+    expect(opened).toEqual([{ path: "Archivio/Contratto.pdf", subpath: "#page=2" }]);
+    expect(card.dataset.cardExtract).toBeUndefined();
+  });
+
+  it("la fonte tolta: il passo dice che il file manca", async () => {
+    const { parent } = rig("Testo\n\n![[Contratto.pdf#page=2&selection=4,0,4,163]]\n", { files: new Set() });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardState).toBe("missing");
+    expect(card.textContent).toContain("File mancante: Contratto.pdf");
+  });
+
+  it("la citazione non chiede la specie PDF: c'è anche col visore spento", async () => {
+    const { parent } = rig("Testo\n\n![[Contratto.pdf#page=2&selection=4,0,4,163]]\n", { renderers: ["sheet"] });
+    await settle();
+    expect(cardsIn(parent)[0]!.dataset.cardState).toBe("passage");
+  });
+});
+
+describe("«Annota» (T49)", () => {
+  /// Le porte della lavagna sopra una cartella finta.
+  function boardsOver(taken: readonly string[] = []) {
+    const files = new Map<string, string>();
+    const boards: LiveCardBoards = {
+      taken: async (file) => taken.includes(file) || [...files.keys()].some((id) => id.endsWith(`/${file}`) || id === file),
+      create: async (id, text) => {
+        files.set(id, text);
+      },
+    };
+    return { files, boards };
+  }
+
+  const board = (path: string, subpath: string | null, width: number, height: number): string =>
+    JSON.stringify({ path, subpath, width, height });
+
+  it("il nome della lavagna viene dal file, pulito", () => {
+    expect(annotationBoardStem("Archivio/Contratto.pdf")).toBe("Contratto (annotazioni)");
+    expect(annotationBoardStem("a#b|c.xlsx")).toBe("a b c (annotazioni)");
+    expect(annotationBoardStem("###.pdf")).toBe("Annotazioni (annotazioni)");
+  });
+
+  it("la zona prende il posto dell'embed, con la misura scritta o quella della scheda", () => {
+    const at = (doc: string, height: number, column: number): string => {
+      const state = mdState(doc);
+      return applied(state, annotateEmbedIn(state, embedRangeAtLine(state, 0)!, "Contratto (annotazioni).canvas", height, column));
+    };
+    expect(at("![[Contratto.pdf#page=2|500x320]]\nDopo", 900, 700)).toBe("![[Contratto (annotazioni).canvas|500x320]]\nDopo");
+    expect(at("![[Contratto.pdf]]", 436, 700)).toBe("![[Contratto (annotazioni).canvas|700x436]]");
+    expect(at("![[Contratto.pdf]]", 436, 0)).toBe("![[Contratto (annotazioni).canvas]]");
+  });
+
+  it("crea accanto alla nota la lavagna con la sola scheda, e nella nota cambia solo l'embed", async () => {
+    const { files, boards } = boardsOver();
+    const before = "# Affitto\n\n![[Contratto.pdf#page=2]]\n\nDopo\n";
+    const { parent, view, cards } = rig(before, { boards, annotationBoard: board });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    const found = cards.find(view, view.state.doc.line(3).from)!;
+    expect(cards.canAnnotate(found)).toBe(true);
+    expect(await cards.annotate(found)).toBe(true);
+    // La lavagna: un file nuovo, con la scheda del PDF alla sua pagina. Il
+    // file del PDF non cambia, e l'inchiostro andrà nel `.canvas`.
+    expect([...files.keys()]).toEqual(["Contratto (annotazioni).canvas"]);
+    expect(JSON.parse(files.get("Contratto (annotazioni).canvas")!)).toMatchObject({ path: "Archivio/Contratto.pdf", subpath: "#page=2" });
+    expect(view.state.doc.toString()).toBe("# Affitto\n\n![[Contratto (annotazioni).canvas]]\n\nDopo\n");
+    expect(card.isConnected).toBe(false);
+    // Annullare toglie la zona dalla nota (la lavagna resta, come dopo il «/»).
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(before);
+  });
+
+  it("un nome preso fa scegliere il seguente; una lavagna che non si crea lascia la nota com'era", async () => {
+    const { files, boards } = boardsOver(["Contratto (annotazioni).canvas"]);
+    const { view, cards } = rig("Testo\n\n![[Contratto.pdf]]\n", { boards, annotationBoard: board });
+    await settle();
+    expect(await cards.annotate(cards.find(view, view.state.doc.line(3).from)!)).toBe(true);
+    expect([...files.keys()]).toEqual(["Contratto (annotazioni) 2.canvas"]);
+    expect(view.state.doc.toString()).toBe("Testo\n\n![[Contratto (annotazioni) 2.canvas]]\n");
+
+    const notes: string[] = [];
+    const broken: LiveCardBoards = { taken: async () => false, create: async () => { throw new Error("disco pieno"); } };
+    const other = rig("Testo\n\n![[Contratto.pdf]]\n", { boards: broken, annotationBoard: board, notify: (message) => notes.push(message) });
+    await settle();
+    expect(await other.cards.annotate(other.cards.find(other.view, other.view.state.doc.line(3).from)!)).toBe(false);
+    expect(other.view.state.doc.toString()).toBe("Testo\n\n![[Contratto.pdf]]\n");
+    expect(notes).toEqual(["La lavagna per annotare non si crea: disco pieno"]);
+  });
+
+  it("un file che c'è già nel frattempo (`already_exists`) fa provare il nome seguente", async () => {
+    const created: string[] = [];
+    let first = true;
+    const boards: LiveCardBoards = {
+      taken: async () => false,
+      create: async (id) => {
+        if (first) {
+          first = false;
+          throw { kind: "already_exists" };
+        }
+        created.push(id);
+      },
+    };
+    const { view, cards } = rig("Testo\n\n![[Contratto.pdf]]\n", { boards, annotationBoard: board });
+    await settle();
+    expect(await cards.annotate(cards.find(view, view.state.doc.line(3).from)!)).toBe(true);
+    expect(created).toEqual(["Contratto (annotazioni) 2.canvas"]);
+  });
+
+  it("non si offre su una lavagna (è già una zona), in sola lettura o senza le porte", async () => {
+    const { boards } = boardsOver();
+    const zone = rig("Testo\n\n![[Percorso.canvas]]\n", { boards, annotationBoard: board });
+    await settle();
+    expect(zone.cards.canAnnotate(zone.cards.find(zone.view, zone.view.state.doc.line(3).from)!)).toBe(false);
+    expect(zone.cards.annotateAt(zone.view, zone.view.state.doc.line(3).from)).toBe(false);
+    const readOnly = rig("Testo\n\n![[Contratto.pdf]]\n", { boards, annotationBoard: board, editable: false });
+    await settle();
+    expect(readOnly.cards.canAnnotate(readOnly.cards.find(readOnly.view, readOnly.view.state.doc.line(3).from)!)).toBe(false);
+    const portless = rig("Testo\n\n![[Contratto.pdf]]\n", { annotationBoard: board });
+    await settle();
+    expect(portless.cards.canAnnotate(portless.cards.find(portless.view, portless.view.state.doc.line(3).from)!)).toBe(false);
+  });
+
+  it("il menu del blocco ha «Annota» dove si annota, e non su una lavagna", () => {
+    const host = (doc: string): BlockGroupHost => {
+      const state = mdState(doc);
+      return {
+        read: (read) => read(state),
+        write: () => false,
+        view: () => false,
+        editable: () => true,
+        copy() {},
+        openLink() {},
+        annotateCard: () => true,
+      };
+    };
+    const ids = (doc: string, extra: Partial<BlockGroupHost> = {}): string[] =>
+      markdownBlockGroup({ ...host(doc), ...extra }, 0)!.items.flatMap((item) => (typeof item === "string" ? [] : [item.id]));
+    expect(ids("![[Contratto.pdf]]")).toContain("markdown.card.annotate");
+    expect(ids("![[Percorso.canvas]]")).not.toContain("markdown.card.annotate");
+    expect(ids("![[Contratto.pdf]]", { editable: () => false })).not.toContain("markdown.card.annotate");
+    expect(ids("![[Contratto.pdf]]", { annotateCard: undefined })).not.toContain("markdown.card.annotate");
   });
 });

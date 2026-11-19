@@ -58,6 +58,7 @@ mod objects;
 mod package;
 pub mod parts;
 mod sheet_xml;
+pub mod values;
 
 /// L'id del formato.
 pub const FORMAT_ID: &str = "xlsx";

@@ -275,6 +275,13 @@ describe("la griglia", () => {
     const align = menu.items[3]!.items as { label: string; checked?: boolean }[];
     expect(align.find((item) => item.checked)?.label).toBe(t("table.menu.sub.align_center"));
     expect(menu.items.filter((item) => item.danger).length).toBe(2);
+    // Il grafico e «Trasforma in foglio» (T52) stanno insieme, prima di ciò che svuota.
+    const sheets = tableMenu([entry("table.clear")], { align: null, paste: null, chart: { regenerate: false, run }, sheet: run });
+    expect(sheets.items.map((item) => `${item.separator ? "— " : ""}${item.label}`)).toEqual([
+      "Grafico da questa tabella", "Trasforma in foglio", `— ${t("table.menu.clear_cell")}`,
+    ]);
+    const onlySheet = tableMenu([], { align: null, paste: null, sheet: run });
+    expect(onlySheet.items.map((item) => `${item.separator ? "— " : ""}${item.label}`)).toEqual(["Trasforma in foglio"]);
     const reading = tableMenu([entry("table.cut", true), entry("table.copy")], { align: null, paste: null });
     expect(reading.clipboard.map((item) => item.label)).toEqual([t("editor_menu.copy")]);
     expect(reading.items).toEqual([]);

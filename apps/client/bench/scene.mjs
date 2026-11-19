@@ -577,15 +577,23 @@ export const SCENE = touchLast(onPage("shell", [
   // Con Tema e Colori aperte (T71): gli otto temi, gli undici colori con la
   // riga dell'accento aperta (i tondi, il selettore, il codice), il
   // contrasto e i due interruttori, come al passo 28 del prototipo.
+  // Con Contenuto e Interruzioni aperte (T74): le righe con le scelte, i
+  // commenti nel margine accanto al loro paragrafo, la tabella a griglia e
+  // il codice coi numeri delle righe, come al passo 29.
+  // Con Caratteri e Pagina aperte (T72): i caratteri di Fub e del vault
+  // (uno chiuso dalla licenza), i cursori, i margini, le guide sulle pagine.
   ...[
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
-    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, true],
-    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, false, true],
-  ].map(([id, title, viewport, themes, front]) => ({
+    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, "temi"],
+    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, "testata"],
+    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, "caratteri"],
+    ["esporta-pdf-contenuto", "Lo spazio «Esporta in PDF» con Contenuto e Interruzioni aperte: commenti nel margine, tabelle a griglia, codice numerato", undefined, "contenuto"],
+  ].map(([id, title, viewport, sections]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
+    ...(sections === "caratteri" ? { query: "esporta-caratteri=1" } : {}),
     prepare: async (page) => {
       // In una finestra stretta l'albero è nel cassetto chiuso: la nota si
       // apre larga, poi la finestra torna com'era (la scena, o lo stato
@@ -595,8 +603,10 @@ export const SCENE = touchLast(onPage("shell", [
       await openNote(page, "Guida/Sintassi di Fub.md");
       if (size) await page.setViewportSize(size);
       await openExportSpace(page);
-      if (themes) await openThemeSections(page);
-      if (front) await openFrontSections(page);
+      if (sections === "temi") await openThemeSections(page);
+      if (sections === "caratteri") await openFontSections(page);
+      if (sections === "contenuto") await openContentSections(page);
+      if (sections === "testata") await openFrontSections(page);
     },
   })),
   // **Il menu dei profili** (T79): lo spazio parte da «Relazione», il
@@ -1696,6 +1706,58 @@ export const SCENE = touchLast(onPage("shell", [
         // La griglia scrive dalla prima cella della parte, e la barra lo dice
         // (sotto i 760 px la cella non si vede: c'è, senza `hidden`).
         if (extra) await page.waitForSelector(".format-bar-context .format-bar-context-cell:not([hidden])", { state: "attached" });
+      }
+    },
+  })),
+  // Gli estratti (T49, il prototipo `.scard .act` e `.exc`, passi 17–18): il
+  // foglio dei conti attivo con due righe scelte e «Estrai» d'accento in
+  // testata; dopo «Estrai», l'estratto sotto la scheda; il passo del
+  // contratto scritto come lo scrive Obsidian, una citazione con la fonte e
+  // «Vai alla pagina»; il passo nella finestra minima.
+  ...[
+    ["estratti-01-estrai", "Il foglio attivo con A1:B2 scelte: «Estrai» d'accento in testata", "choose"],
+    ["estratti-02-estratto", "Dopo «Estrai»: l'estratto delle celle scelte sotto la scheda, legato al foglio", "extract"],
+    ["estratti-03-passo", "Un passo del contratto (`#page=1&selection=…`): la citazione con la fonte e «Vai alla pagina»", "passage"],
+    ["estratti-04-stretta", "Il passo nella finestra minima, 800 px", "passage", NOTE_NARROW],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=estratti&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const sheet = '.pane.focus .pane-editor .live-card[data-card-kind="sheet"]';
+      const passage = '.pane.focus .pane-editor .live-card[data-card-state="passage"]';
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${sheet} .canvas-card-sheet[data-card-state="content"]`);
+      await page.waitForSelector(`${passage} .live-card-excerpt-go`);
+      if (gesture === "passage") {
+        await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), passage);
+        return;
+      }
+      await page.click(`${sheet} .live-card-body`);
+      await page.waitForSelector(`${sheet}[data-card-active="true"]`);
+      // Due righe e due colonne scelte trascinando, da A1 a B2 (il finto dà
+      // solo le finestre che partono da A1, e l'estratto ci parte).
+      const cell = async (row, column) => {
+        // Le celle dell'editor attivo (`aria-selected`), non quelle ferme sotto.
+        const box = await page.locator(`${sheet} .grid-cell[aria-selected][data-row="${row}"][data-column="${column}"]`).boundingBox();
+        if (!box) throw new Error(`la cella ${row},${column} del foglio non si vede`);
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+      const from = await cell(0, 0);
+      const to = await cell(1, 1);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForSelector(`${sheet}[data-card-extract="ready"] .live-card-extract`);
+      if (gesture === "extract") {
+        await page.click(`${sheet} .live-card-extract`);
+        await page.waitForFunction(() => document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet[data-card-state="content"]').length === 2);
+        await page.evaluate(() => {
+          const cards = document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"]');
+          cards[1]?.scrollIntoView({ block: "center" });
+        });
       }
     },
   })),
@@ -3368,6 +3430,50 @@ async function openThemeSections(page) {
   await page.evaluate(() => {
     const side = document.querySelector(".export-side");
     if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Apre Caratteri e Pagina (T72) e aspetta i caratteri del vault caricati,
+/// coi pulsanti scritti nel loro carattere.
+async function openFontSections(page) {
+  await page.click('.export-section[data-section="caratteri"] .export-section-head');
+  await page.waitForSelector('.export-font[data-vault="Caratteri/Macchina.woff2"]');
+  await page.click('.export-section[data-section="pagina"] .export-section-head');
+  await page.waitForSelector(".export-doc[data-guides=true] .export-guide");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Apre le sezioni Contenuto e Interruzioni, sceglie i commenti nel margine,
+/// le tabelle a griglia e il codice numerato, aspetta le pagine rifatte e
+/// porta in vista la pagina coi commenti e la sezione Contenuto.
+async function openContentSections(page) {
+  await page.click('.export-section[data-section="contenuto"] .export-section-head');
+  await page.click('.export-section[data-section="interruzioni"] .export-section-head');
+  await page.click("#export-content-comments-margine");
+  await page.click("#export-content-tables-griglia");
+  await page.click("#export-content-code");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    return /^\d/.test(pages) && document.querySelector(".export-space .export-page .export-comment-placed") !== null;
+  }, null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    const section = document.querySelector('.export-section[data-section="contenuto"]');
+    if (side && section instanceof HTMLElement) side.scrollTop = section.offsetTop - side.offsetTop;
+    const note = document.querySelector(".export-space .export-page .export-comment-placed");
+    const stage = document.querySelector(".export-stage");
+    if (note && stage) {
+      const top = note.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop;
+      stage.scrollTop = Math.max(0, top - 160);
+    }
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
   await page.mouse.move(0, 0);

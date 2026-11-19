@@ -2135,6 +2135,7 @@ dependencies = [
  "fub-format-canvas",
  "fub-format-markdown",
  "fub-format-svg",
+ "fub-format-xlsx",
  "fub-kernel",
  "fub-motori",
  "fub-scene",

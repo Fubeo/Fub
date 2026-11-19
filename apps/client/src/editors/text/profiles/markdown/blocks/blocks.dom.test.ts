@@ -1166,6 +1166,132 @@ describe("«Sposta in…» (E13)", () => {
   });
 });
 
+// ── «Porta su una lavagna» (E25, T48) ───────────────────────────────────────
+//
+// Il menu del blocco e il blocco lasciato su una lavagna aperta a lato:
+// l'editor non tocca il documento, chiede al comando del nucleo (qui una porta
+// finta) di fare dei blocchi le schede di una lavagna; con Ctrl li copia.
+
+describe("«Porta su una lavagna» (E25)", () => {
+  const DOC = "Uno\n\n## I conti\n\nDue\n\n## Fine\n\nTre";
+  const NOTE = { documentId: "nota.md", vault: undefined };
+  const tag = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-block-lift-to");
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  const port = () => ({ carry: vi.fn(async () => null as string | null) });
+
+  /// Una lavagna aperta a lato, nel riquadro 400–900 × 0–600.
+  function beside(hover = vi.fn()) {
+    const stop = offerDropTargets({
+      offers: (doc) => [{ kind: "board", document: { documentId: "Idee.canvas", vault: doc.vault }, title: "Idee", rect: { left: 400, top: 0, right: 900, bottom: 600 }, hover }],
+    });
+    return { hover, stop };
+  }
+
+  afterEach(() => closeContextMenu());
+
+  it("trascinato sulla lavagna a lato, il cartellino la nomina e il rilascio la chiede al comando: sposta", async () => {
+    const { hover, stop } = beside();
+    try {
+      const board = port();
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, board });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(200, 600);
+      expect(tag(view)?.textContent).toBe("Porta sulla lavagna «Idee»");
+      expect(hover).toHaveBeenLastCalledWith(true);
+      hand.up(200);
+      await settle();
+      expect(board.carry).toHaveBeenCalledWith({ doc: "nota.md", at: [0, 3], text: "Uno", to: "Idee.canvas", keep: false });
+      expect(view.state.doc.toString(), "il documento lo cambia la ricarica dopo le due scritture").toBe(DOC);
+      expect(view.state.field(dragPose).lifted, "il blocco si è posato").toBeNull();
+    } finally {
+      stop();
+    }
+  });
+
+  it("con Ctrl al rilascio, il blocco si copia", async () => {
+    const { stop } = beside();
+    try {
+      const board = port();
+      const view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, board });
+      rowsOf20(view);
+      const hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(200, 600);
+      hand.grip.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 600, clientY: 200, ctrlKey: true }));
+      await settle();
+      expect(board.carry).toHaveBeenCalledWith(expect.objectContaining({ to: "Idee.canvas", keep: true }));
+    } finally {
+      stop();
+    }
+  });
+
+  it("senza chi porta i blocchi, le lavagne a lato non sono bersagli; un rifiuto si dice", async () => {
+    const { hover, stop } = beside();
+    try {
+      let view = mount(DOC, 0, vi.fn(), [], { document: () => NOTE });
+      rowsOf20(view);
+      let hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(200, 600);
+      expect(tag(view)?.hidden).toBe(true);
+      expect(hover).not.toHaveBeenCalled();
+      hand.up(200);
+      hand.handles.returning?.land();
+      expect(view.state.doc.toString()).toBe(DOC);
+
+      const board = port();
+      board.carry.mockResolvedValue("«nota» è cambiata");
+      const notify = vi.fn();
+      view = mount(DOC, 0, notify, [], { document: () => NOTE, board });
+      rowsOf20(view);
+      hand = grab(view, 0, 10);
+      hand.move(14);
+      hand.move(200, 600);
+      hand.up(200);
+      await settle();
+      expect(notify).toHaveBeenCalledWith("I blocchi non sono andati sulla lavagna: «nota» è cambiata", "guasto");
+      expect(view.state.doc.toString()).toBe(DOC);
+    } finally {
+      stop();
+    }
+  });
+
+  it("dal menu di una scheda viva: «Porta su una lavagna», con la frase del prototipo, chiede una lavagna nuova", async () => {
+    const board = port();
+    const cards = "Uno\n\n## I conti\n\nDue\n\n## Fine\n\n![[Conti.xlsx]]";
+    const view = mount(cards, 0, vi.fn(), [], { document: () => NOTE, board });
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[4]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 3, clientY: 3 }));
+    const items = [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem]")];
+    expect(items.map((each) => each.querySelector(".menu-label")?.textContent))
+      .toEqual(["Trasforma in", "Colore", "Porta su una lavagna", "Duplica", "Copia il link al blocco", "Elimina"]);
+    const entry = items.find((each) => each.querySelector(".menu-label")?.textContent === "Porta su una lavagna")!;
+    expect(entry.textContent).toContain("le schede scelte diventano una lavagna, e viceversa");
+    entry.click();
+    await settle();
+    // Tutto ASCII: i byte sono i caratteri.
+    const at = cards.indexOf("![[");
+    expect(board.carry).toHaveBeenCalledWith({ doc: "nota.md", at: [at, cards.length], text: "![[Conti.xlsx]]", to: null, keep: false });
+    closeContextMenu();
+
+    // Su un blocco di testo la voce non c'è, come nel prototipo.
+    const plain = mount(DOC, 0, vi.fn(), [], { document: () => NOTE, board });
+    const grip = plain.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+    const tre = plain.state.field(blockModel).blocks[4]!;
+    plain.plugin(handlesView)!.shown = { from: tre.from, depth: tre.depth };
+    grip.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 3, clientY: 3 }));
+    expect([...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem] .menu-label")].map((label) => label.textContent))
+      .not.toContain("Porta su una lavagna");
+  });
+});
+
 // ── I gesti ai bordi (E2, T2) ───────────────────────────────────────────────
 //
 // Ogni caso limite di E2 coi gesti che spostano un blocco: il trascinamento

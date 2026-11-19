@@ -95,6 +95,7 @@ import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
+import { EXPORT_FONTS, exportFontsOutcome, exportFontsWriter, VAULT_FONTS_COMMAND } from "./export-fonts-fixture";
 import { GiroWorkbook, giroResources } from "./giro-fixture";
 import {
   generateGraphFixture as graphFixture,
@@ -459,6 +460,11 @@ const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
   closed: { doc: "Documenti/Chiuso.docx", text: RICH_CLOSED.source },
 };
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
+
+/// I caratteri del vault della scena «esporta-pdf-caratteri» (T72,
+/// `?esporta-caratteri=1`, vedi `export-fonts-fixture.ts`). Le altre scene
+/// hanno un vault senza caratteri.
+const EXPORT_FONTS_SCENE = params.get("esporta-caratteri") === "1";
 
 /// La foto delle scene `photo-*` (`?photo=xmp|senza`), col bundle `fub.craft`
 /// acceso: la riga dei dati di LightCraft sotto la foto. Soltanto le sue
@@ -1865,6 +1871,26 @@ function plainHtml(markdown: string, fences = false): string {
   return out.join("\n");
 }
 
+/// I commenti di una discussione, come il kernel li porta nella resa per la
+/// stampa (`<template class="comment-note">`, inerti: la lettura non li ha).
+/// Servono alla sezione Contenuto dello spazio «Esporta in PDF» (T74): una
+/// discussione di due messaggi in un paragrafo, un commento in una cella.
+const PRINT_COMMENTS: Record<string, readonly (readonly [string, string])[]> = {
+  "Guida/Sintassi di Fub.md": [
+    [
+      "va a capo e continua sulla riga dopo.",
+      '<template class="comment-note" data-author="Anna Rossi" data-date="2026-11-04">Si può dire in meno parole?</template><template class="comment-note" data-author="Bruno Neri" data-date="2026-11-05">La lascerei: è l\'esempio del ritorno a capo.</template>',
+    ],
+    ["della scocca", '<template class="comment-note" data-author="Carla Bianchi" data-date="2026-11-06">Vale anche per le icone?</template>'],
+  ],
+};
+
+function printComments(doc: string, html: string): string {
+  let out = html;
+  for (const [after, notes] of PRINT_COMMENTS[doc] ?? []) out = out.replace(after, `${after}${notes}`);
+  return out;
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
@@ -1875,7 +1901,7 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   // stessa resa della lettura, come la darebbe il kernel per la carta.
   render_print: (q) => {
     const doc = (q as { doc: string }).doc;
-    const html = OUTPUT[doc] ?? (doc === LIVE_DOC && LIVE !== null ? plainHtml(LIVE.text, true) : plainHtml(CORPUS[doc] ?? ""));
+    const html = printComments(doc, OUTPUT[doc] ?? (doc === LIVE_DOC && LIVE !== null ? plainHtml(LIVE.text, true) : plainHtml(CORPUS[doc] ?? "")));
     return { kind: "render_print", value: { html, parts: [] } };
   },
   render_embed: (q) => {
@@ -2303,6 +2329,7 @@ const options: Options = {
 };
 
 const host = createFakeHost(options);
+const writeExportFonts = exportFontsWriter((id, bytes) => host.module.api.resourceWrite(id, bytes, null));
 
 /// **Lo strato d'avvio fermo a uno stato**, per le scene che lo fotografano
 /// (`avvio-*` in `scene.mjs`). Si decide qui, alla nascita del fake, perché
@@ -2640,15 +2667,19 @@ function withChart<W extends { sheet: string; row_start: number; column_start: n
 /// Le parti che le schede di foglio della nota chiedono (`fub.part`, T43),
 /// solo nella Live delle schede vive (`live=schede-vive`) e nella battuta con
 /// le schede (`live=battuta-schede-20`), e le celle dei valori nel testo (T53,
-/// `live=valori-cella` e `live=battuta-valori-100`): la risposta che
+/// `live=valori-cella` e `live=battuta-valori-100`) e negli estratti (T49,
+/// `live=estratti`): la risposta che
 /// `fub-format-xlsx/src/parts.rs` darebbe per la cartella del banco, che non
 /// ricalcola e non scrive. Una parte sconosciuta è persa, con le parti che la
 /// cartella ha.
-const SHEET_PARTS_CASES = new Set(["schede-vive", "battuta-schede-20", "valori-cella", "battuta-valori-100", "grafici"]);
+const SHEET_PARTS_CASES = new Set(["schede-vive", "battuta-schede-20", "valori-cella", "battuta-valori-100", "grafici", "estratti"]);
 const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.has(params.get("live") ?? "")
   ? {
       "": { found: true, kind: "active", sheet: "s1", range: "A1:F6" },
       "Conti!A1:C4": { found: true, kind: "range", sheet: "s1", range: "A1:C4" },
+      // L'estratto che «Estrai» scrive dalle celle scelte (T49, `live=estratti`).
+      // (Il finto dà solo le finestre che partono da A1: l'estratto ci parte.)
+      "Conti!A1:B2": { found: true, kind: "range", sheet: "s1", range: "A1:B2" },
       // Le celle dei valori nel testo: 800, -120, 680, 50.00%, la cella
       // vuota D2 e l'errore #DIV/0! di C4.
       ...Object.fromEntries(["B2", "B3", "B4", "C2", "D2", "C4"]
@@ -2759,6 +2790,12 @@ export const api: typeof host.module.api = {
     }
     if (PDF_PROFILES !== null && id === "pdf.profiles") {
       return { notify: null, effect: { kind: "custom", ns: "fub.pdf.profiles", payload: PDF_PROFILES }, undo: null, partial: null };
+    }
+    // I caratteri del vault per la stampa: il finto non sa leggerli.
+    if (id === VAULT_FONTS_COMMAND) {
+      if (!EXPORT_FONTS_SCENE) return { ...exportFontsOutcome(), effect: { ...exportFontsOutcome().effect, payload: { ...EXPORT_FONTS, caratteri: [] } } };
+      await writeExportFonts();
+      return exportFontsOutcome();
     }
     // Il gesto della barra della Base delle scene `base-*`.
     const based = BASE?.invoke(id, args);

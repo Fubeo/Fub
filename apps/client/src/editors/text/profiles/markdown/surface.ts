@@ -26,6 +26,8 @@ import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import type { MoveBlockPort } from "./blocks/move-to";
+import type { TableSheetPort } from "./table-sheet";
+import type { BoardPort } from "./blocks/to-board";
 import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
@@ -76,7 +78,8 @@ import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
 import { Transclusions, type TransclusionDeps } from "./transclusion";
-import { LiveCards, type LiveCardsPort } from "./live-cards";
+import { LiveCards, liveCardEmbed, type LiveCardsPort } from "./live-cards";
+import { detachedTable } from "./table-sheet";
 import { CellValues, hostCellSlot, type CellValuePort } from "./cell-value";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
@@ -125,7 +128,7 @@ import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource 
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
-import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup } from "./block-groups";
+import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup, type DetachCard } from "./block-groups";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
@@ -212,6 +215,12 @@ export interface MarkdownSurfaceOptions {
   /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
   /// blocco. Senza, il menu del blocco non lo offre.
   moveBlock?: MoveBlockPort;
+  /// «Trasforma in foglio» (T52): il comando che scrive la tabella in un
+  /// foglio accanto alla nota. Senza, il menu della tabella non lo offre.
+  tableSheet?: TableSheetPort;
+  /// «Porta su una lavagna» (T48): il comando che fa dei blocchi le schede di
+  /// una lavagna. Senza, il menu del blocco non lo offre.
+  boardBlock?: BoardPort;
   /// Il blocco sincronizzato (T30): «Sincronizza in un'altra nota» nel menu
   /// del blocco e «Blocco di un'altra nota» nel «/». Senza, non ci sono.
   syncBlock?: SyncBlockPort;
@@ -578,10 +587,46 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     sheetChanged: () => actionsChanged(),
     // Le schede dentro le colonne leggono il loro embed dal testo di adesso.
     text: (from, to) => engine.readState((state) => (to <= state.doc.length ? state.sliceDoc(from, to) : null)),
+    // «Annota» (T49) crea la sua lavagna accanto alla nota con le porte della
+    // «Lavagna» del «/» (T47), senza chiedere il nome.
+    boards: {
+      taken: (file) => newFilePort("canvas").taken(file),
+      create: (id, text) => newFilePort("canvas").create(id, text),
+    },
+    notify: (message) => {
+      if (!life.closed) notify(message, "guasto");
+    },
   }) : null;
   /// I valori di cella della nota (T53): una lettura per cella, un ascolto per
   /// file, in Scrittura e in Lettura.
   const cellValues = opts.cellValues ? new CellValues({ port: opts.cellValues, hostDoc: docId }) : null;
+  /// «Stacca come tabella» (T52): la scheda di una parte di foglio diventa
+  /// una tabella coi valori che mostra adesso, con un passo d'annullamento
+  /// della nota. Le formule restano nel foglio, e il foglio non cambia.
+  const detachCard = async (card: DetachCard): Promise<void> => {
+    const port = opts.cellValues;
+    if (!port) return;
+    const before = engine.readState((state) => state.doc.lineAt(Math.min(card.start, state.doc.length)).text);
+    const locale = engine.readState((state) => declaredLanguage(state.doc)) ?? resolvedLanguage();
+    const result = await detachedTable(port, card.page, docId(), card.part, locale);
+    if (life.closed) return;
+    if ("failed" in result) {
+      notify(result.failed, "guasto");
+      return;
+    }
+    // La riga si rilegge: se l'embed è cambiato mentre si leggeva il foglio,
+    // non si scrive niente.
+    const done = editable() && engine.runViewCommand((view) => {
+      const line = view.state.doc.lineAt(Math.min(card.start, view.state.doc.length));
+      if (line.text !== before || !liveCardEmbed(line.text)) return false;
+      const indent = /^\s*/u.exec(line.text)![0];
+      const from = line.from + indent.length;
+      const insert = withLineBreaks(view.state, result.table.split("\n").join(`\n${indent}`));
+      view.dispatch({ changes: { from, to: line.to, insert }, selection: { anchor: from }, userEvent: "input", scrollIntoView: true });
+      return true;
+    });
+    notify(liveStrings.t(done ? "table_sheet.detached" : "table_sheet.detach.changed"), done ? "info" : "guasto");
+  };
   const cellValueSlot = cellValues
     ? { cellValue: (slot: HTMLElement, life: Lifetime) => hostCellSlot(slot, life, cellValues) }
     : {};
@@ -621,6 +666,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // La pagina del tipo (E5): in fondo alla nota di un tipo, quando il
       // core dice che lo è (`checkTypePage`).
       typePage: { current: () => typePageDoc },
+      ...(opts.tableSheet ? { tableSheet: { doc: docId, port: opts.tableSheet } } : {}),
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -933,6 +979,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // Blocchi, la testata non li usa.
     document: () => ({ documentId: docId(), vault }),
     ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
+    ...(opts.boardBlock ? { board: opts.boardBlock } : {}),
     ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
@@ -2521,7 +2568,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         copy: (text) => copyText(text, t("editor_menu.copied")),
         openLink: (page, heading, block) => void openWikilink(page, heading, block),
         editHere: (start) => engine.runViewCommand((view) => transclusions.editAt(view, start)),
-        ...(liveCards ? { activateCard: (start: number) => engine.runViewCommand((view) => liveCards.activateAt(view, start)) } : {}),
+        ...(liveCards ? {
+          activateCard: (start: number) => engine.runViewCommand((view) => liveCards.activateAt(view, start)),
+          annotateCard: (start: number) => engine.runViewCommand((view) => liveCards.annotateAt(view, start)),
+        } : {}),
+        ...(opts.cellValues ? { detachCard: (card: DetachCard) => void detachCard(card) } : {}),
       }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),

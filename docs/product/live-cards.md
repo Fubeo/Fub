@@ -17,7 +17,9 @@ parte) e **A tutta pagina** (la scheda alta quanto la vista; «Torna alla nota»
 la riporta com'era).
 
 Non sono schede le note (la [trasclusione viva](editor-transclusion.md)), le
-immagini, i suoni, i video e le Basi, che la nota mostra già a modo suo; per ora neanche le lavagne, che restano la resa di sempre. Un embed in mezzo a una frase resta un embed.
+immagini, i suoni, i video e le Basi, che la nota mostra già a modo suo; una
+lavagna è una [zona lavagna](#la-zona-lavagna). Un embed in mezzo a una frase
+resta un embed.
 
 ## Tre stati
 
@@ -181,6 +183,55 @@ dalla porta degli editor, quello di sola lettura a riposo e quello che scrive
 da attiva. La pelle sta nella sezione T47 di
 `theme/scrittoio/skin/live-cards.css`.
 
+## Dalla nota alla lavagna, e ritorno
+
+Blocchi e schede passano da una nota a una lavagna e indietro. Sono sempre
+due file con **un annulla solo**: la nota e la lavagna si scrivono tutte e
+due o nessuna, e l'annulla le rimette com'erano tutte e due (se uno dei due
+è cambiato dopo, non tocca niente e lo dice). Andata e ritorno danno lo
+stesso testo.
+
+- **«Porta su una lavagna»** nel menu di una scheda viva (o di una scelta
+  di blocchi che ne ha una), e nella palette sulla selezione o sul blocco del
+  cursore, crea una lavagna accanto alla nota, col suo nome
+  («Mostra.canvas», poi «Mostra 1.canvas», …), con una scheda per blocco
+  nello stesso ordine, una sotto l'altra, e la apre a lato. I blocchi
+  lasciano la nota.
+  - Un titolo porta con sé la sua sezione, fino al titolo dopo dello stesso
+    livello o più alto: è una scheda sola.
+  - Una voce di primo livello di un elenco è una scheda; due voci una dopo
+    l'altra tornano un elenco solo.
+  - Un embed da solo nel suo blocco è una scheda di file sullo **stesso**
+    file, con la parte e la misura dell'embed: niente si copia. Un embed che
+    non si risolve resta una scheda di testo.
+  - Il resto è una scheda di testo col suo Markdown com'è scritto.
+- **Trascinare** un blocco su una lavagna aperta a lato lo porta lì, a
+  destra di ciò che la lavagna ha: il riquadro si accende col bordo
+  dell'accento e il cartellino dice «Porta sulla lavagna «…»». Con
+  Ctrl al rilascio il blocco si copia e resta anche nella nota.
+- **«Porta in una nota»** dalla palette, sulla lavagna aperta, fa il
+  contrario: crea una nota accanto alla lavagna col suo nome, con le schede
+  in colonna da in alto a sinistra a in basso a destra, e le schede lasciano
+  la lavagna.
+  - Le schede di un gruppo stanno insieme, sotto il nome del gruppo scritto
+    come titolo.
+  - Una scheda di testo dà il suo testo, una di file il suo embed, una di
+    link il suo indirizzo.
+  - I fili diventano link, in una riga `→ …` sotto la scheda da cui partono:
+    verso una scheda di testo un link al blocco (`[[#^id]]`, che le dà l'id
+    se non ce l'ha), verso un file un link al file, verso un gruppo un link
+    al suo titolo. L'etichetta del filo è il testo del link.
+- Se la nota o la lavagna è cambiata da quando si sono scelti i blocchi o le
+  schede, non si muove niente e si dice di sceglierli di nuovo.
+
+I comandi sono `canvas.from_note` e `canvas.to_note` di
+`crates/fub-features/src/lavagna/note.rs`: le regole stanno lì, e i
+parametri `to`, `at`, `keep` (lasciare dove stava: la copia) e `base` li
+rendono usabili anche da un plugin o da un agente. Il client chiede il
+primo dal menu e dal trascinamento (`blocks/to-board.ts`,
+`state/board-from-note.ts`); le lavagne a lato le offre il controllore dei
+documenti come bersagli (`SurfaceBoardOffer` in `editors/core/registry.ts`).
+
 ## Il foglio nella nota
 
 `![[Conti.xlsx#Budget!A1:E7]]` mostra soltanto quella parte del foglio. La
@@ -298,6 +349,104 @@ la voce sta nel menu di `table-grid.ts`, la scrittura in `table-widget.ts`.
 Le scene `grafici-*` del banco (`live=grafici&workbook=1`) mostrano il grafico
 del foglio, quello che il file non ha, la torta scritta da una tabella e il
 menu con la voce.
+
+## Tabella in foglio, foglio in tabella
+
+**Trasforma in foglio.** Nel menu di una tabella Markdown, accanto al grafico,
+e nel menu del blocco della tabella, **Trasforma in foglio** scrive la
+tabella in una cartella di Excel accanto alla nota e mette al suo posto la
+scheda dell'intervallo, `![[Conti.xlsx#Foglio1!A1:C3]]`.
+
+- Il file prende il nome della nota (`Conti.md` → `Conti.xlsx`); se c'è già,
+  il primo libero (`Conti 1.xlsx`). Un nome che le regole del vault non
+  accettano diventa «Tabella». Il foglio si chiama «Foglio1» (in inglese
+  «Sheet1»).
+- I valori si leggono nella lingua della nota come la somma della banda: «1.240,50 €»
+  diventa il numero 1240,5 col suo formato (due decimali, migliaia, euro
+  dopo), «12,5%» un percento,
+  `(1.234)` un negativo fra parentesi. L'intestazione resta testo, e un
+  testo resta testo (un `\|` è una barra, un `<br>` un a capo nella cella).
+- È un comando del nucleo, `note.table.sheet`: scrive il foglio e la nota
+  tutti e due o nessuno, e la nota solo se fra quei byte c'è ancora la
+  tabella. **Annulla** toglie il foglio (nel cestino) e rimette la tabella;
+  se il foglio è cambiato nel frattempo non tocca niente e lo dice, e se la
+  nota è cambiata altrove ritrova la scheda dove è adesso.
+- Una tabella di più di 200 righe o 30 colonne lo propone da sola, una volta
+  per nota aperta, con la voce nell'avviso.
+
+**Stacca come tabella.** Nel menu del blocco di una scheda che nomina un
+intervallo di foglio (non una cella sola, non un foglio intero),
+**Stacca come tabella** la sostituisce con una tabella Markdown dei valori
+che mostra adesso, coi separatori della lingua della nota. Le formule restano
+nel foglio, che non cambia: l'avviso lo dice. Un passo d'annullamento della
+nota; al più 1000 righe e 60 colonne.
+
+**Incollare celle.** Le celle copiate da un foglio (testo a tabulazioni)
+entrano come tabella Markdown, staccata dal testo intorno. Se vengono da un
+foglio del vault aperto in Fub, sotto la tabella c'è la scelta **Tabella** /
+**Incolla come scheda**: la scheda scrive l'embed di quella parte del foglio,
+e la tabella ha i numeri coi separatori della nota.
+Il foglio dice da dove vengono le celle con il tipo degli appunti
+`application/x-fub-cells`; le celle di un altro programma con il loro HTML
+passano dalla conversione dell'HTML, come prima.
+
+Il comando sta in `crates/fub-features/src/commands/table_sheet.rs` (dietro
+la funzione `xlsx` del crate) e scrive con `fub_format_xlsx::values`; il
+client in `table-sheet.ts` (le letture e la tabella dei valori),
+`cells-clipboard.ts`, `state/table-sheet.ts` e `paste.ts`.
+
+## Gli estratti e «Annota»
+
+Un **estratto** è un pezzo di un file messo nella nota col suo legame alla
+fonte: un embed la cui parte nomina il pezzo. Il pezzo resta nel file, e la
+nota tiene soltanto il riferimento: quando la fonte cambia l'estratto mostra
+com'è adesso.
+
+- **Estrai** sta nella testata della scheda attiva di un foglio. Scelte delle
+  celle, scrive sotto la scheda (dopo il riquadro, se la scheda sta in una
+  citazione o nelle colonne) un paragrafo nuovo con l'estratto,
+  `![[Conti.xlsx#Budget!B2:C4]]` (il foglio fra apici se serve:
+  `'Conti 2025'!A1`), staccato da una riga vuota sopra e sotto; la scheda
+  esce e l'estratto, che è una scheda di foglio sulla sua parte, viene in
+  vista. Un passo d'annullamento. Senza celle scelte, o con un nome di foglio
+  che non si scrive in un collegamento (`#`, `|`), il pulsante è spento e dice
+  perché. Un estratto di un estratto è un altro intervallo dello stesso file.
+- **La fonte cambiata**: l'estratto rilegge la sua parte a ogni cambio del
+  file; un intervallo scritto resta quello, e se il suo foglio non c'è più
+  dice «Intervallo non trovato» con **Scegli di nuovo**, come ogni foglio
+  nella nota. **La fonte tolta**: «File mancante», con **Ritrova…**.
+- **I PDF**: gli estratti di PDF arrivano col motore dei PDF, che legge il
+  testo di un passo e lo ritrova dopo un cambio. Finché non c'è, sulla scheda
+  PDF **Estrai** è spento e dice perché. Un passo scritto da un'altra app
+  (`![[Contratto.pdf#page=2&selection=4,0,4,163]]`, come lo scrive Obsidian)
+  si mostra come una citazione con la barra gialla, che dice che il testo lo
+  leggerà il motore dei PDF, e sotto la fonte («Contratto.pdf · p. 2») con
+  **Vai alla pagina**, che apre il PDF a quella pagina; in Lettura è il
+  collegamento alla pagina. L'embed non cambia.
+- Le note hanno già i loro estratti, la [trasclusione viva](editor-transclusion.md)
+  (`![[Verbale#^decisioni]]`); un'immagine si ritaglia sulla lavagna, non
+  nella nota.
+
+**Annota**, nel menu del blocco di una scheda, avvolge la scheda in una
+[zona lavagna](#la-zona-lavagna): crea accanto alla nota una lavagna
+«Contratto (annotazioni)» (poi «Contratto (annotazioni) 2», …) con dentro
+soltanto quella scheda, il file con la sua parte, alla misura della scheda;
+nella nota l'embed diventa `![[Contratto (annotazioni).canvas|700x436]]` (la
+misura scritta resta) e la zona si apre già attiva, con la penna. Si disegna
+nel `.canvas`: la nota cambia solo nell'embed e il file della scheda non
+cambia mai; l'inchiostro sopra una pagina di PDF resta attaccato alla pagina
+(`fub:ink`, [l'ancora di pagina](../reference/canvas-ink-anchors.md)).
+Annullare toglie la zona dalla nota e lascia la lavagna, come dopo
+«Lavagna» del «/». Se la lavagna non si crea la nota resta com'era e un
+avviso dice perché. Non c'è su una zona lavagna (lo è già), in una nota che
+si guarda soltanto o col componente della lavagna spento.
+
+Il pulsante e la citazione stanno in `live-cards.ts` (con la pelle nella
+sezione T49 di `theme/scrittoio/skin/live-cards.css`), il testo della
+lavagna di «Annota» in `editors/core/cards/kinds/canvas.ts`
+(`annotationBoardText`); il passo di PDF lo legge `pdfPassage` di
+`markdown/media.ts`. Le celle scelte arrivano dalla superficie compatta del
+foglio (`SurfaceActiveCell`, `editors/grid/compact.ts`).
 
 ## I limiti
 
