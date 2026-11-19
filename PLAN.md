@@ -2428,7 +2428,7 @@ il componente spento.
 Fatto quando: una scena del banco nei tre stati; un test della parte.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/core/cards src/editors/media/pdf-view.test.ts
-Stato: [ ] da fare
+Stato: [~] integrato in `integra/editor-2` (68d84b2c4, merge eb5a6057c, 2026-11-19), in attesa del main
 
 ## T46 · Il disegno che si modifica sul posto
 
@@ -3443,7 +3443,7 @@ Fatto quando: l'e2e scrive un PDF, lo rilegge con `lopdf` e `hayro`, trova
 testo, link e segnalibri; l'annullamento non lascia file.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base eb5a6057c
 
 ## T77b · PDF accessibile e PDF/A
 
