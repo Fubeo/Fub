@@ -333,6 +333,14 @@ appena qualcuno inserisce un item nel mezzo.
 - Una PR **bozza** riceve la CI corta: solo Linux, senza banchi. Pronta per
   la revisione gira la CI completa, Windows compreso; su `main` gira sempre
   tutto.
+- Una bozza con l'etichetta `notte` (le integrazioni lunghe) riceve anche,
+  ogni notte, la CI completa sulla sua testa:
+  [`notte.yml`](../../.github/workflows/notte.yml) lancia `ci.yml` a mano sul
+  ramo, una volta per testa, così un difetto di Windows o delle foto si vede
+  entro un giorno e non a pacchetto finito. Non è un controllo richiesto, e
+  `baseline.yml` non la segue: il banco visivo può essere rosso per le scene
+  nuove, che il robot fotografa quando la PR è pronta. Si legge con
+  `gh run list --workflow ci.yml --event workflow_dispatch --branch <ramo>`.
 - macOS e iOS sono in pausa
   ([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): nessuna PR li
   aspetta. [`macos-in-pausa.yml`](../../.github/workflows/macos-in-pausa.yml)
