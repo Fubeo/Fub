@@ -237,17 +237,11 @@ Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
 temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
 Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
 della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
-Il ponte dei documenti lascia l'ospite dei diagrammi Mermaid
-(`ui/mermaid.ts`) a `diagram-host`, che importa soltanto chunk condivisi.
-Lascia anche il modello e la griglia delle tabelle Markdown
-(`table-model.ts`, `table-grid.ts`) a `markdown-tables`, chiuso allo stesso modo.
-Il catalogo delle stringhe sta in due chunk, uno per lingua
-(`shell-strings` per l'italiano, `shell-strings-en` per l'inglese).
-Il chunk condiviso della shell (`search`) lascia la disposizione dei riquadri
-(`state/layout.ts`) a `shell-layout`, chiuso verso il basso.
-La barra della formula comune alla lavagna e alla barra di formato delle
-note sta in `editors/core/formula-bar.ts`, fuori dall'ospite delle schede
-(`editors/core/cards/`), che si spegne e non arriva all'avvio.
+Il ponte dei documenti lascia a chunk che importano soltanto chunk condivisi
+l'ospite Mermaid (`diagram-host`) e le tabelle Markdown (`markdown-tables`);
+`search` lascia i riquadri (`state/layout.ts`) a `shell-layout`; le stringhe
+hanno un chunk per lingua (`shell-strings`, `shell-strings-en`). La barra della
+formula (`editors/core/formula-bar.ts`) sta fuori dall'ospite delle schede.
 
 L'audit npm della supply chain
 ([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni
