@@ -447,8 +447,10 @@
   height: 1.25rem;
   margin: 0;
 }
+/* `[type]` dà un nome al fratello a sinistra (`theme/fratelli.test.ts`);
+   un `:has()` con lo stato della casella costava di più a ogni cursore. */
 .modale .draw-export-option input:disabled,
-.modale .draw-export-option:has(> input:disabled) > span {
+.modale .draw-export-option input[type]:disabled + span {
   cursor: default;
   opacity: 0.55;
 }

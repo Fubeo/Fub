@@ -16747,7 +16747,9 @@ input.canvas-toolbar-item {
   margin: 0;
   accent-color: var(--doc-link);
 }
-.markdown-rendered .block-tasks .ui-checkbox:has(> input:checked) > .ui-field-label {
+/* `[type]` dà un nome al fratello a sinistra (`theme/fratelli.test.ts`);
+   un `:has()` con lo stato della casella costava di più a ogni cursore. */
+.markdown-rendered .block-tasks .ui-checkbox input[type="checkbox"]:checked + .ui-field-label {
   color: var(--doc-gutter-fg);
   text-decoration: line-through;
 }
@@ -28192,8 +28194,10 @@ h6.ui-heading {
   height: 1.25rem;
   margin: 0;
 }
+/* `[type]` dà un nome al fratello a sinistra (`theme/fratelli.test.ts`);
+   un `:has()` con lo stato della casella costava di più a ogni cursore. */
 .modale .draw-export-option input:disabled,
-.modale .draw-export-option:has(> input:disabled) > span {
+.modale .draw-export-option input[type]:disabled + span {
   cursor: default;
   opacity: 0.55;
 }
