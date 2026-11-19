@@ -357,10 +357,7 @@ primo, fra `tema`, `file` e `adattato` (`apps/client/src/theme/content-look.ts`)
 Markdown, testo, sorgenti, Lavagna e Base dichiarano `tema`; disegno,
 annotazioni, immagini e media `file`; l'SVG `tema` nel sorgente e `file`
 nell'anteprima. Il documento offre `file` e `adattato` in Pagina e in
-Lettura, `tema` in Scrittura; il foglio di calcolo `file` e `adattato`. La
-scheda di un foglio nella nota non ha un aspetto suo: sta sulla carta della
-nota, e i colori del file ci si portano sopra (`look-adattato`, la carta
-riletta a ogni disegno e a ogni cambio di luce, `CardView.themeChanged`). Il
+Lettura, `tema` in Scrittura; il foglio di calcolo `file` e `adattato`. Il
 campo è obbligatorio, e `apps/client/src/editors/core/surface-looks.test.ts`
 controlla che ogni modalità registrata lo dichiari.
 
