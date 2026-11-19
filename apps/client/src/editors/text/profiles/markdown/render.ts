@@ -10,6 +10,7 @@ import { CALLOUT_HEAD } from "./callout-head";
 import { type DetailsHead, pairDetails, type TopBlock } from "./details";
 import { tocHtml, type TocEntry } from "./toc";
 import { decodeDestination } from "./link-syntax";
+import { onlyCellValues } from "./cell-value";
 import {
   escapeHtml,
   figureHtml,
@@ -444,6 +445,9 @@ function headingLevel(name: string): number {
 function loneFigure(paragraph: SyntaxNode, source: string, to: number, inner: string, attrs: string): string | null {
   const image = paragraph.firstChild;
   if (image?.name !== "Image" || image.from !== paragraph.from || source.slice(image.to, to).trim() !== "") return null;
+  // Una cella chiesta come valore nel testo (`![[Conti.xlsx#Budget!C7|value]]`,
+  // T53) è testo, non una figura: `value` non è una didascalia.
+  if (onlyCellValues(source.slice(image.from, image.to))) return null;
   return figureHtml(inner, visibleText(source, image), attrs);
 }
 

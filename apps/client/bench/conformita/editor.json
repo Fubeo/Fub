@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit e80fae9ec2e6fa00fe26ea67952123d02ccf7c00.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit c53859121b42c53d2dd983ee91c9a8339273ff18.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "e80fae9ec2e6fa00fe26ea67952123d02ccf7c00",
+  "commit": "c53859121b42c53d2dd983ee91c9a8339273ff18",
   "file": "PLAN-ui/editor.html",
   "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {
@@ -22705,6 +22705,178 @@
         "fub": {
           "color": [
             "var(--muted)"
+          ]
+        }
+      }
+    },
+    "valori-cella.valore": {
+      "chiaro-1280": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "border-bottom-width": "1px",
+          "border-bottom-style": "dotted",
+          "border-bottom-color": "color(srgb 0 0.431373 0.27451 / 0.6)",
+          "cursor": "pointer",
+          "font-variant-numeric": "tabular-nums",
+          "white-space": "nowrap",
+          "color": "rgb(24, 35, 28)",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "font-size": "18px",
+          "font-weight": "400",
+          "background-color": "rgba(0, 0, 0, 0)"
+        },
+        "fub": {
+          "border-bottom-color": [
+            "color-mix(in srgb, var(--accent) 60%, transparent)"
+          ],
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "border-bottom-width": "1px",
+          "border-bottom-style": "dotted",
+          "border-bottom-color": "color(srgb 0.333333 0.776471 0.564706 / 0.6)",
+          "cursor": "pointer",
+          "font-variant-numeric": "tabular-nums",
+          "white-space": "nowrap",
+          "color": "rgb(228, 234, 230)",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "font-size": "18px",
+          "font-weight": "400",
+          "background-color": "rgba(0, 0, 0, 0)"
+        },
+        "fub": {
+          "border-bottom-color": [
+            "color-mix(in srgb, var(--accent) 60%, transparent)"
+          ],
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "border-bottom-width": "1px",
+          "border-bottom-style": "dotted",
+          "border-bottom-color": "color(srgb 0 0.431373 0.27451 / 0.6)",
+          "cursor": "pointer",
+          "font-variant-numeric": "tabular-nums",
+          "white-space": "nowrap",
+          "color": "rgb(24, 35, 28)",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "font-size": "18px",
+          "font-weight": "400",
+          "background-color": "rgba(0, 0, 0, 0)"
+        },
+        "fub": {
+          "border-bottom-color": [
+            "color-mix(in srgb, var(--accent) 60%, transparent)"
+          ],
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "border-bottom-width": "1px",
+          "border-bottom-style": "dotted",
+          "border-bottom-color": "color(srgb 0.333333 0.776471 0.564706 / 0.6)",
+          "cursor": "pointer",
+          "font-variant-numeric": "tabular-nums",
+          "white-space": "nowrap",
+          "color": "rgb(228, 234, 230)",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "font-size": "18px",
+          "font-weight": "400",
+          "background-color": "rgba(0, 0, 0, 0)"
+        },
+        "fub": {
+          "border-bottom-color": [
+            "color-mix(in srgb, var(--accent) 60%, transparent)"
+          ],
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      }
+    },
+    "valori-cella.passaggio": {
+      "chiaro-1280": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(0, 110, 70, 0.1)",
+          "border-top-left-radius": "3px",
+          "border-top-right-radius": "3px",
+          "border-bottom-right-radius": "3px",
+          "border-bottom-left-radius": "3px"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(85, 198, 144, 0.13)",
+          "border-top-left-radius": "3px",
+          "border-top-right-radius": "3px",
+          "border-bottom-right-radius": "3px",
+          "border-bottom-left-radius": "3px"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(0, 110, 70, 0.1)",
+          "border-top-left-radius": "3px",
+          "border-top-right-radius": "3px",
+          "border-bottom-right-radius": "3px",
+          "border-bottom-left-radius": "3px"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": "[data-id=\"p-conti\"] .cellv",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(85, 198, 144, 0.13)",
+          "border-top-left-radius": "3px",
+          "border-top-right-radius": "3px",
+          "border-bottom-right-radius": "3px",
+          "border-bottom-left-radius": "3px"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
           ]
         }
       }

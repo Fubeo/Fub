@@ -77,6 +77,7 @@ export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
 import { Transclusions, type TransclusionDeps } from "./transclusion";
 import { LiveCards, type LiveCardsPort } from "./live-cards";
+import { CellValues, hostCellSlot, type CellValuePort } from "./cell-value";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
@@ -230,6 +231,9 @@ export interface MarkdownSurfaceOptions {
   /// Le schede vive (E19, T41): l'ospite delle schede della lavagna, caricato
   /// alla prima scheda. Senza, l'embed di un file resta la resa di sempre.
   liveCards?: LiveCardsPort;
+  /// I valori di cella nel testo (E23, T53): il lettore dei fogli, caricato
+  /// al primo valore. Senza, l'embed di una cella resta la resa di sempre.
+  cellValues?: CellValuePort;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -554,6 +558,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // Le schede dentro le colonne leggono il loro embed dal testo di adesso.
     text: (from, to) => engine.readState((state) => (to <= state.doc.length ? state.sliceDoc(from, to) : null)),
   }) : null;
+  /// I valori di cella della nota (T53): una lettura per cella, un ascolto per
+  /// file, in Scrittura e in Lettura.
+  const cellValues = opts.cellValues ? new CellValues({ port: opts.cellValues, hostDoc: docId }) : null;
+  const cellValueSlot = cellValues
+    ? { cellValue: (slot: HTMLElement, life: Lifetime) => hostCellSlot(slot, life, cellValues) }
+    : {};
   const profile = createMarkdownProfile({
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
@@ -575,6 +585,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       isPerson: opts.pageIcons?.isPerson,
       linkCard: linkCards,
       ...(liveCards ? { liveCards } : {}),
+      ...(cellValues ? { cellValues } : {}),
       // La pagina del giorno (E17): in fondo alla giornaliera, se questa nota
       // lo è con la cartella e il formato di adesso.
       ...(opts.completions.dates?.dailyDate ? {
@@ -613,6 +624,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         importRemoteImage: readOnly ? undefined : importRemoteImage,
         transclude: readOnly ? undefined : transclusions.mount,
         ...(liveCards ? { liveCard: (slot: HTMLElement, life: Lifetime) => liveCards.hostSlot(slot, life) } : {}),
+        ...cellValueSlot,
       }),
     },
     completions: slashMenu ? { ...opts.completions, slash: slashMenu } : opts.completions,
@@ -1287,6 +1299,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       searchTag: opts.onSearchTag,
       toggleTask,
       importRemoteImage: toggleTask ? importRemoteImage : undefined,
+      ...cellValueSlot,
       imageActions: {
         ...(opts.onOpenDocument ? { open: (id: string) => void Promise.resolve(opts.onOpenDocument!(id)).catch(() => {}) } : {}),
         ...(opts.onShowFile
@@ -2504,6 +2517,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       engine.destroy();
       // Dopo l'editor, che smonta i widget: le schede rimaste se ne vanno qui.
       liveCards?.destroy();
+      cellValues?.destroy();
       resources?.release();
       delete parent.dataset.markdownMode;
     },

@@ -2593,14 +2593,20 @@ async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Pr
 
 /// Le parti che le schede di foglio della nota chiedono (`fub.part`, T43),
 /// solo nella Live delle schede vive (`live=schede-vive`) e nella battuta con
-/// le schede (`live=battuta-schede-20`): la risposta che
+/// le schede (`live=battuta-schede-20`), e le celle dei valori nel testo (T53,
+/// `live=valori-cella` e `live=battuta-valori-100`): la risposta che
 /// `fub-format-xlsx/src/parts.rs` darebbe per la cartella del banco, che non
 /// ricalcola e non scrive. Una parte sconosciuta è persa, con le parti che la
 /// cartella ha.
-const SHEET_PARTS: Readonly<Record<string, unknown>> | null = params.get("live") === "schede-vive" || params.get("live") === "battuta-schede-20"
+const SHEET_PARTS_CASES = new Set(["schede-vive", "battuta-schede-20", "valori-cella", "battuta-valori-100"]);
+const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.has(params.get("live") ?? "")
   ? {
       "": { found: true, kind: "active", sheet: "s1", range: "A1:F6" },
       "Conti!A1:C4": { found: true, kind: "range", sheet: "s1", range: "A1:C4" },
+      // Le celle dei valori nel testo: 800, -120, 680, 50.00%, la cella
+      // vuota D2 e l'errore #DIV/0! di C4.
+      ...Object.fromEntries(["B2", "B3", "B4", "C2", "D2", "C4"]
+        .map((cell) => [`Conti!${cell}`, { found: true, kind: "range", sheet: "s1", range: cell }])),
     }
   : null;
 const SHEET_PARTS_LOST = {

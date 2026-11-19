@@ -181,6 +181,38 @@ apertura della sua sessione: è `apps/client/src/editors/grid/card.ts`. Venti
 fogli vivi in una nota non pesano sulla battuta: lo misura la nota
 `battuta-schede-20` di `node bench/interaction.mjs --only=battuta`.
 
+## Un valore nel testo
+
+`![[Conti.xlsx#Budget!C7]]` in mezzo a una frase non è una scheda: è il
+valore della cella, col formato del foglio («2.520 €»), sottolineato da un
+tratteggio d'accento. La parte è una cella sola, col foglio
+(`Budget!C7`, `'Conti 2025'!$B$2`) o senza (`C7`, sul foglio attivo); un
+intervallo, un nome o un foglio intero restano la scheda.
+
+- **Il clic** apre il foglio nella sua linguetta, sulla cella. Il cursore che
+  arriva con le frecce mostra l'embed scritto, come per un'immagine.
+- **Segue il file**: quando il foglio cambia (salvato da Fub, da un'altra
+  app, rinominato o tolto) il valore si rilegge, per evento e mai a tempo.
+  Il valore è quello salvato nel file: aprire la nota non ricalcola e non
+  scrive; un valore che Fub non ha ricalcolato lo dice al passaggio.
+- **I casi limite**: una cella vuota mostra «—»; un errore di formula il suo
+  segno (`#DIV/0!`) nel colore dell'errore; un file mancante o una cella che
+  non c'è il riferimento («Conti.xlsx › Budget!C7»), nel colore dell'errore,
+  e il perché al passaggio.
+- **In Lettura** il valore è testo come il resto, senza tratteggio.
+- **Da solo nel paragrafo** l'embed di una cella è la scheda di foglio. Il
+  menu della scheda, **Mostra come → Valore nel testo**, scrive `|value`
+  (`![[Conti.xlsx#Budget!C7|value]]`) e il valore resta in riga; **Scheda**
+  lo toglie.
+
+I valori di una nota si leggono insieme: un'apertura di sola lettura per
+file, una finestra per blocco della griglia, un ascolto per file. Il lettore
+è `apps/client/src/editors/grid/cell-reader.ts` (la stessa porta della
+scheda di foglio, con `fub.part`); il widget, l'elenco dei valori e la resa
+in Lettura sono `apps/client/src/editors/text/profiles/markdown/cell-value.ts`.
+Cento valori in una nota non pesano sulla battuta: lo misura la nota
+`battuta-valori-100` di `node bench/interaction.mjs --only=battuta`.
+
 ## I limiti
 
 - Fuori dalla vista le schede sono immagini ferme; vive ce ne sono al più

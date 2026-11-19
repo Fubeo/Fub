@@ -24,7 +24,7 @@ vi.mock("../host/query", async (original) => {
 // Il controller cerca i suoi elementi in `index.html` quando si carica.
 const rawHtml = (await import("../../index.html?raw")).default;
 document.body.innerHTML = (/<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml)?.[1] ?? "").replace(/<script[\s\S]*?<\/script>/g, "");
-const { canvasFreeName } = await import("./document-controller");
+const { canvasFreeName, sheetCellOf } = await import("./document-controller");
 const { vaultEntries, WITHOUT_PAGE } = await import("../host/query");
 
 describe("canvasFreeName", () => {
@@ -65,5 +65,19 @@ describe("canvasFreeName", () => {
     expect(free).toBe("Gita a b 1");
     // Il nome proposto è ancora un nome di file valido.
     expect(searchedName(free)).toBe(free);
+  });
+});
+
+describe("sheetCellOf", () => {
+  // Il clic su un valore di cella nel testo (T53) apre il foglio sulla cella
+  // che la parte nomina col suo foglio.
+  it("la prima cella di una parte col foglio; niente per un nome, un foglio o una cella senza foglio", () => {
+    expect(sheetCellOf("#Budget!C7")).toEqual({ sheet: "Budget", cell: "C7" });
+    expect(sheetCellOf("#'Conti 2025'!$b$2")).toEqual({ sheet: "Conti 2025", cell: "B2" });
+    expect(sheetCellOf("#'L''anno'!A1:E7")).toEqual({ sheet: "L'anno", cell: "A1" });
+    expect(sheetCellOf("#Totale")).toBeNull();
+    expect(sheetCellOf("#Budget")).toBeNull();
+    expect(sheetCellOf("#C7")).toBeNull();
+    expect(sheetCellOf(null)).toBeNull();
   });
 });

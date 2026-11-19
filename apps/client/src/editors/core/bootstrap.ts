@@ -1,6 +1,7 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
 import type { LiveCardKit, LiveCardsPort } from "../text/profiles/markdown/live-cards";
+import type { CellValuePort, CellValueReader } from "../text/profiles/markdown/cell-value";
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
@@ -578,6 +579,31 @@ function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts,
   };
 }
 
+/// I valori di cella nel testo di una nota (E23, T53): il lettore dei fogli
+/// (`editors/grid/cell-reader.ts`) sulle stesse porte della scheda di foglio,
+/// caricato con un `import()` al primo valore. L'ascolto è quello delle
+/// schede, che fa dimenticare anche l'immagine ferma del file. Senza le
+/// chiamate dei fogli (un'altra finestra) non c'è: l'embed resta com'era.
+function noteCellValues(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): CellValuePort | null {
+  const grid = options.gridHost;
+  if (!grid) return null;
+  let reader: Promise<CellValueReader | null> | null = null;
+  return {
+    load: () => (reader ??= import("../grid/cell-reader").then(
+      ({ sheetCellReader }): CellValueReader => sheetCellReader({ host: grid, source: ports.sheet.source }),
+      (error: unknown) => {
+        reader = null;
+        console.warn("note: il lettore dei valori di cella non si carica", error);
+        return null;
+      },
+    )),
+    resolve: async (page, from) =>
+      (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from))?.doc ?? null,
+    watch: (path, changed) => ports.watch(path, changed),
+    open: (path, subpath) => ports.open(path, subpath),
+  };
+}
+
 /// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
 /// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione
 /// con la stessa porta della scheda di nota. Nessuna porta nuova.
@@ -749,6 +775,7 @@ export function createDocumentSurfaceRegistry(
           });
         }
         if (profile === "markdown") {
+          const cellValues = options.canvasCards ? noteCellValues(options, options.canvasCards) : null;
           return mountMarkdownSurface(context, {
             onChange: (change) => options.onChange(context.paneId, change),
             onSelectionChange: () => options.onSelectionChange(context.paneId),
@@ -770,6 +797,7 @@ export function createDocumentSurfaceRegistry(
             linkCards: options.linkCards,
             ...(options.transclusion ? { transclusion: options.transclusion } : {}),
             ...(options.canvasCards ? { liveCards: noteLiveCards(options, options.canvasCards, context) } : {}),
+            ...(cellValues ? { cellValues } : {}),
             noteFacts,
             completions: options.completions,
             slash: options.slash,
@@ -1037,10 +1065,10 @@ function mountGrid(
     engine.setPaper(adaptedPaper(context.parent));
     // I comandi del catalogo nella tavolozza arrivano allo stesso modo.
     let palette: GridPalette | null = null;
-    if (compact) {
-      compactKit.guardCompactKeys(context.parent, () => engine.editMode(), compactLife);
-      activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
-    }
+    if (compact) compactKit.guardCompactKeys(context.parent, () => engine.editMode(), compactLife);
+    // La cella attiva: dati per chi ospita la scheda, e il modo di portare il
+    // foglio aperto su una cella (T53: il clic su un valore nel testo).
+    activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
     if (!compact) void import("../grid/palette/commands").then(
       ({ mountGridPalette }) => {
         if (!destroyed) palette = mountGridPalette(engine);

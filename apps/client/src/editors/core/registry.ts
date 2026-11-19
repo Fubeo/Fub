@@ -640,7 +640,10 @@ export interface EditorSurface {
   readonly panels?: SurfacePanels;
   /** The document's entries in the status band. */
   readonly status?: SurfaceStatus;
-  /** The active cell of a grid, for a host that hides the formula bar. */
+  /**
+   * The active cell of a grid: for a host that hides the formula bar, and to
+   * land on a cell when the shell opens the sheet at one (T53).
+   */
   readonly activeCell?: SurfaceActiveCellSource;
   /** The cells selected in a table or a Base, for the sum in the status band. */
   readonly cellSelection?: SurfaceCellSelectionSource;

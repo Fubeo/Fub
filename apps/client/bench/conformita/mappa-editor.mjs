@@ -524,6 +524,18 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf" },
   },
+  // I valori di cella nel testo (T53): nel prototipo il paragrafo `p-conti`
+  // del documento d'apertura («Finora abbiamo speso … su … previsti»), nel
+  // banco lo stesso paragrafo sulla cartella del banco.
+  "valori-cella": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win [data-id="p-conti"] .cellv');
+      },
+    },
+    app: { scena: "valori-cella-01-scrittura" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1620,6 +1632,28 @@ export const PEZZI = [
     prototipo: '.pair .scard[data-kind="pdf"] #pdf-prev',
     app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-previous',
     proprieta: [...DIMENSIONI, "border-radius", "color", "opacity"],
+  },
+  // ── il valore di una cella nel testo (T53) ──────────────────────────────
+  // Il tratteggio d'accento sotto, le cifre tabellari, mai a capo, il
+  // puntatore della mano; al passaggio il velo d'accento con gli angoli di 3 px.
+  {
+    id: "valori-cella.valore",
+    vista: "valori-cella",
+    contesto: "documento",
+    prototipo: '[data-id="p-conti"] .cellv',
+    app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
+    // Il carattere è quello del paragrafo; l'interlinea è del corpo del testo
+    // (non di questo pezzo), e qui non si confronta.
+    proprieta: ["border-bottom-width", "border-bottom-style", "border-bottom-color", "cursor", "font-variant-numeric", "white-space", "color", "font-family", "font-size", "font-weight", "background-color"],
+  },
+  {
+    id: "valori-cella.passaggio",
+    vista: "valori-cella",
+    contesto: "documento",
+    prototipo: '[data-id="p-conti"] .cellv',
+    app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
+    gesto: { tipo: "hover", prototipo: '[data-id="p-conti"] .cellv', app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]' },
+    proprieta: ["background-color", "border-radius"],
   },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {

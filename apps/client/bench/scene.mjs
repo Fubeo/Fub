@@ -1644,6 +1644,35 @@ export const SCENE = touchLast(onPage("shell", [
       }
     },
   })),
+  // I valori di cella nel testo (T53, il prototipo `.cellv` del paragrafo
+  // `p-conti`): in Scrittura il valore col tratteggio d'accento, i casi limite
+  // (vuota, #DIV/0!, foglio che non c'è, file mancante) e la cella da sola con
+  // `|value`; al passaggio il velo d'accento; in Lettura testo come il resto;
+  // nella finestra minima (i 700 px del prototipo li guarda la conformità).
+  ...[
+    ["valori-cella-01-scrittura", "I valori di cella in Scrittura: 680 su 800, la cella vuota «—», #DIV/0!, il foglio e il file che non ci sono, -120 da solo", "live_preview", null, false],
+    ["valori-cella-02-passaggio", "Il puntatore sul primo valore: il velo d'accento", "live_preview", null, true],
+    ["valori-cella-03-lettura", "I valori di cella in Lettura: testo come il resto, col formato del foglio", "reading", null, false],
+    ["valori-cella-04-stretta", "I valori di cella nella finestra minima, 800 px", "live_preview", NOTE_NARROW, false],
+  ].map(([id, title, mode, viewport, hover]) => ({
+    id,
+    title,
+    query: "live=valori-cella&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const value = mode === "reading"
+        ? '.pane.focus[data-mode="reading"] .markdown-rendered .fub-cell-value'
+        : ".pane.focus .pane-editor .cm-fub-cell-value";
+      if (mode === "reading") await chooseMode(page, "reading");
+      // Ogni valore ha avuto la sua risposta: nessuno è ancora «…».
+      await page.waitForFunction((selector) => {
+        const all = [...document.querySelectorAll(selector)];
+        return all.length >= 6 && all.every((each) => each.dataset.cellState !== undefined && each.dataset.cellState !== "loading");
+      }, value);
+    },
+    ...(hover ? { hover: (page) => page.hover(".pane.focus .pane-editor .cm-fub-cell-value >> nth=0") } : {}),
+  })),
   // La scheda di documento (T44, il prototipo `.docw`, passo 17): il verbale
   // in ODT a riposo, in continuo e senza pagine; scelto coi Blocchi (attivo,
   // poi Esc); attivo, con l'editor dei documenti in Scrittura e la sua barra.

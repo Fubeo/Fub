@@ -97,6 +97,13 @@ export interface MarkdownMountOptions {
    * resa non lo idrata. Le note riportate non la ricevono.
    */
   readonly liveCard?: (slot: HTMLElement, life: Lifetime) => boolean;
+  /**
+   * I valori di cella nel testo (T53, `cell-value.ts`): riceve ogni embed reso
+   * che una scheda non ha preso, con la vita della resa. Se lo prende (`true`)
+   * l'embed è il valore della cella che nomina, testo come il resto, e la resa
+   * non lo idrata. Le note riportate non la ricevono.
+   */
+  readonly cellValue?: (slot: HTMLElement, life: Lifetime) => boolean;
 }
 
 /// Una nota riportata, come la trasclusione viva la riceve: il documento che
@@ -519,6 +526,8 @@ async function hydrateEmbeds(
   await Promise.all(Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")).map(async (slot) => {
     const page = slot.dataset.embedPage || options.documentId;
     if (!page) return;
+    // Il valore di una cella (T53) non si trasclude: lo tiene `cellValue`.
+    if (slot.dataset.cellValue) return;
     // Un media non è una nota da trascludere: lo idrata `hydrateVaultMedia`.
     if (slot.dataset.embedPage && mediaKindOfId(slot.dataset.embedPage) !== "other") return;
     if (chain.size > MAX_EMBED_DEPTH) {
@@ -582,6 +591,7 @@ async function hydrateEmbeds(
       // Si scrive un livello solo: una nota riportata dentro questa resta da leggere.
       transclude: undefined,
       liveCard: undefined,
+      cellValue: undefined,
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),
     };
@@ -715,7 +725,16 @@ export function mountMarkdown(
         }
       }
     }
-    hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
+    if (options.cellValue) {
+      for (const slot of container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")) {
+        try {
+          options.cellValue(slot, mountedLife);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    }
+    hasEmbeds = !!container.querySelector(".embed[data-embed-page]:not([data-cell-value])");
     const hasImages = !!container.querySelector("img[data-vault-src]");
     const documentId = options.documentId;
     if (queries.length > 0 || (documentId && (hasEmbeds || hasImages))) {

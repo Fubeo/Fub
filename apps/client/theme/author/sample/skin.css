@@ -17827,6 +17827,41 @@ input.canvas-toolbar-item {
   pointer-events: none;
 }
 
+/* ── Il valore di una cella nel testo (T53, prototipo `.cellv`) ─────────────
+   `![[Conti.xlsx#Budget!C7]]` in mezzo a una frase è il valore della cella,
+   col formato del foglio: un tratteggio d'accento sotto, le cifre tabellari,
+   mai spezzato a capo; al passaggio il velo d'accento, e il clic apre il
+   foglio. Un errore di formula, il file mancante e la cella che non c'è
+   prendono il colore dell'errore; la cella vuota («—») e il valore in lettura
+   il grigio. In Lettura (`.embed.fub-cell-value`) è testo come il resto. */
+.cm-fub-cell-value {
+  border-bottom: 1.5px dotted color-mix(in srgb, var(--accent) 60%, transparent);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cm-fub-cell-value:hover {
+  border-radius: 3px;
+  background: var(--accent-veil);
+}
+.cm-fub-cell-value:is([data-cell-state="loading"], [data-cell-state="empty"], [data-cell-state="unavailable"]) {
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-cell-value:is([data-cell-state="error"], [data-cell-state="missing"], [data-cell-state="lost"]) {
+  border-bottom-color: color-mix(in srgb, var(--doc-danger) 60%, transparent);
+  color: var(--doc-danger);
+}
+.embed.fub-cell-value {
+  display: inline;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.embed.fub-cell-value:is([data-cell-state="error"], [data-cell-state="missing"], [data-cell-state="lost"]) {
+  color: var(--doc-danger);
+}
+
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 
 /* L'editor del disegno (FubDraw): la barra e il foglio. La geometria e i

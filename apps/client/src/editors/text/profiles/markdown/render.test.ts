@@ -256,6 +256,8 @@ describe("note, immagini, codice e HTML in riga", () => {
     const figure = renderMarkdown("![Il ponte|320](ponte.png)").html;
     expect(figure).toMatch(/^<figure[^>]*><img src="ponte.png" alt="Il ponte"[^>]*width="320"[^>]*><figcaption>Il ponte<\/figcaption><\/figure>$/);
     expect(renderMarkdown("Il ![ponte](ponte.png) in riga").html).not.toContain("<figure");
+    // Una cella chiesta come valore nel testo (T53) non è una figura.
+    expect(renderMarkdown("![[Conti.xlsx#Budget!C7|value]]").html).not.toContain("<figure");
     expect(renderMarkdown("![](ponte.png)").html).not.toContain("<figure");
   });
 
