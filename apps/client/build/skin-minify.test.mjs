@@ -63,7 +63,10 @@ function rules(css) {
   return list;
 }
 
-describe("la pelle minimizzata della build", () => {
+// Minimizzano e passano dal cancello tutta la pelle: da soli stanno sotto il
+// secondo, ma sotto il carico di un controllo completo superavano i 5 s di
+// serie (corsa locale del 2026-11-19).
+describe("la pelle minimizzata della build", { timeout: 30_000 }, () => {
   it("ha le stesse regole della pelle scritta, una per una", () => {
     const written = rules(SKIN);
     const minified = rules(minifySkin(SKIN));
