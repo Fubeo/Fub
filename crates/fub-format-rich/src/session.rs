@@ -325,7 +325,7 @@ pub fn blank_in(codec: Codec, language: &str) -> Result<Vec<u8>, RichError> {
 fn is_language_tag(tag: &str) -> bool {
     let mut parts = tag.split('-');
     let primary = parts.next().unwrap_or_default();
-    !primary.eq_ignore_ascii_case("und")
+    primary != fub_abi::locale::UNDETERMINED
         && (2..=8).contains(&primary.len())
         && primary.bytes().all(|b| b.is_ascii_alphabetic())
         && parts.all(|part| {
