@@ -1491,6 +1491,13 @@
   text-align: center;
 }
 
+/* Una formula sulla pagina non scorre: la carta non ha barre. Ciò che non
+   sta nella colonna lo rimpicciolisce l'impaginazione (`vectors.ts`), il
+   resto si taglia, e il blocco non è una fermata del Tab senza niente. */
+.export-page .markdown-rendered .math-block {
+  overflow-x: hidden;
+}
+
 /* Una Base sulla carta: la tabella intera, senza la barra. */
 :is(.export-measure, .export-page) .print-page .base-surface {
   border: 0;
@@ -1524,9 +1531,10 @@
   color: var(--doc-fg);
   font-weight: 650;
 }
+/* Il conto delle risposte, piccolo: nel tono della nota, senza velarlo, che
+   sulla carta bianca scenderebbe sotto i 4,5:1. */
 :is(.export-measure, .export-page) .export-comment i {
   font-style: normal;
-  opacity: 0.8;
 }
 /* Nel margine: piccola, col filo dell'evidenziato a sinistra. */
 :is(.export-measure, .export-page) .export-comment[data-shape="margine"] {

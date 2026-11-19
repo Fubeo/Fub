@@ -89,6 +89,13 @@ describe("il menu contestuale", () => {
     workspace.inert = true;
     showContextMenu(inside, [{ label: "Uno", run: () => {} }]);
     expect(document.getElementById("context-menu")?.parentElement).toBe(dialog);
+    closeContextMenu();
+    // Aperto in un punto (il sottomenu del dito): il dialogo che sta lì.
+    const atPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(inside);
+    showContextMenu({ x: 30, y: 40 }, [{ label: "Uno", run: () => {} }]);
+    expect(atPoint).toHaveBeenCalledWith(30, 40);
+    expect(document.getElementById("context-menu")?.parentElement).toBe(dialog);
+    atPoint.mockRestore();
   });
 
   it("un menu chiuso prima del tempo non porta via quello dopo", () => {

@@ -482,7 +482,10 @@ export function attachBlockActions(options: BlockClickOptions): () => void {
     const firstOnPage = bands.some((other) => other.dataset["pageTop"] !== undefined);
     const menu = blockMenu({ element, firstOnPage }, options);
     for (const other of bands) other.classList.add(SELECTED);
-    showContextMenu({ x: event.clientX, y: event.clientY }, menu.items, {
+    // Il clic, non solo il suo punto: il menu va nel dialogo dello spazio,
+    // dove si clicca e si raggiunge coi tasti, non nell'area di lavoro, che
+    // sotto lo spazio è inerte.
+    showContextMenu(event, menu.items, {
       header: menu.header,
       label: menu.header.kind,
       pointer: event.detail > 0,

@@ -342,7 +342,9 @@ export class ExportPages {
       slot.tabIndex = 0;
       slot.setAttribute("aria-label", t("pdf_export.page.open_named", { name }));
     } else {
-      slot.removeAttribute("role");
+      // Un foglio è un gruppo col suo nome: un `aria-label` su un `div`
+      // senza ruolo non lo legge nessuno.
+      slot.setAttribute("role", "group");
       slot.removeAttribute("tabindex");
       slot.setAttribute("aria-label", name);
     }

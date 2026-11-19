@@ -414,7 +414,13 @@ export function menuPointFor(box: { readonly left: number; readonly bottom: numb
 function menuHost(at: MouseEvent | HTMLElement | MenuPoint): HTMLElement {
   const workspace = document.getElementById("workspace");
   if (workspace && !workspace.inert) return workspace;
-  const from = at instanceof HTMLElement ? at : at instanceof MouseEvent && at.target instanceof Element ? at.target : null;
+  // Un menu aperto in un punto (il sottomenu che col dito prende il posto del
+  // menu) sta nel dialogo che occupa quel punto.
+  const from = at instanceof HTMLElement
+    ? at
+    : at instanceof MouseEvent
+      ? (at.target instanceof Element ? at.target : null)
+      : (document.elementFromPoint?.(at.x, at.y) ?? null);
   return from?.closest<HTMLElement>('[aria-modal="true"]') ?? workspace ?? document.body;
 }
 

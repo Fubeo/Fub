@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenderedDocument } from "../host/contract";
+import { focusableElements } from "../ui/a11y";
 import type { ExportNote } from "./block-actions";
 import { blockId, printBlocks } from "./paginate/measure";
 import type { BlockSource, Scheduler } from "./paginate/slices";
@@ -91,13 +92,19 @@ describe("lo spazio «Esporta in PDF»", () => {
     const { space } = open();
     const root = space.element;
     expect(root.getAttribute("role")).toBe("dialog");
+    expect(root.getAttribute("aria-modal")).toBe("true");
     expect(root.getAttribute("aria-label")).toBe("Esporta in PDF");
+    // Nessun secondo «banner» accanto alla barra del titolo.
+    expect(root.querySelector("header")).toBeNull();
     expect(workspace.inert).toBe(true);
     expect(document.activeElement).toBe(root);
     await settle();
 
     const slots = root.querySelectorAll(".export-slot");
     expect(slots.length).toBeGreaterThan(1);
+    // Fuori dalla vista «tutte» un foglio è un gruppo col suo nome.
+    expect(slots[0]!.getAttribute("role")).toBe("group");
+    expect(slots[0]!.getAttribute("aria-label")).toBe("Pagina 1");
     expect(root.querySelector(".export-band-pages")?.textContent).toBe(`${slots.length} pagine`);
     expect(root.querySelector(".export-page")?.textContent).toContain("Paragrafo 1");
 
@@ -116,6 +123,64 @@ describe("lo spazio «Esporta in PDF»", () => {
     expect(workspace.inert).toBe(false);
     expect(document.activeElement).toBe(opener);
     expect(document.querySelector(".export-measure")).toBeNull();
+  });
+
+  it("di serie copre anche il collegamento «Vai all'editor», e lo ridà chiudendo", async () => {
+    const skip = document.createElement("a");
+    skip.className = "skip-link";
+    skip.href = "#panes";
+    document.body.prepend(skip);
+    try {
+      const space = openExportSpace({ doc: "relazione.md", title: "Relazione", render: vi.fn(async () => note(2)), container: app, scheduler: NOW, measure: fakeMeasure, waitMs: 10 });
+      expect(skip.inert).toBe(true);
+      expect(workspace.inert).toBe(true);
+      await settle();
+      space.close();
+      expect(skip.inert).toBe(false);
+      expect(workspace.inert).toBe(false);
+    } finally {
+      skip.remove();
+    }
+  });
+
+  it("il Tab non esce sulla barra del titolo: entra da fuori e dall'ultimo torna al primo", async () => {
+    const titlebar = document.createElement("button");
+    titlebar.textContent = "barra";
+    document.body.prepend(titlebar);
+    try {
+      const { space } = open();
+      await settle();
+      const root = space.element;
+      const inside = focusableElements(root);
+      expect(inside.length).toBeGreaterThan(1);
+      const tab = (shiftKey = false) => {
+        const event = new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+        (document.activeElement ?? document.body).dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      titlebar.focus();
+      expect(tab()).toBe(true);
+      expect(document.activeElement).toBe(inside[0]);
+      inside.at(-1)!.focus();
+      expect(tab()).toBe(true);
+      expect(document.activeElement).toBe(inside[0]);
+      expect(tab(true)).toBe(true);
+      expect(document.activeElement).toBe(inside.at(-1));
+      // In mezzo comanda il browser.
+      inside[1]!.focus();
+      expect(tab()).toBe(false);
+      // Ciò che una superficie sopra ha già deciso resta suo.
+      titlebar.focus();
+      const taken = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      taken.preventDefault();
+      titlebar.dispatchEvent(taken);
+      expect(document.activeElement).toBe(titlebar);
+      space.close();
+      titlebar.focus();
+      expect(tab()).toBe(false);
+    } finally {
+      titlebar.remove();
+    }
   });
 
   it("lo zoom coi pulsanti esce dalle viste e va a passi di un decimo", async () => {

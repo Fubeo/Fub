@@ -329,7 +329,11 @@ describe("il clic sulla pagina", () => {
     bands[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 30, clientY: 40, detail: 1 }));
     expect(showContextMenu).toHaveBeenCalledOnce();
     const [point, items, options] = showContextMenu.mock.calls[0]! as [unknown, MenuItem[], { header: { kind: string }; onClose: () => void }];
-    expect(point).toEqual({ x: 30, y: 40 });
+    // Il clic stesso: il menu si apre nel suo punto, e nel dialogo dello
+    // spazio che lo contiene, non nell'area di lavoro inerte.
+    expect(point).toBeInstanceOf(MouseEvent);
+    expect((point as MouseEvent).target).toBe(bands[1]);
+    expect([(point as MouseEvent).clientX, (point as MouseEvent).clientY]).toEqual([30, 40]);
     expect(options.header.kind).toBe(t("editor_menu.head.text"));
     expect(items.map((entry) => entry.label)).toContain(BREAK());
     expect(bands.every((band) => band.classList.contains("is-selected"))).toBe(true);

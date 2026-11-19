@@ -74,7 +74,9 @@ const VIEWS: readonly { readonly view: Exclude<ExportView, "libera">; readonly l
 
 export function createToolbar(title: string, actions: ToolbarActions): Toolbar {
   registerExportToolbarIcons();
-  const element = document.createElement("header");
+  // Un `div`, non un `header`: dentro lo spazio un `header` sarebbe un
+  // secondo «banner» accanto alla barra del titolo, che resta la sola.
+  const element = document.createElement("div");
   element.className = "export-top";
 
   const back = button("export-back");

@@ -44,6 +44,7 @@ import { printPages, type PrintMount, type PrintRenderer } from "../editors/medi
 import type { RenderedDocument } from "../host/contract";
 import type { DiagramLookOverride } from "../ui/mermaid";
 import { reducedMotion } from "../theme/reduced-motion";
+import { focusableElements } from "../ui/a11y";
 import { icon, iconEl, registerIcon } from "../ui/icons";
 import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
@@ -100,7 +101,8 @@ export interface ExportSpaceOptions {
   /// Dove sta lo spazio: di serie `#app`, sotto la barra del titolo.
   readonly container?: HTMLElement;
   /// Ciò che sta sotto lo spazio e non deve prendere il fuoco finché è
-  /// aperto: di serie l'area di lavoro e la banda di stato.
+  /// aperto: di serie il collegamento all'editor, l'area di lavoro e la banda
+  /// di stato.
   readonly behind?: readonly HTMLElement[];
   /// La nota cambia o si salva: lo spazio si iscrive e rifà la resa.
   readonly follow?: (changed: (event: "changed" | "saved") => void) => () => void;
@@ -182,7 +184,9 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   registerExportSpaceIcons();
   const lifetime = openLifetime();
   const container = options.container ?? document.getElementById("app") ?? document.body;
-  const behind = options.behind ?? [document.getElementById("workspace"), document.getElementById("status-band")].filter((node): node is HTMLElement => node !== null);
+  // Il collegamento «Vai all'editor» porta in un'area di lavoro coperta e
+  // inerte: finché lo spazio è aperto tace anche lui.
+  const behind = options.behind ?? [document.querySelector<HTMLElement>(".skip-link"), document.getElementById("workspace"), document.getElementById("status-band")].filter((node): node is HTMLElement => node !== null);
   const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   let profile = options.profile ?? defaultProfile();
   /// Il profilo scelto com'era, e il suo id: le regolazioni «ne escono»
@@ -755,6 +759,28 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       event.preventDefault();
       event.stopPropagation();
       void space.print();
+    }
+  });
+
+  // Lo spazio è modale, ma la barra del titolo sopra di lui resta viva (i
+  // controlli della finestra si cliccano): il Tab non ci esce. Dall'ultimo
+  // comando torna al primo, da fuori entra; Escape resta il gesto di sopra,
+  // e i tasti degli altri non si toccano. Sulla finestra e in bolla: una
+  // superficie aperta sopra (un menu, con la sua trappola in cattura) ha già
+  // deciso, e il suo `preventDefault` qui si rispetta.
+  lifetime.listen(window, "keydown", (event) => {
+    if (event.key !== "Tab" || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+    const inside = focusableElements(root);
+    const first = inside[0];
+    const last = inside.at(-1);
+    if (!first || !last) return;
+    const current = document.activeElement;
+    // Lo spazio stesso (il fuoco all'apertura) conta come fuori: da lì
+    // Maiuscole+Tab andrebbe sulla barra.
+    const outside = !(current instanceof Node) || current === root || !root.contains(current);
+    if (event.shiftKey ? outside || current === first : outside || current === last) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
     }
   });
 
