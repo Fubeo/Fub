@@ -19932,6 +19932,102 @@
           ]
         }
       }
+    },
+    "schede.lavagna.zona": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.964706 0.977255 0.968627)",
+          "height": "295px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.0886275 0.123922 0.100392)",
+          "height": "295px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.964706 0.977255 0.968627)",
+          "height": "279px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.0886275 0.123922 0.100392)",
+          "height": "279px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      }
+    },
+    "schede.lavagna.riposo": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      }
     }
   }
 }

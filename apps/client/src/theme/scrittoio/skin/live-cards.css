@@ -861,6 +861,7 @@
 .live-card[data-card-kind="canvas"] .canvas-card-board-editor {
   position: absolute;
   inset: 0;
+  overflow: hidden;
 }
 .live-card[data-card-kind="canvas"] .canvas-card-board-rest[hidden],
 .live-card[data-card-kind="canvas"] .canvas-card-board-editor[hidden] {
