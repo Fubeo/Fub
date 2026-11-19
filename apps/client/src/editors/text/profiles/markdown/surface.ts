@@ -2532,6 +2532,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       currentTheme = theme;
       engine.setTheme(theme);
       transclusions.setTheme(theme);
+      liveCards?.themeChanged();
     },
     editorActions,
     // Anche in Lettura, come Ctrl+Z sulla resa: la pila è dell'editor nascosto.

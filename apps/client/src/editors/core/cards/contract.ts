@@ -313,6 +313,11 @@ export interface CardView {
   setMode(mode: CardMode): void;
   /// La scheda ha cambiato misura (a fine gesto).
   resize?(): void;
+  /// La luce o il tema sono cambiati: la scheda rilegge ciò che ha calcolato
+  /// dai colori della pagina (la scheda di foglio nella nota: i colori del
+  /// file portati sulla carta della nota). Chi disegna solo con la pelle non
+  /// ne ha bisogno.
+  themeChanged?(): void;
   /// Entra nella scheda; `false` se non c'è niente in cui entrare.
   enter?(): boolean;
   leave?(): void;

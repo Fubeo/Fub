@@ -727,6 +727,7 @@ function lazySheetRenderer(load: () => Promise<CardRenderer>): CardRenderer {
           view?.setMode(next);
         },
         resize: () => view?.resize?.(),
+        themeChanged: () => view?.themeChanged?.(),
         enter: () => view?.enter?.() ?? false,
         leave: () => view?.leave?.(),
         key: (event) => view?.key?.(event) ?? false,

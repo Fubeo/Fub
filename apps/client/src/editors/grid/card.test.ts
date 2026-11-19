@@ -22,6 +22,7 @@ import type {
 } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
+import { contrast } from "../../theme/contrast";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { CardCache } from "../canvas/card-cache";
 import type {
@@ -716,6 +717,32 @@ describe("la scheda di foglio", () => {
     expect(clipboard).toEqual(["R1C1\tR1C2\t\nR2C1\t\t\n"]);
   });
 
+  it("le celle sono una griglia ARIA: ogni `gridcell` nella sua `row`, senza righe vuote", async () => {
+    // Una riga intera coperta dall'unione sopra: non porta una `row` vuota.
+    const b = bench({ merges: [{ row: 0, column: 0, rows: 2, columns: 5 }] });
+    b.mount("live");
+    await settle();
+    const grid = b.root().querySelector<HTMLElement>(".canvas-card-sheet-grid")!;
+    expect(grid.getAttribute("role")).toBe("grid");
+    const rows = [...grid.querySelectorAll<HTMLElement>('[role="row"]')];
+    // La riga 2 sta tutta nell'unione: restano la 1, la 3 e la 4.
+    expect(rows.map((row) => row.getAttribute("aria-rowindex"))).toEqual(["1", "3", "4"]);
+    // La riga non si disegna: le celle restano posate sulla griglia.
+    for (const row of rows) expect(row.style.display).toBe("contents");
+    for (const each of grid.querySelectorAll<HTMLElement>('[role="gridcell"]')) {
+      expect(each.parentElement?.getAttribute("role")).toBe("row");
+      expect(each.parentElement?.parentElement).toBe(grid);
+    }
+    // Nessun figlio diretto della griglia è una cella; il resto è nascosto o senza ruolo.
+    for (const child of grid.children) expect(child.getAttribute("role")).not.toBe("gridcell");
+    const merged = cell(b.root(), 0, 0);
+    expect(merged.getAttribute("aria-colindex")).toBe("1");
+    expect(merged.getAttribute("aria-rowspan")).toBe("2");
+    expect(merged.getAttribute("aria-colspan")).toBe("5");
+    expect(cell(b.root(), 3, 4).getAttribute("aria-colindex")).toBe("5");
+    expect(cell(b.root(), 3, 4).hasAttribute("aria-colspan")).toBe(false);
+  });
+
   it("una cella unita che comincia sopra la vista si disegna dalla prima riga in vista", async () => {
     const b = bench({ merges: [{ row: 0, column: 0, rows: 3, columns: 1 }] });
     const card = b.mount("live");
@@ -1379,6 +1406,39 @@ describe("la parte di un foglio (T43)", () => {
     expect(cell(root, 2, 2).style.left).toBe(`${SHEET_NOTE_ROW_HEADER}px`);
     card.leave!();
     expect(headers(root)).toBe(0);
+  });
+
+  it("nella nota i colori del file stanno sulla carta della nota, e la seguono quando cambia la luce", async () => {
+    const red: GridCellStyle = { ...PLAIN, bold: false, italic: false, text_color: "#FF0000" };
+    const b = bench({ note: true, styleOf: (row, column) => (row === 0 && column === 0 ? red : null), part: () => found("s1", "A1:B2") });
+    // La carta della nota di notte; la porta non ne dà una (la nota non è adattata).
+    b.host.style.setProperty("--doc-bg", "#131c16");
+    b.host.style.setProperty("--doc-fg", "#e6ece8");
+    const card = b.mount("live");
+    await settle();
+    const root = b.root();
+    expect(root.classList.contains("look-adattato")).toBe(true);
+    const dark = cell(root, 0, 0).style.getPropertyValue("--file-color-a");
+    expect(cell(root, 0, 0).style.getPropertyValue("--file-color")).toBe("#FF0000");
+    // Il rosso puro sul fondo scuro sta a 4,35:1: portato sulla carta regge.
+    expect(dark).not.toBe("");
+    expect(contrast(dark, "#131c16")).toBeGreaterThanOrEqual(4.5);
+    // Di giorno: la scheda rilegge la carta e ridipinge.
+    b.host.style.setProperty("--doc-bg", "#ffffff");
+    b.host.style.setProperty("--doc-fg", "#131715");
+    card.themeChanged!();
+    const light = cell(b.root(), 0, 0).style.getPropertyValue("--file-color-a");
+    expect(light).not.toBe(dark);
+    expect(contrast(light, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("sulla lavagna, senza la carta della porta, le celle stanno sulla carta del file", async () => {
+    const b = bench();
+    b.host.style.setProperty("--doc-bg", "#131c16");
+    b.host.style.setProperty("--doc-fg", "#e6ece8");
+    b.mount("live");
+    await settle();
+    expect(b.root().classList.contains("look-file")).toBe(true);
   });
 
   it("selezione e Ctrl+C dentro la parte, a tabulazioni", async () => {

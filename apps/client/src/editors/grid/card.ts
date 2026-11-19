@@ -7,8 +7,12 @@
 // giornale e sulla base che dà la porta (`SheetCardPort.source`), e chiede
 // con `gridBytesWindow` solo le righe e le colonne che la scheda mostra. Ogni
 // cella si disegna con la stessa `paintCell` della griglia, sulle stesse
-// classi (`grid-cell`, `grid-header`…), dentro `look-file` o, se la porta dà
-// una carta, `look-adattato`.
+// classi (`grid-cell`, `grid-header`…), dentro `look-file` o, se c'è una
+// carta, `look-adattato`. La carta la dà la porta (il riquadro della lavagna
+// nell'aspetto adattato); nella nota la scheda sta sempre sulla carta della
+// nota, e i colori del file ci si portano sopra (`#readPaper`). Le celle sono
+// una griglia ARIA vera: ogni riga disegnata è un `row` (`display: contents`,
+// la posizione resta delle celle) con le sue `gridcell`.
 //
 // I modi:
 //
@@ -67,7 +71,7 @@ import { isErrorKind } from "../../host/errors";
 import { t } from "../../i18n/strings";
 import { writeClipboardText } from "../../platform/clipboard";
 import { adapter, type Adapter, type Paper } from "../../theme/adapt";
-import { markLook } from "../../theme/content-look";
+import { markLook, themePaper } from "../../theme/content-look";
 import { formatKindOf, formatNameOf } from "../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { showContextMenu } from "../../ui/menu";
@@ -355,6 +359,28 @@ class SheetCard implements CardView {
       return;
     }
     this.#freeze();
+  }
+
+  /// La luce o il tema sono cambiati: la carta della nota è un'altra, e le
+  /// celle si ridipingono coi colori del file portati su di lei. Mentre si
+  /// scrive la griglia vera segue la luce da sé; la resa si rilegge
+  /// uscendo.
+  themeChanged(): void {
+    if (this.#destroyed) return;
+    this.#paper = this.#readPaper();
+    if (this.#editLife !== null) return;
+    if (this.#grid) this.#paint();
+    else if (this.#state === "content") markLook(this.#root, this.#paper ? "adattato" : "file");
+  }
+
+  /// La carta su cui portare i colori del file: quella che dà la porta (la
+  /// lavagna nell'aspetto adattato) o, nella nota, la carta della nota, su cui
+  /// la scheda sta comunque. Sulla carta scura della notte il rosso di un
+  /// file scenderebbe sotto 4,5:1; portato sulla carta tiene la tinta e
+  /// regge. `null`: le celle stanno sulla carta del file.
+  #readPaper(): Adapter | null {
+    const paper = this.#port.paper() ?? (this.#inNote ? themePaper(this.#host) : null);
+    return paper ? adapter(paper) : null;
   }
 
   resize(): void {
@@ -703,10 +729,7 @@ class SheetCard implements CardView {
       return;
     }
     this.#open = opened;
-    this.#paper = (() => {
-      const paper = this.#port.paper();
-      return paper ? adapter(paper) : null;
-    })();
+    this.#paper = this.#readPaper();
     const session = opened.session;
     const hidden = new Set(session.hidden);
     const visible = session.sheets.filter((sheet) => !hidden.has(sheet.id));
@@ -1188,6 +1211,9 @@ class SheetCard implements CardView {
     grid.setAttribute("role", "grid");
     grid.style.position = "absolute";
     grid.style.inset = "0";
+    // Nella nota la carta è quella della nota adesso: alla prima apertura la
+    // scheda può non essere ancora nella pagina.
+    if (this.#inNote) this.#paper = this.#readPaper();
     const font = getComputedStyle(this.#root).fontFamily ?? "";
     const { cells, merges } = this.#cells();
     const rows = this.#rows;
@@ -1222,6 +1248,14 @@ class SheetCard implements CardView {
     const firstRow = rows[0]?.index ?? 0;
     const firstColumn = columns[0]?.index ?? 0;
     for (const row of rows) {
+      // La riga della griglia ARIA: non si disegna (`display: contents`), le
+      // celle restano posate sulla griglia. Entra solo con almeno una cella:
+      // una riga coperta da un'unione sopra di lei non ne ha.
+      const line = document.createElement("div");
+      line.className = "canvas-card-sheet-row";
+      line.setAttribute("role", "row");
+      line.setAttribute("aria-rowindex", String(row.index + 1));
+      line.style.display = "contents";
       for (const column of columns) {
         const merge = mergeAt(merges, { row: row.index, column: column.index });
         let lastRow = row;
@@ -1246,6 +1280,14 @@ class SheetCard implements CardView {
         element.dataset.row = String(row.index);
         element.dataset.column = String(column.index);
         element.setAttribute("role", "gridcell");
+        element.setAttribute("aria-colindex", String(column.index + 1));
+        if (merge) {
+          // Le righe e le colonne in vista che l'unione copre.
+          const rowSpan = (rowAt.get(lastRow.index) ?? 0) - (rowAt.get(row.index) ?? 0) + 1;
+          const columnSpan = (columnAt.get(lastColumn.index) ?? 0) - (columnAt.get(column.index) ?? 0) + 1;
+          if (rowSpan > 1) element.setAttribute("aria-rowspan", String(rowSpan));
+          if (columnSpan > 1) element.setAttribute("aria-colspan", String(columnSpan));
+        }
         const text = document.createElement("span");
         text.className = "grid-cell-text";
         text.textContent = known?.cell.display ?? "";
@@ -1258,7 +1300,7 @@ class SheetCard implements CardView {
         }
         element.append(text);
         place(element, column.offset, row.offset, width, height);
-        grid.append(element);
+        line.append(element);
         const borders = known?.style?.borders;
         if (hasBorders(borders)) {
           const border = document.createElement("div");
@@ -1266,9 +1308,10 @@ class SheetCard implements CardView {
           border.setAttribute("aria-hidden", "true");
           paintBorders(border, borders);
           place(border, column.offset - 1, row.offset - 1, width + 1, height + 1);
-          grid.append(border);
+          line.append(border);
         }
       }
+      if (line.querySelector('[role="gridcell"]')) grid.append(line);
     }
 
     if (range) {
