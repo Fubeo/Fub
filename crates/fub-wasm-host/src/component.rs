@@ -568,7 +568,7 @@ fn cap_the_rest(
             // Il seme delle `HashMap` della std di Rust dalla 1.95: lo si dà
             // dal generatore del sistema, che basta anche al caso «insicuro».
             let mut instance = linker.instance(name)?;
-            instance.func_new("insecure-seed", |mut store, _, results| {
+            instance.func_new("insecure-seed", |mut store, _, _, results| {
                 let bytes = wasi_random_bytes(store.data_mut(), 16)?;
                 let word = |at: usize| {
                     let mut word = [0u8; 8];
@@ -585,7 +585,7 @@ fn cap_the_rest(
             // un guest che ci fa un uuid o una chiave non deve ricevere sempre
             // gli stessi byte (I70). Nessun'altra porta di WASI si apre.
             let mut instance = linker.instance(name)?;
-            instance.func_new("get-random-bytes", |mut store, params, results| {
+            instance.func_new("get-random-bytes", |mut store, _, params, results| {
                 let Some(Val::U64(len)) = params.first() else {
                     return Err(wasmtime::Error::msg(
                         "get-random-bytes: argomento non valido",
@@ -599,7 +599,7 @@ fn cap_the_rest(
                 );
                 Ok(())
             })?;
-            instance.func_new("get-random-u64", |mut store, _, results| {
+            instance.func_new("get-random-u64", |mut store, _, _, results| {
                 let bytes = wasi_random_bytes(store.data_mut(), 8)?;
                 let mut word = [0u8; 8];
                 word.copy_from_slice(&bytes);
@@ -614,13 +614,13 @@ fn cap_the_rest(
         {
             continue;
         }
-        let ComponentItem::ComponentInstance(interface) = item else {
+        let ComponentItem::ComponentInstance(interface) = item.ty else {
             continue;
         };
         let mut functions = Vec::new();
         let mut resources = Vec::new();
         for (entry, item) in interface.exports(engine) {
-            match item {
+            match item.ty {
                 ComponentItem::ComponentFunc(_) => functions.push(entry.to_string()),
                 ComponentItem::Resource(_) => resources.push(entry.to_string()),
                 _ => {}
@@ -632,7 +632,7 @@ fn cap_the_rest(
         }
         for function in functions {
             let label = format!("{name}#{function}");
-            instance.func_new(&function, move |_, _, _| {
+            instance.func_new(&function, move |_, _, _, _| {
                 Err(wasmtime::Error::msg(format!(
                     "this host does not serve `{label}`"
                 )))
