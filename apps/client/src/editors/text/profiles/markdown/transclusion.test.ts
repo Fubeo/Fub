@@ -390,6 +390,21 @@ describe("il blocco sincronizzato", () => {
     );
   });
 
+  it("la pressione sul testo non sposta fuoco e cursore della nota che ospita; su un link sì", () => {
+    const { slot } = synced(depsOf(new DocumentSessionCollection(fakeApi(SYNCED))));
+    const body = slot.querySelector<HTMLElement>(".transclusion-body")!;
+    const press = (target: Element) => {
+      const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(press(body.querySelector("p") ?? body)).toBe(true);
+    const link = document.createElement("a");
+    link.href = "#";
+    body.append(link);
+    expect(press(link)).toBe(false);
+  });
+
   it("il fuoco che esce dal blocco esce anche dalla scrittura", async () => {
     const sessions = new DocumentSessionCollection(fakeApi(SYNCED));
     const { slot, live } = synced(depsOf(sessions));

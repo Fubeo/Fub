@@ -251,7 +251,10 @@ gap outside your scope, report it in the result.
 Check a UI change by looking at it (both lights, narrow width, empty/error
 states, focus), not only by reading the DOM; the `banco` skill covers the
 bench and its pitfalls:
-[`.claude/skills/banco/SKILL.md`](.claude/skills/banco/SKILL.md).
+[`.claude/skills/banco/SKILL.md`](.claude/skills/banco/SKILL.md). When a
+prototype or an artifact is the reference, compare its **code** (markup, CSS,
+computed styles in both lights) with the app's, not screenshots: pictures hide
+layers and shadows that the code shows.
 
 ## Commits, PRs and Git
 

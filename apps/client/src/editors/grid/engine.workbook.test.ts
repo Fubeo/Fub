@@ -8,7 +8,7 @@ import { HOVER_OPEN_DELAY_MS } from "../../kit";
 import { gridJournalText, parseGridJournal } from "../../state/grid-journal";
 import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
-import { settle, typeInActiveCell, workbookHost, workbookMounted } from "./test-support";
+import { frames, settle, shownMarks, typeInActiveCell, workbookHost, workbookMounted } from "./test-support";
 import type { GridHost } from "./engine";
 
 afterEach(() => {
@@ -374,12 +374,19 @@ describe("GridEngine con una cartella di Excel", () => {
       },
     });
     const { engine, host, viewport, cell } = await workbookMounted(grid);
-    const canvas = host.querySelector<HTMLElement>(".grid-canvas")!;
+    const canvas = host.querySelector<HTMLElement>(".grid-plane")!;
     expect(canvas.style.fontSize).toBe("150.0%");
     expect(viewport.classList.contains("no-gridlines")).toBe(true);
     expect(host.querySelector(".grid-row-header")).toBeNull();
     expect(host.querySelector(".grid-column-header")).toBeNull();
-    expect(host.querySelectorAll(".grid-freeze")).toHaveLength(2);
+    // I fili del blocco: fermi, nei livelli della testa, della colonna ferma
+    // e dell'angolo.
+    expect(shownMarks(host, "freeze").map((line) => `${line.parentElement!.className} ${line.dataset.mark}`).sort()).toEqual([
+      "grid-marks-corner freeze-columns",
+      "grid-marks-corner freeze-rows",
+      "grid-marks-left freeze-columns",
+      "grid-marks-top freeze-rows",
+    ]);
     expect(cell(1, 0)!.classList.contains("frozen")).toBe(true);
     expect(cell(1, 1)!.classList.contains("frozen")).toBe(false);
     // Lo zoom allarga le colonne nella stessa misura.
@@ -415,6 +422,92 @@ describe("GridEngine con una cartella di Excel", () => {
     const { engine, host, cell } = await workbookMounted(grid);
     expect(cell(1, 0)?.textContent).toBe("#CIRC!");
     expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.workbook.circular"));
+    engine.destroy();
+  });
+
+  it("il piano a strati: le fasce ferme stanno ferme da sé, e i segni si tagliano per zona", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        window.view = { ...DEFAULT_SHEET_VIEW, frozen_rows: 1, frozen_columns: 1 };
+      },
+    });
+    const { engine, host, viewport, cell } = await workbookMounted(grid);
+    const key = (name: string, init: KeyboardEventInit = {}) =>
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init }));
+    const style = (element: Element | null) => {
+      const s = (element as HTMLElement).style;
+      return { position: s.position, left: s.left, top: s.top, width: s.width, height: s.height };
+    };
+    const scrollTo = async (left: number, top: number) => {
+      viewport.scrollLeft = left;
+      viewport.scrollTop = top;
+      viewport.dispatchEvent(new Event("scroll"));
+      await settle();
+    };
+    // La riga bloccata sta nella testa, le altre nel corpo; ognuna nel suo
+    // gruppo di righe.
+    expect(cell(0, 1)!.closest(".grid-row")!.parentElement!.className).toBe("grid-head");
+    expect(cell(2, 1)!.closest(".grid-row")!.parentElement!.className).toBe("grid-rows");
+    // Una cella della colonna bloccata, l'intestazione della sua riga e
+    // quella della colonna stanno ferme a sinistra con `sticky`.
+    expect(cell(6, 0)!.style.position).toBe("sticky");
+    expect(cell(2, 1)!.style.position).toBe("absolute");
+    const header = () => host.querySelector(".grid-row[data-row='6'] .grid-row-header");
+    const before = {
+      frozen: style(cell(6, 0)),
+      corner: style(cell(0, 0)),
+      header: style(header()),
+      lines: shownMarks(host, "freeze").map(style),
+    };
+    // Scorrendo, niente di tutto questo si sposta per mano dello script.
+    await scrollTo(260, 40);
+    expect(style(cell(6, 0))).toEqual(before.frozen);
+    expect(style(cell(0, 0))).toEqual(before.corner);
+    expect(style(header())).toEqual(before.header);
+    expect(shownMarks(host, "freeze").map(style)).toEqual(before.lines);
+    await scrollTo(0, 0);
+
+    // A1:C3 passa la riga e la colonna bloccate: un pezzo per zona, ognuno
+    // nel livello della sua zona.
+    key("ArrowDown", { shiftKey: true });
+    key("ArrowDown", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    const rect = () => shownMarks(host, "edge").filter((mark) => mark.dataset.mark!.startsWith("rect-"));
+    const layers = () => [...new Set(rect().map((mark) => mark.parentElement!.className))].sort();
+    expect(layers()).toEqual(["grid-marks-body", "grid-marks-corner", "grid-marks-left", "grid-marks-top"]);
+    const pieces = () => rect().map(style);
+    const drawn = pieces();
+    await scrollTo(0, 140);
+    expect(pieces()).toEqual(drawn);
+
+    // Il quadratino è un pezzo solo, intero, nel livello «lift» della zona
+    // del suo angolo: per A3, sul filo della colonna bloccata, la colonna.
+    key("Escape");
+    await scrollTo(0, 0);
+    key("ArrowDown");
+    key("ArrowDown");
+    await frames(40);
+    const handles = shownMarks(host, "handle");
+    expect(handles).toHaveLength(1);
+    expect(handles[0]!.parentElement!.className).toBe("grid-lift-left");
+    expect([handles[0]!.style.width, handles[0]!.style.height]).toEqual(["8px", "8px"]);
+    // Su B1, sul filo della riga bloccata, la testa.
+    key("ArrowUp");
+    key("ArrowUp");
+    key("ArrowRight");
+    await frames(40);
+    expect(shownMarks(host, "handle").map((mark) => mark.parentElement!.className)).toEqual(["grid-lift-top"]);
+    // Aprendo la cella il quadratino se ne va subito (starebbe sopra il testo
+    // della cella aperta), e torna quando si chiude.
+    key("F2");
+    expect(shownMarks(host, "handle")).toHaveLength(0);
+    host
+      .querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await frames(40);
+    expect(shownMarks(host, "handle")).toHaveLength(1);
     engine.destroy();
   });
 

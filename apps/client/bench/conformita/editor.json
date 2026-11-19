@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit b8144678445c3b4dc29b0eb2697b0e8726d481ed.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 2175b792134421effc2ce4f94f503960895e80a0.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "b8144678445c3b4dc29b0eb2697b0e8726d481ed",
+  "commit": "2175b792134421effc2ce4f94f503960895e80a0",
   "file": "PLAN-ui/editor.html",
   "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {
@@ -33741,6 +33741,84 @@
         "fub": {
           "color": [
             "var(--muted)"
+          ]
+        }
+      }
+    },
+    "esporta.blocco-scelto": {
+      "chiaro-1280": {
+        "prototipo": ".px-it.sel",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "outline-width": "2px",
+          "outline-style": "solid",
+          "outline-color": "rgb(0, 110, 70)",
+          "outline-offset": "3px",
+          "border-top-left-radius": "2px",
+          "border-top-right-radius": "2px",
+          "border-bottom-right-radius": "2px",
+          "border-bottom-left-radius": "2px"
+        },
+        "fub": {
+          "outline-color": [
+            "var(--accent)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".px-it.sel",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "outline-width": "2px",
+          "outline-style": "solid",
+          "outline-color": "rgb(85, 198, 144)",
+          "outline-offset": "3px",
+          "border-top-left-radius": "2px",
+          "border-top-right-radius": "2px",
+          "border-bottom-right-radius": "2px",
+          "border-bottom-left-radius": "2px"
+        },
+        "fub": {
+          "outline-color": [
+            "var(--accent)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".px-it.sel",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "outline-width": "2px",
+          "outline-style": "solid",
+          "outline-color": "rgb(0, 110, 70)",
+          "outline-offset": "3px",
+          "border-top-left-radius": "2px",
+          "border-top-right-radius": "2px",
+          "border-bottom-right-radius": "2px",
+          "border-bottom-left-radius": "2px"
+        },
+        "fub": {
+          "outline-color": [
+            "var(--accent)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".px-it.sel",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "outline-width": "2px",
+          "outline-style": "solid",
+          "outline-color": "rgb(85, 198, 144)",
+          "outline-offset": "3px",
+          "border-top-left-radius": "2px",
+          "border-top-right-radius": "2px",
+          "border-bottom-right-radius": "2px",
+          "border-bottom-left-radius": "2px"
+        },
+        "fub": {
+          "outline-color": [
+            "var(--accent)"
           ]
         }
       }

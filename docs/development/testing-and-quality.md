@@ -239,6 +239,10 @@ Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
 della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
 Il ponte dei documenti lascia l'ospite dei diagrammi Mermaid
 (`ui/mermaid.ts`) a `diagram-host`, che importa soltanto chunk condivisi.
+Lascia anche il modello e la griglia delle tabelle Markdown
+(`table-model.ts`, `table-grid.ts`) a `markdown-tables`, chiuso allo stesso modo.
+Il catalogo delle stringhe sta in due chunk, uno per lingua
+(`shell-strings` per l'italiano, `shell-strings-en` per l'inglese).
 La barra della formula comune alla lavagna e alla barra di formato delle
 note sta in `editors/core/formula-bar.ts`, fuori dall'ospite delle schede
 (`editors/core/cards/`), che si spegne e non arriva all'avvio.
@@ -392,6 +396,9 @@ predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
 `baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
 scrivere un file. Le regole e le loro prove stanno in
 [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
+Una scena nuova ancora senza foto non fa cadere il client: il presidio di
+`bench/scene.test.ts` vuole solo che ogni scena abbia tutte le sue luci o
+nessuna, e il rosso lo dà il banco visivo, che fa partire il bot.
 
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo

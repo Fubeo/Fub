@@ -9,6 +9,13 @@ function content(source: string): HTMLElement {
 }
 
 describe("contenuto Markdown reso", () => {
+  it("in Lettura `<!-- pagina -->` (D17) non si vede e non toglie niente al blocco dopo", () => {
+    const root = content("Prima.\n\n<!-- pagina -->\n## Dopo\n");
+    expect(root.textContent).not.toContain("pagina");
+    expect(root.querySelector("[data-page-break]")).toBeNull();
+    expect(root.querySelector("h2")?.textContent).toBe("Dopo");
+  });
+
   it("mostra una task una sola volta, conservando le voci annidate", () => {
     const root = content("- [ ] Da fare\n  - dettaglio\n- [x] Fatto\n");
     expect(Array.from(root.querySelectorAll("li.task"), (item) => item.textContent)).toEqual(["Da faredettaglio", "Fatto"]);

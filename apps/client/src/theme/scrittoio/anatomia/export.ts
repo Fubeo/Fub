@@ -9,7 +9,7 @@ export const EXPORT: PartAnatomy = {
     { name: "export-toolbar", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["export-top", "export-back", "export-back-label", "export-title", "export-title-name", "export-title-note", "export-zoom", "export-zoom-button", "export-zoom-value", "export-segments", "export-views", "export-segment", "export-profile", "export-profile-name", "export-print", "export-print-label", "export-go"] },
     // Le pagine: il palco, i fogli scalati allo zoom, le fasce coi blocchi
     // copiati dalla resa per la stampa, che restano contenuto.
-    { name: "export-pages", layers: { "print-page": "contenuto" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["export-stage", "export-doc", "export-slot", "export-page", "export-page-body", "export-fascia", "export-fascia-content", "export-fit", "print-page"] },
+    { name: "export-pages", layers: { "print-page": "contenuto", "is-selected": "segno" }, states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["export-stage", "export-doc", "export-slot", "export-page", "export-page-body", "export-fascia", "export-fascia-content", "export-fit", "print-page", "is-selected"] },
     // Le pagine coi colori e i caratteri del tema di stampa (T71): la resa
     // che si misura e le sue copie, che restano contenuto.
     { name: "export-print-theme", layers: { "print-page": "contenuto", "markdown-rendered": "contenuto", callout: "contenuto", "callout-title": "contenuto" }, states: [S("rest"), S("selected")], hooks: ["export-measure", "export-page", "export-doc", "export-slot", "print-page", "markdown-rendered", "callout", "callout-title"] },

@@ -60,7 +60,13 @@ expected.
 - **Graphic task.** Start from the prototype under `PLAN-ui/`. Move its CSS into
   the skin file the task names, its structure into the component, its strings
   into `src/i18n/`, its states into the bench scene if the task says so. Don't
-  redesign it. Then look at the result in the bench, following
+  redesign it. **The prototype's code is the reference, not its pictures**: a
+  screenshot hides an extra layer, a background or a shadow that the code shows
+  at once. Read its markup and CSS, then measure the computed styles of each
+  piece (background, border, shadow, radius, padding, gap, font, colour) in the
+  prototype and in the app, in both lights, and make them match; the
+  screenshots only confirm at the end. Every prototype class the task touches
+  goes into the conformity map below, or the task is not done. Then look at the result in the bench, following
   `.claude/skills/banco/SKILL.md`: both lights and 700 px wide, compared with
   the prototype. Save the screenshots outside the repo and give their paths in
   the report. Add the pieces you ported to the map in

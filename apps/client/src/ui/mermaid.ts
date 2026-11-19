@@ -964,12 +964,30 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     pre.setAttribute("aria-label", t("mermaid.source"));
     captionText.setAttribute("aria-label", t("mermaid.caption"));
     captionText.dataset.placeholder = t("mermaid.caption.placeholder");
+    if (stage.hasAttribute("tabindex")) stage.setAttribute("aria-label", t("mermaid.scroll"));
     status.textContent = phase === "error" && problem ? problemSentence(problem) : t("mermaid.loading");
     status.hidden = phase === "ready";
     details.hidden = phase !== "error";
     element.dataset.state = phase;
     element.dataset.diagramStyle = look.style;
     element.setAttribute("aria-busy", String(phase === "loading"));
+  };
+  // Più larga del riquadro la tavola scorre di lato (E26): allora entra nel
+  // giro del Tab, perché chi usa la tastiera la possa scorrere con le frecce.
+  // Finché il disegno ci sta resta fuori, come una figura qualunque. Lo dice
+  // la misura vera, a ogni cambio della tavola o del disegno.
+  const markScroll = () => {
+    const scrolls = phase === "ready" && !image.hidden && stage.scrollWidth > stage.clientWidth + 1;
+    if (scrolls === stage.hasAttribute("tabindex")) return;
+    if (scrolls) {
+      stage.tabIndex = 0;
+      stage.setAttribute("role", "group");
+      stage.setAttribute("aria-label", t("mermaid.scroll"));
+    } else {
+      stage.removeAttribute("tabindex");
+      stage.removeAttribute("role");
+      stage.removeAttribute("aria-label");
+    }
   };
   const fail = (found: DiagramProblem) => {
     phase = "error";
@@ -980,6 +998,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     image.hidden = true;
     details.open = true;
     labels();
+    markScroll();
     options.onResize?.();
   };
   const resize = () => options.onResize?.();
@@ -1026,8 +1045,17 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     event.preventDefault();
     enlarge();
   });
+  if (typeof ResizeObserver !== "undefined") {
+    const sized = new ResizeObserver(markScroll);
+    sized.observe(stage);
+    sized.observe(image);
+    life.add(() => sized.disconnect());
+  }
   life.listen(details, "toggle", resize);
-  life.listen(image, "load", resize);
+  life.listen(image, "load", () => {
+    markScroll();
+    resize();
+  });
   life.listen(image, "error", () => fail({ line: null, text: t("mermaid.image_failed") }));
   life.add(onLanguage(labels));
   life.add(() => {

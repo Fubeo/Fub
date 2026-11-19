@@ -59,6 +59,10 @@ export interface ExportContentOptions extends ContentPorts {
   /// Ogni quanto si guarda se una Base ha la sua tabella, e per quanto.
   readonly basePollMs?: number;
   readonly basePollLimit?: number;
+  /// La resa com'è nella nota, prima dei cambi di ogni misura: i blocchi
+  /// lasciati fuori uno per uno (il clic sulla pagina, T76) si ritrovano qui,
+  /// con le stesse identità di quelli lasciati fuori per specie.
+  readonly pristine?: (page: HTMLElement) => void;
 }
 
 /// Il prefisso delle identità dei blocchi che il contenuto aggiunge.
@@ -104,6 +108,7 @@ export class ExportContent {
   /// misura; il suo `dispose` rimette la resa com'era.
   measure(page: HTMLElement, host: HTMLElement, layout: PrintLayout, build: (page: HTMLElement) => BlockSource & { dispose?(): void }): BlockSource & { dispose(): void } {
     this.undo();
+    this.options.pristine?.(page);
     const content = layout.content;
     if (!content) return withDispose(build(page), () => {});
     // Le identità di prima dei cambi: un blocco aggiunto non sposta le altre.

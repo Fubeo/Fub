@@ -233,9 +233,32 @@ describe("le note legate dei riepiloghi di Relazione (T35)", () => {
       return { kind: "documents", value: { offset: 0, total: 1, items: [{ doc: "Libri/Dune.md", properties: [{ key: "pagine", value: { kind: "number", value: 600 } }] }] } } as IndexResult;
     });
     const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, rows);
-    expect(linked).toEqual([{ target: "Dune", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
+    expect(linked).toEqual([{ target: "Dune", folder: "Letture", doc: "Libri/Dune.md", props: { pagine: { kind: "number", value: 600 } } }]);
     expect(asked.filter((query) => query.kind === "resolve")).toHaveLength(2);
     expect(asked.find((query) => query.kind === "resolve")).toMatchObject({ from: "Letture/2025.md" });
+  });
+
+  it("lo stesso link in cartelle diverse si risolve dal punto di vista di ogni riga", async () => {
+    const folders = [
+      { doc: "A/Scaffale.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+      { doc: "A/Altro.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+      { doc: "B/Scaffale.md", properties: [{ key: "libri", value: wiki("Indice") }] },
+    ];
+    const asked: IndexQuery[] = [];
+    const bridge = deps(async (query) => {
+      asked.push(query);
+      if (query.kind === "resolve") {
+        const from = (query as { from: string }).from;
+        return { kind: "resolved", value: { doc: `${from.split("/")[0]}/Indice.md` } } as IndexResult;
+      }
+      return { kind: "documents", value: { offset: 0, total: 2, items: [{ doc: "A/Indice.md", properties: [] }, { doc: "B/Indice.md", properties: [] }] } } as IndexResult;
+    });
+    const linked = await linkedNotes(bridge, { relations: ["libri"], linkedProps: ["pagine"] }, folders);
+    expect(linked).toEqual([
+      { target: "Indice", folder: "A", doc: "A/Indice.md", props: {} },
+      { target: "Indice", folder: "B", doc: "B/Indice.md", props: {} },
+    ]);
+    expect(asked.filter((query) => query.kind === "resolve"), "una domanda per cartella e pagina").toHaveLength(2);
   });
 
   it("una vista senza riepiloghi di Relazione non chiede niente", async () => {

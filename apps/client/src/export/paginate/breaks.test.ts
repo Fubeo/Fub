@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { A4_BODY, MM, h1, h2, h3, manualBreak, para, separator } from "./corpus";
-import { CHAPTER_BREAK_PREFIX, applyBreaks } from "./breaks";
+import { CHAPTER_BREAK_PREFIX, MANUAL_BREAK_PREFIX, applyBreaks } from "./breaks";
 import type { Box, PageFrame } from "./model";
 import { paginate } from "./rules";
 
@@ -44,6 +44,24 @@ describe("applyBreaks", () => {
   it("le interruzioni a mano restano dove sono", () => {
     const boxes = [para(2), manualBreak(), para(2)];
     expect(applyBreaks(boxes, { everyHeading2: true, separator: true })).toEqual(boxes);
+  });
+
+  it("`<!-- pagina -->`, misurato come separatore alto zero, volta pagina anche col separatore che disegna la linea", () => {
+    const mark = { kind: "separator", id: `${MANUAL_BREAK_PREFIX}blocco:1`, height: 0 } as const;
+    const after = para(2);
+    const boxes = [para(2), mark, after];
+    for (const settings of [NONE, { everyHeading2: false, separator: true }]) {
+      const out = applyBreaks(boxes, settings);
+      expect(out[1]).toEqual({ kind: "break", id: mark.id, reason: "mano" });
+      const result = paginate(out, A4);
+      expect(result.pages).toHaveLength(2);
+      expect(result.pages[1].placements[0]).toMatchObject({ id: after.id, y: 0 });
+    }
+  });
+
+  it("`<!-- pagina -->` davanti al primo blocco della nota non lascia una pagina bianca", () => {
+    const mark = { kind: "separator", id: `${MANUAL_BREAK_PREFIX}blocco:0`, height: 0 } as const;
+    expect(paginate(applyBreaks([mark, h1(), para(2)], NONE), A4).pages).toHaveLength(1);
   });
 });
 

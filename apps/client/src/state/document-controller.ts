@@ -27,7 +27,7 @@
 // la radice, il contenitore dell'editor e quello delle view — e nessuna classe,
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
-import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
+import { lineFeeds, operationFromText, rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
 import { createDocumentSurfaceRegistry, loadPdf, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
 import type { CanvasNotesPort } from "../editors/canvas/engine";
 import { UI_CRAFT, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
@@ -104,7 +104,7 @@ import { noteProperties, syntaxForms, unsavedDrafts } from "../host/query";
 import type { CardEditorHub, CardNotices } from "../editors/core/cards/editor-port";
 import { lazyCardEditorHub } from "./card-writes";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
-import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
+import type { ComponentRefusal, ComponentRow, DraftInfo, Origin, RenderedDocument } from "../host/contract";
 import {
   documentSessions,
   flushPendingSave,
@@ -1310,7 +1310,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     keeps: keepsDiscardedText,
     keep: async (doc, text) => {
       await keepDiscardedText(doc, text);
-      notify(t("document.conflict.kept", { doc }), "info");
+      notify(t("document.conflict.kept", { doc: pageName(doc) }), "info");
     },
   });
   lifetime.add(() => setDocumentWindowKeeper(null));
@@ -2211,8 +2211,10 @@ export async function resolveDiscardingMine(doc: string | null): Promise<void> {
     return;
   }
   // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
+  // Se il testo dell'utente è già nella Cronologia lo si dice, e ripetere la
+  // scelta non lo conserva una seconda volta (lo sa la sessione).
   if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
-    notify(t("document.reload_failed", { doc: pageName(doc) }), "guasto");
+    notify(t(outcome.kept ? "document.conflict.kept_reload_failed" : "document.reload_failed", { doc: pageName(doc) }), "guasto");
   } else if (keep && outcome.kind === "discarded" && outcome.reload.kind === "reloaded") {
     notify(t("document.conflict.kept", { doc: pageName(doc) }), "info");
   }
@@ -4255,6 +4257,10 @@ function exportableNote(surface: EditorSurface | null | undefined): boolean {
   return surface?.printable === true && surface.family === "text" && surface.profile === "markdown";
 }
 
+/// Chi scrive nella nota dallo spazio «Esporta in PDF» (l'interruzione di
+/// pagina a mano, T76): per la sessione è una superficie come un riquadro.
+const EXPORT_SURFACE = "esporta-pdf";
+
 /// Lo spazio «Esporta in PDF» aperto, e il riquadro della sua nota: uno solo
 /// per finestra, perché prende la finestra intera.
 let openExport: { pane: Pane; close: () => void } | null = null;
@@ -4310,11 +4316,36 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
     openBook?.();
     openExport?.close();
+    // Il testo di cui la resa montata è la resa: il core la legge dal disco,
+    // e chi la chiede ha appena salvato; con modifiche ancora da salvare non
+    // si sa, e il clic sulla pagina non ci scrive (T76). Vale da quando la
+    // resa si monta: prima le pagine sono ancora quelle di prima.
+    const sources = new WeakMap<RenderedDocument, string | null>();
+    let shown: string | null = null;
     const space = openExportSpace({
       doc,
       title: pageName(doc),
-      render: renderPrint,
-      mount,
+      render: async (target) => {
+        const text = documentSessions.isDirty(doc) ? null : (documentSessions.text(doc) ?? null);
+        const rendered = await renderPrint(target);
+        sources.set(rendered, text);
+        return rendered;
+      },
+      note: {
+        shown: () => shown,
+        current: () => documentSessions.text(doc) ?? null,
+        readOnly: () => heldWhy(doc) ?? (deniedSaves.has(doc) ? t("pdf_export.block.read_only", { doc: pageName(doc) }) : null),
+        write: (before, after) =>
+          documentSessions.acceptSurfaceChange(doc, EXPORT_SURFACE, { text: after, operation: operationFromText(lineFeeds(before), lineFeeds(after)) }).kind === "accepted",
+        reveal: (span) => {
+          space.close();
+          void reveal(doc, { span });
+        },
+      },
+      mount: (container, rendered, look) => {
+        shown = sources.get(rendered) ?? null;
+        return mount(container, rendered, look);
+      },
       profiles,
       ...start,
       // Il disposer torna allo spazio, che lo chiude con la sua `Lifetime`.

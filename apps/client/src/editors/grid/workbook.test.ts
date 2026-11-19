@@ -11,6 +11,7 @@ import {
   validateBytesWindow,
   workbookView,
   WORKBOOK_SCALE,
+  writtenValue,
 } from "./workbook";
 
 /// Una copia della fixture del provider, da cambiare in un test.
@@ -202,5 +203,20 @@ describe("l'input di una cella nella lingua", () => {
     expect(fileInput("1.500", ",")).toBe("'1.500");
     expect(fileInput("1.500", ".")).toBe("1.500");
     expect(fileInput("1,5", ".")).toBe("1,5");
+  });
+
+  it("mostra subito come numero soltanto un numero semplice; il resto lo riconosce il motore", () => {
+    const shown = (draft: string, decimal: "." | ",") => writtenValue(fileInput(draft, decimal), decimal);
+    expect(shown("1,5", ",")).toEqual({ value: { kind: "number", value: 1.5 }, display: "1,5" });
+    expect(shown("1.5", ".")).toEqual({ value: { kind: "number", value: 1.5 }, display: "1.5" });
+    expect(shown("-42", ",")).toEqual({ value: { kind: "number", value: -42 }, display: "-42" });
+    // «1.5» in italiano e «1,5» in inglese sono testo, come li scrive il file.
+    expect(shown("1.5", ",")).toEqual({ value: { kind: "text", value: "1.5" }, display: "1.5" });
+    expect(shown("1,5", ".")).toEqual({ value: { kind: "text", value: "1,5" }, display: "1,5" });
+    expect(shown("'42", ",")).toEqual({ value: { kind: "text", value: "42" }, display: "42" });
+    for (const draft of ["15/03/2026", "12%", "3 €", "1e3", "=A1+1", "TRUE"]) {
+      expect(shown(draft, ",").value.kind).toBe("text");
+    }
+    expect(shown("", ",")).toEqual({ value: { kind: "blank" }, display: "" });
   });
 });

@@ -198,6 +198,9 @@ export async function paginateOffscreen(options: OffscreenOptions, pipeline?: Pi
   // spazio rifà le pagine quando arrivano, qui si aspettano.
   const fonts = new p.PrintFonts(options.vaultFonts ?? null);
   await fonts.ensure(profile);
+  // Senza blocchi lasciati fuori: le esclusioni col clic sulla pagina (T76)
+  // sono dello spazio aperto e finiscono con lui, così come `pristine` che le
+  // ritrova nella resa; il PDF chiesto da fuori è la nota col suo profilo.
   const settings: PrintSettings = p.printSettingsOf(profile);
   const memory = new p.DiagramMemory();
   const look = p.diagramPrintLook(profile);

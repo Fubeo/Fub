@@ -3,13 +3,15 @@
 > **Ambito:** le forme che Fub legge e riscrive dentro il testo di una nota
 > Markdown, oltre a CommonMark e alle estensioni di Obsidian: i commenti con
 > la discussione e l'archivio dei risolti, i tipi di nota, il promemoria di
-> un compito e le macro delle formule.
+> un compito, l'interruzione di pagina e le macro delle formule.
 > **Fonti autorevoli:** `crates/fub-format-markdown/src/parse/comments.rs`,
 > `crates/fub-abi/src/model.rs` (`custom_kind::COMMENT_RANGE`,
 > `custom_kind::COMMENT_MESSAGE`), i casi «discussione» di
 > `crates/fub-format-markdown/tests/corpus/mod.rs`;
 > `crates/fub-features/src/note_types.rs` per i tipi di nota;
 > `crates/fub-abi/src/rules/tasks.rs` (`task_reminder`) per il promemoria;
+> `is_page_break` in `crates/fub-format-markdown/src/render.rs` e
+> `apps/client/src/rules/page-break.ts` per l'interruzione di pagina;
 > `apps/client/src/editors/text/profiles/markdown/math/macros.ts` per le
 > macro delle formule.
 
@@ -203,6 +205,32 @@ portare un promemoria: `⏰`, poi la data e, se si vuole, l'ora.
   lo mostra così com'è, e Fub non riscrive mai la riga per suonarlo. La regola
   che lo legge è una sola, nel contratto (`task_reminder`), e cosa succede
   quando suona sta in [Compiti](../product/tasks-and-reminders.md#i-promemoria).
+
+## Interruzione di pagina
+
+Una riga `<!-- pagina -->` prima di un blocco fa cominciare quel blocco su
+una pagina nuova, quando la nota si stampa o si esporta in PDF. La scrive il
+gesto «Comincia qui una pagina nuova» dello spazio
+[Esporta in PDF](../product/pdf-export.md#il-clic-sulla-pagina), e la si può
+scrivere a mano.
+
+```markdown
+Fine del capitolo.
+
+<!-- pagina -->
+## Il capitolo dopo
+```
+
+- È un commento HTML, da solo sulla sua riga: gli spazi dentro e attorno
+  non contano (`<!--pagina-->` vale), un commento che dice altro resta un
+  commento. Il riconoscimento è uno solo, nel provider Markdown
+  (`is_page_break`), con la sua copia nel client per la Scrittura.
+- Gli altri programmi non lo mostrano. In Fub non si vede in Lettura né in
+  Scrittura, salvo sulla riga del cursore, dove lo si può cancellare.
+- Nella resa per la stampa e per il PDF diventa un segnaposto vuoto che
+  volta pagina; altrove (a schermo, nel sito statico) non lascia niente.
+  Vale sempre, anche con il separatore `---` che disegna la sua linea; due
+  interruzioni di fila, o una in cima alla nota, non fanno pagine bianche.
 
 ## Le macro delle formule
 

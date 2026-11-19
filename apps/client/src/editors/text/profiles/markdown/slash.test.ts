@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState, type StateEffect, type TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undo } from "@codemirror/commands";
 import { BASE_ENTRY, CANVAS_ENTRY } from "../../../../panels/slash/entries";
@@ -161,6 +161,29 @@ describe("la Base dal «/» (T18)", () => {
     expect(fake.created).toEqual([{ id: "Libri/Letture.base", text: baseFileText("Libri", "Tabella") }]);
     expect(view.state.doc.toString()).toBe("# Letture\n\n![[Letture.base#Tabella]]\n\nDopo");
     expect(fake.notes).toEqual([]);
+  });
+
+  it("lo scorrimento va dove la Base comincia, non al cursore oltre lei: la sua altezza arriva dopo", async () => {
+    const view = editor("# Letture\n\nI libri.\n\n/base\n\nDopo");
+    const fake = host("Libri/Letture.md", ["Libri/Letture.md"]);
+    const specs: TransactionSpec[] = [];
+    const dispatch = view.dispatch.bind(view) as (...specs: TransactionSpec[]) => void;
+    view.dispatch = ((...args: TransactionSpec[]) => {
+      specs.push(...args);
+      dispatch(...args);
+    }) as typeof view.dispatch;
+    expect(await createBaseHere(view, ...slash(view), fake.port)).toBe(true);
+    const written = specs.find((spec) => spec.changes !== undefined)!;
+    expect(written.scrollIntoView).toBeFalsy();
+    // L'effetto di `EditorView.scrollIntoView` porta il punto da mostrare.
+    const effects = [written.effects ?? []].flat() as StateEffect<unknown>[];
+    const targets = effects
+      .map((effect) => (effect.value as { range?: { head?: unknown } } | null)?.range?.head)
+      .filter((head) => typeof head === "number");
+    const doc = view.state.doc.toString();
+    // La riga vuota prima dell'embed, sopra la Base; il cursore resta sotto.
+    expect(targets).toEqual([doc.indexOf("![[") - 1]);
+    expect(view.state.selection.main.head).toBeGreaterThan(doc.indexOf("]]"));
   });
 
   it("un errore di creazione lascia la nota com'era, e lo dice", async () => {

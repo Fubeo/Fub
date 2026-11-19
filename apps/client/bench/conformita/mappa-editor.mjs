@@ -701,6 +701,21 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf-profili" },
   },
+  /// Il clic sulla pagina (T76): dai due lati il primo paragrafo cliccato,
+  /// scelto, col suo menu aperto.
+  "esporta-pdf-blocco": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector('#win .px:not([hidden]) .px-it[data-t="p"]');
+        await page.click('#win .px:not([hidden]) .px-it[data-t="p"]');
+        await page.waitForSelector("#win .px-it.sel");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-blocco" },
+  },
 };
 
 /// Riporta in cima il pannello delle sezioni, toglie il fuoco e porta via il
@@ -2976,6 +2991,17 @@ export const PEZZI = [
     prototipo: ".ptoc-r b",
     app: ".export-toc-page",
     proprieta: ["font-weight", "font-variant-numeric", "text-align"],
+  },
+
+  // ── il clic sulla pagina (T76) ──────────────────────────────────────────
+  // Il blocco scelto: il contorno dell'accento fuori dal blocco. Il menu è
+  // quello di tutta l'app, confrontato con le sue viste.
+  {
+    id: "esporta.blocco-scelto",
+    vista: "esporta-pdf-blocco",
+    prototipo: ".px-it.sel",
+    app: ".export-fascia.is-selected",
+    proprieta: ["outline-width", "outline-style", "outline-color", "outline-offset", "border-radius"],
   },
 ];
 

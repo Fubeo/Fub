@@ -1521,9 +1521,14 @@ function mountStrip(menu: HTMLElement, options: ContextMenuOptions, lifetime: Li
   if (options.stripLabel) strip.setAttribute("aria-label", options.stripLabel);
   (menu.parentElement ?? document.body).appendChild(strip);
   const unmount = options.strip!(strip);
+  // L'immagine che esce si prende con la barra ancora dentro: smontata prima,
+  // la striscia resterebbe vuota (o col rialzo suo, senza la mini-barra) e
+  // l'uscita partirebbe da un riquadro diverso da quello che si vedeva.
   lifetime.add(() => {
-    unmount();
-    exitSurface(strip, () => strip.remove());
+    exitSurface(strip, () => {
+      unmount();
+      strip.remove();
+    });
   });
   placeStrip(strip, menu.getBoundingClientRect());
   enterSurface(strip);

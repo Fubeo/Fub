@@ -5,6 +5,7 @@
 //     node bench/interaction.mjs --only=palette  # solo quelle
 //     node bench/interaction.mjs --rounds=9
 //     node bench/interaction.mjs --only=battuta  # la battuta nelle note grandi
+//     node bench/interaction.mjs --only=battuta --note=schede-20  # solo con le venti schede vive
 //     node bench/interaction.mjs --only=apertura --cpu=4  # aprire una nota grande, pagina più lenta
 //     node bench/interaction.mjs --only=cambio --cpu=4    # passare da una nota piccola all'altra
 //     node bench/interaction.mjs --only=impagina          # impaginare per il PDF: 5, 50, 200 pagine
@@ -20,7 +21,8 @@
 //
 // **La battuta** è un'altra misura: quanto costa un carattere scritto in una
 // nota grande, dalla transazione al layout forzato, senza il disegno. Due note
-// sintetiche (`live-fixture.ts`, 901 e 7.201 righe) in ogni modalità di
+// sintetiche (`live-fixture.ts`, 901 e 7.201 righe), la prima anche con 20, 40
+// e 60 schede vive e con cento valori di cella, in ogni modalità di
 // scrittura; trenta battute e venti spostamenti del cursore di 200 caratteri.
 // Il budget vale per la mediana e per il novantesimo percentile della
 // battuta: una battuta su dieci lenta si sente quanto una mediana alta.
@@ -105,14 +107,18 @@ const INTERACTIONS = [
 ];
 
 /// La battuta: le note, per numero di sezioni, e le modalità in cui si
-/// scrive. `schede-20` è la nota di cinquanta sezioni con venti fogli vivi
-/// dentro (T43, A-5): la battuta resta nel budget anche con le schede;
-/// `valori-100` la stessa nota con cento valori di cella nel testo (T53, A-5). Il budget vale per la mediana e il novantesimo della battuta, in
-/// millisecondi.
+/// scrive. Le note `schede-<n>` sono la nota di cinquanta sezioni con `n`
+/// schede vive a metà, in righe di quattro colonne, le specie in giro
+/// (`typingCardsNote`, T43, T56, A-5): `schede-20` ha venti schede, una col
+/// file che non c'è; `schede-40` quante ne tiene vive la nota
+/// (`MAX_LIVE_CARDS`); `schede-60` oltre il limite, in una finestra alta
+/// abbastanza da montarle tutte (`CARDS`). `valori-100` la stessa nota con
+/// cento valori di cella nel testo (T53, A-5). Il budget vale per la mediana
+/// e il novantesimo della battuta, in millisecondi.
 const TYPING = {
   id: "battuta",
   title: "Una battuta in una nota grande",
-  notes: [50, 400, "schede-20", "valori-100"],
+  notes: [50, 400, "schede-20", "schede-40", "schede-60", "valori-100"],
   modes: [
     ["source", "Sorgente"],
     ["live_preview", "Scrittura"],
@@ -120,6 +126,17 @@ const TYPING = {
   keystrokes: 30,
   moves: 20,
   budget: { median: 4, p90: 8 },
+};
+
+/// Le note della battuta con le schede: quante schede ha la nota, quante
+/// devono essere vive mentre si scrive, quante mancanti e, se serve, la
+/// finestra. Con sessanta schede la finestra di 800 px ne monta quaranta (le
+/// altre sono fuori dalla vista di CodeMirror): alta 1.800 px le monta tutte,
+/// e il limite delle vive si vede.
+const CARDS = {
+  "schede-20": { cards: 20, live: 19, missing: 1, title: "venti schede vive, una col file sparito" },
+  "schede-40": { cards: 40, live: 40, missing: 0, title: "quaranta schede vive" },
+  "schede-60": { cards: 60, live: 40, missing: 0, title: "sessanta schede, quaranta vive", viewport: { width: 1280, height: 1800 } },
 };
 
 /// L'apertura di una nota grande: il caso della Live `lunga-4000`, 4.000
@@ -155,6 +172,12 @@ const PAGINATION = {
 const only = process.argv
   .find((arg) => arg.startsWith("--only="))
   ?.slice("--only=".length)
+  .split(",")
+  .filter(Boolean);
+/// `--note=schede-20,50` misura la battuta solo su quelle note.
+const notesOnly = process.argv
+  .find((arg) => arg.startsWith("--note="))
+  ?.slice("--note=".length)
   .split(",")
   .filter(Boolean);
 const rounds = Number(process.argv.find((arg) => arg.startsWith("--rounds="))?.slice("--rounds=".length) ?? 5);
@@ -265,11 +288,13 @@ async function measure(stage, interaction, scene) {
 /// Apre la nota sintetica nella modalità data e misura battute e cursore.
 async function measureTyping(stage, sections, mode) {
   // Le schede di foglio e i valori di cella leggono la cartella del banco
-  // (`workbook=1`).
-  const cards = sections === "schede-20";
+  // (`workbook=1`); le schede anche il contratto (`pdf-scena`).
+  const cards = CARDS[sections] ?? null;
   const values = sections === "valori-100";
-  const scene = { id: `battuta-${sections}`, query: `live=battuta-${sections}${cards || values ? "&workbook=1" : ""}`, prepare: async () => {} };
+  const extra = cards ? "&workbook=1&pdf-scena=domanda" : values ? "&workbook=1" : "";
+  const scene = { id: `battuta-${sections}`, query: `live=battuta-${sections}${extra}`, prepare: async () => {} };
   const page = await openPage(stage.browser, "dark", { clock: false });
+  if (cards?.viewport) await page.setViewportSize(cards.viewport);
   try {
     await prepareScene(page, scene, "dark", stage.base, sceneUrl);
     await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
@@ -279,11 +304,9 @@ async function measureTyping(stage, sections, mode) {
     await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .pane-editor .cm-content`);
     // Scrittura ha i Blocchi dentro: si misura con le maniglie montate.
     if (mode === "live_preview") await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles", { state: "attached" });
-    // Le schede vive sono montate prima di scrivere: si misura con loro.
-    if (cards && mode === "live_preview") await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"][data-card-state="view"]');
     // I valori di cella hanno letto la cartella prima di scrivere (T53).
     if (values && mode === "live_preview") await page.waitForSelector('.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]');
-    return await page.evaluate(async ({ keystrokes, moves }) => {
+    return await page.evaluate(async ({ keystrokes, moves, cards }) => {
       const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
       const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
       const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -293,6 +316,30 @@ async function measureTyping(stage, sections, mode) {
       view.dispatch({ selection: { anchor: globalThis.__fubLiveBench.cursor }, scrollIntoView: true });
       view.focus();
       for (let i = 0; i < 30; i += 1) await frame();
+      // Le schede vive sono montate, hanno la loro vista e sono vive prima di
+      // scrivere: si misura con loro (al più dieci secondi, poi si dice quante).
+      const counted = () => {
+        const all = [...view.dom.querySelectorAll(".live-card")];
+        return {
+          mounted: all.length,
+          live: all.filter((card) => card.dataset.cardState === "view" && card.dataset.cardMode === "live").length,
+          still: all.filter((card) => card.dataset.cardState === "view" && card.dataset.cardMode === "snapshot").length,
+          missing: all.filter((card) => card.dataset.cardState === "missing").length,
+          loading: all.filter((card) => card.dataset.cardState === "loading").length,
+        };
+      };
+      if (cards) {
+        const until = performance.now() + 10_000;
+        let now = counted();
+        while ((now.mounted < cards.cards || now.loading > 0 || now.live < cards.live) && performance.now() < until) {
+          await frame();
+          now = counted();
+        }
+        if (now.mounted !== cards.cards || now.live !== cards.live || now.missing !== cards.missing) {
+          throw new Error(`schede montate ${now.mounted}/${cards.cards}, vive ${now.live}/${cards.live}, mancanti ${now.missing}/${cards.missing}`);
+        }
+        for (let i = 0; i < 30; i += 1) await frame();
+      }
       const typed = [];
       for (let k = 0; k < keystrokes; k += 1) {
         const head = view.state.selection.main.head;
@@ -320,8 +367,14 @@ async function measureTyping(stage, sections, mode) {
           max: round(sorted[sorted.length - 1]),
         };
       };
-      return { lines: view.state.doc.lines, chars: view.state.doc.length, type: stats(typed), move: stats(moved) };
-    }, { keystrokes: TYPING.keystrokes, moves: TYPING.moves });
+      return {
+        lines: view.state.doc.lines,
+        chars: view.state.doc.length,
+        type: stats(typed),
+        move: stats(moved),
+        ...(cards ? { cards: counted() } : {}),
+      };
+    }, { keystrokes: TYPING.keystrokes, moves: TYPING.moves, cards: mode === "live_preview" ? cards : null });
   } finally {
     await page.context().close();
   }
@@ -634,14 +687,14 @@ try {
     );
   }
   if (typing) {
-    for (const sections of TYPING.notes) {
+    for (const sections of TYPING.notes.filter((note) => !notesOnly || notesOnly.includes(String(note)))) {
       for (const [mode, label] of TYPING.modes) {
         let row;
         try {
           const result = await measureTyping(stage, sections, mode);
           row = {
             id: `${TYPING.id}-${typeof sections === "string" ? sections : result.lines}-${mode}`,
-            title: `${TYPING.title}: ${result.lines} righe${sections === "schede-20" ? ", venti schede di foglio" : sections === "valori-100" ? ", cento valori di cella" : ""}, ${label}`,
+            title: `${TYPING.title}: ${result.lines} righe${CARDS[sections] ? `, ${CARDS[sections].title}` : sections === "valori-100" ? ", cento valori di cella" : ""}, ${label}`,
             budget: { type: TYPING.budget },
             ...result,
             pass: result.type.median <= TYPING.budget.median && result.type.p90 <= TYPING.budget.p90,
@@ -657,7 +710,8 @@ try {
         const ms = (s) => `${s.median} · ${s.p90} · ${s.max} ms`;
         console.log(
           `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}\n` +
-            `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget.median}, novantesimo ≤ ${TYPING.budget.p90}) · cursore ${ms(row.move)}`,
+            `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget.median}, novantesimo ≤ ${TYPING.budget.p90}) · cursore ${ms(row.move)}` +
+            (row.cards ? ` · schede: ${row.cards.live} vive, ${row.cards.still} ferme, ${row.cards.missing} mancanti` : ""),
         );
       }
     }

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { syncAttributes } from "./dom-sync";
+import { morphChildren, placeInOrder, syncAttributes } from "./dom-sync";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -47,5 +47,51 @@ describe("syncAttributes", () => {
     const drawn = row(0, 28);
     syncAttributes(drawn, document.createElement("div"));
     expect(drawn.style.cssText).toBe("");
+  });
+});
+
+describe("morphChildren", () => {
+  it("aggiorna sul posto i figli della stessa forma, stile compreso, anche sotto la CSP", () => {
+    withoutInlineStyleAttribute();
+    const target = document.createElement("div");
+    const text = row(0, 10, { class: "grid-cell-text" });
+    text.textContent = "uno";
+    target.append(text);
+    const source = document.createElement("div");
+    const fresh = row(4, 12, { class: "grid-cell-text" });
+    fresh.textContent = "due";
+    source.append(fresh);
+    morphChildren(target, source, null);
+    expect(target.firstElementChild).toBe(text);
+    expect(text.textContent).toBe("due");
+    expect(text.style.top).toBe("4px");
+    expect(text.style.height).toBe("12px");
+  });
+
+  it("cambia i figli di forma diversa e lascia in fondo quello da tenere", () => {
+    const target = document.createElement("div");
+    const keep = document.createElement("section");
+    target.append(document.createElement("span"), keep);
+    const source = document.createElement("div");
+    source.append(document.createElement("b"), document.createElement("i"));
+    morphChildren(target, source, keep);
+    expect([...target.children].map((child) => child.tagName)).toEqual(["B", "I", "SECTION"]);
+    expect(target.lastElementChild).toBe(keep);
+  });
+});
+
+describe("placeInOrder", () => {
+  it("lascia al suo posto chi resta, toglie chi esce e mette in ordine chi entra", () => {
+    const parent = document.createElement("div");
+    const [a, b, c, d] = ["a", "b", "c", "d"].map((name) => {
+      const element = document.createElement("div");
+      element.dataset.name = name;
+      return element;
+    });
+    const end = document.createElement("p");
+    parent.append(a!, b!, c!, end);
+    placeInOrder(parent, [b!, c!, d!], end, (element) => element.tagName === "DIV");
+    expect([...parent.children].map((child) => (child as HTMLElement).dataset.name ?? child.tagName)).toEqual(["b", "c", "d", "P"]);
+    expect(parent.children[0]).toBe(b);
   });
 });

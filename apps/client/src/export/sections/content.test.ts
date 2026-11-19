@@ -5,7 +5,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { defaultProfile, type ExportProfile } from "../profile";
-import { breaksBody, contentBody } from "./content";
+import { breaksBody, contentBody, contentSummary } from "./content";
 import type { SectionContext } from "./index";
 
 function context(profile = defaultProfile()): SectionContext & { changes: ExportProfile[] } {
@@ -31,6 +31,21 @@ afterEach(() => {
 });
 
 describe("la sezione Contenuto", () => {
+  it("i blocchi lasciati fuori col clic sulla pagina: il conto in testa e «Rimetti» in fondo (T76)", () => {
+    let restored = 0;
+    const skipped = (count: number) => ({ ...context(), skipped: { count, restore: () => restored++ } }) as SectionContext;
+    expect(contentSummary(defaultProfile(), skipped(2))).toBe("2 blocchi lasciati fuori");
+    expect(contentSummary(defaultProfile(), skipped(0))).toBe(contentSummary(defaultProfile()));
+    const body = contentBody(skipped(2));
+    const restore = body.lastElementChild as HTMLButtonElement;
+    expect(restore.id).toBe("export-block-restore-all");
+    expect(restore.textContent).toBe("Rimetti i 2 blocchi lasciati fuori");
+    restore.click();
+    expect(restored).toBe(1);
+    expect(contentBody(skipped(0)).lastElementChild!.classList.contains("export-note")).toBe(true);
+    // Senza il conto (il libro) niente riga.
+    expect(contentBody(context()).querySelector("#export-block-restore-all, .export-note")).toBeNull();
+  });
   it("una riga per specie di blocco, con la scelta del profilo di serie", () => {
     const body = contentBody(context());
     const rows = [...body.querySelectorAll(".export-row")].map((row) => row.querySelector(".export-row-label")!.textContent);

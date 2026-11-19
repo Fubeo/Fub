@@ -299,6 +299,7 @@ ${paperDeclarations("      ")}
     .print-body pre, .print-body figure, .print-body table, .print-body img,
     .print-body .math-block, .print-body .callout { break-inside: avoid; }
     .print-body hr { break-after: page; visibility: hidden; }
+    .print-body .page-break { break-before: page; }
     .print-body img { max-width: 100%; height: auto; }
     .print-body .mermaid-diagram figcaption,
     .print-body .mermaid-diagram[data-state="ready"] details,

@@ -432,8 +432,11 @@ export default defineConfig({
           // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
           // condiviso più grosso e ne consuma il margine a ogni frase nuova.
           if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
+          // L'inglese ha il suo: le due lingue insieme passavano il budget.
+          if (/\/src\/i18n\/catalog-en\.ts$/.test(id)) return "shell-strings-en";
           // Il motore del testo con i suoi pezzi, il tema che legge, gli
-          // appunti delle tabelle e il diario della griglia: li usano la
+          // appunti delle tabelle, la regola di `<!-- pagina -->` (la Live e
+          // l'esportazione in PDF) e il diario della griglia: li usano la
           // shell e la finestra del documento fin dall'avvio. Senza un nome
           // suo, da quando i fogli arrivano soltanto con un `import()`,
           // Rollup li fondeva nel chunk del ponte dei documenti, oltre la
@@ -441,7 +444,7 @@ export default defineConfig({
           if (
             /\/src\/editors\/text\/(engine|theme|phrases|history-footprints|smart-lists|properties-display|live-reveal|paste-html|indent-guides|soft-cursor)\.ts$/.test(id) ||
             /\/src\/theme\/(theme|loader|options|snippets|diagram-style|content-look)\.ts$/.test(id) ||
-            /\/src\/(rules\/offsets|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
+            /\/src\/(rules\/offsets|rules\/page-break|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
           ) {
             return "text-engine";
           }
@@ -496,13 +499,15 @@ export default defineConfig({
           // condivisi, e `lazy-part`, che usano anche le note e i media, sta
           // nel chunk che Rollup gli estrae a parte, non nel ponte.
           if (/\/src\/ui\/mermaid\.ts$/.test(id)) return "diagram-host";
-          // Il modello delle tabelle Markdown (`table-model.ts`): legge e
-          // riscrive la tabella, ordina e passa a TSV. Lo usano la Live, i
-          // grafici e «Trasforma in foglio»; cambia col formato delle tabelle,
-          // non con l'editor, e da solo tiene il ponte dei documenti sotto il
-          // budget. Chiuso verso il basso: importa solo `tabella/sort` e
-          // `editors/core/tsv`, che stanno nei loro chunk.
-          if (/\/src\/editors\/text\/profiles\/markdown\/table-model\.ts$/.test(id)) return "table-model";
+          // Le tabelle Markdown: il modello (`table-model.ts`: legge e
+          // riscrive la tabella, ordina e passa a TSV) e la griglia
+          // (`table-grid.ts`: selezione, menu e appunti delle celle). Li usano
+          // la Live, i grafici e «Trasforma in foglio»; cambiano col formato e
+          // coi gesti delle tabelle, non con l'editor, e da soli tengono il
+          // ponte dei documenti sotto il budget. Chiusi verso il basso:
+          // importano soltanto moduli che stanno nei loro chunk (`tabella/`,
+          // `ui/`, le stringhe), nessuno del ponte.
+          if (/\/src\/editors\/text\/profiles\/markdown\/table-(model|grid)\.ts$/.test(id)) return "markdown-tables";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {

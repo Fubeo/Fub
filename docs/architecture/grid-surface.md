@@ -9,8 +9,9 @@
 
 ## La griglia
 
-Il confine della pagina in una figura: i byte non lasciano il provider, e la
-shell parla soltanto col giornale e con le finestre.
+Il confine della pagina in una figura: i byte non lasciano il provider, la
+shell parla soltanto col giornale e con le finestre, e il salvataggio riparte
+dai byte del file, non dalla griglia (il giornale non è una copia).
 
 ```mermaid
 flowchart LR
@@ -22,9 +23,6 @@ flowchart LR
     PROVIDER --> SALVA["salvataggio: innesto o riscrittura misurata"]
     SALVA --> BYTE
 ```
-
-Il salvataggio riparte sempre dai byte del file, non dalla griglia: il
-giornale non è una copia della cartella.
 
 La famiglia `grid` ha un profilo, `workbook`, che apre una cartella di Excel
 con la versione 2 del protocollo: la sorgente a byte resta nell'host, e il
@@ -75,25 +73,60 @@ variabili di dato (`--file-fill`, `--file-color` e le versioni `-a`), e la
 regola dell'aspetto sta in `theme/scrittoio/structure.css`. Una pelle non
 veste le celle: il gate del contenuto rifiuta `.grid-cell` e `.no-gridlines`,
 e i segni (selezione, cella attiva, valore non ricalcolato, conflitto) si
-scrivono dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono
-ancora sotto il gate.
+scrivono dalla riga, `.grid-row .selected`. La pelle di casa disegna la
+selezione e la cella attiva coi pezzi del motore dei segni («La selezione e il
+riempimento»), e dalla riga solo il valore non ricalcolato e il conflitto. Gli
+oggetti del foglio non sono ancora sotto il gate.
+
+Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
+righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
+a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Ogni
+zona ha un livello di segni: `marks.ts` taglia un rettangolo per zona.
+
+Le righe restano (`#drawRow`): ognuna ricorda per indice la sua misura e le
+sue celle, e una cella si rifà solo quando cambia ciò che mostra; se l'HTML è
+lo stesso resta lo stesso nodo e cambiano le sole classi della selezione,
+così il doppio clic arriva e l'editor aperto non perde il fuoco. Si disegna
+un riquadro intero di margine per lato (`GRID_OVERSCAN` è solo il margine
+del caricamento): lo scorrimento aggiunge e toglie righe ai bordi, un salto
+le rifà tutte, la cella aperta resta anche fuori. Le disegna il gestore
+dello scorrimento, con le misure lette prima di scrivere (anche per una
+finestra arrivata): un giro mette il riquadro, una fascia di un decimo e al
+più tre righe nuove del margine (`GRID_FRAME_NEW_ROWS`), rifà al più 48 celle
+(`GRID_FRAME_REFILLS`); il resto, segni, oggetti e misura delle celle, va
+nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle fasce
+ferme), grande e ferma quanto il riquadro: fili delle righe sull'altezza di
+serie (`--grid-row`), un filo per colonna, celle opache, e la griglia vuota
+dove lo scorrimento precede il disegno. In G2 (quattro giri) la fascia
+uniforme più alta è 1 px; p90 (peggiore) del gestore 6–9 ms (17–20), del
+fotogramma 11–13 ms (15–17).
 
 ## Scrivere nelle celle
 
 Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»: Invio e
 Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab (anche
 `Unidentified` da GTK) confermano e vanno a destra o a sinistra, le frecce
-confermano e si spostano. Invio dopo una serie di Tab torna alla colonna da
-cui la serie è partita. F2 e il doppio clic aprono in «Modifica», dove le
-frecce muovono il cursore; F2 alterna i due modi, e la banda di stato dice il
-modo («Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio
-scrive la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella,
-o il fuoco che lascia l'editor, conferma; dalla cella alla barra della formula
-la bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
-attiva senza aprirla, dentro l'intervallo se è più di una cella. La regola
-pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
-del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
-ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+confermano e si spostano; Invio dopo una serie di Tab torna alla colonna di
+partenza. F2 e il doppio clic aprono in «Modifica» (le frecce muovono il
+cursore); F2 alterna i modi, che la banda di stato dice («Pronto»,
+«Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio scrive in tutta la
+selezione, Esc annulla; un clic altrove o il fuoco che esce conferma, e verso
+la barra della formula la bozza passa col fuoco. Sulla selezione Invio e Tab
+spostano la cella attiva senza aprirla, dentro l'intervallo. Dove andare sta
+in `apps/client/src/tabella/navigation.ts`, il riempimento in
+`tabella/selection.ts` (`fillRange`): regole di ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+Ciò che si conferma si vede prima della risposta (`writtenValue`): un numero
+semplice va a destra, una formula resta scritta e tenue (`.pending`) finché
+il valore compare in `DURATION.state`; vince la risposta, un no torna com'era.
+
+La cella aperta è la cella: il campo sta nel livello «lift» della sua zona,
+con carta, inchiostro, carattere (`--field-font`), allineamento e margini
+della cella; la cornice (2 px di `--grid-mark`) compare in `DURATION.state` e
+la maniglia se ne va. A ogni bozza cresce a colonne intere fino al bordo
+(`openSpan`), poi va a capo e scende fino a metà riquadro, poi scorre dentro.
+Per chi legge lo schermo il campo sta nella sua cella (`aria-owns`), e il
+suo livello «lift» è leggibile solo finché la cella è aperta: gli altri
+livelli restano `aria-hidden`.
 
 Una battuta vera (stampabile, un tasto morto, una composizione dell'IME) porta
 il fuoco nella cella durante il `keydown` e il carattere lo scrive il browser;
@@ -103,27 +136,14 @@ punto dello schermo; Alt+PagSu e Alt+PagGiù fanno lo stesso di lato,
 Ctrl+Backspace riporta in vista la cella attiva, da cui partono le frecce
 senza Maiuscolo.
 
-Nelle formule si punta come nei fogli di calcolo. Dove la formula aspetta un
-operando (`operandSlot` in `profiles/formula.ts`: dopo `=`, un operatore,
-`(`, `,` o `;`), un clic su una cella scrive il suo riferimento, un
-trascinamento lo allarga a un intervallo, e un altro clic lo sostituisce
-finché il cursore resta alla sua fine. La cella aperta e la selezione non
-cambiano, e il fuoco resta nel campo. In «Inserisci» le frecce muovono il
-riferimento puntato, partendo dalla cella aperta, e con Maiuscolo lo
-allargano. F4 alterna i `$` del riferimento al cursore. Ogni riferimento ha
-uno di sei colori (`--doc-author-1…6`), lo stesso nel testo e nel contorno
-del suo intervallo sulla griglia; un riferimento a un altro foglio si
-contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
-ancora: il riferimento si scrive a mano.
-
-Il disegno riusa i nodi che non cambiano (`#reconcile`): il doppio clic
-arriva, l'editor tiene il fuoco, e si disegna al più una volta per fotogramma.
-
-La riga delle intestazioni, l'angolo, i numeri delle righe e le righe
-bloccate stanno fermi con `position: sticky`: sono nel flusso del riquadro,
-davanti al canvas che dà la misura, e li tiene a posto il compositore nello
-stesso fotogramma dello scorrimento, non il disegno che segue. Le colonne
-bloccate e i fili del blocco si rimettono ancora a posto nel disegno.
+Nelle formule si punta. Dove la formula aspetta un operando (`operandSlot`
+in `profiles/formula.ts`: dopo `=`, un operatore, `(`, `,` o `;`) un clic
+scrive il riferimento della cella, un trascinamento lo allarga, un altro clic
+lo sostituisce finché il cursore resta alla sua fine; cella aperta, selezione
+e fuoco non cambiano. In «Inserisci» le frecce muovono il riferimento (con
+Maiuscolo lo allargano), F4 alterna i `$`. Ogni riferimento ha uno di sei
+colori (`--doc-author-1…6`), nel testo e nel contorno sulla griglia, solo sul
+suo foglio; le celle di un altro foglio si scrivono a mano.
 
 ## La selezione e il riempimento
 
@@ -133,150 +153,99 @@ estende dall'àncora, che resta la cella attiva. Fuori dal bordo la griglia scor
 quanto più il puntatore è lontano. Con righe o colonne intere la cella
 attiva resta sulla prima colonna o sulla prima riga.
 
-Un intervallo si disegna con un rettangolo solo, a bordo d'accento, sopra le
-celle velate; la cella attiva resta senza velo, con un filo. Con una cella
-sola il bordo è quello della cella attiva. Il riquadro non ha un anello,
-salvo quando nessuna cella si vede: il fuoco è la cella attiva, che la
-griglia indica con `aria-activedescendant`.
-Le intestazioni della selezione prendono il velo e un filo d'accento verso
-le celle; quella che segue righe o colonne nascoste ha una tacca doppia.
+I segni restano e scivolano (`grid-motion.ts`): rettangolo (2 px sul filo),
+anello della cella attiva, velo e quadratino sono pezzi creati una volta per
+zona e mossi col `transform` da dieci numeri che vanno al bersaglio con la
+molla `GLIDE`, mai oltre né all'indietro, anello e velo dentro il bordo; con
+«ridotto», cambio di foglio o scelta dall'host saltano. La molla la sceglie
+`editor.grid.selection-speed` (`selectionMotion`): `quick` `GLIDE_QUICK`,
+`normal` `GLIDE`, `soft` `SLIDE`, `none` a scatti (un bersaglio nuovo si
+vede subito, lo stesso lascia finire la corsa); le colonne che scivolano
+portano i segni con `SLIDE` con ogni scelta. La griglia legge le due
+preferenze all'apertura e le rilegge a ogni `setting_changed` delle loro
+chiavi; un valore sconosciuto vale quello di serie. Colore `--grid-mark`,
+in colori forzati `Highlight`; il quadratino si prende dove si vede (6 px). Il
+fuoco è la cella attiva (`aria-activedescendant`). Le intestazioni scelte
+hanno velo e filo d'accento, e dopo righe o colonne nascoste una tacca doppia.
 
-Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
-serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
-segue il puntatore con la misura nelle unità di Excel e in pixel del file, e
-al rilascio parte un solo comando. Il doppio clic sul bordo dà
-`home.autofitColumnWidth` (o `home.autofitRowHeight`). Se la colonna sta fra
-quelle scelte intere, la misura vale per tutte. Senza il comando servito il
-bordo non si prende.
+Col dito (`pointerType` `touch`) trascinare scorre e basta: la griglia dice
+`touch-action: pan-x pan-y` e non sceglie niente oltre 8 px (`TAP_MOVE`). Un
+tocco sceglie la cella, la colonna, la riga o il foglio come un clic, e
+conferma una cella aperta; due tocchi sulla stessa cella entro 300 ms la
+aprono; un tocco lungo (450 ms, fermo) la sceglie, se non è già scelta, e
+mette due maniglie agli angoli della selezione, che si tirano per
+allargarla. Le maniglie sono pezzi del motore dei segni (`grid-mark-touch`,
+`data-handle` `a` e `b`): crescono dal centro con la molla `SLIDE` (con
+«ridotto» si dissolvono), seguono la selezione e, come il quadratino, sono
+intere nel livello della zona del loro angolo. Non prendono il puntatore: la
+presa è un cerchio di 9 px attorno all'angolo che si vede, anche dove una
+fascia ferma copre metà maniglia, e un `touchstart` sulla presa ferma lo
+scorrimento. Un tocco altrove, il mouse o la penna le tolgono. Col dito il
+quadratino non c'è (il riempimento si fa dal menu) e il tocco lungo non apre
+menu. Il mouse e la penna fanno ciò che fanno sempre.
 
-Ctrl+clic e Ctrl+trascina aggiungono un intervallo a quelli scelti;
-Maiuscolo estende l'ultimo, un clic semplice ricomincia. Da tastiera
-Maiuscolo+F8 tiene ciò che è scelto mentre ci si sposta, finché non si
-ripete o si preme Esc. I comandi ricevono tutti gli intervalli, separati da
-virgole come in GridCraft, che spegne col suo motivo quelli che non li
-reggono. Canc li svuota tutti; copia e taglia li rifiutano e lo dicono, e il
-quadratino di riempimento non c'è.
+Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella serve
+`home.columnWidth` (o `home.rowHeight`): una guida (`--grid-mark`) segue il puntatore con la
+misura nel riquadro. Al rilascio parte un comando e la misura vale già
+(`SizePreview`): ciò che segue scivola con `SLIDE`, su un no torna e l'avviso
+lo dice, una risposta vecchia non toglie un gesto più nuovo. Il doppio clic dà
+`home.autofit…`; con una colonna fra le scelte intere la misura vale per tutte.
 
-In una cartella a comandi che serve `edit.autoFill` la selezione ha il
-quadratino di riempimento nell'angolo in basso a destra. Tirato fuori dalla
-selezione mostra il bersaglio lungo l'asse su cui il puntatore è uscito di più
-e, al rilascio, dà un solo `edit.autoFill` con sorgente e bersaglio (con Ctrl
-tenuto, nel modo alternato di Excel). Il doppio clic riempie in giù fin dove
-arriva la colonna accanto, nelle righe che la griglia ha letto. Le serie le
-calcola il provider; Ctrl+D e Ctrl+R restano i riempimenti da tastiera.
+Ctrl+clic e Ctrl+trascina aggiungono un intervallo, Maiuscolo estende
+l'ultimo, un clic semplice ricomincia; Maiuscolo+F8 tiene ciò che è scelto
+mentre ci si sposta, finché non si ripete o si preme Esc. I comandi ricevono
+gli intervalli separati da virgole, come in GridCraft, che spegne col motivo
+quelli che non li reggono. Canc li svuota; copia e taglia li rifiutano e lo
+dicono, e il quadratino non c'è.
+
+Con `edit.autoFill` la selezione ha il quadratino in basso a destra: tirato
+fuori, il bersaglio a formiche ferme segue l'asse su cui il puntatore è uscito
+di più, e il rilascio dà un `edit.autoFill` (con Ctrl nel modo alternato di
+Excel). Il doppio clic riempie in giù fin dove arriva la colonna accanto;
+Ctrl+D, Ctrl+R e Serie riempiono da tastiera, le serie le calcola il provider.
+Finché il foglio non risponde le formiche camminano (`ANTS_STEP` px ogni
+`ANTS_MS`, ferme con «ridotto»), la selezione resta sulla sorgente e il
+quadratino non c'è; poi le formiche svaniscono, la selezione scivola sul
+riempimento e i valori nuovi entrano sfalsati; un no lo dice l'avviso.
 
 ## Gli appunti
 
 Copia scrive il TSV degli input, formule comprese, e una tabella HTML di ciò
 che si vede, segnata `data-fub-table`. Incolla legge la tabella HTML di
 Excel, LibreOffice, Sheets o Word quando c'è (le celle unite lasciano celle
-vuote), altrimenti il TSV; quella di Fub cede al TSV accanto, che porta gli
-input. Si incolla dall'angolo in alto a sinistra della selezione: un valore,
-o un blocco che la selezione contiene un numero intero di volte, la riempie,
-e dopo la selezione è ciò che si è scritto. Taglia non svuota: segna
-l'intervallo con le formiche, e l'incolla che segue sposta gli input e
-svuota ciò che resta fuori in un passo solo di Annulla; Esc, una copia o
-una scrittura tolgono il segno. Le regole pure stanno in
-`apps/client/src/tabella/clipboard.ts`.
+vuote), altrimenti il TSV; quella di Fub cede al TSV accanto. Un valore, o un
+blocco che la selezione contiene un numero intero di volte, la riempie
+dall'angolo, e dopo è selezionato ciò che si è scritto. Copia lascia un
+tratteggio largo e un battito (`editor.grid.copy-mark`: `dash-pulse`, `dash`
+o `pulse`, letta alla copia); Taglia non svuota, segna con un tratteggio
+fitto, e l'incolla dopo sposta gli input e svuota il resto in un passo di
+Annulla. Il segno resta sul suo foglio e segue l'ultima copia; Esc, una
+scrittura, un comando o un incolla lo tolgono, ma non un'altra app che cambia
+gli appunti di sistema. Regole pure: `apps/client/src/tabella/clipboard.ts`.
 
-Dentro una cartella a comandi l'incolla che trova negli appunti il testo
-appena copiato dalla cartella non scrive gli input: dà il comando composto
-`fub.pasteFrom` con la sorgente, il suo foglio e `move` per un taglio, sulla
-selezione di arrivo. Il provider lo esegue con `edit.copy` (o `edit.cut`) e
-`edit.pasteSpecial` della facciata in un passo, senza appunti che restano,
-così formule con i riferimenti relativi, formati e unioni seguono come in
-GridCraft, e il giornale lo rifà. Un taglio si incolla una volta; Esc, una
-scrittura o un altro comando dimenticano la sorgente, e l'incolla torna agli
-input. `fub.copyHtml` legge il testo e la tabella HTML di GridCraft di un
-intervallo senza cambiare niente. Senza `fub.pasteFrom` nel catalogo gli
-appunti portano gli input.
+In una cartella a comandi l'incolla che trova negli appunti il testo appena
+copiato dalla cartella dà il comando composto `fub.pasteFrom` (sorgente, suo
+foglio, `move` per un taglio) sulla selezione di arrivo. Il provider lo esegue
+con `edit.copy` (o `edit.cut`) e `edit.pasteSpecial` in un passo, senza
+appunti che restano: formule relative, formati e unioni seguono come in
+GridCraft, e il giornale lo rifà. I valori si vedono subito come anteprima
+(regole di «Scrivere nelle celle»), la risposta del provider vince e un no
+rimette le celle; un taglio ha le formiche attorno alla sorgente finché il
+foglio non risponde, e si incolla una volta. Esc, una scrittura o un altro
+comando dimenticano la sorgente. `fub.copyHtml` legge testo e tabella HTML di
+un intervallo; senza `fub.pasteFrom` gli appunti portano gli input.
 
-Il bordo della selezione, preso a 3 px fuori dal quadratino, si tira quando
-la cartella serve `fub.pasteFrom`: il contorno segue il puntatore e al
-rilascio un solo `fub.pasteFrom` sposta l'intervallo (con Ctrl tenuto lo
-copia), e la selezione è dove lo si è lasciato. Righe o colonne intere e
-più intervalli non si tirano.
+Con `fub.pasteFrom` il bordo della selezione, preso a 3 px fuori dal
+quadratino, si tira: il contorno segue il puntatore, il rilascio dà un
+`fub.pasteFrom` che sposta l'intervallo (con Ctrl lo copia) e lo seleziona.
+Righe o colonne intere e più intervalli non si tirano.
 
 ## La barra multifunzione
 
 Sopra la barra della formula di una cartella a comandi sta la barra
-multifunzione (`apps/client/src/editors/grid/ribbon/`), che il bootstrap
-carica a parte. La barra è quella del kit (`kit/ribbon/`); la griglia le dà
-la sua vista, le sue schede e le due specie di controllo sue, la tavolozza e
-le gallerie. `tabs.ts` descrive schede, gruppi e controlli (pulsanti,
-pulsanti divisi, menu, colori, elenchi, caselle, gallerie, campi); ogni
-controllo nomina un id del catalogo del provider, e la barra mostra
-soltanto quelli che il catalogo serve, spegne quelli spenti con il motivo
-nel suggerimento e dà il comando con i parametri della facciata. Lo stato
-viene dallo stile della cella attiva, dalle tabelle e dalla vista del foglio
-e dal libro della cartella; la scheda della tabella compare con la selezione
-dentro una tabella. La tavolozza disegna i colori del tema con le sfumature
-di ECMA-376 (`palette.ts`), le gallerie gli stili di tabella e di cella.
-
-La forma e la pelle della barra sono del kit: ogni pezzo porta
-`kit-ribbon-<pezzo>` accanto a `grid-ribbon-<pezzo>`, vestito da
-`structure.css` e da «Barra a schede» in `skin/kit.css` (sezioni come le
-schede dell'ispettore, vassoio `--bar-tray`), che vengono prima; ai
-`.grid-ribbon-…` restano tavolozza, gallerie, campioni, «Comandi» e i piani
-della formula e della griglia.
-
-La barra si percorre con le frecce (un solo controllo per scheda sta nel
-Tab), Esc torna alla griglia, Alt o F10 mostrano le lettere di Excel. Quando
-la barra è stretta i pulsanti piccoli perdono il nome, poi i gruppi si
-raccolgono da destra in un pulsante col disegno e il nome: due raccolti di
-fila stanno a pila, uno rimasto solo è alto quanto un foglietto aperto. Nei
-fogli il gruppo raccolto si apre sul posto, nella barra (l'opzione
-`openInPlace` del kit): clic, Invio, Spazio, ↓ o la sua lettera di Alt lo
-aprono col fuoco sul primo comando, gli altri si raccolgono per fargli
-posto, e se nemmeno così la fila ci sta i pulsanti perdono il nome
-(`data-dense`). Ne è aperto uno alla volta; Esc lo richiude e torna al suo
-pulsante, un secondo Esc torna alla griglia, e una scheda cambiata o una
-larghezza che basta a tutti lo richiudono. Il testo della barra è in un
-catalogo suo (`strings.ts`), in italiano e in inglese.
-
-Nei fogli la barra si muove (l'opzione `motion` del kit, che soltanto la
-griglia accende; il padrone è `kit/ribbon/ribbon-motion.ts`, con `moto/`):
-i foglietti di una sezione nuova entrano uno dopo l'altro dal suo verso,
-Ctrl+F1 ritira il vassoio, che svanisce mentre la formula e la griglia gli
-salgono sopra come una tenda (e ridiscendono riaprendolo; durante la corsa
-la griglia tiene la sua altezza e passa sotto la barra dei fogli, così il
-bordo di sotto non salta, e la rende a corsa finita), il foglietto che
-si apre sul posto si alza di un gradino e gli altri scivolano, e la scheda
-della tabella compare e svanisce con la selezione. Un gesto nuovo a metà
-corsa riparte da posa e velocità correnti; ciò che cambia forma o se ne va
-mentre era ancora in corsa lascia un'immagine che svanisce da dove si
-vedeva. Con «ridotto» resta soltanto la dissolvenza del vassoio che torna.
-
-Il primo pulsante della fila dell'accesso rapido, prima delle schede, è
-«Comandi» (`editors/grid/menu-comandi.ts`): un gettone pieno, con
-`aria-haspopup="menu"` e `aria-expanded`, che clic, Invio, Spazio, ↓ o Alt e
-poi C aprono, ed Esc richiude rendendogli il fuoco. Apre un menu di Fub
-(`ui/menu.ts`) con tutti i comandi della cartella, nell'ordine delle schede
-del catalogo: in ogni gruppo prima i controlli della barra, con le loro voci,
-spunte e scelte, poi «Altri comandi del gruppo», quelli del catalogo che la
-barra non mostra, dati come li dà la tavolozza. Le schede contestuali
-(tabella, grafico, oggetto, tabella pivot) stanno sotto «Per ciò che hai
-selezionato»: accese col nome di ciò che è selezionato («Tabella «Vendite»»),
-altrimenti coi controlli della barra spenti e il perché
-(`fogli.motivo.context.*`). Una voce spenta dice il suo motivo: la sola
-lettura per i comandi che cambiano, il contesto che manca, o quello del
-motore. Lo stato si legge all'apertura e, a menu aperto, ogni rilettura della
-barra aggiorna le voci; la cartella che non dà più comandi chiude il menu.
-Scrivendo si cerca in tutte le voci, anche nei sottomenu chiusi, col
-percorso, senza tetto (l'opzione `fullSearch` del menu): prima le accese,
-poi le spente col perché, e il piede conta le voci. Sotto i 560 px del foglio
-il gettone perde il nome, che resta nel suggerimento e nel nome accessibile.
-
-Il tasto destro sceglie come Excel: fuori dalla selezione sceglie la cella,
-la riga o la colonna sotto il puntatore, dentro la lascia. `ribbon/context.ts`
-dichiara le voci per cella, intestazione di riga e di colonna, angolo,
-scheda del foglio e oggetto con gli stessi controlli di `tabs.ts`, e
-`GridRibbon.contextMenu` le dà al menu dell'editor (`editors/grid/menu.ts`),
-che aggiunge gli appunti in TSV e «Copia il riferimento». Una voce che il
-catalogo non serve non si vede. La mini-barra sopra il menu
-(`MINI_CONTROLS`) riusa i controlli della scheda Home: carattere,
-dimensione, grassetto, corsivo, percentuale, separatore delle migliaia e
-decimali. In sola lettura restano le voci che non scrivono.
+multifunzione (`editors/grid/ribbon/`, sulla barra del kit), con «Comandi»
+e il menu del tasto destro: tutto nella
+[barra multifunzione dei fogli](grid-ribbon.md).
 
 ## Le finestre dei fogli
 
@@ -426,24 +395,21 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/engine.ts`, `engine-geometry.ts`, `engine-host.ts`
-- `apps/client/src/editors/grid/workbook.ts`
-- `apps/client/src/editors/grid/objects.ts`
-- `apps/client/src/editors/grid/comment-card.ts`
-- `apps/client/src/editors/grid/ribbon/ribbon.ts`
-- `apps/client/src/kit/ribbon/ribbon.ts`
-- `apps/client/src/kit/ribbon/ribbon-motion.ts`
-- `apps/client/src/editors/grid/ribbon/tabs.ts`, con le schede in `tabs/`
-- `apps/client/src/editors/grid/menu-comandi.ts`
-- `apps/client/src/editors/grid/dialogs/host.ts`
-- `apps/client/src/editors/grid/dialogs/catalog.ts`
-- `apps/client/src/editors/grid/dialogs/page.ts`
-- `apps/client/src/editors/grid/dialogs/notes.ts`
-- `apps/client/src/editors/grid/dialogs/protect.ts`
-- `apps/client/src/editors/grid/palette/commands.ts`
-- `apps/client/src/editors/grid/palette/form.ts`
-- `apps/client/src/editors/grid/risultato.ts`
-- `apps/client/src/editors/grid/motivi.ts`
-- `crates/fub-format-xlsx/src/grid.rs`
-- `crates/fub-format-xlsx/src/export.rs`
-- `crates/fub-format-xlsx/src/objects.rs`
+- `apps/client/src/editors/grid/`: `engine.ts`, `engine-geometry.ts`,
+  `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `grid-motion.ts`,
+  `workbook.ts`, `objects.ts`, `comment-card.ts`, `menu-comandi.ts`,
+  `risultato.ts`, `motivi.ts`, `ribbon/` (`tabs/`), `dialogs/`, `palette/`
+- `apps/client/src/kit/ribbon/`; `crates/fub-format-xlsx/src/`: `grid.rs`,
+  `export.rs`, `objects.rs`
+- la pelle: `apps/client/src/theme/scrittoio/structure.css` (il piano, le
+  zone, la carta, i livelli dei segni, la cella aperta),
+  `theme/scrittoio/skin/editors.css` (sezione «Il foglio di calcolo»: i
+  colori dei segni, delle formiche e della cella aperta) e gli hook in
+  `theme/scrittoio/anatomia/editors.ts` (voce `grid-surface`)
+- il banco: le scene `grid-*` di `apps/client/bench/scene.mjs` (sulla
+  cartella grande `?workbook=large`, gli stati del prototipo delle celle nel
+  foglio pieno: l'intervallo, oltre la riga bloccata, la cella aperta e la
+  colonna tirata, anche a 700 px; il riempimento in attesa, la copia nelle tre
+  scelte del segno e il taglio; `mobile-grid-tocco-lungo` al telefono), i
+  controlli dei gesti G1–G7 in `bench/grid-gestures.mjs` (`npm run
+  bench:grid`) e le coreografie `griglia-*` in `bench/motion-rules.mjs`
