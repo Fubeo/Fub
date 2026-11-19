@@ -10,6 +10,7 @@ import { Queue } from "../ui/race";
 import {
   consumeUnderChange,
   failureOutcome,
+  isOwnEcho,
   stateOf,
   writeCountingEcho,
   type Outcome,
@@ -574,6 +575,16 @@ export class DocumentSession implements DraftBuffer {
    * regola di sempre, perché il testo non salvato va protetto comunque.
    */
   async handleExternalChange(source: Origin, expected = false): Promise<ExternalChangeResult> {
+    // L'eco di una nostra scrittura non legge né sostituisce il buffer: sul
+    // disco c'è ciò che abbiamo scritto. Il testo che una superficie tiene
+    // ancora per sé (la cella di un foglio in cui si sta scrivendo) resta
+    // suo: confermarlo qui chiuderebbe la cella a metà parola a ogni
+    // salvataggio automatico, e i tasti dopo andrebbero fuori dal foglio
+    // (IMP-310, IMP-414). Senza testo tenuto, l'eco segue la via di sempre.
+    if (!expected && this.#pendingSurfaces.size > 0 && isOwnEcho(this.#state, source)) {
+      this.#state.echoes -= 1;
+      return { kind: "echo" };
+    }
     const held = this.settled();
     if (held) await held;
     const generation = ++this.#externalGeneration;

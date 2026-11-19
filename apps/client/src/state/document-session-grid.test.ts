@@ -184,6 +184,139 @@ describe("la cella aperta di un foglio e la sessione", () => {
     pane.engine.destroy();
   });
 
+  it("l'eco del salvataggio automatico non chiude la cella in cui si sta scrivendo (IMP-310, IMP-414)", async () => {
+    const grid = workbookHost();
+    const disk = diskApi(grid);
+    const sessions = new DocumentSessionCollection(disk.api);
+    const pane = await openGrid(sessions, grid);
+    vi.useFakeTimers();
+    // Una cella confermata arma il salvataggio automatico; intanto si scrive
+    // già nella cella accanto.
+    pane.typeWithoutEnter(1, 1, "Farina");
+    pane.engine.commitPending();
+    await vi.advanceTimersByTimeAsync(0);
+    pane.typeWithoutEnter(1, 2, "Fari");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(disk.writes).toHaveLength(1);
+    expect(inputIn(disk.writes[0]!.text, "1,1")).toBe("Farina");
+
+    // L'evento del kernel per la scrittura appena fatta: l'eco, attore
+    // `user` fuori da un lotto.
+    const change = await sessions.handleExternalChange(DOC, { actor: { kind: "user" }, batch: null });
+
+    expect(change.kind).toBe("echo");
+    // La cella resta aperta, con ciò che si è scritto, e la sessione non ha
+    // confermato niente a metà parola.
+    expect(pane.engine.editMode()).not.toBe("ready");
+    expect(sessions.get(DOC)!.hasPending()).toBe(true);
+    expect(sessions.inspect(DOC)!.dirty).toBe(false);
+    const editor = findTextEditorOrThrow(pane.parent.querySelector<HTMLElement>(".grid-cell-editor")!);
+    expect(editor.state.doc.toString()).toBe("Fari");
+    vi.useRealTimers();
+    pane.detach();
+    pane.engine.destroy();
+  });
+
+  it("cinque righe per quattro colonne scritte di fila, coi salvataggi in mezzo, arrivano tutte nei byte (IMP-310, IMP-414, IMP-512)", async () => {
+    const grid = workbookHost();
+    const disk = diskApi(grid);
+    // Come l'host: ogni scrittura torna come evento del kernel, l'eco
+    // dell'utente senza lotto.
+    const write = disk.api.writeDocument;
+    const echoes: Array<Promise<unknown>> = [];
+    const sessions: DocumentSessionCollection = new DocumentSessionCollection({
+      ...disk.api,
+      writeDocument: async (...args) => {
+        const revision = await write(...args);
+        setTimeout(() => echoes.push(sessions.handleExternalChange(DOC, { actor: { kind: "user" }, batch: null })), 0);
+        return revision;
+      },
+    });
+    const pane = await openGrid(sessions, grid);
+    const viewport = pane.parent.querySelector<HTMLElement>(".grid-viewport")!;
+    // Da E8, sotto le celle della fixture e lontano dalla colonna D nascosta.
+    const top = 7;
+    const left = 4;
+    const rows = [
+      ["Voce", "Quantità", "Prezzo", "Totale"],
+      ["Farina", "2", "3", "=F9*G9"],
+      ["Farina integrale", "3", "4", "=F10*G10"],
+      ["Farina", "4", "5", "=F11*G11"],
+      ["Totale", "=SUM(F9:F11)", "Fari", "=SUM(H9:H11)"],
+    ];
+    vi.useFakeTimers();
+    pane.cell(top, left)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    // Come la tastiera: ogni tasto va dove sta il fuoco, non a un elemento
+    // scelto dalla prova.
+    const press = (key: string) => {
+      (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    };
+    const cellEditor = () => pane.parent.querySelector<HTMLElement>(".grid-cell-editor")!;
+    viewport.focus();
+    for (const row of rows) {
+      for (const [index, value] of row.entries()) {
+        press(value[0]!);
+        // A metà parola passa il tempo del salvataggio automatico: scrive
+        // ciò che è confermato, e la sua eco torna con la cella aperta.
+        await vi.advanceTimersByTimeAsync(500);
+        expect(cellEditor().hidden, `la cella di «${value}» resta aperta`).toBe(false);
+        expect(cellEditor().contains(document.activeElement), `il fuoco resta nella cella di «${value}»`).toBe(true);
+        const editor = findTextEditorOrThrow(cellEditor());
+        editor.dispatch({ changes: { from: editor.state.doc.length, insert: value.slice(1) }, userEvent: "input" });
+        press(index === row.length - 1 ? "Enter" : "Tab");
+        await vi.advanceTimersByTimeAsync(0);
+      }
+    }
+    await vi.advanceTimersByTimeAsync(2_000);
+    await sessions.get(DOC)!.flush();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await Promise.all(echoes);
+
+    expect(disk.writes.length).toBeGreaterThan(1);
+    expect(echoes.length).toBe(disk.writes.length);
+    expect(sessions.inspect(DOC)!.dirty).toBe(false);
+    rows.forEach((row, r) => row.forEach((value, c) => {
+      expect(grid.disk("s1", `r${top + r}`, `c${left + c}`), `cella ${top + r},${left + c}`).toBe(value);
+    }));
+    vi.useRealTimers();
+    pane.detach();
+    pane.engine.destroy();
+  });
+
+  it("una cella confermata mentre il salvataggio riapre la cartella a comandi non si perde (IMP-512)", async () => {
+    const grid = workbookHost();
+    const disk = diskApi(grid);
+    const sessions = new DocumentSessionCollection(disk.api);
+    const pane = await openGrid(sessions, grid);
+    vi.useFakeTimers();
+    // Una formula porta la sessione nei comandi: il giornale si pubblica
+    // quando il provider lo conferma, e il salvataggio automatico si arma.
+    pane.typeWithoutEnter(1, 1, "=1+2");
+    pane.engine.commitPending();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sessions.inspect(DOC)!.dirty).toBe(true);
+    // La cella dopo parte verso il provider mentre il salvataggio scrive e
+    // la griglia si riapre sui byte nuovi.
+    grid.hold(true);
+    pane.typeWithoutEnter(2, 1, "dopo");
+    pane.engine.commitPending();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(disk.writes).toHaveLength(1);
+    grid.hold(false);
+    grid.release();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await sessions.get(DOC)!.flush();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(grid.disk("s1", "r1", "c1")).toBe("=1+2");
+    expect(grid.disk("s1", "r2", "c1")).toBe("dopo");
+    expect(pane.cell(2, 1)?.textContent).toBe("dopo");
+    expect(sessions.inspect(DOC)!.dirty).toBe(false);
+    vi.useRealTimers();
+    pane.detach();
+    pane.engine.destroy();
+  });
+
   it("un cambio da fuori con la cella in scrittura diventa una scelta, non una ricarica muta (IMP-031)", async () => {
     let moved: string | null = null;
     const grid: Workbook = workbookHost({ base: () => moved ?? grid.base() });

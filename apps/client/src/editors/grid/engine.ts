@@ -638,6 +638,16 @@ export class GridEngine {
   /// Cresce quando una modifica non entra: quelle in coda partivano da lei.
   #editEpoch = 0;
   #bytesTickets = 0;
+  /// Le celle scritte a comandi il cui giornale il provider non ha ancora
+  /// confermato e pubblicato alla sessione: soltanto il provider le tiene.
+  /// Una riapertura che tiene il documento (dopo un salvataggio, un altro
+  /// riquadro) le riscrive sulla sessione nuova invece di perderle (IMP-512).
+  #unpublished: GridRequestPatch[] = [];
+  /// Quelle portate da una riapertura, finché una non riesce e le riscrive.
+  #carried: GridRequestPatch[] = [];
+  /// Il biglietto dell'ultima scrittura prima della riapertura: quelle
+  /// scritte mentre si riapre hanno il loro, e pubblicano dopo.
+  #carriedTicket = 0;
   #bytesConflicts = 0;
   /// L'ultima frase di un gesto rifiutato o di un guasto, sotto gli avvisi.
   #bytesMessage: string | null = null;
@@ -2003,6 +2013,12 @@ export class GridEngine {
     // i passi si annullano con le loro patch (un salvataggio ha messo il
     // giornale nei byte, o un altro riquadro l'ha cambiato).
     this.#foldHistory();
+    // I passi in coda della sessione di prima non valgono più: le celle che
+    // soltanto il provider teneva si riscrivono sulla sessione nuova. Un
+    // documento nuovo non le porta.
+    this.#carried = reset ? [] : [...this.#carried, ...this.#unpublished];
+    this.#carriedTicket = this.#bytesTickets;
+    this.#unpublished = [];
     this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch, shown));
   }
 
@@ -2069,6 +2085,11 @@ export class GridEngine {
       this.#showView(sheet.id, top);
       this.#afterRewrite(top, shown);
       this.#followMedia();
+      // Dentro il passo della riapertura, prima di ciò che si è scritto
+      // mentre si riapriva: l'ordine delle scritture resta quello dato.
+      const carried = this.#carried;
+      this.#carried = [];
+      if (carried.length) await this.#rewriteCarried(carried, epoch);
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
       this.#openFailed(journal, isErrorKind(error, "conflict")
@@ -2436,8 +2457,33 @@ export class GridEngine {
     const epoch = this.#bytesEpoch;
     const edits = this.#editEpoch;
     const ticket = ++this.#bytesTickets;
+    if (commanding) this.#unpublished.push(...request);
     this.#enqueueProtocol(() => this.#applyBytes(request, history, disks, origin, epoch, edits, ticket, commanding));
     return true;
+  }
+
+  /// Riscrive sulla sessione appena aperta le celle che la sessione di
+  /// prima teneva soltanto nel provider: la riapertura le ha tolte dalla
+  /// coda prima che il loro giornale arrivasse alla sessione del documento.
+  /// Senza preimmagine, perché sono le ultime scritte; una cella scritta due
+  /// volte va con l'ultima.
+  async #rewriteCarried(carried: readonly GridRequestPatch[], epoch: number): Promise<void> {
+    const last = new Map<string, GridRequestPatch>();
+    for (const patch of carried) {
+      const key = `${patch.cell.sheet}\u0000${patch.cell.row}\u0000${patch.cell.column}`;
+      last.delete(key);
+      last.set(key, { cell: { ...patch.cell }, before: null, after: patch.after });
+    }
+    const patches = [...last.values()];
+    const sheet = this.#sheet();
+    for (const patch of patches) {
+      const position = patch.cell.sheet === sheet.id ? positionOf(sheet, patch.cell) : null;
+      if (position) this.#showWritten(position, patch.after);
+    }
+    this.#showView(sheet.id, false);
+    this.#pendingCommandMode += 1;
+    this.#unpublished.push(...patches);
+    await this.#applyBytes(patches, [], [], "input", epoch, this.#editEpoch, this.#carriedTicket, true);
   }
 
   /// Se la sessione è a comandi, o lo sarà quando la coda arriva al provider.
@@ -2500,6 +2546,7 @@ export class GridEngine {
       if (!current()) return;
       // Le modifiche in coda partivano da questa: non entrano neanche loro.
       this.#editEpoch++;
+      this.#unpublished = [];
       // Una cella che il provider dice bloccata lo era in una finestra che la
       // shell non aveva ancora riletto: lo dice come il blocco che si vede.
       this.#bytesMessage = isErrorKind(error, "permission_denied")
@@ -2522,7 +2569,10 @@ export class GridEngine {
     }
     // Il giornale ottimistico si corregge soltanto quando non resta niente in
     // coda: prima, la conferma non contiene ancora le modifiche che seguono.
-    if (ticket === this.#bytesTickets) this.#publishJournal(this.#confirmedJournal, origin);
+    if (ticket === this.#bytesTickets) {
+      this.#unpublished = [];
+      this.#publishJournal(this.#confirmedJournal, origin);
+    }
     // Il passo nuovo si annulla, e niente si ripete più: annulla e ripeti
     // del menu lo dicono dal catalogo riletto.
     const stale = (id: string, enabled: boolean) => this.#commands.some((command) => command.id === id && command.enabled !== enabled);

@@ -121,6 +121,19 @@ export function failureOutcome(e: unknown): "conflitto" | "fallito" {
 /// quando non è successo niente insegna a ignorare quelli che contano**.
 export type UnderChange = "muto" | "eco" | "altra_app" | "riscrittura";
 
+/// L'origine ha l'identità dell'eco (vedi `consumeUnderChange`): attore
+/// `user` fuori da un lotto.
+function echoIdentity(source: Origin): boolean {
+  return source.actor.kind === "user" && source.batch === null;
+}
+
+/// L'evento è l'eco di una nostra scrittura ancora attesa, senza consumarla:
+/// chi lo sa prima di `consumeUnderChange` può non toccare il buffer, perché
+/// sul disco c'è ciò che abbiamo scritto noi.
+export function isOwnEcho(buf: { echoes: number } | undefined, source: Origin): boolean {
+  return buf !== undefined && echoIdentity(source) && buf.echoes > 0;
+}
+
 /// Chi ha riscritto il file, **consumando l'eco che quell'evento era**.
 ///
 /// Questa funzione non è pura, ed è l'unica di questo file a non esserlo: è la
@@ -173,7 +186,7 @@ export function consumeUnderChange(
   // lotto. Ogni altra origine — kernel, plugin, comando dell'utente in lotto —
   // è un cambio vero: non consuma l'attesa (che aspetta il nostro evento) e a
   // buffer sporco si dice.
-  if (source.actor.kind !== "user" || source.batch !== null) {
+  if (!echoIdentity(source)) {
     return buf.dirty ? "riscrittura" : "muto";
   }
   const ours = buf.echoes > 0;
