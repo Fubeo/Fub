@@ -2974,10 +2974,19 @@ export function livePreview(
       });
     }
     if (!changed && cleared.length === 0) return value;
+    // Un tratto rifatto perde le sue decorazioni: quelle che cominciano dentro,
+    // e in fondo alla nota anche quelle posate proprio sulla fine. Il disegno
+    // accanto alla sorgente di un blocco toccato (la formula `$$`, il
+    // diagramma) sta alla fine del blocco, e in fondo alla nota la fine del
+    // blocco è la fine del tratto: senza, ogni battuta ne lasciava uno in più
+    // (IMP-6101, IMP-6102). Più avanti, la fine è l'inizio del tratto dopo, e
+    // ciò che vi comincia è suo.
+    const end = state.doc.length;
     for (const { from, to } of cleared) {
+      const own = (start: number) => start >= from && (start < to || to === end);
       candidates = candidates.update({ filterFrom: from, filterTo: to, filter: (_from, _to, mark) => !dropped.has(mark) });
-      decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
-      gaps = gaps.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
+      decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => !own(start) });
+      gaps = gaps.update({ filterFrom: from, filterTo: to, filter: (start) => !own(start) });
     }
     candidates = candidates.update({ add: added, sort: true });
     decorations = decorations.update({ add: ranges, sort: true });
