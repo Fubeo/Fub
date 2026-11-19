@@ -94,17 +94,16 @@ function extensionOf(page: string): string | null {
 /// Se il file `page` (senza `#…`) si mostra come scheda viva nella nota.
 ///
 /// No per ciò che la nota mostra già a modo suo: una nota (la trasclusione
-/// viva, T29), una Base, un'immagine, un suono, un video. No,
-/// per ora, per la lavagna: la sua scheda nella nota è T47, e fino ad allora
-/// resta la resa di sempre. Il resto (un PDF, un foglio, un documento di
-/// Word o ODT, un file Craft, un formato che la nota non sa mostrare) è una
-/// scheda; quale specie lo dice l'ospite, quando arriva. Un SVG è una scheda
+/// viva, T29), una Base, un'immagine, un suono, un video. Il resto (un PDF,
+/// un foglio, un documento di Word o ODT, un file Craft, una lavagna, che
+/// nella nota è una zona lavagna, T47, un formato che la nota non sa
+/// mostrare) è una scheda; quale specie lo dice l'ospite, quando arriva. Un SVG è una scheda
 /// (T46, ADR 0248): un disegno di Fub ci si disegna sul posto, un SVG
 /// qualunque resta un'immagine ferma dentro la scheda.
 export function isLiveCardFile(page: string): boolean {
   const extension = extensionOf(page);
   if (extension === null) return false;
-  if (extension === "md" || extension === "markdown" || extension === "base" || extension === "canvas") return false;
+  if (extension === "md" || extension === "markdown" || extension === "base") return false;
   const media = mediaKindOfId(page);
   if ((media === "image" && extension !== "svg") || media === "audio" || media === "video") return false;
   const format = formatKindOf(page);
@@ -386,6 +385,7 @@ const KIND_ICON: Readonly<Record<CardKind, string>> = {
   craft: "format-drawing",
   file: "archive",
   drawing: "format-drawing",
+  canvas: "dashboard",
 };
 
 /// Le figure che il set non ha: «Apri» (come quella della trasclusione) e «A
@@ -469,6 +469,9 @@ export class LiveCard {
   readonly #head: HTMLElement;
   readonly #name: HTMLElement;
   readonly #part: HTMLElement;
+  /// Ciò che la specie dice di sé dopo il nome (la zona lavagna: «· 4
+  /// schede», T47).
+  readonly #summary: HTMLElement;
   readonly #tools: HTMLElement;
   #body: HTMLElement;
   /// La vita della vista della specie (o del corpo «mancante»).
@@ -502,7 +505,9 @@ export class LiveCard {
     this.#name = element("b", "live-card-name", fileName(embed.page));
     this.#name.title = embed.page;
     this.#part = element("span", "live-card-part");
-    title.append(this.#name, this.#part);
+    this.#summary = element("span", "live-card-summary");
+    this.#summary.hidden = true;
+    title.append(this.#name, this.#part, this.#summary);
     this.#setPart(liveCardPart(embed.subpath));
     head.append(title, escapeText(), element("span", "live-card-spacer"));
     const done = headButton("live-card-done", null, liveStrings.t("live_card.done"));
@@ -712,6 +717,11 @@ export class LiveCard {
     return this.#cardView;
   }
 
+  #setSummary(text: string | null): void {
+    this.#summary.textContent = text === null ? "" : ` · ${text}`;
+    this.#summary.hidden = text === null;
+  }
+
   #setPart(part: string | null): void {
     this.#part.textContent = part === null ? "" : ` › ${part}`;
     this.#part.hidden = part === null;
@@ -832,6 +842,9 @@ export class LiveCard {
         }
         this.#showMissing();
       },
+      summary: (text) => {
+        if (!life.closed) this.#setSummary(text);
+      },
       pageChanged: (page) => {
         if (life.closed) return;
         this.#owner.rememberPage(path, this.embed.subpath, page);
@@ -862,6 +875,8 @@ export class LiveCard {
     }
     this.#cardView = view;
     life.add(() => view.destroy());
+    // Ciò che la specie diceva di sé se ne va con lei.
+    life.add(() => this.#setSummary(null));
     // Una specie a pagine (il PDF, T45) dice in testata la pagina in vista
     // anche quando l'embed non la nomina.
     const first = view.page?.();
@@ -874,6 +889,7 @@ export class LiveCard {
       return;
     }
     this.#owner.refreshLive();
+    this.#owner.shown(this);
   }
 
   /// La specie scrive nel suo file, o ha smesso: la sua barra, se ne ha una,
@@ -1130,6 +1146,10 @@ export class LiveCardWidget extends WidgetType {
 
 /// Le schede di una superficie: chi è montata, chi è attiva (una sola), chi è
 /// viva, e i gesti che cambiano l'embed nella nota.
+/// Quanto si aspetta, al più, che la scheda di un embed appena scritto si
+/// mostri per attivarla (`LiveCards.activateWhenShown`).
+const ACTIVATE_WAIT_MS = 10_000;
+
 export class LiveCards {
   readonly host: LiveCardsHost;
   readonly #cards = new Map<HTMLElement, LiveCard>();
@@ -1144,6 +1164,8 @@ export class LiveCards {
   /// La pagina dove si è in ogni PDF (T45), per file e parte: tornando in
   /// vista la scheda riparte da lì. Stato della vista, mai scritto.
   readonly #pages = new Map<string, number>();
+  /// La scheda da attivare appena si mostra (`activateWhenShown`).
+  #awaited: { readonly view: EditorView; readonly lineFrom: number; readonly until: number } | null = null;
 
   constructor(host: LiveCardsHost) {
     this.host = host;
@@ -1387,6 +1409,35 @@ export class LiveCards {
     return card ? this.activate(card) : false;
   }
 
+  /// Attiva la scheda dell'embed appena scritto alla riga di `lineFrom`
+  /// (la «Lavagna» del «/», T47) appena si mostra: subito se c'è già,
+  /// altrimenti quando arriva a «view». Chi aspetta troppo (oltre
+  /// `ACTIVATE_WAIT_MS`, la scheda non arriva) rinuncia: la scheda resta
+  /// a riposo, e un clic la attiva.
+  activateWhenShown(view: EditorView, lineFrom: number): void {
+    if (this.#destroyed) return;
+    const card = this.find(view, lineFrom);
+    if (card && card.state === "view") {
+      this.#awaited = null;
+      this.activate(card);
+      return;
+    }
+    this.#awaited = { view, lineFrom, until: Date.now() + ACTIVATE_WAIT_MS };
+  }
+
+  /// Una scheda si è mostrata: se è quella che si aspetta, si attiva.
+  shown(card: LiveCard): void {
+    const awaited = this.#awaited;
+    if (!awaited) return;
+    if (Date.now() > awaited.until) {
+      this.#awaited = null;
+      return;
+    }
+    if (this.find(awaited.view, awaited.lineFrom) !== card) return;
+    this.#awaited = null;
+    this.activate(card);
+  }
+
   /// «Togli dalla nota»: l'embed va via dal testo, con le righe vuote che lo
   /// staccavano; il file resta dov'è. Un passo d'annullamento.
   remove(card: LiveCard): boolean {
@@ -1529,6 +1580,7 @@ export class LiveCards {
 
   destroy(): void {
     if (this.#destroyed) return;
+    this.#awaited = null;
     const active = this.#active;
     if (active) this.leave(active, { choose: false, focus: false });
     for (const card of this.#cards.values()) card.destroy();

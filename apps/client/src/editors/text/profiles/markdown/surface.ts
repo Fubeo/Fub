@@ -68,7 +68,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { BASE_ACTION, REMINDER_ACTION, SYNC_BLOCK_ACTION, createBaseHere, reminderHere, reminderParams, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, CANVAS_ACTION, REMINDER_ACTION, SYNC_BLOCK_ACTION, createBaseHere, createCanvasHere, reminderHere, reminderParams, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
 import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
@@ -419,6 +419,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (entry.id === BASE_ACTION && !transform) {
         // Il «/base» resta finché il file non c'è: lo toglie l'embed.
         startBase(view, from, to);
+      } else if (entry.id === CANVAS_ACTION && !transform) {
+        // Come la Base: il «/lavagna» resta finché il file non c'è.
+        startCanvas(view, from, to);
       } else if (entry.id === SYNC_BLOCK_ACTION && !transform) {
         // Come la Base: il «/» resta finché la trasclusione non c'è.
         startSync(view, from, to);
@@ -439,28 +442,46 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// «Base» dal «/» o da un menu (E12): il file accanto alla nota, poi
   /// l'embed. Una alla volta: la seconda aspetta che la prima finisca.
   let creatingBase = false;
+  /// La porta per creare un file accanto alla nota dal «/»: la Base o la
+  /// lavagna (T47), con il loro titolo e la loro etichetta.
+  const newFilePort = (kind: "base" | "canvas"): NewBasePort => ({
+    note: docId(),
+    taken: async (file) =>
+      (await resolvedReference({ kind: "wiki", value: { page: file } }, docId()).catch(() => null)) !== null,
+    ask: (proposal, taken) => promptText({
+      title: liveStrings.t(kind === "base" ? "base.new.title" : "canvas.new.title"),
+      label: taken !== null
+        ? liveStrings.t("base.new.taken", { name: taken })
+        : liveStrings.t(kind === "base" ? "base.new.name" : "canvas.new.name"),
+      value: proposal,
+      okLabel: liveStrings.t("base.new.create"),
+    }),
+    create: async (id, text) => {
+      await api.resourceWrite(id, new TextEncoder().encode(text), null, vault);
+    },
+    writable: () => editable() && !tableGrid,
+    notify: (message) => {
+      if (!life.closed) notify(message, "guasto");
+    },
+  });
   const startBase = (view: EditorView, from: number, to: number): void => {
     if (creatingBase) return;
     creatingBase = true;
-    const port: NewBasePort = {
-      note: docId(),
-      taken: async (file) =>
-        (await resolvedReference({ kind: "wiki", value: { page: file } }, docId()).catch(() => null)) !== null,
-      ask: (proposal, taken) => promptText({
-        title: liveStrings.t("base.new.title"),
-        label: taken === null ? liveStrings.t("base.new.name") : liveStrings.t("base.new.taken", { name: taken }),
-        value: proposal,
-        okLabel: liveStrings.t("base.new.create"),
-      }),
-      create: async (id, text) => {
-        await api.resourceWrite(id, new TextEncoder().encode(text), null, vault);
-      },
-      writable: () => editable() && !tableGrid,
-      notify: (message) => {
-        if (!life.closed) notify(message, "guasto");
-      },
-    };
+    const port = newFilePort("base");
     void createBaseHere(view, from, to, port)
+      .catch((error: unknown) => port.notify(errorText(error)))
+      .finally(() => { creatingBase = false; });
+  };
+  /// «Lavagna» dal «/» (T47): come la Base, poi la zona lavagna si apre già
+  /// attiva appena la scheda si mostra.
+  const startCanvas = (view: EditorView, from: number, to: number): void => {
+    if (creatingBase) return;
+    creatingBase = true;
+    const port = newFilePort("canvas");
+    void createCanvasHere(view, from, to, port)
+      .then((line) => {
+        if (line !== null && !life.closed) liveCards?.activateWhenShown(view, line);
+      })
       .catch((error: unknown) => port.notify(errorText(error)))
       .finally(() => { creatingBase = false; });
   };
@@ -1470,12 +1491,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     has: (id) =>
       MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION ||
       id === REMINDER_ACTION ||
-      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined),
+      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined) ||
+      // La lavagna dal «/» (T47) dove la nota ha le schede vive, che la
+      // mostrano.
+      (id === CANVAS_ACTION && liveCards !== null),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
       if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
+      if (id === CANVAS_ACTION) return { enabled: !tableGrid && !creatingBase && liveCards !== null, active: null };
       if (id === SYNC_BLOCK_ACTION) return { enabled: !tableGrid && !syncing && opts.syncBlock !== undefined, active: null };
       if (id === REMINDER_ACTION) return { enabled: !tableGrid, active: null };
       if (id === "text.undo" || id === "text.redo") {
@@ -1503,6 +1528,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         return engine.runViewCommand((view) => {
           const at = view.state.selection.main.head;
           startBase(view, at, at);
+          return true;
+        });
+      }
+      if (id === CANVAS_ACTION) {
+        if (tableGrid || creatingBase || !liveCards) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startCanvas(view, at, at);
           return true;
         });
       }

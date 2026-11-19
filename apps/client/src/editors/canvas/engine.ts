@@ -2804,6 +2804,16 @@ export class CanvasEngine {
   }
 
   /**
+   * Tutta la lavagna nella vista, subito, senza volo e senza entrare nella
+   * storia di Indietro: la zona lavagna di una nota a riposo (T47), che si
+   * guarda sempre intera, anche dopo un cambio di misura o di testo.
+   */
+  fitAll(): void {
+    if (this.#destroyed || !this.#doc) return;
+    this.#fitCamera(true);
+  }
+
+  /**
    * Brings into view the card whose source holds `byteOffset` (UTF-8 bytes,
    * the currency of the model's spans): selects it and frames it. `false`
    * when the offset is outside every card, or the scene is too large to draw.

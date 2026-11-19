@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undo } from "@codemirror/commands";
-import { BASE_ENTRY } from "../../../../panels/slash/entries";
+import { BASE_ENTRY, CANVAS_ENTRY } from "../../../../panels/slash/entries";
 import {
+  CANVAS_ACTION, EMPTY_CANVAS_TEXT, canvasEmbed, createCanvasHere,
   BASE_ACTION, baseFileText, baseInsertion, baseName, baseStem, calloutTypeContext, codeLanguageContext, createBaseHere,
   cursorIsLiteral, slashContext, slashPlacement, SLASH_GAP, SLASH_MIN_HEIGHT, SLASH_QUERY_MAX, type NewBasePort,
 } from "./slash";
@@ -290,5 +291,100 @@ describe("la Base dal «/» (T18)", () => {
     expect(cursorAfter("A\n\n/base\n\nB")).toEqual(["B", "B"]);
     expect(cursorAfter("A\n/base\nB")).toEqual(["B", "B"]);
     expect(cursorAfter("A\n\n/base")).toEqual(["", ""]);
+  });
+});
+
+describe("la lavagna dal «/» (T47)", () => {
+  const views: EditorView[] = [];
+  afterEach(() => {
+    for (const view of views.splice(0)) view.destroy();
+  });
+
+  function editor(doc: string): EditorView {
+    const at = doc.indexOf("/lavagna") + "/lavagna".length;
+    const view = new EditorView({
+      state: EditorState.create({ doc, extensions: [history()], selection: EditorSelection.cursor(at) }),
+      parent: document.body.appendChild(document.createElement("div")),
+    });
+    views.push(view);
+    return view;
+  }
+
+  function host(note: string, files: string[], answers: (string | null | undefined)[] = [], fail?: unknown) {
+    const asked: { proposal: string; taken: string | null }[] = [];
+    const created: { id: string; text: string }[] = [];
+    const notes: string[] = [];
+    const vault = new Set(files);
+    const port: NewBasePort = {
+      note,
+      taken: async (file) => [...vault].some((id) => id === file || id.endsWith(`/${file}`)),
+      ask: async (proposal, taken) => {
+        asked.push({ proposal, taken });
+        const answer = answers.shift();
+        return answer === undefined ? proposal : answer;
+      },
+      create: async (id, text) => {
+        if (fail !== undefined) throw fail;
+        if (vault.has(id)) throw { kind: "already_exists", path: id };
+        vault.add(id);
+        created.push({ id, text });
+      },
+      writable: () => true,
+      notify: (message) => notes.push(message),
+    };
+    return { port, asked, created, notes };
+  }
+
+  const slash = (view: EditorView) => {
+    const from = view.state.doc.toString().indexOf("/lavagna");
+    return [from, from + "/lavagna".length] as const;
+  };
+
+  it("l'id della voce è quello dell'azione", () => {
+    expect(CANVAS_ACTION).toBe(CANVAS_ENTRY);
+  });
+
+  it("una lavagna vuota accanto alla nota, l'embed al posto della riga, e la sua riga per attivarla", async () => {
+    const view = editor("# Visita\n\nIl percorso: /lavagna\n\nDopo");
+    const fake = host("Mostra/Visita.md", ["Mostra/Visita.md"]);
+    const line = await createCanvasHere(view, ...slash(view), fake.port);
+    expect(fake.asked).toEqual([{ proposal: "Visita", taken: null }]);
+    expect(fake.created).toEqual([{ id: "Mostra/Visita.canvas", text: EMPTY_CANVAS_TEXT }]);
+    expect(JSON.parse(EMPTY_CANVAS_TEXT)).toEqual({ nodes: [], edges: [] });
+    expect(view.state.doc.toString()).toBe("# Visita\n\nIl percorso:\n\n![[Visita.canvas]]\n\nDopo");
+    expect(line).not.toBeNull();
+    expect(view.state.doc.lineAt(line!).text).toBe(canvasEmbed("Visita"));
+    expect(fake.notes).toEqual([]);
+  });
+
+  it("un nome già preso propone «Nome 2»; «.canvas» scritto nel nome non si raddoppia", async () => {
+    const view = editor("/lavagna");
+    const fake = host("Visita.md", ["Visita.canvas"]);
+    expect(await createCanvasHere(view, ...slash(view), fake.port)).not.toBeNull();
+    expect(fake.asked[0]).toEqual({ proposal: "Visita 2", taken: null });
+    expect(fake.created.map((each) => each.id)).toEqual(["Visita 2.canvas"]);
+
+    const again = editor("/lavagna");
+    const named = host("Visita.md", [], ["Percorso della visita.canvas"]);
+    await createCanvasHere(again, ...slash(again), named.port);
+    expect(named.created.map((each) => each.id)).toEqual(["Percorso della visita.canvas"]);
+    expect(again.state.doc.toString()).toBe("![[Percorso della visita.canvas]]\n\n");
+    const long = baseName("è".repeat(300), 1, "canvas");
+    expect(new TextEncoder().encode(`${long}.canvas`).byteLength).toBeLessThanOrEqual(255);
+  });
+
+  it("un errore di creazione o una rinuncia lasciano la nota com'era", async () => {
+    const doc = "/lavagna";
+    const failing = editor(doc);
+    const broken = host("Visita.md", [], [], { kind: "permission_denied", path: "Visita.canvas" });
+    expect(await createCanvasHere(failing, ...slash(failing), broken.port)).toBeNull();
+    expect(failing.state.doc.toString()).toBe(doc);
+    expect(broken.notes[0]).toMatch(/^La lavagna «Visita» non è stata creata: .+\. La nota resta com'era\.$/);
+
+    const giving = editor(doc);
+    const gave = host("Visita.md", [], [null]);
+    expect(await createCanvasHere(giving, ...slash(giving), gave.port)).toBeNull();
+    expect(giving.state.doc.toString()).toBe(doc);
+    expect(gave.created).toEqual([]);
   });
 });

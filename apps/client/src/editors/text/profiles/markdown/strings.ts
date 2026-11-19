@@ -658,6 +658,11 @@ const IT = {
   "base.new.view": "Tabella",
   "base.new.failed": "La Base «{name}» non è stata creata: {reason}. La nota resta com'era.",
   "base.new.orphan": "La Base «{name}» è creata, ma la nota non si può più scrivere: il file resta accanto alla nota.",
+  "canvas.new.title": "Nuova lavagna",
+  "canvas.new.name": "Nome della lavagna, accanto alla nota",
+  "canvas.new.fallback": "Lavagna",
+  "canvas.new.failed": "La lavagna «{name}» non è stata creata: {reason}. La nota resta com'era.",
+  "canvas.new.orphan": "La lavagna «{name}» è creata, ma la nota non si può più scrivere: il file resta accanto alla nota.",
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
@@ -1306,6 +1311,11 @@ const EN: Record<keyof typeof IT, string> = {
   "base.new.view": "Table",
   "base.new.failed": "The Base “{name}” wasn't created: {reason}. The note is unchanged.",
   "base.new.orphan": "The Base “{name}” is created, but the note can no longer be written: the file stays next to the note.",
+  "canvas.new.title": "New whiteboard",
+  "canvas.new.name": "Name of the whiteboard, next to the note",
+  "canvas.new.fallback": "Whiteboard",
+  "canvas.new.failed": "The whiteboard “{name}” wasn't created: {reason}. The note is unchanged.",
+  "canvas.new.orphan": "The whiteboard “{name}” is created, but the note can no longer be written: the file stays next to the note.",
 };
 
 // Il catalogo nasce alla prima frase, non all'import: chi importa la Live
