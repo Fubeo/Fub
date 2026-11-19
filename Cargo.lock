@@ -2276,6 +2276,7 @@ dependencies = [
  "gridcraft-chart",
  "gridcraft-core",
  "gridcraft-engine",
+ "gridcraft-formula",
  "gridcraft-model",
  "gridcraft-numfmt",
  "gridcraft-xlsx",

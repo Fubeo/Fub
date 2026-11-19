@@ -899,8 +899,9 @@ fn la_finestra_della_convalida_arriva_con_la_regola_della_cella() {
 
 /// Un comando che non tocca le formule non le ricalcola: la riscrittura tiene
 /// i valori salvati nel file, anche quelli che un calcolo cambierebbe (un
-/// valore vecchio, una funzione volatile), e una formula senza valore resta
-/// senza. Ricalcola soltanto ciò che legge una cella cambiata.
+/// valore vecchio, una funzione volatile). Una formula senza valore si calcola
+/// all'apertura, e la riscrittura ne salva il valore. Ricalcola soltanto ciò
+/// che legge una cella cambiata, e la riscrittura salva il valore nuovo.
 #[test]
 fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
     const STALE: &str = r#"<dimension ref="A1:D1"/><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*10</f><v>999</v></c><c r="C1"><f>NOW()</f><v>45000</v></c><c r="D1"><f>A1+1</f></c></row><row r="5"><c r="E5"><v>7</v></c></row></sheetData>"#;
@@ -909,7 +910,7 @@ fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
     let shown = cells(&mut provider, &session.instance, &session.revision, "s1");
     assert_eq!(display(&shown, "s1", "B1"), "999");
     assert_eq!(display(&shown, "s1", "C1"), "45000");
-    assert_eq!(display(&shown, "s1", "D1"), "");
+    assert_eq!(display(&shown, "s1", "D1"), "2");
 
     let bold = give(
         &mut provider,
@@ -926,13 +927,13 @@ fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
     );
     assert_eq!(display(&shown, "s1", "B1"), "999");
     assert_eq!(display(&shown, "s1", "C1"), "45000");
-    assert_eq!(display(&shown, "s1", "D1"), "");
+    assert_eq!(display(&shown, "s1", "D1"), "2");
     let written = provider
         .bytes_to_write(&session.instance, bold.commit.revision.clone())
         .unwrap();
     assert_eq!(value(&written, 0, "B1"), Value::Number(999.0));
     assert_eq!(value(&written, 0, "C1"), Value::Number(45000.0));
-    assert_eq!(value(&written, 0, "D1"), Value::Empty);
+    assert_eq!(value(&written, 0, "D1"), Value::Number(2.0));
 
     // Una cella letta da B1 cambia: B1 si ricalcola.
     let typed = give(
@@ -949,6 +950,12 @@ fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
         "s1",
     );
     assert_eq!(display(&shown, "s1", "B1"), "20");
+    assert_eq!(display(&shown, "s1", "D1"), "3");
+    let written = provider
+        .bytes_to_write(&session.instance, typed.commit.revision.clone())
+        .unwrap();
+    assert_eq!(value(&written, 0, "B1"), Value::Number(20.0));
+    assert_eq!(value(&written, 0, "D1"), Value::Number(3.0));
 }
 
 /// Modificare un commento cambia il suo testo e tiene il thread: le risposte
