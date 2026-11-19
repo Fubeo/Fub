@@ -170,12 +170,15 @@ function whenSelected(run: (view: EditorView, blocks: readonly Block[], selected
   };
 }
 
-/// Esc: seleziona il blocco del cursore. Con Vim acceso Esc è di Vim.
+/// Esc: seleziona il blocco del cursore, e soltanto lui. Con Vim acceso Esc
+/// è di Vim. Fuori da un blocco (una riga vuota) o nel frontmatter, che la
+/// testata mostra come proprietà, non seleziona niente: un Canc dopo non
+/// deve toccare le proprietà (IMP-6106).
 export const selectCursorBlock: Command = (view) => {
   if (view.composing || view.state.field(blockSelection, false) || vimOn(view)) return false;
   const blocks = modelOf(view.state);
   const index = cursorBlock(view.state, blocks);
-  if (index < 0) return false;
+  if (index < 0 || blocks[index]!.kind === "frontmatter") return false;
   view.dispatch(selectBlocks(view.state, blocks, index, index));
   return true;
 };

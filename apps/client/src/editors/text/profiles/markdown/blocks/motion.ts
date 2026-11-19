@@ -914,13 +914,23 @@ const lastSelected = new WeakMap<EditorView, ReadonlySet<number>>();
 /// widget di blocco che sostituisce la riga (una scheda viva) dice da sé
 /// dove sono i suoi bordi (`coordsAtPos`, cioè `WidgetType.coordsAt`): la
 /// riga di CodeMirror ne comprende anche l'aria intorno, che il velo non
-/// copre.
-function rowExtent(view: EditorView, row: BlockInfo): { top: number; bottom: number } {
-  if (row.type === BlockType.WidgetRange) {
-    const box = view.coordsAtPos(row.from, 1);
+/// copre. I widget di blocco attaccati alla riga, prima o dopo (la testata
+/// della pagina sopra la prima riga: titolo e proprietà), CodeMirror li
+/// conta nella riga, ma non sono del blocco: il velo li lascia fuori, sennò
+/// chi seleziona il primo paragrafo vede scelta tutta la pagina (IMP-6106).
+function rowExtent(view: EditorView, line: BlockInfo): { top: number; bottom: number } {
+  const parts: readonly BlockInfo[] = Array.isArray(line.type) ? line.type : [line];
+  let first = 0;
+  while (first < parts.length - 1 && parts[first]!.type === BlockType.WidgetBefore) first++;
+  let last = parts.length - 1;
+  while (last > first && parts[last]!.type === BlockType.WidgetAfter) last--;
+  const head = parts[first]!;
+  const tail = parts[last]!;
+  if (head === tail && head.type === BlockType.WidgetRange) {
+    const box = view.coordsAtPos(head.from, 1);
     if (box && box.bottom > box.top) return { top: box.top - view.documentTop, bottom: box.bottom - view.documentTop };
   }
-  return { top: row.top, bottom: row.bottom };
+  return { top: head.top, bottom: tail.bottom };
 }
 
 /// I riquadri dei blocchi selezionati in vista, dall'inizio della prima riga
