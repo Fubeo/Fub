@@ -21,5 +21,8 @@ export const LIVE_CARDS: PartAnatomy = {
     // Il valore di una cella nel testo (T53): il tratteggio d'accento in
     // Scrittura, testo come il resto in Lettura.
     { name: "cell-value", layer: "contenuto", states: [S("rest"), S("hover")], hooks: ["cm-fub-cell-value", "fub-cell-value", "embed"] },
+    // La zona lavagna (T47): la lavagna vera in forma di scheda, senza la sua
+    // testata, la barra, la colonna degli strumenti e il navigatore.
+    { name: "live-card-canvas", layers: { "canvas-viewport": "contenuto", "canvas-grid": "segno" }, states: [S("rest"), S("selected"), S("focused")], hooks: ["canvas-card-board", "canvas-card-board-rest", "canvas-card-board-editor", "canvas-card-board-message", "canvas-viewport", "canvas-grid", "canvas-body", "canvas-header", "canvas-toolbar", "canvas-rail", "canvas-navigator", "kit-button"] },
   ],
 };

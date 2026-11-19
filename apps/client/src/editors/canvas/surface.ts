@@ -182,6 +182,11 @@ export const CANVAS_MODES: readonly SurfaceMode[] = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
 ];
 
+/// Il margine intorno alle schede quando la zona lavagna di una nota (T47)
+/// mostra tutta la lavagna: quello del prototipo (`.cvz`, le schede a 28 px
+/// dal bordo), più stretto di quello di un riquadro.
+const CARD_FIT_MARGIN = 28;
+
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
 export function mountCanvasSurface(
   profile: string,
@@ -195,6 +200,14 @@ export function mountCanvasSurface(
   if (profile === VECTOR_PROFILE || profile === PDF_PROFILE) {
     return mountDrawingSurface(profile, context, callbacks);
   }
+  /// Montata in una scheda (T47, la zona lavagna di una nota): la pelle della
+  /// scheda toglie la testata, la barra, la colonna degli strumenti e il
+  /// navigatore, che tornano «A tutta pagina»; la vista ricordata della
+  /// lavagna non si legge e non si scrive (è del riquadro). In sola lettura,
+  /// cioè a riposo, la lavagna si guarda sempre intera: a ogni misura nuova e
+  /// a ogni testo nuovo torna a mostrare tutte le schede.
+  const compact = context.compact === true;
+  let fullPage = false;
   const host = document.createElement("div");
   host.className = "canvas-surface-host";
   const source = document.createElement("pre");
@@ -287,7 +300,7 @@ export function mountCanvasSurface(
     ...(callbacks.measureImage ? { measureImage: callbacks.measureImage } : {}),
     ...(callbacks.clipboardMarkdown ? { clipboardMarkdown: callbacks.clipboardMarkdown } : {}),
     ...(callbacks.parts ? { parts: callbacks.parts } : {}),
-    viewMemory: VIEW_MEMORY,
+    ...(compact ? {} : { viewMemory: VIEW_MEMORY }),
     onPendingChange: (pending) => {
       for (const watcher of [...pendingWatchers]) watcher(pending);
     },
@@ -316,6 +329,9 @@ export function mountCanvasSurface(
     engine = mounted;
     try {
       if (held !== null) mounted.setDoc(held);
+      // Nella scheda (T47) la lavagna appena aperta si vede tutta, col
+      // margine della scheda.
+      if (held !== null && compact) mounted.fitAll(CARD_FIT_MARGIN);
     } catch (error) {
       broken(error);
       return;
@@ -366,6 +382,33 @@ export function mountCanvasSurface(
     host.tabIndex = -1;
     void canvasCoreReady().then(settle, fail);
   }
+  // A riposo la scheda mostra tutta la lavagna: una misura nuova della
+  // scheda (la colonna, «A tutta pagina», l'altezza scritta) la rinquadra.
+  // Da attiva la camera è di chi lavora, tranne alla prima misura vera: la
+  // scheda monta la lavagna da scrivere nascosta, e la inquadra quando si
+  // vede.
+  const wholeAtRest = (): void => {
+    if (compact && heldReadOnly) engine?.fitAll(CARD_FIT_MARGIN);
+  };
+  let resizeWatch: ResizeObserver | null = null;
+  if (compact && typeof ResizeObserver !== "undefined") {
+    let last = "";
+    resizeWatch = new ResizeObserver(() => {
+      // Nascosta (la lavagna a riposo mentre si scrive in quella attiva): la
+      // prossima misura vera è come la prima, e la rinquadra.
+      if (host.clientWidth === 0) {
+        last = "";
+        return;
+      }
+      const size = `${host.clientWidth}x${host.clientHeight}`;
+      if (size === last) return;
+      const first = last === "";
+      last = size;
+      if (first) engine?.fitAll(CARD_FIT_MARGIN);
+      else wholeAtRest();
+    });
+    resizeWatch.observe(host);
+  }
   let mode: "canvas" | "source" = profile === CANVAS_SOURCE_PROFILE ? "source" : "canvas";
   const surface: EditorSurface = {
     family: CANVAS_FAMILY,
@@ -388,6 +431,7 @@ export function mountCanvasSurface(
         source.textContent = canvasSourceFallback(text);
         if (engine) {
           engine.setDoc(text);
+          if (compact) engine.fitAll(CARD_FIT_MARGIN);
           inspector.changed();
           return;
         }
@@ -400,6 +444,8 @@ export function mountCanvasSurface(
         const text = typeof update === "string" ? update : update.text;
         if (engine) engine.syncDoc(update);
         else held = text;
+        // La lavagna cambiata altrove, vista a riposo: ancora tutta.
+        wholeAtRest();
         inspector.changed();
         source.textContent = canvasSourceFallback(text);
       },
@@ -455,6 +501,17 @@ export function mountCanvasSurface(
     panels: inspector.panels,
     // La stampa la disegna il provider del canvas (`render_html`).
     printable: true,
+    // Nella scheda (T47) «A tutta pagina» e ritorno: la pelle mostra o toglie
+    // gli strumenti, e la lavagna si rinquadra intera nella misura nuova.
+    ...(compact
+      ? {
+          setFullPage: (full: boolean): void => {
+            if (full === fullPage) return;
+            fullPage = full;
+            engine?.fitAll(CARD_FIT_MARGIN);
+          },
+        }
+      : {}),
     setReadOnly: (readOnly: boolean): void => {
       heldReadOnly = readOnly;
       engine?.setReadOnly(readOnly);
@@ -477,6 +534,7 @@ export function mountCanvasSurface(
       pendingWatchers.clear();
       statusWatchers.clear();
       missingWatch.disconnect();
+      resizeWatch?.disconnect();
       inspector.dispose();
     },
   };

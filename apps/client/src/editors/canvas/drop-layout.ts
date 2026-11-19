@@ -47,6 +47,9 @@ const BORN_SIZE: Readonly<Record<CardKind, CardSize>> = {
   // Il disegno che si modifica è solo della nota (T46): sulla lavagna un SVG
   // è un'immagine, e nasce come lei.
   drawing: { width: 480, height: 360 },
+  // La zona lavagna è solo della nota (T47): sulla lavagna un `.canvas` è una
+  // scheda di file, e nasce come lei.
+  canvas: { width: 320, height: 160 },
   file: { width: 320, height: 160 },
 };
 

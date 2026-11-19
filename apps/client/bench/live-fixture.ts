@@ -493,6 +493,47 @@ const OPTIONS_TYPE_FILES: Readonly<Record<string, string>> = {
   "Tipi/Progetto.md": "---\nicon: 🌱\nproperties: [stato, sala, sito, fase]\nfeatured: [stato, sala, sito]\nfolder: Progetti\n---\n## Obiettivo\n",
 };
 
+/// La zona lavagna (T47, il passo 18 del prototipo): il percorso della visita,
+/// quattro schede legate da fili e un giro di penna, incorporato nella nota
+/// fra due paragrafi. Le schede e i fili sono quelli del prototipo (`CV0`,
+/// `CVW`); il giro di penna sta dove il prototipo scrive «qui la cassa?».
+export const CANVAS_CARD_FILE = "Mostra/Percorso della visita.canvas";
+const CANVAS_CARD_NOTE = [
+  "# La visita",
+  "",
+  "Il percorso della visita è una lavagna, e si sistema senza uscire dalla nota.",
+  "",
+  `![[Percorso della visita.canvas|640x300]]`,
+  "",
+  "Da chiedere: dove mettere la cassa.",
+].join("\n");
+const CANVAS_CARD_PEN = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+const CANVAS_CARD_BOARD = `${JSON.stringify({
+  nodes: [
+    { id: "in", type: "text", text: "Ingresso\n\nvia Roma", x: 28, y: 44, width: 132, height: 84 },
+    { id: "sg", type: "text", text: "Sala grande\n\n12 opere · Le barche in fondo", x: 232, y: 30, width: 190, height: 84, color: "4" },
+    { id: "sp", type: "text", text: "Sala piccola\n\nil video, 6 minuti", x: 250, y: 190, width: 156, height: 84, color: "5" },
+    { id: "us", type: "text", text: "Uscita\n\nlibri e cartoline", x: 520, y: 118, width: 150, height: 84 },
+  ],
+  edges: [
+    { id: "e1", fromNode: "in", fromSide: "right", toNode: "sg", toSide: "left" },
+    { id: "e2", fromNode: "sg", fromSide: "bottom", toNode: "sp", toSide: "top" },
+    { id: "e3", fromNode: "sg", fromSide: "right", toNode: "us", toSide: "left" },
+    { id: "e4", fromNode: "sp", fromSide: "right", toNode: "us", toSide: "left" },
+  ],
+  "fub:ink": {
+    v: 1,
+    strokes: [{
+      id: "s-cassa-1",
+      tool: "pen",
+      brush: CANVAS_CARD_PEN,
+      color: "#e69f00",
+      anchor: { kind: "free" },
+      ink: "1 s100 cxy 50289,23316 354,-316 480,-286 592,-246 685,-200 758,-147 808,-91 834,-30 834,30 808,91 758,147 685,200 592,246 480,286 354,316 216,337 73,347 -73,347 -216,337 -354,316 -480,286 -592,246 -685,200 -758,147 -808,91 -834,30 -834,-30 -808,-91 -758,-147 -685,-200 -592,-246 -480,-286 -354,-316 -216,-337 -73,-347 73,-347 216,-337",
+    }],
+  },
+}, null, 2)}\n`;
+
 /// La scheda di disegno (T46): uno schizzo di Fub che si disegna sul posto e,
 /// più giù, un SVG fatto altrove, che resta un'immagine ferma.
 export const DRAWING_CARD_FILE = "Schizzi/Pianta del soggiorno.svg";
@@ -792,6 +833,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     files: { [DRAWING_CARD_FILE]: DRAWING_CARD_SVG, [DRAWING_CARD_FOREIGN]: DRAWING_CARD_FOREIGN_SVG },
   },
   "schede-pdf": { text: LIVE_CARDS_PDF_NOTE, cursor: null },
+  // La zona lavagna (T47).
+  "scheda-lavagna": { text: CANVAS_CARD_NOTE, cursor: null, files: { [CANVAS_CARD_FILE]: CANVAS_CARD_BOARD } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "battuta-schede-20": typingCardsNote(50, 20),

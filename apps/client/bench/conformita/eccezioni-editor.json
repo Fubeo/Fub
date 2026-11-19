@@ -22,5 +22,11 @@
     "proprieta": "background-color",
     "motivo": "Il vassoio delle viste nel prototipo è --tray-2 (#eaf0ec di giorno, #1f2922 di notte), un token che la tavolozza di Fub non ha e che la tabella del piano non traduce; Fub usa il vassoio che il piano dà per --tray, cioè --sheet-2, invece di un colore scritto a mano.",
     "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T70"
+  },
+  {
+    "pezzo": "schede.lavagna.zona",
+    "proprieta": "height",
+    "motivo": "Nel prototipo .cvz è alta 300 px sotto la testata (e si stringe a 295 o 279 px nella colonna flessibile); in Fub l'altezza dell'embed (|640x300) è quella di tutta la scheda, testata compresa, per ogni specie (live-cards.css, height: calc(var(--live-card-height) - 35px)): la zona è 265 px, e la nota occupa i 300 px che l'embed scrive.",
+    "riferimento": "PLAN.md, T47 «Dal prototipo» (passo 18, .cvz) e T43 (misura dell'embed, docs/product/live-cards.md «Misura, «Mostra come», affiancare»)"
   }
 ]

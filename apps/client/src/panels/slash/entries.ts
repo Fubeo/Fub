@@ -52,8 +52,18 @@ export const SYNC_BLOCK_ENTRY = "markdown.syncblock";
 /// lo stesso id è `REMINDER_ACTION` in `editors/text/profiles/markdown/slash.ts`.
 export const REMINDER_ENTRY = "markdown.reminder";
 
+/// «Lavagna» (E25, T47): crea un `.canvas` vuoto accanto alla nota, lo
+/// incorpora al posto della riga e apre la zona lavagna già attiva.
+/// Un'azione della superficie, come la Base; lo stesso id è `CANVAS_ACTION`
+/// in `editors/text/profiles/markdown/slash.ts`.
+export const CANVAS_ENTRY = "markdown.canvas";
+
 /// Un comando che c'è soltanto con la componente delle Basi accesa.
 const BASE_COMMAND = "base.view.add";
+
+/// Un comando che c'è soltanto con la componente della lavagna accesa
+/// (`fub.lavagna`): senza, il file nascerebbe e nessuno lo saprebbe mostrare.
+const CANVAS_COMMAND = "canvas.create";
 
 /// La scorciatoia Markdown che fa lo stesso: la si impara guardando il menu.
 const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
@@ -85,6 +95,8 @@ const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
   "markdown.linkcard": "https://",
   // Non ha una forma Markdown sua: si chiama scrivendo il suo nome.
   [BASE_ENTRY]: "/base",
+  // L'embed di una lavagna: `![[Nome.canvas]]`.
+  [CANVAS_ENTRY]: "![[.canvas",
   [REMINDER_ENTRY]: "⏰",
 };
 
@@ -125,6 +137,7 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.linkcard": "pagina web sito segnalibro scheda anteprima bookmark web page site card",
   "markdown.underline": "sottolineato underline",
   [BASE_ENTRY]: "base database dati data vista view raccolta collection",
+  [CANVAS_ENTRY]: "lavagna canvas whiteboard board zona schede fili penna cards wires pen",
   [SYNC_BLOCK_ENTRY]: "sincronizzato sincronizza synced sync blocco block altra nota other note trasclusione transclusion",
   [REMINDER_ENTRY]: "promemoria ricordami ricorda sveglia avviso notifica reminder remind alarm alert notification",
   [COLOR_ENTRY]: "colore color colori colors evidenzia fondo testo",
@@ -147,6 +160,8 @@ const SLASH_ICONS: Readonly<Record<string, string>> = {
   [COLOR_ENTRY]: "fmt-color",
   // La figura delle Basi nell'app (la componente `fub.base`).
   [BASE_ENTRY]: "collection",
+  // La figura dei file `.canvas` nella testata della loro scheda.
+  [CANVAS_ENTRY]: "dashboard",
   [SYNC_BLOCK_ENTRY]: "search",
   [REMINDER_ENTRY]: "fmt-alarm",
 };
@@ -274,6 +289,22 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
     });
     const table = listed.findIndex((each) => each.id === "markdown.table");
     listed.splice(table < 0 ? listed.length : table + 1, 0, base);
+  }
+  // La lavagna subito dopo l'incorporamento, fra i file: soltanto se la
+  // lavagna c'è (la componente `fub.lavagna` accesa registra i suoi comandi).
+  const boards = specs.some((spec) => spec.id === CANVAS_COMMAND);
+  if (boards && has(CANVAS_ENTRY) && !hidden.has(CANVAS_ENTRY) && !listed.some((each) => each.id === CANVAS_ENTRY)) {
+    const board = entry({
+      id: CANVAS_ENTRY,
+      label: t("slash.canvas"),
+      description: t("slash.canvas.desc"),
+      icon: SLASH_ICONS[CANVAS_ENTRY]!,
+      hint: MARKDOWN_HINTS[CANVAS_ENTRY]!,
+      section: sectionOf(CANVAS_ENTRY),
+      action: true,
+    });
+    const embed = listed.findIndex((each) => each.id === "markdown.embed");
+    listed.splice(embed < 0 ? listed.length : embed + 1, 0, board);
   }
   // Il blocco di un'altra nota subito dopo la trasclusione, dove la superficie
   // lo sa fare.

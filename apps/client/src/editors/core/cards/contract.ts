@@ -31,7 +31,9 @@ export type CardMode = "live" | "snapshot";
 ///
 /// `drawing` è solo della nota (T46): lì un `.svg` è un disegno che si
 /// modifica sul posto (`noteCardKindOf`); sulla lavagna resta `image`.
-export type CardKind = "note" | "document" | "sheet" | "pdf" | "image" | "web" | "craft" | "drawing" | "file";
+/// Anche `canvas` è solo della nota (T47): lì un `.canvas` è una zona lavagna;
+/// sulla lavagna una lavagna resta una scheda di file.
+export type CardKind = "note" | "document" | "sheet" | "pdf" | "image" | "web" | "craft" | "drawing" | "canvas" | "file";
 
 /// La specie di una scheda dalla sua forma: `null` per testo e gruppi, che
 /// la tela disegna da sé.
@@ -53,12 +55,15 @@ export function cardKindOf(node: CanvasNode): CardKind | null {
   }
 }
 
-/// La specie di un file incorporato in una nota (T41, T46): quella della
+/// La specie di un file incorporato in una nota (T41, T46, T47): quella della
 /// lavagna (`cardKindOf`), tranne l'SVG, che nella nota è `drawing`, il
-/// disegno che si modifica sul posto. Se è davvero un disegno di Fub lo dice
-/// la scheda, dal contenuto: un SVG estraneo resta un'immagine ferma.
+/// disegno che si modifica sul posto, e la lavagna, che nella nota è
+/// `canvas`, la zona lavagna. Se è davvero un disegno di Fub lo dice la
+/// scheda, dal contenuto: un SVG estraneo resta un'immagine ferma.
 export function noteCardKindOf(path: string): CardKind {
-  if (extensionOf(withoutSubpath(path)) === "svg") return "drawing";
+  const extension = extensionOf(withoutSubpath(path));
+  if (extension === "svg") return "drawing";
+  if (extension === "canvas") return "canvas";
   return fileKindOf(path);
 }
 
@@ -218,6 +223,10 @@ export interface CardContext {
   /// La scheda mostra un'altra pagina (da 1): la tela la ricorda. Assente,
   /// non si ricorda niente.
   pageChanged?(page: number): void;
+  /// Una parola breve su ciò che la scheda mostra (la zona lavagna, T47: «4
+  /// schede»), che la testata della nota scrive dopo il nome; `null` la
+  /// toglie. Assente (la lavagna): non si dice.
+  summary?(text: string | null): void;
   /// Ciò che `pageBox()` dà è cambiato: un'immagine di pagina è arrivata, o
   /// è andata via. La tela ridisegna l'inchiostro della scheda (T19): anche
   /// quello che segue il contenuto, perché con la pagina cambia

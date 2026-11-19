@@ -2645,6 +2645,42 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(`${cards}[data-card-chosen="true"]`);
     },
   })),
+  // La zona lavagna (T47, il passo 18 del prototipo): il percorso della
+  // visita a riposo, tutto nella scheda; scelto coi Blocchi (attivo, poi
+  // Esc); attivo, la lavagna vera con la barra della selezione e senza la
+  // colonna degli strumenti; attivo nella finestra minima.
+  ...[
+    ["scheda-lavagna-01-riposo", "Il percorso della visita a riposo: tutta la lavagna nella scheda", "rest"],
+    ["scheda-lavagna-02-scelta", "Il percorso scelto coi Blocchi, dopo Esc", "chosen"],
+    ["scheda-lavagna-03-attiva", "Il percorso attivo: le schede si spostano, senza la colonna degli strumenti", "active"],
+    ["scheda-lavagna-04-attiva-stretta", "Il percorso attivo nella finestra minima", "active", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-lavagna",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="canvas"]';
+      // La lavagna a riposo mostra le sue quattro schede.
+      await page.waitForFunction((selector) => {
+        const root = document.querySelector(selector);
+        return root?.dataset.cardState === "view"
+          && root.querySelector('.canvas-card-board[data-card-board="board"]') !== null
+          && root.querySelectorAll(".canvas-card-board-rest .canvas-node").length === 4;
+      }, card);
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (state === "rest") return;
+      await page.click(`${card} .live-card-body`);
+      await page.waitForFunction((selector) => {
+        const writer = document.querySelector(`${selector}[data-card-active="true"] .canvas-card-board-editor:not([hidden])`);
+        return writer !== null && writer.querySelectorAll(".canvas-node").length === 4;
+      }, card);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+    },
+  })),
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le

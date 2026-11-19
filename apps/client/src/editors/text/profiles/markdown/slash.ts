@@ -546,6 +546,12 @@ export function runSlashAction(
 /// `panels/slash/entries.ts`, che la mette nel menu.
 export const BASE_ACTION = "markdown.base";
 
+/// L'azione «Lavagna» del «/» (E25, T47): crea `Nome.canvas` accanto alla
+/// nota, vuota, scrive `![[Nome.canvas]]` al posto della riga del «/» e apre
+/// la zona lavagna già attiva. Lo stesso id di `CANVAS_ENTRY` in
+/// `panels/slash/entries.ts`.
+export const CANVAS_ACTION = "markdown.canvas";
+
 /// L'azione «Blocco di un'altra nota» del «/» (E14, T30): sceglie una nota e
 /// un suo blocco, gli dà l'id se manca e scrive qui la sua trasclusione, il
 /// blocco sincronizzato (`blocks/sync-to.ts`). Lo stesso id di
@@ -639,21 +645,22 @@ export interface NewBasePort {
 
 /// Il nome di una Base come lo scrive l'utente, pulito: senza `.base` e
 /// senza i caratteri che romperebbero il link (`# | ^ [ ]`) o il nome del
-/// file su un sistema (`/ \ : * ? " < >`). Vuoto se non resta niente.
-export function baseStem(name: string): string {
+/// file su un sistema (`/ \ : * ? " < >`). Vuoto se non resta niente. Con
+/// `extension` lo stesso per un altro file nato dal «/» (`canvas`, T47).
+export function baseStem(name: string, extension = "base"): string {
   return name
-    .replace(/\.base\s*$/i, "")
+    .replace(new RegExp(`\\.${extension}\\s*$`, "i"), "")
     .replace(/[\\/#|^[\]:*?"<>\u0000-\u001f\u007f]+/g, " ")
     .replace(/\s+/g, " ")
     .replace(/^[\s.]+|[\s.]+$/g, "");
 }
 
 /// Il nome numero `n` per `stem`: `stem` per il primo, poi «stem 2»,
-/// «stem 3»…, accorciato perché il file stia in 255 byte.
-export function baseName(stem: string, n = 1): string {
+/// «stem 3»…, accorciato perché il file stia in 255 byte con `.extension`.
+export function baseName(stem: string, n = 1, extension = "base"): string {
   const suffix = n <= 1 ? "" : ` ${n}`;
   const encoder = new TextEncoder();
-  const room = BASE_FILE_BYTES - encoder.encode(`${suffix}.base`).byteLength;
+  const room = BASE_FILE_BYTES - encoder.encode(`${suffix}.${extension}`).byteLength;
   let kept = "";
   let used = 0;
   for (const char of stem) {
@@ -760,24 +767,39 @@ function alreadyExists(error: unknown): boolean {
 
 /// Il primo nome libero da `stem` in su: «stem», o «stem 2», «stem 3»…
 /// Un nome che finisce già con un numero continua da lì.
-async function freeBaseName(port: NewBasePort, stem: string, skip: boolean): Promise<string> {
+async function freeBaseName(port: NewBasePort, stem: string, skip: boolean, extension = "base"): Promise<string> {
   const numbered = /^(.*\S) (\d{1,6})$/.exec(stem);
   const root = numbered ? numbered[1]! : stem;
   const first = numbered ? Number(numbered[2]) : 1;
-  let candidate = baseName(root, first);
+  let candidate = baseName(root, first, extension);
   for (let n = first + (skip ? 1 : 0), tries = 0; tries < BASE_NAME_TRIES; n++, tries++) {
-    candidate = baseName(root, n);
-    if (!(await port.taken(`${candidate}.base`))) return candidate;
+    candidate = baseName(root, n, extension);
+    if (!(await port.taken(`${candidate}.${extension}`))) return candidate;
   }
   return candidate;
 }
 
-/// Crea la Base dal «/» (o da un menu, con `from === to` sul cursore): chiede
-/// il nome, crea il file e scrive l'embed al posto di `from..to`. `true` se
-/// l'embed è entrato nella nota. Non tiene ferma la finestra: aspetta il nome
-/// e l'host, e intanto la nota resta scrivibile.
-export async function createBaseHere(view: EditorView, from: number, to: number, port: NewBasePort): Promise<boolean> {
-  const viewName = liveStrings.t("base.new.view");
+/// Ciò che distingue un file nato dal «/» da un altro: la Base (E12) e la
+/// lavagna (T47) passano dallo stesso gesto.
+interface NewFileKind {
+  /// L'estensione, senza punto.
+  readonly extension: string;
+  /// Il nome di serie se la nota non ne dà uno.
+  readonly fallback: string;
+  /// Il testo del file nato nella cartella `folder`.
+  text(folder: string): string;
+  /// L'embed del file `name` (senza estensione).
+  embed(name: string): string;
+  /// Le frasi per l'errore e per il file rimasto senza embed.
+  failed(name: string, reason: string): string;
+  orphan(name: string): string;
+}
+
+/// Il gesto comune: chiede il nome, crea il file e scrive l'embed al posto
+/// di `from..to`. L'inizio della riga dell'embed scritto, o `null` se
+/// l'embed non è entrato nella nota.
+async function createFileHere(view: EditorView, from: number, to: number, port: NewBasePort, kind: NewFileKind): Promise<number | null> {
+  const { extension } = kind;
   const id = ++baseIds;
   if (view.state.field(pendingBases, false) === undefined) {
     view.dispatch({ effects: StateEffect.appendConfig.of(pendingBases) });
@@ -786,38 +808,39 @@ export async function createBaseHere(view: EditorView, from: number, to: number,
   try {
     const cut = port.note.lastIndexOf("/");
     const folder = cut < 0 ? "" : port.note.slice(0, cut);
-    const title = baseStem(pageName(port.note)) || viewName;
-    let proposal = await freeBaseName(port, title, false);
+    const title = baseStem(pageName(port.note), extension) || kind.fallback;
+    let proposal = await freeBaseName(port, title, false, extension);
     let taken: string | null = null;
     for (;;) {
       const answer = await port.ask(proposal, taken);
-      if (answer === null || !port.writable()) return false;
-      const name = baseName(baseStem(answer) || proposal);
+      if (answer === null || !port.writable()) return null;
+      const name = baseName(baseStem(answer, extension) || proposal, 1, extension);
       // Un nome cambiato a mano si controlla di nuovo: quello proposto lo è già.
-      if (name !== proposal && (await port.taken(`${name}.base`))) {
+      if (name !== proposal && (await port.taken(`${name}.${extension}`))) {
         taken = name;
-        proposal = await freeBaseName(port, name, true);
+        proposal = await freeBaseName(port, name, true, extension);
         continue;
       }
-      if (!port.writable()) return false;
+      if (!port.writable()) return null;
       try {
-        await port.create(folder === "" ? `${name}.base` : `${folder}/${name}.base`, baseFileText(folder, viewName));
+        await port.create(folder === "" ? `${name}.${extension}` : `${folder}/${name}.${extension}`, kind.text(folder));
       } catch (error) {
         if (!alreadyExists(error)) {
-          port.notify(liveStrings.t("base.new.failed", { name, reason: errorText(error) }));
-          return false;
+          port.notify(kind.failed(name, errorText(error)));
+          return null;
         }
         // Nato nel frattempo, o non ancora nell'indice: il nome dopo.
         taken = name;
-        proposal = await freeBaseName(port, name, true);
+        proposal = await freeBaseName(port, name, true, extension);
         continue;
       }
       const range = view.state.field(pendingBases, false)?.get(id);
       if (!range || !port.writable()) {
-        port.notify(liveStrings.t("base.new.orphan", { name }));
-        return false;
+        port.notify(kind.orphan(name));
+        return null;
       }
-      const at = baseInsertion(view.state, range.from, range.to, baseEmbed(name, viewName));
+      const embed = kind.embed(name);
+      const at = baseInsertion(view.state, range.from, range.to, embed);
       view.dispatch({
         changes: { from: at.from, to: at.to, insert: at.insert },
         selection: EditorSelection.cursor(at.cursor),
@@ -825,12 +848,55 @@ export async function createBaseHere(view: EditorView, from: number, to: number,
         userEvent: "input.complete",
       });
       view.focus();
-      return true;
+      // L'embed sta dopo ciò che restava della riga del «/».
+      const embedAt = at.from + at.insert.indexOf(embed);
+      return view.state.doc.lineAt(Math.min(embedAt, view.state.doc.length)).from;
     }
   } finally {
     // Anche su un editor già chiuso: CodeMirror allora aggiorna solo lo stato.
     view.dispatch({ effects: trackBase.of({ id, drop: true }) });
   }
+}
+
+/// Crea la Base dal «/» (o da un menu, con `from === to` sul cursore): chiede
+/// il nome, crea il file e scrive l'embed al posto di `from..to`. `true` se
+/// l'embed è entrato nella nota. Non tiene ferma la finestra: aspetta il nome
+/// e l'host, e intanto la nota resta scrivibile.
+export async function createBaseHere(view: EditorView, from: number, to: number, port: NewBasePort): Promise<boolean> {
+  const viewName = liveStrings.t("base.new.view");
+  const line = await createFileHere(view, from, to, port, {
+    extension: "base",
+    fallback: viewName,
+    text: (folder) => baseFileText(folder, viewName),
+    embed: (name) => baseEmbed(name, viewName),
+    failed: (name, reason) => liveStrings.t("base.new.failed", { name, reason }),
+    orphan: (name) => liveStrings.t("base.new.orphan", { name }),
+  });
+  return line !== null;
+}
+
+/// Il testo di una lavagna nuova: JSON Canvas vuoto, come lo scrive la
+/// lavagna (R6: `JSON.stringify` a due spazi e un a capo in fondo).
+export const EMPTY_CANVAS_TEXT = `${JSON.stringify({ nodes: [], edges: [] }, null, 2)}\n`;
+
+/// L'embed della lavagna `name`.
+export function canvasEmbed(name: string): string {
+  return `![[${name}.canvas]]`;
+}
+
+/// Crea la lavagna dal «/» (T47) come la Base: chiede il nome, crea
+/// `Nome.canvas` vuota accanto alla nota, scrive l'embed al posto di
+/// `from..to`. L'inizio della riga dell'embed, per attivarne la scheda, o
+/// `null` se l'embed non è entrato nella nota.
+export async function createCanvasHere(view: EditorView, from: number, to: number, port: NewBasePort): Promise<number | null> {
+  return createFileHere(view, from, to, port, {
+    extension: "canvas",
+    fallback: liveStrings.t("canvas.new.fallback"),
+    text: () => EMPTY_CANVAS_TEXT,
+    embed: canvasEmbed,
+    failed: (name, reason) => liveStrings.t("canvas.new.failed", { name, reason }),
+    orphan: (name) => liveStrings.t("canvas.new.orphan", { name }),
+  });
 }
 
 // ── I completamenti che una voce riapre ──────────────────────────────────────

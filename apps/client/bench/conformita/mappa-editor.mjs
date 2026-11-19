@@ -536,6 +536,17 @@ export const VISTE = {
     },
     app: { scena: "valori-cella-01-scrittura" },
   },
+  // La zona lavagna (T47): quella del prototipo a riposo, la lavagna intera
+  // nella sua zona; nel banco il percorso della visita, a riposo.
+  "scheda-lavagna": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .scard[data-kind="canvas"] .cvz .cvn');
+      },
+    },
+    app: { scena: "scheda-lavagna-01-riposo" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1654,6 +1665,25 @@ export const PEZZI = [
     app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
     gesto: { tipo: "hover", prototipo: '[data-id="p-conti"] .cellv', app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]' },
     proprieta: ["background-color", "border-radius"],
+  },
+  // La zona lavagna: il fondo del vassoio al 60% sul foglio, alta 300 px
+  // (`|640x300`), col puntatore della scheda che si attiva con un clic. Le
+  // schede e i fili sono quelli della lavagna (eccezioni-editor.json).
+  {
+    id: "schede.lavagna.zona",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest .canvas-viewport',
+    proprieta: ["background-color", "height"],
+  },
+  {
+    id: "schede.lavagna.riposo",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest',
+    proprieta: ["cursor", "overflow"],
   },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {

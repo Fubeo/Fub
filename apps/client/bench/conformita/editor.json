@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit c53859121b42c53d2dd983ee91c9a8339273ff18.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 1d43c567eee45342a510fbfc7f3d711c10a5d21d.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "c53859121b42c53d2dd983ee91c9a8339273ff18",
+  "commit": "1d43c567eee45342a510fbfc7f3d711c10a5d21d",
   "file": "PLAN-ui/editor.html",
   "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {
@@ -22879,6 +22879,102 @@
             "var(--accent-veil)"
           ]
         }
+      }
+    },
+    "schede.lavagna.zona": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.964706 0.977255 0.968627)",
+          "height": "295px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.0886275 0.123922 0.100392)",
+          "height": "295px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.964706 0.977255 0.968627)",
+          "height": "279px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "color(srgb 0.0886275 0.123922 0.100392)",
+          "height": "279px"
+        },
+        "fub": {
+          "background-color": [
+            "color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg))",
+            "color-mix(in srgb, var(--doc-fill) 60%, var(--doc-bg))"
+          ]
+        }
+      }
+    },
+    "schede.lavagna.riposo": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"canvas\"] .cvz",
+        "contesto": "documento",
+        "proprieta": {
+          "cursor": "pointer",
+          "overflow": "hidden"
+        },
+        "fub": {}
       }
     }
   }

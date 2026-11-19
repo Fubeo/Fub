@@ -147,6 +147,40 @@ d'immagine (`kinds/image.ts`) con l'editor dei disegni compatto
 (`editors/spatial/surface.ts` con `compact`, la cromatura `cardChrome` di
 `editors/spatial/tools/editor/chrome/hosts.ts`).
 
+## La zona lavagna
+
+Una lavagna (`.canvas`) incorporata da sola nel paragrafo è una **zona
+lavagna**: un pezzo di nota dove lo spazio è libero, alto quanto dice
+l'embed (`![[Percorso della visita.canvas|640x300]]`). La nota resta una
+colonna che si legge dall'alto in basso; posizioni, fili e tratti stanno nel
+`.canvas`, la nota tiene solo l'embed.
+
+- **A riposo** si vede tutta la lavagna, inquadrata nella zona; la testata
+  dice quante schede ha. La rotella scorre la nota, un clic attiva la zona.
+- **Da attiva** è la lavagna vera, sulla stessa sessione della sua
+  linguetta: si spostano le schede, si tirano i fili, si scrive nelle
+  schede, e la penna c'è (il tasto P e il menu radiale); scegliendo delle
+  schede compare la barra della selezione. La testata, la barra dei comandi,
+  la colonna degli strumenti e il navigatore non ci sono: tornano **A tutta
+  pagina**. Si scrive nel `.canvas`, mai nella nota; Esc esce e la zona
+  torna a mostrare tutta la lavagna.
+- **«Lavagna»** nel menu «/» chiede il nome (di base «Lavagna», poi
+  «Lavagna 2», …), crea una lavagna vuota accanto alla nota, scrive l'embed
+  e apre la zona già attiva. Se la lavagna non si crea la nota resta
+  com'era. C'è solo col componente della lavagna acceso.
+- Una lavagna vuota mostra la griglia; una grandissima si guarda intera,
+  rimpicciolita fino al limite dello zoom.
+- Una lavagna che contiene la nota che la contiene si annida al più per tre
+  livelli: oltre, la zona dice perché non si apre e offre **Apri**.
+- Col componente della lavagna spento, o in una nota che si guarda soltanto,
+  la zona si guarda e basta.
+
+La specie è `editors/core/cards/kinds/canvas.ts`, che monta la superficie
+della lavagna (`editors/canvas/surface.ts`) in forma compatta: due editor
+dalla porta degli editor, quello di sola lettura a riposo e quello che scrive
+da attiva. La pelle sta nella sezione T47 di
+`theme/scrittoio/skin/live-cards.css`.
+
 ## Il foglio nella nota
 
 `![[Conti.xlsx#Budget!A1:E7]]` mostra soltanto quella parte del foglio. La

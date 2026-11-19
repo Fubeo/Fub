@@ -1572,6 +1572,11 @@
     "draw-dock",
     "cm-fub-cell-value",
     "fub-cell-value",
+    "canvas-card-board",
+    "canvas-card-board-rest",
+    "canvas-card-board-editor",
+    "canvas-card-board-message",
+    "canvas-body",
     "draw-export",
     "draw-export-text",
     "draw-group",
@@ -3860,6 +3865,11 @@
     "draw-dock": "cornice",
     "cm-fub-cell-value": "contenuto",
     "fub-cell-value": "contenuto",
+    "canvas-card-board": "cornice",
+    "canvas-card-board-rest": "cornice",
+    "canvas-card-board-editor": "cornice",
+    "canvas-card-board-message": "cornice",
+    "canvas-body": "cornice",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-group": "cornice",
@@ -8482,6 +8492,29 @@
       ]
     },
     {
+      "name": "live-card-canvas",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-board",
+        "canvas-card-board-rest",
+        "canvas-card-board-editor",
+        "canvas-card-board-message",
+        "canvas-viewport",
+        "canvas-grid",
+        "canvas-body",
+        "canvas-header",
+        "canvas-toolbar",
+        "canvas-rail",
+        "canvas-navigator",
+        "kit-button"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11967,10 +12000,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2286,
+    "hooks": 2291,
     "state_names": 7,
-    "assigned_states": 1034,
-    "components": 308,
+    "assigned_states": 1037,
+    "components": 309,
     "preference_tokens": 196
   }
 }
