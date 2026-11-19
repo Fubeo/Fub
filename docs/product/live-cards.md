@@ -262,9 +262,9 @@ la cartella mostrata e basta: niente facciata, giornale e revisione come
 prima. Risponde `{found: true, kind, sheet, range}` con l'id del foglio della
 sessione, o `{found: false, parts}` con i fogli visibili, i nomi e le tabelle;
 un nome definito vale se è un solo rettangolo. La scheda lo chiede a ogni
-apertura della sua sessione: è `apps/client/src/editors/grid/card.ts`. Venti
-fogli vivi in una nota non pesano sulla battuta: lo misura la nota
-`battuta-schede-20` di `node bench/interaction.mjs --only=battuta`.
+apertura della sua sessione: è `apps/client/src/editors/grid/card.ts`. Quanto
+pesano le schede vive sulla battuta lo dice
+[la misura](live-cards-measures.md#quanto-pesano-sulla-battuta).
 
 ## Un valore nel testo
 
@@ -412,7 +412,9 @@ foglio (`SurfaceActiveCell`, `editors/grid/compact.ts`).
 ## I limiti
 
 - Fuori dalla vista le schede sono immagini ferme; vive ce ne sono al più
-  quante ne tiene la lavagna, le più vicine al centro, e quella attiva sempre.
+  quaranta, quante ne tiene la lavagna, le più vicine al centro, e quella
+  attiva sempre. Le misure e la prova con Obsidian:
+  [quante, quanto pesano, in Obsidian](live-cards-measures.md).
 - Un file che non c'è dice «File mancante: …», con **Ritrova…** (un file del
   vault al suo posto: l'embed lo nomina, con la parte e il testo dopo la
   barra) e **Togli dalla nota**.

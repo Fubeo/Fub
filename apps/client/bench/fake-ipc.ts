@@ -3069,14 +3069,15 @@ function withChart<W extends { sheet: string; row_start: number; column_start: n
 
 /// Le parti che le schede di foglio della nota chiedono (`fub.part`, T43),
 /// solo nella Live delle schede vive (`live=schede-vive`) e nella battuta con
-/// le schede (`live=battuta-schede-20`), e le celle dei valori nel testo (T53,
+/// le schede (`live=battuta-schede-<n>`), e le celle dei valori nel testo (T53,
 /// `live=valori-cella` e `live=battuta-valori-100`) e negli estratti (T49,
 /// `live=estratti`): la risposta che
 /// `fub-format-xlsx/src/parts.rs` darebbe per la cartella del banco, che non
 /// ricalcola e non scrive. Una parte sconosciuta è persa, con le parti che la
 /// cartella ha.
-const SHEET_PARTS_CASES = new Set(["schede-vive", "battuta-schede-20", "valori-cella", "battuta-valori-100", "grafici", "estratti"]);
-const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.has(params.get("live") ?? "")
+const SHEET_PARTS_CASES = new Set(["schede-vive", "valori-cella", "battuta-valori-100", "grafici", "estratti"]);
+const SHEET_PARTS_LIVE = params.get("live") ?? "";
+const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.has(SHEET_PARTS_LIVE) || SHEET_PARTS_LIVE.startsWith("battuta-schede-")
   ? {
       "": { found: true, kind: "active", sheet: "s1", range: "A1:F6" },
       "Conti!A1:C4": { found: true, kind: "range", sheet: "s1", range: "A1:C4" },

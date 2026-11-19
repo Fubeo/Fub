@@ -384,13 +384,62 @@ export function typingNote(sections: number): LiveCase {
   return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
 }
 
-/// La nota della battuta con le schede (T43, A-5): `sections` sezioni come
-/// in `typingNote`, e dopo ciascuna delle prime `cards` un foglio vivo, la
-/// stessa parte della cartella del banco.
-export function typingCardsNote(sections: number, cards: number): LiveCase {
-  const parts = Array.from({ length: sections }, (_, i) => (i < cards ? `${section(i)}\n![[Conti.xlsx#Conti!A1:C4]]\n` : section(i)));
+/// La scheda di un file Craft nella nota (T56): il logo dello studio di
+/// VectorCraft del banco (`craft-scheda=<caso>`, `craft-fixture.ts`), da solo
+/// nel paragrafo.
+const CRAFT_CARD_NOTE = [
+  "# Il marchio nuovo",
+  "",
+  "Il logo dello studio, come l'ha disegnato Teo:",
+  "",
+  "![[logo-studio.vectorcraft]]",
+  "",
+  "Da chiedere: la versione in bianco e nero.",
+].join("\n");
+
+/// Le specie della nota della battuta con le schede, in giro: il foglio e il
+/// contratto del banco (`workbook=1`, `pdf-scena`), il verbale in ODT, la
+/// pianta di Fub in SVG e il percorso della visita (una zona lavagna).
+const TYPING_CARD_EMBEDS = [
+  "Conti.xlsx#Conti!A1:C4",
+  "contratto-affitto.pdf",
+  "Verbale.odt",
+  "Pianta del soggiorno.svg",
+  "Percorso della visita.canvas",
+];
+
+/// Il file della nota della battuta che non c'è (T56): una scheda «File
+/// mancante» in mezzo alle altre.
+export const TYPING_CARD_MISSING = "Contratto vecchio.pdf";
+
+/// La nota della battuta con le schede (T43, T56, A-5): `sections` sezioni
+/// come in `typingNote` e, a metà, `cards` schede in righe di quattro colonne
+/// (`[!columns]`, alte 120 px), le specie in giro; con `missing` la seconda
+/// scheda della seconda riga nomina un file che non c'è. Il cursore è nella
+/// sezione subito dopo le schede: le schede stanno tutte nella vista di
+/// CodeMirror, montate e vive (al più `MAX_LIVE_CARDS`), mentre si scrive.
+export function typingCardsNote(sections: number, cards: number, missing = false): LiveCase {
+  const row = (from: number): string => {
+    const columns: string[] = [];
+    for (let i = from; i < Math.min(cards, from + 4); i += 1) {
+      const target = missing && i === 5 ? TYPING_CARD_MISSING : TYPING_CARD_EMBEDS[i % TYPING_CARD_EMBEDS.length];
+      columns.push(`> > [!column]\n> > ![[${target}|160x120]]`);
+    }
+    return `> [!columns]\n${columns.join("\n>\n")}\n`;
+  };
+  const rows = Array.from({ length: Math.ceil(cards / 4) }, (_, r) => row(r * 4));
+  const middle = Math.floor(sections / 2);
+  const parts = Array.from({ length: sections }, (_, i) => (i === middle ? `${rows.join("\n")}\n${section(i)}` : section(i)));
   const text = `${parts.join("\n")}\nFine.`;
-  return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
+  return {
+    text,
+    cursor: text.indexOf(`Testo **forte** e *corsivo* con [[Nota ${middle}]]`),
+    files: {
+      [DOCUMENT_CARD_FILE]: RICH_BENCH.odt,
+      [DRAWING_CARD_FILE]: DRAWING_CARD_SVG,
+      [CANVAS_CARD_FILE]: CANVAS_CARD_BOARD,
+    },
+  };
 }
 
 /// La battuta coi valori di cella nel testo (T53, A-5): `sections` sezioni e
@@ -935,11 +984,18 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     files: { [DRAWING_CARD_FILE]: DRAWING_CARD_SVG, [DRAWING_CARD_FOREIGN]: DRAWING_CARD_FOREIGN_SVG },
   },
   "schede-pdf": { text: LIVE_CARDS_PDF_NOTE, cursor: null },
+  // La scheda di un file Craft (T56): il file lo mette `craft-scheda`.
+  "scheda-craft": { text: CRAFT_CARD_NOTE, cursor: null },
   // La zona lavagna (T47).
   "scheda-lavagna": { text: CANVAS_CARD_NOTE, cursor: null, files: { [CANVAS_CARD_FILE]: CANVAS_CARD_BOARD } },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
-  "battuta-schede-20": typingCardsNote(50, 20),
+  // La battuta con le schede (T43, T56): venti schede, una col file che non
+  // c'è; poi quaranta (il limite delle vive, `MAX_LIVE_CARDS`) e sessanta,
+  // oltre il limite.
+  "battuta-schede-20": typingCardsNote(50, 20, true),
+  "battuta-schede-40": typingCardsNote(50, 40),
+  "battuta-schede-60": typingCardsNote(50, 60),
   // I valori di cella nel testo (T53): la nota del prototipo e la battuta
   // con cento valori.
   "valori-cella": { text: CELL_VALUES_NOTE, cursor: null },
