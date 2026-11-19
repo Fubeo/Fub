@@ -277,6 +277,9 @@ libero. Un tratto attaccato segue la scheda quando si sposta o si
 ridimensiona; su un PDF segue la pagina, su un foglio la cella. Una penna
 tenuta ferma alla fine diventa una forma, Maiusc tira dritto, il righello
 guida il tratto, il Lazo sceglie e sposta schede e tratti insieme.
+Ogni tratto è un passo della cronologia: Ctrl+Z subito dopo lo toglie,
+anche col fuoco sul pulsante della Penna o in una scheda che si sta
+scrivendo (lì prima i tratti, poi il testo).
 
 L'inchiostro sta nel `.canvas`, nei campi `fub:ink`: Obsidian non lo disegna
 ma lo conserva quando riscrive il file. Il formato sta
