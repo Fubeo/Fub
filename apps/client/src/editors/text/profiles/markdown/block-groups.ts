@@ -178,6 +178,10 @@ export interface BlockGroupHost {
   /// Attiva la scheda viva del blocco che comincia in `start` (`live-cards.ts`):
   /// `false` se lì non c'è una scheda che si attiva. Senza, la voce non c'è.
   activateCard?(start: number): boolean;
+  /// «Annota» sulla scheda viva del blocco che comincia in `start` (T49): la
+  /// avvolge in una zona lavagna. `false` se lì non si annota. Senza, la voce
+  /// non c'è.
+  annotateCard?(start: number): boolean;
 }
 
 /// Il gruppo di una scheda di foglio attiva nella nota (T43, prototipo passo
@@ -388,6 +392,14 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
       id: "markdown.card.activate",
       label: liveStrings.t("blockgroup.card.activate"),
       run: () => void host.activateCard?.(block.start),
+    }] : []),
+    // «Annota» (T49): la scheda in una zona lavagna, dove si disegna. Una
+    // lavagna è già una zona, e un valore nel testo non è una scheda.
+    ...(writable && host.annotateCard && !shownAsValue(block) && !/\.canvas$/i.test(block.page) ? [{
+      id: "markdown.card.annotate",
+      label: liveStrings.t("blockgroup.card.annotate"),
+      icon: "pen",
+      run: () => void host.annotateCard?.(block.start),
     }] : []),
     ...(writable ? cardLayout(block, host) : []),
     ...(writable ? [{

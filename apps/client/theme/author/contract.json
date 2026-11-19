@@ -1545,6 +1545,7 @@
     "live-card-open",
     "live-card-full",
     "live-card-label",
+    "live-card-extract",
     "live-card-resize",
     "live-card-missing",
     "live-card-unsupported",
@@ -1577,6 +1578,11 @@
     "canvas-card-board-editor",
     "canvas-card-board-message",
     "canvas-body",
+    "live-card-excerpt",
+    "live-card-excerpt-wait",
+    "live-card-excerpt-source",
+    "live-card-excerpt-name",
+    "live-card-excerpt-go",
     "draw-export",
     "draw-export-text",
     "draw-group",
@@ -3919,6 +3925,7 @@
     "live-card-open": "cornice",
     "live-card-full": "cornice",
     "live-card-label": "cornice",
+    "live-card-extract": "cornice",
     "live-card-resize": "cornice",
     "live-card-missing": "cornice",
     "live-card-unsupported": "cornice",
@@ -3951,6 +3958,11 @@
     "canvas-card-board-editor": "cornice",
     "canvas-card-board-message": "cornice",
     "canvas-body": "cornice",
+    "live-card-excerpt": "contenuto",
+    "live-card-excerpt-wait": "contenuto",
+    "live-card-excerpt-source": "contenuto",
+    "live-card-excerpt-name": "contenuto",
+    "live-card-excerpt-go": "contenuto",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-group": "cornice",
@@ -8501,7 +8513,8 @@
         "live-card-done",
         "live-card-open",
         "live-card-full",
-        "live-card-label"
+        "live-card-label",
+        "live-card-extract"
       ],
       "states": [
         "rest",
@@ -8673,6 +8686,22 @@
       "states": [
         "rest",
         "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "live-card-excerpt",
+      "part": "live-cards",
+      "hooks": [
+        "live-card-excerpt",
+        "live-card-excerpt-wait",
+        "live-card-excerpt-source",
+        "live-card-excerpt-name",
+        "live-card-excerpt-go"
+      ],
+      "states": [
+        "rest",
+        "hover",
         "focused"
       ]
     },
@@ -12322,10 +12351,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2372,
+    "hooks": 2378,
     "state_names": 7,
-    "assigned_states": 1059,
-    "components": 315,
+    "assigned_states": 1062,
+    "components": 316,
     "preference_tokens": 196
   }
 }

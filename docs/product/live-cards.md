@@ -17,7 +17,9 @@ parte) e **A tutta pagina** (la scheda alta quanto la vista; «Torna alla nota»
 la riporta com'era).
 
 Non sono schede le note (la [trasclusione viva](editor-transclusion.md)), le
-immagini, i suoni, i video e le Basi, che la nota mostra già a modo suo; per ora neanche le lavagne, che restano la resa di sempre. Un embed in mezzo a una frase resta un embed.
+immagini, i suoni, i video e le Basi, che la nota mostra già a modo suo; una
+lavagna è una [zona lavagna](#la-zona-lavagna). Un embed in mezzo a una frase
+resta un embed.
 
 ## Tre stati
 
@@ -298,6 +300,59 @@ la voce sta nel menu di `table-grid.ts`, la scrittura in `table-widget.ts`.
 Le scene `grafici-*` del banco (`live=grafici&workbook=1`) mostrano il grafico
 del foglio, quello che il file non ha, la torta scritta da una tabella e il
 menu con la voce.
+
+## Gli estratti e «Annota»
+
+Un **estratto** è un pezzo di un file messo nella nota col suo legame alla
+fonte: un embed la cui parte nomina il pezzo. Il pezzo resta nel file, e la
+nota tiene soltanto il riferimento: quando la fonte cambia l'estratto mostra
+com'è adesso.
+
+- **Estrai** sta nella testata della scheda attiva di un foglio. Scelte delle
+  celle, scrive sotto la scheda (dopo il riquadro, se la scheda sta in una
+  citazione o nelle colonne) un paragrafo nuovo con l'estratto,
+  `![[Conti.xlsx#Budget!B2:C4]]` (il foglio fra apici se serve:
+  `'Conti 2025'!A1`), staccato da una riga vuota sopra e sotto; la scheda
+  esce e l'estratto, che è una scheda di foglio sulla sua parte, viene in
+  vista. Un passo d'annullamento. Senza celle scelte, o con un nome di foglio
+  che non si scrive in un collegamento (`#`, `|`), il pulsante è spento e dice
+  perché. Un estratto di un estratto è un altro intervallo dello stesso file.
+- **La fonte cambiata**: l'estratto rilegge la sua parte a ogni cambio del
+  file; un intervallo scritto resta quello, e se il suo foglio non c'è più
+  dice «Intervallo non trovato» con **Scegli di nuovo**, come ogni foglio
+  nella nota. **La fonte tolta**: «File mancante», con **Ritrova…**.
+- **I PDF**: gli estratti di PDF arrivano col motore dei PDF, che legge il
+  testo di un passo e lo ritrova dopo un cambio. Finché non c'è, sulla scheda
+  PDF **Estrai** è spento e dice perché. Un passo scritto da un'altra app
+  (`![[Contratto.pdf#page=2&selection=4,0,4,163]]`, come lo scrive Obsidian)
+  si mostra come una citazione con la barra gialla, che dice che il testo lo
+  leggerà il motore dei PDF, e sotto la fonte («Contratto.pdf · p. 2») con
+  **Vai alla pagina**, che apre il PDF a quella pagina; in Lettura è il
+  collegamento alla pagina. L'embed non cambia.
+- Le note hanno già i loro estratti, la [trasclusione viva](editor-transclusion.md)
+  (`![[Verbale#^decisioni]]`); un'immagine si ritaglia sulla lavagna, non
+  nella nota.
+
+**Annota**, nel menu del blocco di una scheda, avvolge la scheda in una
+[zona lavagna](#la-zona-lavagna): crea accanto alla nota una lavagna
+«Contratto (annotazioni)» (poi «Contratto (annotazioni) 2», …) con dentro
+soltanto quella scheda, il file con la sua parte, alla misura della scheda;
+nella nota l'embed diventa `![[Contratto (annotazioni).canvas|700x436]]` (la
+misura scritta resta) e la zona si apre già attiva, con la penna. Si disegna
+nel `.canvas`: la nota cambia solo nell'embed e il file della scheda non
+cambia mai; l'inchiostro sopra una pagina di PDF resta attaccato alla pagina
+(`fub:ink`, [l'ancora di pagina](../reference/canvas-ink-anchors.md)).
+Annullare toglie la zona dalla nota e lascia la lavagna, come dopo
+«Lavagna» del «/». Se la lavagna non si crea la nota resta com'era e un
+avviso dice perché. Non c'è su una zona lavagna (lo è già), in una nota che
+si guarda soltanto o col componente della lavagna spento.
+
+Il pulsante e la citazione stanno in `live-cards.ts` (con la pelle nella
+sezione T49 di `theme/scrittoio/skin/live-cards.css`), il testo della
+lavagna di «Annota» in `editors/core/cards/kinds/canvas.ts`
+(`annotationBoardText`); il passo di PDF lo legge `pdfPassage` di
+`markdown/media.ts`. Le celle scelte arrivano dalla superficie compatta del
+foglio (`SurfaceActiveCell`, `editors/grid/compact.ts`).
 
 ## I limiti
 
