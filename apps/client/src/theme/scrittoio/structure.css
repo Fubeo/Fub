@@ -258,6 +258,17 @@
   white-space: nowrap;
 }
 
+/* Una tabella di bottoni (i giorni di un mese: il calendario del cassetto, il
+   mese della Scrivania) sta nella larghezza che ha: colonne uguali, nessuna
+   spinta fuori dal bordo dalla misura dei bottoni. Con la disposizione
+   automatica otto colonne volevano 423 px in un cassetto di 240, e giovedì,
+   venerdì e sabato restavano fuori, senza clic (IMP-2802). È una garanzia e
+   non una veste: un tema può stringere o allargare le celle, non far uscire
+   un giorno dal calendario. */
+.ui-table:has(td > .ui-button) {
+  table-layout: fixed;
+}
+
 .ui-webview-frame {
   display: inline-block;
   line-height: 0;
