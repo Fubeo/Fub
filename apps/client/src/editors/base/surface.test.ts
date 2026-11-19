@@ -970,30 +970,34 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
   ];
   const applyButton = (pop: HTMLElement) => [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Applica")!;
 
-  it("una proprietà che le righe lette non portano si filtra lo stesso: la barra avverte, Applica resta", async () => {
+  it("una proprietà che nessuna nota ha si filtra lo stesso: la barra avverte, Applica resta", async () => {
     const { host, invokeCommand, deliver, done } = mount({}, { rows: works, narrow: true });
     try {
       await ready(host);
       host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
       let pop = popover("base-filter-popover");
+      // Una proprietà delle note che la vista non mostra né chiede: le righe
+      // si leggono con tutte le proprietà, quindi è fra le scelte (IMP-413).
+      expect(pop.textContent).not.toContain("non è fra le proprietà");
       const search = pop.querySelector<HTMLInputElement>(".base-filter-search")!;
       search.value = "[tecnica:olio]";
       search.dispatchEvent(new Event("input"));
-      expect(pop.textContent).toContain("«tecnica» non è fra le proprietà delle righe lette: controlla il nome prima di applicare.");
+      expect(pop.textContent).not.toContain("non è fra le proprietà");
+      // Un nome che nessuna nota ha: la barra avverte, ma non vieta.
+      search.value = "[tecnika:olio]";
+      search.dispatchEvent(new Event("input"));
+      expect(pop.textContent).toContain("«tecnika» non è fra le proprietà delle righe lette: controlla il nome prima di applicare.");
       expect(applyButton(pop).disabled).toBe(false);
+      search.value = "[tecnica:olio]";
+      search.dispatchEvent(new Event("input"));
       applyButton(pop).click();
       expect(JSON.parse(lastSet(invokeCommand)!.value as string)).toEqual({ condition: { property: "tecnica", op: "contains", value: "olio" } });
       deliver();
       await settled(host);
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(1));
-      // Ora il piano la chiede: è fra le proprietà, e non c'è più niente da dire.
       host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
       pop = popover("base-filter-popover");
       expect([...pop.querySelectorAll<HTMLSelectElement>(".base-filter-subject option")].map((each) => each.value)).toContain("tecnica");
-      const again = pop.querySelector<HTMLInputElement>(".base-filter-search")!;
-      again.value = "[tecnica:tempera]";
-      again.dispatchEvent(new Event("input"));
-      expect(pop.textContent).not.toContain("non è fra le proprietà");
     } finally { done(); }
   });
 

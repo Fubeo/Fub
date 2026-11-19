@@ -293,11 +293,10 @@ le salva; se non si salvano, il gesto non parte e la barra lo dice.
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
 o con `OR`, anche negato (`-[stato:Prenotata]`). Il testo libero no: la Base
-dice perché non lo scrive e lascia il filtro com'era. Una proprietà che non è
-una colonna e che le righe lette non hanno si applica lo stesso (le righe
-portano solo le proprietà che la vista chiede), ma la Base avverte di
-controllare il nome: un nome sbagliato non diventa in silenzio un filtro che
-non trova niente. Le scelte e i valori suggeriti vengono dalle righe lette
+dice perché non lo scrive e lascia il filtro com'era. Una proprietà che
+nessuna nota letta ha si applica lo stesso, ma la Base avverte di controllare
+il nome: un nome sbagliato non diventa in silenzio un filtro che non trova
+niente. Le scelte e i valori suggeriti vengono dalle righe lette
 prima del filtro, così un filtro che non trova niente si corregge.
 
 Nella forma a vista una proprietà che nelle righe è sempre una data o sempre
@@ -319,8 +318,12 @@ forma a vista non sa dire (un `or`, un `not` su una proprietà) resta come riga
 di ricerca, e la Base lo dice; uno che neppure la ricerca sa dire (una formula,
 un valore lista) la Base non lo riscrive, lo dice, e si cambia dal file `.base`.
 
-Le proprietà che Filtro e Proprietà propongono sono quelle che le righe caricate
-hanno, con i loro valori come suggerimenti.
+Le proprietà che Filtro e Proprietà propongono sono quelle che le note del
+vault hanno, con i loro valori come suggerimenti, anche quando la vista non ne
+nomina ancora nessuna (una Base appena creata): la Base legge le note con
+tutte le proprietà, prima quelle delle sue righe, al più 200 nomi. A `derive`
+manda solo le proprietà che il piano chiede (`required_props`), o tutte quando
+la vista ha una ricerca (`all_properties`).
 
 Il gesto non scrive, e la barra lo dice sotto le etichette, quando:
 
@@ -346,8 +349,9 @@ modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (
 «+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa,
 Calendario, Linea del tempo. La vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
 **eredita il filtro e le colonne** della vista aperta; una bacheca prende come
-corsie il raggruppamento della vista aperta o la sua prima colonna che è una
-proprietà, una mappa le coordinate della vista aperta o le proprietà `lat` e
+corsie il raggruppamento della vista aperta, la sua prima colonna che è una
+proprietà o, se non ne mostra, la prima proprietà delle note dichiarata Stato
+e poi Selezione nel registro dei tipi, una mappa le coordinate della vista aperta o le proprietà `lat` e
 `lon` (`latitude`/`longitude`) delle righe, un calendario la data della vista
 aperta o la prima proprietà delle righe che ha per valori delle date (la
 linea del tempo la prende come inizio, e la seconda come fine). Senza
