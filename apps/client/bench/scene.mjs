@@ -1405,8 +1405,12 @@ export const SCENE = touchLast(onPage("shell", [
       if (block === "code") {
         await page.click(".pane.focus .pane-editor .cm-content");
         await page.keyboard.press("Control+End");
+        // In fondo e fermo prima del clic: la riga del codice è già in vista,
+        // e il clic non scorre.
+        await scrollerAtRest(page, { toEnd: true });
       }
       await placeCursorOn(page, line);
+      await scrollerAtRest(page);
       // Il gruppo arriva dopo la pausa della barra (un tempo vero: l'orologio
       // fermo del banco ferma la data, non i timer).
       await page.waitForSelector(`.pane.focus .format-bar-context[data-block="${block}"]`, { state: "attached" });
@@ -3108,6 +3112,49 @@ async function selectionBox(page) {
     return seen.frames >= 2 && { x: layer.x, y: layer.y, width: layer.width, height: layer.height };
   }, null, { polling: "raf" });
   return found.jsonValue();
+}
+
+/// Lo scorrimento della nota a fuoco fermo: lo stesso per tre fotogrammi di
+/// fila. Con `toEnd` prima lo porta in fondo, e lo riporta finché il fondo non
+/// smette di spostarsi.
+///
+/// Ctrl+Fine non basta da solo: CodeMirror scorre al suo fotogramma di misura,
+/// e le altezze delle righe mai disegnate sono stime che cambiano appena le
+/// disegna. Il clic che segue cadeva a volte prima di quello scorrimento:
+/// Playwright portava la riga in vista da sé, e la foto mostrava un altro
+/// tratto della nota a ogni corsa (`barra-blocco-stretta`, un terzo dei pixel
+/// diversi fra due corse dello stesso codice).
+async function scrollerAtRest(page, { toEnd = false } = {}) {
+  if (toEnd) {
+    // Il fondo dipende dalle altezze di tutte le righe: misurate alla misura
+    // di adesso, e non stimate da quella di prima (la nota si apre a finestra
+    // larga, poi la finestra si stringe). Si percorre la nota a mezze
+    // pagine finché un giro intero non cambia più l'altezza.
+    await page.evaluate(async () => {
+      const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+      if (!scroller) throw new Error("la nota a fuoco non ha lo scorrimento");
+      const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      for (let pass = 0, height = -1; pass < 6 && height !== scroller.scrollHeight; pass += 1) {
+        height = scroller.scrollHeight;
+        for (let top = 0; top <= scroller.scrollHeight; top += scroller.clientHeight / 2) {
+          scroller.scrollTop = top;
+          await frames();
+        }
+      }
+    });
+  }
+  await page.evaluate(() => delete globalThis.__benchScroll);
+  await page.waitForFunction((end) => {
+    const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+    if (!scroller) return false;
+    const bottom = scroller.scrollHeight - scroller.clientHeight;
+    if (end && Math.abs(scroller.scrollTop - bottom) > 1) scroller.scrollTop = bottom;
+    const at = `${scroller.scrollTop} ${scroller.scrollHeight}`;
+    const seen = (globalThis.__benchScroll ??= { at: null, frames: 0 });
+    seen.frames = seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 3;
+  }, toEnd, { polling: "raf" });
 }
 
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,

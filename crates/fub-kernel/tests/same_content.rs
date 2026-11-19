@@ -720,6 +720,69 @@ fn learning_under_the_lock_asks_the_storage_nothing() {
     );
 }
 
+/// Il workspace di `root` su un supporto che conta le domande, senza
+/// scansione.
+fn unscanned_on(root: &Utf8Path, storage: &Arc<Interposed>) -> Workspace {
+    Workspace::on(
+        root,
+        FormatRegistry::new(),
+        Arc::clone(storage) as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("apertura")
+}
+
+/// La scansione chiede il timbro del cambio **solo alle voci che l'anagrafe
+/// potrebbe certificare**: su Windows chiederlo è aprire il file, e alla prima
+/// apertura di un vault nessuna voce è nota (issue #493: cinquemila aperture
+/// buttate sul vault da cinquemila file). Alla riapertura, invece, ogni voce
+/// con la sua impronta lo chiede ancora: è il timbro che la smentisce quando
+/// misura e data sono rimaste uguali.
+#[test]
+fn the_scan_asks_the_change_stamp_only_of_entries_it_could_certify() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    for n in 0..8 {
+        put(
+            &root,
+            &format!("pila/{n}.bin"),
+            format!("byte{n}").as_bytes(),
+        );
+    }
+
+    // La prima apertura: l'anagrafe è vuota, nessun timbro si chiede.
+    let storage = Arc::new(Interposed::over(&root));
+    let workspace = unscanned_on(&root, &storage);
+    let before = storage.witness_questions.load(Ordering::SeqCst);
+    drop(workspace.prepare_scan_vault().expect("scansione"));
+    assert_eq!(
+        storage.witness_questions.load(Ordering::SeqCst),
+        before,
+        "alla prima apertura nessuna voce è nota: nessun file si apre per il timbro"
+    );
+    drop(workspace);
+
+    // L'anagrafe impara le otto impronte e le scrive.
+    let mut workspace = open_on(&root, Arc::new(Interposed::over(&root)));
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("nuovo.bin"), 5)
+        .invoke(b"altro");
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 8);
+    workspace.store_entries();
+    drop(workspace);
+
+    // La riapertura: ogni voce certificabile chiede il suo timbro.
+    let storage = Arc::new(Interposed::over(&root));
+    let workspace = unscanned_on(&root, &storage);
+    let before = storage.witness_questions.load(Ordering::SeqCst);
+    drop(workspace.prepare_scan_vault().expect("scansione"));
+    assert_eq!(
+        storage.witness_questions.load(Ordering::SeqCst) - before,
+        8,
+        "alla riapertura il timbro si chiede a ogni voce con la sua impronta"
+    );
+}
+
 /// Un orologio fermo a un istante scelto dal test.
 struct Stopped(u64);
 

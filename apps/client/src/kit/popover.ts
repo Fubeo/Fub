@@ -2,7 +2,8 @@
 //
 // Sta nel `body` e non accanto all'ancora: un contenitore che ritaglia o che
 // qualcuno riconcilia non deve poterla tagliare né togliere. La posizione è
-// `fixed` e si ricalcola quando la finestra cambia misura o qualcosa scorre.
+// `fixed` e si ricalcola quando la finestra cambia misura, qualcosa scorre o
+// un carattere finisce di arrivare.
 //
 // Regole che tiene per chi la usa:
 // - si gira dall'altra parte se da quella chiesta non c'è posto, e scivola
@@ -399,6 +400,12 @@ export function openPopover(options: PopoverOptions): PopoverHandle {
     observer.observe(surface);
     own.add(() => observer.disconnect());
   }
+  // Un carattere che finisce di arrivare cambia la misura dell'ancora senza
+  // che niente scorra, e un'ancora in riga (una formula, una parola) il
+  // ResizeObserver non la osserva: la prima formula toccata, coi caratteri
+  // di KaTeX ancora in viaggio, si allargava dopo l'apertura e il popover
+  // centrato su di lei restava spostato di mezza differenza.
+  if (doc.fonts) own.listen(doc.fonts, "loadingdone", reposition);
 
   reposition();
   if (!closed) {
