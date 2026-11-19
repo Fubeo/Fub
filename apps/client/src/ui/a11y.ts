@@ -122,6 +122,18 @@ export function redirectFocusReturn(from: HTMLElement, to: HTMLElement): void {
   }
 }
 
+/// Il fuoco l'ha preso qualcos'altro, di proposito: le trappole aperte la cui
+/// superficie soddisfa `owns`, sciogliendosi, non lo riportano indietro. È il
+/// clic fuori da un menu che cade su ciò che prende il fuoco (il testo di una
+/// nota, un campo): il clic l'ha già dato lì, e riportarlo sul pulsante che
+/// aveva aperto il menu manderebbe al pulsante le battute dopo (IMP-151).
+/// Escape e una scelta da tastiera lasciano il ritorno com'è.
+export function keepFocusWhereItIs(owns: (root: HTMLElement) => boolean): void {
+  for (const trap of trapStack) {
+    if (owns(trap.root)) trap.previous = null;
+  }
+}
+
 export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =
     'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
