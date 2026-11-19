@@ -599,6 +599,29 @@ export const SCENE = touchLast(onPage("shell", [
       if (front) await openFrontSections(page);
     },
   })),
+  // **Il menu dei profili** (T79): lo spazio parte da «Relazione», il
+  // predefinito del vault, che ha il segno; i profili con la loro riga, salva
+  // come nuovo, salva, copia, rinomina, i predefiniti
+  // e «Torna al profilo com'era». Anche nella finestra minima.
+  ...[
+    ["esporta-pdf-profili", "Il menu dei profili d'esportazione: i profili del vault, salva, copia, rinomina, predefinito", undefined],
+    ["esporta-pdf-profili-stretta", "Il menu dei profili d'esportazione alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "profili-pdf=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await page.click(".export-space .export-profile");
+      await page.waitForSelector('#context-menu [role=menuitemradio]:has-text("Relazione")');
+      await page.mouse.move(0, 0);
+    },
+  })),
   // **La sezione Diagrammi** (T75): la nota con un flusso, una formula più
   // larga della colonna, un diagramma con un errore e uno in Aurora; aperta
   // la sezione, ai nodi il blu della tavolozza. Sulle pagine il flusso coi

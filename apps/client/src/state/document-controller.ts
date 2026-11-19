@@ -77,7 +77,9 @@ import { dailyDate, dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
 import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
 import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
-import type { Theme } from "../theme/theme";
+import { themeSeries, type Theme } from "../theme/theme";
+import { startHeadlessExport } from "../export/headless";
+import type { ExportMount } from "../export/space";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, documentOutline, existingDocuments, matchingDocuments, notesByName, renderEmbed, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
@@ -1331,6 +1333,25 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   });
   mountNoteCards(lifetime);
   watchLinkClick(lifetime);
+  // L'esportazione chiesta da fuori (T79): finché la shell è aperta dice al
+  // core che sa impaginare, e impagina fuori dallo schermo le note che un
+  // agente chiede col comando `pdf.export_note`.
+  lifetime.add(startHeadlessExport({
+    render: renderPrint,
+    mount: exportMountOf,
+    save: async (doc) => {
+      await documentSessions.flush(doc);
+    },
+    properties: (doc) => noteProperties(doc),
+    title: pageName,
+    invoke: (command, args, mode) => api.invokeCommand(command, args, mode),
+    listen: (handler) => onEvent("custom", (event) => handler(event.topic, event.payload)),
+    notify: (message, kind) => {
+      notify(message, kind);
+    },
+    queued: (id, request) => nameJob(id, () => t("pdf_export.headless.job", { doc: pageName(request.note) })),
+    fontFaces: () => [themeSeries().fonts],
+  }));
   surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
     onChange: (paneId, change) => {
@@ -4182,6 +4203,18 @@ export async function presentPrint(r: Pane, doc: string): Promise<void> {
 }
 
 const exportSpacePart = lazyPart(() => import("../export/space"));
+const exportProfilePart = lazyPart(() => import("../export/profile"));
+
+/// Chi monta la resa per la stampa di una nota, per lo spazio e per
+/// l'esportazione fuori dallo schermo: le forme che la nota dichiara si
+/// leggono prima, i diagrammi in luce chiara nello stile dell'esportazione.
+async function exportMountOf(doc: string): Promise<ExportMount> {
+  const declared = await syntaxForms(doc).then(
+    (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
+    () => new Set<string>(),
+  );
+  return (container, rendered, look) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light", diagramLook: (index) => look.diagramLook(index) });
+}
 
 /// Lo spazio «Esporta in PDF» impagina una nota Markdown: la resa per la
 /// stampa di una tela è già un foglio suo.
@@ -4199,11 +4232,19 @@ let openExport: { pane: Pane; close: () => void } | null = null;
 export async function presentExport(r: Pane, doc: string): Promise<void> {
   try {
     await documentSessions.flush(doc);
-    const declared = await syntaxForms(doc).then(
-      (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
-      () => new Set<string>(),
+    const mount = await exportMountOf(doc);
+    const [{ openExportSpace }, { commandProfileStore }] = await Promise.all([exportSpacePart.load(), exportProfilePart.load()]);
+    // Il profilo da cui si parte è quello che vale per la nota: il suo tipo,
+    // il vault, «Di serie». Senza i profili (un core che non li ha) si parte
+    // da «Di serie».
+    const profiles = commandProfileStore((command, args, mode) => api.invokeCommand(command, args, mode));
+    const start = await profiles.list(doc).then(
+      (shelf) => {
+        const chosen = shelf.profiles.find((entry) => entry.id === shelf.effective && entry.profile !== null);
+        return chosen?.profile ? { profileId: chosen.id, profile: chosen.profile } : {};
+      },
+      () => ({}),
     );
-    const { openExportSpace } = await exportSpacePart.load();
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
     openBook?.();
     openExport?.close();
@@ -4211,7 +4252,9 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       doc,
       title: pageName(doc),
       render: renderPrint,
-      mount: (container, rendered, look) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light", diagramLook: (index) => look.diagramLook(index) }),
+      mount,
+      profiles,
+      ...start,
       // Il disposer torna allo spazio, che lo chiude con la sua `Lifetime`.
       follow: (changed) => {
         const unsubscribe = documentSessions.subscribe((event) => {

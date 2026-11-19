@@ -485,6 +485,24 @@ if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new Ra
 const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
 if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
 
+/// I profili d'esportazione delle scene `esporta-pdf-profili*`
+/// (`?profili-pdf=1`, T79): due profili salvati, «Relazione» predefinito del
+/// vault, come risponde `pdf.profiles` del core. Il finto non ha i comandi del
+/// PDF: senza il parametro, come senza `draw`, il comando non c'è.
+const PDF_PROFILES = params.get("profili-pdf") === "1"
+  ? {
+      profiles: [
+        { id: "relazione", name: "Relazione", same_name: false, future: false, error: null, profile: { versione: 1, nome: "Relazione", tema: "relazione" } },
+        { id: "tesi", name: "Tesi con commenti", same_name: false, future: false, error: null, profile: { versione: 1, nome: "Tesi con commenti", tema: "accademico", frontespizio: { frontespizio: true, indice: true, profondita_indice: 2, segnalibri: true } } },
+      ],
+      default_name: "Di serie",
+      vault_default: "relazione",
+      type_default: null,
+      note_type: null,
+      effective: { id: "relazione", from: "vault" },
+    }
+  : null;
+
 /// L'albero delle scene T26 (`?albero=miniature|xmp`, vedi
 /// `craft-fixture.ts`): le cartelle «Foto 2026» e «Progetti» con le miniature
 /// accese, e gli XMP mostrati o nascosti.
@@ -2738,6 +2756,9 @@ export const api: typeof host.module.api = {
     if (TREE_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    if (PDF_PROFILES !== null && id === "pdf.profiles") {
+      return { notify: null, effect: { kind: "custom", ns: "fub.pdf.profiles", payload: PDF_PROFILES }, undo: null, partial: null };
     }
     // Il gesto della barra della Base delle scene `base-*`.
     const based = BASE?.invoke(id, args);

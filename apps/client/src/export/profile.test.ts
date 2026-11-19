@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { defaultProfile, geometryOf, MM, paperColorsOf, paperSize, printSettingsOf, type ExportProfile } from "./profile";
+import { describe, expect, it, vi } from "vitest";
+import { commandProfileStore, defaultProfile, geometryOf, MM, paperColorsOf, paperSize, printSettingsOf, type ExportProfile } from "./profile";
 import { layoutChanged } from "./paginate/slices";
 import { printTheme } from "./themes";
 
@@ -49,5 +49,45 @@ describe("il profilo dell'esportazione dal lato della vista", () => {
     expect(layoutChanged(base.layout, breaks.layout)).toBe(true);
     const columns = printSettingsOf({ ...defaultProfile(), testo: { sillabazione: true, colonne: 2 } });
     expect(columns.layout.columns).toBe(2);
+  });
+});
+
+describe("i profili salvati, coi comandi del core (T79)", () => {
+  const outcome = (ns: string, payload: unknown) => ({ notify: null, effect: { kind: "custom", ns, payload }, undo: null }) as never;
+
+  it("elenca i profili, i predefiniti e quello che vale per la nota", async () => {
+    const invoke = vi.fn(async (_command: string, _args: Record<string, unknown>) =>
+      outcome("fub.pdf.profiles", {
+        profiles: [
+          { id: "relazione", name: "Relazione", future: false, profile: { versione: 1, nome: "Relazione", tema: "relazione" } },
+          { id: "rotto", name: "rotto", future: false, profile: null, error: "…" },
+          { id: "", name: "senza id" },
+        ],
+        vault_default: "relazione",
+        type_default: null,
+        note_type: { doc: "Tipi/Libro.md", name: "Libro" },
+        effective: { id: "relazione", from: "vault" },
+      }),
+    );
+    const shelf = await commandProfileStore(invoke).list("Dune.md");
+    expect(invoke).toHaveBeenCalledWith("pdf.profiles", { note: "Dune.md" }, "apply");
+    expect(shelf.profiles.map((p) => [p.id, p.profile?.tema ?? null])).toEqual([["relazione", "relazione"], ["rotto", null]]);
+    // Ciò che il file non dice viene da «Di serie».
+    expect(shelf.profiles[0]?.profile?.pagina).toEqual(defaultProfile().pagina);
+    expect(shelf).toMatchObject({ vaultDefault: "relazione", typeDefault: null, noteType: { doc: "Tipi/Libro.md", name: "Libro" }, effective: "relazione" });
+  });
+
+  it("un profilo nuovo non porta la versione di quello da cui nasce; uno salvato sopra sì", async () => {
+    const invoke = vi.fn(async (_command: string, _args: Record<string, unknown>) => outcome("fub.pdf.profile", { id: "mio" }));
+    const store = commandProfileStore(invoke);
+    const future = { ...defaultProfile(), nome: "Mio", versione: 9 } as ExportProfile;
+    expect(await store.save(null, future)).toBe("mio");
+    const fresh = JSON.parse(String(invoke.mock.calls[0]?.[1]["profile"]));
+    expect(fresh.versione).toBeUndefined();
+    expect(invoke.mock.calls[0]?.[1]["id"]).toBeUndefined();
+    await store.save("mio", future);
+    expect(JSON.parse(String(invoke.mock.calls[1]?.[1]["profile"])).versione).toBe(9);
+    await store.setDefault("mio", "type", "Dune.md");
+    expect(invoke).toHaveBeenLastCalledWith("pdf.profile_default", { id: "mio", scope: "type", note: "Dune.md" }, "apply");
   });
 });

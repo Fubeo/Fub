@@ -43,18 +43,19 @@ import { icon, iconEl, registerIcon } from "../ui/icons";
 import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
+import { promptText } from "../ui/dialogs";
 import { createBand, type Band } from "./band";
 import { ExportPages, steppedZoom, type PageDecor } from "./pages";
 import { PrintMeasure, printBlocks } from "./paginate/measure";
 import { frontMatter, headingsOf, sectionHeadings, sectionsByPage, type FrontSettings, type TocEntry, type TocMetrics } from "./paginate/toc";
 import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
-import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
+import { defaultProfile, printSettingsOf, type ExportProfile, type ProfileStore, type StoredProfile } from "./profile";
 import { coverFactsOf, drawCover, drawTocPage, type CoverFacts } from "./sections/cover-toc";
 import { displayPath, drawHeaderFooter, longDate } from "./sections/header-footer";
 import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
 import { numberHeadings } from "./themes";
-import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
+import { createToolbar, profileMenuItems, type ExportView, type Toolbar } from "./toolbar";
 import { DiagramMemory, diagramLookKey, diagramPrintLook, overrideFor, preparePrintVectors, type DiagramPrintLook } from "./vectors";
 
 /// Come si disegna un diagramma della resa montata: per la sua posizione fra
@@ -97,6 +98,12 @@ export interface ExportSpaceOptions {
   /// sistema le stesse pagine.
   readonly exportPdf?: (profile: ExportProfile) => Promise<void>;
   readonly profile?: ExportProfile;
+  /// L'id del profilo salvato da cui si parte (vuoto: «Di serie»).
+  readonly profileId?: string;
+  /// I profili salvati del vault (T79): il menu del profilo li elenca, li
+  /// salva, li copia, li rinomina e ne fa il predefinito. Senza, il menu ha
+  /// solo il profilo da cui si parte.
+  readonly profiles?: ProfileStore;
   /// Le proprietà della nota (il frontmatter, dall'indice): l'icona, l'autore
   /// e le proprietà in evidenza del frontespizio, l'autore della testata. Si
   /// richiedono all'apertura e quando la nota cambia; senza, il frontespizio
@@ -165,7 +172,10 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   const behind = options.behind ?? [document.getElementById("workspace"), document.getElementById("status-band")].filter((node): node is HTMLElement => node !== null);
   const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   let profile = options.profile ?? defaultProfile();
-  const base = profile;
+  /// Il profilo scelto com'era, e il suo id: le regolazioni «ne escono»
+  /// quando il profilo di adesso non è più lui.
+  let base = profile;
+  let baseId = options.profileId ?? "";
   let view: ExportView = "adatta";
   let free = 1;
   let closed = false;
@@ -487,9 +497,116 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   }
 
   function openProfileMenu(anchor: HTMLElement): void {
-    showContextMenu(anchor, [
-      { label: base.nome, choice: "radio", checked: true, run: () => space.setProfile(base) },
-    ], { label: t("pdf_export.profile.menu") });
+    const store = options.profiles;
+    if (!store) {
+      showContextMenu(anchor, [
+        { label: base.nome, choice: "radio", checked: true, run: () => space.setProfile(base) },
+      ], { label: t("pdf_export.profile.menu") });
+      return;
+    }
+    void store.list(options.doc).then(
+      (shelf) => {
+        if (closed || !anchor.isConnected) return;
+        showContextMenu(anchor, profileMenuItems({ shelf, currentId: baseId, base, modified: profile !== base }, profileActions(store, shelf.noteType?.name ?? "")), {
+          label: t("pdf_export.profile.menu"),
+        });
+      },
+      (error) => notify(t("pdf_export.profiles.list_failed", { reason: errorText(error) }), "guasto"),
+    );
+  }
+
+  /// Sceglie `next` come profilo da cui si parte: le pagine lo mostrano, e
+  /// le regolazioni non ne sono uscite.
+  function adopt(id: string, next: ExportProfile): void {
+    base = next;
+    baseId = id;
+    space.setProfile(next);
+  }
+
+  /// Un nome chiesto a chi esporta; `null` se rinuncia.
+  async function askName(title: string, ok: string, value: string): Promise<string | null> {
+    const name = await promptText({ title, label: t("pdf_export.profiles.name"), value, okLabel: ok });
+    const clean = name?.trim() ?? "";
+    return clean === "" ? null : clean;
+  }
+
+  function profileActions(store: ProfileStore, typeName: string) {
+    const failed = (error: unknown) => notify(t("pdf_export.profiles.failed", { reason: errorText(error) }), "guasto");
+    return {
+      choose: (entry: StoredProfile | null) => {
+        if (entry === null) adopt("", defaultProfile());
+        else if (entry.profile) adopt(entry.id, entry.profile);
+      },
+      saveNew: () => void (async () => {
+        const name = await askName(t("pdf_export.profiles.save_new.title"), t("pdf_export.profiles.save_ok"), t("pdf_export.profiles.new_name"));
+        if (name === null || closed) return;
+        try {
+          const next = { ...profile, nome: name };
+          const id = await store.save(null, next);
+          if (closed) return;
+          adopt(id, next);
+          notify(t("pdf_export.profiles.saved", { name }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      saveOver: () => void (async () => {
+        if (baseId === "") return;
+        try {
+          const next = { ...profile, nome: base.nome };
+          await store.save(baseId, next);
+          if (closed) return;
+          adopt(baseId, next);
+          notify(t("pdf_export.profiles.saved_over", { name: next.nome }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      copy: () => void (async () => {
+        if (baseId === "") return;
+        const name = await askName(t("pdf_export.profiles.copy.title"), t("pdf_export.profiles.copy_ok"), t("pdf_export.profiles.copy_name", { name: base.nome }));
+        if (name === null || closed) return;
+        try {
+          await store.copy(baseId, name);
+          notify(t("pdf_export.profiles.copied", { name }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      rename: () => void (async () => {
+        if (baseId === "") return;
+        const name = await askName(t("pdf_export.profiles.rename.title"), t("pdf_export.profiles.rename_ok"), base.nome);
+        if (name === null || closed) return;
+        try {
+          await store.rename(baseId, name);
+          if (closed) return;
+          // Il nome cambia, le regolazioni di adesso restano come sono.
+          const renamed = { ...base, nome: name };
+          const changed = profile !== base;
+          base = renamed;
+          space.setProfile(changed ? { ...profile, nome: name } : renamed);
+          notify(t("pdf_export.profiles.renamed", { name }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      toggleDefault: (scope: "vault" | "type") => void (async () => {
+        try {
+          const shelf = await store.list(options.doc);
+          const now = scope === "vault" ? (shelf.vaultDefault ?? "") : (shelf.typeDefault ?? null);
+          const on = now === baseId;
+          await store.setDefault(on ? "" : baseId, scope, options.doc);
+          if (closed) return;
+          if (on && scope === "type") notify(t("pdf_export.profiles.default_off_type", { type: typeName }), "info");
+          else if (on || baseId === "") notify(t("pdf_export.profiles.default_off"), "info");
+          else if (scope === "vault") notify(t("pdf_export.profiles.default_set_vault", { name: base.nome }), "info");
+          else notify(t("pdf_export.profiles.default_set_type", { name: base.nome, type: typeName }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      revert: () => space.setProfile(base),
+    };
   }
 
   async function printNow(): Promise<boolean> {
