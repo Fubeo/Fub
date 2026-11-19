@@ -78,7 +78,7 @@ import { linkCardView, requestLinkCard } from "./link-cards";
 import { holdNoteCard, isNoteDoc, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
 import { createNotePeek, LINK_CLICK_KEY, linkClickOf, type LinkClick, type NotePeek, type PeekTarget } from "./note-peek";
 import { themeSeries, type Theme } from "../theme/theme";
-import { startHeadlessExport } from "../export/headless";
+import { LISTEN_COMMAND, startHeadlessExport } from "../export/headless";
 import type { ExportMount } from "../export/space";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
@@ -1351,6 +1351,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     queued: (id, request) => nameJob(id, () => t("pdf_export.headless.job", { doc: pageName(request.note) })),
     fontFaces: () => [themeSeries().fonts],
+    available: () => state.commandSpecs.some((spec) => spec.id === LISTEN_COMMAND),
+    onAvailability: (changed) => on("commands", changed),
   }));
   surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.

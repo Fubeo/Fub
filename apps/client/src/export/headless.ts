@@ -94,6 +94,12 @@ export interface HeadlessDeps {
   /// Chi misura i fogli (i test ne danno uno finto: happy-dom non dispone).
   readonly measureSheets?: typeof measureSheets;
   readonly renewMs?: number;
+  /// Se il core del vault aperto ha il comando della presenza (i disegni
+  /// accesi): senza, la shell non lo chiama. Di serie sì.
+  readonly available?: () => boolean;
+  /// Avvisa quando l'elenco dei comandi cambia (un vault aperto, un
+  /// componente acceso); torna lo smontaggio.
+  readonly onAvailability?: (changed: () => void) => () => void;
 }
 
 /// Comincia ad ascoltare le richieste e a rinnovare la presenza; torna lo
@@ -110,7 +116,8 @@ export function startHeadlessExport(deps: HeadlessDeps): () => void {
     timer = window.setTimeout(renew, ms);
   };
   function renew(): void {
-    if (stopped) return;
+    window.clearTimeout(timer);
+    if (stopped || !(deps.available?.() ?? true)) return;
     deps.invoke(LISTEN_COMMAND, {}, "apply").then(
       (outcome) => schedule(renewOf(outcome) ?? deps.renewMs ?? RENEW_MS),
       // Un core senza il comando (i disegni spenti) o che non risponde: si
@@ -138,10 +145,13 @@ export function startHeadlessExport(deps: HeadlessDeps): () => void {
     });
   });
 
+  // Un vault nuovo ha un core suo: la presenza si dice subito a lui.
+  const unwatch = deps.onAvailability?.(renew) ?? (() => {});
   renew();
   return () => {
     stopped = true;
     window.clearTimeout(timer);
+    unwatch();
     unlisten();
   };
 }

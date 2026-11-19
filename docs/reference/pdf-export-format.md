@@ -167,39 +167,14 @@ campo aggiunto da un Fub più nuovo si salva, e il campo resta.
 
 ## I predefiniti
 
-Un predefinito nomina il profilo da cui si parte; i due file hanno la stessa
-forma:
-
-```json
-{ "versione": 1, "profilo": "relazione" }
-```
-
-- Il profilo che vale per una nota è quello del suo tipo (il file sta nello
-  spazio per-documento della nota del tipo, che il kernel sposta con la
-  rinomina e col cestino), poi quello del vault, poi «Di serie». Un
-  predefinito che nomina un profilo sparito, o che non si legge, lascia il
-  posto al livello dopo.
-- Senza file vale «Di serie»: tornare a «Di serie» toglie il file.
-- Un file con `versione` più alta di 1 si legge (`profilo`) e non si
-  riscrive: cambiarlo è un errore che lo dice. I campi che questa versione
-  non conosce si conservano alla lettura.
-
-## I comandi dei profili
-
-Tutti del bundle `fub.draw`, con `invoke_command`; in prova (`DryRun`)
-dicono che cosa farebbero e non scrivono.
-
-| Comando | Parametri | Effetto |
-|---|---|---|
-| `pdf.profiles` | `note` (facoltativo) | `fub.pdf.profiles`: `profiles` (`id`, `name`, `same_name`, `future`, `profile` o `null` con `error`), `default_name`, `vault_default`, e con `note` anche `note_type` (`doc`, `name`), `type_default` ed `effective` (`id`, `from`: `chosen`, `type`, `vault` o `default`) |
-| `pdf.profile_save` | `profile` (il JSON), `id` (facoltativo: senza, un profilo nuovo) | `fub.pdf.profile`, `{ id, name }` |
-| `pdf.profile_copy` | `id`, `name` | `fub.pdf.profile`, la copia |
-| `pdf.profile_rename` | `id`, `name` | `fub.pdf.profile` |
-| `pdf.profile_default` | `id` (vuoto: «Di serie»), `scope` (`vault` o `type`), `note` (per `type`) | `fub.pdf.profile` |
-
-Un profilo che non c'è è `NotFound`, un nome già usato è `AlreadyExists`,
-un nome vuoto o troppo lungo è `BadArgs`; un profilo di una versione più nuova non si salva sopra né si
-rinomina (si salva come profilo nuovo).
+Un predefinito è `{ "versione": 1, "profilo": "<id>" }`. Per una nota vale
+quello del suo tipo, poi quello del vault, poi «Di serie»; uno che nomina un
+profilo sparito lascia il posto al livello dopo, e «Di serie» toglie il file.
+Una `versione` più alta di 1 si legge e non si riscrive. I comandi
+(`fub.draw`): `pdf.profiles` (con `note`, anche `effective`: `id` e `from`),
+`pdf.profile_save`, `pdf.profile_copy`, `pdf.profile_rename` e
+`pdf.profile_default` (`scope` `vault` o `type`); la forma degli argomenti e
+degli effetti sta nelle loro spec (`pdf_export/command.rs`).
 
 ## La memoria di una nota
 
@@ -484,30 +459,13 @@ Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
 
 ### L'esportazione come comando
 
-`pdf.export_note` esporta una nota senza lo spazio. Il core non impagina:
-manda la richiesta all'app, che impagina e chiama `pdf.write_pages`.
-
-| Parametro | Che cosa vale |
-|---|---|
-| `note` | la nota Markdown (obbligatorio) |
-| `profile` | il profilo, per id o per nome; senza, il [predefinito](#i-predefiniti) che vale per la nota |
-| `target` | il PDF; senza, accanto alla nota col suo nome |
-| `replace` | `true` per sostituire un PDF che c'è già |
-
-1. La shell, finché è aperta sul vault, chiama `pdf.export_listen` ogni 30
-   secondi; la presenza scade dopo 120 (l'effetto `fub.pdf.listening` porta
-   `ttl_ms` e `renew_ms`). La presenza vive nel processo che tiene il vault.
-2. `pdf.export_note` controlla la nota, il profilo e la destinazione; senza
-   una shell presente risponde `Unserved` («serve l'app di Fub aperta su
-   questo vault»), anche in prova. Altrimenti manda l'evento `custom`
-   `fub.draw:pdf.export` con `{ request, note, target, replace, profile_id,
-   profile }` e torna con l'effetto `fub.pdf.export_requested`, `{ request,
-   note, target, profile: { id, name, from, future } }`.
-3. La shell (`apps/client/src/export/headless.ts`) salva la nota se ha
-   modifiche, la impagina fuori dallo schermo col profilo della richiesta, ne
-   misura i fogli e chiama `pdf.write_pages`. Le richieste vanno una alla
-   volta; oltre otto in attesa la shell rifiuta, con un avviso.
-
+`pdf.export_note` (`note`, `profile`, `target`, `replace`) esporta una nota
+senza lo spazio e vuole l'app: la shell rinnova ogni 30 s la sua presenza con
+`pdf.export_listen` (scade dopo 120 s). Senza presenza risponde `Unserved`,
+anche in prova; altrimenti manda l'evento `custom` `fub.draw:pdf.export` e
+torna con `fub.pdf.export_requested`. La shell (`export/headless.ts`) salva la
+nota, la impagina fuori dallo schermo e chiama `pdf.write_pages`, una
+richiesta alla volta.
 
 ## Più note in un PDF
 

@@ -2238,6 +2238,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/pdf_export/command.rs::esporta",
+            (
+                Family::AsciiCase,
+                "riconosce `.md` in fondo alla nota che `pdf.export_note` deve esportare senza \
+                 badare al caso ASCII, come `destinazione` fa con `.pdf`: `Nota.MD` è una nota \
+                 Markdown, la sola che la vista sa impaginare. Non decide l'identità del nome: \
+                 la nota la risolve l'host (`document_revision`) prima di questo controllo.",
+            ),
+        ),
+        (
             "crates/fub-features/src/pdf_export/lavoro.rs::carattere",
             (
                 Family::FolderBoundary,

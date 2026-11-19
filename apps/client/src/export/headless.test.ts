@@ -149,6 +149,21 @@ describe("la presenza della shell", () => {
     expect(h.calls.filter((c) => c.command === LISTEN_COMMAND)).toHaveLength(2);
   });
 
+  it("senza il comando nell'elenco del core non si chiama, e si annuncia appena arriva", async () => {
+    vi.useFakeTimers();
+    let has = false;
+    let changed: () => void = () => {};
+    const h = harness({ available: () => has, onAvailability: (next) => ((changed = next), () => {}) });
+    const stop = startHeadlessExport(h.deps);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.calls).toEqual([]);
+    has = true;
+    changed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.calls.filter((c) => c.command === LISTEN_COMMAND)).toHaveLength(1);
+    stop();
+  });
+
   it("un core che non ha il comando non disturba: si riprova al giro dopo", async () => {
     vi.useFakeTimers();
     const h = harness({ invoke: vi.fn(async () => Promise.reject(new Error("unknown command"))) });
