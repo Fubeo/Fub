@@ -141,6 +141,7 @@ fn pdf_export_i_collegamenti_portano_fuori_e_dentro_il_documento() {
             destinazione: Destinazione::Fuori {
                 url: "https://fub.example/àncora?a=1 b".into(),
             },
+            nodo: None,
         },
         Collegamento {
             x: 20.0,
@@ -151,6 +152,7 @@ fn pdf_export_i_collegamenti_portano_fuori_e_dentro_il_documento() {
                 pagina: 2,
                 y: 100.0,
             },
+            nodo: None,
         },
     ];
     let scritto = scrivi(&e, &Banco::default()).unwrap();
@@ -195,6 +197,7 @@ fn pdf_export_un_indirizzo_che_il_pdf_non_deve_aprire_resta_testo() {
             w: 10.0,
             h: 10.0,
             destinazione: Destinazione::Fuori { url: (*url).into() },
+            nodo: None,
         })
         .collect();
     let scritto = scrivi(&e, &Banco::default()).unwrap();
@@ -221,6 +224,7 @@ fn pdf_export_i_collegamenti_e_i_segnalibri_rotti_hanno_il_loro_errore() {
         w: 10.0,
         h: 10.0,
         destinazione: Destinazione::Dentro { pagina: 2, y: 0.0 },
+        nodo: None,
     }];
     assert_eq!(
         scrivi(&e, &Banco::default()).unwrap_err(),
@@ -238,6 +242,7 @@ fn pdf_export_i_collegamenti_e_i_segnalibri_rotti_hanno_il_loro_errore() {
         destinazione: Destinazione::Fuori {
             url: "https://a.b".into(),
         },
+        nodo: None,
     }];
     assert!(matches!(
         scrivi(&e, &Banco::default()).unwrap_err(),
@@ -252,6 +257,7 @@ fn pdf_export_i_collegamenti_e_i_segnalibri_rotti_hanno_il_loro_errore() {
         destinazione: Destinazione::Fuori {
             url: format!("https://a.b/{}", "x".repeat(MAX_URL_BYTE)),
         },
+        nodo: None,
     }];
     assert!(matches!(
         scrivi(&e, &Banco::default()).unwrap_err(),
@@ -265,6 +271,7 @@ fn pdf_export_i_collegamenti_e_i_segnalibri_rotti_hanno_il_loro_errore() {
             w: 1.0,
             h: 1.0,
             destinazione: Destinazione::Dentro { pagina: 0, y: 0.0 },
+            nodo: None,
         })
         .collect();
     assert_eq!(
@@ -379,6 +386,7 @@ fn pdf_export_un_collegamento_a_una_pagina_dopo_si_ridisegna() {
         w: 60.0,
         h: 14.0,
         destinazione: Destinazione::Dentro { pagina: 1, y: 0.0 },
+        nodo: None,
     }];
     e.segnalibri = vec![Segnalibro {
         titolo: "Due".into(),

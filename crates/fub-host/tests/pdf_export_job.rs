@@ -58,11 +58,13 @@ fn elenco(pagine: usize) -> String {
                     posizioni: vec![0.0, 8.0],
                     sottolineato: false,
                     barrato: false,
+                    nodo: None,
                 }],
                 ..Pagina::default()
             })
             .collect(),
         segnalibri: Vec::new(),
+        struttura: Vec::new(),
     };
     serde_json::to_string(&elenco).unwrap()
 }

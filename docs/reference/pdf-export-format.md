@@ -9,6 +9,8 @@
 > `crates/fub-features/src/pdf_export/aperta.rs`,
 > `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
 > `crates/fub-features/src/pdf_export/writer.rs` (lo scrittore),
+> `crates/fub-features/src/pdf_export/tags.rs` (la struttura del PDF
+> accessibile), `crates/fub-features/src/pdf_export/pdfa.rs` (il PDF/A),
 > `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro).
 
 L'esportazione non scrive niente nella nota. Le regolazioni stanno in due
@@ -263,8 +265,9 @@ PDF. Un campo che il formato non conosce rende l'elenco illeggibile.
 | `collegamenti[]` | un riquadro della pagina che porta fuori (`url`) o a un punto di un'altra pagina (`pagina` dalla prima, che è la 0, e `y`) |
 | `segnalibri[]` | in fila, ognuno col suo `livello` da 1 a 6: un segnalibro sta sotto l'ultimo di livello più basso che lo precede |
 
-`titolo`, `autore`, `lingua`, `collegamenti` e `segnalibri` si possono
-omettere.
+`titolo`, `autore`, `lingua`, `collegamenti`, `segnalibri`, `struttura` e
+ogni `nodo` si possono omettere. La struttura e i nodi servono al
+[PDF accessibile](#il-pdf-accessibile-e-il-pdfa).
 
 ### Che cosa scrive il core
 
@@ -309,7 +312,100 @@ Oltre un limite l'elenco non si scrive, e l'errore dice quale:
 | indirizzo di un collegamento | 8 KiB |
 | segnalibri | 20.000, di livello da 1 a 6 |
 | titolo, autore, lingua, titolo di un segnalibro | 2.000 caratteri |
+| nodi della struttura | 1.000.000 |
+| testo alternativo di un nodo | 10.000 caratteri |
 | durata della scrittura | 10 minuti |
+
+## Il PDF accessibile e il PDF/A
+
+Il PDF **accessibile** porta i tag: un lettore di schermo vi legge titoli,
+paragrafi, elenchi, tabelle con le celle d'intestazione, figure col loro testo
+alternativo, collegamenti, nella lingua e nell'ordine giusti. Lo chiede chi
+esporta (`accessible` nel [comando](#il-comando-e-il-lavoro)); la vista dice
+la specie di ogni cosa che ha disegnato con la `struttura` dell'elenco e il
+`nodo` di ogni pezzo e collegamento:
+
+```json
+{
+  "struttura": [
+    { "specie": "titolo", "livello": 1 },
+    { "specie": "paragrafo" },
+    { "specie": "collegamento", "genitore": 1 },
+    { "specie": "figura", "alt": "Il flusso: si scrive, si impagina, si esporta." },
+    { "specie": "tabella" },
+    { "specie": "riga", "genitore": 4 },
+    { "specie": "intestazione", "genitore": 5, "ambito": "colonna" }
+  ],
+  "pagine": [{
+    "pezzi": [{ "tipo": "testo", "nodo": 0, "…": "…" }, { "tipo": "vettore", "nodo": 3, "…": "…" }],
+    "collegamenti": [{ "nodo": 2, "…": "…" }]
+  }]
+}
+```
+
+| Campo di un nodo | Che cosa vale |
+|---|---|
+| `specie` | che cosa è (tabella sotto); obbligatoria |
+| `genitore` | l'indice del nodo che lo contiene, sempre **prima** di lui; senza, sta sotto il documento |
+| `livello` | da 1 a 6, solo e sempre per `titolo` |
+| `alt` | il testo alternativo: ciò che un lettore di schermo dice al posto di una figura o di una formula, o di un collegamento |
+| `lingua` | un'etichetta BCP 47 se il nodo è in un'altra lingua dalla nota; una che non lo è resta fuori con `lingua_scartata` |
+| `ambito` | solo per `intestazione`: `colonna`, `riga` o `entrambi` |
+| `numerato` | solo per `elenco`: `true` numerato, `false` puntato |
+
+| Specie | Tag del PDF |
+|---|---|
+| `sezione`, `paragrafo`, `citazione`, `codice`, `testo` | `Sect`, `P`, `BlockQuote`, `Code`, `Span` |
+| `titolo` | `H1`…`H6` secondo il `livello` |
+| `elenco`, `voce`, `etichetta`, `corpo-voce` | `L`, `LI`, `Lbl`, `LBody` |
+| `tabella`, `testata-tabella`, `corpo-tabella`, `piede-tabella`, `riga`, `intestazione`, `cella` | `Table`, `THead`, `TBody`, `TFoot`, `TR`, `TH`, `TD` |
+| `figura`, `formula`, `didascalia` | `Figure`, `Formula`, `Caption` |
+| `collegamento`, `nota` | `Link`, `Note` |
+| `indice`, `voce-indice` | `TOC`, `TOCI` |
+
+Che cosa scrive il core:
+
+- l'albero della struttura (`StructTreeRoot`, un `Document` con i nodi), il
+  catalogo marcato (`MarkInfo`), la lingua, e i metadati XMP col titolo;
+- ogni pezzo con un nodo in una sequenza marcata del suo nodo (`MCID`); un
+  pezzo senza nodo (un riquadro, un numero di pagina, un'intestazione
+  ripetuta) è un **artefatto**, che il lettore di schermo salta;
+- l'ordine di lettura è quello della struttura, non quello dei pezzi sulla
+  pagina; un nodo che continua sulla pagina dopo resta un nodo solo;
+- un collegamento con un nodo `collegamento` sta nel suo elemento `Link`, e
+  la sua descrizione (`Contents`) è il testo alternativo del nodo, se no il
+  testo che il nodo contiene, se no l'indirizzo; le pagine coi collegamenti
+  li ordinano secondo la struttura (`Tabs /S`).
+
+Avvisi propri: `struttura_mancante` (chiesto accessibile senza struttura: il
+PDF esce senza tag), `testo_alternativo_mancante` (una figura o una formula
+senza `alt`, col `nodo` e la `pagina`, dalla 1, dove comincia),
+`tabella_senza_intestazione` (col `nodo` e la `pagina`). Un nodo che sbaglia
+(un genitore che non viene prima, un titolo senza livello, un campo dove non
+va) è l'errore `nodo_rotto`; un pezzo che nomina un nodo che non c'è è
+`nodo_sconosciuto`; un collegamento il cui nodo non è un `collegamento` è
+`collegamento_rotto`.
+
+Il **PDF/A** (`pdfa` nel comando) è il PDF per l'archivio: PDF/A-2, al
+livello B (l'aspetto si conserva). Il core scrive i metadati XMP in chiaro,
+uguali ai dati del PDF (`pdfaid` parte 2, livello B), l'`OutputIntent` col
+profilo di colore sRGB (un ICC v2 scritto dal core), l'identificativo del
+file (l'impronta dell'elenco: lo stesso elenco dà gli stessi byte),
+collegamenti che si stampano, e nessuna data. I caratteri sono già tutti
+incorporati, anche quelli dei vettori. Il PDF/A e il PDF accessibile si
+chiedono separati o insieme; il livello A, che vuole anche i tag, non si
+dichiara.
+
+Ciò che il PDF/A non permette **lo dice prima di scrivere**, con l'errore
+`pdfa_non_possibile` e i suoi `ostacoli`, e nessun file:
+`lettere_senza_glifo` (le lettere che né il carattere né Literata disegnano,
+spazi compresi, che senza PDF/A uscirebbero nel riquadro vuoto) e
+`vettore_non_conforme` (un vettore che non si converte in PDF/A, con la sua
+`pagina` dalla 1).
+
+Nel workspace non c'è un validatore di PDF/A o di PDF/UA (veraPDF è Java):
+le prove (`tags_tests.rs`, `pdfa_tests.rs`, `tests/pdf_export_e2e.rs`)
+rileggono il file e ne controllano le regole che lo scrittore tocca.
 
 ## Il comando e il lavoro
 
@@ -323,6 +419,8 @@ lavoro è un lavoro del core.
 | `target` | il percorso del PDF nel vault, con l'estensione `.pdf` (obbligatorio) |
 | `images` | `full` (di serie) o `light`, le immagini alleggerite |
 | `replace` | `true` per sostituire un PDF che c'è già; senza, un PDF che c'è è un errore |
+| `accessible` | `true` per il [PDF accessibile](#il-pdf-accessibile-e-il-pdfa), coi tag della struttura dell'elenco |
+| `pdfa` | `true` per il PDF/A-2b; ciò che non permette è un errore, senza file |
 | `note` | la nota da cui prendere titolo, autore e lingua (`title`/`titolo`, `author`/`autore`, `lang`/`lingua` del frontmatter; il titolo, se manca, è il nome del file) quando l'elenco li lascia vuoti |
 
 Il comando controlla subito ciò che può controllare senza scrivere: l'elenco

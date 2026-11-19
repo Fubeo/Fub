@@ -31,7 +31,9 @@ use fub_abi::traits::{CommandProvider, HostApi, JobProgress, JobSpec};
 use serde::Deserialize;
 
 use super::writer::{scrivi_con, valida, Controllo, Interruzione, Opzioni, QualitaImmagini};
-use super::{ElencoPagine, ErroreEsportazione, Risorse, MAX_ELENCO_BYTE, MAX_TEMPO_MS};
+use super::{
+    ElencoPagine, ErroreEsportazione, OstacoloPdfa, Risorse, MAX_ELENCO_BYTE, MAX_TEMPO_MS,
+};
 use crate::draw::per_il_pdf;
 
 /// Scrive nel vault il PDF di un elenco di pagine.
@@ -48,6 +50,8 @@ const P_TARGET: &str = "target";
 const P_IMAGES: &str = "images";
 const P_REPLACE: &str = "replace";
 const P_NOTE: &str = "note";
+const P_ACCESSIBLE: &str = "accessible";
+const P_PDFA: &str = "pdfa";
 
 const IMAGES_FULL: &str = "full";
 const IMAGES_LIGHT: &str = "light";
@@ -68,6 +72,10 @@ const T_REPLACE: &str = "pdf.write_pages.replace.title";
 const T_REPLACE_DESC: &str = "pdf.write_pages.replace.desc";
 const T_NOTE: &str = "pdf.write_pages.note.title";
 const T_NOTE_DESC: &str = "pdf.write_pages.note.desc";
+const T_ACCESSIBLE: &str = "pdf.write_pages.accessible.title";
+const T_ACCESSIBLE_DESC: &str = "pdf.write_pages.accessible.desc";
+const T_PDFA: &str = "pdf.write_pages.pdfa.title";
+const T_PDFA_DESC: &str = "pdf.write_pages.pdfa.desc";
 
 const P_PLAN: &str = "plan_pdf_write";
 const D_QUEUED: &str = "done_pdf_queued";
@@ -86,6 +94,9 @@ const E_NOT_PDF: &str = "e_pdf_target_not_pdf";
 const E_NAME: &str = "e_pdf_target_name";
 const E_TAKEN: &str = "e_pdf_target_taken";
 const E_PAYLOAD: &str = "e_pdf_job_payload";
+const E_STRUCTURE: &str = "e_pdf_structure_broken";
+const E_PDFA_GLYPHS: &str = "e_pdf_pdfa_glyphs";
+const E_PDFA_VECTOR: &str = "e_pdf_pdfa_vector";
 
 /// Le stringhe in italiano, aggiunte al catalogo del bundle dei disegni.
 pub(crate) fn in_italian(catalog: StringCatalog) -> StringCatalog {
@@ -116,6 +127,18 @@ pub(crate) fn in_italian(catalog: StringCatalog) -> StringCatalog {
         .with(
             T_NOTE_DESC,
             "La nota da cui vengono titolo, autore e lingua, se le pagine non li dicono.",
+        )
+        .with(T_ACCESSIBLE, "PDF accessibile")
+        .with(
+            T_ACCESSIBLE_DESC,
+            "Titoli, elenchi, tabelle, testi alternativi e ordine di lettura marcati, per \
+             chi legge con un lettore di schermo.",
+        )
+        .with(T_PDFA, "PDF/A")
+        .with(
+            T_PDFA_DESC,
+            "Il PDF per l'archivio: porta dentro tutto ciò che serve a leggerlo uguale \
+             fra molti anni.",
         )
         .with(P_PLAN, "Scrive il PDF «{doc}» ({pages} pagine)")
         .with(D_QUEUED, "Scrivo il PDF «{doc}»…")
@@ -185,6 +208,22 @@ pub(crate) fn in_italian(catalog: StringCatalog) -> StringCatalog {
             E_PAYLOAD,
             "Il lavoro del PDF ha ricevuto una richiesta che non si legge.",
         )
+        .with(
+            E_STRUCTURE,
+            "La struttura della nota per il PDF accessibile non si legge e il PDF non si \
+             è scritto. Riapri la nota e riprova.",
+        )
+        .with(
+            E_PDFA_GLYPHS,
+            "Il PDF/A non si è scritto: il carattere «{family}» non ha le lettere «{letters}», \
+             e il PDF/A non ammette lettere senza disegno. Scegli un altro carattere o \
+             esporta senza PDF/A.",
+        )
+        .with(
+            E_PDFA_VECTOR,
+            "Il PDF/A non si è scritto: un disegno a pagina {page} usa una lettera che i \
+             caratteri di Fub non hanno. Cambia quel disegno o esporta senza PDF/A.",
+        )
 }
 
 /// Le stesse stringhe in inglese.
@@ -216,6 +255,18 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
         .with(
             T_NOTE_DESC,
             "The note that gives title, author and language when the pages do not.",
+        )
+        .with(T_ACCESSIBLE, "Accessible PDF")
+        .with(
+            T_ACCESSIBLE_DESC,
+            "Headings, lists, tables, alternative texts and reading order tagged, for \
+             people who read with a screen reader.",
+        )
+        .with(T_PDFA, "PDF/A")
+        .with(
+            T_PDFA_DESC,
+            "The PDF for archiving: it carries everything needed to read it the same way \
+             for many years.",
         )
         .with(P_PLAN, "Write the PDF «{doc}» ({pages} pages)")
         .with(D_QUEUED, "Writing the PDF «{doc}»…")
@@ -281,6 +332,22 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
         .with(
             E_PAYLOAD,
             "The PDF job received a request that cannot be read.",
+        )
+        .with(
+            E_STRUCTURE,
+            "The note's structure for the accessible PDF cannot be read and the PDF was \
+             not written. Reopen the note and try again.",
+        )
+        .with(
+            E_PDFA_GLYPHS,
+            "The PDF/A was not written: the font «{family}» lacks the letters «{letters}», \
+             and PDF/A does not allow letters without a drawing. Choose another font or \
+             export without PDF/A.",
+        )
+        .with(
+            E_PDFA_VECTOR,
+            "The PDF/A was not written: a drawing on page {page} uses a letter Fub's fonts \
+             do not have. Change that drawing or export without PDF/A.",
         )
 }
 
@@ -359,6 +426,14 @@ pub(crate) fn spec() -> CommandSpec {
             ParamSpec::new(P_NOTE, Text::key(T_NOTE), ParamKind::Document)
                 .describing(Text::key(T_NOTE_DESC)),
         )
+        .with_param(
+            ParamSpec::new(P_ACCESSIBLE, Text::key(T_ACCESSIBLE), ParamKind::Bool)
+                .describing(Text::key(T_ACCESSIBLE_DESC)),
+        )
+        .with_param(
+            ParamSpec::new(P_PDFA, Text::key(T_PDFA), ParamKind::Bool)
+                .describing(Text::key(T_PDFA_DESC)),
+        )
         // Un file del vault, nuovo o al posto di un PDF che l'utente ha
         // chiesto di sostituire.
         .with_scope(CommandScope::writing(CommandReach::Document))
@@ -374,6 +449,12 @@ struct Richiesta {
     light: bool,
     #[serde(default)]
     replace: bool,
+    /// Il PDF accessibile, coi tag.
+    #[serde(default)]
+    accessible: bool,
+    /// Il PDF/A-2b.
+    #[serde(default)]
+    pdfa: bool,
     /// I dati della nota, per ciò che l'elenco lascia vuoto.
     #[serde(default)]
     title: String,
@@ -427,6 +508,8 @@ pub(crate) fn invoke(
         target: target.as_str().to_owned(),
         light: args.text(P_IMAGES) == Some(IMAGES_LIGHT),
         replace,
+        accessible: args.flag(P_ACCESSIBLE, false),
+        pdfa: args.flag(P_PDFA, false),
         title,
         author,
         lang,
@@ -479,6 +562,8 @@ pub fn run_job(
         } else {
             QualitaImmagini::Piene
         },
+        accessibile: richiesta.accessible,
+        pdfa: richiesta.pdfa,
     };
     let inizio = host.now_unix_millis();
     let ponte = Ponte {
@@ -618,6 +703,22 @@ fn errore(e: ErroreEsportazione) -> PluginError {
         ErroreEsportazione::TempoScaduto { secondi } => {
             Text::message(E_TIME, vec![Arg::int("seconds", secondi as i64)])
         }
+        ErroreEsportazione::TroppiNodi { .. } | ErroreEsportazione::NodoRotto { .. } => {
+            Text::key(E_STRUCTURE)
+        }
+        ErroreEsportazione::NodoSconosciuto { pagina: p, .. } => pagina(p),
+        ErroreEsportazione::PdfaNonPossibile { ostacoli } => match ostacoli.into_iter().next() {
+            Some(OstacoloPdfa::LettereSenzaGlifo { famiglia, lettere }) => Text::message(
+                E_PDFA_GLYPHS,
+                vec![Arg::text("family", famiglia), Arg::text("letters", lettere)],
+            ),
+            Some(OstacoloPdfa::VettoreNonConforme { pagina: p, .. }) => {
+                Text::message(E_PDFA_VECTOR, vec![Arg::int("page", p as i64)])
+            }
+            // Un errore senza ostacoli non nasce: lo scrittore lo dà solo
+            // con almeno uno.
+            None => Text::key(E_UNREADABLE),
+        },
     };
     PluginError::BadArgs(testo)
 }
