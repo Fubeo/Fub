@@ -2481,7 +2481,7 @@ Fatto quando: spostare una scheda nella zona e rileggere il `.canvas`; la
 rotella che scorre la nota a riposo; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/core/cards src/canvas-edit.e2e.test.ts
-Stato: [~] in corso · coder · base 3915830d9
+Stato: [~] fatto, da integrare (t47 @ 617374887)
 
 ## T48 · Dalla nota alla lavagna, e ritorno
 
@@ -3384,7 +3384,7 @@ Casi limite: un diagramma con errore (l'ultimo disegno buono o il riquadro
 Fatto quando: un test dei vettori; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 21491084f
 
 ## T76 · Il clic sulla pagina
 
