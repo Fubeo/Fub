@@ -1850,8 +1850,15 @@ export const SCENE = touchLast(onPage("shell", [
           scroller.scrollTop = scroller.scrollHeight;
           const missing = document.querySelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
           const card = document.querySelector('.pane.focus .pane-editor .live-card[data-card-state="unsupported"]')?.getBoundingClientRect();
-          return missing !== null && card !== undefined && card.bottom <= window.innerHeight;
-        });
+          // Il fondo vale solo quando altezza e posto restano gli stessi per
+          // dieci fotogrammi di fila: una scheda che cresce dopo il salto
+          // spostava la foto di qualche pixel da una corsa all'altra.
+          const firma = `${scroller.scrollHeight}:${scroller.scrollTop}`;
+          const fermo = window.__fondoFirma === firma ? (window.__fondoFermo ?? 0) + 1 : 0;
+          window.__fondoFirma = firma;
+          window.__fondoFermo = fermo;
+          return missing !== null && card !== undefined && card.bottom <= window.innerHeight && fermo >= 10;
+        }, null, { polling: "raf" });
       }
       if (scroll === "lost") {
         // La parte persa sta sotto il foglio: la si porta in alto nella vista.
