@@ -2540,7 +2540,7 @@ Fatto quando: un estratto dopo che la fonte è cambiata; «Annota» che scrive
 il `.canvas` e non la nota.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/live-cards.test.ts src/editors/canvas
-Stato: [~] in corso · coder · base d1a7af279
+Stato: [~] integrato in `integra/editor-2` (9f621744a, 2026-11-19), in attesa del gruppo; estratti di foglio; i passi PDF solo come citazione finché non c'è il motore dei PDF («Estrai» spento sul PDF); niente estratti di note o immagini (ci sono già trasclusione e lavagna); baseline delle scene nuove dal runner
 
 ## T50 · La Tabella prende i gesti del foglio
 
@@ -2759,7 +2759,7 @@ Fatto quando: i numeri e l'esito sono nella pagina; le guardie dei documenti
 verdi.
 Prova: scripts/check.sh --rapido; cd apps/client && node
 bench/interaction.mjs --only=battuta
-Stato: [ ] da fare · aspetta T49 (Dipende da T41–T55)
+Stato: [~] in corso · coder · base 9f621744a
 
 ## T57 · Diagramma: via la barra, il menu del tasto destro, il gruppo, i tasti
 
