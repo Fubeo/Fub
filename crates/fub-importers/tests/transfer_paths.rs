@@ -10,8 +10,7 @@ use fub_abi::transfer::{
 };
 use fub_importers::pipeline::StagingManifest;
 use fub_importers::{
-    AppleImport, ArchiveImport, CsvExport, EnexImport, JsonImport, OneNoteImport,
-    TextpackImport,
+    AppleImport, ArchiveImport, CsvExport, EnexImport, JsonImport, OneNoteImport, TextpackImport,
 };
 use fub_importers::{ImportCommands, ImportPlugin};
 use fub_sdk::testing::MemoryHost;

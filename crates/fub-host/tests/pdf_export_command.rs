@@ -285,13 +285,9 @@ fn il_vecchio_pdf_con_piu_note_o_nessuna_e_un_errore_tipato() {
     let host = aperto(&root);
     invoca(&host, PDF_EXPORT_LISTEN, json!({})).expect("la shell c'è");
     for target in ["importers.pdf.single", "importers.pdf"] {
-        let errore = esporta_col_vecchio(
-            &host,
-            target,
-            &["Dune.md", "Arrakis.md"],
-            InvokeMode::Apply,
-        )
-        .expect_err("una nota alla volta");
+        let errore =
+            esporta_col_vecchio(&host, target, &["Dune.md", "Arrakis.md"], InvokeMode::Apply)
+                .expect_err("una nota alla volta");
         assert!(
             matches!(errore, PluginError::BadArgs(_)),
             "{target}: {errore:?}"

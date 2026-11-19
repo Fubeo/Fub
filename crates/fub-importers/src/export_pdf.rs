@@ -64,19 +64,14 @@ pub(crate) fn forward(
             )))
         }
     };
-    match host.run_command(
-        PDF_EXPORT_NOTE,
-        serde_json::json!({ "note": doc.as_str() }),
-    ) {
-        Err(PluginError::UnknownCommand(_)) => {
-            Err(PluginError::Unserved(
-                format!(
-                    "`{}` is served by `{PDF_EXPORT_NOTE}`, which this build does not have",
-                    request.target
-                )
-                .into(),
-            ))
-        }
+    match host.run_command(PDF_EXPORT_NOTE, serde_json::json!({ "note": doc.as_str() })) {
+        Err(PluginError::UnknownCommand(_)) => Err(PluginError::Unserved(
+            format!(
+                "`{}` is served by `{PDF_EXPORT_NOTE}`, which this build does not have",
+                request.target
+            )
+            .into(),
+        )),
         other => other,
     }
 }
