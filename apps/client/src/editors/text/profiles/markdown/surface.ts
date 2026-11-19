@@ -587,6 +587,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     sheetChanged: () => actionsChanged(),
     // Le schede dentro le colonne leggono il loro embed dal testo di adesso.
     text: (from, to) => engine.readState((state) => (to <= state.doc.length ? state.sliceDoc(from, to) : null)),
+    // «Annota» (T49) crea la sua lavagna accanto alla nota con le porte della
+    // «Lavagna» del «/» (T47), senza chiedere il nome.
+    boards: {
+      taken: (file) => newFilePort("canvas").taken(file),
+      create: (id, text) => newFilePort("canvas").create(id, text),
+    },
+    notify: (message) => {
+      if (!life.closed) notify(message, "guasto");
+    },
   }) : null;
   /// I valori di cella della nota (T53): una lettura per cella, un ascolto per
   /// file, in Scrittura e in Lettura.
@@ -2559,7 +2568,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         copy: (text) => copyText(text, t("editor_menu.copied")),
         openLink: (page, heading, block) => void openWikilink(page, heading, block),
         editHere: (start) => engine.runViewCommand((view) => transclusions.editAt(view, start)),
-        ...(liveCards ? { activateCard: (start: number) => engine.runViewCommand((view) => liveCards.activateAt(view, start)) } : {}),
+        ...(liveCards ? {
+          activateCard: (start: number) => engine.runViewCommand((view) => liveCards.activateAt(view, start)),
+          annotateCard: (start: number) => engine.runViewCommand((view) => liveCards.annotateAt(view, start)),
+        } : {}),
         ...(opts.cellValues ? { detachCard: (card: DetachCard) => void detachCard(card) } : {}),
       }, pos);
     },

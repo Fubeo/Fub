@@ -571,6 +571,15 @@ describe("la porta per scrivere dentro le schede", () => {
     editors[0]!.moveTo({ name: "C3", formula: "12" });
     editors[0]!.moveTo(null);
     expect(seen).toEqual([{ cell: "C3", formula: "" }, { cell: "C3", formula: "12" }, null]);
+    // L'intervallo scelto e il foglio arrivano anche loro, e un intervallo
+    // che cresce dalla stessa cella avvisa (T49, «Estrai»).
+    editors[0]!.moveTo({ name: "C3", formula: "12", sheet: "Budget", range: "C3" });
+    editors[0]!.moveTo({ name: "C3", formula: "12", sheet: "Budget", range: "C3:D5" });
+    expect(seen.slice(3)).toEqual([
+      { cell: "C3", formula: "12", sheet: "Budget", range: "C3" },
+      { cell: "C3", formula: "12", sheet: "Budget", range: "C3:D5" },
+    ]);
+    seen.splice(3);
 
     stop();
     editors[0]!.moveTo({ name: "D4", formula: "1" });

@@ -300,6 +300,11 @@ export interface CardWriting {
 export interface CardEditorContext {
   readonly cell: string;
   readonly formula: string;
+  /// Il foglio della cella attiva, per nome, e l'intervallo scelto in A1
+  /// (`B2:C4`, o la cella sola): «Estrai» nella nota li scrive come parte
+  /// di un embed nuovo (T49). Assenti se l'editor non li dice.
+  readonly sheet?: string;
+  readonly range?: string;
 }
 
 /// Una scheda montata da un renderer.

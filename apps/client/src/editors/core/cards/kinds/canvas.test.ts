@@ -16,7 +16,7 @@ import { operationFromText, type EditorChange } from "../../text-operation";
 import { createFakeHost, type FakeHost } from "../../../../host/fake";
 import { createCardEditorPort, type CardEditorHub } from "../editor-port";
 import { DocumentSessionCollection } from "../../../../state/document-session";
-import { boardCardCount, canvasCardRenderer, CANVAS_CARD_MAX_DEPTH, type CanvasCardPort } from "./canvas";
+import { annotationBoardText, boardCardCount, canvasCardRenderer, CANVAS_CARD_MAX_DEPTH, type CanvasCardPort } from "./canvas";
 
 const live = vi.hoisted(() => ({ sessions: null as object | null }));
 
@@ -344,5 +344,27 @@ describe("la zona lavagna sulla sessione del file", () => {
       mounted.view.destroy();
       await settle();
     }
+  });
+});
+
+describe("la lavagna di «Annota» (T49)", () => {
+  it("una sola scheda di file, con la parte, in alto a sinistra alla misura della scheda, come la scrive la lavagna", () => {
+    const text = annotationBoardText("Archivio/Contratto.pdf", "#page=2", 699.6, 436.2);
+    expect(text.endsWith("}\n")).toBe(true);
+    const board = JSON.parse(text) as { nodes: Record<string, unknown>[]; edges: unknown[] };
+    expect(board.edges).toEqual([]);
+    expect(board.nodes).toHaveLength(1);
+    const node = board.nodes[0]!;
+    expect(Object.keys(node)).toEqual(["id", "type", "file", "subpath", "x", "y", "width", "height"]);
+    expect(node).toMatchObject({ type: "file", file: "Archivio/Contratto.pdf", subpath: "#page=2", x: 0, y: 0, width: 700, height: 436 });
+    expect(typeof node.id).toBe("string");
+    // Il testo è quello di `JSON.stringify` a due spazi: la lavagna non lo riscrive aprendolo.
+    expect(text).toBe(`${JSON.stringify(board, null, 2)}\n`);
+  });
+
+  it("senza parte non scrive `subpath`; una misura assurda prende quella di base", () => {
+    const node = (JSON.parse(annotationBoardText("Conti.xlsx", null, Number.NaN, 2)) as { nodes: Record<string, unknown>[] }).nodes[0]!;
+    expect("subpath" in node).toBe(false);
+    expect(node).toMatchObject({ width: 400, height: 40 });
   });
 });

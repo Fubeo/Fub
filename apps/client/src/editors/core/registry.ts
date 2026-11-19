@@ -459,6 +459,14 @@ export interface SurfaceStatus {
 export interface SurfaceActiveCell {
   readonly name: string;
   readonly formula: string;
+  /**
+   * The sheet of the active cell, by name, and the selected range around it
+   * in A1 (`B2:C4`, or the cell alone): «Estrai» of a sheet card in a note
+   * writes them as the part of a new embed (T49). Absent when the surface
+   * can't tell.
+   */
+  readonly sheet?: string;
+  readonly range?: string;
 }
 
 export interface SurfaceActiveCellSource {

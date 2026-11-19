@@ -17951,6 +17951,97 @@ input.canvas-toolbar-item {
   background-color: color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg));
   cursor: default;
 }
+/* ── Gli estratti e «Annota» (T49) ───────────────────────────────────────
+   (E25; il prototipo `.scard .only-live.act` e `.exc`, passi 17–18.)
+   «Estrai» sta in testata solo sulla scheda attiva che ha estratti (il
+   foglio; il PDF lo mostra spento, col perché): d'accento e in grassetto
+   come l'azione del prototipo (`--acc-ink` → `--accent-soft`), grigio da
+   spento. Un passo di PDF (`#page=2&selection=…`, scritto da Obsidian) è una
+   citazione, non una scheda: la barra gialla del prototipo (`#e8c84a` in
+   tutte e due le luci, come là), il carattere del corpo del testo (il
+   prototipo scrive un corsivo su `--f-text`, che non dichiara: il suo
+   `font` non vale e il testo eredita quello del paragrafo, dritto), e sotto
+   la fonte con «Vai alla pagina». */
+.live-card-head .live-card-extract {
+  display: none;
+}
+.live-card[data-card-active="true"][data-card-extract] .live-card-head .live-card-extract {
+  display: inline-flex;
+}
+.live-card[data-card-extract="ready"] .live-card-head .live-card-extract {
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+.live-card[data-card-extract="off"] .live-card-head .live-card-extract {
+  color: var(--doc-gutter-fg);
+  cursor: default;
+}
+.live-card[data-card-state="passage"] {
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.live-card[data-card-state="passage"]::after,
+.live-card[data-card-state="passage"] .live-card-head,
+.live-card[data-card-state="passage"] .live-card-resize {
+  display: none;
+}
+.live-card[data-card-state="passage"] .live-card-body {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  cursor: default;
+}
+.live-card[data-card-state="passage"] .live-card-body > * {
+  pointer-events: auto;
+}
+.live-card-excerpt {
+  margin: 4px 0;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid #e8c84a;
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  font-style: normal;
+  line-height: var(--leading-relaxed);
+}
+.live-card-excerpt-wait {
+  margin: 0;
+}
+.live-card-excerpt-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--doc-gutter-fg);
+  font: 12.5px var(--font-ui);
+  font-style: normal;
+}
+.live-card-excerpt-source > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.live-card-excerpt-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card-excerpt-go {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--accent-soft);
+}
+.live-card-excerpt-go:hover {
+  background: var(--accent-veil);
+}
+.live-card-excerpt-go:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 

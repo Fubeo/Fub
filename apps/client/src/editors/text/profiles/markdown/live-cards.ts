@@ -66,7 +66,7 @@ import { modelOf } from "./blocks/transform";
 import { columnCount, dropAsColumn, MAX_COLUMNS } from "./blocks/columns";
 import { siblingsOf } from "./blocks/move";
 import { removeColumnAt } from "./callout";
-import { embedSize, embedSizeText } from "./media";
+import { embedSize, embedSizeText, pdfPassage, type PdfPassage } from "./media";
 import { icon as iconMarkup, registerIcon } from "../../../../ui/icons";
 import { liveStrings } from "./strings";
 import { CELL_VALUE_DISPLAY, cellShownAsValue, cellValueRef } from "./cell-value";
@@ -138,6 +138,9 @@ export function liveCardPart(subpath: string | null): string | null {
   if (subpath === null) return null;
   const page = /^#page=(\d{1,6})$/.exec(subpath);
   if (page) return liveStrings.t("live_card.page", { page: page[1]! });
+  // Un passo di un PDF (T49): la pagina e «un passo», non la selezione.
+  const passage = pdfPassage(subpath);
+  if (passage) return liveStrings.t("live_card.passage", { page: String(passage.page) });
   const text = subpath.replace(/^#/, "").trim();
   // Un intervallo col suo foglio (T43, prototipo passo 16): «Budget · A1:E7».
   const range = /^(?:'((?:[^']|'')+)'|([^!'"\s][^!]*))!(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)$/.exec(text);
@@ -314,6 +317,102 @@ export function besideCardAt(state: EditorState, lineFrom: number): TransactionS
   return full ? "full" : null;
 }
 
+// ── Gli estratti e «Annota» (E25, T49) ─────────────────────────────────────
+// Un estratto è un pezzo di un file legato alla sua fonte: nella nota è un
+// embed la cui parte nomina il pezzo, come gli estratti della lavagna (N6
+// T73, `editors/canvas/parts.ts`) ne scrivono il `subpath`. È una finestra,
+// non una copia: se la fonte cambia, l'estratto la segue.
+//
+// - Di un foglio: «Estrai» dalla scheda attiva scrive sotto
+//   `![[Conti.xlsx#Budget!B2:C4]]`, le celle scelte, che si mostrano con la
+//   scheda di foglio (T43); un estratto di un estratto è un altro intervallo
+//   dello stesso file, mai una catena.
+// - Di un PDF: un passo come lo scrive Obsidian (`#page=2&selection=4,0,4,163`).
+//   Il testo del passo lo trova il motore dei PDF (PdfCraft), che il client
+//   non ha: «Estrai» lo dice, e un passo scritto altrove si mostra come
+//   citazione che lo dice, col nome della fonte e «Vai alla pagina».
+// - «Annota» avvolge la scheda in una zona lavagna (T47) con dentro soltanto
+//   lei: la penna non sta mai nella nota, e l'inchiostro resta attaccato
+//   alla pagina come sulla lavagna (`fub:ink`).
+
+/// Un nome di foglio che una formula scrive senza apici: lettere, cifre,
+/// `_` e `.`, e che non sembri una cella (`A1`, `R1C1`).
+function bareSheetName(sheet: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(sheet) && !/^[A-Za-z]{1,3}\d+$/.test(sheet) && !/^R\d*C\d*$/i.test(sheet);
+}
+
+/// La parte di un estratto di foglio: `Budget!B2:C4`, `'Conti 2025'!A1`.
+/// `null` se il nome o l'intervallo non si scrivono in un collegamento (un
+/// `#`, una `|`, un `^`, un a capo) o l'intervallo non è in A1.
+export function sheetExcerptPart(sheet: string, range: string): string | null {
+  const cells = range.replaceAll("$", "").trim();
+  if (sheet.trim() === "" || !/^[A-Za-z]{1,3}\d{1,7}(?::[A-Za-z]{1,3}\d{1,7})?$/.test(cells)) return null;
+  if (/[#|\]^[\n\r]/.test(sheet)) return null;
+  const name = bareSheetName(sheet) ? sheet : `'${sheet.replaceAll("'", "''")}'`;
+  return `${name}!${cells.toUpperCase()}`;
+}
+
+/// La riga dopo la quale va ciò che nasce sotto la scheda in `range`: la sua,
+/// o per una scheda dentro una citazione o delle colonne (T42) l'ultima riga
+/// del riquadro.
+function lastLineOf(state: EditorState, range: EmbedRange): ReturnType<EditorState["doc"]["line"]> {
+  const { doc } = state;
+  let line = doc.lineAt(range.from);
+  if (!/^\s{0,3}>/.test(line.text)) return line;
+  while (line.number < doc.lines && /^\s{0,3}>/.test(doc.line(line.number + 1).text)) line = doc.line(line.number + 1);
+  return line;
+}
+
+/// «Estrai»: la transazione che scrive sotto la scheda in `range` un
+/// paragrafo nuovo con l'estratto della parte `part` dello stesso file
+/// (`![[Conti.xlsx#Budget!B2:C4]]`), staccato da una riga vuota sopra e
+/// sotto. Il nome del file è quello scritto nella nota. `null` se lì non c'è
+/// più la scheda o la parte non si scrive in un collegamento. Un passo
+/// d'annullamento; il cursore non si muove.
+export function extractEmbedAt(state: EditorState, range: EmbedRange, part: string): TransactionSpec | null {
+  const embed = embedOf(state, range);
+  const text = part.trim();
+  if (!embed || text === "" || /[#|\]^[\n\r]/.test(text.replace(/^#/, ""))) return null;
+  const line = lastLineOf(state, range);
+  const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+  const excerpt = embedText(embed.page, `#${text.replace(/^#/, "")}`, null, true);
+  const insert = `\n\n${excerpt}${next !== null && next.text.trim() !== "" ? "\n" : ""}`;
+  return {
+    changes: { from: line.to, insert },
+    effects: EditorView.scrollIntoView(line.to + 2, { y: "nearest" }),
+    userEvent: "input.extract",
+  };
+}
+
+/// Il nome della lavagna di «Annota» per il file `path`, senza estensione:
+/// «Contratto (annotazioni)». Pulito come i nomi del «/» (`baseStem`).
+export function annotationBoardStem(path: string): string {
+  const base = fileName(path);
+  const point = base.lastIndexOf(".");
+  const stem = (point > 0 ? base.slice(0, point) : base)
+    .replace(/[\\/#|^[\]:*?"<>\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.]+|[\s.]+$/g, "");
+  return liveStrings.t("live_card.annotate.name", { name: stem || liveStrings.t("live_card.annotate.fallback") });
+}
+
+/// «Annota»: la transazione che mette al posto della scheda in `range` la
+/// zona lavagna `board` (il nome del `.canvas` come si scrive in un link),
+/// con la misura della scheda: quella scritta, o l'altezza `height` sulla
+/// larghezza `column`. `null` se lì non c'è più la scheda.
+export function annotateEmbedIn(state: EditorState, range: EmbedRange, board: string, height: number, column: number): TransactionSpec | null {
+  const embed = embedOf(state, range);
+  if (!embed || board === "" || /[#|\]^[\n\r]/.test(board)) return null;
+  const written = liveCardSize(embed.alias);
+  const tall = written.height ?? Math.round(Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, height)));
+  const wide = written.width ?? Math.round(column);
+  const alias = wide > 0 && Number.isFinite(tall) ? embedSizeText(wide, tall) : null;
+  return {
+    changes: { from: range.from, to: range.to, insert: embedText(board, null, alias, true) },
+    userEvent: "input.annotate",
+  };
+}
+
 /// Le schede che devono essere vive: al più `limit`, le più vicine al centro
 /// della vista; a pari distanza l'ordine del documento. Quella attiva lo è
 /// sempre, anche oltre il limite.
@@ -346,6 +445,20 @@ export interface LiveCardKit {
   kindOf(path: string): CardKind;
   /// Quante schede tiene vive al più (`MAX_LIVE_CARDS` della lavagna).
   readonly maxLive: number;
+  /// Il testo della lavagna di «Annota» (T49): una sola scheda, il file
+  /// `path` con la sua parte, grande `width` × `height` (`annotationBoardText`
+  /// della zona lavagna). Senza, «Annota» non c'è.
+  annotationBoard?(path: string, subpath: string | null, width: number, height: number): string;
+}
+
+/// Come «Annota» crea la sua lavagna accanto alla nota (T49): le stesse porte
+/// della «Lavagna» del «/» (T47).
+export interface LiveCardBoards {
+  /// Un file con questo nome (`Nome.canvas`) c'è già nel vault.
+  taken(file: string): Promise<boolean>;
+  /// Crea il file soltanto se non c'è; altrimenti rifiuta, con
+  /// `already_exists`, e non scrive niente.
+  create(id: string, text: string): Promise<void>;
 }
 
 /// Ciò che la shell dà alle schede di una nota. Senza, un embed di file resta
@@ -377,6 +490,12 @@ export interface LiveCardsHost {
   /// Il testo della nota fra `from` e `to`, adesso: le schede dentro le
   /// colonne (T42) leggono da qui il loro embed. Senza, lì non ci sono schede.
   text?(from: number, to: number): string | null;
+  /// Le porte per creare la lavagna di «Annota» (T49). Senza, «Annota» non
+  /// c'è.
+  readonly boards?: LiveCardBoards;
+  /// Dice alla persona perché un gesto non va (un «Estrai» spento, una
+  /// lavagna che non si crea). Senza, il perché resta nel titolo del pulsante.
+  notify?(message: string): void;
 }
 
 /// L'icona della testata per ogni specie: le figure del set.
@@ -398,6 +517,8 @@ const KIND_ICON: Readonly<Record<CardKind, string>> = {
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "live-card-open": ["M13.5 4.5h6v6", "M19.5 4.5 12 12", "M17.25 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-10.5a1.5 1.5 0 0 1-1.5-1.5v-10.5a1.5 1.5 0 0 1 1.5-1.5h4.5"],
   "live-card-full": ["M14.25 4.5h5.25v5.25", "M19.5 4.5 13.5 10.5", "M9.75 19.5H4.5v-5.25", "M4.5 19.5l6-6"],
+  // «Estrai» (T49): la citazione del prototipo, il filo e le righe.
+  "live-card-extract": ["M5 5v14", "M9 8h10M9 12h10M9 16h6"],
 };
 
 /// Registra le figure che il set non ha ancora, una volta per tutte.
@@ -449,7 +570,8 @@ function escapeText(): HTMLElement {
   return line;
 }
 
-type CardState = "loading" | "view" | "row" | "missing" | "unsupported";
+/// `passage`: un passo di un PDF (T49), che la nota mostra come citazione.
+type CardState = "loading" | "view" | "row" | "missing" | "unsupported" | "passage";
 
 /// La Scrittura che contiene `element`, anche dentro un blocco reso.
 function editorOf(element: HTMLElement): EditorView | null {
@@ -478,6 +600,7 @@ export class LiveCard {
   /// schede», T47).
   readonly #summary: HTMLElement;
   readonly #tools: HTMLElement;
+  readonly #extract: HTMLButtonElement;
   #body: HTMLElement;
   /// La vita della vista della specie (o del corpo «mancante»).
   #bodyLife: Lifetime | null = null;
@@ -521,7 +644,10 @@ export class LiveCard {
     open.setAttribute("aria-label", liveStrings.t("live_card.open_named", { name: fileName(embed.page) }));
     const full = headButton("live-card-full", "live-card-full", liveStrings.t("live_card.full"));
     full.setAttribute("aria-pressed", "false");
-    head.append(done, open, full);
+    // «Estrai» (T49): solo da attiva, dove la specie sa dire il pezzo scelto.
+    // Si vede soltanto con `data-card-extract` sulla scheda (`#refreshExtract`).
+    const extract = this.#extract = headButton("live-card-extract", "live-card-extract", liveStrings.t("live_card.extract"));
+    head.append(done, extract, open, full);
     this.#tools = element("div", "live-card-tools");
     this.#tools.hidden = true;
     this.#body = element("div", "live-card-body");
@@ -555,6 +681,16 @@ export class LiveCard {
     life.listen(full, "click", (event: MouseEvent) => {
       event.stopPropagation();
       this.#toggleFull();
+    });
+    life.listen(extract, "click", (event: MouseEvent) => {
+      event.stopPropagation();
+      // Spento, il pulsante dice perché nel suo titolo; il clic lo ripete.
+      const why = this.extractBlocked();
+      if (why !== null) {
+        this.#owner.host.notify?.(why);
+        return;
+      }
+      this.#owner.extract(this);
     });
     // La testata (fuori dai pulsanti) sceglie la scheda: il bordo del blocco.
     life.listen(head, "mousedown", (event: MouseEvent) => {
@@ -736,11 +872,52 @@ export class LiveCard {
     this.#state = state;
     this.root.dataset.cardState = state;
     this.#refreshResizable();
+    this.refreshExtract();
+  }
+
+  /// La parte dell'estratto che «Estrai» scriverebbe adesso (T49): per un
+  /// foglio le celle scelte (`Budget!B2:C4`); `null` se non c'è.
+  extractPart(): string | null {
+    if (this.#kind !== "sheet") return null;
+    const context = this.#cellContext;
+    if (!context?.sheet || !context.range) return null;
+    return sheetExcerptPart(context.sheet, context.range);
+  }
+
+  /// Perché «Estrai» adesso non va, o `null` se va. Un PDF aspetta il suo
+  /// motore; un foglio aspetta delle celle scelte con un nome che si scrive.
+  extractBlocked(): string | null {
+    if (this.#kind === "pdf") return liveStrings.t("live_card.extract.pdf");
+    if (this.#kind !== "sheet") return liveStrings.t("live_card.extract.none");
+    const context = this.#cellContext;
+    if (!context?.sheet || !context.range) return liveStrings.t("live_card.extract.pick");
+    return this.extractPart() === null ? liveStrings.t("live_card.extract.name", { sheet: context.sheet }) : null;
+  }
+
+  /// «Estrai» c'è dove la nota si scrive, su una scheda mostrata di una specie
+  /// che sa dire il pezzo (un foglio) o che lo saprà (un PDF, che lo dice
+  /// spento); la pelle lo mostra soltanto da attiva.
+  refreshExtract(): void {
+    const button = this.#extract;
+    const offered = this.#owner.host.editable() && this.#state === "view"
+      && (this.#kind === "sheet" || this.#kind === "pdf");
+    if (!offered) {
+      delete this.root.dataset.cardExtract;
+      button.removeAttribute("aria-disabled");
+      button.title = "";
+      return;
+    }
+    const why = this.extractBlocked();
+    this.root.dataset.cardExtract = why === null ? "ready" : "off";
+    if (why === null) button.removeAttribute("aria-disabled");
+    else button.setAttribute("aria-disabled", "true");
+    button.title = why ?? liveStrings.t("live_card.extract.title");
   }
 
   #setKind(kind: CardKind): void {
     this.#kind = kind;
     this.root.dataset.cardKind = kind;
+    this.refreshExtract();
     const figure = iconNode(KIND_ICON[kind]);
     const old = this.#head.firstElementChild;
     if (figure && old?.localName === "svg") old.replaceWith(figure);
@@ -776,6 +953,12 @@ export class LiveCard {
       this.#freshBody();
       this.#setState("row");
       delete this.root.dataset.cardMode;
+      return;
+    }
+    // Un passo di un PDF (T49) è un estratto: una citazione con la fonte.
+    const passage = kind === "pdf" ? pdfPassage(this.#embed.subpath) : null;
+    if (passage) {
+      this.#showPassage(path, passage);
       return;
     }
     const renderer = kit && kind ? kit.registry.rendererFor(kind) : null;
@@ -917,8 +1100,10 @@ export class LiveCard {
   /// La cella attiva della specie che scrive: va alla barra di formato.
   #setCellContext(context: CardEditorContext | null): void {
     const before = this.#cellContext;
-    if (before?.cell === context?.cell && before?.formula === context?.formula) return;
+    if (before?.cell === context?.cell && before?.formula === context?.formula
+      && before?.sheet === context?.sheet && before?.range === context?.range) return;
     this.#cellContext = context;
+    this.refreshExtract();
     if (this.#owner.activeCard() === this) this.#owner.sheetChanged();
   }
 
@@ -986,6 +1171,37 @@ export class LiveCard {
     this.#owner.refreshLive();
   }
 
+  /// Un passo di un PDF (T49), come lo scrive Obsidian: una citazione con la
+  /// fonte sotto («Contratto.pdf · p. 2») e «Vai alla pagina». Il testo del
+  /// passo lo trova il motore dei PDF, che il client non ha: la citazione lo
+  /// dice invece di inventarlo, e la pagina si apre col visore.
+  #showPassage(path: string, passage: PdfPassage): void {
+    const body = this.#freshBody();
+    const life = openLifetime();
+    this.#bodyLife = life;
+    this.#setState("passage");
+    delete this.root.dataset.cardMode;
+    const quote = element("blockquote", "live-card-excerpt");
+    const text = element("p", "live-card-excerpt-wait", liveStrings.t("live_card.passage.wait"));
+    const source = element("footer", "live-card-excerpt-source");
+    const figure = iconNode(KIND_ICON.pdf);
+    if (figure) source.append(figure);
+    const name = element("span", "live-card-excerpt-name", liveStrings.t("live_card.passage.source", {
+      name: fileName(path),
+      page: String(passage.page),
+    }));
+    name.title = path;
+    const go = element("button", "live-card-excerpt-go", liveStrings.t("live_card.passage.page"));
+    go.type = "button";
+    life.listen(go, "click", (event: MouseEvent) => {
+      event.stopPropagation();
+      this.#owner.host.port.open(path, `#page=${passage.page}`);
+    });
+    source.append(name, go);
+    quote.append(text, source);
+    body.append(quote);
+  }
+
   #showUnsupported(path: string): void {
     const body = this.#freshBody();
     this.#setState("unsupported");
@@ -1026,6 +1242,9 @@ export class LiveCard {
     if (!view || this.#state !== "view") return false;
     this.setMode("live");
     this.root.dataset.cardActive = "true";
+    // La nota può essere passata in sola lettura da quando la scheda si è
+    // mostrata: «Estrai» si rilegge entrando.
+    this.refreshExtract();
     this.root.focus({ preventScroll: true });
     try {
       view.enter?.();
@@ -1484,6 +1703,95 @@ export class LiveCards {
     return true;
   }
 
+  /// «Estrai» (T49): sotto la scheda, un paragrafo con l'estratto del pezzo
+  /// scelto (`![[Conti.xlsx#Budget!B2:C4]]`), un passo d'annullamento. La
+  /// scheda esce, e l'estratto viene in vista. `false` se non si scrive o la
+  /// specie non dice un pezzo.
+  extract(card: LiveCard): boolean {
+    const view = editorOf(card.root);
+    const part = card.extractPart();
+    if (!view || part === null || !this.host.editable()) return false;
+    const range = card.range();
+    const spec = range === null ? null : extractEmbedAt(view.state, range, part);
+    if (!spec) return false;
+    if (this.#active === card) this.leave(card, { choose: false, focus: false });
+    view.dispatch(spec);
+    return true;
+  }
+
+  /// «Annota» si può sulla scheda: dove la nota si scrive, con le porte per
+  /// creare la lavagna, su un file trovato che non sia già una zona lavagna.
+  canAnnotate(card: LiveCard): boolean {
+    return !card.destroyed && this.host.editable() && this.host.boards !== undefined
+      && card.path !== null && card.kind !== null && card.kind !== "canvas" && !this.#annotating;
+  }
+
+  #annotating = false;
+
+  /// «Annota» sulla scheda del blocco che comincia alla riga di `lineFrom`.
+  annotateAt(view: EditorView, lineFrom: number): boolean {
+    const card = this.find(view, lineFrom);
+    if (!card || !this.canAnnotate(card)) return false;
+    void this.annotate(card);
+    return true;
+  }
+
+  /// «Annota» (T49): crea accanto alla nota una lavagna con dentro soltanto
+  /// questa scheda (il file e la sua parte, alla sua misura) e mette nella
+  /// nota la zona lavagna al posto dell'embed, che si apre già attiva. La
+  /// penna scrive nel `.canvas`, mai nella nota, e il file della scheda non
+  /// cambia. Se la lavagna non si crea la nota resta com'era. `true` se la
+  /// zona è entrata nella nota.
+  async annotate(card: LiveCard): Promise<boolean> {
+    const boards = this.host.boards;
+    const path = card.path;
+    if (!boards || path === null || !this.canAnnotate(card)) return false;
+    const kit = await this.host.port.load().catch(() => null);
+    if (!kit?.annotationBoard || card.destroyed) return false;
+    this.#annotating = true;
+    try {
+      const body = card.root.querySelector<HTMLElement>(".live-card-body");
+      const width = Math.round(body?.clientWidth || card.root.clientWidth || 640);
+      const height = Math.round(body?.clientHeight || 400);
+      const text = kit.annotationBoard(path, card.embed.subpath, width, height);
+      const note = this.host.hostDoc();
+      const cut = note.lastIndexOf("/");
+      const folder = cut < 0 ? "" : note.slice(0, cut);
+      const stem = annotationBoardStem(path);
+      let created: string | null = null;
+      for (let n = 1; n <= 50 && created === null; n += 1) {
+        const name = n === 1 ? stem : `${stem} ${n}`;
+        if (await boards.taken(`${name}.canvas`)) continue;
+        try {
+          await boards.create(folder === "" ? `${name}.canvas` : `${folder}/${name}.canvas`, text);
+          created = name;
+        } catch (error) {
+          if (!alreadyExists(error)) throw error;
+        }
+      }
+      if (created === null) throw new Error(liveStrings.t("live_card.annotate.taken", { name: stem }));
+      const view = card.destroyed ? null : editorOf(card.root);
+      const range = card.destroyed ? null : card.range();
+      const column = view ? columnWidthOf(view) || card.root.getBoundingClientRect().width : 0;
+      const spec = view && range && this.host.editable()
+        ? annotateEmbedIn(view.state, range, `${created}.canvas`, card.root.getBoundingClientRect().height || height + 36, column)
+        : null;
+      if (!view || !range || !spec) {
+        this.host.notify?.(liveStrings.t("live_card.annotate.orphan", { name: `${created}.canvas` }));
+        return false;
+      }
+      if (this.#active === card) this.leave(card, { choose: false, focus: false });
+      view.dispatch(spec);
+      this.activateWhenShown(view, view.state.doc.lineAt(range.from).from);
+      return true;
+    } catch (error) {
+      this.host.notify?.(liveStrings.t("live_card.annotate.failed", { reason: errorText(error) }));
+      return false;
+    } finally {
+      this.#annotating = false;
+    }
+  }
+
   /// La scheda di foglio attiva (T43), per il gruppo «Foglio» della barra di
   /// formato: «Apri» e la cella attiva con la sua formula, se si scrive.
   activeSheet(): { readonly open: () => void; readonly context: CardEditorContext | null } | null {
@@ -1595,6 +1903,11 @@ export class LiveCards {
     this.#hints = null;
     this.#destroyed = true;
   }
+}
+
+/// Il rifiuto di chi crea un file che c'è già (`already_exists`).
+function alreadyExists(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "kind" in error && (error as { kind: unknown }).kind === "already_exists";
 }
 
 /// La posizione del documento dove comincia il widget `root`, o `null`.

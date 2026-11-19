@@ -423,7 +423,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         const stop = source.subscribe(() => {
           if (editor.destroyed) return;
           const next = contextOf(editor.surface);
-          if (next?.cell === last?.cell && next?.formula === last?.formula) return;
+          if (next?.cell === last?.cell && next?.formula === last?.formula && next?.sheet === last?.sheet && next?.range === last?.range) return;
           last = next;
           listener(next);
         });
@@ -830,5 +830,11 @@ function contextOf(surface: EditorSurface): CardEditorContext | null {
   } catch (error) {
     console.error(error);
   }
-  return cell === null ? null : { cell: cell.name, formula: cell.formula };
+  if (cell === null) return null;
+  return {
+    cell: cell.name,
+    formula: cell.formula,
+    ...(cell.sheet === undefined ? {} : { sheet: cell.sheet }),
+    ...(cell.range === undefined ? {} : { range: cell.range }),
+  };
 }

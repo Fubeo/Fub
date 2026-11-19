@@ -553,6 +553,35 @@ export const VISTE = {
     },
     app: { scena: "valori-cella-01-scrittura" },
   },
+  // «Estrai» (T49): nel prototipo sulla scheda PDF attiva del passo «Ogni
+  // formato è una scheda», nell'app sul foglio attivo con delle celle scelte
+  // (sul PDF è spento finché non c'è il motore dei PDF: il piano, T49).
+  "estratti-estrai": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+      },
+    },
+    app: { scena: "estratti-01-estrai" },
+  },
+  // L'estratto (T49): nel prototipo quello che «Estrai» mette sotto la scheda
+  // PDF, nell'app il passo di PDF scritto come lo scrive Obsidian.
+  "estratti-passo": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+        await page.click("#win #pdf-ex");
+        await page.waitForSelector("#win .exc footer button");
+        await page.evaluate(() => document.querySelector("#win .exc")?.scrollIntoView({ block: "center" }));
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "estratti-03-passo" },
+  },
   // La zona lavagna (T47): quella del prototipo a riposo, la lavagna intera
   // nella sua zona; nel banco il percorso della visita, a riposo.
   "scheda-lavagna": {
@@ -1804,6 +1833,56 @@ export const PEZZI = [
     prototipo: '.scard[data-kind="canvas"] .cvz',
     app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest',
     proprieta: ["cursor", "overflow"],
+  },
+  // ── gli estratti (T49) ────────────────────────────────────────────────────
+  // «Estrai» in testata: l'azione d'accento in grassetto, come gli altri
+  // pulsanti della testata per il resto.
+  {
+    id: "estratti.estrai",
+    vista: "estratti-estrai",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="pdf"].active #pdf-ex',
+    app: '.pane.focus .pane-editor .live-card[data-card-active="true"][data-card-extract="ready"] .live-card-extract',
+    proprieta: ["color", "font-weight", "display", "opacity"],
+  },
+  // L'estratto: la barra gialla a sinistra, i margini, il carattere del
+  // paragrafo (il `font` del prototipo nomina `--f-text`, che non c'è, e il
+  // testo eredita quello del paragrafo); sotto la fonte nel carattere
+  // dell'interfaccia, e il pulsante d'accento. L'interlinea è del corpo del
+  // testo (non di questo pezzo), e qui non si confronta, come per i valori
+  // di cella.
+  {
+    id: "estratti.citazione",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc",
+    app: ".pane.focus .pane-editor .live-card-excerpt",
+    proprieta: ["border-left-width", "border-left-style", "border-left-color", "padding", "margin-top", "margin-bottom", "font-style", "font-size", "font-family", "color"],
+  },
+  {
+    id: "estratti.fonte",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer",
+    app: ".pane.focus .pane-editor .live-card-excerpt-source",
+    proprieta: ["font-size", "font-style", "font-family", "color", "gap", "margin-top", ...ALLINEAMENTO],
+  },
+  {
+    id: "estratti.vai",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    proprieta: ["color", "padding", "border-radius"],
+  },
+  {
+    id: "estratti.vai-passaggio",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    gesto: { tipo: "hover", prototipo: ".exc footer button", app: ".pane.focus .pane-editor .live-card-excerpt-go" },
+    proprieta: ["background-color"],
   },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {

@@ -1686,6 +1686,58 @@ export const SCENE = touchLast(onPage("shell", [
       }
     },
   })),
+  // Gli estratti (T49, il prototipo `.scard .act` e `.exc`, passi 17–18): il
+  // foglio dei conti attivo con due righe scelte e «Estrai» d'accento in
+  // testata; dopo «Estrai», l'estratto sotto la scheda; il passo del
+  // contratto scritto come lo scrive Obsidian, una citazione con la fonte e
+  // «Vai alla pagina»; il passo nella finestra minima.
+  ...[
+    ["estratti-01-estrai", "Il foglio attivo con A1:B2 scelte: «Estrai» d'accento in testata", "choose"],
+    ["estratti-02-estratto", "Dopo «Estrai»: l'estratto delle celle scelte sotto la scheda, legato al foglio", "extract"],
+    ["estratti-03-passo", "Un passo del contratto (`#page=1&selection=…`): la citazione con la fonte e «Vai alla pagina»", "passage"],
+    ["estratti-04-stretta", "Il passo nella finestra minima, 800 px", "passage", NOTE_NARROW],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=estratti&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const sheet = '.pane.focus .pane-editor .live-card[data-card-kind="sheet"]';
+      const passage = '.pane.focus .pane-editor .live-card[data-card-state="passage"]';
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${sheet} .canvas-card-sheet[data-card-state="content"]`);
+      await page.waitForSelector(`${passage} .live-card-excerpt-go`);
+      if (gesture === "passage") {
+        await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), passage);
+        return;
+      }
+      await page.click(`${sheet} .live-card-body`);
+      await page.waitForSelector(`${sheet}[data-card-active="true"]`);
+      // Due righe e due colonne scelte trascinando, da A1 a B2 (il finto dà
+      // solo le finestre che partono da A1, e l'estratto ci parte).
+      const cell = async (row, column) => {
+        // Le celle dell'editor attivo (`aria-selected`), non quelle ferme sotto.
+        const box = await page.locator(`${sheet} .grid-cell[aria-selected][data-row="${row}"][data-column="${column}"]`).boundingBox();
+        if (!box) throw new Error(`la cella ${row},${column} del foglio non si vede`);
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+      const from = await cell(0, 0);
+      const to = await cell(1, 1);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForSelector(`${sheet}[data-card-extract="ready"] .live-card-extract`);
+      if (gesture === "extract") {
+        await page.click(`${sheet} .live-card-extract`);
+        await page.waitForFunction(() => document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet[data-card-state="content"]').length === 2);
+        await page.evaluate(() => {
+          const cards = document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"]');
+          cards[1]?.scrollIntoView({ block: "center" });
+        });
+      }
+    },
+  })),
   // I valori di cella nel testo (T53, il prototipo `.cellv` del paragrafo
   // `p-conti`): in Scrittura il valore col tratteggio d'accento, i casi limite
   // (vuota, #DIV/0!, foglio che non c'è, file mancante) e la cella da sola con
