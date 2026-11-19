@@ -16,11 +16,20 @@ use fub_abi::event::{Actor, Event};
 use fub_abi::PluginError;
 use fub_features::pdf_export::lavoro::{PDF_QUEUED, PDF_WRITE_JOB, PDF_WRITE_PAGES};
 use fub_features::pdf_export::{ElencoPagine, Faccia, Pagina, Pezzo, VERSIONE};
-use fub_features::{DrawCommands, DRAW_ID};
+use fub_features::DRAW_ID;
 use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, Host, JobHost};
 use fub_kernel::{FormatRegistry, Workspace};
 use serde_json::json;
+
+/// La riga dei disegni nell'inventario: catalogo, comandi e lavori come li
+/// monta l'app, col PDF delle note composto dentro.
+fn disegni() -> &'static fub_features::OfficialFeature {
+    fub_features::every_official_feature()
+        .iter()
+        .find(|feature| feature.id == DRAW_ID)
+        .expect("la feature dei disegni è nell'inventario")
+}
 
 fn elenco(pagine: usize) -> String {
     let elenco = ElencoPagine {
@@ -123,12 +132,15 @@ fn workspace(root: &Utf8PathBuf) -> Custody<Workspace> {
     let mut ws = Workspace::new(root, formats).unwrap();
     ws.register_plugin(
         fub_abi::traits::PluginManifest::core(DRAW_ID, DRAW_ID)
-            .speaking("it", fub_features::draw::catalog()),
+            .speaking("it", (disegni().catalog)()),
         fub_kernel::Trust::Core,
     )
     .unwrap();
-    ws.register_command_provider(DRAW_ID, Box::new(DrawCommands))
-        .unwrap();
+    ws.register_command_provider(
+        DRAW_ID,
+        (disegni().commands.expect("i disegni hanno comandi"))(),
+    )
+    .unwrap();
     ws.reindex().unwrap();
     Custody::new("pdf export test", ws)
 }
@@ -155,8 +167,11 @@ fn un_lavoro_annullato_non_lascia_il_file() {
     let mut job_host = JobHost::new(workspace.clone(), DRAW_ID)
         .for_job(lavoro.id)
         .cancelled_by(annullato);
-    let esito =
-        fub_features::draw::jobs(&lavoro.spec.job, lavoro.spec.payload.clone(), &mut job_host);
+    let esito = (disegni().jobs.expect("i disegni hanno lavori"))(
+        &lavoro.spec.job,
+        lavoro.spec.payload.clone(),
+        &mut job_host,
+    );
     assert!(matches!(esito, Err(PluginError::Cancelled(_))), "{esito:?}");
     assert!(!root.join("Annullato.pdf").exists());
     let rimasti: Vec<_> = std::fs::read_dir(&root)
@@ -173,7 +188,11 @@ fn un_lavoro_annullato_non_lascia_il_file() {
     // Lo stesso lavoro, non annullato, scrive il PDF: è la bandiera a
     // fermarlo, non la richiesta.
     let mut job_host = JobHost::new(workspace, DRAW_ID).for_job(lavoro.id);
-    fub_features::draw::jobs(&lavoro.spec.job, lavoro.spec.payload, &mut job_host)
-        .expect("il lavoro scrive");
+    (disegni().jobs.expect("i disegni hanno lavori"))(
+        &lavoro.spec.job,
+        lavoro.spec.payload,
+        &mut job_host,
+    )
+    .expect("il lavoro scrive");
     assert!(root.join("Annullato.pdf").exists());
 }

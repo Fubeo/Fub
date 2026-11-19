@@ -112,6 +112,8 @@ use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
 use crate::lavagna::{self, LavagnaCommands, LAVAGNA_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineCommands, OutlineView, OUTLINE_ID};
+#[cfg(feature = "draw")]
+use crate::pdf_export::lavoro::{self as pdf_lavoro, ConIlPdf};
 #[cfg(feature = "proof")]
 use crate::proof::{self, ProofCommands, PROOF_ID};
 #[cfg(feature = "properties")]
@@ -651,9 +653,11 @@ static OFFICIALS: &[OfficialFeature] = &[
     OfficialFeature {
         id: DRAW_ID,
         name: "Drawings",
-        catalog: draw::catalog,
+        // Il PDF delle note viaggia coi disegni (ne usa i caratteri, stessa
+        // feature): stringhe, comando e lavoro li compone qui l'inventario.
+        catalog: || pdf_lavoro::con_le_stringhe(draw::catalog()),
         view: None,
-        commands: Some(|| Box::new(draw::DrawCommands)),
+        commands: Some(|| Box::new(ConIlPdf(draw::DrawCommands))),
         index: Some(|| Box::new(draw::DrawIndex)),
         syntax: None,
         renderers: None,
@@ -662,7 +666,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
-        jobs: Some(draw::jobs),
+        jobs: Some(pdf_lavoro::run_job),
         wiring: HostWiring::None,
     },
     // In coda anche lei, per la stessa ragione: non registra pannelli, e il

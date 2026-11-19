@@ -2226,6 +2226,38 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  nome resta com'è.",
             ),
         ),
+        // -- Il PDF delle note (ADR 0247) --------------------------------------
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::destinazione",
+            (
+                Family::AsciiCase,
+                "riconosce `.pdf` in fondo alla destinazione del PDF di una nota senza badare al \
+                 caso ASCII, come `print.rs::file_name`: `Bando.PDF` è già un PDF e non ne \
+                 riceve un secondo. Non decide l'identità del nome, che resta a \
+                 `path_policy::check` subito dopo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::carattere",
+            (
+                Family::FolderBoundary,
+                "toglie lo `/` iniziale dall'indirizzo di un carattere (`/fonts/<nome>`, come \
+                 l'app lo serve) per riconoscere i caratteri di Fub nel binario: è un indirizzo \
+                 della webview, non un path del vault, e ogni altro nome passa intero a \
+                 `path_policy::from_outside`.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/writer.rs::indirizzo_ammesso",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un link prima di scriverlo nel PDF e lo confronta con \
+                 `http`, `https` e `mailto`: gli schemi URI sono ASCII per la RFC 3986, e il \
+                 confronto è un cancello che tiene fuori `javascript:` e `file:`. Diverge da \
+                 `validate_callback` perché la lista è di ciò che si lascia passare in un file \
+                 che altri apriranno, non di dove richiamare.",
+            ),
+        ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------
         (
             "crates/fub-cli/src/capture.rs::uri",

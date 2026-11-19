@@ -17,10 +17,19 @@ use fub_features::pdf_export::lavoro::{PDF_QUEUED, PDF_WRITE_JOB, PDF_WRITE_PAGE
 use fub_features::pdf_export::{
     Collegamento, Destinazione, ElencoPagine, Faccia, Pagina, Pezzo, Segnalibro, VERSIONE,
 };
-use fub_features::{DrawCommands, DRAW_ID};
+use fub_features::DRAW_ID;
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
 use serde_json::{json, Value};
+
+/// La riga dei disegni nell'inventario: catalogo, comandi e lavori come li
+/// monta l'app, col PDF delle note composto dentro.
+fn disegni() -> &'static fub_features::OfficialFeature {
+    fub_features::every_official_feature()
+        .iter()
+        .find(|feature| feature.id == DRAW_ID)
+        .expect("la feature dei disegni è nell'inventario")
+}
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -42,12 +51,15 @@ impl Vault {
         let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.register_plugin(
             fub_abi::traits::PluginManifest::core(DRAW_ID, DRAW_ID)
-                .speaking("it", fub_features::draw::catalog()),
+                .speaking("it", (disegni().catalog)()),
             fub_kernel::Trust::Core,
         )
         .expect("dichiarato");
-        ws.register_command_provider(DRAW_ID, Box::new(DrawCommands))
-            .expect("registrato");
+        ws.register_command_provider(
+            DRAW_ID,
+            (disegni().commands.expect("i disegni hanno comandi"))(),
+        )
+        .expect("registrato");
         ws.reindex().expect("reindex");
         ws
     }
@@ -151,7 +163,7 @@ fn esporta(ws: &mut Workspace, target: &str) -> Result<Value, PluginError> {
     assert_eq!(lavoro.spec.job, PDF_WRITE_JOB);
     let richiesta = lavoro.spec.payload.clone();
     ws.with_host(&lavoro.plugin, |host| {
-        fub_features::draw::jobs(&lavoro.spec.job, richiesta, host)
+        (disegni().jobs.expect("i disegni hanno lavori"))(&lavoro.spec.job, richiesta, host)
     })
 }
 

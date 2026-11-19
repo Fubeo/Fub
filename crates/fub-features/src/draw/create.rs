@@ -435,11 +435,7 @@ impl DrawCommands {
 
 impl CommandProvider for DrawCommands {
     fn commands(&self) -> Vec<CommandSpec> {
-        vec![
-            DrawCommands::spec(),
-            super::annotate::spec(),
-            crate::pdf_export::lavoro::spec(),
-        ]
+        vec![DrawCommands::spec(), super::annotate::spec()]
     }
 
     fn invoke(
@@ -451,11 +447,6 @@ impl CommandProvider for DrawCommands {
     ) -> Result<CommandOutcome, PluginError> {
         if command == super::PDF_ANNOTATE {
             return super::annotate::invoke(args, mode, host);
-        }
-        // Il PDF delle note sta coi disegni: ne usa i caratteri e lo
-        // scrittore, e si accende con la stessa feature (`draw`).
-        if command == crate::pdf_export::lavoro::PDF_WRITE_PAGES {
-            return crate::pdf_export::lavoro::invoke(args, mode, host);
         }
         if command != DRAWING_CREATE {
             return Err(PluginError::UnknownCommand(command.to_string().into()));

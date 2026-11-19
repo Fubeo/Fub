@@ -27,7 +27,7 @@ use fub_abi::error::PluginError;
 use fub_abi::model::DocId;
 use fub_abi::rules::path_policy::{self, Naming};
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::{HostApi, JobProgress, JobSpec};
+use fub_abi::traits::{CommandProvider, HostApi, JobProgress, JobSpec};
 use serde::Deserialize;
 
 use super::writer::{scrivi_con, valida, Controllo, Interruzione, Opzioni, QualitaImmagini};
@@ -282,6 +282,48 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
             E_PAYLOAD,
             "The PDF job received a request that cannot be read.",
         )
+}
+
+/// Le stringhe del comando e del lavoro aggiunte ai cataloghi di un bundle,
+/// lingua per lingua: l'inventario le monta nel bundle dei disegni.
+pub fn con_le_stringhe(catalogs: Vec<StringCatalog>) -> Vec<StringCatalog> {
+    catalogs
+        .into_iter()
+        .map(|catalog| match catalog.locale.as_str() {
+            "it" => in_italian(catalog),
+            "en" => in_english(catalog),
+            _ => catalog,
+        })
+        .collect()
+}
+
+/// Un fornitore di comandi con in più `pdf.write_pages`.
+///
+/// Il PDF delle note sta nel bundle dei disegni (ne usa i caratteri e si
+/// accende con la stessa feature), ma il modulo dei disegni non lo nomina:
+/// lo compone l'inventario, che è la tavola di montaggio
+/// (`tests/independent_modules.rs`).
+pub struct ConIlPdf<P>(pub P);
+
+impl<P: CommandProvider> CommandProvider for ConIlPdf<P> {
+    fn commands(&self) -> Vec<CommandSpec> {
+        let mut specs = self.0.commands();
+        specs.push(spec());
+        specs
+    }
+
+    fn invoke(
+        &self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        if command == PDF_WRITE_PAGES {
+            return invoke(args, mode, host);
+        }
+        self.0.invoke(command, args, mode, host)
+    }
 }
 
 /// La spec del comando, una sola per l'elenco e per i test.
