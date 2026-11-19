@@ -19,7 +19,12 @@ stampa).
 - Dallo spazio comandi (Ctrl O), «Esporta in PDF…»
   (`shell.doc.export_pdf`), sulla nota del riquadro attivo.
 - All'apertura la nota si salva; lo spazio copre il riquadro e la banda di
-  stato, che restano inerti sotto.
+  stato, che restano inerti sotto, e tace anche «Vai all'editor».
+- Lo spazio è un dialogo modale sotto la barra del titolo, che resta viva
+  per il puntatore (i controlli della finestra): il Tab non ci esce,
+  dall'ultimo comando torna al primo. I menu aperti dallo spazio (i
+  profili, il clic su un blocco) si montano dentro il dialogo, dove si
+  cliccano e si raggiungono coi tasti.
 - «Torna alla nota» o Esc chiude lo spazio e rimette il fuoco dove stava
   prima, se c'è ancora. Chiudere il riquadro chiude anche lo spazio.
 
