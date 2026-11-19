@@ -15,6 +15,7 @@ import type {
   GridBytesWindow,
   GridCellStyle,
   GridMerge,
+  GridObject,
   GridSurfaceSpec,
   GridWindowRequest,
   PluginError,
@@ -46,6 +47,7 @@ import {
   SHEET_NOTE_COLUMN_HEADER,
   SHEET_NOTE_ROW_HEADER,
   sheetCardRenderer,
+  sheetPartAnswer,
   type SheetCardPort,
 } from "./card";
 import type { GridHost } from "./engine";
@@ -118,6 +120,8 @@ interface FakeOptions {
   part?: (text: string) => unknown;
   /// Le celle con un valore non ricalcolato.
   staleAt?: (row: number, column: number) => boolean;
+  /// Gli oggetti della finestra (T54: il grafico).
+  objects?: (request: GridWindowRequest) => GridObject[];
 }
 
 interface FakeHost extends GridHost {
@@ -238,7 +242,7 @@ function fakeHost(options: FakeOptions = {}): FakeHost {
         merges,
         view: VIEW,
         tables: [],
-        objects: [],
+        objects: options.objects?.(request) ?? [],
       };
     },
     async applyGridBytes() {
@@ -1497,5 +1501,94 @@ describe("la parte di un foglio (T43)", () => {
     expect(view.edit!()).toBe(true);
     await until("la griglia c'è", () => made.writings.some((writing) => writing?.context));
     expect(selected).toEqual([["s2", "C4"]]);
+  });
+});
+
+describe("il grafico di un foglio (T54)", () => {
+  /// Il grafico «Vendite» di 320×240 px, ancorato in A7, col disegno `svg`.
+  const chartObject = (svg: string | null, missing: GridObject["missing"] = null): GridObject => ({
+    kind: "chart",
+    id: 5,
+    row: 6,
+    column: 0,
+    dx: 0,
+    dy: 0,
+    width: 320,
+    height: 240,
+    alt: "Vendite",
+    svg,
+    media: null,
+    shape: null,
+    missing,
+  });
+  const chartPart = () => ({ found: true, kind: "chart", sheet: "s1", range: "A7:E20", chart: 5 });
+  const svgOf = (root: HTMLElement) => decodeURIComponent(root.querySelector<HTMLImageElement>(".canvas-card-sheet-chart img")!.src.replace(/^data:image\/svg\+xml;charset=utf-8,/u, ""));
+
+  it("la parte che nomina un grafico mostra il suo disegno, intero e nella sua proporzione, senza celle", async () => {
+    let drawn = '<svg xmlns="http://www.w3.org/2000/svg"><text>Vendite 3 5 2</text></svg>';
+    const b = bench({ note: true, subpath: "#Vendite", part: chartPart, objects: () => [chartObject(drawn)] });
+    const card = b.mount("live");
+    await settle();
+    expect(b.grid.parts).toEqual(["Vendite"]);
+    // Una finestra sola, sulle celle che il grafico copre.
+    expect(b.grid.windows).toHaveLength(1);
+    expect(b.grid.windows[0]!.request).toMatchObject({ sheet: "s1", row_start: 6, row_count: 14, column_start: 0, column_count: 5 });
+    const root = b.root();
+    expect(root.dataset.cardState).toBe("content");
+    expect(cellTexts(root)).toEqual([]);
+    const chart = root.querySelector<HTMLElement>(".canvas-card-sheet-chart")!;
+    expect(chart.getAttribute("role")).toBe("img");
+    expect(chart.getAttribute("aria-label")).toBe(t("grid.object.named", { kind: t("grid.object.kind.chart"), name: "Vendite" }));
+    expect(svgOf(root)).toBe(drawn);
+    expect(chart.querySelector("img")!.style.objectFit).toBe("contain");
+    // Nella nota è alta quanto la proporzione chiede alla sua larghezza.
+    expect(b.fits).toEqual([Math.round(WIDTH * 240 / 320)]);
+    expect(card.contentAspect!()).toBeCloseTo(320 / 240);
+    // Non c'è niente in cui entrare né da scrivere: il grafico si cambia nel foglio.
+    expect(card.enter!()).toBe(false);
+    expect(card.edit!()).toBe(false);
+
+    // Segue i dati: all'evento del file la sessione si riapre e il disegno si rilegge.
+    drawn = '<svg xmlns="http://www.w3.org/2000/svg"><text>Vendite 40 5 2</text></svg>';
+    for (const changed of b.port.changed) changed();
+    await settle();
+    expect(b.grid.opens).toHaveLength(2);
+    expect(svgOf(b.root())).toBe(drawn);
+  });
+
+  it("un grafico che il file nomina ma che non si disegna dice perché e offre «Apri»", async () => {
+    for (const objects of [[], [chartObject(null, "too_large")]]) {
+      const b = bench({ note: true, subpath: "#Vendite", part: chartPart, objects: () => objects });
+      const card = b.mount("live");
+      await settle();
+      const root = b.root();
+      expect(root.dataset.cardState).toBe("unavailable");
+      expect(root.querySelector(".canvas-card-message")!.textContent).toBe(t("canvas.card.chart_unavailable"));
+      expect(root.querySelector(".canvas-file-link")!.textContent).toBe(t("canvas.card.open"));
+      expect(b.fits).toEqual([]);
+      expect(card.contentAspect!()).toBeNull();
+    }
+  });
+
+  it("un grafico che non c'è più propone fra le parti anche i grafici della cartella", async () => {
+    menus.length = 0;
+    const parts = [{ kind: "sheet", name: "Note" }, { kind: "chart", name: "Vendite" }];
+    const b = bench({ note: true, subpath: "#Grafico spese", part: () => ({ found: false, parts }) });
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("lost");
+    b.root().querySelector<HTMLButtonElement>('[data-card-action="choose-part"]')!.click();
+    expect(menus[0]!.map((item) => item.label)).toEqual([
+      t("canvas.card.part_sheet", { name: "Note" }),
+      t("canvas.card.part_chart", { name: "Vendite" }),
+    ]);
+    menus[0]![1]!.run!();
+    expect(b.chosen).toEqual(["Vendite"]);
+  });
+
+  it("una risposta di grafico senza un id che si legge non si usa", () => {
+    expect(sheetPartAnswer(JSON.stringify({ found: true, kind: "chart", sheet: "s1", range: "A7:E20" }))).toBeNull();
+    expect(sheetPartAnswer(JSON.stringify(chartPart()))).toEqual({ sheet: "s1", range: { rowStart: 6, rowEnd: 19, columnStart: 0, columnEnd: 4 }, chart: 5 });
+    expect(sheetPartAnswer(JSON.stringify({ found: true, kind: "range", sheet: "s1", range: "B2:C3", chart: 9 }))).toMatchObject({ chart: null });
   });
 });
