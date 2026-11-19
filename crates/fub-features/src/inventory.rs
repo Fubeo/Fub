@@ -112,6 +112,8 @@ use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
 use crate::lavagna::{self, LavagnaCommands, LAVAGNA_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineCommands, OutlineView, OUTLINE_ID};
+#[cfg(feature = "draw")]
+use crate::pdf_export::lavoro::{self as pdf_lavoro, ConIlPdf};
 #[cfg(feature = "proof")]
 use crate::proof::{self, ProofCommands, PROOF_ID};
 #[cfg(feature = "properties")]
@@ -139,6 +141,14 @@ pub type SyntaxRules = fn() -> Vec<Box<dyn SyntaxRule>>;
 pub type Renderers = fn() -> Vec<Box<dyn CustomRenderer>>;
 /// Costruisce i provider di export di una feature.
 pub type Exports = fn() -> Vec<Box<dyn ExportProvider>>;
+/// Il corpo dei lavori lunghi che i comandi di una feature accodano
+/// (`HostEvents::spawn_job`): il nome del lavoro, la sua richiesta e l'host del
+/// lavoro, che lo ferma quando è annullato.
+pub type Jobs = fn(
+    &str,
+    serde_json::Value,
+    &mut dyn fub_abi::traits::HostApi,
+) -> Result<serde_json::Value, fub_abi::PluginError>;
 
 /// Una riga dell'inventario: una feature ufficiale di questo repo.
 ///
@@ -201,6 +211,9 @@ pub struct OfficialFeature {
     /// un plugin, quindi ognuno ha il suo interruttore nelle impostazioni e lo
     /// stesso `Guard` che li controlla: il core non ha una strada sua.
     pub permissions: &'static [&'static str],
+    /// I lavori che i suoi comandi accodano, se ne accodano: chi monta li
+    /// dà al runner come corpo del bundle (`Plugin::run_job`).
+    pub jobs: Option<Jobs>,
     /// Il collegamento che soltanto chi monta sa fare.
     pub wiring: HostWiring,
 }
@@ -238,6 +251,7 @@ impl OfficialFeature {
             && self.syntax.is_none()
             && self.renderers.is_none()
             && self.exports.is_none()
+            && self.jobs.is_none()
             && self.wiring == HostWiring::None
     }
 }
@@ -265,6 +279,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::SearchIndex,
     },
     #[cfg(feature = "versioning")]
@@ -288,6 +303,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::VersionStore,
     },
     #[cfg(feature = "backlinks")]
@@ -305,6 +321,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "outline")]
@@ -322,6 +339,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "tags")]
@@ -339,6 +357,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     // I compiti usano la ricerca se c'è (`uses` nella mappa, non `requires`: la
@@ -365,6 +384,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // spegnere dalle impostazioni, e allora i promemoria restano nella nota
         // e nell'elenco all'avvio.
         permissions: &[fub_abi::options::permission::NOTIFICATIONS],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "properties")]
@@ -383,6 +403,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[PROPERTIES_ID],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "template")]
@@ -405,6 +426,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // Fonde le proprietà del template con `note.property.set`.
         requires: &[PROPERTIES_ID],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "queries")]
@@ -422,6 +444,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "dashboard")]
@@ -440,6 +463,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "backup")]
@@ -457,6 +481,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "trash")]
@@ -476,6 +501,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // bundle dei comandi: senza quel servizio il cestino non si monta.
         requires: &[COMMANDS_ID],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "graph")]
@@ -494,6 +520,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "formatting")]
@@ -512,6 +539,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "proof")]
@@ -531,6 +559,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::MachineDictionaries,
     },
     #[cfg(feature = "stats")]
@@ -548,6 +577,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "base")]
@@ -568,6 +598,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         // Una cella modificata diventa `note.property.set`/`remove`.
         requires: &[PROPERTIES_ID],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "commands")]
@@ -587,6 +618,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[COMMANDS_ID],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     #[cfg(feature = "blocks")]
@@ -611,6 +643,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
     // Ultima, e non per caso: non registra pannelli, e il suo solo comando,
@@ -620,9 +653,11 @@ static OFFICIALS: &[OfficialFeature] = &[
     OfficialFeature {
         id: DRAW_ID,
         name: "Drawings",
-        catalog: draw::catalog,
+        // Il PDF delle note viaggia coi disegni (ne usa i caratteri, stessa
+        // feature): stringhe, comando e lavoro li compone qui l'inventario.
+        catalog: || pdf_lavoro::con_le_stringhe(draw::catalog()),
         view: None,
-        commands: Some(|| Box::new(draw::DrawCommands)),
+        commands: Some(|| Box::new(ConIlPdf(draw::DrawCommands))),
         index: Some(|| Box::new(draw::DrawIndex)),
         syntax: None,
         renderers: None,
@@ -631,6 +666,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: Some(pdf_lavoro::run_job),
         wiring: HostWiring::None,
     },
     // In coda anche lei, per la stessa ragione: non registra pannelli, e il
@@ -651,6 +687,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         permissions: &[],
+        jobs: None,
         wiring: HostWiring::None,
     },
 ];

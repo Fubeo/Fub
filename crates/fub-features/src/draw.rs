@@ -396,6 +396,8 @@ pub(crate) mod per_il_pdf {
     #[cfg(test)]
     pub(crate) use super::fonts::tests::with_fs_type;
     pub(crate) use super::fonts::{decode, embeddable, instance, Coordinate};
+    /// Il file di un carattere di Fub per nome (`inter-latin-wght-normal.woff2`).
+    pub(crate) use super::typefaces::fub_file as file_di_fub;
 
     /// I caratteri di serie di Fub (Inter, Literata, JetBrains Mono), per il
     /// testo dentro un vettore: sono quelli dei diagrammi.

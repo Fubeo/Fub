@@ -85,6 +85,9 @@ struct CoreBundle {
     kind: ComponentKind,
     group: Option<&'static str>,
     ui: Vec<&'static str>,
+    /// Il corpo dei lavori che i suoi comandi accodano, dalla riga
+    /// dell'inventario (`OfficialFeature::jobs`).
+    jobs: Option<fub_features::Jobs>,
     #[allow(clippy::type_complexity)]
     register: Box<dyn Fn(&mut Registrar<'_>) -> Vec<String> + Send + Sync>,
 }
@@ -108,8 +111,14 @@ impl CoreBundle {
             kind: ComponentKind::default(),
             group: None,
             ui: Vec::new(),
+            jobs: None,
             register: Box::new(register),
         }
+    }
+
+    fn running(mut self, jobs: Option<fub_features::Jobs>) -> Self {
+        self.jobs = jobs;
+        self
     }
 
     fn configuring(mut self, settings: Vec<SettingSpec>) -> Self {
@@ -196,11 +205,54 @@ impl Bundle for CoreBundle {
     }
 
     fn plugin(&self) -> Box<dyn Plugin> {
-        OnlyProviders::boxed(self.manifest())
+        match self.jobs {
+            Some(jobs) => Box::new(CoreJobs {
+                manifest: self.manifest(),
+                jobs,
+            }),
+            None => OnlyProviders::boxed(self.manifest()),
+        }
     }
 
     fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
         (self.register)(registrar)
+    }
+}
+
+/// Il corpo di un bundle ufficiale che accoda lavori: i provider li tiene il
+/// kernel, come per [`OnlyProviders`], e `run_job` è la funzione della riga
+/// dell'inventario.
+struct CoreJobs {
+    manifest: PluginManifest,
+    jobs: fub_features::Jobs,
+}
+
+impl Plugin for CoreJobs {
+    fn manifest(&self) -> PluginManifest {
+        self.manifest.clone()
+    }
+
+    fn activate(
+        &mut self,
+        _host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<(), fub_abi::PluginError> {
+        Ok(())
+    }
+
+    fn deactivate(
+        &mut self,
+        _host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<(), fub_abi::PluginError> {
+        Ok(())
+    }
+
+    fn run_job(
+        &self,
+        job: &str,
+        payload: serde_json::Value,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<serde_json::Value, fub_abi::PluginError> {
+        (self.jobs)(job, payload, host)
     }
 }
 
@@ -525,6 +577,7 @@ pub(crate) fn mount_with_formats(
         .providing(feature.provides)
         .requiring(feature.requires)
         .permitting(feature.permissions)
+        .running(feature.jobs)
         .described_by(rows.iter().find(|row| row.id == feature.id));
         bundles.push(Arc::new(bundle));
     }

@@ -1,4 +1,5 @@
-//! Le prove dello scrittore della prova: il PDF si rilegge con `lopdf` (il
+//! Le prove dello scrittore sul testo, i caratteri, i riquadri, i vettori e
+//! le immagini piene: il PDF si rilegge con `lopdf` (il
 //! testo, i caratteri incorporati) e si ridisegna con `hayro` (dove stanno
 //! l'inchiostro e i fondi).
 
@@ -9,7 +10,7 @@ use std::sync::Arc;
 use super::*;
 
 /// I caratteri dell'app, come li nomina la vista nel banco.
-fn carattere_app(file: &str) -> Option<Vec<u8>> {
+pub(super) fn carattere_app(file: &str) -> Option<Vec<u8>> {
     let nome = file.strip_prefix("/fonts/")?;
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../apps/client/public/fonts")
@@ -18,9 +19,9 @@ fn carattere_app(file: &str) -> Option<Vec<u8>> {
 }
 
 #[derive(Default)]
-struct Banco {
-    caratteri: BTreeMap<String, Vec<u8>>,
-    immagini: BTreeMap<String, Vec<u8>>,
+pub(super) struct Banco {
+    pub(super) caratteri: BTreeMap<String, Vec<u8>>,
+    pub(super) immagini: BTreeMap<String, Vec<u8>>,
 }
 
 impl Risorse for Banco {
@@ -35,11 +36,11 @@ impl Risorse for Banco {
     }
 }
 
-const NEWSREADER: &str = "/fonts/newsreader-latin-opsz-normal.woff2";
-const MONO: &str = "/fonts/ibm-plex-mono-latin-400-normal.woff2";
-const NERO: Colore = [0.0, 0.0, 0.0, 1.0];
+pub(super) const NEWSREADER: &str = "/fonts/newsreader-latin-opsz-normal.woff2";
+pub(super) const MONO: &str = "/fonts/ibm-plex-mono-latin-400-normal.woff2";
+pub(super) const NERO: Colore = [0.0, 0.0, 0.0, 1.0];
 
-fn faccia(famiglia: &str, file: &str, assi: &[(&str, f64)]) -> Faccia {
+pub(super) fn faccia(famiglia: &str, file: &str, assi: &[(&str, f64)]) -> Faccia {
     Faccia {
         famiglia: famiglia.into(),
         file: file.into(),
@@ -55,7 +56,7 @@ fn faccia(famiglia: &str, file: &str, assi: &[(&str, f64)]) -> Faccia {
 }
 
 /// Un testo con le lettere a passo fisso, come le metterebbe una vista.
-fn testo(x: f64, y: f64, faccia: usize, corpo: f64, testo: &str, passo: f64) -> Pezzo {
+pub(super) fn testo(x: f64, y: f64, faccia: usize, corpo: f64, testo: &str, passo: f64) -> Pezzo {
     let n = testo.chars().count();
     Pezzo::Testo {
         x,
@@ -71,20 +72,29 @@ fn testo(x: f64, y: f64, faccia: usize, corpo: f64, testo: &str, passo: f64) -> 
     }
 }
 
-fn elenco(facce: Vec<Faccia>, pagine: Vec<Vec<Pezzo>>) -> ElencoPagine {
+pub(super) fn elenco(facce: Vec<Faccia>, pagine: Vec<Vec<Pezzo>>) -> ElencoPagine {
     ElencoPagine {
         versione: VERSIONE,
         larghezza: 400.0,
         altezza: 300.0,
         titolo: "Prova".into(),
+        autore: String::new(),
+        lingua: String::new(),
         facce,
-        pagine: pagine.into_iter().map(|pezzi| Pagina { pezzi }).collect(),
+        pagine: pagine
+            .into_iter()
+            .map(|pezzi| Pagina {
+                pezzi,
+                ..Pagina::default()
+            })
+            .collect(),
+        segnalibri: Vec::new(),
     }
 }
 
 /// Il testo di ogni pagina, letto con `lopdf`, senza spazi né a capo: la
 /// prova guarda le lettere, non come l'estrattore indovina gli spazi.
-fn lettere(pdf: &[u8]) -> Vec<String> {
+pub(super) fn lettere(pdf: &[u8]) -> Vec<String> {
     let doc = lopdf::Document::load_mem(pdf).expect("il PDF si rilegge");
     let pagine = doc.get_pages();
     pagine
@@ -100,7 +110,7 @@ fn lettere(pdf: &[u8]) -> Vec<String> {
 }
 
 /// La pagina `n` ridisegnata da `hayro` a un pixel per pixel CSS, in RGBA.
-fn ridisegna(pdf: &[u8], n: usize) -> (u32, u32, Vec<u8>) {
+pub(super) fn ridisegna(pdf: &[u8], n: usize) -> (u32, u32, Vec<u8>) {
     use hayro::hayro_interpret::InterpreterSettings;
     use hayro::hayro_syntax::Pdf;
     let pdf = Pdf::new(Arc::new(pdf.to_vec())).expect("hayro legge il PDF");
@@ -125,7 +135,7 @@ fn ridisegna(pdf: &[u8], n: usize) -> (u32, u32, Vec<u8>) {
 }
 
 /// Quanti pixel scuri ci sono nel riquadro.
-fn inchiostro(img: &(u32, u32, Vec<u8>), x0: u32, y0: u32, x1: u32, y1: u32) -> usize {
+pub(super) fn inchiostro(img: &(u32, u32, Vec<u8>), x0: u32, y0: u32, x1: u32, y1: u32) -> usize {
     let (w, _, dati) = img;
     let mut n = 0;
     for y in y0..y1 {
@@ -139,7 +149,7 @@ fn inchiostro(img: &(u32, u32, Vec<u8>), x0: u32, y0: u32, x1: u32, y1: u32) -> 
     n
 }
 
-fn pixel(img: &(u32, u32, Vec<u8>), x: u32, y: u32) -> [u8; 3] {
+pub(super) fn pixel(img: &(u32, u32, Vec<u8>), x: u32, y: u32) -> [u8; 3] {
     let (w, _, dati) = img;
     let i = ((y * w + x) * 4) as usize;
     [dati[i], dati[i + 1], dati[i + 2]]
@@ -334,7 +344,7 @@ fn pdf_export_il_testo_del_vettore_resta_testo() {
     assert!(caratteri >= 1, "il testo del vettore non è testo");
 }
 
-fn png(w: u32, h: u32, colore: [u8; 3]) -> Vec<u8> {
+pub(super) fn png(w: u32, h: u32, colore: [u8; 3]) -> Vec<u8> {
     let mut out = Vec::new();
     {
         let mut enc = png::Encoder::new(&mut out, w, h);
@@ -383,8 +393,8 @@ fn pdf_export_l_immagine_nel_suo_riquadro_e_quella_che_manca() {
 
 #[test]
 fn pdf_export_un_immagine_grande_resta_intera() {
-    // 3000×2000 pixel: nella prova l'immagine entra com'è, senza alleggerirla
-    // (lo farà T77a); il PDF la porta compressa.
+    // 3000×2000 pixel: con le immagini piene l'immagine entra com'è (le
+    // alleggerite sono in `images_tests`); il PDF la porta compressa.
     let mut banco = Banco::default();
     banco
         .immagini

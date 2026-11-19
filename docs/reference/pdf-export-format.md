@@ -1,10 +1,15 @@
 # Il formato dell'esportazione in PDF
 
-> **Ambito:** i file che l'esportazione delle note in PDF tiene nel vault: i
-> profili d'esportazione e la memoria d'esportazione di ogni nota.
+> **Ambito:** i file che l'esportazione delle note in PDF tiene nel vault (i
+> profili d'esportazione e la memoria d'esportazione di ogni nota), l'elenco
+> delle pagine che la vista passa al core, e il comando e il lavoro che
+> scrivono il PDF.
 > **Fonti autorevoli:** `crates/fub-features/src/pdf_export/profile.rs`,
 > `crates/fub-features/src/pdf_export/memory.rs`,
-> `crates/fub-features/src/pdf_export/aperta.rs`.
+> `crates/fub-features/src/pdf_export/aperta.rs`,
+> `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
+> `crates/fub-features/src/pdf_export/writer.rs` (lo scrittore),
+> `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro).
 
 L'esportazione non scrive niente nella nota. Le regolazioni stanno in due
 posti, tutti e due nello spazio dati `fub.esporta-pdf` del vault (vedi
@@ -17,9 +22,10 @@ posti, tutti e due nello spazio dati `fub.esporta-pdf` del vault (vedi
 
 Tutti e due sono dati autorevoli: non si ricostruiscono da niente. Si
 scrivono con la scrittura atomica dello spazio dati, quindi una scrittura che
-non riesce lascia il file di prima intero. Lo scrittore del PDF e il formato
-dell'elenco delle pagine sono nella
-[ADR 0247](../decisions/0247-la-prova-del-motore-del-pdf.md).
+non riesce lascia il file di prima intero. Il perché della strada (la vista
+impagina, il core scrive) è nella
+[ADR 0247](../decisions/0247-la-prova-del-motore-del-pdf.md); l'elenco delle
+pagine e il comando sono [qui sotto](#lelenco-delle-pagine).
 
 ## I profili
 
@@ -206,3 +212,134 @@ il pannello lo dice. La voce resta finché la persona non la toglie.
 Una memoria che non si legge resta e non si sostituisce: salvare risponde con
 l'errore, e solo «ricomincia» la toglie. Una memoria di una versione più nuova
 si legge per ciò che si conosce, conserva il resto e non si riscrive.
+
+## L'elenco delle pagine
+
+La vista impagina la nota e manda al core ciò che ha disegnato, pagina per
+pagina: un JSON (`ElencoPagine`, versione 1) che il core scrive senza andare a
+capo né impaginare. Le misure sono in pixel CSS, con l'origine in alto a
+sinistra della pagina e la `y` verso il basso; un pixel CSS è 3/4 di punto
+PDF. Un campo che il formato non conosce rende l'elenco illeggibile.
+
+```json
+{
+  "versione": 1,
+  "larghezza": 794, "altezza": 1123,
+  "titolo": "Relazione", "autore": "Ada Lovelace", "lingua": "it",
+  "facce": [
+    { "famiglia": "Literata Variable", "file": "/fonts/literata-latin-wght-normal.woff2",
+      "corsivo": false, "assi": [{ "tag": "wght", "valore": 400 }] }
+  ],
+  "pagine": [
+    {
+      "pezzi": [
+        { "tipo": "testo", "x": 72, "y": 90, "larghezza": 30, "faccia": 0, "corpo": 16,
+          "colore": [42, 40, 38, 1], "testo": "Ciao", "posizioni": [0, 9.1, 13.2, 21.5] },
+        { "tipo": "riquadro", "x": 72, "y": 100, "w": 300, "h": 1, "colore": [0, 0, 0, 0.2] },
+        { "tipo": "vettore", "x": 72, "y": 120, "w": 300, "h": 200, "svg": "<svg …>" },
+        { "tipo": "immagine", "x": 72, "y": 340, "w": 300, "h": 200, "file": "Foto/mare.jpg" }
+      ],
+      "collegamenti": [
+        { "x": 72, "y": 76, "w": 30, "h": 18,
+          "destinazione": { "tipo": "fuori", "url": "https://example.org/" } },
+        { "x": 72, "y": 400, "w": 80, "h": 18,
+          "destinazione": { "tipo": "dentro", "pagina": 1, "y": 72 } }
+      ]
+    }
+  ],
+  "segnalibri": [
+    { "titolo": "Introduzione", "livello": 1, "pagina": 0, "y": 72 }
+  ]
+}
+```
+
+| Campo | Che cosa vale |
+|---|---|
+| `titolo`, `autore` | i dati del PDF (`Title`, `Author`); vuoti, il PDF non li porta. Con un titolo il lettore lo mostra al posto del nome del file |
+| `lingua` | un'etichetta BCP 47 (`it`, `en-GB`), nel catalogo del PDF (`Lang`); una che non lo è resta fuori con l'avviso `lingua_scartata` |
+| `facce[].file` | `/fonts/<nome>` per un carattere dell'app, altrimenti il percorso di un file del vault |
+| `pezzi[].posizioni` | dove comincia ogni lettera del testo, dalla `x` del pezzo: una per lettera |
+| `pezzi[].file` (immagine) | il percorso di un file del vault: PNG, JPEG, GIF o WebP |
+| `collegamenti[]` | un riquadro della pagina che porta fuori (`url`) o a un punto di un'altra pagina (`pagina` dalla prima, che è la 0, e `y`) |
+| `segnalibri[]` | in fila, ognuno col suo `livello` da 1 a 6: un segnalibro sta sotto l'ultimo di livello più basso che lo precede |
+
+`titolo`, `autore`, `lingua`, `collegamenti` e `segnalibri` si possono
+omettere.
+
+### Che cosa scrive il core
+
+- **Il testo** è testo vero, che si seleziona e si cerca: ogni faccia diventa
+  un carattere incorporato in sotto-insieme, con la tabella che riporta ogni
+  glifo alla sua lettera. Un carattere variabile si fissa nel punto dei suoi
+  assi. Un carattere che manca, non si legge o la cui licenza non lascia
+  incorporarlo esce in Literata, con un avviso; una lettera che né il
+  carattere né Literata hanno esce nel riquadro vuoto e resta nel testo che si
+  copia (`lettere_mancanti`).
+- **I vettori** restano vettori, e il testo che contengono resta testo, coi
+  caratteri di serie di Fub.
+- **Le immagini** sono *piene* (i byte del file: un JPEG resta il suo JPEG) o
+  *alleggerite*: una più fitta di 150 punti per pollice alla misura in cui sta
+  sulla pagina si riduce a quella risoluzione e si ricomprime (JPEG se è
+  opaca, PNG se ha trasparenza); una GIF, una già leggera o una che ridotta non
+  pesa meno resta com'è. Un'immagine che manca o non si legge lascia il suo
+  posto vuoto (`immagine_mancante`), una oltre 64 MiB anche
+  (`immagine_troppo_grande`).
+- **I collegamenti verso fuori** si aprono solo per `http`, `https` e
+  `mailto`: ogni altro schema (`file:`, `javascript:`, quello di un'app) resta
+  testo che non si clicca, con l'avviso `collegamento_scartato`. I collegamenti
+  dentro il documento portano alla pagina e all'altezza dette.
+- **Il file** non porta date: lo stesso elenco con le stesse risorse dà gli
+  stessi byte.
+
+Gli avvisi non fermano la scrittura: tornano con l'esito, ognuno col suo nome
+(`{"avviso": "immagine_mancante", "file": "Foto/mare.jpg"}`).
+
+### I limiti
+
+Oltre un limite l'elenco non si scrive, e l'errore dice quale:
+
+| Limite | Valore |
+|---|---|
+| peso del JSON dell'elenco | 64 MiB |
+| pagine | da 1 a 5.000 |
+| lato della pagina | 20.000 px |
+| pezzi per pagina | 50.000 |
+| vettore | 8 MiB |
+| collegamenti per pagina | 10.000 |
+| indirizzo di un collegamento | 8 KiB |
+| segnalibri | 20.000, di livello da 1 a 6 |
+| titolo, autore, lingua, titolo di un segnalibro | 2.000 caratteri |
+| durata della scrittura | 10 minuti |
+
+## Il comando e il lavoro
+
+Il comando `pdf.write_pages` del bundle `fub.draw` scrive nel vault il PDF di
+un elenco. Non c'è una porta IPC sua: si chiama con `invoke_command`, e il
+lavoro è un lavoro del core.
+
+| Parametro | Che cosa vale |
+|---|---|
+| `pages` | il JSON dell'elenco (obbligatorio) |
+| `target` | il percorso del PDF nel vault, con l'estensione `.pdf` (obbligatorio) |
+| `images` | `full` (di serie) o `light`, le immagini alleggerite |
+| `replace` | `true` per sostituire un PDF che c'è già; senza, un PDF che c'è è un errore |
+| `note` | la nota da cui prendere titolo, autore e lingua (`title`/`titolo`, `author`/`autore`, `lang`/`lingua` del frontmatter; il titolo, se manca, è il nome del file) quando l'elenco li lascia vuoti |
+
+Il comando controlla subito ciò che può controllare senza scrivere: l'elenco
+si legge ed è nei limiti, la destinazione è un nome di PDF valido e libero (o
+da sostituire). Il piano (`DryRun`) dice il PDF e le pagine e non accoda
+niente. Altrimenti accoda il lavoro `pdf.write_pages` e torna con l'effetto
+`fub.pdf.queued`, `{ "job_id": "<id>", "path": "<pdf>" }`: l'id è una stringa.
+
+Il lavoro riporta l'avanzamento una pagina per passo (`done` su `total`
+pagine), così il centro attività ne mostra la barra e lo sa annullare. Scrive
+il PDF in memoria e lo deposita nel vault **una volta sola, alla fine**: lo
+storage lo scrive in un file temporaneo e lo rinomina, quindi il file arriva
+intero o non arriva. Un lavoro annullato, scaduto o fallito non lascia
+nessun file; un disco pieno o una cartella in sola lettura sono l'errore
+della scrittura, e un PDF che si stava sostituendo resta quello di prima. La
+sostituzione confronta la revisione del PDF letta un attimo prima: una
+scrittura che arriva in mezzo è un conflitto, mai una sovrascrittura cieca.
+
+Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
+

@@ -54,10 +54,12 @@
 //!   di Fub; e le impostazioni dell'editor (livello, parti del Personalizzato,
 //!   cartella dei modelli, suggerimenti).
 //!   Fuori dal `default`, dietro la cargo feature `draw`.
-//! - `pdf_export` — la prova del motore dell'esportazione delle note in PDF
-//!   (ADR 0247): il PDF scritto dagli elenchi di pagina che la vista misura,
-//!   con testo vero, caratteri incorporati in sotto-insieme e vettori. Fuori
-//!   dal `default`, dietro la cargo feature `draw`, da cui prende i caratteri.
+//! - `pdf_export` — l'esportazione delle note in PDF (ADR 0247): il PDF
+//!   scritto dagli elenchi di pagina che la vista misura, con testo vero,
+//!   caratteri incorporati in sotto-insieme, vettori, immagini, collegamenti e
+//!   segnalibri, e il comando `pdf.write_pages` che lo scrive nel vault con un
+//!   lavoro annullabile. Fuori dal `default`, dietro la cargo feature `draw`,
+//!   da cui prende i caratteri.
 //! - [`lavagna`] — la lavagna: il comando `canvas.apply`, che porta in un
 //!   file `.canvas` una lista di operazioni del nucleo (`fub-canvas-core`)
 //!   come una modifica sola, con anteprima e annulla.
@@ -177,7 +179,9 @@ pub use draw::{
 pub use formatting::{FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
-pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
+pub use inventory::{
+    every_official_feature, every_official_view, HostWiring, Jobs, OfficialFeature,
+};
 #[cfg(feature = "lavagna")]
 pub use lavagna::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 #[cfg(feature = "outline")]
