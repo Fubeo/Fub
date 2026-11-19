@@ -66,6 +66,12 @@ export interface TableFrameHost {
   /// Fa il cambio. `select` è dove sta la selezione dopo, anche se la
   /// tabella si ridisegna da capo. `false` se adesso non si può.
   apply(edit: TableEdit, select: TableTarget): boolean;
+  /// Il testo della cella aperta mentre si scrive, come un cambio `set`:
+  /// l'ospite lo porta nel suo documento a ogni battuta, senza chiudere la
+  /// cella e senza toccare la selezione. Così ciò che si vede nella cella è
+  /// già nel documento (bozza, salvataggio). Senza, la cella si scrive
+  /// soltanto alla conferma.
+  draft?(edit: TableEdit): boolean;
   undo(): void;
   redo(): void;
   /// Esce dalla tabella, prima o dopo.
@@ -117,6 +123,9 @@ interface Editing {
   /// Vero mentre il campo scrive la proposta: l'evento `input` che ne nasce
   /// non è una battuta, e non completa di nuovo.
   proposing: boolean;
+  /// Vero se il testo del campo è già andato all'ospite con `draft`: chi
+  /// annulla la modifica deve rimettere `original` anche lì.
+  drafted: boolean;
 }
 
 /// La classe del campo mentre il resto proposto è selezionato: solo lì la
@@ -954,12 +963,16 @@ export class TableFrame {
       return;
     }
     switch (intent.kind) {
-      case "format": this.#host.formatInput?.(intent.which, editing.input); break;
+      case "format":
+        this.#host.formatInput?.(intent.which, editing.input);
+        this.#draft(editing);
+        break;
       case "today": {
         const input = editing.input;
         const start = input.selectionStart ?? input.value.length;
         const end = input.selectionEnd ?? start;
         input.setRangeText(todayText(new Date(), resolvedLanguage()), start, end, "end");
+        this.#draft(editing);
         break;
       }
       case "commit":
@@ -1010,12 +1023,25 @@ export class TableFrame {
     // La colonna si legge adesso, una volta: a ogni battuta il completamento
     // cerca soltanto fra i valori già letti.
     const completion = row >= this.#host.caps().headerRows ? this.#columnCompletion(row, column) : null;
-    const editing: Editing = { row, column, input, mode, original, life, completion, proposal: null, proposing: false };
+    const editing: Editing = { row, column, input, mode, original, life, completion, proposal: null, proposing: false, drafted: false };
     this.#editing = editing;
     this.#placeOverlays();
     input.focus({ preventScroll: true });
     const at = caret ?? input.value.length;
     input.setSelectionRange(at, at);
+    // Ogni battuta va subito all'ospite: il testo della cella non resta solo
+    // a schermo finché non si esce. Prima del completamento, che ascolta lo
+    // stesso evento: la proposta non scelta non è testo scritto. Mentre l'IME
+    // compone si aspetta la fine della composizione.
+    if (this.#host.draft) {
+      life.listen(input, "input", (event) => {
+        if (editing.proposing || (event as InputEvent).isComposing) return;
+        this.#draft(editing);
+      });
+      life.listen(input, "compositionend", () => this.#draft(editing));
+      // Aperta da un carattere: quel carattere è già la prima battuta.
+      if (initial !== undefined && initial !== original) this.#draft(editing);
+    }
     if (completion) {
       // Si completa a ogni lettera scritta, non mentre l'IME compone: lì si
       // completa quando la composizione finisce. Cancellare non completa, così
@@ -1103,6 +1129,19 @@ export class TableFrame {
     editing.input.classList.remove(PROPOSAL);
   }
 
+  /// Il testo del campo come lo scriverebbe la conferma, senza la proposta.
+  #typed(editing: Editing): string {
+    return editing.input.value.replace(/\r?\n/g, " ");
+  }
+
+  /// Porta all'ospite il testo che il campo ha adesso, se l'ospite lo vuole
+  /// e la cella è ancora quella aperta.
+  #draft(editing: Editing): void {
+    if (!this.#host.draft || this.#editing !== editing || this.#host.readOnly()) return;
+    const edit: TableEdit = { kind: "set", blocks: [{ row: editing.row, column: editing.column, rows: [[this.#typed(editing)]] }] };
+    if (this.#host.draft(edit)) editing.drafted = true;
+  }
+
   /// Chiude la modifica: `commit` scrive il testo, altrimenti si torna a
   /// quello di prima. Il fuoco torna alla tabella se era nel campo.
   #finishEditing(commit: boolean, refocus = true): void {
@@ -1111,19 +1150,23 @@ export class TableFrame {
     this.#editing = null;
     editing.life.close();
     const hadFocus = editing.input.ownerDocument.activeElement === editing.input;
-    const typed = editing.input.value.replace(/\r?\n/g, " ");
+    const typed = this.#typed(editing);
     // La proposta accettata scrive il valore della colonna com'è scritto lì:
     // «r» e Invio dà «Roma», come in Excel.
     const { proposal } = editing;
     const value = proposal !== null && typed.toLocaleLowerCase() === proposal.toLocaleLowerCase() ? proposal : typed;
     const cell = this.#cells[editing.row]?.[editing.column];
     if (cell) delete cell.dataset.shown;
-    if (commit && value !== editing.original) {
+    if (!commit && editing.drafted) {
+      // Le battute erano già nel documento: annullare rimette il testo di
+      // prima anche lì.
+      this.apply({ kind: "set", blocks: [{ row: editing.row, column: editing.column, rows: [[editing.original]] }] });
+    } else if (commit && (value !== editing.original || editing.drafted)) {
       const written = this.apply({ kind: "set", blocks: [{ row: editing.row, column: editing.column, rows: [[value]] }] });
       // Chi scrive una formula la vede restare testo: lo si dice una volta.
       // Non per «==» (un segno scritto, non una formula) né per un «=» che
       // non sta in testa.
-      if (written && value.startsWith("=") && !value.startsWith("==")) tellOnce(this.#host.notice, "table.formula.text");
+      if ((written || editing.drafted) && value.startsWith("=") && !value.startsWith("==")) tellOnce(this.#host.notice, "table.formula.text");
     }
     this.#fill();
     this.#paintSelection();

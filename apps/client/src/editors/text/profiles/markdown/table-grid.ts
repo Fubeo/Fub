@@ -53,6 +53,12 @@ export interface TableGridHost {
   /// deve stare la selezione dopo, anche se la griglia viene ridisegnata da
   /// capo. `false` se adesso non si può (sola lettura, tabella cambiata sotto).
   write(next: TableData, select: { anchor: GridPosition; focus: GridPosition }): boolean;
+  /// Il testo della cella aperta, a ogni battuta: va nel testo della nota
+  /// subito, senza chiudere la cella. Le battute di una cella fanno un solo
+  /// passo d'annulla, quello che la `write` di conferma registra; una
+  /// conferma che rimette il testo di prima rimette la tabella byte per byte.
+  /// Senza, la cella si scrive soltanto alla conferma.
+  draft?(next: TableData, select: { anchor: GridPosition; focus: GridPosition }): boolean;
   readOnly(): boolean;
   undo(): void;
   redo(): void;
@@ -309,6 +315,7 @@ export class TableGrid implements TableGridActions {
       align: (column) => this.#data.aligns[column] ?? null,
       readOnly: () => host.readOnly(),
       apply: (edit, select) => this.#apply(edit, select),
+      draft: host.draft ? (edit) => this.#draft(edit) : undefined,
       undo: () => host.undo(),
       redo: () => host.redo(),
       leave: (where) => host.leave(where),
@@ -467,6 +474,17 @@ export class TableGrid implements TableGridActions {
     const next = applyTableEdit(this.#data, edit);
     if (next === this.#data) return false;
     return this.#host.write(next, { anchor: toPosition(select.anchor), focus: toPosition(select.focus) });
+  }
+
+  /// Il testo della cella aperta, a ogni battuta: va nel testo della nota
+  /// come una battuta dell'editor (sessione, bozza, salvataggio), e la
+  /// selezione resta sulla cella. La griglia si aggiorna sul posto senza
+  /// toccare il campo aperto (IMP-6100).
+  #draft(edit: TableEdit): boolean {
+    const next = applyTableEdit(this.#data, edit);
+    if (next === this.#data || !this.#host.draft) return next === this.#data;
+    const { anchor, focus } = this.#frame.selection;
+    return this.#host.draft(next, { anchor: toPosition(anchor), focus: toPosition(focus) });
   }
 
   /// Una tabella nuova che non viene da un gesto della cornice (le enfasi):

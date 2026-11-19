@@ -76,7 +76,7 @@ function apply(rows: string[][], edit: TableEdit, headerRows: number): void {
   }
 }
 
-function mount(initial: string[][], options: { readOnly?: boolean; caps?: TableCaps } = {}) {
+function mount(initial: string[][], options: { readOnly?: boolean; caps?: TableCaps; draft?: boolean } = {}) {
   const rows = initial.map((row) => [...row]);
   const caps = options.caps ?? ALL;
   const edits: TableEdit[] = [];
@@ -85,6 +85,7 @@ function mount(initial: string[][], options: { readOnly?: boolean; caps?: TableC
   const left: string[] = [];
   const notices: string[] = [];
   const reads = { count: 0 };
+  const drafts: TableEdit[] = [];
   let frame: TableFrame | null = null;
   const host: TableFrameHost = {
     size: () => ({ rows: rows.length, columns: rows[0]?.length ?? 0 }),
@@ -101,6 +102,14 @@ function mount(initial: string[][], options: { readOnly?: boolean; caps?: TableC
       frame?.update();
       return true;
     },
+    ...(options.draft ? {
+      draft: (edit: TableEdit) => {
+        drafts.push(edit);
+        apply(rows, edit, caps.headerRows);
+        frame?.update();
+        return true;
+      },
+    } : {}),
     undo: vi.fn(),
     redo: vi.fn(),
     leave: (where) => void left.push(where),
@@ -112,7 +121,7 @@ function mount(initial: string[][], options: { readOnly?: boolean; caps?: TableC
   document.body.append(frame.element);
   const grid = frame.element.querySelector<HTMLElement>(".tb-grid")!;
   const cell = (row: number, column: number) => grid.querySelector<HTMLElement>(`[data-row="${row}"][data-col="${column}"]`)!;
-  return { frame, grid, cell, rows, edits, menus, copied, left, notices, reads };
+  return { frame, grid, cell, rows, edits, drafts, menus, copied, left, notices, reads };
 }
 
 /// Ciò che si è scritto nel campo della cella: il valore nuovo col cursore
@@ -368,6 +377,25 @@ describe("la cornice della Tabella", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(input.value).toBe("東京");
     expect([input.selectionStart, input.selectionEnd]).toEqual([1, 2]);
+  });
+
+  it("con `draft` ogni battuta va all'ospite e la cella resta aperta; l'IME manda la fine della composizione", () => {
+    const { frame, rows, drafts } = mount([["Nome"], [""]], { draft: true });
+    frame.focus({ row: 1, column: 0 });
+    key("A");
+    const input = document.activeElement as HTMLInputElement;
+    expect(rows[1]![0]).toBe("A");
+    type(input, "Ad", "insertText");
+    expect(rows[1]![0]).toBe("Ad");
+    expect(document.activeElement).toBe(input);
+    const before = drafts.length;
+    type(input, "Ad東", "insertCompositionText", true);
+    expect(drafts.length).toBe(before);
+    input.dispatchEvent(new CompositionEvent("compositionend", { data: "東", bubbles: true }));
+    expect(rows[1]![0]).toBe("Ad東");
+    // Escape rimette il testo di prima anche nell'ospite.
+    key("Escape");
+    expect(rows[1]![0]).toBe("");
   });
 
   it("Alt+= scrive la somma come valore e lo dice una volta; senza numeri sopra lo dice", () => {
