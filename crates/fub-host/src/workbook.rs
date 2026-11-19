@@ -118,7 +118,7 @@ static NEW_SHEET: crate::new_file::NewFile = crate::new_file::NewFile {
             extra: &[("first_sheet", "Sheet1")],
         },
     ],
-    blank: |doc, say| {
+    blank: |doc, say, _language| {
         let file_name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
         fub_format_xlsx::blank(file_name, &say("first_sheet")).map_err(|error| error.to_string())
     },

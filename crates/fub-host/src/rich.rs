@@ -149,9 +149,12 @@ static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
             extra: &[],
         },
     ],
-    blank: |_doc, _say| {
+    // Il documento nasce nella lingua di chi lo crea: il correttore e Word
+    // controllano ciò che vi si scrive in quella lingua, non in inglese.
+    blank: |_doc, _say, language| {
         let codec = Codec::Docx;
-        let bytes = fub_format_rich::blank(codec).map_err(|error| error.to_string())?;
+        let bytes =
+            fub_format_rich::blank_in(codec, language).map_err(|error| error.to_string())?;
         let opened =
             fub_format_rich::open_unremembered(codec, &bytes).map_err(|error| error.to_string())?;
         match opened.readonly {

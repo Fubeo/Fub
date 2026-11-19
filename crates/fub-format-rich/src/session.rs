@@ -305,6 +305,34 @@ pub fn blank(codec: Codec) -> Result<Vec<u8>, RichError> {
     codec.write(&Document::new())
 }
 
+/// I byte di un documento vuoto che dichiara `language` (un tag BCP 47:
+/// `it`, `it-IT`) come lingua del testo, quella che il correttore e Word
+/// usano per ciò che vi si scrive. Il documento vuoto di [`blank`] dichiara
+/// l'inglese americano. Un tag che non è un tag resta quello; l'ODT nasce
+/// come in [`blank`].
+pub fn blank_in(codec: Codec, language: &str) -> Result<Vec<u8>, RichError> {
+    if codec == Codec::Odt || !is_language_tag(language) {
+        return blank(codec);
+    }
+    let mut document = Document::new();
+    document.styles.default_chr.lang = Some(language.to_owned());
+    codec.write(&document)
+}
+
+/// Un tag di lingua scrivibile in `w:lang`: sottotag di lettere e cifre da 1
+/// a 8, separati da `-`, il primo di sole lettere. `und` (lingua non detta,
+/// come la dà un host che non la conosce) non dichiara niente.
+fn is_language_tag(tag: &str) -> bool {
+    let mut parts = tag.split('-');
+    let primary = parts.next().unwrap_or_default();
+    !primary.eq_ignore_ascii_case("und")
+        && (2..=8).contains(&primary.len())
+        && primary.bytes().all(|b| b.is_ascii_alphabetic())
+        && parts.all(|part| {
+            (1..=8).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_alphanumeric())
+        })
+}
+
 /// Il documento con i run uguali uniti: il modello che si proietta e si
 /// confronta. Prende il documento letto, che serve soltanto a questo: un
 /// documento grande non si tiene due volte.
@@ -377,4 +405,46 @@ fn dry_run(codec: Codec, document: &Document) -> Option<Vec<u8>> {
     let written = codec.write(document).ok()?;
     let reread = codec.read(&written).ok()?;
     reads_back(document, &normalized(reread)).then_some(written)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// La lingua che la proiezione dice per il testo dei byte `bytes`.
+    fn lang_of(codec: Codec, bytes: &[u8]) -> Option<String> {
+        let opened = open_unremembered(codec, bytes).unwrap();
+        assert_eq!(opened.readonly, None, "un documento vuoto si scrive");
+        projection::Projection::from_json(&opened.projection)
+            .unwrap()
+            .lang
+    }
+
+    #[test]
+    fn un_documento_vuoto_dichiara_la_lingua_di_chi_lo_crea() {
+        let english = blank(Codec::Docx).unwrap();
+        assert_eq!(lang_of(Codec::Docx, &english).as_deref(), Some("en-US"));
+        for tag in ["it", "it-IT", "pt-BR", "sr-Latn-RS"] {
+            let bytes = blank_in(Codec::Docx, tag).unwrap();
+            assert_eq!(lang_of(Codec::Docx, &bytes).as_deref(), Some(tag));
+        }
+        // Un tag che non è un tag non entra nel file.
+        for wrong in [
+            "",
+            "i",
+            "und",
+            "und-IT",
+            "it_IT",
+            "it-",
+            "<w:t>",
+            "italiano-moltolungo",
+        ] {
+            assert_eq!(
+                blank_in(Codec::Docx, wrong),
+                blank(Codec::Docx),
+                "{wrong:?}"
+            );
+        }
+        assert_eq!(blank_in(Codec::Odt, "it-IT"), blank(Codec::Odt));
+    }
 }
