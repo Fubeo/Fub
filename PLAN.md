@@ -3306,7 +3306,7 @@ Fatto quando: test delle guide e del permesso dei caratteri; le foto del
 banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export; cargo nextest run -p fub-features pdf_export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base b1ca0286f
 
 ## T73 · Testata e piè, frontespizio, indice, segnalibri
 
@@ -3332,7 +3332,7 @@ una pagina; una sezione corrente vuota.
 Fatto quando: test dell'indice in due passate; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base b1ca0286f
 
 ## T74 · Il contenuto
 
