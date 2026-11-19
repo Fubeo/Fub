@@ -10,15 +10,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import type { SlashPanelEvents } from "../../editors/core/editor-menu";
-import { createTextEngine } from "../../editors/text/engine";
-import { dailyLink, markdownCompletions, type DateSource } from "../../editors/text/profiles/markdown/completions";
-import { markdownGrammar } from "../../editors/text/profiles/markdown/grammar";
-import { runSlashAction, type SlashMenuSource } from "../../editors/text/profiles/markdown/slash";
-import { slashCatalog, slashMenuEntries } from "./entries";
-import { ALL, FORMATTING, SPECS } from "./fixture.test-data";
-import { createSlashPanel, type SlashPanelDeps } from "./panel";
-import type { NoteChoice } from "./pickers";
+import type { SlashPanelEvents } from "../../../core/editor-menu";
+import { createTextEngine } from "../../engine";
+import { dailyLink, markdownCompletions, type DateSource } from "./completions";
+import { markdownGrammar } from "./grammar";
+import { runSlashAction, type SlashMenuSource } from "./slash";
+import { slashCatalog, slashMenuEntries } from "../../../../panels/slash/entries";
+import { ALL, FORMATTING, SPECS } from "../../../../panels/slash/fixture.test-data";
+import { createSlashPanel, type SlashPanelDeps } from "../../../../panels/slash/panel";
+import type { NoteChoice } from "../../../../panels/slash/pickers";
 
 const today = new Date(2026, 10, 19);
 const use = { recent: [], favorites: [], chord: () => null, today };
@@ -95,9 +95,8 @@ const ENTRIES = FORMATTING.filter(([id]) => !SELECTION_ONLY.test(id));
 
 describe("il menu «/» con le battute vere", () => {
   for (const wait of [0, 120]) {
-    it(`ogni voce scritta per intero dopo una riga si applica con Invio ${wait ? "dopo una pausa" : "subito"}`, async () => {
-      const failed: string[] = [];
-      for (const [id, label] of ENTRIES) {
+    for (const [id, label] of ENTRIES) {
+      it(`«${label}» scritta per intero dopo una riga si applica con Invio ${wait ? "dopo una pausa" : "subito"}`, async () => {
         const { engine, view, type, key, inStep, destroy } = editor();
         try {
           engine.setDoc("Riga di prova.\n");
@@ -112,14 +111,14 @@ describe("il menu «/» con le battute vere", () => {
             key("Enter");
           }
           const doc = engine.getDoc();
+          expect(doc).not.toContain(`/${label}`);
           // «Testo normale» su una riga vuota non ha niente da cambiare.
-          if (doc.includes(`/${label}`) || (doc === "Riga di prova.\n" && id !== "markdown.paragraph")) failed.push(`${id}: ${JSON.stringify(doc)}`);
+          if (id !== "markdown.paragraph") expect(doc).not.toBe("Riga di prova.\n");
         } finally {
           destroy();
         }
-      }
-      expect(failed).toEqual([]);
-    });
+      });
+    }
   }
 
   it("«Elenco puntato» ed «Elenco numerato» sulla riga vuota fanno l'elenco, col cursore dopo il segno", () => {
