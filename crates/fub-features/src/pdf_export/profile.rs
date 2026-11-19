@@ -6,7 +6,7 @@
 //! profilo, nello spazio dati dell'esportazione:
 //!
 //! ```text
-//! .fub/plugins/fub.esporta-pdf/profili/<id>.json
+//! .fub/plugins/fub.draw/profili/<id>.json
 //! ```
 //!
 //! L'`id` è il nome del file senza `.json`, e resta quello anche quando il

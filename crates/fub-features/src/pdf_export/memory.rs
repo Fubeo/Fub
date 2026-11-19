@@ -12,7 +12,7 @@
 //! ([`fub_abi::rules::doc_data`]):
 //!
 //! ```text
-//! .fub/plugins/fub.esporta-pdf/doc/<nota codificata>/esportazione-pdf.json
+//! .fub/plugins/fub.draw/doc/<nota codificata>/esportazione-pdf.json
 //! ```
 //!
 //! È lo spazio che il kernel porta dietro alla nota: la rinomina lo sposta

@@ -171,6 +171,51 @@ tutti: lo stile di un diagramma solo conta le posizioni dentro una nota.
   per starci (non sotto il 30%) e una riga piccola sotto lo dice («formula
   al 64% per stare nella pagina»).
 
+## I profili
+
+Il pulsante del profilo nella barra apre il menu «Profili di esportazione»:
+
+- «Di serie» e poi i profili del vault in ordine di nome, ognuno con una
+  riga che lo riassume («il tema Relazione, A4 verticale, frontespizio e
+  indice»). Il segno sta sul profilo da cui si parte finché le regolazioni
+  non ne escono; il pulsante dice allora «· cambiato». Un profilo il cui file
+  non si legge è spento e lo dice; uno di una versione più nuova di Fub si
+  usa ma non si salva né si rinomina.
+- «Salva come profilo nuovo…» chiede un nome e mette sotto quel nome tutte
+  le regolazioni di adesso; il profilo nuovo vale in ogni nota del vault.
+- Sul profilo scelto: «Salva in «nome»» (solo se le regolazioni ne sono
+  uscite), «Copia il profilo…» e «Rinomina il profilo…».
+- «Predefinito per il vault» e, su una nota che ha un tipo, «Predefinito
+  per le note «tipo»»: il segno dice se il profilo scelto lo è; un clic lo
+  accende o lo spegne. Il predefinito del tipo vale prima di quello del
+  vault.
+- «Torna al profilo com'era» rimette le regolazioni del profilo scelto.
+
+Ogni voce passa dai comandi del core (`pdf.profiles`, `pdf.profile_save`,
+`pdf.profile_copy`, `pdf.profile_rename`, `pdf.profile_default`); un avviso
+dice ciò che è cambiato, o perché non è cambiato. I file stanno nel
+[formato](../reference/pdf-export-format.md#i-predefiniti).
+
+## Esportare senza lo spazio
+
+«Esporta questa nota col suo profilo» si chiede anche col comando
+`pdf.export_note` (`note`, e se servono `profile`, `target`, `replace`), per
+esempio da un agente col server MCP. Il PDF esce come dallo spazio, ma lo
+spazio non si apre:
+
+- serve l'app aperta sul vault, perché è lei che impagina la nota; senza,
+  il comando risponde che bisogna aprirla;
+- la nota, se ha modifiche non salvate, si salva prima;
+- l'app la impagina fuori dallo schermo, con gli stessi fogli dello spazio
+  (testata, frontespizio, indice), e il core scrive il PDF: un avviso dice
+  che è cominciato, e il lavoro si segue (e si annulla) dal centro attività;
+- senza `profile` vale il profilo predefinito del tipo della nota, poi
+  quello del vault, poi «Di serie»; senza `target` il PDF va accanto alla
+  nota, col suo nome. Un profilo nominato che non c'è è un errore che lo
+  nomina;
+- se qualcosa va storto (la nota non si salva, l'impaginazione fallisce) un
+  avviso dice quale nota e perché.
+
 ## Comportamenti
 
 - Mentre si trascina un controllo il profilo cambia «dal vivo»: le pagine si
@@ -181,9 +226,10 @@ tutti: lo stile di un diagramma solo conta le posizioni dentro una nota.
   al sistema le stesse pagine che si vedono, con il formato della carta.
 - «Esporta» scrive il PDF quando c'è lo scrittore del PDF; finché manca
   passa dalla stampa del sistema, e un avviso lo dice.
-- Il menu del profilo offre per ora soltanto «Di serie» (A4, margini
-  25/22/25/22 mm, titolo in alto a destra, «pagina n di m» in basso al
-  centro).
+- Lo spazio si apre col profilo che vale per la nota: quello predefinito
+  per il suo tipo, se c'è, poi quello predefinito del vault, poi «Di serie»
+  (A4, margini 25/22/25/22 mm, titolo in alto a destra, «pagina n di m» in
+  basso al centro).
 - Sotto i 1040 px spariscono il nome della nota e il suggerimento della
   banda, e il pannello si stringe; sotto i 760 px (e sul telefono) il
   pannello va sotto le pagine, la barra tiene solo indietro, profilo,

@@ -309,7 +309,7 @@ pub(crate) fn in_italian(catalog: StringCatalog) -> StringCatalog {
         .with(
             E_PROFILE_FUTURE,
             "Il profilo «{profile}» viene da una versione più nuova di Fub: qui si usa ma non \
-             si riscrive. Fanne una copia per cambiarlo.",
+             si cambia. Salva le regolazioni come profilo nuovo.",
         )
         .with(E_PROFILE_NAME_EMPTY, "Un profilo ha bisogno di un nome.")
         .with(
@@ -350,7 +350,7 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
         .with(
             T_PROFILE_DESC,
             "The export profile, by id or by name. Without it, the default for the note's \
-             type, then the vault's, then «Default».",
+             type, then the vault's, then the built-in «Di serie».",
         )
         .with(T_TARGET, "PDF")
         .with(
@@ -407,7 +407,7 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
         )
         .with(
             T_DEFAULT_ID_DESC,
-            "The profile id. Empty: back to «Default».",
+            "The profile id. Empty: back to the built-in «Di serie».",
         )
         .with(T_SCOPE, "For")
         .with(T_SCOPE_DESC, "The whole vault, or the note's type.")
@@ -428,7 +428,10 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
         )
         .with(D_SAVED, "Profile «{name}» saved.")
         .with(D_DEFAULT, "«{name}» is the default profile.")
-        .with(D_DEFAULT_OFF, "The default profile is back to «Default».")
+        .with(
+            D_DEFAULT_OFF,
+            "The default profile is back to the built-in «Di serie».",
+        )
         .with(
             E_NEEDS_APP,
             "Exporting to PDF needs the Fub app open on this vault: the app lays the note \
@@ -458,7 +461,7 @@ pub(crate) fn in_english(catalog: StringCatalog) -> StringCatalog {
         .with(
             E_PROFILE_FUTURE,
             "The profile «{profile}» comes from a newer version of Fub: it is used here but \
-             not rewritten. Copy it to change it.",
+             not changed. Save the settings as a new profile.",
         )
         .with(E_PROFILE_NAME_EMPTY, "A profile needs a name.")
         .with(

@@ -1,10 +1,12 @@
 # Il formato dell'esportazione in PDF
 
 > **Ambito:** i file che l'esportazione delle note in PDF tiene nel vault (i
-> profili d'esportazione e la memoria d'esportazione di ogni nota), l'elenco
-> delle pagine che la vista passa al core, e il comando e il lavoro che
-> scrivono il PDF.
+> profili d'esportazione, i predefiniti e la memoria d'esportazione di ogni
+> nota), l'elenco delle pagine che la vista passa al core, e i comandi e il
+> lavoro che scrivono il PDF.
 > **Fonti autorevoli:** `crates/fub-features/src/pdf_export/profile.rs`,
+> `crates/fub-features/src/pdf_export/command.rs` (predefiniti, profili ed
+> esportazione come comando),
 > `crates/fub-features/src/pdf_export/memory.rs`,
 > `crates/fub-features/src/pdf_export/aperta.rs`,
 > `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
@@ -14,14 +16,16 @@
 > `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro),
 > `crates/fub-features/src/pdf_export/book.rs` (più note in un PDF).
 
-L'esportazione non scrive niente nella nota. Le regolazioni stanno in due
-posti, tutti e due nello spazio dati `fub.esporta-pdf` del vault (vedi
-[layout su disco](on-disk-layout.md)):
+L'esportazione non scrive niente nella nota. Le regolazioni stanno nello
+spazio dati `fub.draw` del vault, quello del bundle dei disegni che porta i
+comandi del PDF (vedi [layout su disco](on-disk-layout.md)):
 
 | Che cosa | Dove | Vale per |
 |---|---|---|
-| un profilo | `.fub/plugins/fub.esporta-pdf/profili/<id>.json` | ogni nota del vault |
-| la memoria di una nota | `.fub/plugins/fub.esporta-pdf/doc/<nota codificata>/esportazione-pdf.json` | quella nota |
+| un profilo | `.fub/plugins/fub.draw/profili/<id>.json` | ogni nota del vault |
+| il profilo predefinito del vault | `.fub/plugins/fub.draw/predefinito.json` | le note senza un predefinito per il tipo |
+| il profilo predefinito di un tipo | `.fub/plugins/fub.draw/doc/<nota del tipo codificata>/profilo-pdf.json` | le note di quel tipo |
+| la memoria di una nota | `.fub/plugins/fub.draw/doc/<nota codificata>/esportazione-pdf.json` | quella nota |
 
 Tutti e due sono dati autorevoli: non si ricostruiscono da niente. Si
 scrivono con la scrittura atomica dello spazio dati, quindi una scrittura che
@@ -160,6 +164,42 @@ Il file di un profilo con `versione` più alta di 1 non si riscrive: salvare o
 rinominare risponde con l'errore. Una copia invece si fa, e porta con sé
 anche ciò che questa versione non capisce. Un profilo della versione 1 con un
 campo aggiunto da un Fub più nuovo si salva, e il campo resta.
+
+## I predefiniti
+
+Un predefinito nomina il profilo da cui si parte; i due file hanno la stessa
+forma:
+
+```json
+{ "versione": 1, "profilo": "relazione" }
+```
+
+- Il profilo che vale per una nota è quello del suo tipo (il file sta nello
+  spazio per-documento della nota del tipo, che il kernel sposta con la
+  rinomina e col cestino), poi quello del vault, poi «Di serie». Un
+  predefinito che nomina un profilo sparito, o che non si legge, lascia il
+  posto al livello dopo.
+- Senza file vale «Di serie»: tornare a «Di serie» toglie il file.
+- Un file con `versione` più alta di 1 si legge (`profilo`) e non si
+  riscrive: cambiarlo è un errore che lo dice. I campi che questa versione
+  non conosce si conservano alla lettura.
+
+## I comandi dei profili
+
+Tutti del bundle `fub.draw`, con `invoke_command`; in prova (`DryRun`)
+dicono che cosa farebbero e non scrivono.
+
+| Comando | Parametri | Effetto |
+|---|---|---|
+| `pdf.profiles` | `note` (facoltativo) | `fub.pdf.profiles`: `profiles` (`id`, `name`, `same_name`, `future`, `profile` o `null` con `error`), `default_name`, `vault_default`, e con `note` anche `note_type` (`doc`, `name`), `type_default` ed `effective` (`id`, `from`: `chosen`, `type`, `vault` o `default`) |
+| `pdf.profile_save` | `profile` (il JSON), `id` (facoltativo: senza, un profilo nuovo) | `fub.pdf.profile`, `{ id, name }` |
+| `pdf.profile_copy` | `id`, `name` | `fub.pdf.profile`, la copia |
+| `pdf.profile_rename` | `id`, `name` | `fub.pdf.profile` |
+| `pdf.profile_default` | `id` (vuoto: «Di serie»), `scope` (`vault` o `type`), `note` (per `type`) | `fub.pdf.profile` |
+
+Un profilo che non c'è è `NotFound`, un nome già usato è `AlreadyExists`,
+un nome vuoto o troppo lungo è `BadArgs`; un profilo di una versione più nuova non si salva sopra né si
+rinomina (si salva come profilo nuovo).
 
 ## La memoria di una nota
 
@@ -441,6 +481,32 @@ sostituzione confronta la revisione del PDF letta un attimo prima: una
 scrittura che arriva in mezzo è un conflitto, mai una sovrascrittura cieca.
 
 Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
+
+### L'esportazione come comando
+
+`pdf.export_note` esporta una nota senza lo spazio. Il core non impagina:
+manda la richiesta all'app, che impagina e chiama `pdf.write_pages`.
+
+| Parametro | Che cosa vale |
+|---|---|
+| `note` | la nota Markdown (obbligatorio) |
+| `profile` | il profilo, per id o per nome; senza, il [predefinito](#i-predefiniti) che vale per la nota |
+| `target` | il PDF; senza, accanto alla nota col suo nome |
+| `replace` | `true` per sostituire un PDF che c'è già |
+
+1. La shell, finché è aperta sul vault, chiama `pdf.export_listen` ogni 30
+   secondi; la presenza scade dopo 120 (l'effetto `fub.pdf.listening` porta
+   `ttl_ms` e `renew_ms`). La presenza vive nel processo che tiene il vault.
+2. `pdf.export_note` controlla la nota, il profilo e la destinazione; senza
+   una shell presente risponde `Unserved` («serve l'app di Fub aperta su
+   questo vault»), anche in prova. Altrimenti manda l'evento `custom`
+   `fub.draw:pdf.export` con `{ request, note, target, replace, profile_id,
+   profile }` e torna con l'effetto `fub.pdf.export_requested`, `{ request,
+   note, target, profile: { id, name, from, future } }`.
+3. La shell (`apps/client/src/export/headless.ts`) salva la nota se ha
+   modifiche, la impagina fuori dallo schermo col profilo della richiesta, ne
+   misura i fogli e chiama `pdf.write_pages`. Le richieste vanno una alla
+   volta; oltre otto in attesa la shell rifiuta, con un avviso.
 
 
 ## Più note in un PDF
