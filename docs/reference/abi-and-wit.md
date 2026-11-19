@@ -254,9 +254,10 @@ modo, e un bit in più è un tipo diverso.
 Il caso nuovo non arriva mai a un guest vecchio. L'host di Fub è tipizzato e
 lo rifiuta al caricamento; per la via dinamica di wasmtime (`Func::call` con
 un `Val`) il valore si abbassa secondo il tipo del guest, e un caso che il
-guest non conosce è un errore restituito all'host, non una trap. Quell'errore
-però chiude l'istanza: la chiamata dopo, anche con un caso noto, è una trap
-«cannot enter component instance».
+guest non conosce è un errore restituito all'host, non una trap. L'errore
+costa la sola chiamata: l'istanza resta aperta e la chiamata dopo, con un caso
+noto, risponde come sempre (wasmtime 48; con la serie 36 era invece una trap
+«cannot enter component instance»).
 
 `fub:abi@0.2.0`, la versione della pre-alpha, è congelata in
 `wit/frozen/0.2.0.wit`, e `wit_additivity.rs` applica la regola per
