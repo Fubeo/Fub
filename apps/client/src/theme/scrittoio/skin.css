@@ -14500,6 +14500,33 @@ input.canvas-toolbar-item {
 .canvas-ink-label[data-free] {
   color: var(--muted);
 }
+/* L'avviso dei tratti sul testo che rifluisce: un segno d'attenzione di Fub,
+   col pulsante che rimette la larghezza. */
+.canvas-ink-reflow {
+  gap: calc(var(--space-2) / var(--canvas-ink-reflow-k, 1)) calc(var(--space-4) / var(--canvas-ink-reflow-k, 1));
+  margin-top: calc(var(--space-3) / var(--canvas-ink-reflow-k, 1));
+  padding: calc(var(--space-3) / var(--canvas-ink-reflow-k, 1)) calc(var(--space-4) / var(--canvas-ink-reflow-k, 1));
+  border-radius: calc(var(--radius-menu) / var(--canvas-ink-reflow-k, 1));
+  background: var(--warning-wash);
+  box-shadow: 0 0 0 calc(1px / var(--canvas-ink-reflow-k, 1)) var(--warning);
+  color: var(--text);
+  font-size: calc(var(--text-xs) / var(--canvas-ink-reflow-k, 1));
+  line-height: var(--leading-normal);
+}
+.canvas-ink-reflow-back {
+  padding: calc(var(--space-1) / var(--canvas-ink-reflow-k, 1)) calc(var(--space-3) / var(--canvas-ink-reflow-k, 1));
+  border-radius: calc(var(--radius-chip) / var(--canvas-ink-reflow-k, 1));
+  color: var(--accent);
+  font-size: inherit;
+  font-weight: var(--weight-medium);
+}
+.canvas-ink-reflow-back:hover,
+.canvas-ink-reflow-back:focus-visible {
+  background: var(--accent-wash);
+}
+.canvas-ink-reflow-back:active {
+  color: var(--accent-soft);
+}
 .canvas-edge-label {
   fill: var(--muted);
   font-family: var(--font-ui);

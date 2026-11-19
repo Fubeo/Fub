@@ -3962,6 +3962,35 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: visible;
 }
 
+/* L'avviso dei tratti sul testo che rifluisce: sotto la scheda, fuori dal
+   testo e dall'inchiostro. Si legge a ogni zoom: le sue misure si dividono
+   per lo zoom della lavagna (`--canvas-ink-reflow-k`) fino a metà, sotto
+   rimpicciolisce con le schede. La scheda che lo porta sta sopra le vicine,
+   come quella che scrive, perché nessuna lo copra. */
+.canvas-node[data-ink-reflowed] {
+  z-index: 1;
+}
+.canvas-ink-reflow {
+  --canvas-ink-reflow-k: max(var(--canvas-zoom, 1), 0.5);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: max(100%, calc(280px / var(--canvas-ink-reflow-k)));
+  pointer-events: auto;
+}
+.canvas-ink-reflow-text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+}
+.canvas-ink-reflow-back {
+  flex: 0 0 auto;
+}
+
 /* Il Lazo della lavagna (T86): sopra l'inchiostro libero dello stage, il giro
    in corso, il contorno dei tratti scelti e la cornice attorno a loro, in
    coordinate della lavagna. I segni restano sottili a ogni zoom; il colore è

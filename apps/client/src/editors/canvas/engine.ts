@@ -138,6 +138,7 @@ import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type I
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
 import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
 import { cutInkStroke, fadeInkStroke, fadeInkStrokes, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { inkReflowWidth, syncInkReflow } from "./ink-reflow";
 import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
 // I colori delle schede e dei fili (T47).
 import {
@@ -2603,6 +2604,14 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointerleave", (event) => {
       if (event.pointerType === "pen") this.#setVeilPointer(false);
     }, { signal });
+    // «Torna a N px» dell'avviso dei tratti sul testo (`ink-reflow.ts`).
+    this.#viewport.addEventListener("click", (event) => {
+      const back = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-ink-reflow]") : null;
+      const id = back?.closest<HTMLElement>(".canvas-node")?.dataset.node;
+      if (!back || id === undefined) return;
+      event.stopPropagation();
+      this.#restoreInkWidth(id, Number(back.dataset.inkReflow));
+    }, { signal });
     // «×N» illumina le gemelle al passaggio e col fuoco (C14, T22); si
     // spengono quando li perde tutti e due.
     const twinsButton = (target: EventTarget | null): Element | null =>
@@ -4594,6 +4603,20 @@ export class CanvasEngine {
       ? (sheet: string, cell: string) => this.#cellRectOf(node.id, sheet, cell)
       : null;
     paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect, cells);
+    syncInkReflow(element, inkReflowWidth(node, drys), !this.#readOnly);
+  }
+
+  /**
+   * «Torna a N px» dell'avviso dei tratti sul testo (`ink-reflow.ts`): la
+   * scheda `id` riprende la larghezza `width` in cui i tratti sono stati
+   * scritti, col lato sinistro fermo e la sua altezza, in un passo d'annulla.
+   */
+  #restoreInkWidth(id: string, width: number): void {
+    const node = this.#doc?.nodes.find((entry) => entry.id === id);
+    if (!node || this.#readOnly || this.#isSceneOversized() || !(width > 0) || node.width === width) return;
+    // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
+    this.#sizedByHand.add(id);
+    this.#writeOps([{ op: "resize", id, width, height: node.height }]);
   }
 
   /**
@@ -9800,6 +9823,8 @@ export class CanvasEngine {
     if (event.button === 0 && modifier && this.#cardLinkAt(target) !== null) return;
     // ↗ di un estratto (T75) prende il suo clic, anche con Ctrl (Cmd).
     if (event.button === 0 && target instanceof Element && target.closest("[data-excerpt-open]")) return;
+    // Anche «Torna a N px» dell'avviso dei tratti sul testo.
+    if (event.button === 0 && target instanceof Element && target.closest("[data-ink-reflow]")) return;
     // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
     // strumento e sopra ogni cosa (T53).
     if (event.button === 0 && this.#spaceHeld) {
@@ -11899,6 +11924,8 @@ export class CanvasEngine {
         el.style.width = `${node.width}px`;
         el.style.height = `${this.#shownHeight(node)}px`;
         markHandles(el, node, this.#camera.zoom);
+        // L'avviso dei tratti sul testo si vede già mentre si tira il bordo.
+        syncInkReflow(el, inkReflowWidth(node, this.#inkCards.get(id) ?? []), !this.#readOnly);
       }
     }
     this.#drawEdges();

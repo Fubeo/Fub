@@ -3622,6 +3622,10 @@ export const IT = { // --- la scocca -------------------------------------------
   "canvas.ink.attach": "Si attacca a {name}",
   "canvas.ink.attach_card": "Si attacca alla scheda",
   "canvas.ink.free": "Libero sulla lavagna",
+  // La scheda di testo allargata o ristretta dopo i tratti: il testo rifluisce, i tratti no.
+  "canvas.ink.reflow": "La larghezza è cambiata: le sottolineature e i disegni sul testo potrebbero non stare più sulle parole, e andranno rifatti.",
+  "canvas.ink.reflow_back": "Torna a {px} px",
+  "canvas.ink.reflow_back_label": "Torna alla larghezza in cui sono stati scritti i tratti, {px} px",
   // Il lazo (T86): i tratti scelti, passati a un'altra scheda.
   "canvas.ink.moved_to": "Ora fa parte di {name}",
   "canvas.ink.moved_card": "Ora fa parte della scheda",

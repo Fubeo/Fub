@@ -281,6 +281,15 @@ Ogni tratto è un passo della cronologia: Ctrl+Z subito dopo lo toglie,
 anche col fuoco sul pulsante della Penna o in una scheda che si sta
 scrivendo (lì prima i tratti, poi il testo).
 
+Su una scheda di testo o una nota Markdown i tratti restano dove sono stati
+scritti, ma il testo va a capo con la larghezza della scheda. Allargata o
+ristretta dopo i tratti, la scheda lo dice con un avviso sotto di lei: «La
+larghezza è cambiata: le sottolineature e i disegni sul testo potrebbero non
+stare più sulle parole, e andranno rifatti.» L'avviso compare già mentre si
+tira il bordo e resta finché la scheda non torna larga come quando si è
+scritto l'ultimo tratto; «Torna a N px» la rimette così, e Ctrl+Z lo annulla.
+Allungarla in altezza non cambia niente.
+
 L'inchiostro sta nel `.canvas`, nei campi `fub:ink`: Obsidian non lo disegna
 ma lo conserva quando riscrive il file. Il formato sta
 nell'[inchiostro della lavagna](../reference/canvas-ink.md), il funzionamento
