@@ -167,6 +167,25 @@ describe("i gruppi", () => {
     expect(text()).toBe("Prima\n\nDopo\n");
   });
 
+  it("Scheda di un intervallo di foglio: «Stacca come tabella» c'è dove la superficie la sa fare (T52)", () => {
+    const detached: unknown[] = [];
+    const withDetach = (doc: string) => {
+      const made = hostOf(doc, 8);
+      made.host.detachCard = (card) => detached.push(card);
+      return made.host;
+    };
+    const group = markdownBlockGroup(withDetach("Prima\n\n![[Conti.xlsx#'Conti 2025'!A1:C7]]\n\nDopo\n"), null);
+    expect(ids(group)).toContain("markdown.card.detach");
+    item(group, "markdown.card.detach").run?.();
+    expect(detached).toEqual([{ start: 7, page: "Conti.xlsx", part: "'Conti 2025'!A1:C7" }]);
+    // Un foglio intero, una cella sola, un PDF: niente.
+    for (const doc of ["Prima\n\n![[Conti.xlsx]]\n", "Prima\n\n![[Conti.xlsx#Budget!C7]]\n", "Prima\n\n![[Atto.pdf#A1:B2]]\n"]) {
+      expect(ids(markdownBlockGroup(withDetach(doc), null))).not.toContain("markdown.card.detach");
+    }
+    // Senza la superficie che legge i valori la voce non c'è.
+    expect(ids(markdownBlockGroup(hostOf("Prima\n\n![[Conti.xlsx#A1:B2]]\n", 8).host, null))).not.toContain("markdown.card.detach");
+  });
+
   it("Scheda di una cella sola: «Mostra come» offre «Valore nel testo» e lo scrive (T53)", () => {
     const { host, text } = hostOf("Prima\n\n![[Conti.xlsx#Budget!C7]]\n\nDopo\n", 8);
     const group = markdownBlockGroup(host, null);
@@ -223,6 +242,8 @@ describe("i gruppi", () => {
     expect(group?.id).toBe("table");
     expect(item(group, "markdown.table.row.after").action).toBe("markdown.table.row.after");
     expect(item(group, "markdown.table.column.after").action).toBe("markdown.table.column.after");
+    // «Trasforma in foglio» (T52): un'azione della tabella, spenta dove non si scrive.
+    expect(item(group, "markdown.table.sheet")).toMatchObject({ label: "Trasforma in foglio", action: "markdown.table.sheet" });
     const sort = item(group, "markdown.table.sort");
     expect(sort.items!.map((entry) => (typeof entry === "string" ? entry : entry.action))).toEqual([
       "markdown.table.sort.ascending",

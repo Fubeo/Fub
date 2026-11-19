@@ -40,6 +40,9 @@ import {
   type LiveCardWidth,
 } from "./live-cards";
 import { cellShownAsValue, cellValueRef } from "./cell-value";
+import { TABLE_SHEET_ACTION } from "./table-grid";
+import { splitSheetPart } from "./table-sheet";
+import { formatKindOf } from "../../../../ui/format-kind";
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri si
 /// scrivono con «Altro…». Gli stessi nel menu del tasto destro e nella barra.
@@ -158,6 +161,14 @@ function setType(state: EditorState, start: number, type: string): TransactionSp
   return { changes: { from: line.from + head.typeText.from, to: line.from + head.typeText.to, insert: type }, userEvent: "input" };
 }
 
+/// La scheda da staccare come tabella (T52): dove comincia, il file com'è
+/// scritto e la parte (`Foglio1!A1:C3`).
+export interface DetachCard {
+  readonly start: number;
+  readonly page: string;
+  readonly part: string;
+}
+
 /// Ciò che i gesti dei gruppi chiedono alla superficie che li ospita.
 export interface BlockGroupHost {
   /// Legge lo stato del testo adesso.
@@ -178,6 +189,10 @@ export interface BlockGroupHost {
   /// Attiva la scheda viva del blocco che comincia in `start` (`live-cards.ts`):
   /// `false` se lì non c'è una scheda che si attiva. Senza, la voce non c'è.
   activateCard?(start: number): boolean;
+  /// «Stacca come tabella» (T52): la parte di foglio della scheda che
+  /// comincia in `start` diventa una tabella coi valori mostrati. Senza, la
+  /// voce non c'è.
+  detachCard?(card: DetachCard): void;
 }
 
 /// Il gruppo di una scheda di foglio attiva nella nota (T43, prototipo passo
@@ -213,6 +228,15 @@ function cardCell(block: Extract<MarkdownBlock, { kind: "card" }>): boolean {
 /// La scheda è una cella mostrata come valore nel testo (`|value`, T53).
 function shownAsValue(block: Extract<MarkdownBlock, { kind: "card" }>): boolean {
   return cellShownAsValue(block.alias) && cardCell(block);
+}
+
+/// La parte di un intervallo di foglio che la scheda nomina (`Foglio1!A1:C3`),
+/// se è una: «Stacca come tabella» (T52) vale per lei, non per un foglio
+/// intero, un nome o una cella sola.
+function sheetRange(block: Extract<MarkdownBlock, { kind: "card" }>): string | null {
+  if (block.subpath === null || formatKindOf(block.page) !== "sheet" || cardCell(block)) return null;
+  const part = block.subpath.slice(1);
+  return splitSheetPart(part) === null ? null : part;
 }
 
 function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: BlockGroupHost): SurfaceMenuEntry[] {
@@ -390,6 +414,11 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
       run: () => void host.activateCard?.(block.start),
     }] : []),
     ...(writable ? cardLayout(block, host) : []),
+    ...(writable && host.detachCard && sheetRange(block) !== null ? [{
+      id: "markdown.card.detach",
+      label: liveStrings.t("blockgroup.card.detach"),
+      run: () => host.detachCard?.({ start: block.start, page: block.page, part: sheetRange(block)! }),
+    }] : []),
     ...(writable ? [{
       id: "markdown.card.remove",
       label: liveStrings.t("blockgroup.card.remove"),
@@ -398,7 +427,7 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
   ],
   // Le azioni della tabella, coi nomi corti della barra: le spegne la
   // superficie dove non c'è una tabella da cambiare.
-  table: () => [
+  table: (_block, _host, writable) => [
     { id: "markdown.table.row.after", label: liveStrings.t("blockgroup.table.row"), icon: "fmt-plus", action: "markdown.table.row.after" },
     { id: "markdown.table.column.after", label: liveStrings.t("blockgroup.table.column"), icon: "fmt-plus", action: "markdown.table.column.after" },
     {
@@ -410,6 +439,8 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
         { id: "markdown.table.sort.descending", label: t("table.menu.sub.sort_descending"), action: "markdown.table.sort.descending" },
       ],
     },
+    // «Trasforma in foglio» (T52), come nel menu della griglia.
+    ...(writable ? [{ id: TABLE_SHEET_ACTION, label: liveStrings.t("table_sheet.menu"), action: TABLE_SHEET_ACTION }] : []),
   ],
   code: (block, host, writable) => {
     const current = block.language.toLowerCase();

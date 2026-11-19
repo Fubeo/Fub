@@ -127,6 +127,18 @@ impl CoreCommands {
                 .with_param(parameter(NOTES_BLOCK_SYNC, "text", ParamKind::Text))
                 .with_param(parameter(NOTES_BLOCK_SYNC, "id", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
+            // «Trasforma in foglio» (E23): il menu della tabella lo chiama coi
+            // byte della tabella, il suo testo e i valori già letti nella
+            // lingua della nota; `revert` lo scrive soltanto il suo
+            // annullamento. Il raggio è `Documents`: la nota e il foglio.
+            #[cfg(feature = "xlsx")]
+            command(NOTE_TABLE_SHEET)
+                .with_param(parameter(NOTE_TABLE_SHEET, "doc", ParamKind::Document))
+                .with_param(parameter(NOTE_TABLE_SHEET, "at", ParamKind::Numbers))
+                .with_param(parameter(NOTE_TABLE_SHEET, "text", ParamKind::Text))
+                .with_param(parameter(NOTE_TABLE_SHEET, "cells", ParamKind::Text))
+                .with_param(parameter(NOTE_TABLE_SHEET, "revert", ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
             // --- le impostazioni (§11.1) --------------------------------
             //
             // Sono comandi e non codice dell'app per la ragione della
@@ -214,6 +226,8 @@ impl CommandProvider for CoreCommands {
             NOTES_TASK_TOGGLE => notes_task_toggle(args, mode, host),
             NOTES_BLOCK_MOVE => notes_block_move(args, mode, host),
             NOTES_BLOCK_SYNC => notes_block_sync(args, mode, host),
+            #[cfg(feature = "xlsx")]
+            NOTE_TABLE_SHEET => note_table_sheet(args, mode, host),
             VAULT_UNDO => vault_undo(mode, host),
             SETTINGS_SET => settings_set(args, mode, host),
             SETTINGS_RESET => settings_reset(args, mode, host),

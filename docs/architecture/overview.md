@@ -159,7 +159,9 @@ vecchi: niente si ricalcola. Dal primo comando la sessione passa a
 `gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
 raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
 dopo averla misurata. Da `gridcraft-chart` l'adattatore prende anche il
-disegno in SVG dei grafici, che porta alla shell con le finestre. Il motore dei fogli
+disegno in SVG dei grafici, che porta alla shell con le finestre. Con la feature
+`xlsx`, `fub-features` scrive una cartella nuova coi valori di una tabella
+(`fub_format_xlsx::values`) senza vedere GridCraft. Il motore dei fogli
 nasce alla prima apertura dietro un `Pigro` di `fub-motori`, che è anche il
 posto delle sue cache. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
@@ -175,6 +177,7 @@ flowchart LR
     sdk["fub-sdk"]
     motori["fub-motori"]
     xlsx["fub-format-xlsx"]
+    features["fub-features"]
     gcalc["gridcraft-calc"]
     gchart["gridcraft-chart"]
     gcore["gridcraft-core"]
@@ -187,6 +190,7 @@ flowchart LR
     gxlsx["gridcraft-xlsx"]
 
     host --> xlsx
+    features --> xlsx
     xlsx --> abi
     xlsx --> markdown
     xlsx --> motori

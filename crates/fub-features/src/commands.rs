@@ -101,6 +101,10 @@ pub const NOTES_BLOCK_MOVE: &str = "note.block.move";
 /// Il blocco sincronizzato: dà l'id al blocco se manca e scrive la sua
 /// trasclusione in fondo a un'altra nota, tutte e due o nessuna (E14).
 pub const NOTES_BLOCK_SYNC: &str = "note.block.sync";
+/// «Trasforma in foglio» (E23): la tabella diventa un file `.xlsx` accanto
+/// alla nota, e al suo posto resta la scheda dei suoi valori.
+#[cfg(feature = "xlsx")]
+pub const NOTE_TABLE_SHEET: &str = "note.table.sheet";
 /// Cambia un'impostazione (§11.1).
 pub const SETTINGS_SET: &str = "settings.set";
 /// Riporta un'impostazione a ciò che valeva prima che qualcuno decidesse.
@@ -324,6 +328,8 @@ mod notes;
 mod provider;
 mod rewrite;
 mod sync_block;
+#[cfg(feature = "xlsx")]
+mod table_sheet;
 mod tasks;
 
 pub use catalog::catalog;
@@ -336,6 +342,8 @@ use notes::{
 pub use provider::CoreCommands;
 use rewrite::{selection_wikilink, vault_replace};
 use sync_block::notes_block_sync;
+#[cfg(feature = "xlsx")]
+use table_sheet::note_table_sheet;
 use tasks::notes_task_toggle;
 pub use tasks::occurrences;
 
