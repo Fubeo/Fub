@@ -16,6 +16,11 @@
 //
 // La nota cambiata in un altro riquadro si segue: dopo una breve quiete si
 // salva e si chiede la resa nuova, con le stesse pagine sotto gli occhi.
+//
+// Sulle pagine stanno anche le guide dei margini (`guides.ts`), lo specchio
+// e la filigrana della sezione «Pagina» (T72); i caratteri del vault che il
+// profilo nomina si caricano all'apertura e si tolgono alla chiusura
+// (`PrintFonts`).
 
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -26,12 +31,15 @@ import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { createBand, type Band } from "./band";
+import { attachGuides } from "./guides";
 import { ExportPages, steppedZoom } from "./pages";
 import { PrintMeasure } from "./paginate/measure";
 import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
-import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
+import { defaultProfile, MM, paperSize, printSettingsOf, type ExportProfile } from "./profile";
+import { PrintFonts, type VaultFontSource } from "./sections/fonts";
 import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
+import { pageDecorOf } from "./sections/page";
 import { numberHeadings } from "./themes";
 import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
 
@@ -54,8 +62,12 @@ export interface ExportSpaceOptions {
   /// Salva la nota, prima di rifare la resa.
   readonly save?: () => Promise<void>;
   /// Scrive il PDF (T77a). Finché non c'è, «Esporta» passa alla stampa del
-  /// sistema le stesse pagine.
-  readonly exportPdf?: (profile: ExportProfile) => Promise<void>;
+  /// sistema le stesse pagine. `fontFaces`: le regole `@font-face` dei
+  /// caratteri del vault caricati, per la sonda (`ProbeOptions.fontFaces`).
+  readonly exportPdf?: (profile: ExportProfile, extra: { readonly fontFaces: readonly string[] }) => Promise<void>;
+  /// I caratteri del vault per la sezione «Caratteri» (T72). Senza, ci sono
+  /// solo quelli di Fub.
+  readonly vaultFonts?: VaultFontSource;
   readonly profile?: ExportProfile;
   readonly onClose?: () => void;
   readonly scheduler?: Scheduler;
@@ -109,6 +121,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   const finals: ((result: SlicedResult) => void)[] = [];
   let readyTold = false;
   let settings = printSettingsOf(profile);
+  const fonts = new PrintFonts(options.vaultFonts ?? null);
 
   const root = document.createElement("div");
   root.className = "export-space";
@@ -176,6 +189,15 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (closed || next === previewing) return;
     previewing = next;
     showSettings(printSettingsOf(next ?? profile));
+    pages.setDecor(pageDecorOf(next ?? profile));
+  }
+
+  /// Carica i caratteri del vault che il profilo nomina; quando arrivano, le
+  /// pagine si rifanno col carattere vero.
+  function loadFonts(of: ExportProfile): void {
+    void fonts.ensure(of).then((fresh) => {
+      if (fresh && !closed) showSettings(printSettingsOf(previewing ?? profile));
+    });
   }
 
   function sectionContext(): SectionContext {
@@ -192,6 +214,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       },
       redraw: () => renderSide(),
       memory,
+      fonts,
     };
   }
 
@@ -248,6 +271,8 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     const activeSection = active?.closest<HTMLElement>(".export-section")?.dataset["section"] ?? "";
     const scroll = side.scrollTop;
     heads.clear();
+    // Con la sezione «Pagina» aperta le guide dei margini si vedono appena.
+    pages.element.dataset["guides"] = String(opened.has("pagina"));
     side.replaceChildren(...SECTIONS.map(renderSection));
     side.scrollTop = scroll;
     if (!active) return;
@@ -302,6 +327,20 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     },
   });
   pages.setColors({ ...settings.layout.type, ...settings.look.colors });
+  pages.setDecor(pageDecorOf(profile));
+  lifetime.add(
+    attachGuides({
+      pages: pages.element,
+      root,
+      pxPerMm: () => pages.zoom * MM,
+      profile: () => profile,
+      paper: (of) => paperSize(of.pagina),
+      change: (next, live) => space.setProfile(next, { live }),
+      done: () => space.openSection("pagina"),
+    }),
+  );
+  lifetime.add(() => fonts.dispose());
+  loadFonts(profile);
 
   function whenFinal(): Promise<SlicedResult> {
     if (latest?.final) return Promise.resolve(latest);
@@ -335,7 +374,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   async function exportNow(): Promise<void> {
     if (options.exportPdf) {
       try {
-        await options.exportPdf(profile);
+        await options.exportPdf(profile, { fontFaces: fonts.fontFaces() });
       } catch (error) {
         notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
       }
@@ -408,8 +447,10 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       profile = next;
       previewing = null;
       showSettings(printSettingsOf(next));
+      pages.setDecor(pageDecorOf(next));
       toolbar.setProfile(next.nome, next !== base);
       if (change?.live) return;
+      loadFonts(next);
       renderSide();
       if (latest) band.update(profile, { pages: latest.final ? latest.pagination.pages.length : latest.total, bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(latest) : null, ms: latest.workMs });
     },

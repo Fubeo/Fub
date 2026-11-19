@@ -141,7 +141,7 @@ describe("lo spazio «Esporta in PDF»", () => {
     page.click();
     const opened = root.querySelector<HTMLButtonElement>('[data-section="pagina"] .export-section-head')!;
     expect(opened.getAttribute("aria-expanded")).toBe("true");
-    expect(root.querySelector('[data-section="pagina"] .export-note')?.textContent).toContain("prossimo aggiornamento");
+    expect(root.querySelector('[data-section="pagina"] #export-page-format-A4')?.getAttribute("aria-checked")).toBe("true");
 
     const base = defaultProfile();
     const landscape = { ...base, pagina: { ...base.pagina, orizzontale: true } };

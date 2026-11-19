@@ -14,6 +14,7 @@
 // valore che questa versione non conosce si conserva e si mostra come quello
 // di serie, come fa il core.
 
+import { clampMargins } from "./guides";
 import type { PageGeometry } from "./probe";
 import { lookVariables, textOf, typeVariables } from "./themes";
 import type { PrintLayout, PrintLook, PrintSettings } from "./paginate/slices";
@@ -184,23 +185,37 @@ export const MM = 96 / 25.4;
 /// Lo spazio fra le due colonne, in millimetri (7 mm, come nel prototipo).
 export const COLUMN_GAP_MM = 7;
 
+/// Il lato più corto e il più lungo di una misura propria, in millimetri: da
+/// un biglietto da visita a un A0.
+export const MIN_PAPER_MM = 50;
+export const MAX_PAPER_MM = 1189;
+
+/// Se una misura propria regge: due lati fra `MIN_PAPER_MM` e `MAX_PAPER_MM`.
+export function validPaper(size: readonly number[] | null | undefined): size is readonly [number, number] {
+  return Array.isArray(size) && size.length === 2 && size.every((side) => Number.isFinite(side) && side >= MIN_PAPER_MM && side <= MAX_PAPER_MM);
+}
+
 /// La misura del foglio in millimetri, già girata se orizzontale. Un formato
 /// che questa versione non conosce, o una misura propria che non regge, è A4.
 export function paperSize(page: ProfilePage): readonly [number, number] {
   const own = page.formato === "proprio" ? page.misura_propria : null;
   const known = PAPER_MM[page.formato as keyof typeof PAPER_MM];
-  const [w, h] = own && own[0] > 0 && own[1] > 0 ? own : known ?? PAPER_MM.A4;
+  const [w, h] = validPaper(own) ? own : known ?? PAPER_MM.A4;
   return page.orizzontale ? [Math.max(w, h), Math.min(w, h)] : [Math.min(w, h), Math.max(w, h)];
 }
 
-/// La pagina in pixel CSS, coi margini.
+/// La pagina in pixel CSS, coi margini tenuti dentro la pagina
+/// (`clampMargins`): un profilo scritto a mano non lascia il testo senza
+/// posto.
 export function geometryOf(page: ProfilePage): PageGeometry {
-  const [w, h] = paperSize(page);
+  const paper = paperSize(page);
+  const [w, h] = paper;
+  const m = clampMargins(page.margini, paper);
   const px = (mm: number) => Math.round(mm * MM * 100) / 100;
   return {
     width: px(w),
     height: px(h),
-    margin: { top: px(page.margini.sopra), right: px(page.margini.destra), bottom: px(page.margini.sotto), left: px(page.margini.sinistra) },
+    margin: { top: px(m.sopra), right: px(m.destra), bottom: px(m.sotto), left: px(m.sinistra) },
   };
 }
 

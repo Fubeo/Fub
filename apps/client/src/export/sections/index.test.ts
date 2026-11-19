@@ -15,7 +15,7 @@ describe("le dieci sezioni del pannello", () => {
     expect(summaries()).toEqual({
       tema: "Fub",
       colori: "Del tema",
-      caratteri: "Del tema",
+      caratteri: "Newsreader · 11 pt",
       pagina: "A4 verticale",
       testata: "Titolo, Numero di pagina",
       fronte: "Nessuno",
@@ -32,7 +32,7 @@ describe("le dieci sezioni del pannello", () => {
       ...base,
       tema: "rivista",
       colori: { testo: "#000000", titoli: "#111111", "diagramma-fondo": "#ffffff" },
-      testo: { sillabazione: true, colonne: 2, carattere_testo: "Literata", corpo: 11 },
+      testo: { sillabazione: true, colonne: 2, carattere_testo: "literata", corpo: 11 },
       pagina: { ...base.pagina, formato: "A5", orizzontale: true },
       testata: { ...base.testata, posti: {} },
       frontespizio: { ...base.frontespizio, frontespizio: true, indice: true },
