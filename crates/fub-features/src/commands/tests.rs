@@ -89,6 +89,56 @@ fn creation_in_a_folder_places_the_free_name_there() {
     assert_eq!(navigate(explicit).as_str(), "Altrove/Idea.md");
 }
 
+/// Senza una cartella scelta da chi crea, la nota nasce nella cartella delle
+/// nuove note (`files.new-note-folder`), come la crea il kernel: «Nuova nota»
+/// della barra e Ctrl+N passano di qui senza `folder` (IMP-3800). Un path
+/// esplicito resta suo, una cartella scelta vince, e `./` senza una nota in
+/// mano è la radice.
+#[test]
+fn creation_without_a_folder_uses_the_configured_new_note_folder() {
+    let spec = || {
+        SettingSpec::new(
+            "files.new-note-folder",
+            "Cartella delle nuove note",
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+    };
+    let navigate = |outcome: CommandOutcome| match outcome.effect {
+        CommandEffect::Navigate { doc } => doc,
+        other => panic!("navigate atteso, arrivato {other:?}"),
+    };
+    let mut host = MemoryHost::new().with_value(spec(), SettingValue::Text("Clienti/".into()));
+    let untitled = invoke(&mut host, NOTES_CREATE, json!({}), InvokeMode::Apply).unwrap();
+    assert_eq!(navigate(untitled).as_str(), "Clienti/Senza titolo.md");
+    let named = invoke(&mut host, NOTES_CREATE, json!({ "name": "Rossi" }), InvokeMode::Apply).unwrap();
+    assert_eq!(navigate(named).as_str(), "Clienti/Rossi.md");
+    let explicit = invoke(
+        &mut host,
+        NOTES_CREATE,
+        json!({ "name": "Archivio/Bianchi" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert_eq!(navigate(explicit).as_str(), "Archivio/Bianchi.md");
+    let chosen = invoke(
+        &mut host,
+        NOTES_CREATE,
+        json!({ "folder": "Progetti", "name": "Verdi" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert_eq!(navigate(chosen).as_str(), "Progetti/Verdi.md");
+
+    let mut beside = MemoryHost::new().with_value(spec(), SettingValue::Text("./".into()));
+    let root = invoke(&mut beside, NOTES_CREATE, json!({}), InvokeMode::Apply).unwrap();
+    assert_eq!(navigate(root).as_str(), "Senza titolo.md");
+    let mut empty = MemoryHost::new().with_setting(spec());
+    let root = invoke(&mut empty, NOTES_CREATE, json!({}), InvokeMode::Apply).unwrap();
+    assert_eq!(navigate(root).as_str(), "Senza titolo.md");
+}
+
 #[test]
 fn creation_persists_prefilled_properties_atomically_and_rejects_duplicate_keys() {
     let mut host = MemoryHost::new();

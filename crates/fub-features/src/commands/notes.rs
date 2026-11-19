@@ -90,10 +90,14 @@ pub(super) fn notes_create(
     let initial = initial_properties(args.text("properties"))?;
     let extension = crate::formats::new_note_extension(host)?;
     // «Nuova nota qui»: la cartella scelta vale al posto di quella configurata.
-    let folder = args
-        .text("folder")
-        .map(fub_abi::rules::folders::normalized)
-        .filter(|f| !f.is_empty());
+    // Senza una scelta vale `files.new-note-folder`, come per il kernel: la
+    // barra laterale e Ctrl+N arrivano qui senza cartella (IMP-3800). Una
+    // cartella data vuota è la radice scelta, non «nessuna scelta».
+    let folder = match args.text("folder") {
+        Some(chosen) => fub_abi::rules::folders::normalized(chosen).to_string(),
+        None => crate::formats::new_note_folder(&*host),
+    };
+    let folder = Some(folder).filter(|f| !f.is_empty());
     let placed = |name: &str| match &folder {
         Some(folder) if !name.contains('/') => format!("{folder}/{name}"),
         _ => name.to_string(),
