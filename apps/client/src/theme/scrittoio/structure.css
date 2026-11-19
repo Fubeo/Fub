@@ -1253,9 +1253,24 @@ body {
   contain: size layout;
 }
 
+/* In Scrittura i numeri di riga non si vedono, ma la colonna resta nella
+   disposizione, larga zero e senza disegno. CodeMirror le dà come altezza
+   minima quella del testo (`minHeight`): mentre ridisegna una riga, togliendo
+   il blocco d'altezza del contenuto, il fondo dello scorrimento resta dov'è.
+   Tolta del tutto (`display: none`), WebKit accorcia lo scorrimento per un
+   attimo e, a fondo nota, la prima lettera su una riga vuota (il «/» che apre
+   il menu) fa scendere la vista di una riga. */
 .pane-editor[data-markdown-mode="live_preview"] .cm-gutters,
 .pane-editor[data-markdown-mode="blocks"] .cm-gutters {
-  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  visibility: hidden;
+  content-visibility: hidden;
+  pointer-events: none;
 }
 
 .pane-editor[data-markdown-mode] > .pane-preview {

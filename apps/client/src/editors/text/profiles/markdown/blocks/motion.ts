@@ -5,8 +5,9 @@
 // leggono i riquadri delle righe in vista quando il DOM è ancora quello di
 // prima (l'`update` dei plugin viene prima di quello della vista), li si
 // rilegge appena il DOM nuovo è scritto (un `updateListener`, prima del
-// fotogramma) e si anima ogni riga dal posto vecchio al nuovo, con le molle
-// di `moto`. Lo stato è già quello finale al primo
+// fotogramma) e, appena finito il ciclo delle misure, quando il livello dei
+// cursori ha già letto le righe ferme, si anima ogni riga dal posto vecchio
+// al nuovo, con le molle di `moto`. Lo stato è già quello finale al primo
 // fotogramma; finita la corsa sull'elemento non resta niente.
 //
 // Una battuta normale non anima niente: oltre all'annotazione si riconoscono
@@ -19,7 +20,7 @@
 // blocchi; le immagini di chi se ne va e il blocco in mano stanno nello
 // scorrimento, fuori dal contenuto. Ogni gesto ha la sua frase nella regione
 // viva. La posa di un blocco finisce lì: nessun alone, nessun colore dopo.
-import { type ChangeSet, type EditorState, type Extension, type Range, StateEffect, StateField, type Text } from "@codemirror/state";
+import { type ChangeSet, type EditorState, type Extension, type Range, StateEffect, StateField, type Text, Transaction } from "@codemirror/state";
 import { type BlockInfo, BlockType, Decoration, type DecorationSet, EditorView, layer, type LayerMarker, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { animate, halt, liveState, motionLevel, prepareExit, springValue, stagger, STAGGER_MAX, type Ghost, type Motion, type Pose, type SpringValue } from "../../../../../moto";
 import { openLifetime } from "../../../../../ui/lifetime";
@@ -54,6 +55,13 @@ const ARRIVE_Y = 6;
 const EACH_MS = 12;
 /// La durata della dissolvenza quando le righe in moto sono troppe.
 const CROWD_MS = 140;
+/// Quanto (px) il cursore disegnato può scostarsi dalla testa della selezione
+/// senza che lo si ridisegni.
+const CURSOR_SLACK = 1.5;
+/// Le chiavi della verifica del cursore e della sua conferma: una sola per
+/// ciclo delle misure.
+const realignKey = {};
+const realignConfirmKey = {};
 /// Il tempo (ms) dopo una modifica in cui il cursore non scivola: è una
 /// raffica di battute.
 const BURST_MS = 400;
@@ -339,6 +347,8 @@ class BlockMotion {
   private lastEdit = 0;
   /// Ciò che `play` ha letto e che `flush` anima.
   private pending: Before | null = null;
+  /// Le corse delle righe dell'ultimo gesto, finché durano.
+  private lines: readonly Motion[] = [];
 
   constructor(readonly view: EditorView) {
     this.live.className = "cm-fub-block-live";
@@ -385,9 +395,21 @@ class BlockMotion {
       const phrase = gesturePhrase(update.state, gesture);
       if (phrase) this.say(phrase);
       this.play(update, gesture);
-    } else if (update.selectionSet && !update.docChanged) {
+    } else if (update.docChanged) {
+      this.settle();
+    } else if (update.selectionSet) {
       this.glide(update);
     }
+  }
+
+  /// Una battuta che non è un gesto, mentre le righe dell'ultimo arrivano
+  /// ancora (una lettera scritta subito dopo Invio): le righe vanno subito al
+  /// loro posto, prima che CodeMirror le ridisegni e rimisuri il cursore. Il
+  /// testo in cui si scrive sta fermo, e il cursore è dove va la lettera.
+  settle(): void {
+    const lines = this.lines;
+    this.lines = [];
+    for (const motion of lines) motion.finish();
   }
 
   say(text: string): void {
@@ -426,18 +448,73 @@ class BlockMotion {
     }
     const tints = gesture.kind === "color" && !reduced ? this.readTints(update, ranges) : [];
     const before: Before = { gesture, boxes, ghosts, handoffs, ranges, update, tints };
-    // Il DOM nuovo si legge appena CodeMirror lo ha scritto, prima che il
-    // fotogramma lo mostri (`flush`, da `updateListener`): aspettare il ciclo
-    // delle misure lascerebbe vedere un fotogramma col blocco già arrivato, e
-    // un gesto che ne interrompe un altro salterebbe.
+    // Il DOM nuovo si legge appena CodeMirror lo ha scritto (`flush`, da
+    // `updateListener`): letto più tardi, un gesto che ne interrompe un altro
+    // salterebbe. Le corse partono poi nel ciclo delle misure, prima del
+    // fotogramma.
     this.pending = before;
   }
 
   /// Il gesto in sospeso, col DOM ormai quello nuovo.
+  ///
+  /// I riquadri di dopo si leggono subito; le corse partono appena finito il
+  /// ciclo delle misure che CodeMirror ha già chiesto per questa battuta, prima
+  /// del fotogramma. In quel ciclo il livello dei cursori legge le righe, anche
+  /// più volte (una riga che cambia altezza ne chiede un'altra lettura): devono
+  /// essere ferme. Fatte partire prima, la riga nata (8 px più su) o quella che
+  /// scivola sarebbero lette in corsa, e il cursore resterebbe dove la riga
+  /// stava in quel momento finché un'altra battuta non lo ridisegna.
   flush(): void {
     const before = this.pending;
     this.pending = null;
-    if (before) this.animate(before, this.measureAfter(before));
+    if (!before) return;
+    const after = this.measureAfter(before);
+    this.view.requestMeasure({
+      read: () => null,
+      // Il microtask gira quando il ciclo intero è finito, e prima del disegno.
+      write: () => queueMicrotask(() => {
+        if (!this.life.closed) this.animate(before, after);
+      }),
+    });
+  }
+
+  /// Il cursore ridisegnato mentre una riga era in corsa (una lettera scritta
+  /// subito dopo Invio) è rimasto dove la riga stava allora. A corse finite,
+  /// se il cursore disegnato non è dove CodeMirror mette la testa della
+  /// selezione, una transazione con la stessa selezione, fuori dalla
+  /// cronologia, fa ridisegnare il livello. Di solito coincide, e non succede
+  /// niente.
+  ///
+  /// Uno scarto visto si riguarda al giro dopo dello stesso ciclo (`confirm`):
+  /// al primo il livello dei cursori può non aver ancora scritto il cursore di
+  /// una battuta appena arrivata.
+  realignCursor(confirm = false): void {
+    if (this.life.closed) return;
+    this.view.requestMeasure({
+      key: confirm ? realignConfirmKey : realignKey,
+      read: (view) => {
+        const layerEl = view.scrollDOM.querySelector<HTMLElement>(":scope > .cm-cursorLayer");
+        const main = view.state.selection.main;
+        // Lo scivolare del cursore morbido sposta il livello apposta.
+        if (!layerEl || layerEl.style.translate || !main.empty) return false;
+        const drawn = layerEl.querySelector(".cm-cursor-primary")?.getBoundingClientRect();
+        const head = view.coordsAtPos(main.head, main.assoc || 1);
+        if (!drawn || !head || drawn.height === 0) return false;
+        return Math.abs(drawn.top - head.top) > CURSOR_SLACK || Math.abs(drawn.left - head.left) > CURSOR_SLACK;
+      },
+      // Dentro il ciclo delle misure CodeMirror non accetta transazioni: la
+      // si manda appena il ciclo è finito.
+      write: (stale, view) => {
+        if (!stale) return;
+        if (!confirm) {
+          this.realignCursor(true);
+          return;
+        }
+        queueMicrotask(() => {
+          if (!this.life.closed) view.dispatch({ selection: view.state.selection, annotations: Transaction.addToHistory.of(false) });
+        });
+      },
+    });
   }
 
   /// Il fondo colorato delle righe che il colore tocca, prima del gesto.
@@ -523,13 +600,14 @@ class BlockMotion {
     for (const ghost of leaving) ghost.play({ layer: this.ghostLayer, to: { y: GONE_Y, opacity: 0 }, duration: exit, easing: "ease-out" });
     const rising = leaving.length > 0;
     const settles = gesture.kind === "drop" || gesture.kind === "swap";
+    const lines: Motion[] = [];
     for (const { box, from } of moves) {
       const live = after.live.get(box.el);
       if (crowd) {
         animate(box.el, { from: { opacity: 0.4 }, duration: CROWD_MS, easing: "ease-out" });
         continue;
       }
-      animate(box.el, {
+      lines.push(animate(box.el, {
         from,
         ...(live ? { velocity: live.velocity } : {}),
         // Chi sale al posto di ciò che esce finisce col tempo dell'uscita; la
@@ -537,15 +615,22 @@ class BlockMotion {
         ...(rising
           ? { delay: RISE_DELAY, duration: exit - RISE_DELAY, easing: "ease-out" }
           : settles ? { duration: SETTLE_MS, easing: SETTLE_EASING } : { spring: "soft" }),
-      });
+      }));
     }
     // Chi nasce scende di poco e appare; aprendo un ripiegabile, uno dopo
     // l'altro. Col moto ridotto, la sola dissolvenza.
-    stagger(born, (box) => animate(box.el, {
+    lines.push(stagger(born, (box) => animate(box.el, {
       from: { y: BORN_Y, opacity: 0 },
       spring: "soft",
       whenReduced: "fade",
-    }), { each: gesture.kind === "fold" ? EACH_MS : 0, max: STAGGER_MAX });
+    }), { each: gesture.kind === "fold" ? EACH_MS : 0, max: STAGGER_MAX }));
+    if (lines.some((motion) => motion.running)) {
+      this.lines = lines;
+      void Promise.all(lines.map((motion) => motion.finished)).then(() => {
+        if (this.lines === lines) this.lines = [];
+        this.realignCursor();
+      });
+    }
     if (reduced) return;
     this.extras(gesture, after.boxes, before);
   }

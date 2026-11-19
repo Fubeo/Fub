@@ -766,6 +766,11 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     "Vedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani, §ok.\n\nVedi [[Itinerario dettagliato#Giorno 2|il secondo giorno]] domani.",
   ),
   "riga-vuota": at("# Nota nuova\n\n§"),
+  // Il «/» a fondo nota: quaranta paragrafi che vanno a capo, poi la riga
+  // vuota del cursore, l'ultima. La scena la guarda scorsa fino in fondo.
+  "fondo-nota": at(
+    `# Nota lunga\n\n${Array.from({ length: 40 }, (_, i) => `Paragrafo ${i + 1}: una riga di prosa abbastanza lunga da andare a capo nel foglio, come il testo vero di una nota.`).join("\n\n")}\n\n§`,
+  ),
   // La Base nella nota (T18, con `?base=nota`): una riga vuota fra due
   // paragrafi per «/base», e la Base già incorporata, larga fino al margine.
   "base-slash": at("# Letture\n\nI libri dell'anno, in una tabella.\n\n§\n\nSotto, il testo che segue."),
