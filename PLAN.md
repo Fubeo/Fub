@@ -2759,7 +2759,7 @@ Fatto quando: i numeri e l'esito sono nella pagina; le guardie dei documenti
 verdi.
 Prova: scripts/check.sh --rapido; cd apps/client && node
 bench/interaction.mjs --only=battuta
-Stato: [~] in corso · coder · base daf52b2aa
+Stato: [ ] da fare · aspetta T49 (Dipende da T41–T55)
 
 ## T57 · Diagramma: via la barra, il menu del tasto destro, il gruppo, i tasti
 
