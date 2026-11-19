@@ -172,6 +172,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// La revisione che il file `doc` ha adesso sul disco: la cartella di Excel
   /// la chiede quando i byte di `documentBase` non ci sono più.
   readonly documentDiskRevision?: (doc: string) => Promise<string | null>;
+  /// La scrittura in volo del documento `doc`, o `null`: annulla e ripeti di
+  /// una cartella di Excel la aspettano (IMP-6400).
+  readonly documentWriting?: (doc: string) => Promise<void> | null;
   /// Le scritture dei documenti aperti, per i gesti della barra di una Base:
   /// salvare prima, e annunciare la scrittura perché la ricarica non si dica.
   readonly documentWrites?: BaseDocumentWrites;
@@ -1061,6 +1064,7 @@ function mountGrid(
       documentId: context.documentId,
       base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
       diskRevision: options.documentDiskRevision ? () => options.documentDiskRevision!(context.documentId) : undefined,
+      writing: options.documentWriting ? () => options.documentWriting!(context.documentId) : undefined,
       onChange: (change) => {
         options.onChange(context.paneId, change);
         cellChanged();

@@ -1632,6 +1632,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       return base?.kind === "descends_from" ? base.value : null;
     },
     documentDiskRevision: (doc) => api.readDocument(doc, documentSessions.vaultFor(doc)).then((source) => source.revision),
+    documentWriting: (doc) => documentSessions.writing(doc),
     documentWrites: { flush: flushPendingSave, expect: (doc) => documentSessions.expectWrite(doc) },
     media: {
       transport: mediaTransport,

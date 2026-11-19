@@ -624,6 +624,10 @@ export class GridEngine {
   /// La sessione aperta; `null` mentre si apre o se non si è aperta.
   #bytes: BytesState | null = null;
   #bytesOpening = false;
+  /// Annulla e ripeti arrivati mentre il giornale si scriveva, quando la
+  /// scrittura ha fatto riaprire la cartella: vanno alla sessione nuova appena
+  /// aperta, prima delle celle che la riapertura riporta (`#openBytes`).
+  #heldHistory: GridCommand[] = [];
   /// L'ultima sessione mostrata e le finestre lette: restano mentre la
   /// cartella si riapre, così la griglia non si svuota.
   #shownSession: GridBytesSession | null = null;
@@ -1677,6 +1681,17 @@ export class GridEngine {
       done?.(run);
     };
     this.#enqueueProtocol(async () => {
+      // Mentre il giornale si scrive, annullare un comando lo toglierebbe da
+      // un testo che il disco ha già, e il salvataggio non lo riporterebbe
+      // sui byte nuovi (IMP-6400). Il passo aspetta la scrittura, con la coda
+      // ferma dietro di lui; se la scrittura ha fatto riaprire la cartella va
+      // alla sessione nuova, che ritrova la cronologia, appena si apre.
+      if (history && await this.#awaitWriting()) {
+        // La riapertura azzera i comandi in coda (`#pendingCommandMode`).
+        if (!this.#destroyed) this.#holdHistory([command]);
+        finish({ ok: false, error: null });
+        return;
+      }
       // Annulla e ripeti valgono per la sessione che c'è quando arrivano al
       // provider: anche quella riaperta dopo un salvataggio, che ritrova la
       // cronologia del documento.
@@ -1699,6 +1714,30 @@ export class GridEngine {
       }
       answered?.(!this.#destroyed && this.#bytes !== null && this.#bytes.session.revision !== revision);
     });
+  }
+
+  /// Aspetta la scrittura del giornale in volo, se c'è (`writing`). Vero se
+  /// intanto la cartella si è riaperta sui byte scritti (o la griglia è
+  /// smontata): un passo della cronologia non va più alla sessione di prima.
+  /// Falso se non c'era una scrittura, o se non ha cambiato i byte (è
+  /// fallita): il passo va avanti sulla sessione di adesso.
+  async #awaitWriting(): Promise<boolean> {
+    const writing = this.#options.writing?.();
+    if (!writing) return false;
+    const epoch = this.#bytesEpoch;
+    await writing.catch(() => {});
+    return this.#destroyed || epoch !== this.#bytesEpoch;
+  }
+
+  /// Tiene annulla e ripeti `commands` per la sessione che si sta aprendo,
+  /// prima di quelli già tenuti (sono stati dati prima). Se nessuna apertura è
+  /// in coda, vanno in coda adesso, nell'ordine.
+  #holdHistory(commands: readonly GridCommand[]): void {
+    if (this.#bytesOpening) {
+      this.#heldHistory = [...commands, ...this.#heldHistory];
+      return;
+    }
+    for (const command of commands) this.#give(command.id, command.params, true);
   }
 
   /// Un comando che riempie (`FILL_COMMANDS`): le formiche attorno a ciò che
@@ -2007,6 +2046,7 @@ export class GridEngine {
     if (reset) {
       this.#undo = [];
       this.#redo = [];
+      this.#heldHistory = [];
     }
     // Una sessione nuova del provider non ha la history di quella di prima:
     // i passi si annullano con le loro patch (un salvataggio ha messo il
@@ -2084,6 +2124,20 @@ export class GridEngine {
       this.#showView(sheet.id, top);
       this.#afterRewrite(top, shown);
       this.#followMedia();
+      // Annulla e ripeti dati mentre il giornale si scriveva vengono prima
+      // delle celle riportate: sono stati dati prima di loro. Se un'altra
+      // scrittura riapre di nuovo la cartella, aspettano quella sessione.
+      const held = this.#heldHistory;
+      this.#heldHistory = [];
+      for (const [index, command] of held.entries()) {
+        if (!(await this.#awaitWriting()) && !this.#destroyed && epoch === this.#bytesEpoch) {
+          await this.#giveNow(command, true, epoch, this.#editEpoch, this.#carriedTicket);
+          continue;
+        }
+        if (!this.#destroyed) this.#holdHistory(held.slice(index));
+        return;
+      }
+      if (this.#destroyed || epoch !== this.#bytesEpoch) return;
       // Dentro il passo della riapertura, prima di ciò che si è scritto
       // mentre si riapriva: l'ordine delle scritture resta quello dato.
       const carried = this.#carried;
@@ -2110,6 +2164,7 @@ export class GridEngine {
     this.#publishJournal(journal, "input");
     this.#undo = [];
     this.#redo = [];
+    this.#heldHistory = [];
     this.#showNotice();
   }
 

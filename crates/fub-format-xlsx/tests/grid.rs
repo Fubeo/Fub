@@ -892,6 +892,46 @@ fn cambiare_un_valore_ricalcola_le_formule_a_schermo_e_nel_file() {
     assert!(!b11.stale && (number_of(&b11.value) - weighted).abs() < 1e-9);
 }
 
+const FOGLIO1: &str = r#"<sheetData><row r="1"><c r="A1"><v>4</v></c><c r="B1"><f>Dati!A1*3</f><v>15</v></c><c r="C1"><f>B1+1</f><v>16</v></c></row></sheetData>"#;
+const DATI: &str = r#"<sheetData><row r="1"><c r="A1"><v>5</v></c></row></sheetData>"#;
+
+/// IMP-2804 fra fogli, come la prova del tester: il valore cambia sul
+/// secondo foglio, e la formula che lo legge sta sul primo, con una formula
+/// a catena dopo di lei.
+#[test]
+fn cambiare_un_valore_su_un_altro_foglio_ricalcola_chi_lo_legge() {
+    let bytes = Package {
+        sheets: vec![sheet("Foglio1", FOGLIO1), sheet("Dati", DATI)],
+        workbook_tail: r#"<calcPr fullCalcOnLoad="1"/>"#,
+        ..Package::default()
+    }
+    .bytes();
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![GridCellPatch {
+            cell: key_in("s2", "A1"),
+            before: None,
+            after: "7".into(),
+        }],
+    )
+    .unwrap();
+    let foglio1 = sheet_window(&mut provider, &session, &commit.revision, "s1");
+    for (a1, expected) in [("B1", 21.0), ("C1", 22.0)] {
+        let cell = find_in(&foglio1, "s1", a1);
+        assert!(!cell.stale, "{a1}");
+        assert_eq!(cell.value, GridValue::Number(expected), "{a1}");
+    }
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert_eq!(stored(&saved, 1, "A1").0, Value::Number(7.0));
+    assert_eq!(stored(&saved, 0, "B1").0, Value::Number(21.0));
+    assert_eq!(stored(&saved, 0, "C1").0, Value::Number(22.0));
+}
+
 const ORE: &str = r#"<sheetData><row r="2"><c r="A2"><v>8</v></c><c r="B2"><v>40</v></c><c r="C2"><f>A2*B2</f></c></row><row r="3"><c r="A3"><v>5</v></c><c r="B3"><v>50</v></c><c r="C3"><f>A3*B3</f></c></row><row r="4"><c r="C4"><f>SUM(C2:C3)</f></c></row></sheetData>"#;
 const FATTURE: &str = r#"<sheetData><row r="1"><c r="A1"><f>Ore!C4</f></c><c r="B1"><f>FUNZIONEIGNOTA(A1)</f></c></row></sheetData>"#;
 const TOTALE: &str = r#"<sheetData><row r="1"><c r="A1"><f>Fatture!A1*2</f></c></row></sheetData>"#;

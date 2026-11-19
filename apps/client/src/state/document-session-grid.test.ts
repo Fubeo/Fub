@@ -24,6 +24,9 @@ type Workbook = ReturnType<typeof workbookHost>;
  */
 function diskApi(grid: Workbook, current: () => string = () => grid.base()) {
   const writes: Array<{ readonly text: string; readonly base: string }> = [];
+  /// Con `hold`, le scritture restano in volo finché non si chiama `release`.
+  let gate: Promise<void> | null = null;
+  let open = (): void => {};
   const drafts = new Map<string, { readonly text: string; readonly base: string | null }>();
   const read = async (): Promise<DocumentSource> => ({
     text: "",
@@ -42,6 +45,7 @@ function diskApi(grid: Workbook, current: () => string = () => grid.base()) {
         throw { kind: "conflict", message: "stale" } satisfies PluginError;
       }
       writes.push({ text, base: base.kind });
+      if (gate) await gate;
       return text === "" ? grid.base() : grid.save(text);
     },
     resourceWrite: async () => ({ revision: "rev-byte" }),
@@ -53,7 +57,14 @@ function diskApi(grid: Workbook, current: () => string = () => grid.base()) {
     },
     documentClosed: async () => {},
   };
-  return { api, writes, drafts };
+  const hold = () => {
+    gate = new Promise<void>((resolve) => { open = resolve; });
+  };
+  const release = () => {
+    gate = null;
+    open();
+  };
+  return { api, writes, drafts, hold, release };
 }
 
 /** Monta la griglia e la attacca alla sessione come fa la shell. */
@@ -70,6 +81,7 @@ async function openGrid(sessions: DocumentSessionCollection, grid: Workbook) {
       return base?.kind === "descends_from" ? base.value : null;
     },
     diskRevision: async () => grid.base(),
+    writing: () => sessions.writing(DOC),
     onChange: (change) => {
       sessions.acceptSurfaceChange(DOC, "pane", { text: change.text, operation: change.operation });
     },
@@ -336,6 +348,155 @@ describe("la cella aperta di un foglio e la sessione", () => {
     expect(sessions.inspect(DOC)!.result).toBe("conflitto");
     expect(disk.writes).toHaveLength(0);
     expect(pane.cell(1, 1)?.textContent).toBe("abc");
+    pane.detach();
+    pane.engine.destroy();
+  });
+});
+
+describe("annulla di un foglio mentre si salva", () => {
+  /// Una formula salvata porta la cartella nei comandi; poi `step` cambia la
+  /// cartella con un comando, e la sessione comincia a scriverlo.
+  async function savingCommand(step: (pane: Awaited<ReturnType<typeof openGrid>>) => void) {
+    const grid = workbookHost();
+    const disk = diskApi(grid);
+    const sessions = new DocumentSessionCollection(disk.api);
+    const pane = await openGrid(sessions, grid);
+    pane.typeWithoutEnter(8, 6, "=1+2");
+    pane.engine.commitPending();
+    await settle();
+    await sessions.get(DOC)!.flush();
+    await settle();
+    expect(grid.disk("s1", "r8", "c6")).toBe("=1+2");
+    step(pane);
+    await settle();
+    expect(sessions.inspect(DOC)!.dirty).toBe(true);
+    disk.hold();
+    const saving = sessions.get(DOC)!.flush();
+    await settle();
+    expect(sessions.writing(DOC)).not.toBeNull();
+    return { grid, disk, sessions, pane, saving };
+  }
+
+  async function saved(sessions: DocumentSessionCollection, saving: Promise<boolean>) {
+    await saving;
+    await settle();
+    await settle();
+    await sessions.get(DOC)!.flush();
+    await settle();
+    await settle();
+  }
+
+  // IMP-6400: ordinare, e annullare mentre il salvataggio scrive l'ordine.
+  // Il giornale riportato sui byte nuovi perdeva l'annulla, e la sessione
+  // diceva «Tutto salvato» con il file ancora ordinato.
+  it("ordinare e annullare mentre il salvataggio scrive l'ordine riporta il file com'era (IMP-6400)", async () => {
+    const { grid, disk, sessions, pane, saving } = await savingCommand((pane) => {
+      pane.cell(8, 6)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      expect(pane.engine.command("data.sortAscending", "{}")).toBe(true);
+    });
+    expect(disk.writes[disk.writes.length - 1]!.text).toContain("data.sortAscending");
+
+    expect(pane.engine.undo()).toBe(true);
+    await settle();
+    disk.release();
+    await saved(sessions, saving);
+
+    expect(grid.diskStyles()).toEqual([]);
+    expect(sessions.inspect(DOC)).toMatchObject({ result: "ok", dirty: false, text: "" });
+    // E l'ordine si ripete, sul disco come prima.
+    expect(pane.engine.redo()).toBe(true);
+    await settle();
+    await saved(sessions, Promise.resolve(true));
+    expect(grid.diskStyles()).toEqual(["data.sortAscending@G9"]);
+    pane.detach();
+    pane.engine.destroy();
+  });
+
+  it("un comando annullato mentre si salva resta annullato sullo schermo e sul disco (IMP-6400)", async () => {
+    const { grid, disk, sessions, pane, saving } = await savingCommand((pane) => {
+      pane.typeWithoutEnter(9, 6, "=5");
+      pane.engine.commitPending();
+    });
+
+    expect(pane.engine.undo()).toBe(true);
+    await settle();
+    // Il giornale si sta scrivendo: l'annulla lo aspetta, e lo schermo non
+    // mostra ancora ciò che il disco non avrebbe.
+    expect(pane.cell(9, 6)?.textContent).toBe("=5");
+    disk.release();
+    await saved(sessions, saving);
+
+    expect(grid.disk("s1", "r9", "c6")).toBe("");
+    expect(pane.cell(9, 6)?.textContent ?? "").toBe("");
+    expect(grid.disk("s1", "r8", "c6")).toBe("=1+2");
+    expect(sessions.inspect(DOC)).toMatchObject({ result: "ok", dirty: false, text: "" });
+    pane.detach();
+    pane.engine.destroy();
+  });
+
+  it("una cella scritta dopo l'annulla, mentre si salva, entra dopo di lui (IMP-6400)", async () => {
+    const { grid, disk, sessions, pane, saving } = await savingCommand((pane) => {
+      pane.typeWithoutEnter(9, 6, "=5");
+      pane.engine.commitPending();
+    });
+
+    expect(pane.engine.undo()).toBe(true);
+    await settle();
+    pane.typeWithoutEnter(10, 6, "dopo");
+    pane.engine.commitPending();
+    await settle();
+    disk.release();
+    await saved(sessions, saving);
+
+    expect(grid.disk("s1", "r9", "c6")).toBe("");
+    expect(grid.disk("s1", "r10", "c6")).toBe("dopo");
+    expect(pane.cell(9, 6)?.textContent ?? "").toBe("");
+    expect(pane.cell(10, 6)?.textContent).toBe("dopo");
+    expect(sessions.inspect(DOC)).toMatchObject({ result: "ok", dirty: false, text: "" });
+    pane.detach();
+    pane.engine.destroy();
+  });
+
+  it("se il salvataggio fallisce, l'annulla va alla sessione di prima e il salvataggio dopo lo scrive (IMP-6400)", async () => {
+    const grid = workbookHost();
+    const disk = diskApi(grid);
+    let fail = false;
+    const sessions = new DocumentSessionCollection({
+      ...disk.api,
+      writeDocument: async (...args) => {
+        if (!fail) return disk.api.writeDocument(...args);
+        await disk.api.writeDocument(args[0], "", { kind: "dictated" });
+        throw { kind: "io", message: "disco pieno" } satisfies PluginError;
+      },
+    });
+    const pane = await openGrid(sessions, grid);
+    pane.typeWithoutEnter(8, 6, "=1+2");
+    pane.engine.commitPending();
+    await settle();
+    await sessions.get(DOC)!.flush();
+    await settle();
+    pane.typeWithoutEnter(9, 6, "=5");
+    pane.engine.commitPending();
+    await settle();
+    fail = true;
+    disk.hold();
+    const saving = sessions.get(DOC)!.flush();
+    await settle();
+    expect(pane.engine.undo()).toBe(true);
+    await settle();
+    disk.release();
+    await saving;
+    await settle();
+    await settle();
+    expect(pane.cell(9, 6)?.textContent ?? "").toBe("");
+    expect(grid.disk("s1", "r9", "c6")).toBe("");
+    fail = false;
+    await sessions.get(DOC)!.flush();
+    await settle();
+    await settle();
+    expect(grid.disk("s1", "r9", "c6")).toBe("");
+    expect(grid.disk("s1", "r8", "c6")).toBe("=1+2");
+    expect(sessions.inspect(DOC)).toMatchObject({ dirty: false, text: "" });
     pane.detach();
     pane.engine.destroy();
   });

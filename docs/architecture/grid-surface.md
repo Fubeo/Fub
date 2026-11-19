@@ -41,7 +41,11 @@ alla sessione e lo consegna al provider, che controlla le preimmagini, rifiuta l
 celle bloccate e risponde con le celle da rileggere; le modifiche in coda partono
 in fila. Su una cartella annulla e ripeti sono del provider, celle e comandi in
 una pila anche oltre il salvataggio
-([contratto](../reference/ipc-contract.md#cartelle-di-excel)); senza provider
+([contratto](../reference/ipc-contract.md#cartelle-di-excel)). Annulla e ripeti
+dati mentre il giornale si scrive aspettano la scrittura
+(`DocumentSession.writing`), con le modifiche dopo di loro in fila, e vanno
+alla sessione riaperta sui byte scritti: un comando tolto da un giornale che il
+disco ha già non si potrebbe più riportare sul file; senza provider
 l'undo è locale, e si svuota con avviso se altri cambiano una sua cella. Un
 giornale cambiato altrove riapre la sessione; la bozza resta col cursore e il
 fuoco e segue la sua riga. Se la sua cella è cambiata sotto, un avviso chiede
