@@ -17951,6 +17951,97 @@ input.canvas-toolbar-item {
   background-color: color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg));
   cursor: default;
 }
+/* ── Gli estratti e «Annota» (T49) ───────────────────────────────────────
+   (E25; il prototipo `.scard .only-live.act` e `.exc`, passi 17–18.)
+   «Estrai» sta in testata solo sulla scheda attiva che ha estratti (il
+   foglio; il PDF lo mostra spento, col perché): d'accento e in grassetto
+   come l'azione del prototipo (`--acc-ink` → `--accent-soft`), grigio da
+   spento. Un passo di PDF (`#page=2&selection=…`, scritto da Obsidian) è una
+   citazione, non una scheda: la barra gialla del prototipo (`#e8c84a` in
+   tutte e due le luci, come là), il carattere del corpo del testo (il
+   prototipo scrive un corsivo su `--f-text`, che non dichiara: il suo
+   `font` non vale e il testo eredita quello del paragrafo, dritto), e sotto
+   la fonte con «Vai alla pagina». */
+.live-card-head .live-card-extract {
+  display: none;
+}
+.live-card[data-card-active="true"][data-card-extract] .live-card-head .live-card-extract {
+  display: inline-flex;
+}
+.live-card[data-card-extract="ready"] .live-card-head .live-card-extract {
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+.live-card[data-card-extract="off"] .live-card-head .live-card-extract {
+  color: var(--doc-gutter-fg);
+  cursor: default;
+}
+.live-card[data-card-state="passage"] {
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.live-card[data-card-state="passage"]::after,
+.live-card[data-card-state="passage"] .live-card-head,
+.live-card[data-card-state="passage"] .live-card-resize {
+  display: none;
+}
+.live-card[data-card-state="passage"] .live-card-body {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  cursor: default;
+}
+.live-card[data-card-state="passage"] .live-card-body > * {
+  pointer-events: auto;
+}
+.live-card-excerpt {
+  margin: 4px 0;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid #e8c84a;
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  font-style: normal;
+  line-height: var(--leading-relaxed);
+}
+.live-card-excerpt-wait {
+  margin: 0;
+}
+.live-card-excerpt-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--doc-gutter-fg);
+  font: 12.5px var(--font-ui);
+  font-style: normal;
+}
+.live-card-excerpt-source > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.live-card-excerpt-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card-excerpt-go {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--accent-soft);
+}
+.live-card-excerpt-go:hover {
+  background: var(--accent-veil);
+}
+.live-card-excerpt-go:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 
@@ -26411,6 +26502,14 @@ h6.ui-heading {
 :is(.export-measure, .export-page) .print-page .markdown-rendered p {
   text-align: var(--print-text-align, start);
 }
+/* La sillabazione (T72): nel testo sì, nel codice e nelle tabelle no, come
+   nel prototipo. Vale sulla resa misurata e sulle copie. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered {
+  hyphens: var(--print-hyphens, manual);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(pre, code, table) {
+  hyphens: manual;
+}
 /* Col rientro i paragrafi si toccano: il margine sopra del secondo annulla
    quello sotto del primo, e la prima riga rientra. */
 :is(.export-measure, .export-page) .print-page .markdown-rendered > p + p {
@@ -27031,7 +27130,446 @@ h6.ui-heading {
   transition: none;
 }
 
+/* ── Le sezioni «Contenuto» e «Interruzioni» (T74; il prototipo, passo 29) ── */
+.export-content-section {
+  display: grid;
+  gap: 10px;
+}
+/* Una riga che non sta nel pannello (le tre scelte delle schede vive) porta
+   le scelte sotto il nome, invece di allargare il pannello. */
+.export-content-section .export-row {
+  flex-wrap: wrap;
+}
+
+/* ── Il contenuto sulle pagine (T74; il prototipo `.pprops`, `.pcm`,
+   `.pnote`, `.pnotes`, `.ptx-s`, `.plink`, `.ptab`, `.pcode.num`) ─────────
+   Valgono sulla resa che si misura e sulle pagine, come i colori del tema
+   di stampa: la copia veste come ciò che si è misurato. */
+
+/* Le proprietà sotto il titolo: una riga che va a capo, fra due fili. */
+:is(.export-measure, .export-page) .print-page > .export-properties {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  padding: 0.6em 0;
+  border-block: 1px solid var(--doc-rule);
+  font: 0.84em/1.4 var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .export-properties dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em 1.6em;
+  margin: 0;
+}
+:is(.export-measure, .export-page) .export-properties dl > div {
+  display: flex;
+  gap: 0.5em;
+}
+:is(.export-measure, .export-page) .export-properties dt {
+  color: var(--muted);
+}
+:is(.export-measure, .export-page) .export-properties dd {
+  margin: 0;
+  color: var(--doc-fg);
+  font-weight: 600;
+}
+
+/* I link: colorati senza filo, sottolineati col filo pieno, o come il testo.
+   Restano link nel PDF. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered a {
+  color: var(--print-link-color, var(--doc-link));
+  text-decoration-line: var(--print-link-line, none);
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.16em;
+}
+
+/* Le tabelle a linee, a righe alterne, a griglia: i fili restano larghi uguali
+   (cambia il colore), così le misure non cambiano. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(th, td) {
+  border-right-color: var(--print-table-vrule, var(--doc-rule-soft));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered td {
+  border-bottom-color: var(--print-table-hrule, var(--doc-rule-soft));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered tr > td:first-child {
+  border-left-color: var(--print-table-frame, var(--doc-rule));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered tr > td:last-child {
+  border-right-color: var(--print-table-frame, var(--doc-rule));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered table > :last-child > tr:last-child > td {
+  border-bottom-color: var(--print-table-end, var(--doc-rule));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered tbody > tr:nth-child(even) > td {
+  background: var(--print-table-stripe, transparent);
+}
+
+/* Il codice numerato: lo spazio dei numeri a sinistra, i numeri fuori dal
+   testo, all'altezza della riga del sorgente. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered pre[data-print-numbered] {
+  padding-left: calc(var(--space-6) + var(--print-code-digits, 2) * 1ch + 1em);
+}
+:is(.export-measure, .export-page) .export-code-numbers {
+  position: absolute;
+  top: 0;
+  left: var(--space-6);
+  width: calc(var(--print-code-digits, 2) * 1ch);
+  color: var(--muted);
+  line-height: normal;
+  text-align: right;
+  user-select: none;
+}
+:is(.export-measure, .export-page) .export-code-number {
+  position: absolute;
+  top: calc(var(--space-5) + var(--print-code-line, 0) * var(--leading-normal) * 1em);
+  right: 0;
+}
+
+/* La provenienza di una nota riportata, sotto il suo testo. */
+:is(.export-measure, .export-page) .export-source {
+  display: block;
+  margin-top: 0.35em;
+  color: var(--muted);
+  font: 0.76em/1.4 var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .embed[data-print-told]::after {
+  content: none;
+}
+
+/* Le schede vive: il nome sotto l'anteprima, o il nome solo, coi link. */
+:is(.export-measure, .export-page) .export-card-caption {
+  display: block;
+  padding-top: 0.55em;
+  color: var(--muted);
+  font: 0.76em/1.4 var(--print-font-headings, var(--font-ui));
+  text-align: center;
+}
+:is(.export-measure, .export-page) .export-card-name {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45em;
+  align-items: center;
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  color: var(--print-link-color, var(--doc-link));
+  font: 0.92em/1.4 var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .export-card-name svg {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:is(.export-measure, .export-page) .export-card-note {
+  color: var(--muted);
+  font-size: 0.86em;
+}
+:is(.export-measure, .export-page) .export-appendix-page {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  text-align: center;
+}
+:is(.export-measure, .export-page) .export-appendix-page canvas {
+  display: block;
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px var(--doc-rule);
+}
+:is(.export-measure, .export-page) .export-appendix-page figcaption,
+:is(.export-measure, .export-page) .export-appendix-more,
+:is(.export-measure, .export-page) .export-base-caption {
+  margin: 0;
+  padding-top: 0.55em;
+  color: var(--muted);
+  font: 0.76em/1.4 var(--print-font-headings, var(--font-ui));
+  text-align: center;
+}
+
+/* Una Base sulla carta: la tabella intera, senza la barra. */
+:is(.export-measure, .export-page) .print-page .base-surface {
+  border: 0;
+  box-shadow: none;
+}
+
+/* I commenti: il numero in apice nell'accento dopo il passo, e la nota. */
+:is(.export-measure, .export-page) .export-comment-mark {
+  margin-left: 0.1em;
+  color: var(--print-accent, var(--accent));
+  font: 600 0.7em var(--print-font-headings, var(--font-ui));
+}
+.export-comments {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+:is(.export-measure, .export-page) .export-comment {
+  box-sizing: border-box;
+  color: var(--muted);
+  font-family: var(--print-font-headings, var(--font-ui));
+  text-align: left;
+  hyphens: manual;
+}
+:is(.export-measure, .export-page) .export-comment sup {
+  margin-right: 0.25em;
+  color: var(--print-accent, var(--accent));
+  font: 600 0.7em var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .export-comment b {
+  color: var(--doc-fg);
+  font-weight: 650;
+}
+:is(.export-measure, .export-page) .export-comment i {
+  font-style: normal;
+  opacity: 0.8;
+}
+/* Nel margine: piccola, col filo dell'evidenziato a sinistra. */
+:is(.export-measure, .export-page) .export-comment[data-shape="margine"] {
+  padding-left: 0.6em;
+  border-left: 0.2em solid var(--doc-highlight, var(--accent-wash));
+  font-size: calc(var(--text-reading) * 0.66);
+  line-height: 1.36;
+}
+/* In fondo: ogni messaggio della discussione, a corpo quasi pieno. */
+:is(.export-measure, .export-page) .export-comment[data-shape="fondo"] {
+  color: var(--doc-fg);
+  font-size: calc(var(--text-reading) * 0.88);
+  line-height: 1.45;
+}
+:is(.export-measure, .export-page) .export-comments-title {
+  margin: 0 0 0.6em;
+  color: var(--doc-heading);
+  font: 650 var(--print-h2, 1.39em) / 1.25 var(--print-font-headings, var(--font-ui));
+}
+.export-comment-placed {
+  position: absolute;
+  transform-origin: 0 0;
+}
+
+/* ── Le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+   Le righe col nome e il controllo (il prototipo `.px-row`), i caratteri
+   come pulsanti scritti nel loro carattere (`.px-fonts`), i cursori
+   (`.px-rng`), i millimetri (`.px-mm`). Le righe, le scelte fra pochi
+   valori e il campo della filigrana sono quelli comuni delle sezioni
+   (`.export-row`, `.export-choices`, `.export-input`, più sotto). */
+.export-row-stacked {
+  display: grid;
+  gap: 5px;
+  justify-content: stretch;
+}
+.export-fonts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.export-font {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition: box-shadow 0.14s, background 0.14s;
+}
+.export-font:hover {
+  background: var(--overlay-hover);
+}
+.export-font[aria-checked="true"] {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Un carattere del vault che la licenza non lascia incorporare: si vede,
+   tratteggiato, e sceglierlo dice perché non si può. */
+.export-font.is-closed {
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+  text-decoration: line-through;
+  text-decoration-color: var(--outline);
+}
+.export-fonts-status {
+  display: grid;
+  gap: 4px;
+}
+.export-fonts-status[hidden] {
+  display: none;
+}
+.export-fonts-warning {
+  color: var(--warning);
+}
+.export-range {
+  display: grid;
+  grid-template-columns: 104px 1fr 46px;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  color: var(--text);
+}
+.export-range input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.export-range output {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.export-mm {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.export-mm-paper {
+  grid-template-columns: repeat(2, 1fr);
+}
+.export-mm-field {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.export-mm-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 24px 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 12.5px var(--font-ui);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  appearance: textfield;
+}
+.export-mm-input::-webkit-inner-spin-button {
+  appearance: none;
+}
+.export-mm-input[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.export-mm-field em {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: normal;
+  pointer-events: none;
+}
+.export-page-error {
+  color: var(--danger);
+}
+.export-page-error[hidden] {
+  display: none;
+}
+
+/* Le guide dei margini (`.px-g`): una maniglia di 12 px sul bordo del testo,
+   un filo nell'accento al centro. Si vedono appena con la Pagina aperta,
+   piene al passaggio e mentre si trascina; nella vista «tutte» non ci sono. */
+.export-guide {
+  position: absolute;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.14s;
+}
+.export-guide::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.export-guide[data-guide="sopra"],
+.export-guide[data-guide="sotto"] {
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: row-resize;
+}
+.export-guide[data-guide="sopra"] {
+  top: calc(var(--export-margin-top) - 6px);
+}
+.export-guide[data-guide="sotto"] {
+  bottom: calc(var(--export-margin-bottom) - 6px);
+}
+.export-guide[data-guide="sopra"]::after,
+.export-guide[data-guide="sotto"]::after {
+  top: 5.5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.export-guide[data-guide="sinistra"],
+.export-guide[data-guide="destra"] {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+}
+.export-guide[data-guide="sinistra"] {
+  left: calc(var(--export-margin-left) - 6px);
+}
+.export-guide[data-guide="destra"] {
+  right: calc(var(--export-margin-right) - 6px);
+}
+.export-guide[data-guide="sinistra"]::after,
+.export-guide[data-guide="destra"]::after {
+  top: 0;
+  bottom: 0;
+  left: 5.5px;
+  width: 1px;
+}
+.export-doc[data-guides="true"] .export-guide {
+  opacity: 0.4;
+}
+.export-guide:hover,
+.export-space.is-dragging .export-guide {
+  opacity: 1;
+}
+.export-space.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+.export-doc[data-view="tutte"] .export-guide {
+  display: none;
+}
+.export-guide-tip {
+  position: fixed;
+  z-index: 5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--sheet);
+  font: 600 11.5px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.export-guide-tip[hidden] {
+  display: none;
+}
+/* La filigrana (`.px-wm`): in diagonale, sotto il testo, nel carattere dei
+   titoli e nel colore del testo appena accennato. */
+.export-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  color: var(--doc-fg);
+  font: 800 150px/1 var(--print-font-headings, var(--font-reading));
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0.055;
+  transform: rotate(-32deg);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .export-font,
+  .export-guide,
   .export-segment,
   .export-go,
   .export-section-chevron,
@@ -27048,7 +27586,7 @@ h6.ui-heading {
     transition: none;
   }
 }
-:root[data-motion="reduced"] :is(.export-segment, .export-go, .export-section-chevron, .export-theme-preview, .export-color, .export-color-chip, .export-swatch, .export-toggle-knob, .export-toggle-knob::after, .export-dg-swatch, .export-dg-ink, .export-dg-toggle i, .export-dg-toggle i::after) {
+:root[data-motion="reduced"] :is(.export-font, .export-guide, .export-segment, .export-go, .export-section-chevron, .export-theme-preview, .export-color, .export-color-chip, .export-swatch, .export-toggle-knob, .export-toggle-knob::after, .export-dg-swatch, .export-dg-ink, .export-dg-toggle i, .export-dg-toggle i::after) {
   transition: none;
 }
 

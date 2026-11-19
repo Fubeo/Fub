@@ -387,7 +387,9 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
   return pdfEngine;
 }
 
-const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
+/// Il motore dei PDF, caricato alla prima richiesta: anche per le pagine di
+/// un PDF incorporato che l'esportazione mette in coda (T74).
+export const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
 
 /// Le immagini ferme delle schede: una cache sola per finestra, per tutte le
 /// lavagne che vi si aprono, legata al vault in cui si sono fatte. Una lavagna
@@ -567,8 +569,8 @@ const CANVAS_CITATIONS: CardCitations = {
 function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts, context: SurfaceMountContext): LiveCardsPort {
   let kit: Promise<LiveCardKit | null> | null = null;
   return {
-    load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract")]).then(
-      ([cardsFor, contract]): LiveCardKit => {
+    load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract"), import("./cards/kinds/canvas")]).then(
+      ([cardsFor, contract, zone]): LiveCardKit => {
         const cards = cardsFor(context, "note");
         return {
           registry: cards.registry,
@@ -577,6 +579,8 @@ function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts,
           ...(ports.editors ? { editors: ports.editors } : {}),
           kindOf: (path) => contract.noteCardKindOf(path),
           maxLive: contract.MAX_LIVE_CARDS,
+          // «Annota» (T49): la lavagna con la sola scheda, come la zona la legge.
+          annotationBoard: (path, subpath, width, height) => zone.annotationBoardText(path, subpath, width, height),
         };
       },
       (error: unknown) => {

@@ -165,6 +165,25 @@ const LIVE_CARDS_NOTE = [
   "Da chiedere all'agenzia: chi paga la caldaia.",
 ].join("\n");
 
+/// Gli estratti (T49), sulla cartella e sul contratto del banco (`pdf-scena`,
+/// `workbook=1`): i conti della casa come scheda di foglio, da cui «Estrai»
+/// porta sotto le celle scelte; poi un passo del contratto scritto come lo
+/// scrive Obsidian, che senza il motore dei PDF è la citazione con la fonte e
+/// «Vai alla pagina».
+const EXCERPTS_NOTE = [
+  "# Affitto di via Roma",
+  "",
+  "I conti della casa, da tenere aggiornati:",
+  "",
+  "![[Conti.xlsx#Conti!A1:C4]]",
+  "",
+  "Dal contratto, la clausola sulla caldaia:",
+  "",
+  "![[contratto-affitto.pdf#page=1&selection=4,0,4,163]]",
+  "",
+  "Da chiedere all'agenzia: chi paga la manutenzione.",
+].join("\n");
+
 /// I valori di cella nel testo (T53), sulla cartella del banco (`Conti`: 800
 /// in B2, 680 in B4, il #DIV/0! di C4, D2 vuota): il paragrafo del
 /// prototipo, poi i casi limite — la cella vuota, l'errore di formula, il
@@ -900,6 +919,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
   sincronizzato: { text: SYNCED_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: SYNCED_MEETING } },
   "schede-vive": { text: LIVE_CARDS_NOTE, cursor: null, files: { "Casa/foto-appartamento.zip": "" } },
+  // Gli estratti (T49).
+  estratti: { text: EXCERPTS_NOTE, cursor: null },
   "scheda-documento": {
     text: DOCUMENT_CARD_NOTE,
     cursor: null,

@@ -145,8 +145,12 @@ export class PrintMeasure {
     if (element.hasAttribute("data-page-break")) {
       return { box: { kind: "separator", id: `${MANUAL_BREAK_PREFIX}${id}`, height: 0 }, top, bottom: top, exact: true };
     }
-    const table = tag === "TABLE" ? (element as HTMLTableElement) : element.querySelector(":scope > table");
-    if (table instanceof HTMLTableElement && (tag === "TABLE" || element.children.length === 1)) {
+    // Un blocco segnato `data-print-table` (una Base distesa per la carta,
+    // T74) si spezza fra le righe della sua tabella anche se la tabella non
+    // è sua figlia diretta.
+    const marked = element.hasAttribute("data-print-table");
+    const table = tag === "TABLE" ? (element as HTMLTableElement) : element.querySelector(marked ? "table" : ":scope > table");
+    if (table instanceof HTMLTableElement && (tag === "TABLE" || marked || element.children.length === 1)) {
       return { box: this.table(id, table, rect.top, height, depth), top, bottom, exact: depth === "righe" };
     }
     const code = tag === "PRE" && !element.hasAttribute("data-declared-fence");

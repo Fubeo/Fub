@@ -27,9 +27,12 @@
 
 import { plural, t, type Key } from "../../i18n/strings";
 import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
+import { ownCount, textOf, type PageColor } from "../themes";
 import { DIAGRAMS_SECTION } from "./diagrams";
-import { ownCount, type PageColor } from "../themes";
 import { colorsBody } from "./colors";
+import { breaksBody, contentBody, contentSummary } from "./content";
+import { fontsBody, fontsSummary, type PrintFonts } from "./fonts";
+import { pageBody } from "./page";
 import { coverTocBody } from "./cover-toc";
 import { headerFooterBody, SLOT_IDS, slotShortName } from "./header-footer";
 import { themeBody } from "./theme";
@@ -58,6 +61,14 @@ export interface SectionContext {
   /// Ciò che una sezione ricorda fra un disegno del pannello e l'altro, finché
   /// lo spazio è aperto (quale colore è aperto).
   readonly memory: Map<string, unknown>;
+  /// I caratteri del vault dello spazio (T72): l'elenco e quelli caricati.
+  readonly fonts?: PrintFonts;
+  /// I blocchi lasciati fuori col clic sulla pagina (T76): quanti sono, e
+  /// rimetterli. Manca dove non si regola blocco per blocco (il libro).
+  readonly skipped?: {
+    readonly count: number;
+    restore(): void;
+  };
 }
 
 export interface ExportSection {
@@ -65,8 +76,9 @@ export interface ExportSection {
   /// per aprire quella giusta e il banco.
   readonly id: string;
   readonly title: Key;
-  /// Ciò che vale adesso, per la testa della sezione chiusa.
-  summary(profile: ExportProfile): string;
+  /// Ciò che vale adesso, per la testa della sezione chiusa. `context` dice
+  /// anche ciò che non sta nel profilo (i blocchi lasciati fuori).
+  summary(profile: ExportProfile, context?: SectionContext): string;
   /// Le regolazioni della sezione aperta.
   body?(context: SectionContext): HTMLElement;
 }
@@ -97,10 +109,17 @@ function decimal(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 }
 
+const FORMAT_NAMES: Readonly<Record<keyof typeof PAPER_MM, Key>> = {
+  A4: "pdf_export.page.a4",
+  A5: "pdf_export.page.a5",
+  A3: "pdf_export.page.a3",
+  Lettera: "pdf_export.page.letter",
+};
+
 /// Il formato come si legge: «A4», o la misura propria in millimetri.
 export function formatName(profile: ExportProfile): string {
   const { formato } = profile.pagina;
-  if (formato in PAPER_MM) return formato;
+  if (formato in PAPER_MM) return t(FORMAT_NAMES[formato as keyof typeof PAPER_MM]);
   const [w, h] = paperSize(profile.pagina);
   return t("pdf_export.page.own_size", { width: decimal(w), height: decimal(h) });
 }
@@ -134,17 +153,14 @@ export const SECTIONS: readonly ExportSection[] = [
   {
     id: "caratteri",
     title: "pdf_export.section.fonts",
-    summary: (profile) => {
-      const { carattere_testo: face, corpo: size } = profile.testo;
-      if (!face && !size) return t("pdf_export.fonts.theme");
-      const points = size ? t("pdf_export.fonts.size", { size: decimal(size) }) : "";
-      return [face, points].filter(Boolean).join(" · ");
-    },
+    summary: fontsSummary,
+    body: fontsBody,
   },
   {
     id: "pagina",
     title: "pdf_export.section.page",
-    summary: (profile) => (profile.testo.colonne === 2 ? `${paperName(profile)} · ${t("pdf_export.page.two_columns")}` : paperName(profile)),
+    summary: (profile) => (textOf(profile).colonne === 2 ? `${paperName(profile)} · ${t("pdf_export.page.two_columns")}` : paperName(profile)),
+    body: pageBody,
   },
   {
     id: "testata",
@@ -169,13 +185,15 @@ export const SECTIONS: readonly ExportSection[] = [
   {
     id: "contenuto",
     title: "pdf_export.section.content",
-    summary: (profile) => (profile.contenuto.commenti !== "no" ? t("pdf_export.content.comments") : t("pdf_export.content.all")),
+    summary: contentSummary,
+    body: contentBody,
   },
   DIAGRAMS_SECTION,
   {
     id: "interruzioni",
     title: "pdf_export.section.breaks",
     summary: ({ interruzioni }) => (interruzioni.ogni_titolo_2 ? t("pdf_export.breaks.heading2") : t("pdf_export.breaks.auto")),
+    body: breaksBody,
   },
   {
     id: "uscita",

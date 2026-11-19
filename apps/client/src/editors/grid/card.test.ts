@@ -1486,6 +1486,30 @@ describe("la parte di un foglio (T43)", () => {
     expect(b.fits).toEqual([SHEET_NOTE_COLUMN_HEADER + 2 * SHEET_CARD_ROW_HEIGHT, SHEET_NOTE_COLUMN_HEADER + 4 * SHEET_CARD_ROW_HEIGHT]);
   });
 
+  it("un estratto (T49) segue la sua fonte: il file cambia e si rilegge la parte; la parte sparita dice «Intervallo non trovato»", async () => {
+    let answer: unknown = found("s2", "B2:C3");
+    const b = bench({ note: true, sheets: TWO_SHEETS, subpath: "#Budget!B2:C3", part: () => answer });
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("content");
+    expect(b.grid.parts).toEqual(["Budget!B2:C3"]);
+    // La cartella cambia (una riga inserita sopra): la parte si chiede di
+    // nuovo e il rettangolo nuovo si legge, senza toccare la nota.
+    answer = found("s2", "B3:C4");
+    b.grid.revision = "rev-2";
+    b.port.changed[0]!();
+    await settle();
+    expect(b.grid.parts).toEqual(["Budget!B2:C3", "Budget!B2:C3"]);
+    expect(b.grid.windows[b.grid.windows.length - 1]!.request).toMatchObject({ sheet: "s2", row_start: 2, row_count: 2, column_start: 1 });
+    // Il foglio della fonte è stato tolto: l'estratto lo dice.
+    answer = { found: false, parts: [{ kind: "sheet", name: "s1" }] };
+    b.grid.revision = "rev-3";
+    b.port.changed[0]!();
+    await settle();
+    expect(b.root().dataset.cardState).toBe("lost");
+    expect(b.root().querySelector(".canvas-card-message")!.textContent).toBe(t("canvas.card.part_lost", { part: "Budget!B2:C3" }));
+  });
+
   it("scrivendo, la griglia va alla prima cella della parte, sul suo foglio", async () => {
     const port = writingPort();
     const selected: [string, string][] = [];

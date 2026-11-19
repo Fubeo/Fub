@@ -31,6 +31,7 @@ import type { Expected } from "../../../../ui/race";
 import { REMOTE_SRC_ATTRIBUTE, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 import { keepButtonKeys } from "./button-keys";
 import { webEmbedOf, webEmbedPlaceholder, type WebEmbedOpener } from "./web-embed";
+import { liveStrings } from "./strings";
 
 /// Ciò che serve a idratare, iniettabile nei banchi.
 export interface MediaPort {
@@ -99,6 +100,33 @@ export const EMBED_IMAGE_BYTES = 16 * 1024 * 1024;
 /// lo dice il disegno, quando si apre. `null` per un file che non è un disegno, o che non si
 /// legge: si mostra il file.
 ///
+/// Un passo di un PDF: la pagina (da 1) e la selezione come la scrive
+/// Obsidian (`4,0,4,163`: elemento e carattere d'inizio e di fine nel testo
+/// della pagina).
+export interface PdfPassage {
+  readonly page: number;
+  readonly selection: string;
+}
+
+/// Il passo che la parte di un embed nomina (`#page=2&selection=4,0,4,163`,
+/// anche col colore dell'evidenziatore dopo), o `null` se la parte non è un
+/// passo.
+export function pdfPassage(subpath: string | null): PdfPassage | null {
+  if (subpath === null || !subpath.startsWith("#")) return null;
+  let page: number | null = null;
+  let selection: string | null = null;
+  for (const pair of subpath.slice(1).split("&")) {
+    const cut = pair.indexOf("=");
+    if (cut <= 0) return null;
+    const key = pair.slice(0, cut);
+    const value = pair.slice(cut + 1);
+    if (key === "page" && /^\d{1,6}$/.test(value) && page === null) page = Number(value);
+    else if (key === "selection" && /^\d{1,7}(?:,\d{1,7}){3}$/.test(value) && selection === null) selection = value;
+    else if (key !== "color") return null;
+  }
+  return page !== null && page >= 1 && selection !== null ? { page, selection } : null;
+}
+
 /// `heading` è la sezione che un embed nomina, `![[disegno#Copertina]]`: il
 /// titolo mostra il disegno intero, una tavola il disegno ritagliato su di
 /// lei. `false` se il disegno si legge e non ha quella sezione: l'embed non
@@ -444,7 +472,11 @@ export async function hydrateVaultMedia(
         // il clic lo porta come un `[[x.pdf#page=3]]`, e il visore parte da
         // quella pagina.
         const link = (): HTMLElement => {
-          const anchor = Object.assign(document.createElement("a"), { href: "#", textContent: page });
+          // Un passo (T49, `#page=2&selection=…`) dice la sua pagina: il clic
+          // apre il PDF lì, e il testo del passo lo leggerà il motore dei PDF.
+          const passage = pdfPassage(slot.dataset.embedHeading ? `#${slot.dataset.embedHeading}` : null);
+          const text = passage ? liveStrings.t("live_card.passage.source", { name: page, page: String(passage.page) }) : page;
+          const anchor = Object.assign(document.createElement("a"), { href: "#", textContent: text });
           anchor.className = "wikilink";
           anchor.dataset.wikilinkPage = page;
           if (slot.dataset.embedHeading) anchor.dataset.wikilinkHeading = slot.dataset.embedHeading;

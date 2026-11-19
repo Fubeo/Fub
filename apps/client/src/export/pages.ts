@@ -20,11 +20,18 @@
 // dell'indice vengono prima di quelle della nota, e su ogni foglio lo spazio
 // disegna ciò che non è la nota (frontespizio, indice, testata e piè). Senza,
 // i fogli sono le pagine della nota e basta.
+//
+// Ogni foglio porta anche ciò che la sezione «Pagina» decide sopra le
+// fasce (T72, `setMarks`): i margini a specchio, che sulle pagine pari
+// scambiano destra e sinistra, la filigrana in diagonale sotto il testo e,
+// sullo schermo, le quattro guide dei margini (`guides.ts`).
 
 import { t } from "../i18n/strings";
+import { NOTE_OFFSET_MM } from "./content/comments";
 import { printBlocks } from "./paginate/measure";
 import type { Placement } from "./paginate/model";
 import { frameOf, type PrintLayout, type SlicedResult, type VisiblePages } from "./paginate/slices";
+import { MM } from "./profile";
 import type { Sheet } from "./paginate/toc";
 import type { ExportView } from "./toolbar";
 
@@ -63,6 +70,19 @@ export interface PagesOptions {
   readonly onPick: (page: number) => void;
 }
 
+/// Ciò che sta sui fogli oltre alle fasce: non cambia l'impaginazione.
+export interface PageMarks {
+  /// I margini a specchio: sulle pagine pari destra e sinistra si scambiano.
+  readonly mirror: boolean;
+  /// La filigrana su ogni pagina; vuota, nessuna.
+  readonly watermark: string;
+}
+
+const NO_MARKS: PageMarks = { mirror: false, watermark: "" };
+
+/// I lati delle guide, coi nomi dei margini del profilo.
+const GUIDES = ["sopra", "destra", "sotto", "sinistra"] as const;
+
 /// I fogli e chi disegna su ciascuno ciò che non è la nota.
 export interface PageDecor {
   readonly sheets: readonly Sheet[];
@@ -87,6 +107,8 @@ interface Drawn {
   readonly result: SlicedResult;
   readonly blocks: readonly HTMLElement[];
   readonly layout: PrintLayout;
+  /// Le note dei commenti, misurate accanto alla resa (`content/comments.ts`).
+  readonly notes: ReadonlyMap<string, HTMLElement>;
   readonly decor: PageDecor;
 }
 
@@ -97,6 +119,7 @@ export class ExportPages {
   private readonly filled = new Set<number>();
   private drawn: Drawn | null = null;
   private colors: Readonly<Record<string, string>> = {};
+  private marks: PageMarks = NO_MARKS;
   private view: ExportView = "adatta";
   private free = 1;
   private zoomNow = 1;
@@ -144,10 +167,22 @@ export class ExportPages {
     this.colors = { ...colors };
   }
 
+  /// Lo specchio e la filigrana: si ridisegnano i fogli pieni, senza
+  /// rifare l'impaginazione.
+  setMarks(marks: PageMarks): void {
+    if (marks.mirror === this.marks.mirror && marks.watermark === this.marks.watermark) return;
+    this.marks = { mirror: marks.mirror, watermark: marks.watermark };
+    for (const index of this.filled) this.clear(index);
+    this.lastVisible = "";
+    this.refresh();
+  }
+
   /// Le pagine di un'impaginazione: i fogli per tutte, pieni quelli vicini.
   show(result: SlicedResult, source: HTMLElement, layout: PrintLayout, decor?: PageDecor): void {
     const page = source.querySelector<HTMLElement>(".print-page");
-    this.drawn = { result, blocks: page ? printBlocks(page) : [], layout, decor: decor ?? plainDecor(result) };
+    const notes = new Map<string, HTMLElement>();
+    for (const note of source.querySelectorAll<HTMLElement>(".export-comments > [data-export-note]")) notes.set(note.dataset["exportNote"] ?? "", note);
+    this.drawn = { result, blocks: page ? printBlocks(page) : [], layout, notes, decor: decor ?? plainDecor(result) };
     this.redraw();
   }
 
@@ -250,7 +285,7 @@ export class ExportPages {
     const pages: HTMLElement[] = [];
     const count = Math.min(drawn.decor.front + Math.min(drawn.result.ready, drawn.result.pagination.pages.length), drawn.decor.sheets.length);
     for (let index = 0; index < count; index++) {
-      const page = this.pageElement(drawn, index, 1);
+      const page = this.pageElement(drawn, index, 1, true);
       for (const [name, value] of Object.entries(this.colors)) page.style.setProperty(name, value);
       pages.push(page);
     }
@@ -366,30 +401,62 @@ export class ExportPages {
     this.filled.delete(index);
   }
 
-  /// Il foglio della pagina `index`, scalato a `zoom`.
-  private pageElement(drawn: Drawn, index: number, zoom: number): HTMLElement {
-    const { layout, result, blocks, decor } = drawn;
+  /// Il foglio numero `index` (fra tutti), scalato a `zoom`; `print`: quello
+  /// che va alla stampa, senza le guide.
+  private pageElement(drawn: Drawn, index: number, zoom: number, print = false): HTMLElement {
+    const { layout, result, blocks, notes, decor } = drawn;
     const sheet = decor.sheets[index];
     const { page: geometry } = layout;
     const { width: columnWidth } = frameOf(layout);
     const gap = layout.columns === 2 ? layout.columnGap : 0;
+    // Lo specchio sposta soltanto il testo: la colonna è larga uguale.
+    const mirrored = this.marks.mirror && index % 2 === 1;
+    const margin = mirrored ? { ...geometry.margin, left: geometry.margin.right, right: geometry.margin.left } : geometry.margin;
     const page = document.createElement("div");
     page.className = "export-page";
     page.style.width = `${geometry.width}px`;
     page.style.height = `${geometry.height}px`;
     page.style.transform = `scale(${zoom})`;
+    if (this.marks.watermark.trim()) {
+      const mark = document.createElement("div");
+      mark.className = "export-watermark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = this.marks.watermark;
+      page.append(mark);
+    }
     const body = document.createElement("div");
     body.className = "export-page-body";
-    body.style.left = `${geometry.margin.left}px`;
-    body.style.top = `${geometry.margin.top}px`;
-    body.style.width = `${geometry.width - geometry.margin.left - geometry.margin.right}px`;
-    body.style.height = `${geometry.height - geometry.margin.top - geometry.margin.bottom}px`;
+    body.style.left = `${margin.left}px`;
+    body.style.top = `${margin.top}px`;
+    body.style.width = `${geometry.width - margin.left - margin.right}px`;
+    body.style.height = `${geometry.height - margin.top - margin.bottom}px`;
     page.append(body);
+    if (!print) {
+      // Le guide dei margini: i lati che si vedono su questo foglio (con lo
+      // specchio la guida di sinistra è il margine destro del profilo, lo
+      // sa `guides.ts`).
+      page.style.setProperty("--export-margin-top", `${margin.top}px`);
+      page.style.setProperty("--export-margin-right", `${margin.right}px`);
+      page.style.setProperty("--export-margin-bottom", `${margin.bottom}px`);
+      page.style.setProperty("--export-margin-left", `${margin.left}px`);
+      for (const side of GUIDES) {
+        const guide = document.createElement("i");
+        guide.className = "export-guide";
+        guide.dataset["guide"] = side;
+        guide.setAttribute("aria-hidden", "true");
+        page.append(guide);
+      }
+    }
     const placements = sheet?.kind === "pagina" ? (result.pagination.pages[sheet.index]?.placements ?? []) : [];
     const bands: { band: HTMLElement; inner: HTMLElement; copy: HTMLElement; placement: Placement }[] = [];
     for (const placement of placements) {
-      // Le note dei commenti in fondo e il loro titolo le disegna la sezione
-      // del contenuto (T74): qui solo le fasce dei blocchi.
+      // Una nota dei commenti in fondo: la sua copia, larga quanto la colonna
+      // (il titolo «Commenti» sta dentro la prima).
+      if (placement.part === "nota") {
+        const note = placement.note ? notes.get(placement.note) : undefined;
+        if (note) body.append(noteCopy(note, placement.column * (columnWidth + gap), placement.y, placement.scale));
+        continue;
+      }
       if (placement.box < 0 || (placement.part !== "corpo" && placement.part !== "intestazione")) continue;
       const block = blocks[result.blocks[placement.box] ?? -1];
       if (!block) continue;
@@ -422,6 +489,13 @@ export class ExportPages {
       }
       bands.push({ band, inner, copy: copy.block, placement });
     }
+    // Le note nel margine, accanto al loro paragrafo: fuori dalla colonna,
+    // poco oltre il suo bordo destro (il prototipo `.pnote`).
+    const bodyWidth = geometry.width - geometry.margin.left - geometry.margin.right;
+    for (const side of (sheet?.kind === "pagina" ? (result.pagination.pages[sheet.index]?.notes ?? []) : [])) {
+      const note = notes.get(side.id);
+      if (note) body.append(noteCopy(note, bodyWidth + NOTE_OFFSET_MM * MM, side.y, side.scale));
+    }
     if (sheet) decor.draw(page, body, sheet, index);
     // Dove sta il blocco copiato dentro i suoi contenitori si legge dopo
     // averli messi tutti (una sola disposizione), e solo se la pagina è
@@ -441,6 +515,18 @@ export class ExportPages {
     measure();
     return page;
   }
+}
+
+/// La copia di una nota dei commenti, larga come è stata misurata.
+function noteCopy(note: HTMLElement, left: number, top: number, scale: number): HTMLElement {
+  const copy = note.cloneNode(true) as HTMLElement;
+  stripIds(copy);
+  copy.classList.add("export-comment-placed");
+  copy.style.left = `${left}px`;
+  copy.style.top = `${top}px`;
+  copy.style.width = note.parentElement?.style.width ?? "";
+  if (scale < 1) copy.style.transform = `scale(${scale})`;
+  return copy;
 }
 
 /// Dove sta il bordo alto di `element` sotto il bordo alto di `container`, in
@@ -473,7 +559,8 @@ function copyInContext(block: HTMLElement): { root: HTMLElement; block: HTMLElem
     shell.removeAttribute("id");
     if (shell instanceof HTMLOListElement && child instanceof HTMLLIElement) {
       const start = (parent as HTMLOListElement).start || 1;
-      const position = [...parent.children].filter((node) => node instanceof HTMLLIElement).indexOf(child);
+      // Una voce tolta (un compito fatto, T74) non conta, come nel browser.
+      const position = [...parent.children].filter((node) => node instanceof HTMLLIElement && !node.hidden).indexOf(child);
       shell.start = start + Math.max(0, position);
     }
     shell.append(root);

@@ -19,3 +19,18 @@ const PAGE_BREAK = /^\s*<!--\s*pagina\s*-->\s*$/u;
 export function isPageBreak(text: string): boolean {
   return PAGE_BREAK.test(text);
 }
+
+/// Ciò che serve del testo della nota (il `Text` di CodeMirror, senza
+/// legarsi all'editor).
+interface NoteText {
+  lineAt(pos: number): { readonly to: number; readonly number: number };
+  sliceString(from: number, to: number): string;
+}
+
+/// Se la Live nasconde il commento `from..to` di `doc`: è l'interruzione a
+/// mano, su una riga sola, e il cursore non è sulla sua riga (`shown`). Sta
+/// qui e non nella Live perché il ponte del documento è al limite del suo peso.
+export function hidesPageBreak(doc: NoteText, from: number, to: number, shown: { row(line: number): boolean }): boolean {
+  const line = doc.lineAt(from);
+  return to <= line.to && isPageBreak(doc.sliceString(from, to)) && !shown.row(line.number);
+}

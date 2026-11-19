@@ -275,10 +275,22 @@ function kindOf(element: HTMLElement): Kind {
   return "block";
 }
 
+/// Le specie che hanno già il loro nome nella testata del menu dell'editor:
+/// lo stesso nome, una stringa sola.
+const EDITOR_HEADS: Partial<Record<Kind, Key>> = {
+  paragraph: "editor_menu.head.text",
+  bullet: "editor_menu.head.bullet",
+  ordered: "editor_menu.head.ordered",
+  code: "editor_menu.head.code",
+  table: "editor_menu.head.table",
+  image: "editor_menu.head.image",
+  block: "editor_menu.head.block",
+};
+
 function kindName(element: HTMLElement): string {
   const kind = kindOf(element);
   if (kind === "heading") return t("pdf_export.block.kind.heading", { level: element.tagName[1]! });
-  return t(`pdf_export.block.kind.${kind}` as Key);
+  return t(EDITOR_HEADS[kind] ?? (`pdf_export.block.kind.${kind}` as Key));
 }
 
 /// Ciò che lo spazio dà al menu del blocco.
@@ -408,7 +420,7 @@ function toggleBreak(place: BreakPlace, note: ExportNote): void {
   }
   const added = place.marker === null;
   notify(t(added ? "pdf_export.block.break_added" : "pdf_export.block.break_removed"), "info", {
-    label: t("pdf_export.block.undo"),
+    label: t("app.undo"),
     hint: t(added ? "pdf_export.block.undo_added" : "pdf_export.block.undo_removed"),
     run: () => {
       // Si torna indietro soltanto se la nota è ancora come l'ha lasciata

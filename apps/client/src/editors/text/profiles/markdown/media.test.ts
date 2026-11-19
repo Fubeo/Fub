@@ -770,6 +770,16 @@ describe("i PDF dentro una nota (T31)", () => {
     expect(craft.asks).toEqual([]);
   });
 
+  it("un passo (T49, `#page=2&selection=…`) è il collegamento alla sua pagina, che lo dice", async () => {
+    const root = html('<span class="embed" data-embed-page="guida.pdf" data-embed-heading="page=2&amp;selection=4,0,4,163">guida.pdf</span>');
+    const { media } = port({ "guida.pdf": GUIDA });
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media);
+    const link = root.querySelector<HTMLElement>(".embed a.wikilink")!;
+    expect(link.textContent).toBe("guida.pdf · p. 2");
+    expect(link.dataset.wikilinkHeading).toBe("page=2&selection=4,0,4,163");
+    expect(craft.asks).toEqual([]);
+  });
+
   it("senza anteprima (il PDF protetto, l'app che non c'è) resta il collegamento", async () => {
     craft.preview = preview(false);
     const root = html('<span class="embed" data-embed-page="guida.pdf">guida.pdf</span>');

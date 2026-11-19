@@ -98,6 +98,44 @@ e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts)
   dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
   carta scura, col codice e il testo colorato schiariti.
 
+## Caratteri e Pagina
+
+Le due sezioni vivono in
+[`export/sections/fonts.ts`](../../apps/client/src/export/sections/fonts.ts)
+e [`export/sections/page.ts`](../../apps/client/src/export/sections/page.ts);
+le guide dei margini in [`export/guides.ts`](../../apps/client/src/export/guides.ts).
+
+- **Il testo e i titoli** si scelgono fra i caratteri che Fub porta con sé
+  (Newsreader, Literata, Hanken Grotesk, Inter; IBM Plex Mono solo per i
+  titoli), ognuno scritto nel suo carattere, e fra quelli del vault: ogni
+  file `.ttf`, `.otf`, `.woff` o `.woff2` del vault, raccolti in famiglie
+  (il comando `pdf.vault_fonts`, vedi il
+  [formato](../reference/pdf-export-format.md#i-caratteri)). Il PDF li
+  incorpora tutti, e le pagine li mostrano come usciranno.
+- Un carattere del vault che la licenza **non lascia incorporare** si vede
+  barrato e non si sceglie: l'avviso dice perché, e il testo resta nel
+  carattere del tema. Un profilo che lo nominava, o che nomina un carattere
+  sparito dal vault, si legge nel carattere del tema e la sezione lo dice.
+  Un carattere **senza corsivo** lo dice: il corsivo esce diritto, sulle
+  pagine e nel PDF, mai un obliquo inventato.
+- **Corpo** (da 8 a 14 pt), **interlinea**, **scala dei titoli**: cursori che
+  rifanno le pagine mentre si trascinano. Poi i paragrafi staccati o col
+  rientro, i titoli a sinistra o al centro, il testo giustificato, la
+  **sillabazione** (nel testo, non nel codice né nelle tabelle) e i titoli
+  numerati. Ogni scelta resta cambiando tema.
+- **La pagina**: A4, A5, A3, Lettera o una misura propria (ogni lato da 50 a
+  1189 mm: un numero fuori resta scritto in rosso, la frase lo dice e la
+  pagina non cambia), verticale o orizzontale, una o due colonne.
+- **I margini**: i tre pronti (Stretti, Normali, Larghi), i quattro numeri in
+  millimetri, o le **guide** sul bordo del testo, che si vedono con la
+  sezione Pagina aperta e si trascinano: la misura appare accanto al
+  puntatore, le pagine seguono dal vivo, Esc rimette i margini di prima. Un
+  margine va da 5 a 70 mm e lascia al testo almeno 30 mm: uno più largo
+  diventa il più largo possibile e la frase lo dice.
+- **Margini a specchio** per il fronte e retro: sulle pagine pari interno ed
+  esterno si scambiano (e la guida di sinistra cambia il margine destro).
+  **La filigrana**, al più 18 caratteri, attraversa ogni pagina in diagonale,
+  appena accennata.
 ## Testata e piè, frontespizio e indice
 
 - **Sei posti**: a sinistra, al centro e a destra, sopra e sotto la pagina.
@@ -125,6 +163,49 @@ e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts)
 - **I segnalibri** del PDF seguono i titoli; la banda dice quanti sono.
 - Cambiare testata, frontespizio o indice ridisegna i fogli senza rifare
   l'impaginazione della nota; il testo tuo segue mentre si scrive.
+
+## Contenuto e Interruzioni
+
+Le due sezioni vivono in
+[`export/sections/content.ts`](../../apps/client/src/export/sections/content.ts);
+ciò che ogni scelta fa sulle pagine in
+[`export/content/`](../../apps/client/src/export/content/), un modulo per
+specie di blocco. La resa per la stampa si monta una volta: prima di ogni
+misura il contenuto la cambia secondo il profilo, dopo la rimette com'era.
+Un blocco aggiunto (le proprietà, una riga di provenienza) non sposta le
+identità degli altri.
+
+- **Proprietà** sotto il titolo: nessuna, in evidenza (le prime quattro,
+  senza icona, copertina ed etichette) o tutte. Arrivano dall'indice dopo la
+  resa; senza l'indice la pagina esce senza.
+- **Commenti**: no, nel margine o in fondo. Ogni passo commentato prende un
+  numero; i commenti di seguito sono una discussione sola. Nel margine la
+  nota dice il primo nome, il testo e quante risposte, accanto al suo
+  paragrafo; con due colonne o un margine sotto i 22 mm va in fondo. In
+  fondo, sotto il titolo «Commenti», ogni messaggio col nome e la data. Un
+  commento in una cella di tabella ha il numero nella cella. La resa per la
+  stampa del core porta i commenti in `<template class="comment-note">`, che
+  il sanificatore toglierebbe: prima di montarla lo spazio ne fa segnaposti
+  vuoti col solo testo in `data-text` (`inertComments`).
+- **Link** colorati, sottolineati o come il testo; **tabelle** a linee, a
+  righe alterne o a griglia. Cambiano solo l'aspetto, non l'impaginazione.
+- **Compiti fatti**: si mostrano o si tolgono, coi passi che tengono dentro.
+- **Ripiegabili**: tutti aperti, o chiusi col solo titolo.
+- **Note riportate**: svolte, con sotto la riga «da Cartella / Nota ›
+  Sezione». Una nota che riporta sé stessa (o troppo in profondità) non si
+  svolge e la riga dice perché.
+- **Schede vive**: l'anteprima col nome, solo il nome, o per un PDF tutte le
+  sue pagine in fondo (al più 200; la riga al posto della scheda dice dove
+  sono, e quante restano nel file). Un PDF che non si legge esce con
+  l'anteprima.
+- **Basi**: si distendono senza la barra e la ricerca, con sotto «Base ·
+  vista · n righe»; si misurano come una tabella, così una Base di mille
+  righe continua pagina dopo pagina.
+- **Codice numerato**: un numero per riga del sorgente, fuori dal testo.
+- **Interruzioni**: una pagina nuova a ogni Titolo 2 o a ogni separatore, e
+  l'intestazione delle tabelle lunghe ripetuta in cima a ogni pagina (di
+  serie). Spenta, l'intestazione resta solo all'inizio.
+
 ## Il clic sulla pagina
 
 Un clic su un blocco delle pagine (non nella vista Tutte) apre le sue

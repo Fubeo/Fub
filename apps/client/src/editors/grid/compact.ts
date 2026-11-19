@@ -160,7 +160,8 @@ export function activeCellSource(
   return {
     read(): SurfaceActiveCell | null {
       if (life.closed || engine.book() === null) return null;
-      return { name: engine.selectionRefs().active, formula: formulaBarText(root) };
+      const refs = engine.selectionRefs();
+      return { name: refs.active, formula: formulaBarText(root), sheet: refs.sheet, range: refs.range };
     },
     select(sheet, cell) {
       if (life.closed || engine.book() === null) return false;

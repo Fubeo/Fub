@@ -135,7 +135,7 @@ describe("Comincia qui una pagina nuova", () => {
     expect(entry).toMatchObject({ choice: "checkbox", checked: false, disabled: false });
     entry.run!();
     expect(state.text).toBe(SOURCE.replace("Prima è qui.", "<!-- pagina -->\nPrima è qui."));
-    expect(notify).toHaveBeenLastCalledWith(t("pdf_export.block.break_added"), "info", expect.objectContaining({ label: t("pdf_export.block.undo") }));
+    expect(notify).toHaveBeenLastCalledWith(t("pdf_export.block.break_added"), "info", expect.objectContaining({ label: t("app.undo") }));
     lastAction().run();
     expect(state.text).toBe(SOURCE);
   });
@@ -330,7 +330,7 @@ describe("il clic sulla pagina", () => {
     expect(showContextMenu).toHaveBeenCalledOnce();
     const [point, items, options] = showContextMenu.mock.calls[0]! as [unknown, MenuItem[], { header: { kind: string }; onClose: () => void }];
     expect(point).toEqual({ x: 30, y: 40 });
-    expect(options.header.kind).toBe(t("pdf_export.block.kind.paragraph"));
+    expect(options.header.kind).toBe(t("editor_menu.head.text"));
     expect(items.map((entry) => entry.label)).toContain(BREAK());
     expect(bands.every((band) => band.classList.contains("is-selected"))).toBe(true);
     options.onClose();

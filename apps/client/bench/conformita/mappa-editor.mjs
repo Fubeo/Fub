@@ -553,6 +553,35 @@ export const VISTE = {
     },
     app: { scena: "valori-cella-01-scrittura" },
   },
+  // «Estrai» (T49): nel prototipo sulla scheda PDF attiva del passo «Ogni
+  // formato è una scheda», nell'app sul foglio attivo con delle celle scelte
+  // (sul PDF è spento finché non c'è il motore dei PDF: il piano, T49).
+  "estratti-estrai": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+      },
+    },
+    app: { scena: "estratti-01-estrai" },
+  },
+  // L'estratto (T49): nel prototipo quello che «Estrai» mette sotto la scheda
+  // PDF, nell'app il passo di PDF scritto come lo scrive Obsidian.
+  "estratti-passo": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+        await page.click("#win #pdf-ex");
+        await page.waitForSelector("#win .exc footer button");
+        await page.evaluate(() => document.querySelector("#win .exc")?.scrollIntoView({ block: "center" }));
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "estratti-03-passo" },
+  },
   // La zona lavagna (T47): quella del prototipo a riposo, la lavagna intera
   // nella sua zona; nel banco il percorso della visita, a riposo.
   "scheda-lavagna": {
@@ -584,6 +613,55 @@ export const VISTE = {
       },
     },
     app: { scena: "esporta-pdf-temi" },
+  },
+  /// Le sezioni Contenuto e Interruzioni aperte (T74): dai due lati i
+  /// commenti nel margine, le tabelle a griglia e il codice numerato.
+  "esporta-pdf-contenuto": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="contenuto"] .px-sh');
+        await page.click('#win .px-sec[data-sec="interruzioni"] .px-sh');
+        await page.click('#win .px-seg button[data-k="comments"][data-v="margine"]');
+        await page.click('#win .px-seg button[data-k="tab"][data-v="griglia"]');
+        await page.click('#win .px-tog[data-k="codeNum"]');
+        await page.waitForSelector('#win .px-tog[data-k="codeNum"][aria-checked="true"]');
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-contenuto" },
+  },
+  /// Le sezioni Caratteri e Pagina aperte (T72), con la filigrana «BOZZA»
+  /// scritta dai due lati: le righe, i caratteri come pulsanti, i cursori, i
+  /// segmenti, i millimetri, il campo della filigrana, le guide e la
+  /// filigrana sulla prima pagina.
+  "esporta-pdf-caratteri": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="caratteri"] .px-sh');
+        await page.click('#win .px-sec[data-sec="pagina"] .px-sh');
+        await page.fill('#win .px-in[data-k="wm"]', "BOZZA");
+        await page.waitForFunction(() => document.querySelector("#win .px-wm")?.textContent === "BOZZA");
+        await chiudiPannello(page, "#px-side");
+      },
+    },
+    app: {
+      scena: "esporta-pdf-caratteri",
+      prepara: async (page) => {
+        await page.fill("#export-page-watermark", "BOZZA");
+        await page.press("#export-page-watermark", "Tab");
+        await page.waitForSelector(".export-slot .export-watermark");
+        await chiudiPannello(page, ".export-side");
+      },
+    },
   },
   /// Testata e piè, frontespizio e indice (T73): il prototipo al passo
   /// «Tutto il cambiabile, dal vivo» (il profilo «Relazione per il Comune»:
@@ -623,6 +701,17 @@ export const VISTE = {
     app: { scena: "esporta-pdf-blocco" },
   },
 };
+
+/// Riporta in cima il pannello delle sezioni, toglie il fuoco e porta via il
+/// puntatore: gli stessi pezzi a riposo dai due lati.
+async function chiudiPannello(page, pannello) {
+  await page.evaluate((selector) => {
+    const side = document.querySelector(selector);
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }, pannello);
+  await page.mouse.move(0, 0);
+}
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
 /// della guida (ognuno ha il titolo «n. Nome del passo»): per nome, non per
@@ -1760,6 +1849,56 @@ export const PEZZI = [
     app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest',
     proprieta: ["cursor", "overflow"],
   },
+  // ── gli estratti (T49) ────────────────────────────────────────────────────
+  // «Estrai» in testata: l'azione d'accento in grassetto, come gli altri
+  // pulsanti della testata per il resto.
+  {
+    id: "estratti.estrai",
+    vista: "estratti-estrai",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="pdf"].active #pdf-ex',
+    app: '.pane.focus .pane-editor .live-card[data-card-active="true"][data-card-extract="ready"] .live-card-extract',
+    proprieta: ["color", "font-weight", "display", "opacity"],
+  },
+  // L'estratto: la barra gialla a sinistra, i margini, il carattere del
+  // paragrafo (il `font` del prototipo nomina `--f-text`, che non c'è, e il
+  // testo eredita quello del paragrafo); sotto la fonte nel carattere
+  // dell'interfaccia, e il pulsante d'accento. L'interlinea è del corpo del
+  // testo (non di questo pezzo), e qui non si confronta, come per i valori
+  // di cella.
+  {
+    id: "estratti.citazione",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc",
+    app: ".pane.focus .pane-editor .live-card-excerpt",
+    proprieta: ["border-left-width", "border-left-style", "border-left-color", "padding", "margin-top", "margin-bottom", "font-style", "font-size", "font-family", "color"],
+  },
+  {
+    id: "estratti.fonte",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer",
+    app: ".pane.focus .pane-editor .live-card-excerpt-source",
+    proprieta: ["font-size", "font-style", "font-family", "color", "gap", "margin-top", ...ALLINEAMENTO],
+  },
+  {
+    id: "estratti.vai",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    proprieta: ["color", "padding", "border-radius"],
+  },
+  {
+    id: "estratti.vai-passaggio",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    gesto: { tipo: "hover", prototipo: ".exc footer button", app: ".pane.focus .pane-editor .live-card-excerpt-go" },
+    proprieta: ["background-color"],
+  },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {
     id: "mini-barra.superficie",
@@ -2456,6 +2595,213 @@ export const PEZZI = [
     prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
     app: '#export-colors-gray .export-toggle-knob',
     proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── le sezioni Contenuto e Interruzioni (T74) ───────────────────────────
+  // Le righe col nome e le scelte (`pxRow`, `pxSeg`), gli interruttori; sulla
+  // pagina il numero del commento e la sua nota nel margine.
+  {
+    id: "esporta.contenuto-riga",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2)',
+    app: '.export-row[data-row="export-content-comments"]',
+    proprieta: ["display", "min-height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.contenuto-nome",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-rl',
+    app: '.export-row[data-row="export-content-comments"] .export-row-label',
+    proprieta: ["font", "color", "flex-shrink"],
+  },
+  {
+    id: "esporta.contenuto-scelte",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-seg',
+    app: '.export-row[data-row="export-content-comments"] .export-choices',
+    proprieta: ["display", "padding", "border-radius", "background", "gap"],
+  },
+  {
+    id: "esporta.contenuto-scelta",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="fondo"]',
+    app: "#export-content-comments-in-fondo",
+    proprieta: [...BASE, "height", "white-space"],
+  },
+  {
+    id: "esporta.contenuto-scelta-presa",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="margine"]',
+    app: "#export-content-comments-margine",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.contenuto-codice",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="codeNum"]',
+    app: "#export-content-code",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruzioni-intestazione",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="repeatHead"]',
+    app: "#export-breaks-header",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.commento-numero",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pcm sup",
+    app: ".export-page .export-comment-mark",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.commento-margine",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pnote",
+    app: ".export-page .export-comment-placed",
+    proprieta: ["color", "border-left-style", "text-align"],
+  },
+  // ── le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+  {
+    id: "esporta.riga",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-row',
+    app: '.export-section[data-section="pagina"] .export-row',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.riga-nome",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-rl',
+    app: '.export-section[data-section="pagina"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.riga-caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-row',
+    app: '.export-section[data-section="caratteri"] .export-row-stacked',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-fonts',
+    app: '.export-section[data-section="caratteri"] .export-fonts',
+    proprieta: ["display", "gap", "flex-wrap"],
+  },
+  {
+    id: "esporta.carattere",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][data-v="hanken"]',
+    app: '#export-font-testo-hanken',
+    proprieta: [...BASE, "height", "font-size", "color", "background", "cursor"],
+  },
+  {
+    id: "esporta.carattere-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][aria-checked="true"]',
+    app: '[id^="export-font-testo-"][aria-checked="true"]',
+    proprieta: ["box-shadow", "color", "background"],
+  },
+  {
+    id: "esporta.cursore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng',
+    app: '.export-range:has(#export-fonts-size)',
+    proprieta: [...BASE, "display", "align-items", "min-height", "color"],
+  },
+  {
+    id: "esporta.cursore-barra",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng input',
+    app: '#export-fonts-size',
+    proprieta: ["margin", "accent-color", "cursor", "min-width"],
+  },
+  {
+    id: "esporta.cursore-valore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng output',
+    app: '.export-range:has(#export-fonts-size) output',
+    proprieta: ["font-size", "color", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.interruttore-sillabazione",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-tog[data-k="hyph"]',
+    app: '#export-fonts-hyphens',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.segmento-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-seg button[aria-checked="true"]',
+    app: '.export-section[data-section="pagina"] .export-choice[aria-checked="true"]',
+    proprieta: [...BASE, "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.millimetri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-mm',
+    app: '.export-section[data-section="pagina"] .export-mm',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.millimetro",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm label',
+    app: '.export-mm-field',
+    proprieta: ["display", "gap", "font-size", "color", "position"],
+  },
+  {
+    id: "esporta.millimetro-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm input',
+    app: '.export-mm-input',
+    proprieta: [...BASE, "height", "font", "color", "background", "appearance"],
+  },
+  {
+    id: "esporta.millimetro-unita",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm em',
+    app: '.export-mm-field em',
+    proprieta: ["position", "right", "bottom", "font-size", "font-style", "color"],
+  },
+  {
+    id: "esporta.filigrana-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-in[data-k="wm"]',
+    app: '#export-page-watermark',
+    proprieta: [...BASE, "width", "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.nota-guide",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-note',
+    app: '.export-section[data-section="pagina"] .export-note:not(.export-page-error)',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.guida",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-t',
+    app: '.export-slot .export-guide[data-guide="sopra"]',
+    proprieta: ["position", "height", "opacity", "cursor", "z-index"],
+  },
+  {
+    id: "esporta.guida-lato",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-l',
+    app: '.export-slot .export-guide[data-guide="sinistra"]',
+    proprieta: ["position", "width", "opacity", "cursor"],
+  },
+  {
+    id: "esporta.filigrana",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-wm',
+    app: '.export-slot .export-watermark',
+    proprieta: ["position", "display", "font-size", "font-weight", "line-height", "letter-spacing", "white-space", "opacity", "transform", "z-index"],
   },
   // ── Testata e piè, frontespizio e indice (T73, passo 29) ──────────────
   // Il pannello: i sei posti sopra e sotto la paginetta finta, «Fin dove»

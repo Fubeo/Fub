@@ -24,6 +24,12 @@
     "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T70"
   },
   {
+    "pezzo": "esporta.contenuto-scelte",
+    "proprieta": "background-color",
+    "motivo": "Il vassoio delle scelte (`pxSeg`) nel prototipo è --tray-2 (#eaf0ec di giorno, #1f2922 di notte), un token che la tavolozza di Fub non ha e che la tabella del piano non traduce; come il vassoio delle viste (esporta.viste), Fub usa --sheet-2, il vassoio che il piano dà per --tray.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T74"
+  },
+  {
     "pezzo": "esporta.dg-miniatura",
     "proprieta": "box-shadow",
     "motivo": "Nel prototipo la miniatura è .px-paper: il filo attorno è la riga della carta di stampa (--p-rule, #d5ded8) in tutte e due le luci, un colore scritto a mano che la tavolozza di Fub non ha. Fub disegna il filo col filo del pannello (--line-2 → --border-strong), che di notte resta visibile sul pannello scuro; lo spessore (1 px) è lo stesso.",

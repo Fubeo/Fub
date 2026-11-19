@@ -78,7 +78,8 @@ describe("il foglio in una scheda", () => {
   it("dà la cella attiva e la sua formula come dati, e avvisa una volta per giro", async () => {
     const { host, engine, go, life } = await compactMounted();
     const source = activeCellSource(engine, host, life);
-    expect(source.read()).toEqual({ name: "A1", formula: "Voce" });
+    const sheet = engine.selectionRefs().sheet;
+    expect(source.read()).toEqual({ name: "A1", formula: "Voce", sheet, range: "A1" });
 
     const heard = vi.fn();
     const stop = source.subscribe(heard);
@@ -89,11 +90,11 @@ describe("il foglio in una scheda", () => {
     expect(heard).not.toHaveBeenCalled();
     await Promise.resolve();
     expect(heard).toHaveBeenCalledTimes(1);
-    expect(source.read()).toEqual({ name: "B4", formula: "=SUM(B2:B3)" });
+    expect(source.read()).toEqual({ name: "B4", formula: "=SUM(B2:B3)", sheet, range: "B4" });
 
     // Una formula con un errore la dice la cella, e qui c'è la formula com'è.
     go(3, 2);
-    expect(source.read()).toEqual({ name: "C4", formula: "#DIV/0!" });
+    expect(source.read()).toEqual({ name: "C4", formula: "#DIV/0!", sheet, range: "C4" });
 
     stop();
     source.changed();
