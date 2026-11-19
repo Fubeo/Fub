@@ -5,7 +5,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenderedDocument } from "../host/contract";
-import { printBlocks } from "./paginate/measure";
+import type { ExportNote } from "./block-actions";
+import { blockId, printBlocks } from "./paginate/measure";
 import type { BlockSource, Scheduler } from "./paginate/slices";
 import { defaultProfile } from "./profile";
 import { FOLLOW_QUIET_MS, openExportSpace, type ExportSpaceOptions } from "./space";
@@ -248,6 +249,42 @@ describe("lo spazio «Esporta in PDF»", () => {
     const { space } = open({ render: vi.fn(async () => Promise.reject(new Error("niente"))) });
     await settle();
     expect(space.element.querySelector(".export-band-info")?.textContent).toBe("Le pagine non sono pronte");
+    space.close();
+  });
+});
+
+describe("il clic sulla pagina (T76)", () => {
+  /// La resa per la stampa del core: ogni paragrafo con la sua posizione.
+  const source = (paragraphs: number) =>
+    ({ html: Array.from({ length: paragraphs }, (_, i) => `<p data-fub-source-start="${i * 20}" data-fub-source-end="${i * 20 + 12}">Paragrafo ${i + 1}</p>`).join(""), parts: [] }) as unknown as RenderedDocument;
+  const measure = (page: HTMLElement): BlockSource => {
+    const blocks = printBlocks(page);
+    return {
+      count: blocks.length,
+      measure(index) {
+        const top = index * 230;
+        return { box: { kind: "paragraph", id: blockId(blocks[index]!, index), lines: Array.from({ length: 10 }, () => 22) }, top, bottom: top + 220, exact: true };
+      },
+    };
+  };
+  const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>("[role^=menuitem]")].find((entry) => entry.textContent?.includes(label));
+
+  it("lascia fuori un blocco dalle pagine e la sezione Contenuto lo rimette", async () => {
+    const note: ExportNote = { shown: () => "", current: () => "", readOnly: () => null, write: () => true, reveal: () => {} };
+    const { space } = open({ render: vi.fn(async () => source(4)), measure, note });
+    await settle();
+    const band = [...space.element.querySelectorAll<HTMLElement>(".export-fascia")].find((entry) => entry.textContent?.includes("Paragrafo 2"))!;
+    expect(band.dataset["block"]).toBe("src:20");
+    band.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10, detail: 1 }));
+    expect(band.classList.contains("is-selected")).toBe(true);
+    menuItem("Lascia fuori dal PDF")!.click();
+    await settle();
+    expect(space.element.querySelector(".export-page")?.textContent).not.toContain("Paragrafo 2");
+    expect(space.element.querySelector('[data-section="contenuto"] .export-section-summary')?.textContent).toBe("1 blocco lasciato fuori");
+    space.openSection("contenuto");
+    space.element.querySelector<HTMLButtonElement>("#export-block-restore-all")!.click();
+    await settle();
+    expect(space.element.querySelector(".export-page")?.textContent).toContain("Paragrafo 2");
     space.close();
   });
 });

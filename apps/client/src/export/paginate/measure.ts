@@ -68,12 +68,22 @@ export function blockId(element: Element, index: number): string {
 /// quello del blocco dentro. `null` se la resa non lo dice: il titolo della
 /// pagina, ciò che lo spazio aggiunge, un blocco di una nota trasclusa.
 export function sourceSpanOf(element: Element): { readonly start: number; readonly end: number } | null {
-  // Dentro una nota trasclusa le posizioni sono della nota trasclusa.
-  const inner = element.children.length === 1 && !element.classList.contains("embed") ? element.firstElementChild : null;
-  const own = element.hasAttribute("data-fub-source-start") ? element : inner;
-  if (!own) return null;
-  const start = own.getAttribute("data-fub-source-start") ?? "";
-  const end = own.getAttribute("data-fub-source-end") ?? "";
+  // Dentro una nota trasclusa le posizioni sono della nota trasclusa; in un
+  // libro (T78) ogni capitolo ha le sue, e due blocchi avrebbero la stessa.
+  if (element.classList.contains("embed") || element.closest(".export-chapter")) return null;
+  let first: Element | null = element.hasAttribute("data-fub-source-start") ? element : null;
+  let last = first;
+  if (!first && element.tagName === "LI") {
+    // La voce di un elenco non ha posizione: l'hanno i blocchi che contiene.
+    const inside = [...element.children].filter((child) => child.hasAttribute("data-fub-source-start"));
+    first = inside[0] ?? null;
+    last = inside[inside.length - 1] ?? null;
+  } else if (!first && element.children.length === 1) {
+    first = last = element.firstElementChild;
+  }
+  if (!first || !last) return null;
+  const start = first.getAttribute("data-fub-source-start") ?? "";
+  const end = last.getAttribute("data-fub-source-end") ?? "";
   if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) return null;
   const span = { start: Number(start), end: Number(end) };
   return Number.isSafeInteger(span.start) && Number.isSafeInteger(span.end) && span.start <= span.end ? span : null;
@@ -81,12 +91,14 @@ export function sourceSpanOf(element: Element): { readonly start: number; readon
 
 /// I blocchi di primo livello della resa, nell'ordine: si scende nei
 /// contenitori della pagina di stampa e negli elenchi, una voce per scatola.
-/// Ciò che non si vede (`display: none`, i blocchi lasciati fuori) non c'è.
-export function printBlocks(root: Element): HTMLElement[] {
+/// Ciò che non si vede (`display: none`, i blocchi lasciati fuori) non c'è;
+/// con `hidden` ci sono anche i blocchi nascosti, nell'ordine con cui lo
+/// spazio li lascia fuori (`PrintPaginator`).
+export function printBlocks(root: Element, options: { readonly hidden?: boolean } = {}): HTMLElement[] {
   const out: HTMLElement[] = [];
   const visit = (parent: Element) => {
     for (const child of parent.children) {
-      if (!(child instanceof HTMLElement) || child.hidden) continue;
+      if (!(child instanceof HTMLElement) || (child.hidden && options.hidden !== true)) continue;
       if ([...child.classList].some((name) => WRAPPERS.has(name)) || child.tagName === "UL" || child.tagName === "OL") {
         visit(child);
         continue;
