@@ -32,7 +32,7 @@ stampa).
 - **Le dieci sezioni** a destra: Tema, Colori, Caratteri, Pagina, Testata e
   piè di pagina, Frontespizio e indice, Contenuto, Diagrammi, Interruzioni di
   pagina, Uscita. La testa chiusa dice ciò che vale ora («A4 verticale»,
-  «Titolo, Numero di pagina»). Le regolazioni di ogni sezione arrivano coi
+  «Titolo, Pagina»). Le regolazioni di ogni sezione arrivano coi
   loro lavori; finché manca, la sezione aperta lo dice.
 - **La banda** in basso: le pagine, il formato, i margini, i segnalibri e il
   tempo dell'impaginazione. Il numero di pagine si annuncia a voce solo
@@ -71,6 +71,34 @@ e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts)
   si stampano coi colori del tema anche quando l'app è scura: il tema
   dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
   carta scura, col codice e il testo colorato schiariti.
+
+## Testata e piè, frontespizio e indice
+
+- **Sei posti**: a sinistra, al centro e a destra, sopra e sotto la pagina.
+  Un clic su un posto apre il menu: niente, il titolo della nota, la sezione
+  in corso, la data, la pagina, «pagina di pagine», l'autore (la proprietà
+  `autore` o `author`), il percorso nel vault o un testo tuo, che si scrive
+  nel campo sotto i posti. Testata e piè stanno nei margini e usano i
+  caratteri dei titoli e il testo secondario del tema di stampa.
+- La **sezione** è il Titolo 1 o 2 in corso in cima alla pagina, o quello
+  con cui la pagina comincia; prima del primo titolo il posto resta vuoto.
+- **Filo sotto la testata** (acceso di serie), **prima pagina senza
+  testata**, **numeri romani** per frontespizio e indice: con i romani la
+  nota riparte da 1, senza il frontespizio e l'indice si contano solo nel
+  totale delle pagine. A specchio, nelle pagine pari sinistra e destra si
+  scambiano.
+- **Il frontespizio** ha l'icona della nota, il titolo, fino a quattro
+  proprietà, l'autore e la data, con il filo d'accento sul bordo; non ha
+  testata né piè e non si numera. Con il frontespizio il titolo in cima
+  alla nota esce dalle pagine.
+- **L'indice** arriva fino ai Titoli 2 o anche ai 3 e porta i numeri che le
+  pagine stampano davvero: si impagina in due passi (prima con il numero più
+  largo, poi con quelli veri, finché le sue pagine non cambiano più). Un
+  indice lungo va su più pagine; una nota senza titoli non ha indice.
+  Finché l'impaginazione non è finita i numeri che mancano sono «…».
+- **I segnalibri** del PDF seguono i titoli; la banda dice quanti sono.
+- Cambiare testata, frontespizio o indice ridisegna i fogli senza rifare
+  l'impaginazione della nota; il testo tuo segue mentre si scrive.
 
 ## Comportamenti
 
