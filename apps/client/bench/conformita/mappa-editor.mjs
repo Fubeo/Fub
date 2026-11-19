@@ -568,7 +568,45 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf-temi" },
   },
+  /// Le sezioni Caratteri e Pagina aperte (T72), con la filigrana «BOZZA»
+  /// scritta dai due lati: le righe, i caratteri come pulsanti, i cursori, i
+  /// segmenti, i millimetri, il campo della filigrana, le guide e la
+  /// filigrana sulla prima pagina.
+  "esporta-pdf-caratteri": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="caratteri"] .px-sh');
+        await page.click('#win .px-sec[data-sec="pagina"] .px-sh');
+        await page.fill('#win .px-in[data-k="wm"]', "BOZZA");
+        await page.waitForFunction(() => document.querySelector("#win .px-wm")?.textContent === "BOZZA");
+        await chiudiPannello(page, "#px-side");
+      },
+    },
+    app: {
+      scena: "esporta-pdf-caratteri",
+      prepara: async (page) => {
+        await page.fill("#export-page-watermark", "BOZZA");
+        await page.press("#export-page-watermark", "Tab");
+        await page.waitForSelector(".export-slot .export-watermark");
+        await chiudiPannello(page, ".export-side");
+      },
+    },
+  },
 };
+
+/// Riporta in cima il pannello delle sezioni, toglie il fuoco e porta via il
+/// puntatore: gli stessi pezzi a riposo dai due lati.
+async function chiudiPannello(page, pannello) {
+  await page.evaluate((selector) => {
+    const side = document.querySelector(selector);
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }, pannello);
+  await page.mouse.move(0, 0);
+}
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
 /// della guida (ognuno ha il titolo «n. Nome del passo»): per nome, non per
@@ -2222,6 +2260,147 @@ export const PEZZI = [
     prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
     app: '#export-colors-gray .export-toggle-knob',
     proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+  {
+    id: "esporta.riga",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-row',
+    app: '.export-section[data-section="pagina"] .export-row',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.riga-nome",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-rl',
+    app: '.export-section[data-section="pagina"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.riga-caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-row',
+    app: '.export-section[data-section="caratteri"] .export-row-stacked',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-fonts',
+    app: '.export-section[data-section="caratteri"] .export-fonts',
+    proprieta: ["display", "gap", "flex-wrap"],
+  },
+  {
+    id: "esporta.carattere",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][data-v="hanken"]',
+    app: '#export-font-testo-hanken',
+    proprieta: [...BASE, "height", "font-size", "color", "background", "cursor"],
+  },
+  {
+    id: "esporta.carattere-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][aria-checked="true"]',
+    app: '[id^="export-font-testo-"][aria-checked="true"]',
+    proprieta: ["box-shadow", "color", "background"],
+  },
+  {
+    id: "esporta.cursore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng',
+    app: '.export-range:has(#export-fonts-size)',
+    proprieta: [...BASE, "display", "align-items", "min-height", "color"],
+  },
+  {
+    id: "esporta.cursore-barra",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng input',
+    app: '#export-fonts-size',
+    proprieta: ["margin", "accent-color", "cursor", "min-width"],
+  },
+  {
+    id: "esporta.cursore-valore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng output',
+    app: '.export-range:has(#export-fonts-size) output',
+    proprieta: ["font-size", "color", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.interruttore-sillabazione",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-tog[data-k="hyph"]',
+    app: '#export-fonts-hyphens',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.segmento-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-seg button[aria-checked="true"]',
+    app: '.export-section[data-section="pagina"] .export-segment[aria-checked="true"]',
+    proprieta: [...BASE, "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.millimetri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-mm',
+    app: '.export-section[data-section="pagina"] .export-mm',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.millimetro",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm label',
+    app: '.export-mm-field',
+    proprieta: ["display", "gap", "font-size", "color", "position"],
+  },
+  {
+    id: "esporta.millimetro-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm input',
+    app: '.export-mm-input',
+    proprieta: [...BASE, "height", "font", "color", "background", "appearance"],
+  },
+  {
+    id: "esporta.millimetro-unita",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm em',
+    app: '.export-mm-field em',
+    proprieta: ["position", "right", "bottom", "font-size", "font-style", "color"],
+  },
+  {
+    id: "esporta.filigrana-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-in[data-k="wm"]',
+    app: '#export-page-watermark',
+    proprieta: [...BASE, "width", "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.nota-guide",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-note',
+    app: '.export-section[data-section="pagina"] .export-note:not(.export-page-error)',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.guida",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-t',
+    app: '.export-slot .export-guide[data-guide="sopra"]',
+    proprieta: ["position", "height", "opacity", "cursor", "z-index"],
+  },
+  {
+    id: "esporta.guida-lato",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-l',
+    app: '.export-slot .export-guide[data-guide="sinistra"]',
+    proprieta: ["position", "width", "opacity", "cursor"],
+  },
+  {
+    id: "esporta.filigrana",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-wm',
+    app: '.export-slot .export-watermark',
+    proprieta: ["position", "display", "font-size", "font-weight", "line-height", "letter-spacing", "white-space", "opacity", "transform", "z-index"],
   },
 ];
 

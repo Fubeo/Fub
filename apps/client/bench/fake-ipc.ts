@@ -95,6 +95,7 @@ import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
+import { EXPORT_FONTS, exportFontsOutcome, exportFontsWriter, VAULT_FONTS_COMMAND } from "./export-fonts-fixture";
 import { GiroWorkbook, giroResources } from "./giro-fixture";
 import {
   generateGraphFixture as graphFixture,
@@ -459,6 +460,11 @@ const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
   closed: { doc: "Documenti/Chiuso.docx", text: RICH_CLOSED.source },
 };
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
+
+/// I caratteri del vault della scena «esporta-pdf-caratteri» (T72,
+/// `?esporta-caratteri=1`, vedi `export-fonts-fixture.ts`). Le altre scene
+/// hanno un vault senza caratteri.
+const EXPORT_FONTS_SCENE = params.get("esporta-caratteri") === "1";
 
 /// La foto delle scene `photo-*` (`?photo=xmp|senza`), col bundle `fub.craft`
 /// acceso: la riga dei dati di LightCraft sotto la foto. Soltanto le sue
@@ -2280,6 +2286,7 @@ const options: Options = {
 };
 
 const host = createFakeHost(options);
+const writeExportFonts = exportFontsWriter((id, bytes) => host.module.api.resourceWrite(id, bytes, null));
 
 /// **Lo strato d'avvio fermo a uno stato**, per le scene che lo fotografano
 /// (`avvio-*` in `scene.mjs`). Si decide qui, alla nascita del fake, perché
@@ -2707,6 +2714,12 @@ export const api: typeof host.module.api = {
     if (TREE_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    // I caratteri del vault per la stampa: il finto non sa leggerli.
+    if (id === VAULT_FONTS_COMMAND) {
+      if (!EXPORT_FONTS_SCENE) return { ...exportFontsOutcome(), effect: { ...exportFontsOutcome().effect, payload: { ...EXPORT_FONTS, caratteri: [] } } };
+      await writeExportFonts();
+      return exportFontsOutcome();
     }
     // Il gesto della barra della Base delle scene `base-*`.
     const based = BASE?.invoke(id, args);

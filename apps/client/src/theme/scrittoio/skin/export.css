@@ -893,7 +893,7 @@
   position: absolute;
   right: 6px;
   bottom: 7px;
-  color: var(--outline);
+  color: var(--muted);
   font-size: 10.5px;
   font-style: normal;
   pointer-events: none;
