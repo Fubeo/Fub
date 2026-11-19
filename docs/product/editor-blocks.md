@@ -225,6 +225,10 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 - **La selezione.** Il velo dei blocchi scelti (`--doc-block-selected`) appare
   di blocco in blocco.
 
+Il cursore non segue la corsa: dal primo fotogramma sta dove andrà la lettera,
+e una battuta che non è un gesto (la lettera scritta subito dopo Invio) porta
+subito al loro posto le righe ancora in movimento.
+
 Oltre 60 righe in movimento, le righe si limitano a una dissolvenza. Col moto
 ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, il
 posto appare senza scivolare e il blocco in mano si posa senza volo.

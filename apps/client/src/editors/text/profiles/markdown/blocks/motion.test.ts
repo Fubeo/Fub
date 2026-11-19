@@ -242,6 +242,20 @@ describe("che cosa si muove", () => {
     expect(born?.spec.from).toEqual({ y: -8, opacity: 0 });
   });
 
+  it("le righe partono dopo le letture di CodeMirror: il cursore si misura sulla riga ferma", async () => {
+    const view = await mounted("Uno", 3);
+    view.dispatch({ changes: { from: 3, insert: "\n\nDue" }, selection: { anchor: 8 }, userEvent: "input" });
+    // Nella battuta niente si muove ancora: il livello dei cursori legge le
+    // righe nel ciclo delle misure che segue, insieme a questa lettura.
+    expect(moto.runs).toEqual([]);
+    let movingWhenRead: boolean | null = null;
+    view.requestMeasure({ read: () => { movingWhenRead = moto.runs.length > 0; } });
+    await frame();
+    expect(movingWhenRead).toBe(false);
+    // Prima del fotogramma, la riga nata scende e appare.
+    expect(moto.runs.find((run) => run.el.textContent === "Due")?.spec.from).toEqual({ y: -8, opacity: 0 });
+  });
+
   it("un gesto annotato senza testo cambiato (il ripiegabile) passa dal plugin", async () => {
     const view = await mounted("Uno\n\nDue", 1);
     view.dispatch({ annotations: blockGesture.of({ kind: "fold", say: "Aperto" }) });
