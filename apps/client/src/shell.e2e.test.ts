@@ -3399,6 +3399,32 @@ describe("il fuoco dopo un cambio di scheda da tastiera", () => {
     await lands("Riunione", "Appunti della riunione");
   });
 
+  // IMP-152: le scorciatoie globali non agiscono dietro una finestra modale.
+  it("con le Impostazioni aperte Ctrl+W e Ctrl+N tacciono, e dopo Esc tornano (IMP-152)", async () => {
+    await twoTabs();
+    const host = box.host!;
+    const panel = document.querySelector<HTMLElement>("#settings-panel")!;
+    press(",");
+    await waitFor("le Impostazioni si aprono", () => !panel.hidden);
+    await settle();
+    expect(panel.contains(document.activeElement)).toBe(true);
+    const files = Object.keys(host.files()).sort();
+
+    press("w");
+    press("n");
+    await settle();
+    expect(tabs(), "nessuna scheda chiusa dietro la finestra").toHaveLength(2);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort(), "nessuna nota creata dietro la finestra").toEqual(files);
+    expect(panel.hidden).toBe(false);
+
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await waitFor("le Impostazioni si chiudono", () => panel.hidden);
+    editorOf("Appunti della riunione").focus();
+    press("w");
+    await waitFor("chiusa la finestra, Ctrl+W torna a chiudere la scheda", () => tabs().length === 1);
+  });
+
   it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
     await twoTabs();
     press("w");

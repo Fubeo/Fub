@@ -195,6 +195,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Scorciatoie dietro una finestra modale.** Con una finestra modale aperta
+  (una superficie che intrappola il fuoco e si dichiara `aria-modal`: le
+  Impostazioni, un dialogo, la palette, un menu con la ricerca) le
+  scorciatoie globali tacciono: Ctrl+N non crea una nota e Ctrl+W non chiude
+  la scheda dietro la finestra (`modalOpen` in `ui/a11y.ts`, applicata da
+  `ui/keyboard.ts`). Escape e i tasti propri della finestra restano suoi.
 - **Tasti col fuoco fuori dal foglio.** Una regola sola, nell'unico `keydown`
   della shell, dopo i gestori locali e i comandi (`ui/off-sheet-keys.ts`,
   applicata da `ui/keyboard.ts`). Una lettera, un Backspace o un Canc premuti

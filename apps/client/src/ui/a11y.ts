@@ -134,6 +134,14 @@ export function keepFocusWhereItIs(owns: (root: HTMLElement) => boolean): void {
   }
 }
 
+/// Una finestra modale è aperta: una superficie che intrappola il fuoco e si
+/// dichiara modale (`aria-modal="true"`), in cima o sotto un menu aperto da
+/// lei. Mentre c'è, il fondo non si tocca: è la regola delle scorciatoie
+/// globali (`ui/keyboard.ts`, IMP-152).
+export function modalOpen(): boolean {
+  return trapStack.some((trap) => trap.root.isConnected && trap.root.getAttribute("aria-modal") === "true");
+}
+
 export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =
     'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
