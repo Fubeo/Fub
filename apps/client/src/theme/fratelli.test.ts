@@ -200,7 +200,9 @@ describe("i selettori di fratelli dicono chi è il fratello", () => {
   it("ogni eccezione esiste ancora", () => {
     const all = new Set(Object.values(SHEETS).flatMap((text) => {
       const out: string[] = [];
-      postcss.parse(text).walkRules((rule: Rule) => out.push(...rule.selectors));
+      postcss.parse(text).walkRules((rule: Rule) => {
+        out.push(...rule.selectors);
+      });
       return out;
     }));
     expect(Object.keys(EXCEPTIONS).filter((selector) => !all.has(selector))).toEqual([]);
