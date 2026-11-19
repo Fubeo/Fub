@@ -36,8 +36,8 @@
 //! **non** sono additivi per un plugin già compilato: l'host non lo istanzia.
 //! Il caso nuovo non arriva mai al guest vecchio: un host tipizzato non lo
 //! carica, e la via dinamica lo rifiuta con un errore tipizzato, non con una
-//! trap. Quell'errore però chiude l'istanza: la chiamata dopo è una trap
-//! «cannot enter component instance».
+//! trap. Quell'errore costa la chiamata, non l'istanza: dalla serie 48 di
+//! wasmtime la chiamata dopo, con un caso noto, risponde come sempre.
 //!
 //! Dal lato degli import wasmtime controlla allo stesso modo, quando istanzia,
 //! il tipo di ogni funzione che il guest importa: un `enum` o un `variant`
@@ -287,35 +287,29 @@ fn the_new_case_sent_dynamically_is_a_typed_error_and_not_a_trap() {
     assert_typed_refusal(&error, "quadrato");
 }
 
-/// Dopo quel rifiuto l'istanza non si rientra più.
+/// Dopo quel rifiuto l'istanza risponde ancora.
 ///
-/// wasmtime chiude l'ingresso dell'istanza prima di abbassare gli argomenti, e
-/// l'errore di abbassamento non lo riapre: la chiamata dopo, anche con un caso
-/// che il guest conosce, è una trap «cannot enter component instance». Per un
-/// host dinamico il caso nuovo costa l'istanza intera, non solo la chiamata.
+/// wasmtime abbassa gli argomenti prima di entrare nell'istanza, e l'errore di
+/// abbassamento non la tocca: la chiamata dopo, con un caso che il guest
+/// conosce, passa e restituisce il valore. Per un host dinamico il caso nuovo
+/// costa la sola chiamata. Fino alla serie 36 non era così: l'ingresso si
+/// chiudeva prima dell'abbassamento e la chiamata dopo era una trap «cannot
+/// enter component instance»; questo test ferma il comportamento della serie
+/// in uso, e un aggiornamento che lo cambia di nuovo si vede qui.
 #[test]
-fn after_the_new_case_the_dynamic_instance_cannot_be_entered_again() {
+fn after_the_new_case_the_dynamic_instance_answers_again() {
     let mut results = [Val::Bool(false)];
     let (mut store, eco) = funzione_dinamica("eco-colore");
     eco.call(&mut store, &[Val::Enum("blu".to_string())], &mut results)
         .expect_err("un colore che il guest non conosce non si abbassa");
 
-    let error = eco
-        .call(&mut store, &[Val::Enum("verde".to_string())], &mut results)
-        .expect_err("dopo il rifiuto l'istanza non si rientra");
-    assert!(
-        error.downcast_ref::<wasmtime::Trap>().is_some(),
-        "il rientro è una trap: {error:#}"
-    );
-    let message = format!("{error:#}");
-    assert!(
-        message.contains("cannot enter component instance"),
-        "la trap è quella dell'ingresso chiuso, non un altro guasto: {message}"
-    );
+    eco.call(&mut store, &[Val::Enum("verde".to_string())], &mut results)
+        .expect("dopo il rifiuto l'istanza risponde ancora");
+    assert_eq!(results[0], Val::Enum("verde".to_string()));
 }
 
 /// La stessa via dinamica, senza il caso nuovo, risponde a più chiamate di
-/// fila: la trap qui sopra viene dal rifiuto, non dalla via dinamica.
+/// fila sulla stessa istanza.
 #[test]
 fn the_dynamic_instance_answers_twice_without_the_new_case() {
     let mut results = [Val::Bool(false)];
@@ -323,7 +317,6 @@ fn the_dynamic_instance_answers_twice_without_the_new_case() {
     for colore in ["rosso", "verde"] {
         eco.call(&mut store, &[Val::Enum(colore.to_string())], &mut results)
             .expect("un colore che il guest conosce passa");
-        eco.post_return(&mut store).expect("il ritorno si chiude");
         assert_eq!(results[0], Val::Enum(colore.to_string()));
     }
 }
