@@ -18,5 +18,8 @@ export const LIVE_CARDS: PartAnatomy = {
     // La scheda di disegno (T46): il disegno fermo a riposo, l'editor dei
     // disegni da attiva con gli strumenti in una fila sopra il foglio.
     { name: "live-card-drawing", states: [S("rest"), S("selected"), S("focused")], hooks: ["canvas-card-drawing", "canvas-card-drawing-editor", "canvas-card-image", "draw-card-bar", "draw-editor", "draw-header", "draw-rail", "draw-body", "draw-dock"] },
+    // Il valore di una cella nel testo (T53): il tratteggio d'accento in
+    // Scrittura, testo come il resto in Lettura.
+    { name: "cell-value", layer: "contenuto", states: [S("rest"), S("hover")], hooks: ["cm-fub-cell-value", "fub-cell-value", "embed"] },
   ],
 };

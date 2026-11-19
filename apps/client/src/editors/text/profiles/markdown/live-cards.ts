@@ -69,6 +69,7 @@ import { removeColumnAt } from "./callout";
 import { embedSize, embedSizeText } from "./media";
 import { icon as iconMarkup, registerIcon } from "../../../../ui/icons";
 import { liveStrings } from "./strings";
+import { CELL_VALUE_DISPLAY, cellShownAsValue, cellValueRef } from "./cell-value";
 
 /// Un embed che è una scheda: ciò che il paragrafo scrive, letto.
 export interface LiveCardEmbed {
@@ -238,9 +239,10 @@ function embedOf(state: EditorState, range: EmbedRange): LiveCardEmbed | null {
   return text.startsWith("![[") && text.endsWith("]]") ? liveCardEmbed(text) : null;
 }
 
-/// Il dopo-barra che la nota ha scritto di suo: né una misura né `row`.
+/// Il dopo-barra che la nota ha scritto di suo: né una misura, né `row`, né
+/// `value` (il valore nel testo, T53).
 function ownAlias(alias: string | null): string | null {
-  if (alias === null || embedSize(alias) || liveCardDisplay(alias) === "row") return null;
+  if (alias === null || embedSize(alias) || liveCardDisplay(alias) === "row" || cellShownAsValue(alias)) return null;
   return alias;
 }
 
@@ -269,13 +271,16 @@ export function sizeEmbedAt(state: EditorState, range: EmbedRange, size: LiveCar
 }
 
 /// «Mostra come»: la scheda (`![[…]]`, con la sua misura), il link (`[[…]]`,
-/// senza misura) o la riga (`![[…|row]]`). Cambia solo l'embed nella nota.
-export function showEmbedAt(state: EditorState, range: EmbedRange, as: "card" | "link" | "row"): TransactionSpec | null {
+/// senza misura), la riga (`![[…|row]]`) o, per una cella sola di un foglio,
+/// il valore nel testo (`![[…|value]]`, T53). Cambia solo l'embed nella nota.
+export function showEmbedAt(state: EditorState, range: EmbedRange, as: "card" | "link" | "row" | "value"): TransactionSpec | null {
   const embed = embedOf(state, range);
   if (!embed) return null;
+  if (as === "value" && cellValueRef(embed.page, embed.subpath?.replace(/^#/, "") ?? null) === null) return null;
   const alias = as === "row" ? CARD_ROW
+    : as === "value" ? CELL_VALUE_DISPLAY
     : as === "link" ? ownAlias(embed.alias)
-    : liveCardDisplay(embed.alias) === "row" ? null : embed.alias;
+    : liveCardDisplay(embed.alias) === "row" || cellShownAsValue(embed.alias) ? null : embed.alias;
   const insert = embedText(embed.page, embed.subpath, alias, as !== "link");
   if (insert === state.sliceDoc(range.from, range.to)) return null;
   return { changes: { from: range.from, to: range.to, insert }, userEvent: "input" };
@@ -1189,7 +1194,8 @@ export class LiveCards {
     if (!Number.isInteger(from) || !Number.isInteger(to) || to <= from) return false;
     const text = this.host.text?.(from, to) ?? null;
     const embed = text === null ? null : liveCardEmbed(text);
-    if (!embed) return false;
+    // Una cella mostrata come valore nel testo (T53) non è una scheda.
+    if (!embed || cellShownAsValue(embed.alias)) return false;
     const card = this.mount(embed, true);
     card.root.dataset.mdFrom = String(from);
     card.root.dataset.mdTo = String(to);

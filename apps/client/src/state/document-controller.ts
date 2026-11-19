@@ -60,6 +60,7 @@ import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
 import { depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { formatKindOf } from "../ui/format-kind";
 import { lazyPart } from "../ui/lazy-part";
 import { mountMarkdown, mountRenderedDocument, type MarkdownMountOptions } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
@@ -825,12 +826,45 @@ const canvasCards: CanvasCardPorts = {
   },
   open: (path, subpath) => {
     const page = linkedPdfPage(path, subpath?.replace(/^#/, ""));
-    void openDocument(path, page === null ? { gesture: true } : { gesture: true, page }).catch((error: unknown) => {
-      notify(errorText(error), "guasto");
-    });
+    void openDocument(path, page === null ? { gesture: true } : { gesture: true, page })
+      .then(() => landOnSheetCell(path, subpath))
+      .catch((error: unknown) => {
+        notify(errorText(error), "guasto");
+      });
   },
   watch: watchCardFile,
 };
+
+/// La prima cella che la parte di un foglio nomina col suo foglio
+/// (`#Budget!C7`, `#'Conti 2025'!A1:E7`); `null` per un nome, una tabella,
+/// un foglio intero o una cella senza foglio.
+export function sheetCellOf(subpath: string | null | undefined): { readonly sheet: string; readonly cell: string } | null {
+  const text = subpath?.replace(/^#/, "").trim() ?? "";
+  const match = /^(?:'((?:[^']|'')+)'|([^!'"\s][^!]*?))\s*!\s*\$?([A-Za-z]{1,3})\$?([1-9]\d{0,6})(?::\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6})?$/.exec(text);
+  if (!match) return null;
+  const sheet = match[1] !== undefined ? match[1].replaceAll("''", "'") : match[2]!.trim();
+  return { sheet, cell: `${match[3]!.toUpperCase()}${match[4]!}` };
+}
+
+/// Porta il foglio appena aperto (T53: il clic su un valore nel testo, «Apri»
+/// di una scheda di foglio) sulla cella che la parte nomina, senza scrivere
+/// niente. Se la cartella non è ancora mostrata, lo fa alla prima cella
+/// attiva che la superficie annuncia; una superficie che non lo sa fare
+/// resta dov'è.
+function landOnSheetCell(path: string, subpath: string | null): void {
+  const target = formatKindOf(path) === "sheet" ? sheetCellOf(subpath) : null;
+  if (target === null) return;
+  const shown = panes.get(layout.focus);
+  if (shown?.shown?.k !== "doc" || shown.shown.doc !== path) return;
+  const source = shown.surface?.activeCell;
+  if (!source?.select) return;
+  if (source.select(target.sheet, target.cell)) return;
+  const stop = source.subscribe(() => {
+    if (source.read() === null) return;
+    stop();
+    source.select?.(target.sheet, target.cell);
+  });
+}
 
 /// «Apri con…» da una scheda della lavagna (T18): il menu delle app di N7
 /// sotto il pulsante, come il sottomenu dell'albero. Senza app Craft

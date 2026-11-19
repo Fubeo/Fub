@@ -39,6 +39,7 @@ import {
   sizeEmbedAt,
   type LiveCardWidth,
 } from "./live-cards";
+import { cellShownAsValue, cellValueRef } from "./cell-value";
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri si
 /// scrivono con «Altro…». Gli stessi nel menu del tasto destro e nella barra.
@@ -204,8 +205,20 @@ export function sheetCardGroup(sheet: {
 /// (scheda, link, riga), la larghezza (colonna, larga, tutta la pagina),
 /// l'altezza della specie quando ce n'è una scritta, «Affianca». Ogni gesto
 /// rilegge l'embed quando si usa, e scrive un passo d'annullamento.
+/// La cella sola di un foglio che la scheda nomina, se è una (T53).
+function cardCell(block: Extract<MarkdownBlock, { kind: "card" }>): boolean {
+  return cellValueRef(block.page, block.subpath === null ? null : block.subpath.slice(1)) !== null;
+}
+
+/// La scheda è una cella mostrata come valore nel testo (`|value`, T53).
+function shownAsValue(block: Extract<MarkdownBlock, { kind: "card" }>): boolean {
+  return cellShownAsValue(block.alias) && cardCell(block);
+}
+
 function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: BlockGroupHost): SurfaceMenuEntry[] {
-  const display = liveCardDisplay(block.alias);
+  // Una cella sola di un foglio si mostra anche come valore nel testo (T53).
+  const cell = cardCell(block);
+  const display = shownAsValue(block) ? "value" : liveCardDisplay(block.alias);
   const size = liveCardSize(block.alias);
   const column = (): number => {
     let width = 0;
@@ -220,7 +233,7 @@ function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: Block
       const range = embedRangeAtLine(state, Math.min(block.start, state.doc.length));
       return range ? change(state, range) : null;
     });
-  const show = (as: "card" | "link" | "row"): SurfaceMenuItem => ({
+  const show = (as: "card" | "link" | "row" | "value"): SurfaceMenuItem => ({
     id: `markdown.card.show.${as}`,
     label: liveStrings.t(`blockgroup.card.show.${as}`),
     radio: true,
@@ -244,7 +257,7 @@ function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: Block
       id: "markdown.card.show",
       label: liveStrings.t("blockgroup.card.show"),
       icon: "eye",
-      items: [show("card"), show("link"), show("row")],
+      items: [show("card"), show("link"), show("row"), ...(cell ? [show("value")] : [])],
     },
     ...(display === "card" ? [{
       id: "markdown.card.width",
@@ -262,7 +275,8 @@ function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: Block
       label: liveStrings.t("blockgroup.card.height"),
       run: () => write((state, range) => sizeEmbedAt(state, range, { width: size.width, height: null })),
     }] : []),
-    {
+    // Un valore nel testo non si affianca: è una riga di testo.
+    ...(display === "value" ? [] : [{
       id: "markdown.card.beside",
       label: liveStrings.t("blockgroup.card.beside"),
       icon: "fmt-columns",
@@ -274,7 +288,7 @@ function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: Block
         const spec = besideCardAt(state, Math.min(block.start, state.doc.length));
         return spec === null || spec === "full" ? null : spec;
       }),
-    },
+    }]),
   ];
 }
 
@@ -370,7 +384,7 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
       icon: "fmt-open",
       run: () => host.openLink(block.page, block.subpath === null ? null : block.subpath.slice(1), null),
     },
-    ...(host.activateCard ? [{
+    ...(host.activateCard && !shownAsValue(block) ? [{
       id: "markdown.card.activate",
       label: liveStrings.t("blockgroup.card.activate"),
       run: () => void host.activateCard?.(block.start),

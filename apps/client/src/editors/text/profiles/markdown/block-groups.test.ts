@@ -167,6 +167,28 @@ describe("i gruppi", () => {
     expect(text()).toBe("Prima\n\nDopo\n");
   });
 
+  it("Scheda di una cella sola: «Mostra come» offre «Valore nel testo» e lo scrive (T53)", () => {
+    const { host, text } = hostOf("Prima\n\n![[Conti.xlsx#Budget!C7]]\n\nDopo\n", 8);
+    const group = markdownBlockGroup(host, null);
+    const show = (item(group, "markdown.card.show").items ?? []).filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
+    expect(show.map((entry) => entry.id)).toEqual([
+      "markdown.card.show.card",
+      "markdown.card.show.link",
+      "markdown.card.show.row",
+      "markdown.card.show.value",
+    ]);
+    expect(show[3]).toMatchObject({ label: "Valore nel testo", checked: false });
+    show[3]!.run?.();
+    expect(text()).toBe("Prima\n\n![[Conti.xlsx#Budget!C7|value]]\n\nDopo\n");
+    // Mostrata come valore: niente larghezza né «Affianca», ed è la voce scelta.
+    const shown = markdownBlockGroup(hostOf("Prima\n\n![[Conti.xlsx#Budget!C7|value]]\n\nDopo\n", 8).host, null);
+    expect(ids(shown)).toEqual(["markdown.link.open", "markdown.card.show", "markdown.card.remove"]);
+    expect((item(shown, "markdown.card.show").items ?? [])[3]).toMatchObject({ checked: true });
+    // Un intervallo non è una cella: niente «Valore nel testo».
+    const range = markdownBlockGroup(hostOf("![[Conti.xlsx#Budget!A1:C7]]\n", 3).host, null);
+    expect((item(range, "markdown.card.show").items ?? []).map((entry) => typeof entry === "string" ? entry : entry.id)).not.toContain("markdown.card.show.value");
+  });
+
   it("Trasclusione: «Modifica qui» c'è per una sezione o un blocco, dove si scrive", () => {
     const edited: number[] = [];
     const withEdit = (doc: string, editable = true) => {

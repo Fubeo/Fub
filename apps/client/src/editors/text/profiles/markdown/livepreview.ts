@@ -122,6 +122,7 @@ import {
 } from "./link-card";
 import { markPresence } from "../../../core/presence";
 import { holdsLiveCard, liveCardEmbed, LiveCardWidget, type LiveCardEmbed, type LiveCards } from "./live-cards";
+import { cellShownAsValue, cellValueRef, CellValueWidget, onlyCellValues, type CellValues } from "./cell-value";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -167,6 +168,10 @@ export interface LivePreviewCallbacks {
   /// l'embed di un file (un PDF, un foglio, un file Craft) si mostra con
   /// l'ospite delle schede. Senza, l'embed resta la resa di sempre.
   readonly liveCards?: LiveCards;
+  /// I valori di cella nel testo (E23, T53, `./cell-value`): un embed di una
+  /// cella sola di un foglio in mezzo al testo si legge come il suo valore.
+  /// Senza, l'embed resta la resa di sempre.
+  readonly cellValues?: CellValues;
   /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
   /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
   readonly dayPage?: DayPageSource;
@@ -201,6 +206,9 @@ export type LiveDecoKind =
   | "math"
   // widget: immagine del vault in mezzo al testo, `data` è l'HTML della Lettura
   | "image"
+  // widget: il valore di una cella di un foglio in mezzo al testo (T53),
+  // `data` è il bersaglio dell'embed come sta scritto (`Conti.xlsx#Budget!C7`)
+  | "cell-value"
   // widget: la pastiglia di un collegamento col cursore dentro, con `mai`, al
   // posto di `](url)` o di `]]`; `data` è la destinazione
   | "link-pill"
@@ -446,6 +454,7 @@ export function computeDecorations(
   from = 0,
   to = state.doc.length,
   forms?: readonly SyntaxForm[],
+  cells = false,
 ): LiveDeco[] {
   const out: LiveDeco[] = [];
   const declaredInline = inlineDelimiters(forms);
@@ -960,6 +969,15 @@ export function computeDecorations(
       // sezione — due risposte per lo stesso link (§4.4).
       const data = w.target;
       const embedImage = w.embed && !w.heading && !w.block && mediaKindOfId(w.page) === "image";
+      // Il valore di una cella in mezzo al testo (T53), fuori dal cursore come
+      // un'immagine; da solo nel paragrafo è la scheda di foglio, a meno che
+      // l'embed dica `|value`.
+      if (cells && w.embed && !w.block && cellValueRef(w.page, w.heading) !== null
+        && (!aloneAt(rangeStart, rangeEnd) || cellShownAsValue(w.alias))
+        && (reveal.policy === "mai" || !reveal.source(rangeStart, rangeEnd, rangeStart))) {
+        out.push({ from: rangeStart, to: rangeEnd, kind: "cell-value", data: w.target });
+        continue;
+      }
       if (reveal.policy !== "mai" && !(embedImage && imageShown(rangeStart, rangeEnd)) && reveal.source(rangeStart, rangeEnd, rangeStart)) {
         // Sorgente visibile ma link comunque cliccabile e stilato.
         out.push({ from: innerFrom, to: innerA, kind: "wikilink", data });
@@ -1200,7 +1218,7 @@ export function wholePills(
   });
 }
 
-const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "link-pill", "footnote-back"]);
+const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "cell-value", "link-pill", "footnote-back"]);
 
 /// La punteggiatura che non comincia una riga.
 const TRAILING_PUNCTUATION = /^[,.;:!?)\]»”’]+/;
@@ -1721,6 +1739,13 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       return Decoration.replace({ widget: new InlineMathWidget(d.data ?? "") });
     case "image":
       return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", d.to - d.from, d.selected === true, callbacks) });
+    case "cell-value": {
+      const target = parseWikilinkInner(d.data ?? "");
+      const ref = cellValueRef(target.page, target.heading);
+      // Senza la porta `computeDecorations` non lo produce; un riferimento
+      // che non si rilegge resta nascosto come il resto dell'embed.
+      return ref && callbacks.cellValues ? Decoration.replace({ widget: new CellValueWidget(ref, callbacks.cellValues) }) : hidden;
+    }
     case "link-pill":
       return Decoration.replace({ widget: new LinkPillWidget(d.data ?? "") });
     case "footnote-back":
@@ -2712,7 +2737,10 @@ export function livePreview(
     const origin = blockOrigin(block);
     let shape = shapes.get(origin);
     if (!shape) {
-      const media = block.kind === "paragraph" && onlyMedia(block.source);
+      // Un paragrafo di soli valori di cella (T53) è testo: i valori stanno
+      // in riga, come in mezzo a una frase.
+      const media = block.kind === "paragraph" && onlyMedia(block.source)
+        && !(callbacks.cellValues !== undefined && onlyCellValues(block.source));
       shape = { rendered: !INLINE_KINDS.has(block.kind) || media, grid: tableOfBlock(block) !== null };
       shapes.set(origin, shape);
     }
@@ -2962,7 +2990,7 @@ export function livePreview(
     const yaml = frontmatterRange(state.doc);
     for (const visible of ranges) {
       out.lines += state.doc.lineAt(visible.to).number - state.doc.lineAt(visible.from).number + 1;
-      for (const item of computeDecorations(state, active, visible.from, visible.to, forms)) {
+      for (const item of computeDecorations(state, active, visible.from, visible.to, forms, callbacks.cellValues !== undefined)) {
         if (keep && (item.from < keep.from || item.from >= keep.to)) continue;
         if (insideReplaced(replaced, item.from)) continue;
         if (yaml && item.from < yaml.to) continue;
@@ -2990,7 +3018,7 @@ export function livePreview(
           const range = decoration.range(item.from, item.to);
           out.decorations.push(range);
           if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
-            || item.kind === "image" || item.kind === "link-pill" || item.kind === "footnote-back" || item.kind === "task-reminder"
+            || item.kind === "image" || item.kind === "cell-value" || item.kind === "link-pill" || item.kind === "footnote-back" || item.kind === "task-reminder"
             || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") out.atomic.push(range);
           // Le righe dei recinti nascosti: la testata, e la chiusura raccolta.
           if (item.kind === "code-header") out.decorations.push(codeHeaderLine.range(state.doc.lineAt(item.from).from));
