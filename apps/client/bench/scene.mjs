@@ -1840,18 +1840,18 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => [...document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet')]
         .every((sheet) => sheet.dataset.cardState === "content" || sheet.dataset.cardState === "lost"));
       if (scroll === "bottom") {
-        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
-        const last = '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]';
-        await page.waitForSelector(last);
-        // Le schede sopra hanno preso la loro altezza: si va in fondo adesso.
-        await page.evaluate(() => {
+        // Le schede sopra prendono la loro altezza anche dopo il primo salto in
+        // fondo, e CodeMirror disegna solo le righe nella vista: si torna in
+        // fondo a ogni controllo finché le due schede dell'ultima riga ci sono
+        // e l'ultima sta nella finestra (un'attesa sola, senza corse).
+        await page.waitForFunction(() => {
           const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
-          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+          if (!scroller) return false;
+          scroller.scrollTop = scroller.scrollHeight;
+          const missing = document.querySelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
+          const card = document.querySelector('.pane.focus .pane-editor .live-card[data-card-state="unsupported"]')?.getBoundingClientRect();
+          return missing !== null && card !== undefined && card.bottom <= window.innerHeight;
         });
-        await page.waitForFunction((selector) => {
-          const card = document.querySelector(selector)?.getBoundingClientRect();
-          return card !== undefined && card.bottom <= window.innerHeight;
-        }, last);
       }
       if (scroll === "lost") {
         // La parte persa sta sotto il foglio: la si porta in alto nella vista.
