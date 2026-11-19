@@ -5,6 +5,7 @@
 > 60 Hz dove WebKit lo permette?
 > **Fonti autorevoli:** `crates/fub-app/src/disegno.rs`,
 > `crates/fub-app/src/frame_rate.rs`, `crates/fub-app/src/vblank.rs`,
+> `crates/fub-app/src/orologio.rs`,
 > `crates/fub-app/src/main.rs`, `crates/fub-app/build.rs`,
 > `crates/fub-app/src/lib.rs` (`run`),
 > `crates/fub-host/src/settings.rs` (`appearance.rendering`),
@@ -51,28 +52,50 @@ disegna col processore.
 |---|---|---|---|
 | qualunque | driver NVIDIA disallineato | nessuna | «riavvia il computer» |
 | `auto` | NVIDIA < 555 primaria, Wayland, driver allineato, nessuna variabile dell'utente | nessuna | proposta: disegno col processore, movimento calmo, lascia così |
+| `auto`, `gpu` | NVIDIA ≥ 555 primaria, Wayland, driver allineato, nessuna variabile dell'utente | `WEBKIT_FORCE_DMABUF_RENDERER=1` | nessuno |
+| `auto`, `gpu` | WebKitGTK dalla 2.53.0 alla 2.54.1, nessuna variabile dell'utente | `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` | nessuno |
 | `auto` | ogni altro caso | nessuna | nessuno |
-| `gpu` | qualunque | nessuna | solo quello del driver disallineato |
+| `gpu` | ogni altro caso | nessuna | solo quello del driver disallineato |
 | `cpu` | qualunque | `WEBKIT_SKIA_ENABLE_CPU_RENDERING=1` | solo quello del driver disallineato |
 
-`auto` non scrive mai variabili, e la ragione sono le misure fatte su
+`auto` non sceglie il renderer, e la ragione sono le misure fatte su
 Debian 13, niri, RTX 4070 e WebKitGTK 2.54:
 
 - col disegno software Skia CPU è pari al default a PC scarico e peggiore
   sotto carico;
 - sotto NVIDIA < 555 su Wayland Skia CPU dà più fotogrammi, ma lo
   sfarfallio resta: per questo Fub lo propone e non lo fa da solo;
-- per NVIDIA ≥ 555 senza sincronizzazione esplicita del compositor
-  (`__NV_DISABLE_EXPLICIT_SYNC`) e per le VM senza 3D non ci sono misure, e
-  senza misure non si cambia il percorso.
+- per le VM senza 3D non ci sono misure, e senza misure non si cambia il
+  percorso.
+
+Le due variabili che `auto` e `gpu` scrivono non cambiano il renderer:
+correggono due difetti misurati.
+
+- `WEBKIT_FORCE_DMABUF_RENDERER=1` toglie la copia in memoria condivisa
+  della patch NVIDIA di Debian
+  ([Il trasporto dei fotogrammi su Debian](#il-trasporto-dei-fotogrammi-su-debian)):
+  con l'orologio di GTK allo schermo la pagina passa da 42–58 a 178
+  fotogrammi al secondo su uno schermo a 180 Hz. Dove la patch non c'è la
+  variabile non esiste. Solo dal 555, il primo driver con la
+  sincronizzazione esplicita.
+- `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` toglie i fotogrammi vecchi che la
+  composizione di Skia rimette sullo schermo dopo un'animazione, nelle
+  WebKitGTK dalla 2.53.0 alla 2.54.1 (corretto a monte nella 2.54.2, commit
+  WebKit `4af7b773e279`). L'intervallo sta in
+  `disegno::SKIA_DIFETTOSA_DA` / `SKIA_DIFETTOSA_FINO_A`, la versione è
+  quella della libreria caricata. La composizione di TextureMapper non
+  abbassa il ritmo (misure in
+  [Il ritmo dello schermo su NVIDIA](../misure/2026-11-19-linux-ritmo-schermo.md)).
 
 Fub **non scrive mai** `WEBKIT_DISABLE_DMABUF_RENDERER` né
 `WEBKIT_DISABLE_COMPOSITING_MODE`: sono le varianti peggiori in ogni gesto
 misurato. Le variabili che l'utente ha già messo vincono sempre: con
 `WEBKIT_DISABLE_DMABUF_RENDERER`, `WEBKIT_SKIA_ENABLE_CPU_RENDERING`,
 `WEBKIT_DISABLE_COMPOSITING_MODE`, `WEBKIT_DMABUF_RENDERER_FORCE_SHM`,
-`__NV_DISABLE_EXPLICIT_SYNC` o `GDK_BACKEND` nell'ambiente Fub non propone
-niente, e `cpu` non tocca una `WEBKIT_SKIA_ENABLE_CPU_RENDERING` già messa.
+`WEBKIT_FORCE_DMABUF_RENDERER`, `WEBKIT_USE_SKIA_FOR_COMPOSITION`,
+`__NV_DISABLE_EXPLICIT_SYNC` o `GDK_BACKEND` nell'ambiente, con qualunque
+valore, Fub non propone niente e non scrive le sue due, e `cpu` non tocca
+una `WEBKIT_SKIA_ENABLE_CPU_RENDERING` già messa.
 
 ### L'impostazione
 
@@ -222,12 +245,45 @@ da Debian probabilmente lo ereditano (non verificato). `webkit://gpu` lo mostra 
 «DMABuf (Supported buffers: Shared Memory)» e «Buffer format: Shared
 Memory».
 
-Fub non scrive `WEBKIT_FORCE_DMABUF_RENDERER`: il trasporto resta quello del
-pacchetto. Con la variabile i gesti continui passano da circa 54 a 60
-fotogrammi al secondo, ma si fermano lì (la finestra GTK disegna allora con
-EGL, con due attese di fotogramma per fotogramma), e lo sfarfallio non è
-stato guardato: numeri e condizioni in
-[Il vblank emulato su NVIDIA](../misure/2026-11-17-linux-vblank-emulato.md#la-proposta).
+Con NVIDIA dal 555 sotto Wayland Fub scrive `WEBKIT_FORCE_DMABUF_RENDERER=1`
+([La tabella dei casi](#la-tabella-dei-casi)): i fotogrammi restano sulla
+scheda e la finestra GTK li disegna con GL. Da sola la variabile porta la
+pagina da 42–58 a 60 fotogrammi al secondo esatti, perché nel modo GL
+l'orologio di GTK3 va a 60 ([qui sotto](#lorologio-di-gtk3-nel-modo-gl));
+con l'orologio allo schermo arriva a 178.
+
+### L'orologio di GTK3 nel modo GL
+
+Il processo dell'app ridisegna la webview a ogni giro dell'orologio dei
+fotogrammi di GTK (`GdkFrameClock`). GTK3 fa il giro successivo dopo
+l'intervallo di refresh scritto nei tempi del fotogramma precedente
+(`gdk_frame_clock_paint_idle`, `gdk/gdkframeclockidle.c` di GTK 3.24), e
+quell'intervallo lo scrive solo il frame callback di Wayland
+(`frame_callback`, `gdk/wayland/gdkwindow-wayland.c`), dalla frequenza
+dello schermo della finestra. Quando la finestra disegna con GL (i
+fotogrammi DMA-BUF di WebKit sulla scheda: il Flatpak, o Debian con
+`WEBKIT_FORCE_DMABUF_RENDERER=1`) il commit lo fa `eglSwapBuffers` e GTK
+non chiede più il suo frame callback: l'intervallo resta 0 e GTK ripiega su
+`FRAME_INTERVAL`, 16 667 µs. La pagina va a 60 fotogrammi al secondo esatti
+anche su uno schermo a 180 Hz, con il rAF del vblank emulato a 180: i due
+`wl_callback.done` per commit delle misure del 17 novembre sono il frame
+callback di EGL e la sua `wl_display.sync`, letti insieme al commit
+successivo.
+
+`src/orologio.rs` scrive quell'intervallo al posto del frame callback: su
+ogni finestra, dopo ogni disegno (`after-paint`), se il campo è ancora 0 ci
+mette il periodo dello schermo dove sta la finestra
+(`gdk_monitor_get_refresh_rate`, 24–500 Hz). Il campo è privato
+(`struct _GdkFrameTimings`, `gdk/gdkframeclockprivate.h`), con la
+disposizione della 3.24.21 e seguenti; per non scrivere mai nel campo
+sbagliato si scrive solo se il getter pubblico
+(`gdk_frame_timings_get_refresh_interval`) e il campo dicono 0 tutti e due,
+e dopo la scrittura il getter deve leggere il valore scritto: se no il
+campo torna 0 e l'orologio non si tocca più. Vale solo per GTK 3 dalla
+3.24.21, sotto Wayland; `FUB_OROLOGIO_GTK=0` la spegne. Dove GTK disegna da
+sé (memoria condivisa) il frame callback arriva dopo e riscrive lo stesso
+valore. Su uno schermo a 60 Hz l'intervallo è quello di prima. Numeri in
+[Il ritmo dello schermo su NVIDIA](../misure/2026-11-19-linux-ritmo-schermo.md).
 
 ## Come si verifica
 
@@ -235,7 +291,12 @@ stato guardato: numeri e condizioni in
   perché no (`Spenta`, `VersioneFuori`, `VersioneIgnota`, `NonInterposta`);
   `WebKitGTK emulated vblank for CRTC` dice, quando WebKit crea il monitor,
   per quale CRTC e a che frequenza (`emulata_mhz`, 0 se resta il driver).
-
+- La riga `GTK frame clock at the monitor rate` dice se l'orologio di GTK
+  allo schermo è acceso (`Attiva`, `Spenta`); `…: first frame` dice, per
+  ogni finestra, il primo intervallo scritto (`mhz`, `intervallo_us`), cioè
+  che la finestra disegna con GL; `…: not needed here` che GTK o il backend
+  non sono quelli coperti, `…: unknown GdkFrameTimings layout, off` che la
+  verifica col getter non è passata.
 - La riga del log `rendering path chosen before GTK` dice che cosa è stato
   scelto.
 - La riga `WebKitGTK 60 fps preference` dice se la feature è stata trovata e
