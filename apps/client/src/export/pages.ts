@@ -91,8 +91,13 @@ export class ExportPages {
       if (event.key !== "Enter" && event.key !== " ") return;
       if (this.pick(event)) event.preventDefault();
     });
-    this.observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => this.relayoutZoom()) : null;
-    this.observer?.observe(this.stage);
+    // Senza `ResizeObserver` (happy-dom) lo zoom non segue la larghezza del palco.
+    if (typeof ResizeObserver === "function") {
+      this.observer = new ResizeObserver(() => this.relayoutZoom());
+      this.observer.observe(this.stage);
+    } else {
+      this.observer = null;
+    }
   }
 
   /// Lo zoom di adesso.

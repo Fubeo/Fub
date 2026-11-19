@@ -4177,10 +4177,14 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       title: pageName(doc),
       render: renderPrint,
       mount: (container, rendered) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }),
-      follow: (changed) => documentSessions.subscribe((event) => {
-        if (event.id !== doc) return;
-        if (event.kind === "changed" || event.kind === "saved") changed(event.kind);
-      }),
+      // Il disposer torna allo spazio, che lo chiude con la sua `Lifetime`.
+      follow: (changed) => {
+        const unsubscribe = documentSessions.subscribe((event) => {
+          if (event.id !== doc) return;
+          if (event.kind === "changed" || event.kind === "saved") changed(event.kind);
+        });
+        return unsubscribe;
+      },
       save: async () => {
         await documentSessions.flush(doc);
       },

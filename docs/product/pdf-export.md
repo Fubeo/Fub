@@ -5,7 +5,7 @@ di esportarle: come vanno a capo, dove cade ogni interruzione, che cosa sta
 nella testata e nel piè di pagina. Vive in
 [`apps/client/src/export/`](../../apps/client/src/export/); le pagine le
 taglia l'impaginatore della stampa (`PrintPaginator` in
-[`print-paginator.ts`](../../apps/client/src/editors/media/print-paginator.ts)),
+[`paginate/slices.ts`](../../apps/client/src/export/paginate/slices.ts)),
 le regole del profilo sono quelle del core (`fub-markdown`, il `Profilo` di
 stampa).
 
