@@ -105,7 +105,8 @@ Il campo del pannello dei segnalibri segue la stessa regola, sul nome e sul
 percorso del segnalibro.
 Nella testata del foglio ogni cartella del percorso della nota si preme col
 puntatore: l'albero la apre e la porta in vista. Il nome resta il titolo che
-si rinomina col doppio clic o con F2. Una nota rinominata o spostata, da Fub o
+si rinomina col doppio clic o con F2; col fuoco sul nome, scrivere apre il
+campo con la prima lettera già dentro. Una nota rinominata o spostata, da Fub o
 da un'altra app, resta appuntata col percorso nuovo e tiene la sua icona: la
 scrivania e l'explorer mostrano la stessa appuntata.
 

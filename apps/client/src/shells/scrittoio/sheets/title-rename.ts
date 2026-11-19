@@ -4,7 +4,8 @@
 // (`.pane-toolbar > .muted`: il vault, le cartelle e il nome in `.crumb-name`,
 // col percorso intero in `data-path`). Qui quel percorso diventa il posto da cui
 // si rinomina: doppio clic sul nome, oppure F2 (o Invio, o Spazio) col fuoco sul
-// titolo, e al suo posto compare un campo col nome della pagina. Invio rinomina,
+// titolo, e al suo posto compare un campo col nome della pagina. Un carattere
+// scritto col fuoco sul titolo apre il campo e ne è l'inizio. Invio rinomina,
 // Esc e la perdita del fuoco lasciano tutto com'era. Il vault e le cartelle del
 // percorso (`[data-folder]`) sono della vista, che le apre nell'esplora: il
 // doppio clic lì non rinomina.
@@ -83,6 +84,13 @@ export function proposedName(from: string, typed: string): string | null {
   const clean = searchedName(typed);
   if (clean === null || clean === typed.trim() || clean === pageName(from)) return null;
   return nameFault(pageRenameTarget(from, clean).to, "new") === null ? clean : null;
+}
+
+/// Una battuta che scrive un carattere: non una scorciatoia, non un tasto con
+/// nome (Tab, Maiusc, un tasto morto), non lo Spazio, che preme il bottone.
+function writes(event: KeyboardEvent): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return false;
+  return event.key !== " " && [...event.key].length === 1;
 }
 
 export function mountTitleRename(lifetime: Lifetime): void {
@@ -374,6 +382,19 @@ export function mountTitleRename(lifetime: Lifetime): void {
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       title.click();
+    } else if (writes(event)) {
+      // Chi ha cliccato il titolo e scrive il nome nuovo di getto: la prima
+      // lettera apre il campo e ne è l'inizio. Senza, le lettere prima del
+      // primo spazio cadevano sul bottone e lo Spazio apriva il campo col
+      // nome selezionato, che il resto sostituiva (IMP-3806).
+      const bar = barOf(title);
+      if (!bar) return;
+      event.preventDefault();
+      open(bar);
+      const input = edit?.input;
+      if (!input) return;
+      input.value = event.key;
+      input.setSelectionRange(input.value.length, input.value.length);
     }
   });
   // Un clic del puntatore sul titolo non rinomina (è il doppio clic a farlo);
