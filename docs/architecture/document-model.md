@@ -164,7 +164,9 @@ e un avviso per ciò che la griglia non mostra o non ricalcola. La griglia
 disegna lo stile risolto di ogni cella (carattere, bordi, allineamento,
 rotazione, barre e icone della formattazione condizionale), le celle unite, i
 commenti, il testo che passa nelle celle vuote accanto e la vista del foglio
-(riquadri bloccati, zoom, griglia e intestazioni). Modificare una costante
+(riquadri bloccati, zoom, griglia e intestazioni). Il testo che passa accanto
+non prende i gesti: un clic, un doppio clic o il tasto destro su una cella
+vuota coperta da lui valgono per la cella sotto il puntatore. Modificare una costante
 scrive una voce del giornale; le celle bloccate (matrici, formule condivise,
 tabelle, celle unite, pivot, fogli protetti) lo dicono già nella finestra.
 Una formula, un comando del catalogo (anche dalle scorciatoie di Excel,

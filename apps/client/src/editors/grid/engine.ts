@@ -1044,9 +1044,8 @@ export class GridEngine {
         if (object.dataset.object) this.#beginObjectText(object.dataset.object);
         return;
       }
-      const cell = target.closest<HTMLElement>(".grid-cell");
-      const position = cell ? this.#positionOf(cell) : null;
-      if (position) this.#beginEditing("cell", position, undefined, "edit");
+      const position = this.#pressedCell(target, event.clientX, event.clientY);
+      if (position) this.#beginEditing("cell", this.#anchorOf(position), undefined, "edit");
     }), { signal });
     this.#formulaHost.addEventListener("focusin", () => {
       // Dalla cella aperta alla barra la bozza passa con lei.
@@ -1523,7 +1522,7 @@ export class GridEngine {
       return "object";
     }
     if (!this.#viewport.contains(element)) return null;
-    const cell = this.#eventPosition({ target: element } as unknown as Event);
+    const cell = this.#pressedCell(element, x, y);
     const hit = cell ?? this.#hit(x, y, false);
     if (!hit) return null;
     if (this.#selectedObject !== null) this.#selectObject(null);
@@ -6222,12 +6221,23 @@ export class GridEngine {
     return { row, column };
   }
 
-  #eventPosition(event: Event): GridPosition | null {
-    const target = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-cell") : null;
+  /// La cella sotto il punto `x`, `y`, a partire dall'elemento premuto. Un
+  /// testo che deborda (`.spill`) sta sopra le celle vuote accanto, e il
+  /// browser gli dà il puntatore anche lì: per lui vale il punto, non la
+  /// cella del testo, o il clic sceglierebbe la cella sbagliata (IMP-512).
+  #pressedCell(element: EventTarget | null, x: number, y: number): GridPosition | null {
+    const target = element instanceof Element ? element.closest<HTMLElement>(".grid-cell") : null;
     if (!target) return null;
-    const row = Number(target.dataset.row);
-    const column = Number(target.dataset.column);
-    return Number.isInteger(row) && Number.isInteger(column) ? { row, column } : null;
+    // Un evento senza punto (uno sintetico, da tastiera) vale per la cella.
+    if (target.classList.contains("spill") && Number.isFinite(x) && Number.isFinite(y)) {
+      const hit = this.#hit(x, y, false);
+      if (hit && hit.row !== null && hit.column !== null) return { row: hit.row, column: hit.column };
+    }
+    return this.#positionOf(target);
+  }
+
+  #eventPosition(event: MouseEvent): GridPosition | null {
+    return this.#pressedCell(event.target, event.clientX, event.clientY);
   }
 
   /// Scorre fino a `position`. Una riga o una colonna bloccata si vede
