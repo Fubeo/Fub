@@ -92,7 +92,7 @@ import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
 import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
-import { syntaxForms, unsavedDrafts } from "../host/query";
+import { noteProperties, syntaxForms, unsavedDrafts } from "../host/query";
 import type { CardEditorHub, CardNotices } from "../editors/core/cards/editor-port";
 import { lazyCardEditorHub } from "./card-writes";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
@@ -4223,6 +4223,8 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       save: async () => {
         await documentSessions.flush(doc);
       },
+      // Il frontmatter dall'indice: icona, autore e proprietà del frontespizio.
+      properties: () => noteProperties(doc),
       onClose: () => {
         if (openExport?.close === close) openExport = null;
       },

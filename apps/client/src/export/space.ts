@@ -21,6 +21,13 @@
 // la resa, il montaggio e la misura del libro, ogni nota un capitolo che
 // comincia su una pagina sua; il resto (le pagine, le sezioni, la banda, la
 // stampa) non sa che le note sono più d'una.
+//
+// Intorno alle pagine della nota lo spazio mette il frontespizio, l'indice e
+// su ogni foglio la testata e il piè (T73): i fogli e i loro numeri li decide
+// `paginate/toc.ts`, l'indice si misura su un foglio fuori dalla vista. Un
+// cambio di testata, frontespizio o indice ridisegna i fogli e non rifà
+// l'impaginazione della nota; col frontespizio il titolo in cima alla nota
+// esce dall'impaginazione (sta sul frontespizio).
 
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -31,11 +38,14 @@ import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { createBand, type Band } from "./band";
-import { ExportPages, steppedZoom } from "./pages";
-import { PrintMeasure } from "./paginate/measure";
+import { ExportPages, steppedZoom, type PageDecor } from "./pages";
+import { PrintMeasure, printBlocks } from "./paginate/measure";
+import { frontMatter, headingsOf, sectionHeadings, sectionsByPage, type FrontSettings, type TocEntry, type TocMetrics } from "./paginate/toc";
 import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
 import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
+import { coverFactsOf, drawCover, drawTocPage, type CoverFacts } from "./sections/cover-toc";
+import { displayPath, drawHeaderFooter, longDate } from "./sections/header-footer";
 import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
 import { numberHeadings } from "./themes";
 import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
@@ -68,6 +78,11 @@ export interface ExportSpaceOptions {
   /// sistema le stesse pagine.
   readonly exportPdf?: (profile: ExportProfile) => Promise<void>;
   readonly profile?: ExportProfile;
+  /// Le proprietà della nota (il frontmatter, dall'indice): l'icona, l'autore
+  /// e le proprietà in evidenza del frontespizio, l'autore della testata. Si
+  /// richiedono all'apertura e quando la nota cambia; senza, il frontespizio
+  /// ha il titolo e la data.
+  readonly properties?: () => Promise<readonly { readonly key: string; readonly value: unknown }[]>;
   readonly onClose?: () => void;
   readonly scheduler?: Scheduler;
   readonly waitMs?: number;
@@ -100,6 +115,21 @@ function bookmarksOf(result: SlicedResult): number {
   return result.boxes.filter((box) => box.kind === "heading").length;
 }
 
+/// Le misure dell'indice quando il foglio non si dispone (happy-dom): il
+/// titolo e ogni voce come li disegna la pelle col corpo di serie.
+const TOC_FALLBACK = { heading: 48, row: 22 };
+
+/// Le scelte del profilo che decidono i fogli.
+function frontSettingsOf(profile: ExportProfile): FrontSettings {
+  return {
+    cover: profile.frontespizio.frontespizio,
+    toc: profile.frontespizio.indice,
+    roman: profile.testata.numeri_romani,
+    firstWithoutHeader: profile.testata.prima_pagina_senza,
+    depth: profile.frontespizio.profondita_indice,
+  };
+}
+
 /// Registra le icone dello spazio (una volta: un tema può ridisegnarle).
 export function registerExportSpaceIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
@@ -120,6 +150,9 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   const finals: ((result: SlicedResult) => void)[] = [];
   let readyTold = false;
   let settings = printSettingsOf(profile);
+  let cover: CoverFacts = { title: options.title, path: displayPath(options.doc), author: "", date: longDate(), icon: null, properties: [] };
+  /// L'ultimo indice misurato: si rimisura solo se cambiano le voci o la pagina.
+  let tocMeasured: { key: string; metrics: TocMetrics } | null = null;
 
   const root = document.createElement("div");
   root.className = "export-space";
@@ -278,14 +311,88 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     renderSide();
   }
 
-  function onUpdate(result: SlicedResult): void {
-    latest = result;
-    pages.show(result, paginator.host, settings.layout);
+  /// L'indice su un foglio fuori dalla vista: quanto è alto il titolo e
+  /// ogni voce, coi caratteri delle pagine.
+  function measureToc(entries: readonly TocEntry[]): TocMetrics {
+    const { page } = settings.layout;
+    const key = JSON.stringify([page, settings.layout.type, entries.map((entry) => [entry.level, entry.text, entry.number, entry.page])]);
+    if (tocMeasured?.key === key) return tocMeasured.metrics;
+    const metrics = pages.measureSheet(page, (body) => {
+      const toc = drawTocPage(body, entries, true);
+      const rows = [...toc.querySelectorAll<HTMLElement>(".export-toc-row")];
+      const top = toc.getBoundingClientRect().top;
+      const first = rows[0]?.getBoundingClientRect();
+      const heights = rows.map((row) => row.getBoundingClientRect().height);
+      // Senza disposizione (happy-dom) tutto è alto 0: le misure di serie.
+      if (!first || heights.every((height) => height === 0)) {
+        return { page: body.clientHeight || page.height - page.margin.top - page.margin.bottom, heading: TOC_FALLBACK.heading, rows: rows.map(() => TOC_FALLBACK.row) };
+      }
+      return { page: page.height - page.margin.top - page.margin.bottom, heading: Math.max(0, first.top - top), rows: heights };
+    });
+    tocMeasured = { key, metrics };
+    return metrics;
+  }
+
+  /// I fogli di un'impaginazione: frontespizio, indice, pagine della nota,
+  /// e su ognuno testata e piè.
+  function decorOf(result: SlicedResult): PageDecor {
+    const page = paginator.host.querySelector<HTMLElement>(".print-page");
+    const blocks = page ? printBlocks(page) : [];
+    const headings = headingsOf(result.boxes, (box) => {
+      const block = blocks[result.blocks[box] ?? -1];
+      return { text: block?.textContent ?? "", number: block?.dataset["printNumber"] ?? "" };
+    });
+    const front = frontMatter({
+      settings: frontSettingsOf(profile),
+      headings,
+      flowPages: result.pagination.pages.length,
+      final: result.final,
+      firstPage: result.firstPage,
+      measure: measureToc,
+    });
+    const sections = sectionsByPage(result.pagination.pages, sectionHeadings(headings));
+    const geometry = settings.layout.page;
+    const shown = profile;
+    const facts = cover;
+    return {
+      sheets: front.sheets,
+      front: front.front,
+      draw(sheetPage, body, sheet, ordinal) {
+        if (sheet.kind === "frontespizio") drawCover(body, facts, geometry.margin);
+        else if (sheet.kind === "indice") drawTocPage(body, front.toc[sheet.index] ?? [], sheet.index === 0);
+        const section = sheet.kind === "pagina" ? (sections[sheet.index] ?? "") : "";
+        drawHeaderFooter(sheetPage, geometry, shown.testata, facts, sheet, section, shown.pagina.specchio && ordinal % 2 === 1);
+      },
+    };
+  }
+
+  /// Il numero delle pagine del PDF: i fogli prima della nota e le sue.
+  function pageTotal(result: SlicedResult, decor: PageDecor): number | null {
+    const flow = result.final ? result.pagination.pages.length : result.total;
+    return flow === null ? null : decor.front + flow;
+  }
+
+  function updateBand(result: SlicedResult, decor: PageDecor): void {
     band.update(profile, {
-      pages: result.final ? result.pagination.pages.length : result.total,
+      pages: pageTotal(result, decor),
       bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(result) : null,
       ms: result.workMs,
     });
+  }
+
+  /// Ridisegna i fogli intorno alla stessa impaginazione.
+  function redecorate(): void {
+    if (!latest) return;
+    const decor = decorOf(latest);
+    pages.decorate(decor);
+    updateBand(latest, decor);
+  }
+
+  function onUpdate(result: SlicedResult): void {
+    latest = result;
+    const decor = decorOf(result);
+    pages.show(result, paginator.host, settings.layout, decor);
+    updateBand(result, decor);
     toolbar.setZoom(pages.zoom);
     if (result.final) {
       for (const resolve of finals.splice(0)) resolve(result);
@@ -380,7 +487,29 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     } finally {
       saving = false;
     }
-    if (!closed) void paginator.reload();
+    if (!closed) {
+      void paginator.reload();
+      void loadProperties();
+    }
+  }
+
+  /// Le proprietà della nota per il frontespizio e la testata; una risposta
+  /// vecchia arrivata dopo una nuova si scarta, un errore lascia quelle di
+  /// prima.
+  let propertiesAsked = 0;
+  async function loadProperties(): Promise<void> {
+    if (!options.properties) return;
+    const asked = ++propertiesAsked;
+    let read: readonly { readonly key: string; readonly value: unknown }[];
+    try {
+      read = await options.properties();
+    } catch {
+      return;
+    }
+    if (closed || asked !== propertiesAsked) return;
+    const facts = coverFactsOf(read);
+    cover = { ...cover, ...facts };
+    redecorate();
   }
   if (options.follow) lifetime.add(options.follow(follow));
   lifetime.add(() => window.clearTimeout(followTimer));
@@ -422,13 +551,18 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       toolbar.setZoom(pages.setView(next, free));
     },
     setProfile(next, change) {
+      const before = profile;
       profile = next;
       previewing = null;
       showSettings(printSettingsOf(next));
       toolbar.setProfile(next.nome, next !== base);
+      // Testata, frontespizio e indice non cambiano le misure della nota:
+      // si ridisegnano i fogli, anche dal vivo (un testo tuo mentre si scrive).
+      const decorChanged = before.testata !== next.testata || before.frontespizio !== next.frontespizio || before.pagina.specchio !== next.pagina.specchio;
+      if (decorChanged) redecorate();
       if (change?.live) return;
       renderSide();
-      if (latest) band.update(profile, { pages: latest.final ? latest.pagination.pages.length : latest.total, bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(latest) : null, ms: latest.workMs });
+      if (latest && !decorChanged) updateBand(latest, decorOf(latest));
     },
     openSection(id) {
       if (!SECTIONS.some((section) => section.id === id)) return;
@@ -461,5 +595,6 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   }
   root.focus({ preventScroll: true });
   void paginator.open();
+  void loadProperties();
   return space;
 }

@@ -337,6 +337,21 @@ export async function existingDocuments(docs: string[]): Promise<Set<string>> {
   return new Set(page.items.map((m) => m.doc));
 }
 
+/// Le proprietà del frontmatter di una nota come le ha lette l'indice (il
+/// frontespizio dell'esportazione in PDF, T73). Una nota che l'indice non
+/// conosce, o senza frontmatter, risponde con l'elenco vuoto.
+export async function noteProperties(doc: string): Promise<{ key: string; value: unknown }[]> {
+  const page = await runQuery({
+    kind: "documents",
+    matching: theseDocuments([doc]),
+    sort: null,
+    select: { kind: "all" },
+    page: { offset: 0, limit: 1 },
+    excerpts: "omit",
+  });
+  return page.items.find((item) => item.doc === doc)?.properties ?? [];
+}
+
 /// I titoli di un documento come li ha letti l'indice, in ordine di sorgente.
 ///
 /// Un id che non è un documento risponde con l'elenco vuoto, come un documento

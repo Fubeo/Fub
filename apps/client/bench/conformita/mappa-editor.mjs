@@ -568,6 +568,28 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf-temi" },
   },
+  /// Testata e piè, frontespizio e indice (T73): il prototipo al passo
+  /// «Tutto il cambiabile, dal vivo» (il profilo «Relazione per il Comune»:
+  /// tema Relazione, frontespizio, indice, sezione e titolo in testata, data
+  /// e pagine nel piè, le sezioni Frontespizio e Testata aperte), l'app dalla
+  /// scena che porta lo spazio allo stesso profilo coi suoi controlli.
+  "esporta-pdf-testata": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Tutto il cambiabile, dal vivo");
+        await page.waitForSelector("#win .px:not([hidden]) .px-hfp");
+        await page.waitForSelector("#win .px:not([hidden]) .ptoc-r b");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-testata" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -2222,6 +2244,150 @@ export const PEZZI = [
     prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
     app: '#export-colors-gray .export-toggle-knob',
     proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── Testata e piè, frontespizio e indice (T73, passo 29) ──────────────
+  // Il pannello: i sei posti sopra e sotto la paginetta finta, «Fin dove»
+  // dell'indice. Le pagine: testata, piè, frontespizio, indice, coi colori e
+  // i caratteri del tema di stampa (Relazione dai due lati).
+  {
+    id: "esporta.testata-posti",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfp",
+    app: ".export-header-grid",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.testata-fila",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfr",
+    app: ".export-header-row",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.testata-posto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs:not(.on)",
+    app: ".export-slot-choice:not(.is-set)",
+    proprieta: [...BASE, "height", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.testata-posto-scelto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs.on",
+    app: ".export-slot-choice.is-set",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.testata-paginetta",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm",
+    app: ".export-header-lines",
+    proprieta: ["display", "gap", "padding"],
+  },
+  {
+    id: "esporta.testata-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm i:not(.s)",
+    app: ".export-header-line:not(.export-header-line-short)",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "esporta.fronte-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-row',
+    app: '.export-section[data-section="fronte"] .export-row',
+    proprieta: ["display", "gap", "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.fronte-scritta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-rl',
+    app: '.export-section[data-section="fronte"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.fronte-scelte",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg',
+    app: ".export-choices",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.fronte-scelta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="false"]',
+    app: '.export-choice[aria-checked="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.fronte-scelta-premuta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="true"]',
+    app: '.export-choice[aria-checked="true"]',
+    proprieta: ["background", "color", "box-shadow"],
+  },
+  {
+    id: "esporta.pagina-testata",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hd.rule",
+    app: ".export-header.has-rule",
+    proprieta: ["display", "font-variant-numeric", "border-bottom"],
+  },
+  {
+    id: "esporta.pagina-pie",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-ft",
+    app: ".export-footer",
+    proprieta: ["display", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.frontespizio",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover",
+    app: ".export-cover",
+    proprieta: ["display", "flex-direction", "justify-content"],
+  },
+  {
+    id: "esporta.frontespizio-filo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover-band",
+    app: ".export-cover-band",
+    proprieta: ["position", "background"],
+  },
+  {
+    id: "esporta.frontespizio-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover h1",
+    app: ".export-cover-title",
+    proprieta: ["font-weight", "letter-spacing", "color"],
+  },
+  {
+    id: "esporta.indice-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-h",
+    app: ".export-toc-title",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.indice-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r.l-h2",
+    app: '.export-toc-row[data-depth="0"]',
+    proprieta: ["display", "align-items", "gap"],
+  },
+  {
+    id: "esporta.indice-puntini",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r i",
+    app: ".export-toc-dots",
+    proprieta: ["flex-grow", "opacity", "border-bottom-style"],
+  },
+  {
+    id: "esporta.indice-numero",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r b",
+    app: ".export-toc-page",
+    proprieta: ["font-weight", "font-variant-numeric", "text-align"],
   },
 ];
 

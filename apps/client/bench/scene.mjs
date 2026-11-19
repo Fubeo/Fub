@@ -581,7 +581,8 @@ export const SCENE = touchLast(onPage("shell", [
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
     ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, true],
-  ].map(([id, title, viewport, themes]) => ({
+    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, false, true],
+  ].map(([id, title, viewport, themes, front]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
@@ -595,6 +596,7 @@ export const SCENE = touchLast(onPage("shell", [
       if (size) await page.setViewportSize(size);
       await openExportSpace(page);
       if (themes) await openThemeSections(page);
+      if (front) await openFrontSections(page);
     },
   })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
@@ -3291,6 +3293,40 @@ async function openThemeSections(page) {
   await page.evaluate(() => {
     const side = document.querySelector(".export-side");
     if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Porta lo spazio «Esporta in PDF» dove sta il passo 29 del prototipo (il
+/// profilo «Relazione per il Comune»): tema Relazione, frontespizio e indice,
+/// in testata la sezione a sinistra e il titolo a destra, nel piè la data a
+/// sinistra e «pagina di pagine» a destra; le sezioni Frontespizio e Testata
+/// aperte, due pagine affiancate (T73).
+async function openFrontSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-theme[data-theme="relazione"]');
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="fronte"] .export-section-head');
+  await page.click("#export-front-cover");
+  await page.click("#export-front-toc");
+  await page.click('.export-section[data-section="testata"] .export-section-head');
+  for (const [slot, label] of [["sopra-sinistra", "Sezione"], ["sotto-sinistra", "Data"], ["sotto-centro", "Niente"], ["sotto-destra", "Pagina di pagine"]]) {
+    await page.click(`#export-header-${slot}`);
+    await page.click(`#context-menu [role=menuitemradio]:has-text("${label}")`);
+    await page.waitForSelector("#context-menu", { state: "detached" });
+  }
+  // Sotto i 760 px le viste non ci sono (la finestra della conformità a 700).
+  if (await page.isVisible('.export-segment[data-view="due"]')) await page.click('.export-segment[data-view="due"]');
+  await page.waitForSelector(".export-space .export-cover-title");
+  await page.waitForSelector(".export-space .export-toc-row");
+  // L'indice ha i numeri veri quando l'impaginazione è finita.
+  await page.waitForFunction(() => [...document.querySelectorAll(".export-space .export-toc-page")].every((node) => /^\d+$/.test(node.textContent ?? "")), null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    const stage = document.querySelector(".export-stage");
+    if (stage) stage.scrollTop = 0;
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
   await page.mouse.move(0, 0);
