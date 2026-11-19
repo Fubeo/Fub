@@ -698,6 +698,16 @@ impl ExternalSync {
         Arc::clone(&self.lifecycle)
     }
 
+    /// Le cartelle che la politica di esclusione vuole guardate **adesso**.
+    ///
+    /// Un prestito condiviso breve e nessun I/O. `None` se il workspace non si
+    /// presta più: il lotto che segue lo riferisce come guasto, e chi guarda
+    /// resta intanto sulle cartelle che aveva.
+    #[cfg(feature = "notify-watcher")]
+    fn watch_scope(&self) -> Option<fub_kernel::ignore::WatchScope> {
+        self.workspace.read().ok().map(|ws| ws.watch_scope())
+    }
+
     /// Applica un lotto di cambiamenti. Vedi le tre fasi nel doc del tipo.
     /// L'esito non viene abbandonato: un errore di un singolo documento resta
     /// un avviso osservabile e lascia vivo il rilevamento, mentre un errore del
@@ -1209,21 +1219,134 @@ impl ExternalSync {
 pub use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
+mod folders;
+
+#[cfg(feature = "notify-watcher")]
 mod notify_watcher {
     use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use crate::custody::Custody;
     use std::time::Duration;
 
     use camino::{Utf8Path, Utf8PathBuf};
+    use fub_kernel::ignore::WatchScope;
     use fub_kernel::Workspace;
     use notify::event::{EventKind, MetadataKind, ModifyKind, RenameMode};
-    use notify::{RecommendedWatcher, RecursiveMode};
+    use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
     use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 
+    use super::folders::{FolderWatches, PerFolder};
     use super::{ExternalChange, ExternalSync, SyncLifecycle, VaultWatcher, WatcherFactory};
+
+    /// Il debouncer sul backend della piattaforma.
+    type Backend = Debouncer<RecommendedWatcher, RecommendedCache>;
+
+    impl FolderWatches for Backend {
+        fn watch_folder(&mut self, dir: &Path) -> notify::Result<()> {
+            self.watch(dir, RecursiveMode::NonRecursive)
+        }
+
+        fn unwatch_folder(&mut self, dir: &Path) {
+            // Il backend può averla già lasciata (spostata, rimossa): non c'è
+            // niente da togliere, e non è un guasto.
+            let _ = self.unwatch(dir);
+        }
+    }
+
+    /// Il debouncer e, sui backend che pagano un osservatore per cartella,
+    /// l'elenco delle cartelle guardate.
+    ///
+    /// Sta dietro un `Mutex` condiviso perché lo usano due thread: chi chiude
+    /// (per fermare il debouncer) e il thread che consegna i lotti (per
+    /// guardare le cartelle nate dentro il vault). La consegna lo tiene per un
+    /// `Weak`: il debouncer possiede la consegna, e un `Arc` lì dentro sarebbe
+    /// un ciclo che nessun `Drop` romperebbe.
+    struct Watching {
+        backend: Option<Backend>,
+        /// `None` quando il backend guarda l'albero da sé (Windows, macOS).
+        folders: Option<PerFolder>,
+    }
+
+    /// Il backend paga un osservatore per cartella?
+    ///
+    /// inotify sì: ogni cartella guardata è un osservatore del budget
+    /// dell'utente. FSEvents e `ReadDirectoryChangesW` guardano un albero con
+    /// un handle solo, e restano ricorsivi come prima.
+    fn per_folder() -> bool {
+        RecommendedWatcher::kind() == WatcherKind::Inotify
+    }
+
+    /// Questo evento può aver fatto nascere, spostare o togliere una cartella?
+    fn moves_folders(kind: &EventKind) -> bool {
+        matches!(
+            kind,
+            EventKind::Create(_)
+                | EventKind::Remove(_)
+                | EventKind::Modify(ModifyKind::Name(_))
+                | EventKind::Any
+                | EventKind::Other
+        )
+    }
+
+    /// Porta le cartelle guardate al lotto che sta per essere consegnato.
+    ///
+    /// Gira **prima** della consegna, ed è l'ordine che chiude la finestra: una
+    /// cartella nata dentro il vault prende il suo osservatore, e soltanto dopo
+    /// il lotto la cammina (`scan_within`) per i file che ci sono già. Ciò che
+    /// arriva dopo l'osservatore è un evento; ciò che c'era prima è nella
+    /// camminata.
+    ///
+    /// Tre mosse: dimentica le cartelle andate via (il backend ha già lasciato i
+    /// loro osservatori), riallinea se la politica di esclusione è cambiata
+    /// (`.fub/settings.json` è guardata apposta), e guarda le cartelle arrivate.
+    /// Un `Rescan` vuol dire eventi persi, comprese le nascite di cartelle: si
+    /// ricammina il vault intero.
+    fn follow(
+        watching: &Mutex<Watching>,
+        scope: Option<WatchScope>,
+        events: &[notify_debouncer_full::DebouncedEvent],
+    ) -> notify::Result<()> {
+        let mut guard = watching.lock().unwrap_or_else(|and| and.into_inner());
+        let Watching { backend, folders } = &mut *guard;
+        let (Some(backend), Some(folders)) = (backend.as_mut(), folders.as_mut()) else {
+            return Ok(());
+        };
+        let mut arrived: Vec<PathBuf> = Vec::new();
+        let mut rescan = false;
+        for event in events {
+            if event.need_rescan() {
+                rescan = true;
+                continue;
+            }
+            if !moves_folders(&event.kind) {
+                continue;
+            }
+            for path in &event.paths {
+                match std::fs::symlink_metadata(path) {
+                    Ok(meta) if meta.is_dir() => arrived.push(path.clone()),
+                    _ => folders.forget(path),
+                }
+            }
+        }
+        let walked = match scope {
+            Some(scope) => folders.realign(backend, scope)?,
+            None => false,
+        };
+        if walked {
+            return Ok(());
+        }
+        if rescan {
+            let root = folders.root().to_path_buf();
+            return folders.cover(backend, &root);
+        }
+        for dir in arrived {
+            folders.cover(backend, &dir)?;
+        }
+        Ok(())
+    }
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
     pub struct NotifyWatcher;
@@ -1239,14 +1362,13 @@ mod notify_watcher {
     /// che si compra è che chiudere un vault voglia dire che nessuno ci sta più
     /// scrivendo dentro.
     struct Debounced {
-        /// `Option` perché `stop` vuole il debouncer per valore e un `drop` ha
-        /// solo un `&mut`: la `take` è il ponte fra i due.
+        /// Il debouncer sta in un `Option` perché `stop` lo vuole per valore e
+        /// un `drop` ha solo un `&mut`: la `take` è il ponte fra i due.
         ///
-        /// `+ Sync` (decisione 0120, le sessioni si prestano in condivisione) è
-        /// una proprietà del tipo concreto e non più una richiesta scritta qui:
-        /// se un backend smettesse di averlo, a dirlo sarebbe il compilatore su
-        /// `Box<dyn VaultWatcher>`.
-        debouncer: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
+        /// `Sync` (decisione 0120, le sessioni si prestano in condivisione) lo
+        /// dà il `Mutex` a ogni contenuto `Send`: se il backend smettesse di
+        /// esserlo, a dirlo sarebbe il compilatore su `Box<dyn VaultWatcher>`.
+        state: Arc<Mutex<Watching>>,
         /// La bandiera del kernel, che questo debouncer possiede finché è vivo.
         watching: Arc<AtomicBool>,
         lifecycle: Arc<SyncLifecycle>,
@@ -1273,7 +1395,16 @@ mod notify_watcher {
         /// quindi un lotto in volo può uscire e notificare la chiusura.
         fn drop(&mut self) {
             self.lifecycle.invalidate_and_wait();
-            if let Some(debouncer) = self.debouncer.take() {
+            // Il debouncer esce dal lucchetto prima di fermarsi: `stop` aspetta
+            // il thread delle consegne, e quel thread prende lo stesso
+            // lucchetto per guardare le cartelle nuove.
+            let backend = self
+                .state
+                .lock()
+                .unwrap_or_else(|and| and.into_inner())
+                .backend
+                .take();
+            if let Some(debouncer) = backend {
                 debouncer.stop();
             }
             self.watching.store(false, Ordering::Release);
@@ -1422,16 +1553,61 @@ mod notify_watcher {
             watching: Arc<AtomicBool>,
         ) -> Result<Box<dyn VaultWatcher>, String> {
             let failed = watching.clone();
+            // Il recinto si legge qui, prima del primo osservatore: la
+            // fabbrica può leggere il workspace durante l'avvio (vedi il doc
+            // del trait), e nessun lotto può ancora entrarci.
+            let folders = if per_folder() {
+                let scope = workspace
+                    .read()
+                    .map_err(|and| and.to_string())?
+                    .watch_scope();
+                Some(PerFolder::new(root.as_std_path(), scope))
+            } else {
+                None
+            };
+            let state = Arc::new(Mutex::new(Watching {
+                backend: None,
+                folders,
+            }));
+            let following = Arc::downgrade(&state);
             // Il sincronizzatore è **uno** e la chiusura lo possiede: è il modo
             // in cui l'ordine dei lotti smette di dipendere da quanti thread
             // `notify` decide di usare (vedi il doc di `ExternalSync`).
             let mut sync = ExternalSync::new(workspace);
             let lifecycle = sync.lifecycle();
-            let mut debouncer = new_debouncer(
+            let debouncer = new_debouncer(
                 Duration::from_millis(300),
                 None,
                 move |result: DebounceEventResult| match result {
-                    Ok(events) => deliver(&mut sync, events),
+                    Ok(events) => {
+                        let Some(_operation) = sync.lifecycle.enter() else {
+                            return;
+                        };
+                        // Le cartelle nuove prendono l'osservatore **prima**
+                        // che il lotto le cammini: il perché sta su `follow`.
+                        let lost = match following.upgrade() {
+                            Some(state) if per_folder() => {
+                                follow(&state, sync.watch_scope(), &events).err()
+                            }
+                            _ => None,
+                        };
+                        deliver(&mut sync, events);
+                        // Un osservatore che il sistema rifiuta per il limite è
+                        // una cartella del vault che nessuno guarda più: il
+                        // rilevamento non mantiene ciò che promette, e lo dice
+                        // come ogni altro errore del backend (§9.7).
+                        if let Some(error) = lost {
+                            if matches!(error.kind, notify::ErrorKind::MaxFilesWatch) {
+                                failed.store(false, Ordering::Relaxed);
+                                sync.watch_died(vec![format!("watch error: {error:?}")]);
+                            } else {
+                                tracing::warn!(
+                                    target: "fub.host",
+                                    "cartelle nuove non guardate: {error}"
+                                );
+                            }
+                        }
+                    }
                     Err(errors) => {
                         let Some(_operation) = sync.lifecycle.enter() else {
                             return;
@@ -1455,11 +1631,26 @@ mod notify_watcher {
             // così un errore osservato durante l'avvio la abbassa e nessuna
             // scrittura finale può sovrascriverlo con `true`.
             watching.store(true, Ordering::Release);
-            debouncer
-                .watch(root.as_std_path(), RecursiveMode::Recursive)
-                .map_err(|and| and.to_string())?;
+            // Il lucchetto resta preso per tutta la prima camminata: un lotto
+            // che arriva intanto aspetta qui e poi trova l'elenco completo.
+            // Non c'è un ciclo: `watch` parla col thread del backend, non con
+            // quello delle consegne.
+            let mut guard = state.lock().unwrap_or_else(|and| and.into_inner());
+            let Watching { backend, folders } = &mut *guard;
+            let debouncer = backend.insert(debouncer);
+            let started = match folders {
+                Some(folders) => folders.cover(debouncer, root.as_std_path()),
+                None => debouncer.watch(root.as_std_path(), RecursiveMode::Recursive),
+            };
+            if let Err(error) = started {
+                let debouncer = backend.take();
+                drop(guard);
+                drop(debouncer);
+                return Err(error.to_string());
+            }
+            drop(guard);
             Ok(Box::new(Debounced {
-                debouncer: Some(debouncer),
+                state,
                 watching,
                 lifecycle,
             }))
@@ -1513,7 +1704,10 @@ mod notify_watcher {
                 .expect("the root is watched");
             let watching = Arc::new(AtomicBool::new(true));
             let watcher = Debounced {
-                debouncer: Some(debouncer),
+                state: Arc::new(Mutex::new(Watching {
+                    backend: Some(debouncer),
+                    folders: None,
+                })),
                 watching: Arc::clone(&watching),
                 lifecycle,
             };
@@ -1756,6 +1950,136 @@ mod notify_watcher {
                  is gone from disk and stays alive in the registry until someone \
                  reopens the vault"
             );
+        }
+
+        /// Gli inode che gli osservatori inotify di **questo processo**
+        /// guardano, letti dal kernel (`/proc/self/fdinfo`) e non dall'elenco
+        /// che il rilevatore tiene di sé: la prova non si fida del codice che
+        /// prova.
+        #[cfg(target_os = "linux")]
+        fn watched_inodes() -> std::collections::BTreeSet<u64> {
+            let mut out = std::collections::BTreeSet::new();
+            let fds = std::fs::read_dir("/proc/self/fd").expect("the process lists its fds");
+            for fd in fds.flatten() {
+                let inotify = std::fs::read_link(fd.path())
+                    .is_ok_and(|target| target.to_string_lossy().contains("inotify"));
+                if !inotify {
+                    continue;
+                }
+                let info =
+                    std::fs::read_to_string(Path::new("/proc/self/fdinfo").join(fd.file_name()))
+                        .unwrap_or_default();
+                for line in info.lines().filter(|line| line.starts_with("inotify ")) {
+                    let inode = line
+                        .split_whitespace()
+                        .find_map(|field| field.strip_prefix("ino:"))
+                        .and_then(|hex| u64::from_str_radix(hex, 16).ok());
+                    out.extend(inode);
+                }
+            }
+            out
+        }
+
+        /// Aspetta che `check` diventi vero, per al più dieci secondi.
+        #[cfg(target_os = "linux")]
+        fn eventually(mut check: impl FnMut() -> bool) -> bool {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while std::time::Instant::now() < deadline {
+                if check() {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            check()
+        }
+
+        /// IMP-156 — **un vault che è anche un repo git non esaurisce gli
+        /// osservatori.** inotify ne mette uno per cartella, e il rilevatore
+        /// ricorsivo li metteva anche dentro `.git/objects` e `node_modules`,
+        /// che il vault esclude: al limite dell'utente il rilevamento moriva.
+        /// Qui le cartelle escluse non hanno osservatore, nemmeno quelle nate
+        /// dopo l'avvio, mentre una cartella nuova del vault lo prende e un
+        /// file scritto lì dentro dopo arriva all'indice.
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn inotify_watches_only_the_folders_the_vault_counts() {
+            use std::os::unix::fs::MetadataExt;
+
+            let dir = tempfile::tempdir().expect("a vault");
+            let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().expect("canonical"))
+                .expect("utf8");
+            for folder in [
+                ".git/objects/aa",
+                ".git/objects/bb",
+                "node_modules/pacchetto",
+                "note/sotto",
+            ] {
+                std::fs::create_dir_all(root.join(folder)).expect("a folder");
+            }
+            std::fs::write(root.join("note/a.txt"), "a").expect("a note");
+            let mut ws =
+                Workspace::new(&root, fub_kernel::FormatRegistry::new()).expect("the vault opens");
+            ws.reindex().expect("initial scan");
+            let ws = Custody::new("the pruned vault", ws);
+            let flag = ws.read().expect("the vault is alive").watch_flag();
+            let watcher = NotifyWatcher
+                .start(&root, ws.clone(), Arc::clone(&flag))
+                .expect("the watcher starts");
+            let inode = |rel: &str| {
+                std::fs::metadata(root.join(rel))
+                    .expect("the folder exists")
+                    .ino()
+            };
+
+            let watched = watched_inodes();
+            for rel in ["", "note", "note/sotto"] {
+                assert!(watched.contains(&inode(rel)), "{rel:?} must be watched");
+            }
+            for rel in [
+                ".git",
+                ".git/objects",
+                ".git/objects/aa",
+                "node_modules",
+                "node_modules/pacchetto",
+            ] {
+                assert!(
+                    !watched.contains(&inode(rel)),
+                    "{rel} is excluded from the vault and must not spend a watch"
+                );
+            }
+
+            std::fs::create_dir(root.join(".git/objects/cc")).expect("git writes an object");
+            std::fs::create_dir(root.join("nuova")).expect("a new folder of the vault");
+            assert!(
+                eventually(|| watched_inodes().contains(&inode("nuova"))),
+                "a folder born inside the vault must be watched"
+            );
+            std::fs::write(root.join("nuova/dopo.txt"), "dopo").expect("written after the watch");
+            let indexed = || {
+                let ws = ws.read().expect("the vault is alive");
+                let Ok(fub_abi::traits::IndexResult::Entries(page)) =
+                    ws.query_index(fub_abi::traits::IndexQuery::Entries {
+                        of_kind: None,
+                        within: None,
+                        page: None,
+                    })
+                else {
+                    return false;
+                };
+                page.items
+                    .iter()
+                    .any(|entry| entry.id.as_str() == "nuova/dopo.txt")
+            };
+            assert!(
+                eventually(indexed),
+                "a file written in the new folder must reach the index"
+            );
+            assert!(
+                !watched_inodes().contains(&inode(".git/objects/cc")),
+                "an excluded folder born after the start must not be watched"
+            );
+            assert!(flag.load(Ordering::Acquire), "the watcher is still alive");
+            drop(watcher);
         }
     }
 }
