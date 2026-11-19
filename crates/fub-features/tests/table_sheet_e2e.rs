@@ -340,3 +340,32 @@ fn the_dry_run_names_both_files_and_writes_nothing() {
     assert_eq!(vault.text(NOTE), note_text());
     assert!(!vault.exists("Progetti/Conti.xlsx"));
 }
+
+#[test]
+fn a_table_inside_a_quote_becomes_a_sheet_too() {
+    let quoted = "> | Voce | Importo |\n> | --- | ---: |\n> | Luce | 98 |";
+    let text = format!("Prima.\n\n{quoted}\n\nDopo.\n");
+    let vault = Vault::new();
+    vault.write(NOTE, &text);
+    let mut ws = vault.open();
+    // I byte della tabella cominciano dopo il segno della prima riga.
+    let table = &quoted[2..];
+    let start = text.find(table).expect("c'è");
+    turn(
+        &mut ws,
+        json!({
+            "doc": NOTE,
+            "at": [start, start + table.len()],
+            "text": table,
+            "cells": json!([["Voce", "Importo"], ["Luce", { "number": 98.0 }]]).to_string(),
+        }),
+    )
+    .expect("trasformata");
+    let note = vault.text(NOTE);
+    assert!(
+        note.starts_with("Prima.\n\n> ![[") && note.contains("#Foglio1!A1:B2]]\n\nDopo.\n"),
+        "{note}"
+    );
+    undo(&mut ws).expect("annullato");
+    assert_eq!(vault.text(NOTE), text);
+}

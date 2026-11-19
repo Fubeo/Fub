@@ -31,7 +31,7 @@ use fub_abi::rules::folders;
 use fub_abi::rules::path_policy::{self, Naming};
 use fub_format_xlsx::values::{self, Currency, Filled, NumberLook, ValuesError, MAX_DECIMALS};
 
-use super::move_block::{given_bytes, line_range, read};
+use super::move_block::{given_bytes, read};
 use super::*;
 
 pub(super) const E_SHEET_NO_CELLS: &str = "err.table_sheet.no_cells";
@@ -170,9 +170,10 @@ pub(super) fn note_table_sheet(
             doc.page_name(),
         )));
     }
-    let (start, end) = line_range(&note.source, start, end)
-        .filter(|&(start, end)| is_table(&note.model.body, &note.source, start, end))
-        .ok_or_else(|| PluginError::BadArgs(Text::key(E_SHEET_NOT_TABLE)))?;
+    let end = trimmed_end(&note.source, start, end);
+    if start >= end || !is_table(&note.model.body, &note.source, start, end) {
+        return Err(PluginError::BadArgs(Text::key(E_SHEET_NOT_TABLE)));
+    }
     let table = note.source[start..end].to_string();
 
     let sheet = sheet_name(host, &doc)?;
@@ -402,11 +403,30 @@ fn embed_text(
     crate::formats::link_text(host, doc, &link)
 }
 
-/// I byte `start..end` sono una tabella intera della nota, a qualunque
-/// profondità (dentro una citazione, un callout, una voce di elenco)?
+/// La fine di `start..end` senza gli a capo in coda.
+fn trimmed_end(source: &str, start: usize, end: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut end = end.min(source.len());
+    while end > start && matches!(bytes[end - 1], b'\n' | b'\r') {
+        end -= 1;
+    }
+    end
+}
+
+/// I byte `start..end` (senza gli a capo in coda) sono una tabella intera
+/// della nota, a qualunque profondità (dentro una citazione, un callout, una
+/// voce di elenco)? Dentro una citazione i segni `>` delle righe dopo la
+/// prima stanno nei byte della tabella, e l'embed che la sostituisce sta su
+/// una riga sola, dopo il segno della prima.
 fn is_table(blocks: &[Block], source: &str, start: usize, end: usize) -> bool {
     blocks.iter().any(|block| match block {
-        Block::Table { span, .. } => line_range(source, span.start, span.end) == Some((start, end)),
+        Block::Table { span, .. } => {
+            // Lo span finisce sull'ultima cella: la tabella arriva a fine riga.
+            let line_end = source[span.end.min(source.len())..]
+                .find('\n')
+                .map_or(source.len(), |at| span.end + at);
+            span.start == start && trimmed_end(source, span.start, line_end) == end
+        }
         Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
             is_table(blocks, source, start, end)
         }
