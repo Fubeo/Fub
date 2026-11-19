@@ -24907,6 +24907,388 @@
         }
       }
     },
+    "estratti.estrai": {
+      "chiaro-1280": {
+        "prototipo": ".scard[data-kind=\"pdf\"].active #pdf-ex",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(0, 87, 58)",
+          "font-weight": "600",
+          "display": "flex",
+          "opacity": "1"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".scard[data-kind=\"pdf\"].active #pdf-ex",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(127, 216, 173)",
+          "font-weight": "600",
+          "display": "flex",
+          "opacity": "1"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".scard[data-kind=\"pdf\"].active #pdf-ex",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(0, 87, 58)",
+          "font-weight": "600",
+          "display": "flex",
+          "opacity": "1"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".scard[data-kind=\"pdf\"].active #pdf-ex",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(127, 216, 173)",
+          "font-weight": "600",
+          "display": "flex",
+          "opacity": "1"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      }
+    },
+    "estratti.citazione": {
+      "chiaro-1280": {
+        "prototipo": ".exc",
+        "contesto": "documento",
+        "proprieta": {
+          "border-left-width": "3px",
+          "border-left-style": "solid",
+          "border-left-color": "rgb(232, 200, 74)",
+          "padding-top": "4px",
+          "padding-right": "0px",
+          "padding-bottom": "4px",
+          "padding-left": "16px",
+          "margin-top": "4px",
+          "margin-bottom": "4px",
+          "font-style": "normal",
+          "font-size": "18px",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "color": "rgb(52, 65, 58)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".exc",
+        "contesto": "documento",
+        "proprieta": {
+          "border-left-width": "3px",
+          "border-left-style": "solid",
+          "border-left-color": "rgb(232, 200, 74)",
+          "padding-top": "4px",
+          "padding-right": "0px",
+          "padding-bottom": "4px",
+          "padding-left": "16px",
+          "margin-top": "4px",
+          "margin-bottom": "4px",
+          "font-style": "normal",
+          "font-size": "18px",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "color": "rgb(199, 207, 202)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".exc",
+        "contesto": "documento",
+        "proprieta": {
+          "border-left-width": "3px",
+          "border-left-style": "solid",
+          "border-left-color": "rgb(232, 200, 74)",
+          "padding-top": "4px",
+          "padding-right": "0px",
+          "padding-bottom": "4px",
+          "padding-left": "16px",
+          "margin-top": "4px",
+          "margin-bottom": "4px",
+          "font-style": "normal",
+          "font-size": "18px",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "color": "rgb(52, 65, 58)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".exc",
+        "contesto": "documento",
+        "proprieta": {
+          "border-left-width": "3px",
+          "border-left-style": "solid",
+          "border-left-color": "rgb(232, 200, 74)",
+          "padding-top": "4px",
+          "padding-right": "0px",
+          "padding-bottom": "4px",
+          "padding-left": "16px",
+          "margin-top": "4px",
+          "margin-bottom": "4px",
+          "font-style": "normal",
+          "font-size": "18px",
+          "font-family": "Newsreader, Georgia, \"Times New Roman\", serif",
+          "color": "rgb(199, 207, 202)"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-fg)"
+          ]
+        }
+      }
+    },
+    "estratti.fonte": {
+      "chiaro-1280": {
+        "prototipo": ".exc footer",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "12.5px",
+          "font-style": "normal",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "color": "rgb(93, 105, 98)",
+          "row-gap": "6px",
+          "column-gap": "6px",
+          "margin-top": "4px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".exc footer",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "12.5px",
+          "font-style": "normal",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "color": "rgb(160, 170, 164)",
+          "row-gap": "6px",
+          "column-gap": "6px",
+          "margin-top": "4px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".exc footer",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "12.5px",
+          "font-style": "normal",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "color": "rgb(93, 105, 98)",
+          "row-gap": "6px",
+          "column-gap": "6px",
+          "margin-top": "4px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".exc footer",
+        "contesto": "documento",
+        "proprieta": {
+          "font-size": "12.5px",
+          "font-style": "normal",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "color": "rgb(160, 170, 164)",
+          "row-gap": "6px",
+          "column-gap": "6px",
+          "margin-top": "4px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "normal"
+        },
+        "fub": {
+          "color": [
+            "var(--doc-gutter-fg)"
+          ]
+        }
+      }
+    },
+    "estratti.vai": {
+      "chiaro-1280": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(0, 87, 58)",
+          "padding-top": "1px",
+          "padding-right": "5px",
+          "padding-bottom": "1px",
+          "padding-left": "5px",
+          "border-top-left-radius": "5px",
+          "border-top-right-radius": "5px",
+          "border-bottom-right-radius": "5px",
+          "border-bottom-left-radius": "5px"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(127, 216, 173)",
+          "padding-top": "1px",
+          "padding-right": "5px",
+          "padding-bottom": "1px",
+          "padding-left": "5px",
+          "border-top-left-radius": "5px",
+          "border-top-right-radius": "5px",
+          "border-bottom-right-radius": "5px",
+          "border-bottom-left-radius": "5px"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(0, 87, 58)",
+          "padding-top": "1px",
+          "padding-right": "5px",
+          "padding-bottom": "1px",
+          "padding-left": "5px",
+          "border-top-left-radius": "5px",
+          "border-top-right-radius": "5px",
+          "border-bottom-right-radius": "5px",
+          "border-bottom-left-radius": "5px"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "color": "rgb(127, 216, 173)",
+          "padding-top": "1px",
+          "padding-right": "5px",
+          "padding-bottom": "1px",
+          "padding-left": "5px",
+          "border-top-left-radius": "5px",
+          "border-top-right-radius": "5px",
+          "border-bottom-right-radius": "5px",
+          "border-bottom-left-radius": "5px"
+        },
+        "fub": {
+          "color": [
+            "var(--accent-soft)"
+          ]
+        }
+      }
+    },
+    "estratti.vai-passaggio": {
+      "chiaro-1280": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(0, 110, 70, 0.1)"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(85, 198, 144, 0.13)"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(0, 110, 70, 0.1)"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".exc footer button",
+        "contesto": "documento",
+        "proprieta": {
+          "background-color": "rgba(85, 198, 144, 0.13)"
+        },
+        "fub": {
+          "background-color": [
+            "var(--accent-soft)",
+            "var(--accent-veil)"
+          ]
+        }
+      }
+    },
     "schede.lavagna.zona": {
       "chiaro-1280": {
         "prototipo": ".scard[data-kind=\"canvas\"] .cvz",

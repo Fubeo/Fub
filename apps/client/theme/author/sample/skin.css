@@ -17945,8 +17945,10 @@ input.canvas-toolbar-item {
    come l'azione del prototipo (`--acc-ink` → `--accent-soft`), grigio da
    spento. Un passo di PDF (`#page=2&selection=…`, scritto da Obsidian) è una
    citazione, non una scheda: la barra gialla del prototipo (`#e8c84a` in
-   tutte e due le luci, come là), il corsivo del testo, e sotto la fonte con
-   «Vai alla pagina». */
+   tutte e due le luci, come là), il carattere del corpo del testo (il
+   prototipo scrive un corsivo su `--f-text`, che non dichiara: il suo
+   `font` non vale e il testo eredita quello del paragrafo, dritto), e sotto
+   la fonte con «Vai alla pagina». */
 .live-card-head .live-card-extract {
   display: none;
 }
@@ -17974,6 +17976,7 @@ input.canvas-toolbar-item {
 }
 .live-card[data-card-state="passage"] .live-card-body {
   height: auto;
+  min-height: 0;
   overflow: visible;
   cursor: default;
 }
@@ -17985,7 +17988,10 @@ input.canvas-toolbar-item {
   padding: 4px 0 4px 16px;
   border-left: 3px solid #e8c84a;
   color: var(--doc-fg);
-  font: italic 16.5px/1.6 var(--font-reading);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  font-style: normal;
+  line-height: var(--leading-relaxed);
 }
 .live-card-excerpt-wait {
   margin: 0;
