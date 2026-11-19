@@ -29,6 +29,8 @@ import { plural, t, type Key } from "../../i18n/strings";
 import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
 import { ownCount, type PageColor } from "../themes";
 import { colorsBody } from "./colors";
+import { coverTocBody } from "./cover-toc";
+import { headerFooterBody, SLOT_IDS, slotShortName } from "./header-footer";
 import { themeBody } from "./theme";
 
 export interface SectionContext {
@@ -79,19 +81,6 @@ const THEME_NAMES: Readonly<Record<string, Key>> = {
 export function themeName(id: string): string {
   return t(THEME_NAMES[id] ?? "pdf_export.theme.fub");
 }
-
-const SLOT_NAMES: Readonly<Record<string, Key>> = {
-  titolo: "pdf_export.slot.title",
-  sezione: "pdf_export.slot.section",
-  data: "pdf_export.slot.date",
-  pagina: "pdf_export.slot.page",
-  "pagina-di-pagine": "pdf_export.slot.page",
-  autore: "pdf_export.slot.author",
-  percorso: "pdf_export.slot.path",
-  testo: "pdf_export.slot.text",
-};
-
-const SLOT_ORDER = ["sopra-sinistra", "sopra-centro", "sopra-destra", "sotto-sinistra", "sotto-centro", "sotto-destra"];
 
 /// I colori che la persona ha cambiato, senza quelli dei diagrammi.
 function ownPageColors(profile: ExportProfile): number {
@@ -155,9 +144,10 @@ export const SECTIONS: readonly ExportSection[] = [
     id: "testata",
     title: "pdf_export.section.header",
     summary: (profile) => {
-      const names = SLOT_ORDER.map((slot) => profile.testata.posti[slot]?.voce ?? "").filter((voce) => voce !== "").map((voce) => t(SLOT_NAMES[voce] ?? "pdf_export.slot.text"));
+      const names = SLOT_IDS.map((slot) => profile.testata.posti[slot]?.voce ?? "").filter((voce) => voce !== "").map(slotShortName);
       return names.length > 0 ? names.join(", ") : t("pdf_export.header.empty");
     },
+    body: headerFooterBody,
   },
   {
     id: "fronte",
@@ -168,6 +158,7 @@ export const SECTIONS: readonly ExportSection[] = [
       if (front.indice) return t("pdf_export.front.toc");
       return t("pdf_export.front.none");
     },
+    body: coverTocBody,
   },
   {
     id: "contenuto",

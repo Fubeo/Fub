@@ -26447,6 +26447,268 @@ h6.ui-heading {
   transform: translateX(12px);
 }
 
+/* ── Testata e piè, frontespizio, indice (T73; il prototipo `.px-hfp`,
+   `.px-hfs`, `.px-hd`, `.px-ft`, `.pcover`, `.ptoc`, passo 29) ───────────
+   Nel pannello: i sei posti come sulla pagina, tre sopra e tre sotto una
+   paginetta finta; il campo del testo tuo; i tre interruttori; «Fin dove»
+   dell'indice. Sulle pagine: la testata nel margine alto e il piè nel
+   margine basso, coi caratteri dei titoli e il testo secondario del tema di
+   stampa; il frontespizio col filo d'accento sul bordo; l'indice coi puntini
+   e i numeri veri. Le misure sono quelle del prototipo, in em del corpo
+   (`--text-reading`), così seguono i caratteri della pagina. */
+.export-header-section,
+.export-front-section {
+  display: grid;
+  gap: 10px;
+}
+.export-header-grid {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 9px;
+  background: var(--sheet-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.export-header-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.export-slot-choice {
+  height: 26px;
+  padding: 0 5px;
+  overflow: hidden;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 11.5px var(--font-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.export-slot-choice:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.export-slot-choice.is-set {
+  border: 0;
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+.export-header-lines {
+  display: grid;
+  gap: 5px;
+  padding: 5px 22px;
+}
+.export-header-line {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.export-header-line-short {
+  width: 55%;
+}
+/* Una riga con la scritta a sinistra e il controllo a destra (il prototipo
+   `.px-row`, `.px-in`, `.px-seg`). */
+.export-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+.export-row-label {
+  flex: none;
+  color: var(--text);
+}
+.export-input {
+  width: 150px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 12.5px var(--font-ui);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.export-choices {
+  display: inline-flex;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.export-choice {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 12.5px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.export-choice:hover {
+  color: var(--text);
+}
+.export-choice[aria-checked="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+
+/* La testata e il piè sulla pagina: tre celle, al centro quella di mezzo. */
+.export-header,
+.export-footer {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1em;
+  min-height: 1.25em;
+  color: var(--muted);
+  font: calc(var(--text-reading) * 0.74) / 1.25 var(--print-font-headings, var(--font-ui));
+  font-variant-numeric: tabular-nums;
+}
+.export-header.has-rule {
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--doc-rule);
+}
+.export-header-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-header-cell:nth-child(2) {
+  max-width: 60ch;
+  text-align: center;
+}
+.export-header-cell:nth-child(3) {
+  text-align: right;
+}
+
+/* Il frontespizio. */
+.export-cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  font-size: var(--text-reading);
+}
+.export-cover-band {
+  position: absolute;
+  width: 9mm;
+  background: var(--print-accent);
+}
+.export-cover-icon {
+  margin-bottom: 0.35em;
+  font-size: 3.2em;
+  line-height: 1;
+}
+.export-cover-icon[data-page-figure] svg {
+  width: 1em;
+  height: 1em;
+}
+.export-cover-title {
+  margin: 0 0 0.45em;
+  color: var(--doc-heading);
+  font: 700 3.1em / 1.06 var(--print-font-headings, var(--font-ui));
+  letter-spacing: -0.022em;
+}
+.export-cover-properties {
+  margin: 0;
+  color: var(--muted);
+  font: 1em / 1.5 var(--print-font-headings, var(--font-ui));
+}
+.export-cover-foot {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 0.15em;
+  color: var(--muted);
+  font: 0.9em / 1.4 var(--print-font-headings, var(--font-ui));
+}
+.export-cover-foot b {
+  color: var(--doc-fg);
+  font-weight: 650;
+}
+
+/* L'indice. */
+.export-toc {
+  font-size: var(--text-reading);
+}
+.export-toc-title {
+  margin: 0.6em 0 0.7em;
+  color: var(--doc-heading);
+  font: 650 var(--print-h2, 1.39em) / 1.25 var(--print-font-headings, var(--font-ui));
+}
+.export-toc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  padding: 0.24em 0;
+  color: var(--doc-fg);
+  font: 1em / 1.4 var(--print-font-headings, var(--font-ui));
+}
+.export-toc-row[data-depth="1"],
+.export-toc-row[data-depth="2"] {
+  padding-left: 1.5em;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+.export-toc-name {
+  min-width: 0;
+}
+.export-toc-number {
+  display: var(--print-heading-numbers, none);
+  margin-right: 0.6em;
+  color: var(--print-accent);
+  font-style: normal;
+}
+.export-toc-dots {
+  flex: 1;
+  min-width: 1em;
+  border-bottom: 1px dotted var(--muted);
+  opacity: 0.7;
+  transform: translateY(-0.24em);
+}
+.export-toc-page {
+  flex: none;
+  min-width: 1.2em;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* Dove sta un colore, anche fuori dalla nota. */
+.export-doc[data-highlight="titoli"] :is(.export-toc-title, .export-cover-title),
+.export-doc[data-highlight="accento"] :is(.export-cover-band, .export-toc-number),
+.export-doc[data-highlight="linee"] .export-header.has-rule,
+.export-doc[data-highlight="testo-secondario"] :is(.export-header, .export-footer, .export-cover-properties),
+.export-doc[data-highlight="testo"] .export-toc-row {
+  border-radius: 2px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .export-slot-choice,
+  .export-choice {
+    transition: none;
+  }
+}
+:root[data-motion="reduced"] :is(.export-slot-choice, .export-choice) {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .export-segment,
   .export-go,

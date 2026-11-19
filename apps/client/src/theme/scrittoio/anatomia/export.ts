@@ -1,4 +1,4 @@
-/** L'anatomia del pezzo `skin/export.css`. Lo spazio «Esporta in PDF» (T70): la barra in alto con «Torna alla nota», lo zoom, le viste, il profilo, «Stampa…» ed «Esporta»; le pagine come usciranno, coi fogli e le fasce dei blocchi; il pannello delle dieci sezioni che si aprono e si chiudono; la banda coi numeri dell'impaginazione. Le sezioni Tema e Colori (T71), e le pagine coi colori e i caratteri del tema di stampa. */
+/** L'anatomia del pezzo `skin/export.css`. Lo spazio «Esporta in PDF» (T70): la barra in alto con «Torna alla nota», lo zoom, le viste, il profilo, «Stampa…» ed «Esporta»; le pagine come usciranno, coi fogli e le fasce dei blocchi; il pannello delle dieci sezioni che si aprono e si chiudono; la banda coi numeri dell'impaginazione. Le sezioni Tema e Colori (T71), e le pagine coi colori e i caratteri del tema di stampa. Testata e piè, frontespizio e indice (T73). */
 import { S, type PartAnatomy } from "./types";
 
 export const EXPORT: PartAnatomy = {
@@ -16,6 +16,10 @@ export const EXPORT: PartAnatomy = {
     // Le sezioni Tema e Colori (T71).
     { name: "export-theme", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["export-theme-section", "export-themes", "export-theme", "export-theme-preview", "export-theme-heading", "export-theme-line", "export-theme-line-short", "export-theme-box", "export-link"] },
     { name: "export-colors", states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")], hooks: ["export-color-section", "export-colors", "export-color", "is-open", "export-color-head", "export-color-chip", "export-color-name", "export-color-own", "export-color-code", "export-color-reset", "export-palette", "export-swatch", "export-pick", "export-pick-input", "export-hex", "export-hex-error", "export-contrast", "is-low", "export-toggle", "export-toggle-hint", "export-toggle-knob"] },
+    // Testata e piè, frontespizio, indice (T73): i sei posti e i controlli
+    // del pannello; sulle pagine testata, piè, frontespizio e indice.
+    { name: "export-header-footer", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["export-header-section", "export-header-grid", "export-header-row", "export-slot-choice", "is-set", "export-header-lines", "export-header-line", "export-header-line-short", "export-row", "export-row-label", "export-input", "export-front-section", "export-choices", "export-choice"] },
+    { name: "export-front-pages", states: [S("rest"), S("selected")], hooks: ["export-header", "export-footer", "has-rule", "export-header-cell", "export-cover", "export-cover-band", "export-cover-icon", "export-cover-title", "export-cover-properties", "export-cover-foot", "export-toc", "export-toc-title", "export-toc-row", "export-toc-name", "export-toc-number", "export-toc-dots", "export-toc-page"] },
     { name: "export-sections", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["export-side", "export-section", "is-open", "export-section-head", "export-section-name", "export-section-summary", "export-section-chevron", "export-section-body", "export-note"] },
     { name: "export-band", states: [S("rest")], hooks: ["export-band", "export-band-info", "export-band-pages", "export-band-ms", "export-band-hint"] },
   ],

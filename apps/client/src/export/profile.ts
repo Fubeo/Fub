@@ -17,6 +17,7 @@
 import type { PageGeometry } from "./probe";
 import { lookVariables, textOf, typeVariables } from "./themes";
 import type { PrintLayout, PrintLook, PrintSettings } from "./paginate/slices";
+import { TITLE_ID } from "./paginate/toc";
 
 /// I temi di stampa di Fub, nell'ordine in cui la vista li mostra
 /// (`IdTema::DI_FUB`).
@@ -218,7 +219,8 @@ export function paperColorsOf(profile: ExportProfile): Record<string, string> {
 /// Le regolazioni dell'impaginatore dal profilo: pagina, colonne,
 /// interruzioni scelte, i caratteri e l'impostazione del tema (o i tuoi) e i
 /// blocchi lasciati fuori (dalla memoria della nota, `excluded`) rifanno
-/// l'impaginazione; i colori cambiano solo l'aspetto.
+/// l'impaginazione; i colori cambiano solo l'aspetto. Col frontespizio il
+/// titolo in cima alla nota esce dall'impaginazione: sta sul frontespizio.
 export function printSettingsOf(profile: ExportProfile, excluded: readonly string[] = []): PrintSettings {
   const layout: PrintLayout = {
     page: geometryOf(profile.pagina),
@@ -226,7 +228,7 @@ export function printSettingsOf(profile: ExportProfile, excluded: readonly strin
     columnGap: Math.round(COLUMN_GAP_MM * MM * 100) / 100,
     breaks: { everyHeading2: profile.interruzioni.ogni_titolo_2, separator: profile.interruzioni.separatore },
     type: typeVariables(profile),
-    excluded,
+    excluded: profile.frontespizio.frontespizio && !excluded.includes(TITLE_ID) ? [...excluded, TITLE_ID] : excluded,
   };
   const look: PrintLook = { colors: lookVariables(profile) };
   return { layout, look };
