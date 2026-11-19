@@ -10,6 +10,8 @@ import { escapeLinkLabel, linkDestination } from "./link-syntax";
 import { AddressChoiceWidget, bareUrl } from "./link-card";
 import { carriedMarkdown } from "./comments/copy";
 import { webEmbedOf } from "./web-embed";
+import { cellsOrigin } from "./cells-clipboard";
+import { cellsEmbed, tsvTable } from "./table-sheet";
 
 // Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
 // una nota resta commento, invece di passare dall'HTML che non lo porta.
@@ -270,15 +272,34 @@ function addressOnBlankLine(view: EditorView, data: DataTransfer): string | null
   return PASTED_URL.test(url) ? url : null;
 }
 
+/// Le celle copiate da un foglio (testo a tabulazioni): la tabella Markdown
+/// che diventano e, se vengono da un file del vault, l'embed della loro
+/// parte. Le celle di un altro programma con il loro HTML passano dalla
+/// conversione dell'HTML, che tiene anche i segni del testo.
+function pastedCells(view: EditorView, data: DataTransfer): { table: string; embed: string | null } | null {
+  if (isStrictlyInsideCode(view.state, view.state.selection.main.from)) return null;
+  const table = tsvTable(data.getData("text/plain"));
+  if (table === null) return null;
+  const origin = cellsOrigin(data);
+  if (origin === null && data.getData("text/html")) return null;
+  return { table, embed: origin === null ? null : cellsEmbed(origin) };
+}
+
 /// La scelta sotto un indirizzo incollato su una riga vuota. `link` è il
 /// Markdown scritto a `from`: «Scheda» lo sostituisce con l'indirizzo da solo,
 /// «Incorpora» con `embed`, che c'è soltanto per un sito dell'elenco chiuso.
 /// La scelta vale finché il testo non cambia e il cursore resta sul link.
+///
+/// Le celle incollate da un foglio del vault (T52) hanno la stessa scelta con
+/// altre voci: «Tabella» tiene la tabella scritta (`link`), «Scheda» la
+/// sostituisce con l'embed della parte di foglio (`card`).
 interface AddressChoice {
   readonly from: number;
   readonly link: string;
   readonly url: string;
+  readonly card: string;
   readonly embed: string | null;
+  readonly cells?: boolean;
 }
 
 /// La pagina incorporata, `![](https://…)` come Obsidian la scrive e la
@@ -303,7 +324,7 @@ const addressChoice = StateField.define<AddressChoice | null>({
   },
   provide: (field) => EditorView.decorations.from(field, (choice) => (choice === null
     ? Decoration.none
-    : Decoration.set(Decoration.widget({ widget: new AddressChoiceWidget(choice.url, choice.embed !== null), block: true, side: 1 })
+    : Decoration.set(Decoration.widget({ widget: new AddressChoiceWidget(choice.url, choice.embed !== null, choice.cells === true), block: true, side: 1 })
       .range(choice.from + choice.link.length)))),
 });
 
@@ -321,9 +342,11 @@ function chooseAddress(view: EditorView, kind: string | undefined): void {
   const choice = view.state.field(addressChoice);
   if (choice === null) return;
   const to = choice.from + choice.link.length;
-  const insert = kind === "card" ? choice.url : kind === "embed" ? choice.embed : null;
+  const insert = kind === "card" ? choice.card : kind === "embed" ? choice.embed : null;
   // Il testo deve essere ancora quello scritto: altrimenti la scelta è vecchia.
-  if (insert !== null && !view.state.readOnly && view.state.sliceDoc(choice.from, to) === choice.link) {
+  // Il testo si confronta con gli a capo di CodeMirror: una tabella incollata
+  // ha più righe anche in una nota CRLF.
+  if (insert !== null && !view.state.readOnly && view.state.doc.sliceString(choice.from, to) === choice.link) {
     view.dispatch({
       changes: { from: choice.from, to, insert },
       selection: { anchor: choice.from + insert.length },
@@ -416,6 +439,36 @@ const pasteHandler = EditorView.domEventHandlers({
       view.dispatch(view.state.replaceSelection(carried), { userEvent: "input.paste" });
       return true;
     }
+    const cells = pastedCells(view, event.clipboardData);
+    if (cells !== null) {
+      event.preventDefault();
+      const { from, to } = view.state.selection.main;
+      const doc = view.state.doc;
+      // La tabella sta in un blocco suo: una riga vuota la stacca dal testo
+      // che c'è prima o dopo sulla riga.
+      const start = doc.lineAt(from);
+      const end = doc.lineAt(to);
+      const before = doc.sliceString(start.from, from).trim() !== ""
+        ? "\n\n"
+        : from === start.from && start.number > 1 && doc.line(start.number - 1).text.trim() !== "" ? "\n" : "";
+      const after = doc.sliceString(to, end.to).trim() !== ""
+        ? "\n\n"
+        : to === end.to && end.number < doc.lines && doc.line(end.number + 1).text.trim() !== "" ? "\n" : "";
+      const at = from + before.length;
+      const offer = cells.embed === null
+        ? null
+        : { from: at, link: cells.table, url: cells.embed, card: cells.embed, embed: null, cells: true };
+      // Il cursore va in fondo alla tabella: la scelta vale finché resta lì.
+      const insert = textLines(`${before}${cells.table}${after}`);
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: { anchor: at + cells.table.length },
+        userEvent: "input.paste",
+        effects: offerAddressChoice.of(offer),
+        scrollIntoView: true,
+      });
+      return true;
+    }
     const link = linkOverSelection(view, event.clipboardData);
     if (link !== null) {
       event.preventDefault();
@@ -428,7 +481,7 @@ const pasteHandler = EditorView.domEventHandlers({
       const { from } = view.state.selection.main;
       const markdown = linkMarkdown(address, address);
       // «Scheda» esiste per le pagine web: un mailto è solo un link, senza scelta.
-      const offer = bareUrl(address) === null ? null : { from, link: markdown, url: address, embed: embedMarkdown(address) };
+      const offer = bareUrl(address) === null ? null : { from, link: markdown, url: address, card: address, embed: embedMarkdown(address) };
       view.dispatch(view.state.replaceSelection(markdown), {
         userEvent: "input.paste",
         effects: offerAddressChoice.of(offer),

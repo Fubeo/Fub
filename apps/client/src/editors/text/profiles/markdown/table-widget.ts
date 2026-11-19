@@ -24,11 +24,13 @@ import {
   cellContentStart,
   parseTable,
   tableChanges,
+  tableWidth,
   type GridPosition,
   type ParsedTable,
   type TableData,
 } from "./table-model";
 import { generatedChartAfter, tableChart } from "./table-chart";
+import { proposesSheet, sheetCells, type TableSheetPort } from "./table-sheet";
 import { TableGrid, type TableChartAction, type TableGridActions } from "./table-grid";
 import { liveStrings } from "./strings";
 
@@ -41,10 +43,17 @@ export interface TableGridCallbacks {
   changed(): void;
 }
 
+/// «Trasforma in foglio» (T52): la nota aperta e chi scrive il foglio.
+export interface TableSheetHost {
+  doc(): string;
+  readonly port: TableSheetPort;
+}
+
 export interface TableWidgetCallbacks extends WikilinkFollow {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   searchTag(tag: string): void;
   readonly tableGrid?: TableGridCallbacks;
+  readonly tableSheet?: TableSheetHost;
 }
 
 type GridSelection = { anchor: GridPosition; focus: GridPosition };
@@ -52,6 +61,10 @@ type GridSelection = { anchor: GridPosition; focus: GridPosition };
 /// Quanto testo sotto la tabella si guarda per ritrovare il grafico scritto
 /// da «Grafico da questa tabella» (T54).
 const CHART_LOOKAHEAD = 64 * 1024;
+
+/// Le viste a cui una tabella grande ha già proposto il foglio (T52): una
+/// volta per nota aperta, non a ogni ridisegno.
+const proposed = new WeakSet<EditorView>();
 
 /// La griglia montata di ogni widget, per elemento.
 const controllers = new WeakMap<HTMLElement, TableController>();
@@ -101,11 +114,13 @@ class TableController {
         if (activeGrids.get(this.#view) === this.grid) this.#widget.callbacks.tableGrid?.changed();
       },
       chart: () => this.#chart(),
+      sheet: () => this.#sheet(),
     }, parsed);
     if (typeof ResizeObserver !== "undefined") {
       this.#observer = new ResizeObserver(() => this.#view.requestMeasure());
       this.#observer.observe(this.grid.element);
     }
+    this.#propose(parsed);
   }
 
   /// Un widget nuovo per la stessa tabella: la griglia si aggiorna sul posto.
@@ -113,6 +128,52 @@ class TableController {
     this.#widget = widget;
     this.#parsed = parsed;
     this.grid.update(parsed);
+    this.#propose(parsed);
+  }
+
+  /// Una tabella oltre le 200 righe o le 30 colonne si legge meglio in un
+  /// foglio: la nota lo propone una volta, con la voce che lo fa.
+  #propose(parsed: ParsedTable): void {
+    const view = this.#view;
+    if (proposed.has(view) || !proposesSheet(parsed.rows.length - 1, tableWidth(parsed))) return;
+    // Dopo il disegno: il widget si costruisce dentro un aggiornamento della
+    // vista, e la tabella si ritrova nel testo solo quando è montata.
+    queueMicrotask(() => {
+      if (proposed.has(view) || this.#sheet() === null) return;
+      proposed.add(view);
+      notify(liveStrings.t("table_sheet.propose"), "info", {
+        label: liveStrings.t("table_sheet.menu"),
+        run: () => this.#sheet()?.(),
+      });
+    });
+  }
+
+  /// «Trasforma in foglio» (T52): la voce c'è se chi monta l'editor sa
+  /// scrivere il foglio e la nota si scrive.
+  #sheet(): (() => void) | null {
+    const host = this.#widget.callbacks.tableSheet;
+    if (!host || this.#view.state.readOnly || this.#widget.readOnly || this.locate() === null) return null;
+    return () => void this.#turnIntoSheet(host);
+  }
+
+  async #turnIntoSheet(host: TableSheetHost): Promise<void> {
+    const view = this.#view;
+    // La tabella di adesso: il testo può essere cambiato da quando il menu
+    // si è aperto.
+    const located = this.locate();
+    if (!located) {
+      notify(liveStrings.t("table_sheet.failed"), "info");
+      return;
+    }
+    const locale = frontmatterLanguage(view.state) ?? resolvedLanguage();
+    const cells = sheetCells(located.parsed.rows, tableWidth(located.parsed), locale);
+    // I byte UTF-8 del file com'è sul disco: `sliceDoc` rende gli a capo del
+    // file, anche i `\r`.
+    const encoder = new TextEncoder();
+    const start = encoder.encode(view.state.sliceDoc(0, located.from)).length;
+    const text = view.state.sliceDoc(located.from, located.to);
+    const failed = await host.port.turn({ doc: host.doc(), at: [start, start + encoder.encode(text).length], text, cells });
+    if (failed !== null) notify(failed, "guasto");
   }
 
   /// Dove sta adesso la tabella, e la sua sorgente se è ancora quella che la

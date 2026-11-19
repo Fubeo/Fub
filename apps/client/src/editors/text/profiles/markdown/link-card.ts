@@ -290,8 +290,12 @@ const choiceLives = new WeakMap<HTMLElement, Lifetime>();
 /// voci. Quello che sceglie Invio, Spazio, Esc o Tab lo decide `paste.ts`, che
 /// sa che cosa scrivere.
 export class AddressChoiceWidget extends WidgetType {
-  constructor(readonly url: string, readonly embeddable = false) { super(); }
-  eq(other: AddressChoiceWidget): boolean { return other.url === this.url && other.embeddable === this.embeddable; }
+  /// `cells`: la scelta delle celle incollate da un foglio (T52), «Tabella» o
+  /// «Scheda», con le stesse voci e gli stessi tasti.
+  constructor(readonly url: string, readonly embeddable = false, readonly cells = false) { super(); }
+  eq(other: AddressChoiceWidget): boolean {
+    return other.url === this.url && other.embeddable === this.embeddable && other.cells === this.cells;
+  }
   get estimatedHeight(): number { return 32; }
   toDOM(): HTMLElement {
     const root = document.createElement("div");
@@ -299,9 +303,10 @@ export class AddressChoiceWidget extends WidgetType {
     root.contentEditable = "false";
     root.dataset.url = this.url;
     root.setAttribute("role", "toolbar");
-    root.setAttribute("aria-label", liveStrings.t("paste.address.label"));
-    const link = choiceControl("link", liveStrings.t("paste.address.link"), liveStrings.t("paste.address.link.title"), true);
-    const card = choiceControl("card", liveStrings.t("paste.address.card"), liveStrings.t("paste.address.card.title"), false);
+    const words = this.cells ? "paste.cells" : "paste.address";
+    root.setAttribute("aria-label", liveStrings.t(`${words}.label`));
+    const link = choiceControl("link", liveStrings.t(`${words}.link`), liveStrings.t(`${words}.link.title`), true);
+    const card = choiceControl("card", liveStrings.t(`${words}.card`), liveStrings.t(`${words}.card.title`), false);
     const controls = this.embeddable
       ? [link, card, choiceControl("embed", liveStrings.t("paste.address.embed"), liveStrings.t("paste.address.embed.title"), false)]
       : [link, card];

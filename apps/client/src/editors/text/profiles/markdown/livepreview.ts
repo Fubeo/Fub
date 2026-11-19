@@ -89,7 +89,7 @@ import {
   type NativeInline,
 } from "./render-inline";
 import { mediaKindOfId } from "../../../media/media-types";
-import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
+import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks, type TableSheetHost } from "./table-widget";
 import { propertiesExtension } from "./properties";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
@@ -151,6 +151,9 @@ export interface LivePreviewCallbacks {
   /// La griglia delle tabelle che ha il fuoco: chi monta l'editor la usa per
   /// la barra di formattazione. Assente, le griglie funzionano lo stesso.
   readonly tableGrid?: TableGridCallbacks;
+  /// «Trasforma in foglio» (T52): la nota e chi scrive il foglio. Assente, la
+  /// voce non c'è.
+  readonly tableSheet?: TableSheetHost;
   /// Il menu «/» c'è e si apre: il segnaposto della riga vuota lo nomina.
   slashEnabled?(): boolean;
   /// L'icona (`icon:`) della pagina che un wikilink nomina, mostrata prima del

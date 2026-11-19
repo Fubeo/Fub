@@ -69,6 +69,7 @@ import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import { newSubpage, renamePage } from "./page-rename";
 import { moveBlock, moveHeadings, moveNotes } from "./move-block";
+import { tableToSheet } from "./table-sheet";
 import { syncBlockPort } from "./sync-block";
 import { vaultBlockPort } from "./vault-blocks";
 import { linkedPageIcon } from "./page-icons";
@@ -1461,6 +1462,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onRenamePage: renamePage,
     onNewSubpage: newSubpage,
     moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
+    tableSheet: { turn: tableToSheet },
     syncBlock: syncBlockPort,
     pageIcons: {
       icon: linkedPageIcon,
