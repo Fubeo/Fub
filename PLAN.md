@@ -3332,7 +3332,7 @@ una pagina; una sezione corrente vuota.
 Fatto quando: test dell'indice in due passate; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] in corso · coder · base b1ca0286f
+Stato: [~] fatto (t73 @ b94170998), da integrare · il clic su testata o frontespizio nella pagina non apre ancora la sezione; menu dello spazio aperti nel dialogo quando l'area di lavoro è inerte (anche il menu del profilo di T70 era rotto)
 
 ## T74 · Il contenuto
 
