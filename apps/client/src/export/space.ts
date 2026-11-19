@@ -32,6 +32,11 @@
 // cambio di testata, frontespizio o indice ridisegna i fogli e non rifà
 // l'impaginazione della nota; col frontespizio il titolo in cima alla nota
 // esce dall'impaginazione (sta sul frontespizio).
+//
+// Sulle pagine stanno anche le guide dei margini (`guides.ts`), lo specchio
+// e la filigrana della sezione «Pagina» (T72); i caratteri del vault che il
+// profilo nomina si caricano all'apertura e si tolgono alla chiusura
+// (`PrintFonts`).
 
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -44,15 +49,18 @@ import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { createBand, type Band } from "./band";
+import { attachGuides } from "./guides";
 import { ExportPages, steppedZoom, type PageDecor } from "./pages";
 import { PrintMeasure, printBlocks } from "./paginate/measure";
 import { frontMatter, headingsOf, sectionHeadings, sectionsByPage, type FrontSettings, type TocEntry, type TocMetrics } from "./paginate/toc";
 import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
-import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
+import { defaultProfile, MM, paperSize, printSettingsOf, type ExportProfile } from "./profile";
 import { coverFactsOf, drawCover, drawTocPage, type CoverFacts } from "./sections/cover-toc";
+import { PrintFonts, type VaultFontSource } from "./sections/fonts";
 import { displayPath, drawHeaderFooter, longDate } from "./sections/header-footer";
 import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
+import { pageMarksOf } from "./sections/page";
 import { numberHeadings } from "./themes";
 import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
 import { DiagramMemory, diagramLookKey, diagramPrintLook, overrideFor, preparePrintVectors, type DiagramPrintLook } from "./vectors";
@@ -94,8 +102,12 @@ export interface ExportSpaceOptions {
   /// Salva la nota, prima di rifare la resa.
   readonly save?: () => Promise<void>;
   /// Scrive il PDF (T77a). Finché non c'è, «Esporta» passa alla stampa del
-  /// sistema le stesse pagine.
-  readonly exportPdf?: (profile: ExportProfile) => Promise<void>;
+  /// sistema le stesse pagine. `fontFaces`: le regole `@font-face` dei
+  /// caratteri del vault caricati, per la sonda (`ProbeOptions.fontFaces`).
+  readonly exportPdf?: (profile: ExportProfile, extra: { readonly fontFaces: readonly string[] }) => Promise<void>;
+  /// I caratteri del vault per la sezione «Caratteri» (T72). Senza, ci sono
+  /// solo quelli di Fub.
+  readonly vaultFonts?: VaultFontSource;
   readonly profile?: ExportProfile;
   /// Le proprietà della nota (il frontmatter, dall'indice): l'icona, l'autore
   /// e le proprietà in evidenza del frontespizio, l'autore della testata. Si
@@ -180,6 +192,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   let cover: CoverFacts = { title: options.title, path: displayPath(options.doc), author: "", date: longDate(), icon: null, properties: [] };
   /// L'ultimo indice misurato: si rimisura solo se cambiano le voci o la pagina.
   let tocMeasured: { key: string; metrics: TocMetrics } | null = null;
+  const fonts = new PrintFonts(options.vaultFonts ?? null);
 
   const root = document.createElement("div");
   root.className = "export-space";
@@ -253,8 +266,17 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (closed || next === previewing) return;
     previewing = next;
     showSettings(printSettingsOf(next ?? profile));
+    pages.setMarks(pageMarksOf(next ?? profile));
     // Un tema in anteprima cambia anche i diagrammi che seguono il tema.
     restyleDiagrams();
+  }
+
+  /// Carica i caratteri del vault che il profilo nomina; quando arrivano, le
+  /// pagine si rifanno col carattere vero.
+  function loadFonts(of: ExportProfile): void {
+    void fonts.ensure(of).then((fresh) => {
+      if (fresh && !closed) showSettings(printSettingsOf(previewing ?? profile));
+    });
   }
 
   function sectionContext(): SectionContext {
@@ -281,6 +303,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
           renderSide();
         },
       },
+      fonts,
     };
   }
 
@@ -337,6 +360,8 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     const activeSection = active?.closest<HTMLElement>(".export-section")?.dataset["section"] ?? "";
     const scroll = side.scrollTop;
     heads.clear();
+    // Con la sezione «Pagina» aperta le guide dei margini si vedono appena.
+    pages.element.dataset["guides"] = String(opened.has("pagina"));
     side.replaceChildren(...SECTIONS.map(renderSection));
     side.scrollTop = scroll;
     if (!active) return;
@@ -480,6 +505,20 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     },
   });
   pages.setColors({ ...settings.layout.type, ...settings.look.colors });
+  pages.setMarks(pageMarksOf(profile));
+  lifetime.add(
+    attachGuides({
+      pages: pages.element,
+      root,
+      pxPerMm: () => pages.zoom * MM,
+      profile: () => profile,
+      paper: (of) => paperSize(of.pagina),
+      change: (next, live) => space.setProfile(next, { live }),
+      done: () => space.openSection("pagina"),
+    }),
+  );
+  lifetime.add(() => fonts.dispose());
+  loadFonts(profile);
 
   function whenFinal(): Promise<SlicedResult> {
     if (latest?.final) return Promise.resolve(latest);
@@ -513,7 +552,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   async function exportNow(): Promise<void> {
     if (options.exportPdf) {
       try {
-        await options.exportPdf(profile);
+        await options.exportPdf(profile, { fontFaces: fonts.fontFaces() });
       } catch (error) {
         notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
       }
@@ -609,6 +648,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       profile = next;
       previewing = null;
       showSettings(printSettingsOf(next));
+      pages.setMarks(pageMarksOf(next));
       toolbar.setProfile(next.nome, next !== base);
       restyleDiagrams();
       // Testata, frontespizio e indice non cambiano le misure della nota:
@@ -616,6 +656,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       const decorChanged = before.testata !== next.testata || before.frontespizio !== next.frontespizio || before.pagina.specchio !== next.pagina.specchio;
       if (decorChanged) redecorate();
       if (change?.live) return;
+      loadFonts(next);
       renderSide();
       if (latest && !decorChanged) updateBand(latest, decorOf(latest));
     },

@@ -20,6 +20,11 @@
 // dell'indice vengono prima di quelle della nota, e su ogni foglio lo spazio
 // disegna ciò che non è la nota (frontespizio, indice, testata e piè). Senza,
 // i fogli sono le pagine della nota e basta.
+//
+// Ogni foglio porta anche ciò che la sezione «Pagina» decide sopra le
+// fasce (T72, `setMarks`): i margini a specchio, che sulle pagine pari
+// scambiano destra e sinistra, la filigrana in diagonale sotto il testo e,
+// sullo schermo, le quattro guide dei margini (`guides.ts`).
 
 import { t } from "../i18n/strings";
 import { printBlocks } from "./paginate/measure";
@@ -63,6 +68,19 @@ export interface PagesOptions {
   readonly onPick: (page: number) => void;
 }
 
+/// Ciò che sta sui fogli oltre alle fasce: non cambia l'impaginazione.
+export interface PageMarks {
+  /// I margini a specchio: sulle pagine pari destra e sinistra si scambiano.
+  readonly mirror: boolean;
+  /// La filigrana su ogni pagina; vuota, nessuna.
+  readonly watermark: string;
+}
+
+const NO_MARKS: PageMarks = { mirror: false, watermark: "" };
+
+/// I lati delle guide, coi nomi dei margini del profilo.
+const GUIDES = ["sopra", "destra", "sotto", "sinistra"] as const;
+
 /// I fogli e chi disegna su ciascuno ciò che non è la nota.
 export interface PageDecor {
   readonly sheets: readonly Sheet[];
@@ -97,6 +115,7 @@ export class ExportPages {
   private readonly filled = new Set<number>();
   private drawn: Drawn | null = null;
   private colors: Readonly<Record<string, string>> = {};
+  private marks: PageMarks = NO_MARKS;
   private view: ExportView = "adatta";
   private free = 1;
   private zoomNow = 1;
@@ -142,6 +161,16 @@ export class ExportPages {
     for (const name of Object.keys(this.colors)) if (!(name in colors)) this.element.style.removeProperty(name);
     for (const [name, value] of Object.entries(colors)) this.element.style.setProperty(name, value);
     this.colors = { ...colors };
+  }
+
+  /// Lo specchio e la filigrana: si ridisegnano i fogli pieni, senza
+  /// rifare l'impaginazione.
+  setMarks(marks: PageMarks): void {
+    if (marks.mirror === this.marks.mirror && marks.watermark === this.marks.watermark) return;
+    this.marks = { mirror: marks.mirror, watermark: marks.watermark };
+    for (const index of this.filled) this.clear(index);
+    this.lastVisible = "";
+    this.refresh();
   }
 
   /// Le pagine di un'impaginazione: i fogli per tutte, pieni quelli vicini.
@@ -250,7 +279,7 @@ export class ExportPages {
     const pages: HTMLElement[] = [];
     const count = Math.min(drawn.decor.front + Math.min(drawn.result.ready, drawn.result.pagination.pages.length), drawn.decor.sheets.length);
     for (let index = 0; index < count; index++) {
-      const page = this.pageElement(drawn, index, 1);
+      const page = this.pageElement(drawn, index, 1, true);
       for (const [name, value] of Object.entries(this.colors)) page.style.setProperty(name, value);
       pages.push(page);
     }
@@ -366,25 +395,52 @@ export class ExportPages {
     this.filled.delete(index);
   }
 
-  /// Il foglio della pagina `index`, scalato a `zoom`.
-  private pageElement(drawn: Drawn, index: number, zoom: number): HTMLElement {
+  /// Il foglio numero `index` (fra tutti), scalato a `zoom`; `print`: quello
+  /// che va alla stampa, senza le guide.
+  private pageElement(drawn: Drawn, index: number, zoom: number, print = false): HTMLElement {
     const { layout, result, blocks, decor } = drawn;
     const sheet = decor.sheets[index];
     const { page: geometry } = layout;
     const { width: columnWidth } = frameOf(layout);
     const gap = layout.columns === 2 ? layout.columnGap : 0;
+    // Lo specchio sposta soltanto il testo: la colonna è larga uguale.
+    const mirrored = this.marks.mirror && index % 2 === 1;
+    const margin = mirrored ? { ...geometry.margin, left: geometry.margin.right, right: geometry.margin.left } : geometry.margin;
     const page = document.createElement("div");
     page.className = "export-page";
     page.style.width = `${geometry.width}px`;
     page.style.height = `${geometry.height}px`;
     page.style.transform = `scale(${zoom})`;
+    if (this.marks.watermark.trim()) {
+      const mark = document.createElement("div");
+      mark.className = "export-watermark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = this.marks.watermark;
+      page.append(mark);
+    }
     const body = document.createElement("div");
     body.className = "export-page-body";
-    body.style.left = `${geometry.margin.left}px`;
-    body.style.top = `${geometry.margin.top}px`;
-    body.style.width = `${geometry.width - geometry.margin.left - geometry.margin.right}px`;
-    body.style.height = `${geometry.height - geometry.margin.top - geometry.margin.bottom}px`;
+    body.style.left = `${margin.left}px`;
+    body.style.top = `${margin.top}px`;
+    body.style.width = `${geometry.width - margin.left - margin.right}px`;
+    body.style.height = `${geometry.height - margin.top - margin.bottom}px`;
     page.append(body);
+    if (!print) {
+      // Le guide dei margini: i lati che si vedono su questo foglio (con lo
+      // specchio la guida di sinistra è il margine destro del profilo, lo
+      // sa `guides.ts`).
+      page.style.setProperty("--export-margin-top", `${margin.top}px`);
+      page.style.setProperty("--export-margin-right", `${margin.right}px`);
+      page.style.setProperty("--export-margin-bottom", `${margin.bottom}px`);
+      page.style.setProperty("--export-margin-left", `${margin.left}px`);
+      for (const side of GUIDES) {
+        const guide = document.createElement("i");
+        guide.className = "export-guide";
+        guide.dataset["guide"] = side;
+        guide.setAttribute("aria-hidden", "true");
+        page.append(guide);
+      }
+    }
     const placements = sheet?.kind === "pagina" ? (result.pagination.pages[sheet.index]?.placements ?? []) : [];
     const bands: { band: HTMLElement; inner: HTMLElement; copy: HTMLElement; placement: Placement }[] = [];
     for (const placement of placements) {

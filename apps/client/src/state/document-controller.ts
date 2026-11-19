@@ -91,6 +91,7 @@ import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
+import type { VaultFontList, VaultFontSource } from "../export/sections/fonts";
 import { emit, on, readState, state, writeState } from "./store";
 import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
 import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
@@ -4207,6 +4208,19 @@ let openExport: { pane: Pane; close: () => void } | null = null;
 /// Apre lo spazio «Esporta in PDF» sulla nota del riquadro (E28, T70): la
 /// salva prima, perché la resa per la stampa il core la legge dal disco, e
 /// la segue mentre cambia in un altro riquadro.
+/// I caratteri del vault per la stampa (T72), per una nota sola e per il
+/// libro: l'elenco dal core, i byte dalla stessa porta dei caratteri dei
+/// disegni.
+const printVaultFonts: VaultFontSource = {
+  list: async () => {
+    const outcome = await api.invokeCommand("pdf.vault_fonts", {}, "apply");
+    const effect = outcome.effect;
+    if (effect.kind !== "custom" || effect.ns !== "fub.pdf.vault_fonts") throw new Error(`pdf.vault_fonts answered ${effect.kind}`);
+    return effect.payload as VaultFontList;
+  },
+  read: (file, limit) => drawingFonts.read(file, limit),
+};
+
 export async function presentExport(r: Pane, doc: string): Promise<void> {
   try {
     await documentSessions.flush(doc);
@@ -4234,6 +4248,7 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       save: async () => {
         await documentSessions.flush(doc);
       },
+      vaultFonts: printVaultFonts,
       // Il frontmatter dall'indice: icona, autore e proprietà del frontespizio.
       properties: () => noteProperties(doc),
       onClose: () => {
@@ -4293,6 +4308,8 @@ export async function presentBookExport(paths: readonly string[], name: string):
       render: book.render,
       mount: book.mount,
       measure: book.measure,
+      // Caratteri e pagina sono del profilo, comuni a tutti i capitoli.
+      vaultFonts: printVaultFonts,
       follow: (changed) => {
         // Lo spazio lo chiude col suo `Lifetime` alla chiusura.
         const unsubscribe = documentSessions.subscribe((event) => {

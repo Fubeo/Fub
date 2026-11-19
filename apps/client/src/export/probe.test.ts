@@ -82,6 +82,12 @@ describe("FaceTable", () => {
     expect(italic).toEqual(expect.objectContaining({ file: "/fonts/lettura-corsivo.woff2", corsivo: true }));
   });
 
+  it("il file di un carattere del vault torna il percorso del vault, spazi e accenti compresi (T72)", () => {
+    const vault = `@font-face { font-family: "fubprint-x"; font-style: normal; font-weight: 1 1000; src: url("/Caratteri%20miei/Citt%C3%A0.otf"); }`;
+    const table = new FaceTable([vault]);
+    expect(table.list[table.index(style('"fubprint-x", serif'))].file).toBe("/Caratteri miei/Città.otf");
+  });
+
   it("senza le regole, o col file non caricato, la faccia resta senza file", () => {
     expect(new FaceTable([]).list).toEqual([]);
     const none = new FaceTable([]);
