@@ -268,8 +268,7 @@ Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica de
 browser `historyUndo` e `historyRedo`. Le battute adiacenti (entro mezzo secondo) vengono raggruppate
 secondo le regole native dell'editor; composizione, incolla, cancellazione,
 sostituzione e modifiche multi-cursore conservano i propri confini osservabili. La
-history della selezione è distinta da quella del contenuto. Quella del contenuto tiene almeno 10 000 passi
-(`TEXT_HISTORY_DEPTH`, come i documenti Word): annullando tutto il testo torna com'era all'apertura.
+history della selezione è distinta da quella del contenuto, che tiene almeno 10 000 passi (`TEXT_HISTORY_DEPTH`, come i documenti Word): annullando tutto il testo torna com'era all'apertura.
 
 Una modifica ricevuta da un altro riquadro aggiorna il testo ma non diventa una
 battuta nella history della superficie destinataria. Se il cambio esterno è
