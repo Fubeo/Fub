@@ -2481,7 +2481,7 @@ Fatto quando: spostare una scheda nella zona e rileggere il `.canvas`; la
 rotella che scorre la nota a riposo; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/core/cards src/canvas-edit.e2e.test.ts
-Stato: [~] fatto, da integrare (t47 @ 617374887)
+Stato: [x] integrato in integra/editor-2 (a1f13c274) · zona 265 px con la testata (eccezione); la tinta della selezione dei Blocchi copre solo la colonna sulle schede larghe (da correggere)
 
 ## T48 · Dalla nota alla lavagna, e ritorno
 
