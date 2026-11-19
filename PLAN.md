@@ -2759,7 +2759,7 @@ Fatto quando: i numeri e l'esito sono nella pagina; le guardie dei documenti
 verdi.
 Prova: scripts/check.sh --rapido; cd apps/client && node
 bench/interaction.mjs --only=battuta
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base daf52b2aa
 
 ## T57 · Diagramma: via la barra, il menu del tasto destro, il gruppo, i tasti
 
@@ -3306,7 +3306,7 @@ Fatto quando: test delle guide e del permesso dei caratteri; le foto del
 banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export; cargo nextest run -p fub-features pdf_export
-Stato: [~] fatto (t72 @ 9d4640a9c), unione con l'integrazione in corso dal coder · Newsreader, Hanken e Plex ora nel binario (stessi file dell'app, OFL); Georgia e Palatino ripiegano su Literata; formato «Propria» in più
+Stato: [~] integrato in `integra/editor-2` (e06621ec1, 2026-11-19), in attesa del gruppo; PageDecor di T72 rinominato PageMarks (collideva con T73); scelte con le classi comuni di T73; baseline delle scene nuove dal runner
 
 ## T73 · Testata e piè, frontespizio, indice, segnalibri
 
