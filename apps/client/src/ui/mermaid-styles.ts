@@ -62,6 +62,29 @@ export interface DiagramPalette {
   readonly texture: "none" | "grid" | "glow" | "paper";
   /// Il colore della griglia o dell'alone.
   readonly texture2?: string;
+  /// I colori dati a mano (l'esportazione in PDF, E28): vincono sullo stile
+  /// sui nodi, sulle decisioni e su inizio e fine (`ownColorRules` di
+  /// `mermaid-drawing.ts`). Le linee cambiano `line`.
+  readonly own?: DiagramOwnColors;
+}
+
+/// I quattro colori che l'esportazione dà a mano ai diagrammi, `#rrggbb`:
+/// ognuno vince sullo stile, e la scritta sopra sceglie da sola fra chiaro e
+/// scuro.
+export interface DiagramOwnColors {
+  readonly nodes?: string;
+  readonly decisions?: string;
+  readonly ends?: string;
+  readonly lines?: string;
+}
+
+/// Come l'esportazione cambia la tavolozza di uno stile: i colori dati a mano
+/// e il fondo. `paper: false` toglie la carta dello stile (la trama compresa)
+/// e il diagramma sta su `ground`, la carta della pagina.
+export interface DiagramPaletteChange {
+  readonly colors?: DiagramOwnColors;
+  readonly paper?: boolean;
+  readonly ground?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -474,6 +497,31 @@ export function paletteFor(
     ? armonia(light, read)
     : { ...WRITTEN[style][light], ground: WRITTEN[style][light].paper, nodeHues: NODE_HUES[style], edge: EDGE_STROKE };
   return level === "high" ? sharpened(base) : base;
+}
+
+/// La tavolozza con i cambi dell'esportazione. Un colore scritto male non
+/// entra; senza cambi torna la stessa tavolozza.
+export function changedPalette(p: DiagramPalette, change: DiagramPaletteChange): DiagramPalette {
+  const valid = (color: string | undefined): string | undefined => (color !== undefined && parseHex(color) ? color : undefined);
+  const nodes = valid(change.colors?.nodes);
+  const decisions = valid(change.colors?.decisions);
+  const ends = valid(change.colors?.ends);
+  const lines = valid(change.colors?.lines);
+  const bare = change.paper === false && p.paper !== null;
+  if (!nodes && !decisions && !ends && !lines && !bare) return p;
+  const own: DiagramOwnColors = {
+    ...(nodes ? { nodes } : {}),
+    ...(decisions ? { decisions } : {}),
+    ...(ends ? { ends } : {}),
+  };
+  const next: DiagramPalette = {
+    ...p,
+    ...(bare ? { paper: null, ground: valid(change.ground) ?? "#ffffff", texture: "none" as const } : {}),
+    ...(lines ? { line: lines } : {}),
+    ...(Object.keys(own).length > 0 ? { own } : {}),
+  };
+  if (bare) delete (next as { texture2?: string }).texture2;
+  return next;
 }
 
 /// L'etichetta leggibile su un colore della serie.

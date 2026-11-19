@@ -486,6 +486,10 @@ export interface PrintPaginatorOptions {
   /// Chi misura la resa montata: di serie `PrintMeasure` (i test ne danno uno
   /// finto, happy-dom non dispone).
   readonly measure?: (page: HTMLElement) => BlockSource & { dispose?(): void };
+  /// Ritocca la resa montata prima di ogni misura, già larga quanto la
+  /// colonna (`export/vectors.ts`: i diagrammi con un errore, ciò che non ci
+  /// sta in larghezza).
+  readonly prepare?: (page: HTMLElement) => void;
 }
 
 /// L'impaginatore di una nota per l'esportazione: chiede la resa per la
@@ -499,6 +503,7 @@ export class PrintPaginator {
   private visible: VisiblePages = { first: 0, last: 0 };
   private generation = 0;
   private surface: PrintSurface | null = null;
+  private rendered: RenderedDocument | null = null;
   private source: (BlockSource & { dispose?(): void }) | null = null;
   private slices: SlicedPagination | null = null;
   private hidden: HTMLElement[] = [];
@@ -540,6 +545,12 @@ export class PrintPaginator {
     return this.load();
   }
 
+  /// Rimonta l'ultima resa senza chiederla di nuovo al core: cambia come si
+  /// disegna (lo stile dei diagrammi), non la nota.
+  remount(): Promise<void> {
+    return this.load(this.rendered);
+  }
+
   update(settings: PrintSettings): void {
     const relayout = layoutChanged(this.settings.layout, settings.layout);
     this.settings = settings;
@@ -566,18 +577,22 @@ export class PrintPaginator {
     this.host.remove();
   }
 
-  private async load(): Promise<void> {
+  private async load(again: RenderedDocument | null = null): Promise<void> {
     const generation = ++this.generation;
     let rendered: RenderedDocument;
-    try {
-      this.renders++;
-      rendered = await this.options.render(this.options.doc, "print");
-    } catch (error) {
-      if (generation === this.generation && !this.disposed) this.options.onError?.(error);
-      return;
+    if (again !== null) rendered = again;
+    else {
+      try {
+        this.renders++;
+        rendered = await this.options.render(this.options.doc, "print");
+      } catch (error) {
+        if (generation === this.generation && !this.disposed) this.options.onError?.(error);
+        return;
+      }
     }
     // Una revisione più nuova è già stata chiesta: questa resa è vecchia.
     if (generation !== this.generation || this.disposed) return;
+    this.rendered = rendered;
     this.stopSlices();
     this.surface?.dispose();
     this.hidden = [];
@@ -616,6 +631,11 @@ export class PrintPaginator {
     this.host.style.width = `${shape.width}px`;
     this.appliedType = applyVariables(this.host, layout.type, this.appliedType);
     this.applyExcluded(surface.page, layout.excluded);
+    try {
+      this.options.prepare?.(surface.page);
+    } catch (error) {
+      this.options.onError?.(error);
+    }
     this.layouts++;
     const source = (this.options.measure ?? ((page) => new PrintMeasure(page)))(surface.page);
     this.source = source;

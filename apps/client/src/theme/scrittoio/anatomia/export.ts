@@ -11,6 +11,10 @@ export const EXPORT: PartAnatomy = {
     // copiati dalla resa per la stampa, che restano contenuto.
     { name: "export-pages", layers: { "print-page": "contenuto" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["export-stage", "export-doc", "export-slot", "export-page", "export-page-body", "export-fascia", "export-fascia-content", "export-fit", "print-page"] },
     { name: "export-sections", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["export-side", "export-section", "is-open", "export-section-head", "export-section-name", "export-section-summary", "export-section-chevron", "export-section-body", "export-note"] },
+    // La sezione Diagrammi (T75): gli stili con la miniatura, i quattro
+    // colori dati a mano, il fondo; sulle pagine, la riga di ciò che si è
+    // rimpicciolito per starci.
+    { name: "export-diagrams", states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")], hooks: ["export-dg", "export-dg-styles", "export-dg-style", "export-dg-swatch", "export-dg-swatch-node", "export-dg-swatch-choice", "export-dg-swatch-pill", "export-link", "export-link-inline", "export-dg-colors", "export-dg-color", "export-dg-color-head", "export-dg-chip", "is-none", "export-dg-reset", "export-dg-palette", "export-dg-ink", "export-dg-pick", "export-dg-hex", "export-dg-toggle", "export-fit-note"] },
     { name: "export-band", states: [S("rest")], hooks: ["export-band", "export-band-info", "export-band-pages", "export-band-ms", "export-band-hint"] },
   ],
 };

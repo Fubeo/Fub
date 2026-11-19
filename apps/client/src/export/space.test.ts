@@ -181,6 +181,42 @@ describe("lo spazio «Esporta in PDF»", () => {
     expect(tell).toBeNull();
   });
 
+  it("lo stile dei diagrammi rimonta la resa che c'è, senza chiederla al core", async () => {
+    const looks: (string | undefined)[][] = [];
+    const mount = vi.fn((container: HTMLElement, rendered: RenderedDocument, look: { diagramLook(index: number | null): { style?: string } | null }) => {
+      container.innerHTML = rendered.html;
+      looks.push([look.diagramLook(0)?.style, look.diagramLook(1)?.style, look.diagramLook(null)?.style]);
+      return { ready: Promise.resolve(), dispose: () => undefined };
+    });
+    const { space, render } = open({ mount });
+    await settle();
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(looks).toEqual([[undefined, undefined, undefined]]);
+    space.setProfile({ ...space.profile, diagrammi: { stile: "aurora", fondo: true } });
+    await settle();
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(looks[looks.length - 1]).toEqual(["aurora", "aurora", "aurora"]);
+    // Uno stile a un diagramma solo, poi via di nuovo; un cambio che non
+    // tocca i diagrammi non rimonta niente.
+    space.setDiagramStyle(1, "blueprint");
+    await settle();
+    expect(looks[looks.length - 1]).toEqual(["aurora", "blueprint", "aurora"]);
+    expect(space.diagramStyles.get(1)).toBe("blueprint");
+    const mounts = mount.mock.calls.length;
+    space.setProfile({ ...space.profile, frontespizio: { ...space.profile.frontespizio, segnalibri: !space.profile.frontespizio.segnalibri } });
+    await settle();
+    expect(mount.mock.calls.length).toBe(mounts);
+    space.openSection("diagrammi");
+    const clear = app.querySelector<HTMLButtonElement>("#export-dg-clear-own");
+    expect(clear?.textContent).toBe("Togli lo stile dato a 1");
+    clear!.click();
+    await settle();
+    expect(space.diagramStyles.size).toBe(0);
+    expect(looks[looks.length - 1]).toEqual(["aurora", "aurora", "aurora"]);
+    expect(render).toHaveBeenCalledTimes(1);
+    space.close();
+  });
+
   it("«Stampa…» manda alla stampa del sistema le stesse pagine, senza zoom", async () => {
     const print = vi.fn();
     vi.stubGlobal("print", print);

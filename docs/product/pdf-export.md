@@ -38,6 +38,46 @@ stampa).
   tempo dell'impaginazione. Il numero di pagine si annuncia a voce solo
   quando cambia.
 
+## Diagrammi
+
+La sezione Diagrammi decide come escono i diagrammi Mermaid della nota.
+`%% stile:` nella nota non cambia: tutto sta nel profilo (`diagrammi`, i
+colori `diagramma-*`).
+
+- **Lo stile**, sei pulsanti con la miniatura nei colori che disegnano
+  davvero: «Come nella nota» (lo stile di ogni diagramma, in luce chiara),
+  «Segue il tema» (Armonia coi colori della carta di stampa) o uno dei
+  quattro stili con il fondo (Acquerello, Aurora, Blueprint, Inchiostro).
+  Passando su uno stile le pagine lo mostrano; uscendo tornano a quello
+  scelto. La testa chiusa dice il nome dello stile.
+- **Uno stile per un solo diagramma**: lo dà il clic sul diagramma nella
+  pagina; vale per la posizione del diagramma fra quelli della nota (non
+  per quelli di una nota trasclusa, che prendono lo stile di tutti). Quando
+  ce ne sono, la sezione offre «Togli lo stile dato a N».
+- **Quattro colori dati a mano**: nodi, decisioni, inizio e fine, linee.
+  Ognuno ha una tavolozza di dodici inchiostri, un colore qualsiasi e il
+  codice; un colore dato vince sullo stile, e la scritta sopra sceglie da
+  sola fra chiaro e scuro. «tuo» segna i colori dati, il pulsante accanto
+  torna a quello dello stile.
+- **Fondo del diagramma**: spento, i quattro stili con il fondo perdono la
+  carta colorata e stanno sulla carta della pagina.
+
+Un cambio di stile, colori o fondo ridisegna i diagrammi della resa che c'è,
+senza chiederla di nuovo al core.
+
+### Sulla carta
+
+- I diagrammi e le formule vanno nel PDF come vettori (`svg2pdf`): il
+  disegno di un diagramma passa al core con i suoi colori scritti sugli
+  elementi e le scritte come testo, che nel PDF si seleziona. Le radici e
+  le frecce delle formule sono già SVG nella resa.
+- Un diagramma con un errore esce con l'ultimo disegno buono visto nello
+  spazio; se non ce n'è uno, al suo posto c'è il riquadro «non disegnato»
+  con il problema.
+- Una formula o un diagramma più larghi della colonna si rimpiccioliscono
+  per starci (non sotto il 30%) e una riga piccola sotto lo dice («formula
+  al 64% per stare nella pagina»).
+
 ## Comportamenti
 
 - Mentre si trascina un controllo il profilo cambia «dal vivo»: le pagine si

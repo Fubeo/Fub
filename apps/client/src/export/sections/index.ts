@@ -24,6 +24,7 @@
 
 import { plural, t, type Key } from "../../i18n/strings";
 import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
+import { DIAGRAMS_SECTION } from "./diagrams";
 
 export interface SectionContext {
   readonly profile: ExportProfile;
@@ -32,6 +33,11 @@ export interface SectionContext {
   change(next: ExportProfile, options?: { readonly live?: boolean }): void;
   /// Apre un'altra sezione e la porta sotto gli occhi.
   open(id: string): void;
+  /// Gli stili dati a un diagramma solo (T75): quanti sono, e toglierli.
+  readonly diagrams?: {
+    readonly own: number;
+    clearOwn(): void;
+  };
 }
 
 export interface ExportSection {
@@ -154,15 +160,7 @@ export const SECTIONS: readonly ExportSection[] = [
     title: "pdf_export.section.content",
     summary: (profile) => (profile.contenuto.commenti !== "no" ? t("pdf_export.content.comments") : t("pdf_export.content.all")),
   },
-  {
-    id: "diagrammi",
-    title: "pdf_export.section.diagrams",
-    summary: ({ diagrammi }) => {
-      if (diagrammi.stile === "nota") return t("pdf_export.diagrams.note");
-      if (diagrammi.stile === "tema") return t("pdf_export.diagrams.theme");
-      return diagrammi.stile;
-    },
-  },
+  DIAGRAMS_SECTION,
   {
     id: "interruzioni",
     title: "pdf_export.section.breaks",

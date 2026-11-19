@@ -16,10 +16,17 @@
 //
 // La nota cambiata in un altro riquadro si segue: dopo una breve quiete si
 // salva e si chiede la resa nuova, con le stesse pagine sotto gli occhi.
+//
+// I diagrammi (T75) si disegnano con lo stile della sezione Diagrammi: chi
+// monta la resa riceve l'aspetto di ogni diagramma (`ExportMount`), e un
+// cambio di stile, colori o fondo rimonta la resa che c'è, senza chiederla
+// di nuovo al core (`vectors.ts`).
 
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 import { printPages, type PrintMount, type PrintRenderer } from "../editors/media/print-view";
+import type { RenderedDocument } from "../host/contract";
+import type { DiagramLookOverride } from "../ui/mermaid";
 import { reducedMotion } from "../theme/reduced-motion";
 import { icon, iconEl, registerIcon } from "../ui/icons";
 import { openLifetime } from "../ui/lifetime";
@@ -32,6 +39,17 @@ import type { BlockSource } from "./paginate/slices";
 import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
 import { SECTIONS, type ExportSection } from "./sections/index";
 import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
+import { DiagramMemory, diagramLookKey, diagramPrintLook, overrideFor, preparePrintVectors, type DiagramPrintLook } from "./vectors";
+
+/// Come si disegna un diagramma della resa montata: per la sua posizione fra
+/// i diagrammi della nota, `null` per quello di una nota trasclusa.
+export interface ExportMountLook {
+  diagramLook(index: number | null): DiagramLookOverride | null;
+}
+
+/// Chi monta la resa per lo spazio: un `PrintMount` che sa anche disegnare i
+/// diagrammi nello stile dell'esportazione.
+export type ExportMount = (container: HTMLElement, rendered: RenderedDocument, look: ExportMountLook) => ReturnType<PrintMount>;
 
 /// Quanto si aspetta dopo l'ultimo cambio della nota prima di rifare la resa.
 export const FOLLOW_QUIET_MS = 400;
@@ -41,7 +59,9 @@ export interface ExportSpaceOptions {
   /// Il nome della nota, nella barra e in cima alla prima pagina.
   readonly title: string;
   readonly render: PrintRenderer;
-  readonly mount?: PrintMount;
+  readonly mount?: ExportMount;
+  /// Gli stili dati a un diagramma solo, per la sua posizione nella nota.
+  readonly diagramStyles?: ReadonlyMap<number, string>;
   /// Dove sta lo spazio: di serie `#app`, sotto la barra del titolo.
   readonly container?: HTMLElement;
   /// Ciò che sta sotto lo spazio e non deve prendere il fuoco finché è
@@ -71,12 +91,22 @@ export interface ExportSpace {
   setView(view: Exclude<ExportView, "libera">): void;
   setProfile(next: ExportProfile, options?: { readonly live?: boolean }): void;
   openSection(id: string): void;
+  /// Dà a un diagramma solo uno stile suo (`null`: torna a quello di tutti).
+  setDiagramStyle(index: number, style: string | null): void;
+  /// Gli stili dati a un diagramma solo, per la sua posizione.
+  readonly diagramStyles: ReadonlyMap<number, string>;
   print(): Promise<void>;
   close(): void;
 }
 
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "export-open": ["M6.75 9.3L12 14.7l5.25-5.4"],
+  // «Un colore qualsiasi» della sezione Diagrammi (T75): la tavolozza del
+  // pittore, come `fmt-color` della barra di formato.
+  "export-color": [
+    "M12 3.5c4.7 0 8.5 3.4 8.5 7.6 0 2.6-2.1 4.2-4.3 4.2h-1.7a1.6 1.6 0 0 0-1.2 2.7 1.6 1.6 0 0 1-1.2 2.6C7.3 20.6 3.5 16.8 3.5 12S7.3 3.5 12 3.5z",
+    "M7 11a1 1 0 1 0 2 0 1 1 0 1 0-2 0M10 7.6a1 1 0 1 0 2 0 1 1 0 1 0-2 0M14.4 8.4a1 1 0 1 0 2 0 1 1 0 1 0-2 0",
+  ],
 };
 
 /// Il conto dei segnalibri del PDF: i titoli della nota impaginata.
@@ -104,6 +134,10 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   const finals: ((result: SlicedResult) => void)[] = [];
   let readyTold = false;
   let settings = printSettingsOf(profile);
+  const diagramStyles = new Map(options.diagramStyles ?? []);
+  let diagramLook: DiagramPrintLook = diagramPrintLook(profile, diagramStyles);
+  let diagramKey = diagramLookKey(diagramLook);
+  const diagramMemory = new DiagramMemory();
 
   const root = document.createElement("div");
   root.className = "export-space";
@@ -161,6 +195,16 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       },
       change: (next: ExportProfile, change?: { readonly live?: boolean }) => space.setProfile(next, change),
       open: (id: string) => space.openSection(id),
+      diagrams: {
+        get own() {
+          return diagramStyles.size;
+        },
+        clearOwn: () => {
+          diagramStyles.clear();
+          restyleDiagrams();
+          renderSide();
+        },
+      },
     };
   }
 
@@ -260,11 +304,25 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
   }
 
+  const exportMount = options.mount;
+  const mount: PrintMount | undefined = exportMount && ((container, rendered) =>
+    exportMount(container, rendered, { diagramLook: (index) => overrideFor(diagramLook, index) }));
+
+  /// Lo stile dei diagrammi è cambiato: la resa che c'è si rimonta.
+  function restyleDiagrams(): void {
+    diagramLook = diagramPrintLook(profile, diagramStyles);
+    const key = diagramLookKey(diagramLook);
+    if (key === diagramKey) return;
+    diagramKey = key;
+    if (!closed) void paginator.remount();
+  }
+
   const paginator = new PrintPaginator({
     doc: options.doc,
     title: options.title,
     render: options.render,
-    mount: options.mount,
+    mount,
+    prepare: (page) => preparePrintVectors(page, diagramMemory),
     settings,
     onUpdate,
     onError,
@@ -381,6 +439,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       paginator.update(settings);
       pages.setColors(settings.look.colors);
       toolbar.setProfile(next.nome, next !== base);
+      restyleDiagrams();
       if (change?.live) return;
       renderSummaries();
       if (latest) band.update(profile, { pages: latest.final ? latest.pagination.pages.length : latest.total, bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(latest) : null, ms: latest.workMs });
@@ -391,6 +450,16 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       renderSide();
       heads.get(id)?.head.scrollIntoView({ block: "nearest" });
     },
+    get diagramStyles() {
+      return diagramStyles;
+    },
+    setDiagramStyle(index, style) {
+      if (!Number.isSafeInteger(index) || index < 0) return;
+      if (style === null) diagramStyles.delete(index);
+      else diagramStyles.set(index, style);
+      restyleDiagrams();
+      renderSide();
+    },
     print: async () => {
       await printNow();
     },
@@ -400,6 +469,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       finals.length = 0;
       lifetime.close();
       paginator.dispose();
+      diagramMemory.dispose();
       pages.dispose();
       root.remove();
       if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
