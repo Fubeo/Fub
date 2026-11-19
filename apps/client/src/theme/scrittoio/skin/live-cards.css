@@ -533,8 +533,14 @@
 .live-card[data-card-resizing="true"] .live-card-resize::after {
   background: var(--accent);
 }
+/* Col fuoco da tastiera la lineetta porta l'anello del fuoco, come i
+   pulsanti della testata: il bordo largo 10 px non ne ha uno suo. */
 .live-card-resize:focus-visible {
   outline: none;
+}
+.live-card-resize:focus-visible::after {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 /* «Mostra come: riga»: l'icona e il nome, in una riga sola. */

@@ -29,6 +29,8 @@ import {
   sizeEmbedAt,
   annotateEmbedIn,
   annotationBoardStem,
+  CARD_MAX_HEIGHT,
+  CARD_MIN_HEIGHT,
   extractEmbedAt,
   sheetExcerptPart,
   type LiveCardBoards,
@@ -881,6 +883,24 @@ describe("la misura sulla scheda", () => {
     expect(view.state.doc.line(3).text).toBe("![[Conti.xlsx|500x260]]");
   });
 
+  it("il bordo è un separatore con un valore: l'altezza fra i suoi limiti", async () => {
+    const { parent } = rig("Prima\n\n![[Conti.xlsx|500x300]]\n\nDopo\n");
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    const handle = card.querySelector<HTMLElement>(".live-card-resize")!;
+    expect(handle.getAttribute("role")).toBe("separator");
+    expect(handle.getAttribute("aria-valuemin")).toBe(String(CARD_MIN_HEIGHT));
+    expect(handle.getAttribute("aria-valuemax")).toBe(String(CARD_MAX_HEIGHT));
+    // happy-dom non impagina: vale l'altezza scritta nell'embed.
+    expect(handle.getAttribute("aria-valuenow")).toBe("300");
+    expect(handle.getAttribute("aria-valuetext")).toBe("300 pixel");
+    card.dispatchEvent(new Event("pointerenter"));
+    handle.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientY: 100, pointerId: 1, bubbles: true }));
+    handle.dispatchEvent(new PointerEvent("pointermove", { clientY: 360, pointerId: 1, bubbles: true }));
+    // Mentre si trascina segue il bordo.
+    expect(handle.getAttribute("aria-valuenow")).toBe("260");
+  });
+
   it("in sola lettura il bordo non si trascina", async () => {
     const { parent } = rig("Prima\n\n![[Conti.xlsx]]\n", { editable: false });
     await settle();
@@ -1214,6 +1234,28 @@ describe("«Estrai» sulla scheda (T49)", () => {
     expect(notes).toEqual([button.title]);
     expect(view.state.doc.toString()).toBe(doc);
     expect(cards.activeCard()).not.toBeNull();
+  });
+
+  it("spento, Invio e Spazio non lo premono: dicono soltanto perché", async () => {
+    const notes: string[] = [];
+    const doc = "Testo\n\n![[Contratto.pdf#page=2]]\n";
+    const { parent, view, cards } = rig(doc, { notify: (message) => notes.push(message) });
+    await settle();
+    cards.activateAt(view, view.state.doc.line(3).from);
+    const button = cardsIn(parent)[0]!.querySelector<HTMLButtonElement>(".live-card-extract")!;
+    let clicks = 0;
+    button.addEventListener("click", () => (clicks += 1));
+    for (const key of ["Enter", " "]) {
+      const down = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      button.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+      const up = new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true });
+      button.dispatchEvent(up);
+      expect(up.defaultPrevented).toBe(true);
+    }
+    expect(clicks).toBe(0);
+    expect(notes).toEqual([button.title, button.title]);
+    expect(view.state.doc.toString()).toBe(doc);
   });
 
   it("in sola lettura, su un file che manca o su una specie senza estratti non c'è", async () => {

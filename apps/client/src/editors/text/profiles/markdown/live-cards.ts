@@ -612,6 +612,8 @@ export class LiveCard {
   /// La cella attiva e la sua formula, mentre la specie scrive (un foglio).
   #cellContext: CardEditorContext | null = null;
   #refreshResizable: () => void = () => {};
+  /// Il bordo in basso, che cambia l'altezza (T42).
+  #resizeHandle: HTMLElement | null = null;
 
   constructor(owner: LiveCards, embed: LiveCardEmbed, inColumn = false) {
     this.#owner = owner;
@@ -657,7 +659,12 @@ export class LiveCard {
     resize.setAttribute("role", "separator");
     resize.setAttribute("aria-orientation", "horizontal");
     resize.setAttribute("aria-label", liveStrings.t("live_card.resize"));
+    // Un separatore che prende il fuoco è un comando con un valore: l'altezza
+    // della scheda in pixel, fra i suoi limiti (`#refreshHeightValue`).
+    resize.setAttribute("aria-valuemin", String(CARD_MIN_HEIGHT));
+    resize.setAttribute("aria-valuemax", String(CARD_MAX_HEIGHT));
     resize.tabIndex = -1;
+    this.#resizeHandle = resize;
     // Il tocco che trascina il bordo non scorre la pagina (la pelle non ha
     // `touch-action`: lo scrive l'elemento).
     resize.style.touchAction = "none";
@@ -691,6 +698,20 @@ export class LiveCard {
         return;
       }
       this.#owner.extract(this);
+    });
+    // Spento (`aria-disabled`), Invio e Spazio non lo premono: un comando
+    // spento non dà clic. Dicono soltanto perché, come il clic del puntatore.
+    const extractOff = (event: KeyboardEvent): boolean =>
+      extract.getAttribute("aria-disabled") === "true" && (event.key === "Enter" || event.key === " ");
+    life.listen(extract, "keydown", (event: KeyboardEvent) => {
+      if (!extractOff(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const why = this.extractBlocked();
+      if (why !== null && !event.repeat) this.#owner.host.notify?.(why);
+    });
+    life.listen(extract, "keyup", (event: KeyboardEvent) => {
+      if (extractOff(event)) event.preventDefault();
     });
     // La testata (fuori dai pulsanti) sceglie la scheda: il bordo del blocco.
     life.listen(head, "mousedown", (event: MouseEvent) => {
@@ -766,6 +787,19 @@ export class LiveCard {
       delete this.root.dataset.cardHeight;
       this.root.style.removeProperty("--live-card-height");
     }
+    this.#refreshHeightValue();
+  }
+
+  /// L'altezza sul bordo che la cambia (`aria-valuenow`): `height` mentre si
+  /// trascina, sennò quella che la scheda ha nella pagina o, fuori dalla
+  /// pagina, quella scritta nell'embed.
+  #refreshHeightValue(height?: number): void {
+    const handle = this.#resizeHandle;
+    if (!handle) return;
+    const shown = height ?? (this.root.getBoundingClientRect().height || (liveCardSize(this.#embed.alias).height ?? CARD_MIN_HEIGHT));
+    const value = Math.round(Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, shown)));
+    handle.setAttribute("aria-valuenow", String(value));
+    handle.setAttribute("aria-valuetext", liveStrings.t("live_card.resize.value", { height: String(value) }));
   }
 
   /// Trascinare il bordo in basso: la scheda segue il puntatore, e al rilascio
@@ -783,6 +817,7 @@ export class LiveCard {
       if (can()) this.root.dataset.cardResizable = "true";
       else delete this.root.dataset.cardResizable;
       handle.tabIndex = can() ? 0 : -1;
+      this.#refreshHeightValue();
     };
     life.listen(this.root, "pointerenter", () => this.#refreshResizable());
     life.listen(this.root, "focusin", () => this.#refreshResizable());
@@ -812,6 +847,7 @@ export class LiveCard {
         height = Math.round(Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, from + move.clientY - start)));
         this.root.dataset.cardHeight = "set";
         this.root.style.setProperty("--live-card-height", `${height}px`);
+        this.#refreshHeightValue(height);
         this.#owner.requestMeasure(this);
       });
       gesture.listen(handle, "pointerup", () => end(Math.abs(height - from) >= 1 ? height : null));
@@ -1232,6 +1268,16 @@ export class LiveCard {
     }
     this.#mode = mode;
     this.root.dataset.cardMode = mode;
+  }
+
+  /// La luce o il tema sono cambiati: la vista della specie rilegge i colori
+  /// che ha calcolato dalla pagina.
+  themeChanged(): void {
+    try {
+      this.#cardView?.themeChanged?.();
+    } catch (error) {
+      console.warn(`note: la scheda ${this.embed.page} non segue la luce`, error);
+    }
   }
 
   /// Entra nella scheda (e nella scrittura del suo file, dove si scrive).
@@ -1825,6 +1871,13 @@ export class LiveCards {
     const card = this.#active;
     if (!card || card.destroyed || card.kind !== "sheet" || card.state !== "view") return null;
     return { open: () => card.open(), context: card.cellContext };
+  }
+
+  /// La luce o il tema sono cambiati (`EditorSurface.setTheme`): ogni scheda
+  /// lo dice alla sua specie.
+  themeChanged(): void {
+    if (this.#destroyed) return;
+    for (const card of this.#cards.values()) card.themeChanged();
   }
 
   /// Ciò che `activeSheet` dà è cambiato: lo sa la superficie.

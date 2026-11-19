@@ -62,7 +62,9 @@ immagini tengono la misura di sempre: non sono schede.
 - **Altezza**: quella della specie; si cambia trascinando il bordo in basso
   (o, col fuoco sul bordo, con le frecce). Esc durante il trascinamento la
   riporta com'era; al rilascio la nota scrive la misura, un passo
-  d'annullamento. **Altezza normale** la toglie.
+  d'annullamento. **Altezza normale** la toglie. Il bordo è un separatore
+  con un valore: col fuoco porta l'anello, e un lettore di schermo dice
+  l'altezza in pixel, fra 120 e 2400.
 - **Mostra come**: **Scheda**; **Link**, che diventa `[[Conti.xlsx]]`;
   **Riga**, solo icona e nome (`![[Conti.xlsx|row]]`).
 - **Affianca**: la scheda va accanto a quella subito sotto (o sopra) in un
@@ -244,6 +246,12 @@ tabella seguono un intervallo che cresce: un intervallo scritto resta quello.
   ricalcola e non scrive. Un valore che Fub non ha ricalcolato ha il filo a
   puntini del foglio. La scheda è alta quanto le righe della parte (oltre
   sedici righe si scorre dentro), senza lettere né numeri.
+- **I colori** sono quelli del file portati sulla carta della nota (l'aspetto
+  adattato, `theme/adapt.ts`): la tinta resta, la chiarezza cambia quanto
+  basta per 4,5:1. Il rosso puro di un'intestazione sulla carta scura della
+  notte starebbe a 4,35:1; cambiata la luce, la scheda ridipinge le celle.
+  Per un lettore di schermo le celle sono una griglia, riga per riga, con il
+  numero della riga e della colonna del foglio.
 - **Da attiva** compaiono le lettere delle colonne e i numeri delle righe, e
   si scrive nelle celle come nel foglio: Invio, F2, il doppio clic o un
   carattere aprono la cella, la selezione si copia con Ctrl+C come testo a
@@ -378,7 +386,8 @@ com'è adesso.
   nella nota. **La fonte tolta**: «File mancante», con **Ritrova…**.
 - **I PDF**: gli estratti di PDF arrivano col motore dei PDF, che legge il
   testo di un passo e lo ritrova dopo un cambio. Finché non c'è, sulla scheda
-  PDF **Estrai** è spento e dice perché. Un passo scritto da un'altra app
+  PDF **Estrai** è spento e dice perché (al clic, o con Invio e Spazio, che
+  non lo premono). Un passo scritto da un'altra app
   (`![[Contratto.pdf#page=2&selection=4,0,4,163]]`, come lo scrive Obsidian)
   si mostra come una citazione con la barra gialla, che dice che il testo lo
   leggerà il motore dei PDF, e sotto la fonte («Contratto.pdf · p. 2») con
