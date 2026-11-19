@@ -5300,6 +5300,41 @@ describe("portare a schermo un punto", () => {
     document.querySelector<HTMLButtonElement>(".export-back")!.click();
     expect(document.querySelector(".export-space")).toBeNull();
   });
+
+  it("la nota resta byte per byte: aprire lo spazio, regolare, stampare e tornare non la riscrive", async () => {
+    // A capo di Windows, spazi in coda, l'interruzione a mano e nessun a capo
+    // finale: niente che una riscrittura lascerebbe com'è.
+    const note = "---\r\ntags: [prova]\r\n---\r\n# Strana  \r\n\r\nRiga con spazi in coda   \r\n\r\n<!-- pagina -->\r\n\r\n| a | b |\r\n|---|---|\r\n| 1 | 2 |\r\n\r\nSenza a capo finale";
+    const host = await start({ ...VAULT, "Strana.md": note });
+    const { openDocument } = await import("./panels/document");
+    const { allCommands } = await import("./ui/commands");
+    await openDocument("Strana.md");
+    await settle();
+    const previous = Object.getOwnPropertyDescriptor(window, "print");
+    const print = vi.fn();
+    Object.defineProperty(window, "print", { configurable: true, value: print });
+    try {
+      await allCommands().find((entry) => entry.id === "shell.doc.export_pdf")!.run!();
+      await waitFor("le pagine ci sono", () => document.querySelector(".export-space .export-slot") !== null);
+      const space = document.querySelector<HTMLElement>(".export-space")!;
+      space.querySelector<HTMLButtonElement>('.export-segment[data-view="tutte"]')!.click();
+      space.querySelector<HTMLButtonElement>('.export-section[data-section="tema"] .export-section-head')!.click();
+      await settle();
+      space.querySelector<HTMLButtonElement>("#export-theme-relazione")!.click();
+      await settle();
+      space.querySelector<HTMLButtonElement>(".export-print")!.click();
+      await waitFor("la stampa parte", () => print.mock.calls.length > 0);
+      window.dispatchEvent(new Event("afterprint"));
+      space.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.querySelector(".export-space")).toBeNull();
+      await settle();
+    } finally {
+      if (previous) Object.defineProperty(window, "print", previous);
+      else Reflect.deleteProperty(window, "print");
+    }
+    expect(host.atGate("writeDocument").filter((call) => call.args[0] === "Strana.md")).toEqual([]);
+    expect(host.files()["Strana.md"]).toBe(note);
+  });
 });
 
 describe("la modalità di ogni famiglia di superfici", () => {

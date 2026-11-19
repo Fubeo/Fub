@@ -684,6 +684,26 @@ export const SCENE = touchLast(onPage("shell", [
       await openExportBlockMenu(page, text);
     },
   })),
+  // **Le due voci di oggi** (T80): nel menu «…» di una nota Markdown,
+  // «Esporta ▸» offre l'HTML e «PDF…», che apre lo spazio «Esporta in PDF»
+  // (il vecchio PDF di solo testo non c'è più); «Esporta in PDF…» sta al
+  // posto di «Stampa», che è nella barra dello spazio. Anche nella finestra
+  // minima.
+  ...[
+    ["menu-riquadro-esporta", "Il menu «…» di una nota con «Esporta» aperto: HTML e PDF, che apre lo spazio «Esporta in PDF»", undefined],
+    ["menu-riquadro-esporta-stretta", "Il menu «…» di una nota con «Esporta» aperto, alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "esporta-menu=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await page.click(".pane.focus [data-pane-menu]");
+      await page.locator("#context-menu [role=menuitem]", { has: page.locator(".menu-label", { hasText: /^Esporta$/ }) }).click();
+      await page.waitForSelector(".context-submenu [role=menuitem]");
+      await page.mouse.move(0, 0);
+    },
+  })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
   // cursore sceso con le frecce resta a metà altezza del foglio.
   {
