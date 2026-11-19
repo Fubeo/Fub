@@ -422,8 +422,16 @@ describe("trasforma in lista (Mod-Shift-8/7)", () => {
     expect(run(toggleBulletList, "riga|").out).toBe("- riga|");
   });
 
-  it("solo righe vuote → default", () => {
-    expect(run(toggleBulletList, "|").handled).toBe(false);
+  it("la riga vuota del cursore diventa voce, col cursore dopo il segno (IMP-6104)", () => {
+    expect(run(toggleBulletList, "|").out).toBe("- |");
+    expect(run(toggleOrderedList, "a\n|").out).toBe("a\n1. |");
+    expect(run(toggleBulletList, "  |").out).toBe("  - |");
+    // Il cursore a inizio di una riga piena resta sul testo, dopo il segno.
+    expect(run(toggleBulletList, "|riga").out).toBe("- |riga");
+  });
+
+  it("solo righe vuote selezionate → default", () => {
+    expect(run(toggleBulletList, "‹\n\n›").handled).toBe(false);
   });
 });
 

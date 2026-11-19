@@ -125,7 +125,11 @@ ogni movimento del puntatore.
 
 ## La selezione di blocchi
 
-Esc seleziona il blocco del cursore; Shift+↑/↓ allarga ai fratelli, ↑/↓
+Esc seleziona il blocco del cursore, e soltanto lui: su una riga vuota o nel
+frontmatter non seleziona niente, e il velo copre le righe del blocco, non la
+testata della pagina che sta sopra la prima riga. Righe scritte con un solo a
+capo sono un paragrafo solo, come in Markdown, e Esc le sceglie insieme.
+Shift+↑/↓ allarga ai fratelli, ↑/↓
 passano al blocco vicino, Canc e Backspace eliminano i blocchi con le loro righe
 vuote, Mod+D duplica, Invio ed Esc tornano al testo. Copiare e tagliare
 lavorano sul Markdown dei blocchi interi. La selezione è del riquadro: un altro

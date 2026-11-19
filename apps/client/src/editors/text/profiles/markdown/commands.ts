@@ -551,11 +551,14 @@ export const toggleCheckbox: StateCommand = (target) => {
 /// `Mod-Shift-8/7`: le righe selezionate diventano elenco puntato/numerato.
 /// Toggle: se lo sono già *tutte*, i marcatori si tolgono. La conversione da
 /// un tipo all'altro sostituisce solo pallino/numero e conserva la checkbox
-/// (una todo resta una todo); le righe vuote in mezzo si saltano.
+/// (una todo resta una todo); le righe vuote in mezzo si saltano. Una riga
+/// sola, anche vuota, diventa voce: dal «/» su una riga nuova l'elenco nasce
+/// lì, col cursore dopo il segno (IMP-6104).
 function setListKind(kind: "bullet" | "ordered"): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
-    const lines = selectedLines(state).filter((l) => l.text.trim() !== "");
+    const selected = selectedLines(state);
+    const lines = selected.length > 1 ? selected.filter((l) => l.text.trim() !== "") : selected;
     if (lines.length === 0) return false;
     const items = lines.map((l) => listItem(l.text));
     const allSame = items.every((it) => it !== null && it.kind === kind);
@@ -581,7 +584,14 @@ function setListKind(kind: "bullet" | "ordered"): StateCommand {
         changes.push({ from: l.from + indentLen, insert: marker });
       }
     }
-    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    // Un cursore dove nasce il segno va dopo di lui, pronto a scrivere la
+    // voce; una selezione si sposta con le modifiche come sempre.
+    const set = state.changes(changes);
+    const selection = EditorSelection.create(
+      state.selection.ranges.map((range) => (range.empty ? EditorSelection.cursor(set.mapPos(range.head, 1)) : range.map(set))),
+      state.selection.mainIndex,
+    );
+    dispatch(state.update({ changes: set, selection, scrollIntoView: true, userEvent: "input" }));
     return true;
   };
 }
