@@ -282,9 +282,16 @@ impl Shared {
             ws.prepare_finish_index_with_graph(in_progress.work, graph)
         };
         let completed_finish = prepared_finish.invoke();
-        let opening = with_event_drain(&self.workspace, |ws| {
-            ws.finalize_finish_index(completed_finish)
+        let (opening, rejoin) = with_event_drain(&self.workspace, |ws| {
+            ws.finalize_finish_index_detached(completed_finish)
         })?;
+        // I dati delle rinomine fatte ad app chiusa si spostano fuori dal
+        // prestito esclusivo e sotto lo stesso turno (IMP-1805), prima della
+        // raccolta degli spazi orfani che sta più sotto.
+        if !rejoin.is_empty() {
+            let completed = rejoin.invoke();
+            with_event_drain(&self.workspace, |ws| ws.finish_rejoin(completed))?;
+        }
         // Il flush è una fase esterna separata: il token conserva gli indici,
         // mentre i lettori e la re-entry possono progredire senza guard Workspace.
         let _ = crate::teardown::flush_indexes(&self.workspace)?;

@@ -208,6 +208,43 @@ verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
 
+### Il disco fuori dal prestito esclusivo
+
+Una scrittura durevole fa un `fsync`, e su un disco occupato un `fsync` dura
+secondi. Dentro il prestito esclusivo ogni lettura del vault aspettava quei
+secondi (IMP-1805: prestiti di 11–44 s nei log dei tester). La regola: **il
+disco si scrive sotto il turno, fuori dal prestito; il prestito esclusivo
+aggiorna solo la memoria.** La soglia del log resta 250 ms (`Custody`), e
+`legacy_tests/exclusive_hold_budget.rs` la presidia con un disco finto che fa
+durare 300 ms ogni scrittura.
+
+- **Salvataggi e modifiche** (`write_document`, `apply_edit`, `write_bytes`,
+  anche i link riscritti da una rinomina o da uno spostamento): il kernel
+  prepara la scrittura sotto un prestito condiviso, la posa sul disco con la
+  sua CAS (`PreparedDocumentWrite::place`) e poi aggiorna anagrafe, indice e
+  registro in un prestito breve (`commit_placed_document_*`). La CAS e il turno
+  insieme impediscono che un testo vecchio copra uno nuovo: un altro writer
+  di Fub aspetta il turno, uno esterno fa fallire la CAS con `Stale`. Fra
+  `place` e il commit il file ha già il testo nuovo e l'anagrafe no: il
+  rilevatore che lo guarda in quel tratto fa i suoi piani, ma applica solo con
+  `Custody::write`, che aspetta il turno di chi salva, e il kernel scarta un
+  piano fatto su una voce d'anagrafe che nel frattempo è cambiata
+  (`prepare_sync_path_prepared`). Così un salvataggio o uno spostamento non
+  diventa una modifica da fuori (`legacy_tests/watcher_echo_window.rs`).
+- **La riga del registro** di un epilogo (`jobs::finish_events`) si appende
+  dopo aver lasciato il prestito, quando il turno è del thread che chiude:
+  l'ordine delle righe lo tiene il turno. Un append fallito diventa un
+  `Trouble` come prima.
+- **Le rinomine fatte ad app chiusa** che la fine di un'indicizzazione
+  riconosce (apertura e `vault.rebuild-index`): organizzazione, stato
+  per-documento e bozze si spostano in un `PendingRejoin` eseguito fuori dal
+  prestito, prima della raccolta degli spazi orfani, e i `DocumentRenamed`
+  escono dopo, con `Workspace::finish_rejoin`.
+- **Il registro dei vault** (`vaults.rs`, `mutate`): lock del file compagno,
+  rilettura e scrittura atomica girano sotto il turno della custodia, e
+  l'elenco fuso entra in memoria in un prestito breve solo se la scrittura è
+  riuscita.
+
 ### Bozze e salvataggio
 
 La bozza di recupero esiste per coprire il tempo in cui il disco non ha ancora

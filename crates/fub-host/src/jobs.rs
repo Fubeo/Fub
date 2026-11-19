@@ -432,10 +432,15 @@ impl JobHost {
             let mut detached = self.for_provider(hook.owner(), InvokeMode::Apply);
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(source, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -462,6 +467,10 @@ impl JobHost {
     ) -> Result<EditReport, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
+        // Rientrante: chi passa da `apply_edit_detached` lo ha già. Il recupero
+        // delle rinomine ci arriva diretto, e la scrittura sul disco fuori dal
+        // prestito conta sul turno per non avere un altro writer in mezzo.
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             let id = fenced_doc_id(id)?;
@@ -484,10 +493,15 @@ impl JobHost {
             hook.invoke(&mut detached)
         });
         let base = request.base;
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(&next, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_edit(placed, model, base, &report)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -709,13 +723,32 @@ pub(crate) fn drain_events(workspace: &Custody<Workspace>) -> Result<(), PluginE
 }
 
 /// Consegna gli eventi e completa l'epilogo opaco preparato dal kernel.
+///
+/// La riga del registro si appende **fuori** dal prestito esclusivo (IMP-1805):
+/// è una scrittura sul disco, e su un disco occupato dura secondi che nessuna
+/// lettura del vault deve passare ad aspettare. L'ordine delle righe lo tiene
+/// il turno di scrittura, quindi la si stacca solo se il turno è di questo
+/// thread — lo è per ogni chiamante di oggi; chi non lo tenesse la scrive
+/// dentro il prestito, come prima.
 pub(crate) fn finish_events<T>(
     workspace: &Custody<Workspace>,
     deferred: DeferredEvents<T>,
 ) -> Result<T, PluginError> {
     drain_events(workspace)?;
-    let mut ws = workspace.write()?;
-    Ok(ws.finish_deferred_events(deferred))
+    if !workspace.holds_turn() {
+        let mut ws = workspace.write()?;
+        return Ok(ws.finish_deferred_events(deferred));
+    }
+    let (outcome, record) = {
+        let mut ws = workspace.write()?;
+        ws.finish_deferred_events_detached(deferred)
+    };
+    if let Some(record) = record {
+        if let Err(failure) = record.append() {
+            workspace.write()?.report_journal_failure(failure);
+        }
+    }
+    Ok(outcome)
 }
 
 /// Esegue un comando **di sola lettura** col frame tutto suo
@@ -804,7 +837,16 @@ pub(crate) fn run_detached_rebuild_index(
                 ws.prepare_finish_index_with_graph(work, graph)
             };
             let completed_finish = prepared_finish.invoke();
-            let opening = workspace.write()?.finalize_finish_index(completed_finish);
+            let (opening, rejoin) = workspace
+                .write()?
+                .finalize_finish_index_detached(completed_finish);
+            // Come all'apertura (`runner/shared.rs`): i dati delle rinomine
+            // riconosciute si spostano fuori dal prestito esclusivo, sotto il
+            // turno del comando, prima della raccolta qui sotto.
+            if !rejoin.is_empty() {
+                let completed = rejoin.invoke();
+                workspace.write()?.finish_rejoin(completed);
+            }
 
             let _ = crate::teardown::flush_indexes(workspace)?;
             workspace.read()?.store_entries();
@@ -967,10 +1009,12 @@ impl VaultWrite for JobHost {
             hook.invoke(&mut detached)
         });
         self.stopped()?;
+        let placed = prepared
+            .place(bytes, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_bytes_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {

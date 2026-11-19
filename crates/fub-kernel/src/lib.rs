@@ -131,11 +131,12 @@ pub use vault::{data_root, PreparedIgnoreCheck, TrashEntry, Vault, FUB_DIR, TRAS
 pub use viewstate::ViewStates;
 pub use workspace::{
     new_doc_id, valid_doc_id, Barred, CatchUpSnapshot, CompletedExternalAssetRename,
-    CompletedSyncChange, ExternalRenamePlan, GraphUpdate, IndexBatchStep, Indexing, Opening,
-    ParsedBatch, ParsedChange, ParsedExplicitRename, ParsedExternalAssetRename,
-    ParsedExternalRename, PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp,
-    PreparedDocumentBytesWrite, PreparedExplicitRename, PreparedExternalAssetRename,
-    PreparedReadOnlyCommand, PreparedResourceOpen, PreparedResourceRead, PreparedTimerCursors,
-    ReadsInFlight, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE,
-    UNDO_STALE_MANY, UNDO_STALE_ONE,
+    CompletedRejoin, CompletedSyncChange, ExternalRenamePlan, GraphUpdate, IndexBatchStep,
+    Indexing, JournalFailure, Opening, ParsedBatch, ParsedChange, ParsedExplicitRename,
+    ParsedExternalAssetRename, ParsedExternalRename, PendingExternalAssetRename,
+    PendingJournalRecord, PendingRejoin, PendingSyncChange, PlacedDocumentBytesWrite,
+    PlacedDocumentWrite, PreparedCatchUp, PreparedDocumentBytesWrite, PreparedExplicitRename,
+    PreparedExternalAssetRename, PreparedReadOnlyCommand, PreparedResourceOpen,
+    PreparedResourceRead, PreparedTimerCursors, ReadsInFlight, Rejected, SyncPlan, Trust,
+    Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE, UNDO_STALE_MANY, UNDO_STALE_ONE,
 };
