@@ -69,6 +69,7 @@ pub(super) fn testo(x: f64, y: f64, faccia: usize, corpo: f64, testo: &str, pass
         posizioni: (0..n).map(|i| i as f64 * passo).collect(),
         sottolineato: false,
         barrato: false,
+        nodo: None,
     }
 }
 
@@ -89,6 +90,7 @@ pub(super) fn elenco(facce: Vec<Faccia>, pagine: Vec<Vec<Pezzo>>) -> ElencoPagin
             })
             .collect(),
         segnalibri: Vec::new(),
+        struttura: Vec::new(),
     }
 }
 
@@ -293,6 +295,7 @@ fn pdf_export_il_vettore_resta_un_vettore() {
         w: 200.0,
         h: 100.0,
         svg: svg.into(),
+        nodo: None,
     }];
     let scritto = scrivi(&elenco(vec![], vec![pezzi]), &Banco::default()).unwrap();
     let img = ridisegna(&scritto.pdf, 0);
@@ -327,6 +330,7 @@ fn pdf_export_il_testo_del_vettore_resta_testo() {
         w: 200.0,
         h: 50.0,
         svg,
+        nodo: None,
     }];
     let scritto = scrivi(&elenco(vec![], vec![pezzi]), &Banco::default()).unwrap();
     assert!(scritto.avvisi.is_empty(), "{:?}", scritto.avvisi);
@@ -370,6 +374,7 @@ fn pdf_export_l_immagine_nel_suo_riquadro_e_quella_che_manca() {
             w: 160.0,
             h: 80.0,
             file: "Foto/blu.png".into(),
+            nodo: None,
         },
         Pezzo::Immagine {
             x: 250.0,
@@ -377,6 +382,7 @@ fn pdf_export_l_immagine_nel_suo_riquadro_e_quella_che_manca() {
             w: 50.0,
             h: 50.0,
             file: "Foto/non-c-e.png".into(),
+            nodo: None,
         },
     ];
     let scritto = scrivi(&elenco(vec![], vec![pezzi]), &banco).unwrap();
@@ -405,6 +411,7 @@ fn pdf_export_un_immagine_grande_resta_intera() {
         w: 400.0,
         h: 266.0,
         file: "grande.png".into(),
+        nodo: None,
     }];
     let scritto = scrivi(&elenco(vec![], vec![pezzi]), &banco).unwrap();
     assert!(scritto.avvisi.is_empty());

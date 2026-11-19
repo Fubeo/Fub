@@ -103,6 +103,7 @@ fn pdf_export_alleggerite_il_pdf_pesa_meno_e_l_immagine_c_e() {
         w: 200.0,
         h: 150.0,
         file: "Foto/mare.png".into(),
+        nodo: None,
     }];
     let e = elenco(vec![], vec![pezzi]);
     let piene = scrivi(&e, &banco).unwrap();
@@ -111,6 +112,7 @@ fn pdf_export_alleggerite_il_pdf_pesa_meno_e_l_immagine_c_e() {
         &banco,
         &Opzioni {
             immagini: QualitaImmagini::Alleggerite,
+            ..Opzioni::default()
         },
         &mut Sempre,
     )
@@ -158,6 +160,7 @@ fn pdf_export_un_immagine_rotta_o_troppo_grande_lascia_il_posto_vuoto() {
         w: 50.0,
         h: 50.0,
         file: file.into(),
+        nodo: None,
     };
     let e = elenco(
         vec![],
@@ -168,7 +171,16 @@ fn pdf_export_un_immagine_rotta_o_troppo_grande_lascia_il_posto_vuoto() {
         ]],
     );
     for immagini in [QualitaImmagini::Piene, QualitaImmagini::Alleggerite] {
-        let scritto = scrivi_con(&e, &banco, &Opzioni { immagini }, &mut Sempre).unwrap();
+        let scritto = scrivi_con(
+            &e,
+            &banco,
+            &Opzioni {
+                immagini,
+                ..Opzioni::default()
+            },
+            &mut Sempre,
+        )
+        .unwrap();
         assert_eq!(
             scritto.avvisi,
             vec![

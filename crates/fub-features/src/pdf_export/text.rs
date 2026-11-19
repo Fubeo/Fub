@@ -43,6 +43,9 @@ pub(super) struct Carattere {
     larghezze: HashMap<u16, f32>,
     /// Le lettere che non ha, per l'avviso.
     mancanti: Vec<char>,
+    /// Ogni lettera uscita col glifo vuoto, spazi compresi: il PDF/A non le
+    /// ammette.
+    vuote: Vec<char>,
     pub(super) nome: String,
     pub(super) rif: Ref,
 }
@@ -65,9 +68,22 @@ impl Carattere {
             glifi,
             larghezze: HashMap::new(),
             mancanti: Vec::new(),
+            vuote: Vec::new(),
             nome: format!("F{indice}"),
             rif,
         })
+    }
+
+    /// La famiglia e le lettere uscite col glifo vuoto, in ordine e una volta
+    /// sola, se ce ne sono.
+    pub(super) fn lettere_senza_glifo(&self) -> Option<(String, String)> {
+        if self.vuote.is_empty() {
+            return None;
+        }
+        let mut lettere = self.vuote.clone();
+        lettere.sort_unstable();
+        lettere.dedup();
+        Some((self.famiglia.clone(), lettere.into_iter().collect()))
     }
 
     fn glifo_di(&self, lettera: char) -> Option<u16> {
@@ -253,6 +269,7 @@ impl Scrittore<'_> {
                     if !lettera.is_whitespace() && !lettera.is_control() {
                         self.caratteri[primo].mancanti.push(lettera);
                     }
+                    self.caratteri[primo].vuote.push(lettera);
                     scelte.push((primo, 0));
                 }
             }

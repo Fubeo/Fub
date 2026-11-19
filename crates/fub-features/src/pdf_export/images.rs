@@ -59,6 +59,13 @@ impl Scrittore<'_> {
         };
         match self.innesta(&albero) {
             Ok(rif) => Some(rif),
+            // Nel PDF/A `svg2pdf` rifiuta ciò che il PDF/A non ammette: non
+            // è un vettore che si legge male, è un PDF/A che non si può
+            // scrivere.
+            Err(motivo) if self.opzioni.pdfa => {
+                self.ostacolo_vettore(motivo);
+                None
+            }
             Err(motivo) => {
                 self.avvisi.push(Avviso::VettoreIlleggibile { motivo });
                 None
@@ -120,8 +127,12 @@ impl Scrittore<'_> {
     /// Un albero di `usvg` come `XObject` del PDF, coi riferimenti rinumerati
     /// dopo quelli già scritti; se `svg2pdf` non lo sa scrivere, il perché.
     fn innesta(&mut self, albero: &usvg::Tree) -> Result<Ref, String> {
-        let (pezzo, rif) = svg2pdf::to_chunk(albero, svg2pdf::ConversionOptions::default())
-            .map_err(|errore| errore.to_string())?;
+        let opzioni = svg2pdf::ConversionOptions {
+            pdfa: self.opzioni.pdfa,
+            ..svg2pdf::ConversionOptions::default()
+        };
+        let (pezzo, rif) =
+            svg2pdf::to_chunk(albero, opzioni).map_err(|errore| errore.to_string())?;
         let mut mappa: HashMap<Ref, Ref> = HashMap::new();
         let mut prossimo = self.prossimo;
         let rinumerato: Chunk = pezzo.renumber(|vecchio| {
