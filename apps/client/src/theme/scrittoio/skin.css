@@ -5105,6 +5105,19 @@ kbd,
   background: var(--sheet);
   transition: opacity var(--duration-fast) var(--ease);
 }
+/* Una lavagna a lato sotto un blocco staccato da una nota (T48): il foglio
+   dice col bordo dell'accento che il rilascio la porta lì. Il contorno sta
+   sopra quello che il foglio contiene. */
+.pane[data-drop-hot] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sheet);
+}
+@media (forced-colors: active) {
+  .pane[data-drop-hot] {
+    outline-color: Highlight;
+  }
+}
 /* Un riquadro senza linguette non è un foglio: resta scrivania. */
 .pane:has(> .pane-tabs[hidden])::before {
   background: transparent;

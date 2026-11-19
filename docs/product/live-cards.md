@@ -181,6 +181,55 @@ dalla porta degli editor, quello di sola lettura a riposo e quello che scrive
 da attiva. La pelle sta nella sezione T47 di
 `theme/scrittoio/skin/live-cards.css`.
 
+## Dalla nota alla lavagna, e ritorno
+
+Blocchi e schede passano da una nota a una lavagna e indietro. Sono sempre
+due file con **un annulla solo**: la nota e la lavagna si scrivono tutte e
+due o nessuna, e l'annulla le rimette com'erano tutte e due (se uno dei due
+è cambiato dopo, non tocca niente e lo dice). Andata e ritorno danno lo
+stesso testo.
+
+- **«Porta su una lavagna»** nel menu di una scheda viva (o di una scelta
+  di blocchi che ne ha una), e nella palette sulla selezione o sul blocco del
+  cursore, crea una lavagna accanto alla nota, col suo nome
+  («Mostra.canvas», poi «Mostra 1.canvas», …), con una scheda per blocco
+  nello stesso ordine, una sotto l'altra, e la apre a lato. I blocchi
+  lasciano la nota.
+  - Un titolo porta con sé la sua sezione, fino al titolo dopo dello stesso
+    livello o più alto: è una scheda sola.
+  - Una voce di primo livello di un elenco è una scheda; due voci una dopo
+    l'altra tornano un elenco solo.
+  - Un embed da solo nel suo blocco è una scheda di file sullo **stesso**
+    file, con la parte e la misura dell'embed: niente si copia. Un embed che
+    non si risolve resta una scheda di testo.
+  - Il resto è una scheda di testo col suo Markdown com'è scritto.
+- **Trascinare** un blocco su una lavagna aperta a lato lo porta lì, a
+  destra di ciò che la lavagna ha: il riquadro si accende col bordo
+  dell'accento e il cartellino dice «Porta sulla lavagna «…»». Con
+  <kbd>Ctrl</kbd> al rilascio il blocco si copia e resta anche nella nota.
+- **«Porta in una nota»** dalla palette, sulla lavagna aperta, fa il
+  contrario: crea una nota accanto alla lavagna col suo nome, con le schede
+  in colonna da in alto a sinistra a in basso a destra, e le schede lasciano
+  la lavagna.
+  - Le schede di un gruppo stanno insieme, sotto il nome del gruppo scritto
+    come titolo.
+  - Una scheda di testo dà il suo testo, una di file il suo embed, una di
+    link il suo indirizzo.
+  - I fili diventano link, in una riga `→ …` sotto la scheda da cui partono:
+    verso una scheda di testo un link al blocco (`[[#^id]]`, che le dà l'id
+    se non ce l'ha), verso un file un link al file, verso un gruppo un link
+    al suo titolo. L'etichetta del filo è il testo del link.
+- Se la nota o la lavagna è cambiata da quando si sono scelti i blocchi o le
+  schede, non si muove niente e si dice di sceglierli di nuovo.
+
+I comandi sono `canvas.from_note` e `canvas.to_note` di
+`crates/fub-features/src/lavagna/note.rs`: le regole stanno lì, e i
+parametri `to`, `at`, `keep` (lasciare dove stava: la copia) e `base` li
+rendono usabili anche da un plugin o da un agente. Il client chiede il
+primo dal menu e dal trascinamento (`blocks/to-board.ts`,
+`state/board-from-note.ts`); le lavagne a lato le offre il controllore dei
+documenti come bersagli (`SurfaceBoardOffer` in `editors/core/registry.ts`).
+
 ## Il foglio nella nota
 
 `![[Conti.xlsx#Budget!A1:E7]]` mostra soltanto quella parte del foglio. La

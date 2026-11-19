@@ -26,6 +26,7 @@ import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import type { MoveBlockPort } from "./blocks/move-to";
+import type { BoardPort } from "./blocks/to-board";
 import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
@@ -212,6 +213,9 @@ export interface MarkdownSurfaceOptions {
   /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
   /// blocco. Senza, il menu del blocco non lo offre.
   moveBlock?: MoveBlockPort;
+  /// «Porta su una lavagna» (T48): il comando che fa dei blocchi le schede di
+  /// una lavagna. Senza, il menu del blocco non lo offre.
+  boardBlock?: BoardPort;
   /// Il blocco sincronizzato (T30): «Sincronizza in un'altra nota» nel menu
   /// del blocco e «Blocco di un'altra nota» nel «/». Senza, non ci sono.
   syncBlock?: SyncBlockPort;
@@ -933,6 +937,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // Blocchi, la testata non li usa.
     document: () => ({ documentId: docId(), vault }),
     ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
+    ...(opts.boardBlock ? { board: opts.boardBlock } : {}),
     ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,

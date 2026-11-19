@@ -3,6 +3,7 @@ import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
 import type { LiveCardKit, LiveCardsPort } from "../text/profiles/markdown/live-cards";
 import type { CellValuePort, CellValueReader } from "../text/profiles/markdown/cell-value";
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
+import type { BoardPort } from "../text/profiles/markdown/blocks/to-board";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
@@ -138,6 +139,8 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
   /// «Sposta in…» dal menu del blocco e sulle note del cassetto (T32).
   readonly moveBlock?: MoveBlockPort;
+  /// «Porta su una lavagna» dal menu del blocco e sulle lavagne a lato (T48).
+  readonly boardBlock?: BoardPort;
   /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
   readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
@@ -798,6 +801,7 @@ export function createDocumentSurfaceRegistry(
             onRenamePage: options.onRenamePage,
             onNewSubpage: options.onNewSubpage,
             ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
+            ...(options.boardBlock ? { boardBlock: options.boardBlock } : {}),
             ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,

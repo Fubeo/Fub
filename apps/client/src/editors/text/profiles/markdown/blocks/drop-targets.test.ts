@@ -3,9 +3,9 @@ import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
-import type { SurfaceNoteOffer, SurfacePlaceOffer } from "../../../../core/registry";
+import { dropOffers, offerDropTargets, type SurfaceBoardOffer, type SurfaceNoteOffer, type SurfacePlaceOffer } from "../../../../core/registry";
 import { markdownGrammar } from "../grammar";
-import { headingOfPlace, moveToSectionEnd, noteTargets, placeTargets, sectionEnd, targetAt } from "./drop-targets";
+import { boardTargets, headingOfPlace, moveToSectionEnd, noteTargets, placeTargets, sectionEnd, targetAt } from "./drop-targets";
 import { blockBytes } from "./move-to";
 import { blockModel } from "./model";
 
@@ -210,5 +210,36 @@ describe("le note del cassetto (E13)", () => {
     const { at, text } = blockBytes(state, blocks, { first: item, last: item });
     expect(text).toBe("- uno\r\n  - figlio");
     expect(at).toEqual([bytes("Città\r\n\r\n"), bytes("Città\r\n\r\n- uno\r\n  - figlio")]);
+  });
+});
+
+describe("le lavagne aperte a lato (T48)", () => {
+  const board = (title: string, documentId = `${title}.canvas`, rect = { left: 700, top: 40, right: 1200, bottom: 800 }): SurfaceBoardOffer =>
+    ({ kind: "board", document: { documentId, vault: undefined }, title, rect, hover: vi.fn() });
+
+  it("una lavagna per riquadro, «Porta sulla lavagna «…»»; il rilascio non tocca il documento, lo dice `board`", () => {
+    const state = stateOf(DOC);
+    const uno = indexAt(state, "Uno");
+    const idee = board("Idee");
+    const targets = boardTargets([idee, board("Nascosta", "Nascosta.canvas", { left: 0, top: 0, right: 0, bottom: 0 }), offer(DOC, "## Fine", "Fine")]);
+    expect(targets.map((target) => target.label), "il riquadro che non si vede e il titolo della Struttura no").toEqual(["Porta sulla lavagna «Idee»"]);
+    expect(targets[0]!.board).toEqual({ document: { documentId: "Idee.canvas", vault: undefined }, title: "Idee" });
+    expect(targets[0]!.note).toBeUndefined();
+    expect(targets[0]!.drop(state, blocksOf(state), { first: uno, last: uno })).toBeNull();
+    targets[0]!.hover(true);
+    expect(idee.hover).toHaveBeenCalledWith(true);
+    expect(noteTargets([idee]), "una lavagna non è una nota del cassetto").toEqual([]);
+    expect(targetAt(targets, 900, 400)).toBe(targets[0]);
+  });
+
+  it("la shell offre le lavagne di altri documenti dello stesso vault, mai il documento stesso", () => {
+    const dispose = offerDropTargets({
+      offers: () => [board("Idee"), board("Sé", "nota.md"), { ...board("Altrove"), document: { documentId: "Altrove.canvas", vault: "/altro" } }],
+    });
+    try {
+      expect(dropOffers({ documentId: "nota.md", vault: undefined }).map((each) => each.document.documentId)).toEqual(["Idee.canvas"]);
+    } finally {
+      dispose();
+    }
   });
 });
