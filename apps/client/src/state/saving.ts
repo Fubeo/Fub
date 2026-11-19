@@ -127,11 +127,14 @@ function echoIdentity(source: Origin): boolean {
   return source.actor.kind === "user" && source.batch === null;
 }
 
-/// L'evento è l'eco di una nostra scrittura ancora attesa, senza consumarla:
-/// chi lo sa prima di `consumeUnderChange` può non toccare il buffer, perché
-/// sul disco c'è ciò che abbiamo scritto noi.
-export function isOwnEcho(buf: { echoes: number } | undefined, source: Origin): boolean {
-  return buf !== undefined && echoIdentity(source) && buf.echoes > 0;
+/// Se l'evento è l'eco di una nostra scrittura ancora attesa, la consuma e
+/// dice di sì: chi lo sa prima di `consumeUnderChange` può non toccare il
+/// buffer, perché sul disco c'è ciò che abbiamo scritto noi. Un'altra
+/// origine non tocca il conto.
+export function consumeOwnEcho(buf: { echoes: number } | undefined, source: Origin): boolean {
+  if (buf === undefined || !echoIdentity(source) || buf.echoes <= 0) return false;
+  buf.echoes -= 1;
+  return true;
 }
 
 /// Chi ha riscritto il file, **consumando l'eco che quell'evento era**.

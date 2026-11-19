@@ -8,9 +8,9 @@ import type { DocumentSource, DraftInfo, Origin, WriteBase } from "../host/contr
 import type { SourceKind } from "../host/enums.generated";
 import { Queue } from "../ui/race";
 import {
+  consumeOwnEcho,
   consumeUnderChange,
   failureOutcome,
-  isOwnEcho,
   stateOf,
   writeCountingEcho,
   type Outcome,
@@ -581,8 +581,7 @@ export class DocumentSession implements DraftBuffer {
     // suo: confermarlo qui chiuderebbe la cella a metà parola a ogni
     // salvataggio automatico, e i tasti dopo andrebbero fuori dal foglio
     // (IMP-310, IMP-414). Senza testo tenuto, l'eco segue la via di sempre.
-    if (!expected && this.#pendingSurfaces.size > 0 && isOwnEcho(this.#state, source)) {
-      this.#state.echoes -= 1;
+    if (!expected && this.#pendingSurfaces.size > 0 && consumeOwnEcho(this.#state, source)) {
       return { kind: "echo" };
     }
     const held = this.settled();
