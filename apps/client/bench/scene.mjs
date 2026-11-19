@@ -577,19 +577,23 @@ export const SCENE = touchLast(onPage("shell", [
   // Con Tema e Colori aperte (T71): gli otto temi, gli undici colori con la
   // riga dell'accento aperta (i tondi, il selettore, il codice), il
   // contrasto e i due interruttori, come al passo 28 del prototipo.
+  // Con Contenuto e Interruzioni aperte (T74): le righe con le scelte, i
+  // commenti nel margine accanto al loro paragrafo, la tabella a griglia e
+  // il codice coi numeri delle righe, come al passo 29.
   // Con Caratteri e Pagina aperte (T72): i caratteri di Fub e del vault
   // (uno chiuso dalla licenza), i cursori, i margini, le guide sulle pagine.
   ...[
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
-    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, true],
-    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, false, true],
-    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, false, false, true],
-  ].map(([id, title, viewport, themes, front, fonts]) => ({
+    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, "temi"],
+    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, "testata"],
+    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, "caratteri"],
+    ["esporta-pdf-contenuto", "Lo spazio «Esporta in PDF» con Contenuto e Interruzioni aperte: commenti nel margine, tabelle a griglia, codice numerato", undefined, "contenuto"],
+  ].map(([id, title, viewport, sections]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
-    ...(fonts ? { query: "esporta-caratteri=1" } : {}),
+    ...(sections === "caratteri" ? { query: "esporta-caratteri=1" } : {}),
     prepare: async (page) => {
       // In una finestra stretta l'albero è nel cassetto chiuso: la nota si
       // apre larga, poi la finestra torna com'era (la scena, o lo stato
@@ -599,9 +603,10 @@ export const SCENE = touchLast(onPage("shell", [
       await openNote(page, "Guida/Sintassi di Fub.md");
       if (size) await page.setViewportSize(size);
       await openExportSpace(page);
-      if (themes) await openThemeSections(page);
-      if (fonts) await openFontSections(page);
-      if (front) await openFrontSections(page);
+      if (sections === "temi") await openThemeSections(page);
+      if (sections === "caratteri") await openFontSections(page);
+      if (sections === "contenuto") await openContentSections(page);
+      if (sections === "testata") await openFrontSections(page);
     },
   })),
   // **La sezione Diagrammi** (T75): la nota con un flusso, una formula più
@@ -3366,6 +3371,34 @@ async function openFontSections(page) {
     await document.fonts.ready;
     const side = document.querySelector(".export-side");
     if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Apre le sezioni Contenuto e Interruzioni, sceglie i commenti nel margine,
+/// le tabelle a griglia e il codice numerato, aspetta le pagine rifatte e
+/// porta in vista la pagina coi commenti e la sezione Contenuto.
+async function openContentSections(page) {
+  await page.click('.export-section[data-section="contenuto"] .export-section-head');
+  await page.click('.export-section[data-section="interruzioni"] .export-section-head');
+  await page.click("#export-content-comments-margine");
+  await page.click("#export-content-tables-griglia");
+  await page.click("#export-content-code");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    return /^\d/.test(pages) && document.querySelector(".export-space .export-page .export-comment-placed") !== null;
+  }, null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    const section = document.querySelector('.export-section[data-section="contenuto"]');
+    if (side && section instanceof HTMLElement) side.scrollTop = section.offsetTop - side.offsetTop;
+    const note = document.querySelector(".export-space .export-page .export-comment-placed");
+    const stage = document.querySelector(".export-stage");
+    if (note && stage) {
+      const top = note.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop;
+      stage.scrollTop = Math.max(0, top - 160);
+    }
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
   await page.mouse.move(0, 0);

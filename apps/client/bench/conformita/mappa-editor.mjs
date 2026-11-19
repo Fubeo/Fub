@@ -585,6 +585,28 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf-temi" },
   },
+  /// Le sezioni Contenuto e Interruzioni aperte (T74): dai due lati i
+  /// commenti nel margine, le tabelle a griglia e il codice numerato.
+  "esporta-pdf-contenuto": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="contenuto"] .px-sh');
+        await page.click('#win .px-sec[data-sec="interruzioni"] .px-sh');
+        await page.click('#win .px-seg button[data-k="comments"][data-v="margine"]');
+        await page.click('#win .px-seg button[data-k="tab"][data-v="griglia"]');
+        await page.click('#win .px-tog[data-k="codeNum"]');
+        await page.waitForSelector('#win .px-tog[data-k="codeNum"][aria-checked="true"]');
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-contenuto" },
+  },
   /// Le sezioni Caratteri e Pagina aperte (T72), con la filigrana «BOZZA»
   /// scritta dai due lati: le righe, i caratteri come pulsanti, i cursori, i
   /// segmenti, i millimetri, il campo della filigrana, le guide e la
@@ -2479,6 +2501,72 @@ export const PEZZI = [
     prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
     app: '#export-colors-gray .export-toggle-knob',
     proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── le sezioni Contenuto e Interruzioni (T74) ───────────────────────────
+  // Le righe col nome e le scelte (`pxRow`, `pxSeg`), gli interruttori; sulla
+  // pagina il numero del commento e la sua nota nel margine.
+  {
+    id: "esporta.contenuto-riga",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2)',
+    app: '.export-row[data-row="export-content-comments"]',
+    proprieta: ["display", "min-height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.contenuto-nome",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-rl',
+    app: '.export-row[data-row="export-content-comments"] .export-row-label',
+    proprieta: ["font", "color", "flex-shrink"],
+  },
+  {
+    id: "esporta.contenuto-scelte",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-seg',
+    app: '.export-row[data-row="export-content-comments"] .export-choices',
+    proprieta: ["display", "padding", "border-radius", "background", "gap"],
+  },
+  {
+    id: "esporta.contenuto-scelta",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="fondo"]',
+    app: "#export-content-comments-in-fondo",
+    proprieta: [...BASE, "height", "white-space"],
+  },
+  {
+    id: "esporta.contenuto-scelta-presa",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="margine"]',
+    app: "#export-content-comments-margine",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.contenuto-codice",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="codeNum"]',
+    app: "#export-content-code",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruzioni-intestazione",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="repeatHead"]',
+    app: "#export-breaks-header",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.commento-numero",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pcm sup",
+    app: ".export-page .export-comment-mark",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.commento-margine",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pnote",
+    app: ".export-page .export-comment-placed",
+    proprieta: ["color", "border-left-style", "text-align"],
   },
   // ── le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
   {

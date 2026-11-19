@@ -13,6 +13,7 @@ import type { Box, FlowBox, PageFrame } from "./model";
 import { paginate } from "./rules";
 import {
   IDLE_SLICE_MS,
+  NOTE_GAP,
   PrintPaginator,
   SlicedPagination,
   VISIBLE_SLICE_MS,
@@ -258,7 +259,7 @@ describe("le regolazioni", () => {
   it("la colonna e la pagina vengono dal formato e dai margini", () => {
     const one = frameOf(settings().layout);
     expect(one.width).toBe(794 - 144);
-    expect(one.frame).toEqual({ height: 1123 - 144, columns: 1, noteMargin: 72 });
+    expect(one.frame).toEqual({ height: 1123 - 144, columns: 1, noteMargin: 72, noteGap: NOTE_GAP });
     const two = frameOf(settings({ columns: 2, columnGap: 24 }).layout);
     expect(two.width).toBe((794 - 144 - 24) / 2);
     expect(() => frameOf(settings({ page: { ...A4, margin: { top: 600, bottom: 600, left: 72, right: 72 } } }).layout)).toThrow(RangeError);

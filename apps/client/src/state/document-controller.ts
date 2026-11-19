@@ -28,7 +28,7 @@
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import { createDocumentSurfaceRegistry, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
+import { createDocumentSurfaceRegistry, loadPdf, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
 import type { CanvasNotesPort } from "../editors/canvas/engine";
 import { UI_CRAFT, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
 import { components, componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
@@ -4251,6 +4251,19 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       vaultFonts: printVaultFonts,
       // Il frontmatter dall'indice: icona, autore e proprietà del frontespizio.
       properties: () => noteProperties(doc),
+      // I PDF incorporati, per le loro pagine in coda (T74).
+      pdf: {
+        resolve: async (target, from) => (await resolvedReference({ kind: "wiki", value: { page: target, heading: null, block: null } }, from).catch(() => null))?.doc ?? null,
+        read: async (id) => {
+          const port = await openResourcePort(mediaTransport, id);
+          try {
+            return await port.readAll();
+          } finally {
+            await port.close();
+          }
+        },
+        load: loadPdf,
+      },
       onClose: () => {
         if (openExport?.close === close) openExport = null;
       },

@@ -16,6 +16,8 @@
 
 import { clampMargins } from "./guides";
 import type { PageGeometry } from "./probe";
+import { contentChoicesOf, contentLayoutOf } from "./content/choices";
+import { contentLookVariables } from "./content/look";
 import { lookVariables, textOf, typeVariables } from "./themes";
 import type { PrintLayout, PrintLook, PrintSettings } from "./paginate/slices";
 import { TITLE_ID } from "./paginate/toc";
@@ -244,7 +246,8 @@ export function printSettingsOf(profile: ExportProfile, excluded: readonly strin
     breaks: { everyHeading2: profile.interruzioni.ogni_titolo_2, separator: profile.interruzioni.separatore },
     type: typeVariables(profile),
     excluded: profile.frontespizio.frontespizio && !excluded.includes(TITLE_ID) ? [...excluded, TITLE_ID] : excluded,
+    content: contentLayoutOf(profile),
   };
-  const look: PrintLook = { colors: lookVariables(profile) };
+  const look: PrintLook = { colors: { ...lookVariables(profile), ...contentLookVariables(contentChoicesOf(profile.contenuto)) } };
   return { layout, look };
 }

@@ -24,6 +24,7 @@
 import type { RenderedDocument } from "../../host/contract";
 import { PRINT_WAIT_MS, mountPrintSurface, type PrintMount, type PrintRenderer, type PrintSurface } from "../../editors/media/print-view";
 import type { PageGeometry } from "../probe";
+import type { ContentLayout } from "../content/choices";
 import { applyBreaks, type BreakSettings } from "./breaks";
 import { blockId, PrintMeasure, printBlocks, type MeasureDepth, type MeasuredBlock } from "./measure";
 import type { Box, PageFrame, Pagination, Placement } from "./model";
@@ -430,6 +431,10 @@ export interface PrintLayout {
   readonly type: Readonly<Record<string, string>>;
   /// I blocchi lasciati fuori (le identità di `blockId`).
   readonly excluded: readonly string[];
+  /// Le scelte del Contenuto che cambiano la resa che si misura (T74):
+  /// proprietà, commenti, compiti fatti, ripiegabili, schede, codice
+  /// numerato, intestazioni ripetute. Senza, la resa com'è.
+  readonly content?: ContentLayout;
 }
 
 /// Ciò che cambia solo l'aspetto: variabili CSS di colori e link.
@@ -456,8 +461,13 @@ function canonical(layout: PrintLayout): unknown {
     breaks: { everyHeading2: layout.breaks.everyHeading2, separator: layout.breaks.separator },
     type: Object.entries(layout.type).sort(([a], [b]) => a.localeCompare(b)),
     excluded: [...layout.excluded].sort(),
+    content: layout.content ?? null,
   };
 }
+
+/// Lo spazio fra una nota dei commenti e la successiva, nel margine e in
+/// fondo (il prototipo `.pnotes { gap: 0.5em }`, a corpo 11).
+export const NOTE_GAP = 7;
 
 /// La colonna del testo e la pagina vista dalle regole.
 export function frameOf(layout: PrintLayout): { readonly width: number; readonly frame: PageFrame } {
@@ -467,7 +477,10 @@ export function frameOf(layout: PrintLayout): { readonly width: number; readonly
   const width = (inner - gap) / columns;
   const height = page.height - page.margin.top - page.margin.bottom;
   if (!(width > 0) || !(height > 0)) throw new RangeError(`i margini non lasciano spazio sulla pagina (${Math.round(width)}×${Math.round(height)} px)`);
-  return { width, frame: { height, columns, noteMargin: page.margin.right } };
+  // Coi commenti in fondo il margine non ospita note: le regole le mettono
+  // dopo l'ultimo blocco come con un margine stretto.
+  const noteMargin = layout.content?.comments === "in-fondo" ? 0 : page.margin.right;
+  return { width, frame: { height, columns, noteMargin, noteGap: NOTE_GAP } };
 }
 
 export interface PrintPaginatorOptions {
@@ -556,6 +569,13 @@ export class PrintPaginator {
     this.settings = settings;
     this.applyLook(settings.look);
     if (relayout && this.surface) this.relayout();
+  }
+
+  /// Misura e impagina da capo la resa montata, con le stesse regolazioni:
+  /// qualcosa che la misura legge è arrivato dopo (le proprietà della nota,
+  /// le pagine di un PDF, le righe di una Base).
+  remeasure(): void {
+    if (this.surface && !this.disposed) this.relayout();
   }
 
   setVisible(visible: VisiblePages): void {

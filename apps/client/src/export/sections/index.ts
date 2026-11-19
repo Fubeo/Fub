@@ -30,6 +30,7 @@ import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
 import { ownCount, textOf, type PageColor } from "../themes";
 import { DIAGRAMS_SECTION } from "./diagrams";
 import { colorsBody } from "./colors";
+import { breaksBody, contentBody } from "./content";
 import { fontsBody, fontsSummary, type PrintFonts } from "./fonts";
 import { pageBody } from "./page";
 import { coverTocBody } from "./cover-toc";
@@ -178,12 +179,14 @@ export const SECTIONS: readonly ExportSection[] = [
     id: "contenuto",
     title: "pdf_export.section.content",
     summary: (profile) => (profile.contenuto.commenti !== "no" ? t("pdf_export.content.comments") : t("pdf_export.content.all")),
+    body: contentBody,
   },
   DIAGRAMS_SECTION,
   {
     id: "interruzioni",
     title: "pdf_export.section.breaks",
     summary: ({ interruzioni }) => (interruzioni.ogni_titolo_2 ? t("pdf_export.breaks.heading2") : t("pdf_export.breaks.auto")),
+    body: breaksBody,
   },
   {
     id: "uscita",

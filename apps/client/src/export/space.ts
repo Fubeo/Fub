@@ -49,6 +49,9 @@ import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { createBand, type Band } from "./band";
+import { inertComments } from "./content/comments";
+import { ExportContent } from "./content/index";
+import { renderPdfPages, type PdfPagesPorts } from "./content/pdf-pages";
 import { attachGuides } from "./guides";
 import { ExportPages, steppedZoom, type PageDecor } from "./pages";
 import { PrintMeasure, printBlocks } from "./paginate/measure";
@@ -114,6 +117,9 @@ export interface ExportSpaceOptions {
   /// richiedono all'apertura e quando la nota cambia; senza, il frontespizio
   /// ha il titolo e la data.
   readonly properties?: () => Promise<readonly { readonly key: string; readonly value: unknown }[]>;
+  /// Come trovare, leggere e aprire un PDF incorporato, per «tutte le pagine
+  /// in coda» del Contenuto (T74); senza, il PDF esce con la sua anteprima.
+  readonly pdf?: PdfPagesPorts;
   readonly onClose?: () => void;
   readonly scheduler?: Scheduler;
   readonly waitMs?: number;
@@ -472,6 +478,15 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
   }
 
+  const content = new ExportContent({
+    title: options.title,
+    properties: options.properties,
+    cardPages: options.pdf ? (target, width) => renderPdfPages(options.pdf!, target, options.doc, width) : undefined,
+    onChange: () => {
+      if (!closed) paginator.remeasure();
+    },
+  });
+
   const exportMount = options.mount;
   const mount: PrintMount | undefined = exportMount && ((container, rendered) =>
     exportMount(container, rendered, { diagramLook: (index) => overrideFor(diagramLook, index) }));
@@ -486,10 +501,15 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (!closed) void paginator.remount();
   }
 
-  const paginator = new PrintPaginator({
+  const paginator: PrintPaginator = new PrintPaginator({
     doc: options.doc,
     title: options.title,
-    render: options.render,
+    // I commenti della resa diventano segnaposti che il sanificatore lascia
+    // passare (`inertComments`): senza, la scelta «Commenti» non avrebbe niente.
+    render: async (doc, target) => {
+      const rendered = await options.render(doc, target);
+      return { ...rendered, html: inertComments(rendered.html) };
+    },
     mount,
     prepare: (page) => preparePrintVectors(page, diagramMemory),
     settings,
@@ -499,9 +519,11 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     waitMs: options.waitMs,
     // Prima di misurare, ogni titolo prende il suo numero: lo mostra solo un
     // tema coi titoli numerati, ma la resa misurata e le copie lo portano già.
+    // Poi il Contenuto cambia la resa secondo le scelte (T74), e la rimette
+    // com'era alla misura dopo.
     measure: (page) => {
       numberHeadings(page);
-      return options.measure ? options.measure(page) : new PrintMeasure(page);
+      return content.measure(page, paginator.host, settings.layout, (shaped) => (options.measure ? options.measure(shaped) : new PrintMeasure(shaped)));
     },
   });
   pages.setColors({ ...settings.layout.type, ...settings.look.colors });
@@ -581,6 +603,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       saving = false;
     }
     if (!closed) {
+      content.refresh();
       void paginator.reload();
       void loadProperties();
     }
@@ -685,6 +708,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       finals.length = 0;
       lifetime.close();
       paginator.dispose();
+      content.dispose();
       diagramMemory.dispose();
       pages.dispose();
       root.remove();

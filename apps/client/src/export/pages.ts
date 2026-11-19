@@ -27,9 +27,11 @@
 // sullo schermo, le quattro guide dei margini (`guides.ts`).
 
 import { t } from "../i18n/strings";
+import { NOTE_OFFSET_MM } from "./content/comments";
 import { printBlocks } from "./paginate/measure";
 import type { Placement } from "./paginate/model";
 import { frameOf, type PrintLayout, type SlicedResult, type VisiblePages } from "./paginate/slices";
+import { MM } from "./profile";
 import type { Sheet } from "./paginate/toc";
 import type { ExportView } from "./toolbar";
 
@@ -105,6 +107,8 @@ interface Drawn {
   readonly result: SlicedResult;
   readonly blocks: readonly HTMLElement[];
   readonly layout: PrintLayout;
+  /// Le note dei commenti, misurate accanto alla resa (`content/comments.ts`).
+  readonly notes: ReadonlyMap<string, HTMLElement>;
   readonly decor: PageDecor;
 }
 
@@ -176,7 +180,9 @@ export class ExportPages {
   /// Le pagine di un'impaginazione: i fogli per tutte, pieni quelli vicini.
   show(result: SlicedResult, source: HTMLElement, layout: PrintLayout, decor?: PageDecor): void {
     const page = source.querySelector<HTMLElement>(".print-page");
-    this.drawn = { result, blocks: page ? printBlocks(page) : [], layout, decor: decor ?? plainDecor(result) };
+    const notes = new Map<string, HTMLElement>();
+    for (const note of source.querySelectorAll<HTMLElement>(".export-comments > [data-export-note]")) notes.set(note.dataset["exportNote"] ?? "", note);
+    this.drawn = { result, blocks: page ? printBlocks(page) : [], layout, notes, decor: decor ?? plainDecor(result) };
     this.redraw();
   }
 
@@ -398,7 +404,7 @@ export class ExportPages {
   /// Il foglio numero `index` (fra tutti), scalato a `zoom`; `print`: quello
   /// che va alla stampa, senza le guide.
   private pageElement(drawn: Drawn, index: number, zoom: number, print = false): HTMLElement {
-    const { layout, result, blocks, decor } = drawn;
+    const { layout, result, blocks, notes, decor } = drawn;
     const sheet = decor.sheets[index];
     const { page: geometry } = layout;
     const { width: columnWidth } = frameOf(layout);
@@ -444,8 +450,13 @@ export class ExportPages {
     const placements = sheet?.kind === "pagina" ? (result.pagination.pages[sheet.index]?.placements ?? []) : [];
     const bands: { band: HTMLElement; inner: HTMLElement; copy: HTMLElement; placement: Placement }[] = [];
     for (const placement of placements) {
-      // Le note dei commenti in fondo e il loro titolo le disegna la sezione
-      // del contenuto (T74): qui solo le fasce dei blocchi.
+      // Una nota dei commenti in fondo: la sua copia, larga quanto la colonna
+      // (il titolo «Commenti» sta dentro la prima).
+      if (placement.part === "nota") {
+        const note = placement.note ? notes.get(placement.note) : undefined;
+        if (note) body.append(noteCopy(note, placement.column * (columnWidth + gap), placement.y, placement.scale));
+        continue;
+      }
       if (placement.box < 0 || (placement.part !== "corpo" && placement.part !== "intestazione")) continue;
       const block = blocks[result.blocks[placement.box] ?? -1];
       if (!block) continue;
@@ -472,6 +483,13 @@ export class ExportPages {
       }
       bands.push({ band, inner, copy: copy.block, placement });
     }
+    // Le note nel margine, accanto al loro paragrafo: fuori dalla colonna,
+    // poco oltre il suo bordo destro (il prototipo `.pnote`).
+    const bodyWidth = geometry.width - geometry.margin.left - geometry.margin.right;
+    for (const side of (sheet?.kind === "pagina" ? (result.pagination.pages[sheet.index]?.notes ?? []) : [])) {
+      const note = notes.get(side.id);
+      if (note) body.append(noteCopy(note, bodyWidth + NOTE_OFFSET_MM * MM, side.y, side.scale));
+    }
     if (sheet) decor.draw(page, body, sheet, index);
     // Dove sta il blocco copiato dentro i suoi contenitori si legge dopo
     // averli messi tutti (una sola disposizione), e solo se la pagina è
@@ -491,6 +509,18 @@ export class ExportPages {
     measure();
     return page;
   }
+}
+
+/// La copia di una nota dei commenti, larga come è stata misurata.
+function noteCopy(note: HTMLElement, left: number, top: number, scale: number): HTMLElement {
+  const copy = note.cloneNode(true) as HTMLElement;
+  stripIds(copy);
+  copy.classList.add("export-comment-placed");
+  copy.style.left = `${left}px`;
+  copy.style.top = `${top}px`;
+  copy.style.width = note.parentElement?.style.width ?? "";
+  if (scale < 1) copy.style.transform = `scale(${scale})`;
+  return copy;
 }
 
 /// Dove sta il bordo alto di `element` sotto il bordo alto di `container`, in
@@ -523,7 +553,8 @@ function copyInContext(block: HTMLElement): { root: HTMLElement; block: HTMLElem
     shell.removeAttribute("id");
     if (shell instanceof HTMLOListElement && child instanceof HTMLLIElement) {
       const start = (parent as HTMLOListElement).start || 1;
-      const position = [...parent.children].filter((node) => node instanceof HTMLLIElement).indexOf(child);
+      // Una voce tolta (un compito fatto, T74) non conta, come nel browser.
+      const position = [...parent.children].filter((node) => node instanceof HTMLLIElement && !node.hidden).indexOf(child);
       shell.start = start + Math.max(0, position);
     }
     shell.append(root);

@@ -387,7 +387,9 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
   return pdfEngine;
 }
 
-const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
+/// Il motore dei PDF, caricato alla prima richiesta: anche per le pagine di
+/// un PDF incorporato che l'esportazione mette in coda (T74).
+export const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
 
 /// Le immagini ferme delle schede: una cache sola per finestra, per tutte le
 /// lavagne che vi si aprono, legata al vault in cui si sono fatte. Una lavagna

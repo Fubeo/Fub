@@ -2224,6 +2224,22 @@
     "export-toc-number",
     "export-toc-dots",
     "export-toc-page",
+    "export-content-section",
+    "export-properties",
+    "export-code-numbers",
+    "export-code-number",
+    "export-source",
+    "export-card-caption",
+    "export-card-name",
+    "export-card-note",
+    "export-appendix-page",
+    "export-appendix-more",
+    "export-base-caption",
+    "export-comment-mark",
+    "export-comments",
+    "export-comment",
+    "export-comments-title",
+    "export-comment-placed",
     "export-side",
     "export-section",
     "export-section-head",
@@ -4614,6 +4630,22 @@
     "export-toc-number": "cornice",
     "export-toc-dots": "cornice",
     "export-toc-page": "cornice",
+    "export-content-section": "cornice",
+    "export-properties": "cornice",
+    "export-code-numbers": "cornice",
+    "export-code-number": "cornice",
+    "export-source": "cornice",
+    "export-card-caption": "cornice",
+    "export-card-name": "cornice",
+    "export-card-note": "cornice",
+    "export-appendix-page": "cornice",
+    "export-appendix-more": "cornice",
+    "export-base-caption": "cornice",
+    "export-comment-mark": "cornice",
+    "export-comments": "cornice",
+    "export-comment": "cornice",
+    "export-comments-title": "cornice",
+    "export-comment-placed": "cornice",
     "export-side": "cornice",
     "export-section": "cornice",
     "export-section-head": "cornice",
@@ -10466,6 +10498,49 @@
       ]
     },
     {
+      "name": "export-content-panel",
+      "part": "export",
+      "hooks": [
+        "export-content-section"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "export-content-pages",
+      "part": "export",
+      "hooks": [
+        "export-measure",
+        "export-page",
+        "print-page",
+        "markdown-rendered",
+        "embed",
+        "base-surface",
+        "export-properties",
+        "export-code-numbers",
+        "export-code-number",
+        "export-source",
+        "export-card-caption",
+        "export-card-name",
+        "export-card-note",
+        "export-appendix-page",
+        "export-appendix-more",
+        "export-base-caption",
+        "export-comment-mark",
+        "export-comments",
+        "export-comment",
+        "export-comments-title",
+        "export-comment-placed"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "export-sections",
       "part": "export",
       "hooks": [
@@ -12430,10 +12505,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2388,
+    "hooks": 2404,
     "state_names": 7,
-    "assigned_states": 1074,
-    "components": 318,
+    "assigned_states": 1079,
+    "components": 320,
     "preference_tokens": 196
   }
 }
