@@ -46,6 +46,9 @@ import {
   type SurfaceReference,
   type SurfaceRequest,
   type SurfaceScrollLink,
+  offerDropTargets,
+  type SurfaceDropDocument,
+  type SurfaceDropOffer,
 } from "../editors/core/registry";
 import { modeById, modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
@@ -71,6 +74,7 @@ import { newSubpage, renamePage } from "./page-rename";
 import { moveBlock, moveHeadings, moveNotes } from "./move-block";
 import { tableToSheet } from "./table-sheet";
 import { syncBlockPort } from "./sync-block";
+import { boardBlockPort } from "./board-from-note";
 import { vaultBlockPort } from "./vault-blocks";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
@@ -87,6 +91,7 @@ import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
+import type { VaultFontList, VaultFontSource } from "../export/sections/fonts";
 import { emit, on, readState, state, writeState } from "./store";
 import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
 import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
@@ -165,7 +170,7 @@ import { hideSlashEntry, slashPrefs } from "../panels/slash/prefs";
 import type * as SlashPanelModule from "../panels/slash/panel";
 import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
-import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
+import { mountViewInPane, unmountViewFromPane, primaryView, visibleRect } from "../ui/views";
 import { errorText, isErrorKind } from "../host/errors";
 import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews } from "./craft-previews";
 import { openWithEntry } from "../panels/open-with";
@@ -1332,6 +1337,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   });
   mountNoteCards(lifetime);
   watchLinkClick(lifetime);
+  // Le lavagne aperte a lato sono bersagli di un blocco staccato dal testo
+  // (T48, «Porta su una lavagna»).
+  lifetime.add(offerDropTargets({ offers: boardOffers }));
   surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
     onChange: (paneId, change) => {
@@ -1463,6 +1471,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onNewSubpage: newSubpage,
     moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
     tableSheet: { turn: tableToSheet },
+    // La lavagna nuova si apre a lato, o nel vicino che la mostra già.
+    boardBlock: boardBlockPort((doc) => openDocumentBeside(doc, "row", { reuse: true })),
     syncBlock: syncBlockPort,
     pageIcons: {
       icon: linkedPageIcon,
@@ -4198,6 +4208,19 @@ let openExport: { pane: Pane; close: () => void } | null = null;
 /// Apre lo spazio «Esporta in PDF» sulla nota del riquadro (E28, T70): la
 /// salva prima, perché la resa per la stampa il core la legge dal disco, e
 /// la segue mentre cambia in un altro riquadro.
+/// I caratteri del vault per la stampa (T72), per una nota sola e per il
+/// libro: l'elenco dal core, i byte dalla stessa porta dei caratteri dei
+/// disegni.
+const printVaultFonts: VaultFontSource = {
+  list: async () => {
+    const outcome = await api.invokeCommand("pdf.vault_fonts", {}, "apply");
+    const effect = outcome.effect;
+    if (effect.kind !== "custom" || effect.ns !== "fub.pdf.vault_fonts") throw new Error(`pdf.vault_fonts answered ${effect.kind}`);
+    return effect.payload as VaultFontList;
+  },
+  read: (file, limit) => drawingFonts.read(file, limit),
+};
+
 export async function presentExport(r: Pane, doc: string): Promise<void> {
   try {
     await documentSessions.flush(doc);
@@ -4225,6 +4248,7 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       save: async () => {
         await documentSessions.flush(doc);
       },
+      vaultFonts: printVaultFonts,
       // Il frontmatter dall'indice: icona, autore e proprietà del frontespizio.
       properties: () => noteProperties(doc),
       // I PDF incorporati, per le loro pagine in coda (T74).
@@ -4297,6 +4321,8 @@ export async function presentBookExport(paths: readonly string[], name: string):
       render: book.render,
       mount: book.mount,
       measure: book.measure,
+      // Caratteri e pagina sono del profilo, comuni a tutti i capitoli.
+      vaultFonts: printVaultFonts,
       follow: (changed) => {
         // Lo spazio lo chiude col suo `Lifetime` alla chiusura.
         const unsubscribe = documentSessions.subscribe((event) => {
@@ -4561,6 +4587,33 @@ export async function openFromView(id: string): Promise<void> {
   }
   focusPane(other);
   await openDocument(id);
+}
+
+/// Le lavagne che i riquadri mostrano adesso, dove può cadere un blocco
+/// staccato da una nota (T48): una per riquadro che si vede, col nome della
+/// sua linguetta. Il riquadro acceso dice il bersaglio col suo bordo.
+function boardOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  if (document.vault !== undefined && document.vault !== openVaultRoot()) return [];
+  const out: SurfaceDropOffer[] = [];
+  for (const id of layoutPanes()) {
+    const doc = activeDoc(id);
+    const pane = panes.get(id);
+    if (doc === null || !pane || !/\.canvas$/i.test(doc)) continue;
+    const rect = visibleRect(pane.root);
+    if (!rect) continue;
+    const root = pane.root;
+    out.push({
+      kind: "board",
+      document: { documentId: doc, vault: document.vault },
+      title: docTitle(doc),
+      rect,
+      hover: (on) => {
+        if (on) root.dataset.dropHot = "true";
+        else delete root.dataset.dropHot;
+      },
+    });
+  }
+  return out;
 }
 
 /// Come si apre un documento accanto.

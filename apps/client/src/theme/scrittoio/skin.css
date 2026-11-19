@@ -5105,6 +5105,19 @@ kbd,
   background: var(--sheet);
   transition: opacity var(--duration-fast) var(--ease);
 }
+/* Una lavagna a lato sotto un blocco staccato da una nota (T48): il foglio
+   dice col bordo dell'accento che il rilascio la porta lì. Il contorno sta
+   sopra quello che il foglio contiene. */
+.pane[data-drop-hot] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sheet);
+}
+@media (forced-colors: active) {
+  .pane[data-drop-hot] {
+    outline-color: Highlight;
+  }
+}
 /* Un riquadro senza linguette non è un foglio: resta scrivania. */
 .pane:has(> .pane-tabs[hidden])::before {
   background: transparent;
@@ -26383,6 +26396,14 @@ h6.ui-heading {
 :is(.export-measure, .export-page) .print-page .markdown-rendered p {
   text-align: var(--print-text-align, start);
 }
+/* La sillabazione (T72): nel testo sì, nel codice e nelle tabelle no, come
+   nel prototipo. Vale sulla resa misurata e sulle copie. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered {
+  hyphens: var(--print-hyphens, manual);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(pre, code, table) {
+  hyphens: manual;
+}
 /* Col rientro i paragrafi si toccano: il margine sopra del secondo annulla
    quello sotto del primo, e la prima riga rientra. */
 :is(.export-measure, .export-page) .print-page .markdown-rendered > p + p {
@@ -27217,7 +27238,232 @@ h6.ui-heading {
   transform-origin: 0 0;
 }
 
+/* ── Le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+   Le righe col nome e il controllo (il prototipo `.px-row`), i caratteri
+   come pulsanti scritti nel loro carattere (`.px-fonts`), i cursori
+   (`.px-rng`), i millimetri (`.px-mm`). Le righe, le scelte fra pochi
+   valori e il campo della filigrana sono quelli comuni delle sezioni
+   (`.export-row`, `.export-choices`, `.export-input`, più sotto). */
+.export-row-stacked {
+  display: grid;
+  gap: 5px;
+  justify-content: stretch;
+}
+.export-fonts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.export-font {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition: box-shadow 0.14s, background 0.14s;
+}
+.export-font:hover {
+  background: var(--overlay-hover);
+}
+.export-font[aria-checked="true"] {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Un carattere del vault che la licenza non lascia incorporare: si vede,
+   tratteggiato, e sceglierlo dice perché non si può. */
+.export-font.is-closed {
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+  text-decoration: line-through;
+  text-decoration-color: var(--outline);
+}
+.export-fonts-status {
+  display: grid;
+  gap: 4px;
+}
+.export-fonts-status[hidden] {
+  display: none;
+}
+.export-fonts-warning {
+  color: var(--warning);
+}
+.export-range {
+  display: grid;
+  grid-template-columns: 104px 1fr 46px;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  color: var(--text);
+}
+.export-range input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.export-range output {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.export-mm {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.export-mm-paper {
+  grid-template-columns: repeat(2, 1fr);
+}
+.export-mm-field {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.export-mm-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 24px 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 12.5px var(--font-ui);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  appearance: textfield;
+}
+.export-mm-input::-webkit-inner-spin-button {
+  appearance: none;
+}
+.export-mm-input[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.export-mm-field em {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: normal;
+  pointer-events: none;
+}
+.export-page-error {
+  color: var(--danger);
+}
+.export-page-error[hidden] {
+  display: none;
+}
+
+/* Le guide dei margini (`.px-g`): una maniglia di 12 px sul bordo del testo,
+   un filo nell'accento al centro. Si vedono appena con la Pagina aperta,
+   piene al passaggio e mentre si trascina; nella vista «tutte» non ci sono. */
+.export-guide {
+  position: absolute;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.14s;
+}
+.export-guide::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.export-guide[data-guide="sopra"],
+.export-guide[data-guide="sotto"] {
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: row-resize;
+}
+.export-guide[data-guide="sopra"] {
+  top: calc(var(--export-margin-top) - 6px);
+}
+.export-guide[data-guide="sotto"] {
+  bottom: calc(var(--export-margin-bottom) - 6px);
+}
+.export-guide[data-guide="sopra"]::after,
+.export-guide[data-guide="sotto"]::after {
+  top: 5.5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.export-guide[data-guide="sinistra"],
+.export-guide[data-guide="destra"] {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+}
+.export-guide[data-guide="sinistra"] {
+  left: calc(var(--export-margin-left) - 6px);
+}
+.export-guide[data-guide="destra"] {
+  right: calc(var(--export-margin-right) - 6px);
+}
+.export-guide[data-guide="sinistra"]::after,
+.export-guide[data-guide="destra"]::after {
+  top: 0;
+  bottom: 0;
+  left: 5.5px;
+  width: 1px;
+}
+.export-doc[data-guides="true"] .export-guide {
+  opacity: 0.4;
+}
+.export-guide:hover,
+.export-space.is-dragging .export-guide {
+  opacity: 1;
+}
+.export-space.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+.export-doc[data-view="tutte"] .export-guide {
+  display: none;
+}
+.export-guide-tip {
+  position: fixed;
+  z-index: 5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--sheet);
+  font: 600 11.5px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.export-guide-tip[hidden] {
+  display: none;
+}
+/* La filigrana (`.px-wm`): in diagonale, sotto il testo, nel carattere dei
+   titoli e nel colore del testo appena accennato. */
+.export-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  color: var(--doc-fg);
+  font: 800 150px/1 var(--print-font-headings, var(--font-reading));
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0.055;
+  transform: rotate(-32deg);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .export-font,
+  .export-guide,
   .export-segment,
   .export-go,
   .export-section-chevron,
@@ -27234,7 +27480,7 @@ h6.ui-heading {
     transition: none;
   }
 }
-:root[data-motion="reduced"] :is(.export-segment, .export-go, .export-section-chevron, .export-theme-preview, .export-color, .export-color-chip, .export-swatch, .export-toggle-knob, .export-toggle-knob::after, .export-dg-swatch, .export-dg-ink, .export-dg-toggle i, .export-dg-toggle i::after) {
+:root[data-motion="reduced"] :is(.export-font, .export-guide, .export-segment, .export-go, .export-section-chevron, .export-theme-preview, .export-color, .export-color-chip, .export-swatch, .export-toggle-knob, .export-toggle-knob::after, .export-dg-swatch, .export-dg-ink, .export-dg-toggle i, .export-dg-toggle i::after) {
   transition: none;
 }
 

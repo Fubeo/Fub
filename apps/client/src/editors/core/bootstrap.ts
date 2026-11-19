@@ -5,6 +5,7 @@ import type { CellValuePort, CellValueReader } from "../text/profiles/markdown/c
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
 import type { TableSheetPort } from "../text/profiles/markdown/table-sheet";
 import { FUB_CELLS_TYPE, rememberCellsCopy } from "../text/profiles/markdown/cells-clipboard";
+import type { BoardPort } from "../text/profiles/markdown/blocks/to-board";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
@@ -142,6 +143,8 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly moveBlock?: MoveBlockPort;
   /// «Trasforma in foglio» dal menu della tabella (T52).
   readonly tableSheet?: TableSheetPort;
+  /// «Porta su una lavagna» dal menu del blocco e sulle lavagne a lato (T48).
+  readonly boardBlock?: BoardPort;
   /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
   readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
@@ -805,6 +808,7 @@ export function createDocumentSurfaceRegistry(
             onNewSubpage: options.onNewSubpage,
             ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
             ...(options.tableSheet ? { tableSheet: options.tableSheet } : {}),
+            ...(options.boardBlock ? { boardBlock: options.boardBlock } : {}),
             ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,

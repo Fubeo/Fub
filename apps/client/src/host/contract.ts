@@ -3019,6 +3019,7 @@ export const COMMANDS = {
   moveBlock: "note.block.move",
   syncBlock: "note.block.sync",
   tableSheet: "note.table.sheet",
+  fromNote: "canvas.from_note",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

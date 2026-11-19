@@ -580,16 +580,20 @@ export const SCENE = touchLast(onPage("shell", [
   // Con Contenuto e Interruzioni aperte (T74): le righe con le scelte, i
   // commenti nel margine accanto al loro paragrafo, la tabella a griglia e
   // il codice coi numeri delle righe, come al passo 29.
+  // Con Caratteri e Pagina aperte (T72): i caratteri di Fub e del vault
+  // (uno chiuso dalla licenza), i cursori, i margini, le guide sulle pagine.
   ...[
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
     ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, "temi"],
     ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, "testata"],
+    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, "caratteri"],
     ["esporta-pdf-contenuto", "Lo spazio «Esporta in PDF» con Contenuto e Interruzioni aperte: commenti nel margine, tabelle a griglia, codice numerato", undefined, "contenuto"],
   ].map(([id, title, viewport, sections]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
+    ...(sections === "caratteri" ? { query: "esporta-caratteri=1" } : {}),
     prepare: async (page) => {
       // In una finestra stretta l'albero è nel cassetto chiuso: la nota si
       // apre larga, poi la finestra torna com'era (la scena, o lo stato
@@ -600,6 +604,7 @@ export const SCENE = touchLast(onPage("shell", [
       if (size) await page.setViewportSize(size);
       await openExportSpace(page);
       if (sections === "temi") await openThemeSections(page);
+      if (sections === "caratteri") await openFontSections(page);
       if (sections === "contenuto") await openContentSections(page);
       if (sections === "testata") await openFrontSections(page);
     },
@@ -3348,6 +3353,22 @@ async function openThemeSections(page) {
   await page.click("#export-color-accento");
   await page.waitForSelector("#export-color-palette-accento");
   await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Apre Caratteri e Pagina (T72) e aspetta i caratteri del vault caricati,
+/// coi pulsanti scritti nel loro carattere.
+async function openFontSections(page) {
+  await page.click('.export-section[data-section="caratteri"] .export-section-head');
+  await page.waitForSelector('.export-font[data-vault="Caratteri/Macchina.woff2"]');
+  await page.click('.export-section[data-section="pagina"] .export-section-head');
+  await page.waitForSelector(".export-doc[data-guides=true] .export-guide");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
     const side = document.querySelector(".export-side");
     if (side) side.scrollTop = 0;
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
