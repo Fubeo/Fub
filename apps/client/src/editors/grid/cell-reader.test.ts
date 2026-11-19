@@ -1,6 +1,6 @@
 // Il lettore dei valori di cella nel testo (T53) con un `GridHost` finto: una
 // sessione per file e per lettura, chiusa sempre; la parte trovata con
-// `fub.part` o, senza il comando, per nome; una finestra di una cella sola;
+// `fub.part` o, senza il comando, per nome; una finestra per blocco;
 // la cella vuota, l'errore di formula, il valore non ricalcolato, l'unione,
 // la cella persa, il file mancante e la superficie che manca. Non scrive mai.
 import { describe, expect, it } from "vitest";
@@ -23,6 +23,8 @@ interface FakeOptions {
   readonly merges?: GridMerge[];
   readonly surfaces?: boolean;
   readonly conflictOnce?: boolean;
+  /// Le righe di ogni foglio (100 se non lo dice).
+  readonly rows?: number;
 }
 
 interface Fake extends GridHost {
@@ -62,7 +64,7 @@ function fake(options: FakeOptions): Fake {
       return {
         instance: `i${++counter}`,
         revision: "rev-1",
-        sheets: SHEETS.map((sheet) => ({ id: sheet.id, name: sheet.name, row_count: 100, column_count: 26 })),
+        sheets: SHEETS.map((sheet) => ({ id: sheet.id, name: sheet.name, row_count: options.rows ?? 100, column_count: 26 })),
         active: "s1",
         hidden: [],
         notices: [],
@@ -74,33 +76,36 @@ function fake(options: FakeOptions): Fake {
     async gridBytesWindow(_surface, _instance, request) {
       host.windows.push(request);
       const sheet = SHEETS.find((each) => each.id === request.sheet)!;
-      const rows = [{ id: `r${request.row_start}`, index: request.row_start, height: null, hidden: false }];
-      const columns = [{ id: `c${request.column_start}`, index: request.column_start, width: null, hidden: false }];
-      const name = `${sheet.name}!${columnLetters(request.column_start)}${request.row_start + 1}`;
-      const own = options.cells[name];
-      const cells: GridBytesCell[] = own ? [{
-        key: { sheet: sheet.id, row: rows[0]!.id, column: columns[0]!.id },
-        input: own.display,
-        style: 0,
-        value: own.value,
-        display: own.display,
-        lock: null,
-        stale: own.stale ?? false,
-        conflict: false,
-        data_bar: null,
-        icon: null,
-        comment: null,
-        link: null,
-      }] : [];
+      const rows = Array.from({ length: request.row_count }, (_, i) =>
+        ({ id: `r${request.row_start + i}`, index: request.row_start + i, height: null, hidden: false }));
+      const columns = Array.from({ length: request.column_count }, (_, i) =>
+        ({ id: `c${request.column_start + i}`, index: request.column_start + i, width: null, hidden: false }));
+      const cells: GridBytesCell[] = rows.flatMap((row) => columns.flatMap((column) => {
+        const own = options.cells[`${sheet.name}!${columnLetters(column.index)}${row.index + 1}`];
+        return own ? [{
+          key: { sheet: sheet.id, row: row.id, column: column.id },
+          input: own.display,
+          style: 0,
+          value: own.value,
+          display: own.display,
+          lock: null,
+          stale: own.stale ?? false,
+          conflict: false,
+          data_bar: null,
+          icon: null,
+          comment: null,
+          link: null,
+        }] : [];
+      }));
       const merges = (options.merges ?? []).filter((merge) =>
-        merge.row <= request.row_start && merge.row + merge.rows > request.row_start
-        && merge.column <= request.column_start && merge.column + merge.columns > request.column_start);
+        merge.row <= request.row_start + request.row_count - 1 && merge.row + merge.rows > request.row_start
+        && merge.column <= request.column_start + request.column_count - 1 && merge.column + merge.columns > request.column_start);
       return {
         revision: request.revision,
         sheet: sheet.id,
         row_start: request.row_start,
         column_start: request.column_start,
-        total_rows: 100,
+        total_rows: options.rows ?? 100,
         total_columns: 26,
         rows,
         columns,
@@ -159,8 +164,36 @@ describe("il lettore dei valori di cella", () => {
     expect(answers.get("C7")).toEqual({ state: "value", text: "2.520 €", error: false, stale: false });
     expect(host.opens).toEqual(["Conti.xlsx"]);
     expect(host.closes).toEqual(["i1"]);
-    expect(host.windows.every((window) => window.row_count === 1 && window.column_count === 1)).toBe(true);
+    // Una finestra per blocco, dall'angolo del blocco all'ultima cella chiesta.
+    expect(host.windows.map(({ sheet, row_start, row_count, column_start, column_count }) =>
+      [sheet, row_start, row_count, column_start, column_count])).toEqual([["s1", 0, 7, 0, 3], ["s2", 0, 2, 0, 2]]);
     expect(host.writes).toBe(0);
+  });
+
+  it("cento celle vicine fanno una finestra; una lontana ha il suo blocco", async () => {
+    const cells: Record<string, { value: Value; display: string }> = {};
+    const parts: string[] = [];
+    for (let row = 1; row <= 100; row += 1) {
+      cells[`Budget!C${row}`] = { value: number(row), display: `${row}` };
+      parts.push(`Budget!C${row}`);
+    }
+    const host = fake({ cells, rows: 1000 });
+    const answers = await sheetCellReader(port(host)).read("Conti.xlsx", [...parts, "Budget!B700"]);
+    expect(answers.get("Budget!C100")).toEqual({ state: "value", text: "100", error: false, stale: false });
+    expect(answers.get("Budget!B700")).toEqual({ state: "empty" });
+    expect(host.windows.map(({ row_start, row_count, column_start, column_count }) =>
+      [row_start, row_count, column_start, column_count])).toEqual([[0, 100, 0, 3], [512, 188, 0, 2]]);
+  });
+
+  it("l'angolo di un'unione in un altro blocco si legge col suo blocco", async () => {
+    const host = fake({
+      cells: { "Budget!A256": { value: number(4), display: "4" }, "Budget!A1": { value: number(1), display: "1" } },
+      merges: [{ row: 255, column: 0, rows: 2, columns: 1 }],
+      rows: 1000,
+    });
+    const answers = await sheetCellReader(port(host)).read("Conti.xlsx", ["Budget!A1", "Budget!A257"]);
+    expect(answers.get("Budget!A1")).toEqual({ state: "value", text: "1", error: false, stale: false });
+    expect(answers.get("Budget!A257")).toEqual({ state: "value", text: "4", error: false, stale: false });
   });
 
   it("chiede la parte al provider con fub.part, quando la sessione lo serve", async () => {

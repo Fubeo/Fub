@@ -1570,6 +1570,8 @@
     "draw-rail",
     "draw-body",
     "draw-dock",
+    "cm-fub-cell-value",
+    "fub-cell-value",
     "draw-export",
     "draw-export-text",
     "draw-group",
@@ -3811,6 +3813,8 @@
     "draw-rail": "cornice",
     "draw-body": "cornice",
     "draw-dock": "cornice",
+    "cm-fub-cell-value": "contenuto",
+    "fub-cell-value": "contenuto",
     "draw-export": "cornice",
     "draw-export-text": "cornice",
     "draw-group": "cornice",
@@ -8375,6 +8379,19 @@
       ]
     },
     {
+      "name": "cell-value",
+      "part": "live-cards",
+      "hooks": [
+        "cm-fub-cell-value",
+        "fub-cell-value",
+        "embed"
+      ],
+      "states": [
+        "rest",
+        "hover"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -11761,10 +11778,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2239,
+    "hooks": 2241,
     "state_names": 7,
-    "assigned_states": 1018,
-    "components": 302,
+    "assigned_states": 1020,
+    "components": 303,
     "preference_tokens": 196
   }
 }

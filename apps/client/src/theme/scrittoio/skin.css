@@ -17845,11 +17845,11 @@ input.canvas-toolbar-item {
   background: var(--accent-veil);
 }
 .cm-fub-cell-value:is([data-cell-state="loading"], [data-cell-state="empty"], [data-cell-state="unavailable"]) {
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
 }
 .cm-fub-cell-value:is([data-cell-state="error"], [data-cell-state="missing"], [data-cell-state="lost"]) {
-  border-bottom-color: color-mix(in srgb, var(--danger) 60%, transparent);
-  color: var(--danger);
+  border-bottom-color: color-mix(in srgb, var(--doc-danger) 60%, transparent);
+  color: var(--doc-danger);
 }
 .embed.fub-cell-value {
   display: inline;
@@ -17859,7 +17859,7 @@ input.canvas-toolbar-item {
   font-variant-numeric: tabular-nums;
 }
 .embed.fub-cell-value:is([data-cell-state="error"], [data-cell-state="missing"], [data-cell-state="lost"]) {
-  color: var(--danger);
+  color: var(--doc-danger);
 }
 
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */

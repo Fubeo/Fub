@@ -7,8 +7,9 @@
 // file; `openGridBytes` sul giornale e sulla base della porta (la linguetta
 // aperta, anche non salvata, o i byte del disco); per ogni parte il comando
 // che legge soltanto `fub.part` (o, con un provider che non lo serve, il
-// foglio per nome e la cella in A1); poi una finestra di una cella sola. Una
-// sessione per file e per lettura, chiusa sempre. Non chiama mai
+// foglio per nome e la cella in A1); poi le finestre, una per blocco della
+// griglia, dall'angolo del blocco all'ultima cella chiesta. Una sessione per
+// file e per lettura, chiusa sempre. Non chiama mai
 // `applyGridBytes` né un comando che scrive: il valore è quello salvato, col
 // formato del foglio (`display`), e un valore non ricalcolato lo dice
 // (`stale`).
@@ -78,11 +79,24 @@ async function readCells(port: CellReaderPort, path: string, parts: readonly str
   }
   if (opened === null) return all({ state: "missing" });
   const { surface, session } = opened;
+  const windows = new WindowCache(port.host, surface, session);
   try {
+    const places: { part: string; place: CellPlace }[] = [];
     for (const part of parts) {
       try {
         const place = await findCell(port.host, surface, session, part);
-        answers.set(part, place === null ? { state: "lost" } : await readCell(port.host, surface, session, place));
+        if (place === null || !insideSheet(session, place)) answers.set(part, { state: "lost" });
+        else places.push({ part, place });
+      } catch (error) {
+        console.warn(`note: la cella «${part}» di ${path} non si legge`, error);
+        answers.set(part, { state: "unavailable" });
+      }
+    }
+    // Le celle dello stesso blocco si leggono con una finestra sola.
+    windows.plan(places.map(({ place }) => place));
+    for (const { part, place } of places) {
+      try {
+        answers.set(part, await readCell(windows, place));
       } catch (error) {
         console.warn(`note: la cella «${part}» di ${path} non si legge`, error);
         answers.set(part, { state: "unavailable" });
@@ -147,23 +161,93 @@ async function findCell(host: GridHost, surface: string, session: GridBytesSessi
   return sheet ? { sheet: sheet.id, at } : null;
 }
 
-/// Legge la cella `place`: una finestra di una cella. Una cella dentro
-/// un'unione vale per l'unione: si legge la sua cella in alto a sinistra.
-async function readCell(host: GridHost, surface: string, session: GridBytesSession, place: CellPlace): Promise<CellReading> {
+/// La cella sta dentro il suo foglio: oltre l'ultima riga o colonna è persa.
+function insideSheet(session: GridBytesSession, place: CellPlace): boolean {
   const sheet = session.sheets.find((candidate) => candidate.id === place.sheet);
-  if (!sheet || place.at.row >= sheet.row_count || place.at.column >= sheet.column_count) return { state: "lost" };
+  return sheet !== undefined && place.at.row < sheet.row_count && place.at.column < sheet.column_count;
+}
+
+/// I blocchi in cui la griglia chiede le sue finestre (`GRID_WINDOW_ROWS` e
+/// `GRID_WINDOW_COLUMNS` di `engine.ts`, che il lettore non importa per non
+/// tirarsi dietro il motore): una finestra parte sempre dall'angolo di un
+/// blocco, come quelle della griglia e della scheda.
+const BLOCK_ROWS = 256;
+const BLOCK_COLUMNS = 128;
+
+/// Le finestre di una lettura, una per blocco: dall'angolo del blocco fino
+/// all'ultima cella chiesta in quel blocco, mai oltre il foglio. Cento valori
+/// dello stesso foglio vicini fanno una finestra sola.
+class WindowCache {
+  readonly #extent = new Map<string, { row: number; column: number }>();
+  readonly #windows = new Map<string, Promise<GridBytesWindow>>();
+
+  constructor(
+    private readonly host: GridHost,
+    private readonly surface: string,
+    private readonly session: GridBytesSession,
+  ) {}
+
+  /// Le celle che la lettura chiederà: ogni blocco arriva fino all'ultima.
+  plan(places: readonly CellPlace[]): void {
+    for (const place of places) this.#grow(place);
+  }
+
+  /// La finestra del blocco di `place`, chiesta una volta.
+  window(place: CellPlace): Promise<GridBytesWindow> {
+    const key = this.#grow(place);
+    let window = this.#windows.get(key);
+    const extent = this.#extent.get(key)!;
+    // L'angolo di un'unione che scavalca un blocco può stare oltre la
+    // finestra già chiesta di quel blocco: se ne chiede una più grande.
+    if (window && (place.at.row > extent.row || place.at.column > extent.column)) {
+      extent.row = Math.max(extent.row, place.at.row);
+      extent.column = Math.max(extent.column, place.at.column);
+      window = undefined;
+    }
+    if (!window) {
+      const rowStart = blockStart(place.at.row, BLOCK_ROWS);
+      const columnStart = blockStart(place.at.column, BLOCK_COLUMNS);
+      const sheet = this.session.sheets.find((candidate) => candidate.id === place.sheet)!;
+      window = this.host.gridBytesWindow(this.surface, this.session.instance, {
+        revision: this.session.revision,
+        sheet: place.sheet,
+        row_start: rowStart,
+        row_count: Math.min(extent.row, sheet.row_count - 1) - rowStart + 1,
+        column_start: columnStart,
+        column_count: Math.min(extent.column, sheet.column_count - 1) - columnStart + 1,
+        known_media: [],
+      }).then((answer) => {
+        validateBytesWindow(answer, this.session);
+        return answer;
+      });
+      this.#windows.set(key, window);
+    }
+    return window;
+  }
+
+  #grow(place: CellPlace): string {
+    const key = `${place.sheet}\u0000${blockStart(place.at.row, BLOCK_ROWS)}\u0000${blockStart(place.at.column, BLOCK_COLUMNS)}`;
+    const extent = this.#extent.get(key);
+    // Una finestra già chiesta non si allarga qui: lo decide `window`.
+    if (!extent) this.#extent.set(key, { row: place.at.row, column: place.at.column });
+    else if (!this.#windows.has(key)) {
+      extent.row = Math.max(extent.row, place.at.row);
+      extent.column = Math.max(extent.column, place.at.column);
+    }
+    return key;
+  }
+}
+
+function blockStart(index: number, size: number): number {
+  return Math.floor(index / size) * size;
+}
+
+/// Legge la cella `place` dalla finestra del suo blocco. Una cella dentro
+/// un'unione vale per l'unione: si legge la sua cella in alto a sinistra.
+async function readCell(windows: WindowCache, place: CellPlace): Promise<CellReading> {
   let at = place.at;
   for (let pass = 0; pass < 2; pass++) {
-    const window = await host.gridBytesWindow(surface, session.instance, {
-      revision: session.revision,
-      sheet: sheet.id,
-      row_start: at.row,
-      row_count: 1,
-      column_start: at.column,
-      column_count: 1,
-      known_media: [],
-    });
-    validateBytesWindow(window, session);
+    const window = await windows.window({ sheet: place.sheet, at });
     const anchor = mergeAnchor(window.merges, at);
     if (anchor.row !== at.row || anchor.column !== at.column) {
       at = anchor;

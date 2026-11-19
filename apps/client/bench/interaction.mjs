@@ -106,12 +106,13 @@ const INTERACTIONS = [
 
 /// La battuta: le note, per numero di sezioni, e le modalità in cui si
 /// scrive. `schede-20` è la nota di cinquanta sezioni con venti fogli vivi
-/// dentro (T43, A-5): la battuta resta nel budget anche con le schede. Il budget vale per la mediana e il novantesimo della battuta, in
+/// dentro (T43, A-5): la battuta resta nel budget anche con le schede;
+/// `valori-100` la stessa nota con cento valori di cella nel testo (T53, A-5). Il budget vale per la mediana e il novantesimo della battuta, in
 /// millisecondi.
 const TYPING = {
   id: "battuta",
   title: "Una battuta in una nota grande",
-  notes: [50, 400, "schede-20"],
+  notes: [50, 400, "schede-20", "valori-100"],
   modes: [
     ["source", "Sorgente"],
     ["live_preview", "Scrittura"],
@@ -263,9 +264,11 @@ async function measure(stage, interaction, scene) {
 
 /// Apre la nota sintetica nella modalità data e misura battute e cursore.
 async function measureTyping(stage, sections, mode) {
-  // Le schede di foglio leggono la cartella del banco (`workbook=1`).
-  const cards = typeof sections === "string";
-  const scene = { id: `battuta-${sections}`, query: `live=battuta-${sections}${cards ? "&workbook=1" : ""}`, prepare: async () => {} };
+  // Le schede di foglio e i valori di cella leggono la cartella del banco
+  // (`workbook=1`).
+  const cards = sections === "schede-20";
+  const values = sections === "valori-100";
+  const scene = { id: `battuta-${sections}`, query: `live=battuta-${sections}${cards || values ? "&workbook=1" : ""}`, prepare: async () => {} };
   const page = await openPage(stage.browser, "dark", { clock: false });
   try {
     await prepareScene(page, scene, "dark", stage.base, sceneUrl);
@@ -278,6 +281,8 @@ async function measureTyping(stage, sections, mode) {
     if (mode === "live_preview") await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-handles", { state: "attached" });
     // Le schede vive sono montate prima di scrivere: si misura con loro.
     if (cards && mode === "live_preview") await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"][data-card-state="view"]');
+    // I valori di cella hanno letto la cartella prima di scrivere (T53).
+    if (values && mode === "live_preview") await page.waitForSelector('.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]');
     return await page.evaluate(async ({ keystrokes, moves }) => {
       const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
       const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
@@ -636,7 +641,7 @@ try {
           const result = await measureTyping(stage, sections, mode);
           row = {
             id: `${TYPING.id}-${typeof sections === "string" ? sections : result.lines}-${mode}`,
-            title: `${TYPING.title}: ${result.lines} righe${typeof sections === "string" ? ", venti schede di foglio" : ""}, ${label}`,
+            title: `${TYPING.title}: ${result.lines} righe${sections === "schede-20" ? ", venti schede di foglio" : sections === "valori-100" ? ", cento valori di cella" : ""}, ${label}`,
             budget: { type: TYPING.budget },
             ...result,
             pass: result.type.median <= TYPING.budget.median && result.type.p90 <= TYPING.budget.p90,

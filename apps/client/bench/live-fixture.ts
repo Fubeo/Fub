@@ -165,6 +165,25 @@ const LIVE_CARDS_NOTE = [
   "Da chiedere all'agenzia: chi paga la caldaia.",
 ].join("\n");
 
+/// I valori di cella nel testo (T53), sulla cartella del banco (`Conti`: 800
+/// in B2, 680 in B4, il #DIV/0! di C4, D2 vuota): il paragrafo del
+/// prototipo, poi i casi limite — la cella vuota, l'errore di formula, il
+/// foglio che non c'è, il file mancante — e una cella da sola chiesta come
+/// valore (`|value`).
+const CELL_VALUES_NOTE = [
+  "# Il budget della casa",
+  "",
+  "Finora abbiamo speso ![[Conti.xlsx#Conti!B4]] su ![[Conti.xlsx#Conti!B2]] previsti. I preventivi arrivati stanno nella tabella; il budget intero è un pezzo di **Conti.xlsx**.",
+  "",
+  "La quota della caldaia è ![[Conti.xlsx#Conti!D2]], la media dei mesi dà ![[Conti.xlsx#Conti!C4]] e il budget vecchio diceva ![[Conti.xlsx#Budget!C7]].",
+  "",
+  "I conti dell'anno scorso dicevano ![[Conti 2024.xlsx#Budget!C7]], ma il file non c'è più.",
+  "",
+  "![[Conti.xlsx#Conti!B3|value]]",
+  "",
+  "Da chiedere all'agenzia: chi paga la caldaia.",
+].join("\n");
+
 /// La misura e il posto delle schede (T42): il contratto e i conti affiancati
 /// in un `[!columns]`, i conti a tutta pagina e bassi (`|900x260`), il
 /// contratto come riga (`|row`).
@@ -316,6 +335,24 @@ export function typingNote(sections: number): LiveCase {
 /// stessa parte della cartella del banco.
 export function typingCardsNote(sections: number, cards: number): LiveCase {
   const parts = Array.from({ length: sections }, (_, i) => (i < cards ? `${section(i)}\n![[Conti.xlsx#Conti!A1:C4]]\n` : section(i)));
+  const text = `${parts.join("\n")}\nFine.`;
+  return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
+}
+
+/// La battuta coi valori di cella nel testo (T53, A-5): `sections` sezioni e
+/// `values` valori della cartella del banco in mezzo alle frasi, due per
+/// sezione finché ce ne sono. Il cursore a metà, come le altre battute.
+export function typingValuesNote(sections: number, values: number): LiveCase {
+  const cells = ["Conti!B2", "Conti!B3", "Conti!B4", "Conti!C2"];
+  let left = values;
+  const parts = Array.from({ length: sections }, (_, i) => {
+    const here = Math.min(2, left);
+    left -= here;
+    if (here === 0) return section(i);
+    const one = `![[Conti.xlsx#${cells[(2 * i) % cells.length]}]]`;
+    const two = `![[Conti.xlsx#${cells[(2 * i + 1) % cells.length]}]]`;
+    return `${section(i)}\nSpesi ${one}${here === 2 ? ` su ${two} previsti` : ""}, per ora.\n`;
+  });
   const text = `${parts.join("\n")}\nFine.`;
   return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
 }
@@ -758,6 +795,10 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "battuta-schede-20": typingCardsNote(50, 20),
+  // I valori di cella nel testo (T53): la nota del prototipo e la battuta
+  // con cento valori.
+  "valori-cella": { text: CELL_VALUES_NOTE, cursor: null },
+  "battuta-valori-100": typingValuesNote(50, 100),
   "lunga-4000": longNote(4000),
 };
 
