@@ -40,6 +40,7 @@ import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mou
 import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type WikilinkGesture } from "./link-gesture";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { resolvedReference, settings } from "../../../../host/query";
+import { nextTaskOccurrence } from "../../../../host/tasks";
 import { onEvent } from "../../../../state/kernel";
 import { openVaultRoot } from "../../../../state/store";
 import { featureInType, listNoteTypes, noteTypeOf, type NoteType, type NoteTypeState } from "../../../../state/note-types";
@@ -129,6 +130,7 @@ import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
 import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup, type DetachCard } from "./block-groups";
+import { dispatchTaskToggles } from "./task-toggle";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
@@ -567,6 +569,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     open: (page, heading, block) => void openWikilink(page, heading, block),
     theme: () => currentTheme,
     extensions: (doc) => createMarkdownProfile({
+      nextOccurrence: nextTaskOccurrence,
       callbacks: {
         openWikilink: (page, heading, block) => void opts.onOpenWikilink(page, heading, block, doc),
         searchTag: opts.onSearchTag,
@@ -639,6 +642,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     ? { cellValue: (slot: HTMLElement, life: Lifetime) => hostCellSlot(slot, life, cellValues) }
     : {};
   const profile = createMarkdownProfile({
+    nextOccurrence: nextTaskOccurrence,
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
       openWikilink,
@@ -1312,11 +1316,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     if (!/^\[[^\]\r\n]\]$/u.test(text.slice(symbolOffset - 1, symbolOffset + 2))) return;
     const symbol = text[symbolOffset] ?? "";
-    engine.applyUserEdit(
-      symbolOffset,
-      symbolOffset + 1,
-      taskChecked(symbol) ? " " : "x",
-    );
+    // Dalla ricorrenza come la casella in Scrittura (`task-toggle.ts`).
+    engine.runCommand((target) => {
+      dispatchTaskToggles(target, [{ symbol: symbolOffset, insert: taskChecked(symbol) ? " " : "x" }], { userEvent: "input" });
+      return true;
+    });
     reading.focus({ preventScroll: true });
   }
 
@@ -2278,7 +2282,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
             label: t(task.checked ? "editor_menu.task.undone" : "editor_menu.task.done"),
             icon: "check",
             chord: "Mod-Enter",
-            run: () => void engine.applyUserEdit(task.symbol, task.symbol + 1, task.checked ? " " : "x"),
+            run: () => void engine.runCommand((target) => {
+              dispatchTaskToggles(target, [{ symbol: task.symbol, insert: task.checked ? " " : "x" }], { userEvent: "input" });
+              return true;
+            }),
           }] : []),
           MENU_RULE,
           ...indents,

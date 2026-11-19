@@ -225,6 +225,13 @@ il testo, quindi non aspetta la scrittura del file che deve coprire (#485).
   è quello appena scritto, e lo scarto si accoda dietro le bozze già partite.
   Se nel frattempo è arrivato testo nuovo la bozza resta, e la cadenza la
   riscrive sulla revisione nuova.
+- **Bozza già sul disco.** Un'app chiusa con un salvataggio in volo può
+  lasciare il file col testo nuovo e la bozza con la revisione di prima. Al
+  recupero la shell legge il file di ogni bozza rimasta su una nota che c'è
+  (`DocumentSessionCollection.withoutSuperseded`): se il testo è uguale byte
+  per byte, la bozza si scarta e non diventa un conflitto. Una lettura
+  fallita, un testo diverso anche di un a capo o una sessione già aperta
+  tengono la bozza.
 - **Host.** `save_draft` e `discard_draft` girano fuori dal thread principale
   e non prendono il turno di scrittura, che il salvataggio tiene per tutta la
   sua durata: prendono la porta delle bozze (`Workspace::draft_port`) con un

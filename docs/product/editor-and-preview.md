@@ -300,7 +300,10 @@ cronologia del documento (`version.keep`, con la nota datata del conflitto):
 una conservazione fallita non scarta niente, e un tasto premuto mentre si
 conserva rende la lettura superata, col conflitto ancora aperto
 ([versioni](vault-recupero-e-versioni.md#versioning)). Una bozza recuperata senza revisione di base, su un file che
-esiste, rientra direttamente in conflitto invece di sovrascriverlo.
+esiste, rientra direttamente in conflitto invece di sovrascriverlo. Una
+bozza che ha lo stesso testo del file, come quella lasciata da una chiusura
+veloce a salvataggio già arrivato, non è un conflitto: si toglie da sola alla
+riapertura. Una bozza diversa dal file resta finché la persona non sceglie.
 
 Un testo che nessun formato serve, come un SVG, non passa da `write_document`,
 che il kernel rifiuterebbe: la sessione lo scrive a byte con `resource_write`

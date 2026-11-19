@@ -4494,7 +4494,9 @@ export async function recoverDrafts(): Promise<number> {
   void refreshLimitedMode();
   let drafts: DraftInfo[];
   try {
-    drafts = toRecover(await unsavedDrafts());
+    // Una bozza con lo stesso testo del file non è da recuperare: si toglie
+    // invece di diventare un conflitto (IMP-1801).
+    drafts = await documentSessions.withoutSuperseded(toRecover(await unsavedDrafts()));
   } catch {
     // Un recupero che non parte non deve impedire di aprire il vault: è una
     // rete di sicurezza, e una rete che blocca la porta è peggio di nessuna

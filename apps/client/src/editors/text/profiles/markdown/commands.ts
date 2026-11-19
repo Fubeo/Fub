@@ -13,6 +13,7 @@ import { isolateHistory } from "@codemirror/commands";
 import { indentUnit, syntaxTree } from "@codemirror/language";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { taskChecked } from "../../../../rules/mirrored";
+import { dispatchTaskToggles, type TaskSymbolEdit } from "./task-toggle";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
@@ -519,9 +520,16 @@ export const dedentListItem: StateCommand = ({ state, dispatch }) => {
 
 /// `Mod-Enter`: spunta/s-spunta le todo delle righe selezionate; una voce di
 /// lista senza checkbox la guadagna, non spuntata. Righe che non sono voci
-export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
+///
+/// Un compito ricorrente (`🔁`) che si spunta fa nascere il successivo nella
+/// stessa transazione (`task-toggle.ts`). Il bersaglio non si destruttura:
+/// con una ricorrenza la transazione parte dopo la risposta della regola, e
+/// lo stato si rilegge allora.
+export const toggleCheckbox: StateCommand = (target) => {
+  const state = target.state;
   if (state.readOnly) return false;
-  const changes: ChangeSpec[] = [];
+  const boxes: TaskSymbolEdit[] = [];
+  const added: ChangeSpec[] = [];
   for (const l of selectedLines(state)) {
     const item = listItem(l.text);
     if (!item || item.kind === "quote") continue;
@@ -530,13 +538,13 @@ export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
       // contando all'indietro dal marcatore presupponeva che la casella fosse
       // sempre `[x] ` di quattro caratteri, che a fine riga è falso.
       const box = l.from + item.boxFrom;
-      changes.push({ from: box + 1, to: box + 2, insert: taskChecked(item.symbol) ? " " : "x" });
+      boxes.push({ symbol: box + 1, insert: taskChecked(item.symbol) ? " " : "x" });
     } else {
-      changes.push({ from: l.from + item.markerEnd, insert: "[ ] " });
+      added.push({ from: l.from + item.markerEnd, insert: "[ ] " });
     }
   }
-  if (changes.length === 0) return false;
-  dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+  if (boxes.length === 0 && added.length === 0) return false;
+  dispatchTaskToggles(target, boxes, { scrollIntoView: true, userEvent: "input" }, added);
   return true;
 };
 

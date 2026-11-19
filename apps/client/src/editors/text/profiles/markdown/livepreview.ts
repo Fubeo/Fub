@@ -27,6 +27,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
+import { dispatchTaskToggles } from "./task-toggle";
 import { hidesPageBreak } from "../../../../rules/page-break";
 import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
@@ -1865,13 +1866,14 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
     if (/^\[[^\]\n]\]$/.test(threeChars)) {
       const checked = !taskChecked(threeChars[1]);
       const line = view.state.doc.lineAt(pos);
-      view.dispatch({
-        changes: { from: pos + 1, to: pos + 2, insert: checked ? "x" : " " },
-        annotations: blockGesture.of({ kind: "check", lead: { from: line.from, to: line.to }, say: liveStrings.t(checked ? "blocks.checked" : "blocks.unchecked") }),
+      // La spunta passa dalla ricorrenza (`task-toggle.ts`): un compito `🔁`
+      // spuntato fa nascere il successivo nella stessa transazione.
+      dispatchTaskToggles(view, [{ symbol: pos + 1, insert: checked ? "x" : " " }], (mapPos) => ({
+        annotations: blockGesture.of({ kind: "check", lead: { from: mapPos(line.from), to: mapPos(line.to) }, say: liveStrings.t(checked ? "blocks.checked" : "blocks.unchecked") }),
         // Come ogni battuta di contenuto: senza, la modifica cade fuori dalla
         // history nativa dell'editor.
         userEvent: "input",
-      });
+      }));
       e.preventDefault();
       return true;
     }
@@ -2288,10 +2290,7 @@ class MarkdownWidget extends WidgetType {
         if (view.state.readOnly || position < 1 || position + 1 >= view.state.doc.length) return;
         const marker = view.state.doc.sliceString(position - 1, position + 2);
         if (!/^\[[^\]\r\n]\]$/.test(marker)) return;
-        view.dispatch({
-          changes: { from: position, to: position + 1, insert: taskChecked(marker[1]!) ? " " : "x" },
-          userEvent: "input",
-        });
+        dispatchTaskToggles(view, [{ symbol: position, insert: taskChecked(marker[1]!) ? " " : "x" }], { userEvent: "input" });
       },
       openSource: (position: number) => {
         const anchor = Math.max(0, Math.min(view.state.doc.length, position));

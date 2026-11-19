@@ -47,7 +47,7 @@ struct Rule {
 /// è il giorno civile dell'utente in giorni dall'epoca. La riga nuova è la
 /// stessa con le date spostate e senza la data di completamento, quindi
 /// conserva rientro, punto elenco, testo e ogni campo che qui non si capisce.
-pub(super) fn next_line(line: &str, today: i64) -> Option<String> {
+pub(crate) fn next_line(line: &str, today: i64) -> Option<String> {
     let rule = rule_of(line)?;
     let dates = dates_of(line);
     let reference = DATES.iter().find_map(|sign| {
@@ -120,7 +120,7 @@ fn dates_of(line: &str) -> Vec<((usize, usize), (char, i64))> {
 }
 
 /// `AAAA-MM-GG` in giorni dall'epoca, se è un giorno che esiste.
-fn day_of(text: &str) -> Option<i64> {
+pub(crate) fn day_of(text: &str) -> Option<i64> {
     let bytes = text.as_bytes();
     if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
         return None;

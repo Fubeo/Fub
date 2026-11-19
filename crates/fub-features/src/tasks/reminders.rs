@@ -29,6 +29,14 @@
 //! prima, e l'elenco dei promemoria passati, che all'avvio chiede quelli fino
 //! ad adesso.
 //!
+//! La stessa rotta risponde a una seconda domanda, che non legge l'indice:
+//! [`RemindersQuery::NextOccurrence`], la riga del compito che nasce quando se
+//! ne spunta uno ricorrente (`🔁`). La regola è quella di `note.task.toggle`
+//! (`commands/recurrence.rs`), e la chiede l'editor quando si spunta la casella
+//! nella nota: lì la spunta è una modifica del buffer della sessione, non una
+//! scrittura del file, quindi l'editor scrive la riga nuova nella stessa
+//! transazione della spunta invece di copiare la regola in TypeScript.
+//!
 //! L'indice non sa che ore sono, e non deve: un [`IndexProvider`] risponde da
 //! ciò che ha già in mano, senza host. L'ora del muro la calcola chi chiede,
 //! con l'offset **di adesso** ([`civil_now`]), così un cambio di fuso o l'ora
@@ -72,6 +80,15 @@ pub const REMINDER_LIMIT: usize = 1_000;
 /// La versione della domanda che questo indice capisce.
 pub const REMINDERS_VERSION: u32 = 1;
 
+/// La versione della domanda del compito successivo.
+pub const NEXT_OCCURRENCE_VERSION: u32 = 1;
+
+/// La riga più lunga che la domanda del compito successivo accetta, in byte.
+///
+/// Una riga di compito è una frase; una riga di 64 KiB è un file incollato su
+/// una riga sola, e non vale un giro di IPC con dentro tutto il testo.
+pub const NEXT_OCCURRENCE_MAX_LINE: usize = 64 * 1024;
+
 /// La chiave d'errore di una domanda che non ha la forma della rotta: la
 /// frase sta nel catalogo dei compiti.
 pub(super) const E_QUERY: &str = "reminders_query";
@@ -106,6 +123,14 @@ pub enum RemindersQuery {
         #[serde(default)]
         limit: Option<usize>,
     },
+    /// La riga del compito che nasce spuntando `line`, se `line` ricorre.
+    NextOccurrence {
+        version: u32,
+        /// La riga del compito, ancora da spuntare e senza terminatore.
+        line: String,
+        /// Il giorno di chi spunta, `AAAA-MM-GG`: conta per `when done`.
+        today: String,
+    },
 }
 
 impl RemindersQuery {
@@ -116,6 +141,15 @@ impl RemindersQuery {
             after: after.map(reminder_text),
             until: until.map(reminder_text),
             limit: None,
+        }
+    }
+
+    /// La domanda del compito successivo, nella versione di oggi.
+    pub fn next_occurrence(line: impl Into<String>, today: impl Into<String>) -> Self {
+        RemindersQuery::NextOccurrence {
+            version: NEXT_OCCURRENCE_VERSION,
+            line: line.into(),
+            today: today.into(),
         }
     }
 
@@ -146,6 +180,15 @@ impl ReminderList {
             _ => Err(bad_query("not a custom answer")),
         }
     }
+}
+
+/// La risposta della domanda del compito successivo.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NextOccurrence {
+    /// La riga da scrivere sopra quella spuntata, senza terminatore; `None` se
+    /// la riga non ricorre (nessuna regola, una regola che non si capisce,
+    /// nessuna data da spostare).
+    pub line: Option<String>,
 }
 
 /// Un promemoria come lo porta la risposta.
@@ -239,12 +282,19 @@ impl ReminderIndex {
     fn answer(&self, query: serde_json::Value) -> Result<IndexResult, PluginError> {
         let query =
             RemindersQuery::deserialize(&query).map_err(|error| bad_query(&error.to_string()))?;
-        let RemindersQuery::Reminders {
-            version,
-            after,
-            until,
-            limit,
-        } = query;
+        let (version, after, until, limit) = match query {
+            RemindersQuery::Reminders {
+                version,
+                after,
+                until,
+                limit,
+            } => (version, after, until, limit),
+            RemindersQuery::NextOccurrence {
+                version,
+                line,
+                today,
+            } => return next_occurrence(version, &line, &today),
+        };
         if version != REMINDERS_VERSION {
             return Err(bad_query("unsupported version"));
         }
@@ -312,6 +362,34 @@ impl IndexProvider for ReminderIndex {
             _ => Err(PluginError::Unserved(Text::key(E_ROUTE))),
         }
     }
+}
+
+/// La risposta della domanda del compito successivo: la regola di
+/// `note.task.toggle`, applicata a una riga che arriva da fuori.
+fn next_occurrence(version: u32, line: &str, today: &str) -> Result<IndexResult, PluginError> {
+    use crate::commands::recurrence;
+    if version != NEXT_OCCURRENCE_VERSION {
+        return Err(bad_query("unsupported version"));
+    }
+    if line.len() > NEXT_OCCURRENCE_MAX_LINE {
+        return Err(bad_query("`line` is too long"));
+    }
+    if line.contains(['\n', '\r']) {
+        return Err(bad_query("`line` is one line"));
+    }
+    let today =
+        recurrence::day_of(today).ok_or_else(|| bad_query("`today` is not `YYYY-MM-DD`"))?;
+    let answer = NextOccurrence {
+        line: recurrence::next_line(line, today),
+    };
+    serde_json::to_value(answer)
+        .map(IndexResult::Custom)
+        .map_err(|error| {
+            PluginError::Internal(Text::message(
+                E_ANSWER,
+                vec![Arg::text(DETAIL, error.to_string())],
+            ))
+        })
 }
 
 /// I promemoria dei compiti **aperti** di un modello, in qualunque punto

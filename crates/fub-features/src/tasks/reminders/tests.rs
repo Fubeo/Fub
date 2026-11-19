@@ -394,3 +394,82 @@ fn a_reminder_knows_the_section_it_opens_on() {
         .collect();
     assert_eq!(headings, vec![None, Some("Lavoro"), Some("Casa")]);
 }
+
+#[test]
+fn the_route_answers_the_next_occurrence_with_the_toggle_rule() {
+    // L'indice vuoto risponde lo stesso: la domanda non legge le note.
+    let index = ReminderIndex::new();
+    let next = |line: &str, today: &str| {
+        index
+            .query(RemindersQuery::next_occurrence(line, today).to_index_query())
+            .map(|answer| match answer {
+                IndexResult::Custom(value) => {
+                    serde_json::from_value::<NextOccurrence>(value).expect("reads")
+                }
+                other => panic!("not a custom answer: {other:?}"),
+            })
+    };
+    assert_eq!(
+        next(
+            "- [ ] 1:1 del giovedì 🔁 every week 📅 2026-11-19",
+            "2026-11-19"
+        )
+        .expect("answers")
+        .line
+        .as_deref(),
+        Some("- [ ] 1:1 del giovedì 🔁 every week 📅 2026-11-26")
+    );
+    assert_eq!(
+        next(
+            "- [ ] F24 mensile 🔁 every month 📅 2026-11-16",
+            "2026-11-19"
+        )
+        .expect("answers")
+        .line
+        .as_deref(),
+        Some("- [ ] F24 mensile 🔁 every month 📅 2026-12-16")
+    );
+    assert_eq!(
+        next(
+            "- [ ] Taglio 🔁 every 3 weeks when done 📅 2026-09-01",
+            "2026-10-19"
+        )
+        .expect("answers")
+        .line
+        .as_deref(),
+        Some("- [ ] Taglio 🔁 every 3 weeks when done 📅 2026-11-09"),
+        "`when done` counts from the day of who asks"
+    );
+    assert_eq!(
+        next("- [ ] Senza ricorrenza 📅 2026-11-19", "2026-11-19")
+            .expect("answers")
+            .line,
+        None,
+        "a line that does not recur answers no line, not an error"
+    );
+
+    let ask = |query: serde_json::Value| {
+        index.query(IndexQuery::Custom {
+            ns: TASKS_ID.into(),
+            query,
+        })
+    };
+    let long = format!(
+        "- [ ] {} 🔁 every day 📅 2026-11-19",
+        "x".repeat(NEXT_OCCURRENCE_MAX_LINE)
+    );
+    for bad in [
+        serde_json::json!({"kind": "next_occurrence", "version": 2, "line": "- [ ] a", "today": "2026-11-19"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a", "today": "domani"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a", "today": "2026-02-30"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a\n- [ ] b", "today": "2026-11-19"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": long, "today": "2026-11-19"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a", "today": "2026-11-19", "extra": 1}),
+    ] {
+        assert!(
+            matches!(ask(bad.clone()), Err(PluginError::BadArgs(_))),
+            "{bad} is refused"
+        );
+    }
+}
