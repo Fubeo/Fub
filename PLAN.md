@@ -2508,7 +2508,7 @@ Fatto quando: andata e ritorno nota, lavagna, nota con lo stesso testo;
 l'annulla rimette i due file.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 lavagna
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 49709f452
 
 ## T49 · Gli estratti nella nota e «Annota»
 
@@ -3384,7 +3384,7 @@ Casi limite: un diagramma con errore (l'ultimo disegno buono o il riquadro
 Fatto quando: un test dei vettori; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] in corso · coder · base 21491084f
+Stato: [~] fatto (t75 @ c05063347), da integrare · lo stile dato a un solo diagramma vale per la sessione dello spazio (nessuna IPC lo salva); togliere lo stile col clic sulla pagina attende T76
 
 ## T76 · Il clic sulla pagina
 
