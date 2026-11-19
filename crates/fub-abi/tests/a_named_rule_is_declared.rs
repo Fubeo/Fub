@@ -796,6 +796,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/base.rs::is_base_definition",
+            (
+                Family::AsciiCase,
+                "riconosce un file di definizione di una Base (`.base`, anche `.BASE`) per toglierlo \
+                 dalle righe di ogni Base (IMP-1804). L'estensione è un letterale ASCII fisso \
+                 scritto qui, non testo di un provider né un nome di nota: non chiede «chi lo sa \
+                 parsare» come `documents.rs::extension_of`, chiede solo se il file è una Base, e \
+                 piega come `media.rs::kind_of` per la specie di un file.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/workspace.rs::new_notes_id",
             (
                 Family::AsciiCase,
