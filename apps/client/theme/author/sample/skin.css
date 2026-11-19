@@ -21000,7 +21000,8 @@ h6.ui-heading {
   text-align: center;
 }
 .ui-table td > .ui-button {
-  min-width: 0;
+  /* Tondo quando la colonna ha posto, più stretto quando non ne ha. */
+  min-width: min(2.5em, 100%);
   max-width: 100%;
   padding-right: var(--space-1);
   padding-left: var(--space-1);
