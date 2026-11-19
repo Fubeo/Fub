@@ -306,30 +306,16 @@ Lo scrittore legge ogni faccia dal suo `file`: `/fonts/<nome>` è un carattere
 che Fub porta con sé (i quattordici dell'app, gli stessi byte), ogni altro
 percorso è un file del vault. Il comando `pdf.vault_fonts` del bundle
 `fub.draw`, in sola lettura, elenca i caratteri del vault per la sezione
-Caratteri: torna l'effetto `fub.pdf.vault_fonts` con
-
-```json
-{
-  "caratteri": [
-    {
-      "famiglia": "Aperta",
-      "file": "Caratteri/Aperta.ttf",
-      "facce": [{ "file": "Caratteri/Aperta.ttf", "corsivo": false, "pesi": [100, 900], "incorporabile": true }],
-      "corsivo": false,
-      "incorporabile": true
-    }
-  ],
-  "illeggibili": ["Caratteri/Rotto.otf"],
-  "tralasciati": 0
-}
-```
+Caratteri: torna l'effetto `fub.pdf.vault_fonts` con `caratteri` (per ogni
+famiglia `famiglia`, `file`, `corsivo`, `incorporabile` e le `facce`, ognuna
+col suo `file`, `corsivo`, `pesi` e `incorporabile`), `illeggibili` (i
+percorsi che non si leggono) e `tralasciati` (quanti file restano fuori).
 
 Le famiglie sono quelle scritte nei file, senza badare alle maiuscole, in
 ordine di percorso; `file` è la faccia diritta più vicina al peso 400 ed è
-l'id che il profilo ricorda. Basta una faccia che la licenza
-(`fsType`) non lascia incorporare perché la famiglia sia `incorporabile: false`. Il comando
-legge al più 200 file e 256 MiB; ciò che resta fuori è contato in
-`tralasciati`.
+l'id che il profilo ricorda. Basta una faccia che la licenza (`fsType`) non
+lascia incorporare perché la famiglia sia `incorporabile: false`. Il comando
+legge al più 200 file e 256 MiB.
 
 ### I limiti
 
