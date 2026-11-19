@@ -112,7 +112,13 @@ fn creation_without_a_folder_uses_the_configured_new_note_folder() {
     let mut host = MemoryHost::new().with_value(spec(), SettingValue::Text("Clienti/".into()));
     let untitled = invoke(&mut host, NOTES_CREATE, json!({}), InvokeMode::Apply).unwrap();
     assert_eq!(navigate(untitled).as_str(), "Clienti/Senza titolo.md");
-    let named = invoke(&mut host, NOTES_CREATE, json!({ "name": "Rossi" }), InvokeMode::Apply).unwrap();
+    let named = invoke(
+        &mut host,
+        NOTES_CREATE,
+        json!({ "name": "Rossi" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
     assert_eq!(navigate(named).as_str(), "Clienti/Rossi.md");
     let explicit = invoke(
         &mut host,

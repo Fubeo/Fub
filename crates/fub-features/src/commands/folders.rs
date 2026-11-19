@@ -153,6 +153,18 @@ fn move_folder(
         }
     };
 
+    // I link delle proprietà alle voci, col nome che hanno adesso: dopo lo
+    // spostamento si riscrivono, come quelli del corpo (IMP-2805).
+    let found = match super::relink::property_links_to(&*host, &tree.entries) {
+        Ok(found) => found,
+        Err(error) => {
+            if carried {
+                let _ = host.migrate_folder_organization(to, from);
+            }
+            remove_folders(host, created);
+            return Err(error);
+        }
+    };
     let mut moved: Vec<(DocId, DocId)> = Vec::new();
     let mut warnings = Vec::new();
     for doc in &tree.entries {
@@ -191,6 +203,8 @@ fn move_folder(
             ],
         )));
     }
+
+    warnings.extend(super::relink::rewrite_property_links(host, &found, &moved));
 
     let mut origin = vec![from.to_string()];
     origin.extend(tree.folders.iter().cloned());
