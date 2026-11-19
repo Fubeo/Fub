@@ -194,6 +194,35 @@ describe("un blocco $$", () => {
     expect(view.state.doc.toString()).toBe("a\n\n$$x$$\n");
     expect(view.state.selection.main.head).toBe(view.state.doc.length);
   });
+
+  it("scritto a mano nella nota resta testo finché il cursore non ne esce (IMP-719)", async () => {
+    const view = mount("a\n\n", 3);
+    // I dollari e la formula scritti nella nota: la formula da toccare
+    // prenderebbe a metà i tasti che seguono.
+    view.dispatch({ changes: { from: 3, insert: "$$x^2$$" }, selection: { anchor: 8 }, userEvent: "input.type" });
+    await settle();
+    expect(document.querySelector(".cm-fub-mx-block")).toBeNull();
+    view.dispatch({ changes: { from: 8, insert: " +" }, selection: { anchor: 10 }, userEvent: "input.type" });
+    await settle();
+    expect(document.querySelector(".cm-fub-mx-block")).toBeNull();
+    // Fuori, e di nuovo dentro: si tocca come sempre.
+    view.dispatch({ selection: { anchor: 0 }, userEvent: "select" });
+    await settle();
+    view.dispatch({ selection: { anchor: 6 }, userEvent: "select" });
+    await settle();
+    expect(document.querySelector(".cm-fub-mx-block")).not.toBeNull();
+  });
+
+  it("chiuso scrivendo `$$`, il cursore va in una riga nuova e non davanti al testo dopo", async () => {
+    const doc = "a\n\n$$x$$\n# T";
+    const view = mount(doc, 0);
+    view.dispatch({ selection: { anchor: doc.indexOf("x") } });
+    await settle();
+    input()!.focus();
+    type(["End", "$", "$"]);
+    expect(view.state.doc.toString()).toBe("a\n\n$$x$$\n\n# T");
+    expect(view.state.selection.main.head).toBe("a\n\n$$x$$\n".length);
+  });
 });
 
 describe("restano com'erano", () => {

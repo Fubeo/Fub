@@ -14,7 +14,8 @@ cursore).
   formula nella frase cambia mentre si scrive, evidenziata.
 - **Formula a blocco.** Un blocco `$$` sulle sue righe si modifica sul posto,
   con un bordo del colore d'accento. Un blocco dentro una citazione o un
-  elenco resta sorgente.
+  elenco resta sorgente, e così un blocco che si sta scrivendo a mano nella
+  nota (`$$x^2$$`) finché il cursore non ne esce.
 - **Formula con un errore.** Si apre col suo LaTeX a vista, e sotto il campo
   c'è subito che cosa non va (vedi «Gli errori»); si corregge lì.
 
@@ -29,7 +30,16 @@ cursore).
   precedente (in una matrice, alla cella dopo: vedi «Le matrici»). Spazio
   esce dal pezzo in cui si scrive.
 - Un comando scritto per nome (`\frac`, `\alpha`) entra quando è finito, con
-  spazio, Tab o Invio; Esc lo toglie.
+  spazio, Tab o Invio; Esc lo toglie. Anche dentro uno spazio vuoto
+  (`\frac{\ln x}{2}`).
+- Il LaTeX scritto a mano regge: dopo una `{` battuta, che non si scrive,
+  l'esponente o il pedice aperto col suo tasto prende un segno solo (`L_t}`
+  chiude il numeratore); senza graffa, `+`, `-`, `=`, `<`, `>`, `,` e lo
+  spazio escono dall'esponente prima di scriversi (`x^2+y^2` è
+  `x^{2}+y^{2}`, `x^10` resta `x^{10}`).
+- `$` chiude una formula in riga e `$$` un blocco: il cursore va dopo, in una
+  riga nuova se quella dopo il blocco ha già del testo. Una `$` sola in un
+  blocco resta il segno `\$`.
 - Backspace e Canc non rompono mai la formula: tolgono un pezzo intero o ne
   escono. Tolto tutto, sparisce anche `$…$`; scrivere lo rimette.
 - Ctrl Z e Ctrl Y tornano indietro dentro la formula; Invio ed Esc escono. Da

@@ -513,6 +513,25 @@ describe("autoPairDecision", () => {
     expect(decide("costa 5$ e poi |$", "$")).toBeNull();
   });
 
+  it("la chiusura `$$` di un blocco scritto su una riga scavalca tutte e due le `$`", () => {
+    expect(decide("$$x^2|$$", "$")).toEqual({ action: "skip" });
+    expect(decide("$$x^2$|$", "$")).toEqual({ action: "skip" });
+    // Una `\$` scritta è un segno, non la chiusura.
+    expect(decide("$$5\\$|$", "$")).toBeNull();
+    // `$$` da solo non ha ancora una formula da chiudere.
+    expect(decide("$$|$", "$")).toBeNull();
+  });
+
+  it("la `]` battuta subito dopo una casella è quella della casella (`- [ ]]`)", () => {
+    expect(decide("- [ ]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("1. [x]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("> - [ ]|", "]")).toEqual({ action: "absorb" });
+    // Fuori da una voce la `]` è una lettera.
+    expect(decide("testo [ ]|", "]")).toBeNull();
+    // Dopo la casella, nel testo della voce, sì.
+    expect(decide("- [ ] a]|", "]")).toBeNull();
+  });
+
   it("niente auto-pair con selezione attiva o input multi-carattere", () => {
     expect(decide("‹sel›", "[")).toBeNull();
     const state = mk("|");

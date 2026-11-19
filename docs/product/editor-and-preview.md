@@ -166,6 +166,12 @@ ondulato. Senza i blocchi il titolo del cursore ha «H2» nel margine, che apre 
 vuota un segnaposto. Le righe vuote dopo un blocco reso (tabella, richiamo, embed) sono
 alte zero, e lo stacco è del blocco; col cursore su una di loro la riga si vede e prende
 lo stacco, così il testo sotto non si sposta. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
+Chi scrive il Markdown a mano ottiene quello che ha scritto: `**grassetto**` battuto
+segno per segno resta grassetto; la `]` battuta subito dopo una casella è quella già
+messa (niente `- [ ]]`); sulla voce che Invio ha appena aperto, `- `, `* ` o `1. `
+cambiano il segno della voce invece di annidarne una a vista; un blocco `$$…$$`
+scritto su una riga resta testo, chiusura compresa, finché il cursore non ne esce, e
+poi si disegna.
 
 In un elenco Invio continua la voce (puntata, numerata o compito, rinumerando
 quelle dopo). Invio su una voce vuota esce dall'elenco con un paragrafo vero:

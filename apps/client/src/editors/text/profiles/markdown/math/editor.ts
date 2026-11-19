@@ -38,8 +38,9 @@ import { unwrapFormula } from "./paste";
 import { holesOf, mapFormula, placeAt, snap, type Place, type Span } from "./points";
 import { commandName, propose, proposalsAddNothing, SYMBOLS, symbolName, type MathSymbol } from "./symbols";
 
-/// Perché il cursore lascia la formula.
-export type LeaveReason = "before" | "after" | "enter" | "escape" | "up" | "down";
+/// Perché il cursore lascia la formula. `close` è la chiusura scritta a mano
+/// (`$`, o `$$` in un blocco): il cursore va dopo la formula, dove scrivere.
+export type LeaveReason = "before" | "after" | "enter" | "escape" | "up" | "down" | "close";
 
 /// Dove sta il cursore quando la formula si apre.
 export type MathStart = "start" | "end" | { readonly x: number; readonly y: number };
@@ -132,6 +133,19 @@ export class MathEditor {
   private state: MathState;
   /// La `\` di un comando che si sta scrivendo per nome.
   private pending: number | null = null;
+  /// In un blocco, la prima `$` della chiusura `$$` scritta a mano: la
+  /// seconda lascia la formula.
+  private dollar = false;
+  /// Chi scrive ha battuto una graffa, che nella formula toccata non si
+  /// scrive: scrive LaTeX a mano, e un esponente o un pedice aperto col suo
+  /// tasto prende un segno solo, come `L_t` nel LaTeX.
+  private handTex = false;
+  /// L'esponente o il pedice appena aperto col suo tasto: vale per il tasto dopo.
+  private freshScript = false;
+  /// Si sta scrivendo in un esponente o in un pedice aperto col suo tasto,
+  /// senza graffa: un segno come `+` o lo spazio ne esce (`leaveScript`).
+  /// Un tasto che non scrive (una freccia, Invio) lo dimentica.
+  private keyedScript = false;
   private mode: MathMode;
   private preferences: MathPreferences;
   /// La scrittura veloce appena fatta: Backspace subito dopo la annulla.
@@ -239,7 +253,11 @@ export class MathEditor {
     void loadKatex().then((library) => {
       if (this.life.closed) return;
       this.library = library;
-      if (this.mode === "visual" && !this.reads(this.state.tex)) this.toMode("latex");
+      // Il comando che si sta scrivendo per nome (`\fr`) non si legge ancora,
+      // e non fa della formula una da scrivere in LaTeX: conta il resto.
+      const { tex, caret } = this.state;
+      const settled = this.pending === null ? tex : tex.slice(0, this.pending) + tex.slice(caret);
+      if (this.mode === "visual" && !this.reads(settled)) this.toMode("latex");
       this.paint();
     }, () => {
       if (!this.life.closed && this.mode === "visual") this.toMode("latex");
@@ -1212,6 +1230,16 @@ export class MathEditor {
     // Un tasto modificatore da solo (Maiusc premuto prima di ←) non fa niente:
     // né lascia la scelta né chiude la scrittura veloce.
     if (MODIFIER_KEYS.has(event.key)) return;
+    // La prima `$` di un blocco non seguita dalla seconda era un segno: entra
+    // come prima, `\$`, e il tasto fa il suo.
+    if (this.dollar && event.key !== "$") {
+      this.dollar = false;
+      this.apply(rules.typeChar(this.state, "$", { inTable: this.options.inTable }));
+    }
+    // L'esponente appena aperto vale soltanto per il tasto che segue.
+    const script = this.freshScript;
+    this.freshScript = false;
+    if (event.key.length !== 1) this.keyedScript = false;
     const undo = this.quickUndo;
     this.quickUndo = null;
     // Il LaTeX messo nel campo per Ctrl C (T66) non resta.
@@ -1368,6 +1396,13 @@ export class MathEditor {
           const typed = { tex: `${tex.slice(0, caret)} ${tex.slice(caret)}`, caret: caret + 1 };
           const quick = rules.quickWrite(typed, " ", { help: "piene", decimalComma: decimalComma() });
           if (quick && this.commitQuick(quick)) return;
+          // `x^2 + y^2`: lo spazio chiude l'esponente scritto col suo tasto.
+          const out = this.keyedScript ? rules.leaveScript(this.state, " ") : null;
+          this.keyedScript = false;
+          if (out !== null) {
+            this.moveTo(out);
+            return;
+          }
         }
         this.apply(rules.space(this.state));
         return;
@@ -1375,7 +1410,7 @@ export class MathEditor {
       default:
         if (event.key.length === 1) {
           handled();
-          this.type(event.key);
+          this.type(event.key, true, script);
         }
     }
   }
@@ -1616,13 +1651,18 @@ export class MathEditor {
   }
 
   private leave(reason: LeaveReason): void {
+    // Una `$` sola prima di uscire con un altro gesto era un segno.
+    if (this.dollar) {
+      this.dollar = false;
+      this.apply(rules.typeChar(this.state, "$", { inTable: this.options.inTable }));
+    }
     this.dropPending();
     this.options.onLeave(reason);
   }
 
   /// Un segno scritto: dentro un comando per nome le lettere lo allungano.
   /// `quick` falso per il testo dell'IME, che entra com'è.
-  private type(ch: string, quick = true): void {
+  private type(ch: string, quick = true, script = false): void {
     if (this.pending !== null) {
       if (/[a-zA-Z]/.test(ch)) {
         this.dismissed = false;
@@ -1645,11 +1685,50 @@ export class MathEditor {
     if (ch === "\\") {
       const outcome = rules.typeChar(this.state, ch, { inTable: this.options.inTable });
       if (outcome.kind !== "edit") return;
-      this.pending = outcome.state.caret - 1;
-      this.commit(outcome.state);
+      // Il cursore resta subito dopo la `\`: in uno spazio vuoto come
+      // `\frac{|}{}` il posto agganciato cadrebbe oltre la graffa, che con la
+      // `\` davanti si legge `\}`, e il nome finirebbe fuori dal pezzo.
+      const from = this.state.caret;
+      this.pending = from;
+      this.commit({ tex: outcome.state.tex, caret: from + 1 });
       return;
     }
     const text = this.textRole();
+    if (quick && !text && ch === "$") {
+      // La chiusura scritta a mano: `$` in una formula nel testo, `$$` in un
+      // blocco, lascia la formula invece di scrivere `\$`.
+      if (this.options.display && !this.dollar) {
+        this.dollar = true;
+        return;
+      }
+      this.dollar = false;
+      this.leave("close");
+      return;
+    }
+    if (quick && !text && ch === "{") {
+      this.handTex = true;
+      // `x^{`: l'esponente si chiude con la sua graffa, non con un segno.
+      if (script) this.keyedScript = false;
+    }
+    if (quick && !text && this.keyedScript) {
+      const out = rules.leaveScript(this.state, ch);
+      if (out !== null) {
+        this.keyedScript = false;
+        this.moveTo(out);
+        // Lo spazio, che nella formula non si scrive, ha già fatto il suo.
+        if (ch === " ") return;
+      }
+    }
+    if (quick && script && this.handTex && !text && ch !== "{" && ch !== "}") {
+      // `L_t` scritto a mano: il pedice prende la `t` e il cursore ne esce.
+      const outcome = rules.typeChar(this.state, ch, { inTable: this.options.inTable });
+      if (outcome.kind === "edit") {
+        this.commit(outcome.state);
+        const out = rules.typeChar(this.state, "}", { inTable: this.options.inTable });
+        if (out.kind !== "none") this.apply(out);
+        return;
+      }
+    }
     if (quick && !text) {
       // Le parentesi che si chiudono da sole, e quella chiusa che c'è già.
       const over = rules.stepOver(this.state, ch);
@@ -1694,7 +1773,11 @@ export class MathEditor {
         return;
       }
     }
+    const opened = quick && (ch === "^" || ch === "_") && outcome.kind === "edit"
+      && outcome.state.tex.length === this.state.tex.length + 3;
     this.apply(outcome);
+    this.freshScript = opened;
+    if (opened) this.keyedScript = true;
   }
 
   /// `"` nella formula che si tocca: un `\text{}` col cursore dentro, che si
