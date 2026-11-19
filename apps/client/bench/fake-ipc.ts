@@ -1842,6 +1842,26 @@ function plainHtml(markdown: string): string {
   return out.join("\n");
 }
 
+/// I commenti di una discussione, come il kernel li porta nella resa per la
+/// stampa (`<template class="comment-note">`, inerti: la lettura non li ha).
+/// Servono alla sezione Contenuto dello spazio «Esporta in PDF» (T74): una
+/// discussione di due messaggi in un paragrafo, un commento in una cella.
+const PRINT_COMMENTS: Record<string, readonly (readonly [string, string])[]> = {
+  "Guida/Sintassi di Fub.md": [
+    [
+      "va a capo e continua sulla riga dopo.",
+      '<template class="comment-note" data-author="Anna Rossi" data-date="2026-11-04">Si può dire in meno parole?</template><template class="comment-note" data-author="Bruno Neri" data-date="2026-11-05">La lascerei: è l\'esempio del ritorno a capo.</template>',
+    ],
+    ["della scocca", '<template class="comment-note" data-author="Carla Bianchi" data-date="2026-11-06">Vale anche per le icone?</template>'],
+  ],
+};
+
+function printComments(doc: string, html: string): string {
+  let out = html;
+  for (const [after, notes] of PRINT_COMMENTS[doc] ?? []) out = out.replace(after, `${after}${notes}`);
+  return out;
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
@@ -1852,7 +1872,7 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   // stessa resa della lettura, come la darebbe il kernel per la carta.
   render_print: (q) => {
     const doc = (q as { doc: string }).doc;
-    const html = OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? "");
+    const html = printComments(doc, OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? ""));
     return { kind: "render_print", value: { html, parts: [] } };
   },
   render_embed: (q) => {

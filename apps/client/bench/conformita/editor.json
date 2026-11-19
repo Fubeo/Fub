@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 836c7a639c7cc90c5602a48f78aae39ec2cc740f.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs editor` (dopo `git fetch`), che legge PLAN-ui/editor.html dal ramo piano/editor-completo al commit 06aad5ebe8a09a5d29473133a8b290c6f2e9ccc7.",
   "prototipo": "editor",
   "ramo": "piano/editor-completo",
-  "commit": "836c7a639c7cc90c5602a48f78aae39ec2cc740f",
+  "commit": "06aad5ebe8a09a5d29473133a8b290c6f2e9ccc7",
   "file": "PLAN-ui/editor.html",
   "sha256": "69d313a99b68c80f51bb4874ecfee465043efe883aab63be087b4563a44baa25",
   "traduzioni": {
@@ -25577,6 +25577,1120 @@
             "var(--border-strong)"
           ]
         }
+      }
+    },
+    "esporta.contenuto-riga": {
+      "chiaro-1280": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2)",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "min-height": "28px",
+          "row-gap": "10px",
+          "column-gap": "10px",
+          "align-items": "center",
+          "justify-content": "space-between"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2)",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "min-height": "28px",
+          "row-gap": "10px",
+          "column-gap": "10px",
+          "align-items": "center",
+          "justify-content": "space-between"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2)",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "min-height": "28px",
+          "row-gap": "10px",
+          "column-gap": "10px",
+          "align-items": "center",
+          "justify-content": "space-between"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2)",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "min-height": "28px",
+          "row-gap": "10px",
+          "column-gap": "10px",
+          "align-items": "center",
+          "justify-content": "space-between"
+        },
+        "fub": {}
+      }
+    },
+    "esporta.contenuto-nome": {
+      "chiaro-1280": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-rl",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "flex-shrink": "0"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-rl",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "flex-shrink": "0"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-rl",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "flex-shrink": "0"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-rl",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "flex-shrink": "0"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      }
+    },
+    "esporta.contenuto-scelte": {
+      "chiaro-1280": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-seg",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "padding-top": "2px",
+          "padding-right": "2px",
+          "padding-bottom": "2px",
+          "padding-left": "2px",
+          "border-top-left-radius": "8px",
+          "border-top-right-radius": "8px",
+          "border-bottom-right-radius": "8px",
+          "border-bottom-left-radius": "8px",
+          "background-color": "rgb(234, 240, 236)",
+          "background-image": "none",
+          "row-gap": "2px",
+          "column-gap": "2px"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-seg",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "padding-top": "2px",
+          "padding-right": "2px",
+          "padding-bottom": "2px",
+          "padding-left": "2px",
+          "border-top-left-radius": "8px",
+          "border-top-right-radius": "8px",
+          "border-bottom-right-radius": "8px",
+          "border-bottom-left-radius": "8px",
+          "background-color": "rgb(31, 41, 34)",
+          "background-image": "none",
+          "row-gap": "2px",
+          "column-gap": "2px"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-seg",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "padding-top": "2px",
+          "padding-right": "2px",
+          "padding-bottom": "2px",
+          "padding-left": "2px",
+          "border-top-left-radius": "8px",
+          "border-top-right-radius": "8px",
+          "border-bottom-right-radius": "8px",
+          "border-bottom-left-radius": "8px",
+          "background-color": "rgb(234, 240, 236)",
+          "background-image": "none",
+          "row-gap": "2px",
+          "column-gap": "2px"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".px-sec[data-sec=\"contenuto\"] .px-row:nth-child(2) .px-seg",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "display": "flex",
+          "padding-top": "2px",
+          "padding-right": "2px",
+          "padding-bottom": "2px",
+          "padding-left": "2px",
+          "border-top-left-radius": "8px",
+          "border-top-right-radius": "8px",
+          "border-bottom-right-radius": "8px",
+          "border-bottom-left-radius": "8px",
+          "background-color": "rgb(31, 41, 34)",
+          "background-image": "none",
+          "row-gap": "2px",
+          "column-gap": "2px"
+        },
+        "fub": {}
+      }
+    },
+    "esporta.contenuto-scelta": {
+      "chiaro-1280": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"fondo\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(93, 105, 98)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"fondo\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(160, 170, 164)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"fondo\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(93, 105, 98)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"fondo\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(160, 170, 164)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px",
+          "white-space": "nowrap"
+        },
+        "fub": {
+          "color": [
+            "var(--muted)"
+          ]
+        }
+      }
+    },
+    "esporta.contenuto-scelta-presa": {
+      "chiaro-1280": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"margine\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "rgba(20, 44, 30, 0.06) 0px 0px 0px 1px, rgba(20, 44, 30, 0.1) 0px 1px 3px 0px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(24, 35, 28)",
+          "background-color": "rgb(252, 254, 253)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"margine\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "rgba(255, 255, 255, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.5) 0px 1px 3px 0px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(228, 234, 230)",
+          "background-color": "rgb(19, 28, 22)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"margine\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "rgba(20, 44, 30, 0.06) 0px 0px 0px 1px, rgba(20, 44, 30, 0.1) 0px 1px 3px 0px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(24, 35, 28)",
+          "background-color": "rgb(252, 254, 253)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".px-seg button[data-k=\"comments\"][data-v=\"margine\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "9px",
+          "padding-bottom": "0px",
+          "padding-left": "9px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "normal",
+          "column-gap": "normal",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "rgba(255, 255, 255, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.5) 0px 1px 3px 0px",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "12.5px",
+          "font-weight": "400",
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "color": "rgb(228, 234, 230)",
+          "background-color": "rgb(19, 28, 22)",
+          "background-image": "none",
+          "opacity": "1",
+          "height": "24px"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ],
+          "background-color": [
+            "var(--sheet)"
+          ]
+        }
+      }
+    },
+    "esporta.contenuto-codice": {
+      "chiaro-1280": {
+        "prototipo": ".px-tog[data-k=\"codeNum\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".px-tog[data-k=\"codeNum\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".px-tog[data-k=\"codeNum\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".px-tog[data-k=\"codeNum\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      }
+    },
+    "esporta.interruzioni-intestazione": {
+      "chiaro-1280": {
+        "prototipo": ".px-tog[data-k=\"repeatHead\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-1280": {
+        "prototipo": ".px-tog[data-k=\"repeatHead\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "chiaro-700": {
+        "prototipo": ".px-tog[data-k=\"repeatHead\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(52, 65, 58)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      },
+      "scuro-700": {
+        "prototipo": ".px-tog[data-k=\"repeatHead\"]",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "padding-top": "0px",
+          "padding-right": "0px",
+          "padding-bottom": "0px",
+          "padding-left": "0px",
+          "margin-top": "0px",
+          "margin-right": "0px",
+          "margin-bottom": "0px",
+          "margin-left": "0px",
+          "row-gap": "12px",
+          "column-gap": "12px",
+          "border-top-width": "0px",
+          "border-top-style": "none",
+          "border-top-color": "none",
+          "border-right-width": "0px",
+          "border-right-style": "none",
+          "border-right-color": "none",
+          "border-bottom-width": "0px",
+          "border-bottom-style": "none",
+          "border-bottom-color": "none",
+          "border-left-width": "0px",
+          "border-left-style": "none",
+          "border-left-color": "none",
+          "border-top-left-radius": "6px",
+          "border-top-right-radius": "6px",
+          "border-bottom-right-radius": "6px",
+          "border-bottom-left-radius": "6px",
+          "box-shadow": "none",
+          "font-family": "\"Hanken Grotesk\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+          "font-size": "13px",
+          "font-weight": "400",
+          "line-height": "18.85px",
+          "letter-spacing": "normal",
+          "color": "rgb(199, 207, 202)",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "background-image": "none",
+          "opacity": "1",
+          "min-height": "26px",
+          "display": "flex",
+          "align-items": "center",
+          "justify-content": "space-between",
+          "text-align": "left"
+        },
+        "fub": {
+          "color": [
+            "var(--text)"
+          ]
+        }
+      }
+    },
+    "esporta.commento-numero": {
+      "chiaro-1280": {
+        "prototipo": ".pcm sup",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-weight": "600",
+          "color": "rgb(0, 110, 70)"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".pcm sup",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-weight": "600",
+          "color": "rgb(0, 110, 70)"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".pcm sup",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-weight": "600",
+          "color": "rgb(0, 110, 70)"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".pcm sup",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "font-weight": "600",
+          "color": "rgb(0, 110, 70)"
+        },
+        "fub": {}
+      }
+    },
+    "esporta.commento-margine": {
+      "chiaro-1280": {
+        "prototipo": ".pnote",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "color": "rgb(93, 105, 98)",
+          "border-left-style": "solid",
+          "text-align": "left"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".pnote",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "color": "rgb(93, 105, 98)",
+          "border-left-style": "solid",
+          "text-align": "left"
+        },
+        "fub": {}
+      },
+      "chiaro-700": {
+        "prototipo": ".pnote",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "color": "rgb(93, 105, 98)",
+          "border-left-style": "solid",
+          "text-align": "left"
+        },
+        "fub": {}
+      },
+      "scuro-700": {
+        "prototipo": ".pnote",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "color": "rgb(93, 105, 98)",
+          "border-left-style": "solid",
+          "text-align": "left"
+        },
+        "fub": {}
       }
     }
   }
