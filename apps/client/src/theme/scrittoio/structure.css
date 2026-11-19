@@ -6450,8 +6450,9 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .draw-properties {
   flex-grow: 2;
 }
-.draw-dock > :not([hidden]) ~ :not([hidden]),
-.draw-sheet > :not([hidden]) ~ :not([hidden]) {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.draw-dock > :nth-child(n + 2 of :not([hidden])),
+.draw-sheet > :nth-child(n + 2 of :not([hidden])) {
   border-block-start-width: 1px;
 }
 /* Una scheda del disegno nell'ispettore (C1): i suoi pannelli in colonna,

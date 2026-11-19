@@ -8485,8 +8485,9 @@ button.cm-fub-page-icon:focus-visible {
   padding-inline: var(--space-6);
   background: var(--sheet-2);
 }
-.cm-editor .cm-content :not(.cm-fub-callout-line) + .cm-fub-callout-line,
-.cm-editor .cm-content .cm-fub-callout-line:first-child {
+/* La prima riga del riquadro: quella che non segue un'altra sua riga (il
+   fratello a sinistra ha un nome, vedi `theme/fratelli.test.ts`). */
+.cm-editor .cm-content .cm-fub-callout-line:not(.cm-fub-callout-line + :where(.cm-fub-callout-line)) {
   padding-top: var(--space-5);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
@@ -8765,8 +8766,8 @@ button.cm-fub-page-icon:focus-visible {
   padding-inline: var(--space-6);
   background: var(--sheet-2);
 }
-.cm-editor .cm-content :not(.cm-fub-codeblock) + .cm-fub-codeblock,
-.cm-editor .cm-content .cm-fub-codeblock:first-child {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.cm-editor .cm-content .cm-fub-codeblock:not(.cm-fub-codeblock + :where(.cm-fub-codeblock)) {
   padding-top: var(--space-4);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
@@ -9253,10 +9254,9 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
-[data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:first-child,
-[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:first-child,
-[data-markdown-mode="live_preview"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter,
-[data-markdown-mode="blocks"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+[data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:not(.cm-fub-frontmatter + :where(.cm-fub-frontmatter)),
+[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:not(.cm-fub-frontmatter + :where(.cm-fub-frontmatter)) {
   padding-top: var(--space-4);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
@@ -9310,7 +9310,9 @@ button.cm-fub-page-icon:focus-visible {
   line-height: var(--leading-normal);
   white-space: normal;
 }
-.markdown-rendered :not(.block-footnote-definition) + .block-footnote-definition {
+/* La prima nota a piè di pagina dopo il testo (non la prima della pagina):
+   il fratello a sinistra ha un nome, vedi `theme/fratelli.test.ts`. */
+.markdown-rendered .block-footnote-definition:where(:not(:first-child)):not(.block-footnote-definition + :where(.block-footnote-definition)) {
   margin-top: var(--space-6);
   padding-top: var(--space-5);
   border-top: 1px solid var(--doc-rule-soft);
@@ -14678,7 +14680,8 @@ input.canvas-toolbar-item {
   color: inherit;
   font-weight: var(--weight-bold);
 }
-.base-new > button + button {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.base-new > button:where(:nth-child(n + 2)) {
   padding: 0 var(--space-3);
   border-left: 1px solid color-mix(in srgb, var(--accent-contrast) 25%, transparent);
 }
@@ -15072,8 +15075,9 @@ input.canvas-toolbar-item {
   height: 38px;
 }
 /* Un filo fra le colonne, nell'intestazione, nelle righe e nel piede. */
-.base-table th + th,
-.base-table td + td {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.base-table tr > th:where(:nth-child(n + 2)),
+.base-table tr > td:where(:nth-child(n + 2)) {
   border-left: 1px solid var(--border);
 }
 .base-table th {
@@ -16743,7 +16747,7 @@ input.canvas-toolbar-item {
   margin: 0;
   accent-color: var(--doc-link);
 }
-.markdown-rendered .block-tasks .ui-checkbox input:checked + .ui-field-label {
+.markdown-rendered .block-tasks .ui-checkbox:has(> input:checked) > .ui-field-label {
   color: var(--doc-gutter-fg);
   text-decoration: line-through;
 }
@@ -19089,7 +19093,8 @@ button.draw-isolation-crumb:hover {
 .vector-about:has(> .vector-about-desc[hidden]):has(> .vector-about-links[hidden]):has(> .vector-about-objects[hidden]) {
   display: none;
 }
-.vector-about > :not([hidden]) ~ :not([hidden]) {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.vector-about > :nth-child(n + 2 of :not([hidden])) {
   margin-top: var(--space-2);
 }
 /* I collegamenti si leggono come link: il testo sottolineato. */
@@ -20330,7 +20335,8 @@ button.draw-isolation-crumb:hover {
 .slide ol {
   padding-left: 1.2em;
 }
-.slide li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.slide :is(ul, ol) > li:where(:nth-child(n + 2)) {
   margin-top: 0.3em;
 }
 .slide a {
@@ -24888,7 +24894,8 @@ h6.ui-heading {
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.modale .palette-plan li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.modale .palette-plan > li:where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 
@@ -25726,7 +25733,8 @@ h6.ui-heading {
 .dock-panel > ul > li {
   padding: var(--space-4) 0;
 }
-.dock-panel > ul > li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.dock-panel > ul > li:where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 
@@ -28185,7 +28193,7 @@ h6.ui-heading {
   margin: 0;
 }
 .modale .draw-export-option input:disabled,
-.modale .draw-export-option input:disabled + span {
+.modale .draw-export-option:has(> input:disabled) > span {
   cursor: default;
   opacity: 0.55;
 }
@@ -29076,7 +29084,8 @@ h6.ui-heading {
   flex-direction: column;
 }
 
-.settings-card > :not([hidden]) ~ * {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.settings-card > :nth-child(n + 2 of :where(:not([hidden]))) {
   border-top: 1px solid var(--border);
 }
 
@@ -29676,7 +29685,8 @@ h6.ui-heading {
   background: var(--sheet-2);
 }
 
-.prefs-theme-entries > :not([hidden]) ~ * {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.prefs-theme-entries > :nth-child(n + 2 of :where(:not([hidden]))) {
   border-top: 1px solid var(--border);
 }
 
@@ -29918,7 +29928,8 @@ h6.ui-heading {
   display: none;
 }
 
-.settings-catalog-results > * + * {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.settings-catalog-results > :where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 

@@ -433,7 +433,8 @@
   flex-direction: column;
 }
 
-.settings-card > :not([hidden]) ~ * {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.settings-card > :nth-child(n + 2 of :where(:not([hidden]))) {
   border-top: 1px solid var(--border);
 }
 
@@ -1033,7 +1034,8 @@
   background: var(--sheet-2);
 }
 
-.prefs-theme-entries > :not([hidden]) ~ * {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.prefs-theme-entries > :nth-child(n + 2 of :where(:not([hidden]))) {
   border-top: 1px solid var(--border);
 }
 
@@ -1275,7 +1277,8 @@
   display: none;
 }
 
-.settings-catalog-results > * + * {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.settings-catalog-results > :where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 

@@ -571,7 +571,8 @@
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.modale .palette-plan li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.modale .palette-plan > li:where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 

@@ -3652,7 +3652,8 @@ input.canvas-toolbar-item {
   color: inherit;
   font-weight: var(--weight-bold);
 }
-.base-new > button + button {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.base-new > button:where(:nth-child(n + 2)) {
   padding: 0 var(--space-3);
   border-left: 1px solid color-mix(in srgb, var(--accent-contrast) 25%, transparent);
 }
@@ -4046,8 +4047,9 @@ input.canvas-toolbar-item {
   height: 38px;
 }
 /* Un filo fra le colonne, nell'intestazione, nelle righe e nel piede. */
-.base-table th + th,
-.base-table td + td {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.base-table tr > th:where(:nth-child(n + 2)),
+.base-table tr > td:where(:nth-child(n + 2)) {
   border-left: 1px solid var(--border);
 }
 .base-table th {
@@ -5717,7 +5719,7 @@ input.canvas-toolbar-item {
   margin: 0;
   accent-color: var(--doc-link);
 }
-.markdown-rendered .block-tasks .ui-checkbox input:checked + .ui-field-label {
+.markdown-rendered .block-tasks .ui-checkbox:has(> input:checked) > .ui-field-label {
   color: var(--doc-gutter-fg);
   text-decoration: line-through;
 }

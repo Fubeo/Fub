@@ -1140,7 +1140,8 @@
 .slide ol {
   padding-left: 1.2em;
 }
-.slide li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.slide :is(ul, ol) > li:where(:nth-child(n + 2)) {
   margin-top: 0.3em;
 }
 .slide a {
