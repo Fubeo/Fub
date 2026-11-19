@@ -7668,12 +7668,7 @@ impl Workspace {
     fn record(&mut self, op: JournalOp) {
         let origin = self.dispatch.origin();
         if let Err(and) = self.journal.append(origin, op) {
-            self.report_trouble(
-                Severity::Failure,
-                None,
-                PluginError::Internal(format!("registro: {and}").into()),
-                None,
-            );
+            self.report_journal_failure(JournalFailure(and));
         }
     }
 
