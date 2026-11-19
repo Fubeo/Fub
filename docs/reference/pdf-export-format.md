@@ -144,9 +144,8 @@ quello del tema.
   stesso nome: Fub li elenca tutti e due, e la vista mostra accanto il nome
   del file. Fub non crea né rinomina un profilo col nome di un altro; due nomi
   sono uguali se differiscono solo per le maiuscole o per gli spazi ai lati.
-- **Un file che non si legge** (non è JSON, non ha la forma di un profilo,
-  pesa più di 256 KiB) resta nell'elenco col motivo; salvarci sopra risponde
-  con l'errore e lo lascia com'era.
+- **Un file che non si legge** (non è JSON né un profilo, o supera 256 KiB)
+  resta nell'elenco col motivo; salvarci sopra è un errore e non lo tocca.
 - **Una versione più nuova** si legge per ciò che si conosce: le chiavi
   sconosciute, a ogni livello, si riscrivono uguali; un valore a elenco
   sconosciuto (un formato `B5`, un tema nuovo) resta, e la vista usa quello
