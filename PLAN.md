@@ -3521,7 +3521,7 @@ Fatto quando: un test del comando ad app aperta e senza; un test del
 predefinito per tipo (con T33).
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export; cd apps/client && npx vitest run src/export
-Stato: [~] in corso · coder · base d1a7af279
+Stato: `[~]` integrato in `integra/editor-2` (72f4247aa, 2026-11-19), in attesa del gruppo; l'esportazione da fuori non applica i blocchi lasciati fuori (durano con lo spazio aperto); chunk `shell-layout` per tenere `search` sotto il budget.
 
 ## T80 · Misure, banco, documentazione; le due voci di oggi
 
