@@ -213,6 +213,58 @@ in Lettura sono `apps/client/src/editors/text/profiles/markdown/cell-value.ts`.
 Cento valori in una nota non pesano sulla battuta: lo misura la nota
 `battuta-valori-100` di `node bench/interaction.mjs --only=battuta`.
 
+## I grafici
+
+**Il grafico di un foglio.** `![[Conti.xlsx#Grafico spese]]` da solo nel
+paragrafo mostra il grafico che nel file ha il titolo «Grafico spese»: lo
+disegna GridCraft, lo stesso SVG del foglio aperto, intero e nella sua
+proporzione (nella nota la scheda è alta quanto la proporzione chiede alla
+sua larghezza). Il titolo si confronta senza badare alle maiuscole né agli
+spazi; un foglio, un nome definito o una tabella con lo stesso nome vengono
+prima. Un grafico senza titolo non si può nominare: il nome che Excel dà
+alla cornice («Grafico 4») non arriva a Fub.
+
+- **Segue i dati**: quando il foglio cambia la scheda riapre la cartella e il
+  disegno si rifà sui valori salvati, per evento e mai a tempo.
+- Un grafico non ha celle: la scheda non si attiva e non si scrive. Il
+  grafico si cambia nel foglio aperto, con **Apri**.
+- Un titolo che il file non ha dice «Intervallo non trovato», e **Scegli di
+  nuovo** elenca anche i grafici della cartella («Grafico Vendite»). Un
+  grafico che il file ha ma che non si disegna (oltre la misura di una
+  finestra) dice «Il grafico non si può disegnare qui: aprilo nel foglio»,
+  con **Apri**.
+
+`fub.part` risponde, per un grafico, `{found: true, kind: "chart", sheet,
+range, chart}`: `range` sono le celle che il grafico copre, `chart` il suo id
+nel file. La scheda legge la finestra di quelle celle e ne mostra soltanto
+il disegno del grafico (`objects` della finestra). I grafici come parti sono
+`chart_named` in `crates/fub-format-xlsx/src/objects.rs`.
+
+**Il grafico da una tabella.** Nel menu di una tabella Markdown (il tasto
+destro su una cella), **Grafico da questa tabella** scrive sotto la tabella
+un recinto Mermaid normale coi valori di adesso: una torta (`pie`) per una
+sola colonna di numeri, al più otto righe, tutte piene e mai negative;
+altrimenti le barre di `xychart-beta`, e una linea per colonna quando le
+colonne di numeri sono più d'una. Le etichette sono la prima colonna che non
+è di numeri.
+
+- **Non è un grafico vivo**, e lo dice: un commento `%%` dentro il recinto
+  porta la data dei valori, e l'avviso lo ripete. Sulla stessa tabella la
+  voce diventa **Rigenera il grafico dalla tabella** e riscrive il recinto al
+  suo posto (lo ritrova dal segno `%% fub:table-chart`, subito sotto la
+  tabella); un recinto scritto a mano non si tocca. Un passo d'annullamento.
+- Una colonna è di numeri se ogni sua cella piena è un numero, letto nella
+  lingua della nota come la somma della banda: «1.240,50 €» in italiano,
+  `(120)` negativo, «12,5%» si disegna 12,5. Una cella barrata non conta.
+- Una tabella senza numeri, o in una nota di sola lettura, non ha la voce.
+
+Il recinto lo fa `apps/client/src/editors/text/profiles/markdown/table-chart.ts`;
+la voce sta nel menu di `table-grid.ts`, la scrittura in `table-widget.ts`.
+
+Le scene `grafici-*` del banco (`live=grafici&workbook=1`) mostrano il grafico
+del foglio, quello che il file non ha, la torta scritta da una tabella e il
+menu con la voce.
+
 ## I limiti
 
 - Fuori dalla vista le schede sono immagini ferme; vive ce ne sono al più

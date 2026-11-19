@@ -2591,6 +2591,29 @@ async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Pr
   return result;
 }
 
+/// Il grafico della cartella del banco nelle scene dei grafici (T54,
+/// `live=grafici`): la cartella generata non ne ha, e il finto lo aggiunge
+/// alle finestre che toccano le sue celle. Il disegno è quello che
+/// `fub-format-xlsx` dà per l'istogramma «Vendite» di
+/// `tests/objects.rs` (GridCraft, `chart_svg`), copiato com'è.
+const CHART_ID = 1;
+const CHART_RANGE = "A1:E14";
+const CHART_SCENE = params.get("live") === "grafici";
+const CHART_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="280" viewBox="0 0 320 280" font-family="Helvetica,Arial,sans-serif" style=""><rect x="0" y="0" width="320" height="280" fill="#ffffff" stroke="#d9d9d9" stroke-width="1"/><text x="160" y="20.92" font-size="14" text-anchor="middle" fill="#595959">Vendite</text><text x="17" y="256.55" font-size="9" text-anchor="end" fill="#595959">0</text><text x="17" y="220.73" font-size="9" text-anchor="end" fill="#595959">1</text><text x="17" y="184.92" font-size="9" text-anchor="end" fill="#595959">2</text><text x="17" y="149.1" font-size="9" text-anchor="end" fill="#595959">3</text><text x="17" y="113.28" font-size="9" text-anchor="end" fill="#595959">4</text><text x="17" y="77.47" font-size="9" text-anchor="end" fill="#595959">5</text><text x="17" y="41.65" font-size="9" text-anchor="end" fill="#595959">6</text><polyline points="21,253.4 306,253.4" fill="none" stroke="#bfbfbf" stroke-width="0.75"/><text x="68.5" y="263.42" font-size="9" text-anchor="middle" fill="#595959">1</text><text x="163.5" y="263.42" font-size="9" text-anchor="middle" fill="#595959">2</text><text x="258.5" y="263.42" font-size="9" text-anchor="middle" fill="#595959">3</text><rect x="49.5" y="145.95" width="38" height="107.45" fill="#156082"/><rect x="144.5" y="74.32" width="38" height="179.08" fill="#156082"/><rect x="239.5" y="181.77" width="38" height="71.63" fill="#156082"/></svg>';
+/// La finestra col grafico, se tocca le sue celle (A1:E14: il finto dà solo
+/// le finestre che partono da A1, e il grafico sta lì).
+function withChart<W extends { sheet: string; row_start: number; column_start: number; rows: unknown[]; columns: unknown[]; objects: unknown[] }>(window: W): W {
+  if (!CHART_SCENE || window.sheet !== "s1") return window;
+  const touches = window.row_start <= 13 && window.rows.length > 0
+    && window.column_start <= 4 && window.columns.length > 0;
+  if (!touches) return window;
+  const chart = {
+    kind: "chart", id: CHART_ID, row: 0, column: 0, dx: 0, dy: 0, width: 320, height: 280,
+    alt: "Vendite", svg: CHART_SVG, media: null, shape: null, missing: null,
+  };
+  return { ...window, objects: [...window.objects, chart] };
+}
+
 /// Le parti che le schede di foglio della nota chiedono (`fub.part`, T43),
 /// solo nella Live delle schede vive (`live=schede-vive`) e nella battuta con
 /// le schede (`live=battuta-schede-20`), e le celle dei valori nel testo (T53,
@@ -2598,7 +2621,7 @@ async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Pr
 /// `fub-format-xlsx/src/parts.rs` darebbe per la cartella del banco, che non
 /// ricalcola e non scrive. Una parte sconosciuta è persa, con le parti che la
 /// cartella ha.
-const SHEET_PARTS_CASES = new Set(["schede-vive", "battuta-schede-20", "valori-cella", "battuta-valori-100"]);
+const SHEET_PARTS_CASES = new Set(["schede-vive", "battuta-schede-20", "valori-cella", "battuta-valori-100", "grafici"]);
 const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.has(params.get("live") ?? "")
   ? {
       "": { found: true, kind: "active", sheet: "s1", range: "A1:F6" },
@@ -2607,6 +2630,9 @@ const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.
       // vuota D2 e l'errore #DIV/0! di C4.
       ...Object.fromEntries(["B2", "B3", "B4", "C2", "D2", "C4"]
         .map((cell) => [`Conti!${cell}`, { found: true, kind: "range", sheet: "s1", range: cell }])),
+      // Il grafico «Vendite» (T54, `live=grafici`): le celle che copre e il
+      // suo id nel file.
+      Vendite: { found: true, kind: "chart", sheet: "s1", range: CHART_RANGE, chart: CHART_ID },
     }
   : null;
 const SHEET_PARTS_LOST = {
@@ -2660,8 +2686,8 @@ export const api: typeof host.module.api = {
       sheetOpenCount.set(session.instance, (sheetOpenCount.get(session.instance) ?? 0) + 1);
       return { ...session, instance };
     },
-    gridBytesWindow: (surface: string, instance: string, request: Parameters<typeof behind.gridBytesWindow>[2]) =>
-      behind.gridBytesWindow(surface, sheetInstance(instance), request),
+    gridBytesWindow: async (surface: string, instance: string, request: Parameters<typeof behind.gridBytesWindow>[2]) =>
+      withChart(await behind.gridBytesWindow(surface, sheetInstance(instance), request)),
     applyGridBytes: (surface: string, instance: string, request: Parameters<typeof behind.applyGridBytes>[2]) =>
       behind.applyGridBytes(surface, sheetInstance(instance), request),
     gridBytesCommands: (surface: string, instance: string, selection: Parameters<typeof behind.gridBytesCommands>[2]) =>
