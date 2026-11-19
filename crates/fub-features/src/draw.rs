@@ -277,7 +277,7 @@ pub fn catalog() -> Vec<StringCatalog> {
     // per nome nei campi «Da» di «Nuovo disegno» e «PDF» di «Annota il PDF».
     crate::formats::speaking(vec![
         choice::in_italian(annotated::in_italian(annotate::in_italian(
-            create::in_italian(StringCatalog::new("it")),
+            crate::pdf_export::lavoro::in_italian(create::in_italian(StringCatalog::new("it"))),
         )))
         .with(E_TARGET, "«{target}» non è una destinazione dei disegni.")
         .with(E_NO_DRAWINGS, "Nella selezione non c'è nessun disegno.")
@@ -321,7 +321,7 @@ pub fn catalog() -> Vec<StringCatalog> {
              macchina.",
         ),
         choice::in_english(annotated::in_english(annotate::in_english(
-            create::in_english(StringCatalog::new("en")),
+            crate::pdf_export::lavoro::in_english(create::in_english(StringCatalog::new("en"))),
         )))
         .with(E_TARGET, "«{target}» is not a drawing export destination.")
         .with(E_NO_DRAWINGS, "The selection contains no drawings.")
@@ -381,6 +381,17 @@ pub fn exports() -> Vec<Box<dyn ExportProvider>> {
     ]
 }
 
+/// I lavori lunghi del bundle dei disegni: oggi la scrittura del PDF di una
+/// nota ([`crate::pdf_export::lavoro`]), che il comando `pdf.write_pages`
+/// accoda.
+pub fn jobs(
+    job: &str,
+    payload: serde_json::Value,
+    host: &mut dyn fub_abi::traits::HostApi,
+) -> Result<serde_json::Value, fub_abi::PluginError> {
+    crate::pdf_export::lavoro::run_job(job, payload, host)
+}
+
 /// I caratteri di Fub incorporati nel binario, gli stessi dell'export: l'host
 /// li dà al motore del disegno (`Servizi::fornisci_caratteri`) prima della sua
 /// prima apertura, così un disegno esce uguale nell'editor e nell'export.
@@ -396,6 +407,8 @@ pub(crate) mod per_il_pdf {
     #[cfg(test)]
     pub(crate) use super::fonts::tests::with_fs_type;
     pub(crate) use super::fonts::{decode, embeddable, instance, Coordinate};
+    /// Il file di un carattere di Fub per nome (`inter-latin-wght-normal.woff2`).
+    pub(crate) use super::typefaces::fub_file as file_di_fub;
 
     /// I caratteri di serie di Fub (Inter, Literata, JetBrains Mono), per il
     /// testo dentro un vettore: sono quelli dei diagrammi.

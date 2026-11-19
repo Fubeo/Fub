@@ -1,22 +1,35 @@
-//! L'esportazione delle note in PDF: **la prova del motore** (ADR 0247).
+//! L'esportazione delle note in PDF: la vista compone, Fub scrive (ADR 0247).
 //!
 //! La strada A dell'esportazione: la pagina la compone la vista, il PDF lo
 //! scrive Fub. La vista impagina la nota e misura ciò che ha disegnato: ogni
 //! pezzo di testo con la sua posizione, il suo carattere e la posizione di
 //! ogni lettera, i fondi e i bordi, i vettori (diagrammi, radici delle
-//! formule), le immagini. Ne fa un [`ElencoPagine`] e lo passa al core, che
-//! scrive il PDF con [`scrivi`]: testo vero, che si seleziona e si cerca, coi
-//! caratteri incorporati in sotto-insieme, e i vettori come vettori.
+//! formule), le immagini, i collegamenti e i segnalibri. Ne fa un
+//! [`ElencoPagine`] e lo passa al core, che scrive il PDF con [`scrivi`] (o
+//! [`scrivi_con`], che si può fermare): testo vero, che si seleziona e si
+//! cerca, coi caratteri incorporati in sotto-insieme, i vettori come vettori,
+//! i collegamenti che si cliccano, i segnalibri e i dati del documento.
 //!
 //! Anteprima e file coincidono perché nascono dalla stessa misura: il core non
 //! va a capo e non impagina, mette ogni lettera dove la vista l'ha messa. Per
 //! questo coincidono sulla macchina che esporta e non fra due macchine: due
 //! sistemi possono andare a capo in punti diversi, e ognuno scrive il suo.
 //!
-//! È una prova e non ancora il contratto: il formato dell'elenco ha una
-//! versione ([`VERSIONE`]) e i suoi limiti, ma non attraversa ancora l'IPC
-//! (lo farà con `invoke_command` e un lavoro del core). Le misure e la scelta
-//! stanno nell'ADR.
+//! # Lo scrittore
+//!
+//! - [`writer`]: il controllo dell'elenco, le pagine, i dati del documento e i
+//!   collegamenti;
+//! - `text`: i caratteri, i loro sotto-insiemi e il testo;
+//! - `images`: i vettori e le immagini, piene o alleggerite;
+//! - `outline`: i segnalibri.
+//!
+//! # Il comando e il suo lavoro
+//!
+//! [`lavoro`] porta l'elenco dalla vista al file: il comando
+//! [`PDF_WRITE_PAGES`](lavoro::PDF_WRITE_PAGES) lo controlla e accoda un
+//! lavoro del core, che si vede nel centro attività e si annulla; il lavoro
+//! scrive il PDF e lo deposita nel vault in un colpo solo, così il file arriva
+//! intero o non arriva.
 //!
 //! # Il profilo e la memoria
 //!
@@ -24,7 +37,7 @@
 //! il [`profile`] (tema, colori, caratteri, pagina, contenuto: vale per ogni
 //! nota del vault) e la [`memory`] di ogni nota (lo stile dato a un solo
 //! diagramma e i blocchi lasciati fuori). Tutti e due vivono nello spazio
-//! dati [`SPAZIO_DATI`]; la forma dei file è in
+//! dati [`SPAZIO_DATI`]; la forma dei file e dell'elenco è in
 //! `docs/reference/pdf-export-format.md`.
 //!
 //! # Le unità
@@ -39,17 +52,27 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 mod aperta;
+mod images;
+#[cfg(test)]
+mod images_tests;
+pub mod lavoro;
 pub mod memory;
+mod outline;
+#[cfg(test)]
+mod outline_tests;
 pub mod profile;
-mod prova;
 #[cfg(test)]
 mod tests;
+mod text;
+pub mod writer;
+#[cfg(test)]
+mod writer_tests;
 
 /// L'id dello spazio dati dell'esportazione: profili e memorie delle note
 /// stanno sotto `.fub/plugins/fub.esporta-pdf/`.
 pub const SPAZIO_DATI: &str = "fub.esporta-pdf";
 
-pub use prova::scrivi;
+pub use writer::{scrivi, scrivi_con, Controllo, Interruzione, Opzioni, QualitaImmagini};
 
 /// La versione del formato dell'elenco delle pagine.
 pub const VERSIONE: u32 = 1;
@@ -67,6 +90,35 @@ pub const MAX_LATO_PAGINA: f64 = 20_000.0;
 /// Il vettore più grande, in byte del suo SVG.
 pub const MAX_VETTORE_BYTE: usize = 8 * 1024 * 1024;
 
+/// L'elenco più pesante, in byte del suo JSON: un libro con molti diagrammi
+/// ci sta, un elenco che porta le immagini dentro di sé no (le immagini si
+/// nominano per file).
+pub const MAX_ELENCO_BYTE: usize = 64 * 1024 * 1024;
+
+/// L'immagine più pesante, in byte del suo file: oltre, resta fuori e lo dice
+/// un avviso.
+pub const MAX_IMMAGINE_BYTE: usize = 64 * 1024 * 1024;
+
+/// Quanti collegamenti al più in una pagina.
+pub const MAX_COLLEGAMENTI_PAGINA: usize = 10_000;
+
+/// Quanti segnalibri al più nel documento.
+pub const MAX_SEGNALIBRI: usize = 20_000;
+
+/// Il livello più profondo di un segnalibro: quello del Titolo 6.
+pub const MAX_LIVELLO_SEGNALIBRO: u8 = 6;
+
+/// L'indirizzo più lungo di un collegamento verso fuori, in byte.
+pub const MAX_URL_BYTE: usize = 8 * 1024;
+
+/// Il testo più lungo di un segnalibro, del titolo, dell'autore o della
+/// lingua, in caratteri.
+pub const MAX_TESTO_DATI: usize = 2_000;
+
+/// Quanto può durare la scrittura di un PDF nel lavoro del core, in
+/// millisecondi: oltre, si ferma con [`ErroreEsportazione::TempoScaduto`].
+pub const MAX_TEMPO_MS: u64 = 10 * 60 * 1000;
+
 /// Ciò che la vista misura di una nota impaginata.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -80,11 +132,65 @@ pub struct ElencoPagine {
     /// Il titolo del documento, per i dati del PDF.
     #[serde(default)]
     pub titolo: String,
+    /// Chi l'ha scritto, per i dati del PDF: dalle proprietà della nota.
+    #[serde(default)]
+    pub autore: String,
+    /// La lingua del testo, come etichetta BCP 47 (`it`, `en-GB`): un lettore
+    /// di schermo la usa per la pronuncia.
+    #[serde(default)]
+    pub lingua: String,
     /// Le facce dei caratteri che il testo usa: un pezzo di testo ne nomina
     /// una col suo indice.
     pub facce: Vec<Faccia>,
     /// Le pagine, dalla prima.
     pub pagine: Vec<Pagina>,
+    /// I segnalibri, nell'ordine in cui si leggono: ognuno col suo livello,
+    /// e l'albero lo fanno i livelli.
+    #[serde(default)]
+    pub segnalibri: Vec<Segnalibro>,
+}
+
+/// Un segnalibro: un titolo della nota e il punto della pagina dove comincia.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Segnalibro {
+    /// Il testo che il lettore mostra nell'elenco dei segnalibri.
+    pub titolo: String,
+    /// Da 1 (Titolo 1) a [`MAX_LIVELLO_SEGNALIBRO`]: un segnalibro sta sotto
+    /// l'ultimo di livello più basso che lo precede.
+    pub livello: u8,
+    /// L'indice della pagina, dalla prima, che è la 0.
+    pub pagina: usize,
+    /// Dove comincia sulla pagina, in pixel CSS dall'alto.
+    #[serde(default)]
+    pub y: f64,
+}
+
+/// Un collegamento: un riquadro della pagina che porta altrove.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Collegamento {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub destinazione: Destinazione,
+}
+
+/// Dove porta un collegamento.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "lowercase", deny_unknown_fields)]
+pub enum Destinazione {
+    /// Un indirizzo fuori dal documento: solo `http`, `https` e `mailto`.
+    Fuori { url: String },
+    /// Un punto del documento: un titolo, una nota a piè, un rimando.
+    Dentro {
+        /// L'indice della pagina, dalla prima, che è la 0.
+        pagina: usize,
+        /// Il punto della pagina, in pixel CSS dall'alto.
+        #[serde(default)]
+        y: f64,
+    },
 }
 
 /// Una faccia di un carattere, come la vista l'ha scelta: il file da cui il
@@ -116,11 +222,14 @@ pub struct Asse {
     pub valore: f64,
 }
 
-/// Una pagina: i suoi pezzi nell'ordine in cui si disegnano.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Una pagina: i suoi pezzi nell'ordine in cui si disegnano, e i suoi
+/// collegamenti, che non si disegnano ma si cliccano.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Pagina {
     pub pezzi: Vec<Pezzo>,
+    #[serde(default)]
+    pub collegamenti: Vec<Collegamento>,
 }
 
 /// Un colore: rosso, verde e blu da 0 a 255, e l'opacità da 0 a 1.
@@ -218,8 +327,16 @@ pub enum Avviso {
     LettereMancanti { famiglia: String, lettere: String },
     /// L'immagine non c'è, o non si legge: al suo posto non c'è niente.
     ImmagineMancante { file: String },
+    /// L'immagine pesa più di [`MAX_IMMAGINE_BYTE`]: al suo posto non c'è
+    /// niente.
+    ImmagineTroppoGrande { file: String, byte: u64 },
     /// Un vettore che non si legge come SVG.
     VettoreIlleggibile { motivo: String },
+    /// Un collegamento verso un indirizzo che il PDF non apre (uno schema che
+    /// non è `http`, `https` o `mailto`): il testo resta, il clic no.
+    CollegamentoScartato { url: String },
+    /// Una lingua che non è un'etichetta BCP 47: il PDF non la dice.
+    LinguaScartata { lingua: String },
 }
 
 /// Perché un elenco non diventa un PDF.
@@ -245,6 +362,26 @@ pub enum ErroreEsportazione {
     VettoreTroppoGrande { pagina: usize, pezzo: usize },
     /// Il sotto-insieme di un carattere non si scrive.
     SottoInsieme { famiglia: String, motivo: String },
+    /// Il JSON dell'elenco non si legge come un elenco di questa versione.
+    ElencoIlleggibile { motivo: String },
+    /// Il JSON dell'elenco pesa più di [`MAX_ELENCO_BYTE`].
+    ElencoTroppoGrande { byte: u64 },
+    /// Più di [`MAX_COLLEGAMENTI_PAGINA`] collegamenti in una pagina.
+    TroppiCollegamenti { pagina: usize },
+    /// Un collegamento con una misura che non è un numero, o che porta a una
+    /// pagina che l'elenco non ha.
+    CollegamentoRotto { pagina: usize, collegamento: usize },
+    /// Più di [`MAX_SEGNALIBRI`] segnalibri.
+    TroppiSegnalibri { segnalibri: usize },
+    /// Un segnalibro con un livello fuori misura, un testo troppo lungo o una
+    /// pagina che l'elenco non ha.
+    SegnalibroRotto { segnalibro: usize },
+    /// Il titolo, l'autore o la lingua sono più lunghi di [`MAX_TESTO_DATI`].
+    DatiTroppoLunghi,
+    /// La scrittura è durata più del tempo concesso.
+    TempoScaduto { secondi: u64 },
+    /// Chi l'ha chiesta l'ha annullata.
+    Annullato,
 }
 
 impl fmt::Display for ErroreEsportazione {
@@ -278,6 +415,41 @@ impl fmt::Display for ErroreEsportazione {
             Self::SottoInsieme { famiglia, motivo } => {
                 write!(f, "the font {famiglia} could not be subset: {motivo}")
             }
+            Self::ElencoIlleggibile { motivo } => {
+                write!(f, "the page list cannot be read: {motivo}")
+            }
+            Self::ElencoTroppoGrande { byte } => write!(
+                f,
+                "the page list is {byte} bytes, more than {} MiB",
+                MAX_ELENCO_BYTE >> 20
+            ),
+            Self::TroppiCollegamenti { pagina } => write!(
+                f,
+                "page {pagina} has more than {MAX_COLLEGAMENTI_PAGINA} links"
+            ),
+            Self::CollegamentoRotto {
+                pagina,
+                collegamento,
+            } => write!(
+                f,
+                "link {collegamento} of page {pagina} has an invalid measure or target"
+            ),
+            Self::TroppiSegnalibri { segnalibri } => write!(
+                f,
+                "{segnalibri} bookmarks: at most {MAX_SEGNALIBRI} are allowed"
+            ),
+            Self::SegnalibroRotto { segnalibro } => write!(
+                f,
+                "bookmark {segnalibro} has an invalid level, title or target"
+            ),
+            Self::DatiTroppoLunghi => write!(
+                f,
+                "the title, author or language is longer than {MAX_TESTO_DATI} characters"
+            ),
+            Self::TempoScaduto { secondi } => {
+                write!(f, "writing the PDF took more than {secondi} seconds")
+            }
+            Self::Annullato => f.write_str("writing the PDF was cancelled"),
         }
     }
 }
