@@ -2540,7 +2540,7 @@ Fatto quando: un estratto dopo che la fonte è cambiata; «Annota» che scrive
 il `.canvas` e non la nota.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/live-cards.test.ts src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base d1a7af279
 
 ## T50 · La Tabella prende i gesti del foglio
 
@@ -3306,7 +3306,7 @@ Fatto quando: test delle guide e del permesso dei caratteri; le foto del
 banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export; cargo nextest run -p fub-features pdf_export
-Stato: [~] in corso · coder · base b1ca0286f
+Stato: [~] fatto (t72 @ 9d4640a9c), unione con l'integrazione in corso dal coder · Newsreader, Hanken e Plex ora nel binario (stessi file dell'app, OFL); Georgia e Palatino ripiegano su Literata; formato «Propria» in più
 
 ## T73 · Testata e piè, frontespizio, indice, segnalibri
 
