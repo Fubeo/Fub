@@ -1622,12 +1622,12 @@ export const SCENE = touchLast(onPage("shell", [
   // `p-conti`): in Scrittura il valore col tratteggio d'accento, i casi limite
   // (vuota, #DIV/0!, foglio che non c'è, file mancante) e la cella da sola con
   // `|value`; al passaggio il velo d'accento; in Lettura testo come il resto;
-  // a 700 px.
+  // nella finestra minima (i 700 px del prototipo li guarda la conformità).
   ...[
     ["valori-cella-01-scrittura", "I valori di cella in Scrittura: 680 su 800, la cella vuota «—», #DIV/0!, il foglio e il file che non ci sono, -120 da solo", "live_preview", null, false],
     ["valori-cella-02-passaggio", "Il puntatore sul primo valore: il velo d'accento", "live_preview", null, true],
     ["valori-cella-03-lettura", "I valori di cella in Lettura: testo come il resto, col formato del foglio", "reading", null, false],
-    ["valori-cella-04-stretta", "I valori di cella a 700 px", "live_preview", { width: 700, height: 800 }, false],
+    ["valori-cella-04-stretta", "I valori di cella nella finestra minima, 800 px", "live_preview", NOTE_NARROW, false],
   ].map(([id, title, mode, viewport, hover]) => ({
     id,
     title,
