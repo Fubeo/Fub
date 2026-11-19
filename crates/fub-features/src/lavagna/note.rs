@@ -946,15 +946,27 @@ pub(super) fn canvas_to_note(
         }
     };
     let target = landing.doc().clone();
-    let body = note_text(&*host, &target, board.core.canvas(), &chosen)?;
+    // La nota che c'è si legge prima dei testi: un id di blocco nuovo non deve
+    // essere già suo.
+    let existing = match &landing {
+        Landing::Existing(to) => Some(read_note(&*host, to)?),
+        Landing::New(_) => None,
+    };
+    let body = note_text(
+        &*host,
+        &target,
+        board.core.canvas(),
+        &chosen,
+        existing.as_ref().map_or("", |note| note.source.as_str()),
+    )?;
 
     let mut plan = WritePlan::new();
-    match &landing {
-        Landing::New(new) => {
+    match (&landing, existing) {
+        (Landing::New(new), _) => {
             plan = plan.create(new.clone(), format!("{body}\n"));
         }
-        Landing::Existing(to) => {
-            let note = read_note(&*host, to)?;
+        (Landing::Existing(_), None) => unreachable!("una nota che c'è si è letta"),
+        (Landing::Existing(to), Some(note)) => {
             let at = match args.number(AT) {
                 Some(at) => landing_byte(&note.source, at)
                     .ok_or_else(|| PluginError::BadArgs(named(E_TO_AT, &[("doc", to)])))?,
@@ -1088,6 +1100,7 @@ fn note_text(
     target: &DocId,
     canvas: &Canvas,
     chosen: &HashSet<String>,
+    existing: &str,
 ) -> Result<String, PluginError> {
     let nodes: Vec<&CanvasNode> = canvas
         .nodes
@@ -1131,7 +1144,7 @@ fn note_text(
     let mut taken: HashSet<String> = HashSet::new();
     for node in &nodes {
         if let Some(id) = node.text.as_deref().and_then(written_block_id) {
-            taken.insert(id.to_ascii_lowercase());
+            taken.insert(id.to_string());
         }
     }
     let mut arrows: HashMap<&str, Vec<String>> = HashMap::new();
@@ -1154,7 +1167,9 @@ fn note_text(
                             .as_deref()
                             .and_then(written_block_id)
                             .map(str::to_string)
-                            .unwrap_or_else(|| fresh_block_id(&target_node.id, &mut taken));
+                            .unwrap_or_else(|| {
+                                fresh_block_id(&target_node.id, existing, &mut taken)
+                            });
                         block_ids.insert(target_node.id.as_str(), id.clone());
                         id
                     }
@@ -1355,17 +1370,21 @@ fn written_block_id(text: &str) -> Option<&str> {
 
 /// Un id di blocco nuovo per la scheda `card`: i primi sei caratteri del suo id
 /// che vanno bene in un `^id`, o, se non bastano o sono presi, uno che nasce
-/// dall'id. Sempre lo stesso per la stessa scheda.
-fn fresh_block_id(card: &str, taken: &mut HashSet<String>) -> String {
+/// dall'id. Sempre lo stesso per la stessa scheda. Preso vuol dire scritto
+/// così fra le schede o nella nota d'arrivo (`existing`), come per l'id di
+/// «Sposta in…» (`commands/move_block.rs`): il confronto è esatto.
+fn fresh_block_id(card: &str, existing: &str, taken: &mut HashSet<String>) -> String {
     let clean: String = card
         .chars()
         .filter(char::is_ascii_alphanumeric)
-        .map(|c| c.to_ascii_lowercase())
         .take(6)
         .collect();
     let mut candidate = clean;
     let mut round: u64 = 0;
-    while candidate.len() < 4 || taken.contains(&candidate) {
+    while candidate.len() < 4
+        || taken.contains(&candidate)
+        || existing.contains(&format!("^{candidate}"))
+    {
         let hash = Fnv1a::hash(format!("{card}\u{0}{round}").as_bytes());
         candidate = format!("{:06x}", hash & 0xff_ffff);
         round += 1;
@@ -1511,11 +1530,13 @@ mod tests {
     #[test]
     fn un_id_nuovo_nasce_dalla_scheda_e_non_ripete() {
         let mut taken = HashSet::new();
-        assert_eq!(fresh_block_id("6f1d2a9c0b7e", &mut taken), "6f1d2a");
-        let again = fresh_block_id("6f1d2a00", &mut taken);
+        assert_eq!(fresh_block_id("6f1d2a9c0b7e", "", &mut taken), "6f1d2a");
+        let again = fresh_block_id("6f1d2a00", "", &mut taken);
         assert_ne!(again, "6f1d2a");
         assert_eq!(again.len(), 6);
-        assert_eq!(fresh_block_id("a", &mut HashSet::new()).len(), 6);
+        assert_eq!(fresh_block_id("a", "", &mut HashSet::new()).len(), 6);
+        let taken_in_note = fresh_block_id("abcdef12", "Testo ^abcdef\n", &mut HashSet::new());
+        assert_ne!(taken_in_note, "abcdef", "un id della nota d'arrivo è preso");
     }
 
     #[test]

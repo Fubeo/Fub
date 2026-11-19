@@ -206,7 +206,7 @@ stesso testo.
 - **Trascinare** un blocco su una lavagna aperta a lato lo porta lì, a
   destra di ciò che la lavagna ha: il riquadro si accende col bordo
   dell'accento e il cartellino dice «Porta sulla lavagna «…»». Con
-  <kbd>Ctrl</kbd> al rilascio il blocco si copia e resta anche nella nota.
+  Ctrl al rilascio il blocco si copia e resta anche nella nota.
 - **«Porta in una nota»** dalla palette, sulla lavagna aperta, fa il
   contrario: crea una nota accanto alla lavagna col suo nome, con le schede
   in colonna da in alto a sinistra a in basso a destra, e le schede lasciano
