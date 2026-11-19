@@ -51,7 +51,7 @@ prova sono nella tabella qui sotto.
 | l'estensione | `apps/clipper/` | il clipper del browser (MV3, Firefox, Safari) | `node apps/clipper/smoke-headless.mjs` |
 | i motori e i dati di terzi | `vendor/` | WordCraft e GridCraft copiati, patch numerate, `UPSTREAM.md`; i dati a file singolo | `node tools/vendor-craft/vendor.mjs check`, `node tools/vendor-craft/provenienza.mjs check` |
 | le prove dei motori | `tools/motori-prova/` | le misure di K0: peso, RAM, tempi, librerie doppie | `node tools/motori-prova/misura.mjs --out DIR` |
-| la prova con Obsidian | `tools/prova-obsidian/` | una lavagna con l'inchiostro e lo script che confronta prima e dopo; i passi nel `README.md` | `node --test tools/prova-obsidian/confronta.test.mjs` |
+| la prova con Obsidian | `tools/prova-obsidian/`, `tests/fixtures/prova-obsidian-schede/` | una lavagna con l'inchiostro e lo script che confronta prima e dopo; il vault con ogni specie di scheda viva; i passi nei due `README.md` | `node --test tools/prova-obsidian/confronta.test.mjs`, `npx vitest run bench/prova-obsidian.test.ts` |
 | i componenti WASM | `esempi/` | un esempio per cosa da dimostrare, fuori dal workspace | li compila il test di `fub-wasm-host` |
 | il Flatpak | `packaging/flatpak/` | manifest, `.desktop`, metainfo e il generatore delle sorgenti offline del pacchetto Linux | `desktop-file-validate packaging/flatpak/io.github.Fubeo.Fub.desktop` |
 | la CI | `.github/` | workflow e i guard Node dell'elenco `ci-required` | `node .github/scripts/<guard>.mjs` |

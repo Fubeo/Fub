@@ -88,6 +88,8 @@
 - Che cosa fa il clic su un link, come si sbircia una nota, che cosa succede incollando un indirizzo? → [product/editor-links.md](../product/editor-links.md)
 - Che cosa chiede «Nuova nota» e che cosa mostra la testata di una nota con un tipo? → [product/editor-note-types.md](../product/editor-note-types.md)
 - Come si scrive dentro una nota riportata (`![[Nota#Sezione]]`)? → [product/editor-transclusion.md](../product/editor-transclusion.md)
+- Come si usa un PDF, un foglio, un documento o un disegno dentro una nota? → [product/live-cards.md](../product/live-cards.md)
+- Quante schede vive regge una nota, quanto pesano e che cosa ne vede Obsidian? → [product/live-cards-measures.md](../product/live-cards-measures.md)
 - Come funzionano tasto destro, mini-barra e comando «/»? → [product/editor-menus.md](../product/editor-menus.md)
 - Che cosa mostra la barra di formato e come si sceglie la sua forma? → [product/editor-toolbar.md](../product/editor-toolbar.md)
 - Come lavora il correttore mentre si scrive? → [product/proofing.md](../product/proofing.md)
