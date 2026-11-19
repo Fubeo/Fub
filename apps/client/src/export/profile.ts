@@ -15,6 +15,8 @@
 // di serie, come fa il core.
 
 import type { PageGeometry } from "./probe";
+import { contentChoicesOf, contentLayoutOf } from "./content/choices";
+import { contentLookVariables } from "./content/look";
 import { lookVariables, textOf, typeVariables } from "./themes";
 import type { PrintLayout, PrintLook, PrintSettings } from "./paginate/slices";
 
@@ -227,7 +229,8 @@ export function printSettingsOf(profile: ExportProfile, excluded: readonly strin
     breaks: { everyHeading2: profile.interruzioni.ogni_titolo_2, separator: profile.interruzioni.separatore },
     type: typeVariables(profile),
     excluded,
+    content: contentLayoutOf(profile),
   };
-  const look: PrintLook = { colors: lookVariables(profile) };
+  const look: PrintLook = { colors: { ...lookVariables(profile), ...contentLookVariables(contentChoicesOf(profile.contenuto)) } };
   return { layout, look };
 }

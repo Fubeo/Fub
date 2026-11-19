@@ -98,6 +98,48 @@ e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts)
   dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
   carta scura, col codice e il testo colorato schiariti.
 
+## Contenuto e Interruzioni
+
+Le due sezioni vivono in
+[`export/sections/content.ts`](../../apps/client/src/export/sections/content.ts);
+ciò che ogni scelta fa sulle pagine in
+[`export/content/`](../../apps/client/src/export/content/), un modulo per
+specie di blocco. La resa per la stampa si monta una volta: prima di ogni
+misura il contenuto la cambia secondo il profilo, dopo la rimette com'era.
+Un blocco aggiunto (le proprietà, una riga di provenienza) non sposta le
+identità degli altri.
+
+- **Proprietà** sotto il titolo: nessuna, in evidenza (le prime quattro,
+  senza icona, copertina ed etichette) o tutte. Arrivano dall'indice dopo la
+  resa; senza l'indice la pagina esce senza.
+- **Commenti**: no, nel margine o in fondo. Ogni passo commentato prende un
+  numero; i commenti di seguito sono una discussione sola. Nel margine la
+  nota dice il primo nome, il testo e quante risposte, accanto al suo
+  paragrafo; con due colonne o un margine sotto i 22 mm va in fondo. In
+  fondo, sotto il titolo «Commenti», ogni messaggio col nome e la data. Un
+  commento in una cella di tabella ha il numero nella cella. La resa per la
+  stampa del core porta i commenti in `<template class="comment-note">`, che
+  il sanificatore toglierebbe: prima di montarla lo spazio ne fa segnaposti
+  vuoti col solo testo in `data-text` (`inertComments`).
+- **Link** colorati, sottolineati o come il testo; **tabelle** a linee, a
+  righe alterne o a griglia. Cambiano solo l'aspetto, non l'impaginazione.
+- **Compiti fatti**: si mostrano o si tolgono, coi passi che tengono dentro.
+- **Ripiegabili**: tutti aperti, o chiusi col solo titolo.
+- **Note riportate**: svolte, con sotto la riga «da Cartella / Nota ›
+  Sezione». Una nota che riporta sé stessa (o troppo in profondità) non si
+  svolge e la riga dice perché.
+- **Schede vive**: l'anteprima col nome, solo il nome, o per un PDF tutte le
+  sue pagine in fondo (al più 200; la riga al posto della scheda dice dove
+  sono, e quante restano nel file). Un PDF che non si legge esce con
+  l'anteprima.
+- **Basi**: si distendono senza la barra e la ricerca, con sotto «Base ·
+  vista · n righe»; si misurano come una tabella, così una Base di mille
+  righe continua pagina dopo pagina.
+- **Codice numerato**: un numero per riga del sorgente, fuori dal testo.
+- **Interruzioni**: una pagina nuova a ogni Titolo 2 o a ogni separatore, e
+  l'intestazione delle tabelle lunghe ripetuta in cima a ogni pagina (di
+  serie). Spenta, l'intestazione resta solo all'inizio.
+
 ## Comportamenti
 
 - Mentre si trascina un controllo il profilo cambia «dal vivo»: le pagine si

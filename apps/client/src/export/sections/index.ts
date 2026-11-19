@@ -29,6 +29,7 @@ import { plural, t, type Key } from "../../i18n/strings";
 import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
 import { ownCount, type PageColor } from "../themes";
 import { colorsBody } from "./colors";
+import { breaksBody, contentBody } from "./content";
 import { themeBody } from "./theme";
 
 export interface SectionContext {
@@ -173,6 +174,7 @@ export const SECTIONS: readonly ExportSection[] = [
     id: "contenuto",
     title: "pdf_export.section.content",
     summary: (profile) => (profile.contenuto.commenti !== "no" ? t("pdf_export.content.comments") : t("pdf_export.content.all")),
+    body: contentBody,
   },
   {
     id: "diagrammi",
@@ -187,6 +189,7 @@ export const SECTIONS: readonly ExportSection[] = [
     id: "interruzioni",
     title: "pdf_export.section.breaks",
     summary: ({ interruzioni }) => (interruzioni.ogni_titolo_2 ? t("pdf_export.breaks.heading2") : t("pdf_export.breaks.auto")),
+    body: breaksBody,
   },
   {
     id: "uscita",

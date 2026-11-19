@@ -25,6 +25,7 @@
 import type { RenderedDocument } from "../host/contract";
 import type { PrintMount, PrintRenderer } from "../editors/media/print-view";
 import { setSanitizedHtml } from "../ui/sanitize";
+import { inertComments } from "./content/comments";
 import { CHAPTER_BREAK_PREFIX } from "./paginate/breaks";
 import { PrintMeasure, type MeasureDepth, type MeasuredBlock } from "./paginate/measure";
 import type { BlockSource } from "./paginate/slices";
@@ -177,7 +178,9 @@ export function createBook(options: BookOptions): Book {
     // tutto insieme, e chi guarda aspetterebbe lo stesso l'ultima.
     for (const doc of options.docs) {
       try {
-        read.push({ doc, rendered: await options.render(doc, target) });
+        // I commenti passano il sanificatore come segnaposti (T74).
+        const chapter = await options.render(doc, target);
+        read.push({ doc, rendered: { ...chapter, html: inertComments(chapter.html) } });
       } catch (error) {
         first ??= error;
         missed.push(doc);
