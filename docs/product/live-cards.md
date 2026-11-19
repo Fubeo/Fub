@@ -333,7 +333,8 @@ nota; al più 1000 righe e 60 colonne.
 **Incollare celle.** Le celle copiate da un foglio (testo a tabulazioni)
 entrano come tabella Markdown, staccata dal testo intorno. Se vengono da un
 foglio del vault aperto in Fub, sotto la tabella c'è la scelta **Tabella** /
-**Incolla come scheda**: la scheda scrive l'embed di quella parte del foglio.
+**Incolla come scheda**: la scheda scrive l'embed di quella parte del foglio,
+e la tabella ha i numeri coi separatori della nota.
 Il foglio dice da dove vengono le celle con il tipo degli appunti
 `application/x-fub-cells`; le celle di un altro programma con il loro HTML
 passano dalla conversione dell'HTML, come prima.
