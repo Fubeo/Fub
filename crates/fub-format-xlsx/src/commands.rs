@@ -210,12 +210,17 @@ pub(crate) fn kind_of(bytes: &[u8]) -> XlsxKind {
     .unwrap_or(XlsxKind::Workbook)
 }
 
-/// Scrive la cartella con il codec.
-pub(crate) fn write(workbook: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, XlsxError> {
-    guarded(|| {
+/// Scrive con il codec la cartella `workbook`, che riscrive il file
+/// `source`: dello stesso tipo, e con la richiesta di ricalcolo
+/// all'apertura che il file fa (IMP-617).
+pub(crate) fn write(workbook: &Workbook, source: &[u8]) -> Result<Vec<u8>, XlsxError> {
+    let kind = kind_of(source);
+    let rewritten = guarded(|| {
         gridcraft_xlsx::write_xlsx_as(workbook, kind)
             .map_err(|error| XlsxError::Codec(error.to_string()))
-    })
+    })?;
+    crate::graft::keep_full_calc(source, rewritten)
+        .map_err(|error| XlsxError::Codec(error.to_string()))
 }
 
 /// Le perdite di `after` rispetto a `before`: ciò che `before` conta più
@@ -242,7 +247,7 @@ fn loses(found: Vec<String>) -> Rewrite {
 /// La prova a vuoto: la cartella `workbook`, letta da `bytes`, riscritta
 /// senza modifiche.
 pub(crate) fn measure(bytes: &[u8], workbook: &Workbook) -> Rewrite {
-    let rewritten = match write(workbook, kind_of(bytes)) {
+    let rewritten = match write(workbook, bytes) {
         Ok(rewritten) => rewritten,
         Err(error) => {
             return Rewrite::Loses(truncate(
@@ -264,7 +269,7 @@ pub(crate) fn measure(bytes: &[u8], workbook: &Workbook) -> Rewrite {
 /// La misura sui byte nuovi: si rileggono, e riscriverli non perde niente.
 pub(crate) fn verify(bytes: &[u8]) -> Result<(), String> {
     let read = crate::read(bytes).map_err(|error| error.to_string())?;
-    let again = write(&read.workbook, kind_of(bytes)).map_err(|error| error.to_string())?;
+    let again = write(&read.workbook, bytes).map_err(|error| error.to_string())?;
     match losses(bytes, &again)? {
         found if found.is_empty() => Ok(()),
         found => match loses(found) {

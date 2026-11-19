@@ -840,6 +840,59 @@ fn full_calc_on_load(xml: &[u8]) -> Result<Vec<u8>, GraftError> {
     }
 }
 
+/// Se `xl/workbook.xml` chiede di ricalcolare all'apertura.
+fn asks_full_calc(xml: &[u8]) -> Result<bool, GraftError> {
+    let mut reader = Reader::from_reader(xml);
+    let mut depth = 0usize;
+    loop {
+        let event = reader
+            .read_event()
+            .map_err(|error| package::xml_error("workbook", error))?;
+        match event {
+            Event::Start(ref element) | Event::Empty(ref element) => {
+                if depth == 1 && local(element.name().as_ref()) == b"calcPr" {
+                    return Ok(attr(element, b"fullCalcOnLoad")
+                        .is_some_and(|value| matches!(value.trim(), "1" | "true")));
+                }
+                if matches!(event, Event::Start(_)) {
+                    depth += 1;
+                }
+            }
+            Event::End(_) => depth = depth.saturating_sub(1),
+            Event::Eof => return Ok(false),
+            _ => {}
+        }
+    }
+}
+
+/// La riscrittura `rewritten` della cartella `source`, con la richiesta di
+/// ricalcolo all'apertura che `source` fa. Il codec scrive `fullCalcOnLoad`
+/// soltanto per una formula senza valore; quella di un innesto dice che i
+/// valori salvati delle formule possono essere vecchi, e la riscrittura li
+/// porta così come sono.
+pub(crate) fn keep_full_calc(source: &[u8], rewritten: Vec<u8>) -> Result<Vec<u8>, GraftError> {
+    let mut package = Package::open(source)?;
+    let part = package.workbook_part()?;
+    let asked = match package.read(&part)? {
+        Some(xml) => asks_full_calc(&xml)?,
+        None => false,
+    };
+    if !asked {
+        return Ok(rewritten);
+    }
+    let mut package = Package::open(&rewritten)?;
+    let part = package.workbook_part()?;
+    let xml = package
+        .read(&part)?
+        .ok_or_else(|| GraftError::Package(format!("{part} is missing")))?;
+    if asks_full_calc(&xml)? {
+        return Ok(rewritten);
+    }
+    let replaced = HashMap::from([(normalize(&part), full_calc_on_load(&xml)?)]);
+    drop(package);
+    rezip(&rewritten, replaced, &BTreeSet::new())
+}
+
 /// Toglie gli elementi vuoti `name` il cui attributo `key` soddisfa `matches`.
 fn remove_empty(
     xml: &[u8],

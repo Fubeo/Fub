@@ -482,3 +482,156 @@ fn una_formula_sotto_le_righe_usate_non_cambia_la_misura_dei_fogli() {
     let grown = whole_window(&mut provider, &session, &outcome.commit.revision);
     assert_eq!(grown.total_rows, 10 + 100);
 }
+
+#[test]
+fn una_formula_entra_anche_dopo_un_innesto_che_chiede_di_ricalcolare() {
+    // IMP-617: l'innesto di una costante letta da una formula scrive
+    // `fullCalcOnLoad="1"`; la riscrittura per la formula di dopo non deve
+    // contarlo come una perdita, e il file salvato chiede ancora di
+    // ricalcolare.
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("A2", "0.25")],
+    )
+    .unwrap();
+    let grafted = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert!(workbook_xml(&grafted).contains("fullCalcOnLoad=\"1\""));
+
+    let (mut provider, session) = open(&grafted, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("D3", "=SUM(A1:A2)"), patch("E3", "=B1*C1")],
+    )
+    .unwrap();
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    let read = fub_format_xlsx::read(&saved).unwrap();
+    let sheet = &read.workbook.sheets[0];
+    let formula = |a1: &str| {
+        sheet
+            .cell(CellRef::parse(a1).unwrap())
+            .and_then(|cell| cell.formula.as_ref())
+            .map(|formula| formula.text.clone())
+    };
+    assert_eq!(formula("D3").as_deref(), Some("SUM(A1:A2)"));
+    assert_eq!(formula("E3").as_deref(), Some("B1*C1"));
+    assert_eq!(value(&saved, "D3"), Value::Number(1.25));
+    assert_eq!(value(&saved, "A2"), Value::Number(0.25));
+    assert!(workbook_xml(&saved).contains("fullCalcOnLoad=\"1\""));
+}
+
+#[test]
+fn cinque_righe_scritte_di_fila_coi_salvataggi_in_mezzo_arrivano_tutte_nel_file() {
+    // La prova di IMP-310, IMP-414, IMP-512 e IMP-617 sul provider vero:
+    // una cartella nuova di Fub, 5 righe per 4 colonne scritte una cella
+    // alla volta (testi ripetuti, numeri, prodotti e somme su intervalli),
+    // un salvataggio e una riapertura dopo ogni cella o dopo ogni riga, come
+    // il salvataggio automatico con chi scrive piano o svelto; poi una
+    // quantità corretta (l'innesto chiede di ricalcolare) e una formula
+    // dopo. Si rilegge il file cella per cella.
+    let rows: [[&str; 4]; 5] = [
+        ["Voce", "Quantità", "Prezzo", "Totale"],
+        ["Farina", "2", "3", "=B2*C2"],
+        ["Farina integrale", "3", "4", "=B3*C3"],
+        ["Farina", "4", "5", "=B4*C4"],
+        ["Totale", "=SUM(B2:B4)", "Fari", "=SUM(D2:D4)"],
+    ];
+    let columns = ["A", "B", "C", "D", "E"];
+    // Scrive le celle date in una sessione nuova sui byte, e salva.
+    let write = |bytes: &[u8], cells: &[(usize, usize, &str)]| -> Vec<u8> {
+        let (mut provider, session) = open(bytes, &GridJournal::new());
+        let sheet = session.sheets[0].id.clone();
+        let mut revision = session.revision.clone();
+        for &(r, c, input) in cells {
+            let cell = GridCellKey {
+                sheet: sheet.clone(),
+                row: format!("r{r}"),
+                column: format!("c{c}"),
+            };
+            let patch = GridCellPatch {
+                cell,
+                before: None,
+                after: input.into(),
+            };
+            revision = apply(&mut provider, &session, &revision, vec![patch])
+                .unwrap_or_else(|error| panic!("{}{}: {error:?}", columns[c], r + 1))
+                .revision;
+        }
+        provider
+            .bytes_to_write(&session.instance, revision)
+            .unwrap_or_else(|error| panic!("salvataggio: {error:?}"))
+    };
+    let cells: Vec<(usize, usize, &str)> = rows
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| row.iter().enumerate().map(move |(c, input)| (r, c, *input)))
+        .collect();
+    let blank = fub_format_xlsx::blank("Conti.xlsx", "Foglio1").unwrap();
+    let per_cell = cells
+        .iter()
+        .fold(blank.clone(), |bytes, cell| write(&bytes, &[*cell]));
+    let per_row = cells.chunks(4).fold(blank, |bytes, row| write(&bytes, row));
+
+    for bytes in [per_cell, per_row] {
+        check_rows(&rows, &columns, &bytes);
+        for (a1, expected) in [
+            ("D2", 6.0),
+            ("D3", 12.0),
+            ("D4", 20.0),
+            ("B5", 9.0),
+            ("D5", 38.0),
+        ] {
+            assert_eq!(value(&bytes, a1), Value::Number(expected), "{a1}");
+        }
+        let corrected = write(&bytes, &[(2, 1, "6")]);
+        assert!(workbook_xml(&corrected).contains("fullCalcOnLoad=\"1\""));
+        let bytes = write(&corrected, &[(1, 4, "=SUM(D2:D4)")]);
+        let mut rows = rows;
+        rows[2][1] = "6";
+        check_rows(&rows, &columns, &bytes);
+        let read = fub_format_xlsx::read(&bytes).unwrap();
+        let formula = read.workbook.sheets[0]
+            .cell(CellRef::parse("E2").unwrap())
+            .and_then(|cell| cell.formula.as_ref())
+            .map(|formula| formula.text.clone());
+        assert_eq!(formula.as_deref(), Some("SUM(D2:D4)"));
+        // I valori in cache delle formule di prima restano quelli del file:
+        // il segno dice a chi apre di ricalcolarli.
+        assert!(workbook_xml(&bytes).contains("fullCalcOnLoad=\"1\""));
+    }
+}
+
+/// Ogni cella di `rows` nel file: la formula scritta, o il numero o il testo.
+fn check_rows(rows: &[[&str; 4]; 5], columns: &[&str], bytes: &[u8]) {
+    let read = fub_format_xlsx::read(bytes).unwrap();
+    let sheet = &read.workbook.sheets[0];
+    for (r, row) in rows.iter().enumerate() {
+        for (c, input) in row.iter().enumerate() {
+            let a1 = format!("{}{}", columns[c], r + 1);
+            let at = CellRef::parse(&a1).unwrap();
+            match input.strip_prefix('=') {
+                Some(formula) => assert_eq!(
+                    sheet
+                        .cell(at)
+                        .and_then(|cell| cell.formula.as_ref())
+                        .map(|f| f.text.as_str()),
+                    Some(formula),
+                    "formula in {a1}"
+                ),
+                None => match input.parse::<f64>() {
+                    Ok(expected) => assert_eq!(sheet.value(at), Value::Number(expected), "{a1}"),
+                    Err(_) => assert_eq!(sheet.value(at), Value::from(*input), "{a1}"),
+                },
+            }
+        }
+    }
+}
