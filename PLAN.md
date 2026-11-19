@@ -2481,7 +2481,7 @@ Fatto quando: spostare una scheda nella zona e rileggere il `.canvas`; la
 rotella che scorre la nota a riposo; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/core/cards src/canvas-edit.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 3915830d9
 
 ## T48 · Dalla nota alla lavagna, e ritorno
 
@@ -2678,7 +2678,7 @@ Fatto quando: un valore nel testo che cambia quando la cella cambia; la
 battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/cell-value.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base e1ab8eaae
 
 ## T54 · I grafici: dal foglio e da una tabella
 
