@@ -397,7 +397,7 @@ pub(crate) mod per_il_pdf {
     #[cfg(test)]
     pub(crate) use super::fonts::tests::{renamed, with_fs_type};
     pub(crate) use super::fonts::{
-        decode, describe, embeddable, instance, Coordinate, Style, MAX_FONT_BYTES,
+        decode, describe, embeddable, instance, same_family, Coordinate, Style, MAX_FONT_BYTES,
     };
     /// Il file di un carattere di Fub per nome (`inter-latin-wght-normal.woff2`).
     pub(crate) use super::typefaces::fub_file as file_di_fub;

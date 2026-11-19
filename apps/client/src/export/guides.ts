@@ -17,6 +17,7 @@
 // margini scritti a mano in un profilo.
 
 import { t, type Key } from "../i18n/strings";
+import { openLifetime } from "../ui/lifetime";
 import type { ExportProfile, Margins } from "./profile";
 
 /// Il margine più stretto e il più largo, in millimetri.
@@ -186,20 +187,19 @@ export function attachGuides(options: GuidesOptions): () => void {
       finish();
       options.change(start, false);
     };
+    // Gli ascolti del gesto vivono quanto il gesto: `finish` li chiude tutti.
+    const gesture = openLifetime();
     const finish = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
-      window.removeEventListener("keydown", cancel, true);
+      gesture.close();
       options.root.classList.remove("is-dragging");
       tip.hidden = true;
       stop = null;
     };
     stop = finish;
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
-    window.addEventListener("keydown", cancel, true);
+    gesture.listen(window, "pointermove", move);
+    gesture.listen(window, "pointerup", up);
+    gesture.listen(window, "pointercancel", up);
+    gesture.listen(window, "keydown", cancel, { capture: true });
     move(event);
   };
 

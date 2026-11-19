@@ -225,20 +225,21 @@ fn faccia_di(host: &dyn ReadApi, entry: &VaultEntry) -> Option<(String, FacciaDe
     ))
 }
 
-/// Le facce raccolte per famiglia (lo stesso nome, senza badare alle
-/// maiuscole), in ordine di nome.
+/// Le facce raccolte per famiglia (lo stesso nome col confronto dei browser,
+/// `same_family`: le maiuscole contano solo fuori dall'ASCII), nell'ordine
+/// del loro primo file: le facce arrivano già in ordine di percorso.
 fn per_famiglia(facce: Vec<(String, FacciaDelVault)>) -> Vec<CarattereDelVault> {
     let mut famiglie: Vec<(String, Vec<FacciaDelVault>)> = Vec::new();
     for (famiglia, faccia) in facce {
         match famiglie
             .iter_mut()
-            .find(|(nome, _)| nome.to_lowercase() == famiglia.to_lowercase())
+            .find(|(nome, _)| per_il_pdf::same_family(nome, &famiglia))
         {
             Some((_, facce)) => facce.push(faccia),
             None => famiglie.push((famiglia, vec![faccia])),
         }
     }
-    let mut caratteri: Vec<CarattereDelVault> = famiglie
+    let caratteri: Vec<CarattereDelVault> = famiglie
         .into_iter()
         .map(|(famiglia, facce)| {
             // Il file che il profilo nomina: un tondo, il più vicino al 400;
@@ -266,12 +267,6 @@ fn per_famiglia(facce: Vec<(String, FacciaDelVault)>) -> Vec<CarattereDelVault> 
             }
         })
         .collect();
-    caratteri.sort_by(|a, b| {
-        a.famiglia
-            .to_lowercase()
-            .cmp(&b.famiglia.to_lowercase())
-            .then_with(|| a.famiglia.cmp(&b.famiglia))
-    });
     caratteri
 }
 
