@@ -517,6 +517,21 @@ const theme = EditorView.baseTheme({
   ".tb-add[hidden]": { display: "none" },
 });
 
+/// La selezione tutta dentro una tabella montata entra nella sua griglia,
+/// sulla cella dove sta: `true` se una tabella l'ha presa.
+function enterSelectedGrid(view: EditorView): boolean {
+  const main = view.state.selection.main;
+  if (view.state.selection.ranges.length > 1) return false;
+  for (const controller of mounted(view)) {
+    const located = controller.locate();
+    if (!located || main.from <= located.from || main.to >= located.to) continue;
+    const cell = cellAtOffset(located.parsed, main.head - located.from);
+    if (cell) queueMicrotask(() => controller.grid.focus(cell));
+    return true;
+  }
+  return false;
+}
+
 /// La parte della Live che conosce le griglie: la tastiera per entrarci, la
 /// griglia attiva che si spegne quando il fuoco torna al testo, e la
 /// selezione portata in una tabella da fuori che vi entra sulla cella giusta.
@@ -534,15 +549,12 @@ export function tableGrids(callbacks: TableWidgetCallbacks): Extension {
       // selezionata — entra nella griglia sulla cella di chi l'ha portata lì.
       // Vale anche per il fuoco che torna al testo con la selezione ancora lì:
       // scrivere nella sorgente nascosta di una tabella non è un gesto possibile.
-      const main = view.state.selection.main;
       if (view.state.selection.ranges.length > 1) return;
-      for (const controller of mounted(view)) {
-        const located = controller.locate();
-        if (!located || main.from <= located.from || main.to >= located.to) continue;
-        const cell = cellAtOffset(located.parsed, main.head - located.from);
-        if (cell) queueMicrotask(() => controller.grid.focus(cell));
-        return;
-      }
+      // La griglia di una tabella appena scritta (il «/», la barra) nasce col
+      // disegno, che viene dopo i plugin: si cerca anche lì, prima della
+      // battuta che segue, perché il testo vada nella cella e non accanto
+      // alla tabella.
+      if (!enterSelectedGrid(view)) queueMicrotask(() => { if (view.hasFocus) enterSelectedGrid(view); });
     }
   });
   return [

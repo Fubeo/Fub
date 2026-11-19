@@ -7,8 +7,8 @@
 // dell'apertura torna col cursore sopra. Un `<details>` senza chiusura resta
 // sorgente, con l'ondulato.
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState, type Extension, MapMode, type Range, StateEffect, StateField, type Transaction } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import { EditorSelection, type EditorState, type Extension, MapMode, Prec, type Range, StateEffect, StateField, type Transaction, type TransactionSpec } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { Tree } from "@lezer/common";
 import { liveReveal } from "../../live-reveal";
 import { blockGesture } from "./block-gesture";
@@ -336,7 +336,43 @@ const theme = EditorView.baseTheme({
   ])),
 });
 
+/// Invio nel sommario di un ripiegabile: il sommario sta su una riga sola, e
+/// spezzarlo ne farebbe HTML che non si legge più come ripiegabile (IMP-620).
+/// Il cursore va al contenuto, fra le sue righe vuote, che nascono se mancano.
+/// `null` se il cursore non è in un sommario.
+export function summaryEnter(state: EditorState): TransactionSpec | null {
+  if (state.readOnly || state.selection.ranges.length > 1) return null;
+  const { from, to } = state.selection.main;
+  for (const pair of detailsOf(state).pairs) {
+    const summary = pair.head.summary;
+    if (!summary || from < pair.open.from + summary.from || to > pair.open.from + summary.to) continue;
+    const line = state.doc.lineAt(pair.open.from + summary.to);
+    const blank = (n: number) => n <= state.doc.lines && state.doc.line(n).text.trim() === "";
+    if (blank(line.number + 1) && blank(line.number + 2) && state.doc.line(line.number + 2).from < pair.close.from) {
+      return { selection: EditorSelection.cursor(state.doc.line(line.number + 2).from), scrollIntoView: true, userEvent: "select" };
+    }
+    const nl = state.lineBreak;
+    return {
+      changes: { from: line.to, insert: nl + nl + nl },
+      selection: EditorSelection.cursor(line.to + 2 * nl.length),
+      scrollIntoView: true,
+      userEvent: "input",
+    };
+  }
+  return null;
+}
+
+const summaryKeys = Prec.high(keymap.of([{
+  key: "Enter",
+  run: (view) => {
+    const spec = summaryEnter(view.state);
+    if (!spec) return false;
+    view.dispatch(spec);
+    return true;
+  },
+}]));
+
 /// Il ripiegabile della Live e dei Blocchi.
 export function detailsLive(): Extension {
-  return [toggled, htmlTops, decorations, gestures, theme];
+  return [toggled, htmlTops, decorations, gestures, theme, summaryKeys];
 }

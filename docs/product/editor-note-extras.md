@@ -42,7 +42,9 @@ In Scrittura resta il sommario con la freccia davanti, e il contenuto
 sta rientrato sotto; i tag e le due righe vuote non si vedono. La freccia apre
 e chiude soltanto nella vista e non scrive niente. Un ripiegabile comincia
 aperto se ha `open`, che «Aperto di norma» nel menu del blocco mette o toglie,
-e un cursore che entra nel contenuto lo apre. La Lettura e l'export lo rendono
+e un cursore che entra nel contenuto lo apre. Invio nel sommario non lo
+spezza: il cursore va al contenuto, fra le sue righe vuote, che nascono se
+mancano. La Lettura e l'export lo rendono
 come `<details>` vero. Ogni altra forma, come un sommario con altri tag o un
 `<details>` senza la sua chiusura, resta HTML; senza chiusura ha l'ondulato.
 

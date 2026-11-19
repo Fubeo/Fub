@@ -117,6 +117,19 @@ describe("i passi del «/»", () => {
     expect(done).toEqual([{ params: { template: "flowchart" } }]);
   });
 
+  it("il diagramma: chi scrive subito il sorgente prende il recinto vuoto, e la lettera passa al testo", () => {
+    const { done, opened } = step("diagram");
+    // `false`: la battuta non è del passo, prosegue nel recinto appena messo.
+    expect(opened.key(new KeyboardEvent("keydown", { key: "f" }))).toBe(false);
+    expect(done).toEqual([{ params: {} }]);
+  });
+
+  it("la tabella: ciò che si scrive non sceglie una cella", () => {
+    const { done, opened } = step("table");
+    expect(opened.key(new KeyboardEvent("keydown", { key: "f" }))).toBe(false);
+    expect(done).toEqual([]);
+  });
+
   it("il codice: si filtra scrivendo, Backspace cancella, un nome nuovo si usa com'è", () => {
     const { opened, done, key, type } = step("code");
     expect(opened.dom.querySelector(".slash-step-row")?.textContent).toBe("Testo semplice");

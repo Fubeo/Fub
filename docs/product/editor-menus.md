@@ -215,7 +215,10 @@ scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
   galleria dei tipi), Link a una nota e Incorpora (le note, poi una sezione),
   Blocco di codice (i linguaggi) e Diagramma (i modelli Mermaid) si scelgono
   nello stesso riquadro, sotto una testata col nome del passo; ⌫ o Esc tornano
-  all'elenco. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
+  all'elenco. Nella galleria dei diagrammi chi scrive subito il sorgente
+  (`flowchart TD`) lo scrive in un recinto `mermaid` vuoto. Una tabella
+  appena messa prende il fuoco sulla prima intestazione: si scrive nella
+  cella. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
   si trovano scrivendo («/blu»).
 - **Niente trovato.** Il pannello resta aperto e lo dice («Nessun blocco per
   «qwerty».»); la sola riga, accesa, cerca fra tutti i comandi, con Invio o
