@@ -1470,7 +1470,7 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
       t("pane.menu.focus"),
       t("pane.menu.split_right"),
       t("pane.menu.split_down"),
-      t("pane.print"),
+      t("pane.export_pdf"),
       t("pane.slides"),
       t("pane.recorder.open"),
       t("pane.menu.close_tab"),

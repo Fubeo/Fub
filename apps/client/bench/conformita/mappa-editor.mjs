@@ -510,6 +510,20 @@ export const VISTE = {
     },
     app: { scena: "schede-pdf-01-riposo" },
   },
+  /// Lo spazio «Esporta in PDF» (T70): il prototipo al passo «Esporta in
+  /// PDF: le pagine vere» (le sezioni Tema e Colori aperte), l'app dalla
+  /// scena dello spazio (le sezioni chiuse). Le teste si confrontano su una
+  /// sezione chiusa dai due lati, la Pagina.
+  "esporta-pdf": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+      },
+    },
+    app: { scena: "esporta-pdf" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1735,6 +1749,202 @@ export const PEZZI = [
     prototipo: '.scard[data-kind="doc"] .docp p:not(.r)',
     app: '.live-card[data-card-kind="document"] .canvas-card-document-content > p',
     proprieta: ["margin", "color"],
+  },
+
+  // ── lo spazio «Esporta in PDF» (T70) ────────────────────────────────────
+  // Il prototipo lo mette sopra tutta la sua finestra, l'app sotto la barra
+  // del titolo: si confrontano i pezzi, non dove sta lo spazio. Il foglio
+  // non confronta il fondo: è la carta del tema di stampa, non della pelle.
+  {
+    id: "esporta.spazio",
+    vista: "esporta-pdf",
+    prototipo: ".px",
+    app: ".export-space",
+    proprieta: ["color", "background", "display"],
+  },
+  {
+    id: "esporta.barra",
+    vista: "esporta-pdf",
+    prototipo: ".px-top",
+    app: ".export-top",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.indietro",
+    vista: "esporta-pdf",
+    prototipo: ".px-back",
+    app: ".export-back",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.titolo",
+    vista: "esporta-pdf",
+    prototipo: ".px-tt",
+    app: ".export-title",
+    proprieta: [...BASE, "display", "align-items"],
+  },
+  {
+    id: "esporta.titolo-nome",
+    vista: "esporta-pdf",
+    prototipo: ".px-tt b",
+    app: ".export-title-name",
+    proprieta: ["font", "color", "white-space"],
+  },
+  {
+    id: "esporta.titolo-nota",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-tt span",
+    app: ".export-title-note",
+    proprieta: ["font", "color", "white-space", "text-overflow"],
+  },
+  {
+    id: "esporta.zoom",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom",
+    app: ".export-zoom",
+    proprieta: ["color", "display", "align-items"],
+  },
+  {
+    id: "esporta.zoom-pulsante",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom button",
+    app: ".export-zoom-button",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "esporta.zoom-valore",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom output",
+    app: ".export-zoom-value",
+    proprieta: ["font", "color", "min-width", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.viste",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-views",
+    app: ".export-views",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.vista",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: '.px-views button[aria-pressed="false"]',
+    app: '.export-segment[aria-pressed="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.vista-premuta",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: '.px-views button[aria-pressed="true"]',
+    app: '.export-segment[aria-pressed="true"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.profilo",
+    vista: "esporta-pdf",
+    prototipo: ".px-prof",
+    app: ".export-profile",
+    proprieta: [...BASE, "height", "max-width", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.esporta",
+    vista: "esporta-pdf",
+    prototipo: ".px-go",
+    app: ".export-go",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.palco",
+    vista: "esporta-pdf",
+    prototipo: ".px-stage",
+    app: ".export-stage",
+    proprieta: ["padding", "background", "overflow-y"],
+  },
+  {
+    id: "esporta.pagine",
+    vista: "esporta-pdf",
+    prototipo: ".px-doc",
+    app: ".export-doc",
+    proprieta: ["gap", ...ALLINEAMENTO, "flex-wrap"],
+  },
+  {
+    id: "esporta.foglio",
+    vista: "esporta-pdf",
+    prototipo: ".px-slot",
+    app: ".export-slot",
+    proprieta: ["border-radius", "box-shadow"],
+  },
+  {
+    id: "esporta.pannello",
+    vista: "esporta-pdf",
+    prototipo: ".px-side",
+    app: ".export-side",
+    proprieta: ["background", "box-shadow", "width"],
+  },
+  {
+    id: "esporta.sezione",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"]',
+    app: '.export-section[data-section="pagina"]',
+    proprieta: ["border", "background"],
+  },
+  {
+    id: "esporta.sezione-testa",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh',
+    app: '.export-section[data-section="pagina"] .export-section-head',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.sezione-nome",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh b',
+    app: '.export-section[data-section="pagina"] .export-section-name',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.sezione-riassunto",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh span',
+    app: '.export-section[data-section="pagina"] .export-section-summary',
+    proprieta: ["font", "color", "text-align", "white-space", "text-overflow"],
+  },
+  {
+    id: "esporta.banda",
+    vista: "esporta-pdf",
+    prototipo: ".px-band",
+    app: ".export-band",
+    proprieta: [...BASE, "height", "align-items", "white-space"],
+  },
+  {
+    id: "esporta.banda-pagine",
+    vista: "esporta-pdf",
+    prototipo: "#px-info b",
+    app: ".export-band-pages",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.banda-ms",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: "#px-info .ms",
+    app: ".export-band-ms",
+    proprieta: ["font", "color", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.banda-suggerimento",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-hint",
+    app: ".export-band-hint",
+    proprieta: ["font", "color", "text-overflow"],
   },
 ];
 

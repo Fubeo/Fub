@@ -1914,6 +1914,20 @@ function registerCommands(): void {
     run: () => void chooseExport(layout.focus),
   });
   registerShellCommand({
+    id: "shell.doc.export_pdf",
+    title: "commands.doc.export_pdf",
+    description: "commands.doc.export_pdf.desc",
+    layer: "document",
+    available: () => {
+      const pane = panes.get(layout.focus);
+      return pane?.shown?.k === "doc" && exportableNote(pane.surface);
+    },
+    run: () => {
+      const pane = panes.get(layout.focus);
+      if (pane?.shown?.k === "doc" && exportableNote(pane.surface)) void presentExport(pane, pane.shown.doc);
+    },
+  });
+  registerShellCommand({
     id: "shell.doc.copy_anchor_link",
     title: "commands.doc.copy_anchor_link",
     description: "commands.doc.copy_anchor_link.desc",
@@ -3699,6 +3713,7 @@ function releaseSurfaceExtras(r: Pane): void {
   r.disposeSlides = null;
   r.disposePrint?.();
   r.disposePrint = null;
+  if (openExport?.pane === r) openExport.close();
 }
 
 // --- le superfici da parte (`ParkedSurface`) --------------------------------
@@ -4129,6 +4144,58 @@ export async function presentPrint(r: Pane, doc: string): Promise<void> {
     r.disposePrint = stop;
   } catch (error) {
     notify(t("document.print_unavailable", { reason: errorText(error) }), "guasto");
+  }
+}
+
+const exportSpacePart = lazyPart(() => import("../export/space"));
+
+/// Lo spazio «Esporta in PDF» impagina una nota Markdown: la resa per la
+/// stampa di una tela è già un foglio suo.
+function exportableNote(surface: EditorSurface | null | undefined): boolean {
+  return surface?.printable === true && surface.family === "text" && surface.profile === "markdown";
+}
+
+/// Lo spazio «Esporta in PDF» aperto, e il riquadro della sua nota: uno solo
+/// per finestra, perché prende la finestra intera.
+let openExport: { pane: Pane; close: () => void } | null = null;
+
+/// Apre lo spazio «Esporta in PDF» sulla nota del riquadro (E28, T70): la
+/// salva prima, perché la resa per la stampa il core la legge dal disco, e
+/// la segue mentre cambia in un altro riquadro.
+export async function presentExport(r: Pane, doc: string): Promise<void> {
+  try {
+    await documentSessions.flush(doc);
+    const declared = await syntaxForms(doc).then(
+      (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
+      () => new Set<string>(),
+    );
+    const { openExportSpace } = await exportSpacePart.load();
+    if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+    openExport?.close();
+    const space = openExportSpace({
+      doc,
+      title: pageName(doc),
+      render: renderPrint,
+      mount: (container, rendered) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }),
+      // Il disposer torna allo spazio, che lo chiude con la sua `Lifetime`.
+      follow: (changed) => {
+        const unsubscribe = documentSessions.subscribe((event) => {
+          if (event.id !== doc) return;
+          if (event.kind === "changed" || event.kind === "saved") changed(event.kind);
+        });
+        return unsubscribe;
+      },
+      save: async () => {
+        await documentSessions.flush(doc);
+      },
+      onClose: () => {
+        if (openExport?.close === close) openExport = null;
+      },
+    });
+    const close = () => space.close();
+    openExport = { pane: r, close };
+  } catch (error) {
+    notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
   }
 }
 

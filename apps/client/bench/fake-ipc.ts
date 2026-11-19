@@ -1848,6 +1848,13 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     const html = OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? "");
     return { kind: "render_preview", value: { html, parts: [] } };
   },
+  // La resa per la stampa (lo spazio «Esporta in PDF», T70; «Stampa»): la
+  // stessa resa della lettura, come la darebbe il kernel per la carta.
+  render_print: (q) => {
+    const doc = (q as { doc: string }).doc;
+    const html = OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? "");
+    return { kind: "render_print", value: { html, parts: [] } };
+  },
   render_embed: (q) => {
     if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
     // Una Base incorporata (`?base=nota`, T18): il blocco `fub:base` che il

@@ -21,6 +21,7 @@ import { FRAME } from "./anatomia/frame";
 import { GRAPH } from "./anatomia/graph";
 import { KIT } from "./anatomia/kit";
 import { LAUNCHER } from "./anatomia/launcher";
+import { EXPORT } from "./anatomia/export";
 import { LIVE_CARDS } from "./anatomia/live-cards";
 import { MEDIA } from "./anatomia/media";
 import { MATH } from "./anatomia/math";
@@ -61,6 +62,7 @@ const DECLARED: readonly PartAnatomy[] = [
   DIAGRAMS,
   LAUNCHER,
   CENTRES,
+  EXPORT,
   DRAW_DIALOGS,
   SETTINGS,
   WELCOME,

@@ -37,6 +37,7 @@ export const ORDER = [
   "diagrams",
   "launcher",
   "centres",
+  "export",
   "draw-dialogs",
   "settings",
   "welcome",

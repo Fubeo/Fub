@@ -5000,7 +5000,7 @@ describe("portare a schermo un punto", () => {
     const { openDocument } = await import("./panels/document");
     const { t } = await import("./i18n/strings");
     const { closeContextMenu } = await import("./ui/menu");
-    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print")];
+    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print"), t("pane.export_pdf")];
     const offered = async (): Promise<string[]> => {
       panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
       await settle();
@@ -5012,7 +5012,8 @@ describe("portare a schermo un punto", () => {
       return gestures.filter((gesture) => labels.includes(gesture));
     };
 
-    expect(await offered(), "la nota Markdown").toEqual(gestures);
+    // Una nota Markdown si stampa dallo spazio «Esporta in PDF».
+    expect(await offered(), "la nota Markdown").toEqual([t("pane.recorder.open"), t("pane.slides"), t("pane.export_pdf")]);
     await openDocument("lavagna.canvas");
     await settle();
     // La tela si stampa dal suo provider; non ha una resa da presentare né
@@ -5060,7 +5061,7 @@ describe("portare a schermo un punto", () => {
     }
   });
 
-  it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
+  it("la stampa dallo spazio «Esporta in PDF» salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
     const host = await start(VAULT);
     const { t } = await import("./i18n/strings");
     const previous = Object.getOwnPropertyDescriptor(window, "print");
@@ -5074,8 +5075,12 @@ describe("portare a schermo un punto", () => {
       panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
       await settle();
       const entry = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
-        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.print"));
+        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.export_pdf"));
       entry!.click();
+      await waitFor("lo spazio si apre", () => document.querySelector(".export-print") !== null);
+      // La resa che si impagina ha la riga: la nota è stata salvata prima.
+      await waitFor("la resa arriva", () => document.querySelector(".export-measure")?.textContent?.includes("Riga appena scritta.") === true);
+      document.querySelector<HTMLButtonElement>(".export-print")!.click();
       await waitFor("la stampa parte", () => print.mock.calls.length > 0);
 
       const written = host.calls.findIndex((call) => call.gate === "writeDocument");
@@ -5083,14 +5088,69 @@ describe("portare a schermo un punto", () => {
         call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
       expect(written).toBeGreaterThanOrEqual(0);
       expect(rendered).toBeGreaterThan(written);
-      expect(document.querySelector(".print-host .print-body")?.textContent).toContain("Riga appena scritta.");
+      // Le stesse pagine dello spazio, senza zoom.
+      expect(document.querySelectorAll(".print-host > .print-sheet")).toHaveLength(document.querySelectorAll(".export-slot").length);
+      expect(document.querySelector(".print-host")?.textContent).toContain("Benvenuto");
 
       window.dispatchEvent(new Event("afterprint"));
       expect(document.querySelector(".print-host")).toBeNull();
+      document.querySelector(".export-space")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.querySelector(".export-space")).toBeNull();
     } finally {
       if (previous) Object.defineProperty(window, "print", previous);
       else Reflect.deleteProperty(window, "print");
     }
+  });
+
+  it("«Esporta in PDF…» salva, apre lo spazio sopra la nota, cambia vista e con Esc torna alla nota", async () => {
+    const host = await start(VAULT);
+    const { t } = await import("./i18n/strings");
+    typeInEditor("Riga per il PDF.");
+    expect(host.atGate("writeDocument")).toHaveLength(0);
+    const opener = panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!;
+    opener.focus();
+    opener.click();
+    await settle();
+    const labels = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].map((button) => button.querySelector(".menu-label")?.textContent);
+    // Al posto di «Stampa», che sta nello spazio.
+    expect(labels).toContain(t("pane.export_pdf"));
+    expect(labels).not.toContain(t("pane.print"));
+    [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
+      .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.export_pdf"))!.click();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+
+    const space = document.querySelector<HTMLElement>(".export-space")!;
+    expect(space.getAttribute("role")).toBe("dialog");
+    expect(document.getElementById("workspace")!.inert).toBe(true);
+    // La nota salvata prima della resa, che il core legge dal disco.
+    const written = host.calls.findIndex((call) => call.gate === "writeDocument");
+    const rendered = host.calls.findIndex((call) =>
+      call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
+    expect(written).toBeGreaterThanOrEqual(0);
+    expect(rendered).toBeGreaterThan(written);
+    await waitFor("le pagine ci sono", () => space.querySelector(".export-slot") !== null);
+    expect(space.querySelector(".export-title-note")?.textContent).not.toBe("");
+
+    space.querySelector<HTMLButtonElement>('.export-segment[data-view="due"]')!.click();
+    expect(space.querySelector(".export-doc")?.getAttribute("data-view")).toBe("due");
+    expect(space.querySelector('.export-segment[data-view="due"]')?.getAttribute("aria-pressed")).toBe("true");
+
+    space.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.querySelector(".export-space")).toBeNull();
+    expect(document.querySelector(".export-measure")).toBeNull();
+    expect(document.getElementById("workspace")!.inert).toBe(false);
+    expect(panes()[0]!.contains(document.activeElement)).toBe(true);
+  });
+
+  it("lo spazio «Esporta in PDF» si apre anche dallo spazio dei comandi", async () => {
+    await start(VAULT);
+    const { allCommands } = await import("./ui/commands");
+    const command = allCommands().find((entry) => entry.id === "shell.doc.export_pdf")!;
+    expect(command.unavailable ?? null).toBeNull();
+    await command.run!();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+    document.querySelector<HTMLButtonElement>(".export-back")!.click();
+    expect(document.querySelector(".export-space")).toBeNull();
   });
 });
 
