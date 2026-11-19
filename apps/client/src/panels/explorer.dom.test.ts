@@ -514,3 +514,60 @@ describe("le azioni del titolo", () => {
     expect(submenu).toBeDefined();
   });
 });
+
+describe("«Sposta in…» con molte note scelte", () => {
+  /// Più schede di quante ne arrivavano (14 su 60, IMP-3804) alla radice, e la
+  /// cartella che le aspetta.
+  const NAMES = Array.from({ length: 24 }, (_, i) => `Cliente ${String(i + 1).padStart(2, "0")}.md`);
+  const many = (): Record<string, string> => {
+    const files: Record<string, string> = { "Clienti/Indice.md": "# Indice\n" };
+    for (const name of NAMES) files[name] = `# ${name}\n`;
+    return files;
+  };
+  const ctrlClick = (path: string): void => {
+    row(path)!.querySelector<HTMLElement>(".row-name")!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true, detail: 1 }),
+    );
+  };
+  const picker = () => document.querySelector<HTMLInputElement>('.shell-dialog input[role="combobox"]');
+  /// Gli avvisi detti finora, dal più vecchio.
+  const notices = async (): Promise<string[]> => (await import("../ui/notify")).recentNotices().map((n) => n.text).reverse();
+
+  async function moveAllInto(folder: string): Promise<void> {
+    for (const name of NAMES) ctrlClick(name);
+    await quiet();
+    expect(document.querySelector(".tree-selection-count")!.textContent).toContain("24");
+    document.querySelector<HTMLElement>(".tree-selection-move")!.click();
+    await waitFor("il selettore della cartella", () => picker() !== null);
+    picker()!.value = folder;
+    picker()!.dispatchEvent(new Event("input"));
+    picker()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  }
+
+  it("le sposta tutte, e alla fine lo dice una volta", async () => {
+    const host = await start({ file: many(), resources: {} });
+    await moveAllInto("Clienti");
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("24 note spostate in Clienti"), 15_000);
+    expect(NAMES.filter((name) => !(`Clienti/${name}` in host.files()))).toEqual([]);
+    expect(Object.keys(host.files()).filter((path) => !path.includes("/"))).toEqual([]);
+    const said = await notices();
+    expect(said.filter((text) => text.startsWith("Sposto 24 note"))).toHaveLength(1);
+    expect(said.filter((text) => text.includes("note spostate"))).toEqual(["24 note spostate in Clienti"]);
+  });
+
+  it("una nota che non si sposta resta dov'è, intera, e si dice col suo nome", async () => {
+    const files = many();
+    // La destinazione di una è già occupata: quella non può arrivare.
+    files["Clienti/Cliente 07.md"] = "# Un'altra scheda\n";
+    const host = await start({ file: files, resources: {} });
+    await moveAllInto("Clienti");
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("23 note su 24 spostate in Clienti"), 15_000);
+    expect(host.files()["Cliente 07.md"]).toBe("# Cliente 07.md\n");
+    expect(host.files()["Clienti/Cliente 07.md"]).toBe("# Un'altra scheda\n");
+    expect(NAMES.filter((name) => name !== "Cliente 07.md" && !(`Clienti/${name}` in host.files()))).toEqual([]);
+    const said = await notices();
+    expect(said.filter((text) => text.startsWith("Non riesco a spostare"))).toEqual([
+      expect.stringContaining("Non riesco a spostare Cliente 07.md in Clienti:"),
+    ]);
+  });
+});

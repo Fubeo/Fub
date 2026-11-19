@@ -1864,6 +1864,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const to = String(args?.to);
         const before = docs.get(from);
         if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        // Come il kernel, una destinazione occupata è un rifiuto e mai una
+        // sovrascrittura: la nota che c'era resta, e quella spostata pure.
+        if (to !== from && docs.has(to)) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
         // Come il kernel, la rinomina si porta dietro i wikilink che la
         // nominavano (anche quelli della nota stessa): le note toccate
         // cambiano revisione e lo dicono con `document_changed`.
