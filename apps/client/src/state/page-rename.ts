@@ -29,12 +29,32 @@ export const NAME_FAULT: Record<NameFault, Key> = {
 };
 
 /// `p/Nome.md` con un altro nome di pagina: stessa cartella, stessa estensione.
+/// Un titolo con delle cartelle sposta il file: vedi [`placedTitle`].
 export function renamedPath(from: string, name: string): string {
   const slash = from.lastIndexOf("/");
-  const dir = slash === -1 ? "" : from.slice(0, slash + 1);
   const dot = from.lastIndexOf(".");
   const ext = dot > slash ? from.slice(dot) : "";
-  return normalizedName(`${dir}${name}${ext}`);
+  return normalizedName(`${placedTitle(slash === -1 ? "" : from.slice(0, slash), name)}${ext}`);
+}
+
+/// Il percorso, dalla radice del vault, che un titolo scritto in una pagina
+/// della cartella `folder` nomina.
+///
+/// Un nome semplice resta nella cartella, e così un percorso che parte da lì
+/// (`Archivio/Nuova` in `Progetti` è `Progetti/Archivio/Nuova`). Due modi di
+/// scrivere il percorso **dalla radice** non si annidano (IMP-2800): uno «/»
+/// in testa (`/Archivio/Nuova`), e il percorso che comincia con la cartella
+/// stessa, come lo mostra la barra sopra il titolo: in `Progetti/Tesi` il
+/// titolo `Progetti/Tesi/Villa` è `Progetti/Tesi/Villa`, non
+/// `Progetti/Tesi/Progetti/Tesi/Villa`.
+export function placedTitle(folder: string, typed: string): string {
+  const name = typed.trim();
+  if (name.startsWith("/")) return name.replace(/^\/+/, "");
+  if (folder === "") return name;
+  const here = normalizedName(folder);
+  const written = normalizedName(name);
+  if (written.startsWith(`${here}/`)) return written;
+  return `${folder}/${name}`;
 }
 
 /// Che cosa cambia nome quando il titolo di `doc` diventa `name`: il file, o la
@@ -46,8 +66,7 @@ export type PageRename =
 export function pageRenameTarget(doc: string, name: string): PageRename {
   if (isFolderPage(doc)) {
     const folder = parentOf(doc);
-    const up = parentOf(folder);
-    return { kind: "folder", from: folder, to: normalizedName(up ? `${up}/${name}` : name) };
+    return { kind: "folder", from: folder, to: normalizedName(placedTitle(parentOf(folder), name)) };
   }
   return { kind: "file", from: doc, to: renamedPath(doc, name) };
 }

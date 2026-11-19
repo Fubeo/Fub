@@ -164,9 +164,22 @@ scritto da solo come testo (`tipo: "[[Tipi/Libro]]"`) si mostra come una
 Relazione anche senza tipo nel registro. In sola lettura il nome apre la
 nota e niente si scrive.
 
-Rinominare una nota legata **non** aggiorna le Relazioni che la nominano: i
-link del frontmatter non sono archi del grafo dei link, e il link resta
-rotto finché non lo si riscrive.
+Rinominare o spostare una nota legata (`note.rename`, e `folder.rename` per
+le voci di una cartella) riscrive anche i link delle proprietà che la
+nominano: un link solo, una lista di link, o un testo che è soltanto un
+`[[…]]`, in qualunque chiave. I link del frontmatter non sono archi del
+grafo dei link, quindi non li riscrive la rinomina del kernel: li cerca il
+comando prima di rinominare, col nome vecchio, e li riscrive dopo
+(`fub_features::commands::relink`). Le regole sono quelle dei link del
+corpo: si riscrive un link che arrivava per nome o per percorso, mai per
+alias; il nome resta un nome e il percorso un percorso, col percorso se il
+nome nuovo è ambiguo; cambia soltanto la pagina dentro `[[…]]` (titolo,
+blocco, testo mostrato, virgolette e resto dello YAML restano). Ogni nota
+si scrive con la sua revisione, nello stesso annullamento della rinomina.
+Una nota cambiata nel frattempo, o un nome nuovo con caratteri che in una
+proprietà cambierebbero il link (`"`, `|`, `#`, `[`…), lascia il link col
+nome vecchio: la rinomina riesce, e l'esito nomina quelle note
+(`partial`), che l'app mostra come un avviso di guasto.
 
 ### Collegata da
 

@@ -70,6 +70,30 @@ describe("che cosa cambia nome", () => {
     expect(renamedPageName("Viaggi/Roma/_index.md", "Napoli")).toBe("Napoli");
   });
 
+  it("un titolo con cartelle parte dalla cartella della nota, e non annida il percorso dalla radice (IMP-2800)", () => {
+    const fonti = "Progetti/Tesi/Fonti/Villa, R.md";
+    // Il percorso intero, come lo mostra la barra: la nota resta dov'è.
+    expect(pageRenameTarget(fonti, "Progetti/Tesi/Fonti/Villa, R")).toEqual({ kind: "file", from: fonti, to: fonti });
+    expect(pageRenameTarget(fonti, "Progetti/Tesi/Fonti/Rossi")).toEqual({ kind: "file", from: fonti, to: "Progetti/Tesi/Fonti/Rossi.md" });
+    // Lo «/» in testa è la radice del vault.
+    expect(pageRenameTarget(fonti, "/Archivio/Villa, R")).toEqual({ kind: "file", from: fonti, to: "Archivio/Villa, R.md" });
+    expect(pageRenameTarget(fonti, "/Villa, R")).toEqual({ kind: "file", from: fonti, to: "Villa, R.md" });
+    // Un percorso che non parte dalla cartella resta relativo a lei.
+    expect(pageRenameTarget(fonti, "Lette/Villa, R")).toEqual({ kind: "file", from: fonti, to: "Progetti/Tesi/Fonti/Lette/Villa, R.md" });
+    // Alla radice è lo stesso percorso.
+    expect(pageRenameTarget("Ricerca.md", "Area/Esami/Ricerca")).toEqual({ kind: "file", from: "Ricerca.md", to: "Area/Esami/Ricerca.md" });
+    // La pagina di una cartella: il percorso dalla radice nomina la cartella.
+    expect(pageRenameTarget("Viaggi/Roma/_index.md", "Viaggi/Napoli")).toEqual({ kind: "folder", from: "Viaggi/Roma", to: "Viaggi/Napoli" });
+    expect(pageRenameTarget("Viaggi/Roma/_index.md", "/Napoli")).toEqual({ kind: "folder", from: "Viaggi/Roma", to: "Napoli" });
+    expect(renamedPageName(fonti, "/Archivio/Villa, R")).toBe("Villa, R");
+  });
+
+  it("dalla radice la rinomina passa davvero, e il percorso ripetuto non tocca niente", async () => {
+    expect(await renamePage("Progetti/Tesi/Fonti/Villa, R.md", "/Archivio/Villa, R")).toBeNull();
+    expect(await renamePage("Progetti/Tesi/Fonti/Villa, R.md", "Progetti/Tesi/Fonti/Villa, R")).toBeNull();
+    expect(world.files).toEqual([["Progetti/Tesi/Fonti/Villa, R.md", "Archivio/Villa, R.md"]]);
+  });
+
   it("un `_index` alla radice è una nota come le altre", () => {
     expect(pageRenameTarget("_index.md", "Casa")).toEqual({ kind: "file", from: "_index.md", to: "Casa.md" });
   });

@@ -35,6 +35,12 @@ e questa, Ctrl-Spazio fa il Ctrl-clic da tastiera. La barra della scelta sta
 sotto l'albero, ferma in fondo alla colonna, così comparendo non sposta le
 righe sotto il puntatore: dice quante note sono scelte e offre «Sposta in…»,
 «In una cartella nuova», «Sposta nel cestino» e «Deseleziona»; Esc la azzera.
+Più note spostate insieme (dalla barra, dal trascinamento o in una cartella
+nuova) vanno una alla volta: un avviso dice a che punto sono («Sposto 60 note
+in Clienti: 12 di 60…»), e alla fine uno solo dice quante sono arrivate. Una
+nota che non si può spostare (la destinazione ha già una nota con quel nome,
+per esempio) resta dov'era, intera, e ha il suo avviso col nome e il motivo;
+il riepilogo dice quante restano indietro.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.

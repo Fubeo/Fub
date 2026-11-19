@@ -1377,7 +1377,7 @@ async function pickMoveFolder(id: string): Promise<void> {
 /// Lo stesso selettore per più note insieme (la scelta multipla dell'albero):
 /// le cartelle escluse sono quelle che non portano da nessuna parte per **tutte**
 /// le note (la casa comune, le note stesse), e lo spostamento va in fila — un
-/// rifiuto di una non ferma le altre, perché `moveIntoFolder` lo dice da sé.
+/// rifiuto di una non ferma le altre, e `moveNotesInto` le dice tutte.
 async function pickMoveFolders(ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return;
   // Un selettore con filtro e non un menu contestuale: le cartelle di un vault
@@ -1403,10 +1403,12 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
     more: other,
   });
   if (choice === null) return;
+  const notes: string[] = [];
   for (const id of ids) {
     if (folderRowOf(id)) await moveFolderInto(id, choice);
-    else await moveIntoFolder(id, choice);
+    else notes.push(id);
   }
+  await moveNotesInto(notes, choice);
 }
 
 /// «In una cartella nuova»: la cartella nasce nella casa comune delle note
@@ -1427,7 +1429,7 @@ async function groupIntoNewFolder(ids: readonly string[]): Promise<void> {
   }
   for (const folder of [parent, wanted]) if (folder) state.expanded.add(folder);
   saveExpanded();
-  for (const id of ids) await moveIntoFolder(id, wanted);
+  await moveNotesInto(ids, wanted);
   await refreshFromKernel(true);
 }
 
@@ -2807,38 +2809,74 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
   if (to === id || moving.has(id)) return;
   if (await ensureSaved()) return;
-  moving.add(id);
-  markMoving(id, true);
-  try {
-    const outcome = await renameKeepingBuffer(id, to);
-    if (outcome.kind === "collision") {
-      notify(
-        t("explorer.move_failed", {
-          doc: id,
-          folder: folderPath || t("explorer.root"),
-          reason: t("explorer.destination_open"),
-        }),
-        "guasto",
-      );
-      return;
-    }
-  } catch (e) {
-    notify(
-      t("explorer.move_failed", {
-        doc: id,
-        folder: folderPath || t("explorer.root"),
-        reason: errorText(e),
-      }),
-      "guasto",
-    );
+  const refused = await moveNote(id, folderPath);
+  if (refused !== null) {
+    notify(t("explorer.move_failed", { doc: id, folder: folderPath || t("explorer.root"), reason: refused }), "guasto");
     return;
-  } finally {
-    moving.delete(id);
-    markMoving(id, false);
   }
   if (folderPath) state.expanded.add(folderPath);
   saveExpanded();
   await refreshDocuments();
+}
+
+/// Lo spostamento di una nota, senza avvisi: `null` se è al posto nuovo (o
+/// c'era già), altrimenti il motivo per cui è rimasta dov'era. Chi chiama ha
+/// già messo in salvo i buffer, e lo dice lui.
+async function moveNote(id: string, folderPath: string): Promise<string | null> {
+  const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
+  if (to === id) return null;
+  if (moving.has(id)) return t("explorer.move_in_flight");
+  moving.add(id);
+  markMoving(id, true);
+  try {
+    const outcome = await renameKeepingBuffer(id, to);
+    return outcome.kind === "collision" ? t("explorer.destination_open") : null;
+  } catch (e) {
+    return errorText(e);
+  } finally {
+    moving.delete(id);
+    markMoving(id, false);
+  }
+}
+
+/// Più note nella stessa cartella (la scelta dell'albero, il trascinamento di
+/// una scelta, «In una cartella nuova»): una alla volta, perché ogni rinomina
+/// riscrive i link delle altre, ma **un racconto solo** (IMP-3804). Mentre
+/// vanno, un avviso dice a che punto sono; alla fine dice quante sono
+/// arrivate, e ogni nota rimasta indietro ha il suo avviso col suo motivo.
+/// Nessuna resta indietro in silenzio, e nessuna si perde: una nota che non
+/// si sposta è ancora dov'era, col suo nome.
+async function moveNotesInto(ids: readonly string[], folderPath: string): Promise<void> {
+  if (ids.length === 0) return;
+  if (ids.length === 1) {
+    await moveIntoFolder(ids[0]!, folderPath);
+    return;
+  }
+  if (await ensureSaved()) return;
+  const folder = folderPath || t("explorer.root");
+  const total = String(ids.length);
+  const progress = notify(t("explorer.moving_many", { n: total, folder, done: "0" }));
+  const refused: Array<{ id: string; reason: string }> = [];
+  let done = 0;
+  try {
+    for (const id of ids) {
+      const reason = await moveNote(id, folderPath);
+      if (reason === null) done += 1;
+      else refused.push({ id, reason });
+      progress.rewrite(t("explorer.moving_many", { n: total, folder, done: String(done + refused.length) }));
+    }
+  } finally {
+    progress.withdraw();
+    if (folderPath) state.expanded.add(folderPath);
+    saveExpanded();
+    await refreshDocuments();
+  }
+  if (refused.length === 0) {
+    notify(t("explorer.moved_many", { n: String(done), folder }));
+    return;
+  }
+  notify(t("explorer.moved_some", { done: String(done), n: total, folder, left: String(refused.length) }), "guasto");
+  for (const { id, reason } of refused) notify(t("explorer.move_failed", { doc: id, folder, reason }), "guasto");
 }
 
 /// Progresso dello spostamento sulla riga (U11): `aria-busy` finché il rename
@@ -2879,11 +2917,13 @@ function wireRootDropTarget(lifetime: Lifetime): void {
 /// nella scelta, tutte le scelte, una alla volta e con lo stesso comando del
 /// menu. Una cartella non entra in sé stessa né in una figlia: la si salta.
 async function moveGroupInto(dragged: NonNullable<typeof drag>, folder: string): Promise<void> {
+  const notes: string[] = [];
   for (const path of dragged.group) {
     if (path === folder || folder.startsWith(`${path}/`) || parentOf(path) === folder) continue;
     if (folderRowOf(path) || (path === dragged.path && dragged.kind === "folder")) await moveFolderInto(path, folder);
-    else await moveIntoFolder(path, folder);
+    else notes.push(path);
   }
+  await moveNotesInto(notes, folder);
   if (dragged.group.length > 1) selection?.clear();
 }
 

@@ -90,10 +90,14 @@ pub(super) fn notes_create(
     let initial = initial_properties(args.text("properties"))?;
     let extension = crate::formats::new_note_extension(host)?;
     // «Nuova nota qui»: la cartella scelta vale al posto di quella configurata.
-    let folder = args
-        .text("folder")
-        .map(fub_abi::rules::folders::normalized)
-        .filter(|f| !f.is_empty());
+    // Senza una scelta vale `files.new-note-folder`, come per il kernel: la
+    // barra laterale e Ctrl+N arrivano qui senza cartella (IMP-3800). Una
+    // cartella data vuota è la radice scelta, non «nessuna scelta».
+    let folder = match args.text("folder") {
+        Some(chosen) => fub_abi::rules::folders::normalized(chosen).to_string(),
+        None => crate::formats::new_note_folder(&*host),
+    };
+    let folder = Some(folder).filter(|f| !f.is_empty());
     let placed = |name: &str| match &folder {
         Some(folder) if !name.contains('/') => format!("{folder}/{name}"),
         _ => name.to_string(),
@@ -224,10 +228,22 @@ pub(super) fn notes_rename(
                 }
             }
         }
+        // E quelle che la nominano in una proprietà: anche lì si riscrive.
+        let found = super::relink::property_links_to(&*host, std::slice::from_ref(&doc))?;
+        for source in super::relink::property_link_sources(&found) {
+            if !docs.contains(&source) {
+                docs.push(source);
+            }
+        }
         return Ok(plan(two(P_RENAME, doc.as_str(), to.as_str()), docs));
     }
 
+    // I link delle proprietà si cercano col nome vecchio, che dopo la rinomina
+    // non porta più qui; si riscrivono dopo, col nome nuovo (IMP-2805).
+    let found = super::relink::property_links_to(&*host, std::slice::from_ref(&doc))?;
     host.rename_document(&doc, &to)?;
+    let failures =
+        super::relink::rewrite_property_links(host, &found, &[(doc.clone(), to.clone())]);
     // L'inverso di una rinomina è **la rinomina all'incontrario**, e con essa
     // torna indietro gratis anche tutto ciò che la rinomina si era portata
     // dietro: i wikilink riscritti nelle sorgenti, l'organizzazione, lo stato
@@ -250,7 +266,24 @@ pub(super) fn notes_rename(
     );
     // Nessun `Navigate`: chi guardava quella nota la segue attraverso
     // `document-renamed`, e chi ne guardava un'altra non deve essere spostato.
-    Ok(CommandOutcome::notify(two(D_RENAME, doc.as_str(), to.as_str())).undoable(undo))
+    if failures.is_empty() {
+        return Ok(CommandOutcome::notify(two(D_RENAME, doc.as_str(), to.as_str())).undoable(undo));
+    }
+    // La rinomina è fatta, e l'annullamento la disfa; le note i cui
+    // collegamenti nelle proprietà sono rimasti vecchi si dicono per nome.
+    let attempted = super::relink::property_link_sources(&found).len();
+    let notify = Text::message(
+        D_RENAME_RELINK,
+        vec![
+            Arg::text(A_DOC, doc.as_str()),
+            Arg::text(A_TO, to.as_str()),
+            Arg::text(A_FAILED, why(&failures)),
+        ],
+    );
+    let done = attempted.saturating_sub(failures.len());
+    Ok(CommandOutcome::notify(notify)
+        .undoable(undo)
+        .partially(Partial::of(attempted, done, failures)))
 }
 
 /// `note.folder_page`: la nota diventa `X/_index.<ext>` con la rinomina di

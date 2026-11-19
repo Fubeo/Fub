@@ -382,6 +382,26 @@ fn catalog_it() -> StringCatalog {
              indietro: {failed}",
         )
         .with(
+            E_RELINK_CHANGED,
+            "le proprietà di «{doc}» sono cambiate nel frattempo: il collegamento \
+             resta col nome vecchio, riscrivilo dalla nota",
+        )
+        .with(
+            E_RELINK_UNREACHABLE,
+            "il nome nuovo di «{doc}» non si lascia scrivere in modo che porti a lei: \
+             il collegamento nella proprietà resta col nome vecchio",
+        )
+        .with(
+            E_RELINK_UNWRITABLE,
+            "il nome nuovo di «{doc}» ha caratteri che in una proprietà cambierebbero \
+             il collegamento: resta col nome vecchio",
+        )
+        .with(
+            E_RELINK_INDEX,
+            "l'indice ha dato una risposta inattesa ({kind}): i collegamenti nelle \
+             proprietà non si sono riscritti. Riprova; se succede ancora, ricostruisci l'indice",
+        )
+        .with(
             E_UNDECLARED_KEY,
             "Nessuno ha dichiarato l'impostazione `{key}`.",
         )
@@ -431,6 +451,10 @@ fn catalog_it() -> StringCatalog {
         )
         .with(D_CREATE, "Creata «{doc}»")
         .with(D_RENAME, "«{doc}» rinominata in «{to}»")
+        .with(
+            D_RENAME_RELINK,
+            "«{doc}» rinominata in «{to}» · Collegamenti nelle proprietà da guardare: {failed}",
+        )
         .with(D_TRASH, "«{doc}» spostata nel cestino")
         .with(D_RESTORE, "Ripristinata «{doc}»")
         .with(
@@ -1071,6 +1095,26 @@ fn catalog_en() -> StringCatalog {
             "“{folder}” stopped halfway ({reason}), and not everything came \
              back: {failed}",
         )
+        .with(
+            E_RELINK_CHANGED,
+            "the properties of “{doc}” changed in the meantime: the link keeps the \
+             old name, rewrite it from the note",
+        )
+        .with(
+            E_RELINK_UNREACHABLE,
+            "the new name of “{doc}” cannot be written so that it leads there: the \
+             link in the property keeps the old name",
+        )
+        .with(
+            E_RELINK_UNWRITABLE,
+            "the new name of “{doc}” has characters that would change the link in a \
+             property: it keeps the old name",
+        )
+        .with(
+            E_RELINK_INDEX,
+            "the index gave an unexpected answer ({kind}): the links in properties \
+             were not rewritten. Try again; if it happens again, rebuild the index",
+        )
         .with(E_UNDECLARED_KEY, "Nobody has declared the setting `{key}`.")
         .with(
             E_NOT_PROGRAM_WRITABLE,
@@ -1114,6 +1158,10 @@ fn catalog_en() -> StringCatalog {
         )
         .with(D_CREATE, "Created «{doc}»")
         .with(D_RENAME, "«{doc}» renamed to «{to}»")
+        .with(
+            D_RENAME_RELINK,
+            "«{doc}» renamed to «{to}» · Links in properties to check: {failed}",
+        )
         .with(D_TRASH, "«{doc}» moved to the trash")
         .with(D_RESTORE, "Restored «{doc}»")
         .with(
