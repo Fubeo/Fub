@@ -161,11 +161,11 @@ describe("lo spazio «Esporta in PDF»", () => {
       titlebar.focus();
       expect(tab()).toBe(true);
       expect(document.activeElement).toBe(inside[0]);
-      inside.at(-1)!.focus();
+      inside[inside.length - 1]!.focus();
       expect(tab()).toBe(true);
       expect(document.activeElement).toBe(inside[0]);
       expect(tab(true)).toBe(true);
-      expect(document.activeElement).toBe(inside.at(-1));
+      expect(document.activeElement).toBe(inside[inside.length - 1]);
       // In mezzo comanda il browser.
       inside[1]!.focus();
       expect(tab()).toBe(false);

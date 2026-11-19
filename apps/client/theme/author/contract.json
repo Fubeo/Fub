@@ -10598,6 +10598,7 @@
         "print-page",
         "markdown-rendered",
         "embed",
+        "math-block",
         "base-surface",
         "export-properties",
         "export-code-numbers",

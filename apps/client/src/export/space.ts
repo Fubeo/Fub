@@ -772,7 +772,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (event.key !== "Tab" || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
     const inside = focusableElements(root);
     const first = inside[0];
-    const last = inside.at(-1);
+    const last = inside[inside.length - 1];
     if (!first || !last) return;
     const current = document.activeElement;
     // Lo spazio stesso (il fuoco all'apertura) conta come fuori: da lì
