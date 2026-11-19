@@ -2,10 +2,10 @@
 //
 // Il profilo vive nel core (`crates/fub-features/src/pdf_export/profile.rs`,
 // la forma del file in `docs/reference/pdf-export-format.md`): tema, colori,
-// caratteri, pagina, testata, contenuto, interruzioni, uscita. Non passa
-// ancora dall'IPC (lo farà coi profili salvati, T79), e qui c'è la sua forma
-// con gli stessi nomi dei campi del file, e i valori di serie del profilo
-// «Di serie». Le sezioni dello spazio (`sections/`) lo leggono e ne fanno una
+// caratteri, pagina, testata, contenuto, interruzioni, uscita. Qui c'è la
+// sua forma con gli stessi nomi dei campi del file, i valori di serie del
+// profilo «Di serie» e i profili salvati del vault (`ProfileStore`, sopra i
+// comandi `pdf.profiles` e `pdf.profile_*` del core, T79). Le sezioni dello spazio (`sections/`) lo leggono e ne fanno una
 // copia cambiata; `printSettingsOf` ne fa le regolazioni dell'impaginatore
 // (`paginate/slices.ts`): ciò che cambia le misure (`PrintLayout`) e ciò che
 // cambia solo l'aspetto (`PrintLook`).
@@ -14,6 +14,7 @@
 // valore che questa versione non conosce si conserva e si mostra come quello
 // di serie, come fa il core.
 
+import type { CommandOutcome, InvokeMode } from "../host/contract";
 import { clampMargins } from "./guides";
 import type { PageGeometry } from "./probe";
 import { contentChoicesOf, contentLayoutOf } from "./content/choices";
@@ -250,4 +251,110 @@ export function printSettingsOf(profile: ExportProfile, excluded: readonly strin
   };
   const look: PrintLook = { colors: { ...lookVariables(profile), ...contentLookVariables(contentChoicesOf(profile.contenuto)) } };
   return { layout, look };
+}
+
+// ── I profili salvati ───────────────────────────────────────────────────────
+
+/// Un profilo salvato nel vault, come lo elenca il core.
+export interface StoredProfile {
+  /// L'id: il nome del suo file.
+  readonly id: string;
+  readonly name: string;
+  /// `null` se il file non si legge.
+  readonly profile: ExportProfile | null;
+  /// Viene da una versione più nuova di Fub: si usa, non si riscrive.
+  readonly future: boolean;
+}
+
+/// I profili del vault e i predefiniti; per una nota anche il suo tipo e il
+/// profilo che vale.
+export interface ProfileShelf {
+  readonly profiles: readonly StoredProfile[];
+  readonly vaultDefault: string | null;
+  readonly typeDefault: string | null;
+  readonly noteType: { readonly doc: string; readonly name: string } | null;
+  /// L'id del profilo che vale per la nota (vuoto: «Di serie»).
+  readonly effective: string;
+}
+
+/// Dove stanno i profili salvati: il core, coi suoi comandi.
+export interface ProfileStore {
+  list(note?: string): Promise<ProfileShelf>;
+  /// Salva sopra il profilo `id`, o come nuovo con `null`; torna l'id.
+  save(id: string | null, profile: ExportProfile): Promise<string>;
+  copy(id: string, name: string): Promise<string>;
+  rename(id: string, name: string): Promise<void>;
+  /// Il predefinito del vault, o del tipo della nota; `""` torna «Di serie».
+  setDefault(id: string, scope: "vault" | "type", note?: string): Promise<void>;
+}
+
+type Invoke = (command: string, args: Record<string, unknown>, mode: InvokeMode) => Promise<CommandOutcome>;
+
+function payloadOf(outcome: CommandOutcome, ns: string): Record<string, unknown> {
+  const effect = outcome.effect;
+  if (effect.kind === "custom" && effect.ns === ns && typeof effect.payload === "object" && effect.payload !== null) return effect.payload as Record<string, unknown>;
+  return {};
+}
+
+const textOrNull = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+
+/// Il profilo del core con i campi che questa versione aspetta: uno che
+/// manca prende il valore di serie; ciò che non conosce si conserva.
+export function profileFromCore(value: unknown): ExportProfile | null {
+  if (typeof value !== "object" || value === null) return null;
+  const read = value as Record<string, unknown>;
+  if (typeof read["nome"] !== "string") return null;
+  // Sezione per sezione: un profilo scritto prima che una sezione avesse un
+  // campo (Caratteri, Pagina, Contenuto…) prende quel campo di serie.
+  const base = defaultProfile() as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...base, ...read };
+  for (const [key, value] of Object.entries(base)) {
+    const own = read[key];
+    if (isPlainObject(value) && isPlainObject(own)) out[key] = { ...value, ...own };
+  }
+  return out as unknown as ExportProfile;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/// I profili sopra i comandi del core.
+export function commandProfileStore(invoke: Invoke): ProfileStore {
+  const idOf = (outcome: CommandOutcome) => String(payloadOf(outcome, "fub.pdf.profile")["id"] ?? "");
+  return {
+    async list(note) {
+      const outcome = await invoke("pdf.profiles", note ? { note } : {}, "apply");
+      const data = payloadOf(outcome, "fub.pdf.profiles");
+      const rows = Array.isArray(data["profiles"]) ? (data["profiles"] as Record<string, unknown>[]) : [];
+      const profiles = rows
+        .map((row): StoredProfile => ({ id: String(row["id"] ?? ""), name: String(row["name"] ?? row["id"] ?? ""), profile: profileFromCore(row["profile"]), future: row["future"] === true }))
+        .filter((row) => row.id !== "");
+      const type = data["note_type"] as { doc?: unknown; name?: unknown } | null;
+      const effective = data["effective"] as { id?: unknown } | null;
+      return {
+        profiles,
+        vaultDefault: textOrNull(data["vault_default"]),
+        typeDefault: textOrNull(data["type_default"]),
+        noteType: type && typeof type.doc === "string" ? { doc: type.doc, name: String(type.name ?? type.doc) } : null,
+        effective: typeof effective?.id === "string" ? effective.id : "",
+      };
+    },
+    async save(id, profile) {
+      // Un profilo nuovo è di questa versione, anche se nasce da uno futuro:
+      // la versione la mette il core.
+      const { versione: _version, ...fresh } = profile as ExportProfile & { versione?: unknown };
+      const body = id === null ? fresh : profile;
+      return idOf(await invoke("pdf.profile_save", { ...(id === null ? {} : { id }), profile: JSON.stringify(body) }, "apply"));
+    },
+    async copy(id, name) {
+      return idOf(await invoke("pdf.profile_copy", { id, name }, "apply"));
+    },
+    async rename(id, name) {
+      await invoke("pdf.profile_rename", { id, name }, "apply");
+    },
+    async setDefault(id, scope, note) {
+      await invoke("pdf.profile_default", { id, scope, ...(note ? { note } : {}) }, "apply");
+    },
+  };
 }

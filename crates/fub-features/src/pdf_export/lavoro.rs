@@ -617,7 +617,7 @@ fn leggi(json: &str) -> Result<ElencoPagine, ErroreEsportazione> {
 }
 
 /// La destinazione nella forma dei nomi del vault: un PDF dal nome valido.
-fn destinazione(scritta: &str) -> Result<DocId, PluginError> {
+pub(crate) fn destinazione(scritta: &str) -> Result<DocId, PluginError> {
     let percorso = path_policy::from_outside(scritta);
     let doc = DocId::new(percorso.clone());
     if !percorso.to_ascii_lowercase().ends_with(PDF) || percorso.len() <= PDF.len() {

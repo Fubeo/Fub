@@ -685,6 +685,22 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf-testata" },
   },
+  /// Il menu dei profili (T79): il prototipo apre il pulsante del profilo
+  /// al passo «Esporta in PDF: le pagine vere»; l'app dalla scena coi
+  /// profili del vault, il menu aperto.
+  "esporta-pdf-profili": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click("#win #px-prof");
+        await page.waitForSelector("#win .pop .m-l > button.m-i");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-profili" },
+  },
   /// Il clic sulla pagina (T76): dai due lati il primo paragrafo cliccato,
   /// scelto, col suo menu aperto.
   "esporta-pdf-blocco": {
@@ -2248,6 +2264,35 @@ export const PEZZI = [
     vista: "esporta-pdf-diagrammi",
     prototipo: '.px-dg[aria-pressed="true"]',
     app: '.export-dg-style[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  // Il menu dei profili (T79): il menu di Fub coi profili del vault.
+  {
+    id: "esporta.profili-superficie",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop",
+    app: ".context-menu",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "esporta.profili-voce",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i:not(.act)",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit)",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.profili-icona",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i .ic",
+    app: '.context-menu .menu-items > button.kit-row[role="menuitem"] .menu-icon',
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "esporta.profili-nota",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i .lb small",
+    app: ".context-menu .menu-items > button.kit-row .menu-description",
     proprieta: ["font", "color"],
   },
   {

@@ -1,10 +1,12 @@
 # Il formato dell'esportazione in PDF
 
 > **Ambito:** i file che l'esportazione delle note in PDF tiene nel vault (i
-> profili d'esportazione e la memoria d'esportazione di ogni nota), l'elenco
-> delle pagine che la vista passa al core, e il comando e il lavoro che
-> scrivono il PDF.
+> profili d'esportazione, i predefiniti e la memoria d'esportazione di ogni
+> nota), l'elenco delle pagine che la vista passa al core, e i comandi e il
+> lavoro che scrivono il PDF.
 > **Fonti autorevoli:** `crates/fub-features/src/pdf_export/profile.rs`,
+> `crates/fub-features/src/pdf_export/command.rs` (predefiniti, profili ed
+> esportazione come comando),
 > `crates/fub-features/src/pdf_export/memory.rs`,
 > `crates/fub-features/src/pdf_export/aperta.rs`,
 > `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
@@ -14,14 +16,16 @@
 > `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro),
 > `crates/fub-features/src/pdf_export/book.rs` (più note in un PDF).
 
-L'esportazione non scrive niente nella nota. Le regolazioni stanno in due
-posti, tutti e due nello spazio dati `fub.esporta-pdf` del vault (vedi
-[layout su disco](on-disk-layout.md)):
+L'esportazione non scrive niente nella nota. Le regolazioni stanno nello
+spazio dati `fub.draw` del vault, quello del bundle dei disegni che porta i
+comandi del PDF (vedi [layout su disco](on-disk-layout.md)):
 
 | Che cosa | Dove | Vale per |
 |---|---|---|
-| un profilo | `.fub/plugins/fub.esporta-pdf/profili/<id>.json` | ogni nota del vault |
-| la memoria di una nota | `.fub/plugins/fub.esporta-pdf/doc/<nota codificata>/esportazione-pdf.json` | quella nota |
+| un profilo | `.fub/plugins/fub.draw/profili/<id>.json` | ogni nota del vault |
+| il profilo predefinito del vault | `.fub/plugins/fub.draw/predefinito.json` | le note senza un predefinito per il tipo |
+| il profilo predefinito di un tipo | `.fub/plugins/fub.draw/doc/<nota del tipo codificata>/profilo-pdf.json` | le note di quel tipo |
+| la memoria di una nota | `.fub/plugins/fub.draw/doc/<nota codificata>/esportazione-pdf.json` | quella nota |
 
 Tutti e due sono dati autorevoli: non si ricostruiscono da niente. Si
 scrivono con la scrittura atomica dello spazio dati, quindi una scrittura che
@@ -134,34 +138,30 @@ maiuscole; un colore scritto male a mano nel file resta com'è, conta come
 scelta tua (lo si toglie con «torna al tema») ma non vale: la pagina usa
 quello del tema.
 
-### Due profili con lo stesso nome
+### Nomi uguali, file che non si leggono, versioni più nuove
 
-Copiando il file col gestore dei file nasce un secondo profilo col nome del
-primo. Fub li elenca tutti e due e dice che si chiamano uguale, così la vista
-mostra accanto il nome del file. Fub invece non crea né rinomina un profilo
-col nome di un altro: due nomi sono uguali se differiscono solo per le
-maiuscole o per gli spazi ai lati.
+- **Nomi uguali.** Un file copiato col gestore dei file fa due profili con lo
+  stesso nome: Fub li elenca tutti e due, e la vista mostra accanto il nome
+  del file. Fub non crea né rinomina un profilo col nome di un altro; due nomi
+  sono uguali se differiscono solo per le maiuscole o per gli spazi ai lati.
+- **Un file che non si legge** (non è JSON né un profilo, o supera 256 KiB)
+  resta nell'elenco col motivo; salvarci sopra è un errore e non lo tocca.
+- **Una versione più nuova** si legge per ciò che si conosce: le chiavi
+  sconosciute, a ogni livello, si riscrivono uguali; un valore a elenco
+  sconosciuto (un formato `B5`, un tema nuovo) resta, e la vista usa quello
+  di serie. Con `versione` più alta di 1 il file non si riscrive (salvare o
+  rinominare è un errore), ma si copia, con tutto ciò che porta.
 
-### Un profilo che non si legge
+## I predefiniti
 
-Un file che non è JSON, o non ha la forma di un profilo, o pesa più di
-256 KiB, resta nell'elenco col motivo e non si sostituisce: salvarci sopra
-risponde con l'errore e lascia il file com'era. La persona lo può togliere.
-
-### Un profilo di una versione più nuova
-
-Si legge per ciò che si conosce, e il resto si conserva:
-
-- le chiavi che questa versione non conosce, a ogni livello, restano com'erano
-  e si riscrivono uguali;
-- un valore a elenco che questa versione non conosce (un formato `B5`, un
-  tema nuovo) resta com'è; la vista usa quello di serie e può dire che il
-  profilo ha regolazioni che qui non si vedono.
-
-Il file di un profilo con `versione` più alta di 1 non si riscrive: salvare o
-rinominare risponde con l'errore. Una copia invece si fa, e porta con sé
-anche ciò che questa versione non capisce. Un profilo della versione 1 con un
-campo aggiunto da un Fub più nuovo si salva, e il campo resta.
+Un predefinito è `{ "versione": 1, "profilo": "<id>" }`. Per una nota vale
+quello del suo tipo, poi quello del vault, poi «Di serie»; uno che nomina un
+profilo sparito lascia il posto al livello dopo, e «Di serie» toglie il file.
+Una `versione` più alta di 1 si legge e non si riscrive. I comandi
+(`fub.draw`): `pdf.profiles` (con `note`, anche `effective`: `id` e `from`),
+`pdf.profile_save`, `pdf.profile_copy`, `pdf.profile_rename` e
+`pdf.profile_default` (`scope` `vault` o `type`); la forma degli argomenti e
+degli effetti sta nelle loro spec (`pdf_export/command.rs`).
 
 ## La memoria di una nota
 
@@ -449,18 +449,23 @@ da sostituire). Il piano (`DryRun`) dice il PDF e le pagine e non accoda
 niente. Altrimenti accoda il lavoro `pdf.write_pages` e torna con l'effetto
 `fub.pdf.queued`, `{ "job_id": "<id>", "path": "<pdf>" }`: l'id è una stringa.
 
-Il lavoro riporta l'avanzamento una pagina per passo (`done` su `total`
-pagine), così il centro attività ne mostra la barra e lo sa annullare. Scrive
-il PDF in memoria e lo deposita nel vault **una volta sola, alla fine**: lo
-storage lo scrive in un file temporaneo e lo rinomina, quindi il file arriva
-intero o non arriva. Un lavoro annullato, scaduto o fallito non lascia
-nessun file; un disco pieno o una cartella in sola lettura sono l'errore
-della scrittura, e un PDF che si stava sostituendo resta quello di prima. La
-sostituzione confronta la revisione del PDF letta un attimo prima: una
-scrittura che arriva in mezzo è un conflitto, mai una sovrascrittura cieca.
-
+Il lavoro avanza una pagina per passo (`done` su `total`), così il centro
+attività ne mostra la barra e lo sa annullare. Deposita il PDF nel vault **una
+volta sola, alla fine**, con un file temporaneo rinominato: arriva intero o
+non arriva. Annullato, scaduto o fallito non lascia file; un disco pieno o una
+cartella in sola lettura sono l'errore della scrittura, e un PDF da sostituire
+resta quello di prima. La sostituzione confronta la revisione letta un attimo
+prima: una scrittura in mezzo è un conflitto, mai una sovrascrittura cieca.
 Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
 
+### L'esportazione come comando
+
+`pdf.export_note` (`note`, `profile`, `target`, `replace`) vuole l'app: la
+shell rinnova ogni 30 s la presenza con `pdf.export_listen` (scade dopo
+120 s); senza, risponde `Unserved`, anche in prova. Altrimenti manda l'evento
+`custom` `fub.draw:pdf.export` e torna con `fub.pdf.export_requested`; la shell
+(`export/headless.ts`) salva la nota, la impagina fuori dallo schermo con i
+fogli dello spazio (`export/decor.ts`) e chiama `pdf.write_pages`.
 
 ## Più note in un PDF
 

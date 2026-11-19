@@ -243,6 +243,8 @@ Lascia anche il modello e la griglia delle tabelle Markdown
 (`table-model.ts`, `table-grid.ts`) a `markdown-tables`, chiuso allo stesso modo.
 Il catalogo delle stringhe sta in due chunk, uno per lingua
 (`shell-strings` per l'italiano, `shell-strings-en` per l'inglese).
+Il chunk condiviso della shell (`search`) lascia la disposizione dei riquadri
+(`state/layout.ts`) a `shell-layout`, chiuso verso il basso.
 La barra della formula comune alla lavagna e alla barra di formato delle
 note sta in `editors/core/formula-bar.ts`, fuori dall'ospite delle schede
 (`editors/core/cards/`), che si spegne e non arriva all'avvio.

@@ -48,6 +48,7 @@ import { icon, iconEl, registerIcon } from "../ui/icons";
 import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
+import { promptText } from "../ui/dialogs";
 import { createBand, type Band } from "./band";
 import { attachBlockActions, BlockExclusions, type ExportNote } from "./block-actions";
 import { inertComments } from "./content/comments";
@@ -55,18 +56,18 @@ import { ExportContent } from "./content/index";
 import { renderPdfPages, type PdfPagesPorts } from "./content/pdf-pages";
 import { attachGuides } from "./guides";
 import { ExportPages, steppedZoom, type PageDecor } from "./pages";
-import { PrintMeasure, printBlocks } from "./paginate/measure";
-import { frontMatter, headingsOf, sectionHeadings, sectionsByPage, type FrontSettings, type TocEntry, type TocMetrics } from "./paginate/toc";
+import { decorOf as sheetsDecorOf, tocMeasurer } from "./decor";
+import { PrintMeasure } from "./paginate/measure";
 import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
-import { defaultProfile, MM, paperSize, printSettingsOf, type ExportProfile } from "./profile";
-import { coverFactsOf, drawCover, drawTocPage, type CoverFacts } from "./sections/cover-toc";
+import { defaultProfile, MM, paperSize, printSettingsOf, type ExportProfile, type ProfileStore, type StoredProfile } from "./profile";
+import { coverFactsOf, type CoverFacts } from "./sections/cover-toc";
 import { PrintFonts, type VaultFontSource } from "./sections/fonts";
-import { displayPath, drawHeaderFooter, longDate } from "./sections/header-footer";
+import { displayPath, longDate } from "./sections/header-footer";
 import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
 import { pageMarksOf } from "./sections/page";
 import { numberHeadings } from "./themes";
-import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
+import { createToolbar, profileMenuItems, type ExportView, type Toolbar } from "./toolbar";
 import { DiagramMemory, diagramLookKey, diagramPrintLook, overrideFor, preparePrintVectors, type DiagramPrintLook } from "./vectors";
 
 /// Come si disegna un diagramma della resa montata: per la sua posizione fra
@@ -113,6 +114,12 @@ export interface ExportSpaceOptions {
   /// solo quelli di Fub.
   readonly vaultFonts?: VaultFontSource;
   readonly profile?: ExportProfile;
+  /// L'id del profilo salvato da cui si parte (vuoto: «Di serie»).
+  readonly profileId?: string;
+  /// I profili salvati del vault (T79): il menu del profilo li elenca, li
+  /// salva, li copia, li rinomina e ne fa il predefinito. Senza, il menu ha
+  /// solo il profilo da cui si parte.
+  readonly profiles?: ProfileStore;
   /// Le proprietà della nota (il frontmatter, dall'indice): l'icona, l'autore
   /// e le proprietà in evidenza del frontespizio, l'autore della testata. Si
   /// richiedono all'apertura e quando la nota cambia; senza, il frontespizio
@@ -166,21 +173,6 @@ function bookmarksOf(result: SlicedResult): number {
   return result.boxes.filter((box) => box.kind === "heading").length;
 }
 
-/// Le misure dell'indice quando il foglio non si dispone (happy-dom): il
-/// titolo e ogni voce come li disegna la pelle col corpo di serie.
-const TOC_FALLBACK = { heading: 48, row: 22 };
-
-/// Le scelte del profilo che decidono i fogli.
-function frontSettingsOf(profile: ExportProfile): FrontSettings {
-  return {
-    cover: profile.frontespizio.frontespizio,
-    toc: profile.frontespizio.indice,
-    roman: profile.testata.numeri_romani,
-    firstWithoutHeader: profile.testata.prima_pagina_senza,
-    depth: profile.frontespizio.profondita_indice,
-  };
-}
-
 /// Registra le icone dello spazio (una volta: un tema può ridisegnarle).
 export function registerExportSpaceIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
@@ -193,7 +185,10 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   const behind = options.behind ?? [document.getElementById("workspace"), document.getElementById("status-band")].filter((node): node is HTMLElement => node !== null);
   const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   let profile = options.profile ?? defaultProfile();
-  const base = profile;
+  /// Il profilo scelto com'era, e il suo id: le regolazioni «ne escono»
+  /// quando il profilo di adesso non è più lui.
+  let base = profile;
+  let baseId = options.profileId ?? "";
   let view: ExportView = "adatta";
   let free = 1;
   let closed = false;
@@ -209,8 +204,6 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   let diagramKey = diagramLookKey(diagramLook);
   const diagramMemory = new DiagramMemory();
   let cover: CoverFacts = { title: options.title, path: displayPath(options.doc), author: "", date: longDate(), icon: null, properties: [] };
-  /// L'ultimo indice misurato: si rimisura solo se cambiano le voci o la pagina.
-  let tocMeasured: { key: string; metrics: TocMetrics } | null = null;
   const fonts = new PrintFonts(options.vaultFonts ?? null);
 
   const root = document.createElement("div");
@@ -417,59 +410,15 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     excludedChanged();
   }
 
-  /// L'indice su un foglio fuori dalla vista: quanto è alto il titolo e
-  /// ogni voce, coi caratteri delle pagine.
-  function measureToc(entries: readonly TocEntry[]): TocMetrics {
-    const { page } = settings.layout;
-    const key = JSON.stringify([page, settings.layout.type, entries.map((entry) => [entry.level, entry.text, entry.number, entry.page])]);
-    if (tocMeasured?.key === key) return tocMeasured.metrics;
-    const metrics = pages.measureSheet(page, (body) => {
-      const toc = drawTocPage(body, entries, true);
-      const rows = [...toc.querySelectorAll<HTMLElement>(".export-toc-row")];
-      const top = toc.getBoundingClientRect().top;
-      const first = rows[0]?.getBoundingClientRect();
-      const heights = rows.map((row) => row.getBoundingClientRect().height);
-      // Senza disposizione (happy-dom) tutto è alto 0: le misure di serie.
-      if (!first || heights.every((height) => height === 0)) {
-        return { page: body.clientHeight || page.height - page.margin.top - page.margin.bottom, heading: TOC_FALLBACK.heading, rows: rows.map(() => TOC_FALLBACK.row) };
-      }
-      return { page: page.height - page.margin.top - page.margin.bottom, heading: Math.max(0, first.top - top), rows: heights };
-    });
-    tocMeasured = { key, metrics };
-    return metrics;
-  }
+  /// L'indice su un foglio fuori dalla vista, coi caratteri delle pagine
+  /// (anche quelle di un tema in anteprima).
+  const measureToc = tocMeasurer(pages, () => settings.layout);
 
-  /// I fogli di un'impaginazione: frontespizio, indice, pagine della nota,
-  /// e su ognuno testata e piè.
+  /// I fogli di un'impaginazione (`decor.ts`, gli stessi dell'esportazione
+  /// fuori dallo schermo): frontespizio, indice, pagine della nota, e su
+  /// ognuno testata e piè.
   function decorOf(result: SlicedResult): PageDecor {
-    const page = paginator.host.querySelector<HTMLElement>(".print-page");
-    const blocks = page ? printBlocks(page) : [];
-    const headings = headingsOf(result.boxes, (box) => {
-      const block = blocks[result.blocks[box] ?? -1];
-      return { text: block?.textContent ?? "", number: block?.dataset["printNumber"] ?? "" };
-    });
-    const front = frontMatter({
-      settings: frontSettingsOf(profile),
-      headings,
-      flowPages: result.pagination.pages.length,
-      final: result.final,
-      firstPage: result.firstPage,
-      measure: measureToc,
-    });
-    const sections = sectionsByPage(result.pagination.pages, sectionHeadings(headings));
-    const geometry = settings.layout.page;
-    const shown = profile;
-    const facts = cover;
-    return {
-      sheets: front.sheets,
-      front: front.front,
-      draw(sheetPage, body, sheet, ordinal) {
-        if (sheet.kind === "frontespizio") drawCover(body, facts, geometry.margin);
-        else if (sheet.kind === "indice") drawTocPage(body, front.toc[sheet.index] ?? [], sheet.index === 0);
-        const section = sheet.kind === "pagina" ? (sections[sheet.index] ?? "") : "";
-        drawHeaderFooter(sheetPage, geometry, shown.testata, facts, sheet, section, shown.pagina.specchio && ordinal % 2 === 1);
-      },
-    };
+    return sheetsDecorOf({ result, host: paginator.host, profile, layout: settings.layout, cover, measureToc }).decor;
   }
 
   /// Il numero delle pagine del PDF: i fogli prima della nota e le sue.
@@ -593,9 +542,116 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   }
 
   function openProfileMenu(anchor: HTMLElement): void {
-    showContextMenu(anchor, [
-      { label: base.nome, choice: "radio", checked: true, run: () => space.setProfile(base) },
-    ], { label: t("pdf_export.profile.menu") });
+    const store = options.profiles;
+    if (!store) {
+      showContextMenu(anchor, [
+        { label: base.nome, choice: "radio", checked: true, run: () => space.setProfile(base) },
+      ], { label: t("pdf_export.profile.menu") });
+      return;
+    }
+    void store.list(options.doc).then(
+      (shelf) => {
+        if (closed || !anchor.isConnected) return;
+        showContextMenu(anchor, profileMenuItems({ shelf, currentId: baseId, base, modified: profile !== base }, profileActions(store, shelf.noteType?.name ?? "")), {
+          label: t("pdf_export.profile.menu"),
+        });
+      },
+      (error) => notify(t("pdf_export.profiles.list_failed", { reason: errorText(error) }), "guasto"),
+    );
+  }
+
+  /// Sceglie `next` come profilo da cui si parte: le pagine lo mostrano, e
+  /// le regolazioni non ne sono uscite.
+  function adopt(id: string, next: ExportProfile): void {
+    base = next;
+    baseId = id;
+    space.setProfile(next);
+  }
+
+  /// Un nome chiesto a chi esporta; `null` se rinuncia.
+  async function askName(title: string, ok: string, value: string): Promise<string | null> {
+    const name = await promptText({ title, label: t("pdf_export.profiles.name"), value, okLabel: ok });
+    const clean = name?.trim() ?? "";
+    return clean === "" ? null : clean;
+  }
+
+  function profileActions(store: ProfileStore, typeName: string) {
+    const failed = (error: unknown) => notify(t("pdf_export.profiles.failed", { reason: errorText(error) }), "guasto");
+    return {
+      choose: (entry: StoredProfile | null) => {
+        if (entry === null) adopt("", defaultProfile());
+        else if (entry.profile) adopt(entry.id, entry.profile);
+      },
+      saveNew: () => void (async () => {
+        const name = await askName(t("pdf_export.profiles.save_new.title"), t("pdf_export.profiles.save_ok"), t("pdf_export.profiles.new_name"));
+        if (name === null || closed) return;
+        try {
+          const next = { ...profile, nome: name };
+          const id = await store.save(null, next);
+          if (closed) return;
+          adopt(id, next);
+          notify(t("pdf_export.profiles.saved", { name }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      saveOver: () => void (async () => {
+        if (baseId === "") return;
+        try {
+          const next = { ...profile, nome: base.nome };
+          await store.save(baseId, next);
+          if (closed) return;
+          adopt(baseId, next);
+          notify(t("pdf_export.profiles.saved_over", { name: next.nome }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      copy: () => void (async () => {
+        if (baseId === "") return;
+        const name = await askName(t("pdf_export.profiles.copy.title"), t("pdf_export.profiles.copy_ok"), t("pdf_export.profiles.copy_name", { name: base.nome }));
+        if (name === null || closed) return;
+        try {
+          await store.copy(baseId, name);
+          notify(t("pdf_export.profiles.copied", { name }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      rename: () => void (async () => {
+        if (baseId === "") return;
+        const name = await askName(t("pdf_export.profiles.rename.title"), t("pdf_export.profiles.rename_ok"), base.nome);
+        if (name === null || closed) return;
+        try {
+          await store.rename(baseId, name);
+          if (closed) return;
+          // Il nome cambia, le regolazioni di adesso restano come sono.
+          const renamed = { ...base, nome: name };
+          const changed = profile !== base;
+          base = renamed;
+          space.setProfile(changed ? { ...profile, nome: name } : renamed);
+          notify(t("pdf_export.profiles.renamed", { name }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      toggleDefault: (scope: "vault" | "type") => void (async () => {
+        try {
+          const shelf = await store.list(options.doc);
+          const now = scope === "vault" ? (shelf.vaultDefault ?? "") : (shelf.typeDefault ?? null);
+          const on = now === baseId;
+          await store.setDefault(on ? "" : baseId, scope, options.doc);
+          if (closed) return;
+          if (on && scope === "type") notify(t("pdf_export.profiles.default_off_type", { type: typeName }), "info");
+          else if (on || baseId === "") notify(t("pdf_export.profiles.default_off"), "info");
+          else if (scope === "vault") notify(t("pdf_export.profiles.default_set_vault", { name: base.nome }), "info");
+          else notify(t("pdf_export.profiles.default_set_type", { name: base.nome, type: typeName }), "info");
+        } catch (error) {
+          failed(error);
+        }
+      })(),
+      revert: () => space.setProfile(base),
+    };
   }
 
   async function printNow(): Promise<boolean> {

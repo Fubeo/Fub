@@ -107,7 +107,9 @@ pub mod inventory;
 pub mod lavagna;
 // I tipi di nota: i modelli ne creano le note, le proprietà ne cambiano il
 // tipo e dicono quando manca. Ognuna ne usa una parte.
-#[cfg(any(feature = "template", feature = "properties"))]
+// Anche il PDF delle note (coi disegni) li legge: il profilo predefinito per
+// tipo.
+#[cfg(any(feature = "template", feature = "properties", feature = "draw"))]
 #[allow(dead_code)]
 mod note_types;
 #[cfg(feature = "outline")]

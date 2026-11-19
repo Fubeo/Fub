@@ -175,6 +175,20 @@ formato, e `canvas.*` sono del componente `fub.lavagna`.
 - Con il componente `fub.lavagna` spento questi strumenti rispondono
   `unavailable`, perché il comando non c'è, e la guida non è fra le risorse.
 
+## Il PDF di una nota
+
+`fub_invoke` con `pdf.export_note` (`{ "note": "…", "profile"?, "target"?,
+"replace"? }`) esporta una nota in PDF col suo profilo, come lo spazio
+«Esporta in PDF» ([il comando](pdf-export-format.md#lesportazione-come-comando)).
+Il server non impagina: la richiesta passa all'app per il canale di
+controllo, e l'app impagina e scrive.
+
+- Con l'app aperta sul vault il risultato è `fub.pdf.export_requested`: la
+  richiesta è partita, il PDF arriva quando il lavoro dell'app finisce.
+- Senza l'app (il server tiene il vault da solo) è `unavailable`, con un
+  testo che chiede di aprire il vault nell'app; anche in prova.
+- `pdf.profiles` con `note` dice i profili e quello che vale per la nota.
+
 ## Risorse
 
 Le note del vault sono risorse con l'URI di apertura di Fub,

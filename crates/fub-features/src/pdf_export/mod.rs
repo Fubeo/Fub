@@ -68,6 +68,7 @@ mod aperta;
 pub mod book;
 #[cfg(test)]
 mod book_tests;
+pub mod command;
 pub mod fonts;
 mod images;
 #[cfg(test)]
@@ -91,9 +92,10 @@ pub mod writer;
 #[cfg(test)]
 mod writer_tests;
 
-/// L'id dello spazio dati dell'esportazione: profili e memorie delle note
-/// stanno sotto `.fub/plugins/fub.esporta-pdf/`.
-pub const SPAZIO_DATI: &str = "fub.esporta-pdf";
+/// L'id dello spazio dati dell'esportazione: profili, predefiniti e memorie
+/// delle note stanno sotto `.fub/plugins/fub.draw/`, lo spazio del bundle dei
+/// disegni che porta i comandi del PDF (lo spazio dati è di chi chiama).
+pub const SPAZIO_DATI: &str = crate::draw::DRAW_ID;
 
 pub use pdfa::OstacoloPdfa;
 pub use tags::{Ambito, Nodo, Specie};

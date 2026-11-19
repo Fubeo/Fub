@@ -8,6 +8,9 @@
 
 import { t } from "../i18n/strings";
 import { icon, iconEl, registerIcon } from "../ui/icons";
+import type { MenuItem } from "../ui/menu";
+import { DEFAULT_PROFILE_NAME, type ExportProfile, type ProfileShelf, type StoredProfile } from "./profile";
+import { formatName, paperName, themeName } from "./sections/index";
 
 /// Quante pagine si vedono: una larga quanto lo spazio (`adatta`), due
 /// affiancate, tutte in miniatura; `libera` è lo zoom scelto coi pulsanti.
@@ -162,4 +165,124 @@ export function createToolbar(title: string, actions: ToolbarActions): Toolbar {
     },
   };
   return toolbar;
+}
+
+// ── Il menu del profilo ─────────────────────────────────────────────────────
+//
+// Il prototipo (`#px-prof`, «Profili di esportazione»): i profili, con
+// spuntato quello scelto se le regolazioni non ne sono uscite; poi «Salva
+// come profilo nuovo…» e «Torna al profilo com'era». Qui in più ciò che il
+// piano chiede: salvare nel profilo scelto, copiarlo, rinominarlo, farne il
+// predefinito del vault o del tipo della nota.
+
+/// Ciò che il menu deve sapere: i profili del vault, quale è scelto, se le
+/// regolazioni ne sono uscite.
+export interface ProfileMenuState {
+  readonly shelf: ProfileShelf;
+  /// L'id del profilo scelto; vuoto per «Di serie».
+  readonly currentId: string;
+  /// Il profilo scelto com'era quando lo si è scelto.
+  readonly base: ExportProfile;
+  readonly modified: boolean;
+}
+
+export interface ProfileMenuActions {
+  /// Sceglie un profilo; `null` per «Di serie».
+  choose(entry: StoredProfile | null): void;
+  saveNew(): void;
+  saveOver(): void;
+  copy(): void;
+  rename(): void;
+  /// Accende o spegne il predefinito.
+  toggleDefault(scope: "vault" | "type"): void;
+  revert(): void;
+}
+
+/// La riga sotto il nome di un profilo: il tema, la pagina e, se ci sono,
+/// frontespizio e indice.
+export function profileSummary(profile: ExportProfile): string {
+  // Il tema e il formato, l'orientamento solo se è orizzontale: il menu è
+  // largo al più 380 px, e una nota più lunga taglierebbe il nome del
+  // profilo (la riga del kit stringe tutti e due).
+  const paper = profile.pagina.orizzontale ? paperName(profile) : formatName(profile);
+  const parts = [t("pdf_export.profiles.summary", { theme: themeName(profile.tema) }), paper];
+  return parts.join(", ");
+}
+
+/// Le voci del menu del profilo.
+export function profileMenuItems(state: ProfileMenuState, actions: ProfileMenuActions): MenuItem[] {
+  const { shelf, currentId, modified } = state;
+  const stored = [...shelf.profiles].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const current = stored.find((entry) => entry.id === currentId) ?? null;
+  const items: MenuItem[] = [
+    {
+      label: DEFAULT_PROFILE_NAME,
+      description: t("pdf_export.profiles.default_summary"),
+      choice: "radio",
+      checked: currentId === "" && !modified,
+      run: () => actions.choose(null),
+    },
+  ];
+  for (const entry of stored) {
+    const description = entry.profile === null ? t("pdf_export.profiles.broken") : entry.future ? t("pdf_export.profiles.future") : profileSummary(entry.profile);
+    items.push({
+      label: entry.name,
+      description,
+      choice: "radio",
+      checked: entry.id === currentId && !modified,
+      disabled: entry.profile === null,
+      run: () => actions.choose(entry),
+    });
+  }
+  items.push({
+    label: t("pdf_export.profiles.save_new"),
+    icon: "plus",
+    separator: true,
+    run: () => actions.saveNew(),
+  });
+  if (current) {
+    items.push({
+      label: t("pdf_export.profiles.save", { name: current.name }),
+      ...(current.future ? { description: t("pdf_export.profiles.future") } : {}),
+      icon: "compose",
+      disabled: !modified || current.future,
+      run: () => actions.saveOver(),
+    });
+    items.push({ label: t("pdf_export.profiles.copy"), icon: "copy", run: () => actions.copy() });
+    items.push({
+      label: t("pdf_export.profiles.rename"),
+      icon: "pen",
+      disabled: current.future,
+      run: () => actions.rename(),
+    });
+  }
+  // Il predefinito è di un profilo salvato, o torna a «Di serie».
+  const vaultOn = (shelf.vaultDefault ?? "") === currentId;
+  items.push({
+    label: t("pdf_export.profiles.default_vault"),
+    choice: "checkbox",
+    checked: vaultOn,
+    separator: true,
+    // «Di serie» è già il predefinito quando non ce n'è un altro.
+    disabled: currentId === "" && vaultOn,
+    run: () => actions.toggleDefault("vault"),
+  });
+  if (shelf.noteType) {
+    const typeOn = shelf.typeDefault !== null && shelf.typeDefault === currentId;
+    items.push({
+      label: t("pdf_export.profiles.default_type", { type: shelf.noteType.name }),
+      choice: "checkbox",
+      checked: typeOn,
+      disabled: currentId === "",
+      run: () => actions.toggleDefault("type"),
+    });
+  }
+  items.push({
+    label: t("pdf_export.profiles.revert"),
+    icon: "history",
+    separator: true,
+    disabled: !modified,
+    run: () => actions.revert(),
+  });
+  return items;
 }

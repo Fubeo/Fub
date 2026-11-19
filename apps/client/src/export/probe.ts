@@ -152,6 +152,22 @@ export function measureNote(root: HTMLElement, page: PageGeometry = A4, title = 
   return { elenco: list, misure, tagli: paged.cuts, lettere: probe.letters };
 }
 
+/// Le pagine già impaginate, ognuna un foglio intero (`export/headless.ts`,
+/// e lo spazio quando «Esporta» scriverà il PDF): si misura ciò che il
+/// browser ha disegnato su ogni foglio, la carta compresa, senza tagliare
+/// niente. Le misure stanno nella pagina, con l'origine nel suo angolo in alto
+/// a sinistra; le facce sono le stesse per tutti i fogli.
+export function measureSheets(sheets: readonly HTMLElement[], options: ProbeOptions = {}): { readonly facce: ProbeFace[]; readonly pagine: { pezzi: ProbeItem[] }[] } {
+  const faces = new FaceTable(options.fontFaces ?? []);
+  const pagine = sheets.map((sheet) => {
+    const probe = new Probe(sheet, options, faces);
+    probe.sheet();
+    probe.dispose();
+    return { pezzi: probe.items.map((m) => ({ ...m.item, x: round(m.item.x), y: round(m.item.y) })) };
+  });
+  return { facce: faces.list, pagine };
+}
+
 class Probe {
   readonly items: Measured[] = [];
   readonly faces: FaceTable;
@@ -161,14 +177,23 @@ class Probe {
   private readonly colors = new ColorReader();
   private readonly baselines = new BaselineReader();
 
-  constructor(private readonly root: HTMLElement, private readonly options: ProbeOptions) {
-    this.faces = new FaceTable(options.fontFaces ?? []);
+  constructor(private readonly root: HTMLElement, private readonly options: ProbeOptions, faces?: FaceTable) {
+    this.faces = faces ?? new FaceTable(options.fontFaces ?? []);
     this.origin = root.getBoundingClientRect();
   }
 
   dispose(): void {
     this.range.detach();
     this.baselines.dispose();
+  }
+
+  /// Un foglio intero: la sua carta, poi ciò che c'è sopra, tagliato al
+  /// bordo del foglio.
+  sheet(): void {
+    const page = this.box(this.root.getBoundingClientRect());
+    const paper = this.colors.read(getComputedStyle(this.root).backgroundColor);
+    if (paper[3] > 0) this.rect(page, paper);
+    this.element(this.root, page, { under: false, strike: false });
   }
 
   element(el: Element, clip: Box, decor: Decor): void {
