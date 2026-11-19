@@ -1434,6 +1434,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   // come farebbe `available`: il menu si apre anche su un riquadro accanto.
   const sourceView = offeredSourceView(r);
   const sourceShown = tabOverride(activeTab(r.id)) !== null;
+  const markdownNote = surface?.family === "text" && surface.profile === "markdown";
   const exports: MenuItem[] = [
     ...offeredExports(r).map((format) => ({
       label: t("pane.menu.export_as", { what: format.label() }),
@@ -1442,6 +1443,12 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         if (r.shown?.k === "doc") void runExport(r.shown.doc, format);
       },
     })),
+    // Il PDF di una nota Markdown è lo spazio «Esporta in PDF», con le pagine
+    // vere: «PDF…» lo apre, al posto del vecchio PDF di solo testo.
+    ...(doc && markdownNote && surface?.printable && offeredExports(r).length > 0 ? [{
+      label: t("pane.menu.export_as", { what: t("markdown.export.pdf") }),
+      run: () => void presentExport(r, doc),
+    }] : []),
     ...(exportWindow(r) ? [{
       label: t("pane.menu.export_other"),
       run: () => {
@@ -1468,7 +1475,6 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       run: () => runCommand("shell.focus.toggle"),
     }] : []),
   ];
-  const markdownNote = surface?.family === "text" && surface.profile === "markdown";
   const writing: MenuItem[] = doc && markdownNote ? [{
     label: t("pane.menu.blocks"),
     description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
