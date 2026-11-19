@@ -304,7 +304,8 @@
 .dock-panel > ul > li {
   padding: var(--space-4) 0;
 }
-.dock-panel > ul > li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.dock-panel > ul > li:where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 

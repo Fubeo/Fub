@@ -445,6 +445,28 @@ describe("la scheda nella Live", () => {
     // La battuta non passa dalle schede: il budget della battuta della Live.
     expect(perKey).toBeLessThan(16);
   });
+
+  it("il cursore che non le tocca non le rimonta; entrare in una riga d'incorporo sostituisce solo quella", async () => {
+    const text = "Testo\n\n![[F0.pdf]]\n\nRiga uno\n\n![[F1.pdf]]\n\nRiga due\n\nFine\n";
+    const { parent, view, species } = rig(text);
+    await settle();
+    const elements = cardsIn(parent);
+    expect(elements).toHaveLength(2);
+    const before = species.views.filter((one) => !one.destroyed);
+    // Avanti e indietro fra righe di testo che non sono schede.
+    for (let i = 0; i < 10; i += 1) {
+      view.dispatch({ selection: { anchor: text.indexOf(["Testo", "Riga uno", "Riga due", "Fine"][i % 4]!) } });
+    }
+    await settle();
+    expect(before.every((one) => !one.destroyed)).toBe(true);
+    expect(cardsIn(parent)).toEqual(elements);
+    // Dentro la riga d'incorporo della seconda: quella diventa testo, la prima resta com'era.
+    view.dispatch({ selection: { anchor: text.indexOf("![[F1.pdf]]") + 3 } });
+    await settle();
+    expect(cardsIn(parent)).toEqual([elements[0]]);
+    expect(view.contentDOM.textContent).toContain("F1.pdf");
+    expect(before.filter((one) => one.destroyed).map((one) => one.path)).toEqual(["Archivio/F1.pdf"]);
+  });
 });
 
 describe("la scheda scelta è un oggetto", () => {
