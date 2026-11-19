@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { A4_BODY, MM, h1, h2, h3, manualBreak, para, separator } from "./corpus";
-import { applyBreaks } from "./breaks";
+import { CHAPTER_BREAK_PREFIX, applyBreaks } from "./breaks";
 import type { Box, PageFrame } from "./model";
 import { paginate } from "./rules";
 
@@ -30,6 +30,15 @@ describe("applyBreaks", () => {
     const rule = separator();
     const out = applyBreaks([para(2), rule, para(2)], { ...NONE, separator: true });
     expect(out[1]).toEqual({ kind: "break", id: rule.id, reason: "separatore" });
+  });
+
+  it("il separatore fra due note di un libro volta sempre pagina", () => {
+    const chapter = { kind: "separator", id: `${CHAPTER_BREAK_PREFIX}1`, height: 0 } as const;
+    const boxes = [para(2), chapter, h1(), para(2)];
+    expect(applyBreaks(boxes, NONE)[1]).toEqual({ kind: "break", id: chapter.id, reason: "capitolo" });
+    const result = paginate(applyBreaks(boxes, NONE), A4);
+    expect(result.pages).toHaveLength(2);
+    expect(result.pages[1].placements[0]).toMatchObject({ id: boxes[2]!.id, y: 0 });
   });
 
   it("le interruzioni a mano restano dove sono", () => {

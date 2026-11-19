@@ -72,7 +72,7 @@ import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { onComponents } from "../state/components";
-import { canShowFile, copyNoteLinks, openDocument, openDocumentBeside } from "../state/document-controller";
+import { canShowFile, copyNoteLinks, openDocument, openDocumentBeside, presentBookExport } from "../state/document-controller";
 import { newNoteInActiveSpace } from "../state/new-note";
 import { mountExplorerTypes, type ExplorerTypes } from "./explorer-types";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
@@ -362,6 +362,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     group: (paths) => groupIntoNewFolder(paths),
     copy: (paths) => copyEntries(paths),
     copyLinks: (paths) => copyNoteLinks(paths),
+    exportPdf: (paths) => presentBookExport(paths, t("pdf_export.book.selection")),
     lifetime,
   });
   lifetime.add(() => {
@@ -1549,6 +1550,7 @@ function folderMenu(at: MouseEvent, path: string): void {
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
+      { label: t("pane.export_pdf"), run: () => void exportFolderPdf(path) },
       {
         separator: true,
         label: t("explorer.organize"),
@@ -1574,6 +1576,30 @@ function folderMenu(at: MouseEvent, path: string): void {
       ...(pasting ? { clipboard: [{ label: t("explorer.paste"), icon: "template", hint: displayBinding("Mod-v"), run: () => void pasteEntries(path) }] } : {}),
     },
   );
+}
+
+/// Le note di una cartella nell'ordine dell'albero, a ogni profondità: la
+/// pagina della cartella per prima, poi le sottocartelle (ognuna con le sue
+/// note), poi le note, come l'albero le mostra con l'ordine scelto. Si
+/// chiedono tutte, anche quelle delle cartelle chiuse.
+async function notesInTreeOrder(path: string): Promise<string[]> {
+  const content = await folderContent(path, WITHOUT_PAGE);
+  const node = sortContent({ path, ...content }, state.meta, state.explorerSort);
+  const page = folderNoteOf(node, state.handledExtensions, legacyPages);
+  const out: string[] = page ? [page] : [];
+  for (const sub of node.folders) out.push(...(await notesInTreeOrder(sub.path)));
+  for (const id of node.notes) if (id !== page) out.push(id);
+  return out;
+}
+
+/// «Esporta in PDF…» su una cartella (T78): le sue note in un PDF solo, ogni
+/// nota un capitolo.
+async function exportFolderPdf(path: string): Promise<void> {
+  try {
+    await presentBookExport(await notesInTreeOrder(path), path === "" ? t("explorer.root") : childName(path));
+  } catch (error) {
+    notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
+  }
 }
 
 /// Il menu «Nuovo» del «+» del titolo, sotto il pulsante: i tipi che si possono

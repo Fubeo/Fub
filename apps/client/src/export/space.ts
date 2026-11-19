@@ -16,6 +16,11 @@
 //
 // La nota cambiata in un altro riquadro si segue: dopo una breve quiete si
 // salva e si chiede la resa nuova, con le stesse pagine sotto gli occhi.
+//
+// Più note in un PDF (T78) passano dallo stesso spazio: `export/book.ts` dà
+// la resa, il montaggio e la misura del libro, ogni nota un capitolo che
+// comincia su una pagina sua; il resto (le pagine, le sezioni, la banda, la
+// stampa) non sa che le note sono più d'una.
 
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -39,9 +44,15 @@ import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
 export const FOLLOW_QUIET_MS = 400;
 
 export interface ExportSpaceOptions {
+  /// La nota; per più note (`export/book.ts`, T78) la prima, e `render`,
+  /// `mount` e `measure` sono quelli del libro.
   readonly doc: string;
-  /// Il nome della nota, nella barra e in cima alla prima pagina.
+  /// Il nome della nota, nella barra e in cima alla prima pagina; per più
+  /// note quello della cartella o della scelta, col loro numero.
   readonly title: string;
+  /// Ciò che dice «Torna…»: di serie «Torna alla nota». Più note, aperte
+  /// dall'albero, tornano alle note.
+  readonly backLabel?: string;
   readonly render: PrintRenderer;
   readonly mount?: PrintMount;
   /// Dove sta lo spazio: di serie `#app`, sotto la barra del titolo.
@@ -130,6 +141,12 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     print: () => void space.print(),
     exportPdf: () => void exportNow(),
   });
+  if (options.backLabel) {
+    const back = toolbar.element.querySelector<HTMLElement>(".export-back");
+    const label = back?.querySelector<HTMLElement>(".export-back-label");
+    if (label) label.textContent = options.backLabel;
+    back?.setAttribute("aria-label", options.backLabel);
+  }
 
   const main = document.createElement("div");
   main.className = "export-main";

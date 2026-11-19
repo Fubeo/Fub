@@ -83,6 +83,19 @@ describe("scelta multipla dell'albero", () => {
     await vi.waitFor(() => expect(trash).toHaveBeenCalledWith(["a.md", "b.md"]));
   });
 
+  it("con l'esportazione, la scelta va in un PDF solo nell'ordine in cui si è scelta (T78)", () => {
+    life.close();
+    life = openLifetime();
+    const exportPdf = vi.fn(async (_paths: string[]) => {});
+    sel = mountTreeSelection({ list, currentDoc: () => current, trash, move, group, copy, copyLinks, exportPdf, lifetime: life });
+    click("c.md", { ctrlKey: true });
+    click("a.md", { ctrlKey: true });
+    const { items: menu } = sel.menuFor("a.md")!;
+    expect(menu.map((item) => item.label)).toEqual(["Sposta in…", "In una cartella nuova…", "Copia i link", "Esporta in PDF…", "Sposta nel cestino"]);
+    menu[3]!.run!();
+    expect(exportPdf).toHaveBeenCalledWith(["c.md", "a.md"]);
+  });
+
   it("Ctrl-clic aggiunge e toglie, e non apre la nota", () => {
     const opened = vi.fn();
     list.addEventListener("click", opened);
