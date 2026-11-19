@@ -2567,6 +2567,55 @@ export const SCENE = touchLast(onPage("shell", [
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
+  // Il «/» sull'ultima riga di una nota scorsa fino in fondo: il menu si apre
+  // sopra la riga e la vista non si muove. Nella WebView di Linux la vista
+  // scendeva di una riga: mentre CodeMirror ridisegna la riga, il testo è per
+  // un attimo più corto, e a fondo nota lo scorrimento si accorciava con lui.
+  // La scena fa accorciare il testo per un attimo anche qui, poi scrive il «/».
+  ...[
+    ["slash-10-fondo", "Il menu «/» sull'ultima riga di una nota scorsa fino in fondo: sopra la riga, la vista ferma", null],
+    ["slash-11-fondo-stretta", "Il menu «/» a fondo nota nella finestra minima: sopra la riga, la vista ferma", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=fondo-nota&slash=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "bottom");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      // Di nuovo in fondo: la prima misura di CodeMirror allunga la nota di
+      // qualche pixel dopo lo scorrimento di `openLive`.
+      await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+        view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      });
+      const before = await caretLinePlace(page);
+      if (before.scrollTop < before.maxScroll - 1) throw new Error(`la nota non è scorsa fino in fondo: ${before.scrollTop} di ${before.maxScroll}`);
+      const shrunk = await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+        // Come CodeMirror quando ridisegna una riga: per un attimo l'ultima
+        // riga non c'è, e la disposizione si calcola così.
+        const last = view.contentDOM.lastElementChild;
+        last.style.display = "none";
+        void view.scrollDOM.scrollHeight;
+        last.style.display = "";
+        return view.scrollDOM.scrollTop;
+      });
+      if (shrunk !== before.scrollTop) throw new Error(`il testo accorciato per un attimo sposta la vista: da ${before.scrollTop} a ${shrunk} px`);
+      await page.keyboard.type("/");
+      await page.waitForSelector(".slash-panel");
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const after = await caretLinePlace(page);
+      if (after.scrollTop !== before.scrollTop || Math.abs(after.lineTop - before.lineTop) > 0.5) {
+        throw new Error(`il «/» a fondo nota sposta la vista: scorrimento da ${before.scrollTop} a ${after.scrollTop} px, riga da ${before.lineTop} a ${after.lineTop}`);
+      }
+      const above = await page.$eval(".slash-panel", (panel) => panel.classList.contains("cm-tooltip-above"));
+      if (!above) throw new Error("a fondo nota il menu «/» non si apre sopra la riga");
+    },
+  })),
   // La Base nella nota (T18, E12, E19): incorporata, si allarga oltre la
   // colonna del testo fino al margine; nella finestra stretta resta nella
   // colonna. Poi «/base»: il nome chiesto, e la Base nata al posto della riga.
@@ -4089,6 +4138,20 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// Dove sta la riga del cursore nella nota a fuoco: lo scorrimento, quanto può
+/// scorrere al più e il bordo alto della riga nella finestra.
+function caretLinePlace(page) {
+  return page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const { node } = view.domAtPos(view.state.selection.main.head);
+    const line = (node instanceof Element ? node : node.parentElement)?.closest(".cm-line");
+    if (!line) throw new Error("il cursore non sta in una riga");
+    const scroller = view.scrollDOM;
+    return { scrollTop: scroller.scrollTop, maxScroll: scroller.scrollHeight - scroller.clientHeight, lineTop: line.getBoundingClientRect().top };
+  });
 }
 
 /// La formula toccata (T60). `inline`: → davanti alla formula in riga, poi
