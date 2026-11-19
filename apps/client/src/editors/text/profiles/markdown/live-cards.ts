@@ -1325,6 +1325,12 @@ export class LiveCard {
   }
 }
 
+/// L'elemento della scheda nel posto di `LiveCardWidget.toDOM`.
+function slotCard(slot: HTMLElement): HTMLElement | null {
+  const root = slot.firstElementChild;
+  return root instanceof HTMLElement && root.dataset.liveCard !== undefined ? root : null;
+}
+
 /// Il widget di blocco di una scheda: lo stesso embed è la stessa scheda, e
 /// CodeMirror tiene il suo DOM da una resa all'altra.
 export class LiveCardWidget extends WidgetType {
@@ -1338,14 +1344,34 @@ export class LiveCardWidget extends WidgetType {
       && other.embed.alias === this.embed.alias;
   }
 
+  /// La scheda dentro un posto (`cm-fub-live-card-slot`, `flow-root`) che ne
+  /// contiene i margini: CodeMirror misura l'altezza di un widget di blocco
+  /// sul bordo del suo elemento, margini esclusi, e coi margini sulla scheda
+  /// ogni riga sotto finiva più in alto della sua altezza misurata.
   toDOM(): HTMLElement {
-    return this.cards.mount(this.embed).root;
+    const slot = document.createElement("div");
+    slot.className = "cm-fub-live-card-slot";
+    slot.append(this.cards.mount(this.embed).root);
+    return slot;
+  }
+
+  /// Le coordinate della scheda, non del posto: chi le chiede (il velo della
+  /// selezione di blocchi, lo scorrimento) vuole i bordi che si vedono.
+  /// Come CodeMirror fa per un widget di blocco che sostituisce del testo, un
+  /// filo verticale all'inizio (`pos` 0) o alla fine.
+  override coordsAt(dom: HTMLElement, pos: number): { left: number; right: number; top: number; bottom: number } | null {
+    const root = slotCard(dom);
+    if (!root) return null;
+    const box = root.getBoundingClientRect();
+    const x = pos === 0 ? box.left : box.right;
+    return { left: x, right: x, top: box.top, bottom: box.bottom };
   }
 
   /// Lo stesso file mostrato allo stesso modo, con un'altra misura (T42): la
   /// scheda resta montata e prende la misura nuova, senza rifare la specie.
   override updateDOM(dom: HTMLElement): boolean {
-    const card = this.cards.cardOf(dom);
+    const root = slotCard(dom);
+    const card = root ? this.cards.cardOf(root) : null;
     if (!card || card.embed.page !== this.embed.page || card.embed.subpath !== this.embed.subpath
       || liveCardDisplay(card.embed.alias) !== liveCardDisplay(this.embed.alias)) return false;
     card.update(this.embed);
@@ -1353,7 +1379,8 @@ export class LiveCardWidget extends WidgetType {
   }
 
   override destroy(dom: HTMLElement): void {
-    this.cards.unmount(dom);
+    const root = slotCard(dom);
+    if (root) this.cards.unmount(root);
   }
 
   /// Gli eventi della scheda sono suoi: CodeMirror non sposta il cursore né
@@ -1693,7 +1720,7 @@ export class LiveCards {
   /// «Scegli di nuovo» (T43): l'embed nomina la parte `part` dello stesso
   /// file, con il suo alias. Un passo d'annullamento.
   repart(card: LiveCard, part: string): boolean {
-    const view = EditorView.findFromDOM(card.root);
+    const view = editorOf(card.root);
     if (!view || !this.host.editable()) return false;
     const pos = positionOf(view, card.root);
     if (pos === null) return false;

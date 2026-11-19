@@ -1863,6 +1863,7 @@ export const SCENE = touchLast(onPage("shell", [
         const card = `.pane.focus .pane-editor .live-card[data-card-kind="${choose}"]`;
         await page.click(`${card} .live-card-name`);
         await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+        await expectVeilOnCard(page, card);
       }
       if (activate) {
         const body = `.pane.focus .pane-editor .live-card[data-card-kind="${activate}"] .live-card-body`;
@@ -2107,6 +2108,7 @@ export const SCENE = touchLast(onPage("shell", [
       if (gesture === "choose") {
         await page.click(`${card} .live-card-name`);
         await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+        await expectVeilOnCard(page, card);
       }
       if (gesture === "activate") {
         await page.click(`${card} .live-card-body`);
@@ -3033,6 +3035,7 @@ export const SCENE = touchLast(onPage("shell", [
       if (state === "chosen") {
         await page.click(`${card} .live-card-name`);
         await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+        await expectVeilOnCard(page, card);
       }
       if (state === "active") {
         await page.click(`${card} .live-card-body`);
@@ -4025,6 +4028,30 @@ async function openNote(page, path) {
 /// il caso dice e scrive i tasti della scena (`@Invio` è un tasto, il resto
 /// testo). Senza cursore la nota si guarda dall'alto e senza fuoco; `scroll`
 /// dice se dall'alto o dal fondo.
+/// Il velo della selezione di blocchi copre la scheda scelta bordo per bordo,
+/// e le righe sotto le schede stanno dove CodeMirror le misura (IMP-155): i
+/// margini della scheda gli sfuggivano, e il velo saliva di 18 px.
+async function expectVeilOnCard(page, card) {
+  await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-mark");
+  const wrong = await page.evaluate(async (selector) => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const chosen = document.querySelector(selector).getBoundingClientRect();
+    const mark = document.querySelector(".pane.focus .pane-editor .cm-fub-block-mark").getBoundingClientRect();
+    const out = [];
+    if (Math.abs(mark.top - chosen.top) > 0.5 || Math.abs(mark.bottom - chosen.bottom) > 0.5) {
+      out.push(`velo ${mark.top}–${mark.bottom}, scheda ${chosen.top}–${chosen.bottom}`);
+    }
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    for (const line of document.querySelectorAll(".pane.focus .pane-editor .cm-fub-live-card-slot + .cm-line")) {
+      const measured = view.lineBlockAt(view.posAtDOM(line)).top + view.documentTop;
+      const seen = line.getBoundingClientRect().top;
+      if (Math.abs(measured - seen) > 0.5) out.push(`riga sotto una scheda misurata a ${measured}, vista a ${seen}`);
+    }
+    return out.join("; ");
+  }, `${card}[data-card-chosen="true"]`);
+  if (wrong) throw new Error(`il velo non sta sulla scheda: ${wrong}`);
+}
+
 async function openLive(page, keys, scroll, mode = "live_preview") {
   const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
   if (doc === null) throw new Error("la pagina non ha la nota della Live");

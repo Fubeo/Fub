@@ -5,7 +5,7 @@ export const LIVE_CARDS: PartAnatomy = {
   part: "live-cards",
   layer: "cornice",
   components: [
-    { name: "live-card", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["live-card", "live-card-body", "live-card-tools"] },
+    { name: "live-card", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["live-card", "live-card-body", "live-card-tools", "cm-fub-live-card-slot"] },
     { name: "live-card-head", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["live-card-head", "live-card-title", "live-card-name", "live-card-spacer", "live-card-escape", "live-card-done", "live-card-open", "live-card-full", "live-card-label", "live-card-extract"] },
     { name: "live-card-resize", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["live-card-resize"] },
     { name: "live-card-columns", layer: "contenuto", states: [S("rest")], hooks: ["markdown-rendered", "fub-columns", "fub-column"] },

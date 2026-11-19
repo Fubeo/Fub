@@ -1550,6 +1550,7 @@
     "live-card",
     "live-card-body",
     "live-card-tools",
+    "cm-fub-live-card-slot",
     "live-card-head",
     "live-card-title",
     "live-card-name",
@@ -3976,6 +3977,7 @@
     "live-card": "cornice",
     "live-card-body": "cornice",
     "live-card-tools": "cornice",
+    "cm-fub-live-card-slot": "cornice",
     "live-card-head": "cornice",
     "live-card-title": "cornice",
     "live-card-name": "cornice",
@@ -8601,7 +8603,8 @@
       "hooks": [
         "live-card",
         "live-card-body",
-        "live-card-tools"
+        "live-card-tools",
+        "cm-fub-live-card-slot"
       ],
       "states": [
         "rest",
@@ -12581,7 +12584,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2424,
+    "hooks": 2425,
     "state_names": 7,
     "assigned_states": 1083,
     "components": 321,
