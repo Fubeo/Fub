@@ -143,7 +143,11 @@ proof = ["dep:wordcraft-proof", "dep:fub-motori"]
 # un'altra riga accende la sua feature, così la mappa di una build parziale si
 # costruisce sempre (`tests/cargo_features.rs`).
 rich = ["engine-documents"]
-xlsx = ["engine-sheets"]
+# `xlsx` non è più soltanto un marcatore: porta anche il comando
+# `note.table.sheet` («Trasforma in foglio»), che scrive il foglio nuovo con
+# `fub-format-xlsx` (i valori e il loro formato numerico). Il motore resta
+# dietro quell'adattatore: qui non entra nessun crate di GridCraft.
+xlsx = ["engine-sheets", "dep:fub-format-xlsx"]
 engine-documents = []
 engine-sheets = []
 # Sincronizzazione, pubblicazione, aggiornamenti e anteprime dei link: i bundle
@@ -161,6 +165,10 @@ fub-abi = { workspace = true }
 fub-componenti = { workspace = true }
 serde = { workspace = true }
 fub-format-base = { workspace = true, optional = true }
+# Dietro `xlsx`: «Trasforma in foglio» scrive la cartella nuova coi valori
+# della tabella (`fub_format_xlsx::values`). Come gli altri formati qui sopra
+# non porta il kernel; GridCraft lo vede soltanto lui.
+fub-format-xlsx = { workspace = true, optional = true }
 # Dietro `draw`: un disegno nuovo lo scrive `serialize` del provider dei
 # disegni, e l'id del formato è il suo. Come `fub-format-base` per `base`, il
 # formato è una libreria del contratto e non porta il kernel.

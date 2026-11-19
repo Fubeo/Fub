@@ -162,6 +162,8 @@ pub use commands::{
     SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
     TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
+#[cfg(all(feature = "commands", feature = "xlsx"))]
+pub use commands::NOTE_TABLE_SHEET;
 #[cfg(feature = "dashboard")]
 pub use dashboard::{
     DashboardView, DASHBOARD_ID, DASHBOARD_VIEW, DESK_BASE_KEY, DESK_TILES_KEY, DESK_TILE_NS,
