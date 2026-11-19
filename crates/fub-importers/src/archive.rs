@@ -529,7 +529,6 @@ impl ArchiveImport {
             join_doc_path(folder, file)
                 .ok_or_else(|| bad_args(format!("entry `{name}` has no usable name")))
         };
-        let lower = name.to_ascii_lowercase();
         if layout.is_database(name) {
             // The CSV stays a file of the vault, byte for byte: the links
             // that call it open it in the sheet editor. It is not a note, so
@@ -568,7 +567,9 @@ impl ArchiveImport {
             }
             return Ok(());
         }
-        if lower.ends_with(".md") || lower.ends_with(".markdown") {
+        if crate::notion_export::has_extension(name, "md")
+            || crate::notion_export::has_extension(name, "markdown")
+        {
             let text = std::str::from_utf8(bytes)
                 .map_err(|_| bad_args(format!("entry `{name}` is not UTF-8 text")))?;
             let converted = layout.page(name, text);

@@ -57,6 +57,15 @@ struct Parts {
     ext: Option<String>,
 }
 
+/// L'estensione di un nome dell'export, senza distinguere le maiuscole:
+/// `ext` è scritta minuscola, e le estensioni che contano (`md`, `markdown`,
+/// `csv`) sono ASCII. È l'unico confronto di nomi del modulo che piega il
+/// caso; gli id e i titoli si confrontano come sono scritti.
+pub(crate) fn has_extension(name: &str, ext: &str) -> bool {
+    name.rsplit_once('.')
+        .is_some_and(|(stem, found)| !stem.is_empty() && found.eq_ignore_ascii_case(ext))
+}
+
 fn is_notion_id(text: &str) -> bool {
     text.len() == 32 && text.bytes().all(|b| b.is_ascii_hexdigit())
 }
@@ -67,20 +76,14 @@ fn split_name(component: &str, is_file: bool) -> Parts {
         _ => (component, None),
     };
     let (stem, tail) = match stem.strip_suffix("_all") {
-        Some(rest)
-            if ext
-                .as_deref()
-                .is_some_and(|e| e.eq_ignore_ascii_case("csv")) =>
-        {
-            (rest, "_all")
-        }
+        Some(rest) if has_extension(component, "csv") => (rest, "_all"),
         _ => (stem, ""),
     };
     if let Some((base, id)) = stem.rsplit_once(' ') {
         if is_notion_id(id) && !base.trim().is_empty() {
             return Parts {
                 base: base.trim_end().to_string(),
-                id: id.to_ascii_lowercase(),
+                id: id.to_string(),
                 tail: tail.to_string(),
                 ext,
             };
@@ -180,11 +183,7 @@ impl Layout {
     pub(crate) fn detect(names: &[&str]) -> Option<Layout> {
         let notion = names.iter().any(|name| {
             let parts = split_name(last(name), true);
-            !parts.id.is_empty()
-                && parts
-                    .ext
-                    .as_deref()
-                    .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("csv"))
+            !parts.id.is_empty() && (has_extension(name, "md") || has_extension(name, "csv"))
         });
         notion.then(|| Layout::plan(names))
     }
@@ -297,12 +296,7 @@ impl Layout {
         let mut by_folder: BTreeMap<String, String> = BTreeMap::new();
         for name in names {
             let parts = split_name(last(name), true);
-            if parts.id.is_empty()
-                || !parts
-                    .ext
-                    .as_deref()
-                    .is_some_and(|e| e.eq_ignore_ascii_case("csv"))
-            {
+            if parts.id.is_empty() || !has_extension(name, "csv") {
                 continue;
             }
             let folder = join(parent(name), &format!("{} {}", parts.base, parts.id));
@@ -355,10 +349,10 @@ impl Layout {
     /// nelle loro cartelle, che servono per unire righe e pagine.
     pub(crate) fn needs_content(&self, name: &str) -> bool {
         self.databases.contains_key(name)
-            || self.databases.keys().any(|csv| {
-                parent(name) == Layout::row_folder(csv)
-                    && name.to_ascii_lowercase().ends_with(".md")
-            })
+            || self
+                .databases
+                .keys()
+                .any(|csv| parent(name) == Layout::row_folder(csv) && has_extension(name, "md"))
     }
 
     /// Legge i database e unisce ogni riga alla sua pagina. `content` dà il
@@ -386,7 +380,7 @@ impl Layout {
             let folder = Layout::row_folder(&database.csv);
             let mut pages: Vec<(String, String, String)> = names
                 .iter()
-                .filter(|name| parent(name) == folder && name.to_ascii_lowercase().ends_with(".md"))
+                .filter(|name| parent(name) == folder && has_extension(name, "md"))
                 .map(|name| {
                     let clean = self.files.get(name).cloned().unwrap_or_default();
                     let stem = last(&clean).trim_end_matches(".md").to_string();
@@ -627,7 +621,7 @@ impl Layout {
         let resolved = normalize(&join(from_dir, &decoded))?;
         let target = match self.files.get(&resolved) {
             Some(clean) => clean.clone(),
-            None => match self.dirs.get(resolved.trim_end_matches('/')) {
+            None => match self.dirs.get(&resolved) {
                 Some(clean) => clean.clone(),
                 None => {
                     // Un file di un'altra parte dell'archivio: lo stesso nome
