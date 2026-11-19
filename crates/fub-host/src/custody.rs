@@ -499,6 +499,13 @@ impl<T> Custody<T> {
         Duration::from_micros(self.inside.longest_hold_micros.load(Ordering::Relaxed))
     }
 
+    /// Quanti thread sono in fila adesso per un prestito condiviso o per il
+    /// turno: un banco lo guarda per sapere che un altro thread aspetta.
+    #[cfg(test)]
+    pub fn queued(&self) -> u32 {
+        self.inside.waiting.load(Ordering::Acquire)
+    }
+
     /// Ricomincia la misura di [`longest_hold`](Custody::longest_hold), per
     /// misurare un gesto solo.
     #[cfg(test)]

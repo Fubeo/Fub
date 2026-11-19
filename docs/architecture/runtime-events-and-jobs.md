@@ -224,7 +224,13 @@ durare 300 ms ogni scrittura.
   sua CAS (`PreparedDocumentWrite::place`) e poi aggiorna anagrafe, indice e
   registro in un prestito breve (`commit_placed_document_*`). La CAS e il turno
   insieme impediscono che un testo vecchio copra uno nuovo: un altro writer
-  di Fub aspetta il turno, uno esterno fa fallire la CAS con `Stale`.
+  di Fub aspetta il turno, uno esterno fa fallire la CAS con `Stale`. Fra
+  `place` e il commit il file ha già il testo nuovo e l'anagrafe no: il
+  rilevatore che lo guarda in quel tratto fa i suoi piani, ma applica solo con
+  `Custody::write`, che aspetta il turno di chi salva, e il kernel scarta un
+  piano fatto su una voce d'anagrafe che nel frattempo è cambiata
+  (`prepare_sync_path_prepared`). Così un salvataggio o uno spostamento non
+  diventa una modifica da fuori (`legacy_tests/watcher_echo_window.rs`).
 - **La riga del registro** di un epilogo (`jobs::finish_events`) si appende
   dopo aver lasciato il prestito, quando il turno è del thread che chiude:
   l'ordine delle righe lo tiene il turno. Un append fallito diventa un

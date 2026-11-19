@@ -41,6 +41,7 @@ mod the_watcher_batch;
 mod the_watcher_window;
 mod unlinked_mentions;
 mod view_provider_stale;
+mod watcher_echo_window;
 mod watcher_factory_lock;
 
 use std::sync::RwLockReadGuard;
