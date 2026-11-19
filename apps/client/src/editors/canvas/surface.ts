@@ -182,6 +182,11 @@ export const CANVAS_MODES: readonly SurfaceMode[] = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
 ];
 
+/// Il margine intorno alle schede quando la zona lavagna di una nota (T47)
+/// mostra tutta la lavagna: quello del prototipo (`.cvz`, le schede a 28 px
+/// dal bordo), più stretto di quello di un riquadro.
+const CARD_FIT_MARGIN = 28;
+
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
 export function mountCanvasSurface(
   profile: string,
@@ -324,6 +329,9 @@ export function mountCanvasSurface(
     engine = mounted;
     try {
       if (held !== null) mounted.setDoc(held);
+      // Nella scheda (T47) la lavagna appena aperta si vede tutta, col
+      // margine della scheda.
+      if (held !== null && compact) mounted.fitAll(CARD_FIT_MARGIN);
     } catch (error) {
       broken(error);
       return;
@@ -380,17 +388,23 @@ export function mountCanvasSurface(
   // scheda monta la lavagna da scrivere nascosta, e la inquadra quando si
   // vede.
   const wholeAtRest = (): void => {
-    if (compact && heldReadOnly) engine?.fitAll();
+    if (compact && heldReadOnly) engine?.fitAll(CARD_FIT_MARGIN);
   };
   let resizeWatch: ResizeObserver | null = null;
   if (compact && typeof ResizeObserver !== "undefined") {
     let last = "";
     resizeWatch = new ResizeObserver(() => {
+      // Nascosta (la lavagna a riposo mentre si scrive in quella attiva): la
+      // prossima misura vera è come la prima, e la rinquadra.
+      if (host.clientWidth === 0) {
+        last = "";
+        return;
+      }
       const size = `${host.clientWidth}x${host.clientHeight}`;
-      if (size === last || host.clientWidth === 0) return;
+      if (size === last) return;
       const first = last === "";
       last = size;
-      if (first) engine?.fitAll();
+      if (first) engine?.fitAll(CARD_FIT_MARGIN);
       else wholeAtRest();
     });
     resizeWatch.observe(host);
@@ -417,7 +431,7 @@ export function mountCanvasSurface(
         source.textContent = canvasSourceFallback(text);
         if (engine) {
           engine.setDoc(text);
-          wholeAtRest();
+          if (compact) engine.fitAll(CARD_FIT_MARGIN);
           inspector.changed();
           return;
         }
@@ -494,7 +508,7 @@ export function mountCanvasSurface(
           setFullPage: (full: boolean): void => {
             if (full === fullPage) return;
             fullPage = full;
-            engine?.fitAll();
+            engine?.fitAll(CARD_FIT_MARGIN);
           },
         }
       : {}),

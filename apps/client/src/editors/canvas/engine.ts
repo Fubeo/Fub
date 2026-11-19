@@ -2807,10 +2807,15 @@ export class CanvasEngine {
    * Tutta la lavagna nella vista, subito, senza volo e senza entrare nella
    * storia di Indietro: la zona lavagna di una nota a riposo (T47), che si
    * guarda sempre intera, anche dopo un cambio di misura o di testo.
+   * `margin`, in unità della lavagna per lato: la scheda ne vuole meno di
+   * un riquadro.
    */
-  fitAll(): void {
+  fitAll(margin = FIT_MARGIN): void {
     if (this.#destroyed || !this.#doc) return;
-    this.#fitCamera(true);
+    this.#stopMotion(false);
+    this.#camera = this.#fitTarget(this.#doc.nodes, margin);
+    this.#applyCamera();
+    this.#refreshLive();
   }
 
   /**
@@ -5449,7 +5454,7 @@ export class CanvasEngine {
    * `spatial/camera.ts`): al centro, con `FIT_MARGIN` per lato, mai oltre il
    * 100%. Senza schede, il 100% con l'origine in alto a sinistra.
    */
-  #fitTarget(nodes: readonly CanvasNode[]): Viewport {
+  #fitTarget(nodes: readonly CanvasNode[], margin = FIT_MARGIN): Viewport {
     if (!nodes.length) return { x: 24, y: 24, zoom: 1 };
     let minX = Infinity;
     let minY = Infinity;
@@ -5465,10 +5470,10 @@ export class CanvasEngine {
     const view = { w: Math.max(1, rect.width || 800), h: Math.max(1, rect.height || 600) };
     // Il margine sta nei bordi, in unità della lavagna: il centro non cambia.
     const bounds = {
-      minX: minX - FIT_MARGIN,
-      minY: minY - FIT_MARGIN,
-      maxX: Math.max(minX + 1, maxX) + FIT_MARGIN,
-      maxY: Math.max(minY + 1, maxY) + FIT_MARGIN,
+      minX: minX - margin,
+      minY: minY - margin,
+      maxX: Math.max(minX + 1, maxX) + margin,
+      maxY: Math.max(minY + 1, maxY) + margin,
     };
     return fromCamera(fit(bounds, view, 0, 0, FIT_LIMITS));
   }

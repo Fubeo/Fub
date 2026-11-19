@@ -17827,6 +17827,83 @@ input.canvas-toolbar-item {
   pointer-events: none;
 }
 
+/* ── La zona lavagna (T47) ───────────────────────────────────────────────
+   (E25, D15 A; il prototipo `.scard[data-kind="canvas"]` e `.cvz`, passo
+   18.) Un `.canvas` nella nota è la lavagna vera (N6), in forma di scheda:
+   la testata, la barra dei comandi, la colonna degli strumenti e il
+   navigatore della lavagna non ci sono, e tornano «A tutta pagina»; resta
+   la barra della selezione, sopra le schede scelte. Il fondo è quello del
+   prototipo: il vassoio della pagina (`--doc-fill-soft`, il `--tray` del
+   prototipo) al 60% sul foglio, coi punti della griglia nel filo
+   `--doc-rule` (il `--line-2`). A riposo la lavagna intera si guarda e
+   basta (il contenitore è inerte: la rotella scorre la nota, il clic attiva
+   la scheda); da attiva prende il posto di quella a riposo, sopra di lei. Le
+   schede e i fili sono della lavagna, vestiti come sulla lavagna. */
+.live-card[data-card-kind="canvas"] .canvas-card-board {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board-rest,
+.live-card[data-card-kind="canvas"] .canvas-card-board-editor {
+  position: absolute;
+  inset: 0;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board-rest[hidden],
+.live-card[data-card-kind="canvas"] .canvas-card-board-editor[hidden] {
+  display: none;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board-rest {
+  cursor: pointer;
+}
+.live-card[data-card-kind="canvas"] .canvas-viewport {
+  background-color: color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg));
+}
+.live-card[data-card-kind="canvas"] .canvas-grid {
+  background-image: radial-gradient(var(--doc-rule) 1px, transparent 1.2px);
+}
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-header,
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-toolbar,
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-rail,
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-navigator {
+  display: none;
+}
+/* Senza la colonna la vista prende tutta la larghezza. */
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* «A tutta pagina»: la lavagna intera, con i suoi strumenti. */
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-header,
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-toolbar,
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-rail {
+  display: flex;
+}
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-body {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+/* Annidata troppo a fondo, o senza la lavagna: una riga che dice perché, e
+   «Apri». */
+.live-card[data-card-kind="canvas"] .canvas-card-board-message {
+  max-width: 44ch;
+  color: var(--doc-gutter-fg);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board[data-card-board="unavailable"] .canvas-card-board-rest,
+.live-card[data-card-kind="canvas"] .canvas-card-board[data-card-board="link"] .canvas-card-board-rest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background-color: color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg));
+  cursor: default;
+}
+
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */
 
 /* L'editor del disegno (FubDraw): la barra e il foglio. La geometria e i

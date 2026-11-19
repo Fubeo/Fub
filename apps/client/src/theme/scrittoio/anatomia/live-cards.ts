@@ -18,5 +18,8 @@ export const LIVE_CARDS: PartAnatomy = {
     // La scheda di disegno (T46): il disegno fermo a riposo, l'editor dei
     // disegni da attiva con gli strumenti in una fila sopra il foglio.
     { name: "live-card-drawing", states: [S("rest"), S("selected"), S("focused")], hooks: ["canvas-card-drawing", "canvas-card-drawing-editor", "canvas-card-image", "draw-card-bar", "draw-editor", "draw-header", "draw-rail", "draw-body", "draw-dock"] },
+    // La zona lavagna (T47): la lavagna vera in forma di scheda, senza la sua
+    // testata, la barra, la colonna degli strumenti e il navigatore.
+    { name: "live-card-canvas", layers: { "canvas-viewport": "contenuto", "canvas-grid": "segno" }, states: [S("rest"), S("selected"), S("focused")], hooks: ["canvas-card-board", "canvas-card-board-rest", "canvas-card-board-editor", "canvas-card-board-message", "canvas-viewport", "canvas-grid", "canvas-body", "canvas-header", "canvas-toolbar", "canvas-rail", "canvas-navigator", "kit-button"] },
   ],
 };
