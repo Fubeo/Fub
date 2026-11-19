@@ -22,7 +22,7 @@ import type { EditorView } from "@codemirror/view";
 import { errorText } from "../../../../../host/errors";
 import { pickFromList } from "../../../../../ui/dialogs";
 import { markdownGrammar } from "../grammar";
-import { baseInsertion, trackSlashRange } from "../slash";
+import { baseInsertion, revealEmbed, trackSlashRange } from "../slash";
 import { liveStrings } from "../strings";
 import { blockAnchor } from "./anchor";
 import { blockBytes, type MoveNote } from "./move-to";
@@ -181,7 +181,7 @@ export async function syncedBlockHere(view: EditorView, from: number, to: number
     view.dispatch({
       changes: { from: at.from, to: at.to, insert: at.insert },
       selection: EditorSelection.cursor(at.cursor),
-      scrollIntoView: true,
+      effects: revealEmbed(view.state, at.embed),
       userEvent: "input.complete",
     });
     view.focus();

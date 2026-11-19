@@ -80,6 +80,11 @@ const SHEET_700 = { width: 1016, height: 800 };
 /// La finestra in cui, senza l'albero e l'ispettore, il foglio è largo
 /// 1248 px: la misura «piena» del prototipo.
 const SHEET_FULL = { width: 1308, height: 800 };
+/// La stessa larghezza per gli stati della griglia sulla cartella grande, un
+/// po' più alta: a 1308×800 il riquadro della griglia finisce a mezzo pixel
+/// sugli angoli tondi del foglio, e su questi angoli Chromium dava a ogni
+/// scatto un antialiasing diverso di un livello (la scena non stava mai ferma).
+const SHEET_FULL_GRID = { width: 1308, height: 820 };
 /// La nota nella finestra minima del computer (`minWidth` e un'altezza da
 /// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
 /// computer non si può avere.
@@ -957,6 +962,114 @@ export const SCENE = touchLast(onPage("shell", [
       await page.mouse.move(header.x, header.y);
     },
   },
+  // **Gli stati della griglia** (griglia T8), sulla cartella grande
+  // (`?workbook=large`, 3000 righe per 20 colonne con la riga 1 e la colonna
+  // A bloccate): gli stati della barra del prototipo
+  // (`PLAN-ui/celle-griglia.html` del piano delle celle), nel foglio pieno e
+  // a 700 px. Il telefono ha la sua scena, fra quelle di `mobile.html`. Il
+  // movimento è ridotto (`openPage`): i segni sono già al loro posto e le
+  // formiche non camminano.
+  ...[["", SHEET_FULL_GRID, "full", "nel foglio pieno"], ["-700", SHEET_700, 700, "a 700 px"]].flatMap(([suffix, viewport, width, where]) => [
+    {
+      id: `grid-large-intervallo${suffix}`,
+      title: `Griglia: l'intervallo C4:E9, ${where}`,
+      query: "workbook=large",
+      viewport,
+      prepare: async (page) => {
+        await openLargeSheet(page, width);
+        await pickGridRange(page, [3, 2], [8, 4]);
+      },
+    },
+    {
+      id: `grid-large-oltre${suffix}`,
+      title: `Griglia: l'intervallo C1:E9 oltre la riga bloccata, scorso in giù e a destra, ${where}`,
+      query: "workbook=large",
+      viewport,
+      prepare: async (page) => {
+        await openLargeSheet(page, width);
+        await pickGridRange(page, [0, 2], [8, 4]);
+        await scrollGrid(page, 140, 112);
+      },
+    },
+    {
+      id: `grid-large-cella-aperta${suffix}`,
+      title: `Griglia: la cella A5 aperta con un testo lungo, ${where}`,
+      query: "workbook=large",
+      viewport,
+      prepare: async (page) => {
+        await openLargeSheet(page, width);
+        await writeInCell(page, 4, 0, LONG_CELL_TEXT);
+      },
+    },
+    {
+      id: `grid-large-colonna-tirata${suffix}`,
+      title: `Griglia: il bordo di una colonna vicino al lato destro, tirato di 60 px, ${where}`,
+      query: "workbook=large",
+      viewport,
+      prepare: async (page) => {
+        await openLargeSheet(page, width);
+        await pickGridRange(page, [3, 2], [3, 2]);
+      },
+      // Il bordo si tiene col tasto giù: il gesto è l'ultimo, dopo che il
+      // fotografo ha portato via il puntatore.
+      hover: dragColumnNearEdge,
+    },
+  ]),
+  {
+    id: "grid-large-riempimento",
+    title: "Griglia: C4:C5 (10 e 20) tirata col quadratino fino a C12, il foglio non ha ancora risposto",
+    query: "workbook=large&risposte=si",
+    viewport: SHEET_FULL_GRID,
+    prepare: async (page) => {
+      await openLargeSheet(page, "full");
+      await pickGridRange(page, [3, 2], [4, 2]);
+      const grip = await page.evaluate(() => {
+        const handle = [...document.querySelectorAll(".pane.focus .grid-mark-handle")].find((mark) => !mark.hidden && mark.getClientRects().length > 0);
+        const box = handle?.getBoundingClientRect();
+        return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
+      });
+      if (!grip) throw new Error("il quadratino di C4:C5 non si vede");
+      const end = await gridCellCenter(page, 11, 2);
+      await page.mouse.move(grip.x, grip.y);
+      await page.mouse.down();
+      await page.mouse.move(grip.x, (grip.y + end.y) / 2, { steps: 4 });
+      await page.mouse.move(end.x, end.y, { steps: 4 });
+      // Il foglio non risponde finché la scena non è fotografata: la pagina
+      // dopo rinasce, e la risposta non arriva mai.
+      await page.evaluate(() => {
+        window.bench.throttle("gridBytesCommand");
+      });
+      await page.mouse.up();
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll(".pane.focus .grid-mark-ants")].filter((mark) => !mark.hidden && mark.getClientRects().length > 0).length === 4);
+    },
+  },
+  // La copia nelle tre scelte di «Segno della copia» (griglia T9,
+  // `editor.grid.copy-mark`, `?copia=…` del finto), e il taglio, che resta
+  // sempre il tratteggio fitto.
+  ...[
+    ["grid-large-copiata", "", "l'intervallo C4:E9 copiato, col tratteggio e il battito", "Control+c", ".grid-mark-copy"],
+    ["grid-large-copiata-tratteggio", "&copia=dash", "l'intervallo C4:E9 copiato, col solo tratteggio", "Control+c", ".grid-mark-copy"],
+    ["grid-large-copiata-battito", "&copia=pulse", "l'intervallo C4:E9 copiato, col solo battito", "Control+c", null],
+    ["grid-large-tagliata", "", "l'intervallo C4:E9 tagliato", "Control+x", ".grid-mark-cut"],
+  ].map(([id, query, what, keys, mark]) => ({
+    id,
+    title: `Griglia: ${what}`,
+    query: `workbook=large${query}`,
+    viewport: SHEET_FULL_GRID,
+    prepare: async (page) => {
+      await openLargeSheet(page, "full");
+      await pickGridRange(page, [3, 2], [8, 4]);
+      await page.keyboard.press(keys);
+      if (mark) {
+        await page.waitForFunction((selector) =>
+          [...document.querySelectorAll(`.pane.focus ${selector}`)].filter((el) => !el.hidden && el.getClientRects().length > 0).length === 4, mark);
+      } else {
+        // Il solo battito si accende e svanisce: resta la selezione.
+        await page.waitForFunction(() => [...document.querySelectorAll(".pane.focus .grid-mark-flash")].every((el) => el.hidden || el.getClientRects().length === 0));
+      }
+    },
+  })),
   // **I comandi dei fogli nella tavolozza**: un comando senza una finestra
   // scritta a mano e con dei parametri obbligatori apre quella costruita dal
   // catalogo (`editors/grid/palette/form.ts`), con l'intervallo che parte
@@ -1360,8 +1473,12 @@ export const SCENE = touchLast(onPage("shell", [
       if (block === "code") {
         await page.click(".pane.focus .pane-editor .cm-content");
         await page.keyboard.press("Control+End");
+        // In fondo e fermo prima del clic: la riga del codice è già in vista,
+        // e il clic non scorre.
+        await scrollerAtRest(page, { toEnd: true });
       }
       await placeCursorOn(page, line);
+      await scrollerAtRest(page);
       // Il gruppo arriva dopo la pausa della barra (un tempo vero: l'orologio
       // fermo del banco ferma la data, non i timer).
       await page.waitForSelector(`.pane.focus .format-bar-context[data-block="${block}"]`, { state: "attached" });
@@ -3175,6 +3292,17 @@ export const SCENE = touchLast(onPage("shell", [
         await page.mouse.move(0, 0);
       },
     },
+    // La griglia al dito (griglia T7 e T8), sulla cartella grande: un tocco
+    // lungo su B3 mette le due maniglie, e quella di fine tirata fino a B6
+    // allarga la selezione, come lo stato «Al telefono» del prototipo.
+    {
+      id: "mobile-grid-tocco-lungo",
+      title: "Il telefono: la griglia con le maniglie del tocco lungo su B3:B6",
+      query: "workbook=large",
+      viewport: PHONE,
+      touch: true,
+      prepare: touchGridHandles,
+    },
     {
       id: "mobile-launcher",
       title: "Il telefono: il lanciatore, dalla pillola",
@@ -3489,6 +3617,49 @@ async function openFrontSections(page) {
   });
   await page.mouse.move(0, 0);
 }
+/// Le scene che soltanto il banco dei gesti apre (`bench/grid-gestures.mjs`):
+/// non hanno una foto di riferimento né un passaggio del banco
+/// dell'accessibilità, e le baseline restano tutte quelle di `SCENE`.
+///
+/// **La cartella grande** (griglia T1): 3000 righe per 20 colonne con la riga
+/// 1 e la colonna A bloccate, fatta in codice dal finto (`?workbook=large`).
+/// I controlli G1 ci scorrono sopra.
+export const GESTURE_SCENE = onPage("shell", [
+  {
+    id: "grid-large",
+    title: "Grid v2: una cartella grande, con la riga e la colonna bloccate",
+    query: "workbook=large",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
+  // **Le misure tirate** (griglia T5): la stessa cartella, col finto che dice
+  // sì a `home.columnWidth` e `home.rowHeight` come l'host vero
+  // (`?misure=si`). I controlli G5 ci tirano i bordi.
+  {
+    id: "grid-large-misure",
+    title: "Grid v2: la cartella grande, che accetta le misure tirate",
+    query: "workbook=large&misure=si",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
+  // **Riempire, copiare, incollare** (griglia T6): la stessa cartella, col
+  // finto che dice sì ai riempimenti e a `fub.pasteFrom` (`?risposte=si`);
+  // C4 vale 10 e C5 20, come nel prototipo. I controlli G6 ci riempiono e ci
+  // copiano, e la coreografia del riempimento ci aspetta la risposta.
+  {
+    id: "grid-large-appunti",
+    title: "Grid v2: la cartella grande, che accetta riempimenti e incolla",
+    query: "workbook=large&risposte=si",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
+  // **Le velocità della selezione** (griglia T9): la stessa cartella con
+  // `editor.grid.selection-speed` scelta dal finto (`?velocita=…`). Il mouse
+  // fitto di G3 ci gira con ogni scelta.
+  ...[["quick", "svelta"], ["soft", "morbida"], ["none", "a scatti"]].map(([speed, name]) => ({
+    id: `grid-large-${speed}`,
+    title: `Grid v2: la cartella grande, con la selezione ${name}`,
+    query: `workbook=large&velocita=${speed}`,
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  })),
+]);
 
 function onPage(page, scenes) {
   return scenes.map((scene) => ({ query: "", ...scene, page }));
@@ -3604,11 +3775,64 @@ async function selectionBox(page) {
   return found.jsonValue();
 }
 
+/// Lo scorrimento della nota a fuoco fermo: lo stesso per tre fotogrammi di
+/// fila. Con `toEnd` prima lo porta in fondo, e lo riporta finché il fondo non
+/// smette di spostarsi.
+///
+/// Ctrl+Fine non basta da solo: CodeMirror scorre al suo fotogramma di misura,
+/// e le altezze delle righe mai disegnate sono stime che cambiano appena le
+/// disegna. Il clic che segue cadeva a volte prima di quello scorrimento:
+/// Playwright portava la riga in vista da sé, e la foto mostrava un altro
+/// tratto della nota a ogni corsa (`barra-blocco-stretta`, un terzo dei pixel
+/// diversi fra due corse dello stesso codice).
+async function scrollerAtRest(page, { toEnd = false } = {}) {
+  if (toEnd) {
+    // Il fondo dipende dalle altezze di tutte le righe: misurate alla misura
+    // di adesso, e non stimate da quella di prima (la nota si apre a finestra
+    // larga, poi la finestra si stringe). Si percorre la nota a mezze
+    // pagine finché un giro intero non cambia più l'altezza.
+    await page.evaluate(async () => {
+      const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+      if (!scroller) throw new Error("la nota a fuoco non ha lo scorrimento");
+      const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      for (let pass = 0, height = -1; pass < 6 && height !== scroller.scrollHeight; pass += 1) {
+        height = scroller.scrollHeight;
+        for (let top = 0; top <= scroller.scrollHeight; top += scroller.clientHeight / 2) {
+          scroller.scrollTop = top;
+          await frames();
+        }
+      }
+    });
+  }
+  await page.evaluate(() => delete globalThis.__benchScroll);
+  await page.waitForFunction((end) => {
+    const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+    if (!scroller) return false;
+    const bottom = scroller.scrollHeight - scroller.clientHeight;
+    if (end && Math.abs(scroller.scrollTop - bottom) > 1) scroller.scrollTop = bottom;
+    const at = `${scroller.scrollTop} ${scroller.scrollHeight}`;
+    const seen = (globalThis.__benchScroll ??= { at: null, frames: 0 });
+    seen.frames = seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 3;
+  }, toEnd, { polling: "raf" });
+}
+
 /// La barra misurata (il «…» deciso al fotogramma) e il puntatore lontano,
-/// senza suggerimenti.
+/// senza suggerimenti. La bolla della mini-barra, se c'è, ferma: lo stesso
+/// posto per tre fotogrammi di fila (si riposa quando la sua misura cambia).
 async function settleBar(page) {
   await page.mouse.move(0, 0);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.evaluate(() => delete globalThis.__benchBubble);
+  await page.waitForFunction(() => {
+    const bubble = document.querySelector(".selection-bubble:not([hidden])");
+    const at = bubble ? `${bubble.style.left} ${bubble.style.top} ${bubble.getBoundingClientRect().width}` : "";
+    const seen = (globalThis.__benchBubble ??= { at: null, frames: 0 });
+    seen.frames = seen.at === at ? seen.frames + 1 : 0;
+    seen.at = at;
+    return seen.frames >= 3;
+  }, null, { polling: "raf" });
 }
 
 async function openNote(page, path) {
@@ -4024,10 +4248,14 @@ async function openNoteTypes(page, gesture) {
       await page.waitForSelector("#sidebar-scrim:not([hidden])");
     }
     await page.waitForSelector("#types-list:not([hidden]) .type-row");
-    // Il «+» dell'albero apre il menu «Nuovo» (S34); la sua voce «Nota» è il
-    // gesto della nota nuova, che coi tipi chiede il tipo.
+    // Il «+» del cassetto apre il menu «Nuovo» (S34); la sua «Nota» è il
+    // gesto di «Nuova nota», che coi tipi nel vault chiede il tipo sotto il
+    // «+» (E5).
     await page.click("#new-note");
-    await page.locator("#context-menu button").filter({ has: page.locator(".menu-label", { hasText: /^Nota$/ }) }).first().click();
+    await page
+      .locator('#context-menu[aria-label="Nuovo"] [role=menuitem]')
+      .filter({ has: page.locator(".menu-label", { hasText: /^Nota$/ }) })
+      .click();
     await page.waitForSelector(".note-type-popover .note-type-menu-item");
   }
   if (gesture === "choose") {
@@ -4212,6 +4440,36 @@ async function touchOn(page) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   return cdp;
+}
+
+/// La griglia al dito: apre la cartella grande, tiene il dito su B3 oltre
+/// `LONG_PRESS_MS` (450 ms in `editors/grid/engine.ts`) finché compaiono le due
+/// maniglie, e tira quella di fine fino a B6. Il dito passa dal browser vero
+/// (`Input.dispatchTouchEvent`), come in `bench/grid-gestures.mjs`.
+async function touchGridHandles(page) {
+  const cdp = await touchOn(page);
+  await openRibbon(page, "phone", "Dati/Grande.xlsx");
+  const send = (type, points) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map(({ x, y }) => ({ x, y, id: 1 })) });
+  const b3 = await gridCellCenter(page, 2, 1);
+  const b6 = await gridCellCenter(page, 5, 1);
+  await send("touchStart", [b3]);
+  await page.waitForFunction(() => [...document.querySelectorAll(".pane.focus .grid-mark-touch")].filter((mark) => !mark.hidden).length === 2);
+  await send("touchEnd", []);
+  const grip = await page.evaluate(() => {
+    const mark = [...document.querySelectorAll('.pane.focus .grid-mark-touch[data-handle="b"]')].find((el) => !el.hidden);
+    const box = mark?.getBoundingClientRect();
+    return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
+  });
+  if (!grip) throw new Error("la maniglia di fine del tocco lungo non si vede");
+  await send("touchStart", [grip]);
+  for (let step = 1; step <= 10; step += 1) {
+    const t = step / 10;
+    await send("touchMove", [{ x: grip.x + (b6.x - grip.x) * t, y: grip.y + (b6.y - grip.y) * t }]);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  }
+  await send("touchEnd", []);
+  await page.waitForFunction(() => document.querySelectorAll(".pane.focus .grid-cell.selected").length === 4);
+  await marksAtRest(page);
 }
 
 /// La tastiera a schermo, finta: un browser senza schermo non l'ha, e ciò
@@ -4565,9 +4823,9 @@ async function chooseBaseSummary(page, column, label) {
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
 /// griglia v2 abbia disegnato le sue celle.
-async function openWorkbook(page) {
+async function openWorkbook(page, path = "Dati/Conti.xlsx") {
   await openFolder(page, "Dati");
-  await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');
+  await page.click(`#file-list .tree-row[data-path="${path}"]`);
   await page.waitForFunction(() => {
     const grid = document.querySelector(".grid-surface");
     return grid?.getAttribute("data-grid-protocol") === "v2"
@@ -4605,8 +4863,9 @@ async function gridAtRest(page) {
 /// Apre la cartella per le scene della barra dei fogli, col foglio largo
 /// `width` px, oppure senza l'albero e l'ispettore (`"full"`, 1248 px nella
 /// finestra `SHEET_FULL`) o quanto lascia il telefono (`"phone"`), e aspetta che la barra abbia raccolto i suoi foglietti.
-async function openRibbon(page, width) {
-  await openFromTree(page, "Dati/Conti.xlsx", '.pane.focus .grid-surface[data-grid-protocol="v2"] [role="gridcell"]');
+/// `path` è la cartella: di solito quella delle scene della barra.
+async function openRibbon(page, width, path = "Dati/Conti.xlsx") {
+  await openFromTree(page, path, '.pane.focus .grid-surface[data-grid-protocol="v2"] [role="gridcell"]');
   if (await page.isVisible('#toggle-inspector[aria-pressed="true"]')) {
     await page.click("#toggle-inspector");
     await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
@@ -4627,6 +4886,97 @@ async function openRibbon(page, width) {
   // La barra si raccoglie al fotogramma dopo la misura del foglio.
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.focus('.pane.focus .grid-surface [role="gridcell"][aria-selected="true"], .pane.focus .grid-surface [role="grid"]');
+}
+
+/// Il testo lungo della cella aperta, lo stesso del prototipo delle celle.
+const LONG_CELL_TEXT = "Luce 4 — bolletta di gennaio e febbraio, con il conguaglio";
+
+/// Apre la cartella grande delle scene degli stati della griglia
+/// (`?workbook=large`), col foglio largo come nelle scene della barra.
+function openLargeSheet(page, width) {
+  return openRibbon(page, width, "Dati/Grande.xlsx");
+}
+
+/// Sceglie l'intervallo da `from` a `to` (riga e colonna da zero) come una
+/// persona: un clic sulla prima cella, poi Maiusc e le frecce. Aspetta che i
+/// lati del rettangolo stiano sui bordi delle due celle: col movimento ridotto
+/// ci arrivano subito.
+async function pickGridRange(page, [r0, c0], [r1, c1]) {
+  const { x, y } = await gridCellCenter(page, r0, c0);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(
+    ([r, c]) => {
+      const active = document.querySelector(".pane.focus .grid-cell.active");
+      return active?.dataset.row === String(r) && active?.dataset.column === String(c);
+    },
+    [r0, c0],
+  );
+  for (let c = c0; c < c1; c += 1) await page.keyboard.press("Shift+ArrowRight");
+  for (let r = r0; r < r1; r += 1) await page.keyboard.press("Shift+ArrowDown");
+  await page.waitForFunction(
+    ([r, c, n]) => document.querySelectorAll(".pane.focus .grid-cell.selected").length === n
+      && document.querySelector(".pane.focus .grid-cell.active")?.dataset.row === String(r)
+      && document.querySelector(".pane.focus .grid-cell.active")?.dataset.column === String(c),
+    [r0, c0, (r1 - r0 + 1) * (c1 - c0 + 1)],
+  );
+  await marksAtRest(page);
+}
+
+/// Aspetta che i segni della griglia stiano fermi per due fotogrammi di fila.
+async function marksAtRest(page) {
+  await page.evaluate(() => new Promise((resolve) => {
+    const root = document.querySelector(".pane.focus .grid-viewport");
+    const look = () => [...root.querySelectorAll(".grid-mark")].map((mark) => `${mark.hidden}${mark.style.transform}${mark.style.width}${mark.style.height}`).join("|");
+    let before = look();
+    let still = 0;
+    const tick = () => {
+      const now = look();
+      still = now === before ? still + 1 : 0;
+      before = now;
+      if (still >= 2) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }));
+}
+
+/// Scorre la griglia a `top`, `left` e aspetta che le righe e i segni siano
+/// ridisegnati.
+async function scrollGrid(page, top, left) {
+  await page.evaluate(([t, l]) => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    viewport.scrollTop = t;
+    viewport.scrollLeft = l;
+  }, [top, left]);
+  await page.waitForFunction(
+    ([t, l]) => {
+      const viewport = document.querySelector(".pane.focus .grid-viewport");
+      return Math.abs(viewport.scrollTop - t) < 1 && Math.abs(viewport.scrollLeft - l) < 1;
+    },
+    [top, left],
+  );
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await marksAtRest(page);
+}
+
+/// Prende il bordo destro dell'ultima colonna che, tirata di 60 px, resta
+/// dentro il riquadro (come lo sceglie il prototipo), lo tira di 60 px e lo
+/// tiene: la misura dal vivo si vede.
+async function dragColumnNearEdge(page) {
+  const edge = await page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport").getBoundingClientRect();
+    const near = [...document.querySelectorAll(".pane.focus .grid-column-header")]
+      .map((element) => element.getBoundingClientRect())
+      .filter((box) => box.width > 0 && box.right + 60 <= viewport.right - 4)
+      .sort((a, b) => b.right - a.right)[0];
+    return near ? { x: near.right - 1, y: near.top + near.height / 2 } : null;
+  });
+  if (!edge) throw new Error("nessun bordo di colonna vicino al lato destro");
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  for (const dx of [10, 30, 50, 60]) await page.mouse.move(edge.x + dx, edge.y);
+  await page.waitForSelector(".pane.focus .grid-resize-label:not([hidden])");
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
 /// Apre il menu «Comandi» della barra dei fogli e, se c'è, la strada di

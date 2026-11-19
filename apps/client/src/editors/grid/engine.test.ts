@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
+import { createManualDriver, setMotionDriver, type ManualDriver } from "../../moto";
+import { DURATION } from "../../moto/spring";
 import { GRID_BYTES_PROTOCOL_VERSION, type GridBytesCell, type GridBytesWindow } from "../../host/contract";
 import { writeClipboardText } from "../../platform/clipboard";
 import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
-import { fillTarget, typingOpens, type GridHost } from "./engine";
-import { bytesHost, cellAt, mounted, settle, SURFACE, typeInActiveCell, written } from "./test-support";
+import { fillTarget, openSpan, typingOpens, type GridHost } from "./engine";
+import { previewSizes, resizeLabelAt } from "./engine-geometry";
+import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, workbookHost, workbookMounted, written } from "./test-support";
 
 vi.mock("../../platform/clipboard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../platform/clipboard")>()),
@@ -55,16 +58,100 @@ describe("GridEngine", () => {
     expect(viewport.getAttribute("role")).toBe("grid");
     expect(viewport.getAttribute("aria-rowcount")).toBe("101");
     expect(viewport.getAttribute("aria-colcount")).toBe("51");
-    expect(engine.renderedCellCount()).toBeLessThan(200);
+    // Il riquadro (600 × 300, meno le intestazioni) e un riquadro intero di
+    // margine prima e dopo: righe di 28 px, colonne di 120.
+    const span = { rows: 300 - 28, columns: 600 - 52 };
+    const drawn = () => {
+      const cells = [...host.querySelectorAll<HTMLElement>(".grid-cell")];
+      const rows = cells.map((cell) => Number(cell.dataset.row));
+      const columns = cells.map((cell) => Number(cell.dataset.column));
+      return { minRow: Math.min(...rows), maxRow: Math.max(...rows), maxColumn: Math.max(...columns) };
+    };
+    expect(drawn()).toEqual({ minRow: 0, maxRow: Math.floor((2 * span.rows) / 28), maxColumn: Math.floor((2 * span.columns) / 120) });
     expect(host.querySelectorAll(".grid-cell").length).toBe(engine.renderedCellCount());
 
     viewport.scrollTop = 1_400;
     viewport.dispatchEvent(new Event("scroll"));
     await settle();
-    const renderedRows = [...host.querySelectorAll<HTMLElement>(".grid-cell")]
-      .map((cell) => Number(cell.dataset.row));
-    expect(Math.min(...renderedRows)).toBeGreaterThan(40);
-    expect(engine.renderedCellCount()).toBeLessThan(200);
+    await frames();
+    expect(drawn().minRow).toBe(Math.floor((1_400 - span.rows) / 28));
+    expect(drawn().maxRow).toBe(Math.floor((1_400 + 2 * span.rows) / 28));
+    engine.destroy();
+  });
+
+  it("le righe restano: uno scorrimento le aggiunge e le toglie solo ai bordi, nel suo gestore", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells: { "0,0": "1", "10,1": "x" } }));
+    const rows = () => new Map([...host.querySelectorAll<HTMLElement>(".grid-rows > .grid-row")].map((row) => [Number(row.dataset.row), row]));
+    const before = rows();
+    const cell = cellAt(host, 10, 1)!;
+    expect(cell.textContent).toBe("x");
+    // Il gestore dello scorrimento disegna subito, senza aspettare un
+    // fotogramma, le righe del riquadro e di una fascia di un decimo di
+    // riquadro attorno a lui, più qualcuna del margine; il resto del margine
+    // lo finiscono i fotogrammi dopo.
+    viewport.scrollTop = 280;
+    viewport.dispatchEvent(new Event("scroll"));
+    expect(Math.max(...rows().keys())).toBeGreaterThanOrEqual(Math.floor((280 + 272 + 27) / 28));
+    await frames();
+    const after = rows();
+    expect(Math.max(...after.keys())).toBe(Math.floor((280 + 2 * 272) / 28));
+    // Le righe che c'erano e ci sono ancora sono gli stessi elementi, con le
+    // stesse celle.
+    const kept = [...after.keys()].filter((row) => before.has(row));
+    expect(kept.length).toBeGreaterThan(10);
+    for (const row of kept) expect(after.get(row)).toBe(before.get(row));
+    expect(cellAt(host, 10, 1)).toBe(cell);
+    // Uno scorrimento lontano è un salto: nessuna riga resta, tutte nuove.
+    viewport.scrollTop = 300 * 28;
+    viewport.dispatchEvent(new Event("scroll"));
+    await frames();
+    const far = rows();
+    expect([...far.values()].some((row) => [...after.values()].includes(row))).toBe(false);
+    expect(Math.min(...far.keys())).toBe(Math.floor((300 * 28 - 272) / 28));
+    engine.destroy();
+  });
+
+  it("una cella che cambia si aggiorna sul posto, e una che non cambia non si tocca", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost({ cells: { "0,0": "1", "1,0": "2" } }));
+    const changed = cellAt(host, 0, 0)!;
+    const still = cellAt(host, 1, 0)!;
+    const text = still.querySelector(".grid-cell-text");
+    changed.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    const formula = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-formula-editor")!);
+    formula.focus();
+    formula.dispatch({ changes: { from: 0, to: formula.state.doc.length, insert: "uno" }, userEvent: "input" });
+    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await settle();
+    expect(cellAt(host, 0, 0)).toBe(changed);
+    expect(changed.textContent).toBe("uno");
+    expect(cellAt(host, 1, 0)).toBe(still);
+    expect(still.querySelector(".grid-cell-text")).toBe(text);
+    // La selezione si sposta sulle celle che restano, senza rifarle.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(changed.classList.contains("active")).toBe(true);
+    expect(changed.getAttribute("aria-selected")).toBe("true");
+    expect(still.classList.contains("active")).toBe(false);
+    engine.destroy();
+  });
+
+  it("la carta sotto le righe ha un filo per ogni colonna disegnata, e la sua copia nelle fasce ferme", async () => {
+    const { engine, host, viewport } = await mounted();
+    const plane = host.querySelector<HTMLElement>(".grid-plane")!;
+    const paper = plane.querySelector<HTMLElement>(":scope > .grid-paper")!;
+    expect(paper.getAttribute("aria-hidden")).toBe("true");
+    expect(plane.querySelector(".grid-head > .grid-paper-top")).not.toBeNull();
+    expect(plane.querySelector<HTMLElement>(":scope > .grid-paper-left")!.hidden).toBe(false);
+    expect(plane.style.getPropertyValue("--grid-row")).toBe("28px");
+    const rules = () => [...paper.querySelectorAll<HTMLElement>(".grid-rule-column")].map((rule) => rule.style.left);
+    const columns = new Set([...host.querySelectorAll<HTMLElement>(".grid-cell")].map((cell) => cell.dataset.column));
+    expect(rules()).toHaveLength(columns.size);
+    // Il filo sta sull'ultimo pixel della colonna, dopo le intestazioni.
+    expect(rules()[0]).toBe(`${52 + 120 - 1}px`);
+    // Scorrendo di lato i fili seguono le colonne disegnate.
+    viewport.scrollLeft = 2_400;
+    viewport.dispatchEvent(new Event("scroll"));
+    expect(rules()).toContain(`${52 + 25 * 120 - 1}px`);
+    expect(rules()).not.toContain(`${52 + 120 - 1}px`);
     engine.destroy();
   });
 
@@ -72,7 +159,10 @@ describe("GridEngine", () => {
     const { engine, viewport } = await mounted();
     const rows = [...viewport.querySelectorAll<HTMLElement>('[role="row"]')];
     expect(rows.length).toBeGreaterThan(1);
-    expect(rows.every((row) => row.parentElement === viewport)).toBe(true);
+    // Le righe stanno nei loro gruppi: la testa (le intestazioni e le righe
+    // bloccate) e il corpo, nel piano della griglia.
+    expect(rows.every((row) => row.parentElement?.getAttribute("role") === "rowgroup")).toBe(true);
+    expect(rows[0]?.parentElement?.classList.contains("grid-head")).toBe(true);
     expect(rows[0]?.getAttribute("aria-rowindex")).toBe("1");
 
     for (const row of rows) {
@@ -679,9 +769,9 @@ describe("GridEngine", () => {
     key("ArrowRight", { shiftKey: true });
     send("cut");
     expect(written(engine.getDoc())).toEqual({});
-    expect(host.querySelector(".grid-cut-mark")).not.toBeNull();
+    expect(host.querySelector(".grid-mark-cut:not([hidden])")).not.toBeNull();
     key("Escape");
-    expect(host.querySelector(".grid-cut-mark")).toBeNull();
+    expect(host.querySelector(".grid-mark-cut:not([hidden])")).toBeNull();
 
     send("cut");
     key("ArrowDown");
@@ -689,7 +779,7 @@ describe("GridEngine", () => {
     key("ArrowRight");
     send("paste");
     expect(written(engine.getDoc())).toEqual({ "0,0": "", "0,1": "", "2,1": "1", "2,2": "2" });
-    expect(host.querySelector(".grid-cut-mark")).toBeNull();
+    expect(host.querySelector(".grid-mark-cut:not([hidden])")).toBeNull();
     engine.undo();
     expect(written(engine.getDoc())).toEqual({});
     engine.destroy();
@@ -735,7 +825,9 @@ describe("GridEngine", () => {
     viewport.dispatchEvent(new Event("scroll"));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(editorHost.hidden).toBe(false);
-    expect(editorHost.parentElement).toBe(cellAt(host, 0, 0));
+    // La cella aperta scorre con la sua zona: sta nel suo livello, non nella cella.
+    expect(editorHost.parentElement?.classList.contains("grid-marks-body")).toBe(true);
+    expect([editorHost.dataset.row, editorHost.dataset.column]).toEqual(["0", "0"]);
 
     viewport.focus();
     await settle();
@@ -744,22 +836,88 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("la cella aperta non sta dentro un aria-hidden, e il suo livello torna nascosto quando si chiude", async () => {
+    const { engine, host, viewport } = await mounted();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const editorHost = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    expect(editorHost.hidden).toBe(false);
+    // Un lettore di schermo non legge niente dentro un `aria-hidden`: il campo
+    // col fuoco sparirebbe (axe `aria-hidden-focus`, scena `grid-large-cella-aperta`).
+    expect(editorHost.closest("[aria-hidden]")).toBeNull();
+    // Il campo sta nel livello, e per chi legge è dentro la sua cella: una
+    // griglia contiene solo righe e celle.
+    expect(editorHost.id).not.toBe("");
+    expect(cellAt(host, 0, 0)!.getAttribute("aria-owns")).toBe(editorHost.id);
+    const lift = editorHost.parentElement!;
+    // I segni che il livello porta restano nascosti da sé.
+    for (const mark of lift.querySelectorAll(".grid-mark")) expect(mark.getAttribute("aria-hidden")).toBe("true");
+    editorHost.querySelector<HTMLElement>(".cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await Promise.resolve();
+    expect(editorHost.hidden).toBe(true);
+    expect(lift.getAttribute("aria-hidden")).toBe("true");
+    expect(host.querySelector("[aria-owns]")).toBeNull();
+    for (const other of host.querySelectorAll(".grid-lift-top, .grid-lift-left, .grid-lift-corner")) expect(other.getAttribute("aria-hidden")).toBe("true");
+    engine.destroy();
+  });
+
+  it("la cella aperta è la cella: nel livello della sua zona, col suo carattere, e cresce a colonne intere", async () => {
+    const long = "x".repeat(40);
+    const { engine, host, viewport } = await mounted(bytesHost({ cells: { "0,0": long } }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const editorHost = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    expect(editorHost.hidden).toBe(false);
+    // Non dentro la cella: in fondo al livello «lift» del corpo, sopra i segni.
+    expect(cellAt(host, 0, 0)!.contains(editorHost)).toBe(false);
+    expect(editorHost.parentElement?.classList.contains("grid-marks-body")).toBe(true);
+    expect(editorHost.parentElement?.lastElementChild).toBe(editorHost);
+    // La cornice è un pezzo a parte, e il campo scrive col carattere della cella.
+    expect(editorHost.querySelector(":scope > .grid-cell-editor-frame")?.getAttribute("aria-hidden")).toBe("true");
+    expect(editorHost.querySelector(":scope > .grid-cell-editor-text .cm-content")).not.toBeNull();
+    expect(editorHost.style.getPropertyValue("--field-font")).not.toBe("");
+    // Senza tela il testo si stima a 0,6 em per carattere: la cella (120 px)
+    // cresce a destra di colonne intere, meno il filo, dentro il riquadro.
+    expect(editorHost.style.left).toBe("52px");
+    const width = parseFloat(editorHost.style.width) + 1;
+    expect(width % 120).toBe(0);
+    expect(width).toBeGreaterThan(120);
+    expect(52 + width).toBeLessThanOrEqual(600);
+    expect(editorHost.style.height).toBe(`${28 - 1}px`);
+    expect(editorHost.classList.contains("wraps")).toBe(false);
+    // Un testo più lungo del riquadro (600 px) arriva al suo bordo e va a capo.
+    findTextEditorOrThrow(editorHost).dispatch({ changes: { from: long.length, insert: "y".repeat(60) } });
+    expect(editorHost.style.width).toBe(`${4 * 120 - 1}px`);
+    expect(editorHost.classList.contains("wraps")).toBe(true);
+    // Chiusa, torna fuori dalle zone e non porta niente della cella.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    editorHost.querySelector<HTMLElement>(".cm-content")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await settle();
+    expect(editorHost.hidden).toBe(true);
+    expect(editorHost.classList.contains("wraps")).toBe(false);
+    expect(editorHost.dataset.row).toBeUndefined();
+    engine.destroy();
+  });
+
   it("disegna l'intervallo con un rettangolo solo, e segna le intestazioni dopo i nascosti", async () => {
     const { engine, host, viewport } = await mounted(bytesHost({ rows: 4, columns: 4, hiddenRows: [1], hiddenColumns: [1] }));
     const key = (name: string, init: KeyboardEventInit = {}) =>
       viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init }));
-    // Una cella sola: il bordo è quello della cella attiva.
-    expect(host.querySelector(".grid-selection")).toBeNull();
-    expect(viewport.classList.contains("ranged")).toBe(false);
+    // Una cella sola: il rettangolo è la cella attiva, senza anello né velo.
+    expect(shownRanges(host)).toBe(1);
+    expect(shownMarks(host, "veil")).toEqual([]);
+    expect(shownMarks(host, "ring")).toEqual([]);
     key("ArrowDown", { shiftKey: true });
     key("ArrowRight", { shiftKey: true });
-    expect(host.querySelectorAll(".grid-selection")).toHaveLength(1);
-    expect(viewport.classList.contains("ranged")).toBe(true);
+    await frames(40);
+    expect(shownRanges(host)).toBe(1);
+    expect(shownMarks(host, "ring")).toHaveLength(4);
+    expect(shownMarks(host, "veil").length).toBeGreaterThan(0);
     expect(host.querySelector(".grid-cell.active")?.classList.contains("selected")).toBe(true);
     key("Escape");
     key("ArrowLeft");
-    expect(host.querySelector(".grid-selection")).toBeNull();
-    expect(viewport.classList.contains("ranged")).toBe(false);
+    await frames(40);
+    expect(shownRanges(host)).toBe(1);
+    expect(shownMarks(host, "veil")).toEqual([]);
     // La tacca dei nascosti sta sull'intestazione che li segue.
     const marked = [...host.querySelectorAll(".grid-header.after-hidden")].map((header) => header.textContent);
     expect(marked.sort()).toEqual(["3", "C"]);
@@ -777,7 +935,7 @@ describe("GridEngine", () => {
     key("ArrowRight");
     key("Escape");
     // A1 resta scelta, e C3 è l'intervallo in cui si lavora; B2 no.
-    expect(host.querySelectorAll(".grid-selection")).toHaveLength(2);
+    expect(shownRanges(host)).toBe(2);
     const copy = new Event("copy", { bubbles: true, cancelable: true });
     const data = new Map<string, string>();
     Object.defineProperty(copy, "clipboardData", { value: { setData: (type: string, text: string) => data.set(type, text), getData: () => "" } });
@@ -787,7 +945,7 @@ describe("GridEngine", () => {
     expect(written(engine.getDoc())).toEqual({ "0,0": "", "2,2": "" });
     // Fuori dal modo, una freccia ricomincia da un intervallo solo.
     key("ArrowLeft");
-    expect(host.querySelector(".grid-selection")).toBeNull();
+    expect(shownRanges(host)).toBe(1);
     engine.destroy();
   });
 
@@ -948,6 +1106,28 @@ describe("GridEngine", () => {
   });
 });
 
+describe("openSpan", () => {
+  // Cinque colonne da 100 px, la prima a 50 px dal bordo del riquadro.
+  const edge = (index: number) => 50 + index * 100;
+  it("cresce a colonne intere finché il testo ci sta", () => {
+    expect(openSpan(edge, 5, 1, 2, 99, 0, 600, ["after", "before"])).toEqual({ start: 1, end: 2, fits: true });
+    expect(openSpan(edge, 5, 1, 2, 150, 0, 600, ["after", "before"])).toEqual({ start: 1, end: 3, fits: true });
+    // Allineata a destra cresce a sinistra.
+    expect(openSpan(edge, 5, 2, 3, 150, 0, 600, ["before", "after"])).toEqual({ start: 1, end: 3, fits: true });
+  });
+  it("si ferma al bordo del riquadro, poi cresce dall'altra parte, poi non ci sta", () => {
+    expect(openSpan(edge, 5, 3, 4, 250, 0, 460, ["after", "before"])).toEqual({ start: 1, end: 4, fits: true });
+    expect(openSpan(edge, 5, 3, 4, 900, 120, 460, ["after", "before"])).toEqual({ start: 1, end: 4, fits: false });
+  });
+  it("salta i confini nascosti sotto una fascia ferma", () => {
+    // Le colonne dopo la prima sono scorse di 180 px: i confini 2 e 3 stanno
+    // sotto la fascia ferma, che finisce a 150.
+    const scrolled = (index: number) => (index <= 1 ? edge(index) : edge(index) - 180);
+    expect(openSpan(scrolled, 5, 0, 1, 250, 150, 600, ["after"])).toEqual({ start: 0, end: 5, fits: true });
+    expect(openSpan(scrolled, 5, 0, 1, 110, 150, 600, ["after"])).toEqual({ start: 0, end: 3, fits: true });
+  });
+});
+
 describe("fillTarget", () => {
   const source = { rowStart: 1, rowEnd: 2, columnStart: 1, columnEnd: 1 };
   it("estende lungo l'asse su cui il puntatore è uscito di più", () => {
@@ -958,5 +1138,375 @@ describe("fillTarget", () => {
   });
   it("dentro la sorgente non riempie", () => {
     expect(fillTarget(source, { row: 2, column: 1 })).toBe(source);
+  });
+});
+
+// **Ciò che si scrive o si tira si vede subito** (griglia T5): sulla cartella
+// di Excel, col provider tenuto in volo (`hold`) per guardare l'anteprima.
+describe("GridEngine: l'anteprima di ciò che si scrive o si tira", () => {
+  const press = (target: EventTarget, type: string, x: number, y: number) =>
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: y }));
+  const headerOf = (host: HTMLElement, label: string) =>
+    [...host.querySelectorAll<HTMLElement>(".grid-column-header")].find((element) => element.textContent === label)!;
+  /// Tira il bordo destro dell'intestazione `label` di `by` px e lo rilascia.
+  const pull = (host: HTMLElement, viewport: HTMLElement, label: string, by: number) => {
+    const header = headerOf(host, label);
+    const edge = parseFloat(header.style.left) + parseFloat(header.style.width);
+    press(viewport, "pointermove", edge - 2, 10);
+    press(viewport, "pointerdown", edge - 2, 10);
+    press(viewport, "pointermove", edge - 2 + by, 10);
+    press(viewport, "pointerup", edge - 2 + by, 10);
+  };
+  const widthOf = (host: HTMLElement, label: string) => parseFloat(headerOf(host, label).style.width);
+  const rounds = async (count: number) => {
+    for (let round = 0; round < count; round += 1) await settle();
+  };
+
+  it("un numero va a destra appena lo si conferma, e la cella che il provider rilegge vince", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid);
+    grid.hold(true);
+    go(6, 1);
+    typeInActiveCell(host, viewport, "42");
+    expect(cell(6, 1)!.textContent).toBe("42");
+    expect(cell(6, 1)!.style.textAlign).toBe("end");
+    // Un testo resta a sinistra, e un numero con l'apostrofo è un testo.
+    go(7, 1);
+    typeInActiveCell(host, viewport, "abc");
+    go(8, 1);
+    typeInActiveCell(host, viewport, "'42");
+    expect(cell(7, 1)!.style.textAlign).not.toBe("end");
+    expect(cell(8, 1)!.textContent).toBe("42");
+    expect(cell(8, 1)!.style.textAlign).not.toBe("end");
+    // Il finto rilegge ogni input come testo: la sua risposta vince
+    // sull'anteprima del numero.
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(cell(6, 1)!.textContent).toBe("42");
+    expect(cell(6, 1)!.style.textAlign).not.toBe("end");
+    engine.destroy();
+  });
+
+  it("una formula resta com'è scritta, tenue, finché il foglio non risponde", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid);
+    grid.hold(true);
+    go(6, 1);
+    typeInActiveCell(host, viewport, "=B2+1");
+    expect(cell(6, 1)!.textContent).toBe("=B2+1");
+    expect(cell(6, 1)!.classList.contains("pending")).toBe(true);
+    // Tenue non è «legge celle cambiate»: niente `stale`.
+    expect(cell(6, 1)!.classList.contains("stale")).toBe(false);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(cell(6, 1)!.classList.contains("pending")).toBe(false);
+    engine.destroy();
+  });
+
+  it("una larghezza tirata vale subito, e resta quando il provider dice sì", async () => {
+    let wide: number | null = null;
+    const grid = workbookHost({
+      window: (window) => {
+        const column = window.columns.find((candidate) => candidate.index === 1);
+        if (column && wide !== null) column.width = wide;
+      },
+    });
+    const { engine, host, viewport } = await workbookMounted(grid);
+    const before = widthOf(host, "B");
+    const after = Math.round(Math.round((before + 28) / 1.4) * 1.4);
+    const left = parseFloat(headerOf(host, "C").style.left);
+    grid.hold(true);
+    pull(host, viewport, "B", 28);
+    // Dal primo disegno dopo il rilascio: la colonna è larga quanto al
+    // rilascio, e la C è già al posto nuovo.
+    expect(widthOf(host, "B")).toBe(after);
+    expect(parseFloat(headerOf(host, "C").style.left)).toBe(left + after - before);
+    await rounds(2);
+    expect(widthOf(host, "B")).toBe(after);
+    expect(grid.given.map((request) => request.command.id)).toEqual(["home.columnWidth"]);
+    wide = JSON.parse(grid.given[0].command.params).width;
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(widthOf(host, "B")).toBe(after);
+    engine.destroy();
+  });
+
+  it("un no torna com'era, e l'avviso dice perché", async () => {
+    const grid = workbookHost();
+    const refusing = {
+      ...grid,
+      host: {
+        ...grid.host,
+        gridBytesCommand: async () => {
+          throw { kind: "permission_denied", message: "il foglio è protetto" };
+        },
+      },
+    };
+    const { engine, host, viewport, notice } = await workbookMounted(refusing);
+    const before = widthOf(host, "B");
+    pull(host, viewport, "B", 28);
+    expect(widthOf(host, "B")).toBeGreaterThan(before);
+    await rounds(6);
+    expect(widthOf(host, "B")).toBe(before);
+    expect(notice().hidden).toBe(false);
+    expect(notice().textContent).toContain("il foglio è protetto");
+    engine.destroy();
+  });
+
+  it("una risposta vecchia non annulla un gesto più nuovo sullo stesso bordo", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport } = await workbookMounted(grid);
+    const before = widthOf(host, "B");
+    grid.hold(true);
+    pull(host, viewport, "B", 28);
+    const first = widthOf(host, "B");
+    pull(host, viewport, "B", 42);
+    const second = widthOf(host, "B");
+    expect(second).toBeGreaterThan(first);
+    // Il primo comando risponde (il finto non cambia le larghezze): la sua
+    // anteprima esce, quella del secondo gesto resta e vince.
+    await rounds(2);
+    grid.release();
+    await rounds(16);
+    expect(grid.given.length).toBe(2);
+    expect(widthOf(host, "B")).toBe(second);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    // Tutti e due hanno risposto: restano le misure lette.
+    expect(widthOf(host, "B")).toBe(before);
+    engine.destroy();
+  });
+});
+
+describe("la misura di un bordo tirato e le anteprime delle misure", () => {
+  it("la misura sta dopo il bordo, o prima quando dopo non c'è posto, mai fuori dal riquadro", () => {
+    expect(resizeLabelAt(100, 150, 700)).toBe(106);
+    expect(resizeLabelAt(600, 150, 700)).toBe(444);
+    expect(resizeLabelAt(100, 150, 200)).toBe(6);
+    expect(resizeLabelAt(-40, 150, 700)).toBe(6);
+  });
+  it("la più nuova vince, e senza anteprime le linee restano quelle", () => {
+    const lines = [{ hidden: false, width: 10 }, { hidden: false }, { hidden: true, width: 5 }];
+    expect(previewSizes(lines, "width", [])).toBe(lines);
+    const previews = [
+      { ticket: 1, sheet: "s1", axis: "column" as const, first: 0, last: 1, size: 30 },
+      { ticket: 2, sheet: "s1", axis: "column" as const, first: 1, last: 1, size: 40 },
+    ];
+    expect(previewSizes(lines, "width", previews)).toEqual([{ hidden: false, width: 30 }, { hidden: false, width: 40 }, { hidden: true, width: 5 }]);
+    expect(lines[0].width).toBe(10);
+  });
+});
+
+describe("GridEngine: riempire, copiare, tagliare, incollare (griglia T6)", () => {
+  const FRAME = 1000 / 60;
+  let driver: ManualDriver;
+  afterEach(() => {
+    setMotionDriver(null);
+  });
+  const rounds = async (count: number) => {
+    for (let round = 0; round < count; round += 1) await settle();
+  };
+  const shown = (host: HTMLElement, selector: string) => host.querySelectorAll<HTMLElement>(`${selector}:not([hidden])`).length;
+  /// I pezzi che si vedono quando le uscite (una dissolvenza in
+  /// `DURATION.swap`) sono finite.
+  const faded = async (host: HTMLElement, selector: string) => {
+    driver.advance(DURATION.swap + FRAME * 2);
+    await settle();
+    return shown(host, selector);
+  };
+  const walkingAnts = () => driver.plays.filter((play) => play.state === "running" && (play.el as HTMLElement).classList.contains("grid-ants"));
+  async function mountedWithMotion(grid = workbookHost()) {
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    const made = await workbookMounted(grid);
+    const copied = new Map<string, string>();
+    const send = (type: string) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { getData: (kind: string) => copied.get(kind) ?? "", setData: (kind: string, text: string) => { copied.set(kind, text); } },
+      });
+      made.viewport.dispatchEvent(event);
+    };
+    const key = (name: string) => made.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+    return { ...made, grid, send, key, copied };
+  }
+
+  it("un riempimento aspetta il foglio con le formiche in cammino attorno al bersaglio; poi i valori entrano dalla sorgente", async () => {
+    const { engine, host, grid, go } = await mountedWithMotion();
+    go(1, 1);
+    await settle();
+    grid.hold(true);
+    expect(engine.command("edit.autoFill", JSON.stringify({ source: "B2", target: "B2:B4" }))).toBe(true);
+    await settle();
+    // Il contorno resta, le formiche camminano, il quadratino non c'è e la
+    // selezione resta sulla sorgente.
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    expect(walkingAnts().length).toBe(4);
+    expect(shown(host, ".grid-mark-handle")).toBe(0);
+    expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 1, column: 1 } });
+    driver.advance(1000);
+    await settle();
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    expect(walkingAnts().length).toBe(4);
+
+    const before = driver.plays.length;
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    // La risposta ferma le formiche; il provider seleziona il riempimento.
+    expect(walkingAnts()).toHaveLength(0);
+    expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 3, column: 1 } });
+    // I valori nuovi (B3, B4) entrano uno dopo l'altro, dalla sorgente.
+    const entering = driver.plays.slice(before).filter((play) => (play.el as HTMLElement).classList.contains("grid-cell-text"));
+    const rows = entering.map((play) => Number((play.el as HTMLElement).closest<HTMLElement>(".grid-cell")!.dataset.row));
+    expect(rows).toEqual([2, 3]);
+    expect(entering[1]!.timing.delay).toBeGreaterThan(entering[0]!.timing.delay);
+    expect(entering.every((play) => Number(play.keyframes[0]!.opacity) === 0)).toBe(true);
+    // Le formiche escono con una dissolvenza, poi non c'è più niente.
+    driver.advance(DURATION.swap + FRAME * 2);
+    await rounds(2);
+    expect(shown(host, ".grid-mark-ants")).toBe(0);
+    engine.destroy();
+  });
+
+  it("un riempimento che il foglio rifiuta toglie le formiche, e l'avviso dice perché", async () => {
+    const { engine, host, grid, go, notice } = await mountedWithMotion();
+    go(1, 1);
+    await settle();
+    grid.hold(true);
+    grid.failCommand({ kind: "bad_args", message: "fill refused" });
+    engine.command("edit.fillDown");
+    await settle();
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(walkingAnts()).toHaveLength(0);
+    driver.advance(DURATION.swap + FRAME * 2);
+    await rounds(2);
+    expect(shown(host, ".grid-mark-ants")).toBe(0);
+    expect(notice().textContent).toContain("fill refused");
+    // Il quadratino torna.
+    expect(shown(host, ".grid-mark-handle")).toBe(1);
+    engine.destroy();
+  });
+
+  it("lo smontaggio durante l'attesa ferma le formiche", async () => {
+    const { engine, grid, go } = await mountedWithMotion();
+    go(1, 1);
+    await settle();
+    grid.hold(true);
+    engine.command("edit.fillRight");
+    await settle();
+    expect(walkingAnts().length).toBeGreaterThan(0);
+    engine.destroy();
+    expect(walkingAnts()).toHaveLength(0);
+    grid.hold(false);
+    grid.release();
+    await rounds(4);
+    driver.advance(1000);
+    expect(walkingAnts()).toHaveLength(0);
+  });
+
+  it("ciò che si è copiato ha il tratteggio largo e un battito; Esc, scrivere o un'altra copia lo spostano", async () => {
+    const { engine, host, viewport, send, key, go } = await mountedWithMotion();
+    go(1, 1);
+    send("copy");
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    expect(shown(host, ".grid-mark-flash")).toBeGreaterThan(0);
+    // Sul tratteggio il bordo pieno della selezione non c'è.
+    expect(shown(host, ".grid-mark-edge")).toBe(0);
+    driver.advance(DURATION.swap + FRAME * 2);
+    await settle();
+    expect(shown(host, ".grid-mark-flash")).toBe(0);
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    key("Escape");
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
+    expect(shown(host, ".grid-mark-edge")).toBe(4);
+
+    // Due copie: il segno segue l'ultima, e lascia la selezione di prima.
+    send("copy");
+    const first = host.querySelector<HTMLElement>('.grid-mark-copy[data-mark="clip-top"]:not([hidden])')!.style.cssText;
+    go(2, 0);
+    send("copy");
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    expect(host.querySelector<HTMLElement>('.grid-mark-copy[data-mark="clip-top"]:not([hidden])')!.style.cssText).not.toBe(first);
+
+    // Scrivere toglie il segno.
+    go(8, 1);
+    typeInActiveCell(host, viewport, "7");
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
+    engine.destroy();
+  });
+
+  it("il segno di una copia resta sul suo foglio", async () => {
+    const { engine, host, send, go } = await mountedWithMotion();
+    go(1, 1);
+    send("copy");
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
+    tabs[1]!.click();
+    await settle();
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
+    tabs[0]!.click();
+    await settle();
+    expect(shown(host, ".grid-mark-copy")).toBe(4);
+    engine.destroy();
+  });
+
+  it("incollare mostra i valori subito; la risposta del foglio vince, e un no rimette le celle com'erano", async () => {
+    const { engine, grid, send, go, cell, notice, host } = await mountedWithMotion();
+    go(1, 1);
+    send("copy");
+    grid.hold(true);
+    go(6, 2);
+    send("paste");
+    // Dal primo disegno, prima della risposta.
+    expect(cell(6, 2)!.textContent).toBe("800");
+    expect(await faded(host, ".grid-mark-copy")).toBe(0);
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    // Il finto non scrive le celle: la sua cella vuota vince sull'anteprima.
+    expect(cell(6, 2)!.textContent).toBe("");
+
+    grid.hold(true);
+    grid.failCommand({ kind: "bad_args", message: "paste refused" });
+    go(7, 2);
+    send("paste");
+    expect(cell(7, 2)!.textContent).toBe("800");
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(cell(7, 2)!.textContent).toBe("");
+    expect(notice().textContent).toContain("paste refused");
+    engine.destroy();
+  });
+
+  it("un taglio incollato ha le formiche attorno a ciò che si sposta finché il foglio non risponde", async () => {
+    const { engine, grid, send, go, cell, host } = await mountedWithMotion();
+    go(1, 1);
+    send("cut");
+    expect(shown(host, ".grid-mark-cut")).toBe(4);
+    grid.hold(true);
+    go(7, 1);
+    send("paste");
+    expect(await faded(host, ".grid-mark-cut")).toBe(0);
+    expect(shown(host, ".grid-mark-ants")).toBe(4);
+    expect(walkingAnts().length).toBe(4);
+    // L'anteprima: il valore sulla destinazione, la sorgente vuota.
+    expect(cell(7, 1)!.textContent).toBe("800");
+    expect(cell(1, 1)!.textContent).toBe("");
+    grid.hold(false);
+    grid.release();
+    await rounds(8);
+    expect(walkingAnts()).toHaveLength(0);
+    driver.advance(DURATION.swap + FRAME * 2);
+    await rounds(2);
+    expect(shown(host, ".grid-mark-ants")).toBe(0);
+    engine.destroy();
   });
 });

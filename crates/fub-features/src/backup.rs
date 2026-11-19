@@ -10,7 +10,9 @@
 //! suo entrano nello snapshot come stanno sul disco. Un file che non si legge
 //! non ferma il backup degli altri: si salta, e l'esito lo nomina con il
 //! perché ([`Partial`]); uno snapshot a cui manca qualcosa non fa ruotare via
-//! i più vecchi.
+//! i più vecchi. E non toglie l'unica copia a nessuno: quella che lo snapshot
+//! dello stesso giorno aveva di un file saltato passa nel nuovo, e se non si
+//! rilegge lo snapshot del giorno resta com'era ([`carry_over`]).
 //!
 //! Il manifest `snapshots.json` è il punto di commit. Un backup copia le note
 //! nella cartella del giorno che il manifest **non** nomina, poi riscrive il
@@ -102,6 +104,7 @@ const E_SKIP_DENIED: &str = "e_skip_denied";
 const E_SKIP_IO: &str = "e_skip_io";
 const E_SKIP_OTHER: &str = "e_skip_other";
 const E_NOT_WRITTEN: &str = "e_not_written";
+const E_KEPT: &str = "e_kept";
 const PATH: &str = "path";
 /// Quanti file saltati il pannello nomina, prima di «e altri N».
 const SHOWN_SKIPPED: usize = 5;
@@ -171,8 +174,9 @@ pub fn catalog() -> Vec<StringCatalog> {
             )
             .with(
                 SKIPPED,
-                "Backup fatto, ma alcuni file non sono nello snapshot ({n}). Gli \
-                 snapshot di prima restano tutti.",
+                "Backup fatto, ma {n} file non si sono potuti leggere. Di quelli \
+                 che erano già nello snapshot di oggi resta la copia di prima; gli \
+                 snapshot dei giorni prima non si toccano.",
             )
             .with(SKIPPED_MORE, "… e altri {n}.")
             .with(
@@ -197,6 +201,12 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Non ho potuto scrivere la copia di «{path}»: il backup si è fermato \
                  e lo snapshot di prima è intatto. Controlla lo spazio sul disco e \
                  riprova.",
+            )
+            .with(
+                E_KEPT,
+                "Backup non fatto: «{path}» non si è potuto leggere, e nemmeno la sua \
+                 copia nello snapshot «{id}». Lo snapshot «{id}» resta com'era: \
+                 controlla che il file non sia bloccato, poi riprova.",
             )
             .with(S_GROUP, "Backup")
             .with(S_KEEP, "Snapshot da tenere")
@@ -260,8 +270,9 @@ pub fn catalog() -> Vec<StringCatalog> {
             )
             .with(
                 SKIPPED,
-                "Backup done, but some files are not in the snapshot ({n}). All the \
-                 earlier snapshots are kept.",
+                "Backup done, but {n} files could not be read. Those already in \
+                 today's snapshot keep the copy made before; the snapshots of earlier \
+                 days are left untouched.",
             )
             .with(SKIPPED_MORE, "…and {n} more.")
             .with(
@@ -282,6 +293,12 @@ pub fn catalog() -> Vec<StringCatalog> {
                 E_NOT_WRITTEN,
                 "Could not write the copy of «{path}»: the backup stopped and the \
                  previous snapshot is intact. Check the free disk space and try again.",
+            )
+            .with(
+                E_KEPT,
+                "Backup not done: «{path}» could not be read, and neither could its \
+                 copy in snapshot «{id}». Snapshot «{id}» stays as it was: check that \
+                 the file is not locked, then try again.",
             )
             .with(S_GROUP, "Backup")
             .with(S_KEEP, "Snapshots to keep")
@@ -541,6 +558,21 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
         });
     }
     let copied = copies.len();
+    // Un file saltato che lo snapshot di oggi aveva già copiato non perde la
+    // sua copia: passa nello snapshot nuovo, che sostituisce quello di oggi.
+    // Se non si rilegge, lo snapshot di oggi resta com'era e il backup si
+    // ferma: uno snapshot nuovo senza l'unica copia sarebbe una perdita.
+    if !skipped.is_empty() {
+        if let Some(earlier) = store.snapshots.iter().find(|s| s.id == id) {
+            if let Err(and) = carry_over(host, earlier, &dir, &skipped, &mut copies) {
+                // La copia nuova non la nomina nessuno: via, o resterebbe
+                // fino al backup dopo. Un guasto qui non cambia l'errore.
+                let _ = remove_snapshot_files(host, &dir);
+                return Err(and);
+            }
+        }
+    }
+    let kept = copies.len();
     // L'inventario va prima del manifest, come le copie: il manifest che lo
     // nomina non deve mai arrivare prima di ciò che nomina.
     let inventory = serde_json::to_vec(&Inventory { files: copies }).map_err(|and| {
@@ -551,20 +583,21 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
     })?;
     host.data_write(&inventory_path(&dir), &inventory)?;
     if let Some(existing) = store.snapshots.iter_mut().find(|s| s.id == id) {
-        existing.n = copied as u32;
+        existing.n = kept as u32;
         existing.dir = Some(dir);
         existing.inventory = true;
     } else {
         store.snapshots.push(Snapshot {
             id: id.clone(),
-            n: copied as u32,
+            n: kept as u32,
             dir: Some(dir),
             inventory: true,
             rest: serde_json::Map::new(),
         });
     }
     // Uno snapshot a cui manca qualcosa non manda via i più vecchi: potrebbero
-    // essere i soli ad avere la copia dei file saltati.
+    // essere i soli ad avere la copia dei file saltati. Quello di oggi che il
+    // nuovo sostituisce sì: le copie dei file saltati sono passate nel nuovo.
     let mut stale = if skipped.is_empty() {
         rotate(&mut store, &id, keep(host))
     } else {
@@ -617,6 +650,67 @@ fn not_written(doc: &DocId, mut and: PluginError) -> PluginError {
     tracing::warn!(doc = %doc, error = %and, "backup: copia non scritta");
     *and.message_mut() = Text::message(E_NOT_WRITTEN, vec![Arg::text(PATH, doc.as_str())]);
     and
+}
+
+/// Copia in `dir`, lo snapshot nuovo, ciò che `earlier` (lo snapshot dello
+/// stesso giorno che il nuovo sostituisce) aveva dei file `skipped`, e lo
+/// aggiunge a `copies`. Ogni copia si verifica sull'inventario di `earlier`,
+/// se ce l'ha; un file che `earlier` non aveva non c'è da portare. Una copia
+/// che non si rilegge, o che non torna, ferma tutto con [`E_KEPT`].
+fn carry_over(
+    host: &mut dyn HostApi,
+    earlier: &Snapshot,
+    dir: &str,
+    skipped: &[Failure],
+    copies: &mut Vec<Saved>,
+) -> Result<(), PluginError> {
+    let from = earlier.dir().to_owned();
+    let inventory = if earlier.inventory {
+        read_inventory(host, &from)?
+    } else {
+        None
+    };
+    for doc in skipped
+        .iter()
+        .filter_map(|failure| failure.subject.as_ref())
+    {
+        let path = doc.as_str();
+        let kept = || {
+            PluginError::Io(Text::message(
+                E_KEPT,
+                vec![Arg::text(PATH, path), Arg::text(ID, &earlier.id)],
+            ))
+        };
+        // Che cosa lo snapshot di prima dice di avere di questo file.
+        let expected = match (&inventory, earlier.inventory) {
+            (Some(inventory), _) => match inventory.files.iter().find(|c| c.path == path) {
+                Some(copy) => Some((copy.size, copy.hash)),
+                None => continue,
+            },
+            // L'inventario c'era e non si legge: la copia non si verifica.
+            (None, true) => return Err(kept()),
+            // Uno snapshot di prima dell'inventario: si guarda la cartella.
+            (None, false) => None,
+        };
+        let bytes = match (host.data_read(&format!("{from}/{path}")), expected) {
+            (Ok(Some(bytes)), Some((size, hash)))
+                if bytes.len() as u64 == size && Fnv1a::hash(&bytes) == hash =>
+            {
+                bytes
+            }
+            (Ok(Some(bytes)), None) => bytes,
+            (Ok(None), None) => continue,
+            _ => return Err(kept()),
+        };
+        host.data_write(&format!("{dir}/{path}"), &bytes)
+            .map_err(|and| not_written(doc, and))?;
+        copies.push(Saved {
+            path: path.to_owned(),
+            size: bytes.len() as u64,
+            hash: Fnv1a::hash(&bytes),
+        });
+    }
+    Ok(())
 }
 
 /// L'altra cartella dello snapshot di un giorno, per il backup che lo rifà.

@@ -70,7 +70,7 @@ function pointer(host: HTMLElement, viewport: HTMLElement, gesture: ConformanceP
     return inside(found);
   };
   const handle = () => {
-    const found = host.querySelector<HTMLElement>(".grid-fill-handle");
+    const found = host.querySelector<HTMLElement>(".grid-mark-handle:not([hidden])");
     if (!found) throw new Error("il foglio non mostra il quadratino");
     return found;
   };
@@ -85,7 +85,11 @@ function pointer(host: HTMLElement, viewport: HTMLElement, gesture: ConformanceP
       return;
     }
     case "fill-double":
-      handle().dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    {
+      const grip = handle();
+      const point = inside(grip);
+      grip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: point.x, clientY: point.y }));
+    }
       return;
     case "header": {
       // Le intestazioni stanno sopra (le lettere) e a sinistra (i numeri).

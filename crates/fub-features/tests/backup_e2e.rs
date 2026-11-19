@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
+use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
 use fub_abi::settings::SettingValue;
@@ -290,6 +291,176 @@ fn an_unreadable_file_is_skipped_and_named_not_the_whole_backup() {
         titles(&tree).iter().any(|t| t.contains("2 note")),
         "lo snapshot c'è, con ciò che si è copiato: {:?}",
         titles(&tree)
+    );
+}
+
+/// Toglie e ridà il permesso di leggere ai file del vault: il guasto di un file
+/// bloccato. `None` quando chi gira legge lo stesso (root): il caso non si
+/// riproduce.
+#[cfg(unix)]
+fn lock(vault: &Vault, rels: &[&str], locked: bool) -> Option<()> {
+    use std::os::unix::fs::PermissionsExt;
+    for rel in rels {
+        let path = vault.root.join(rel);
+        let mode = if locked { 0o000 } else { 0o644 };
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).expect("permessi");
+        if locked && std::fs::read(&path).is_ok() {
+            lock(vault, rels, false);
+            return None;
+        }
+    }
+    Some(())
+}
+
+/// Le note cestinate e poi ripristinate dallo snapshot `id`, col testo che
+/// tornano ad avere.
+#[cfg(unix)]
+fn restored(ws: &mut Workspace, id: &str, docs: &[&str]) -> Vec<String> {
+    for doc in docs {
+        ws.delete_document(&DocId::new(*doc)).expect("cestina");
+    }
+    ws.invoke_command(
+        VAULT_BACKUP_RESTORE,
+        serde_json::json!({ "id": id }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("restore");
+    docs.iter()
+        .map(|doc| ws.read_source(&DocId::new(*doc)).expect("ripristinata"))
+        .collect()
+}
+
+/// **Un backup con file saltati non cancella la copia completa di oggi.** Il
+/// secondo backup del giorno sostituiva lo snapshot del mattino anche quando
+/// un file non si leggeva: la sua sola copia se ne andava con la cartella
+/// vecchia, mentre l'avviso diceva che gli snapshot di prima restavano tutti.
+/// Ora la copia di prima del file saltato passa nello snapshot nuovo, e
+/// l'avviso dice proprio questo.
+#[cfg(unix)]
+#[test]
+fn a_partial_backup_keeps_the_morning_copy_of_the_skipped_file() {
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    vault.put("c.md", "# C\n");
+    let clock = Arc::new(Days(AtomicU64::new(1_789_905_600_000)));
+    let mut ws = vault.open_at(clock);
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il backup del mattino");
+    ws.write_document(&DocId::new("a.md"), "# A della sera\n", WriteBase::Dictated)
+        .expect("la sera");
+    if lock(&vault, &["b.md"], true).is_none() {
+        return;
+    }
+    let tree = run_from_the_panel(&mut ws);
+    lock(&vault, &["b.md"], false);
+
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("b.md"), "il file saltato si nomina: {json}");
+    assert!(
+        json.contains("copia di prima"),
+        "l'avviso dice dove sta la copia del file saltato: {json}"
+    );
+    assert!(
+        !json.contains("restano tutti"),
+        "lo snapshot del mattino non resta com'era, e l'avviso non lo dice: {json}"
+    );
+    assert!(
+        titles(&tree).iter().any(|t| t.contains("3 note")),
+        "lo snapshot ha ancora tutte le note: {:?}",
+        titles(&tree)
+    );
+    assert_eq!(
+        restored(&mut ws, "2026-09-20", &["a.md", "b.md", "c.md"]),
+        ["# A della sera\n", "# B\n", "# C\n"],
+        "la sera per ciò che si è letto, il mattino per il file saltato"
+    );
+}
+
+/// **Un backup che non legge niente non svuota lo snapshot di oggi.** Con
+/// zero file copiati, lo snapshot pieno del mattino diventava vuoto.
+#[cfg(unix)]
+#[test]
+fn a_backup_that_reads_nothing_keeps_todays_full_snapshot() {
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    let clock = Arc::new(Days(AtomicU64::new(1_789_905_600_000)));
+    let mut ws = vault.open_at(clock);
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il backup del mattino");
+    if lock(&vault, &["a.md", "b.md"], true).is_none() {
+        return;
+    }
+    let tree = run_from_the_panel(&mut ws);
+    lock(&vault, &["a.md", "b.md"], false);
+
+    assert!(
+        titles(&tree).iter().any(|t| t.contains("2 note")),
+        "lo snapshot non si svuota: {:?}",
+        titles(&tree)
+    );
+    assert_eq!(
+        restored(&mut ws, "2026-09-20", &["a.md", "b.md"]),
+        ["# A\n", "# B\n"]
+    );
+}
+
+/// **Se la copia di prima del file saltato non si rilegge, lo snapshot di
+/// oggi resta com'era.** Il backup si ferma con un errore che nomina il file
+/// e dice che lo snapshot di prima c'è ancora: meglio niente di nuovo che uno
+/// snapshot nuovo che ha perso l'unica copia.
+#[cfg(unix)]
+#[test]
+fn a_partial_backup_whose_earlier_copy_is_damaged_leaves_today_as_it_was() {
+    let vault = Vault::new();
+    vault.put("a.md", "# A\n");
+    vault.put("b.md", "# B\n");
+    let clock = Arc::new(Days(AtomicU64::new(1_789_905_600_000)));
+    let mut ws = vault.open_at(clock);
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("il backup del mattino");
+    let morning = vault
+        .root
+        .join(".fub/plugins")
+        .join(BACKUP_ID)
+        .join("2026-09-20");
+    std::fs::write(morning.join("b.md"), "# B alterata\n").unwrap();
+    ws.write_document(&DocId::new("a.md"), "# A della sera\n", WriteBase::Dictated)
+        .expect("la sera");
+    if lock(&vault, &["b.md"], true).is_none() {
+        return;
+    }
+    let tree = run_from_the_panel(&mut ws);
+    lock(&vault, &["b.md"], false);
+
+    let json = serde_json::to_string(&tree).unwrap();
+    assert!(json.contains("b.md"), "l'errore nomina il file: {json}");
+    assert!(
+        json.contains("resta com'era"),
+        "l'errore dice che lo snapshot di prima c'è ancora: {json}"
+    );
+    assert_eq!(snapshot_dirs(&vault), ["2026-09-20"], "niente di nuovo");
+    assert_eq!(
+        std::fs::read_to_string(morning.join("a.md")).unwrap(),
+        "# A\n",
+        "lo snapshot del mattino resta com'era"
     );
 }
 

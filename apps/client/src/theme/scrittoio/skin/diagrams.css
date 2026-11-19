@@ -35,6 +35,12 @@
   scrollbar-width: thin;
   transition: background-color 0.22s, opacity 0.18s;
 }
+/* Quando scorre la tavola prende il fuoco del Tab (`ui/mermaid.ts`): l'anello
+   rientra della sua larghezza e segue gli angoli della tavola, perché il
+   bordo della colonna non lo tagli. */
+.mermaid-diagram .mermaid-diagram-view:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
 .mermaid-diagram[data-diagram-style="acquerello"] .mermaid-diagram-view,
 .mermaid-diagram[data-diagram-style="aurora"] .mermaid-diagram-view,
 .mermaid-diagram[data-diagram-style="blueprint"] .mermaid-diagram-view,

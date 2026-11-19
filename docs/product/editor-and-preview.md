@@ -418,19 +418,9 @@ Tabella condivisi con i documenti e i fogli: sono descritti in
 
 ## La griglia
 
-La griglia mostra intestazioni, celle e selezione rettangolare in una viewport
-virtualizzata. Supporta tastiera, schede dei fogli, formula bar e copia TSV
-(celle multilinea fra virgolette, come in Excel). Tab e Maiusc+Tab percorrono
-le celle visibili; raggiunti i due estremi, lasciano la griglia e proseguono
-verso gli altri controlli della shell. Nessuna battuta attraversa IPC.
-
-Una cartella di Excel si apre con i valori salvati nel file, senza ricalcolo,
-e si modifica a comandi; la forma è descritta nel [modello del
-documento](../architecture/document-model.md). Il protocollo Grid a byte (la
-versione 2) porta finestre, patch e giornale fra la shell e un provider nativo
-o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
-Limiti, coordinate e invalidazione sono normati in [ABI e
-WIT](../reference/abi-and-wit.md).
+La griglia dei fogli di calcolo (tastiera, valori del file, protocollo a byte
+e preferenze dei segni) è descritta in [La griglia dei fogli di
+calcolo](grid-editor.md).
 
 ## Dove si trova
 

@@ -45,7 +45,12 @@ merge under the rule in `CLAUDE.md`.
    that apply. Set the task's `Stato` to `[~] in corso · coder · base <sha>`.
    A graphic task also adds its pieces to the prototype map in
    `apps/client/bench/conformita/` and passes `npm run bench:conformita`
-   (through the heavy-check queue); say so in its brief.
+   (through the heavy-check queue); say so in its brief. When the user names
+   an artifact or prototype as the reference, the brief says that its code
+   (markup, CSS, computed styles measured prototype → app in both lights) is
+   the reference and screenshots are only the final confirmation. At
+   integration, every prototype class the task touches must be in the map and
+   compared; a missing one sends the task back.
 3. **While they work** don't poll. Integrate whoever finished, answer questions,
    handle CI results as they arrive.
 4. **A report arrives:**

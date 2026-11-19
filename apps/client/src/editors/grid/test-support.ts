@@ -243,6 +243,21 @@ export function typeInActiveCell(host: HTMLElement, viewport: HTMLElement, text:
   viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
 }
 
+/** Lascia passare `count` fotogrammi: il margine che uno scorrimento lascia indietro lo finiscono loro. */
+export async function frames(count = 12): Promise<void> {
+  for (let index = 0; index < count; index += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+/// I pezzi dei segni (`grid-motion.ts`) di un tipo che si vedono: quelli che
+/// non servono restano nascosti nel loro serbatoio.
+export const shownMarks = (host: HTMLElement, kind: string) =>
+  [...host.querySelectorAll<HTMLElement>(`.grid-mark-${kind}`)].filter((mark) => !mark.hidden);
+
+/// Quanti rettangoli scelti si vedono: uno per prefisso dei lati (`rect`,
+/// `other-0`, …), in qualunque livello cadano.
+export const shownRanges = (host: HTMLElement) =>
+  new Set(shownMarks(host, "edge").map((mark) => mark.dataset.mark!.replace(/-(top|bottom|left|right)$/, ""))).size;
+
 export const cellAt = (host: HTMLElement, row: number, column: number) =>
   host.querySelector<HTMLElement>(`.grid-cell[data-row="${row}"][data-column="${column}"]`);
 
@@ -288,6 +303,9 @@ export function workbookHost(options: {
   const answers: Array<() => void> = [];
   let hold = false;
   let failApply: PluginError | null = null;
+  /// L'errore con cui il finto rifiuta il prossimo comando che cambia la
+  /// cartella, se c'è.
+  let failCommand: PluginError | null = null;
   let journal = "";
   let instances = 0;
   /// Le celle che `save` ha messo nei byte, sopra quelle della fixture.
@@ -452,6 +470,7 @@ export function workbookHost(options: {
       calls.push(`command ${request.command.id}`);
       given.push(structuredClone(request));
       if (hold) await new Promise<void>((resolve) => answers.push(resolve));
+      if (failCommand) throw failCommand;
       // Come l'host: un'istanza chiusa nel frattempo non c'è più.
       if (closed.includes(instance)) throw { kind: "not_found", message: "grid instance closed" } satisfies PluginError;
       if (request.revision !== revisionOf(journal)) throw { kind: "conflict", message: "stale grid revision" } satisfies PluginError;
@@ -508,7 +527,7 @@ export function workbookHost(options: {
         },
         sheets: structuredClone(xlsx.session.sheets),
         hidden: structuredClone(xlsx.session.hidden),
-        selection: { sheet: request.command.sheet, selection: request.command.selection, active: request.command.active },
+        selection: answeredSelection(request.command),
         result: null,
         dialog: options.dialog?.(request.command) ?? null,
         commands: catalog(),
@@ -552,6 +571,7 @@ export function workbookHost(options: {
     hold: (value: boolean) => { hold = value; },
     release: () => { for (const answer of answers.splice(0)) answer(); },
     failApply: (error: PluginError | null) => { failApply = error; },
+    failCommand: (error: PluginError | null) => { failCommand = error; },
   };
 }
 
@@ -591,4 +611,19 @@ export async function workbookMounted(
     cell(row, column)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
   };
   return { engine, host, viewport, changes, cell, notice, formula, go, selections: () => selections };
+}
+
+/// La selezione che il finto provider lascia dopo un comando: quella che
+/// aveva, tranne `edit.autoFill`, che come GridCraft seleziona il
+/// riempimento con la cella attiva al primo angolo della sorgente.
+function answeredSelection(command: GridCommand): GridCommandOutcome["selection"] {
+  if (command.id === "edit.autoFill") {
+    try {
+      const { source, target } = JSON.parse(command.params) as { source?: string; target?: string };
+      if (source && target) return { sheet: command.sheet, selection: target, active: source.split(":")[0]! };
+    } catch {
+      // Parametri che non si leggono: la selezione resta.
+    }
+  }
+  return { sheet: command.sheet, selection: command.selection, active: command.active };
 }

@@ -206,7 +206,11 @@ fn doc(id: &str) -> DocId {
 impl Bench {
     /// Due note: la partenza col blocco, l'arrivo senza.
     fn open() -> Bench {
-        let root = Utf8PathBuf::from("/vault-piano");
+        // Una radice assoluta su ogni sistema: su Windows «/vault» non lo è, e il
+        // vault l'aprirebbe sul disco corrente, lontano dai file scritti qui.
+        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+            .expect("current dir is UTF-8")
+            .join("vault-piano");
         let inner = MemStorage::new();
         inner.write(&root.join(A), A_TEXT.as_bytes()).unwrap();
         inner.write(&root.join(B), B_TEXT.as_bytes()).unwrap();
@@ -528,6 +532,59 @@ fn batch_a_rename_and_an_edit() {
     assert_eq!(bench.text(B).as_deref(), Some(B_TEXT));
     assert_eq!(bench.text("Arrivo nuovo.md"), None);
     assert_eq!(bench.text(A).as_deref(), Some(A_TEXT));
+}
+
+/// **Una modifica su un documento rinominato dal piano, che non torna, ha la
+/// sua copia anche lei.** La copia di prima si teneva soltanto sotto il nome
+/// vecchio: se l'inverso della modifica cadeva sul nome nuovo, il ritorno non
+/// trovava niente da mettere al sicuro, e l'errore nominava un file che dopo
+/// la rinomina all'incontrario non esisteva più.
+#[test]
+fn batch_a_failed_put_back_after_a_rename_keeps_a_copy_and_names_the_file() {
+    let renamed = "Arrivo nuovo.md";
+    let plan = WritePlan::new()
+        .rename(doc(B), doc(renamed), Revision::of(B_TEXT))
+        .edit(doc(renamed), put_block(B_TEXT))
+        .edit(doc(A), take_block());
+    let mut bench = Bench::open();
+    // Sul nome nuovo passano la rinomina e la modifica, non il suo inverso; la
+    // partenza non si scrive: il piano cade al terzo passo.
+    bench.disk_full(renamed, 2);
+    bench.disk_full(A, 0);
+
+    let error = bench.write_plan(plan).expect_err("the disk is full");
+
+    let failure = bench.failure();
+    assert!(!failure.rolled_back(), "{failure:?}");
+    assert_eq!(failure.unrestored.len(), 1, "{failure:?}");
+    let left = &failure.unrestored[0];
+    assert_eq!(
+        left.doc,
+        doc(B),
+        "the rename went back: the file is named as before the plan"
+    );
+    assert_eq!(bench.text(renamed), None);
+    assert_eq!(
+        bench.text(B).as_deref(),
+        Some("tre\nil blocco\n"),
+        "the edit stayed: that is why it is named"
+    );
+    let copy = left.copy.clone().expect("the copy of before was kept");
+    assert!(copy.starts_with(UNRESTORED_DIR), "{copy}");
+    let kept = bench
+        .storage
+        .inner
+        .read(&bench.root.join(".fub/plugins").join(PLUGIN).join(&copy))
+        .expect("the copy is under .fub/");
+    assert_eq!(kept, B_TEXT.as_bytes(), "the copy is the file as it was");
+    let PluginError::Io(message) = &error else {
+        panic!("a plan not put back is not a conflict: {error:?}")
+    };
+    let message = message.as_literal().unwrap_or_default().to_string();
+    assert!(
+        message.contains(B) && message.contains(&copy),
+        "the error names the file and its copy: {message}"
+    );
 }
 
 #[test]

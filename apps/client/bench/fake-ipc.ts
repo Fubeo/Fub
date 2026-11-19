@@ -52,6 +52,9 @@ import type {
   DrawingOutcome,
   GridBytesSession,
   GridBytesWindow,
+  GridCommand,
+  GridCommandOutcome,
+  GridCommandRequest,
   Heading,
   IndexQuery,
   IndexResult,
@@ -67,6 +70,7 @@ import type {
   ViewUpdate,
 } from "../src/host/contract";
 import { inShellLanguage } from "./fake-english";
+import { gridJournalText } from "../src/state/grid-journal";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
@@ -326,7 +330,11 @@ globalThis.__fubLiveBench = Object.freeze({
 /// file che soltanto quella scena ha: l'albero e i conteggi delle altre
 /// restano quelli delle loro baseline. Sessione e finestre sono quelle che
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
-const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
+///
+/// `?workbook=large` apre invece una cartella grande, fatta qui in codice
+/// con la forma di `xlsx-grid.json`: la scena `grid-large` dei controlli G1.
+const WORKBOOK = params.get("workbook");
+const WORKBOOK_DOC = WORKBOOK === "1" ? "Dati/Conti.xlsx" : WORKBOOK === "large" ? "Dati/Grande.xlsx" : null;
 
 /// Le lavagne delle scene `lavagna-*` del banco dell'accessibilità (T61,
 /// `?lavagna=1`): una vuota e una con un gruppo, tre schede di testo, una nota
@@ -408,6 +416,309 @@ const BENCH_SESSION = GRID_CASE === "readonly"
       LOOKING.test(command.id) ? command : { ...command, enabled: false, reason: "La cartella è aperta in sola lettura." }),
   }
   : XLSX_GRID.session;
+
+/// La cartella grande della scena `grid-large` (`?workbook=large`): 3000
+/// righe per 20 colonne, la riga 1 e la colonna A bloccate, numeri, date e
+/// testi lunghi che debordano nelle celle vuote dopo di loro. Le finestre
+/// sono blocchi di 256 righe con tutte le colonne, come le chiede il motore.
+const LARGE_ROWS = 3000;
+const LARGE_COLUMNS = 20;
+const LARGE_BLOCK = 256;
+const LARGE_STYLE = { ...XLSX_GRID.windows[0]!.styles[0]!, bold: false, italic: false, text_color: null, horizontal: null };
+const LARGE_SESSION = {
+  ...XLSX_GRID.session,
+  instance: "xlsx-large",
+  revision: "sha256:grande",
+  sheets: [{ id: "s1", name: "Grande", row_count: LARGE_ROWS, column_count: LARGE_COLUMNS }],
+  active: "s1",
+  hidden: [],
+  notices: [],
+  conflicts: [],
+};
+const LARGE_MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+type LargeValue = { value: { kind: "text"; value: string } | { kind: "number"; value: number }; display: string };
+/// Il valore della cella (riga, colonna) da zero, o `null` se è vuota. La
+/// colonna D porta un testo lungo, e la E e la F restano vuote per lasciarlo
+/// debordare.
+function largeValue(row: number, column: number): LargeValue | null {
+  const text = (value: string): LargeValue => ({ value: { kind: "text", value }, display: value });
+  const number = (value: number, display = String(value)): LargeValue => ({ value: { kind: "number", value }, display });
+  if (row === 0) {
+    const heads = ["Voce", "Importo", "Data", "Descrizione", "", "", "Quantità"];
+    if (column >= heads.length) return text(`Colonna ${column + 1}`);
+    return heads[column] ? text(heads[column]!) : null;
+  }
+  switch (column) {
+    case 0: return text(`Voce ${row}`);
+    case 1: {
+      const amount = Math.round(((row * 37) % 1000) * 150) / 100;
+      return number(amount, amount.toFixed(2));
+    }
+    case 2: return number(45658 + row, `${1 + (row % 28)} ${LARGE_MONTHS[row % 12]} 2026`);
+    case 3: return text(`Una descrizione lunga della voce ${row}, che deborda nelle celle vuote a destra`);
+    case 4: case 5: return null;
+    default: return number((row * (column + 3)) % 997);
+  }
+}
+/// La cella della finestra in (riga, colonna) da zero con il valore `cell`.
+function largeCell(row: number, column: number, cell: LargeValue) {
+  return {
+    key: { sheet: "s1", row: `r${row}`, column: `c${column}` },
+    input: cell.display,
+    style: 0,
+    ...cell,
+    lock: null,
+    stale: false,
+    conflict: false,
+    data_bar: null,
+    icon: null,
+    comment: null,
+    link: null,
+  };
+}
+function largeWindow(start: number) {
+  const count = Math.min(LARGE_BLOCK, LARGE_ROWS - start);
+  const rows = Array.from({ length: count }, (_, at) => ({ id: `r${start + at}`, index: start + at, height: 20.0, hidden: false }));
+  const columns = Array.from({ length: LARGE_COLUMNS }, (_, index) =>
+    ({ id: `c${index}`, index, width: index === 0 ? 140.0 : index === 2 || index === 3 ? 96.0 : 64.0, hidden: false }));
+  const cells = [];
+  for (const row of rows) {
+    for (const column of columns) {
+      const cell = largeValue(row.index, column.index);
+      if (cell) cells.push(largeCell(row.index, column.index, cell));
+    }
+  }
+  return {
+    revision: LARGE_SESSION.revision,
+    sheet: "s1",
+    row_start: start,
+    column_start: 0,
+    total_rows: LARGE_ROWS,
+    total_columns: LARGE_COLUMNS,
+    rows,
+    columns,
+    cells,
+    styles: [LARGE_STYLE],
+    merges: [],
+    view: { ...XLSX_GRID.windows[0]!.view, frozen_rows: 1, frozen_columns: 1 },
+    tables: [],
+    objects: [],
+  };
+}
+/// `?misure=si`, con `?workbook=large`: il finto dice sì alle misure tirate
+/// (`home.columnWidth`, `home.rowHeight`) invece di rifiutarle perché non le
+/// serve, come l'host vero: la revisione cambia, il giornale prende il
+/// comando e le finestre rilette hanno la misura nuova. La scena
+/// `grid-large-misure` dei controlli G5 (griglia T5). Il giornale qui è
+/// soltanto quello delle misure: la scena non scrive celle. Una porta resa
+/// guasta o frenata dal banco (`fault`, `throttle`) vale anche qui, perché la
+/// risposta passa prima dal finto.
+const SIZES_ANSWER = WORKBOOK === "large" && params.get("misure") === "si";
+const SIZE_COMMANDS: ReadonlySet<string> = new Set(["home.columnWidth", "home.rowHeight"]);
+/// `?risposte=si`, con `?workbook=large`: il finto dice sì anche ai
+/// riempimenti e a `fub.pasteFrom`, e le finestre rilette hanno i valori
+/// nuovi. Nella cartella di partenza C4 vale 10, C5 20 e sotto, fino a C16,
+/// è vuota, come nel prototipo: tirato fino a C12, il riempimento dà 30…90.
+/// La scena `grid-large-appunti` dei controlli G6 (griglia T6). Una porta
+/// frenata o guasta dal banco vale anche qui.
+const CELLS_ANSWER = WORKBOOK === "large" && params.get("risposte") === "si";
+const CELL_COMMANDS: ReadonlySet<string> = new Set([
+  "edit.autoFill",
+  "edit.fillDown",
+  "edit.fillRight",
+  "edit.fillUp",
+  "edit.fillLeft",
+  "edit.fillSeries",
+  "fub.pasteFrom",
+]);
+/// Una revisione data dal finto: le misure, colonna (o riga) → misura nei
+/// pixel della cartella, e le celle cambiate, `riga:colonna` → valore (o
+/// `null`, vuota).
+interface Answered {
+  readonly columns: ReadonlyMap<number, number>;
+  readonly rows: ReadonlyMap<number, number>;
+  readonly cells: ReadonlyMap<string, LargeValue | null>;
+}
+const sizedRevisions = new Map<string, Answered>();
+/// Le celle della cartella di partenza, con `?risposte=si`.
+const ANSWER_BASE: ReadonlyMap<string, LargeValue | null> = CELLS_ANSWER
+  ? new Map(Array.from({ length: 13 }, (_, at): [string, LargeValue | null] => {
+    const row = 3 + at;
+    const value = row === 3 ? 10 : row === 4 ? 20 : null;
+    return [`${row}:2`, value === null ? null : { value: { kind: "number", value }, display: String(value) }];
+  }))
+  : new Map();
+/// I comandi del giornale che la shell tiene dall'ultima apertura: il diff
+/// della risposta parte da quelli.
+let sizedCommands: GridCommand[] = [];
+/// L'ultima revisione data dal finto, e quella che il salvataggio ha messo
+/// nel file: riaperto senza giornale, il file ha quelle misure.
+let lastSized: string | null = null;
+let savedSized: string | null = null;
+
+/// L'indice da zero di una colonna in A1 («C» → 2).
+function columnIndex(letters: string): number {
+  let index = 0;
+  for (const letter of letters) index = index * 26 + (letter.charCodeAt(0) - 64);
+  return index - 1;
+}
+
+/// Un intervallo A1 («C4:C12», «B2») in righe e colonne da zero.
+function rangeOf(a1: string): { r0: number; c0: number; r1: number; c1: number } {
+  const corner = (cell: string) => {
+    const match = /^([A-Z]+)(\d+)$/.exec(cell)!;
+    return { row: Number(match[2]) - 1, column: columnIndex(match[1]!) };
+  };
+  const [first, last = first] = a1.split(":");
+  const a = corner(first!);
+  const b = corner(last!);
+  return { r0: Math.min(a.row, b.row), c0: Math.min(a.column, b.column), r1: Math.max(a.row, b.row), c1: Math.max(a.column, b.column) };
+}
+/// L'A1 di (riga, colonna) da zero.
+function cellName(row: number, column: number): string {
+  let letters = "";
+  for (let n = column + 1; n > 0; n = Math.floor((n - 1) / 26)) letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
+  return `${letters}${row + 1}`;
+}
+/// Il valore di (riga, colonna) nelle celle `cells` della revisione.
+function answeredValue(cells: ReadonlyMap<string, LargeValue | null>, row: number, column: number): LargeValue | null {
+  const key = `${row}:${column}`;
+  return cells.has(key) ? cells.get(key)! : ANSWER_BASE.has(key) ? ANSWER_BASE.get(key)! : largeValue(row, column);
+}
+
+/// Un riempimento o un incolla sulle celle `cells`: scrive le celle nuove e
+/// rende la selezione che lascia, come GridCraft (il riempimento selezionato,
+/// la cella attiva al primo angolo della sorgente; l'incolla selezionato).
+function answerCells(cells: Map<string, LargeValue | null>, command: GridCommand): { selection: string; active: string } {
+  const read = (row: number, column: number) => answeredValue(cells, row, column);
+  const selected = rangeOf(command.selection.split(",")[0]!);
+  if (command.id === "fub.pasteFrom") {
+    const asked = JSON.parse(command.params) as { source: string; move?: boolean };
+    const from = rangeOf(asked.source);
+    const block = Array.from({ length: from.r1 - from.r0 + 1 }, (_, r) =>
+      Array.from({ length: from.c1 - from.c0 + 1 }, (_, c) => read(from.r0 + r, from.c0 + c)));
+    if (asked.move) {
+      for (let row = from.r0; row <= from.r1; row += 1) for (let column = from.c0; column <= from.c1; column += 1) cells.set(`${row}:${column}`, null);
+    }
+    block.forEach((line, r) => line.forEach((value, c) => cells.set(`${selected.r0 + r}:${selected.c0 + c}`, value)));
+    const end = cellName(selected.r0 + block.length - 1, selected.c0 + block[0]!.length - 1);
+    const start = cellName(selected.r0, selected.c0);
+    return { selection: start === end ? start : `${start}:${end}`, active: start };
+  }
+  let source = selected;
+  let target = selected;
+  if (command.id === "edit.autoFill") {
+    const asked = JSON.parse(command.params) as { source: string; target: string };
+    source = rangeOf(asked.source);
+    target = rangeOf(asked.target);
+  } else if (command.id === "edit.fillDown" || command.id === "edit.fillSeries") {
+    source = { ...selected, r1: selected.r0 };
+  } else if (command.id === "edit.fillUp") {
+    source = { ...selected, r0: selected.r1 };
+  } else if (command.id === "edit.fillRight") {
+    source = { ...selected, c1: selected.c0 };
+  } else {
+    source = { ...selected, c0: selected.c1 };
+  }
+  const down = target.c0 === source.c0 && target.c1 === source.c1;
+  // Una serie lungo ogni colonna (o riga) della sorgente: con due numeri o
+  // più, il passo fra gli ultimi due; altrimenti la sorgente si ripete.
+  const lines = down ? source.c1 - source.c0 + 1 : source.r1 - source.r0 + 1;
+  for (let line = 0; line < lines; line += 1) {
+    const at = (index: number) => (down ? read(source.r0 + index, source.c0 + line) : read(source.r0 + line, source.c0 + index));
+    const length = down ? source.r1 - source.r0 + 1 : source.c1 - source.c0 + 1;
+    const seed = Array.from({ length }, (_, index) => at(index));
+    const numbers = seed.every((value) => value?.value.kind === "number") ? seed.map((value) => value!.value.value as number) : null;
+    const step = numbers && numbers.length > 1 ? numbers[numbers.length - 1]! - numbers[numbers.length - 2]! : numbers ? 0 : null;
+    const first = down ? target.r0 : target.c0;
+    const last = down ? target.r1 : target.c1;
+    const origin = down ? source.r0 : source.c0;
+    for (let index = first; index <= last; index += 1) {
+      const offset = index - origin;
+      if (offset >= 0 && offset < length) continue;
+      let value: LargeValue | null;
+      if (numbers && step !== null) {
+        const number = numbers[numbers.length - 1]! + step * (offset - length + 1);
+        value = { value: { kind: "number", value: number }, display: String(number) };
+      } else {
+        value = seed[((offset % length) + length) % length] ?? null;
+      }
+      cells.set(down ? `${index}:${source.c0 + line}` : `${source.r0 + line}:${index}`, value);
+    }
+  }
+  const whole = { r0: Math.min(source.r0, target.r0), c0: Math.min(source.c0, target.c0), r1: Math.max(source.r1, target.r1), c1: Math.max(source.c1, target.c1) };
+  return { selection: `${cellName(whole.r0, whole.c0)}:${cellName(whole.r1, whole.c1)}`, active: cellName(source.r0, source.c0) };
+}
+
+/// La risposta del provider a una misura tirata, o (con `?risposte=si`) a
+/// un riempimento o a un incolla, su `revision`.
+function sizedOutcome(revision: string, request: GridCommandRequest): GridCommandOutcome {
+  const { id, params: text } = request.command;
+  const known = sizedRevisions.get(revision);
+  const columns = new Map(known?.columns);
+  const rows = new Map(known?.rows);
+  const cells = new Map(known?.cells);
+  let selection = { sheet: request.command.sheet, selection: request.command.selection, active: request.command.active };
+  if (CELL_COMMANDS.has(id)) {
+    selection = { sheet: request.command.sheet, ...answerCells(cells, request.command) };
+  } else if (id === "home.columnWidth") {
+    const params = JSON.parse(text) as { cols: string; width: number };
+    const [a, b] = params.cols.split(":").map(columnIndex);
+    for (let index = a!; index <= b!; index += 1) columns.set(index, params.width);
+  } else {
+    const params = JSON.parse(text) as { rows: string; height: number };
+    const [a, b] = params.rows.split(":").map((row) => Number(row) - 1);
+    for (let index = a!; index <= b!; index += 1) rows.set(index, params.height);
+  }
+  const deleted = sizedCommands.length ? gridJournalText({ entries: [], commands: sizedCommands }) : "";
+  sizedCommands = [...sizedCommands, request.command];
+  const inserted = gridJournalText({ entries: [], commands: sizedCommands });
+  const next = `sha256:grande-misure-${sizedRevisions.size + 1}`;
+  sizedRevisions.set(next, { columns, rows, cells });
+  lastSized = next;
+  return {
+    commit: { revision: next, edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted }, invalidation: { kind: "all" } },
+    sheets: LARGE_SESSION.sheets,
+    hidden: [],
+    selection,
+    result: null,
+    dialog: null,
+    commands: LARGE_SESSION.commands,
+    book: LARGE_SESSION.book,
+  } as GridCommandOutcome;
+}
+
+/// La finestra della revisione `revision` con le misure e le celle che il
+/// finto ha dato.
+function sizedWindow(window: GridBytesWindow, revision: string): GridBytesWindow {
+  const sized = sizedRevisions.get(revision);
+  const changed = new Map([...ANSWER_BASE, ...(sized?.cells ?? [])]);
+  if (changed.size) {
+    const first = window.row_start;
+    const last = first + window.rows.length - 1;
+    const inside = (key: string) => {
+      const row = Number(key.split(":")[0]);
+      return row >= first && row <= last;
+    };
+    const keyOf = (cell: GridBytesWindow["cells"][number]) => `${cell.key.row.slice(1)}:${cell.key.column.slice(1)}`;
+    const added = [...changed].filter(([key, value]) => value !== null && inside(key)).map(([key, value]) => {
+      const [row, column] = key.split(":").map(Number);
+      return largeCell(row!, column!, value!) as GridBytesWindow["cells"][number];
+    });
+    window = { ...window, cells: [...window.cells.filter((cell) => !changed.has(keyOf(cell))), ...added] };
+  }
+  if (!sized) return window;
+  return {
+    ...window,
+    columns: window.columns.map((column) => (sized.columns.has(column.index) ? { ...column, width: sized.columns.get(column.index)! } : column)),
+    rows: window.rows.map((row) => (sized.rows.has(row.index) ? { ...row, height: sized.rows.get(row.index)! } : row)),
+  };
+}
+
+/// Le finestre si fanno solo se la scena le chiede.
+const LARGE_WINDOWS = WORKBOOK === "large"
+  ? Array.from({ length: Math.ceil(LARGE_ROWS / LARGE_BLOCK) }, (_, block) => largeWindow(block * LARGE_BLOCK))
+  : [];
 
 /// Il risultato dei comandi che leggono (`?result=stats|errors|empty`,
 /// insieme a `?workbook=1`): la risposta del provider alla prima esecuzione,
@@ -1590,6 +1901,60 @@ const MATH_SETTINGS: readonly SettingEntry[] = !params.has("mathsource") && !par
   source: MATH_HELP_CHOSEN ? "machine" : "default",
 }];
 
+/// Le due preferenze della griglia (griglia T9), come le voci dell'host
+/// (`editor.grid.copy-mark` ed `editor.grid.selection-speed` di
+/// `crates/fub-host/src/settings.rs`): di macchina, di serie `dash-pulse` e
+/// `normal`. Le hanno le scene delle cartelle (`?workbook=…`), dove le
+/// scene dei gesti le cambiano con `?copia=dash|pulse` e
+/// `?velocita=quick|soft|none`, e con `?grigliapref=1` le Impostazioni, per
+/// guardarne la riga; le altre scene delle Impostazioni restano com'erano.
+const GRID_COPY_PARAM = params.get("copia");
+const GRID_COPY_CHOSEN = GRID_COPY_PARAM === "dash" || GRID_COPY_PARAM === "pulse" ? GRID_COPY_PARAM : null;
+const GRID_SPEED_PARAM = params.get("velocita");
+const GRID_SPEED_CHOSEN = GRID_SPEED_PARAM === "quick" || GRID_SPEED_PARAM === "soft" || GRID_SPEED_PARAM === "none" ? GRID_SPEED_PARAM : null;
+const GRID_PREFERENCES: readonly SettingEntry[] = WORKBOOK_DOC === null && params.get("grigliapref") !== "1" ? [] : [{
+  spec: {
+    key: "editor.grid.copy-mark",
+    label: "Segno della copia nei fogli di calcolo",
+    description: "Che cosa resta sulle celle che copi: un tratteggio largo finché non incolli, un battito che si accende e svanisce, o tutti e due. Il taglio resta sempre un tratteggio fitto.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "dash-pulse",
+      options: [
+        { value: "dash-pulse", label: "Tratteggio e battito" },
+        { value: "dash", label: "Solo il tratteggio" },
+        { value: "pulse", label: "Solo il battito" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: GRID_COPY_CHOSEN ?? "dash-pulse",
+  source: GRID_COPY_CHOSEN ? "machine" : "default",
+}, {
+  spec: {
+    key: "editor.grid.selection-speed",
+    label: "Velocità della selezione nei fogli di calcolo",
+    description: "Come la selezione va alla cella nuova, coi tasti e col puntatore: scivola più svelta, come di norma o più morbida, oppure salta di cella in cella. Col movimento ridotto si ferma subito, qualunque sia la scelta.",
+    group: "Editor",
+    scope: "machine",
+    kind: {
+      kind: "choice",
+      default: "normal",
+      options: [
+        { value: "quick", label: "Svelta" },
+        { value: "normal", label: "Come di norma" },
+        { value: "soft", label: "Morbida" },
+        { value: "none", label: "A scatti" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: GRID_SPEED_CHOSEN ?? "normal",
+  source: GRID_SPEED_CHOSEN ? "machine" : "default",
+}];
+
 /// `?tipi=1`: il registro dei tipi del vault (`properties.types` di
 /// `crates/fub-kernel/src/properties.rs`), per le scene di Selezione e Stato
 /// (T9): la testata di `live=opzioni` e la Bacheca della Base per `stato`.
@@ -2266,12 +2631,16 @@ const options: Options = {
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
     ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
-    gridBytes: {
+    gridBytes: WORKBOOK === "large" ? {
+      surface: XLSX_GRID.surface,
+      session: LARGE_SESSION,
+      windows: LARGE_WINDOWS,
+    } as GridBytesFake : {
       surface: XLSX_GRID.surface,
       session: BENCH_SESSION,
       windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window, ...(GIRO_WORKBOOK?.windows ?? [])].map(benchWindow),
@@ -2360,10 +2729,33 @@ declare global {
   }
 }
 
+/// Le porte di `gridBytesCommand` frenate o guaste dal banco, viste anche da
+/// chi risponde alle misure tirate (`?misure=si`) al posto del finto.
+const sizeGates: { held: Promise<void> | null; fault: boolean } = { held: null, fault: false };
+
 globalThis.window.bench = {
   emit: host.emit,
-  fault: host.fault,
-  throttle: host.throttle,
+  fault: (gate, reason) => {
+    const restore = host.fault(gate, reason);
+    if (gate !== "gridBytesCommand") return restore;
+    sizeGates.fault = true;
+    return () => {
+      sizeGates.fault = false;
+      restore();
+    };
+  },
+  throttle: (gate) => {
+    const release = host.throttle(gate);
+    if (gate !== "gridBytesCommand") return release;
+    let open = () => {};
+    const held = new Promise<void>((resolve) => { open = resolve; });
+    sizeGates.held = held;
+    return () => {
+      if (sizeGates.held === held) sizeGates.held = null;
+      open();
+      release();
+    };
+  },
   writeFromOutside: host.writeFromOutside,
   calls: host.calls,
   light: LIGHT,
@@ -2751,6 +3143,34 @@ export const api: typeof host.module.api = {
       return Promise.resolve(sheetPartOutcome(asked) as Awaited<ReturnType<typeof behind.gridBytesCommand>>);
     },
   }),
+  ...(SIZES_ANSWER || CELLS_ANSWER ? {
+    gridBytesCommand: async (surface, instance, request) => {
+      // Le misure (e i riempimenti e gli incolla, con `?risposte=si`) le
+      // serve il banco; il resto, e una porta resa guasta, il finto. La
+      // chiamata si registra come la registra il finto, e una porta frenata
+      // tiene in volo anche la risposta del banco.
+      const answered = (SIZES_ANSWER && SIZE_COMMANDS.has(request.command.id)) || (CELLS_ANSWER && CELL_COMMANDS.has(request.command.id));
+      if (!answered || sizeGates.fault) return behind.gridBytesCommand(surface, instance, request);
+      host.calls.push({ gate: "gridBytesCommand", args: [instance, request] });
+      if (sizeGates.held) await sizeGates.held;
+      return sizedOutcome(request.revision, request);
+    },
+    gridBytesWindow: async (surface, instance, request) =>
+      sizedWindow(await behind.gridBytesWindow(surface, instance, request), request.revision),
+    // Il salvataggio scrive le misure nel file e riapre la cartella senza
+    // giornale: come l'host vero, il finto la riapre con le misure salvate.
+    writeDocument: async (id, source, base, ...rest) => {
+      const written = await behind.writeDocument(id, source, base, ...rest);
+      if (id === WORKBOOK_DOC && lastSized !== null) savedSized = lastSized;
+      return written;
+    },
+    openGridBytes: async (surface, doc, journal, base) => {
+      const session = await behind.openGridBytes(surface, doc, journal, base);
+      if (journal !== "" || savedSized === null) return session;
+      sizedCommands = [];
+      return { ...session, revision: savedSized };
+    },
+  } satisfies Partial<typeof host.module.api> : {}),
   invokeCommand: async (id, args, ...rest) => {
     // L'anteprima del RAW della scena: il finto non sa leggere un RAW.
     const doc = (args as { doc?: unknown } | null)?.doc;

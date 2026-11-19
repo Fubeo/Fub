@@ -84,7 +84,7 @@ import { join } from "node:path";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { createServer } from "vite";
-import { SCENE, sceneUrl } from "./scene.mjs";
+import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, prepareScene, stillShot, watchCsp, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
 import {
   CHOREOGRAPHIES,
@@ -983,7 +983,9 @@ const stage = await openStage({
 const report = [];
 try {
   for (const choreography of chosen) {
-    const scene = SCENE.find((candidate) => candidate.id === choreography.scene);
+    // Anche le scene dei gesti, senza foto di riferimento: la cartella grande
+    // che accetta i riempimenti (griglia T6).
+    const scene = [...SCENE, ...GESTURE_SCENE].find((candidate) => candidate.id === choreography.scene);
     let row;
     try {
       if (!scene) throw new Error(`la scena «${choreography.scene}» non c'è`);

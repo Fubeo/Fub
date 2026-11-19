@@ -1635,7 +1635,11 @@ mod refusing {
 fn refusing_vault(refused: &str) -> Workspace {
     use fub_kernel::{MachineSettings, MemStorage, VaultStorage};
     use std::sync::{Arc, Mutex};
-    let root = Utf8PathBuf::from("/vault-sposta");
+    // Una radice assoluta su ogni sistema: su Windows «/vault» non lo è, e il
+    // vault l'aprirebbe sul disco corrente, lontano dai file scritti qui.
+    let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8")
+        .join("vault-sposta");
     let inner = MemStorage::new();
     inner
         .write(&root.join(MOVE_FROM), MOVE_FROM_TEXT.as_bytes())

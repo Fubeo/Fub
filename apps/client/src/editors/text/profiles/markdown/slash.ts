@@ -693,7 +693,8 @@ export function baseEmbed(name: string, view: string): string {
 /// da una riga vuota dal testo intorno, perché sia un blocco suo. Il cursore
 /// va oltre la Base, perché in Live la si veda e non il suo sorgente: al
 /// testo che segue o, in fondo alla nota, su una riga nuova dove scrivere.
-export function baseInsertion(state: EditorState, from: number, to: number, embed: string): { from: number; to: number; insert: string; cursor: number } {
+/// `embed` è dove comincia l'embed, nel testo dopo la modifica.
+export function baseInsertion(state: EditorState, from: number, to: number, embed: string): { from: number; to: number; insert: string; cursor: number; embed: number } {
   const line = state.doc.lineAt(from);
   const end = Math.max(to, from);
   const rest = state.sliceDoc(line.from, from) + state.sliceDoc(end, line.to);
@@ -712,7 +713,17 @@ export function baseInsertion(state: EditorState, from: number, to: number, embe
   // In fondo alla nota la riga dove scrivere; altrimenti la riga vuota prima
   // del testo che segue, che resta dov'è.
   const insert = `${head}${embed}${br}${last ? br : ""}`;
-  return { from: line.from, to: until, insert, cursor: line.from + insert.length + (last ? 0 : br.length) };
+  return { from: line.from, to: until, insert, cursor: line.from + insert.length + (last ? 0 : br.length), embed: line.from + head.length };
+}
+
+/// Lo scorrimento dopo un embed scritto dal «/» (la Base, il blocco
+/// sincronizzato): si guarda dove l'embed comincia, non il cursore oltre lui.
+/// L'altezza dell'embed arriva quando la sua resa è pronta, e uno scorrimento
+/// al cursore misurato prima o dopo lasciava la nota ferma oppure la portava
+/// in fondo all'embed, secondo chi arrivava primo. La riga prima dell'embed è
+/// testo: la sua altezza c'è già.
+export function revealEmbed(state: EditorState, embed: number): StateEffect<unknown> {
+  return EditorView.scrollIntoView(Math.max(0, embed - state.lineBreak.length), { y: "nearest" });
 }
 
 /// Le Basi in attesa del nome o del file: dove sta il loro «/query», seguito
@@ -844,7 +855,7 @@ async function createFileHere(view: EditorView, from: number, to: number, port: 
       view.dispatch({
         changes: { from: at.from, to: at.to, insert: at.insert },
         selection: EditorSelection.cursor(at.cursor),
-        scrollIntoView: true,
+        effects: revealEmbed(view.state, at.embed),
         userEvent: "input.complete",
       });
       view.focus();

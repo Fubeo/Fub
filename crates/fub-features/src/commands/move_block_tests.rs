@@ -426,3 +426,33 @@ fn move_block_rules_on_text() {
         "```\nx\n```\n\n^id0001"
     );
 }
+
+/// **I link interni del blocco spostato puntano ancora dove puntavano.** Si
+/// copiavano uguali: `[[#Titolo]]` e `[[#^id]]` della nota di partenza, nella
+/// nota d'arrivo, nominavano un titolo o un blocco dell'arrivo (o niente).
+/// Diventano `[[Riunione#…]]`; quelli che nominano ciò che si sposta col
+/// blocco restano com'erano, e un `[[Riunione#…]]` verso ciò che si sposta
+/// segue il blocco.
+#[test]
+fn move_block_internal_links_keep_pointing_at_the_source_note() {
+    let source = "## Contesto\n\nUn fatto. ^fatto\n\n## Da spostare\n\nVedi [[#Contesto]], ![[#^fatto]], [[#^qui|qui]], [[#Da spostare]] e [[Riunione#^qui]]. ^qui\n";
+    let mut host = vault(&[("Riunione.md", source), ("Progetto.md", DEST)]);
+    let block = "## Da spostare\n\nVedi [[#Contesto]], ![[#^fatto]], [[#^qui|qui]], [[#Da spostare]] e [[Riunione#^qui]]. ^qui";
+    let outcome = apply(
+        &mut host,
+        json!({ "doc": "Riunione.md", "at": at(source, block), "text": block, "to": "Progetto.md", "leave": "none" }),
+    );
+    assert_eq!(
+        text(&host, "Progetto.md"),
+        format!(
+            "{DEST}\n## Da spostare\n\nVedi [[Riunione#Contesto]], ![[Riunione#^fatto]], [[#^qui|qui]], [[#Da spostare]] e [[Progetto#^qui]]. ^qui\n"
+        )
+    );
+    assert_eq!(
+        text(&host, "Riunione.md"),
+        "## Contesto\n\nUn fatto. ^fatto\n"
+    );
+    undo(&mut host, &outcome);
+    assert_eq!(text(&host, "Riunione.md"), source);
+    assert_eq!(text(&host, "Progetto.md"), DEST);
+}

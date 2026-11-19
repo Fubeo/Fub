@@ -284,6 +284,17 @@ export class LiveTransclusion {
       host.open(embed.page, embed.heading, embed.block);
     });
     if (this.synced && this.#canEdit) {
+      // La pressione sul testo non tocca la nota che ospita: senza, il
+      // browser dava il fuoco all'editor della nota e ci posava la selezione
+      // sul blocco; la Live allora mostrava il sorgente della riga, toglieva
+      // il blocco, e il clic che doveva aprirne l'editor trovava il blocco già
+      // smontato, secondo chi arrivava primo. Il fuoco lo prende l'editor del
+      // blocco, al clic.
+      life.listen(this.#body, "mousedown", (event) => {
+        if (this.#phase !== "idle" || event.button !== 0) return;
+        if (event.target instanceof Element && event.target.closest("a, button, input, summary")) return;
+        event.preventDefault();
+      });
       // Il blocco si scrive dove sta: un clic sul testo apre l'editor col
       // cursore dove si è cliccato. Un link nel testo resta un link.
       life.listen(this.#body, "click", (event) => {
