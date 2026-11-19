@@ -134,7 +134,11 @@ pub fn of_values(
                     if !value.is_finite() {
                         return Err(ValuesError::NotFinite { cell: at() });
                     }
-                    if look.currency.as_ref().is_some_and(|c| !writable_symbol(&c.symbol)) {
+                    if look
+                        .currency
+                        .as_ref()
+                        .is_some_and(|c| !writable_symbol(&c.symbol))
+                    {
                         return Err(ValuesError::Currency { cell: at() });
                     }
                 }
@@ -239,8 +243,7 @@ fn writable_symbol(symbol: &str) -> bool {
 /// chi apre il file li vede nella propria lingua.
 pub fn number_format(look: &NumberLook) -> Option<String> {
     let decimals = look.decimals.min(MAX_DECIMALS) as usize;
-    if decimals == 0 && !look.grouped && !look.percent && !look.parens && look.currency.is_none()
-    {
+    if decimals == 0 && !look.grouped && !look.percent && !look.parens && look.currency.is_none() {
         return None;
     }
     let mut body = String::from(if look.grouped { "#,##0" } else { "0" });
@@ -377,23 +380,43 @@ mod tests {
         let spaced = of_values("Conti.xlsx", "Conti 2025", &rows, true).unwrap();
         assert_eq!(spaced.part, "'Conti 2025'!A1:C4");
         let read = read(&written.bytes).unwrap();
-        assert!(read.report.warnings.is_empty(), "{:?}", read.report.warnings);
+        assert!(
+            read.report.warnings.is_empty(),
+            "{:?}",
+            read.report.warnings
+        );
         let workbook = read.workbook;
         assert_eq!(workbook.sheets.len(), 1);
         let sheet = workbook.sheet(0).unwrap();
         assert_eq!(sheet.name, "Foglio1");
-        assert_eq!(sheet.value(CellRef::parse("B2").unwrap()), Value::Number(1240.5));
-        assert_eq!(sheet.value(CellRef::parse("C2").unwrap()), Value::Number(0.125));
+        assert_eq!(
+            sheet.value(CellRef::parse("B2").unwrap()),
+            Value::Number(1240.5)
+        );
+        assert_eq!(
+            sheet.value(CellRef::parse("C2").unwrap()),
+            Value::Number(0.125)
+        );
         // Un testo che si legge come numero, nell'intestazione, resta testo.
-        assert_eq!(sheet.value(CellRef::parse("C1").unwrap()), Value::Text("12".into()));
+        assert_eq!(
+            sheet.value(CellRef::parse("C1").unwrap()),
+            Value::Text("12".into())
+        );
         // Una formula scritta in una tabella è testo, e non si calcola.
         assert_eq!(
             sheet.value(CellRef::parse("A3").unwrap()),
             Value::Text("=SOMMA(B2)".into())
         );
-        assert!(sheet.cell(CellRef::parse("A3").unwrap()).unwrap().formula.is_none());
+        assert!(sheet
+            .cell(CellRef::parse("A3").unwrap())
+            .unwrap()
+            .formula
+            .is_none());
         assert_eq!(sheet.value(CellRef::parse("B3").unwrap()), Value::Empty);
-        assert_eq!(sheet.value(CellRef::parse("A4").unwrap()), Value::Text("a\ncapo".into()));
+        assert_eq!(
+            sheet.value(CellRef::parse("A4").unwrap()),
+            Value::Text("a\ncapo".into())
+        );
         assert_eq!(shown(&workbook, "B2"), "1,240.50 €");
         assert_eq!(shown(&workbook, "C2"), "12.5%");
         assert_eq!(shown(&workbook, "C3"), "(1,234)");
@@ -411,7 +434,10 @@ mod tests {
 
     #[test]
     fn cio_che_un_foglio_non_tiene_non_si_scrive() {
-        assert_eq!(of_values("a.xlsx", "Foglio1", &[], true), Err(ValuesError::Empty));
+        assert_eq!(
+            of_values("a.xlsx", "Foglio1", &[], true),
+            Err(ValuesError::Empty)
+        );
         assert_eq!(
             of_values("a.xlsx", "Foglio1", &[vec![]], true),
             Err(ValuesError::Empty)
@@ -426,7 +452,10 @@ mod tests {
             of_values("a.xlsx", "Foglio1", &wide, false),
             Err(ValuesError::TooLarge { .. })
         ));
-        let infinite = vec![vec![Filled::Text("a".into()), number(f64::NAN, NumberLook::default())]];
+        let infinite = vec![vec![
+            Filled::Text("a".into()),
+            number(f64::NAN, NumberLook::default()),
+        ]];
         assert_eq!(
             of_values("a.xlsx", "Foglio1", &infinite, false),
             Err(ValuesError::NotFinite { cell: "B1".into() })
