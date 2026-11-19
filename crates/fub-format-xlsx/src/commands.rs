@@ -630,9 +630,16 @@ impl Facade {
     }
 
     /// Rifà i comandi di un giornale. Ognuno deve cambiare la cartella come
-    /// la prima volta.
+    /// la prima volta, tranne l'input delle celle in testa: è il giornale di
+    /// celle che il provider ha convertito in comandi, e una cella che i byte
+    /// hanno già è salvata, come la voce applicata che la conversione salta.
+    /// Succede quando un salvataggio di celle finisce mentre una formula
+    /// converte il giornale: il giornale che resta da salvare rimette input
+    /// che il disco ha già (IMP-512).
     pub fn replay(&mut self, commands: &[GridCommand]) -> Result<(), PluginError> {
+        let mut leading = true;
         for command in commands {
+            leading &= input_cell(command).is_some();
             let ran = self.run(command).map_err(|error| {
                 PluginError::Conflict(
                     format!(
@@ -642,7 +649,7 @@ impl Facade {
                     .into(),
                 )
             })?;
-            if !ran.changed {
+            if !ran.changed && !leading {
                 return Err(PluginError::Conflict(
                     format!(
                         "grid journal command `{}` no longer changes the workbook",

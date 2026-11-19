@@ -610,6 +610,73 @@ fn cinque_righe_scritte_di_fila_coi_salvataggi_in_mezzo_arrivano_tutte_nel_file(
     }
 }
 
+#[test]
+fn il_giornale_convertito_durante_un_salvataggio_di_celle_si_salva_sui_byte_nuovi() {
+    // IMP-512: il salvataggio automatico scrive le voci di A1 e B1; mentre
+    // scrive, una formula converte il giornale in comandi, che rimettono
+    // anche A1 e B1. Il giornale che resta da salvare (`rebase`) riparte dai
+    // byte nuovi: le celle che hanno già non sono un conflitto.
+    let blank = fub_format_xlsx::blank("Conti.xlsx", "Foglio1").unwrap();
+    let (mut provider, session) = open(&blank, &GridJournal::new());
+    let sheet = session.sheets[0].id.clone();
+    let cell = |r: u32, c: u32, after: &str| GridCellPatch {
+        cell: GridCellKey {
+            sheet: sheet.clone(),
+            row: format!("r{r}"),
+            column: format!("c{c}"),
+        },
+        before: None,
+        after: after.into(),
+    };
+    // Il giornale della sessione dopo `commit`, come lo tiene la shell.
+    fn take(journal: &mut String, commit: fub_abi::GridCommit) -> Revision {
+        let edit = commit.edit;
+        let (from, to) = (edit.from as usize, edit.to as usize);
+        *journal = format!("{}{}{}", &journal[..from], edit.inserted, &journal[to..]);
+        commit.revision
+    }
+    let mut journal = String::new();
+    let revision = take(
+        &mut journal,
+        apply(
+            &mut provider,
+            &session,
+            &session.revision,
+            vec![cell(0, 0, "Voce")],
+        )
+        .unwrap(),
+    );
+    let revision = take(
+        &mut journal,
+        apply(&mut provider, &session, &revision, vec![cell(0, 1, "2")]).unwrap(),
+    );
+    let written = GridJournal::parse(&journal).unwrap();
+    let saved = provider
+        .bytes_to_write(&session.instance, revision.clone())
+        .unwrap();
+    take(
+        &mut journal,
+        apply(
+            &mut provider,
+            &session,
+            &revision,
+            vec![cell(0, 3, "=B1*2")],
+        )
+        .unwrap(),
+    );
+    let converted = GridJournal::parse(&journal).unwrap();
+    assert!(!converted.commands().is_empty());
+
+    let rest = converted.rebase(&written);
+    let (mut provider, session) = open(&saved, &rest);
+    let bytes = provider
+        .bytes_to_write(&session.instance, session.revision.clone())
+        .unwrap();
+    assert_eq!(value(&bytes, "A1"), Value::from("Voce"));
+    assert_eq!(value(&bytes, "B1"), Value::Number(2.0));
+    assert_eq!(value(&bytes, "D1"), Value::Number(4.0));
+}
+
 /// Ogni cella di `rows` nel file: la formula scritta, o il numero o il testo.
 fn check_rows(rows: &[[&str; 4]; 5], columns: &[&str], bytes: &[u8]) {
     let read = fub_format_xlsx::read(bytes).unwrap();
