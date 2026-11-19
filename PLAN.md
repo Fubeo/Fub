@@ -2654,7 +2654,7 @@ Fatto quando: andata e ritorno tabella, foglio, tabella coi valori uguali;
 l'annulla sui due file.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features -p
 fub-format-xlsx
-Stato: [~] in corso · coder · base bc8419ad3
+Stato: [x] integrato in integra/editor-2 (merge dopo d1a7af279) · l'annulla è un passo del comando (revert); fub-features dipende da fub-format-xlsx dietro la feature xlsx; appunti application/x-fub-cells · manca la foto di «Stacca come tabella» (la maniglia della scheda apre il menu del paragrafo); le celle copiate dal menu del foglio non offrono la scheda
 
 ## T53 · Un valore di cella nel testo
 
