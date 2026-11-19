@@ -432,6 +432,8 @@ export default defineConfig({
           // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
           // condiviso più grosso e ne consuma il margine a ogni frase nuova.
           if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
+          // L'inglese ha il suo: le due lingue insieme passavano il budget.
+          if (/\/src\/i18n\/catalog-en\.ts$/.test(id)) return "shell-strings-en";
           // Il motore del testo con i suoi pezzi, il tema che legge, gli
           // appunti delle tabelle, la regola di `<!-- pagina -->` (la Live e
           // l'esportazione in PDF) e il diario della griglia: li usano la
