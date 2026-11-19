@@ -7678,6 +7678,16 @@ impl Workspace {
         self.docs.vault.prepare_is_ignored(abs)
     }
 
+    /// Le cartelle che un rilevatore per-cartella deve guardare, con la
+    /// politica di esclusione che vale **adesso** (§15.6).
+    ///
+    /// Nessun I/O: si risolve la politica e basta, come in
+    /// [`prepare_is_ignored`](Self::prepare_is_ignored). Chi guarda la
+    /// richiede a ogni lotto e la confronta con quella con cui sta guardando.
+    pub fn watch_scope(&self) -> crate::ignore::WatchScope {
+        crate::ignore::WatchScope::new(self.docs.vault.ignore_policy())
+    }
+
     /// Prepara una lettura del watcher conservando la porta sincrona storica.
     ///
     /// I chiamanti sotto `Custody` usano invece [`prepare_is_ignored`] e
