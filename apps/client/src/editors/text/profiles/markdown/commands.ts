@@ -7,6 +7,7 @@ import {
   type Line,
   type StateCommand,
   type Text,
+  type TransactionSpec,
 } from "@codemirror/state";
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
@@ -313,6 +314,32 @@ export const closeFenceEnter: StateCommand = ({ state, dispatch }) => {
   }));
   return true;
 };
+
+/// La chiusura di un recinto scritta a mano sulla riga subito sopra la sua
+/// chiusura, quella che `closeFenceEnter` (o il «/») ha già messo: la battuta
+/// che completa ` ``` ` scavalca la chiusura che c'è, come `]` scavalca la
+/// parentesi chiusa da sé. La riga scritta se ne va e il cursore va in fondo
+/// alla chiusura: resta un recinto solo, e Invio esce dal blocco. Senza, la
+/// chiusura di prima apriva un secondo recinto vuoto (IMP-6107).
+export function fenceCloseSkip(state: EditorState, from: number, to: number, typed: string): TransactionSpec | null {
+  if (from !== to || (typed !== "`" && typed !== "~")) return null;
+  const line = state.doc.lineAt(from);
+  if (from !== line.to || line.number === 1 || line.number === state.doc.lines) return null;
+  const written = FENCE_CLOSE.exec(line.text + typed);
+  const next = state.doc.line(line.number + 1);
+  const below = FENCE_CLOSE.exec(next.text);
+  if (!written || !below || written[1] !== below[1]) return null;
+  // La riga sta nel corpo di un recinto che questa chiusura chiude, e la
+  // chiusura di sotto è la sua.
+  const open = openFenceAfter(state, 1, line.number - 1);
+  if (!open || written[1]![0] !== open.char || written[1]!.length < open.length) return null;
+  return {
+    changes: { from: line.from, to: next.from },
+    selection: { anchor: next.to - (next.from - line.from) },
+    scrollIntoView: true,
+    userEvent: "input.type",
+  };
+}
 
 /// `Enter` dentro una lista: continua la voce (il testo dopo il cursore scende
 /// sulla riga nuova), rinumera le numerate a valle, e su una voce vuota toglie
@@ -910,6 +937,11 @@ const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
       scrollIntoView: true,
       userEvent: "input.complete",
     });
+    return true;
+  }
+  const fence = fenceCloseSkip(view.state, from, to, text);
+  if (fence) {
+    view.dispatch(fence);
     return true;
   }
   const decision = autoPairDecision(view.state, from, to, text);
