@@ -4634,10 +4634,15 @@ impl Host {
             let mut detached = JobHost::new(workspace.clone(), hook.owner());
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(bytes, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_bytes_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -4677,10 +4682,15 @@ impl Host {
             let mut detached = JobHost::new(workspace.clone(), hook.owner());
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(source, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {

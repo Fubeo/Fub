@@ -460,20 +460,30 @@ impl RegistryInner {
     /// [0066](../../../docs/decisions/0195-versioni-indipendenti.md)),
     /// e il tetto si applica dopo la fusione: se l'altra installazione ha
     /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
+    ///
+    /// **Il disco gira fuori dal prestito esclusivo** (IMP-1805). Il lock del
+    /// file compagno può aspettare un'altra installazione fino a due secondi, e
+    /// la scrittura atomica fa un `fsync` che su un disco occupato dura secondi:
+    /// dentro il prestito, ogni lettura del registro — l'elenco dei vault che la
+    /// finestra di avvio disegna — restava ferma per tutto quel tempo. Il turno
+    /// di scrittura serializza le mutazioni di questo processo, quindi l'ordine
+    /// in cui gli elenchi fusi entrano in memoria è quello in cui sono arrivati
+    /// sul disco: un elenco vecchio non copre uno nuovo. La memoria si aggiorna
+    /// solo a scrittura riuscita, come prima.
     fn mutate(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
         self.ensure_open()?;
-        let mut entries = self.entries.write()?;
         let Some(path) = &self.path else {
-            f(&mut entries);
+            f(&mut *self.entries.write()?);
             return Ok(());
         };
         self.refusal(path)?;
+        let _turn = self.entries.write_turn();
         // L'aggiornamento parla una lingua sola (`String`) e qui gli esiti sono
         // due: il mondo — un disco pieno, un file che non si rilegge — e un
         // difetto nostro, cioè una struttura che non si serializza. La seconda
         // si riconosce da dove nasce, e resta un `Internal` come prima.
         let mut defect = None;
-        *entries = fub_kernel::update_atomic(
+        let merged = fub_kernel::update_atomic(
             path,
             || load(path),
             |disk| {
@@ -485,6 +495,7 @@ impl RegistryInner {
             Some(d) => PluginError::Internal(d.into()),
             None => PluginError::Io(and.into()),
         })?;
+        *self.entries.write()? = merged;
         Ok(())
     }
 
@@ -923,5 +934,50 @@ mod tests {
             handle.notes_opened(Utf8Path::new("/after"), 2),
             Err(PluginError::Cancelled(_))
         ));
+    }
+
+    /// IMP-1805: il registro non resta in prestito esclusivo mentre aspetta il
+    /// lock di un'altra installazione o il disco.
+    ///
+    /// Sui log dei tester «il registro dei vault» restava preso fino a 44 s,
+    /// pochi secondi dopo l'avvio: `notes_opened` faceva lock del file
+    /// compagno, rilettura e `fsync` dentro il prestito, e intanto l'elenco dei
+    /// vault non si leggeva. Qui il lock compagno lo tiene il test (l'altra
+    /// installazione), e la mutazione lo aspetta fino alla rinuncia.
+    #[test]
+    fn a_registry_update_waits_for_the_disk_outside_the_exclusive_hold() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
+        let (owner, _warning) = VaultRegistry::open(&path);
+        let reg = owner.handle();
+        reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
+
+        let companion = dir.path().join(".vaults.json.lock");
+        let other = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&companion)
+            .expect("il file compagno si apre");
+        other.lock().expect("l'altra installazione prende il lock");
+
+        reg.inner.entries.forget_longest_hold();
+        let started = std::time::Instant::now();
+        reg.notes_opened(Utf8Path::new("/b"), 2).unwrap();
+        let waited = started.elapsed();
+        drop(other);
+
+        assert!(
+            waited >= std::time::Duration::from_secs(1),
+            "la mutazione ha aspettato il lock dell'altra installazione ({waited:?})"
+        );
+        let longest = reg.inner.entries.longest_hold();
+        assert!(
+            longest < std::time::Duration::from_millis(250),
+            "il registro è rimasto in prestito esclusivo {longest:?} su {waited:?} di attesa"
+        );
+        assert_eq!(reg.list().len(), 2, "la mutazione è arrivata in memoria");
+        let (reopened, _) = VaultRegistry::open(&path);
+        assert_eq!(reopened.handle().list().len(), 2, "e sul disco");
     }
 }
