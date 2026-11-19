@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { PRINT_PAPER } from "../editors/media/print-view";
 import { defaultProfile, geometryOf, MM, paperColorsOf, paperSize, printSettingsOf, type ExportProfile } from "./profile";
 import { layoutChanged } from "./paginate/slices";
+import { printTheme } from "./themes";
 
 function withPage(page: Partial<ExportProfile["pagina"]>): ExportProfile {
   const profile = defaultProfile();
@@ -28,13 +28,13 @@ describe("il profilo dell'esportazione dal lato della vista", () => {
     expect(paperSize(withPage({ formato: "B5-sconosciuto" }).pagina)).toEqual([210, 297]);
   });
 
-  it("i colori del profilo vanno sulle variabili della carta, e uno scritto male non entra", () => {
+  it("i colori del profilo vanno sulle variabili della carta, e uno scritto male resta quello del tema", () => {
     const profile = { ...defaultProfile(), colori: { testo: "#112233", link: "rosso", carta: "#fafafa" } };
     const colors = paperColorsOf(profile);
     expect(colors["--doc-fg"]).toBe("#112233");
     expect(colors["--text"]).toBe("#112233");
     expect(colors["--doc-bg"]).toBe("#fafafa");
-    expect(colors["--doc-link"]).toBe(PRINT_PAPER["--doc-link"]);
+    expect(colors["--doc-link"]).toBe(printTheme("fub").colors.link);
   });
 
   it("un colore cambia solo l'aspetto; la pagina e le interruzioni rifanno l'impaginazione", () => {

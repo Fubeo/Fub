@@ -26051,14 +26051,416 @@ h6.ui-heading {
   display: none;
 }
 
+/* ── Le pagine coi colori e i caratteri del tema di stampa (T71) ─────────
+   Le variabili `--print-*` le scrive lo spazio (`export/themes.ts`) sulla
+   resa che si misura (`.export-measure`) e sulle pagine (`.export-doc`, e su
+   ogni pagina che va alla stampa): queste regole valgono per tutte e due,
+   così la copia veste come la resa misurata. I colori dell'app che la
+   Lettura usa (`--accent`, `--border`, `--sheet-2`) li sostituisce il tema
+   di stampa: le pagine restano chiare anche al buio. */
+.export-page {
+  filter: var(--print-filter, none);
+}
+:is(.export-measure, .export-page) .print-page > h1,
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--doc-heading);
+  font-family: var(--print-font-headings, inherit);
+  text-align: var(--print-heading-align, start);
+}
+:is(.export-measure, .export-page) .print-page > h1,
+:is(.export-measure, .export-page) .print-page .markdown-rendered h1 {
+  font-size: var(--print-h1, 2.22em);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered h2 {
+  font-size: var(--print-h2, 1.39em);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered h3 {
+  font-size: var(--print-h3, 1.22em);
+}
+/* Il numero di un titolo, nell'accento: c'è sempre, si vede solo coi titoli
+   numerati. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered [data-print-number]::before {
+  content: attr(data-print-number);
+  display: var(--print-heading-numbers, none);
+  margin-right: 0.55em;
+  color: var(--print-accent);
+  font-variant-numeric: tabular-nums;
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered p {
+  text-align: var(--print-text-align, start);
+}
+/* Col rientro i paragrafi si toccano: il margine sopra del secondo annulla
+   quello sotto del primo, e la prima riga rientra. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered > p + p {
+  margin-top: calc(var(--print-paragraph-pull, 0) * -1 * var(--text-reading) * var(--leading-relaxed));
+  text-indent: var(--print-indent, 0);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered blockquote {
+  border-left-color: var(--print-accent);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered .callout {
+  background: var(--print-callout);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered pre {
+  box-shadow: inset 0 0 0 1px var(--print-code-edge, transparent);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered th {
+  background: var(--print-table-head);
+}
+
+/* Dove sta un colore: il passaggio su una riga dei Colori contorna sulle
+   pagine i punti che lo usano (il prototipo `.px-doc[data-hl]`). Ogni blocco
+   sta in una finestra alta quanto lui (`.export-fascia`), che taglia ciò che
+   esce: il contorno di un blocco sta dentro il suo bordo, quello di un pezzo
+   di riga appena fuori. */
+.export-doc[data-highlight="carta"] .export-slot {
+  box-shadow: 0 0 0 2px var(--focus-ring), 0 16px 36px -16px rgba(0, 0, 0, 0.32);
+}
+.export-doc[data-highlight="testo"] .export-page .markdown-rendered :is(p, li),
+.export-doc[data-highlight="titoli"] .export-page .print-page > h1,
+.export-doc[data-highlight="titoli"] .export-page .markdown-rendered :is(h1, h2, h3, h4, h5, h6),
+.export-doc[data-highlight="accento"] .export-page .markdown-rendered :is(blockquote, .callout-title),
+.export-doc[data-highlight="testo-secondario"] .export-page .markdown-rendered :is(blockquote, figcaption),
+.export-doc[data-highlight="linee"] .export-page .markdown-rendered :is(hr, table),
+.export-doc[data-highlight="riquadri"] .export-page .markdown-rendered .callout,
+.export-doc[data-highlight="codice"] .export-page .markdown-rendered pre,
+.export-doc[data-highlight="intestazioni-tabella"] .export-page .markdown-rendered th {
+  border-radius: 2px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.export-doc[data-highlight="accento"] .export-page .markdown-rendered [data-print-number]::before,
+.export-doc[data-highlight="link"] .export-page .markdown-rendered a,
+.export-doc[data-highlight="testo-secondario"] .export-page .markdown-rendered del,
+.export-doc[data-highlight="evidenziato"] .export-page .markdown-rendered mark,
+.export-doc[data-highlight="codice"] .export-page .markdown-rendered :not(pre) > code {
+  border-radius: 2px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── La sezione «Tema» (T71; il prototipo `.px-themes`, `.px-th`) ─────── */
+.export-theme-section,
+.export-color-section {
+  display: grid;
+  gap: 10px;
+}
+.export-themes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px 8px;
+}
+.export-theme {
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: 11.5px var(--font-ui);
+  text-align: center;
+  cursor: pointer;
+}
+/* La paginetta del tema, nei colori del tema (variabili scritte dalla
+   sezione): la carta, «Aa» nel carattere dei titoli, tre righe di testo, un
+   riquadro col filo d'accento. */
+.export-theme-preview {
+  position: relative;
+  display: block;
+  aspect-ratio: 5 / 6.3;
+  overflow: hidden;
+  padding: 8px 8px 0;
+  border-radius: 6px;
+  background: var(--export-theme-paper);
+  color: var(--export-theme-ink);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  text-align: left;
+  transition: box-shadow 0.14s, transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-theme-heading {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--export-theme-heading);
+  font-family: var(--export-theme-font);
+  font-size: 15px;
+  line-height: 1;
+}
+.export-theme-line {
+  display: block;
+  height: 2px;
+  margin-bottom: 3px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.45;
+}
+.export-theme-line-short {
+  width: 60%;
+}
+.export-theme-box {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--export-theme-fill);
+  box-shadow: inset 2.5px 0 0 var(--export-theme-accent), inset 0 0 0 0.5px var(--export-theme-rule);
+}
+.export-theme:hover .export-theme-preview {
+  box-shadow: 0 0 0 1px var(--muted), 0 8px 16px -8px rgba(0, 0, 0, 0.45);
+  transform: translateY(-2px);
+}
+.export-theme[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-theme[aria-pressed="true"] .export-theme-preview {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.export-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-soft);
+  font: 12px/1.4 var(--font-ui);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ── La sezione «Colori» (T71; il prototipo `.px-cols`, `.px-col`) ────── */
+.export-colors {
+  display: grid;
+  gap: 1px;
+  margin: 0 -6px;
+}
+.export-color {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-radius: 8px;
+  transition: background 0.14s;
+}
+.export-color.is-open {
+  background: var(--sheet-2);
+}
+.export-color-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.export-color-head:hover,
+.export-color-reset:hover {
+  background: var(--overlay-hover);
+}
+.export-color-chip {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--export-color);
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.45);
+  transition: background 0.14s;
+}
+.export-color-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-color-own {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+.export-color-code {
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  font: 11px var(--font-mono);
+}
+.export-color-reset {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.export-palette {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 10px 31px;
+}
+.export-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--export-color);
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.42);
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-swatch:hover {
+  transform: scale(1.18);
+}
+.export-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--sheet-2), 0 0 0 4px var(--accent);
+}
+.export-pick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sheet);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+.export-pick-input {
+  position: absolute;
+  inset: -6px;
+  width: 36px;
+  height: 36px;
+  opacity: 0;
+  cursor: pointer;
+}
+.export-pick:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.export-hex {
+  width: 72px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 11.5px var(--font-mono);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.export-hex[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.export-hex-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.export-hex-error[hidden] {
+  display: none;
+}
+.export-contrast {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.export-contrast b {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-contrast.is-low,
+.export-contrast.is-low b {
+  color: var(--danger);
+}
+/* Gli interruttori (il prototipo `.px-tog`). */
+.export-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.export-toggle-hint {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.export-toggle-knob {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-strong);
+  transition: background 0.16s;
+}
+.export-toggle-knob::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-toggle[aria-checked="true"] .export-toggle-knob {
+  background: var(--accent);
+}
+.export-toggle[aria-checked="true"] .export-toggle-knob::after {
+  transform: translateX(12px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .export-segment,
   .export-go,
-  .export-section-chevron {
+  .export-section-chevron,
+  .export-theme-preview,
+  .export-color,
+  .export-color-chip,
+  .export-swatch,
+  .export-toggle-knob,
+  .export-toggle-knob::after {
     transition: none;
   }
 }
-:root[data-motion="reduced"] :is(.export-segment, .export-go, .export-section-chevron) {
+:root[data-motion="reduced"] :is(.export-segment, .export-go, .export-section-chevron, .export-theme-preview, .export-color, .export-color-chip, .export-swatch, .export-toggle-knob, .export-toggle-knob::after) {
   transition: none;
 }
 
@@ -26098,6 +26500,17 @@ h6.ui-heading {
   .export-title {
     padding-left: 0;
     box-shadow: none;
+  }
+  /* Col pannello largo quanto la finestra, otto temi in una riga: quattro
+     paginette larghe un quarto sarebbero alte più delle pagine vere. */
+  .export-themes {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+/* Sul telefono tornano quattro per riga. */
+@media (max-width: 520px) {
+  .export-themes {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 

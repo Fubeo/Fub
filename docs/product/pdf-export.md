@@ -26,7 +26,7 @@ stampa).
 - **La barra in alto**: «Torna alla nota», il nome della nota, lo zoom
   (−, percentuale, +), le tre viste (Una, Due, Tutte), il profilo, «Stampa…»
   ed «Esporta». Nella vista Tutte un clic su una pagina la apre in Una.
-- **Le pagine** su un fondo neutro, nei colori di carta del profilo. Si
+- **Le pagine** su un fondo neutro, nei colori del tema di stampa. Si
   riempiono solo le pagine vicine a quelle visibili: una nota lunga non
   costruisce tutte le copie insieme.
 - **Le dieci sezioni** a destra: Tema, Colori, Caratteri, Pagina, Testata e
@@ -37,6 +37,40 @@ stampa).
 - **La banda** in basso: le pagine, il formato, i margini, i segnalibri e il
   tempo dell'impaginazione. Il numero di pagine si annuncia a voce solo
   quando cambia.
+
+## Tema e Colori
+
+I temi di stampa e i loro colori vivono in
+[`export/themes.ts`](../../apps/client/src/export/themes.ts); le due
+sezioni in [`export/sections/theme.ts`](../../apps/client/src/export/sections/theme.ts)
+e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts).
+
+- **Otto temi**: Fub, Classico, Relazione, Rivista, Accademico, Quaderno,
+  Essenziale, Notte. Ognuno porta gli undici colori, i caratteri dei titoli
+  e del testo, il corpo, l'interlinea, la scala dei titoli e l'impostazione
+  (colonne, giustificato, rientro o spazio fra i paragrafi, titoli centrati
+  o numerati). Un tema che questa versione non conosce si legge come Fub.
+- Passare su un tema lo mostra sulle pagine senza sceglierlo; uscendo
+  tornano le pagine di prima. Un clic lo sceglie.
+- **Undici colori**: carta, testo, titoli, accento, link, testo secondario,
+  linee, evidenziato, riquadri, codice, intestazioni di tabella. Una riga
+  aperta offre i tondi pronti, un selettore libero e il codice a mano
+  (`#rgb` o `#rrggbb`, come il core). Un codice scritto male non entra: la
+  riga lo dice e resta il colore di prima; Esc nel campo rimette il colore
+  com'era. Passare su un colore contorna sulle pagine i punti che lo usano.
+- **Il contrasto** del testo sulla carta si ricalcola a ogni colore e avvisa
+  sotto 4,5 a 1; l'accento avvisa a parte sotto 3 a 1.
+- Ciò che cambi tu resta cambiando tema: la riga dice «tuo» e torna al
+  colore del tema da sola; «Togli le regolazioni tue» le toglie tutte.
+- **Bianco e nero** fa grigio ogni colore e, con un filtro sulla pagina,
+  anche ciò che i colori non raggiungono (un diagramma colorato,
+  un'immagine). **Risparmia inchiostro** dà carta bianca e niente fondi
+  pieni: un fondo uguale alla carta prende il filo delle linee.
+- Un colore cambia solo variabili dell'aspetto e non rifà l'impaginazione;
+  il tema la rifà solo se cambia le misure (caratteri, colonne). Le pagine
+  si stampano coi colori del tema anche quando l'app è scura: il tema
+  dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
+  carta scura, col codice e il testo colorato schiariti.
 
 ## Comportamenti
 

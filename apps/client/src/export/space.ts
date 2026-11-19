@@ -27,10 +27,12 @@ import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { createBand, type Band } from "./band";
 import { ExportPages, steppedZoom } from "./pages";
-import { PrintPaginator, type Scheduler, type SlicedResult } from "./paginate/slices";
+import { PrintMeasure } from "./paginate/measure";
+import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
 import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
-import { SECTIONS, type ExportSection } from "./sections/index";
+import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
+import { numberHeadings } from "./themes";
 import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
 
 /// Quanto si aspetta dopo l'ultimo cambio della nota prima di rifare la resa.
@@ -75,8 +77,11 @@ export interface ExportSpace {
   close(): void;
 }
 
+/// Le icone dello spazio e delle sue sezioni: si registrano all'apertura, una
+/// volta sola (il selettore libero dei Colori è `export-pick`).
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "export-open": ["M6.75 9.3L12 14.7l5.25-5.4"],
+  "export-pick": ["M4.5 19.5l3.6-.9 10.95-10.95-2.7-2.7L5.4 15.9z", "M3.75 21.75h16.5"],
 };
 
 /// Il conto dei segnalibri del PDF: i titoli della nota impaginata.
@@ -153,14 +158,40 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
 
   const opened = new Set<string>();
   const heads = new Map<string, { head: HTMLButtonElement; summary: HTMLElement }>();
+  const memory = new Map<string, unknown>();
+  /// Il profilo che le pagine mostrano senza che sia scelto (il passaggio su
+  /// un tema), o `null`.
+  let previewing: ExportProfile | null = null;
 
-  function sectionContext() {
+  /// Le pagine mostrano `settings`: le misure all'impaginatore, i colori e i
+  /// caratteri sulle pagine (le copie dei blocchi si vestono come la resa che
+  /// si è misurata).
+  function showSettings(next: PrintSettings): void {
+    settings = next;
+    paginator.update(next);
+    pages.setColors({ ...next.layout.type, ...next.look.colors });
+  }
+
+  function preview(next: ExportProfile | null): void {
+    if (closed || next === previewing) return;
+    previewing = next;
+    showSettings(printSettingsOf(next ?? profile));
+  }
+
+  function sectionContext(): SectionContext {
     return {
       get profile() {
         return profile;
       },
-      change: (next: ExportProfile, change?: { readonly live?: boolean }) => space.setProfile(next, change),
-      open: (id: string) => space.openSection(id),
+      change: (next, change) => space.setProfile(next, change),
+      open: (id) => space.openSection(id),
+      preview,
+      highlight: (color) => {
+        if (color) pages.element.dataset["highlight"] = color;
+        else delete pages.element.dataset["highlight"];
+      },
+      redraw: () => renderSide(),
+      memory,
     };
   }
 
@@ -230,13 +261,6 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     renderSide();
   }
 
-  function renderSummaries(): void {
-    for (const section of SECTIONS) {
-      const entry = heads.get(section.id);
-      if (entry) entry.summary.textContent = section.summary(profile);
-    }
-  }
-
   function onUpdate(result: SlicedResult): void {
     latest = result;
     pages.show(result, paginator.host, settings.layout);
@@ -270,9 +294,14 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     onError,
     scheduler: options.scheduler,
     waitMs: options.waitMs,
-    measure: options.measure,
+    // Prima di misurare, ogni titolo prende il suo numero: lo mostra solo un
+    // tema coi titoli numerati, ma la resa misurata e le copie lo portano già.
+    measure: (page) => {
+      numberHeadings(page);
+      return options.measure ? options.measure(page) : new PrintMeasure(page);
+    },
   });
-  pages.setColors(settings.look.colors);
+  pages.setColors({ ...settings.layout.type, ...settings.look.colors });
 
   function whenFinal(): Promise<SlicedResult> {
     if (latest?.final) return Promise.resolve(latest);
@@ -377,12 +406,11 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     },
     setProfile(next, change) {
       profile = next;
-      settings = printSettingsOf(next);
-      paginator.update(settings);
-      pages.setColors(settings.look.colors);
+      previewing = null;
+      showSettings(printSettingsOf(next));
       toolbar.setProfile(next.nome, next !== base);
       if (change?.live) return;
-      renderSummaries();
+      renderSide();
       if (latest) band.update(profile, { pages: latest.final ? latest.pagination.pages.length : latest.total, bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(latest) : null, ms: latest.workMs });
     },
     openSection(id) {
