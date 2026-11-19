@@ -11,6 +11,7 @@ import { extractSegments, replaceChecked } from "./proof";
 import { richSchema, toDoc } from "./schema";
 import { t } from "../../i18n/strings";
 import { safeHref } from "./paste";
+import { offSheetKey } from "../../ui/off-sheet-keys";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -87,6 +88,31 @@ describe("il motore ricco", () => {
     expect(e.state.doc.textContent).toBe("\tuno");
     e.destroy();
     expect(page.hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("una lettera col fuoco sul foglio entra nel testo, e la regola dei tasti fuori dal foglio la lascia passare (IMP-723)", () => {
+    const e = engine(source([para("")]));
+    const page = document.querySelector<HTMLElement>(".rich-desk")!.parentElement!;
+    const editable = document.querySelector<HTMLElement>(".rich-content")!;
+    const key = (init: KeyboardEventInit) => new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    // Il clic accanto alla carta, o sulla barra di scorrimento, lascia il fuoco al foglio.
+    page.focus();
+    expect(document.activeElement).toBe(page);
+    // Un gesto con Ctrl resta dov'è.
+    const save = key({ key: "s", ctrlKey: true });
+    page.dispatchEvent(save);
+    expect(document.activeElement).toBe(page);
+    const letter = key({ key: "G" });
+    page.dispatchEvent(letter);
+    // Il tasto non si ferma: va al testo, dove adesso sta il fuoco.
+    expect(letter.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(editable);
+    expect(offSheetKey(letter, "other", document.activeElement)).toBeNull();
+    // In sola lettura il foglio tiene il fuoco: non c'è dove scrivere.
+    e.setReadOnly(true);
+    page.focus();
+    page.dispatchEvent(key({ key: "G" }));
+    expect(document.activeElement).toBe(page);
   });
 
   it("un testo che non si legge non si scrive, e non diventa un documento vuoto salvabile", () => {

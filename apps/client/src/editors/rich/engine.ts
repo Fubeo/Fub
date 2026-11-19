@@ -119,6 +119,13 @@ export interface RichPendingEdit {
   settle(step: "undo" | "redo"): void;
 }
 
+/// Il tasto scrive un carattere: una lettera, una cifra, un segno, lo spazio.
+/// Ctrl o ⌘ fanno un gesto, salvo con AltGr (Ctrl+Alt su Windows).
+function writesText(event: KeyboardEvent): boolean {
+  if (event.isComposing || [...event.key].length !== 1) return false;
+  return !(event.ctrlKey || event.metaKey) || event.getModifierState("AltGraph");
+}
+
 /// Le azioni del catalogo che sono un passo della storia.
 const HISTORY_STEPS: Readonly<Record<string, "undo" | "redo">> = { "text.undo": "undo", "text.redo": "redo" };
 
@@ -257,9 +264,19 @@ export class RichEngine {
     parent.setAttribute("role", "document");
     parent.setAttribute("aria-label", options.label());
     const enter = (event: KeyboardEvent) => {
-      if (event.target !== parent || event.key !== "Enter") return;
-      event.preventDefault();
-      this.focus();
+      if (event.target !== parent) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.focus();
+        return;
+      }
+      // Un carattere scritto col fuoco sul foglio (dopo un clic accanto alla
+      // carta o sulla sua barra di scorrimento) va nel documento, al cursore:
+      // il fuoco entra nel testo mentre il tasto passa, e il tasto resta suo.
+      // Senza, la regola dei tasti fuori dal foglio (`ui/off-sheet-keys.ts`)
+      // fermerebbe le lettere e lascerebbe passare lo spazio: la prima parola
+      // si perderebbe (IMP-723).
+      if (writesText(event) && this.editable()) this.focus();
     };
     parent.addEventListener("keydown", enter);
     this.#motion = new RichMotion({
