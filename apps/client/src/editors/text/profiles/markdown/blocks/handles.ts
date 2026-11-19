@@ -43,8 +43,9 @@ import {
 import { animate, halt, liveState, type Motion, motionLevel, onFrame } from "../../../../../moto";
 import { markPresence } from "../../../../core/presence";
 import { dropOffers, type SurfaceDropDocument, watchDropOffers } from "../../../../core/registry";
-import { type DropTarget, noteTargets, placeTargets, targetAt } from "./drop-targets";
+import { boardTargets, type DropTarget, noteTargets, placeTargets, targetAt } from "./drop-targets";
 import { blockBytes, type MoveBlockPort, moveWithQuestions, registerMoveIcon } from "./move-to";
+import { type BoardPort, hasCard, registerBoardIcon } from "./to-board";
 import type { SyncBlockPort } from "./sync-to";
 import { edgeDepth, edgeScroll, type EdgeScroll } from "./autoscroll";
 import type { Teardown } from "../../../../../ui/lifetime";
@@ -98,6 +99,10 @@ export interface BlocksOptions {
   /// sposta il blocco. Senza, il menu non offre la voce e le note del cassetto
   /// non sono bersagli.
   readonly move?: MoveBlockPort;
+  /// «Porta su una lavagna» (E25, T48): il comando che fa dei blocchi le
+  /// schede di una lavagna. Senza, il menu non offre la voce e le lavagne
+  /// aperte a lato non sono bersagli.
+  readonly board?: BoardPort;
   /// Il tipo della nota (E5) e i suoi gesti, come in `PageOptions`
   /// (`../page/header.ts`): il tipo che `tipo` nomina, i tipi del vault per
   /// «Scegli il tipo», la nota di un tipo da aprire, «In evidenza» nel tipo.
@@ -250,6 +255,9 @@ interface Drag {
   moving: boolean;
   x: number;
   y: number;
+  /// Ctrl (⌘ sul Mac) tenuto all'ultimo movimento o al rilascio: su una
+  /// lavagna a lato il blocco si copia invece di spostarsi.
+  copy: boolean;
   hold: Hold | null;
 }
 
@@ -833,6 +841,15 @@ class HandlesView {
     const groups: (MenuItem | false)[][] = [[
       transformable && { label: liveStrings.t("blocks.menu.transform"), icon: "sync", items: this.transformItems(key, act) },
       colors.length > 0 && { label: liveStrings.t("blocks.menu.color"), icon: "fmt-color", items: colors },
+      // «Porta su una lavagna» (T48): come nel prototipo, sulle schede vive
+      // (e sulle scelte che ne hanno una). Per i blocchi di testo c'è il
+      // trascinamento su una lavagna a lato, e il comando nella palette.
+      hasCard(view.state, blocks, run) && view.state.facet(blocksOptions).board !== undefined && registerBoardIcon() && {
+        label: liveStrings.t("blocks.menu.board"),
+        description: liveStrings.t("blocks.menu.board.desc"),
+        icon: "board",
+        run: act(() => this.carryToBoard(key)),
+      },
       // Un ripiegabile: se la nota lo apre già aperto (K2). La freccia
       // invece apre e chiude soltanto nella vista.
       blocks[index]?.kind === "details" && {
@@ -1038,7 +1055,7 @@ class HandlesView {
     const touch = event.pointerType === "touch";
     const drag: Drag = {
       pointer: event.pointerId, touch, startX: event.clientX, startY: event.clientY, key: keyOf(blocks[index]!), life,
-      moving: false, x: event.clientX, y: event.clientY, hold: null,
+      moving: false, x: event.clientX, y: event.clientY, copy: event.ctrlKey || event.metaKey, hold: null,
     };
     this.drag = drag;
     // Presa, gli occhi si socchiudono, e restano così finché il blocco è in mano.
@@ -1064,6 +1081,7 @@ class HandlesView {
       if (move.pointerId !== drag.pointer) return;
       drag.x = move.clientX;
       drag.y = move.clientY;
+      drag.copy = move.ctrlKey || move.metaKey;
       if (!drag.moving) {
         const far = Math.hypot(move.clientX - drag.startX, move.clientY - drag.startY) >= SLOP;
         if (!far) return;
@@ -1073,7 +1091,10 @@ class HandlesView {
       }
       this.track();
     });
-    life.listen(this.grip, "pointerup", () => this.endDrag(true));
+    life.listen(this.grip, "pointerup", (up) => {
+      if (up.pointerId === drag.pointer) drag.copy = up.ctrlKey || up.metaKey;
+      this.endDrag(true);
+    });
     life.listen(this.grip, "pointercancel", () => this.endDrag(false));
     life.listen(this.grip, "lostpointercapture", () => this.endDrag(false));
     // Una finestra che perde il fuoco interrompe il gesto: il blocco torna.
@@ -1445,6 +1466,8 @@ class HandlesView {
       ...placeTargets(state, state.field(blockModel).blocks, hold.run, offers),
       // Le note del cassetto, se c'è chi sposta fra le note.
       ...(state.facet(blocksOptions).move ? noteTargets(offers) : []),
+      // Le lavagne aperte a lato, se c'è chi porta i blocchi su una lavagna.
+      ...(state.facet(blocksOptions).board ? boardTargets(offers) : []),
     ];
     // Il bersaglio di prima appartiene a misure vecchie: si spegne sempre, e
     // si riaccende quello nuovo sotto il puntatore (anche la stessa riga).
@@ -1890,7 +1913,7 @@ class HandlesView {
     const index = indexOf(blocks, drag.key);
     if (index < 0) return settle();
     const run = runFor(state, blocks, index);
-    if (target) return this.dropOn(target, run);
+    if (target) return this.dropOn(target, run, drag.copy);
     if (hold.beside) {
       const spec = dropAsColumn(state, blocks, run, hold.beside.target, hold.beside.side);
       if (!spec) return settle();
@@ -1920,11 +1943,12 @@ class HandlesView {
   /// Il rilascio sul bersaglio fuori dalla colonna: il blocco va dove il
   /// bersaglio dice («In fondo a …»), in un passo d'annullamento, e la vista
   /// lo porta al centro. Nessun volo: il blocco ricompare al suo posto nuovo.
-  dropOn(target: DropTarget, run: BlockRun): boolean {
+  dropOn(target: DropTarget, run: BlockRun, copy = false): boolean {
     const view = this.view;
     const state = view.state;
     const blocks = state.field(blockModel).blocks;
     if (target.note) return this.dropOnNote(target.note, run);
+    if (target.board) return this.dropOnBoard(target.board, run, copy);
     const spec = target.drop(state, blocks, run);
     if (!spec) {
       if (state.field(dragPose).lifted) view.dispatch({ effects: setDragPose.of(null), annotations: blockGesture.of({ kind: "drop", say: "" }) });
@@ -1966,6 +1990,47 @@ class HandlesView {
       (error: unknown) => failed(errorText(error)),
     );
     return false;
+  }
+
+  /// Il rilascio su una lavagna aperta a lato: «Porta su una lavagna» senza
+  /// domande, una scheda per blocco a destra di ciò che la lavagna ha; con
+  /// Ctrl i blocchi restano anche qui. Il blocco si posa dov'era; lo toglie la
+  /// ricarica dopo la scrittura dei due file, e un errore lo dice senza aver
+  /// toccato niente.
+  dropOnBoard(board: NonNullable<DropTarget["board"]>, run: BlockRun, copy: boolean): boolean {
+    const view = this.view;
+    const state = view.state;
+    const options = state.facet(blocksOptions);
+    const doc = options.document?.()?.documentId;
+    if (state.field(dragPose).lifted) view.dispatch({ effects: setDragPose.of(null), annotations: blockGesture.of({ kind: "drop", say: "" }) });
+    if (!options.board || !doc) return false;
+    const block = blockBytes(state, state.field(blockModel).blocks, run);
+    this.carry(options, { doc, at: block.at, text: block.text, to: board.document.documentId, keep: copy });
+    return false;
+  }
+
+  /// «Porta su una lavagna» dal menu: una lavagna nuova accanto alla nota,
+  /// aperta a lato. La tratta si legge adesso, col menu.
+  carryToBoard(key: BlockKey): void {
+    const options = this.view.state.facet(blocksOptions);
+    const doc = options.document?.()?.documentId;
+    if (!options.board || !doc) return;
+    this.withRun(key, (state, blocks, run) => {
+      const block = blockBytes(state, blocks, run);
+      this.carry(options, { doc, at: block.at, text: block.text, to: null, keep: false });
+    });
+  }
+
+  /// Chiede il comando, e dice soltanto un no: l'esito buono, col suo
+  /// «Annulla», lo racconta chi porta.
+  carry(options: BlocksOptions, request: Parameters<BoardPort["carry"]>[0]): void {
+    const failed = (reason: string) => options.notify?.(liveStrings.t("blocks.board.failed", { reason }), "guasto");
+    void options.board?.carry(request).then(
+      (reason) => {
+        if (reason !== null) failed(reason);
+      },
+      (error: unknown) => failed(errorText(error)),
+    );
   }
 
   /// Il blocco lasciato senza spostarlo (Esc, o rilasciato al suo posto)

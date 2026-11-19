@@ -46,6 +46,9 @@ import {
   type SurfaceReference,
   type SurfaceRequest,
   type SurfaceScrollLink,
+  offerDropTargets,
+  type SurfaceDropDocument,
+  type SurfaceDropOffer,
 } from "../editors/core/registry";
 import { modeById, modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
@@ -71,6 +74,7 @@ import { newSubpage, renamePage } from "./page-rename";
 import { moveBlock, moveHeadings, moveNotes } from "./move-block";
 import { tableToSheet } from "./table-sheet";
 import { syncBlockPort } from "./sync-block";
+import { boardBlockPort } from "./board-from-note";
 import { vaultBlockPort } from "./vault-blocks";
 import { linkedPageIcon } from "./page-icons";
 import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
@@ -165,7 +169,7 @@ import { hideSlashEntry, slashPrefs } from "../panels/slash/prefs";
 import type * as SlashPanelModule from "../panels/slash/panel";
 import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
-import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
+import { mountViewInPane, unmountViewFromPane, primaryView, visibleRect } from "../ui/views";
 import { errorText, isErrorKind } from "../host/errors";
 import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews } from "./craft-previews";
 import { openWithEntry } from "../panels/open-with";
@@ -1332,6 +1336,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   });
   mountNoteCards(lifetime);
   watchLinkClick(lifetime);
+  // Le lavagne aperte a lato sono bersagli di un blocco staccato dal testo
+  // (T48, «Porta su una lavagna»).
+  lifetime.add(offerDropTargets({ offers: boardOffers }));
   surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
     onChange: (paneId, change) => {
@@ -1463,6 +1470,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onNewSubpage: newSubpage,
     moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
     tableSheet: { turn: tableToSheet },
+    // La lavagna nuova si apre a lato, o nel vicino che la mostra già.
+    boardBlock: boardBlockPort((doc) => openDocumentBeside(doc, "row", { reuse: true })),
     syncBlock: syncBlockPort,
     pageIcons: {
       icon: linkedPageIcon,
@@ -4548,6 +4557,33 @@ export async function openFromView(id: string): Promise<void> {
   }
   focusPane(other);
   await openDocument(id);
+}
+
+/// Le lavagne che i riquadri mostrano adesso, dove può cadere un blocco
+/// staccato da una nota (T48): una per riquadro che si vede, col nome della
+/// sua linguetta. Il riquadro acceso dice il bersaglio col suo bordo.
+function boardOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  if (document.vault !== undefined && document.vault !== openVaultRoot()) return [];
+  const out: SurfaceDropOffer[] = [];
+  for (const id of layoutPanes()) {
+    const doc = activeDoc(id);
+    const pane = panes.get(id);
+    if (doc === null || !pane || !/\.canvas$/i.test(doc)) continue;
+    const rect = visibleRect(pane.root);
+    if (!rect) continue;
+    const root = pane.root;
+    out.push({
+      kind: "board",
+      document: { documentId: doc, vault: document.vault },
+      title: docTitle(doc),
+      rect,
+      hover: (on) => {
+        if (on) root.dataset.dropHot = "true";
+        else delete root.dataset.dropHot;
+      },
+    });
+  }
+  return out;
 }
 
 /// Come si apre un documento accanto.

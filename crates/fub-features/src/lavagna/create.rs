@@ -181,7 +181,7 @@ fn unwritable(doc: &DocId, reason: &dyn std::fmt::Display) -> PluginError {
 /// Il guasto di un nome, nella frase del catalogo. Il `match` è esaustivo di
 /// proposito: un guasto nuovo nel contratto non compila finché non ha la sua
 /// frase.
-fn bad_name(written: &str, fault: &NameFault) -> PluginError {
+pub(super) fn bad_name(written: &str, fault: &NameFault) -> PluginError {
     let key = match fault {
         NameFault::Empty => E_NAME_EMPTY,
         NameFault::Traversal { .. } => E_NAME_TRAVERSAL,
