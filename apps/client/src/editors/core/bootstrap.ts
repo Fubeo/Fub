@@ -260,13 +260,16 @@ function proofPorts(vault: string | null | undefined): ProofPorts {
   };
 }
 
-/// Il nome di una lingua nella lingua dell'interfaccia: `it` → «italiano».
+/// Il nome di una lingua nella lingua dell'interfaccia, come un valore che
+/// comincia con la maiuscola: `it` → «Italiano».
 function languageName(code: string): string {
+  let name = code;
   try {
-    return new Intl.DisplayNames([resolvedLanguage()], { type: "language" }).of(code) ?? code;
+    name = new Intl.DisplayNames([resolvedLanguage()], { type: "language" }).of(code) ?? code;
   } catch {
-    return code;
+    // Un codice che `Intl` non conosce resta il codice.
   }
+  return name.charAt(0).toLocaleUpperCase(resolvedLanguage()) + name.slice(1);
 }
 
 const PLAIN_TEXT_MODES = [
