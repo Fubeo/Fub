@@ -209,13 +209,18 @@ export function quotedSheet(name: string): string {
 
 /// Il testo a tabulazioni incollato come tabella Markdown, o `null` se non è
 /// una griglia: almeno due celle, e ogni riga con le stesse colonne.
-export function tsvTable(text: string): string | null {
+///
+/// Con `locale` le celle vengono da un foglio di Fub, che le copia col formato
+/// di GridCraft: i numeri prendono i separatori della nota e le colonne di
+/// numeri vanno a destra, come in «Stacca come tabella».
+export function tsvTable(text: string, locale?: string): string | null {
   if (!text.includes("\t")) return null;
   const rows = parseTsv(text.replace(/\r?\n$/u, ""));
   const columns = rows[0]?.length ?? 0;
   if (rows.length === 0 || columns < 2 || rows.some((row) => row.length !== columns)) return null;
   // Un testo rientrato a tabulazioni (codice, un elenco) non è una griglia.
   if (rows.every((row) => row[0]!.trim() === "")) return null;
+  if (locale !== undefined) return tableOfShown(rows, locale);
   const data = rows.length === 1 ? [...rows, rows[0]!.map(() => "")] : rows;
   return serializeTable({ rows: data, aligns: Array.from({ length: columns }, () => null) });
 }

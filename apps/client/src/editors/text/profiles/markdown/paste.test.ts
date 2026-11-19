@@ -597,9 +597,11 @@ describe("celle incollate da un foglio (T52)", () => {
   });
 
   it("le celle di un foglio del vault offrono «Incolla come scheda», che scrive l'embed", () => {
-    rememberCellsCopy(TSV, { doc: "Conti.xlsx", sheet: "Foglio1", range: "A1:B2" });
-    const { engine, host, view } = paste("", TSV, "", EditorSelection.single(6), true, BLANK);
-    expect(engine.getDoc()).toBe(`prima\r\n\r\n${TABLE}\r\n\r\nfine`);
+    // Il foglio copia col formato di GridCraft: i numeri prendono i separatori della nota.
+    const shown = "Voce\tImporto\nAffitto\t1,240.50 €\n";
+    rememberCellsCopy(shown, { doc: "Conti.xlsx", sheet: "Foglio1", range: "A1:B2" });
+    const { engine, host, view } = paste("", shown, "", EditorSelection.single(6), true, BLANK);
+    expect(engine.getDoc()).toBe("prima\r\n\r\n| Voce    |    Importo |\r\n| ------- | ---------: |\r\n| Affitto | 1.240,50 € |\r\n\r\nfine");
     const choice = host.querySelector(".cm-fub-address-choice");
     expect(choice?.getAttribute("aria-label")).toBe("Come scrivere le celle");
     const buttons = [...host.querySelectorAll<HTMLElement>(".cm-fub-address-choice [data-choice]")];

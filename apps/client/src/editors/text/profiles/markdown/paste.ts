@@ -11,6 +11,8 @@ import { AddressChoiceWidget, bareUrl } from "./link-card";
 import { carriedMarkdown } from "./comments/copy";
 import { webEmbedOf } from "./web-embed";
 import { cellsOrigin } from "./cells-clipboard";
+import { declaredLanguage } from "./render";
+import { resolvedLanguage } from "../../../../i18n/strings";
 import { cellsEmbed, tsvTable } from "./table-sheet";
 
 // Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
@@ -278,10 +280,11 @@ function addressOnBlankLine(view: EditorView, data: DataTransfer): string | null
 /// conversione dell'HTML, che tiene anche i segni del testo.
 function pastedCells(view: EditorView, data: DataTransfer): { table: string; embed: string | null } | null {
   if (isStrictlyInsideCode(view.state, view.state.selection.main.from)) return null;
-  const table = tsvTable(data.getData("text/plain"));
-  if (table === null) return null;
   const origin = cellsOrigin(data);
   if (origin === null && data.getData("text/html")) return null;
+  const locale = origin === null ? undefined : declaredLanguage(view.state.doc) ?? resolvedLanguage();
+  const table = tsvTable(data.getData("text/plain"), locale);
+  if (table === null) return null;
   return { table, embed: origin === null ? null : cellsEmbed(origin) };
 }
 
