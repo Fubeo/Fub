@@ -485,6 +485,13 @@ fn defaults_for(filter: &FilterDef) -> BTreeMap<String, Value> {
 fn create_defaults(global: &FilterDef, local: &FilterDef) -> BTreeMap<String, Value> {
     defaults_for(&FilterDef::And(vec![global.clone(), local.clone()]))
 }
+/// Un file `.base`: la definizione di una Base, che nessuna Base elenca.
+fn is_base_definition(path: &str) -> bool {
+    path.rsplit('/')
+        .next()
+        .and_then(|name| name.rsplit_once('.'))
+        .is_some_and(|(stem, ext)| !stem.is_empty() && ext.eq_ignore_ascii_case("base"))
+}
 fn file_fields(path: &str) -> BTreeMap<String, BaseValue> {
     let name = path.rsplit('/').next().unwrap_or(path);
     let folder = path.rsplit_once('/').map(|(f, _)| f).unwrap_or("");
@@ -1117,6 +1124,12 @@ fn derive(
         .map(str::to_lowercase);
     let mut result = Vec::new();
     for input in rows {
+        // Una Base elenca note, mai le definizioni delle Basi: il suo file
+        // `.base` (e quello delle altre) non è una riga, qualunque filtro
+        // abbia (IMP-1804).
+        if is_base_definition(&input.doc) {
+            continue;
+        }
         let time = row_time(plan, &input.props);
         let days = civil_days(&input.props);
         let mut ctx = RowContext {
@@ -2191,6 +2204,31 @@ mod tests {
             derived["rows"][0]["values"]["stato"],
             json!({"kind":"text","value":"Bozza"})
         );
+    }
+
+    /// IMP-1804: una Base dentro la cartella che filtra non elenca il suo
+    /// file `.base`, né quello di un'altra Base, nemmeno senza filtro.
+    #[test]
+    fn a_base_never_lists_base_files() {
+        let folder = "filters:\n  condition:\n    file: path\n    op: in_folder\n    value: \"Progetti\"\nviews:\n  - name: \"Tabella\"\n    type: table\n";
+        let open = "views:\n  - name: \"Tabella\"\n    type: table\n";
+        let rows = json!([
+            {"doc":"Progetti/Progetti.base","props":{}},
+            {"doc":"Progetti/Altra.BASE","props":{}},
+            {"doc":"Progetti/Sito.md","props":{}},
+            {"doc":"Progetti/.base","props":{}},
+            {"doc":"Progetti/base.md","props":{}}
+        ]);
+        for source in [folder, open] {
+            let derived = respond(json!({"version":1,"op":"derive","source":source,"view":"Tabella","now_ms":0,"rows":rows})).unwrap();
+            let docs: Vec<_> = derived["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["doc"].as_str().unwrap().to_owned())
+                .collect();
+            assert_eq!(docs, ["Progetti/.base", "Progetti/Sito.md", "Progetti/base.md"]);
+        }
     }
 
     #[test]
