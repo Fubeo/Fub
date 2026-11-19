@@ -2508,7 +2508,7 @@ Fatto quando: andata e ritorno nota, lavagna, nota con lo stesso testo;
 l'annulla rimette i due file.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 lavagna
-Stato: [~] in corso · coder · base 49709f452
+Stato: [~] integrato in `integra/editor-2` (219950782, 2026-11-19), in attesa del gruppo; comandi canvas.from_note/canvas.to_note; manca il trascinamento lavagna → nota (editors/canvas, fuori da Tocca: `canvas.to_note` pronto, oggi dalla palette); baseline delle scene nuove dal runner
 
 ## T49 · Gli estratti nella nota e «Annota»
 
@@ -3412,7 +3412,7 @@ Fatto quando: un test per voce; un test che `<!-- pagina -->` volta pagina e
 non si vede nell'editor né in Lettura.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 219950782
 
 ## T77a · Lo scrittore del PDF
 
