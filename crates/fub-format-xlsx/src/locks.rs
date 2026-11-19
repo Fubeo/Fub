@@ -53,6 +53,17 @@ impl Lock {
         Lock::Protected,
     ];
 
+    /// Il blocco tiene anche il valore salvato di una formula: la cella ha un
+    /// valore che non è soltanto il suo (una matrice, un'area versata, una
+    /// tabella di dati, una pivot, un valore ricco), e il ricalcolo non lo
+    /// riscrive. Gli altri blocchi fermano soltanto chi scrive un input.
+    pub fn holds_value(self) -> bool {
+        matches!(
+            self,
+            Lock::Array | Lock::Spill | Lock::DataTable | Lock::Pivot | Lock::RichValue
+        )
+    }
+
     /// Il codice stabile del blocco.
     pub fn code(self) -> &'static str {
         match self {

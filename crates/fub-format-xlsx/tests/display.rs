@@ -188,9 +188,10 @@ fn l_aspetto_segue_il_file_e_il_tema_della_shell() {
 }
 
 #[test]
-fn le_celle_versate_hanno_i_valori_del_file_e_niente_si_ricalcola() {
+fn le_celle_versate_hanno_i_valori_del_file_e_una_formula_senza_valore_si_calcola() {
     // Una matrice dinamica (`cm`) e una legacy, con i valori versati in cache;
-    // una formula salvata senza valore; un valore casuale salvato.
+    // una formula salvata senza valore; un valore casuale salvato. Soltanto la
+    // formula senza valore si calcola.
     let mut p = opened(&one_sheet(
         r#"<sheetData>
 <row r="1"><c r="A1" cm="1"><f t="array" ref="A1:A3">_xlfn.SEQUENCE(3)</f><v>1</v></c><c r="B1"><f t="array" ref="B1:B2">C1:C2*10</f><v>10</v></c><c r="C1"><v>1</v></c><c r="D1"><f>C1+C2</f></c><c r="E1"><f>RAND()</f><v>0.25</v></c></row>
@@ -212,11 +213,11 @@ fn le_celle_versate_hanno_i_valori_del_file_e_niente_si_ricalcola() {
     let unsaved = p.cell(0, 3);
     assert_eq!(unsaved.input, "=C1+C2");
     assert_eq!(
-        (unsaved.value, unsaved.display.as_str()),
-        (GridValue::Blank, "")
+        (unsaved.value, unsaved.display.as_str(), unsaved.stale),
+        (GridValue::Number(3.0), "3", false)
     );
     assert_eq!(p.cell(0, 4).display, "0.25");
-    assert_eq!(p.notices(), [("uncomputed", 1)]);
+    assert!(p.notices().is_empty(), "{:?}", p.notices());
 }
 
 #[test]

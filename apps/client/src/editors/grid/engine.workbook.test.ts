@@ -80,9 +80,9 @@ describe("GridEngine con una cartella di Excel", () => {
     // La seconda modifica tiene il `before` dei byte: è la fixture del provider.
     expect(engine.getDoc()).toBe(xlsx.edit.commit.edit.inserted);
     expect(grid.applied[1]).toEqual({ ...xlsx.edit.request, revision: grid.applied[1].revision, patches: [{ ...xlsx.edit.request.patches[0], before: "9" }] });
-    // Le formule che leggono B2 mostrano il valore del file, segnato.
-    expect(cell(3, 1)?.classList.contains("stale")).toBe(true);
-    expect(cell(3, 1)?.textContent).toBe("680");
+    // Le formule che leggono B2 mostrano il valore ricalcolato, senza segno.
+    expect(cell(3, 1)?.classList.contains("stale")).toBe(false);
+    expect(cell(3, 1)?.textContent).toBe("780");
     expect(notice().textContent).toContain(" ");
 
     // Annullare riporta i byte: il giornale si svuota. La cronologia è del
