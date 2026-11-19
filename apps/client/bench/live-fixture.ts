@@ -184,6 +184,41 @@ const CELL_VALUES_NOTE = [
   "Da chiedere all'agenzia: chi paga la caldaia.",
 ].join("\n");
 
+/// I grafici (T54), sulla cartella del banco: il grafico «Vendite» del foglio
+/// come scheda (il finto lo disegna col disegno vero di GridCraft,
+/// `fake-ipc.ts`), un grafico che il file non ha, e una tabella Markdown col
+/// recinto che «Grafico da questa tabella» le ha scritto sotto.
+const CHARTS_NOTE = [
+  "# Le spese della casa",
+  "",
+  "Il grafico del foglio, che segue i conti:",
+  "",
+  "![[Conti.xlsx#Vendite]]",
+  "",
+  "Un grafico che il foglio non ha più:",
+  "",
+  "![[Conti.xlsx#Grafico spese]]",
+  "",
+  "I preventivi, e sotto il grafico scritto dalla tabella:",
+  "",
+  "| Voce | Importo |",
+  "| --- | --- |",
+  "| Caldaia | 1.240,50 € |",
+  "| Imbianchino | 860 |",
+  "| Trasloco | 420 |",
+  "",
+  "```mermaid",
+  "pie title Importo",
+  "  %% fub:table-chart",
+  "  %% Valori della tabella sopra al 19 nov 2026: il grafico non la segue. Si aggiorna dal menu della tabella, «Rigenera il grafico dalla tabella».",
+  '  "Caldaia" : 1240.5',
+  '  "Imbianchino" : 860',
+  '  "Trasloco" : 420',
+  "```",
+  "",
+  "Da chiedere all'agenzia: chi paga la caldaia.",
+].join("\n");
+
 /// La misura e il posto delle schede (T42): il contratto e i conti affiancati
 /// in un `[!columns]`, i conti a tutta pagina e bassi (`|900x260`), il
 /// contratto come riga (`|row`).
@@ -842,6 +877,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   // con cento valori.
   "valori-cella": { text: CELL_VALUES_NOTE, cursor: null },
   "battuta-valori-100": typingValuesNote(50, 100),
+  // I grafici (T54): dal foglio e da una tabella.
+  grafici: { text: CHARTS_NOTE, cursor: null },
   "lunga-4000": longNote(4000),
 };
 

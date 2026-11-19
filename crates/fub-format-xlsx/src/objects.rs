@@ -5,6 +5,13 @@
 //!
 //! Le misure sono quelle del foglio di GridCraft, in pixel a 96 dpi e a zoom
 //! 100: le stesse delle righe e delle colonne della finestra.
+//!
+//! Un grafico è anche una parte che una nota incorpora (T54):
+//! `![[Conti.xlsx#Grafico spese]]` nomina il grafico col suo titolo
+//! ([`chart_named`]), e la scheda legge la finestra delle celle che il grafico
+//! copre ([`ChartPart::range`]): il disegno arriva con gli oggetti di quella
+//! finestra, lo stesso SVG del foglio aperto, rifatto sui dati di adesso a
+//! ogni lettura.
 
 use std::collections::HashSet;
 
@@ -179,6 +186,85 @@ pub(crate) fn objects(
     }
     out.truncate(MAX_GRID_WINDOW_OBJECTS);
     out
+}
+
+/// Un grafico che una nota nomina (T54): il foglio, l'id del file e le celle
+/// che copre.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ChartPart {
+    pub sheet: usize,
+    pub id: u32,
+    /// Le celle sotto il grafico, dalla cella dell'ancora a quella dell'angolo
+    /// in basso a destra: la finestra che le legge porta il suo disegno.
+    pub range: RangeRef,
+}
+
+/// Il nome con cui una nota chiama un grafico: il suo titolo, con gli spazi
+/// raccolti. Il modello non tiene il nome che Excel dà alla cornice
+/// («Grafico 4»): un grafico senza titolo non ha nome, e non è una parte.
+fn chart_name(chart: &gridcraft_model::Chart) -> Option<String> {
+    let title = chart.title.as_deref()?;
+    let name = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!name.is_empty()).then_some(name)
+}
+
+/// Il grafico di titolo `name`, con gli spazi raccolti e senza badare alle
+/// maiuscole, con la stessa chiave degli altri nomi della cartella
+/// (`parts::name_key`); il primo, nell'ordine dei fogli, se due hanno lo stesso
+/// titolo. Un grafico che il disegno non sa fare (una misura nulla) non c'è.
+pub(crate) fn chart_named(workbook: &Workbook, name: &str) -> Option<ChartPart> {
+    let wanted = crate::parts::name_key(&name.split_whitespace().collect::<Vec<_>>().join(" "));
+    if wanted.is_empty() {
+        return None;
+    }
+    workbook
+        .sheets
+        .iter()
+        .enumerate()
+        .find_map(|(index, sheet)| {
+            sheet
+                .charts
+                .iter()
+                .filter(|chart| drawable(chart))
+                .find(|chart| {
+                    chart_name(chart).is_some_and(|own| crate::parts::name_key(&own) == wanted)
+                })
+                .map(|chart| ChartPart {
+                    sheet: index,
+                    id: chart.id,
+                    range: covered(sheet, &chart.anchor),
+                })
+        })
+}
+
+/// I titoli dei grafici della cartella che una nota può nominare, nell'ordine
+/// dei fogli e del disegno.
+pub(crate) fn chart_names(workbook: &Workbook) -> impl Iterator<Item = String> + '_ {
+    workbook
+        .sheets
+        .iter()
+        .flat_map(|sheet| sheet.charts.iter())
+        .filter(|chart| drawable(chart))
+        .filter_map(chart_name)
+}
+
+/// Un grafico con una misura: quelli senza, `chart_svg` non li disegna.
+fn drawable(chart: &gridcraft_model::Chart) -> bool {
+    chart.anchor.width >= 1.0 && chart.anchor.height >= 1.0
+}
+
+/// Le celle che un oggetto ancorato copre: la sua cella e quelle fino al suo
+/// angolo in basso a destra. Un bordo che cade sull'inizio di una riga non la
+/// prende.
+fn covered(sheet: &Sheet, anchor: &Anchor) -> RangeRef {
+    let rect = Rect::of(sheet, anchor);
+    let end_row = sheet
+        .row_at((rect.y + rect.height - 0.5).max(rect.y))
+        .max(anchor.cell.row);
+    let end_col = sheet
+        .col_at((rect.x + rect.width - 0.5).max(rect.x))
+        .max(anchor.cell.col);
+    RangeRef::new(anchor.cell, CellRef::new(end_row, end_col))
 }
 
 fn placed(

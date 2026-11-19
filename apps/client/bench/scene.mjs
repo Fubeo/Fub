@@ -1678,6 +1678,53 @@ export const SCENE = touchLast(onPage("shell", [
     },
     ...(hover ? { hover: (page) => page.hover(".pane.focus .pane-editor .cm-fub-cell-value >> nth=0") } : {}),
   })),
+  // I grafici (T54): il grafico «Vendite» del foglio come scheda, disegnato
+  // da GridCraft e alto quanto la sua proporzione; un grafico che il file non
+  // ha («Intervallo non trovato»); la tabella col recinto Mermaid che
+  // «Grafico da questa tabella» le ha scritto sotto; il menu della tabella
+  // con la voce; la finestra minima.
+  ...[
+    ["grafici-01-scrittura", "Il grafico del foglio come scheda, alto quanto la sua proporzione", "top", false, null],
+    ["grafici-05-perso", "Il fondo del grafico del foglio e, sotto, un grafico che il file non ha", "lost", false, null],
+    ["grafici-02-tabella", "La tabella dei preventivi e la torta scritta dalla tabella", "table", false, null],
+    ["grafici-03-menu", "Il menu della tabella con «Rigenera il grafico dalla tabella»", "table", true, null],
+    ["grafici-04-stretta", "I grafici nella finestra minima, 800 px", "top", false, NOTE_NARROW],
+  ].map(([id, title, scroll, menu, viewport]) => ({
+    id,
+    title,
+    query: "live=grafici&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      if (scroll === "table") {
+        // La torta si disegna quando entra in vista.
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+        await page.waitForFunction(() => {
+          const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+          return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+        });
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+      }
+      if (scroll === "lost") {
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
+      }
+      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (menu) {
+        await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
+        await page.waitForSelector("#context-menu [role=menuitem]");
+      }
+    },
+  })),
   // La scheda di documento (T44, il prototipo `.docw`, passo 17): il verbale
   // in ODT a riposo, in continuo e senza pagine; scelto coi Blocchi (attivo,
   // poi Esc); attivo, con l'editor dei documenti in Scrittura e la sua barra.
