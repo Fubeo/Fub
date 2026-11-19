@@ -2157,6 +2157,42 @@ mod tests {
         assert_eq!(bare["order"], json!([]));
     }
 
+    /// La Base come la crea «/base» su una cartella (IMP-147, IMP-413,
+    /// IMP-616): il piano non chiede nessuna proprietà, quindi la superficie
+    /// deve leggerle da sé per proporle. Quando la vista ne nomina una (una
+    /// colonna, un filtro su una data, le corsie), `derive` la usa.
+    #[test]
+    fn a_new_folder_base_plans_no_property_and_derives_the_ones_it_names() {
+        let fresh = "filters:\n  condition:\n    file: path\n    op: in_folder\n    value: \"Redazione\"\nviews:\n  - name: \"Tabella\"\n    type: table\n";
+        let plan =
+            respond(json!({"version":1,"op":"plan","source":fresh,"view":"Tabella"})).unwrap();
+        assert_eq!(plan["required_props"], json!([]));
+        assert_eq!(plan["all_properties"], json!(false));
+        assert_eq!(plan["columns"], json!([]));
+        let day = |y: i32, m: u8, d: u8| json!({"kind":"date","value":{"year":y,"month":m,"day":d,"time":null}});
+        let rows = json!([
+            {"doc":"Redazione/Pane.md","props":{"stato":{"kind":"text","value":"Bozza"},"uscita":day(2026,11,28)}},
+            {"doc":"Redazione/Brodo.md","props":{"stato":{"kind":"text","value":"Pubblicato"},"uscita":day(2026,12,12)}},
+            {"doc":"Spesa/Mercato.md","props":{"uscita":day(2026,1,1)}}
+        ]);
+        let named = format!("{fresh}    order:\n      - stato\n    filters:\n      condition:\n        property: uscita\n        op: less_than\n        value: \"2026-12-01\"\n");
+        let plan =
+            respond(json!({"version":1,"op":"plan","source":named,"view":"Tabella"})).unwrap();
+        assert_eq!(plan["required_props"], json!(["stato", "uscita"]));
+        let derived = respond(json!({"version":1,"op":"derive","source":named,"view":"Tabella","now_ms":0,"rows":rows})).unwrap();
+        let docs: Vec<_> = derived["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["doc"].clone())
+            .collect();
+        assert_eq!(docs, vec![json!("Redazione/Pane.md")]);
+        assert_eq!(
+            derived["rows"][0]["values"]["stato"],
+            json!({"kind":"text","value":"Bozza"})
+        );
+    }
+
     #[test]
     fn parse_says_each_view_type_in_order() {
         let parsed = respond(json!({"version":1,"op":"parse","source":TIME_SOURCE})).unwrap();

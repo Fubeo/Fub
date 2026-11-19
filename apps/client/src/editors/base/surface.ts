@@ -32,7 +32,7 @@ import { columnIcon, viewIcon } from "./icons";
 import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
 import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
 import { readOnlyColumn, sameKey, sortedBy } from "./sort";
-import { freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
+import { declaredType, freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
 import { keyboardPlatform } from "../../ui/commands";
@@ -581,16 +581,24 @@ export function mountBaseSurface(
       }
       const nextPlan = plan;
       if (!nextPlan) throw new Error("base: piano assente");
-      const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, nextPlan.allProperties ? { kind: "all" } : { kind: "keys", keys: nextPlan.requiredProps }, { offset: 0, limit: 256 }, request.signal);
+      // Le note si leggono con tutte le loro proprietà, anche quando la vista
+      // non ne chiede ancora nessuna (una Base nuova): Proprietà, Filtro, le
+      // corsie della Bacheca e la data del Calendario propongono quelle che
+      // le note hanno (IMP-147, IMP-413, IMP-616). A `derive` vanno solo
+      // quelle che il piano chiede.
+      const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, { kind: "all" }, { offset: 0, limit: 256 }, request.signal);
       if (!valid(ticket)) return;
       // Le note legate dai riepiloghi di Relazione (T35): nessuna domanda in
       // più se la vista non ne ha.
       const linked = await linkedNotes(deps, nextPlan, found.rows, request.signal);
       if (!valid(ticket)) return;
-      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked);
+      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked, nextPlan.allProperties ? null : nextPlan.requiredProps);
       if (!valid(ticket)) return;
       rows = result.rows;
-      read = readProperties(found.rows);
+      // Prima le note della Base, poi le altre del vault: sotto il tetto di
+      // `PROPERTY_LIMIT` nomi, quelli delle sue note entrano per primi.
+      const shown = new Set(result.rows.map((row) => row.doc));
+      read = readProperties([...found.rows.filter((row) => shown.has(row.doc)), ...found.rows.filter((row) => !shown.has(row.doc))]);
       kindCache = new Map();
       summaries = result.summaries;
       displayed = VISIBLE_STEP;
@@ -979,9 +987,12 @@ export function mountBaseSurface(
     const lat = find(LATITUDE_KEYS), lon = find(LONGITUDE_KEYS);
     return lat && lon ? { lat_key: lat, lon_key: lon } : null;
   };
-  // Le corsie di una bacheca nuova: il gruppo della vista aperta, o la prima
-  // colonna che è una proprietà.
-  const lanes = (): string | null => grouping() ?? plan?.group ?? plan?.columns.find((column) => columnProperty(column) !== null) ?? null;
+  // Le corsie di una bacheca nuova: il gruppo della vista aperta, la prima
+  // colonna che è una proprietà o, in una vista che non ne mostra, la prima
+  // proprietà delle note dichiarata stato e poi scelta (come lo «Status» di
+  // Notion).
+  const declaredLane = (kind: "status" | "select"): string | undefined => rowProperties().find((key) => declaredType(propertyTypes, key) === kind);
+  const lanes = (): string | null => grouping() ?? plan?.group ?? plan?.columns.find((column) => columnProperty(column) !== null) ?? declaredLane("status") ?? declaredLane("select") ?? null;
   // Le proprietà delle righe i cui valori sono date: la data di un calendario.
   const dateProperties = (): string[] => rowProperties().filter((key) => kinds(key) === "date");
   // La data di un calendario nuovo: quella della vista aperta, o la prima

@@ -474,8 +474,16 @@ function isCell(value: unknown): value is BaseCellValue {
     default: return false;
   }
 }
-export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view: string | null, rows: BaseRowInput[], nowMs = Date.now(), container: string | null = null, linked: readonly BaseLinkedNote[] = []): Promise<BaseDerived> {
-  const raw = await baseQuery(deps, { version: 1, op: "derive", source, view, now_ms: nowMs, container, rows: rows.map((row) => ({ doc: row.doc, props: Object.fromEntries((row.properties ?? []).map((property) => [property.key, property.value])) })), ...(linked.length > 0 ? { linked } : {}) });
+/// `needed`: le proprietà che `derive` legge (`required_props` del piano), o
+/// `null` se le legge tutte (`all_properties`, la ricerca della vista). Le righe
+/// arrivano con tutte le proprietà delle note, perché la barra propone quelle
+/// che le note hanno; a `derive` vanno solo quelle che il piano chiede, così la
+/// domanda resta piccola come prima, entro `MAX_BASE_QUERY_BYTES` del core.
+/// Ogni riga derivata tiene comunque tutte le proprietà lette della sua nota.
+export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view: string | null, rows: BaseRowInput[], nowMs = Date.now(), container: string | null = null, linked: readonly BaseLinkedNote[] = [], needed: readonly string[] | null = null): Promise<BaseDerived> {
+  const wanted = needed === null ? null : new Set(needed);
+  const props = (row: BaseRowInput) => Object.fromEntries((row.properties ?? []).filter((property) => wanted === null || wanted.has(property.key)).map((property) => [property.key, property.value]));
+  const raw = await baseQuery(deps, { version: 1, op: "derive", source, view, now_ms: nowMs, container, rows: rows.map((row) => ({ doc: row.doc, props: props(row) })), ...(linked.length > 0 ? { linked } : {}) });
   if (!Array.isArray(raw.rows)) throw new Error("base: righe malformate");
   const properties = new Map(rows.map((row) => [row.doc, Object.fromEntries((row.properties ?? []).map((entry) => [entry.key, entry.value]))]));
   const derived = raw.rows.map((item): BaseRow => {
