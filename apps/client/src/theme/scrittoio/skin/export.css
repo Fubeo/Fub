@@ -252,7 +252,7 @@
   outline: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: 3px;
 }
-.export-doc:not([data-view="tutte"]) .export-fascia.is-selected {
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block].is-selected {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }

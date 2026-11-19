@@ -517,6 +517,23 @@ const EXPORT_DIAGRAMS_NOTE = [
   "Il resto del piano segue.",
 ].join("\n");
 
+/// Il clic sulla pagina dell'esportazione (T76): paragrafi, una pagina nuova
+/// messa a mano con `<!-- pagina -->` prima del ritorno, un diagramma.
+const EXPORT_BLOCKS_NOTE = [
+  "# Il viaggio",
+  "",
+  "Prima tappa: Torino, poi le colline. Il treno parte presto e arriva prima di pranzo, con il tempo di lasciare i bagagli.",
+  "",
+  "Seconda tappa: il lago. Due giorni di cammino, una notte in rifugio, il ritorno in battello se il tempo tiene.",
+  "",
+  fence(...FLOW),
+  "",
+  "<!-- pagina -->",
+  "## Il ritorno",
+  "",
+  "Si torna in treno, la sera, con le foto da scegliere.",
+].join("\n");
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
 /// I tipi di nota del vault delle scene `tipo-*` (E5): uno con le proprietà
 /// coi loro tipi e una cartella, uno con un'icona emoji, uno senza icona; due
@@ -876,6 +893,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
   // Lo spazio «Esporta in PDF» con la sezione Diagrammi (T75).
   "esporta-diagrammi": { text: EXPORT_DIAGRAMS_NOTE, cursor: null },
+  // Il clic su un blocco della pagina (T76).
+  "esporta-blocchi": { text: EXPORT_BLOCKS_NOTE, cursor: null },
   // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
   "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
