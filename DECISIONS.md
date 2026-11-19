@@ -1946,3 +1946,5 @@ L'utente ha approvato: dal 2026-11-17 i task finiti non hanno più una PR comple
 - 2026-11-19 · fuori piano · Storia di annulla: Word e testo a 10.000 passi (prima 100, scartavano in silenzio). Lavagna (100) e foglio (100) hanno lo stesso schema: da provare come perdita.
 - 2026-11-19 · T70 · Finché un task non collega lo scrittore (T77a), «Esporta» passa dalla stampa di sistema con un avviso; due eccezioni di conformità (inchiostro su accento, vassoio --sheet-2).
 - 2026-11-19 · T53 · Il clic su un valore porta alla cella: cella attiva su ogni griglia (bootstrap, registry) e il controller atterra sulla cella dopo openDocument. Un file mancante non si rilegge quando ricompare (da fare in un task a parte).
+- 2026-11-19 · T71 · I colori del PDF puntano sui token dell'app letti dalla resa (pagine chiare al buio); a 700 px gli otto temi in una riga; Georgia e Palatino ripiegano su Literata (lo scrittore non li incorpora).
+- 2026-11-19 · T77b · PDF/A-2b; profilo sRGB ICC v2 scritto dal core (nessuna dipendenza); ciò che il PDF/A non permette dà PdfaNonPossibile prima di scrivere; la descrizione di un collegamento è alt, poi il testo del nodo, poi l'URL.

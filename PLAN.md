@@ -3275,7 +3275,7 @@ Fatto quando: test dei temi e del contrasto; un test che il colore cambia
 solo variabili; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] in corso · coder · base 900a1143e
+Stato: [x] integrato in integra/editor-2 (merge prima di b1ca0286f)
 
 ## T72 · Caratteri e pagina
 
@@ -3468,7 +3468,7 @@ Fatto quando: un test della struttura dei tag; un controllo PDF/A sul file
 `Stato`).
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [~] in corso · coder · base e53505383
+Stato: [x] integrato in integra/editor-2 (b1ca0286f) · controllo PDF/A sul file: nessun validatore nel workspace (veraPDF è Java); al suo posto controlla_accessibile e controlla_pdfa nell'e2e; PDF/A-2 livello B
 
 ## T78 · Più note in un PDF
 
