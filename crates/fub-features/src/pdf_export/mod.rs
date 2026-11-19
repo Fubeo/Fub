@@ -31,6 +31,12 @@
 //! scrive il PDF e lo deposita nel vault in un colpo solo, così il file arriva
 //! intero o non arriva.
 //!
+//! # Più note in un PDF
+//!
+//! [`book`] compone un libro (più note, una per capitolo, coi collegamenti
+//! fra loro che diventano interni) in un elenco solo, e il suo comando lo
+//! passa al lavoro di una nota.
+//!
 //! # Il profilo e la memoria
 //!
 //! Le regolazioni dell'esportazione stanno in due posti, fuori dalla nota:
@@ -52,6 +58,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 mod aperta;
+pub mod book;
+#[cfg(test)]
+mod book_tests;
 mod images;
 #[cfg(test)]
 mod images_tests;

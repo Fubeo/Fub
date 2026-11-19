@@ -9,7 +9,8 @@
 > `crates/fub-features/src/pdf_export/aperta.rs`,
 > `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
 > `crates/fub-features/src/pdf_export/writer.rs` (lo scrittore),
-> `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro).
+> `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro),
+> `crates/fub-features/src/pdf_export/book.rs` (più note in un PDF).
 
 L'esportazione non scrive niente nella nota. Le regolazioni stanno in due
 posti, tutti e due nello spazio dati `fub.esporta-pdf` del vault (vedi
@@ -343,3 +344,78 @@ scrittura che arriva in mezzo è un conflitto, mai una sovrascrittura cieca.
 
 Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
 
+
+## Più note in un PDF
+
+Il comando `pdf.write_book` del bundle `fub.draw` scrive nel vault un PDF
+con più note, ognuna un capitolo. La vista impagina ogni nota come per il
+PDF di una nota sola e manda un **libro** (`Libro`, versione 1, in
+`crates/fub-features/src/pdf_export/book.rs`): i capitoli in fila, ognuno
+col suo elenco delle pagine e i suoi rimandi, i collegamenti che portano a
+un'altra nota. Un campo che il formato non conosce rende il libro
+illeggibile.
+
+```json
+{
+  "versione": 1,
+  "titolo": "Progetto", "autore": "Ada Lovelace", "lingua": "it",
+  "capitoli": [
+    {
+      "nota": "Progetto/Alfa.md",
+      "titolo": "Alfa",
+      "pagine": { "versione": 1, "larghezza": 794, "altezza": 1123, "facce": [], "pagine": [{ "pezzi": [] }] },
+      "rimandi": [
+        { "pagina": 0, "x": 72, "y": 90, "w": 40, "h": 18,
+          "nota": "Progetto/Beta.md", "sezione": "Metodo" },
+        { "pagina": 0, "x": 72, "y": 120, "w": 40, "h": 18,
+          "nota": "Fuori.md", "url": "https://example.org/fuori" }
+      ]
+    }
+  ]
+}
+```
+
+| Campo | Che cosa vale |
+|---|---|
+| `titolo`, `autore`, `lingua` | i dati del PDF, come nell'elenco delle pagine |
+| `capitoli[].nota` | il percorso della nota nel vault; senza, il capitolo è fatto di pagine del libro (il frontespizio, l'indice), e i suoi rimandi portano alle note |
+| `capitoli[].titolo` | il titolo del capitolo nei segnalibri; vuoto, il `titolo` del suo elenco, poi il nome del file |
+| `capitoli[].pagine` | un elenco delle pagine: le sue pagine e i suoi collegamenti interni contano dalla prima pagina del capitolo |
+| `rimandi[].pagina` | la pagina del capitolo, dalla sua prima, che è la 0 |
+| `rimandi[].nota`, `sezione` | la nota a cui porta, e il titolo della sezione se il collegamento la nomina |
+| `rimandi[].url` | dove porta se la nota non è nel libro (solo `http`, `https`, `mailto` si aprono) |
+
+Il core ne fa un elenco solo, quello che scrive per una nota:
+
+- le pagine dei capitoli una dopo l'altra, e i collegamenti dentro una nota
+  spostati con le sue pagine;
+- le facce di tutti i capitoli in una tavola, una volta sola ciascuna;
+- **un indice solo**: un segnalibro per nota, col suo titolo, e i titoli
+  della nota un livello sotto (al più il 6); le pagine senza nota tengono i
+  loro segnalibri. Due note con lo stesso titolo prendono accanto il
+  percorso senza estensione: «Diario (2024/Diario)»;
+- un rimando a una nota del libro diventa un collegamento interno: alla
+  prima pagina della nota, o al segnalibro della sezione con quel titolo
+  (senza badare alle maiuscole né agli spazi ai lati); una sezione che non
+  c'è porta all'inizio della nota, con l'avviso `sezione_non_trovata`;
+- un rimando a una nota che il libro non ha porta all'`url`; senza, resta
+  testo, con l'avviso `nota_non_esportata` (uno per nota).
+
+I parametri sono quelli di `pdf.write_pages`, con `book` (il JSON del
+libro, obbligatorio) al posto di `pages` e senza `note`. Il comando compone
+il libro e lo passa a `pdf.write_pages`: il lavoro è uno solo, lo stesso
+`pdf.write_pages`, con la sua barra, il suo annullamento e i suoi limiti
+sull'elenco intero (le pagine, il peso, i collegamenti, i segnalibri).
+L'effetto `fub.pdf.queued` porta in più `warnings`, gli avvisi del libro.
+
+Un libro non si scrive, e l'errore dice perché, se:
+
+| Errore | Quando |
+|---|---|
+| `illeggibile`, `troppo_grande` | il JSON non è un libro di questa forma, o pesa più di 64 MiB |
+| `versione` | `versione` non è 1 |
+| `numero_capitoli` | nessun capitolo, o più di 2.000 |
+| `misure_diverse` | un capitolo ha la pagina di un'altra misura |
+| `nota_ripetuta` | la stessa nota in due capitoli |
+| `capitolo` | l'elenco di un capitolo non è valido (anche un collegamento interno che esce dal capitolo) |
+| `rimando_rotto` | un rimando su una pagina che il capitolo non ha, o con una misura che non è un numero |

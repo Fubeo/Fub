@@ -113,6 +113,8 @@ use crate::lavagna::{self, LavagnaCommands, LAVAGNA_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineCommands, OutlineView, OUTLINE_ID};
 #[cfg(feature = "draw")]
+use crate::pdf_export::book::{self as pdf_libro, ConIlLibro};
+#[cfg(feature = "draw")]
 use crate::pdf_export::lavoro::{self as pdf_lavoro, ConIlPdf};
 #[cfg(feature = "proof")]
 use crate::proof::{self, ProofCommands, PROOF_ID};
@@ -654,10 +656,11 @@ static OFFICIALS: &[OfficialFeature] = &[
         id: DRAW_ID,
         name: "Drawings",
         // Il PDF delle note viaggia coi disegni (ne usa i caratteri, stessa
-        // feature): stringhe, comando e lavoro li compone qui l'inventario.
-        catalog: || pdf_lavoro::con_le_stringhe(draw::catalog()),
+        // feature): stringhe, comandi (una nota, più note) e lavoro li compone
+        // qui l'inventario.
+        catalog: || pdf_libro::con_le_stringhe(pdf_lavoro::con_le_stringhe(draw::catalog())),
         view: None,
-        commands: Some(|| Box::new(ConIlPdf(draw::DrawCommands))),
+        commands: Some(|| Box::new(ConIlLibro(ConIlPdf(draw::DrawCommands)))),
         index: Some(|| Box::new(draw::DrawIndex)),
         syntax: None,
         renderers: None,
