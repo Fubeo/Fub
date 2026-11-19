@@ -3,6 +3,8 @@ import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
 import type { LiveCardKit, LiveCardsPort } from "../text/profiles/markdown/live-cards";
 import type { CellValuePort, CellValueReader } from "../text/profiles/markdown/cell-value";
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
+import type { TableSheetPort } from "../text/profiles/markdown/table-sheet";
+import { FUB_CELLS_TYPE, rememberCellsCopy } from "../text/profiles/markdown/cells-clipboard";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
@@ -138,6 +140,8 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
   /// «Sposta in…» dal menu del blocco e sulle note del cassetto (T32).
   readonly moveBlock?: MoveBlockPort;
+  /// «Trasforma in foglio» dal menu della tabella (T52).
+  readonly tableSheet?: TableSheetPort;
   /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
   readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
@@ -800,6 +804,7 @@ export function createDocumentSurfaceRegistry(
             onRenamePage: options.onRenamePage,
             onNewSubpage: options.onNewSubpage,
             ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
+            ...(options.tableSheet ? { tableSheet: options.tableSheet } : {}),
             ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
@@ -1077,6 +1082,18 @@ function mountGrid(
     // La cella attiva: dati per chi ospita la scheda, e il modo di portare il
     // foglio aperto su una cella (T53: il clic su un valore nel testo).
     activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
+    // Le celle copiate dicono da dove vengono (T52): una nota che le incolla
+    // offre la scheda di quella parte del foglio. Dopo la copia del motore,
+    // che scrive il testo e l'HTML, e solo se l'ha fatta lui.
+    const tellOrigin = (event: ClipboardEvent): void => {
+      if (!event.defaultPrevented || !event.clipboardData) return;
+      const refs = engine.selectionRefs();
+      const origin = { doc: context.documentId, sheet: refs.sheet, range: refs.range };
+      event.clipboardData.setData(FUB_CELLS_TYPE, JSON.stringify(origin));
+      rememberCellsCopy(engine.selectionTsv(), origin);
+    };
+    compactLife.listen(context.parent, "copy", tellOrigin);
+    compactLife.listen(context.parent, "cut", tellOrigin);
     if (!compact) void import("../grid/palette/commands").then(
       ({ mountGridPalette }) => {
         if (!destroyed) palette = mountGridPalette(engine);

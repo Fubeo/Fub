@@ -75,7 +75,13 @@ export interface TableGridHost {
   /// scrive, se ce n'è già uno da rigenerare sotto la tabella e come
   /// scriverlo; `null` se la voce non c'è (una tabella senza numeri).
   chart?(): TableChartAction | null;
+  /// «Trasforma in foglio» (T52): il gesto, se chi monta l'editor sa scrivere
+  /// il foglio e la nota si scrive; `null` se la voce non c'è.
+  sheet?(): (() => void) | null;
 }
+
+/// L'azione «Trasforma in foglio» (T52), per il menu del blocco della tabella.
+export const TABLE_SHEET_ACTION = "markdown.table.sheet";
 
 /// La voce del grafico nel menu della griglia (T54).
 export interface TableChartAction {
@@ -205,7 +211,12 @@ const ALIGN_LABELS: Readonly<Record<string, Key>> = {
 /// voce che adesso non vale non si vede; un sottomenu senza voci nemmeno.
 export function tableMenu(
   entries: readonly TableMenuEntry[],
-  options: { readonly align: TableAlign; readonly paste: (() => void) | null; readonly chart?: TableChartAction | null },
+  options: {
+    readonly align: TableAlign;
+    readonly paste: (() => void) | null;
+    readonly chart?: TableChartAction | null;
+    readonly sheet?: (() => void) | null;
+  },
 ): { readonly clipboard: MenuItem[]; readonly items: MenuItem[] } {
   const live = entries.filter((entry) => !entry.disabled);
   const byId = new Map(live.map((entry) => [entry.id, entry]));
@@ -244,9 +255,15 @@ export function tableMenu(
   const sorted = [...nest("table.menu.sort", under("sort"), true), ...nest("table.menu.align", aligns)];
   // «Grafico da questa tabella» (T54): dopo l'ordine, prima di ciò che svuota.
   const chart = options.chart ?? null;
-  const charted: MenuItem[] = chart
-    ? [{ label: liveStrings.t(chart.regenerate ? "table_chart.menu.again" : "table_chart.menu"), separator: true, run: () => chart.run() }]
-    : [];
+  // «Trasforma in foglio» (T52): accanto al grafico, l'altra strada verso i
+  // fogli.
+  const sheet = options.sheet ?? null;
+  const charted: MenuItem[] = [
+    ...(chart
+      ? [{ label: liveStrings.t(chart.regenerate ? "table_chart.menu.again" : "table_chart.menu"), separator: true, run: () => chart.run() }]
+      : []),
+    ...(sheet ? [{ label: liveStrings.t("table_sheet.menu"), separator: chart === null, run: () => sheet() }] : []),
+  ];
   const items: MenuItem[] = [
     ...nest("table.menu.insert", under("insert")),
     ...nest("table.menu.move", under("move")),
@@ -304,6 +321,7 @@ export class TableGrid implements TableGridActions {
           align: this.#data.aligns[focus.column] ?? null,
           paste: host.readOnly() ? null : () => this.#paste(),
           chart: host.readOnly() ? null : host.chart?.() ?? null,
+          sheet: host.readOnly() ? null : host.sheet?.() ?? null,
         });
         const column = (this.#data.rows[0]?.[focus.column] ?? "").trim();
         showContextMenu(at, menu.items, {
@@ -405,6 +423,7 @@ export class TableGrid implements TableGridActions {
       return { enabled: editable, active: editable && rangeWrapped(this.#data, range, wrap[0], wrap[1]) };
     }
     if (id === "markdown.clear" || id === "markdown.link") return { enabled: editable, active: null };
+    if (id === TABLE_SHEET_ACTION) return { enabled: editable && (this.#host.sheet?.() ?? null) !== null, active: null };
     const command = this.#frame.commandState(id);
     if (!command.known) return UNAVAILABLE;
     return { enabled: command.enabled, active: null };
@@ -419,6 +438,11 @@ export class TableGrid implements TableGridActions {
     if (id === "markdown.link") {
       this.#link();
       return true;
+    }
+    if (id === TABLE_SHEET_ACTION) {
+      const sheet = this.#host.sheet?.() ?? null;
+      sheet?.();
+      return sheet !== null;
     }
     return this.#frame.runCommand(id);
   }

@@ -12,7 +12,8 @@
 //! Le cargo feature non sono più solo i moduli dell'inventario: ogni riga di
 //! `fub_features::componenti` che sta dietro una feature lo dice
 //! (`cargo_feature`), e le feature dei componenti che non sono moduli di questo
-//! crate (`rich`, `xlsx`, i due motori, `http-client`, `craft`) sono marcatori. Il
+//! crate (`rich`, `xlsx`, i due motori, `http-client`, `craft`) sono marcatori;
+//! `xlsx` porta in più il comando `note.table.sheet` e il suo formato. Il
 //! confronto si fa fra le righe e `[features]`, nei due versi.
 //!
 //! # Il guardiano di `fub-host`

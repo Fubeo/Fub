@@ -123,6 +123,29 @@ describe("il libro nello spazio", () => {
     expect(page.querySelector(".export-chapter-title")?.textContent).toBe("Nota Alfa.md");
   });
 
+  it("dà a ogni capitolo l'aspetto comune dei diagrammi, mai quello di una posizione", async () => {
+    const asked: (number | null)[] = [];
+    const looks: unknown[] = [];
+    const book = createBook({
+      docs: ["Alfa.md", "Gamma.md"],
+      render,
+      mount: (container, _chapter, _doc, diagramLook) => {
+        looks.push(diagramLook());
+        return { ready: Promise.resolve(), dispose: () => container.replaceChildren() };
+      },
+    });
+    await book.render("Alfa.md", "print");
+    const aurora = { style: "aurora" as const };
+    await book.mount(document.createElement("div"), { html: "", parts: [] }, {
+      diagramLook: (index) => {
+        asked.push(index);
+        return aurora;
+      },
+    }).ready;
+    expect(looks).toEqual([aurora, aurora]);
+    expect(asked).toEqual([null, null]);
+  });
+
   it("la misura legge il segno fra due note come un'interruzione «capitolo»", () => {
     const page = document.createElement("article");
     page.className = "print-page";

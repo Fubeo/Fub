@@ -492,6 +492,31 @@ const DIAGRAM_CASES = [
   "Fine.",
 ].join("\n");
 
+/// I diagrammi e le formule nell'esportazione in PDF (T75): un flusso col
+/// titolo, una formula più larga della colonna, un diagramma con un errore
+/// (sulla carta il riquadro «non disegnato» col problema) e uno in Aurora.
+const EXPORT_DIAGRAMS_NOTE = [
+  "# Il viaggio",
+  "",
+  "Come si decide la partenza:",
+  "",
+  fence("---", "title: La partenza", "---", ...FLOW),
+  "",
+  "Il costo del viaggio, tratta per tratta:",
+  "",
+  "```math",
+  String.raw`C_{\text{totale}} = \sum_{i=1}^{n} \left( p_i \cdot d_i + t_i \cdot \frac{h_i}{24} + s_i + \frac{a_i \cdot b_i}{c_i + d_i} + \frac{e_i \cdot f_i}{g_i + h_i} + q_i \right) + \frac{k}{m} + r + \frac{u_1 + u_2 + u_3}{v}`,
+  "```",
+  "",
+  "Il ritorno, ancora da scrivere:",
+  "",
+  fence("flowchart TD", "  A[Uno] --> --> B"),
+  "",
+  fence("%% stile: aurora", "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])"),
+  "",
+  "Il resto del piano segue.",
+].join("\n");
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
 /// I tipi di nota del vault delle scene `tipo-*` (E5): uno con le proprietà
 /// coi loro tipi e una cartella, uno con un'icona emoji, uno senza icona; due
@@ -849,6 +874,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
     .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
   "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
+  // Lo spazio «Esporta in PDF» con la sezione Diagrammi (T75).
+  "esporta-diagrammi": { text: EXPORT_DIAGRAMS_NOTE, cursor: null },
   // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
   "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },

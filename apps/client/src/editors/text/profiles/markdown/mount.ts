@@ -4,7 +4,7 @@ import { errorText } from "../../../../host/errors";
 import { onLanguage, t } from "../../../../i18n/strings";
 import { highlightMarkdownCode } from "./highlight-code";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
-import { mountMermaidBlocks } from "../../../../ui/mermaid";
+import { mountMermaidBlocks, type DiagramLookOverride } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
 import { claimQueryBlocks, embedTasksBlocks, fillQueryBlock, markTaskDues } from "./query-block";
@@ -64,6 +64,12 @@ export interface MarkdownMountOptions {
   readonly declaredFences?: ReadonlySet<string>;
   /** Draws every diagram in one light, whatever the theme (print is paper). */
   readonly diagramAppearance?: DiagramLight;
+  /**
+   * The look imposed on each diagram of this document, by its position among
+   * the document's diagrams (from 0); `null` for a diagram of a transcluded
+   * note. The PDF export uses it (`export/vectors.ts`); the note is untouched.
+   */
+  readonly diagramLook?: (index: number | null) => DiagramLookOverride | null;
   /**
    * What the right click on a rendered vault image can do besides copying:
    * open it in the viewer, open it with another app, show it in the
@@ -379,6 +385,7 @@ function enhanceContent(
     revealSource: options.openSource,
     editFence: options.editFence,
     appearance: options.diagramAppearance,
+    look: options.diagramLook && ((index) => options.diagramLook?.(index) ?? null),
   }));
   life.add(mountMathBlocks(container));
   markTaskDues(container);
@@ -491,7 +498,7 @@ const lightbox = lazyPart(() => import("../../../../ui/lightbox"));
 export function mountRenderedDocument(
   container: HTMLElement,
   rendered: RenderedDocument,
-  options: Pick<MarkdownMountOptions, "documentId" | "declaredFences" | "diagramAppearance" | "resources">,
+  options: Pick<MarkdownMountOptions, "documentId" | "declaredFences" | "diagramAppearance" | "diagramLook" | "resources">,
 ): RenderedDocumentMount {
   const life = openLifetime();
   const race = new Race();
@@ -592,6 +599,8 @@ async function hydrateEmbeds(
       transclude: undefined,
       liveCard: undefined,
       cellValue: undefined,
+      // A diagram of the transcluded note is not one of this note's blocks.
+      diagramLook: options.diagramLook && (() => options.diagramLook?.(null) ?? null),
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),
     };

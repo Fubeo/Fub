@@ -24,6 +24,7 @@
 
 import type { RenderedDocument } from "../host/contract";
 import type { PrintMount, PrintRenderer } from "../editors/media/print-view";
+import type { DiagramLookOverride } from "../ui/mermaid";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { inertComments } from "./content/comments";
 import { CHAPTER_BREAK_PREFIX } from "./paginate/breaks";
@@ -136,11 +137,24 @@ export function markChapterLinks(root: ParentNode, from: string, targets: Chapte
 }
 
 /// Monta la resa di una nota in un contenitore: quella dello spazio di una
-/// nota sola, con la nota per i suoi media.
-export type ChapterMount = (container: HTMLElement, rendered: RenderedDocument, doc: string) => {
+/// nota sola, con la nota per i suoi media. `diagramLook`: l'aspetto dei
+/// diagrammi della sezione Diagrammi (T75), lo stesso per ogni capitolo.
+export type ChapterMount = (
+  container: HTMLElement,
+  rendered: RenderedDocument,
+  doc: string,
+  diagramLook: () => DiagramLookOverride | null,
+) => {
   readonly ready: Promise<void>;
   dispose(): void;
 };
+
+/// Un `PrintMount` che riceve anche l'aspetto dei diagrammi dallo spazio.
+export type BookMount = (
+  container: HTMLElement,
+  rendered: RenderedDocument,
+  look?: { diagramLook(index: number | null): DiagramLookOverride | null },
+) => ReturnType<PrintMount>;
 
 export interface BookOptions {
   /// Le note, già in ordine.
@@ -153,7 +167,10 @@ export interface BookOptions {
 
 export interface Book {
   readonly render: PrintRenderer;
-  readonly mount: PrintMount;
+  /// Il montaggio dello spazio (`ExportMount`): `look` dà l'aspetto dei
+  /// diagrammi. Nel libro vale per tutti quello comune: lo stile dato a un
+  /// diagramma solo conta le posizioni dentro una nota, e i capitoli sono più.
+  readonly mount: BookMount;
   readonly measure: (page: HTMLElement) => BlockSource & { dispose?(): void };
   /// Le note dell'ultima resa che non si sono lette.
   skipped(): readonly string[];
@@ -192,7 +209,8 @@ export function createBook(options: BookOptions): Book {
     return EMPTY;
   };
 
-  const mount: PrintMount = (container) => {
+  const mount: BookMount = (container, _rendered, look) => {
+    const diagramLook = () => look?.diagramLook(null) ?? null;
     const targets = new ChapterTargets(rendered.map((entry) => entry.doc));
     const mounts: { ready: Promise<void>; dispose(): void }[] = [];
     rendered.forEach((entry, index) => {
@@ -214,7 +232,7 @@ export function createBook(options: BookOptions): Book {
       body.className = "markdown-rendered export-chapter";
       body.dataset["exportChapter"] = String(index);
       container.append(heading, body);
-      if (options.mount) mounts.push(options.mount(body, entry.rendered, entry.doc));
+      if (options.mount) mounts.push(options.mount(body, entry.rendered, entry.doc, diagramLook));
       else setSanitizedHtml(body, entry.rendered.html);
       markChapterLinks(body, entry.doc, targets);
     });

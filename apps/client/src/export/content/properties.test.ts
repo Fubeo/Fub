@@ -5,7 +5,8 @@
 
 import { describe, expect, it } from "vitest";
 import { ContentChanges } from "./changes";
-import { applyProperties, propertyText, shownProperties } from "./properties";
+import { propertyText } from "../sections/cover-toc";
+import { applyProperties, shownProperties } from "./properties";
 
 const ENTRIES = [
   { key: "icon", value: "📄" },
@@ -24,7 +25,7 @@ describe("le proprietà della nota", () => {
     expect(propertyText(["a", "b"])).toBe("a, b");
     expect(propertyText("[[Persone/Anna Rossi]]")).toBe("Anna Rossi");
     expect(propertyText("[[Persone/Anna Rossi|Anna]]")).toBe("Anna");
-    expect(propertyText(true)).toBe("Sì");
+    expect(propertyText(true)).toBe("sì");
     expect(propertyText(null)).toBe("");
     expect(propertyText("2026-11-04")).toMatch(/2026/);
     expect(propertyText("2026-02-31")).toBe("2026-02-31");

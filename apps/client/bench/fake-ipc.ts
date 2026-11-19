@@ -1785,7 +1785,9 @@ function embedBlock(text: string, block: string): string {
 /// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
 /// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
 /// esserlo: basta a non mostrare il sorgente grezzo, col suo `#`, nell'anteprima.
-function plainHtml(markdown: string): string {
+/// `fences`: un recinto dice la sua lingua (`language-mermaid`), come nella
+/// resa vera; serve alla resa per la stampa della Live (i diagrammi, T75).
+function plainHtml(markdown: string, fences = false): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const inline = (s: string) => esc(s)
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
@@ -1797,6 +1799,7 @@ function plainHtml(markdown: string): string {
   let paragraph: string[] = [];
   let items: string[] = [];
   let fence: string[] | null = null;
+  let info = "";
   const flush = (): void => {
     if (paragraph.length > 0) out.push(`<p>${paragraph.map(inline).join(" ")}</p>`);
     if (items.length > 0) out.push(`<ul>${items.join("")}</ul>`);
@@ -1806,7 +1809,8 @@ function plainHtml(markdown: string): string {
   for (const line of markdown.split("\n")) {
     if (fence !== null) {
       if (line.startsWith("```")) {
-        out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
+        const language = fences && /^[a-z]+$/u.test(info) ? ` class="language-${info}"` : "";
+        out.push(`<pre><code${language}>${esc(fence.join("\n"))}</code></pre>`);
         fence = null;
       } else fence.push(line);
       continue;
@@ -1814,6 +1818,7 @@ function plainHtml(markdown: string): string {
     if (line.startsWith("```")) {
       flush();
       fence = [];
+      info = line.slice(3).trim().toLowerCase();
       continue;
     }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
@@ -1872,7 +1877,7 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   // stessa resa della lettura, come la darebbe il kernel per la carta.
   render_print: (q) => {
     const doc = (q as { doc: string }).doc;
-    const html = printComments(doc, OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? ""));
+    const html = printComments(doc, OUTPUT[doc] ?? (doc === LIVE_DOC && LIVE !== null ? plainHtml(LIVE.text, true) : plainHtml(CORPUS[doc] ?? "")));
     return { kind: "render_print", value: { html, parts: [] } };
   },
   render_embed: (q) => {

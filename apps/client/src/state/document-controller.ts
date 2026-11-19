@@ -69,6 +69,7 @@ import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import { newSubpage, renamePage } from "./page-rename";
 import { moveBlock, moveHeadings, moveNotes } from "./move-block";
+import { tableToSheet } from "./table-sheet";
 import { syncBlockPort } from "./sync-block";
 import { vaultBlockPort } from "./vault-blocks";
 import { linkedPageIcon } from "./page-icons";
@@ -1461,6 +1462,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onRenamePage: renamePage,
     onNewSubpage: newSubpage,
     moveBlock: { notes: moveNotes, headings: moveHeadings, move: moveBlock },
+    tableSheet: { turn: tableToSheet },
     syncBlock: syncBlockPort,
     pageIcons: {
       icon: linkedPageIcon,
@@ -4211,7 +4213,7 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       doc,
       title: pageName(doc),
       render: renderPrint,
-      mount: (container, rendered) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }),
+      mount: (container, rendered, look) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light", diagramLook: (index) => look.diagramLook(index) }),
       // Il disposer torna allo spazio, che lo chiude con la sua `Lifetime`.
       follow: (changed) => {
         const unsubscribe = documentSessions.subscribe((event) => {
@@ -4282,7 +4284,7 @@ export async function presentBookExport(paths: readonly string[], name: string):
       docs: notes,
       render: renderPrint,
       title: pageName,
-      mount: (container, rendered, doc) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }),
+      mount: (container, rendered, doc, diagramLook) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light", diagramLook: () => diagramLook() }),
     });
     openBook?.();
     openExport?.close();

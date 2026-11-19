@@ -407,6 +407,17 @@ export function menuPointFor(box: { readonly left: number; readonly bottom: numb
 /// Apre il menu `items` nel punto del gesto `at`, o sotto il pulsante `at`
 /// che lo apre: allora gli sta allineato, e dove sotto non c'è posto si apre
 /// sopra, senza mai coprirlo.
+/// Dove si appende un menu: nell'area di lavoro, di solito. Quando l'area di
+/// lavoro è inerte sotto un dialogo modale (lo spazio «Esporta in PDF»), un
+/// menu lì dentro si vedrebbe e non si potrebbe cliccare né raggiungere coi
+/// tasti: va nel dialogo da cui è stato aperto.
+function menuHost(at: MouseEvent | HTMLElement | MenuPoint): HTMLElement {
+  const workspace = document.getElementById("workspace");
+  if (workspace && !workspace.inert) return workspace;
+  const from = at instanceof HTMLElement ? at : at instanceof MouseEvent && at.target instanceof Element ? at.target : null;
+  return from?.closest<HTMLElement>('[aria-modal="true"]') ?? workspace ?? document.body;
+}
+
 export function showContextMenu(
   at: MouseEvent | HTMLElement | MenuPoint,
   items: readonly MenuItem[],
@@ -463,8 +474,7 @@ export function showContextMenu(
   if (root.field !== null) menu.querySelector(".menu-items")?.setAttribute("aria-labelledby", menu.id);
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
-  const workspace = document.getElementById("workspace");
-  (workspace ?? document.body).appendChild(menu);
+  menuHost(at).appendChild(menu);
   if (anchor === null) placeInViewport(menu, x, y);
   else placeBeside(menu, anchor, chrome.full);
   // WebKitGTK può terminare il processo web mentre fotografa in una View

@@ -58,7 +58,7 @@ stampa).
 - **Le dieci sezioni** a destra: Tema, Colori, Caratteri, Pagina, Testata e
   piè di pagina, Frontespizio e indice, Contenuto, Diagrammi, Interruzioni di
   pagina, Uscita. La testa chiusa dice ciò che vale ora («A4 verticale»,
-  «Titolo, Numero di pagina»). Le regolazioni di ogni sezione arrivano coi
+  «Titolo, Pagina»). Le regolazioni di ogni sezione arrivano coi
   loro lavori; finché manca, la sezione aperta lo dice.
 - **La banda** in basso: le pagine, il formato, i margini, i segnalibri e il
   tempo dell'impaginazione. Il numero di pagine si annuncia a voce solo
@@ -97,6 +97,34 @@ e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts)
   si stampano coi colori del tema anche quando l'app è scura: il tema
   dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
   carta scura, col codice e il testo colorato schiariti.
+
+## Testata e piè, frontespizio e indice
+
+- **Sei posti**: a sinistra, al centro e a destra, sopra e sotto la pagina.
+  Un clic su un posto apre il menu: niente, il titolo della nota, la sezione
+  in corso, la data, la pagina, «pagina di pagine», l'autore (la proprietà
+  `autore` o `author`), il percorso nel vault o un testo tuo, che si scrive
+  nel campo sotto i posti. Testata e piè stanno nei margini e usano i
+  caratteri dei titoli e il testo secondario del tema di stampa.
+- La **sezione** è il Titolo 1 o 2 in corso in cima alla pagina, o quello
+  con cui la pagina comincia; prima del primo titolo il posto resta vuoto.
+- **Filo sotto la testata** (acceso di serie), **prima pagina senza
+  testata**, **numeri romani** per frontespizio e indice: con i romani la
+  nota riparte da 1, senza il frontespizio e l'indice si contano solo nel
+  totale delle pagine. A specchio, nelle pagine pari sinistra e destra si
+  scambiano.
+- **Il frontespizio** ha l'icona della nota, il titolo, fino a quattro
+  proprietà, l'autore e la data, con il filo d'accento sul bordo; non ha
+  testata né piè e non si numera. Con il frontespizio il titolo in cima
+  alla nota esce dalle pagine.
+- **L'indice** arriva fino ai Titoli 2 o anche ai 3 e porta i numeri che le
+  pagine stampano davvero: si impagina in due passi (prima con il numero più
+  largo, poi con quelli veri, finché le sue pagine non cambiano più). Un
+  indice lungo va su più pagine; una nota senza titoli non ha indice.
+  Finché l'impaginazione non è finita i numeri che mancano sono «…».
+- **I segnalibri** del PDF seguono i titoli; la banda dice quanti sono.
+- Cambiare testata, frontespizio o indice ridisegna i fogli senza rifare
+  l'impaginazione della nota; il testo tuo segue mentre si scrive.
 
 ## Contenuto e Interruzioni
 
@@ -139,6 +167,52 @@ identità degli altri.
 - **Interruzioni**: una pagina nuova a ogni Titolo 2 o a ogni separatore, e
   l'intestazione delle tabelle lunghe ripetuta in cima a ogni pagina (di
   serie). Spenta, l'intestazione resta solo all'inizio.
+
+## Diagrammi
+
+La sezione Diagrammi decide come escono i diagrammi Mermaid della nota.
+`%% stile:` nella nota non cambia: tutto sta nel profilo (`diagrammi`, i
+colori `diagramma-*`).
+
+- **Lo stile**, sei pulsanti con la miniatura nei colori che disegnano
+  davvero: «Come nella nota» (lo stile di ogni diagramma, in luce chiara),
+  «Segue il tema» (Armonia coi colori della carta di stampa) o uno dei
+  quattro stili con il fondo (Acquerello, Aurora, Blueprint, Inchiostro).
+  Passando su uno stile le pagine lo mostrano; uscendo tornano a quello
+  scelto. La testa chiusa dice il nome dello stile.
+- **Uno stile per un solo diagramma**: lo dà il clic sul diagramma nella
+  pagina; vale per la posizione del diagramma fra quelli della nota (non
+  per quelli di una nota trasclusa, che prendono lo stile di tutti). Quando
+  ce ne sono, la sezione offre «Togli lo stile dato a N».
+- **Quattro colori dati a mano**: nodi, decisioni, inizio e fine, linee.
+  Ognuno ha una tavolozza di dodici inchiostri, un colore qualsiasi e il
+  codice; un colore dato vince sullo stile, e la scritta sopra sceglie da
+  sola fra chiaro e scuro. «tuo» segna i colori dati, il pulsante accanto
+  torna a quello dello stile.
+- **Fondo del diagramma**: spento, i quattro stili con il fondo perdono la
+  carta colorata e stanno sulla carta della pagina.
+
+Un cambio di stile, colori o fondo ridisegna i diagrammi della resa che c'è,
+senza chiederla di nuovo al core; anche un tema in anteprima, per i
+diagrammi che seguono il tema. Il bianco e nero vale anche per i colori
+dati ai diagrammi. In un PDF di più note vale per ogni capitolo lo stile di
+tutti: lo stile di un diagramma solo conta le posizioni dentro una nota.
+
+### Sulla carta
+
+- I diagrammi e le formule vanno nel PDF come vettori (`svg2pdf`, nello
+  scrittore del core): la misura delle pagine (`export/probe.ts`, con
+  `vectorOf` di `export/vectors.ts`) passa il disegno di un diagramma con i
+  suoi colori scritti sugli elementi e le scritte come testo, che nel PDF
+  si seleziona. Le radici e le frecce delle formule sono già SVG nella
+  resa. Finché «Esporta» passa dalla stampa del sistema, la stampa riceve
+  gli stessi disegni.
+- Un diagramma con un errore esce con l'ultimo disegno buono visto nello
+  spazio; se non ce n'è uno, al suo posto c'è il riquadro «non disegnato»
+  con il problema.
+- Una formula o un diagramma più larghi della colonna si rimpiccioliscono
+  per starci (non sotto il 30%) e una riga piccola sotto lo dice («formula
+  al 64% per stare nella pagina»).
 
 ## Comportamenti
 

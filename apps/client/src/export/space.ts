@@ -17,14 +17,27 @@
 // La nota cambiata in un altro riquadro si segue: dopo una breve quiete si
 // salva e si chiede la resa nuova, con le stesse pagine sotto gli occhi.
 //
+// I diagrammi (T75) si disegnano con lo stile della sezione Diagrammi: chi
+// monta la resa riceve l'aspetto di ogni diagramma (`ExportMount`), e un
+// cambio di stile, colori o fondo rimonta la resa che c'è, senza chiederla
+// di nuovo al core (`vectors.ts`).
 // Più note in un PDF (T78) passano dallo stesso spazio: `export/book.ts` dà
 // la resa, il montaggio e la misura del libro, ogni nota un capitolo che
 // comincia su una pagina sua; il resto (le pagine, le sezioni, la banda, la
 // stampa) non sa che le note sono più d'una.
+//
+// Intorno alle pagine della nota lo spazio mette il frontespizio, l'indice e
+// su ogni foglio la testata e il piè (T73): i fogli e i loro numeri li decide
+// `paginate/toc.ts`, l'indice si misura su un foglio fuori dalla vista. Un
+// cambio di testata, frontespizio o indice ridisegna i fogli e non rifà
+// l'impaginazione della nota; col frontespizio il titolo in cima alla nota
+// esce dall'impaginazione (sta sul frontespizio).
 
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 import { printPages, type PrintMount, type PrintRenderer } from "../editors/media/print-view";
+import type { RenderedDocument } from "../host/contract";
+import type { DiagramLookOverride } from "../ui/mermaid";
 import { reducedMotion } from "../theme/reduced-motion";
 import { icon, iconEl, registerIcon } from "../ui/icons";
 import { openLifetime } from "../ui/lifetime";
@@ -34,14 +47,28 @@ import { createBand, type Band } from "./band";
 import { inertComments } from "./content/comments";
 import { ExportContent } from "./content/index";
 import { renderPdfPages, type PdfPagesPorts } from "./content/pdf-pages";
-import { ExportPages, steppedZoom } from "./pages";
-import { PrintMeasure } from "./paginate/measure";
+import { ExportPages, steppedZoom, type PageDecor } from "./pages";
+import { PrintMeasure, printBlocks } from "./paginate/measure";
+import { frontMatter, headingsOf, sectionHeadings, sectionsByPage, type FrontSettings, type TocEntry, type TocMetrics } from "./paginate/toc";
 import { PrintPaginator, type PrintSettings, type Scheduler, type SlicedResult } from "./paginate/slices";
 import type { BlockSource } from "./paginate/slices";
 import { defaultProfile, printSettingsOf, type ExportProfile } from "./profile";
+import { coverFactsOf, drawCover, drawTocPage, type CoverFacts } from "./sections/cover-toc";
+import { displayPath, drawHeaderFooter, longDate } from "./sections/header-footer";
 import { SECTIONS, type ExportSection, type SectionContext } from "./sections/index";
 import { numberHeadings } from "./themes";
 import { createToolbar, type ExportView, type Toolbar } from "./toolbar";
+import { DiagramMemory, diagramLookKey, diagramPrintLook, overrideFor, preparePrintVectors, type DiagramPrintLook } from "./vectors";
+
+/// Come si disegna un diagramma della resa montata: per la sua posizione fra
+/// i diagrammi della nota, `null` per quello di una nota trasclusa.
+export interface ExportMountLook {
+  diagramLook(index: number | null): DiagramLookOverride | null;
+}
+
+/// Chi monta la resa per lo spazio: un `PrintMount` che sa anche disegnare i
+/// diagrammi nello stile dell'esportazione.
+export type ExportMount = (container: HTMLElement, rendered: RenderedDocument, look: ExportMountLook) => ReturnType<PrintMount>;
 
 /// Quanto si aspetta dopo l'ultimo cambio della nota prima di rifare la resa.
 export const FOLLOW_QUIET_MS = 400;
@@ -57,7 +84,9 @@ export interface ExportSpaceOptions {
   /// dall'albero, tornano alle note.
   readonly backLabel?: string;
   readonly render: PrintRenderer;
-  readonly mount?: PrintMount;
+  readonly mount?: ExportMount;
+  /// Gli stili dati a un diagramma solo, per la sua posizione nella nota.
+  readonly diagramStyles?: ReadonlyMap<number, string>;
   /// Dove sta lo spazio: di serie `#app`, sotto la barra del titolo.
   readonly container?: HTMLElement;
   /// Ciò che sta sotto lo spazio e non deve prendere il fuoco finché è
@@ -95,12 +124,16 @@ export interface ExportSpace {
   setView(view: Exclude<ExportView, "libera">): void;
   setProfile(next: ExportProfile, options?: { readonly live?: boolean }): void;
   openSection(id: string): void;
+  /// Dà a un diagramma solo uno stile suo (`null`: torna a quello di tutti).
+  setDiagramStyle(index: number, style: string | null): void;
+  /// Gli stili dati a un diagramma solo, per la sua posizione.
+  readonly diagramStyles: ReadonlyMap<number, string>;
   print(): Promise<void>;
   close(): void;
 }
 
 /// Le icone dello spazio e delle sue sezioni: si registrano all'apertura, una
-/// volta sola (il selettore libero dei Colori è `export-pick`).
+/// volta sola (il selettore libero dei Colori e dei Diagrammi è `export-pick`).
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "export-open": ["M6.75 9.3L12 14.7l5.25-5.4"],
   "export-pick": ["M4.5 19.5l3.6-.9 10.95-10.95-2.7-2.7L5.4 15.9z", "M3.75 21.75h16.5"],
@@ -109,6 +142,21 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
 /// Il conto dei segnalibri del PDF: i titoli della nota impaginata.
 function bookmarksOf(result: SlicedResult): number {
   return result.boxes.filter((box) => box.kind === "heading").length;
+}
+
+/// Le misure dell'indice quando il foglio non si dispone (happy-dom): il
+/// titolo e ogni voce come li disegna la pelle col corpo di serie.
+const TOC_FALLBACK = { heading: 48, row: 22 };
+
+/// Le scelte del profilo che decidono i fogli.
+function frontSettingsOf(profile: ExportProfile): FrontSettings {
+  return {
+    cover: profile.frontespizio.frontespizio,
+    toc: profile.frontespizio.indice,
+    roman: profile.testata.numeri_romani,
+    firstWithoutHeader: profile.testata.prima_pagina_senza,
+    depth: profile.frontespizio.profondita_indice,
+  };
 }
 
 /// Registra le icone dello spazio (una volta: un tema può ridisegnarle).
@@ -131,6 +179,13 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   const finals: ((result: SlicedResult) => void)[] = [];
   let readyTold = false;
   let settings = printSettingsOf(profile);
+  const diagramStyles = new Map(options.diagramStyles ?? []);
+  let diagramLook: DiagramPrintLook = diagramPrintLook(profile, diagramStyles);
+  let diagramKey = diagramLookKey(diagramLook);
+  const diagramMemory = new DiagramMemory();
+  let cover: CoverFacts = { title: options.title, path: displayPath(options.doc), author: "", date: longDate(), icon: null, properties: [] };
+  /// L'ultimo indice misurato: si rimisura solo se cambiano le voci o la pagina.
+  let tocMeasured: { key: string; metrics: TocMetrics } | null = null;
 
   const root = document.createElement("div");
   root.className = "export-space";
@@ -204,6 +259,8 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (closed || next === previewing) return;
     previewing = next;
     showSettings(printSettingsOf(next ?? profile));
+    // Un tema in anteprima cambia anche i diagrammi che seguono il tema.
+    restyleDiagrams();
   }
 
   function sectionContext(): SectionContext {
@@ -220,6 +277,16 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       },
       redraw: () => renderSide(),
       memory,
+      diagrams: {
+        get own() {
+          return diagramStyles.size;
+        },
+        clearOwn: () => {
+          diagramStyles.clear();
+          restyleDiagrams();
+          renderSide();
+        },
+      },
     };
   }
 
@@ -289,14 +356,88 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     renderSide();
   }
 
-  function onUpdate(result: SlicedResult): void {
-    latest = result;
-    pages.show(result, paginator.host, settings.layout);
+  /// L'indice su un foglio fuori dalla vista: quanto è alto il titolo e
+  /// ogni voce, coi caratteri delle pagine.
+  function measureToc(entries: readonly TocEntry[]): TocMetrics {
+    const { page } = settings.layout;
+    const key = JSON.stringify([page, settings.layout.type, entries.map((entry) => [entry.level, entry.text, entry.number, entry.page])]);
+    if (tocMeasured?.key === key) return tocMeasured.metrics;
+    const metrics = pages.measureSheet(page, (body) => {
+      const toc = drawTocPage(body, entries, true);
+      const rows = [...toc.querySelectorAll<HTMLElement>(".export-toc-row")];
+      const top = toc.getBoundingClientRect().top;
+      const first = rows[0]?.getBoundingClientRect();
+      const heights = rows.map((row) => row.getBoundingClientRect().height);
+      // Senza disposizione (happy-dom) tutto è alto 0: le misure di serie.
+      if (!first || heights.every((height) => height === 0)) {
+        return { page: body.clientHeight || page.height - page.margin.top - page.margin.bottom, heading: TOC_FALLBACK.heading, rows: rows.map(() => TOC_FALLBACK.row) };
+      }
+      return { page: page.height - page.margin.top - page.margin.bottom, heading: Math.max(0, first.top - top), rows: heights };
+    });
+    tocMeasured = { key, metrics };
+    return metrics;
+  }
+
+  /// I fogli di un'impaginazione: frontespizio, indice, pagine della nota,
+  /// e su ognuno testata e piè.
+  function decorOf(result: SlicedResult): PageDecor {
+    const page = paginator.host.querySelector<HTMLElement>(".print-page");
+    const blocks = page ? printBlocks(page) : [];
+    const headings = headingsOf(result.boxes, (box) => {
+      const block = blocks[result.blocks[box] ?? -1];
+      return { text: block?.textContent ?? "", number: block?.dataset["printNumber"] ?? "" };
+    });
+    const front = frontMatter({
+      settings: frontSettingsOf(profile),
+      headings,
+      flowPages: result.pagination.pages.length,
+      final: result.final,
+      firstPage: result.firstPage,
+      measure: measureToc,
+    });
+    const sections = sectionsByPage(result.pagination.pages, sectionHeadings(headings));
+    const geometry = settings.layout.page;
+    const shown = profile;
+    const facts = cover;
+    return {
+      sheets: front.sheets,
+      front: front.front,
+      draw(sheetPage, body, sheet, ordinal) {
+        if (sheet.kind === "frontespizio") drawCover(body, facts, geometry.margin);
+        else if (sheet.kind === "indice") drawTocPage(body, front.toc[sheet.index] ?? [], sheet.index === 0);
+        const section = sheet.kind === "pagina" ? (sections[sheet.index] ?? "") : "";
+        drawHeaderFooter(sheetPage, geometry, shown.testata, facts, sheet, section, shown.pagina.specchio && ordinal % 2 === 1);
+      },
+    };
+  }
+
+  /// Il numero delle pagine del PDF: i fogli prima della nota e le sue.
+  function pageTotal(result: SlicedResult, decor: PageDecor): number | null {
+    const flow = result.final ? result.pagination.pages.length : result.total;
+    return flow === null ? null : decor.front + flow;
+  }
+
+  function updateBand(result: SlicedResult, decor: PageDecor): void {
     band.update(profile, {
-      pages: result.final ? result.pagination.pages.length : result.total,
+      pages: pageTotal(result, decor),
       bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(result) : null,
       ms: result.workMs,
     });
+  }
+
+  /// Ridisegna i fogli intorno alla stessa impaginazione.
+  function redecorate(): void {
+    if (!latest) return;
+    const decor = decorOf(latest);
+    pages.decorate(decor);
+    updateBand(latest, decor);
+  }
+
+  function onUpdate(result: SlicedResult): void {
+    latest = result;
+    const decor = decorOf(result);
+    pages.show(result, paginator.host, settings.layout, decor);
+    updateBand(result, decor);
     toolbar.setZoom(pages.zoom);
     if (result.final) {
       for (const resolve of finals.splice(0)) resolve(result);
@@ -321,6 +462,20 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     },
   });
 
+  const exportMount = options.mount;
+  const mount: PrintMount | undefined = exportMount && ((container, rendered) =>
+    exportMount(container, rendered, { diagramLook: (index) => overrideFor(diagramLook, index) }));
+
+  /// Lo stile dei diagrammi è cambiato: la resa che c'è si rimonta. Vale il
+  /// profilo che le pagine mostrano, anche quello in anteprima.
+  function restyleDiagrams(): void {
+    diagramLook = diagramPrintLook(previewing ?? profile, diagramStyles);
+    const key = diagramLookKey(diagramLook);
+    if (key === diagramKey) return;
+    diagramKey = key;
+    if (!closed) void paginator.remount();
+  }
+
   const paginator: PrintPaginator = new PrintPaginator({
     doc: options.doc,
     title: options.title,
@@ -330,7 +485,8 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       const rendered = await options.render(doc, target);
       return { ...rendered, html: inertComments(rendered.html) };
     },
-    mount: options.mount,
+    mount,
+    prepare: (page) => preparePrintVectors(page, diagramMemory),
     settings,
     onUpdate,
     onError,
@@ -410,7 +566,27 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (!closed) {
       content.refresh();
       void paginator.reload();
+      void loadProperties();
     }
+  }
+
+  /// Le proprietà della nota per il frontespizio e la testata; una risposta
+  /// vecchia arrivata dopo una nuova si scarta, un errore lascia quelle di
+  /// prima.
+  let propertiesAsked = 0;
+  async function loadProperties(): Promise<void> {
+    if (!options.properties) return;
+    const asked = ++propertiesAsked;
+    let read: readonly { readonly key: string; readonly value: unknown }[];
+    try {
+      read = await options.properties();
+    } catch {
+      return;
+    }
+    if (closed || asked !== propertiesAsked) return;
+    const facts = coverFactsOf(read);
+    cover = { ...cover, ...facts };
+    redecorate();
   }
   if (options.follow) lifetime.add(options.follow(follow));
   lifetime.add(() => window.clearTimeout(followTimer));
@@ -452,19 +628,35 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       toolbar.setZoom(pages.setView(next, free));
     },
     setProfile(next, change) {
+      const before = profile;
       profile = next;
       previewing = null;
       showSettings(printSettingsOf(next));
       toolbar.setProfile(next.nome, next !== base);
+      restyleDiagrams();
+      // Testata, frontespizio e indice non cambiano le misure della nota:
+      // si ridisegnano i fogli, anche dal vivo (un testo tuo mentre si scrive).
+      const decorChanged = before.testata !== next.testata || before.frontespizio !== next.frontespizio || before.pagina.specchio !== next.pagina.specchio;
+      if (decorChanged) redecorate();
       if (change?.live) return;
       renderSide();
-      if (latest) band.update(profile, { pages: latest.final ? latest.pagination.pages.length : latest.total, bookmarks: profile.frontespizio.segnalibri ? bookmarksOf(latest) : null, ms: latest.workMs });
+      if (latest && !decorChanged) updateBand(latest, decorOf(latest));
     },
     openSection(id) {
       if (!SECTIONS.some((section) => section.id === id)) return;
       opened.add(id);
       renderSide();
       heads.get(id)?.head.scrollIntoView({ block: "nearest" });
+    },
+    get diagramStyles() {
+      return diagramStyles;
+    },
+    setDiagramStyle(index, style) {
+      if (!Number.isSafeInteger(index) || index < 0) return;
+      if (style === null) diagramStyles.delete(index);
+      else diagramStyles.set(index, style);
+      restyleDiagrams();
+      renderSide();
     },
     print: async () => {
       await printNow();
@@ -476,6 +668,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       lifetime.close();
       paginator.dispose();
       content.dispose();
+      diagramMemory.dispose();
       pages.dispose();
       root.remove();
       if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
@@ -492,5 +685,6 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   }
   root.focus({ preventScroll: true });
   void paginator.open();
+  void loadProperties();
   return space;
 }

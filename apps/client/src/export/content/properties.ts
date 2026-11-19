@@ -14,7 +14,8 @@
 // Le proprietà stanno in una riga che va a capo, col nome in grigio e il
 // valore scritto per chi legge, fra due fili: un blocco che non si spezza.
 
-import { resolvedLanguage, t } from "../../i18n/strings";
+import { t } from "../../i18n/strings";
+import { propertyText } from "../sections/cover-toc";
 import type { ContentChanges } from "./changes";
 import type { PropertiesChoice } from "./choices";
 
@@ -35,27 +36,6 @@ const PAGE_KEYS = new Set(["icon", "cover", "cover-y", "cssclasses"]);
 const TAG_KEYS = new Set(["tags", "tag"]);
 /// Quante proprietà stanno in evidenza (`FEATURED_LIMIT`).
 export const FEATURED_PROPERTIES = 4;
-
-/// Un valore del frontmatter scritto per chi legge: le liste con le virgole,
-/// i link col nome della nota, le date per esteso, sì e no.
-export function propertyText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (Array.isArray(value)) return value.map(propertyText).filter(Boolean).join(", ");
-  if (typeof value === "boolean") return t(value ? "pdf_export.content.yes" : "pdf_export.content.no_value");
-  if (typeof value === "number") return Number.isFinite(value) ? new Intl.NumberFormat(resolvedLanguage()).format(value) : "";
-  if (typeof value !== "string") return "";
-  const text = value.trim();
-  const link = /^\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]$/u.exec(text);
-  if (link) return (link[2] ?? link[1]!.split("/").pop() ?? link[1]!).trim();
-  const date = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(text);
-  if (date) {
-    const day = new Date(Date.UTC(Number(date[1]), Number(date[2]) - 1, Number(date[3])));
-    if (!Number.isNaN(day.getTime()) && day.getUTCDate() === Number(date[3])) {
-      return new Intl.DateTimeFormat(resolvedLanguage(), { dateStyle: "long", timeZone: "UTC" }).format(day);
-    }
-  }
-  return text;
-}
 
 /// Le proprietà che escono con la scelta, nell'ordine del file. Una chiave
 /// scritta due volte vale una volta, col valore dell'ultima, come la legge

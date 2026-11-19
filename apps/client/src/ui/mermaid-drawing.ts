@@ -308,7 +308,40 @@ export function themeCssFor(style: DiagramStyleId, p: DiagramPalette): string {
     default:
       break;
   }
+  // I colori dati a mano vengono dopo: vincono sullo stile e sulle tinte.
+  rules.push(...ownColorRules(p));
   return rules.join("");
+}
+
+/// Le forme di ogni gruppo di colori dati a mano, come Mermaid 11 le disegna
+/// (figli diretti del nodo): i nodi sono rettangoli e tracciati semplici, le
+/// decisioni poligoni (il rombo, l'esagono), inizio e fine cerchi, capsule
+/// (`outer-path`) e i pallini degli stati. `:nth-child(n)` prende ogni nodo
+/// con lo stesso peso delle tinte alternate, che così perdono.
+const OWN_SHAPES: Readonly<Record<"nodes" | "decisions" | "ends", readonly string[]>> = {
+  nodes: ["rect.label-container", "path.label-container:not(.outer-path)"],
+  decisions: ["polygon.label-container"],
+  ends: ["circle.label-container", ".outer-path", "circle.state-start"],
+};
+
+/// Le regole dei colori dati a mano: forma, bordo un po' più scuro, scritta
+/// chiara o scura secondo il fondo.
+export function ownColorRules(p: DiagramPalette): string[] {
+  const own = p.own;
+  if (!own) return [];
+  const rules: string[] = [];
+  for (const group of ["nodes", "decisions", "ends"] as const) {
+    const color = own[group];
+    if (!color) continue;
+    const node = ".nodes>.node:nth-child(n)";
+    const shapes = OWN_SHAPES[group];
+    const label = readableOn(color, [p.ink, "#ffffff", "#111111"]);
+    rules.push(
+      `${shapes.map((shape) => `${node}>${shape},${node}>${shape} path`).join(",")}{fill:${color};stroke:${seriesBorder(p, color)};}`,
+      `${shapes.map((shape) => `${node}>${shape}~.label text,${node}>${shape}~.label .nodeLabel`).join(",")}{fill:${label};color:${label};}`,
+    );
+  }
+  return rules;
 }
 
 /// Le tinte alternate dei nodi. Le forme sono i figli diretti con la classe
