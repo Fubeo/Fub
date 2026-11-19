@@ -429,6 +429,39 @@ describe("«Aggiungi qui › Testo» del tasto destro", () => {
   });
 });
 
+describe("la scheda del doppio clic non copre quelle accanto (IMP-3808)", () => {
+  it("il doppio clic nel vuoto vicino a una scheda la mette al posto libero più vicino, non sopra", () => {
+    const { engine, host } = mounted(ONE);
+    // Il vuoto a sinistra della scheda: una scheda nuova di 320×160 con
+    // l'angolo lì coprirebbe metà di «centro».
+    const near = screenOf(host, -200, 80);
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: near.clientX, clientY: near.clientY }));
+    const born = bornAfter(engine, ["c"]);
+    expect(born).toHaveLength(1);
+    expect(overlaps(born[0]!, nodeOf(engine, "c")!)).toBe(false);
+    expect(document.activeElement).toBe(host.querySelector(".canvas-text-editor"));
+    engine.destroy();
+  });
+
+  it("un altro doppio clic nello stesso punto non mette la seconda scheda sopra la prima", () => {
+    const { engine, host } = mounted(ONE);
+    const far = screenOf(host, 1000, 1000);
+    for (let i = 0; i < 2; i++) {
+      viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: far.clientX, clientY: far.clientY }));
+      const editor = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+      editor.value = `idea ${i}`;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    }
+    const born = bornAfter(engine, ["c"]);
+    expect(born).toHaveLength(2);
+    // La prima dove dice il clic, nel vuoto; la seconda accanto.
+    expect(born[0]).toMatchObject({ x: 1000, y: 1000 });
+    expect(overlaps(born[0]!, born[1]!)).toBe(false);
+    engine.destroy();
+  });
+});
+
 describe("la scheda nuova lasciata vuota se ne va (IMP-043)", () => {
   it("«Aggiungi testo» e poi Esc senza scrivere: la scheda non resta, il testo torna quello di prima e non resta niente da annullare", () => {
     const { engine, host } = mounted(ONE);

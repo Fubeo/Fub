@@ -706,6 +706,11 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
           }
           surface.focus?.();
         },
+        focusAtPoint: (point) => {
+          if (editor.destroyed || !surface.caretAt?.(point)) return false;
+          surface.focus?.();
+          return true;
+        },
         text: () => (editor.destroyed ? editor.last : buffer.getDoc()),
         destroy,
       };

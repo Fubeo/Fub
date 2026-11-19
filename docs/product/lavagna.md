@@ -142,7 +142,10 @@ disco ([scrivere dentro una scheda](../reference/canvas-cards.md#scrivere-dentro
 
 - **Una scheda di testo** si scrive col doppio clic, o con Invio, nel Live
   delle note: solo il testo, senza il titolo, le proprietà, l'icona e la
-  copertina di una pagina. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
+  copertina di una pagina. Il doppio clic sul testo mette il cursore lì, come
+  in ogni editor; fuori dal testo, e con Invio, il cursore va in fondo. Il
+  doppio clic nel vuoto fa nascere una scheda di testo lì, o al posto libero
+  più vicino se coprirebbe un'altra scheda. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
   480 px di larghezza, poi va a capo; Ctrl+Invio apre una scheda nuova sotto,
   Ctrl+Maiusc+Invio a destra con un filo. «Aggiungi testo» (la riga delle
   opzioni, il menu, Ctrl+/) apre la scheda già in scrittura in un posto libero

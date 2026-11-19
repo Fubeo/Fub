@@ -426,6 +426,12 @@ interface CardEditor {
   readonly born: CanvasStep | null;
   /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
   grown: { readonly width: number; readonly height: number } | null;
+  /**
+   * Il punto della finestra del doppio clic che ha aperto la scheda di testo:
+   * l'editor delle note ci mette il cursore, come ogni editor di testo
+   * (IMP-3808). `null` senza un punto (Invio, una scheda nuova).
+   */
+  readonly point: { readonly x: number; readonly y: number } | null;
 }
 
 /** L'ultimo incolla scritto: il testo, il punto sulla griglia e quante volte di fila lì. */
@@ -10033,7 +10039,9 @@ export class CanvasEngine {
    * alla Selezione, salvo con `keepTool` (il doppio tocco, T63).
    */
   #placeText(clientX?: number, clientY?: number, link?: CardLink, keepTool = false): void {
-    const at = clientX === undefined || clientY === undefined ? this.#freeTextSpot() : this.#screenToWorld(clientX, clientY);
+    const at = clientX === undefined || clientY === undefined
+      ? this.#freeTextSpot()
+      : link ? this.#screenToWorld(clientX, clientY) : this.#freeTextSpotAt(this.#screenToWorld(clientX, clientY));
     const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
     // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
@@ -10055,6 +10063,21 @@ export class CanvasEngine {
     const rect = this.#viewport.getBoundingClientRect();
     const center = this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
     const spot = nearFreeSpot(doc.nodes, { x: snap(center.x - 160), y: snap(center.y - 80), width: 320, height: TEXT_CARD_HEIGHT });
+    return { x: spot.x, y: spot.y };
+  }
+
+  /**
+   * L'angolo in alto a sinistra di una scheda di testo nuova nel punto `at`
+   * (del mondo) scelto da chi usa (il doppio clic, il doppio tocco, il menu):
+   * lì, se la scheda ci sta senza coprirne un'altra; se no al posto libero più
+   * vicino, con la regola di «Aggiungi testo» (IMP-042). Una scheda che nasce
+   * sopra quelle accanto le nasconde, e il clic dopo cade su di loro
+   * (IMP-3808).
+   */
+  #freeTextSpotAt(at: { x: number; y: number }): { x: number; y: number } {
+    const doc = this.#doc;
+    if (!doc) return at;
+    const spot = nearFreeSpot(doc.nodes, { x: snap(at.x), y: snap(at.y), width: 320, height: TEXT_CARD_HEIGHT });
     return { x: spot.x, y: spot.y };
   }
 
@@ -12753,7 +12776,7 @@ export class CanvasEngine {
       // Una scheda di file prende il gesto anche senza vista, se manca o non si mostra (T93).
       const takesGesture = entry.node.type === "file" || (kind !== null && DOUBLE_CLICK_ENTERS.has(kind));
       if (takesGesture) this.#enterOrEdit(entry.node, from);
-      else this.#beginCardEdit(entry.node);
+      else this.#beginCardEdit(entry.node, null, { x: e.clientX, y: e.clientY });
     });
     return entry;
   }
@@ -13221,7 +13244,7 @@ export class CanvasEngine {
    * messa per scriverci (lo strumento Testo, Ctrl+Invio): lasciata vuota, se
    * ne va con lui (T44).
    */
-  #beginCardEdit(target: CanvasNode, born: CanvasStep | null = null): void {
+  #beginCardEdit(target: CanvasNode, born: CanvasStep | null = null, point: { x: number; y: number } | null = null): void {
     if (this.#readOnly || !this.#doc) return;
     const node = this.#doc.nodes.find((candidate) => candidate.id === target.id);
     if (!node) return;
@@ -13247,7 +13270,7 @@ export class CanvasEngine {
     const lifetime = new AbortController();
     const editor: CardEditor = {
       id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false,
-      born, grown: null,
+      born, grown: null, point,
     };
     this.#editor = editor;
     // Mentre si scrive nella scheda la barra della selezione non c'è (T51).
@@ -13557,7 +13580,10 @@ export class CanvasEngine {
     }, { signal });
     input.remove();
     host.hidden = false;
-    if (focused) live.focus(caret);
+    // Il cursore dove era il doppio clic, se nel campo non si è ancora scritto
+    // niente; se no (o fuori dal testo) dov'era nel campo (IMP-3808).
+    const untouched = input.value === (node.text ?? "");
+    if (focused && !(untouched && editor.point && live.focusAtPoint?.(editor.point))) live.focus(caret);
   }
 }
 

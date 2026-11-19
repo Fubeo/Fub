@@ -785,6 +785,9 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
     focused = 0;
     forms: unknown = null;
     readonly reveals: number[] = [];
+    /// I punti chiesti a `caretAt`; `onText` dice se cadono sul testo.
+    readonly carets: Array<{ x: number; y: number }> = [];
+    onText = true;
     /// Il testo che la superficie tiene ancora (una composizione IME a metà):
     /// arriva a `onChange` solo con `commitPending`.
     held: string | null = null;
@@ -832,6 +835,10 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
         reveal: ({ span }) => {
           this.reveals.push(span.start);
           return true;
+        },
+        caretAt: (at) => {
+          this.carets.push({ x: at.x, y: at.y });
+          return this.onText;
         },
         setReadOnly: (readOnly) => {
           this.readOnly = readOnly;
@@ -925,6 +932,15 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
     editor!.focus();
     expect(surface.reveals).toEqual([2, 6]);
     expect(surface.focused).toBe(2);
+
+    // Il doppio clic che l'ha aperta: il cursore sotto il punto, poi il fuoco
+    // (IMP-3808). Fuori dal testo non succede niente, e chi chiama usa `focus`.
+    expect(editor!.focusAtPoint?.({ x: 30, y: 12 })).toBe(true);
+    expect(surface.carets).toEqual([{ x: 30, y: 12 }]);
+    expect(surface.focused).toBe(3);
+    surface.onText = false;
+    expect(editor!.focusAtPoint?.({ x: 30, y: 2 })).toBe(false);
+    expect(surface.focused).toBe(3);
 
     editor!.destroy();
     editor!.destroy();

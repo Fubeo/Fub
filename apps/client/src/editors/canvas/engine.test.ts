@@ -1338,6 +1338,8 @@ interface FakeLiveText {
   /** Il contenitore che si scrive, come il `contenteditable` dell'editor vero. */
   readonly area: HTMLElement;
   readonly focusAt: Array<number | undefined>;
+  /** I punti chiesti a `focusAtPoint`, se la porta lo offre. */
+  readonly pointsAt: Array<{ readonly x: number; readonly y: number }>;
   destroyed: boolean;
   /** Una battuta: il testo nuovo va a `onText`, come fa la porta. */
   typed(next: string): void;
@@ -1347,7 +1349,7 @@ interface FakeLiveText {
  * La porta delle schede con `openText` finto: `answer` dice se l'editor si
  * monta; `gate`, se c'è, tiene la risposta finché non si apre.
  */
-function textPort(answer: "live" | "none" = "live", gate?: Promise<void>) {
+function textPort(answer: "live" | "none" = "live", gate?: Promise<void>, onText?: (point: { x: number; y: number }) => boolean) {
   const opened: FakeLiveText[] = [];
   const calls: string[] = [];
   const port: CardEditorPort = {
@@ -1368,6 +1370,7 @@ function textPort(answer: "live" | "none" = "live", gate?: Promise<void>) {
         options,
         area,
         focusAt: [],
+        pointsAt: [],
         destroyed: false,
         typed: (next) => {
           current = next;
@@ -1379,6 +1382,14 @@ function textPort(answer: "live" | "none" = "live", gate?: Promise<void>) {
           live.focusAt.push(at);
           area.focus();
         },
+        ...(onText ? {
+          focusAtPoint: (point: { x: number; y: number }) => {
+            live.pointsAt.push(point);
+            if (!onText(point)) return false;
+            area.focus();
+            return true;
+          },
+        } : {}),
         text: () => current,
         destroy: () => {
           if (live.destroyed) return;
@@ -1444,6 +1455,29 @@ describe("CanvasEngine: la scheda di testo in Live (T43)", () => {
     expect(place.scrollTop).toBe(0);
     engine.destroy();
     expect(live.destroyed).toBe(true);
+  });
+
+  it("il doppio clic su una scheda di testo mette il cursore dove si è cliccato, non in fondo (IMP-3808)", async () => {
+    // Sul testo: il cursore va lì, e il fuoco non lo riporta in fondo.
+    const onText = textPort("live", undefined, () => true);
+    const first = mounted(canvasSource(), withTextPort(onText.port));
+    first.host.querySelector<HTMLElement>('.canvas-node[data-node="t"]')!
+      .dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 140, clientY: 90 }));
+    await settle();
+    const live = onText.opened[0]!;
+    expect(live.pointsAt).toEqual([{ x: 140, y: 90 }]);
+    expect(live.focusAt).toEqual([]);
+    expect(document.activeElement).toBe(live.area);
+    first.engine.destroy();
+    // Fuori dal testo (la testata della scheda): il cursore in fondo, come prima.
+    const offText = textPort("live", undefined, () => false);
+    const second = mounted(canvasSource(), withTextPort(offText.port));
+    second.host.querySelector<HTMLElement>('.canvas-node[data-node="t"]')!
+      .dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 140, clientY: 4 }));
+    await settle();
+    expect(offText.opened[0]!.pointsAt).toEqual([{ x: 140, y: 4 }]);
+    expect(offText.opened[0]!.focusAt).toEqual(["vedi [[Altra]] e #tag".length]);
+    second.engine.destroy();
   });
 
   it("il testo arriva al .canvas dopo la pausa, con un commit solo; prima è nella bozza", async () => {

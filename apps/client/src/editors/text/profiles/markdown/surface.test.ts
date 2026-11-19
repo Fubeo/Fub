@@ -831,6 +831,28 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("caretAt mette il cursore sotto il punto, senza scrivere; fuori dal riquadro o in Lettura non tocca niente (IMP-3808)", () => {
+    const { ed, view } = editor();
+    ed.setMode("live_preview");
+    ed.buffer.setDoc("Kant e Locke\n");
+    view().dispatch({ selection: { anchor: 13 } });
+    const original = view().posAtCoords.bind(view());
+    view().posAtCoords = ((_coords: { x: number; y: number }) => 4) as typeof original;
+    const box = vi.spyOn(view().scrollDOM, "getBoundingClientRect")
+      .mockReturnValue({ left: 10, top: 20, right: 210, bottom: 120, width: 200, height: 100, x: 10, y: 20, toJSON: () => ({}) });
+    expect(ed.caretAt({ x: 60, y: 40 })).toBe(true);
+    expect(view().state.selection.main.head).toBe(4);
+    expect(ed.buffer.getDoc()).toBe("Kant e Locke\n");
+    // La testata della scheda, sopra il riquadro dell'editor: il cursore resta.
+    view().dispatch({ selection: { anchor: 13 } });
+    expect(ed.caretAt({ x: 60, y: 5 })).toBe(false);
+    expect(view().state.selection.main.head).toBe(13);
+    ed.setMode("reading");
+    expect(ed.caretAt({ x: 60, y: 40 })).toBe(false);
+    box.mockRestore();
+    ed.destroy();
+  });
+
   // Le voci di primo livello, coi separatori come «—»: ciò che la superficie
   // dà al compositore, nei gruppi in cui lo dà.
   const contextLabels = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>): string[] =>
