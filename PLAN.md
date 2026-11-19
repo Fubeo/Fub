@@ -2678,7 +2678,7 @@ Fatto quando: un valore nel testo che cambia quando la cella cambia; la
 battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/cell-value.test.ts
-Stato: [~] in corso · coder · base e1ab8eaae
+Stato: [x] integrato in integra/editor-2 (21491084f) · misure Scrittura: valori-100 2.7·3.4·19 ms, Sorgente 1.8·5.4·7.8 (mediana·p90·max); generale 901 righe 2.6·6.8 → 2.6·3.8, 7201 righe 6.1·11.1 → 5.1·8.8 (fuori budget già prima), schede-20 4.7·6.1 → 2.6·4.3
 
 ## T54 · I grafici: dal foglio e da una tabella
 
