@@ -3443,7 +3443,7 @@ Fatto quando: l'e2e scrive un PDF, lo rilegge con `lopdf` e `hayro`, trova
 testo, link e segnalibri; l'annullamento non lascia file.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [~] in corso · coder · base eb5a6057c
+Stato: [x] integrato in integra/editor-2 (e53505383)
 
 ## T77b · PDF accessibile e PDF/A
 
