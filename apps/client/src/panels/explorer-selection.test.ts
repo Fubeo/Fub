@@ -8,9 +8,9 @@ import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 let list: HTMLElement;
 let life: Lifetime;
 let sel: TreeSelection;
-let trash: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
-let move: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
-let group: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
+let trash: ReturnType<typeof vi.fn<(paths: string[]) => Promise<boolean | void>>>;
+let move: ReturnType<typeof vi.fn<(paths: string[]) => Promise<boolean | void>>>;
+let group: ReturnType<typeof vi.fn<(paths: string[]) => Promise<boolean | void>>>;
 let copy: ReturnType<typeof vi.fn<(paths: string[]) => void>>;
 let copyLinks: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
 let current: string | null;
@@ -38,9 +38,9 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="host"><ul id="list"></ul></div>';
   list = document.getElementById("list")!;
   life = openLifetime();
-  trash = vi.fn(async (_paths: string[]) => 0);
-  move = vi.fn(async (_paths: string[]) => {});
-  group = vi.fn(async (_paths: string[]) => {});
+  trash = vi.fn(async (_paths: string[]): Promise<boolean | void> => true);
+  move = vi.fn(async (_paths: string[]): Promise<boolean | void> => {});
+  group = vi.fn(async (_paths: string[]): Promise<boolean | void> => {});
   copy = vi.fn((_paths: string[]) => {});
   copyLinks = vi.fn(async (_paths: string[]) => {});
   current = null;
@@ -169,6 +169,62 @@ describe("scelta multipla dell'albero", () => {
     document.querySelector<HTMLButtonElement>(".tree-selection-group")!.click();
     await vi.waitFor(() => expect(group).toHaveBeenCalledWith(["a.md", "d.md"]));
     await vi.waitFor(() => expect(sel.paths()).toEqual([]));
+  });
+
+  it("un gesto prende la scelta quando parte: mentre va, la barra non la offre più (IMP-1803)", async () => {
+    let finish!: () => void;
+    move.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    click("a.md", { ctrlKey: true });
+    click("b.md", { ctrlKey: true });
+    document.querySelector<HTMLButtonElement>(".tree-selection-move")!.click();
+    expect(move).toHaveBeenCalledWith(["a.md", "b.md"]);
+    expect(sel.paths(), "le note in viaggio non sono più scelte").toEqual([]);
+    expect(document.querySelector<HTMLElement>(".tree-selection")!.hidden).toBe(true);
+
+    // Mentre lo spostamento va, si sceglie un'altra nota: la fine del primo
+    // gesto non la cancella, e il secondo gesto porta solo lei.
+    click("c.md", { ctrlKey: true });
+    finish();
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sel.paths()).toEqual(["c.md"]);
+    document.querySelector<HTMLButtonElement>(".tree-selection-group")!.click();
+    expect(group).toHaveBeenCalledWith(["c.md"]);
+  });
+
+  it("un gesto annullato rende la scelta, senza le voci sparite nel frattempo", async () => {
+    let cancel!: (value: boolean) => void;
+    move.mockImplementationOnce(() => new Promise<boolean>((resolve) => (cancel = resolve)));
+    click("a.md", { ctrlKey: true });
+    click("b.md", { ctrlKey: true });
+    click("c.md", { ctrlKey: true });
+    document.querySelector<HTMLButtonElement>(".tree-selection-move")!.click();
+    expect(sel.paths()).toEqual([]);
+    build(["a.md", "c.md", "d.md", "dir/"]);
+    sel.repaint();
+    cancel(false);
+    await vi.waitFor(() => expect(sel.paths()).toEqual(["a.md", "c.md"]));
+
+    // Annullato dopo che si è scelto altro: vale la scelta nuova.
+    move.mockImplementationOnce(() => new Promise<boolean>((resolve) => (cancel = resolve)));
+    document.querySelector<HTMLButtonElement>(".tree-selection-move")!.click();
+    click("d.md", { ctrlKey: true });
+    cancel(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sel.paths()).toEqual(["d.md"]);
+  });
+
+  it("una voce che il kernel dice sparita esce subito, con ciò che le stava sotto", () => {
+    build(["a.md", "b.md", "dir/x.md", "dir/y.md"]);
+    sel.repaint();
+    for (const path of ["a.md", "b.md", "dir/x.md", "dir/y.md"]) click(path, { ctrlKey: true });
+    sel.forget("a.md");
+    expect(sel.paths()).toEqual(["b.md", "dir/x.md", "dir/y.md"]);
+    sel.forget("dir");
+    expect(sel.paths()).toEqual(["b.md"]);
+    sel.forget("di");
+    expect(sel.paths(), "un prefisso che non è una cartella non toglie niente").toEqual(["b.md"]);
+    expect(document.querySelector(".tree-selection-count")!.textContent).toBe("1 scelte");
   });
 
   it("un gesto della barra premuto da tastiera riporta il fuoco nell'albero, non su body (IMP-154)", async () => {

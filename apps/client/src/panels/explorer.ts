@@ -357,7 +357,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   selection = mountTreeSelection({
     list: fileListEl,
     currentDoc: () => state.currentDoc,
-    trash: (paths) => trashManyWithConfirm(paths),
+    trash: async (paths) => (await trashManyWithConfirm(paths)) > 0,
     move: (paths) => pickMoveFolders(paths),
     group: (paths) => groupIntoNewFolder(paths),
     copy: (paths) => copyEntries(paths),
@@ -368,6 +368,13 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
+  // Una voce che sparisce esce dalla scelta quando il kernel lo dice, anche se
+  // l'ha spostata, rinominata o cestinata un altro programma: la barra non
+  // offre mai un percorso che non c'è più (IMP-1803).
+  lifetime.add(onEvent("document_renamed", (event) => selection?.forget(event.from)));
+  lifetime.add(onEvent("document_removed", (event) => selection?.forget(event.id)));
+  lifetime.add(onEvent("entry_renamed", (event) => selection?.forget(event.from)));
+  lifetime.add(onEvent("entry_removed", (event) => selection?.forget(event.id)));
   // «Tutte le note» sta subito sopra l'albero; la barra della scelta multipla
   // sta subito sotto.
   fileListEl.before(allTitleEl);
@@ -1378,8 +1385,9 @@ async function pickMoveFolder(id: string): Promise<void> {
 /// le cartelle escluse sono quelle che non portano da nessuna parte per **tutte**
 /// le note (la casa comune, le note stesse), e lo spostamento va in fila — un
 /// rifiuto di una non ferma le altre, e `moveNotesInto` le dice tutte.
-async function pickMoveFolders(ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return;
+/// `false` se non si è spostato niente perché chi sceglie ha annullato.
+async function pickMoveFolders(ids: readonly string[]): Promise<boolean> {
+  if (ids.length === 0) return false;
   // Un selettore con filtro e non un menu contestuale: le cartelle di un vault
   // vero sono centinaia, e un menu senza posizione né scorrimento non le regge.
   const folders = await vaultFolders(FOLDER_PICK);
@@ -1402,35 +1410,45 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
     ],
     more: other,
   });
-  if (choice === null) return;
+  if (choice === null) return false;
   const notes: string[] = [];
   for (const id of ids) {
     if (folderRowOf(id)) await moveFolderInto(id, choice);
     else notes.push(id);
   }
   await moveNotesInto(notes, choice);
+  return true;
 }
 
 /// «In una cartella nuova»: la cartella nasce nella casa comune delle note
-/// scelte (la radice visibile, se ne hanno più d'una) e le note ci entrano con
-/// lo stesso spostamento del menu. Se la cartella non nasce, nessuna si muove.
-async function groupIntoNewFolder(ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return;
+/// scelte (la radice visibile, se ne hanno più d'una), e il dialogo dice dove
+/// prima che si scriva il nome. Le note ci entrano con lo stesso spostamento
+/// del menu. Se la cartella non nasce, nessuna si muove: `false`, come per un
+/// dialogo annullato, e la scelta torna.
+async function groupIntoNewFolder(ids: readonly string[]): Promise<boolean> {
+  if (ids.length === 0) return false;
   const homes = new Set(ids.map(parentOf));
   const parent = homes.size === 1 ? [...homes][0]! : (state.activeSpace ?? "");
-  const name = (await promptText({ title: t("explorer.selection.group"), label: t("explorer.new_folder") }))?.trim();
-  if (!name) return;
+  const name = (await promptText({
+    title: t("explorer.selection.group"),
+    label: parent ? t("explorer.selection.group_where", { folder: parent }) : t("explorer.selection.group_where_root"),
+  }))?.trim();
+  if (!name) return false;
   const wanted = parent ? `${parent}/${name}` : name;
+  let made: string;
   try {
-    await createFolder(wanted);
+    // Il percorso che il kernel ha creato davvero (normalizzato): le note
+    // vanno lì, non nella stringa chiesta.
+    made = await createFolder(wanted);
   } catch (e) {
     notify(t("explorer.new_folder_failed", { folder: wanted, reason: errorText(e) }), "guasto");
-    return;
+    return false;
   }
-  for (const folder of [parent, wanted]) if (folder) state.expanded.add(folder);
+  for (const folder of [parent, made]) if (folder) state.expanded.add(folder);
   saveExpanded();
-  await moveNotesInto(ids, wanted);
+  await moveNotesInto(ids, made);
   await refreshFromKernel(true);
+  return true;
 }
 
 /// Quante cartelle chiede il selettore di destinazione: più di un livello
@@ -2917,6 +2935,10 @@ function wireRootDropTarget(lifetime: Lifetime): void {
 /// nella scelta, tutte le scelte, una alla volta e con lo stesso comando del
 /// menu. Una cartella non entra in sé stessa né in una figlia: la si salta.
 async function moveGroupInto(dragged: NonNullable<typeof drag>, folder: string): Promise<void> {
+  // Come i gesti della barra: le note trascinate escono dalla scelta quando
+  // partono, non quando arrivano, o la fine di uno spostamento lungo
+  // cancellerebbe la scelta fatta nel frattempo (IMP-1803).
+  if (dragged.group.length > 1) selection?.clear();
   const notes: string[] = [];
   for (const path of dragged.group) {
     if (path === folder || folder.startsWith(`${path}/`) || parentOf(path) === folder) continue;
@@ -2924,7 +2946,6 @@ async function moveGroupInto(dragged: NonNullable<typeof drag>, folder: string):
     else notes.push(path);
   }
   await moveNotesInto(notes, folder);
-  if (dragged.group.length > 1) selection?.clear();
 }
 
 /// La cartella che riceve un rilascio da fuori sotto `target`: la cartella
