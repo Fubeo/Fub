@@ -18,6 +18,17 @@ o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
 Limiti, coordinate e invalidazione sono normati in [ABI e
 WIT](../reference/abi-and-wit.md).
 
+Il salvataggio automatico scrive le celle confermate e lascia aperta, col
+fuoco, la cella in cui si sta scrivendo: la sua bozza entra soltanto nella
+copia di recupero, e si scrive quando la si conferma (o quando si chiude il
+foglio). Una formula entra anche in una cartella che l'innesto ha segnato da
+ricalcolare all'apertura (`fullCalcOnLoad`): la riscrittura tiene il segno.
+
+Le formule si scrivono con i nomi inglesi delle funzioni (`SUM`, `AVERAGE`),
+come stanno nel file e come li elenca «Inserisci funzione»; i numeri si
+scrivono col separatore decimale della lingua. I nomi italiani (`SOMMA`,
+`MEDIA`) non sono ancora riconosciuti: la cella mostra `#NAME?`.
+
 Due preferenze dell'editor dicono come si muovono i
 segni della griglia, e una scelta vale dal gesto dopo, in tutte le griglie
 aperte, senza riaprire il foglio. **Segno della copia nei fogli di calcolo**
