@@ -802,8 +802,11 @@ export class LiveCard {
       width: body.clientWidth || 640,
       height: body.clientHeight || 360,
     };
+    // La pagina dove si era (T45): stato della vista, mai del file.
+    const remembered = this.#owner.pageOf(path, this.embed.subpath);
     const editable = this.#owner.host.editable();
     const context: CardContext = {
+      ...(remembered === null ? {} : { initialPage: remembered }),
       path,
       subpath: this.embed.subpath,
       host: "note",
@@ -831,6 +834,7 @@ export class LiveCard {
       },
       pageChanged: (page) => {
         if (life.closed) return;
+        this.#owner.rememberPage(path, this.embed.subpath, page);
         this.#setPart(liveStrings.t("live_card.page", { page: String(page) }));
       },
       ...(kit.editors && editable ? { editors: kit.editors } : {}),
@@ -858,6 +862,10 @@ export class LiveCard {
     }
     this.#cardView = view;
     life.add(() => view.destroy());
+    // Una specie a pagine (il PDF, T45) dice in testata la pagina in vista
+    // anche quando l'embed non la nomina.
+    const first = view.page?.();
+    if (first !== undefined) this.#setPart(liveStrings.t("live_card.page", { page: String(first) }));
     this.#mode = "snapshot";
     this.root.dataset.cardMode = "snapshot";
     this.#setState("view");
@@ -1133,9 +1141,21 @@ export class LiveCards {
   #keys: Extension | null = null;
   #refreshQueued = false;
   #destroyed = false;
+  /// La pagina dove si è in ogni PDF (T45), per file e parte: tornando in
+  /// vista la scheda riparte da lì. Stato della vista, mai scritto.
+  readonly #pages = new Map<string, number>();
 
   constructor(host: LiveCardsHost) {
     this.host = host;
+  }
+
+  /// La pagina ricordata del file `path` mostrato con la parte `subpath`.
+  pageOf(path: string, subpath: string | null): number | null {
+    return this.#pages.get(`${path}${subpath ?? ""}`) ?? null;
+  }
+
+  rememberPage(path: string, subpath: string | null, page: number): void {
+    this.#pages.set(`${path}${subpath ?? ""}`, page);
   }
 
   /// La scheda di un embed. `inColumn`: dentro una colonna di `[!columns]`.
@@ -1465,6 +1485,8 @@ export class LiveCards {
     return {
       id: "card",
       items: [
+        // Il PDF (T45): le pagine si sfogliano coi tasti.
+        ...(card.kind === "pdf" && card.state === "view" ? [{ keys: ["PageUp", "PageDown"], say: liveStrings.t("live.keys.card.pages") }] : []),
         { keys: ["Escape"], say: liveStrings.t("live.keys.card.leave") },
         ...(writing ? [{ keys: ["Mod-z"], say: liveStrings.t("live.keys.card.undo") }] : []),
       ],

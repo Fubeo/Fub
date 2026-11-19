@@ -1551,6 +1551,9 @@
     "live-card-message",
     "live-card-hint",
     "live-card-actions",
+    "canvas-card-pdf-text",
+    "markedContent",
+    "canvas-card-pdf-message",
     "canvas-card-lost",
     "canvas-card-message",
     "format-bar-context",
@@ -3789,6 +3792,9 @@
     "live-card-message": "cornice",
     "live-card-hint": "cornice",
     "live-card-actions": "cornice",
+    "canvas-card-pdf-text": "contenuto",
+    "markedContent": "contenuto",
+    "canvas-card-pdf-message": "contenuto",
     "canvas-card-lost": "cornice",
     "canvas-card-message": "cornice",
     "format-bar-context": "cornice",
@@ -8281,6 +8287,30 @@
       ]
     },
     {
+      "name": "live-card-pdf",
+      "part": "live-cards",
+      "hooks": [
+        "canvas-card-pdf",
+        "canvas-card-pdf-page",
+        "canvas-card-pdf-text",
+        "markedContent",
+        "canvas-card-pdf-message",
+        "canvas-card-pdf-previous",
+        "canvas-card-pdf-next",
+        "canvas-card-pdf-status",
+        "cm-editor",
+        "cm-content"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
       "name": "live-card-sheet",
       "part": "live-cards",
       "hooks": [
@@ -11731,10 +11761,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2236,
+    "hooks": 2239,
     "state_names": 7,
-    "assigned_states": 1012,
-    "components": 301,
+    "assigned_states": 1018,
+    "components": 302,
     "preference_tokens": 196
   }
 }

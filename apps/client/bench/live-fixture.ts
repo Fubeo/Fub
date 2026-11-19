@@ -494,6 +494,17 @@ const DRAWING_CARD_FOREIGN_SVG = [
   '  <text x="160" y="74" font-size="40" text-anchor="middle" fill="#ffffff" font-family="sans-serif">FESTA</text>',
   "</svg>",
   "",
+/// La scheda PDF (T45): il manuale di quattro pagine del giro (`giro=editor`,
+/// `giro-fixture.ts`), un PDF vero col testo che pdf.js stende, mostrato dalla
+/// pagina 2 (`#page=2`).
+const LIVE_CARDS_PDF_NOTE = [
+  "# Imparare Fub",
+  "",
+  "Il manuale, dalla pagina sulle note:",
+  "",
+  "![[Manuale di Fub.pdf#page=2]]",
+  "",
+  "Da rileggere prima della riunione di giovedì.",
 ].join("\n");
 
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
@@ -741,6 +752,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
     cursor: null,
     files: { [DRAWING_CARD_FILE]: DRAWING_CARD_SVG, [DRAWING_CARD_FOREIGN]: DRAWING_CARD_FOREIGN_SVG },
   },
+  "schede-pdf": { text: LIVE_CARDS_PDF_NOTE, cursor: null },
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
   "battuta-schede-20": typingCardsNote(50, 20),

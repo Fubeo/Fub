@@ -1695,6 +1695,57 @@ export const SCENE = touchLast(onPage("shell", [
       },
     } : {}),
   })),
+  // La scheda PDF (T45, il prototipo `.pdfw` e `.pdfn`, passo 17): il manuale
+  // di quattro pagine del giro, dalla pagina 2 con «2 / 4». A riposo; scelta
+  // (un clic sulla testata, i Blocchi accesi); attiva, col puntatore sopra
+  // (le frecce accanto al numero) e una riga del testo della pagina scelta;
+  // la stessa nota a riposo nella finestra minima (i 700 px del prototipo li
+  // guarda la conformità).
+  ...[
+    ["schede-pdf-01-riposo", "La scheda PDF a riposo: la pagina 2 sulla carta, «2 / 4» sotto", null],
+    ["schede-pdf-02-scelta", "La scheda PDF scelta coi Blocchi: il filo della selezione la circonda", "choose"],
+    ["schede-pdf-03-attiva", "La scheda PDF attiva: bordo d'accento, le frecce accanto al numero, una riga del testo scelta", "activate"],
+    ["schede-pdf-04-stretta", "La scheda PDF nella finestra minima, 800 px: la pagina si stringe con la carta", null, NOTE_NARROW],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=schede-pdf&giro=editor",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="pdf"]';
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${card}[data-card-state="view"] .canvas-card-pdf[data-card-state="content"]`);
+      await page.waitForFunction((selector) => document.querySelector(`${selector} .canvas-card-pdf-status`)?.textContent === "2 / 4", card);
+      // La scheda intera in vista, col numero sotto la pagina.
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (gesture === "choose") {
+        await page.click(`${card} .live-card-name`);
+        await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+      }
+      if (gesture === "activate") {
+        await page.click(`${card} .live-card-body`);
+        await page.waitForSelector(`${card}[data-card-active="true"]`);
+        // Il clic ha portato il puntatore sulla scheda, che ha steso il testo;
+        // se ne sceglie la seconda riga, come farebbe un trascinamento.
+        await page.waitForSelector(`${card} .canvas-card-pdf-text span`);
+        await page.evaluate((selector) => {
+          const pieces = [...document.querySelectorAll(`${selector} .canvas-card-pdf-text span`)];
+          const line = pieces.find((piece) => piece.textContent.startsWith("Una nota"));
+          if (!line) throw new Error("la pagina 2 del manuale non ha la sua riga");
+          const range = document.createRange();
+          range.selectNodeContents(line);
+          getSelection().removeAllRanges();
+          getSelection().addRange(range);
+        }, card);
+      }
+    },
+    ...(gesture === "activate" ? {
+      hover: async (page) => {
+        // Sulla scheda attiva il testo sta sopra la pagina e prende il puntatore.
+        await page.hover('.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-text');
+      },
+    } : {}),
+  })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
   // finestra minima, dove la riga toglie dalla fine le voci che non ci stanno.

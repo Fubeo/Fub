@@ -36,6 +36,10 @@ import { mountMarkdown } from "./mount";
 import { embedSize } from "./media";
 import { removeColumnAt } from "./callout";
 import { blockModel } from "./blocks/model";
+import { pdfCardRenderer } from "../../../core/cards/kinds/pdf";
+import { CardCache } from "../../../canvas/card-cache";
+import type { PdfEngine } from "../../../media/pdf-view";
+import { currentHints } from "../../../core/hints";
 import { blocksMode } from "./blocks";
 import { blockSelection } from "./blocks/selection";
 import { mountMarkdownSurface } from "./surface";
@@ -962,5 +966,97 @@ describe("«Affianca»: le schede nelle colonne", () => {
     expect(after.indexOf("E.pdf")).toBeLessThan(after.indexOf("A.pdf"));
     // Senza una scheda accanto, niente.
     expect(besideCardAt(mdState("Testo\n\n![[E.pdf]]\n\nAltro testo\n"), 7)).toBeNull();
+  });
+});
+
+describe("la scheda PDF nella nota (T45)", () => {
+  /// La specie PDF vera, con un motore finto di `pages` pagine e la cache vera
+  /// delle immagini ferme al posto di quella vuota del banco.
+  function realPdf(species: FakeSpecies, pages: number): { renders: number[] } {
+    const renders: number[] = [];
+    const engine: PdfEngine = {
+      pageCount: pages,
+      search: async () => [],
+      pageSize: async () => [600, 800] as const,
+      renderArea: async () => true,
+      async renderPage(index, canvas, scale = 1) {
+        renders.push(index);
+        canvas.width = Math.ceil(600 * scale);
+        canvas.height = Math.ceil(800 * scale);
+      },
+      destroy() {},
+    };
+    const pdf = pdfCardRenderer({ read: async () => new Uint8Array([1]), load: async () => engine, watch: () => () => {} });
+    const snapshots = new CardCache();
+    species.renderer = { kinds: ["pdf"], mount: (node, host, mode, context) => pdf.mount(node, host, mode, { ...context, snapshots }) };
+    return { renders };
+  }
+
+  function statusOf(card: HTMLElement): string | null | undefined {
+    return card.querySelector(".canvas-card-pdf-status")?.textContent;
+  }
+
+  it("la parte: #page=3 mostra «3 / 6»; senza parte la testata dice la prima pagina", async () => {
+    const one = rig("Prima\n\n![[Contratto.pdf#page=3]]\n\nDopo\n");
+    const { renders } = realPdf(one.species, 6);
+    await settle();
+    await settle();
+    const card = cardsIn(one.parent)[0]!;
+    expect(card.dataset.cardState).toBe("view");
+    expect(statusOf(card)).toBe("3 / 6");
+    expect(card.querySelector(".live-card-part")?.textContent).toContain("p. 3");
+    expect(renders).toEqual([2]);
+
+    const two = rig("Prima\n\n![[Contratto.pdf]]\n\nDopo\n");
+    realPdf(two.species, 6);
+    await settle();
+    await settle();
+    const plain = cardsIn(two.parent)[0]!;
+    expect(statusOf(plain)).toBe("1 / 6");
+    expect(plain.querySelector(".live-card-part")?.textContent).toContain("p. 1");
+  });
+
+  it("da attiva si sfoglia: la testata segue, la nota no; tornando in vista riparte da lì", async () => {
+    const { parent, view, cards, species } = rig("Prima\n\n![[Contratto.pdf#page=2]]\n\nDopo\n");
+    realPdf(species, 6);
+    await settle();
+    await settle();
+    const before = view.state.doc.toString();
+    const card = cardsIn(parent)[0]!;
+    expect(cards.activateAt(view, view.state.doc.line(3).from)).toBe(true);
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "PageDown", bubbles: true, cancelable: true }));
+    await settle();
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await settle();
+    expect(statusOf(card)).toBe("4 / 6");
+    expect(card.querySelector(".live-card-part")?.textContent).toContain("p. 4");
+    // La riga dei suggerimenti dice i tasti delle pagine.
+    const hints = currentHints();
+    expect(hints?.id).toBe("card");
+    expect(hints?.items.some((item) => "keys" in item && item.keys.includes("PageDown"))).toBe(true);
+    // La pagina è stato della vista: il file della nota resta com'era.
+    expect(view.state.doc.toString()).toBe(before);
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+    // Il cursore nell'embed smonta la scheda; fuori, si rimonta alla pagina 4.
+    view.dispatch({ selection: { anchor: 10 } });
+    expect(cardsIn(parent)).toHaveLength(0);
+    view.dispatch({ selection: { anchor: 0 } });
+    await settle();
+    await settle();
+    const again = cardsIn(parent)[0]!;
+    expect(statusOf(again)).toBe("4 / 6");
+    expect(again.querySelector(".live-card-part")?.textContent).toContain("p. 4");
+    expect(view.state.doc.toString()).toBe(before);
+  });
+
+  it("senza la specie PDF (il visore spento) dice «PDF · percorso» con «Apri»", async () => {
+    const { parent } = rig("Prima\n\n![[Contratto.pdf]]\n\nDopo\n", { renderers: ["sheet"] });
+    await settle();
+    const card = cardsIn(parent)[0]!;
+    expect(card.dataset.cardState).toBe("unsupported");
+    expect(card.querySelector(".live-card-message")?.textContent).toContain("PDF");
+    expect(card.querySelector(".live-card-message")?.textContent).toContain("Archivio/Contratto.pdf");
+    expect(card.querySelector(".live-card-open")).not.toBeNull();
   });
 });
