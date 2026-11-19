@@ -592,6 +592,31 @@ export const SCENE = touchLast(onPage("shell", [
       await openExportSpace(page);
     },
   })),
+  // **La sezione Diagrammi** (T75): la nota con un flusso, una formula più
+  // larga della colonna, un diagramma con un errore e uno in Aurora; aperta
+  // la sezione, ai nodi il blu della tavolozza. Sulle pagine il flusso coi
+  // nodi blu, la formula rimpicciolita che lo dice, il riquadro «non
+  // disegnato» col problema. Anche nella finestra minima.
+  ...[
+    ["esporta-pdf-diagrammi", "La sezione Diagrammi dell'esportazione: gli stili, il colore dei nodi dato a mano, il fondo; sulle pagine la formula rimpicciolita e il diagramma non disegnato", undefined],
+    ["esporta-pdf-diagrammi-stretta", "La sezione Diagrammi alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=esporta-diagrammi",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      // La disposizione larga prima di aprire la nota: `openLive` legge se
+      // l'albero sta nel cassetto.
+      await page.waitForFunction(() => !document.querySelector("#layout")?.classList.contains("layout-compact"));
+      await openLive(page, [], "top");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await openExportDiagrams(page);
+    },
+  })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
   // cursore sceso con le frecce resta a metà altezza del foglio.
   {
@@ -3190,6 +3215,34 @@ async function openExportSpace(page) {
   }, null, { timeout: 15_000 });
   // L'entrata dello spazio è finita, e il puntatore non sta su un controllo.
   await page.waitForFunction(() => document.querySelector(".export-space")?.getAnimations().length === 0);
+  await page.mouse.move(0, 0);
+}
+
+/// Apre la sezione Diagrammi dello spazio «Esporta in PDF», apre la riga dei
+/// nodi e sceglie il blu della tavolozza (`#1f4f8f`); aspetta che la resa
+/// rimontata sia di nuovo impaginata, coi diagrammi disegnati.
+async function openExportDiagrams(page) {
+  await page.click('.export-section[data-section="diagrammi"] .export-section-head');
+  await page.waitForSelector(".export-dg-styles");
+  await page.click("#export-dg-color-diagramma-nodi");
+  await page.click("#export-dg-ink-diagramma-nodi-1f4f8f");
+  await page.waitForSelector("#export-dg-reset-diagramma-nodi");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    const host = document.querySelector(".export-measure");
+    const drawn = [...(host?.querySelectorAll(".mermaid-diagram") ?? [])];
+    return /^\d/.test(pages) && drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
+      && document.querySelector(".export-space .export-slot .export-fascia") !== null;
+  }, null, { timeout: 15_000 });
+  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
+  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
+  await page.evaluate(() => {
+    const found = globalThis.__fubCsp;
+    for (let i = found.length - 1; i >= 0; i--) {
+      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+    }
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.mouse.move(0, 0);
 }
 

@@ -524,6 +524,23 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf" },
   },
+  /// La sezione Diagrammi dello spazio (T75): dai due lati aperta, la riga
+  /// dei nodi aperta col blu della tavolozza (`#1f4f8f`) scelto; lo stile
+  /// resta «Come nella nota», il fondo acceso.
+  "esporta-pdf-diagrammi": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="diagrammi"] .px-sh');
+        await page.click('#win .px-sec[data-sec="diagrammi"] [data-col="dgn"]');
+        await page.click('#win [data-colset="dgn"][data-v="#1f4f8f"]');
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-diagrammi" },
+  },
   // I valori di cella nel testo (T53): nel prototipo il paragrafo `p-conti`
   // del documento d'apertura («Finora abbiamo speso … su … previsti»), nel
   // banco lo stesso paragrafo sulla cartella del banco.
@@ -1980,11 +1997,197 @@ export const PEZZI = [
     app: ".export-band-hint",
     proprieta: ["font", "color", "text-overflow"],
   },
+
+  // ── la sezione Diagrammi (T75) ──────────────────────────────────────────
+  // Le miniature hanno i colori della tavolozza che disegna ogni stile
+  // (`paletteFor`, come quelle del menu del diagramma): si confrontano forma
+  // e misure, non le tinte.
+  {
+    id: "esporta.dg-stili",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-dgs",
+    app: ".export-dg-styles",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.dg-stile",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"]',
+    app: '.export-dg-style[data-dg="aurora"]',
+    proprieta: ["font", "color", "padding", "gap", "border-radius", "display"],
+  },
+  {
+    id: "esporta.dg-stile-scelto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[aria-pressed="true"]',
+    app: '.export-dg-style[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.dg-miniatura",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch',
+    proprieta: ["height", "border-radius", "box-shadow", ...ALLINEAMENTO, "gap"],
+  },
+  {
+    id: "esporta.dg-miniatura-scelta",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[aria-pressed="true"] .px-dsw',
+    app: '.export-dg-style[aria-pressed="true"] .export-dg-swatch',
+    proprieta: ["box-shadow"],
+  },
+  {
+    id: "esporta.dg-miniatura-nodo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .n',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-node',
+    proprieta: [...DIMENSIONI, "border-radius", "border-width", "border-style"],
+  },
+  {
+    id: "esporta.dg-miniatura-scelta-rombo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .d',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-choice',
+    proprieta: [...DIMENSIONI, "border-radius", "transform"],
+  },
+  {
+    id: "esporta.dg-miniatura-pillola",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .p',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-pill',
+    proprieta: [...DIMENSIONI, "border-radius"],
+  },
+  {
+    id: "esporta.dg-nota",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-note',
+    app: '.export-section[data-section="diagrammi"] .export-note',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.dg-colori",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cols",
+    app: ".export-dg-colors",
+    proprieta: ["display", "gap", "margin"],
+  },
+  {
+    id: "esporta.dg-colore-aperto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col.open",
+    app: ".export-dg-color.is-open",
+    proprieta: ["background", "border-radius", "display"],
+  },
+  {
+    id: "esporta.dg-colore-testa",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-cb",
+    app: ".export-dg-color:not(.is-open) .export-dg-color-head",
+    proprieta: [...BASE, "height", "align-items", "text-align"],
+  },
+  {
+    id: "esporta.dg-colore-pallino",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col.open .px-chip",
+    app: ".export-dg-color.is-open .export-dg-chip",
+    proprieta: [...DIMENSIONI, "border-radius", "background-color", "box-shadow"],
+  },
+  {
+    id: "esporta.dg-colore-pallino-vuoto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-chip.none",
+    app: ".export-dg-color:not(.is-open) .export-dg-chip.is-none",
+    proprieta: [...DIMENSIONI, "border-radius", "box-shadow"],
+  },
+  {
+    id: "esporta.dg-colore-tuo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cb em",
+    app: ".export-dg-color-head em",
+    proprieta: ["font", "color", "background", "border-radius", "padding"],
+  },
+  {
+    id: "esporta.dg-colore-codice",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-cb code",
+    app: ".export-dg-color:not(.is-open) .export-dg-color-head code",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.dg-colore-torna",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cr",
+    app: ".export-dg-reset",
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background"],
+  },
+  {
+    id: "esporta.dg-tavolozza",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-pal",
+    app: ".export-dg-palette",
+    proprieta: ["display", "flex-wrap", "gap", "padding", "align-items"],
+  },
+  {
+    id: "esporta.dg-inchiostro",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-ps[data-v="#b3261e"]',
+    app: "#export-dg-ink-diagramma-nodi-b3261e",
+    proprieta: [...DIMENSIONI, "border-radius", "box-shadow", "background-color"],
+  },
+  {
+    id: "esporta.dg-inchiostro-scelto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-ps[aria-pressed="true"]',
+    app: '.export-dg-ink[aria-pressed="true"]',
+    proprieta: ["box-shadow", "background-color"],
+  },
+  {
+    id: "esporta.dg-qualsiasi",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-pick",
+    app: ".export-dg-pick",
+    proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow", "color"],
+  },
+  {
+    id: "esporta.dg-codice-campo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-hex",
+    app: ".export-dg-hex",
+    proprieta: [...DIMENSIONI, "font", "color", "background", "box-shadow", "border-radius", "padding"],
+  },
+  {
+    id: "esporta.dg-fondo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog',
+    app: "#export-dg-paper",
+    proprieta: ["font", "color", "min-height", "gap", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.dg-fondo-spiega",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog small',
+    app: "#export-dg-paper small",
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.dg-fondo-interruttore",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog i',
+    app: "#export-dg-paper i",
+    proprieta: [...DIMENSIONI, "border-radius", "background"],
+  },
 ];
 
 /// I pezzi che hanno ancora differenze, e chi li corregge. Non si
 /// confrontano finché non passano in `PEZZI`.
 export const DA_COPRIRE = [
+  {
+    id: "esporta.dg-togli-stili",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-link.in',
+    app: "#export-dg-clear-own",
+    perche: "«Togli lo stile dato a N» c'è solo con uno stile dato a un diagramma solo, e quello lo dà il clic sulla pagina (T76): nessuna vista lo apre ancora dai due lati",
+  },
   // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
   {
     id: "compiti.ispettore",

@@ -67,10 +67,13 @@ senza chiederla di nuovo al core.
 
 ### Sulla carta
 
-- I diagrammi e le formule vanno nel PDF come vettori (`svg2pdf`): il
-  disegno di un diagramma passa al core con i suoi colori scritti sugli
-  elementi e le scritte come testo, che nel PDF si seleziona. Le radici e
-  le frecce delle formule sono già SVG nella resa.
+- I diagrammi e le formule vanno nel PDF come vettori (`svg2pdf`, nello
+  scrittore del core): la misura delle pagine (`export/probe.ts`, con
+  `vectorOf` di `export/vectors.ts`) passa il disegno di un diagramma con i
+  suoi colori scritti sugli elementi e le scritte come testo, che nel PDF
+  si seleziona. Le radici e le frecce delle formule sono già SVG nella
+  resa. Finché «Esporta» passa dalla stampa del sistema, la stampa riceve
+  gli stessi disegni.
 - Un diagramma con un errore esce con l'ultimo disegno buono visto nello
   spazio; se non ce n'è uno, al suo posto c'è il riquadro «non disegnato»
   con il problema.
