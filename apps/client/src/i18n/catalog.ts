@@ -594,6 +594,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "proof.add_word_failed": "Non ho potuto aggiungere «{word}» al dizionario: {reason}",
 "proof.ignore": "Ignora",
 "proof.ignore_here": "Ignora in questa nota",
+"proof.missing_dictionary": "Il correttore non trova sul computer il dizionario per scrivere in {language} ({dictionary}): segna la grammatica, non i refusi. Installa il dizionario Hunspell della lingua (dal gestore dei pacchetti, o quello di LibreOffice) e riavvia Fub.",
 "grid.surface": "Foglio di calcolo",
 "grid.a11y.superficie": "Foglio di calcolo",
 "grid.workbook.macros": "Le macro della cartella non si eseguono, e restano nel file come sono.",

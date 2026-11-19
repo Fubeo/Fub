@@ -256,7 +256,17 @@ function proofPorts(vault: string | null | undefined): ProofPorts {
       ];
       return () => stops.forEach((stop) => stop());
     },
+    missingDictionary: (dictionary, language) => notify(t("proof.missing_dictionary", { language: languageName(language), dictionary }), "info"),
   };
+}
+
+/// Il nome di una lingua nella lingua dell'interfaccia: `it` → «italiano».
+function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames([resolvedLanguage()], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
 }
 
 const PLAIN_TEXT_MODES = [
