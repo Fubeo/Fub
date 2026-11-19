@@ -6228,7 +6228,8 @@ export class GridEngine {
   #pressedCell(element: EventTarget | null, x: number, y: number): GridPosition | null {
     const target = element instanceof Element ? element.closest<HTMLElement>(".grid-cell") : null;
     if (!target) return null;
-    if (target.classList.contains("spill")) {
+    // Un evento senza punto (uno sintetico, da tastiera) vale per la cella.
+    if (target.classList.contains("spill") && Number.isFinite(x) && Number.isFinite(y)) {
       const hit = this.#hit(x, y, false);
       if (hit && hit.row !== null && hit.column !== null) return { row: hit.row, column: hit.column };
     }
