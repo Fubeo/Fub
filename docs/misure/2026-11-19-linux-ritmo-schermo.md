@@ -97,6 +97,94 @@ Il binario nuovo nel Flatpak resta sotto la sonda (156–161 contro 172–180)
 perché la pagina di Fub è più pesante della sonda; il tetto dei 60 non c'è
 più.
 
+## La superficie di GTK3
+
+Dopo l'orologio, Fub nel Flatpak sembrava ancora lento a chi lo usa: il
+thread principale dell'app stava al 55–80% di un core. Misurato la sera del
+19 novembre sul Fub del Flatpak installato (WebKitGTK 2.54.3) e sul binario
+con `GDK_RENDERING=recording`, nella stessa sandbox, finestra a tutto schermo
+su DP-2 (2560 × 1440, GTK3 a scala 2), configurazione e vault temporanei.
+
+- **Il metodo**: una libreria in `LD_PRELOAD` conta i `wl_surface.commit`
+  dell'app e misura `gdk_cairo_draw_from_gl`; un campionatore sul tempo di
+  processore del thread principale (`timer_create`, `backtrace`) dice in
+  quale libreria va il tempo. La CPU dei thread e i page fault si leggono da
+  `/proc`. I gesti si fanno dall'ispettore remoto, 5 s l'uno: «anima» sposta
+  un riquadro a ogni rAF, «scorri» fa scorrere una nota di 5000 righe,
+  «lavagna» sposta una lavagna di 300 schede, «fermo» è l'app senza gesti
+  30 s dopo l'avvio, con e senza la nota aperta.
+- **Dove va il tempo, prima**: nel campionatore il 54% del tempo proprio
+  del thread principale è in pixman (riempire pixel) e il 22% in
+  `memset`/`memcpy` di libc, sotto il disegno della finestra di gdk e cairo
+  (77–90% inclusivo). `gdk_cairo_draw_from_gl` costa 0,06–0,12 ms: nessuna
+  lettura dalla scheda.
+
+Thread principale (CPU di un core e page fault al secondo) e fotogrammi al
+secondo della pagina; un giro per colonna, carico medio fra 7 e 18:
+
+| gesto | Flatpak prima | Flatpak dopo | nativo prima (`similar`) | nativo dopo |
+|---|---|---|---|---|
+| fermo | 29%, 213 000 fault/s | 1–6%, 0–24 fault/s | 26%, 161 000 fault/s | 3%, 0 fault/s |
+| anima | 105,5 fps, 98% (kernel 79) | 172–174 fps, 17–18% | 103,5 fps, 97% | 175,5 fps, 11% |
+| scorri | 133 fps, 78% | 131–151 fps, 12–14% | 104,7 fps, 74% | 154,6 fps, 11% |
+| fermo, nota aperta | 46%, 185 000 fault/s | 5% | 29% | 7% |
+| lavagna | 31 fps, 45% | 30–33 fps, 3–6% | 67,7 fps, 49% | 92,9 fps, 6% |
+
+- **Il nostro orologio non c'entra**: con `FUB_OROLOGIO_GTK=0` e la
+  superficie di prima il thread principale sta al 37% da fermo (227 000
+  fault/s) e all'86% con la pagina che anima, a 60 fotogrammi; con la
+  superficie che registra, 2% e 19%.
+- **La lavagna dipende dal processo web**: 103–122% di CPU nel processo web
+  in ogni variante, e il thread principale dell'app è libero dopo la
+  correzione. È un costo della pagina, a parte.
+- Le foto della nota e della lavagna con la superficie che registra sono
+  uguali a quelle di prima.
+
+### Fub fermo
+
+Con Fub fermo GTK manda al compositore 17–21 finestre al secondo, 36–37 con
+una nota aperta, mentre la pagina compone 2–4 volte al secondo (Timeline
+dell'ispettore). Ogni ridisegno di GTK viene da WebKit (pila di
+`gtk_widget_queue_draw`: un fotogramma nuovo dal processo web). Nel tempo
+non sono continui: dopo ogni gesto, o il ridimensionamento all'avvio, c'è
+una raffica a 60 al secondo lunga circa 3 s, poi solo il cursore (1,6 al
+secondo, ogni 606 ms).
+
+| prova, nota aperta e ferma | commit/s | thread principale |
+|---|---|---|
+| Flatpak prima | 35–37 | 28–51% |
+| dopo, con o senza `FUB_OROLOGIO_GTK=0` o `FUB_VBLANK_EMULATO=0` | 35–37 | 5–8% |
+| dopo, `GTK_OVERLAY_SCROLLING=0` | 1,6 | 0–1% |
+
+- Né l'orologio né il vblank emulato tengono acceso l'orologio di GTK: le
+  raffiche restano uguali senza.
+- Nessuna animazione CSS sempre accesa e nessun rAF che si richiama: in 3 s
+  di riposo nessuna mutazione del DOM e nessun evento di transizione o
+  animazione. L'animazione `cm-blink` di zero ms del cursore fermo, tolta,
+  non cambia i commit (37 al secondo).
+- Le raffiche sono le barre di scorrimento sovrapposte di WebKitGTK che
+  sfumano: senza (`GTK_OVERLAY_SCROLLING=0`) restano solo i giri del
+  cursore. Senza barre sovrapposte la barra si vede sempre e la colonna
+  della nota si sposta di circa 10 px: non è una scelta di questa misura.
+
+### Il costo della pagina
+
+Binario dopo, Timeline dell'ispettore durante il gesto (5 s), carico 13–14:
+
+| gesto | fps | thread principale | processo web | ridisegni della pagina |
+|---|---|---|---|---|
+| scorri la nota | 162 | 31% | 33% (56% tutti i thread) | 160 `Paint`, 15 500 `InvalidateLayout` |
+| scorri le impostazioni | 172 | 25% | 39% (53%) | 16 600 `Paint`, 14 500 su tutta la parte visibile (910 × 589) |
+| trascina il grafo | 180 | 18% | 20% (29%) | nessuno: è un canvas |
+| sposta la lavagna | 112 | 17% | 46% (89%) | 4 800 `Paint`, 560 `Layout` |
+
+Lo scorrevole delle impostazioni (`.settings-scroll`) non è un contesto di
+impilamento, e WebKitGTK lo ridipinge tutto a ogni passo invece di
+spostarne i livelli. Con `isolation: isolate` sullo scorrevole (o
+`transform: translateZ(0)`) i `Paint` scendono da 16 600 a 1 150 e l'area
+ridipinta da 8,1 a 0,25 Gpx in 5 s, a 178 fps. La nota non ha questo costo.
+Nessun `backdrop-filter`, `filter` o ombra grande compare nei ridisegni.
+
 ## Che cosa dicono
 
 - **Il vblank emulato funziona e segue lo schermo.** Il registro d'avvio di

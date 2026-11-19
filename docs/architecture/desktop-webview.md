@@ -52,7 +52,7 @@ disegna col processore.
 |---|---|---|---|
 | qualunque | driver NVIDIA disallineato | nessuna | «riavvia il computer» |
 | `auto` | NVIDIA < 555 primaria, Wayland, driver allineato, nessuna variabile dell'utente | nessuna | proposta: disegno col processore, movimento calmo, lascia così |
-| `auto`, `gpu` | NVIDIA ≥ 555 primaria, Wayland, driver allineato, nessuna variabile dell'utente | `WEBKIT_FORCE_DMABUF_RENDERER=1` | nessuno |
+| `auto`, `gpu` | NVIDIA ≥ 555 primaria, Wayland, driver allineato, nessuna variabile dell'utente | `WEBKIT_FORCE_DMABUF_RENDERER=1`, e `GDK_RENDERING=recording` se l'utente non l'ha messa | nessuno |
 | `auto`, `gpu` | WebKitGTK dalla 2.53.0 alla 2.54.1, nessuna variabile dell'utente | `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` | nessuno |
 | `auto` | ogni altro caso | nessuna | nessuno |
 | `gpu` | ogni altro caso | nessuna | solo quello del driver disallineato |
@@ -68,8 +68,8 @@ Debian 13, niri, RTX 4070 e WebKitGTK 2.54:
 - per le VM senza 3D non ci sono misure, e senza misure non si cambia il
   percorso.
 
-Le due variabili che `auto` e `gpu` scrivono non cambiano il renderer:
-correggono due difetti misurati.
+Le variabili che `auto` e `gpu` scrivono non cambiano il renderer:
+correggono difetti misurati.
 
 - `WEBKIT_FORCE_DMABUF_RENDERER=1` toglie la copia in memoria condivisa
   della patch NVIDIA di Debian
@@ -78,6 +78,10 @@ correggono due difetti misurati.
   fotogrammi al secondo su uno schermo a 180 Hz. Dove la patch non c'è la
   variabile non esiste. Solo dal 555, il primo driver con la
   sincronizzazione esplicita.
+- `GDK_RENDERING=recording`, insieme alla precedente, toglie a GTK3
+  l'immagine grande quanto la finestra che rifà a ogni fotogramma nel modo
+  GL ([La superficie di GTK3 nel modo GL](#la-superficie-di-gtk3-nel-modo-gl)).
+  Una `GDK_RENDERING` dell'utente, con qualunque valore, vince.
 - `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` toglie i fotogrammi vecchi che la
   composizione di Skia rimette sullo schermo dopo un'animazione, nelle
   WebKitGTK dalla 2.53.0 alla 2.54.1 (corretto a monte nella 2.54.2, commit
@@ -94,7 +98,7 @@ misurato. Le variabili che l'utente ha già messo vincono sempre: con
 `WEBKIT_DISABLE_COMPOSITING_MODE`, `WEBKIT_DMABUF_RENDERER_FORCE_SHM`,
 `WEBKIT_FORCE_DMABUF_RENDERER`, `WEBKIT_USE_SKIA_FOR_COMPOSITION`,
 `__NV_DISABLE_EXPLICIT_SYNC` o `GDK_BACKEND` nell'ambiente, con qualunque
-valore, Fub non propone niente e non scrive le sue due, e `cpu` non tocca
+valore, Fub non propone niente e non scrive le sue, e `cpu` non tocca
 una `WEBKIT_SKIA_ENABLE_CPU_RENDERING` già messa.
 
 ### L'impostazione
@@ -284,6 +288,39 @@ campo torna 0 e l'orologio non si tocca più. Vale solo per GTK 3 dalla
 sé (memoria condivisa) il frame callback arriva dopo e riscrive lo stesso
 valore. Su uno schermo a 60 Hz l'intervallo è quello di prima. Numeri in
 [Il ritmo dello schermo su NVIDIA](../misure/2026-11-19-linux-ritmo-schermo.md).
+
+### La superficie di GTK3 nel modo GL
+
+Nel modo GL GTK3 disegna ogni giro della finestra così
+(`gdk_window_begin_paint_internal` e `gdk_window_end_paint_internal`,
+`gdk/gdkwindow.c`): crea una superficie cairo grande quanto la parte da
+ridisegnare (`gdk_window_create_similar_surface`), la pulisce
+(`gdk_window_clear_backing_region`), ci lascia dipingere i widget, e alla
+fine carica come texture solo ciò che GL non ha già coperto. La webview
+copre tutta la finestra con GL (`gdk_cairo_draw_from_gl`, che costa 0,1 ms
+e non legge pixel dalla scheda), ma la superficie si crea, si pulisce e si
+butta lo stesso. WebKit chiede di ridisegnare tutta la webview a ogni
+fotogramma, anche senza gesti: dopo ogni scorrimento, ridimensionamento o
+passaggio del puntatore le barre di scorrimento sovrapposte di WebKitGTK
+sfumano a 60 fotogrammi al secondo per circa 3 s (20–40 al secondo di
+media con Fub fermo e una nota aperta). A tutto schermo a scala 2 sono
+4266 × 2400 × 4 = 41 MB a fotogramma. È sopra i 32 MB oltre cui glibc
+chiede la memoria al kernel ogni volta (`mmap`), e il thread principale
+passa il tempo nei page fault della memoria nuova.
+
+Con `GDK_RENDERING=recording` (letta in `gdk_init`, `gdk/gdk.c`) la
+superficie registra i comandi invece di riempire pixel: pulirla e
+dipingerci lo sfondo costa niente, e si rasterizza solo la parte che GL non
+copre, quando la carica come texture (`cairo_surface_map_to_image`). La
+variabile cambia la superficie solo dove GTK ne chiede una simile: le
+finestre disegnate con GL e le cache dei widget che scorrono
+(`GtkPixelCache`, che Fub non usa); le finestre senza GL sotto Wayland
+disegnano direttamente nel loro buffer. Fub la scrive solo con NVIDIA dal
+555 sotto Wayland, dove scrive anche `WEBKIT_FORCE_DMABUF_RENDERER=1` e dove
+c'è la misura; il meccanismo è di GTK3 e vale per ogni scheda che disegna
+con GL. Si eredita nei programmi che Fub avvia, dove non cambia il
+risultato. Numeri in
+[Il ritmo dello schermo su NVIDIA](../misure/2026-11-19-linux-ritmo-schermo.md#la-superficie-di-gtk3).
 
 ## Come si verifica
 

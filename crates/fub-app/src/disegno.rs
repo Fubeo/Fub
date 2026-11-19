@@ -53,11 +53,11 @@
 //!   un'immagine grande quanto la finestra, la pulisce, ci dipinge lo sfondo
 //!   e poi la butta, anche se la webview copre tutto con GL. A tutto schermo
 //!   a scala 2 sono 41 MB a fotogramma, sopra la soglia oltre cui glibc li
-//!   chiede al kernel ogni volta: il thread principale passava il 77% del
-//!   tempo nei page fault, al 98% di un core, e la pagina restava a 110
-//!   fotogrammi al secondo. Con la superficie che registra i comandi si
-//!   rasterizza solo la parte che GL non copre: 20% di un core e 170
-//!   fotogrammi;
+//!   chiede al kernel ogni volta: con la pagina che anima il thread
+//!   principale stava al 98% di un core, tre quarti nel kernel per i page
+//!   fault, e la pagina a 105 fotogrammi al secondo; fermo, al 20–30%. Con
+//!   la superficie che registra i comandi si rasterizza solo la parte che
+//!   GL non copre: 17% di un core e 172–174 fotogrammi, fermo 1–6%;
 //! - `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` (dalla 2.53.0 alla 2.54.1): dopo
 //!   un'animazione la composizione di Skia rimette sullo schermo per un
 //!   istante pezzi di un fotogramma vecchio, corretto a monte nella 2.54.2.
