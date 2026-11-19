@@ -26,6 +26,8 @@ import { commentIcons } from "../editors/text/profiles/markdown/comments/thread"
 import { transclusionIcons } from "../editors/text/profiles/markdown/transclusion";
 import { registerMoveIcon } from "../editors/text/profiles/markdown/blocks/move-to";
 import { registerDiagramIcons } from "./diagram-menu";
+import { registerExportSpaceIcons } from "../export/space";
+import { registerExportToolbarIcons } from "../export/toolbar";
 import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 
 /// I moduli che chiamano `registerIcon`, e la prova li monta tutti qui sopra.
@@ -45,6 +47,8 @@ const REGISTRARS = [
   "../panels/format-bar.ts",
   "../panels/mini-bar.ts",
   "../kit/color/picker.ts",
+  "../export/space.ts",
+  "../export/toolbar.ts",
   "./diagram-menu.ts",
 ];
 
@@ -88,6 +92,8 @@ describe("i nomi che un tema può ridisegnare", () => {
     transclusionIcons();
     registerMoveIcon();
     registerDiagramIcons();
+    registerExportSpaceIcons();
+    registerExportToolbarIcons();
     createColorPicker({
       value: "#000000",
       text: TEXT,

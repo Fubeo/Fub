@@ -41,7 +41,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "export-print": ["M7 9V4h10v5", "M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2", "M7 14h10v6H7z"],
 };
 
-function ensureIcons(): void {
+/// Registra le icone della barra dello spazio (una volta).
+export function registerExportToolbarIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
 }
 
@@ -69,7 +70,7 @@ const VIEWS: readonly { readonly view: Exclude<ExportView, "libera">; readonly l
 ];
 
 export function createToolbar(title: string, actions: ToolbarActions): Toolbar {
-  ensureIcons();
+  registerExportToolbarIcons();
   const element = document.createElement("header");
   element.className = "export-top";
 

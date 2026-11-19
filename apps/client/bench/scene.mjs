@@ -84,9 +84,10 @@ const SHEET_FULL = { width: 1308, height: 800 };
 /// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
 /// computer non si può avere.
 const NOTE_NARROW = { width: 800, height: 800 };
-/// La finestra «700 px» del prototipo dello spazio «Esporta in PDF»: lo spazio
-/// prende la finestra intera, e la sua larghezza è quella.
-const EXPORT_700 = { width: 700, height: 800 };
+/// La finestra minima del desktop per lo spazio «Esporta in PDF» (il «700 px»
+/// del prototipo è sotto la minima: il pannello sotto le pagine lo guarda la
+/// scena del telefono).
+const EXPORT_NARROW = { width: 800, height: 800 };
 /// La testata della trasclusione viva nel riquadro col fuoco.
 const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-head";
 /// Il blocco sincronizzato nel riquadro col fuoco.
@@ -575,7 +576,7 @@ export const SCENE = touchLast(onPage("shell", [
   // va sotto le pagine; il telefono sta fra le scene di `mobile.html`.
   ...[
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
-    ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» a 700 px: il pannello sotto le pagine", EXPORT_700],
+    ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
   ].map(([id, title, viewport]) => ({
     id,
     title,

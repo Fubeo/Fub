@@ -84,8 +84,13 @@ function bookmarksOf(result: SlicedResult): number {
   return result.boxes.filter((box) => box.kind === "heading").length;
 }
 
-export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
+/// Registra le icone dello spazio (una volta: un tema può ridisegnarle).
+export function registerExportSpaceIcons(): void {
   for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+}
+
+export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
+  registerExportSpaceIcons();
   const lifetime = openLifetime();
   const container = options.container ?? document.getElementById("app") ?? document.body;
   const behind = options.behind ?? [document.getElementById("workspace"), document.getElementById("status-band")].filter((node): node is HTMLElement => node !== null);

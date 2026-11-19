@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 525 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 528 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -88,13 +88,13 @@ draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-ti
 draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end
 draw-tip-other-start draw-tip-square-end draw-tip-square-start draw-tip-triangle-end
 draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo
-draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out eye flag fmt-alarm
-fmt-bold fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code fmt-codeblock fmt-color
-fmt-columns fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed fmt-expand fmt-footnote
-fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon fmt-image fmt-indent
-fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers fmt-open fmt-outdent fmt-person
-fmt-plus fmt-property fmt-quick fmt-quote fmt-redo fmt-rule fmt-sort fmt-star fmt-strike
-fmt-subscript fmt-superscript fmt-table fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo
+draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out export-back export-open
+export-print eye flag fmt-alarm fmt-bold fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code
+fmt-codeblock fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed
+fmt-expand fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon
+fmt-image fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers fmt-open
+fmt-outdent fmt-person fmt-plus fmt-property fmt-quick fmt-quote fmt-redo fmt-rule fmt-sort fmt-star
+fmt-strike fmt-subscript fmt-superscript fmt-table fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo
 fmt-webpage fmt-wikilink focus footnote format-drawing format-odt format-photo format-sheet
 format-word gr-accounting gr-align-bottom gr-align-center gr-align-left gr-align-middle
 gr-align-right gr-align-top gr-arrow-down gr-arrow-left gr-arrow-right gr-arrow-up gr-border-all
