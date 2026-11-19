@@ -392,11 +392,13 @@ Il core ne fa un elenco solo, quello che scrive per una nota:
 - le facce di tutti i capitoli in una tavola, una volta sola ciascuna;
 - **un indice solo**: un segnalibro per nota, col suo titolo, e i titoli
   della nota un livello sotto (al più il 6); le pagine senza nota tengono i
-  loro segnalibri. Due note con lo stesso titolo prendono accanto il
-  percorso senza estensione: «Diario (2024/Diario)»;
+  loro segnalibri. Due note con lo stesso titolo (con la chiave dei nomi
+  del vault, `resolution_key`) prendono accanto il percorso senza
+  estensione: «Diario (2024/Diario)»;
 - un rimando a una nota del libro diventa un collegamento interno: alla
   prima pagina della nota, o al segnalibro della sezione con quel titolo
-  (senza badare alle maiuscole né agli spazi ai lati); una sezione che non
+  (con la regola di `[[Nota#Sezione]]`, `heading_matches`: lo slug o il
+  titolo com'è, senza badare alle maiuscole); una sezione che non
   c'è porta all'inizio della nota, con l'avviso `sezione_non_trovata`;
 - un rimando a una nota che il libro non ha porta all'`url`; senza, resta
   testo, con l'avviso `nota_non_esportata` (uno per nota).

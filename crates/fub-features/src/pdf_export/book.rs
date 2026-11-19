@@ -34,6 +34,8 @@ use fub_abi::command::{
     InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::error::PluginError;
+use fub_abi::model::heading_slug;
+use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
@@ -197,8 +199,12 @@ fn al_piu(testo: &str, max: usize) -> String {
     testo.chars().take(max).collect()
 }
 
-fn titolo_uguale(a: &str, b: &str) -> bool {
-    a.trim().to_lowercase() == b.trim().to_lowercase()
+/// Il `sezione` di un rimando nomina questo titolo? La stessa regola di un
+/// `[[Nota#Sezione]]` ([`heading_matches`](fub_abi::model::heading_matches)):
+/// lo slug, o il titolo com'è, con la chiave di risoluzione dei nomi.
+fn titolo_uguale(sezione: &str, titolo: &str) -> bool {
+    heading_slug(sezione) == heading_slug(titolo)
+        || resolution_key(sezione) == resolution_key(titolo)
 }
 
 fn misura_valida(valori: [f64; 4]) -> bool {
@@ -384,7 +390,7 @@ fn etichette(libro: &Libro) -> Vec<String> {
     let mut quanti: BTreeMap<String, usize> = BTreeMap::new();
     for (capitolo, titolo) in libro.capitoli.iter().zip(&base) {
         if capitolo.nota.is_some() {
-            *quanti.entry(titolo.trim().to_lowercase()).or_default() += 1;
+            *quanti.entry(resolution_key(titolo)).or_default() += 1;
         }
     }
     libro
@@ -392,9 +398,7 @@ fn etichette(libro: &Libro) -> Vec<String> {
         .iter()
         .zip(base)
         .map(|(capitolo, titolo)| {
-            let doppio = quanti
-                .get(&titolo.trim().to_lowercase())
-                .is_some_and(|n| *n > 1);
+            let doppio = quanti.get(&resolution_key(&titolo)).is_some_and(|n| *n > 1);
             let titolo = match (&capitolo.nota, doppio) {
                 (Some(nota), true) => {
                     format!("{titolo} ({})", senza_estensione(&chiave(nota)))

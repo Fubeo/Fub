@@ -4280,10 +4280,14 @@ export async function presentBookExport(paths: readonly string[], name: string):
       render: book.render,
       mount: book.mount,
       measure: book.measure,
-      follow: (changed) => documentSessions.subscribe((event) => {
-        if (!members.has(event.id)) return;
-        if (event.kind === "changed" || event.kind === "saved") changed(event.kind);
-      }),
+      follow: (changed) => {
+        // Lo spazio lo chiude col suo `Lifetime` alla chiusura.
+        const unsubscribe = documentSessions.subscribe((event) => {
+          if (!members.has(event.id)) return;
+          if (event.kind === "changed" || event.kind === "saved") changed(event.kind);
+        });
+        return unsubscribe;
+      },
       save: saveAll,
       onReady: () => {
         const skipped = book.skipped();
