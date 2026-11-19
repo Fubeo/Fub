@@ -2700,7 +2700,7 @@ Casi limite: un grafico che il file nomina ma non c'è; una tabella senza
 numeri (la voce non c'è); numeri all'italiana.
 Fatto quando: un test della parte grafico; un test del recinto generato.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-xlsx
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 21491084f
 
 ## T55 · La somma nella banda
 
@@ -3494,7 +3494,7 @@ Fatto quando: un e2e con tre note e i link interni che portano al posto
 giusto.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 21491084f
 
 ## T79 · I profili e l'esportazione come comando
 
