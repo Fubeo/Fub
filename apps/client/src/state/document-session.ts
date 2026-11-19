@@ -1372,6 +1372,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
   writing(id: string): Promise<void> | null {
     return this.#sessions.get(id)?.writing() ?? null;
   }
+
   /// Le bozze non arrivano più sul disco (l'ultima è fallita dopo un
   /// `draft-blind`, e nessuna è tornata a scriversi): chi si monta dopo
   /// l'evento lo rilegge qui.
