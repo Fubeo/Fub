@@ -237,6 +237,21 @@ describe("lo spazio «Esporta in PDF»", () => {
     vi.unstubAllGlobals();
   });
 
+  it("«Stampa…» senza nessuna stampante: lo dice, non lascia pagine dietro e lo spazio resta", async () => {
+    // Il sistema senza stampanti: la stampa del sistema rifiuta.
+    vi.stubGlobal("print", vi.fn(() => {
+      throw new Error("nessuna stampante");
+    }));
+    const { space } = open();
+    await settle();
+    await space.print();
+    expect(document.querySelector(".print-host")).toBeNull();
+    expect(document.body.textContent).toContain("nessuna stampante");
+    expect(space.element.isConnected).toBe(true);
+    space.close();
+    vi.unstubAllGlobals();
+  });
+
   it("una nota vuota fa una pagina, col solo titolo", async () => {
     const { space } = open({ render: vi.fn(async () => note(0)) });
     await settle();
