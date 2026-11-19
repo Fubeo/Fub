@@ -399,14 +399,12 @@ Il correttore ha un motore e un client per tutte le superfici di prosa, e un
 adattatore per formato.
 
 - Il motore è la feature `fub.proof`, una route `query_index` custom chiusa e
-  versionata (`languages`, `check`). Riceve segmenti di testo, una lingua, le
-  opzioni, le parole del dizionario personale e, facoltativi, gli indici dei
-  segmenti che sono voci d'elenco (`list_items`: la loro prima parola non
-  chiede la maiuscola); risponde con rilievi in byte UTF-8 dentro ogni
-  segmento. Il dizionario personale è l'impostazione del
-  vault `proof.words`, scritta soltanto dai comandi `proof.word.add` e
-  `proof.word.remove`. I dizionari Hunspell della macchina li legge soltanto
-  il collegamento dell'host (`HostWiring::MachineDictionaries`).
+  versionata (`languages`, `check`). Riceve segmenti, lingua, opzioni, parole
+  del dizionario personale e, facoltativo, `list_items` (le voci d'elenco: la
+  prima parola non chiede la maiuscola); risponde con rilievi in byte UTF-8
+  dentro ogni segmento. Il dizionario personale è `proof.words` del vault,
+  scritto soltanto da `proof.word.add` e `proof.word.remove`; i dizionari
+  Hunspell della macchina li legge soltanto `HostWiring::MachineDictionaries`.
 - Il client, `apps/client/src/editors/core/proof.ts`, non conosce CodeMirror
   né formati. Legge le impostazioni, spezza le richieste entro i limiti della
   route, converte gli offset in code unit UTF-16 e scarta le risposte tardive;
@@ -415,12 +413,11 @@ adattatore per formato.
 - L'adattatore del formato estrae la prosa e tiene la mappa a pezzi verso il
   buffer. Quello Markdown
   (`apps/client/src/editors/text/profiles/markdown/proof.ts`) mette `U+FFFC`
-  al posto di codice, link, tag e formule, segna come voce d'elenco il
-  blocco che sta in un `ListItem` (paragrafo o compito), e offre una sostituzione soltanto
-  per un rilievo che sta in un pezzo copiato dal buffer. I segni sono
-  diagnostiche di `@codemirror/lint`; una correzione è una transazione
-  `input.proof`, quindi entra nella cronologia della superficie e nella coda
-  della `DocumentSession`.
+  al posto di codice, link, tag e formule, segna voce d'elenco il blocco in un
+  `ListItem` (paragrafo o compito), e offre una sostituzione soltanto per un
+  rilievo in un pezzo copiato dal buffer. I segni sono diagnostiche di
+  `@codemirror/lint`; una correzione è una transazione `input.proof`, quindi
+  entra nella cronologia della superficie e nella coda della `DocumentSession`.
 
 L'adattatore della superficie ricca (`apps/client/src/editors/rich/proof.ts`)
 usa lo stesso client e la stessa mappa a pezzi: un segmento per paragrafo, con
