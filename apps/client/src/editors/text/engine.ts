@@ -272,6 +272,15 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
   ];
 }
 
+/// Quanti passi tiene la storia di una superficie di testo. Quella di
+/// CodeMirror ne tiene 100 (`minDepth`) se non le si dice altro, e oltre butta
+/// via i più vecchi senza dirlo: dopo molti tasti lenti l'annulla non tornava
+/// più al testo aperto, e il salvataggio portava sul disco lo stato a metà.
+/// Diecimila come la storia dei documenti Word (`RICH_HISTORY_DEPTH`): ore di
+/// scrittura un gesto alla volta; un passo tiene soltanto le modifiche
+/// inverse e le selezioni, non una copia del testo.
+export const TEXT_HISTORY_DEPTH = 10_000;
+
 type ApplyOrigin = "user" | "sync" | "undo" | "redo" | "replace";
 
 export class TextEngine {
@@ -284,7 +293,7 @@ export class TextEngine {
   private readonly layoutCompartment = new Compartment();
   private readonly phrasesCompartment = new Compartment();
   private readonly nativeHistoryExtension = nativeHistory({
-    minDepth: 100,
+    minDepth: TEXT_HISTORY_DEPTH,
     newGroupDelay: 500,
   });
   private readonly originAnnotation = Annotation.define<ApplyOrigin>();

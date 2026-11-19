@@ -155,7 +155,7 @@ import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts
 import { cardTarget } from "./sources";
 import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
-import { cardFormulaBar, type CardFormulaBar } from "../core/cards/formula-bar";
+import { cardFormulaBar, type CardFormulaBar } from "../core/formula-bar";
 import { noteHeadingOf } from "../core/cards/kinds/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
