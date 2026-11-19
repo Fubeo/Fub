@@ -2011,8 +2011,7 @@ impl Instance {
                 None => loses(why),
             });
         }
-        let bytes =
-            commands::write(self.shown(), commands::kind_of(&self.bytes)).map_err(xlsx_error)?;
+        let bytes = commands::write(self.shown(), &self.bytes).map_err(xlsx_error)?;
         commands::verify(&bytes).map_err(loses)?;
         Ok(bytes)
     }
