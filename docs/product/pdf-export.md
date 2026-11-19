@@ -72,6 +72,45 @@ e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts)
   dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
   carta scura, col codice e il testo colorato schiariti.
 
+## Caratteri e Pagina
+
+Le due sezioni vivono in
+[`export/sections/fonts.ts`](../../apps/client/src/export/sections/fonts.ts)
+e [`export/sections/page.ts`](../../apps/client/src/export/sections/page.ts);
+le guide dei margini in [`export/guides.ts`](../../apps/client/src/export/guides.ts).
+
+- **Il testo e i titoli** si scelgono fra i caratteri che Fub porta con sé
+  (Newsreader, Literata, Hanken Grotesk, Inter; IBM Plex Mono solo per i
+  titoli), ognuno scritto nel suo carattere, e fra quelli del vault: ogni
+  file `.ttf`, `.otf`, `.woff` o `.woff2` del vault, raccolti in famiglie
+  (il comando `pdf.vault_fonts`, vedi il
+  [formato](../reference/pdf-export-format.md#i-caratteri)). Il PDF li
+  incorpora tutti, e le pagine li mostrano come usciranno.
+- Un carattere del vault che la licenza **non lascia incorporare** si vede
+  barrato e non si sceglie: l'avviso dice perché, e il testo resta nel
+  carattere del tema. Un profilo che lo nominava, o che nomina un carattere
+  sparito dal vault, si legge nel carattere del tema e la sezione lo dice.
+  Un carattere **senza corsivo** lo dice: il corsivo esce diritto, sulle
+  pagine e nel PDF, mai un obliquo inventato.
+- **Corpo** (da 8 a 14 pt), **interlinea**, **scala dei titoli**: cursori che
+  rifanno le pagine mentre si trascinano. Poi i paragrafi staccati o col
+  rientro, i titoli a sinistra o al centro, il testo giustificato, la
+  **sillabazione** (nel testo, non nel codice né nelle tabelle) e i titoli
+  numerati. Ogni scelta resta cambiando tema.
+- **La pagina**: A4, A5, A3, Lettera o una misura propria (ogni lato da 50 a
+  1189 mm: un numero fuori resta scritto in rosso, la frase lo dice e la
+  pagina non cambia), verticale o orizzontale, una o due colonne.
+- **I margini**: i tre pronti (Stretti, Normali, Larghi), i quattro numeri in
+  millimetri, o le **guide** sul bordo del testo, che si vedono con la
+  sezione Pagina aperta e si trascinano: la misura appare accanto al
+  puntatore, le pagine seguono dal vivo, Esc rimette i margini di prima. Un
+  margine va da 5 a 70 mm e lascia al testo almeno 30 mm: uno più largo
+  diventa il più largo possibile e la frase lo dice.
+- **Margini a specchio** per il fronte e retro: sulle pagine pari interno ed
+  esterno si scambiano (e la guida di sinistra cambia il margine destro).
+  **La filigrana**, al più 18 caratteri, attraversa ogni pagina in diagonale,
+  appena accennata.
+
 ## Comportamenti
 
 - Mentre si trascina un controllo il profilo cambia «dal vivo»: le pagine si

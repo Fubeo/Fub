@@ -119,7 +119,9 @@ persona ha cambiato:
   `diagramma-linee`, che vincono sullo stile del diagramma;
 - `testo` ha un campo per ogni scelta che il tema decide e la persona ha
   cambiato: `carattere_testo` e `carattere_titoli` (l'id di un carattere di
-  Fub o il percorso di uno del vault), `corpo` (punti), `interlinea` (multipli
+  Fub, `newsreader`, `literata`, `hanken`, `inter` o, solo per i titoli,
+  `plex`, o il percorso di uno del vault; `georgia` e `palatino`, dei
+  profili di prima, si leggono `literata`), `corpo` (punti), `interlinea` (multipli
   del corpo), `paragrafi` (`spazio`, `rientro`), `giustificato`,
   `titoli_numerati`, `scala_titoli`, `allineamento_titoli` (`sinistra`,
   `centro`), `colonne`. Un campo che manca lo decide il tema.
@@ -296,6 +298,37 @@ ogni `nodo` si possono omettere. La struttura e i nodi servono al
 
 Gli avvisi non fermano la scrittura: tornano con l'esito, ognuno col suo nome
 (`{"avviso": "immagine_mancante", "file": "Foto/mare.jpg"}`).
+
+### I caratteri
+
+Lo scrittore legge ogni faccia dal suo `file`: `/fonts/<nome>` è un carattere
+che Fub porta con sé (i quattordici dell'app, gli stessi byte), ogni altro
+percorso è un file del vault. Il comando `pdf.vault_fonts` del bundle
+`fub.draw`, in sola lettura, elenca i caratteri del vault per la sezione
+Caratteri: torna l'effetto `fub.pdf.vault_fonts` con
+
+```json
+{
+  "caratteri": [
+    {
+      "famiglia": "Aperta",
+      "file": "Caratteri/Aperta.ttf",
+      "facce": [{ "file": "Caratteri/Aperta.ttf", "corsivo": false, "pesi": [100, 900], "incorporabile": true }],
+      "corsivo": false,
+      "incorporabile": true
+    }
+  ],
+  "illeggibili": ["Caratteri/Rotto.otf"],
+  "tralasciati": 0
+}
+```
+
+Le famiglie sono quelle scritte nei file, senza badare alle maiuscole, in
+ordine di percorso; `file` è la faccia diritta più vicina al peso 400 ed è
+l'id che il profilo ricorda. Basta una faccia che la licenza
+(`fsType`) non lascia incorporare perché la famiglia sia `incorporabile: false`. Il comando
+legge al più 200 file e 256 MiB; ciò che resta fuori è contato in
+`tralasciati`.
 
 ### I limiti
 
