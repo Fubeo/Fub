@@ -125,7 +125,7 @@ describe("i segni della griglia sulla carta", () => {
     expect(marks, "la regola dei segni sulla carta").toBeDefined();
     expect(marks!.body).toMatch(/--accent:\s*var\(--paper-link, #[0-9a-f]{6}\)/);
     expect(marks!.body).toMatch(/--accent-veil:\s*color-mix\(in srgb, var\(--paper-link, #[0-9a-f]{6}\) 12%, transparent\)/);
-    for (const hook of ["grid-cell", "grid-selection", "grid-fill-handle", "grid-cell-editor", "grid-object", "grid-comment-mark"]) {
+    for (const hook of ["grid-cell", "grid-selection", "grid-cell-editor", "grid-object", "grid-comment-mark"]) {
       expect(marks!.selectors[0], hook).toMatch(new RegExp(`\\.${hook}(?![\\w-])`));
     }
   });
@@ -155,7 +155,8 @@ describe("i segni della griglia sulla carta", () => {
     const paperFg = resolve(declared(structure, ".look-file .grid-viewport", "--doc-fg")!, dark);
     expect(contrast(paperFg, paperBg)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(paperFg, resolve("var(--bg-elev)", dark))).toBeLessThan(1.5);
-    expect(declared(editors, ".look-file .grid-fill-handle", "border-color")).toBe("var(--doc-bg)");
+    // Il quadratino del riempimento (motore dei segni) ha il bordo della carta.
+    expect(declared(editors, ".grid-mark-handle", "box-shadow")).toBe("0 0 0 1px var(--doc-bg, #ffffff)");
   });
 });
 

@@ -420,6 +420,16 @@ o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
 Limiti, coordinate e invalidazione sono normati in [ABI e
 WIT](../reference/abi-and-wit.md).
 
+Due preferenze dell'editor dicono come si muovono i
+segni della griglia, e una scelta vale dal gesto dopo, in tutte le griglie
+aperte, senza riaprire il foglio. **Segno della copia nei fogli di calcolo**
+(`editor.grid.copy-mark`): «Tratteggio e battito» (di norma), «Solo il
+tratteggio» o «Solo il battito»; il taglio resta un tratteggio fitto.
+**Velocità della selezione nei fogli di calcolo**
+(`editor.grid.selection-speed`): «Svelta», «Come di norma» (di norma),
+«Morbida» o «A scatti», coi tasti, coi comandi e col puntatore. Col moto
+ridotto la selezione si ferma subito con ogni scelta.
+
 ## Dove si trova
 
 - `apps/client/src/editors/core/`

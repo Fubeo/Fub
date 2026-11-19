@@ -225,6 +225,20 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Mostra i file XMP nell'albero": "Show XMP files in the tree",
   "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.":
     "Off, XMP files disappear from the tree: search finds them and the photo shows their data.",
+  // Le due preferenze della griglia (`fub-host/src/settings.rs`, griglia T9).
+  "Segno della copia nei fogli di calcolo": "Copy mark in spreadsheets",
+  "Che cosa resta sulle celle che copi: un tratteggio largo finché non incolli, un battito che si accende e svanisce, o tutti e due. Il taglio resta sempre un tratteggio fitto.":
+    "What stays on the cells you copy: a wide dashed outline until you paste, a pulse that lights up and fades, or both. Cut always keeps a dense dashed outline.",
+  "Tratteggio e battito": "Dashes and pulse",
+  "Solo il tratteggio": "Dashes only",
+  "Solo il battito": "Pulse only",
+  "Velocità della selezione nei fogli di calcolo": "Selection speed in spreadsheets",
+  "Come la selezione va alla cella nuova, coi tasti e col puntatore: scivola più svelta, come di norma o più morbida, oppure salta di cella in cella. Col movimento ridotto si ferma subito, qualunque sia la scelta.":
+    "How the selection moves to the new cell, with the keys and the pointer: it glides faster, as usual or softer, or it jumps from cell to cell. With reduced motion it stops at once, whatever you choose.",
+  Svelta: "Quick",
+  "Come di norma": "As usual",
+  Morbida: "Soft",
+  "A scatti": "In steps",
 };
 
 /// La scenografia nella lingua in cui parla adesso la shell.

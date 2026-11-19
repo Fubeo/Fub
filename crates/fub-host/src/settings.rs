@@ -246,6 +246,20 @@ pub const EDITOR_HINTS: &str = "editor.hints";
 /// lingua dichiarata nella nota, altrimenti quella dell'app), mai in codice,
 /// formule, link, frontmatter, nell'incolla e nella composizione (IME).
 pub const EDITOR_TYPOGRAPHY: &str = "editor.typography";
+/// Il segno che resta su ciò che si è copiato in un foglio di calcolo:
+/// `dash-pulse` (di serie) un tratteggio largo e un battito, `dash` soltanto
+/// il tratteggio, `pulse` soltanto il battito. Il taglio resta un tratteggio
+/// fitto e le formiche del riempimento non cambiano. La legge la griglia
+/// (`apps/client/src/editors/grid/grid-motion.ts`); un valore che non
+/// conosce vale `dash-pulse`.
+pub const EDITOR_GRID_COPY_MARK: &str = "editor.grid.copy-mark";
+/// Come la selezione di un foglio di calcolo va alla cella nuova, coi tasti,
+/// coi comandi e col puntatore: `quick`, `normal` (di serie) e `soft` la
+/// fanno scivolare con una molla più svelta, quella di sempre o una più
+/// morbida; `none` la sposta a scatti di cella. Col movimento ridotto di
+/// `appearance.motion` si ferma subito con ogni scelta. Un valore che la
+/// griglia non conosce vale `normal`.
+pub const EDITOR_GRID_SELECTION_SPEED: &str = "editor.grid.selection-speed";
 /// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
 /// `source` o `reading`, gli id delle modalità della superficie testuale.
 /// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
@@ -1085,6 +1099,29 @@ fn editor_settings() -> Vec<SettingSpec> {
         vec![
             UiOption::new("apri", Text::key(C_EDITOR_LINK_CLICK_OPEN)),
             UiOption::new("sbircia", Text::key(C_EDITOR_LINK_CLICK_PEEK)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_GRID_COPY_MARK,
+        C_EDITOR_GRID_COPY_MARK,
+        C_EDITOR_GRID_COPY_MARK_DESC,
+        "dash-pulse",
+        vec![
+            UiOption::new("dash-pulse", Text::key(C_EDITOR_GRID_COPY_MARK_BOTH)),
+            UiOption::new("dash", Text::key(C_EDITOR_GRID_COPY_MARK_DASH)),
+            UiOption::new("pulse", Text::key(C_EDITOR_GRID_COPY_MARK_PULSE)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_GRID_SELECTION_SPEED,
+        C_EDITOR_GRID_SELECTION_SPEED,
+        C_EDITOR_GRID_SELECTION_SPEED_DESC,
+        "normal",
+        vec![
+            UiOption::new("quick", Text::key(C_EDITOR_GRID_SELECTION_SPEED_QUICK)),
+            UiOption::new("normal", Text::key(C_EDITOR_GRID_SELECTION_SPEED_NORMAL)),
+            UiOption::new("soft", Text::key(C_EDITOR_GRID_SELECTION_SPEED_SOFT)),
+            UiOption::new("none", Text::key(C_EDITOR_GRID_SELECTION_SPEED_NONE)),
         ],
     ));
     settings.push(
@@ -1978,6 +2015,17 @@ const C_EDITOR_LINK_CLICK: &str = "core.editor.link_click";
 const C_EDITOR_LINK_CLICK_DESC: &str = "core.editor.link_click.desc";
 const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
 const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
+const C_EDITOR_GRID_COPY_MARK: &str = "core.editor.grid.copy_mark";
+const C_EDITOR_GRID_COPY_MARK_DESC: &str = "core.editor.grid.copy_mark.desc";
+const C_EDITOR_GRID_COPY_MARK_BOTH: &str = "core.editor.grid.copy_mark.dash_pulse";
+const C_EDITOR_GRID_COPY_MARK_DASH: &str = "core.editor.grid.copy_mark.dash";
+const C_EDITOR_GRID_COPY_MARK_PULSE: &str = "core.editor.grid.copy_mark.pulse";
+const C_EDITOR_GRID_SELECTION_SPEED: &str = "core.editor.grid.selection_speed";
+const C_EDITOR_GRID_SELECTION_SPEED_DESC: &str = "core.editor.grid.selection_speed.desc";
+const C_EDITOR_GRID_SELECTION_SPEED_QUICK: &str = "core.editor.grid.selection_speed.quick";
+const C_EDITOR_GRID_SELECTION_SPEED_NORMAL: &str = "core.editor.grid.selection_speed.normal";
+const C_EDITOR_GRID_SELECTION_SPEED_SOFT: &str = "core.editor.grid.selection_speed.soft";
+const C_EDITOR_GRID_SELECTION_SPEED_NONE: &str = "core.editor.grid.selection_speed.none";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_HINTS: &str = "core.editor.hints";
@@ -2697,6 +2745,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_DESC, "Che cosa fa il clic che apre un link: portare la nota nel riquadro, o aprirla nella sbirciata, sopra la destra del foglio, dove si scrive senza lasciare la nota di prima. Alt col clic, o Alt Invio, sbircia sempre.")
         .with(C_EDITOR_LINK_CLICK_OPEN, "Apre la nota")
         .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
+        .with(C_EDITOR_GRID_COPY_MARK, "Segno della copia nei fogli di calcolo")
+        .with(C_EDITOR_GRID_COPY_MARK_DESC, "Che cosa resta sulle celle che copi: un tratteggio largo finché non incolli, un battito che si accende e svanisce, o tutti e due. Il taglio resta sempre un tratteggio fitto.")
+        .with(C_EDITOR_GRID_COPY_MARK_BOTH, "Tratteggio e battito")
+        .with(C_EDITOR_GRID_COPY_MARK_DASH, "Solo il tratteggio")
+        .with(C_EDITOR_GRID_COPY_MARK_PULSE, "Solo il battito")
+        .with(C_EDITOR_GRID_SELECTION_SPEED, "Velocità della selezione nei fogli di calcolo")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_DESC, "Come la selezione va alla cella nuova, coi tasti e col puntatore: scivola più svelta, come di norma o più morbida, oppure salta di cella in cella. Col movimento ridotto si ferma subito, qualunque sia la scelta.")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_QUICK, "Svelta")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NORMAL, "Come di norma")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_SOFT, "Morbida")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NONE, "A scatti")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
@@ -3435,6 +3494,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_LINK_CLICK_DESC, "What the click that opens a link does: bring the note into the pane, or open it in the peek, over the right of the sheet, where you write without leaving the note you were in. Alt with the click, or Alt Enter, always peeks.")
         .with(C_EDITOR_LINK_CLICK_OPEN, "Opens the note")
         .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
+        .with(C_EDITOR_GRID_COPY_MARK, "Copy mark in spreadsheets")
+        .with(C_EDITOR_GRID_COPY_MARK_DESC, "What stays on the cells you copy: a wide dashed outline until you paste, a pulse that lights up and fades, or both. Cut always keeps a dense dashed outline.")
+        .with(C_EDITOR_GRID_COPY_MARK_BOTH, "Dashes and pulse")
+        .with(C_EDITOR_GRID_COPY_MARK_DASH, "Dashes only")
+        .with(C_EDITOR_GRID_COPY_MARK_PULSE, "Pulse only")
+        .with(C_EDITOR_GRID_SELECTION_SPEED, "Selection speed in spreadsheets")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_DESC, "How the selection moves to the new cell, with the keys and the pointer: it glides faster, as usual or softer, or it jumps from cell to cell. With reduced motion it stops at once, whatever you choose.")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_QUICK, "Quick")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NORMAL, "As usual")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_SOFT, "Soft")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NONE, "In steps")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_HINTS, "Hints row")
