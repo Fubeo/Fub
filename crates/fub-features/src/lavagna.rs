@@ -38,6 +38,7 @@ mod apply;
 mod check;
 mod create;
 mod guide;
+mod note;
 #[cfg(feature = "draw")]
 mod prefill;
 mod preview;
@@ -82,6 +83,14 @@ pub const CANVAS_GUIDE: &str = "canvas.guide";
 /// Disegna una lavagna, com'è o com'era dopo una lista di operazioni, senza
 /// scriverla: un PNG con `draw`, altrimenti l'SVG come testo.
 pub const CANVAS_PREVIEW: &str = "canvas.preview";
+
+/// «Porta su una lavagna» (E25, T48): i blocchi scelti di una nota diventano
+/// schede di una lavagna, nuova o indicata. Le regole sono in `note`.
+pub const CANVAS_FROM_NOTE: &str = "canvas.from_note";
+
+/// «Porta in una nota» (E25, T48): le schede di una lavagna diventano blocchi
+/// di una nota, nuova o indicata, coi fili come link. Le regole sono in `note`.
+pub const CANVAS_TO_NOTE: &str = "canvas.to_note";
 
 /// Il namespace dell'effetto che dice che cosa ha fatto `canvas.apply`.
 pub const LAVAGNA_NS: &str = LAVAGNA_ID;
@@ -502,6 +511,31 @@ impl CommandProvider for LavagnaCommands {
                 .with_param(parameter(CANVAS_PREVIEW, SEED, ParamKind::Text))
                 .with_param(parameter(CANVAS_PREVIEW, SIZE, ParamKind::Number))
                 .with_scope(CommandScope::read_only()),
+            // Due file con un annulla solo (T32a): la nota e la lavagna.
+            CommandSpec::new(
+                CANVAS_FROM_NOTE,
+                Text::key(format!("{CANVAS_FROM_NOTE}.title")),
+            )
+            .describing(Text::key(format!("{CANVAS_FROM_NOTE}.desc")))
+            .with_param(parameter(CANVAS_FROM_NOTE, DOC, ParamKind::Document))
+            .with_param(parameter(CANVAS_FROM_NOTE, note::AT, ParamKind::Numbers))
+            .with_param(parameter(CANVAS_FROM_NOTE, note::TEXT, ParamKind::Text))
+            .with_param(parameter(CANVAS_FROM_NOTE, note::TO, ParamKind::Document))
+            .with_param(parameter(CANVAS_FROM_NOTE, NAME, ParamKind::Text))
+            .with_param(parameter(CANVAS_FROM_NOTE, FOLDER, ParamKind::Text))
+            .with_param(parameter(CANVAS_FROM_NOTE, note::KEEP, ParamKind::Bool))
+            .with_scope(CommandScope::writing(CommandReach::Documents)),
+            CommandSpec::new(CANVAS_TO_NOTE, Text::key(format!("{CANVAS_TO_NOTE}.title")))
+                .describing(Text::key(format!("{CANVAS_TO_NOTE}.desc")))
+                .with_param(parameter(CANVAS_TO_NOTE, DOC, ParamKind::Document))
+                .with_param(parameter(CANVAS_TO_NOTE, IDS, ParamKind::Text))
+                .with_param(parameter(CANVAS_TO_NOTE, note::TO, ParamKind::Document))
+                .with_param(parameter(CANVAS_TO_NOTE, note::AT, ParamKind::Number))
+                .with_param(parameter(CANVAS_TO_NOTE, NAME, ParamKind::Text))
+                .with_param(parameter(CANVAS_TO_NOTE, FOLDER, ParamKind::Text))
+                .with_param(parameter(CANVAS_TO_NOTE, note::KEEP, ParamKind::Bool))
+                .with_param(parameter(CANVAS_TO_NOTE, BASE, ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
         ]
     }
 
@@ -519,6 +553,8 @@ impl CommandProvider for LavagnaCommands {
             CANVAS_CHECK => check::canvas_check(Args::new(&args), host),
             CANVAS_GUIDE => guide::canvas_guide(Args::new(&args)),
             CANVAS_PREVIEW => preview::canvas_preview(Args::new(&args), host),
+            CANVAS_FROM_NOTE => note::canvas_from_note(Args::new(&args), mode, host),
+            CANVAS_TO_NOTE => note::canvas_to_note(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -1298,7 +1334,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
 pub fn catalog() -> Vec<StringCatalog> {
     let mut it = StringCatalog::new("it");
     let mut en = StringCatalog::new("en");
-    for (key, italiano, english) in STRINGS {
+    for (key, italiano, english) in STRINGS.iter().chain(note::STRINGS) {
         it = it.with(*key, *italiano);
         en = en.with(*key, *english);
     }
@@ -1415,7 +1451,7 @@ mod tests {
             S_DROP_FOLDER_PATH_DESC,
         ];
         for catalog in &catalogs {
-            for key in keys {
+            for key in keys.iter().chain(note::KEYS).copied() {
                 assert!(
                     catalog.entries.contains_key(key),
                     "«{key}» manca in «{}»",
@@ -1428,7 +1464,7 @@ mod tests {
         // campo «Documento»).
         assert_eq!(
             catalogs[0].entries.len(),
-            STRINGS.len() + crate::formats::SPOKEN.len()
+            STRINGS.len() + note::STRINGS.len() + crate::formats::SPOKEN.len()
         );
     }
 
