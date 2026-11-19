@@ -1633,6 +1633,15 @@ export class CanvasEngine {
   #undo: CanvasStep[] = [];
   #redo: CanvasStep[] = [];
   /**
+   * I passi dei gesti d'inchiostro fatti col fuoco dentro una scheda che
+   * scrive (un campo, l'editor di una nota), dall'ultimo tasto premuto: i
+   * tasti sono del campo, ma Ctrl+Z subito dopo un tratto annulla il tratto,
+   * e Ctrl+Maiusc+Z (Ctrl+Y) lo rifà (`#inkUndoKey`). Un altro tasto li
+   * lascia: da lì Ctrl+Z torna al campo.
+   */
+  #inkOverField: CanvasStep[] = [];
+  #inkOverFieldRedo: CanvasStep[] = [];
+  /**
    * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
    * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
    * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
@@ -2521,6 +2530,9 @@ export class CanvasEngine {
       this.#keydown(event);
       this.#statusSettle();
     }, { signal });
+    // Prima delle schede che scrivono: Ctrl+Z subito dopo un tratto fatto
+    // sopra un campo aperto annulla il tratto, non il testo.
+    this.#viewport.addEventListener("keydown", (event) => this.#inkUndoKey(event), { signal, capture: true });
     // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
     // mouse torna a selezionare.
     this.#life.listen(window, "keyup", (event) => {
@@ -2723,6 +2735,8 @@ export class CanvasEngine {
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    this.#inkOverField = [];
+    this.#inkOverFieldRedo = [];
     this.#statusSettle();
     this.#syncEmpty();
     if (!document) {
@@ -4009,7 +4023,82 @@ export class CanvasEngine {
     this.#inkChain = null;
     this.#paintInk();
     if (this.#intakeError) this.#showNotice("");
+    this.#inkGestureDone();
     return true;
+  }
+
+  /**
+   * Un gesto d'inchiostro è appena diventato l'ultimo passo d'annulla. La
+   * penna non prende il fuoco (un tratto non chiude il campo che si scrive):
+   * perché Ctrl+Z, subito dopo, tolga il tratto, il fuoco dentro una scheda
+   * che scrive ricorda il passo (`#inkUndoKey`); ogni altro fuoco (un
+   * pulsante della colonna o della riga, un'altra parte della finestra,
+   * nessuno) passa alla vista, come dopo un clic sulla lavagna.
+   */
+  #inkGestureDone(): void {
+    const step = this.#undo[this.#undo.length - 1];
+    if (!step || this.#destroyed) return;
+    const active = document.activeElement;
+    const inCard = active instanceof Element && active !== this.#viewport && this.#viewport.contains(active)
+      ? active.closest(".canvas-node") : null;
+    if (inCard && inCard !== active) {
+      this.#inkOverField.push(step);
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    this.#inkOverField = [];
+    this.#inkOverFieldRedo = [];
+    // Una scheda o la vista col fuoco: i tasti arrivano già alla tela.
+    if (active instanceof Element && this.#viewport.contains(active)) return;
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * Ctrl+Z (Ctrl+Maiusc+Z, Ctrl+Y) col fuoco in una scheda che scrive,
+   * subito dopo uno o più gesti d'inchiostro (`#inkOverField`): annulla (o
+   * rifà) il gesto, e il campo resta aperto col suo testo. Ogni altro tasto
+   * li lascia, e da lì i tasti sono del campo.
+   */
+  #inkUndoKey(event: KeyboardEvent): void {
+    if (event.key === "Control" || event.key === "Meta" || event.key === "Shift" || event.key === "Alt") return;
+    const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
+    const letter = event.key.toLowerCase();
+    const chord = mod && letter === "z" ? (event.shiftKey ? "redo" : "undo") : mod && letter === "y" && !event.shiftKey ? "redo" : null;
+    if (chord === null || event.isComposing) {
+      this.#inkOverField = [];
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    if (event.defaultPrevented || this.#penDown || this.#pending !== null || this.#readOnly) return;
+    const from = chord === "undo" ? this.#inkOverField : this.#inkOverFieldRedo;
+    const history = chord === "undo" ? this.#undo : this.#redo;
+    const step = from[from.length - 1];
+    if (!step) return;
+    if (history[history.length - 1] !== step) {
+      // La storia è cambiata sotto (un annulla dal menu, una modifica): i
+      // passi ricordati non sono più gli ultimi.
+      this.#inkOverField = [];
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    from.pop();
+    history.pop();
+    const done = chord === "undo"
+      ? this.#replay(step, "undo", (again) => {
+        this.#redo.push(again);
+        this.#inkOverFieldRedo.push(again);
+      })
+      : this.#replay(step, "redo", (again) => {
+        this.#pushUndo(again, false);
+        this.#inkOverField.push(again);
+      });
+    if (done !== true) {
+      history.push(step);
+      from.push(step);
+    }
+    this.#statusSettle();
   }
 
   /**
@@ -4311,7 +4400,10 @@ export class CanvasEngine {
     if (dry) this.#paintStroke(holder, dry);
     if (this.#intakeError) this.#showNotice("");
     // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
-    if (!stroke.split) this.#sayInkHolder(holder);
+    if (!stroke.split) {
+      this.#sayInkHolder(holder);
+      this.#inkGestureDone();
+    }
     if (shape !== null) this.#writeShape(stroke, shape, record, ref, holder, page ?? cell);
   }
 
