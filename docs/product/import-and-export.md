@@ -195,8 +195,9 @@ al centro attività, da cui lo si salva dove si vuole.
   `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
   passo e una nota in fondo alla pagina.
 - **PDF** (`importers.pdf.single`): il testo della nota in un PDF statico, col
-  nome della nota. Per diagrammi, formule e immagini c'è «Stampa», che il
-  sistema salva anche in PDF.
+  nome della nota. Per diagrammi, formule e immagini c'è
+  [«Esporta in PDF…»](pdf-export.md), che mostra le pagine vere e le manda
+  alla stampa del sistema.
 
 Ciò che non entra lo dice il rapporto, con la nota a cui si riferisce: una
 parte che solo Fub disegna (un diagramma, una query, una vista), che

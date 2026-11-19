@@ -57,6 +57,7 @@ flowchart LR
 | [Ricerca, link e grafo](product/search-links-and-graph.md), [spazio comandi (Ctrl O)](product/command-space.md) | trovare, seguire e comandare dalla tastiera |
 | [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
+| [Esporta in PDF](product/pdf-export.md) | le pagine vere di una nota, le sezioni del profilo, la stampa |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
 | [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
 | [Criteri di accettazione](product/acceptance.md) | quando una modifica è accettabile |
