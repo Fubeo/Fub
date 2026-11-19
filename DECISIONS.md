@@ -1386,6 +1386,102 @@ La più recente in cima: data · piano · decisione · perché.
   (un'eccezione sarebbe solo CSS dentro `.grid-ribbon`). Le baseline delle 9
   scene nuove arrivano dal runner con T17; fino ad allora `bench/scene.test`
   «ci sono tutte» resta rosso.
+
+- 2026-11-05 · griglia-celle · D-1…D-6 e D-8: l'utente «seguo i tuoi
+  consigli». Valgono B1–B4, B6, B7 e «coperte» come sono scritte; in più,
+  come l'orchestratore aveva consigliato, il segno della copia (D-1) e la
+  velocità della selezione (D-5) diventano due preferenze in Impostazioni
+  (`editor.grid.copy-mark`, `editor.grid.selection-speed`), con di norma la
+  scelta del prototipo: il task nuovo T9, fra T6 e T8. È l'unico lavoro
+  nell'host del piano (due voci in `settings.rs`, nessuna porta) · perché:
+  l'utente vuole il prodotto più personalizzabile possibile e il consiglio
+  dato a D-1 e D-5 era «di norma come il prototipo, più una scelta in
+  Impostazioni»; la lettura che le preferenze facciano parte del consiglio
+  seguito è dell'orchestratore, ed è scritta nel rapporto all'utente.
+- 2026-11-04 · griglia-celle · D-7, la selezione col puntatore: «scivola»,
+  la risposta dell'utente («in celle dei fogli voglio selezione del
+  puntatore -> scivola sempre»). Il puntatore usa le regole dei tasti; B5,
+  T3 (regole del passo, prove, «Fatto quando» di g3-mouse-fitto) e la scelta
+  del prototipo cambiano di conseguenza · perché: l'utente preferisce il
+  moto di prima anche se un lato che cala mostra per un attimo qualche cella
+  non scelta.
+- 2026-11-04 · Celle dei fogli · terzo giro sul movimento, D-7 e D-8
+  (l'utente: «un po' glitchata… la velocizzerei leggermente», «per una
+  frazione di secondo… una porzione maggiore di superficie», «glitcha e esce
+  dal normale funzionamento e seleziona male il tutto»). Le cause, provate
+  sul prototipo di prima con una sonda a 1000 Hz (`probe5.mjs` e
+  `analyze5.mjs` in `/home/fubeo/.cache/fub-k1/tmp/griglia-moto3/`: 9 stati,
+  1280 e 390 px, CPU 1× e 4×, più `pointermove` per fotogramma) e coi
+  fotogrammi dipinti: (1) le corse WAAPI annullate a ogni cella restavano
+  dipinte dal compositore, poi la selezione saltava di circa 200 px; (2)
+  anche i lati che calano scivolavano, quindi la selezione mostrava celle
+  non scelte: 1777 fotogrammi a 1280 px, fino a 509 px, e 98 dei 240
+  dipinti; (3) un bersaglio nuovo ereditava la velocità: 39 fotogrammi oltre
+  il bersaglio e 276 all'indietro; (4) il moto dipendeva da quanti eventi
+  arrivano in un fotogramma: con lo stesso bersaglio finale la velocità di
+  partenza andava da 0 a 7097 px/s; (5) le maniglie del tocco nella colonna
+  bloccata stavano 3,5 px fuori posto (origine CSS al centro, corsa
+  calcolata dall'angolo); (6) la cella sotto il puntatore non si rileggeva
+  allo scorrimento né al rilascio, come nel prodotto; (7) il quadratino e le
+  maniglie del tocco si tagliavano per zona come i lati, già nel prototipo
+  che l'utente ha provato: sul filo del blocco un tondo diventava due ovali
+  con una cucitura bianca, quattro pezzi su B2, dopo uno scorrimento di lato
+  ne restava uno spicchio sul filo, e del quadratino di A5 restavano 4 px;
+  la sonda li vede divisi o tagliati in 464–1586 fotogrammi per giro
+  (`maniglia/confronto-v5.png`). Scelto: un motore solo, con il bersaglio,
+  la posa mostrata e un passo per fotogramma (un evento cambia solo il
+  bersaglio); nessuna velocità all'indietro, un tetto alla radice lenta
+  della molla, niente oltre il bersaglio; col puntatore il modo «segue» (il
+  lato che cala salta, quello che cresce scivola); la cella riletta allo
+  scorrimento e al rilascio; i segni d'angolo un pezzo solo, intero, nel
+  livello della zona del loro angolo, coperto dalla fascia ferma come le
+  celle, e presi dove si vede l'angolo (B7). Dopo, la stessa sonda: zero
+  difetti in 44 900 fotogrammi nei quattro giri, segni d'angolo compresi, e
+  in 334 dipinti; `sim.mjs` zero su 600 gesti simulati con due semi (272 954
+  e 295 127 fotogrammi); il gestore del puntatore costa come prima (al 99°
+  percentile 1,2 ms per fotogramma). D-7 resta all'utente: «segue» è
+  consigliato perché tiene il moto un po' più svelto che l'utente vuole e
+  non mostra mai una cella non scelta, ma mentre cresce ne mostra qualcuna
+  in meno (fino a 341 px a 1280); «salta» è la lettura stretta di «mai
+  un'area diversa» (zero fotogrammi diversi); «scivola» è il moto di prima
+  senza i salti, con la porzione maggiore (fino a 507 px). D-8 resta
+  all'utente: «coperte» è consigliato perché la maniglia la sposta lo
+  scorrimento del browser insieme alle celle, senza ritardo, ed è la regola
+  di tutti gli altri segni; «sopra» tiene il tondo intero sul filo (con la
+  sua regola la sonda vede 122–131 pezzi saliti sopra la fascia per giro, a
+  1280 e 390 px e con la CPU 4×, tutti interi e al posto giusto, e zero
+  difetti), ma lo sposta lo script un fotogramma dietro le celle e quando
+  l'angolo passa sotto la fascia torna giù di colpo.
+- Celle dei fogli, secondo giro sul movimento (l'utente: «per una frazione
+  di secondo viene selezionata una porzione maggiore»). Causa: quando la
+  selezione passava la riga o la colonna bloccata, i lati e le fasce della
+  zona nuova comparivano già alla misura finale (in dissolvenza) mentre il
+  resto scivolava ancora, e uscendo sparivano di colpo. Scelto: ogni pezzo
+  che compare o se ne va durante una corsa corre con gli altri dalla stessa
+  geometria, uscendo dal filo del blocco o rientrandoci. Sonda su 21 gesti
+  (clic, Maiusc, frecce svelte, trascinamenti, pagine, Home, oltre il
+  blocco) a 1280 e 390 px: 0 fotogrammi con un pezzo fuori dal bordo; stato
+  finale uguale con e senza movimento.
+- Celle dei fogli, il movimento dei segni (richiesta dell'utente: «un po'
+  glitchata», «la velocizzerei leggermente»). Nel prototipo il velo usciva
+  dal bordo durante la corsa, un tasto tenuto giù ripartiva ogni volta da
+  fermo, l'anello e il velo sparivano di colpo e la molla snap rimbalzava di
+  2 px. Scelto: una sola geometria di dieci numeri per tutti i pezzi, una
+  molla per numero con la velocità che si conserva, l'anello e il velo
+  sempre presenti che crescono dal bordo, e due molle della griglia smorzate
+  al punto critico, GLIDE 1400/75 e SLIDE 700/53, in cima a grid-motion.ts,
+  al posto di snap e soft: circa il 30 % più svelte e senza rimbalzo.
+  moto/spring.ts non cambia. Misurato con le sonde: 0 fotogrammi col velo
+  fuori dal bordo, stato finale uguale con e senza movimento.
+- Griglia-celle · piano nuovo, scritto dal pianificatore di K3 il 2026-11-03
+  sulla richiesta dell'utente di portare le celle dei fogli al livello della
+  barra: 16 difetti misurati, otto task (T1 | T2 | T3 | T4 T7 | T5 | T6 |
+  T8), prototipo PLAN-ui/celle-griglia.html. Il ramo nasce da
+  piano/k3-motori @ 06e054c8 per avere la barra e il prototipo di K3
+  accanto; il primo task parte solo dopo che T19 di K3 è integrato, e allora
+  piano/k3-motori si unisce in questo ramo tenendo il PLAN.md della griglia
+  (il PLAN.md di K3 resta su piano/k3-motori). Le domande D-1…D-6 sono
+  all'utente; i default B1–B6 valgono finché non risponde.
 - K3 · D-7 (il foglietto chiuso della variante C): l'utente ha scelto
   l'ibrida il 2026-11-03, due o più chiusi a pila alti 38 px, uno rimasto
   solo a tessera alta quanto la barra (80 px). Il pianificatore l'ha scritta

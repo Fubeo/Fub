@@ -3266,10 +3266,31 @@ kbd,
   transition: opacity var(--duration-slow) var(--ease);
 }
 
-/* La barra del titolo si attenua e torna al passaggio (la regola sta in
-   `structure.css`): qui la durata, la stessa del velo. */
-.titlebar {
+/* La barra del titolo si attenua e torna piena al passaggio del puntatore, o
+   quando il fuoco ci entra da tastiera. Si attenua nei colori e non con
+   un'opacità: un velo porterebbe il nome del vault e l'invito della pillola
+   sotto 2:1, mentre il grigio quieto (`--muted`) tiene 4,5:1 sul fondo della
+   barra in tutte e due le luci. Il nome del vault e il titolo scendono al
+   grigio, la pillola perde il pozzetto e il marchio, che è un disegno e non
+   un testo, si vela a metà (le sue parti chiare restano sopra 3:1); la
+   durata è quella del velo. */
+[data-focus-mode] .titlebar :is(.vault-chip, .pill-title) {
+  transition: color var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar .pill {
+  transition: transform var(--duration-state) var(--ease), background-color var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar .brand-glyph {
   transition: opacity var(--duration-slow) var(--ease);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) :is(.vault-chip, .pill-title) {
+  color: var(--muted);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) .pill {
+  background: var(--bg);
+}
+[data-focus-mode] .titlebar:not(:hover):not(:focus-within) .brand-glyph {
+  opacity: 0.5;
 }
 
 /* «Esci dalla concentrazione», in testa alla parte destra della banda: il
@@ -11032,9 +11053,12 @@ button.cm-fub-page-icon:focus-visible {
   color: var(--doc-fg);
 }
 /* Il carattere di serie è il monospazio. Pesa una classe sola: un profilo che
-   scrive prosa mette il suo con il proprio tema dell'editor, che pesa di più. */
+   scrive prosa mette il suo con il proprio tema dell'editor, che pesa di più.
+   Un campo che deve scrivere col carattere di chi lo ospita (la cella aperta
+   della griglia) lo dice con `--field-font`; per ogni altro editor non cambia
+   niente. */
 .cm-content {
-  font-family: var(--font-mono);
+  font-family: var(--field-font, var(--font-mono));
   font-size: var(--text-base);
   line-height: var(--leading-normal);
 }
@@ -11578,6 +11602,11 @@ button.cm-fub-page-icon:focus-visible {
 .grid-formula-editor .cm-editor .cm-content .cm-activeLine {
   background-color: transparent;
 }
+/* Nemmeno la cella aperta tinge la riga attiva: è la cella, non un
+   documento, e di notte la banda chiara sulla carta del file si vedrebbe. */
+.grid-cell-editor .cm-editor .cm-content .cm-activeLine {
+  background-color: transparent;
+}
 .grid-viewport {
   outline: none;
 }
@@ -11600,18 +11629,25 @@ button.cm-fub-page-icon:focus-visible {
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-bold);
 }
+/* La carta sotto le intestazioni, dove la loro riga non è ancora disegnata:
+   la striscia delle intestazioni di colonna in cima alla testa e
+   nell'angolo, e quella delle intestazioni delle righe nella colonna ferma,
+   coi fili delle righe. */
+.grid-paper-top,
+.grid-paper-corner {
+  background: linear-gradient(var(--sheet-2) 0 var(--grid-head-h, 0px), var(--doc-bg) 0);
+}
+.grid-paper-left-head {
+  border-right: 1px solid var(--border);
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row, 28px) - 1px), var(--border) 0 var(--grid-row, 28px)),
+    var(--sheet-2);
+}
 /* Le intestazioni della selezione prendono l'accento, come nei fogli di
-   calcolo. */
+   calcolo: il testo qui, il velo e il filo verso le celle nelle fasce che
+   scivolano con la selezione (`grid-mark-band-col`, `-row`). */
 .grid-header.selected {
-  box-shadow: inset 0 0 0 999px var(--accent-veil);
   color: var(--accent);
-}
-/* E un filo d'accento sul lato verso le celle. */
-.grid-column-header.selected {
-  box-shadow: inset 0 -2px 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
-}
-.grid-row-header.selected {
-  box-shadow: inset -2px 0 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
 }
 /* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
    che le segue. */
@@ -11622,7 +11658,7 @@ button.cm-fub-page-icon:focus-visible {
   border-top: 3px double var(--muted);
 }
 /* Il filo del blocco è quello di Excel. */
-.grid-freeze {
+.grid-mark-freeze {
   background: var(--muted);
 }
 /* Il segno di una nota nell'angolo, come in Excel: rosso per le note,
@@ -11724,30 +11760,86 @@ button.cm-fub-page-icon:focus-visible {
   background: var(--bg-elev);
   color: var(--doc-fg);
 }
-/* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
-   suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
-.grid-row .selected {
-  box-shadow: inset 0 0 0 999px var(--accent-veil);
+/* I segni della selezione prendono `--grid-mark` (in `structure.css`).
+   Il rettangolo: quattro lati di 2 px, uno sul filo e uno dentro; la cella
+   attiva ha un anello sottile e il resto un velo. Il velo sta sopra le
+   celle, quindi si vede anche su una cella col colore suo. */
+.grid-mark-edge,
+.grid-mark-ring,
+.grid-mark-handle {
+  background: var(--grid-mark, var(--accent));
 }
-.grid-row .active {
-  box-shadow: inset 0 0 0 2px var(--accent);
+.grid-mark-veil {
+  background: color-mix(in srgb, var(--grid-mark, var(--accent)) 14%, transparent);
 }
-/* Dentro un intervallo la cella attiva resta bianca, con un filo: il bordo
-   forte è quello del rettangolo. */
-.grid-viewport.ranged .grid-row .active {
-  box-shadow: inset 0 0 0 1px var(--accent);
+/* Il quadratino all'angolo della selezione: il bordo è la carta. */
+.grid-mark-handle {
+  box-shadow: 0 0 0 1px var(--doc-bg, #ffffff);
 }
+/* Le maniglie del tocco lungo: un tondo pieno col bordo della carta. */
+.grid-mark-touch {
+  border-radius: 50%;
+  background: var(--grid-mark, var(--accent));
+  box-shadow: 0 0 0 2px var(--doc-bg, #ffffff), var(--shadow-2);
+}
+/* Le intestazioni della selezione: il velo e il filo d'accento del tema,
+   perché le intestazioni sono cornice e non carta. */
+.grid-mark-band-col {
+  background: var(--accent-veil);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.grid-mark-band-row {
+  background: var(--accent-veil);
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+/* Ciò che si è copiato: un tratteggio largo; tagliato: uno fitto. Le
+   formiche di un riempimento o di un taglio incollato hanno il periodo di un
+   loro passo (8 px), e il battito di una copia è un velo che svanisce. */
+.grid-mark-copy[data-dir="h"] {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 6px, transparent 6px 10px);
+}
+.grid-mark-copy[data-dir="v"] {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 6px, transparent 6px 10px);
+}
+.grid-mark-cut[data-dir="h"] {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 3px, transparent 3px 6px);
+}
+.grid-mark-cut[data-dir="v"] {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 3px, transparent 3px 6px);
+}
+.grid-mark-ants[data-dir="h"] > .grid-ants {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 4px, transparent 4px 8px);
+}
+.grid-mark-ants[data-dir="v"] > .grid-ants {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 4px, transparent 4px 8px);
+}
+.grid-mark-flash {
+  background: color-mix(in srgb, var(--grid-mark, var(--accent)) 30%, transparent);
+}
+@media (forced-colors: active) {
+  .grid-mark-edge,
+  .grid-mark-ring,
+  .grid-mark-handle,
+  .grid-mark-touch {
+    border: 1px solid Highlight;
+  }
+  .grid-mark-veil,
+  .grid-mark-band-col,
+  .grid-mark-band-row,
+  .grid-mark-flash {
+    background: transparent;
+  }
+  /* I colori forzati tolgono i tratteggi dipinti: resta un bordo
+     tratteggiato. */
+  .grid-mark-copy,
+  .grid-mark-cut,
+  .grid-ants {
+    border: 1px dashed Highlight;
+  }
+}
+/* Il contorno della selezione nella scheda di un foglio (`card.ts`). */
 .grid-selection {
   border: 2px solid var(--accent);
-}
-/* Il quadratino all'angolo della selezione, e il riempimento tirato a
-   tratteggio come in Excel. */
-.grid-fill-handle {
-  border: 1px solid var(--sheet);
-  background: var(--accent);
-}
-.grid-fill-preview {
-  border: 2px dashed var(--accent);
 }
 /* Dove andrà la selezione tirata per il bordo. */
 .grid-move-preview {
@@ -11797,14 +11889,11 @@ button.cm-fub-page-icon:focus-visible {
 .grid-formula-editor .cm-formula-ref-6 {
   color: var(--doc-author-6);
 }
-/* Le formiche di un taglio: il tratteggio fitto dice «si sposta». Stanno
-   ferme: un moto che non finisce è ammesso solo per un lavoro in corso. */
-.grid-cut-mark {
-  border: 2px dashed var(--accent);
-}
-/* La guida di una misura tirata, e la misura accanto. */
+/* La guida di una misura tirata, e la misura accanto. La guida sta sulla
+   carta del file come i segni: ha il loro colore (`--grid-mark`), che resta
+   leggibile anche nelle luci scure, dove l'accento è chiaro. */
 .grid-resize-guide {
-  background: var(--accent);
+  background: var(--grid-mark);
 }
 .grid-resize-label {
   padding: var(--space-2) var(--space-3);
@@ -11816,22 +11905,29 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
-.grid-cell-editor {
-  border: 2px solid var(--accent);
-  background: var(--bg-elev);
+/* La cornice della cella aperta: 2 px del colore dei segni, sul filo della
+   cella e un pixel dentro, e l'ombra che la solleva. La carta e l'inchiostro
+   sono quelli della cella (`structure.css`), in ogni luce. */
+.grid-cell-editor-frame {
+  border: 2px solid var(--grid-mark, var(--accent));
   box-shadow: var(--shadow-2);
+}
+@media (forced-colors: active) {
+  .grid-cell-editor-frame {
+    border-color: Highlight;
+  }
 }
 /* I segni della griglia sulla carta del file prendono l'accento della carta
    (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
    modifica e il testo di un oggetto hanno il fondo della carta, sotto
-   l'inchiostro della carta, non quello dei pannelli, e il quadratino del
-   riempimento il bordo della carta. */
+   l'inchiostro della carta, non quello dei pannelli (il quadratino del
+   riempimento ha il bordo della carta da sé, `.grid-mark-handle`). La cella
+   aperta nel livello dei segni prende poi la carta della sua cella
+   (`--file-fill`, in `structure.css`), che pesa di più e ricade sullo stesso
+   `--doc-bg`. */
 .look-file .grid-cell-editor,
 .look-file .grid-object-text-editor {
   background: var(--doc-bg);
-}
-.look-file .grid-fill-handle {
-  border-color: var(--doc-bg);
 }
 /* Una cella di una cartella di Excel che legge una cella cambiata mostra
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
@@ -22850,6 +22946,12 @@ h6.ui-heading {
 .mini-bar[hidden] {
   display: none;
 }
+/* Sopra il menu entra ed esce la striscia (`ui/menu.ts`), che ha il suo moto:
+   la mini-barra non ne aggiunge un altro, e l'immagine che esce, una copia,
+   non la fa ripartire da trasparente. */
+.context-strip .mini-bar {
+  animation: none;
+}
 @keyframes mini-bar-in {
   from {
     opacity: 0;
@@ -23783,6 +23885,12 @@ h6.ui-heading {
   background: var(--diagram-paper, transparent);
   scrollbar-width: thin;
   transition: background-color 0.22s, opacity 0.18s;
+}
+/* Quando scorre la tavola prende il fuoco del Tab (`ui/mermaid.ts`): l'anello
+   rientra della sua larghezza e segue gli angoli della tavola, perché il
+   bordo della colonna non lo tagli. */
+.mermaid-diagram .mermaid-diagram-view:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 .mermaid-diagram[data-diagram-style="acquerello"] .mermaid-diagram-view,
 .mermaid-diagram[data-diagram-style="aurora"] .mermaid-diagram-view,

@@ -19,7 +19,9 @@ quando il disegno manca: un errore di sintassi, un diagramma troppo grande.
 Un clic sul disegno lo apre a schermo intero.
 
 Il disegno non supera mai la sua misura naturale e, nella colonna stretta, non
-scende sotto il 72%: oltre, la tavola scorre di lato.
+scende sotto il 72%: oltre, la tavola scorre di lato. Finché scorre la tavola
+entra nel giro del Tab, col suo anello del fuoco, e le frecce la fanno
+scorrere; quando il disegno ci sta ne esce.
 
 ## La didascalia
 

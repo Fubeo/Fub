@@ -143,15 +143,61 @@ async function aScene(page, scene, light, base, axeSource) {
   }
   // Nessuna selezione manuale: una nuova regola axe applicabile deve diventare
   // senza che questo file debba essere aggiornato a mano.
-  const outcome = await page.evaluate(
-    async () =>
-      // eslint-disable-next-line no-undef
-      await window.axe.run(document, {
-        // Gli iframe sono web_view del catalogo e portano `about:blank`: il
-        // documento figlio non appartiene alla superficie che si sta provando.
-        iframes: false,
-      }),
-  );
+  const outcome = await page.evaluate(async () => {
+    // eslint-disable-next-line no-undef
+    const axe = window.axe;
+    const result = await axe.run(document, {
+      // Gli iframe sono web_view del catalogo e portano `about:blank`: il
+      // documento figlio non appartiene alla superficie che si sta provando.
+      iframes: false,
+    });
+    // `aria-required-children` scende nei figli del DOM, e non sa che un
+    // figlio dichiarato da un altro elemento con `aria-owns` sta, per il
+    // browser, sotto quell'elemento: la cella aperta della griglia vive nel
+    // livello dei segni (sopra le celle) e la sua cella la dichiara sua. La
+    // stessa visita di axe, con i suoi giudizi di ruolo, visibilità e fuoco,
+    // ma senza i sottoalberi dichiarati altrove: se non resta niente fuori
+    // posto il rilievo cade; se resta, resta com'è.
+    const ownedElsewhere = (element, root) => {
+      for (let node = element; node && node !== root; node = node.parentElement) {
+        if (!node.id) continue;
+        const owner = document.querySelector(`[aria-owns~="${CSS.escape(node.id)}"]`);
+        if (owner && root.contains(owner) && !node.contains(owner)) return true;
+      }
+      return false;
+    };
+    const misplaced = (root) => {
+      const required = ["row", "rowgroup"];
+      const globals = axe.commons.standards.getGlobalAriaAttrs();
+      const queue = [...root.children];
+      const found = [];
+      for (let element; (element = queue.shift()); ) {
+        if (ownedElsewhere(element, root)) continue;
+        const vNode = axe.utils.getNodeFromTree(element);
+        if (!vNode || !axe.commons.dom.isVisibleToScreenReaders(vNode)) continue;
+        const role = axe.commons.aria.getRole(vNode, { noPresentational: true });
+        const global = globals.some((name) => vNode.hasAttr(name)) || axe.commons.dom.isFocusable(vNode);
+        if ((!role && !global) || role === "rowgroup") queue.push(...element.children);
+        else if (!required.includes(role)) found.push(element);
+      }
+      return found;
+    };
+    const rule = result.violations.find((each) => each.id === "aria-required-children");
+    if (rule) {
+      // L'albero virtuale di axe vive solo durante una sua visita.
+      axe.setup(document);
+      try {
+        rule.nodes = rule.nodes.filter((node) => {
+          const target = typeof node.target[0] === "string" ? document.querySelector(node.target[0]) : null;
+          return !(target?.getAttribute("role") === "grid" && misplaced(target).length === 0);
+        });
+      } finally {
+        axe.teardown();
+      }
+    }
+    result.violations = result.violations.filter((rule) => rule.nodes.length > 0);
+    return result;
+  });
 
   await removePaper(page);
 
@@ -584,8 +630,26 @@ async function inspectKeyboard(page) {
         const descendantIndicator =
           descendant !== null &&
           hasIndicator(getComputedStyle(descendant), getComputedStyle(descendant, "::before"), getComputedStyle(descendant, "::after"));
+        // La griglia dei fogli disegna il fuoco coi pezzi del motore dei segni
+        // (`editors/grid/grid-motion.ts`): l'anello della cella attiva, o il
+        // rettangolo della selezione quando è la cella sola, sono elementi a
+        // parte sopra la cella, non un'ombra della cella. Conta un pezzo che
+        // si vede e tocca il bordo della cella attiva.
+        const markIndicator =
+          descendant !== null &&
+          el.classList.contains("grid-viewport") &&
+          (() => {
+            const cell = descendant.getBoundingClientRect();
+            return [...el.querySelectorAll(".grid-mark-ring, .grid-mark-edge")].some((mark) => {
+              if (mark.hidden) return false;
+              const look = getComputedStyle(mark);
+              const box = mark.getBoundingClientRect();
+              return look.visibility === "visible" && Number(look.opacity) > 0 && box.width > 0 && box.height > 0 &&
+                box.right >= cell.left - 2 && box.left <= cell.right + 2 && box.bottom >= cell.top - 2 && box.top <= cell.bottom + 2;
+            });
+          })();
         const indicator =
-          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator)) ||
+          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator || markIndicator)) ||
           (el.tagName === "IFRAME" && shellIndicator);
         // I fatti del combobox, per l'eccezione della finestra modale: solo
         // per un campo combobox senza un indicatore suo.

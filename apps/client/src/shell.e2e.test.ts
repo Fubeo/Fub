@@ -1406,6 +1406,61 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     ]);
     expect(Object.keys(host.files())).toContain("Benvenuto.md");
   });
+
+  // IMP-154: la riga col fuoco sparisce dall'albero e il fuoco cadeva su
+  // `body`, dove le battute dopo si perdevano. Resta nell'albero, sulla riga
+  // vicina: la successiva, la precedente se era l'ultima, la cartella se è
+  // rimasta vuota. Anche quando la nota cestinata era aperta e l'editor chiude.
+  it("Canc lascia il fuoco sulla riga vicina, anche se la nota era aperta", async () => {
+    const host = await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Spesa.md");
+    await settle();
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const press = (path: string) => {
+      const item = noteItem(path)!;
+      item.focus();
+      const canc = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+      item.dispatchEvent(canc);
+      expect(canc.defaultPrevented).toBe(true);
+    };
+    const focusedPath = () => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active.matches('#file-list li[role="treeitem"]')
+        ? active.dataset.path
+        : `fuori dall'albero: ${active?.tagName ?? "niente"}`;
+    };
+
+    // Spesa è aperta ed è l'ultima della cartella: il fuoco va alla precedente.
+    expect([...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("Spesa"))).toBe(true);
+    press("note/Spesa.md");
+    await waitFor("Spesa è nel cestino", () => host.trash().length === 1 && !noteItem("note/Spesa.md"));
+    await settle();
+    expect([...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("Spesa"))).toBe(false);
+    expect(focusedPath()).toBe("note/Riunione.md");
+    expect(document.activeElement?.getAttribute("tabindex")).toBe("0");
+
+    // L'ultima della cartella: il fuoco va alla cartella rimasta vuota, se
+    // l'albero la disegna ancora (l'host finto la toglie con l'ultima nota),
+    // altrimenti alla prima voce che resta.
+    press("note/Riunione.md");
+    await waitFor("Riunione è nel cestino", () => host.trash().length === 2 && !noteItem("note/Riunione.md"));
+    await settle();
+    expect(focusedPath()).toBe(noteItem("note") ? "note" : "Benvenuto.md");
+  });
+
+  it("Canc sulla prima di più note lascia il fuoco sulla successiva", async () => {
+    const host = await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const riunione = noteItem("note/Riunione.md")!;
+    riunione.focus();
+    riunione.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
+    await waitFor("Riunione è nel cestino", () => host.trash().length === 1 && !noteItem("note/Riunione.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Spesa.md"));
+  });
 });
 
 describe("una conferma sola", () => {
@@ -4659,6 +4714,36 @@ describe("i riquadri dopo un'attesa", () => {
     expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
   });
 
+  it("col testo nella Cronologia e il disco che non si rilegge lo si dice, e ripetere non lo conserva due volte", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+    const repairOpen = host.fault("openDocument", "disco non leggibile");
+    const repairRead = host.fault("readDocument", "disco non leggibile");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "chi scrive sa che il suo testo è salvo",
+      () => recentNotices().some((notice) => notice.text.includes("è nella Cronologia, ma il file non si è riletto")),
+    );
+    await settle();
+    repairOpen();
+    repairRead();
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const keeps = host.calls.slice(before).filter((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    expect(keeps, "lo stesso testo entra nella Cronologia una volta sola").toHaveLength(1);
+  });
+
   it("se il testo non entra nella Cronologia non si scarta niente, e lo si dice", async () => {
     const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
     const { recentNotices } = await import("./ui/notify");
@@ -4707,7 +4792,10 @@ describe("i riquadri dopo un'attesa", () => {
       expect(args?.doc).toBe("Benvenuto.md");
       expect(args?.text).toBe("testo della finestra");
       expect(args?.note).toMatch(/^Testo scartato nel conflitto del /);
-      expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+      // Il nome della nota come lo dice il resto dell'app, non il percorso.
+      const notice = recentNotices().find((entry) => entry.text.includes("è nella Cronologia"));
+      expect(notice?.text).toContain("su Benvenuto è");
+      expect(notice?.text).not.toContain("Benvenuto.md");
 
       const repair = host.fault("invokeCommand", "spazio dati pieno");
       child.postMessage({ ...id, kind: "keep", token: "due", text: "testo della finestra" });

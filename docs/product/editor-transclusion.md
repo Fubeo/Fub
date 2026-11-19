@@ -53,7 +53,9 @@ Lo stesso blocco in più note: nel file è l'embed del blocco col suo id,
   un recinto o una tabella) e scrive l'embed in fondo all'altra nota. Le due
   scritture sono un piano solo: tutte e due o nessuna, con un **Annulla** che
   rimette le due note com'erano. Un id già usato nell'altra nota non si
-  riusa; un blocco cambiato mentre si sceglie, o una nota cambiata da fuori
+  riusa; un id chiesto da chi chiama segue la regola delle ancore (lettere,
+  cifre, `-` e `_`) e si confronta con quelli della nota senza badare a
+  maiuscole e minuscole, come li confronta il link; un blocco cambiato mentre si sceglie, o una nota cambiata da fuori
   dopo la lettura, non scrivono niente e lo dicono.
 - **Blocco di un'altra nota** nel «/» (dopo «Trasclusione»): si sceglie la
   nota e un suo blocco; il comando gli dà l'id, poi l'embed si scrive al

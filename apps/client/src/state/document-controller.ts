@@ -1308,7 +1308,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     keeps: keepsDiscardedText,
     keep: async (doc, text) => {
       await keepDiscardedText(doc, text);
-      notify(t("document.conflict.kept", { doc }), "info");
+      notify(t("document.conflict.kept", { doc: pageName(doc) }), "info");
     },
   });
   lifetime.add(() => setDocumentWindowKeeper(null));
@@ -2172,8 +2172,10 @@ export async function resolveDiscardingMine(doc: string | null): Promise<void> {
     return;
   }
   // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
+  // Se il testo dell'utente è già nella Cronologia lo si dice, e ripetere la
+  // scelta non lo conserva una seconda volta (lo sa la sessione).
   if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
-    notify(t("document.reload_failed", { doc: pageName(doc) }), "guasto");
+    notify(t(outcome.kept ? "document.conflict.kept_reload_failed" : "document.reload_failed", { doc: pageName(doc) }), "guasto");
   } else if (keep && outcome.kind === "discarded" && outcome.reload.kind === "reloaded") {
     notify(t("document.conflict.kept", { doc: pageName(doc) }), "info");
   }

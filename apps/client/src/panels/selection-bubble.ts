@@ -55,6 +55,13 @@ export function bubblePlace(
   return { left: Math.round(left), top: Math.round(top) };
 }
 
+/// La misura del bordo della bolla, coi decimali. La bolla non ha trasformazioni,
+/// quindi il rettangolo è la stessa misura che dà il `ResizeObserver`.
+function measure(element: HTMLElement): { width: number; height: number } {
+  const rect = element.getBoundingClientRect();
+  return { width: rect.width, height: rect.height };
+}
+
 export function createSelectionBubble(host: BubbleHost): SelectionBubble {
   const element = document.createElement("div");
   element.className = "selection-bubble";
@@ -71,10 +78,15 @@ export function createSelectionBubble(host: BubbleHost): SelectionBubble {
   /// La misura della bolla, tenuta dal `ResizeObserver`; `null` finché non
   /// si è vista (nascosta non ne ha una).
   let size: { width: number; height: number } | null = null;
+  /// La misura con cui la bolla si è posata l'ultima volta.
+  let placedWith: { width: number; height: number } | null = null;
   if (typeof ResizeObserver !== "undefined") {
     const observer = new ResizeObserver((entries) => {
       const box = entries[entries.length - 1]?.borderBoxSize?.[0];
       size = box && box.inlineSize > 0 ? { width: box.inlineSize, height: box.blockSize } : null;
+      // Una bolla che ha cambiato misura (i pulsanti riletti, il «…» deciso)
+      // si riposa: centrata con la misura vera, non con quella di prima.
+      if (size && !element.hidden && (size.width !== placedWith?.width || size.height !== placedWith?.height)) schedule();
     });
     observer.observe(element);
     life.add(() => observer.disconnect());
@@ -99,7 +111,12 @@ export function createSelectionBubble(host: BubbleHost): SelectionBubble {
       element.hidden = false;
       size = null;
     }
-    const measured = size ?? { width: element.offsetWidth, height: element.offsetHeight };
+    // La prima volta la misura si prende dal motore, frazionaria come quella
+    // del `ResizeObserver`: con `offsetWidth`, arrotondato, il centro cadeva
+    // mezzo pixel più in là e la bolla stava un pixel più a sinistra o più a
+    // destra secondo chi aveva misurato per ultimo.
+    const measured = size ?? measure(element);
+    placedWith = measured;
     const at = bubblePlace(box, measured, { width: window.innerWidth, height: window.innerHeight });
     const left = `${at.left}px`;
     const top = `${at.top}px`;

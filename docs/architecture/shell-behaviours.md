@@ -266,6 +266,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio, Esc o un clic su qualcosa che non prende il fuoco, il fuoco resta
   sulla voce e la segue al nome nuovo quando l'albero la ridisegna; un clic su
   un controllo lo lascia a quel controllo.
+- **Fuoco su una voce che sparisce dall'albero.** Se il ridisegno dell'albero
+  non trova più la voce col fuoco (Canc la cestina, uno spostamento o una
+  rinomina la portano in un'altra cartella, una cartella chiusa la nasconde),
+  il fuoco va alla voce vicina che resta: la successiva nello stesso gruppo,
+  altrimenti la precedente, altrimenti la cartella che la conteneva; se non
+  resta niente di questo, la prima voce dell'albero o il pulsante dell'albero
+  vuoto (`renderFileList` in `panels/explorer.ts`). Vale anche quando la nota
+  cestinata era aperta e la sua scheda si chiude. Un gesto della barra della
+  scelta multipla premuto da tastiera, che nasconde la barra, riporta il fuoco
+  all'albero (`panels/explorer-selection.ts`). Il fuoco non resta mai su
+  `body`, dove le battute dopo si perderebbero.
 - **Indice delle impostazioni.** «In questa pagina» (`panels/settings.ts`)
   segna la sezione in lettura. Una voce scelta col clic resta la voce attiva
   anche quando la sua sezione sta nell'ultimo schermo e lo scorrimento non può

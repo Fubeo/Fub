@@ -180,6 +180,14 @@ fuoco) ed Esc lo chiude riportando il fuoco sulla banda; la barra di formato e
 quella del PDF sono un solo punto di Tab ciascuna.
 Il combobox modale (il lanciatore) mostra il fuoco col cursore e la riga
 attiva, senza anello: eccezione stretta e casi in `bench/a11y-rules.mjs`.
+La griglia dei fogli mostra il fuoco coi pezzi del motore dei segni (l'anello
+della cella attiva, o il rettangolo quando è la cella sola), elementi a parte
+sopra la cella: vale come indicatore un pezzo visibile sul bordo della cella
+`aria-activedescendant`. La sua cella aperta sta nel livello dei segni e la
+cella la dichiara sua con `aria-owns`, che `aria-required-children` di axe
+non segue: il banco rifà la stessa visita di axe senza i sottoalberi
+dichiarati da un altro elemento della griglia, e il rilievo cade solo se così
+non resta niente fuori posto.
 Lo scroller dell'editor di testo (`.cm-scroller`) ha l'anello dipinto dal
 velo `::after` del suo `.cm-editor`, sopra i numeri di riga: il banco lo conta
 solo se il velo c'è, copre tutto l'editor e dipinge un contorno o un'ombra

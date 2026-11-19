@@ -1178,6 +1178,39 @@ describe("il moto del menu", () => {
     expect(play.timing.duration).toBeLessThanOrEqual(200);
   });
 
+  it("la barra sopra il menu esce con la sua immagine intera, smontata solo dopo", () => {
+    // jsdom non misura: senza un riquadro l'uscita non lascerebbe immagini.
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const width = this.classList.contains("context-strip") ? 16 + 30 * this.childElementCount : 120;
+      return DOMRect.fromRect({ x: 40, y: 150, width, height: 36 });
+    });
+    const seenAtUnmount: string[] = [];
+    try {
+      showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }], {
+        strip: (host) => {
+          const bar = document.createElement("div");
+          bar.className = "mini-bar";
+          bar.append(document.createElement("button"), document.createElement("button"));
+          host.append(bar);
+          return () => {
+            const ghost = document.querySelector('.context-strip[aria-hidden="true"]');
+            seenAtUnmount.push(ghost?.querySelectorAll(".mini-bar button").length.toString() ?? "senza immagine");
+            bar.remove();
+          };
+        },
+      });
+      closeContextMenu();
+      const ghost = document.querySelector<HTMLElement>('.context-strip[aria-hidden="true"]');
+      expect(ghost).not.toBeNull();
+      expect(ghost!.style.width).toBe("46px");
+      expect(ghost!.querySelectorAll(".mini-bar button")).toHaveLength(2);
+      expect(seenAtUnmount).toEqual(["2"]);
+      expect(document.querySelector('.context-strip:not([aria-hidden="true"])')).toBeNull();
+    } finally {
+      measure.mockRestore();
+    }
+  });
+
   it("col moto ridotto non si muove affatto, e una parte premuta si fa subito", () => {
     setMotionPreference("reduced");
     const run = vi.fn();

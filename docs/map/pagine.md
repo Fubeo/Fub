@@ -47,6 +47,7 @@
 - Come comunica la shell TypeScript con il core senza diffondere Tauri? → [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md)
 - Chi controlla il valore scritto in una riga delle Impostazioni, e che cosa vede la persona quando non va? → [architecture/setting-values.md](../architecture/setting-values.md)
 - Come la shell apre, mostra e modifica una cartella di Excel, e che cosa resta al provider? → [architecture/grid-surface.md](../architecture/grid-surface.md)
+- Come la cartella dà i suoi comandi nella barra multifunzione, in «Comandi» e nel menu del tasto destro? → [architecture/grid-ribbon.md](../architecture/grid-ribbon.md)
 - Come Fub raccoglie l'inchiostro e dove vivono penna, evidenziatore e gomma? → [architecture/ink-and-tools.md](../architecture/ink-and-tools.md)
 - Come la lavagna prende la penna, disegna il tratto nelle schede e ne fa un passo di annulla? → [architecture/ink-on-canvas.md](../architecture/ink-on-canvas.md)
 - Come Fub costruisce e inserisce i motori copiati (GridCraft e gli altri Craft)? → [architecture/motori.md](../architecture/motori.md)

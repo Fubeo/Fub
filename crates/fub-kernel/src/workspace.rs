@@ -5729,16 +5729,24 @@ impl Workspace {
             .files
             .into_iter()
             .map(|file| {
-                let change_stamp = self.docs.vault.change_stamp(&file.id);
                 // Una domanda sola all'anagrafe: la risposta intera serve
                 // alla riapertura incrementale di `finalize_scan_vault`, e
                 // rifarla là è un lock e una copia regalati per niente.
+                //
+                // **Il timbro si chiede per ultimo**, e solo a una voce che
+                // l'anagrafe potrebbe certificare: su Windows leggerlo è
+                // aprire il file, e alla prima apertura di un vault nessuna
+                // voce è nota. Chiederlo a tutti costava cinquemila aperture
+                // buttate su un vault da cinquemila file, la parte più lenta
+                // del montaggio su Windows (issue #493).
                 let known = self
                     .entry_store
                     .known(&file.id)
                     .filter(|known| known.describes(file.size, file.mtime))
-                    .filter(|known| known.same_change_stamp(change_stamp))
-                    .filter(|known| known.fingerprint.is_some());
+                    .filter(|known| known.fingerprint.is_some())
+                    .filter(|known| {
+                        known.same_change_stamp(self.docs.vault.change_stamp(&file.id))
+                    });
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
                     kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),

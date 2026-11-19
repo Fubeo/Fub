@@ -171,6 +171,30 @@ describe("scelta multipla dell'albero", () => {
     await vi.waitFor(() => expect(sel.paths()).toEqual([]));
   });
 
+  it("un gesto della barra premuto da tastiera riporta il fuoco nell'albero, non su body (IMP-154)", async () => {
+    list.querySelectorAll<HTMLElement>("li").forEach((li) => (li.tabIndex = -1));
+    list.querySelector<HTMLElement>('li[data-path="c.md"]')!.tabIndex = 0;
+    click("a.md", { ctrlKey: true });
+    click("b.md", { ctrlKey: true });
+    const button = document.querySelector<HTMLButtonElement>(".tree-selection-trash")!;
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.click();
+    await vi.waitFor(() => expect(sel.paths()).toEqual([]));
+    expect(document.activeElement).toBe(list.querySelector('li[data-path="c.md"]'));
+
+    // Un fuoco che il gesto ha portato altrove (il selettore della cartella)
+    // resta dov'è.
+    const elsewhere = document.createElement("input");
+    document.body.append(elsewhere);
+    move.mockImplementationOnce(async () => elsewhere.focus());
+    click("d.md", { ctrlKey: true });
+    document.querySelector<HTMLButtonElement>(".tree-selection-move")!.focus();
+    document.querySelector<HTMLButtonElement>(".tree-selection-move")!.click();
+    await vi.waitFor(() => expect(sel.paths()).toEqual([]));
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("la riga della nota aperta resta selezionata quando esce dalla scelta", () => {
     current = "a.md";
     list.querySelector('[data-path="a.md"]')!.setAttribute("aria-selected", "true");

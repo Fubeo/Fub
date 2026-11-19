@@ -196,8 +196,8 @@ La concentrazione (`shell.focus.toggle`, «Modalità concentrazione» nel menu
 Vista e in Ctrl O, «Concentrazione» nel menu «…» del riquadro di una nota)
 lascia il foglio e poco altro:
 
-- cassetti, linguette dei riquadri e barra di formato si ritirano; la barra del
-  titolo si attenua e torna piena al passaggio del puntatore o col fuoco;
+- cassetti, linguette e barra di formato si ritirano; la barra del titolo si
+  attenua nei colori, leggibile, e torna piena al passaggio o col fuoco;
 - nel foglio che ha il fuoco resta acceso il blocco del cursore (le righe fino
   alla riga vuota prima e dopo, o tutte quelle che una scelta attraversa) e gli
   altri si attenuano; la riga sotto il puntatore si riaccende. Vale in ogni

@@ -10,7 +10,7 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich` e dei Blocchi
+// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich`, della griglia e dei Blocchi
 // che fa partire una corsa di `moto` è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
@@ -534,6 +534,76 @@ const light = (theme) => (page) =>
 
 /// La barra dei fogli del riquadro col fuoco.
 const GRID_RIBBON = ".pane.focus .grid-ribbon";
+/// Una cella della griglia col fuoco (riga e colonna da zero), con le classi
+/// in più che deve avere.
+const gridCell = (row, column, extra = "") => `.pane.focus .grid-cell${extra}[data-row="${row}"][data-column="${column}"]`;
+/// Il lato alto del rettangolo della selezione, nel livello del corpo.
+const GRID_EDGE = '.pane.focus .grid-marks-body .grid-mark-edge[data-mark="rect-top"]';
+/// Sceglie una cella con un clic vero e aspetta che sia la cella attiva.
+const pickCell = async (page, row, column) => {
+  const at = await centre(page, gridCell(row, column));
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector(gridCell(row, column, ".active"));
+};
+/// La maniglia di fine del tocco lungo, quando si vede.
+const GRID_GRIP_B = '.pane.focus .grid-mark-touch[data-handle="b"]:not([hidden])';
+/// Il dito del CDP su una pagina, col tocco acceso: passa dal browser vero
+/// (`Input.dispatchTouchEvent`), dove `touch-action` decide chi scorre.
+const fingers = new WeakMap();
+async function finger(page) {
+  let cdp = fingers.get(page);
+  if (!cdp) {
+    cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    fingers.set(page, cdp);
+  }
+  return cdp;
+}
+const touch = async (page, type, points) =>
+  (await finger(page)).send("Input.dispatchTouchEvent", { type, touchPoints: points.map(({ x, y }) => ({ x, y, id: 1 })) });
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/// Un tocco lungo su una cella: giù più di `LONG_PRESS_MS` (450) della griglia.
+const longPressCell = async (page, row, column) => {
+  const at = await centre(page, gridCell(row, column));
+  await touch(page, "touchStart", [at]);
+  await wait(700);
+  await touch(page, "touchEnd", []);
+};
+/// La maniglia di fine del tocco lungo tirata col dito fino a una cella.
+const dragGrip = async (page, row, column) => {
+  const from = await centre(page, GRID_GRIP_B);
+  const to = await centre(page, gridCell(row, column));
+  await touch(page, "touchStart", [from]);
+  for (let step = 1; step <= 12; step += 1) {
+    await wait(16);
+    await touch(page, "touchMove", [{ x: from.x + ((to.x - from.x) * step) / 12, y: from.y + ((to.y - from.y) * step) / 12 }]);
+  }
+  await touch(page, "touchEnd", []);
+};
+/// Tira di `by` px il bordo destro dell'intestazione di colonna `label` e lo
+/// rilascia. Il bordo si legge dalla misura della colonna, non dal disegno:
+/// a metà di una corsa le colonne dopo sono ancora spostate.
+const pullColumnEdge = async (page, label, by) => {
+  const edge = await page.evaluate((name) => {
+    const header = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === name);
+    const box = header.getBoundingClientRect();
+    return { x: box.right - 1, y: box.top + box.height / 2 };
+  }, label);
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + by / 2, edge.y);
+  await page.mouse.move(edge.x + by, edge.y);
+  await page.mouse.up();
+};
+const columnWidthOf = (page, label) => page.evaluate((name) => {
+  const header = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === name);
+  return header ? parseFloat(header.style.width) : 0;
+}, label);
+const columnWider = (label, width) => async (page) => (await columnWidthOf(page, label)) > width;
+const columnNarrower = (label, width) => async (page) => {
+  const now = await columnWidthOf(page, label);
+  return now > 0 && now < width;
+};
 /// La cella scelta cinque colonne più a destra, fuori dalla tabella della
 /// scena `grid-ribbon-table`.
 const stepRight = async (page) => {
@@ -1329,6 +1399,183 @@ export const CHOREOGRAPHIES = [
     arrived: has(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
     undo: stepRight,
     returned: lacks(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
+  },
+  // **I segni della griglia** (`grid-motion.ts`): un motore solo li fa
+  // scivolare dai dieci numeri della selezione, per i tasti e per il
+  // puntatore allo stesso modo. Il motore scrive il `transform` in linea a
+  // ogni fotogramma: `track` lo guarda sul lato alto del rettangolo.
+  {
+    id: "griglia-freccia",
+    title: "Griglia: una freccia, e il rettangolo scivola sulla cella accanto",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: (page) => page.keyboard.press("ArrowRight"),
+    arrived: has(gridCell(1, 2, ".active")),
+    undo: (page) => page.keyboard.press("ArrowLeft"),
+    returned: has(gridCell(1, 1, ".active")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-maiusc-freccia",
+    title: "Griglia: Maiusc+freccia, e il rettangolo si allarga dal bordo; anello e velo crescono da lì",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: (page) => page.keyboard.press("Shift+ArrowDown"),
+    arrived: has(gridCell(2, 1, ".selected")),
+    undo: (page) => page.keyboard.press("Shift+ArrowUp"),
+    returned: lacks(gridCell(2, 1, ".selected")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-ctrl-freccia",
+    title: "Griglia: Ctrl+freccia, un salto lontano che scivola senza passare la cella d'arrivo",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 0, 0),
+    act: (page) => page.keyboard.press("Control+ArrowDown"),
+    arrived: lacks(gridCell(0, 0, ".active")),
+    undo: (page) => page.keyboard.press("Control+ArrowUp"),
+    returned: has(gridCell(0, 0, ".active")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-trascina",
+    title: "Griglia: trascinando col puntatore il rettangolo si allarga e segue, nello stesso modo dei tasti",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: async (page) => {
+      const from = await centre(page, gridCell(1, 1));
+      const to = await centre(page, gridCell(3, 2));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 8 });
+      await page.mouse.up();
+    },
+    arrived: has(gridCell(3, 2, ".selected")),
+    undo: (page) => pickCell(page, 1, 1),
+    returned: lacks(gridCell(3, 2, ".selected")),
+    track: [GRID_EDGE],
+  },
+  // **Il dito** (griglia T7): le maniglie del tocco lungo sono pezzi dello
+  // stesso motore. Il tocco si accende nel `setup`, prima del primo scatto,
+  // perché accenderlo può cambiare ciò che la pagina mostra a un dito.
+  {
+    id: "griglia-tocco-lungo",
+    title: "Griglia: un tocco lungo, e le due maniglie crescono dal centro agli angoli della selezione",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await finger(page);
+      await pickCell(page, 1, 1);
+    },
+    act: (page) => longPressCell(page, 1, 1),
+    arrived: has(GRID_GRIP_B),
+    undo: (page) => pickCell(page, 1, 1),
+    returned: lacks(GRID_GRIP_B),
+    track: [GRID_GRIP_B],
+  },
+  {
+    id: "griglia-maniglia-tirata",
+    title: "Griglia: la maniglia del tocco tirata col dito, e il rettangolo la segue scivolando",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await finger(page);
+      await pickCell(page, 1, 1);
+      await longPressCell(page, 1, 1);
+      await page.waitForSelector(GRID_GRIP_B);
+    },
+    act: (page) => dragGrip(page, 3, 2),
+    arrived: has(gridCell(3, 2, ".selected")),
+    undo: (page) => dragGrip(page, 1, 1),
+    returned: lacks(gridCell(3, 2, ".selected")),
+    track: [GRID_EDGE, GRID_GRIP_B],
+  },
+  // **La cella aperta** (griglia T4): F2 su B4, la cui formula è più lunga
+  // della cella. La cella aperta è subito al suo posto, cresciuta a colonne
+  // intere; compare soltanto la cornice, una dissolvenza in `DURATION.state`.
+  {
+    id: "griglia-cella-aperta",
+    title: "Griglia: F2 su una cella col testo lungo, la cella aperta è già al suo posto e la cornice compare",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 3, 1),
+    act: (page) => page.keyboard.press("F2"),
+    arrived: has(".pane.focus .grid-cell-editor:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: has(".pane.focus .grid-cell-editor[hidden]"),
+    track: [".pane.focus .grid-cell-editor-frame"],
+  },
+  // **Il bordo tirato** (griglia T5): al rilascio la misura nuova vale già,
+  // e le colonne dopo scivolano col `flip` di SLIDE. Nella prima il provider
+  // resta in volo (`throttle`) e il bordo si ritira: l'anteprima nuova parte
+  // da dov'è la corsa. Nella seconda il finto rifiuta la misura (non la
+  // serve), e le colonne tornano indietro scivolando.
+  {
+    id: "griglia-bordo-tirato",
+    title: "Griglia: il bordo di B tirato di 40 px e rilasciato, le colonne dopo scivolano al posto nuovo",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => page.evaluate(() => { window.bench.throttle("gridBytesCommand"); }),
+    act: (page) => pullColumnEdge(page, "B", 40),
+    arrived: columnWider("B", 110),
+    undo: (page) => pullColumnEdge(page, "B", -40),
+    returned: columnNarrower("B", 95),
+  },
+  {
+    id: "griglia-bordo-no",
+    title: "Griglia: il provider rifiuta la larghezza tirata, le colonne tornano scivolando e l'avviso dice perché",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    act: (page) => pullColumnEdge(page, "B", 40),
+    arrived: has(".pane.focus .grid-notice:not([hidden])"),
+    undo: null,
+    irreversible: "il ritorno è la risposta del provider: tirare di nuovo è un altro gesto, con la sua anteprima",
+  },
+  // **Copiare e riempire** (griglia T6): Ctrl+C lascia il tratteggio largo e
+  // un battito, un velo che svanisce in `DURATION.swap`; Esc toglie il segno.
+  // Il riempimento tirato, nella cartella grande che lo accetta, aspetta la
+  // risposta con le formiche (che non sono una coreografia: le ferma la
+  // risposta, e la prova di `grid-motion.test.ts` lo dimostra); poi le
+  // formiche escono, la selezione scivola sul riempimento e i valori nuovi
+  // entrano sfalsati.
+  {
+    id: "griglia-copia-battito",
+    title: "Griglia: Ctrl+C su B2:B3, il tratteggio largo resta e il battito svanisce",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await pickCell(page, 1, 1);
+      await page.keyboard.press("Shift+ArrowDown");
+    },
+    act: (page) => page.keyboard.press("Control+c"),
+    arrived: has(".pane.focus .grid-mark-copy:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".pane.focus .grid-mark-copy:not([hidden])"),
+  },
+  {
+    id: "griglia-riempimento-risposta",
+    title: "Griglia: C4:C5 tirata col quadratino fino a C12; alla risposta le formiche escono e i valori entrano sfalsati",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-large-appunti",
+    setup: async (page) => {
+      await pickCell(page, 3, 2);
+      await page.keyboard.press("Shift+ArrowDown");
+    },
+    act: async (page) => {
+      const from = await centre(page, ".pane.focus .grid-mark-handle:not([hidden])");
+      const to = await centre(page, gridCell(11, 2));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 6 });
+      await page.mouse.up();
+    },
+    arrived: (page) => page.evaluate((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent === "90", gridCell(11, 2)),
+    undo: null,
+    irreversible: "il ritorno è Annulla, un comando che il provider esegue: un altro gesto, con la sua risposta",
   },
 ];
 
