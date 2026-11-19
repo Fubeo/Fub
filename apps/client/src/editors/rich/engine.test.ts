@@ -115,6 +115,18 @@ describe("il motore ricco", () => {
     expect(document.activeElement).toBe(page);
   });
 
+  it("con due documenti, la lettera battuta sul foglio del secondo va nel secondo, non dove era rimasta la selezione (IMP-2806)", () => {
+    engine(source([para("relazione")]));
+    engine(source([para("")]));
+    const [firstText, secondText] = [...document.querySelectorAll<HTMLElement>(".rich-content")];
+    const secondPage = [...document.querySelectorAll<HTMLElement>(".rich-desk")][1]!.parentElement!;
+    // Si è scritto nel primo: la selezione della pagina resta nel suo testo.
+    firstText!.focus();
+    secondPage.focus();
+    secondPage.dispatchEvent(new KeyboardEvent("keydown", { key: "O", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(secondText);
+  });
+
   it("un testo che non si legge non si scrive, e non diventa un documento vuoto salvabile", () => {
     const changes: EditorChange[] = [];
     const e = engine("{non è una proiezione", changes);
