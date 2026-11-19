@@ -508,6 +508,14 @@ export default defineConfig({
           // importano soltanto moduli che stanno nei loro chunk (`tabella/`,
           // `ui/`, le stringhe), nessuno del ponte.
           if (/\/src\/editors\/text\/profiles\/markdown\/table-(model|grid)\.ts$/.test(id)) return "markdown-tables";
+          // La disposizione dei riquadri e delle schede (`state/layout.ts`):
+          // il modello che la shell salva e rilegge, letto da quasi ogni
+          // pannello, anche da quelli che si caricano dopo. Cambia con la
+          // disposizione, non con la shell, e da sola tiene il chunk condiviso
+          // della shell (`search`) sotto il budget. Chiusa verso il basso:
+          // importa soltanto le stringhe, lo stato e l'aspetto del contenuto,
+          // che stanno nei loro chunk, nessuno di `search`.
+          if (/\/src\/state\/layout\.ts$/.test(id)) return "shell-layout";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
