@@ -149,4 +149,26 @@ describe("la cella della griglia e la sessione del documento", () => {
     expect(ed.redo()).toBe(true);
     expect(sessions.text(ID)).toBe("Paragrafo.\n\n| A | B |\n| --- | --- |\n| Uno |  |\n");
   });
+
+  it("ogni riga aggiunta col Tab si toglie con un annulla, il primo compreso (IMP-6105)", async () => {
+    const { sessions, ed, parent, view } = await setup();
+    const rows = (text: string) => text.split("\n").filter((line) => line.startsWith("|")).length;
+    expect(rows(sessions.text(ID)!)).toBe(3);
+    // Come col mouse: il clic sulla prima cella la sceglie.
+    const first = parent.querySelector<HTMLElement>(".tb-grid .tb-cell")!;
+    first.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    first.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
+    first.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+    // Quattro celle: tre Tab vanno all'ultima, il quarto aggiunge una riga;
+    // due Tab la attraversano e il terzo ne aggiunge un'altra.
+    for (let n = 0; n < 7; n++) press(document.activeElement as HTMLElement, "Tab");
+    expect(rows(sessions.text(ID)!)).toBe(5);
+    // Il clic fuori dalla tabella, poi Ctrl+Z.
+    view.focus();
+    expect(ed.undo()).toBe(true);
+    expect(rows(sessions.text(ID)!)).toBe(4);
+    expect(ed.undo()).toBe(true);
+    expect(rows(sessions.text(ID)!)).toBe(3);
+    expect(sessions.text(ID)).toBe(NOTE);
+  });
 });

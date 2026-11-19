@@ -225,6 +225,10 @@ export interface PageHost {
   focusText(): void;
   /// Il titolo è cambiato fuori dal testo (una rinomina riuscita).
   refresh(): void;
+  /// Annulla e ripeti della nota, da Ctrl+Z e Ctrl+Maiusc+Z (o Ctrl+Y) nel
+  /// titolo che non ha una modifica sua: un passo per tasto.
+  undo?(): void;
+  redo?(): void;
   /// L'altezza della testata è cambiata.
   measure(): void;
   /// «Altre N proprietà» aperto o chiuso.
@@ -428,6 +432,14 @@ function titleHeading(data: PageData): HTMLElement {
   return title;
 }
 
+/// Ctrl (o Cmd)+Z annulla; con Maiusc, o Ctrl+Y, ripete.
+function historyKey(event: KeyboardEvent): "undo" | "redo" | null {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return null;
+  const key = event.key.toLowerCase();
+  if (key === "z") return event.shiftKey ? "redo" : "undo";
+  return key === "y" && !event.shiftKey ? "redo" : null;
+}
+
 /// Il titolo in Scrittura: un campo. Invio o l'uscita rinominano, Esc torna
 /// al nome di prima; Invio ed Esc portano al testo.
 function titleField(data: PageData, host: PageHost, root: HTMLElement, life: Lifetime): HTMLInputElement {
@@ -467,6 +479,20 @@ function titleField(data: PageData, host: PageHost, root: HTMLElement, life: Lif
   };
   life.listen(title, "keydown", (event) => {
     if (event.isComposing) return;
+    // Il titolo senza una modifica sua non ha niente da annullare: Ctrl+Z vale
+    // per la nota, come col fuoco nel testo, invece di non fare niente (o di
+    // lasciar fare a WebKit un annulla suo, un passo sì e uno no). Chi ha
+    // scritto nel titolo annulla prima ciò che ha scritto lì (IMP-6105).
+    const history = historyKey(event);
+    if (history && title.value === data.title) {
+      const run = history === "undo" ? host.undo : host.redo;
+      if (run) {
+        event.preventDefault();
+        event.stopPropagation();
+        run();
+      }
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
