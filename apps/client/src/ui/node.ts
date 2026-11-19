@@ -669,8 +669,7 @@ function update(
     }
     case "row":
       if (prev.node !== "row") return false;
-      children(el, next.cells, onAction);
-      ensureRowCell(el as HTMLTableRowElement);
+      rowCells(el as HTMLTableRowElement, next.cells, onAction);
       connect(el, next.action, onAction);
       return true;
     case "custom": {
@@ -941,6 +940,34 @@ function documentIcon(doc: string): HTMLElement {
     if (figure) span.appendChild(figure);
   }
   return span;
+}
+
+/// Riconcilia le celle di una riga già disegnata. Ogni nodo sta dentro il suo
+/// `td`, come lo mette il disegno: i figli diretti della riga sono le celle
+/// HTML, non i nodi, quindi l'accoppiamento si fa cella per cella. Accoppiare
+/// sulla riga non trovava nessun vecchio figlio (i `td` non sono nodi
+/// disegnati) e attaccava i nodi nuovi alla riga fuori dalle celle, accanto a
+/// quelle vecchie: una seconda griglia a ogni ridisegno (IMP-4801).
+function rowCells(row: HTMLTableRowElement, cells: readonly UiNode[], onAction: Port): void {
+  for (const empty of Array.from(row.querySelectorAll<HTMLTableCellElement>(":scope > td.ui-empty-cell"))) {
+    empty.remove();
+  }
+  cells.forEach((cell, i) => {
+    let td = row.cells[i];
+    if (!td) {
+      td = document.createElement("td");
+      row.appendChild(td);
+    }
+    children(td, [cell], onAction);
+  });
+  while (row.cells.length > cells.length) {
+    const extra = row.cells[row.cells.length - 1]!;
+    for (const child of Array.from(extra.children)) {
+      if (child instanceof HTMLElement) unmount(child);
+    }
+    extra.remove();
+  }
+  ensureRowCell(row);
 }
 
 function ensureRowCell(row: HTMLTableRowElement): void {
