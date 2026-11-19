@@ -1,0 +1,6 @@
+# Il corpus senza perdite (`fub-host`, test `prealpha_corpus`) confronta i
+# byte: CRLF e BOM esistono apposta, e la normalizzazione dei fine riga della
+# radice ne farebbe altri file.
+* -text
+README.md text eol=lf
+.gitattributes text eol=lf
