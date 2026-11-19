@@ -632,8 +632,10 @@ function renderFileList(only: string | null = null): void {
   const active = document.activeElement;
   const focused =
     active instanceof HTMLElement && fileListEl.contains(active) ? active : null;
-  let toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
+  const focusedEntry = focused?.closest<HTMLElement>('li[role="treeitem"]') ?? null;
+  let toRestore = focusedEntry?.dataset.path;
   const onChevron = focused?.matches("button.chevron");
+  const nearby = focusedEntry ? neighbours(focusedEntry) : [];
 
   if (only === null || !patchFolder(only)) rebuildTree();
 
@@ -646,6 +648,19 @@ function renderFileList(only: string | null = null): void {
   else if (renamed !== null && entry(renamed.to)) {
     toRestore = renamed.to;
     renameFocus = null;
+  }
+
+  // La voce col fuoco non c'è più: cestinata con Canc, spostata altrove,
+  // rinominata in un'altra cartella, nascosta da una cartella chiusa. Il fuoco
+  // non cade su `body`, dove le battute dopo si perderebbero (IMP-154): va
+  // alla voce vicina che resta.
+  let fallback: HTMLElement | null = null;
+  if (toRestore !== undefined && !entry(toRestore)) {
+    toRestore = nearby.find((path) => entry(path) !== undefined);
+    if (toRestore === undefined) {
+      fallback = treeEntries()[0] ?? fileListEl.querySelector<HTMLElement>(".tree-empty button");
+      toRestore = fallback?.dataset.path;
+    }
   }
 
   roving(toRestore);
@@ -661,7 +676,29 @@ function renderFileList(only: string | null = null): void {
       ? row?.querySelector<HTMLElement>(":scope > .tree-row > .chevron:not(:disabled)")
       : null;
     (control ?? row)?.focus();
+  } else {
+    fallback?.focus();
   }
+}
+
+/// Dove va il fuoco se `item` sparisce dall'albero, in ordine di preferenza:
+/// le voci che la seguono nello stesso gruppo, poi quelle che la precedono
+/// (dalla più vicina), poi la cartella che la contiene e le sue antenate. Si
+/// legge prima del ridisegno, dai nodi di prima; dopo vale la prima che c'è
+/// ancora. Più voci sparite insieme (una scelta multipla nel cestino) si
+/// saltano tutte.
+function neighbours(item: HTMLElement): string[] {
+  const out: string[] = [];
+  const add = (each: Element | null) => {
+    const path = each instanceof HTMLElement && each.matches('li[role="treeitem"]') ? each.dataset.path : undefined;
+    if (path !== undefined) out.push(path);
+  };
+  for (let next = item.nextElementSibling; next; next = next.nextElementSibling) add(next);
+  for (let previous = item.previousElementSibling; previous; previous = previous.previousElementSibling) add(previous);
+  for (let parent = item.parentElement?.closest('li[role="treeitem"]') ?? null; parent; parent = parent.parentElement?.closest('li[role="treeitem"]') ?? null) {
+    add(parent);
+  }
+  return out;
 }
 
 /// Rifà l'albero intero, dal contenuto caricato.
