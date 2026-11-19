@@ -21,6 +21,32 @@ stampa).
 - «Torna alla nota» o Esc chiude lo spazio e rimette il fuoco dove stava
   prima, se c'è ancora. Chiudere il riquadro chiude anche lo spazio.
 
+## Più note in un PDF
+
+- Dal tasto destro su una cartella dell'albero, «Esporta in PDF…»: le note
+  Markdown della cartella e delle sue sottocartelle, nell'ordine
+  dell'albero (la pagina della cartella per prima, poi le sottocartelle,
+  poi le note), anche quelle delle cartelle chiuse.
+- Dal tasto destro su più note scelte insieme, «Esporta in PDF…»: le note
+  nell'ordine in cui si sono scelte.
+- Lo spazio è lo stesso: la barra dice il nome della cartella (o «Note
+  scelte») e quante note sono, e «Torna alle note» lo chiude. Ogni nota è un
+  capitolo: comincia su una pagina sua, col suo nome in testa. L'indice è
+  uno solo, per tutto il PDF.
+- I collegamenti fra le note esportate portano dentro il PDF, alla nota o
+  alla sezione che nominano; quelli verso note rimaste fuori restano verso
+  fuori. Due note con lo stesso nome si distinguono nei segnalibri col loro
+  percorso.
+- Una nota che non si legge resta fuori, e un avviso la nomina; i file che
+  non sono note Markdown (disegni, fogli) restano fuori, e un avviso lo
+  dice. Oltre 500 note lo spazio non si apre e chiede di esportarne meno.
+- Le note si salvano all'apertura e si seguono come una nota sola: una
+  nota che cambia in un riquadro rifà le pagine.
+- «Esporta» passa per ora dalla stampa del sistema, come per una nota sola.
+  Il comando che scrive il PDF di più note (`pdf.write_book`) ne fa un
+  lavoro solo, che si annulla dal centro attività (vedi
+  [il formato](../reference/pdf-export-format.md#più-note-in-un-pdf)).
+
 ## Che cosa c'è
 
 - **La barra in alto**: «Torna alla nota», il nome della nota, lo zoom
