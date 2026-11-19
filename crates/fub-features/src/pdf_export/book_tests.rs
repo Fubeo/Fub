@@ -7,6 +7,7 @@ use fub_sdk::testing::MemoryHost;
 use serde_json::json;
 
 use super::book::*;
+use super::tags::{Nodo, Specie};
 use super::{
     Collegamento, Destinazione, ElencoPagine, ErroreEsportazione, Faccia, Pagina, Pezzo,
     Segnalibro, VERSIONE,
@@ -34,6 +35,7 @@ fn testo(faccia: usize, parola: &str) -> Pezzo {
         posizioni: (0..n).map(|i| i as f64 * 8.0).collect(),
         sottolineato: false,
         barrato: false,
+        nodo: None,
     }
 }
 
@@ -65,6 +67,7 @@ fn pagine(titolo: &str, parole: &[&str]) -> ElencoPagine {
                 y: 30.0,
             })
             .collect(),
+        struttura: Vec::new(),
     }
 }
 
@@ -87,6 +90,7 @@ fn rimando(pagina: usize, nota: &str) -> Rimando {
         nota: nota.into(),
         sezione: None,
         url: None,
+        nodo: None,
     }
 }
 
@@ -126,6 +130,7 @@ fn pdf_export_libro_le_pagine_vanno_in_fila_e_le_facce_in_una_tavola() {
         w: 1.0,
         h: 1.0,
         destinazione: Destinazione::Dentro { pagina: 1, y: 5.0 },
+        nodo: None,
     });
     let composto = componi(&libro(vec![capitolo("A.md", "A", &["Uno"]), secondo])).unwrap();
     let elenco = composto.elenco;
@@ -354,6 +359,7 @@ fn pdf_export_libro_i_libri_sbagliati_si_dicono_per_nome() {
         w: 1.0,
         h: 1.0,
         destinazione: Destinazione::Dentro { pagina: 1, y: 0.0 },
+        nodo: None,
     });
     let e = componi(&libro(vec![fuori, capitolo("B.md", "B", &["y"])])).unwrap_err();
     assert!(
@@ -462,4 +468,53 @@ fn pdf_export_libro_la_spec_chiede_libro_e_destinazione() {
         .map(|p| p.name.as_str())
         .collect();
     assert_eq!(richiesti, vec!["book", "target"]);
+}
+
+fn nodo(specie: Specie, genitore: Option<usize>) -> Nodo {
+    Nodo {
+        specie,
+        genitore,
+        livello: None,
+        alt: String::new(),
+        lingua: String::new(),
+        ambito: None,
+        numerato: None,
+    }
+}
+
+#[test]
+fn la_struttura_di_ogni_capitolo_resta_sua_nel_libro() {
+    // Due note accessibili: ognuna con una sezione e un paragrafo dentro,
+    // il testo nel paragrafo e, nella seconda, un collegamento.
+    let mut a = capitolo("A.md", "A", &["Uno"]);
+    let mut b = capitolo("B.md", "B", &["Due"]);
+    for c in [&mut a, &mut b] {
+        c.pagine.struttura = vec![
+            nodo(Specie::Sezione, None),
+            nodo(Specie::Paragrafo, Some(0)),
+        ];
+        if let Pezzo::Testo { nodo, .. } = &mut c.pagine.pagine[0].pezzi[0] {
+            *nodo = Some(1);
+        }
+    }
+    b.pagine.struttura.push(nodo(Specie::Collegamento, Some(1)));
+    let mut r = rimando(0, "A.md");
+    r.nodo = Some(2);
+    b.rimandi.push(r);
+
+    let elenco = componi(&libro(vec![a, b])).unwrap().elenco;
+    // I nodi della seconda nota vengono dopo quelli della prima, coi
+    // genitori spostati: nessun ramo finisce dentro l'altra nota.
+    let genitori: Vec<_> = elenco.struttura.iter().map(|n| n.genitore).collect();
+    assert_eq!(genitori, [None, Some(0), None, Some(2), Some(3)]);
+    let nodi: Vec<_> = elenco
+        .pagine
+        .iter()
+        .map(|p| match &p.pezzi[0] {
+            Pezzo::Testo { nodo, .. } => *nodo,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(nodi, [Some(1), Some(3)]);
+    assert_eq!(elenco.pagine[1].collegamenti[0].nodo, Some(4));
 }

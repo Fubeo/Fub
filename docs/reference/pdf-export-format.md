@@ -482,12 +482,16 @@ illeggibile.
 | `rimandi[].pagina` | la pagina del capitolo, dalla sua prima, che è la 0 |
 | `rimandi[].nota`, `sezione` | la nota a cui porta, e il titolo della sezione se il collegamento la nomina |
 | `rimandi[].url` | dove porta se la nota non è nel libro (solo `http`, `https`, `mailto` si aprono) |
+| `rimandi[].nodo` | facoltativo: il nodo `collegamento` della `struttura` del capitolo a cui appartiene, come per un collegamento della pagina |
 
 Il core ne fa un elenco solo, quello che scrive per una nota:
 
 - le pagine dei capitoli una dopo l'altra, e i collegamenti dentro una nota
   spostati con le sue pagine;
 - le facce di tutti i capitoli in una tavola, una volta sola ciascuna;
+- le `struttura` dei capitoli una dopo l'altra, ognuna un ramo del
+  documento: i genitori e i `nodo` dei pezzi, dei collegamenti e dei
+  rimandi si spostano dei nodi dei capitoli prima;
 - **un indice solo**: un segnalibro per nota, col suo titolo, e i titoli
   della nota un livello sotto (al più il 6); le pagine senza nota tengono i
   loro segnalibri. Due note con lo stesso titolo (con la chiave dei nomi

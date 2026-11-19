@@ -41,6 +41,7 @@ use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
 use serde::{Deserialize, Serialize};
 
+use super::tags::Nodo;
 use super::writer::valida;
 use super::{
     Collegamento, Destinazione, ElencoPagine, ErroreEsportazione, Faccia, Pezzo, Segnalibro,
@@ -119,6 +120,11 @@ pub struct Rimando {
     /// (`http`, `https`, `mailto`). Senza, il testo resta e il clic no.
     #[serde(default)]
     pub url: Option<String>,
+    /// Il nodo [`Specie::Collegamento`](super::tags::Specie::Collegamento)
+    /// della struttura del capitolo a cui appartiene, come per un
+    /// [`Collegamento`](super::Collegamento) della pagina.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nodo: Option<usize>,
 }
 
 /// Il libro composto: l'elenco da scrivere e ciò che non è andato come la
@@ -268,6 +274,7 @@ pub fn componi(libro: &Libro) -> Result<Composto, ErroreLibro> {
     let mut facce: Vec<Faccia> = Vec::new();
     let mut pagine = Vec::with_capacity(pagine_prima);
     let mut segnalibri = Vec::new();
+    let mut struttura: Vec<Nodo> = Vec::new();
     let mut avvisi = BTreeSet::new();
 
     for (i, capitolo) in libro.capitoli.iter().enumerate() {
@@ -287,11 +294,34 @@ pub fn componi(libro: &Libro) -> Result<Composto, ErroreLibro> {
             })
             .collect();
         let primo_nuovo = pagine.len();
+        // La struttura del capitolo in coda a quella del libro: i nodi, i
+        // genitori e i pezzi che li nominano si spostano dei nodi che
+        // vengono prima, così ogni capitolo resta un ramo del documento.
+        let nodi_prima = struttura.len();
+        struttura.extend(capitolo.pagine.struttura.iter().map(|nodo| Nodo {
+            genitore: nodo.genitore.map(|g| g + nodi_prima),
+            ..nodo.clone()
+        }));
         for pagina in &capitolo.pagine.pagine {
             let mut pagina = pagina.clone();
             for pezzo in &mut pagina.pezzi {
                 if let Pezzo::Testo { faccia, .. } = pezzo {
                     *faccia = mappa[*faccia];
+                }
+                match pezzo {
+                    Pezzo::Testo { nodo, .. }
+                    | Pezzo::Vettore { nodo, .. }
+                    | Pezzo::Immagine { nodo, .. } => {
+                        if let Some(n) = nodo {
+                            *n += nodi_prima;
+                        }
+                    }
+                    Pezzo::Riquadro { .. } => {}
+                }
+            }
+            for collegamento in &mut pagina.collegamenti {
+                if let Some(n) = &mut collegamento.nodo {
+                    *n += nodi_prima;
                 }
             }
             for collegamento in &mut pagina.collegamenti {
@@ -324,6 +354,7 @@ pub fn componi(libro: &Libro) -> Result<Composto, ErroreLibro> {
                     w: rimando.w,
                     h: rimando.h,
                     destinazione,
+                    nodo: rimando.nodo.map(|n| n + nodi_prima),
                 });
         }
         // Un segnalibro per nota, e i suoi titoli un livello sotto; le pagine
@@ -361,6 +392,7 @@ pub fn componi(libro: &Libro) -> Result<Composto, ErroreLibro> {
             facce,
             pagine,
             segnalibri,
+            struttura,
         },
         avvisi: avvisi.into_iter().collect(),
     })

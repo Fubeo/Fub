@@ -88,6 +88,7 @@ fn testo(y: f64, parola: &str) -> Pezzo {
         posizioni: (0..n).map(|i| i as f64 * 8.0).collect(),
         sottolineato: false,
         barrato: false,
+        nodo: None,
     }
 }
 
@@ -123,6 +124,7 @@ fn pagine(parole: &[&str], titoli: &[(&str, u8, usize, f64)]) -> ElencoPagine {
                 y: *y,
             })
             .collect(),
+        struttura: Vec::new(),
     }
 }
 
@@ -136,6 +138,7 @@ fn rimando(nota: &str, sezione: Option<&str>, url: Option<&str>) -> Rimando {
         nota: nota.into(),
         sezione: sezione.map(Into::into),
         url: url.map(Into::into),
+        nodo: None,
     }
 }
 
