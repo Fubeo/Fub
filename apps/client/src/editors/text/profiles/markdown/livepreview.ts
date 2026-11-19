@@ -27,6 +27,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
+import { hidesPageBreak } from "../../../../rules/page-break";
 import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
 import { alarmFigure, projectedReminder, reminderLabel, reminderLong, reminderNotificationsOn, reminderPassed, reminderTimeOf } from "./task-reminder";
@@ -832,10 +833,15 @@ export function computeDecorations(
           exclusions.push({ from: node.from, to: node.to });
           return;
         case "HTMLBlock":
-        case "CommentBlock":
+        case "CommentBlock": {
           exclusions.push({ from: node.from, to: node.to });
           opaqueBlocks.push({ from: node.from, to: node.to });
+          // L'interruzione di pagina a mano (D17, `<!-- pagina -->`) non si
+          // vede, come in Lettura: la si ritrova sulla riga del cursore, per
+          // cancellarla.
+          if (node.name === "CommentBlock" && hidesPageBreak(doc, node.from, node.to, reveal)) out.push({ from: node.from, to: node.to, kind: "hide" });
           return false;
+        }
 
         case "Image": {
           // Un'immagine del vault fuori dalla riga attiva si vede come in

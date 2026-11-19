@@ -26142,6 +26142,21 @@ h6.ui-heading {
   position: absolute;
   overflow: hidden;
 }
+/* Il clic su un blocco della pagina (T76; il prototipo `.px-it`): il blocco
+   sotto il puntatore si contorna, quello del menu aperto di più. Il contorno
+   sta fuori dalla fascia, che taglia solo ciò che ha dentro. */
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block] {
+  border-radius: 2px;
+  cursor: pointer;
+}
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block]:hover {
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 3px;
+}
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block].is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 .export-fascia-content {
   position: absolute;
   top: 0;

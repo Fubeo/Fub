@@ -639,6 +639,28 @@ export const SCENE = touchLast(onPage("shell", [
       await openExportDiagrams(page);
     },
   })),
+  // **Il clic sulla pagina** (T76): un clic su un paragrafo apre le sue
+  // regolazioni, col blocco contornato; sul diagramma anche il suo stile. La
+  // nota ha `<!-- pagina -->` prima del ritorno, che comincia una pagina sua.
+  ...[
+    ["esporta-pdf-blocco", "Il menu di un paragrafo sulla pagina dell'esportazione: pagina nuova, lascia fuori, Regola, Vai al blocco", undefined, "Prima tappa"],
+    ["esporta-pdf-blocco-diagramma", "Il menu di un diagramma sulla pagina dell'esportazione: con lo stile di quel diagramma", undefined, null],
+    ["esporta-pdf-blocco-stretta", "Il menu di un paragrafo sulla pagina dell'esportazione alla finestra minima (800 px)", EXPORT_NARROW, "Prima tappa"],
+  ].map(([id, title, viewport, text]) => ({
+    id,
+    title,
+    query: "live=esporta-blocchi",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.waitForFunction(() => !document.querySelector("#layout")?.classList.contains("layout-compact"));
+      await openLive(page, [], "top");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await openExportBlockMenu(page, text);
+    },
+  })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
   // cursore sceso con le frecce resta a metà altezza del foglio.
   {
@@ -3496,6 +3518,35 @@ async function openExportSpace(page) {
   // L'entrata dello spazio è finita, e il puntatore non sta su un controllo.
   await page.waitForFunction(() => document.querySelector(".export-space")?.getAnimations().length === 0);
   await page.mouse.move(0, 0);
+}
+
+/// Il clic su un blocco delle pagine dello spazio «Esporta in PDF» (T76): la
+/// fascia che ha `text`, o quella del diagramma se `text` è `null`; aspetta il
+/// menu aperto col blocco contornato.
+async function openExportBlockMenu(page, text) {
+  // La nota ha un diagramma: disegnato nella resa misurata e sulla pagina.
+  await page.waitForFunction(() => {
+    const drawn = [...(document.querySelector(".export-measure")?.querySelectorAll(".mermaid-diagram") ?? [])];
+    return drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
+      && document.querySelector(".export-space .export-fascia .mermaid-diagram img") !== null;
+  }, null, { timeout: 15_000 });
+  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
+  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
+  await page.evaluate(() => {
+    const found = globalThis.__fubCsp;
+    for (let i = found.length - 1; i >= 0; i--) {
+      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+    }
+  });
+  const band = text === null
+    ? page.locator(".export-space .export-fascia:has(.mermaid-diagram)").first()
+    : page.locator(".export-space .export-fascia", { hasText: text }).first();
+  await band.scrollIntoViewIfNeeded();
+  const box = await band.boundingBox();
+  if (!box) throw new Error("la fascia del blocco non si vede");
+  await page.mouse.click(box.x + Math.min(box.width / 2, 120), box.y + box.height / 2);
+  await page.waitForSelector("#context-menu [role^=menuitem]");
+  await page.waitForSelector(".export-space .export-fascia.is-selected");
 }
 
 /// Apre la sezione Diagrammi dello spazio «Esporta in PDF», apre la riga dei

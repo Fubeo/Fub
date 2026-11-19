@@ -30,7 +30,7 @@ import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
 import { ownCount, textOf, type PageColor } from "../themes";
 import { DIAGRAMS_SECTION } from "./diagrams";
 import { colorsBody } from "./colors";
-import { breaksBody, contentBody } from "./content";
+import { breaksBody, contentBody, contentSummary } from "./content";
 import { fontsBody, fontsSummary, type PrintFonts } from "./fonts";
 import { pageBody } from "./page";
 import { coverTocBody } from "./cover-toc";
@@ -63,6 +63,12 @@ export interface SectionContext {
   readonly memory: Map<string, unknown>;
   /// I caratteri del vault dello spazio (T72): l'elenco e quelli caricati.
   readonly fonts?: PrintFonts;
+  /// I blocchi lasciati fuori col clic sulla pagina (T76): quanti sono, e
+  /// rimetterli. Manca dove non si regola blocco per blocco (il libro).
+  readonly skipped?: {
+    readonly count: number;
+    restore(): void;
+  };
 }
 
 export interface ExportSection {
@@ -70,8 +76,9 @@ export interface ExportSection {
   /// per aprire quella giusta e il banco.
   readonly id: string;
   readonly title: Key;
-  /// Ciò che vale adesso, per la testa della sezione chiusa.
-  summary(profile: ExportProfile): string;
+  /// Ciò che vale adesso, per la testa della sezione chiusa. `context` dice
+  /// anche ciò che non sta nel profilo (i blocchi lasciati fuori).
+  summary(profile: ExportProfile, context?: SectionContext): string;
   /// Le regolazioni della sezione aperta.
   body?(context: SectionContext): HTMLElement;
 }
@@ -178,7 +185,7 @@ export const SECTIONS: readonly ExportSection[] = [
   {
     id: "contenuto",
     title: "pdf_export.section.content",
-    summary: (profile) => (profile.contenuto.commenti !== "no" ? t("pdf_export.content.comments") : t("pdf_export.content.all")),
+    summary: contentSummary,
     body: contentBody,
   },
   DIAGRAMS_SECTION,

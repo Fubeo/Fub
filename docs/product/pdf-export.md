@@ -206,6 +206,49 @@ identità degli altri.
   l'intestazione delle tabelle lunghe ripetuta in cima a ogni pagina (di
   serie). Spenta, l'intestazione resta solo all'inizio.
 
+## Il clic sulla pagina
+
+Un clic su un blocco delle pagine (non nella vista Tutte) apre le sue
+regolazioni, con in testa la specie del blocco («Paragrafo», «Titolo 2»,
+«Diagramma»…); il blocco resta contornato finché il menu è aperto. Il
+codice sta in
+[`export/block-actions.ts`](../../apps/client/src/export/block-actions.ts).
+
+- **Comincia qui una pagina nuova** scrive nella nota, sulla riga prima del
+  blocco, `<!-- pagina -->` (vedi
+  [le convenzioni della nota](../reference/note-conventions.md#interruzione-di-pagina));
+  su un blocco che ce l'ha già la voce è spuntata e la toglie. L'avviso che
+  lo dice ha «Annulla», che riporta la nota com'era se nel frattempo non è
+  cambiata. Le pagine si rifanno quando la nota si è salvata. La pagina
+  nuova vale sempre, anche con il separatore che disegna la sua linea.
+  - Con la nota in sola lettura la voce è spenta e dice perché.
+  - Su un blocco già in cima a una pagina la voce dice che così ci resta
+    anche se il testo prima cambia.
+  - Dentro un elenco la pagina nuova comincia solo prima dell'elenco: la
+    prima voce la mette lì, le altre hanno la voce spenta.
+  - Se la nota è cambiata dopo che le pagine sono state fatte, non si scrive
+    e un avviso chiede di riprovare quando le pagine si sono aggiornate.
+- **Lascia fuori dal PDF** toglie il blocco dalle pagine, senza toccare la
+  nota; l'avviso ha «Rimetti». La sezione Contenuto conta i blocchi
+  lasciati fuori nella testa e ha «Rimetti i N blocchi lasciati fuori». Il
+  blocco si riconosce dai titoli sopra di lui e dal contenuto: se la nota
+  cambia altrove resta fuori, se il blocco stesso cambia torna nel PDF e un
+  avviso lo dice. Per ora vale finché lo spazio è aperto: la memoria della
+  nota ([il formato](../reference/pdf-export-format.md)) non passa ancora
+  dal client.
+- **Lo stile di questo diagramma**, sul diagramma: «Come gli altri», «Segue
+  il tema» o uno dei quattro stili con il fondo (vedi [Diagrammi](#diagrammi)).
+- **Regola: …** apre la sezione che regola quella specie di blocco:
+  Caratteri per titoli, paragrafi, elenchi e citazioni; Colori per
+  riquadri, codice e tabelle; Contenuto per compiti, ripiegabili e
+  trasclusioni; Diagrammi per i diagrammi.
+- **Vai al blocco nella nota** chiude lo spazio e porta il cursore al
+  blocco.
+
+Il titolo della pagina e i blocchi di una nota trasclusa non sono blocchi
+della nota: il loro menu ha solo «Regola: …». In un PDF di più note il menu
+non scrive nelle note e non porta nella nota.
+
 ## Diagrammi
 
 La sezione Diagrammi decide come escono i diagrammi Mermaid della nota.

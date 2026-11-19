@@ -2158,7 +2158,10 @@ function embedBlock(text: string, block: string): string {
 /// esserlo: basta a non mostrare il sorgente grezzo, col suo `#`, nell'anteprima.
 /// `fences`: un recinto dice la sua lingua (`language-mermaid`), come nella
 /// resa vera; serve alla resa per la stampa della Live (i diagrammi, T75).
-function plainHtml(markdown: string, fences = false): string {
+/// `print`: come la resa per la stampa del core, ogni blocco dice dove sta nel
+/// sorgente (`data-fub-source-start`/`-end`, in byte) e `<!-- pagina -->` è il
+/// segnaposto che volta pagina (il clic sulla pagina, T76).
+function plainHtml(markdown: string, fences = false, print = false): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const inline = (s: string) => esc(s)
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
@@ -2166,22 +2169,38 @@ function plainHtml(markdown: string, fences = false): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const encoder = new TextEncoder();
+  const lines = markdown.split("\n");
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    starts.push(offset);
+    offset += encoder.encode(line).length + 1;
+  }
+  /// Gli attributi della posizione di un blocco dalla riga `from` alla `to`.
+  const at = (from: number, to: number): string =>
+    print ? ` data-fub-source-start="${starts[from]}" data-fub-source-end="${starts[to]! + encoder.encode(lines[to]!).length}"` : "";
   const out: string[] = [];
   let paragraph: string[] = [];
+  let paragraphFrom = 0;
   let items: string[] = [];
+  let itemsFrom = 0;
   let fence: string[] | null = null;
+  let fenceFrom = 0;
   let info = "";
+  let row = -1;
   const flush = (): void => {
-    if (paragraph.length > 0) out.push(`<p>${paragraph.map(inline).join(" ")}</p>`);
-    if (items.length > 0) out.push(`<ul>${items.join("")}</ul>`);
+    if (paragraph.length > 0) out.push(`<p${at(paragraphFrom, paragraphFrom + paragraph.length - 1)}>${paragraph.map(inline).join(" ")}</p>`);
+    if (items.length > 0) out.push(`<ul${at(itemsFrom, itemsFrom + items.length - 1)}>${items.join("")}</ul>`);
     paragraph = [];
     items = [];
   };
-  for (const line of markdown.split("\n")) {
+  for (const line of lines) {
+    row++;
     if (fence !== null) {
       if (line.startsWith("```")) {
         const language = fences && /^[a-z]+$/u.test(info) ? ` class="language-${info}"` : "";
-        out.push(`<pre><code${language}>${esc(fence.join("\n"))}</code></pre>`);
+        out.push(`<pre${at(fenceFrom, row)}><code${language}>${esc(fence.join("\n"))}</code></pre>`);
         fence = null;
       } else fence.push(line);
       continue;
@@ -2189,21 +2208,30 @@ function plainHtml(markdown: string, fences = false): string {
     if (line.startsWith("```")) {
       flush();
       fence = [];
+      fenceFrom = row;
       info = line.slice(3).trim().toLowerCase();
+      continue;
+    }
+    // `<!-- pagina -->` volta pagina sulla carta; a schermo non c'è, come
+    // nella resa vera.
+    if (/^\s*<!--\s*pagina\s*-->\s*$/u.test(line)) {
+      flush();
+      if (print) out.push(`<div${at(row, row)} class="page-break" data-page-break="mano"></div>`);
       continue;
     }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flush();
       const level = heading[1]!.length;
-      out.push(`<h${level}>${inline(heading[2]!)}</h${level}>`);
+      out.push(`<h${level}${at(row, row)}>${inline(heading[2]!)}</h${level}>`);
       continue;
     }
     const item = /^\s*[-*]\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line);
     if (item) {
       if (paragraph.length > 0) flush();
+      if (items.length === 0) itemsFrom = row;
       const box = item[1] === undefined ? "" : `<input type="checkbox" disabled${item[1] === " " ? "" : " checked"}> `;
-      items.push(`<li>${box}${inline(item[2]!)}</li>`);
+      items.push(`<li${at(row, row)}>${box}${inline(item[2]!)}</li>`);
       continue;
     }
     if (line.trim() === "") {
@@ -2211,6 +2239,7 @@ function plainHtml(markdown: string, fences = false): string {
       continue;
     }
     if (items.length > 0) flush();
+    if (paragraph.length === 0) paragraphFrom = row;
     paragraph.push(line);
   }
   if (fence !== null) out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
@@ -2248,7 +2277,7 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   // stessa resa della lettura, come la darebbe il kernel per la carta.
   render_print: (q) => {
     const doc = (q as { doc: string }).doc;
-    const html = printComments(doc, OUTPUT[doc] ?? (doc === LIVE_DOC && LIVE !== null ? plainHtml(LIVE.text, true) : plainHtml(CORPUS[doc] ?? "")));
+    const html = printComments(doc, OUTPUT[doc] ?? (doc === LIVE_DOC && LIVE !== null ? plainHtml(LIVE.text, true, true) : plainHtml(CORPUS[doc] ?? "")));
     return { kind: "render_print", value: { html, parts: [] } };
   },
   render_embed: (q) => {

@@ -462,6 +462,12 @@ export class ExportPages {
       if (!block) continue;
       const band = document.createElement("div");
       band.className = "export-fascia";
+      // Chi è il blocco, per il clic sulla pagina (`block-actions.ts`): la
+      // sua identità, il suo posto fra i blocchi della resa misurata, e se
+      // comincia lui la pagina.
+      band.dataset["block"] = placement.id;
+      band.dataset["blockIndex"] = String(result.blocks[placement.box]);
+      if (placement.y === 0 && placement.column === 0 && placement.from === 0 && placement.part === "corpo") band.dataset["pageTop"] = "";
       band.style.left = `${placement.column * (columnWidth + gap)}px`;
       band.style.top = `${placement.y}px`;
       band.style.width = `${columnWidth}px`;

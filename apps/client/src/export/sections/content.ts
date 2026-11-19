@@ -4,7 +4,9 @@
 // Contenuto: una riga per specie di blocco, col nome a sinistra e le scelte a
 // destra (proprietà, commenti, link, compiti fatti, ripiegabili, schede vive,
 // tabelle), poi l'interruttore del codice numerato. Che cosa fa ogni scelta
-// sulla resa lo dice `export/content/`.
+// sulla resa lo dice `export/content/`. In fondo i blocchi lasciati fuori uno
+// per uno col clic sulla pagina (T76, `export/block-actions.ts`): quanti sono
+// in testa, «Rimetti» nel corpo.
 //
 // Interruzioni: tre interruttori (ogni Titolo 2, il separatore, le
 // intestazioni delle tabelle lunghe) e la nota su ciò che vale sempre.
@@ -22,6 +24,7 @@ import {
   PROPERTIES_CHOICES,
   TABLES_CHOICES,
 } from "../content/choices";
+import { exclusionsRow, exclusionsSummary } from "../block-actions";
 import type { ExportProfile, ProfileBreaks, ProfileContent } from "../profile";
 import type { SectionContext } from "./index";
 
@@ -108,6 +111,14 @@ const DONE_NAMES: (readonly ["mostra" | "togli", Key])[] = [
   ["togli", "pdf_export.content.done.remove"],
 ];
 
+/// La testa del Contenuto: i blocchi lasciati fuori col clic sulla pagina
+/// prima di tutto (il prototipo), poi i commenti o «Tutta la nota».
+export function contentSummary(profile: ExportProfile, context?: SectionContext): string {
+  const skipped = context?.skipped?.count ?? 0;
+  if (skipped > 0) return exclusionsSummary(skipped);
+  return profile.contenuto.commenti !== "no" ? t("pdf_export.content.comments") : t("pdf_export.content.all");
+}
+
 export function contentBody(context: SectionContext): HTMLElement {
   const body = document.createElement("div");
   body.className = "export-content-section";
@@ -123,6 +134,9 @@ export function contentBody(context: SectionContext): HTMLElement {
     choiceRow("export-content-tables", "pdf_export.content.tables", TABLES_NAMES, choices.tables, (tabelle) => set({ tabelle })),
     toggle("export-content-code", "pdf_export.content.code", null, choices.codeNumbers, () => set({ codice_numerato: !contentChoicesOf(context.profile.contenuto).codeNumbers })),
   );
+  // Sotto le scelte per specie, i blocchi lasciati fuori uno per uno (T76):
+  // «Rimetti», o come se ne lascia fuori uno.
+  if (context.skipped) body.append(exclusionsRow(context.skipped.count, context.skipped.restore));
   return body;
 }
 

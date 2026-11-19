@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2424 hook**, **7 stati** (1082 assegnazioni su 321 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2424 hook**, **7 stati** (1083 assegnazioni su 321 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 530 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 533 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -88,40 +88,41 @@ draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-ti
 draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end
 draw-tip-other-start draw-tip-square-end draw-tip-square-start draw-tip-triangle-end
 draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo
-draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out export-back export-open
-export-pick export-print eye flag fmt-alarm fmt-bold fmt-bullets fmt-callout fmt-chevron-down
-fmt-clear fmt-code fmt-codeblock fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details
-fmt-diagram fmt-embed fmt-expand fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide
-fmt-highlight fmt-icon fmt-image fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more
-fmt-numbers fmt-open fmt-outdent fmt-person fmt-plus fmt-property fmt-quick fmt-quote fmt-redo
-fmt-rule fmt-sort fmt-star fmt-strike fmt-subscript fmt-superscript fmt-table fmt-tasks fmt-text
-fmt-toc fmt-underline fmt-undo fmt-webpage fmt-wikilink focus footnote format-drawing format-odt
-format-photo format-sheet format-word gr-accounting gr-align-bottom gr-align-center gr-align-left
-gr-align-middle gr-align-right gr-align-top gr-arrow-down gr-arrow-left gr-arrow-right gr-arrow-up
-gr-border-all gr-border-bottom gr-border-double gr-border-inside gr-border-left gr-border-none
-gr-border-outside gr-border-right gr-border-thick gr-border-thick-bottom gr-border-top
-gr-border-top-bottom gr-breaks gr-bring-forward gr-bring-front gr-calc gr-calc-now gr-cell-style
-gr-cells gr-cf gr-cf-bars gr-cf-icons gr-cf-scale gr-cf-top gr-chart-column gr-chart-element
-gr-chart-layout gr-chart-line gr-chart-other gr-chart-pie gr-chart-recommended gr-chart-scatter
-gr-chart-switch gr-checkbox gr-chevron-down gr-chevron-up gr-clear gr-comment gr-comment-delete
-gr-comment-new gr-convert gr-date gr-decimal-less gr-decimal-more gr-delete gr-delete-column
-gr-delete-row gr-dependents gr-duplicates gr-fill gr-fill-down gr-filter gr-filter-advanced
-gr-filter-clear gr-financial gr-find gr-flash gr-font gr-format gr-freeze gr-function gr-gridlines
-gr-group gr-icons gr-indent-less gr-indent-more gr-insert gr-insert-column gr-insert-row gr-link
-gr-lock gr-logical gr-lookup gr-margins gr-math gr-merge gr-merge-across gr-merge-cells gr-minus
-gr-more gr-name gr-note gr-number gr-orientation gr-orientation-down gr-orientation-up
-gr-orientation-vertical gr-page gr-page-landscape gr-page-orientation gr-page-setup gr-paper gr-pdf
-gr-plus gr-precedents gr-print-area gr-print-preview gr-print-titles gr-reapply gr-recent gr-resize
-gr-send-back gr-send-backward gr-shape-ellipse gr-shape-line gr-shape-outline gr-shape-rectangle
-gr-shape-rounded gr-shape-triangle gr-shapes gr-sheet gr-show-formulas gr-sort gr-sort-asc
-gr-sort-desc gr-sort-filter gr-styles gr-subtotal gr-sum gr-symbol gr-table gr-table-style gr-text
-gr-text-box gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-normal
-gr-what-if gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph grip-eyes grip-eyes-held hash heading
-heart help history home image inbox info keyboard kit-eyedropper line-number media-dark-pages
-media-fit-width media-page-next media-page-previous media-show-annotations media-thumbnails
-media-two-pages minus monitor moon more move music notes outline palette panel-left panel-right pen
-people pin plus prop-checkbox prop-date prop-list prop-number prop-people prop-select prop-status
-prop-tags prop-text prop-url properties publish query rc-align-center rc-align-justify rc-align-left
+draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out export-adjust export-back
+export-break export-goto export-open export-pick export-print eye flag fmt-alarm fmt-bold
+fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code fmt-codeblock fmt-color fmt-columns
+fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed fmt-expand fmt-footnote fmt-h1
+fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon fmt-image fmt-indent fmt-italic
+fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers fmt-open fmt-outdent fmt-person fmt-plus
+fmt-property fmt-quick fmt-quote fmt-redo fmt-rule fmt-sort fmt-star fmt-strike fmt-subscript
+fmt-superscript fmt-table fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo fmt-webpage fmt-wikilink
+focus footnote format-drawing format-odt format-photo format-sheet format-word gr-accounting
+gr-align-bottom gr-align-center gr-align-left gr-align-middle gr-align-right gr-align-top
+gr-arrow-down gr-arrow-left gr-arrow-right gr-arrow-up gr-border-all gr-border-bottom
+gr-border-double gr-border-inside gr-border-left gr-border-none gr-border-outside gr-border-right
+gr-border-thick gr-border-thick-bottom gr-border-top gr-border-top-bottom gr-breaks gr-bring-forward
+gr-bring-front gr-calc gr-calc-now gr-cell-style gr-cells gr-cf gr-cf-bars gr-cf-icons gr-cf-scale
+gr-cf-top gr-chart-column gr-chart-element gr-chart-layout gr-chart-line gr-chart-other gr-chart-pie
+gr-chart-recommended gr-chart-scatter gr-chart-switch gr-checkbox gr-chevron-down gr-chevron-up
+gr-clear gr-comment gr-comment-delete gr-comment-new gr-convert gr-date gr-decimal-less
+gr-decimal-more gr-delete gr-delete-column gr-delete-row gr-dependents gr-duplicates gr-fill
+gr-fill-down gr-filter gr-filter-advanced gr-filter-clear gr-financial gr-find gr-flash gr-font
+gr-format gr-freeze gr-function gr-gridlines gr-group gr-icons gr-indent-less gr-indent-more
+gr-insert gr-insert-column gr-insert-row gr-link gr-lock gr-logical gr-lookup gr-margins gr-math
+gr-merge gr-merge-across gr-merge-cells gr-minus gr-more gr-name gr-note gr-number gr-orientation
+gr-orientation-down gr-orientation-up gr-orientation-vertical gr-page gr-page-landscape
+gr-page-orientation gr-page-setup gr-paper gr-pdf gr-plus gr-precedents gr-print-area
+gr-print-preview gr-print-titles gr-reapply gr-recent gr-resize gr-send-back gr-send-backward
+gr-shape-ellipse gr-shape-line gr-shape-outline gr-shape-rectangle gr-shape-rounded
+gr-shape-triangle gr-shapes gr-sheet gr-show-formulas gr-sort gr-sort-asc gr-sort-desc
+gr-sort-filter gr-styles gr-subtotal gr-sum gr-symbol gr-table gr-table-style gr-text gr-text-box
+gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-normal gr-what-if
+gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph grip-eyes grip-eyes-held hash heading heart help
+history home image inbox info keyboard kit-eyedropper line-number media-dark-pages media-fit-width
+media-page-next media-page-previous media-show-annotations media-thumbnails media-two-pages minus
+monitor moon more move music notes outline palette panel-left panel-right pen people pin plus
+prop-checkbox prop-date prop-list prop-number prop-people prop-select prop-status prop-tags
+prop-text prop-url properties publish query rc-align-center rc-align-justify rc-align-left
 rc-align-right rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear
 rc-column-after rc-column-before rc-column-delete rc-column-left rc-column-right rc-columns
 rc-comment-new rc-comments rc-count rc-drawing rc-drawing-edit rc-find rc-footer rc-header rc-image

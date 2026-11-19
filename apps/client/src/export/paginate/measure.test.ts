@@ -4,7 +4,8 @@
 // guardano che le scatole escano giuste, con la stima e con le righe.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bandsOf, blockId, lineRows, printBlocks, PrintMeasure } from "./measure";
+import { MANUAL_BREAK_PREFIX } from "./breaks";
+import { bandsOf, blockId, lineRows, printBlocks, PrintMeasure, sourceSpanOf } from "./measure";
 import { boxHeight } from "./model";
 
 type Rect = { top: number; bottom: number };
@@ -79,6 +80,41 @@ describe("i blocchi della resa", () => {
     const blocks = printBlocks(root);
     expect(blocks.map((b) => b.tagName)).toEqual(["H1", "H2", "P", "LI", "LI", "PRE", "DIV", "HR", "FIGURE"]);
     expect(blocks.map((b, i) => blockId(b, i))).toEqual(["titolo", "md:0", "md:10", "md:30", "md:40", "md:50", "blocco:6", "md:70", "md:80"]);
+  });
+});
+
+describe("la resa per la stampa del core", () => {
+  const CORE = `
+    <article class="print-page"><h1>Nota</h1><div class="print-body markdown-rendered">
+      <p data-fub-source-start="0" data-fub-source-end="6">Prima.</p>
+      <div data-fub-source-start="8" data-fub-source-end="23" class="page-break" data-page-break="mano"></div>
+      <div class="markdown-table-scroll"><table data-fub-source-start="24" data-fub-source-end="40"><tbody><tr><td>1</td></tr></tbody></table></div>
+      <div class="embed"><p data-fub-source-start="3" data-fub-source-end="9">altra nota</p></div>
+    </div></article>`;
+
+  it("l'identità di un blocco è la sua posizione nel sorgente, anche dentro il contenitore di una tabella, mai quella di una nota trasclusa", () => {
+    const root = document.createElement("div");
+    root.innerHTML = CORE;
+    document.body.append(root);
+    const blocks = printBlocks(root);
+    expect(blocks.map((b, i) => blockId(b, i))).toEqual(["titolo", "src:0", "src:8", "src:24", "blocco:4"]);
+    expect(sourceSpanOf(blocks[3]!)).toEqual({ start: 24, end: 40 });
+    expect(sourceSpanOf(blocks[4]!)).toBeNull();
+    // Un blocco nascosto prima non sposta le identità dopo.
+    blocks[1]!.hidden = true;
+    expect(printBlocks(root).map((b, i) => blockId(b, i))).toEqual(["titolo", "src:8", "src:24", "blocco:3"]);
+  });
+
+  it("`<!-- pagina -->` si misura come un separatore alto zero che volta pagina", () => {
+    const root = document.createElement("div");
+    root.innerHTML = CORE;
+    document.body.append(root);
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      return rect(this.matches("p") ? { top: 100, bottom: 120 } : this.matches("[data-page-break]") ? { top: 130, bottom: 130 } : { top: 0, bottom: 0 });
+    });
+    const measure = new PrintMeasure(root);
+    expect(measure.measure(2, "stima")).toEqual({ box: { kind: "separator", id: `${MANUAL_BREAK_PREFIX}src:8`, height: 0 }, top: 130, bottom: 130, exact: true });
+    measure.dispose();
   });
 });
 

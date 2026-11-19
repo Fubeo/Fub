@@ -10361,11 +10361,13 @@
         "export-fascia",
         "export-fascia-content",
         "export-fit",
-        "print-page"
+        "print-page",
+        "is-selected"
       ],
       "states": [
         "rest",
         "hover",
+        "selected",
         "focused"
       ]
     },
@@ -12581,7 +12583,7 @@
     "optional_roles": 73,
     "hooks": 2424,
     "state_names": 7,
-    "assigned_states": 1082,
+    "assigned_states": 1083,
     "components": 321,
     "preference_tokens": 196
   }

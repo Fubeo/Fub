@@ -49,6 +49,7 @@ import { openLifetime } from "../ui/lifetime";
 import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { createBand, type Band } from "./band";
+import { attachBlockActions, BlockExclusions, type ExportNote } from "./block-actions";
 import { inertComments } from "./content/comments";
 import { ExportContent } from "./content/index";
 import { renderPdfPages, type PdfPagesPorts } from "./content/pdf-pages";
@@ -124,6 +125,10 @@ export interface ExportSpaceOptions {
   readonly scheduler?: Scheduler;
   readonly waitMs?: number;
   readonly measure?: (page: HTMLElement) => BlockSource & { dispose?(): void };
+  /// La nota, per il clic sulla pagina (T76): l'interruzione a mano si scrive
+  /// lì, e «Vai al blocco nella nota» ci porta. Il libro non la dà, e senza
+  /// non ci sono nemmeno i blocchi lasciati fuori.
+  readonly note?: ExportNote;
   /// Lo spazio della prima resa, per chi vuole aspettarla (il banco, i test).
   readonly onReady?: (result: SlicedResult) => void;
 }
@@ -149,6 +154,11 @@ export interface ExportSpace {
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "export-open": ["M6.75 9.3L12 14.7l5.25-5.4"],
   "export-pick": ["M4.5 19.5l3.6-.9 10.95-10.95-2.7-2.7L5.4 15.9z", "M3.75 21.75h16.5"],
+  // Il menu del blocco sulla pagina (T76; il prototipo `i-rule`, `i-sliders`,
+  // `i-arr-l`).
+  "export-break": ["M3 12h18", "M7.5 6.75h9M7.5 17.25h9"],
+  "export-adjust": ["M3 6.75h18M3 12h18M3 17.25h18", "M13.4 6.75a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0", "M5.9 12a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0", "M11.9 17.25a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0"],
+  "export-goto": ["M19.5 12H5.25", "M11.25 6l-6 6 6 6"],
 };
 
 /// Il conto dei segnalibri del PDF: i titoli della nota impaginata.
@@ -190,7 +200,10 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   let latest: SlicedResult | null = null;
   const finals: ((result: SlicedResult) => void)[] = [];
   let readyTold = false;
-  let settings = printSettingsOf(profile);
+  /// I blocchi lasciati fuori col clic sulla pagina (T76), per questa nota.
+  const exclusions = new BlockExclusions();
+  const settingsOf = (shown: ExportProfile): PrintSettings => printSettingsOf(shown, options.note ? exclusions.ids : []);
+  let settings = settingsOf(profile);
   const diagramStyles = new Map(options.diagramStyles ?? []);
   let diagramLook: DiagramPrintLook = diagramPrintLook(profile, diagramStyles);
   let diagramKey = diagramLookKey(diagramLook);
@@ -271,7 +284,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   function preview(next: ExportProfile | null): void {
     if (closed || next === previewing) return;
     previewing = next;
-    showSettings(printSettingsOf(next ?? profile));
+    showSettings(settingsOf(next ?? profile));
     pages.setMarks(pageMarksOf(next ?? profile));
     // Un tema in anteprima cambia anche i diagrammi che seguono il tema.
     restyleDiagrams();
@@ -281,7 +294,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   /// pagine si rifanno col carattere vero.
   function loadFonts(of: ExportProfile): void {
     void fonts.ensure(of).then((fresh) => {
-      if (fresh && !closed) showSettings(printSettingsOf(previewing ?? profile));
+      if (fresh && !closed) showSettings(settingsOf(previewing ?? profile));
     });
   }
 
@@ -310,6 +323,16 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
         },
       },
       fonts,
+      // I blocchi lasciati fuori col clic sulla pagina (T76): solo una nota
+      // si può regolare blocco per blocco.
+      skipped: options.note
+        ? {
+            get count() {
+              return exclusions.count;
+            },
+            restore: restoreExcluded,
+          }
+        : undefined,
     };
   }
 
@@ -330,7 +353,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     name.textContent = t(section.title);
     const summary = document.createElement("span");
     summary.className = "export-section-summary";
-    summary.textContent = section.summary(profile);
+    summary.textContent = section.summary(profile, sectionContext());
     const chevron = document.createElement("span");
     chevron.className = "export-icon export-icon-small export-section-chevron";
     chevron.setAttribute("aria-hidden", "true");
@@ -379,6 +402,19 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     if (opened.has(id)) opened.delete(id);
     else opened.add(id);
     renderSide();
+  }
+
+  /// I blocchi lasciati fuori sono cambiati: le pagine si rifanno senza di
+  /// loro, e il pannello conta quanti sono.
+  function excludedChanged(): void {
+    if (closed) return;
+    showSettings(settingsOf(previewing ?? profile));
+    renderSide();
+  }
+
+  function restoreExcluded(): void {
+    exclusions.clear();
+    excludedChanged();
   }
 
   /// L'indice su un foglio fuori dalla vista: quanto è alto il titolo e
@@ -484,6 +520,15 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     cardPages: options.pdf ? (target, width) => renderPdfPages(options.pdf!, target, options.doc, width) : undefined,
     onChange: () => {
       if (!closed) paginator.remeasure();
+    },
+    // I blocchi lasciati fuori col clic sulla pagina si ritrovano nella resa
+    // nuova, prima dei cambi del Contenuto; uno che è cambiato non è più lo
+    // stesso, e l'esclusione si perde dicendolo.
+    pristine: (page) => {
+      if (!options.note || exclusions.count === 0) return;
+      const found = exclusions.resolve(page);
+      for (const lost of found.lost) notify(t("pdf_export.block.lost", { block: lost.preview }), "info");
+      if (found.changed || found.lost.length > 0) queueMicrotask(excludedChanged);
     },
   });
 
@@ -628,6 +673,17 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
     redecorate();
   }
   if (options.follow) lifetime.add(options.follow(follow));
+  lifetime.add(attachBlockActions({
+    pages: pages.element,
+    allPages: () => view === "tutte",
+    page: () => paginator.host.querySelector<HTMLElement>(".print-page"),
+    exclusions,
+    excludedChanged,
+    openSection: (id) => space.openSection(id),
+    diagramStyle: (index) => diagramStyles.get(index),
+    setDiagramStyle: (index, style) => space.setDiagramStyle(index, style),
+    ...(options.note ? { note: options.note } : {}),
+  }));
   lifetime.add(() => window.clearTimeout(followTimer));
 
   lifetime.listen(root, "keydown", (event) => {
@@ -670,7 +726,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
       const before = profile;
       profile = next;
       previewing = null;
-      showSettings(printSettingsOf(next));
+      showSettings(settingsOf(next));
       pages.setMarks(pageMarksOf(next));
       toolbar.setProfile(next.nome, next !== base);
       restyleDiagrams();
