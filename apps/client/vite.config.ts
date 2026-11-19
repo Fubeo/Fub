@@ -433,7 +433,8 @@ export default defineConfig({
           // condiviso più grosso e ne consuma il margine a ogni frase nuova.
           if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
           // Il motore del testo con i suoi pezzi, il tema che legge, gli
-          // appunti delle tabelle e il diario della griglia: li usano la
+          // appunti delle tabelle, la regola di `<!-- pagina -->` (la Live e
+          // l'esportazione in PDF) e il diario della griglia: li usano la
           // shell e la finestra del documento fin dall'avvio. Senza un nome
           // suo, da quando i fogli arrivano soltanto con un `import()`,
           // Rollup li fondeva nel chunk del ponte dei documenti, oltre la
@@ -441,7 +442,7 @@ export default defineConfig({
           if (
             /\/src\/editors\/text\/(engine|theme|phrases|history-footprints|smart-lists|properties-display|live-reveal|paste-html|indent-guides|soft-cursor)\.ts$/.test(id) ||
             /\/src\/theme\/(theme|loader|options|snippets|diagram-style|content-look)\.ts$/.test(id) ||
-            /\/src\/(rules\/offsets|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
+            /\/src\/(rules\/offsets|rules\/page-break|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
           ) {
             return "text-engine";
           }

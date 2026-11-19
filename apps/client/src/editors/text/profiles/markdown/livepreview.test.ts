@@ -399,6 +399,19 @@ describe("il markup letterale non è sintassi Obsidian", () => {
     expect(ofKind(ds, "highlight")).toEqual([]);
   });
 
+  it("`<!-- pagina -->` (D17) non si vede fuori dalla riga del cursore, e sulla sua riga resta da cancellare", () => {
+    const doc = "Prima.\n\n<!-- pagina -->\n## Dopo\n\n<!-- un commento -->";
+    const from = doc.indexOf("<!-- pagina -->");
+    expect(ofKind(decorate(doc), "hide")).toContainEqual({ from, to: from + "<!-- pagina -->".length, kind: "hide" });
+    // Il titolo dopo resta un titolo.
+    expect(ofKind(decorate(doc), "h2")).toHaveLength(1);
+    // Sulla riga attiva il commento si legge.
+    expect(ofKind(decorate(doc, [3]), "hide").some((d) => d.from === from)).toBe(false);
+    // Un commento che dice altro resta com'era.
+    const other = doc.indexOf("<!-- un commento -->");
+    expect(decorate(doc).some((d) => d.from === other)).toBe(false);
+  });
+
   it("un `#` dentro un tag HTML non è un tag", () => {
     expect(ofKind(decorate('un <a href="#frag">t</a> qui'), "tag")).toEqual([]);
   });

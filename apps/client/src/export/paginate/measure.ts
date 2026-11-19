@@ -19,6 +19,7 @@
 // spezzare. Così una pagina impaginata con le stime si sposta al più di una
 // riga quando arrivano le righe vere.
 
+import { MANUAL_BREAK_PREFIX } from "./breaks";
 import type { FlowBox, HeadingBox } from "./model";
 
 export type MeasureDepth = "stima" | "righe";
@@ -49,11 +50,33 @@ const IRREGULAR = `${ATOMIC}, p, ul, ol, pre, table, blockquote, div, figure, h1
 
 /// L'identità di un blocco nella resa: la sua posizione nel sorgente, se la
 /// resa la dice (la ritrovano l'indice e il clic sulla pagina), se no l'ordine.
+/// La resa della Lettura la scrive in `data-md-from`, quella per la stampa
+/// del core in byte in `data-fub-source-start` (`sourceSpanOf`): con lei
+/// l'identità non dipende da quali blocchi sono nascosti.
 export function blockId(element: Element, index: number): string {
   const from = (element as HTMLElement).dataset?.mdFrom;
   if (from !== undefined && /^\d+$/.test(from)) return `md:${from}`;
+  const span = sourceSpanOf(element);
+  if (span) return `src:${span.start}`;
   if (element instanceof HTMLHeadingElement && element.parentElement?.classList.contains("print-page")) return "titolo";
   return `blocco:${index}`;
+}
+
+/// Dove sta un blocco della resa per la stampa nel sorgente della nota, in
+/// byte UTF-8 (`data-fub-source-start`/`-end` del core); per un contenitore
+/// che la resa mette attorno a un blocco solo (lo scorrimento di una tabella)
+/// quello del blocco dentro. `null` se la resa non lo dice: il titolo della
+/// pagina, ciò che lo spazio aggiunge, un blocco di una nota trasclusa.
+export function sourceSpanOf(element: Element): { readonly start: number; readonly end: number } | null {
+  // Dentro una nota trasclusa le posizioni sono della nota trasclusa.
+  const inner = element.children.length === 1 && !element.classList.contains("embed") ? element.firstElementChild : null;
+  const own = element.hasAttribute("data-fub-source-start") ? element : inner;
+  if (!own) return null;
+  const start = own.getAttribute("data-fub-source-start") ?? "";
+  const end = own.getAttribute("data-fub-source-end") ?? "";
+  if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) return null;
+  const span = { start: Number(start), end: Number(end) };
+  return Number.isSafeInteger(span.start) && Number.isSafeInteger(span.end) && span.start <= span.end ? span : null;
 }
 
 /// I blocchi di primo livello della resa, nell'ordine: si scende nei
@@ -105,6 +128,11 @@ export class PrintMeasure {
       return { box: { kind: "heading", id, level: Number(tag[1]) as HeadingBox["level"], height }, top, bottom, exact: true };
     }
     if (tag === "HR") return { box: { kind: "separator", id, height }, top, bottom, exact: true };
+    // `<!-- pagina -->` (D17): un separatore alto zero che volta sempre pagina
+    // (`applyBreaks`).
+    if (element.hasAttribute("data-page-break")) {
+      return { box: { kind: "separator", id: `${MANUAL_BREAK_PREFIX}${id}`, height: 0 }, top, bottom: top, exact: true };
+    }
     const table = tag === "TABLE" ? (element as HTMLTableElement) : element.querySelector(":scope > table");
     if (table instanceof HTMLTableElement && (tag === "TABLE" || element.children.length === 1)) {
       return { box: this.table(id, table, rect.top, height, depth), top, bottom, exact: depth === "righe" };
