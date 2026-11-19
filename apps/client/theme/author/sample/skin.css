@@ -25318,6 +25318,422 @@ h6.ui-heading {
   }
 }
 
+/* ── skin/export.css ────────────────────────────────────────────────────── */
+
+/* ── Lo spazio «Esporta in PDF» ──────────────────────────────────────────
+   (T70, E28; il prototipo `.px`, `.px-top`, `.px-stage`, `.px-side`,
+   `.px-band`.) Prende la finestra sotto la barra del titolo: in alto la
+   barra con lo zoom, le viste, il profilo ed «Esporta»; sotto, le pagine
+   come usciranno su un fondo neutro e, a destra, le dieci sezioni che si
+   aprono e si chiudono; in fondo la banda coi numeri dell'impaginazione.
+   Sotto i 1040 px il pannello si stringe e il nome della nota sparisce;
+   sotto i 760 px (il telefono) il pannello va sotto le pagine. */
+
+.export-space {
+  position: absolute;
+  inset: var(--titlebar-h, 0px) 0 0 0;
+  z-index: calc(var(--z-drawer) + 5);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.export-space:focus {
+  outline: 0;
+}
+
+/* La barra in alto: a sinistra, come nel prototipo. */
+.export-top {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  min-width: 0;
+  padding: 0 12px 0 8px;
+  background: var(--sheet);
+  box-shadow: 0 1px 0 var(--border);
+}
+.export-spacer {
+  flex: none;
+}
+.export-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.export-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.export-icon-small,
+.export-icon-small svg {
+  width: 14px;
+  height: 14px;
+}
+.export-back,
+.export-profile,
+.export-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.export-back {
+  flex: none;
+  padding: 0 10px 0 6px;
+}
+.export-print {
+  flex: none;
+  padding: 0 10px 0 8px;
+}
+.export-back:hover,
+.export-profile:hover,
+.export-print:hover,
+.export-zoom-button:hover {
+  background: var(--overlay-hover);
+}
+.export-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 10px;
+  box-shadow: -1px 0 0 var(--border);
+}
+.export-title-name {
+  font-weight: 650;
+  white-space: nowrap;
+}
+.export-title-note {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-zoom {
+  display: flex;
+  flex: none;
+  align-items: center;
+  color: var(--muted);
+}
+.export-zoom-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: 15px/1 var(--font-ui);
+  cursor: pointer;
+}
+.export-zoom-value {
+  min-width: 44px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.export-segments {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.export-segment {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 12.5px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.export-segment:hover {
+  color: var(--text);
+}
+.export-segment[aria-pressed="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+.export-profile {
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 8px 0 10px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.export-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-go {
+  flex: none;
+  height: 30px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: 600 13px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, transform 0.1s;
+}
+/* Il prototipo schiarisce l'accento (`filter: brightness`), che la pelle non
+   ammette: qui il passaggio è quello dei pulsanti primari di Fub. */
+.export-go:hover {
+  background: var(--accent-soft);
+}
+.export-go:active {
+  transform: scale(0.98);
+}
+.export-space :is(button, input, [tabindex="0"]):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* Le pagine, su un fondo neutro, e il pannello a destra. */
+.export-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.export-stage {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.export-doc {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 20px;
+}
+.export-slot {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--doc-bg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0, 0, 0, 0.08), 0 16px 36px -16px rgba(0, 0, 0, 0.32);
+}
+.export-doc[data-view="tutte"] .export-slot {
+  cursor: pointer;
+}
+.export-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  transform-origin: 0 0;
+  user-select: none;
+}
+.export-page-body {
+  position: absolute;
+}
+.export-fascia {
+  position: absolute;
+  overflow: hidden;
+}
+.export-fascia-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+/* Il blocco copiato porta i contenitori della resa: la pagina di stampa non
+   ha più i suoi margini, il primo blocco non ha spazio sopra. */
+.export-fascia-content .print-page {
+  margin: 0;
+  padding: 0;
+}
+.export-fit {
+  position: absolute;
+  color: var(--muted);
+  font: 9px var(--font-ui);
+  white-space: nowrap;
+}
+
+.export-side {
+  flex: none;
+  width: 322px;
+  overflow-y: auto;
+  background: var(--sheet);
+  box-shadow: -1px 0 0 var(--border);
+  scrollbar-width: thin;
+}
+.export-section {
+  border-bottom: 1px solid var(--border);
+}
+.export-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: 13px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.export-section-head:hover {
+  background: var(--overlay-hover);
+}
+.export-section-name {
+  flex: none;
+  font-weight: 650;
+}
+.export-section-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-section-chevron {
+  color: var(--muted);
+  transition: transform 0.18s;
+}
+.export-section.is-open .export-section-chevron {
+  transform: rotate(180deg);
+}
+.export-section-body {
+  display: grid;
+  gap: 10px;
+  padding: 2px 14px 15px;
+}
+.export-section-body[hidden] {
+  display: none;
+}
+.export-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* La banda in fondo. */
+.export-band {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--sheet);
+  box-shadow: 0 -1px 0 var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.export-band-info {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+.export-band-pages {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-band-ms {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.export-band-hint {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+.export-band-hint[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-segment,
+  .export-go,
+  .export-section-chevron {
+    transition: none;
+  }
+}
+:root[data-motion="reduced"] :is(.export-segment, .export-go, .export-section-chevron) {
+  transition: none;
+}
+
+@media (max-width: 1040px) {
+  .export-band-hint,
+  .export-title-note {
+    display: none;
+  }
+  .export-side {
+    width: 300px;
+  }
+}
+
+/* Il telefono, e una finestra stretta: il pannello sotto le pagine. */
+@media (max-width: 760px) {
+  .export-main {
+    flex-direction: column;
+  }
+  .export-side {
+    width: auto;
+    height: 46%;
+    box-shadow: 0 -1px 0 var(--border);
+  }
+  .export-zoom,
+  .export-views,
+  .export-back-label,
+  .export-print-label,
+  .export-band-info > :nth-child(n + 3) {
+    display: none;
+  }
+  .export-stage {
+    padding: 14px;
+  }
+  .export-profile {
+    max-width: 120px;
+  }
+  .export-title {
+    padding-left: 0;
+    box-shadow: none;
+  }
+}
+
 /* ── skin/draw-dialogs.css ──────────────────────────────────────────────── */
 
 /* La miniatura di una voce che è un'immagine: un quadrato fisso, così le

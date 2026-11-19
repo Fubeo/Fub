@@ -1,0 +1,254 @@
+// Il profilo dell'esportazione in PDF dal lato della vista (E28, T68, T70).
+//
+// Il profilo vive nel core (`crates/fub-features/src/pdf_export/profile.rs`,
+// la forma del file in `docs/reference/pdf-export-format.md`): tema, colori,
+// caratteri, pagina, testata, contenuto, interruzioni, uscita. Non passa
+// ancora dall'IPC (lo farà coi profili salvati, T79), e qui c'è la sua forma
+// con gli stessi nomi dei campi del file, e i valori di serie del profilo
+// «Di serie». Le sezioni dello spazio (`sections/`) lo leggono e ne fanno una
+// copia cambiata; `printSettingsOf` ne fa le regolazioni dell'impaginatore
+// (`paginate/slices.ts`): ciò che cambia le misure (`PrintLayout`) e ciò che
+// cambia solo l'aspetto (`PrintLook`).
+//
+// Le scelte aperte del core (`scelta_aperta!`) arrivano come stringhe: un
+// valore che questa versione non conosce si conserva e si mostra come quello
+// di serie, come fa il core.
+
+import { PRINT_PAPER } from "../editors/media/print-view";
+import type { PageGeometry } from "./probe";
+import type { PrintLayout, PrintLook, PrintSettings } from "./paginate/slices";
+
+/// I temi di stampa di Fub, nell'ordine in cui la vista li mostra
+/// (`IdTema::DI_FUB`).
+export const PRINT_THEMES = ["fub", "classico", "relazione", "rivista", "accademico", "quaderno", "essenziale", "notte"] as const;
+
+export type PaperFormat = "A4" | "A5" | "A3" | "Lettera" | "proprio";
+
+/// I margini, in millimetri.
+export interface Margins {
+  readonly sopra: number;
+  readonly destra: number;
+  readonly sotto: number;
+  readonly sinistra: number;
+}
+
+export interface ProfilePage {
+  readonly formato: PaperFormat | (string & {});
+  /// Larghezza e altezza in millimetri, col formato `proprio`.
+  readonly misura_propria?: readonly [number, number] | null;
+  readonly orizzontale: boolean;
+  readonly margini: Margins;
+  readonly specchio: boolean;
+  readonly filigrana: string;
+}
+
+/// Le scelte del testo: ciò che manca lo decide il tema.
+export interface ProfileText {
+  readonly carattere_testo?: string | null;
+  readonly carattere_titoli?: string | null;
+  readonly corpo?: number | null;
+  readonly interlinea?: number | null;
+  readonly paragrafi?: string | null;
+  readonly giustificato?: boolean | null;
+  readonly titoli_numerati?: boolean | null;
+  readonly scala_titoli?: number | null;
+  readonly allineamento_titoli?: string | null;
+  readonly colonne?: number | null;
+  readonly sillabazione: boolean;
+}
+
+export interface ProfileInk {
+  readonly bianco_e_nero: boolean;
+  readonly risparmio: boolean;
+}
+
+export interface HeaderSlot {
+  readonly voce: string;
+  readonly testo?: string;
+}
+
+export interface ProfileHeaderFooter {
+  /// I posti che hanno qualcosa (`sopra-sinistra` … `sotto-destra`).
+  readonly posti: Readonly<Record<string, HeaderSlot>>;
+  readonly filo: boolean;
+  readonly prima_pagina_senza: boolean;
+  readonly numeri_romani: boolean;
+}
+
+export interface ProfileFront {
+  readonly frontespizio: boolean;
+  readonly indice: boolean;
+  readonly profondita_indice: number;
+  readonly segnalibri: boolean;
+}
+
+export interface ProfileContent {
+  readonly proprieta: string;
+  readonly commenti: string;
+  readonly link: string;
+  readonly compiti_fatti: boolean;
+  readonly ripiegabili: string;
+  readonly schede: string;
+  readonly tabelle: string;
+  readonly codice_numerato: boolean;
+}
+
+export interface ProfileDiagrams {
+  readonly stile: string;
+  readonly fondo: boolean;
+}
+
+export interface ProfileBreaks {
+  readonly ogni_titolo_2: boolean;
+  readonly separatore: boolean;
+  readonly ripeti_intestazione: boolean;
+}
+
+export interface ProfileOutput {
+  readonly pagine: string;
+  readonly immagini: string;
+  readonly accessibile: boolean;
+  readonly pdfa: boolean;
+}
+
+/// Un profilo d'esportazione, coi nomi dei campi del file.
+export interface ExportProfile {
+  readonly nome: string;
+  readonly tema: string;
+  /// I colori cambiati uno per uno (`carta`, `testo`, …), `#rrggbb`.
+  readonly colori: Readonly<Record<string, string>>;
+  readonly inchiostro: ProfileInk;
+  readonly testo: ProfileText;
+  readonly pagina: ProfilePage;
+  readonly testata: ProfileHeaderFooter;
+  readonly frontespizio: ProfileFront;
+  readonly contenuto: ProfileContent;
+  readonly diagrammi: ProfileDiagrams;
+  readonly interruzioni: ProfileBreaks;
+  readonly uscita: ProfileOutput;
+}
+
+/// Il nome del profilo che c'è anche senza nessun file (`NOME_DI_SERIE`).
+export const DEFAULT_PROFILE_NAME = "Di serie";
+
+/// Il profilo «Di serie»: gli stessi valori di `Profilo::di_serie()`.
+export function defaultProfile(): ExportProfile {
+  return {
+    nome: DEFAULT_PROFILE_NAME,
+    tema: PRINT_THEMES[0],
+    colori: {},
+    inchiostro: { bianco_e_nero: false, risparmio: false },
+    testo: { sillabazione: true },
+    pagina: {
+      formato: "A4",
+      misura_propria: null,
+      orizzontale: false,
+      margini: { sopra: 25, destra: 22, sotto: 25, sinistra: 22 },
+      specchio: false,
+      filigrana: "",
+    },
+    testata: {
+      posti: { "sopra-destra": { voce: "titolo" }, "sotto-centro": { voce: "pagina-di-pagine" } },
+      filo: true,
+      prima_pagina_senza: false,
+      numeri_romani: false,
+    },
+    frontespizio: { frontespizio: false, indice: false, profondita_indice: 2, segnalibri: true },
+    contenuto: {
+      proprieta: "nessuna",
+      commenti: "no",
+      link: "colorati",
+      compiti_fatti: true,
+      ripiegabili: "aperti",
+      schede: "anteprima",
+      tabelle: "linee",
+      codice_numerato: false,
+    },
+    diagrammi: { stile: "nota", fondo: true },
+    interruzioni: { ogni_titolo_2: false, separatore: true, ripeti_intestazione: true },
+    uscita: { pagine: "", immagini: "piene", accessibile: true, pdfa: false },
+  };
+}
+
+/// Le misure dei formati, in millimetri, in verticale.
+export const PAPER_MM: Readonly<Record<Exclude<PaperFormat, "proprio">, readonly [number, number]>> = {
+  A4: [210, 297],
+  A5: [148, 210],
+  A3: [297, 420],
+  Lettera: [215.9, 279.4],
+};
+
+/// Un millimetro in pixel CSS: 96 punti per pollice, 25,4 mm per pollice.
+export const MM = 96 / 25.4;
+
+/// Lo spazio fra le due colonne, in millimetri (7 mm, come nel prototipo).
+export const COLUMN_GAP_MM = 7;
+
+/// La misura del foglio in millimetri, già girata se orizzontale. Un formato
+/// che questa versione non conosce, o una misura propria che non regge, è A4.
+export function paperSize(page: ProfilePage): readonly [number, number] {
+  const own = page.formato === "proprio" ? page.misura_propria : null;
+  const known = PAPER_MM[page.formato as keyof typeof PAPER_MM];
+  const [w, h] = own && own[0] > 0 && own[1] > 0 ? own : known ?? PAPER_MM.A4;
+  return page.orizzontale ? [Math.max(w, h), Math.min(w, h)] : [Math.min(w, h), Math.max(w, h)];
+}
+
+/// La pagina in pixel CSS, coi margini.
+export function geometryOf(page: ProfilePage): PageGeometry {
+  const [w, h] = paperSize(page);
+  const px = (mm: number) => Math.round(mm * MM * 100) / 100;
+  return {
+    width: px(w),
+    height: px(h),
+    margin: { top: px(page.margini.sopra), right: px(page.margini.destra), bottom: px(page.margini.sotto), left: px(page.margini.sinistra) },
+  };
+}
+
+/// Le colonne del profilo: due solo se lo dice, se no una.
+export function columnsOf(profile: ExportProfile): 1 | 2 {
+  return profile.testo.colonne === 2 ? 2 : 1;
+}
+
+/// Quale variabile della carta prende ogni colore del profilo. I colori che
+/// la resa per la stampa non usa ancora (l'accento, i riquadri) li legge il
+/// tema di stampa (T71).
+const COLOR_VARIABLES: Readonly<Record<string, readonly string[]>> = {
+  carta: ["--doc-bg"],
+  testo: ["--doc-fg", "--text"],
+  titoli: ["--doc-heading", "--syn-heading"],
+  link: ["--doc-link"],
+  "testo-secondario": ["--muted"],
+  linee: ["--doc-rule"],
+  evidenziato: ["--doc-highlight"],
+  codice: ["--doc-fill-soft"],
+  "intestazioni-tabella": ["--doc-fill"],
+};
+
+const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu;
+
+/// Le variabili della carta: quella di stampa, coi colori del profilo sopra.
+/// Un colore scritto male non entra (resta quello della carta).
+export function paperColorsOf(profile: ExportProfile): Record<string, string> {
+  const colors: Record<string, string> = { ...PRINT_PAPER };
+  for (const [key, value] of Object.entries(profile.colori)) {
+    if (!HEX.test(value)) continue;
+    for (const variable of COLOR_VARIABLES[key] ?? []) colors[variable] = value;
+  }
+  return colors;
+}
+
+/// Le regolazioni dell'impaginatore dal profilo: pagina, colonne,
+/// interruzioni scelte e i blocchi lasciati fuori (dalla memoria della nota,
+/// `excluded`) rifanno l'impaginazione; i colori cambiano solo l'aspetto.
+export function printSettingsOf(profile: ExportProfile, excluded: readonly string[] = []): PrintSettings {
+  const layout: PrintLayout = {
+    page: geometryOf(profile.pagina),
+    columns: columnsOf(profile),
+    columnGap: Math.round(COLUMN_GAP_MM * MM * 100) / 100,
+    breaks: { everyHeading2: profile.interruzioni.ogni_titolo_2, separator: profile.interruzioni.separatore },
+    type: {},
+    excluded,
+  };
+  const look: PrintLook = { colors: paperColorsOf(profile) };
+  return { layout, look };
+}

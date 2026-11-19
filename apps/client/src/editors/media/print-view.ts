@@ -229,11 +229,44 @@ export function mountPrintSurface(
   };
 }
 
+/// La carta della stampa: inchiostro scuro su bianco con i colori del foglio
+/// chiaro, qualunque sia il tema dell'app. La usano la stampa della nota
+/// (`PRINT_CSS`) e le pagine dello spazio «Esporta in PDF» (`export/`), che
+/// la scrivono come variabili sul loro contenitore: la carta si stampa chiara
+/// anche al buio.
+export const PRINT_PAPER: Readonly<Record<string, string>> = {
+  "--doc-bg": "#ffffff",
+  "--doc-fg": "#2a2826",
+  "--doc-heading": "#1f1d1b",
+  "--doc-link": "#145785",
+  "--doc-fill": "rgb(135 135 135 / 16%)",
+  "--doc-fill-soft": "rgb(135 135 135 / 10%)",
+  "--doc-rule": "rgb(135 135 135 / 45%)",
+  "--doc-rule-soft": "rgb(135 135 135 / 28%)",
+  "--doc-highlight": "rgb(240 200 80 / 38%)",
+  "--doc-danger": "#993836",
+  "--text": "#2a2826",
+  "--muted": "#605c56",
+  "--syn-keyword": "#744981",
+  "--syn-name": "#8c443a",
+  "--syn-function": "#2b5f92",
+  "--syn-literal": "#814f22",
+  "--syn-type": "#705a12",
+  "--syn-operator": "#236775",
+  "--syn-comment": "#6a635b",
+  "--syn-string": "#3e6840",
+  "--syn-heading": "#1f1d1b",
+  "--syn-invalid": "#9a2929",
+};
+
+function paperDeclarations(indent: string): string {
+  return Object.entries(PRINT_PAPER).map(([name, value]) => `${indent}${name}: ${value};`).join("\n");
+}
+
 /// Lo stile della stampa. A schermo la resa sta fuori dalla vista ma
 /// disposta, perché diagrammi e immagini si carichino; sulla carta resta solo
-/// lei. La carta ha una luce sola: inchiostro scuro su bianco con i colori
-/// del foglio chiaro, qualunque sia il tema, e i comandi dei blocchi
-/// (didascalie, sorgenti, copia) non si stampano.
+/// lei, con la carta di `PRINT_PAPER`; i comandi dei blocchi (didascalie,
+/// sorgenti, copia) non si stampano.
 const PRINT_CSS = `
   @media screen {
     .print-host {
@@ -258,28 +291,7 @@ const PRINT_CSS = `
     .print-host {
       display: block !important;
       position: static !important;
-      --doc-bg: #ffffff;
-      --doc-fg: #2a2826;
-      --doc-heading: #1f1d1b;
-      --doc-link: #145785;
-      --doc-fill: rgb(135 135 135 / 16%);
-      --doc-fill-soft: rgb(135 135 135 / 10%);
-      --doc-rule: rgb(135 135 135 / 45%);
-      --doc-rule-soft: rgb(135 135 135 / 28%);
-      --doc-highlight: rgb(240 200 80 / 38%);
-      --doc-danger: #993836;
-      --text: #2a2826;
-      --muted: #605c56;
-      --syn-keyword: #744981;
-      --syn-name: #8c443a;
-      --syn-function: #2b5f92;
-      --syn-literal: #814f22;
-      --syn-type: #705a12;
-      --syn-operator: #236775;
-      --syn-comment: #6a635b;
-      --syn-string: #3e6840;
-      --syn-heading: #1f1d1b;
-      --syn-invalid: #9a2929;
+${paperDeclarations("      ")}
       color: var(--doc-fg);
       background: var(--doc-bg);
     }
@@ -341,6 +353,99 @@ export async function printRendered(options: PrintOptions): Promise<() => void> 
   // Se `afterprint` non scatta (contesti senza stampa), il contenitore non
   // resta per sempre: chi chiama conserva il teardown e lo chiama al cambio
   // di tab. Qui si torna subito il teardown per quello scopo.
+  return teardown;
+}
+
+/// Lo stile delle pagine già impaginate: ogni pagina è un foglio della sua
+/// misura, senza i margini della stampante, perché i margini stanno già dentro
+/// la pagina. La misura arriva in pixel CSS e si scrive arrotondata al
+/// centesimo: nel foglio non entra altro che numeri.
+function pagesCss(size: { readonly width: number; readonly height: number }): string {
+  const length = (value: number): string => {
+    if (!Number.isFinite(value) || value <= 0) throw new RangeError(`misura di pagina non valida: ${value}`);
+    return `${Math.round(value * 100) / 100}px`;
+  };
+  return `
+  @media screen {
+    .print-host {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  }
+  @page { size: ${length(size.width)} ${length(size.height)}; margin: 0; }
+  @media print {
+    html, body {
+      height: auto !important;
+      margin: 0 !important;
+      background: #ffffff !important;
+      color-scheme: light;
+    }
+    body > :not(.print-host) { display: none !important; }
+    .print-host {
+      display: block !important;
+      position: static !important;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      visibility: visible;
+    }
+    .print-host > .print-sheet {
+      position: relative !important;
+      transform: none !important;
+      break-inside: avoid;
+      break-after: page;
+      overflow: hidden;
+    }
+    .print-host > .print-sheet:last-child { break-after: auto; }
+  }`;
+}
+
+/**
+ * Manda alla stampa del sistema pagine già impaginate, così come sono: le
+ * stesse che lo spazio «Esporta in PDF» mostra («Stampa…»). Le pagine vanno
+ * in un contenitore fuori vista, `window.print` le stampa una per foglio, e su
+ * `afterprint` (che scatta anche quando la stampa si annulla) tutto si toglie.
+ * Torna il teardown, per chi chiude prima che `afterprint` arrivi.
+ */
+export function printPages(
+  pages: readonly HTMLElement[],
+  size: { readonly width: number; readonly height: number },
+  onAfterPrint?: () => void,
+): () => void {
+  if (typeof window.print !== "function") throw new Error(t("errors.print.unavailable"));
+  if (pages.length === 0) throw new Error(t("errors.print.no_pages"));
+  const life = openLifetime();
+  const stylesheet = adoptSheet(pagesCss(size));
+  life.add(() => stylesheet.dispose());
+  const host = document.createElement("div");
+  host.className = "print-host";
+  host.setAttribute("aria-hidden", "true");
+  for (const page of pages) {
+    page.classList.add("print-sheet");
+    host.append(page);
+  }
+  document.body.append(host);
+  life.add(() => host.remove());
+  let done = false;
+  function teardown(): void {
+    if (done) return;
+    done = true;
+    life.close();
+    onAfterPrint?.();
+  }
+  try {
+    life.listen(window, "afterprint", teardown);
+    window.print();
+  } catch (error) {
+    teardown();
+    throw error;
+  }
   return teardown;
 }
 
