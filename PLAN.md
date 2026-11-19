@@ -3551,7 +3551,7 @@ profilo salvato prima di T80; la stampa senza nessuna stampante.
 Fatto quando: le guardie dei documenti verdi; nessuna strada vecchia
 rimasta senza un sinonimo.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: `[~]` integrato in `integra/editor-2` (55948f252, 2026-11-19), in attesa del gruppo; «Stampa» era già «Esporta in PDF…» da T70, aggiunto «Esporta ▸ PDF…»; i due id vecchi sono sinonimi di `pdf.export_note` (una nota alla volta, app aperta, `with_meta` senza effetto); scene a 800 px (la finestra minima).
 
 ## T81 · I menu: una lingua sola
 
