@@ -12,7 +12,7 @@
 //!
 //! An export of Notion (pages and databases named with their Notion id) is
 //! the one archive read as a whole first: names lose the id, a database's
-//! CSV and its row pages join into one note per row ([`crate::notion_export`]).
+//! CSV and its row pages join into one note per row (`notion_export`).
 //!
 //! Security: traversal (`..`, absolute, drive-letter, backslash escapes,
 //! symlink names are just names here), bombs (entry/total caps + ratio
