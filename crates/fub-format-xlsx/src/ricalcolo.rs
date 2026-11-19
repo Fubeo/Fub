@@ -26,7 +26,7 @@ use std::collections::{HashMap, HashSet};
 
 use gridcraft_calc::recalc::{Calc, Key};
 use gridcraft_core::{CellError, RangeRef, Value};
-use gridcraft_formula::ast::{Expr, SheetSel};
+use gridcraft_engine::formula::ast::{Expr, SheetSel};
 use gridcraft_model::{CalcMode, Workbook};
 
 use crate::{guarded, XlsxError};

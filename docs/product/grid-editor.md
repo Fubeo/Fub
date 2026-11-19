@@ -25,7 +25,7 @@ Le formule si ricalcolano come in Excel, con il motore di GridCraft
   ricalcolare all'apertura (`fullCalcOnLoad`);
 - **all'apertura** una formula che un altro programma ha salvato senza valore
   si calcola e si mostra; il file non cambia finché non lo si modifica, e la
-  prima modifica salva anche quei valori. Un valore di oggi o casuale
+  prima modifica salva anche quei valori. Una data corrente o un numero casuale
   (`NOW`, `RAND`) resta quello del file fino alla prima cella cambiata;
 - **una formula che il motore non sa calcolare** (una funzione che non
   conosce o di una macro, un riferimento a un'altra cartella, una formula
