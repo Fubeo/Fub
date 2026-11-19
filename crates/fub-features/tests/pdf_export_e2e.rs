@@ -813,14 +813,7 @@ fn controlla_accessibile(doc: &lopdf::Document) -> Vec<String> {
 fn nell_xmp(xml: &str, apre: &str, chiude: &str) -> Option<String> {
     let inizio = xml.find(apre)? + apre.len();
     let fine = inizio + xml[inizio..].find(chiude)?;
-    Some(
-        xml[inizio..fine]
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'")
-            .replace("&amp;", "&"),
-    )
+    Some(fub_abi::html::unescape(&xml[inizio..fine]))
 }
 
 /// Il controllo del PDF/A-2b: le regole di ISO 19005-2 che lo scrittore tocca.

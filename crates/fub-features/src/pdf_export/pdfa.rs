@@ -164,20 +164,12 @@ pub(super) fn impronta(elenco: &ElencoPagine) -> Vec<u8> {
     Sha256::digest(&json)[..16].to_vec()
 }
 
-/// Un testo dentro l'XML: le cinque entità, e niente che l'XML non ammetta.
+/// Un testo dentro l'XML: niente che l'XML non ammetta, e i cinque caratteri
+/// che interpreta resi con la tabella unica di `fub_abi::html` (le sue entità
+/// valgono anche in XML).
 fn xml(testo: &str) -> String {
-    let mut fuori = String::with_capacity(testo.len());
-    for c in testo.chars().filter(|c| ammesso_in_xml(*c)) {
-        match c {
-            '&' => fuori.push_str("&amp;"),
-            '<' => fuori.push_str("&lt;"),
-            '>' => fuori.push_str("&gt;"),
-            '"' => fuori.push_str("&quot;"),
-            '\'' => fuori.push_str("&apos;"),
-            c => fuori.push(c),
-        }
-    }
-    fuori
+    let pulito: String = testo.chars().filter(|c| ammesso_in_xml(*c)).collect();
+    fub_abi::html::escape(&pulito)
 }
 
 /// I metadati XMP: titolo, autore e lingua come nel dizionario `Info`, chi

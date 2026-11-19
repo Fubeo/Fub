@@ -150,7 +150,10 @@ fn pdf_export_l_xmp_dice_titolo_autore_e_pdfa_in_xml_pulito() {
     let x = xmp("A <b> & \"c\"\u{1}", "Ada", Some("it"), true);
     assert!(x.starts_with("<?xpacket begin=\"\u{FEFF}\""));
     assert!(x.ends_with("<?xpacket end=\"w\"?>"));
-    assert!(x.contains("<rdf:li xml:lang=\"x-default\">A &lt;b&gt; &amp; &quot;c&quot;</rdf:li>"));
+    assert!(x.contains(&format!(
+        "<rdf:li xml:lang=\"x-default\">{}</rdf:li>",
+        fub_abi::html::escape("A <b> & \"c\"")
+    )));
     assert!(x.contains("<dc:creator><rdf:Seq><rdf:li>Ada</rdf:li></rdf:Seq></dc:creator>"));
     assert!(x.contains("<rdf:li>it</rdf:li>"));
     assert!(x.contains("<pdfaid:part>2</pdfaid:part>"));
@@ -204,7 +207,7 @@ fn pdf_export_il_pdfa_porta_profilo_metadati_e_identificativo() {
         .unwrap();
     assert!(metadati.dict.get(b"Filter").is_err(), "in chiaro");
     let xml = String::from_utf8(metadati.content.clone()).unwrap();
-    assert!(xml.contains("Relazione &lt;finale&gt; &amp; &quot;bozza&quot;"));
+    assert!(xml.contains(&fub_abi::html::escape("Relazione <finale> & \"bozza\"")));
     assert!(xml.contains("<rdf:li>Ada Lovelace</rdf:li>"));
     let info = doc
         .get_dictionary(doc.trailer.get(b"Info").unwrap().as_reference().unwrap())
