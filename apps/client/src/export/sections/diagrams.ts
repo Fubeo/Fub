@@ -64,9 +64,9 @@ function loadStyles(): Promise<Styles> {
   });
 }
 
-/// Quale riga dei colori è aperta: una alla volta, e resta aperta quando il
-/// pannello si ridisegna.
-let openColor: string | null = null;
+/// Quale riga dei colori è aperta (`SectionContext.memory`): una alla volta,
+/// e resta aperta quando il pannello si ridisegna, finché lo spazio è aperto.
+const OPEN_KEY = "diagrammi.aperto";
 
 /// La tavolozza che disegna uno stile sulla carta di stampa.
 function swatchPalette(module: Styles, style: ExportDiagramStyle, profile: ExportProfile): DiagramPalette {
@@ -177,7 +177,7 @@ function scopeNote(context: SectionContext): HTMLElement {
 function colorRow(context: SectionContext, key: string, name: string): HTMLElement {
   const value = context.profile.colori[key];
   const own = value !== undefined && HEX6.test(value);
-  const open = openColor === key;
+  const open = context.memory.get(OPEN_KEY) === key;
   const row = document.createElement("div");
   row.className = "export-dg-color";
   row.classList.toggle("is-open", open);
@@ -201,9 +201,9 @@ function colorRow(context: SectionContext, key: string, name: string): HTMLEleme
   }
   head.append(code);
   head.addEventListener("click", () => {
-    openColor = open ? null : key;
+    context.memory.set(OPEN_KEY, open ? null : key);
     // Il pannello si rifà col fuoco su questa testa (per `id`).
-    context.change(context.profile);
+    context.redraw();
   });
   row.append(head);
   if (own) {
@@ -247,7 +247,7 @@ function colorRow(context: SectionContext, key: string, name: string): HTMLEleme
     context.change(withColor(context.profile, key, input.value.toLowerCase()), { live: true });
   });
   input.addEventListener("change", () => context.change(withColor(context.profile, key, input.value.toLowerCase())));
-  const svg = iconEl("export-color");
+  const svg = iconEl("export-pick");
   any.append(input);
   if (svg) any.append(svg);
   const hex = document.createElement("input");
@@ -292,42 +292,20 @@ function paperToggle(context: SectionContext): HTMLElement {
   return toggle;
 }
 
-/// Il corpo della sezione. Il pannello non lo ridisegna a ogni cambio (rifà
-/// solo le teste): si ridisegna da sé a gesto finito, col fuoco dov'era.
+/// Il corpo della sezione. A gesto finito il pannello si ridisegna tutto,
+/// col fuoco dov'era (per `id`); dal vivo no.
 export function diagramsBody(context: SectionContext): HTMLElement {
   const body = document.createElement("div");
   body.className = "export-dg";
-  const local: SectionContext = {
-    get profile() {
-      return context.profile;
-    },
-    change(next, options) {
-      context.change(next, options);
-      if (!options?.live) redraw();
-    },
-    open: (id) => context.open(id),
-    get diagrams() {
-      return context.diagrams;
-    },
-  };
-  const build = (): HTMLElement[] => {
-    const colors = document.createElement("div");
-    colors.className = "export-dg-colors";
-    colors.setAttribute("role", "group");
-    colors.setAttribute("aria-label", t("pdf_export.diagrams.colors"));
-    for (const { key, part } of DIAGRAM_COLOR_KEYS) colors.append(colorRow(local, key, t(COLOR_NAMES[part])));
-    const colorsNote = document.createElement("p");
-    colorsNote.className = "export-note";
-    colorsNote.textContent = t("pdf_export.diagrams.colors_note");
-    return [styleGrid(local), scopeNote(local), colors, colorsNote, paperToggle(local)];
-  };
-  const redraw = () => {
-    if (!body.isConnected) return;
-    const active = document.activeElement instanceof HTMLElement && body.contains(document.activeElement) ? document.activeElement.id : "";
-    body.replaceChildren(...build());
-    if (active) body.querySelector<HTMLElement>(`#${CSS.escape(active)}`)?.focus({ preventScroll: true });
-  };
-  body.append(...build());
+  const colors = document.createElement("div");
+  colors.className = "export-dg-colors";
+  colors.setAttribute("role", "group");
+  colors.setAttribute("aria-label", t("pdf_export.diagrams.colors"));
+  for (const { key, part } of DIAGRAM_COLOR_KEYS) colors.append(colorRow(context, key, t(COLOR_NAMES[part])));
+  const colorsNote = document.createElement("p");
+  colorsNote.className = "export-note";
+  colorsNote.textContent = t("pdf_export.diagrams.colors_note");
+  body.append(styleGrid(context), scopeNote(context), colors, colorsNote, paperToggle(context));
   return body;
 }
 

@@ -14,9 +14,10 @@
 // valore che questa versione non conosce si conserva e si mostra come quello
 // di serie, come fa il core.
 
-import { PRINT_PAPER } from "../editors/media/print-view";
 import type { PageGeometry } from "./probe";
+import { lookVariables, textOf, typeVariables } from "./themes";
 import type { PrintLayout, PrintLook, PrintSettings } from "./paginate/slices";
+import { TITLE_ID } from "./paginate/toc";
 
 /// I temi di stampa di Fub, nell'ordine in cui la vista li mostra
 /// (`IdTema::DI_FUB`).
@@ -204,51 +205,31 @@ export function geometryOf(page: ProfilePage): PageGeometry {
   };
 }
 
-/// Le colonne del profilo: due solo se lo dice, se no una.
+/// Le colonne del profilo: le tue se le hai scelte, se no quelle del tema.
 export function columnsOf(profile: ExportProfile): 1 | 2 {
-  return profile.testo.colonne === 2 ? 2 : 1;
+  return textOf(profile).colonne;
 }
 
-/// Quale variabile della carta prende ogni colore del profilo. I colori che
-/// la resa per la stampa non usa ancora (l'accento, i riquadri) li legge il
-/// tema di stampa (T71).
-const COLOR_VARIABLES: Readonly<Record<string, readonly string[]>> = {
-  carta: ["--doc-bg"],
-  testo: ["--doc-fg", "--text"],
-  titoli: ["--doc-heading", "--syn-heading"],
-  link: ["--doc-link"],
-  "testo-secondario": ["--muted"],
-  linee: ["--doc-rule"],
-  evidenziato: ["--doc-highlight"],
-  codice: ["--doc-fill-soft"],
-  "intestazioni-tabella": ["--doc-fill"],
-};
-
-const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu;
-
-/// Le variabili della carta: quella di stampa, coi colori del profilo sopra.
-/// Un colore scritto male non entra (resta quello della carta).
+/// Le variabili della carta: i colori del tema di stampa coi tuoi sopra
+/// (`themes.ts`). Un colore scritto male non entra (resta quello del tema).
 export function paperColorsOf(profile: ExportProfile): Record<string, string> {
-  const colors: Record<string, string> = { ...PRINT_PAPER };
-  for (const [key, value] of Object.entries(profile.colori)) {
-    if (!HEX.test(value)) continue;
-    for (const variable of COLOR_VARIABLES[key] ?? []) colors[variable] = value;
-  }
-  return colors;
+  return lookVariables(profile);
 }
 
 /// Le regolazioni dell'impaginatore dal profilo: pagina, colonne,
-/// interruzioni scelte e i blocchi lasciati fuori (dalla memoria della nota,
-/// `excluded`) rifanno l'impaginazione; i colori cambiano solo l'aspetto.
+/// interruzioni scelte, i caratteri e l'impostazione del tema (o i tuoi) e i
+/// blocchi lasciati fuori (dalla memoria della nota, `excluded`) rifanno
+/// l'impaginazione; i colori cambiano solo l'aspetto. Col frontespizio il
+/// titolo in cima alla nota esce dall'impaginazione: sta sul frontespizio.
 export function printSettingsOf(profile: ExportProfile, excluded: readonly string[] = []): PrintSettings {
   const layout: PrintLayout = {
     page: geometryOf(profile.pagina),
     columns: columnsOf(profile),
     columnGap: Math.round(COLUMN_GAP_MM * MM * 100) / 100,
     breaks: { everyHeading2: profile.interruzioni.ogni_titolo_2, separator: profile.interruzioni.separatore },
-    type: {},
-    excluded,
+    type: typeVariables(profile),
+    excluded: profile.frontespizio.frontespizio && !excluded.includes(TITLE_ID) ? [...excluded, TITLE_ID] : excluded,
   };
-  const look: PrintLook = { colors: paperColorsOf(profile) };
+  const look: PrintLook = { colors: lookVariables(profile) };
   return { layout, look };
 }

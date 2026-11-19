@@ -399,7 +399,7 @@ type CanvasCardsFor = (context: SurfaceMountContext, host?: CardHost) => CanvasC
 /// pesano sull'avvio di Fub. La scheda di foglio arriva con un suo `import()`
 /// al primo foglio.
 async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
-  const [cards, { CardCache }, note, image, pdf, web, craft, documents, drawing] = await Promise.all([
+  const [cards, { CardCache }, note, image, pdf, web, craft, documents, drawing, board] = await Promise.all([
     import("./cards/contract"),
     import("../canvas/card-cache"),
     import("./cards/kinds/note"),
@@ -409,6 +409,7 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     import("./cards/kinds/craft"),
     import("./cards/kinds/document"),
     import("./cards/kinds/drawing"),
+    import("./cards/kinds/canvas"),
   ]);
   windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
   const snapshots = windowSnapshots.cache;
@@ -478,6 +479,11 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     // Il disegno che si modifica sul posto è della nota (T46): sulla lavagna
     // un `.svg` resta una scheda d'immagine.
     if (host === "note" && imagePort) renderers.push(drawing.drawingCardRenderer(imagePort));
+    // La zona lavagna è della nota (T47): sulla lavagna un `.canvas` resta
+    // una scheda di file.
+    if (host === "note") {
+      renderers.push(board.canvasCardRenderer({ ...(ports.editors ? { editors: ports.editors } : {}), open }));
+    }
     if (grid) {
       renderers.push(lazySheetRenderer(async () => {
         const { sheetCardRenderer } = await import("../grid/card");

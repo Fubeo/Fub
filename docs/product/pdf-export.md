@@ -21,23 +21,110 @@ stampa).
 - «Torna alla nota» o Esc chiude lo spazio e rimette il fuoco dove stava
   prima, se c'è ancora. Chiudere il riquadro chiude anche lo spazio.
 
+## Più note in un PDF
+
+- Dal tasto destro su una cartella dell'albero, «Esporta in PDF…»: le note
+  Markdown della cartella e delle sue sottocartelle, nell'ordine
+  dell'albero (la pagina della cartella per prima, poi le sottocartelle,
+  poi le note), anche quelle delle cartelle chiuse.
+- Dal tasto destro su più note scelte insieme, «Esporta in PDF…»: le note
+  nell'ordine in cui si sono scelte.
+- Lo spazio è lo stesso: la barra dice il nome della cartella (o «Note
+  scelte») e quante note sono, e «Torna alle note» lo chiude. Ogni nota è un
+  capitolo: comincia su una pagina sua, col suo nome in testa. L'indice è
+  uno solo, per tutto il PDF.
+- I collegamenti fra le note esportate portano dentro il PDF, alla nota o
+  alla sezione che nominano; quelli verso note rimaste fuori restano verso
+  fuori. Due note con lo stesso nome si distinguono nei segnalibri col loro
+  percorso.
+- Una nota che non si legge resta fuori, e un avviso la nomina; i file che
+  non sono note Markdown (disegni, fogli) restano fuori, e un avviso lo
+  dice. Oltre 500 note lo spazio non si apre e chiede di esportarne meno.
+- Le note si salvano all'apertura e si seguono come una nota sola: una
+  nota che cambia in un riquadro rifà le pagine.
+- «Esporta» passa per ora dalla stampa del sistema, come per una nota sola.
+  Il comando che scrive il PDF di più note (`pdf.write_book`) ne fa un
+  lavoro solo, che si annulla dal centro attività (vedi
+  [il formato](../reference/pdf-export-format.md#più-note-in-un-pdf)).
+
 ## Che cosa c'è
 
 - **La barra in alto**: «Torna alla nota», il nome della nota, lo zoom
   (−, percentuale, +), le tre viste (Una, Due, Tutte), il profilo, «Stampa…»
   ed «Esporta». Nella vista Tutte un clic su una pagina la apre in Una.
-- **Le pagine** su un fondo neutro, nei colori di carta del profilo. Si
+- **Le pagine** su un fondo neutro, nei colori del tema di stampa. Si
   riempiono solo le pagine vicine a quelle visibili: una nota lunga non
   costruisce tutte le copie insieme.
 - **Le dieci sezioni** a destra: Tema, Colori, Caratteri, Pagina, Testata e
   piè di pagina, Frontespizio e indice, Contenuto, Diagrammi, Interruzioni di
   pagina, Uscita. La testa chiusa dice ciò che vale ora («A4 verticale»,
-  «Titolo, Numero di pagina»). Le regolazioni di ogni sezione arrivano coi
+  «Titolo, Pagina»). Le regolazioni di ogni sezione arrivano coi
   loro lavori; finché manca, la sezione aperta lo dice.
 - **La banda** in basso: le pagine, il formato, i margini, i segnalibri e il
   tempo dell'impaginazione. Il numero di pagine si annuncia a voce solo
   quando cambia.
 
+## Tema e Colori
+
+I temi di stampa e i loro colori vivono in
+[`export/themes.ts`](../../apps/client/src/export/themes.ts); le due
+sezioni in [`export/sections/theme.ts`](../../apps/client/src/export/sections/theme.ts)
+e [`export/sections/colors.ts`](../../apps/client/src/export/sections/colors.ts).
+
+- **Otto temi**: Fub, Classico, Relazione, Rivista, Accademico, Quaderno,
+  Essenziale, Notte. Ognuno porta gli undici colori, i caratteri dei titoli
+  e del testo, il corpo, l'interlinea, la scala dei titoli e l'impostazione
+  (colonne, giustificato, rientro o spazio fra i paragrafi, titoli centrati
+  o numerati). Un tema che questa versione non conosce si legge come Fub.
+- Passare su un tema lo mostra sulle pagine senza sceglierlo; uscendo
+  tornano le pagine di prima. Un clic lo sceglie.
+- **Undici colori**: carta, testo, titoli, accento, link, testo secondario,
+  linee, evidenziato, riquadri, codice, intestazioni di tabella. Una riga
+  aperta offre i tondi pronti, un selettore libero e il codice a mano
+  (`#rgb` o `#rrggbb`, come il core). Un codice scritto male non entra: la
+  riga lo dice e resta il colore di prima; Esc nel campo rimette il colore
+  com'era. Passare su un colore contorna sulle pagine i punti che lo usano.
+- **Il contrasto** del testo sulla carta si ricalcola a ogni colore e avvisa
+  sotto 4,5 a 1; l'accento avvisa a parte sotto 3 a 1.
+- Ciò che cambi tu resta cambiando tema: la riga dice «tuo» e torna al
+  colore del tema da sola; «Togli le regolazioni tue» le toglie tutte.
+- **Bianco e nero** fa grigio ogni colore e, con un filtro sulla pagina,
+  anche ciò che i colori non raggiungono (un diagramma colorato,
+  un'immagine). **Risparmia inchiostro** dà carta bianca e niente fondi
+  pieni: un fondo uguale alla carta prende il filo delle linee.
+- Un colore cambia solo variabili dell'aspetto e non rifà l'impaginazione;
+  il tema la rifà solo se cambia le misure (caratteri, colonne). Le pagine
+  si stampano coi colori del tema anche quando l'app è scura: il tema
+  dell'app cambia solo la cornice dello spazio. Notte stampa davvero su
+  carta scura, col codice e il testo colorato schiariti.
+
+## Testata e piè, frontespizio e indice
+
+- **Sei posti**: a sinistra, al centro e a destra, sopra e sotto la pagina.
+  Un clic su un posto apre il menu: niente, il titolo della nota, la sezione
+  in corso, la data, la pagina, «pagina di pagine», l'autore (la proprietà
+  `autore` o `author`), il percorso nel vault o un testo tuo, che si scrive
+  nel campo sotto i posti. Testata e piè stanno nei margini e usano i
+  caratteri dei titoli e il testo secondario del tema di stampa.
+- La **sezione** è il Titolo 1 o 2 in corso in cima alla pagina, o quello
+  con cui la pagina comincia; prima del primo titolo il posto resta vuoto.
+- **Filo sotto la testata** (acceso di serie), **prima pagina senza
+  testata**, **numeri romani** per frontespizio e indice: con i romani la
+  nota riparte da 1, senza il frontespizio e l'indice si contano solo nel
+  totale delle pagine. A specchio, nelle pagine pari sinistra e destra si
+  scambiano.
+- **Il frontespizio** ha l'icona della nota, il titolo, fino a quattro
+  proprietà, l'autore e la data, con il filo d'accento sul bordo; non ha
+  testata né piè e non si numera. Con il frontespizio il titolo in cima
+  alla nota esce dalle pagine.
+- **L'indice** arriva fino ai Titoli 2 o anche ai 3 e porta i numeri che le
+  pagine stampano davvero: si impagina in due passi (prima con il numero più
+  largo, poi con quelli veri, finché le sue pagine non cambiano più). Un
+  indice lungo va su più pagine; una nota senza titoli non ha indice.
+  Finché l'impaginazione non è finita i numeri che mancano sono «…».
+- **I segnalibri** del PDF seguono i titoli; la banda dice quanti sono.
+- Cambiare testata, frontespizio o indice ridisegna i fogli senza rifare
+  l'impaginazione della nota; il testo tuo segue mentre si scrive.
 ## Diagrammi
 
 La sezione Diagrammi decide come escono i diagrammi Mermaid della nota.
@@ -63,7 +150,10 @@ colori `diagramma-*`).
   carta colorata e stanno sulla carta della pagina.
 
 Un cambio di stile, colori o fondo ridisegna i diagrammi della resa che c'è,
-senza chiederla di nuovo al core.
+senza chiederla di nuovo al core; anche un tema in anteprima, per i
+diagrammi che seguono il tema. Il bianco e nero vale anche per i colori
+dati ai diagrammi. In un PDF di più note vale per ogni capitolo lo stile di
+tutti: lo stile di un diagramma solo conta le posizioni dentro una nota.
 
 ### Sulla carta
 

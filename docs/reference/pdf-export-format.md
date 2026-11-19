@@ -9,7 +9,10 @@
 > `crates/fub-features/src/pdf_export/aperta.rs`,
 > `crates/fub-features/src/pdf_export/mod.rs` (l'elenco),
 > `crates/fub-features/src/pdf_export/writer.rs` (lo scrittore),
-> `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro).
+> `crates/fub-features/src/pdf_export/tags.rs` (la struttura del PDF
+> accessibile), `crates/fub-features/src/pdf_export/pdfa.rs` (il PDF/A),
+> `crates/fub-features/src/pdf_export/lavoro.rs` (comando e lavoro),
+> `crates/fub-features/src/pdf_export/book.rs` (più note in un PDF).
 
 L'esportazione non scrive niente nella nota. Le regolazioni stanno in due
 posti, tutti e due nello spazio dati `fub.esporta-pdf` del vault (vedi
@@ -263,8 +266,9 @@ PDF. Un campo che il formato non conosce rende l'elenco illeggibile.
 | `collegamenti[]` | un riquadro della pagina che porta fuori (`url`) o a un punto di un'altra pagina (`pagina` dalla prima, che è la 0, e `y`) |
 | `segnalibri[]` | in fila, ognuno col suo `livello` da 1 a 6: un segnalibro sta sotto l'ultimo di livello più basso che lo precede |
 
-`titolo`, `autore`, `lingua`, `collegamenti` e `segnalibri` si possono
-omettere.
+`titolo`, `autore`, `lingua`, `collegamenti`, `segnalibri`, `struttura` e
+ogni `nodo` si possono omettere. La struttura e i nodi servono al
+[PDF accessibile](#il-pdf-accessibile-e-il-pdfa).
 
 ### Che cosa scrive il core
 
@@ -309,7 +313,100 @@ Oltre un limite l'elenco non si scrive, e l'errore dice quale:
 | indirizzo di un collegamento | 8 KiB |
 | segnalibri | 20.000, di livello da 1 a 6 |
 | titolo, autore, lingua, titolo di un segnalibro | 2.000 caratteri |
+| nodi della struttura | 1.000.000 |
+| testo alternativo di un nodo | 10.000 caratteri |
 | durata della scrittura | 10 minuti |
+
+## Il PDF accessibile e il PDF/A
+
+Il PDF **accessibile** porta i tag: un lettore di schermo vi legge titoli,
+paragrafi, elenchi, tabelle con le celle d'intestazione, figure col loro testo
+alternativo, collegamenti, nella lingua e nell'ordine giusti. Lo chiede chi
+esporta (`accessible` nel [comando](#il-comando-e-il-lavoro)); la vista dice
+la specie di ogni cosa che ha disegnato con la `struttura` dell'elenco e il
+`nodo` di ogni pezzo e collegamento:
+
+```json
+{
+  "struttura": [
+    { "specie": "titolo", "livello": 1 },
+    { "specie": "paragrafo" },
+    { "specie": "collegamento", "genitore": 1 },
+    { "specie": "figura", "alt": "Il flusso: si scrive, si impagina, si esporta." },
+    { "specie": "tabella" },
+    { "specie": "riga", "genitore": 4 },
+    { "specie": "intestazione", "genitore": 5, "ambito": "colonna" }
+  ],
+  "pagine": [{
+    "pezzi": [{ "tipo": "testo", "nodo": 0, "…": "…" }, { "tipo": "vettore", "nodo": 3, "…": "…" }],
+    "collegamenti": [{ "nodo": 2, "…": "…" }]
+  }]
+}
+```
+
+| Campo di un nodo | Che cosa vale |
+|---|---|
+| `specie` | che cosa è (tabella sotto); obbligatoria |
+| `genitore` | l'indice del nodo che lo contiene, sempre **prima** di lui; senza, sta sotto il documento |
+| `livello` | da 1 a 6, solo e sempre per `titolo` |
+| `alt` | il testo alternativo: ciò che un lettore di schermo dice al posto di una figura o di una formula, o di un collegamento |
+| `lingua` | un'etichetta BCP 47 se il nodo è in un'altra lingua dalla nota; una che non lo è resta fuori con `lingua_scartata` |
+| `ambito` | solo per `intestazione`: `colonna`, `riga` o `entrambi` |
+| `numerato` | solo per `elenco`: `true` numerato, `false` puntato |
+
+| Specie | Tag del PDF |
+|---|---|
+| `sezione`, `paragrafo`, `citazione`, `codice`, `testo` | `Sect`, `P`, `BlockQuote`, `Code`, `Span` |
+| `titolo` | `H1`…`H6` secondo il `livello` |
+| `elenco`, `voce`, `etichetta`, `corpo-voce` | `L`, `LI`, `Lbl`, `LBody` |
+| `tabella`, `testata-tabella`, `corpo-tabella`, `piede-tabella`, `riga`, `intestazione`, `cella` | `Table`, `THead`, `TBody`, `TFoot`, `TR`, `TH`, `TD` |
+| `figura`, `formula`, `didascalia` | `Figure`, `Formula`, `Caption` |
+| `collegamento`, `nota` | `Link`, `Note` |
+| `indice`, `voce-indice` | `TOC`, `TOCI` |
+
+Che cosa scrive il core:
+
+- l'albero della struttura (`StructTreeRoot`, un `Document` con i nodi), il
+  catalogo marcato (`MarkInfo`), la lingua, e i metadati XMP col titolo;
+- ogni pezzo con un nodo in una sequenza marcata del suo nodo (`MCID`); un
+  pezzo senza nodo (un riquadro, un numero di pagina, un'intestazione
+  ripetuta) è un **artefatto**, che il lettore di schermo salta;
+- l'ordine di lettura è quello della struttura, non quello dei pezzi sulla
+  pagina; un nodo che continua sulla pagina dopo resta un nodo solo;
+- un collegamento con un nodo `collegamento` sta nel suo elemento `Link`, e
+  la sua descrizione (`Contents`) è il testo alternativo del nodo, se no il
+  testo che il nodo contiene, se no l'indirizzo; le pagine coi collegamenti
+  li ordinano secondo la struttura (`Tabs /S`).
+
+Avvisi propri: `struttura_mancante` (chiesto accessibile senza struttura: il
+PDF esce senza tag), `testo_alternativo_mancante` (una figura o una formula
+senza `alt`, col `nodo` e la `pagina`, dalla 1, dove comincia),
+`tabella_senza_intestazione` (col `nodo` e la `pagina`). Un nodo che sbaglia
+(un genitore che non viene prima, un titolo senza livello, un campo dove non
+va) è l'errore `nodo_rotto`; un pezzo che nomina un nodo che non c'è è
+`nodo_sconosciuto`; un collegamento il cui nodo non è un `collegamento` è
+`collegamento_rotto`.
+
+Il **PDF/A** (`pdfa` nel comando) è il PDF per l'archivio: PDF/A-2, al
+livello B (l'aspetto si conserva). Il core scrive i metadati XMP in chiaro,
+uguali ai dati del PDF (`pdfaid` parte 2, livello B), l'`OutputIntent` col
+profilo di colore sRGB (un ICC v2 scritto dal core), l'identificativo del
+file (l'impronta dell'elenco: lo stesso elenco dà gli stessi byte),
+collegamenti che si stampano, e nessuna data. I caratteri sono già tutti
+incorporati, anche quelli dei vettori. Il PDF/A e il PDF accessibile si
+chiedono separati o insieme; il livello A, che vuole anche i tag, non si
+dichiara.
+
+Ciò che il PDF/A non permette **lo dice prima di scrivere**, con l'errore
+`pdfa_non_possibile` e i suoi `ostacoli`, e nessun file:
+`lettere_senza_glifo` (le lettere che né il carattere né Literata disegnano,
+spazi compresi, che senza PDF/A uscirebbero nel riquadro vuoto) e
+`vettore_non_conforme` (un vettore che non si converte in PDF/A, con la sua
+`pagina` dalla 1).
+
+Nel workspace non c'è un validatore di PDF/A o di PDF/UA (veraPDF è Java):
+le prove (`tags_tests.rs`, `pdfa_tests.rs`, `tests/pdf_export_e2e.rs`)
+rileggono il file e ne controllano le regole che lo scrittore tocca.
 
 ## Il comando e il lavoro
 
@@ -323,6 +420,8 @@ lavoro è un lavoro del core.
 | `target` | il percorso del PDF nel vault, con l'estensione `.pdf` (obbligatorio) |
 | `images` | `full` (di serie) o `light`, le immagini alleggerite |
 | `replace` | `true` per sostituire un PDF che c'è già; senza, un PDF che c'è è un errore |
+| `accessible` | `true` per il [PDF accessibile](#il-pdf-accessibile-e-il-pdfa), coi tag della struttura dell'elenco |
+| `pdfa` | `true` per il PDF/A-2b; ciò che non permette è un errore, senza file |
 | `note` | la nota da cui prendere titolo, autore e lingua (`title`/`titolo`, `author`/`autore`, `lang`/`lingua` del frontmatter; il titolo, se manca, è il nome del file) quando l'elenco li lascia vuoti |
 
 Il comando controlla subito ciò che può controllare senza scrivere: l'elenco
@@ -343,3 +442,84 @@ scrittura che arriva in mezzo è un conflitto, mai una sovrascrittura cieca.
 
 Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
 
+
+## Più note in un PDF
+
+Il comando `pdf.write_book` del bundle `fub.draw` scrive nel vault un PDF
+con più note, ognuna un capitolo. La vista impagina ogni nota come per il
+PDF di una nota sola e manda un **libro** (`Libro`, versione 1, in
+`crates/fub-features/src/pdf_export/book.rs`): i capitoli in fila, ognuno
+col suo elenco delle pagine e i suoi rimandi, i collegamenti che portano a
+un'altra nota. Un campo che il formato non conosce rende il libro
+illeggibile.
+
+```json
+{
+  "versione": 1,
+  "titolo": "Progetto", "autore": "Ada Lovelace", "lingua": "it",
+  "capitoli": [
+    {
+      "nota": "Progetto/Alfa.md",
+      "titolo": "Alfa",
+      "pagine": { "versione": 1, "larghezza": 794, "altezza": 1123, "facce": [], "pagine": [{ "pezzi": [] }] },
+      "rimandi": [
+        { "pagina": 0, "x": 72, "y": 90, "w": 40, "h": 18,
+          "nota": "Progetto/Beta.md", "sezione": "Metodo" },
+        { "pagina": 0, "x": 72, "y": 120, "w": 40, "h": 18,
+          "nota": "Fuori.md", "url": "https://example.org/fuori" }
+      ]
+    }
+  ]
+}
+```
+
+| Campo | Che cosa vale |
+|---|---|
+| `titolo`, `autore`, `lingua` | i dati del PDF, come nell'elenco delle pagine |
+| `capitoli[].nota` | il percorso della nota nel vault; senza, il capitolo è fatto di pagine del libro (il frontespizio, l'indice), e i suoi rimandi portano alle note |
+| `capitoli[].titolo` | il titolo del capitolo nei segnalibri; vuoto, il `titolo` del suo elenco, poi il nome del file |
+| `capitoli[].pagine` | un elenco delle pagine: le sue pagine e i suoi collegamenti interni contano dalla prima pagina del capitolo |
+| `rimandi[].pagina` | la pagina del capitolo, dalla sua prima, che è la 0 |
+| `rimandi[].nota`, `sezione` | la nota a cui porta, e il titolo della sezione se il collegamento la nomina |
+| `rimandi[].url` | dove porta se la nota non è nel libro (solo `http`, `https`, `mailto` si aprono) |
+| `rimandi[].nodo` | facoltativo: il nodo `collegamento` della `struttura` del capitolo a cui appartiene, come per un collegamento della pagina |
+
+Il core ne fa un elenco solo, quello che scrive per una nota:
+
+- le pagine dei capitoli una dopo l'altra, e i collegamenti dentro una nota
+  spostati con le sue pagine;
+- le facce di tutti i capitoli in una tavola, una volta sola ciascuna;
+- le `struttura` dei capitoli una dopo l'altra, ognuna un ramo del
+  documento: i genitori e i `nodo` dei pezzi, dei collegamenti e dei
+  rimandi si spostano dei nodi dei capitoli prima;
+- **un indice solo**: un segnalibro per nota, col suo titolo, e i titoli
+  della nota un livello sotto (al più il 6); le pagine senza nota tengono i
+  loro segnalibri. Due note con lo stesso titolo (con la chiave dei nomi
+  del vault, `resolution_key`) prendono accanto il percorso senza
+  estensione: «Diario (2024/Diario)»;
+- un rimando a una nota del libro diventa un collegamento interno: alla
+  prima pagina della nota, o al segnalibro della sezione con quel titolo
+  (con la regola di `[[Nota#Sezione]]`, `heading_matches`: lo slug o il
+  titolo com'è, senza badare alle maiuscole); una sezione che non
+  c'è porta all'inizio della nota, con l'avviso `sezione_non_trovata`;
+- un rimando a una nota che il libro non ha porta all'`url`; senza, resta
+  testo, con l'avviso `nota_non_esportata` (uno per nota).
+
+I parametri sono quelli di `pdf.write_pages`, con `book` (il JSON del
+libro, obbligatorio) al posto di `pages` e senza `note`. Il comando compone
+il libro e lo passa a `pdf.write_pages`: il lavoro è uno solo, lo stesso
+`pdf.write_pages`, con la sua barra, il suo annullamento e i suoi limiti
+sull'elenco intero (le pagine, il peso, i collegamenti, i segnalibri).
+L'effetto `fub.pdf.queued` porta in più `warnings`, gli avvisi del libro.
+
+Un libro non si scrive, e l'errore dice perché, se:
+
+| Errore | Quando |
+|---|---|
+| `illeggibile`, `troppo_grande` | il JSON non è un libro di questa forma, o pesa più di 64 MiB |
+| `versione` | `versione` non è 1 |
+| `numero_capitoli` | nessun capitolo, o più di 2.000 |
+| `misure_diverse` | un capitolo ha la pagina di un'altra misura |
+| `nota_ripetuta` | la stessa nota in due capitoli |
+| `capitolo` | l'elenco di un capitolo non è valido (anche un collegamento interno che esce dal capitolo) |
+| `rimando_rotto` | un rimando su una pagina che il capitolo non ha, o con una misura che non è un numero |

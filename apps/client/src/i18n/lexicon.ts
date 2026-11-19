@@ -57,6 +57,9 @@ export const LEXICON: readonly LexiconEntry[] = [
   // nella nota con la scheda della lavagna. «Togli dalla nota» toglie l'embed,
   // mai il file.
   { say: "Scheda viva", instead: ["Embed interattivo", "Anteprima incorporata", "Widget del file"], why: "La stessa scheda della lavagna, e si usa dove sta: «viva» come la trasclusione" },
+  // La zona lavagna (T47): una lavagna incorporata in una nota, che si
+  // sistema senza uscire dalla nota. Nel «/» la voce è «Lavagna».
+  { say: "Zona lavagna", instead: ["Lavagna incorporata", "Canvas nella nota", "Mini lavagna"], why: "Dice che il piano libero ha un confine, e che fuori la nota resta una colonna" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

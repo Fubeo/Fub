@@ -38,6 +38,7 @@ fn elenco_json(titolo: &str) -> String {
                     posizioni: vec![0.0, 8.0, 12.0, 20.0],
                     sottolineato: false,
                     barrato: false,
+                    nodo: None,
                 },
                 Pezzo::Immagine {
                     x: 20.0,
@@ -45,11 +46,13 @@ fn elenco_json(titolo: &str) -> String {
                     w: 40.0,
                     h: 20.0,
                     file: "Foto/blu.png".into(),
+                    nodo: None,
                 },
             ],
             ..Pagina::default()
         }],
         segnalibri: Vec::new(),
+        struttura: Vec::new(),
     };
     serde_json::to_string(&elenco).unwrap()
 }
@@ -90,7 +93,7 @@ fn pdf_export_la_spec_chiede_pagine_e_destinazione() {
         .map(|p| p.name.as_str())
         .collect();
     assert_eq!(richiesti, vec![P_PAGES, P_TARGET]);
-    assert_eq!(spec.params.len(), 5);
+    assert_eq!(spec.params.len(), 7);
 }
 
 #[test]
@@ -345,6 +348,27 @@ fn pdf_export_gli_errori_dello_scrittore_hanno_la_loro_frase() {
     assert_eq!(chiave(&e), E_BROKEN_PAGE);
     let e = errore(ErroreEsportazione::TempoScaduto { secondi: 600 });
     assert_eq!(chiave(&e), E_TIME);
+    let e = errore(ErroreEsportazione::NodoRotto { nodo: 4 });
+    assert_eq!(chiave(&e), E_STRUCTURE);
+    let e = errore(ErroreEsportazione::NodoSconosciuto {
+        pagina: 2,
+        pezzo: 0,
+    });
+    assert_eq!(chiave(&e), E_BROKEN_PAGE);
+    let e = errore(ErroreEsportazione::PdfaNonPossibile {
+        ostacoli: vec![OstacoloPdfa::LettereSenzaGlifo {
+            famiglia: "Literata".into(),
+            lettere: "中".into(),
+        }],
+    });
+    assert_eq!(chiave(&e), E_PDFA_GLYPHS);
+    let e = errore(ErroreEsportazione::PdfaNonPossibile {
+        ostacoli: vec![OstacoloPdfa::VettoreNonConforme {
+            pagina: 3,
+            motivo: "glifi".into(),
+        }],
+    });
+    assert_eq!(chiave(&e), E_PDFA_VECTOR);
     // Ogni chiave ha la sua frase in italiano e in inglese.
     let it = in_italian(StringCatalog::new("it"));
     let en = in_english(StringCatalog::new("en"));
@@ -364,6 +388,13 @@ fn pdf_export_gli_errori_dello_scrittore_hanno_la_loro_frase() {
         E_NAME,
         E_TAKEN,
         E_PAYLOAD,
+        E_STRUCTURE,
+        E_PDFA_GLYPHS,
+        E_PDFA_VECTOR,
+        T_ACCESSIBLE,
+        T_ACCESSIBLE_DESC,
+        T_PDFA,
+        T_PDFA_DESC,
         P_PLAN,
         D_QUEUED,
         T_TITLE,
@@ -372,4 +403,29 @@ fn pdf_export_gli_errori_dello_scrittore_hanno_la_loro_frase() {
         assert!(it.entries.contains_key(k), "{k} in italiano");
         assert!(en.entries.contains_key(k), "{k} in inglese");
     }
+}
+
+#[test]
+fn pdf_export_il_lavoro_scrive_il_pdfa_se_chiesto() {
+    let mut host = host();
+    let mut r = richiesta("Archivio.pdf", false);
+    r["pdfa"] = json!(true);
+    r["accessible"] = json!(true);
+    let esito = run_job(PDF_WRITE_JOB, r, &mut host).unwrap();
+    // La nota non ha mandato la struttura: il PDF/A esce, senza tag, e lo
+    // dice.
+    assert_eq!(
+        esito["warnings"],
+        json!([{ "avviso": "struttura_mancante" }])
+    );
+    let pdf = host
+        .read_document_bytes(&DocId::new("Archivio.pdf"))
+        .unwrap();
+    let doc = lopdf::Document::load_mem(&pdf).unwrap();
+    let radice = doc.trailer.get(b"Root").unwrap().as_reference().unwrap();
+    let cat = doc.get_dictionary(radice).unwrap();
+    assert!(cat.has(b"OutputIntents"));
+    assert!(cat.has(b"Metadata"));
+    assert!(!cat.has(b"StructTreeRoot"));
+    assert!(doc.trailer.has(b"ID"));
 }

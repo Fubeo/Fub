@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_ENTRY, COLOR_ENTRY, REMINDER_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
+import { BASE_ENTRY, CANVAS_ENTRY, COLOR_ENTRY, REMINDER_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -139,6 +139,33 @@ describe("la Base dal «/» (T18)", () => {
     expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
     expect(slashMenuEntries(WITH_BASES, "", (id) => id !== BASE_ENTRY && ALL(id)).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
     expect(slashMenuEntries(WITH_BASES, "base", ALL, undefined, { ...use(), hidden: [BASE_ENTRY] }).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+  });
+});
+
+describe("la lavagna dal «/» (T47)", () => {
+  // `canvas.create` c'è soltanto con la componente della lavagna accesa.
+  const WITH_BOARDS = [...LIST, spec("canvas.create", "Nuova lavagna", ["toolbar"])];
+
+  it("sta fra i file, dopo l'incorporamento, con la sua figura e l'embed di una lavagna", () => {
+    const { entries } = slashMenuEntries(WITH_BOARDS, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids.indexOf(CANVAS_ENTRY)).toBeGreaterThan(ids.indexOf("markdown.embed"));
+    expect(entries.find((entry) => entry.id === CANVAS_ENTRY)).toMatchObject({
+      label: "Lavagna", section: "media", action: true, picker: null, icon: "dashboard", hint: "![[.canvas",
+      description: "Una zona libera dentro la nota: schede, fili e penna.",
+    });
+  });
+
+  it("scrivendo «/lavagna», «canvas» o «whiteboard» la si trova per prima", () => {
+    for (const query of ["lavagna", "canvas", "whiteboard"]) {
+      expect(slashMenuEntries(WITH_BOARDS, query, ALL).entries[0]!.id, query).toBe(CANVAS_ENTRY);
+    }
+  });
+
+  it("non c'è senza la lavagna, dove la superficie non sa crearla, né se è nascosta", () => {
+    expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BOARDS, "", (id) => id !== CANVAS_ENTRY && ALL(id)).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BOARDS, "lavagna", ALL, undefined, { ...use(), hidden: [CANVAS_ENTRY] }).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
   });
 });
 

@@ -8,7 +8,9 @@
 //!
 //! - `text`: il testo vero, coi caratteri incorporati in sotto-insieme;
 //! - `images`: i vettori e le immagini, piene o alleggerite;
-//! - `outline`: l'albero dei segnalibri.
+//! - `outline`: l'albero dei segnalibri;
+//! - `tags`: la struttura del PDF accessibile, se chi esporta la chiede;
+//! - `pdfa`: il profilo di colore, i metadati e ciò che il PDF/A non permette.
 //!
 //! Lo stesso elenco con le stesse risorse dà sempre gli stessi byte: il PDF
 //! non porta date, e ogni oggetto ha il suo numero nell'ordine in cui
@@ -19,9 +21,11 @@ use std::io::Write as _;
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use pdf_writer::types::{ActionType, AnnotationType};
+use pdf_writer::types::{ActionType, AnnotationFlags, AnnotationType};
 use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref, Str, TextStr};
 
+use super::pdfa::OstacoloPdfa;
+use super::tags::{nodo_del_pezzo, Marcatura};
 use super::text::Carattere;
 use super::{
     Avviso, Colore, Destinazione, ElencoPagine, ErroreEsportazione, Pezzo, Risorse, Scritto,
@@ -53,6 +57,13 @@ pub enum QualitaImmagini {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Opzioni {
     pub immagini: QualitaImmagini,
+    /// Il PDF accessibile: i tag dalla struttura dell'elenco, l'ordine di
+    /// lettura, i testi alternativi e i metadati XMP.
+    pub accessibile: bool,
+    /// Il PDF/A-2b, per l'archivio: il profilo di colore, i metadati XMP e
+    /// l'identificativo del file; ciò che il PDF/A non permette ferma la
+    /// scrittura prima del file.
+    pub pdfa: bool,
 }
 
 /// Perché una scrittura si è fermata prima della fine.
@@ -183,7 +194,9 @@ pub(crate) fn valida(elenco: &ElencoPagine) -> Result<(), ErroreEsportazione> {
                         return Err(rotto);
                     }
                 }
-                Pezzo::Vettore { x, y, w, h, svg } => {
+                Pezzo::Vettore {
+                    x, y, w, h, svg, ..
+                } => {
                     if !misura(*x) || !misura(*y) || !estensione(*w) || !estensione(*h) {
                         return Err(rotto);
                     }
@@ -229,7 +242,7 @@ pub(crate) fn valida(elenco: &ElencoPagine) -> Result<(), ErroreEsportazione> {
             return Err(ErroreEsportazione::SegnalibroRotto { segnalibro });
         }
     }
-    Ok(())
+    super::tags::valida(elenco)
 }
 
 fn colore_valido(c: &Colore) -> bool {
@@ -262,6 +275,12 @@ pub(super) struct Scrittore<'a> {
     /// collegamento o un segnalibro può portare a una pagina che viene dopo.
     pub(super) pagine: Vec<Ref>,
     albero: Ref,
+    /// Ciò che servirà per scrivere la struttura del PDF accessibile.
+    pub(super) marcatura: Marcatura,
+    /// Ciò che il PDF/A non permette, trovato scrivendo le pagine.
+    pub(super) ostacoli: Vec<OstacoloPdfa>,
+    /// La pagina che si sta scrivendo, dalla prima, che è la 0.
+    pub(super) pagina_in_corso: usize,
 }
 
 impl<'a> Scrittore<'a> {
@@ -286,6 +305,9 @@ impl<'a> Scrittore<'a> {
             avvisi: Vec::new(),
             pagine: Vec::new(),
             albero: Ref::new(1),
+            marcatura: Marcatura::default(),
+            ostacoli: Vec::new(),
+            pagina_in_corso: 0,
         };
         s.albero = s.rif();
         s
@@ -306,24 +328,34 @@ impl<'a> Scrittore<'a> {
         let totale = self.elenco.pagine.len();
         self.pagine = (0..totale).map(|_| self.rif()).collect();
         self.carica_facce();
+        self.prepara_tag();
         for indice in 0..totale {
             self.controllo.continua(indice, totale)?;
             self.pagina(indice)?;
         }
         self.controllo.continua(totale, totale)?;
+        self.controlla_pdfa()?;
         self.scrivi_caratteri()?;
         let segnalibri = self.segnalibri();
         let lingua = self.lingua();
+        let struttura = self.scrivi_struttura();
+        let (metadati, profilo) = self.prepara_metadati();
+        let titolo = self.titolo_del_pdf();
+        let autore = self.autore_del_pdf();
         let catalogo = self.rif();
         let mut cat = self.pdf.catalog(catalogo);
         cat.pages(self.albero);
+        if let Some(radice) = struttura {
+            super::tags::nel_catalogo(&mut cat, radice);
+        }
+        super::pdfa::nel_catalogo(&mut cat, metadati, profilo);
         if let Some(radice) = segnalibri {
             cat.outlines(radice);
         }
         if let Some(lingua) = &lingua {
             cat.lang(TextStr(lingua));
         }
-        if !self.elenco.titolo.is_empty() {
+        if !titolo.is_empty() {
             // Il lettore mostra il titolo nella barra, non il nome del file.
             cat.viewer_preferences().display_doc_title(true);
         }
@@ -335,14 +367,15 @@ impl<'a> Scrittore<'a> {
             .count(conto);
         let info = self.rif();
         let mut dati = self.pdf.document_info(info);
-        if !self.elenco.titolo.is_empty() {
-            dati.title(TextStr(&self.elenco.titolo));
+        if !titolo.is_empty() {
+            dati.title(TextStr(&titolo));
         }
-        if !self.elenco.autore.is_empty() {
-            dati.author(TextStr(&self.elenco.autore));
+        if !autore.is_empty() {
+            dati.author(TextStr(&autore));
         }
         dati.creator(TextStr("Fub")).producer(TextStr("Fub"));
         dati.finish();
+        self.identifica();
         Ok(())
     }
 
@@ -400,7 +433,9 @@ impl<'a> Scrittore<'a> {
         let mut usati: BTreeMap<usize, ()> = BTreeMap::new();
         let mut oggetti: Vec<(String, Ref)> = Vec::new();
         let mut stati: BTreeMap<String, Ref> = BTreeMap::new();
+        self.pagina_in_corso = indice;
         for pezzo in &pagina.pezzi {
+            self.apri_marcatura(&mut c, indice, nodo_del_pezzo(pezzo));
             match pezzo {
                 Pezzo::Testo {
                     x,
@@ -413,6 +448,7 @@ impl<'a> Scrittore<'a> {
                     posizioni,
                     sottolineato,
                     barrato,
+                    ..
                 } => {
                     c.save_state();
                     if let Some((nome, rif)) = self.trasparenza(colore[3]) {
@@ -450,7 +486,9 @@ impl<'a> Scrittore<'a> {
                     c.fill_nonzero();
                     c.restore_state();
                 }
-                Pezzo::Vettore { x, y, w, h, svg } => {
+                Pezzo::Vettore {
+                    x, y, w, h, svg, ..
+                } => {
                     self.controllo.continua(indice, totale)?;
                     if let Some(rif) = self.vettore(svg) {
                         let nome = format!("X{}", oggetti.len());
@@ -458,7 +496,9 @@ impl<'a> Scrittore<'a> {
                         oggetti.push((nome, rif));
                     }
                 }
-                Pezzo::Immagine { x, y, w, h, file } => {
+                Pezzo::Immagine {
+                    x, y, w, h, file, ..
+                } => {
                     self.controllo.continua(indice, totale)?;
                     if let Some(rif) = self.immagine(file, *w, *h) {
                         let nome = format!("X{}", oggetti.len());
@@ -467,6 +507,7 @@ impl<'a> Scrittore<'a> {
                     }
                 }
             }
+            self.chiudi_marcatura(&mut c);
         }
         c.restore_state();
         let contenuto = self.rif();
@@ -480,10 +521,17 @@ impl<'a> Scrittore<'a> {
             .keys()
             .map(|&i| (self.caratteri[i].nome.clone(), self.caratteri[i].rif))
             .collect();
+        let (genitori, ordine) = self.chiavi_della_pagina(indice);
         let mut p = self.pdf.page(rif);
         p.media_box(Rect::new(0.0, 0.0, largo, alto));
         p.parent(self.albero);
         p.contents(contenuto);
+        if let Some(chiave) = genitori {
+            p.struct_parents(chiave);
+        }
+        if let Some(ordine) = ordine {
+            p.tab_order(ordine);
+        }
         if !annotazioni.is_empty() {
             p.annotations(annotazioni.iter().copied());
         }
@@ -545,10 +593,23 @@ impl<'a> Scrittore<'a> {
                 }
             };
             let rif = self.rif();
+            let chiave = self.marca_annotazione(indice, rif, c.nodo);
+            let descrizione = self.descrizione_collegamento(c.nodo, &c.destinazione);
+            let pdfa = self.opzioni.pdfa;
             let mut a = self.pdf.annotation(rif);
             a.subtype(AnnotationType::Link)
                 .rect(riquadro)
                 .border(0.0, 0.0, 0.0, None);
+            if let Some(chiave) = chiave {
+                a.struct_parent(chiave);
+            }
+            if let Some(descrizione) = &descrizione {
+                a.contents(TextStr(descrizione));
+            }
+            if pdfa {
+                // Il PDF/A vuole ogni annotazione stampabile.
+                a.flags(AnnotationFlags::PRINT);
+            }
             match destinazione {
                 Ok(uri) => {
                     a.action()

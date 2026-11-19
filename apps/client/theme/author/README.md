@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2307 hook**, **7 stati** (1039 assegnazioni su 309 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2372 hook**, **7 stati** (1059 assegnazioni su 315 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,7 +10,7 @@ Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1753 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1818 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (157 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
 - **contenuto** (397 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
@@ -88,8 +88,8 @@ draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-ti
 draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end
 draw-tip-other-start draw-tip-square-end draw-tip-square-start draw-tip-triangle-end
 draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo
-draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out export-back export-color
-export-open export-print eye flag fmt-alarm fmt-bold fmt-bullets fmt-callout fmt-chevron-down
+draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out export-back export-open
+export-pick export-print eye flag fmt-alarm fmt-bold fmt-bullets fmt-callout fmt-chevron-down
 fmt-clear fmt-code fmt-codeblock fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details
 fmt-diagram fmt-embed fmt-expand fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide
 fmt-highlight fmt-icon fmt-image fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more

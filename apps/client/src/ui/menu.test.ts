@@ -70,6 +70,27 @@ describe("il menu contestuale", () => {
     });
   });
 
+  it("sta nell'area di lavoro, e nel dialogo modale quando l'area di lavoro è inerte sotto", () => {
+    const workspace = document.createElement("div");
+    workspace.id = "workspace";
+    const own = document.createElement("button");
+    workspace.append(own);
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const inside = document.createElement("button");
+    dialog.append(inside);
+    document.body.append(workspace, dialog);
+    showContextMenu(own, [{ label: "Uno", run: () => {} }]);
+    expect(document.getElementById("context-menu")?.parentElement).toBe(workspace);
+    closeContextMenu();
+    // Lo spazio «Esporta in PDF» rende inerte l'area di lavoro: un menu lì
+    // si vedrebbe e non si potrebbe cliccare.
+    workspace.inert = true;
+    showContextMenu(inside, [{ label: "Uno", run: () => {} }]);
+    expect(document.getElementById("context-menu")?.parentElement).toBe(dialog);
+  });
+
   it("un menu chiuso prima del tempo non porta via quello dopo", () => {
     // Il menu si apre e si chiude subito — è il gesto di chi preme Escape, o
     // sceglie una voce col ritorno a capo. Poi il timer scatta.

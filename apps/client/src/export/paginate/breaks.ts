@@ -21,13 +21,21 @@ export interface BreakSettings {
   readonly separator: boolean;
 }
 
+/// L'inizio dell'identità del separatore fra due note di un PDF di più note
+/// (`export/book.ts`): volta sempre pagina, qualunque sia la regolazione del
+/// separatore, perché ogni nota comincia su una pagina sua.
+export const CHAPTER_BREAK_PREFIX = "capitolo:";
+
 /// Le scatole con le interruzioni scelte: un `break` «titolo2» prima di ogni
-/// Titolo 2, il separatore sostituito da un `break` «separatore». Le
-/// interruzioni a mano restano dove sono.
+/// Titolo 2, il separatore sostituito da un `break` «separatore», quello fra
+/// due note da un `break` «capitolo». Le interruzioni a mano restano dove
+/// sono.
 export function applyBreaks(boxes: readonly Box[], settings: BreakSettings): Box[] {
   const out: Box[] = [];
   for (const box of boxes) {
-    if (box.kind === "heading" && box.level === 2 && settings.everyHeading2) {
+    if (box.kind === "separator" && box.id.startsWith(CHAPTER_BREAK_PREFIX)) {
+      out.push(breakBox(box.id, "capitolo"));
+    } else if (box.kind === "heading" && box.level === 2 && settings.everyHeading2) {
       out.push(breakBox(`${box.id}#pagina`, "titolo2"));
       out.push(box);
     } else if (box.kind === "separator" && settings.separator) {

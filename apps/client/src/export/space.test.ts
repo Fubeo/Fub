@@ -151,8 +151,10 @@ describe("lo spazio «Esporta in PDF»", () => {
     expect(opened.querySelector(".export-section-summary")?.textContent).toBe("A4 verticale");
     opened.focus();
     space.setProfile(landscape);
-    expect(opened.querySelector(".export-section-summary")?.textContent).toBe("A4 orizzontale");
-    expect(document.activeElement).toBe(opened);
+    // A gesto finito il pannello si ridisegna, col fuoco sulla stessa testa.
+    const again = root.querySelector<HTMLButtonElement>('[data-section="pagina"] .export-section-head')!;
+    expect(again.querySelector(".export-section-summary")?.textContent).toBe("A4 orizzontale");
+    expect(document.activeElement).toBe(again);
     expect(root.querySelector(".export-profile-name")?.textContent).toBe("Di serie · cambiato");
     space.close();
   });

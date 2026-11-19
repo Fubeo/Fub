@@ -14,10 +14,14 @@ interface Mounted {
   readonly clearOwn: ReturnType<typeof vi.fn>;
 }
 
+/// La sezione come la monta lo spazio: a gesto finito (e quando una riga si
+/// apre) il pannello rifà il corpo, dal vivo no.
 function mount(start: ExportProfile = defaultProfile(), own = 0): Mounted {
   let profile = start;
   const changes: Mounted["changes"] = [];
   const clearOwn = vi.fn();
+  const host = document.createElement("div");
+  const redraw = () => host.replaceChildren(diagramsBody(context));
   const context: SectionContext = {
     get profile() {
       return profile;
@@ -25,13 +29,18 @@ function mount(start: ExportProfile = defaultProfile(), own = 0): Mounted {
     change(next, options) {
       profile = next;
       changes.push({ profile: next, live: options?.live === true });
+      if (!options?.live) redraw();
     },
     open: () => undefined,
+    preview: () => undefined,
+    highlight: () => undefined,
+    redraw,
+    memory: new Map(),
     diagrams: { own, clearOwn },
   };
-  const body = diagramsBody(context);
-  document.body.append(body);
-  return { body, changes, profile: () => profile, clearOwn };
+  redraw();
+  document.body.append(host);
+  return { body: host, changes, profile: () => profile, clearOwn };
 }
 
 afterEach(() => {

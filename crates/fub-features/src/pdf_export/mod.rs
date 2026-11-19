@@ -21,7 +21,12 @@
 //!   collegamenti;
 //! - `text`: i caratteri, i loro sotto-insiemi e il testo;
 //! - `images`: i vettori e le immagini, piene o alleggerite;
-//! - `outline`: i segnalibri.
+//! - `outline`: i segnalibri;
+//! - `tags`: la struttura del PDF accessibile (i tag, l'ordine di lettura, i
+//!   testi alternativi), dalla [`struttura`](ElencoPagine::struttura) che la
+//!   vista manda;
+//! - `pdfa`: ciò che il PDF/A aggiunge (il profilo di colore, i metadati XMP)
+//!   e ciò che non permette, detto prima che il file si scriva.
 //!
 //! # Il comando e il suo lavoro
 //!
@@ -30,6 +35,12 @@
 //! lavoro del core, che si vede nel centro attività e si annulla; il lavoro
 //! scrive il PDF e lo deposita nel vault in un colpo solo, così il file arriva
 //! intero o non arriva.
+//!
+//! # Più note in un PDF
+//!
+//! [`book`] compone un libro (più note, una per capitolo, coi collegamenti
+//! fra loro che diventano interni) in un elenco solo, e il suo comando lo
+//! passa al lavoro di una nota.
 //!
 //! # Il profilo e la memoria
 //!
@@ -52,6 +63,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 mod aperta;
+pub mod book;
+#[cfg(test)]
+mod book_tests;
 mod images;
 #[cfg(test)]
 mod images_tests;
@@ -60,7 +74,13 @@ pub mod memory;
 mod outline;
 #[cfg(test)]
 mod outline_tests;
+mod pdfa;
+#[cfg(test)]
+mod pdfa_tests;
 pub mod profile;
+mod tags;
+#[cfg(test)]
+mod tags_tests;
 #[cfg(test)]
 mod tests;
 mod text;
@@ -72,6 +92,8 @@ mod writer_tests;
 /// stanno sotto `.fub/plugins/fub.esporta-pdf/`.
 pub const SPAZIO_DATI: &str = "fub.esporta-pdf";
 
+pub use pdfa::OstacoloPdfa;
+pub use tags::{Ambito, Nodo, Specie};
 pub use writer::{scrivi, scrivi_con, Controllo, Interruzione, Opzioni, QualitaImmagini};
 
 /// La versione del formato dell'elenco delle pagine.
@@ -115,6 +137,14 @@ pub const MAX_URL_BYTE: usize = 8 * 1024;
 /// lingua, in caratteri.
 pub const MAX_TESTO_DATI: usize = 2_000;
 
+/// Quanti nodi al più nella struttura del PDF accessibile: più dei pezzi di
+/// un libro lungo, meno di un elenco impazzito.
+pub const MAX_NODI: usize = 1_000_000;
+
+/// Il testo alternativo più lungo, in caratteri: la descrizione di un
+/// diagramma ci sta.
+pub const MAX_TESTO_ALTERNATIVO: usize = 10_000;
+
 /// Quanto può durare la scrittura di un PDF nel lavoro del core, in
 /// millisecondi: oltre, si ferma con [`ErroreEsportazione::TempoScaduto`].
 pub const MAX_TEMPO_MS: u64 = 10 * 60 * 1000;
@@ -148,6 +178,11 @@ pub struct ElencoPagine {
     /// e l'albero lo fanno i livelli.
     #[serde(default)]
     pub segnalibri: Vec<Segnalibro>,
+    /// La struttura del PDF accessibile: i [`Nodo`] nell'ordine in cui si
+    /// leggono, e ognuno col suo genitore. Un pezzo o un collegamento nomina
+    /// il suo nodo col suo indice; vuota, il PDF non porta tag.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub struttura: Vec<Nodo>,
 }
 
 /// Un segnalibro: un titolo della nota e il punto della pagina dove comincia.
@@ -175,6 +210,9 @@ pub struct Collegamento {
     pub w: f64,
     pub h: f64,
     pub destinazione: Destinazione,
+    /// Il nodo [`Specie::Collegamento`] della struttura a cui appartiene.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nodo: Option<usize>,
 }
 
 /// Dove porta un collegamento.
@@ -261,6 +299,11 @@ pub enum Pezzo {
         sottolineato: bool,
         #[serde(default)]
         barrato: bool,
+        /// Il nodo della [struttura](ElencoPagine::struttura) a cui appartiene;
+        /// senza, nel PDF accessibile è un artefatto (una testata, un numero
+        /// di pagina).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        nodo: Option<usize>,
     },
     /// Un rettangolo pieno: un fondo, un lato di un bordo, una linea.
     Riquadro {
@@ -278,6 +321,9 @@ pub enum Pezzo {
         w: f64,
         h: f64,
         svg: String,
+        /// Il nodo della struttura a cui appartiene, di solito una figura.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        nodo: Option<usize>,
     },
     /// Un'immagine, coi byte che [`Risorse::immagine`] dà per `file`.
     Immagine {
@@ -286,6 +332,9 @@ pub enum Pezzo {
         w: f64,
         h: f64,
         file: String,
+        /// Il nodo della struttura a cui appartiene, di solito una figura.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        nodo: Option<usize>,
     },
 }
 
@@ -337,6 +386,16 @@ pub enum Avviso {
     CollegamentoScartato { url: String },
     /// Una lingua che non è un'etichetta BCP 47: il PDF non la dice.
     LinguaScartata { lingua: String },
+    /// Il PDF accessibile è stato chiesto ma l'elenco non ha la struttura:
+    /// il PDF esce senza tag.
+    StrutturaMancante,
+    /// Una figura o una formula senza testo alternativo: un lettore di schermo
+    /// non sa dire che cosa mostra. `nodo` è il suo indice nella struttura,
+    /// `pagina` (dalla prima, che è la 1) dove comincia.
+    TestoAlternativoMancante { nodo: usize, pagina: Option<usize> },
+    /// Una tabella senza celle d'intestazione: un lettore di schermo legge le
+    /// celle senza dire di che colonna sono.
+    TabellaSenzaIntestazione { nodo: usize, pagina: Option<usize> },
 }
 
 /// Perché un elenco non diventa un PDF.
@@ -382,6 +441,15 @@ pub enum ErroreEsportazione {
     TempoScaduto { secondi: u64 },
     /// Chi l'ha chiesta l'ha annullata.
     Annullato,
+    /// Più di [`MAX_NODI`] nodi nella struttura.
+    TroppiNodi { nodi: usize },
+    /// Un nodo della struttura con un genitore che non viene prima, un campo
+    /// che non vale per la sua specie o un testo troppo lungo.
+    NodoRotto { nodo: usize },
+    /// Un pezzo che nomina un nodo che la struttura non ha.
+    NodoSconosciuto { pagina: usize, pezzo: usize },
+    /// Il PDF/A non si può scrivere: ciò che non permette, detto per nome.
+    PdfaNonPossibile { ostacoli: Vec<OstacoloPdfa> },
 }
 
 impl fmt::Display for ErroreEsportazione {
@@ -450,6 +518,22 @@ impl fmt::Display for ErroreEsportazione {
                 write!(f, "writing the PDF took more than {secondi} seconds")
             }
             Self::Annullato => f.write_str("writing the PDF was cancelled"),
+            Self::TroppiNodi { nodi } => {
+                write!(f, "{nodi} structure nodes: at most {MAX_NODI} are allowed")
+            }
+            Self::NodoRotto { nodo } => write!(
+                f,
+                "structure node {nodo} has an invalid parent, field or text"
+            ),
+            Self::NodoSconosciuto { pagina, pezzo } => write!(
+                f,
+                "item {pezzo} of page {pagina} names an unknown structure node"
+            ),
+            Self::PdfaNonPossibile { ostacoli } => write!(
+                f,
+                "the PDF/A cannot be written: {} obstacles",
+                ostacoli.len()
+            ),
         }
     }
 }

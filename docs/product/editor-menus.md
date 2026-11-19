@@ -300,9 +300,9 @@ voci sono parenti, «Sposta nel cestino» in rosso per ultimo.
 |---|---|
 | Nota | Apri a lato, Apri in una nuova finestra, Rinomina, Sposta in…, Duplica, Copia ▸ (il link, il percorso, il file), Appuntata, Organizza ▸ (icona, segnalibri, converti in cartella, ordine, mostra nella cartella del sistema, apri con un'altra app), Sposta nel cestino |
 | Altro file | Apri, Apri a lato, Apri con un'altra app, Rinomina, Sposta in…, Copia ▸, Mostra le note che lo usano, Sposta nel cestino |
-| Cartella | Nuova nota qui, Nuovo ▸ (l'elenco del «+», sotto), Importa ▸, Rinomina, Sposta in…, Cerca nella cartella, Organizza ▸ (icona, usa come spazio, segnalibri, ordine, copia il percorso, esporta la cartella, mostra nella cartella del sistema), Sposta nel cestino |
+| Cartella | Nuova nota qui, Nuovo ▸ (l'elenco del «+», sotto), Importa ▸, Rinomina, Sposta in…, Cerca nella cartella, Esporta in PDF…, Organizza ▸ (icona, usa come spazio, segnalibri, ordine, copia il percorso, esporta la cartella, mostra nella cartella del sistema), Sposta nel cestino |
 | Titolo e spazio vuoto | Nuova nota, Nuovo ▸ (l'elenco del «+»), Ordina ▸, Comprimi tutto, Importa ▸ |
-| Scelta multipla | Sposta in…, In una cartella nuova…, Copia i link, Sposta nel cestino |
+| Scelta multipla | Sposta in…, In una cartella nuova…, Copia i link, Esporta in PDF…, Sposta nel cestino |
 | Scheda | Chiudi, Chiudi le altre, Chiudi anche ▸ (a destra, non appuntate, tutte), Appuntata, Dividi a destra, Apri in una nuova finestra, Pila ▸, Copia il percorso, Mostra nell'esploratore |
 | Riquadro (⋯) | Dividi a destra, Dividi in basso, Sorgente accanto, Esporta ▸ (i formati, poi «Altro formato…»), Stampa, Presenta come slide, Registra audio, Chiudi la scheda, Chiudi il riquadro |
 

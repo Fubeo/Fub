@@ -20,11 +20,19 @@
 //
 // Un corpo riceve il profilo e `change`: mentre si trascina un controllo
 // (`live`) cambiano solo le pagine, e il pannello non si ridisegna; a gesto
-// finito il pannello rifà le teste, col fuoco dov'era.
+// finito il pannello si ridisegna tutto, teste e corpi, col fuoco sul
+// controllo che l'aveva (per `id`: ogni controllo di un corpo ne ha uno
+// stabile). `preview` mostra un profilo sulle pagine senza sceglierlo,
+// `highlight` contorna sulle pagine dove sta un colore.
 
 import { plural, t, type Key } from "../../i18n/strings";
 import { paperSize, PAPER_MM, type ExportProfile } from "../profile";
 import { DIAGRAMS_SECTION } from "./diagrams";
+import { ownCount, type PageColor } from "../themes";
+import { colorsBody } from "./colors";
+import { coverTocBody } from "./cover-toc";
+import { headerFooterBody, SLOT_IDS, slotShortName } from "./header-footer";
+import { themeBody } from "./theme";
 
 export interface SectionContext {
   readonly profile: ExportProfile;
@@ -38,6 +46,18 @@ export interface SectionContext {
     readonly own: number;
     clearOwn(): void;
   };
+  /// Mostra sulle pagine un profilo senza sceglierlo (il passaggio su un
+  /// tema); `null` torna al profilo scelto. Il pannello non cambia.
+  preview(next: ExportProfile | null): void;
+  /// Contorna sulle pagine i punti dove un colore è usato (il passaggio su un
+  /// colore); `null` toglie il contorno.
+  highlight(color: PageColor | null): void;
+  /// Ridisegna il pannello col fuoco dov'era, senza cambiare il profilo (una
+  /// riga che si apre).
+  redraw(): void;
+  /// Ciò che una sezione ricorda fra un disegno del pannello e l'altro, finché
+  /// lo spazio è aperto (quale colore è aperto).
+  readonly memory: Map<string, unknown>;
 }
 
 export interface ExportSection {
@@ -68,19 +88,6 @@ export function themeName(id: string): string {
   return t(THEME_NAMES[id] ?? "pdf_export.theme.fub");
 }
 
-const SLOT_NAMES: Readonly<Record<string, Key>> = {
-  titolo: "pdf_export.slot.title",
-  sezione: "pdf_export.slot.section",
-  data: "pdf_export.slot.date",
-  pagina: "pdf_export.slot.page",
-  "pagina-di-pagine": "pdf_export.slot.page",
-  autore: "pdf_export.slot.author",
-  percorso: "pdf_export.slot.path",
-  testo: "pdf_export.slot.text",
-};
-
-const SLOT_ORDER = ["sopra-sinistra", "sopra-centro", "sopra-destra", "sotto-sinistra", "sotto-centro", "sotto-destra"];
-
 /// I colori che la persona ha cambiato, senza quelli dei diagrammi.
 function ownPageColors(profile: ExportProfile): number {
   return Object.keys(profile.colori).filter((key) => !key.startsWith("diagramma-")).length;
@@ -108,10 +115,11 @@ export const SECTIONS: readonly ExportSection[] = [
     id: "tema",
     title: "pdf_export.section.theme",
     summary: (profile) => {
-      const own = ownPageColors(profile);
+      const own = ownCount(profile);
       const name = themeName(profile.tema);
       return own > 0 ? `${name} · ${plural(own, "pdf_export.theme.own.one", "pdf_export.theme.own.other")}` : name;
     },
+    body: themeBody,
   },
   {
     id: "colori",
@@ -121,6 +129,7 @@ export const SECTIONS: readonly ExportSection[] = [
       const own = ownPageColors(profile);
       return own > 0 ? plural(own, "pdf_export.colors.own.one", "pdf_export.colors.own.other") : t("pdf_export.colors.theme");
     },
+    body: colorsBody,
   },
   {
     id: "caratteri",
@@ -141,9 +150,10 @@ export const SECTIONS: readonly ExportSection[] = [
     id: "testata",
     title: "pdf_export.section.header",
     summary: (profile) => {
-      const names = SLOT_ORDER.map((slot) => profile.testata.posti[slot]?.voce ?? "").filter((voce) => voce !== "").map((voce) => t(SLOT_NAMES[voce] ?? "pdf_export.slot.text"));
+      const names = SLOT_IDS.map((slot) => profile.testata.posti[slot]?.voce ?? "").filter((voce) => voce !== "").map(slotShortName);
       return names.length > 0 ? names.join(", ") : t("pdf_export.header.empty");
     },
+    body: headerFooterBody,
   },
   {
     id: "fronte",
@@ -154,6 +164,7 @@ export const SECTIONS: readonly ExportSection[] = [
       if (front.indice) return t("pdf_export.front.toc");
       return t("pdf_export.front.none");
     },
+    body: coverTocBody,
   },
   {
     id: "contenuto",

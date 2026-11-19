@@ -574,10 +574,15 @@ export const SCENE = touchLast(onPage("shell", [
   // pagine come usciranno su un fondo neutro, a destra le dieci sezioni
   // chiuse che dicono ciò che vale, in fondo la banda. A 700 px il pannello
   // va sotto le pagine; il telefono sta fra le scene di `mobile.html`.
+  // Con Tema e Colori aperte (T71): gli otto temi, gli undici colori con la
+  // riga dell'accento aperta (i tondi, il selettore, il codice), il
+  // contrasto e i due interruttori, come al passo 28 del prototipo.
   ...[
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
-  ].map(([id, title, viewport]) => ({
+    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, true],
+    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, false, true],
+  ].map(([id, title, viewport, themes, front]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
@@ -590,6 +595,8 @@ export const SCENE = touchLast(onPage("shell", [
       await openNote(page, "Guida/Sintassi di Fub.md");
       if (size) await page.setViewportSize(size);
       await openExportSpace(page);
+      if (themes) await openThemeSections(page);
+      if (front) await openFrontSections(page);
     },
   })),
   // **La sezione Diagrammi** (T75): la nota con un flusso, una formula più
@@ -1698,6 +1705,53 @@ export const SCENE = touchLast(onPage("shell", [
     },
     ...(hover ? { hover: (page) => page.hover(".pane.focus .pane-editor .cm-fub-cell-value >> nth=0") } : {}),
   })),
+  // I grafici (T54): il grafico «Vendite» del foglio come scheda, disegnato
+  // da GridCraft e alto quanto la sua proporzione; un grafico che il file non
+  // ha («Intervallo non trovato»); la tabella col recinto Mermaid che
+  // «Grafico da questa tabella» le ha scritto sotto; il menu della tabella
+  // con la voce; la finestra minima.
+  ...[
+    ["grafici-01-scrittura", "Il grafico del foglio come scheda, alto quanto la sua proporzione", "top", false, null],
+    ["grafici-05-perso", "Il fondo del grafico del foglio e, sotto, un grafico che il file non ha", "lost", false, null],
+    ["grafici-02-tabella", "La tabella dei preventivi e la torta scritta dalla tabella", "table", false, null],
+    ["grafici-03-menu", "Il menu della tabella con «Rigenera il grafico dalla tabella»", "table", true, null],
+    ["grafici-04-stretta", "I grafici nella finestra minima, 800 px", "top", false, NOTE_NARROW],
+  ].map(([id, title, scroll, menu, viewport]) => ({
+    id,
+    title,
+    query: "live=grafici&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      if (scroll === "table") {
+        // La torta si disegna quando entra in vista.
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+        await page.waitForFunction(() => {
+          const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+          return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+        });
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+      }
+      if (scroll === "lost") {
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
+      }
+      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (menu) {
+        await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
+        await page.waitForSelector("#context-menu [role=menuitem]");
+      }
+    },
+  })),
   // La scheda di documento (T44, il prototipo `.docw`, passo 17): il verbale
   // in ODT a riposo, in continuo e senza pagine; scelto coi Blocchi (attivo,
   // poi Esc); attivo, con l'editor dei documenti in Scrittura e la sua barra.
@@ -2670,6 +2724,42 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(`${cards}[data-card-chosen="true"]`);
     },
   })),
+  // La zona lavagna (T47, il passo 18 del prototipo): il percorso della
+  // visita a riposo, tutto nella scheda; scelto coi Blocchi (attivo, poi
+  // Esc); attivo, la lavagna vera con la barra della selezione e senza la
+  // colonna degli strumenti; attivo nella finestra minima.
+  ...[
+    ["scheda-lavagna-01-riposo", "Il percorso della visita a riposo: tutta la lavagna nella scheda", "rest"],
+    ["scheda-lavagna-02-scelta", "Il percorso scelto coi Blocchi, dopo Esc", "chosen"],
+    ["scheda-lavagna-03-attiva", "Il percorso attivo: le schede si spostano, senza la colonna degli strumenti", "active"],
+    ["scheda-lavagna-04-attiva-stretta", "Il percorso attivo nella finestra minima", "active", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-lavagna",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="canvas"]';
+      // La lavagna a riposo mostra le sue quattro schede.
+      await page.waitForFunction((selector) => {
+        const root = document.querySelector(selector);
+        return root?.dataset.cardState === "view"
+          && root.querySelector('.canvas-card-board[data-card-board="board"]') !== null
+          && root.querySelectorAll(".canvas-card-board-rest .canvas-node").length === 4;
+      }, card);
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (state === "rest") return;
+      await page.click(`${card} .live-card-body`);
+      await page.waitForFunction((selector) => {
+        const writer = document.querySelector(`${selector}[data-card-active="true"] .canvas-card-board-editor:not([hidden])`);
+        return writer !== null && writer.querySelectorAll(".canvas-node").length === 4;
+      }, card);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+    },
+  })),
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
@@ -3243,6 +3333,54 @@ async function openExportDiagrams(page) {
     }
   });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// Apre le sezioni Tema e Colori dello spazio «Esporta in PDF» e la riga
+/// dell'accento, poi porta il pannello in cima.
+async function openThemeSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="colori"] .export-section-head');
+  await page.click("#export-color-accento");
+  await page.waitForSelector("#export-color-palette-accento");
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Porta lo spazio «Esporta in PDF» dove sta il passo 29 del prototipo (il
+/// profilo «Relazione per il Comune»): tema Relazione, frontespizio e indice,
+/// in testata la sezione a sinistra e il titolo a destra, nel piè la data a
+/// sinistra e «pagina di pagine» a destra; le sezioni Frontespizio e Testata
+/// aperte, due pagine affiancate (T73).
+async function openFrontSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-theme[data-theme="relazione"]');
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="fronte"] .export-section-head');
+  await page.click("#export-front-cover");
+  await page.click("#export-front-toc");
+  await page.click('.export-section[data-section="testata"] .export-section-head');
+  for (const [slot, label] of [["sopra-sinistra", "Sezione"], ["sotto-sinistra", "Data"], ["sotto-centro", "Niente"], ["sotto-destra", "Pagina di pagine"]]) {
+    await page.click(`#export-header-${slot}`);
+    await page.click(`#context-menu [role=menuitemradio]:has-text("${label}")`);
+    await page.waitForSelector("#context-menu", { state: "detached" });
+  }
+  // Sotto i 760 px le viste non ci sono (la finestra della conformità a 700).
+  if (await page.isVisible('.export-segment[data-view="due"]')) await page.click('.export-segment[data-view="due"]');
+  await page.waitForSelector(".export-space .export-cover-title");
+  await page.waitForSelector(".export-space .export-toc-row");
+  // L'indice ha i numeri veri quando l'impaginazione è finita.
+  await page.waitForFunction(() => [...document.querySelectorAll(".export-space .export-toc-page")].every((node) => /^\d+$/.test(node.textContent ?? "")), null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    const stage = document.querySelector(".export-stage");
+    if (stage) stage.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
   await page.mouse.move(0, 0);
 }
 

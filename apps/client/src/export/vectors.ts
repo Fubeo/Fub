@@ -29,6 +29,7 @@ import type { DiagramOwnColors } from "../ui/mermaid-styles";
 import { adoptSheet } from "../ui/stylesheets";
 import { ColorReader, SVG_PAINT } from "./probe";
 import { paperColorsOf, type ExportProfile } from "./profile";
+import { grayOf } from "./themes";
 
 // --- L'aspetto dei diagrammi ------------------------------------------------
 
@@ -66,7 +67,9 @@ export function diagramOwnColors(profile: ExportProfile): DiagramOwnColors {
   const colors: { -readonly [K in keyof DiagramOwnColors]: string } = {};
   for (const { key, part } of DIAGRAM_COLOR_KEYS) {
     const value = profile.colori[key];
-    if (value !== undefined && HEX6.test(value)) colors[part] = value.toLowerCase();
+    if (value === undefined || !HEX6.test(value)) continue;
+    // Il bianco e nero vale anche per i colori dati ai diagrammi.
+    colors[part] = profile.inchiostro.bianco_e_nero ? grayOf(value).toLowerCase() : value.toLowerCase();
   }
   return colors;
 }

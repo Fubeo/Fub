@@ -553,6 +553,60 @@ export const VISTE = {
     },
     app: { scena: "valori-cella-01-scrittura" },
   },
+  // La zona lavagna (T47): quella del prototipo a riposo, la lavagna intera
+  // nella sua zona; nel banco il percorso della visita, a riposo.
+  "scheda-lavagna": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .scard[data-kind="canvas"] .cvz .cvn');
+      },
+    },
+    app: { scena: "scheda-lavagna-01-riposo" },
+  },
+  /// Le sezioni Tema e Colori aperte (T71): dai due lati la riga
+  /// dell'accento aperta, coi tondi, il selettore e il codice. A 700 px il
+  /// pannello sta sotto le pagine, e i pezzi si leggono dove sono.
+  "esporta-pdf-temi": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-cb[data-col="acc"]');
+        await page.waitForSelector("#win .px-pal");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-temi" },
+  },
+  /// Testata e piè, frontespizio e indice (T73): il prototipo al passo
+  /// «Tutto il cambiabile, dal vivo» (il profilo «Relazione per il Comune»:
+  /// tema Relazione, frontespizio, indice, sezione e titolo in testata, data
+  /// e pagine nel piè, le sezioni Frontespizio e Testata aperte), l'app dalla
+  /// scena che porta lo spazio allo stesso profilo coi suoi controlli.
+  "esporta-pdf-testata": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Tutto il cambiabile, dal vivo");
+        await page.waitForSelector("#win .px:not([hidden]) .px-hfp");
+        await page.waitForSelector("#win .px:not([hidden]) .ptoc-r b");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-testata" },
+  },
 };
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
@@ -1672,6 +1726,25 @@ export const PEZZI = [
     gesto: { tipo: "hover", prototipo: '[data-id="p-conti"] .cellv', app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]' },
     proprieta: ["background-color", "border-radius"],
   },
+  // La zona lavagna: il fondo del vassoio al 60% sul foglio, alta 300 px
+  // (`|640x300`), col puntatore della scheda che si attiva con un clic. Le
+  // schede e i fili sono quelli della lavagna (eccezioni-editor.json).
+  {
+    id: "schede.lavagna.zona",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest .canvas-viewport',
+    proprieta: ["background-color", "height"],
+  },
+  {
+    id: "schede.lavagna.riposo",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest',
+    proprieta: ["cursor", "overflow"],
+  },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {
     id: "mini-barra.superficie",
@@ -2176,6 +2249,342 @@ export const PEZZI = [
     prototipo: '.px-sec[data-sec="diagrammi"] .px-tog i',
     app: "#export-dg-paper i",
     proprieta: [...DIMENSIONI, "border-radius", "background"],
+  },
+  // ── le sezioni Tema e Colori (T71) ──────────────────────────────────────
+  // La paginetta d'anteprima di un tema dipinge i colori del tema di stampa,
+  // uguali dai due lati (Fub e Notte); la cornice e le scritte sono della pelle.
+  {
+    id: "esporta.temi",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-themes',
+    app: '.export-themes',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.tema",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"]',
+    app: '.export-theme[data-theme="classico"]',
+    proprieta: [...BASE, "text-align"],
+  },
+  {
+    id: "esporta.tema-scelto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[aria-pressed="true"]',
+    app: '.export-theme[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.tema-anteprima",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp',
+    app: '.export-theme[data-theme="classico"] .export-theme-preview',
+    proprieta: [...BASE, "position", "overflow", "text-align"],
+  },
+  {
+    id: "esporta.tema-anteprima-scelta",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[aria-pressed="true"] .px-thp',
+    app: '.export-theme[aria-pressed="true"] .export-theme-preview',
+    proprieta: ["box-shadow"],
+  },
+  {
+    id: "esporta.tema-notte",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="notte"] .px-thp',
+    app: '.export-theme[data-theme="notte"] .export-theme-preview',
+    proprieta: ["background", "color"],
+  },
+  {
+    id: "esporta.tema-aa",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp b',
+    app: '.export-theme[data-theme="classico"] .export-theme-heading',
+    proprieta: ["font-size", "line-height", "margin", "color", "display"],
+  },
+  {
+    id: "esporta.tema-riga",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp i:not(.s)',
+    app: '.export-theme[data-theme="classico"] .export-theme-line:not(.export-theme-line-short)',
+    proprieta: ["height", "margin", "border-radius", "opacity", "background"],
+  },
+  {
+    id: "esporta.tema-riquadro",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp u',
+    app: '.export-theme[data-theme="classico"] .export-theme-box',
+    proprieta: ["height", "border-radius", "background", "box-shadow", "position"],
+  },
+  {
+    id: "esporta.tema-nota",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-thd',
+    app: '#export-theme-about',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.colori",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-cols',
+    app: '.export-section[data-section="colori"] .export-colors',
+    proprieta: ["display", "gap", "margin"],
+  },
+  {
+    id: "esporta.colore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"]',
+    app: '.export-color[data-color="titoli"]',
+    proprieta: ["border-radius", "background", "display"],
+  },
+  {
+    id: "esporta.colore-aperto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col.open',
+    app: '.export-color.is-open',
+    proprieta: ["border-radius", "background"],
+  },
+  {
+    id: "esporta.colore-testa",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb',
+    app: '#export-color-titoli',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.colore-tondo",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-chip',
+    app: '#export-color-titoli .export-color-chip',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "background"],
+  },
+  {
+    id: "esporta.colore-nome",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb span',
+    app: '#export-color-titoli .export-color-name',
+    proprieta: ["font", "color", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.colore-codice",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb code',
+    app: '#export-color-titoli .export-color-code',
+    proprieta: ["font", "color", "background", "padding"],
+  },
+  {
+    id: "esporta.colore-tavolozza",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-pal',
+    app: '#export-color-palette-accento',
+    proprieta: ["display", "gap", "padding", "align-items"],
+  },
+  {
+    id: "esporta.colore-pronto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-ps[aria-pressed="false"]',
+    app: '.export-swatch[aria-pressed="false"]',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "padding", "border"],
+  },
+  {
+    id: "esporta.colore-pronto-scelto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-ps[aria-pressed="true"]',
+    app: '.export-swatch[aria-pressed="true"]',
+    proprieta: ["box-shadow", "background"],
+  },
+  {
+    id: "esporta.colore-selettore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-pick',
+    app: '.export-pick',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "background", "color"],
+  },
+  {
+    id: "esporta.colore-esadecimale",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-hex',
+    app: '#export-hex-accento',
+    proprieta: ["width", "height", "border", "border-radius", "box-shadow", "background", "color", "font", "padding"],
+  },
+  {
+    id: "esporta.contrasto",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-con',
+    app: '#export-contrast',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.contrasto-numero",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-con b',
+    app: '#export-contrast b',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.interruttore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"]',
+    app: '#export-colors-gray',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruttore-nota",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] small',
+    app: '#export-colors-gray .export-toggle-hint',
+    proprieta: ["font", "color", "margin", "display"],
+  },
+  {
+    id: "esporta.interruttore-pallino",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
+    app: '#export-colors-gray .export-toggle-knob',
+    proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── Testata e piè, frontespizio e indice (T73, passo 29) ──────────────
+  // Il pannello: i sei posti sopra e sotto la paginetta finta, «Fin dove»
+  // dell'indice. Le pagine: testata, piè, frontespizio, indice, coi colori e
+  // i caratteri del tema di stampa (Relazione dai due lati).
+  {
+    id: "esporta.testata-posti",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfp",
+    app: ".export-header-grid",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.testata-fila",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfr",
+    app: ".export-header-row",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.testata-posto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs:not(.on)",
+    app: ".export-slot-choice:not(.is-set)",
+    proprieta: [...BASE, "height", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.testata-posto-scelto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs.on",
+    app: ".export-slot-choice.is-set",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.testata-paginetta",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm",
+    app: ".export-header-lines",
+    proprieta: ["display", "gap", "padding"],
+  },
+  {
+    id: "esporta.testata-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm i:not(.s)",
+    app: ".export-header-line:not(.export-header-line-short)",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "esporta.fronte-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-row',
+    app: '.export-section[data-section="fronte"] .export-row',
+    proprieta: ["display", "gap", "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.fronte-scritta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-rl',
+    app: '.export-section[data-section="fronte"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.fronte-scelte",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg',
+    app: ".export-choices",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.fronte-scelta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="false"]',
+    app: '.export-choice[aria-checked="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.fronte-scelta-premuta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="true"]',
+    app: '.export-choice[aria-checked="true"]',
+    proprieta: ["background", "color", "box-shadow"],
+  },
+  {
+    id: "esporta.pagina-testata",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hd.rule",
+    app: ".export-header.has-rule",
+    proprieta: ["display", "font-variant-numeric", "border-bottom"],
+  },
+  {
+    id: "esporta.pagina-pie",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-ft",
+    app: ".export-footer",
+    proprieta: ["display", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.frontespizio",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover",
+    app: ".export-cover",
+    proprieta: ["display", "flex-direction", "justify-content"],
+  },
+  {
+    id: "esporta.frontespizio-filo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover-band",
+    app: ".export-cover-band",
+    proprieta: ["position", "background"],
+  },
+  {
+    id: "esporta.frontespizio-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover h1",
+    app: ".export-cover-title",
+    proprieta: ["font-weight", "letter-spacing", "color"],
+  },
+  {
+    id: "esporta.indice-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-h",
+    app: ".export-toc-title",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.indice-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r.l-h2",
+    app: '.export-toc-row[data-depth="0"]',
+    proprieta: ["display", "align-items", "gap"],
+  },
+  {
+    id: "esporta.indice-puntini",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r i",
+    app: ".export-toc-dots",
+    proprieta: ["flex-grow", "opacity", "border-bottom-style"],
+  },
+  {
+    id: "esporta.indice-numero",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r b",
+    app: ".export-toc-page",
+    proprieta: ["font-weight", "font-variant-numeric", "text-align"],
   },
 ];
 

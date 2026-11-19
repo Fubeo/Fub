@@ -17,7 +17,7 @@ describe("le dieci sezioni del pannello", () => {
       colori: "Del tema",
       caratteri: "Del tema",
       pagina: "A4 verticale",
-      testata: "Titolo, Numero di pagina",
+      testata: "Titolo, Pagina",
       fronte: "Nessuno",
       contenuto: "Tutta la nota",
       diagrammi: "Come nella nota",
@@ -40,7 +40,8 @@ describe("le dieci sezioni del pannello", () => {
       uscita: { ...base.uscita, pagine: "1-3", pdfa: true },
     };
     const said = summaries(changed);
-    expect(said.tema).toBe("Rivista · 2 colori tuoi");
+    // Tre colori (anche quello del diagramma) e tre scelte del testo.
+    expect(said.tema).toBe("Rivista · 6 regolazioni tue");
     expect(said.colori).toBe("2 tuoi");
     expect(said.caratteri).toBe("Literata · 11 pt");
     expect(said.pagina).toBe("A5 orizzontale · 2 colonne");

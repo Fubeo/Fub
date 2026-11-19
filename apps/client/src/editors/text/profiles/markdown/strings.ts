@@ -555,6 +555,12 @@ const IT = {
   "cell_value.missing": "File mancante: {name}. Non è più nel vault, o ha cambiato nome; la nota tiene l'embed com'è scritto.",
   "cell_value.lost": "Cella non trovata: «{name}» non ha {cell}.",
   "cell_value.unavailable": "Il valore non si legge: qui Fub non apre «{name}» come foglio.",
+  "table_chart.menu": "Grafico da questa tabella",
+  "table_chart.menu.again": "Rigenera il grafico dalla tabella",
+  "table_chart.note": "Valori della tabella sopra al {date}: il grafico non la segue. Si aggiorna dal menu della tabella, «Rigenera il grafico dalla tabella».",
+  "table_chart.written": "Grafico scritto sotto la tabella, coi valori di adesso: non la segue. Per aggiornarlo, «Rigenera il grafico dalla tabella» nel menu della tabella.",
+  "table_chart.rewritten": "Grafico rigenerato coi valori di adesso della tabella.",
+  "table_chart.failed": "Il grafico non è stato scritto: la tabella è cambiata nel frattempo. Riprova dal menu della tabella.",
   "blockgroup.card.width": "Larghezza",
   "blockgroup.card.width.column": "Colonna del testo",
   "blockgroup.card.width.wide": "Larga",
@@ -669,6 +675,11 @@ const IT = {
   "base.new.view": "Tabella",
   "base.new.failed": "La Base «{name}» non è stata creata: {reason}. La nota resta com'era.",
   "base.new.orphan": "La Base «{name}» è creata, ma la nota non si può più scrivere: il file resta accanto alla nota.",
+  "canvas.new.title": "Nuova lavagna",
+  "canvas.new.name": "Nome della lavagna, accanto alla nota",
+  "canvas.new.fallback": "Lavagna",
+  "canvas.new.failed": "La lavagna «{name}» non è stata creata: {reason}. La nota resta com'era.",
+  "canvas.new.orphan": "La lavagna «{name}» è creata, ma la nota non si può più scrivere: il file resta accanto alla nota.",
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
@@ -1218,6 +1229,12 @@ const EN: Record<keyof typeof IT, string> = {
   "cell_value.missing": "Missing file: {name}. It is no longer in the vault, or it was renamed; the note keeps the embed as written.",
   "cell_value.lost": "Cell not found: “{name}” has no {cell}.",
   "cell_value.unavailable": "The value can't be read: here Fub doesn't open “{name}” as a sheet.",
+  "table_chart.menu": "Chart from this table",
+  "table_chart.menu.again": "Regenerate the chart from the table",
+  "table_chart.note": "Values of the table above on {date}: the chart doesn't follow it. Update it from the table menu, “Regenerate the chart from the table”.",
+  "table_chart.written": "Chart written below the table with the current values: it doesn't follow the table. To update it, “Regenerate the chart from the table” in the table menu.",
+  "table_chart.rewritten": "Chart regenerated with the current values of the table.",
+  "table_chart.failed": "The chart wasn't written: the table changed in the meantime. Try again from the table menu.",
   "blockgroup.card.width": "Width",
   "blockgroup.card.width.column": "Text column",
   "blockgroup.card.width.wide": "Wide",
@@ -1328,6 +1345,11 @@ const EN: Record<keyof typeof IT, string> = {
   "base.new.view": "Table",
   "base.new.failed": "The Base “{name}” wasn't created: {reason}. The note is unchanged.",
   "base.new.orphan": "The Base “{name}” is created, but the note can no longer be written: the file stays next to the note.",
+  "canvas.new.title": "New whiteboard",
+  "canvas.new.name": "Name of the whiteboard, next to the note",
+  "canvas.new.fallback": "Whiteboard",
+  "canvas.new.failed": "The whiteboard “{name}” wasn't created: {reason}. The note is unchanged.",
+  "canvas.new.orphan": "The whiteboard “{name}” is created, but the note can no longer be written: the file stays next to the note.",
 };
 
 // Il catalogo nasce alla prima frase, non all'import: chi importa la Live

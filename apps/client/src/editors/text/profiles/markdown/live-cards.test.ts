@@ -246,7 +246,9 @@ describe("quali embed sono schede", () => {
     // Un SVG è una scheda (T46): un disegno di Fub ci si disegna sul posto.
     expect(isLiveCardFile("Schizzo.svg")).toBe(true);
     expect(isLiveCardFile("Schizzo.SVG")).toBe(true);
-    for (const page of ["Nota", "Nota.md", "Viste.base", "Lavagna.canvas", "Foto.png", "Voce.mp3", "Clip.mp4", "Scatto.xmp"]) {
+    // Una lavagna è una scheda (T47): la zona lavagna.
+    expect(isLiveCardFile("Percorso della visita.canvas")).toBe(true);
+    for (const page of ["Nota", "Nota.md", "Viste.base", "Foto.png", "Voce.mp3", "Clip.mp4", "Scatto.xmp"]) {
       expect(isLiveCardFile(page), page).toBe(false);
     }
     expect(liveCardEmbed("![[Contratto.pdf#page=3]]")).toEqual({ page: "Contratto.pdf", subpath: "#page=3", alias: null });

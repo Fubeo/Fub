@@ -17,6 +17,7 @@ import { displayBinding } from "../../../../ui/commands";
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { notify } from "../../../../ui/notify";
 import { t, type Key } from "../../../../i18n/strings";
+import { liveStrings } from "./strings";
 import { setSanitizedHtml } from "../../../../ui/sanitize";
 import { readClipboard, writeClipboardText } from "../../../../platform/clipboard";
 import type { TableAlign, TableCaps, TableEdit, TableMenuEntry } from "../../../../tabella/adapter";
@@ -70,6 +71,17 @@ export interface TableGridHost {
   focused(): void;
   /// Selezione o contenuto sono cambiati: la barra di formattazione rilegge lo stato.
   changed(): void;
+  /// «Grafico da questa tabella» (T54): se la tabella ne ha uno e la nota si
+  /// scrive, se ce n'è già uno da rigenerare sotto la tabella e come
+  /// scriverlo; `null` se la voce non c'è (una tabella senza numeri).
+  chart?(): TableChartAction | null;
+}
+
+/// La voce del grafico nel menu della griglia (T54).
+export interface TableChartAction {
+  /// Sotto la tabella c'è già il grafico che la voce aveva scritto.
+  readonly regenerate: boolean;
+  run(): void;
 }
 
 /// Le azioni dell'editor che la griglia sa fare sulle proprie celle, quando
@@ -193,7 +205,7 @@ const ALIGN_LABELS: Readonly<Record<string, Key>> = {
 /// voce che adesso non vale non si vede; un sottomenu senza voci nemmeno.
 export function tableMenu(
   entries: readonly TableMenuEntry[],
-  options: { readonly align: TableAlign; readonly paste: (() => void) | null },
+  options: { readonly align: TableAlign; readonly paste: (() => void) | null; readonly chart?: TableChartAction | null },
 ): { readonly clipboard: MenuItem[]; readonly items: MenuItem[] } {
   const live = entries.filter((entry) => !entry.disabled);
   const byId = new Map(live.map((entry) => [entry.id, entry]));
@@ -230,10 +242,16 @@ export function tableMenu(
     return entry ? [{ label: t(label), danger: true, separator: index === 0, run: entry.run }] : [];
   });
   const sorted = [...nest("table.menu.sort", under("sort"), true), ...nest("table.menu.align", aligns)];
+  // «Grafico da questa tabella» (T54): dopo l'ordine, prima di ciò che svuota.
+  const chart = options.chart ?? null;
+  const charted: MenuItem[] = chart
+    ? [{ label: liveStrings.t(chart.regenerate ? "table_chart.menu.again" : "table_chart.menu"), separator: true, run: () => chart.run() }]
+    : [];
   const items: MenuItem[] = [
     ...nest("table.menu.insert", under("insert")),
     ...nest("table.menu.move", under("move")),
     ...sorted,
+    ...charted,
     ...(clear ? [{ label: t("table.menu.clear_cell"), hint: displayBinding("Delete"), separator: true, run: clear.run }] : []),
     ...danger,
   ];
@@ -285,6 +303,7 @@ export class TableGrid implements TableGridActions {
         const menu = tableMenu(entries, {
           align: this.#data.aligns[focus.column] ?? null,
           paste: host.readOnly() ? null : () => this.#paste(),
+          chart: host.readOnly() ? null : host.chart?.() ?? null,
         });
         const column = (this.#data.rows[0]?.[focus.column] ?? "").trim();
         showContextMenu(at, menu.items, {
