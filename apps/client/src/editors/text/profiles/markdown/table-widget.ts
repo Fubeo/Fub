@@ -10,7 +10,9 @@
 import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@codemirror/commands";
+import { resolvedLanguage } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { notify } from "../../../../ui/notify";
 import { withLineBreaks } from "../../line-breaks";
 import { followPath, followWikilink, textLinkGesture, type WikilinkFollow } from "./link-gesture";
 import { routeHref } from "./link-syntax";
@@ -26,7 +28,9 @@ import {
   type ParsedTable,
   type TableData,
 } from "./table-model";
-import { TableGrid, type TableGridActions } from "./table-grid";
+import { generatedChartAfter, tableChart } from "./table-chart";
+import { TableGrid, type TableChartAction, type TableGridActions } from "./table-grid";
+import { liveStrings } from "./strings";
 
 /// Ciò che chi monta l'editor vuole sapere della griglia attiva: la barra di
 /// formattazione le chiede lo stato delle azioni e gliele fa eseguire.
@@ -44,6 +48,10 @@ export interface TableWidgetCallbacks extends WikilinkFollow {
 }
 
 type GridSelection = { anchor: GridPosition; focus: GridPosition };
+
+/// Quanto testo sotto la tabella si guarda per ritrovare il grafico scritto
+/// da «Grafico da questa tabella» (T54).
+const CHART_LOOKAHEAD = 64 * 1024;
 
 /// La griglia montata di ogni widget, per elemento.
 const controllers = new WeakMap<HTMLElement, TableController>();
@@ -92,6 +100,7 @@ class TableController {
       changed: () => {
         if (activeGrids.get(this.#view) === this.grid) this.#widget.callbacks.tableGrid?.changed();
       },
+      chart: () => this.#chart(),
     }, parsed);
     if (typeof ResizeObserver !== "undefined") {
       this.#observer = new ResizeObserver(() => this.#view.requestMeasure());
@@ -146,6 +155,63 @@ class TableController {
     // La stessa griglia è stata aggiornata sul posto: niente da rimettere.
     if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
     return true;
+  }
+
+  /// «Grafico da questa tabella» (T54): il recinto coi valori di adesso, se la
+  /// tabella ne ha uno, e se sotto c'è già quello da rigenerare.
+  #chartPlan(): { readonly from: number; readonly to: number; readonly insert: string; readonly regenerate: boolean } | null {
+    const view = this.#view;
+    const located = this.locate();
+    if (!located || view.state.readOnly || this.#widget.readOnly) return null;
+    const locale = frontmatterLanguage(view.state) ?? resolvedLanguage();
+    const date = new Intl.DateTimeFormat(resolvedLanguage(), { dateStyle: "medium" }).format(new Date());
+    const fence = tableChart(located.parsed, locale, liveStrings.t("table_chart.note", { date }));
+    if (fence === null) return null;
+    const doc = view.state.doc;
+    // Il grafico di prima sta subito sotto: basta guardare fin dove arriva un
+    // recinto ragionevole.
+    const after = doc.sliceString(located.to, Math.min(doc.length, located.to + CHART_LOOKAHEAD));
+    const existing = generatedChartAfter(after);
+    if (existing) {
+      return { from: located.to + existing.from, to: located.to + existing.to, insert: fence, regenerate: true };
+    }
+    // Sotto la tabella, con una riga vuota prima e, se il testo continua
+    // subito, una dopo. La tabella può finire col suo a capo o subito prima.
+    const endsLine = located.to > 0 && doc.sliceString(located.to - 1, located.to) === "\n";
+    let lead: string;
+    let tail: string;
+    if (endsLine) {
+      lead = "\n";
+      tail = after === "" || /^[ \t]*(?:\n|$)/u.test(after) ? "\n" : "\n\n";
+    } else {
+      lead = "\n\n";
+      tail = /^\n[ \t]*\S/u.test(after) ? "\n" : "";
+    }
+    return { from: located.to, to: located.to, insert: `${lead}${fence}${tail}`, regenerate: false };
+  }
+
+  #chart(): TableChartAction | null {
+    const plan = this.#chartPlan();
+    if (plan === null) return null;
+    return {
+      regenerate: plan.regenerate,
+      run: () => {
+        // Il testo può essere cambiato da quando il menu si è aperto: si
+        // rifà il conto su quello di adesso.
+        const now = this.#chartPlan();
+        if (now === null) {
+          notify(liveStrings.t("table_chart.failed"), "info");
+          return;
+        }
+        const view = this.#view;
+        view.dispatch({
+          changes: { from: now.from, to: now.to, insert: withLineBreaks(view.state, now.insert) },
+          userEvent: "input",
+          scrollIntoView: true,
+        });
+        notify(liveStrings.t(now.regenerate ? "table_chart.rewritten" : "table_chart.written"), "info");
+      },
+    };
   }
 
   /// Rimette il cursore nel testo prima o dopo la tabella. Una tabella in

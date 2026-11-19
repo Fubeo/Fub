@@ -2,7 +2,8 @@
 //! `pdf.write_pages` accoda il lavoro, il runner lo esegue col corpo che il
 //! bundle `fub.draw` dichiara nell'inventario (`OfficialFeature::jobs`), il
 //! centro attività ne vede l'avanzamento pagina per pagina, e il PDF arriva
-//! nel vault intero. Un lavoro annullato non lascia nessun file.
+//! nel vault intero. Un lavoro annullato non lascia nessun file, anche quando
+//! scrive più note in un PDF (`pdf.write_book`: lo stesso lavoro).
 
 #![cfg(feature = "draw")]
 
@@ -14,6 +15,7 @@ use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::event::{Actor, Event};
 use fub_abi::PluginError;
+use fub_features::pdf_export::book::{Capitolo, Libro, PDF_WRITE_BOOK, VERSIONE_LIBRO};
 use fub_features::pdf_export::lavoro::{PDF_QUEUED, PDF_WRITE_JOB, PDF_WRITE_PAGES};
 use fub_features::pdf_export::{ElencoPagine, Faccia, Pagina, Pezzo, VERSIONE};
 use fub_features::DRAW_ID;
@@ -197,4 +199,50 @@ fn un_lavoro_annullato_non_lascia_il_file() {
     )
     .expect("il lavoro scrive");
     assert!(root.join("Annullato.pdf").exists());
+}
+
+#[test]
+fn il_libro_di_piu_note_e_un_lavoro_solo_che_si_annulla() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let workspace = workspace(&root);
+    let capitolo = |nota: &str| Capitolo {
+        nota: Some(nota.into()),
+        titolo: String::new(),
+        pagine: serde_json::from_str::<ElencoPagine>(&elenco(2)).unwrap(),
+        rimandi: Vec::new(),
+    };
+    let libro = Libro {
+        versione: VERSIONE_LIBRO,
+        titolo: "Libro".into(),
+        autore: String::new(),
+        lingua: String::new(),
+        capitoli: vec![capitolo("A.md"), capitolo("B.md"), capitolo("C.md")],
+    };
+    let lavoro = {
+        let mut ws = workspace.write().unwrap();
+        ws.invoke_command(
+            PDF_WRITE_BOOK,
+            json!({ "book": serde_json::to_string(&libro).unwrap(), "target": "Libro.pdf" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("accodato");
+        let mut lavori = ws.take_pending_jobs();
+        assert_eq!(lavori.len(), 1, "un lavoro solo per tre note");
+        lavori.remove(0)
+    };
+    assert_eq!(lavoro.spec.job, PDF_WRITE_JOB);
+
+    let annullato = Arc::new(AtomicBool::new(true));
+    let mut job_host = JobHost::new(workspace, DRAW_ID)
+        .for_job(lavoro.id)
+        .cancelled_by(annullato);
+    let esito = (disegni().jobs.expect("i disegni hanno lavori"))(
+        &lavoro.spec.job,
+        lavoro.spec.payload,
+        &mut job_host,
+    );
+    assert!(matches!(esito, Err(PluginError::Cancelled(_))), "{esito:?}");
+    assert!(!root.join("Libro.pdf").exists());
 }

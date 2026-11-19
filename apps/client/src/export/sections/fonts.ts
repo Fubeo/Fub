@@ -292,13 +292,13 @@ function arrows(group: HTMLElement): void {
 /// Una scelta fra pochi valori (`.px-seg`).
 export function segments<V extends string | number | boolean>(id: string, label: string, options: readonly (readonly [V, Key])[], current: V | null, pick: (value: V) => void): HTMLElement {
   const group = document.createElement("div");
-  group.className = "export-segments";
+  group.className = "export-choices";
   group.setAttribute("role", "radiogroup");
   group.setAttribute("aria-label", label);
   for (const [value, name] of options) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "export-segment";
+    button.className = "export-choice";
     button.id = `${id}-${String(value)}`;
     button.setAttribute("role", "radio");
     button.setAttribute("aria-checked", String(value === current));

@@ -583,8 +583,9 @@ export const SCENE = touchLast(onPage("shell", [
     ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
     ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
     ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, true],
-    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, false, true],
-  ].map(([id, title, viewport, themes, fonts]) => ({
+    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, false, true],
+    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, false, false, true],
+  ].map(([id, title, viewport, themes, front, fonts]) => ({
     id,
     title,
     ...(viewport ? { viewport } : {}),
@@ -600,6 +601,32 @@ export const SCENE = touchLast(onPage("shell", [
       await openExportSpace(page);
       if (themes) await openThemeSections(page);
       if (fonts) await openFontSections(page);
+      if (front) await openFrontSections(page);
+    },
+  })),
+  // **La sezione Diagrammi** (T75): la nota con un flusso, una formula più
+  // larga della colonna, un diagramma con un errore e uno in Aurora; aperta
+  // la sezione, ai nodi il blu della tavolozza. Sulle pagine il flusso coi
+  // nodi blu, la formula rimpicciolita che lo dice, il riquadro «non
+  // disegnato» col problema. Anche nella finestra minima.
+  ...[
+    ["esporta-pdf-diagrammi", "La sezione Diagrammi dell'esportazione: gli stili, il colore dei nodi dato a mano, il fondo; sulle pagine la formula rimpicciolita e il diagramma non disegnato", undefined],
+    ["esporta-pdf-diagrammi-stretta", "La sezione Diagrammi alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=esporta-diagrammi",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      // La disposizione larga prima di aprire la nota: `openLive` legge se
+      // l'albero sta nel cassetto.
+      await page.waitForFunction(() => !document.querySelector("#layout")?.classList.contains("layout-compact"));
+      await openLive(page, [], "top");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await openExportDiagrams(page);
     },
   })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
@@ -1682,6 +1709,53 @@ export const SCENE = touchLast(onPage("shell", [
       }, value);
     },
     ...(hover ? { hover: (page) => page.hover(".pane.focus .pane-editor .cm-fub-cell-value >> nth=0") } : {}),
+  })),
+  // I grafici (T54): il grafico «Vendite» del foglio come scheda, disegnato
+  // da GridCraft e alto quanto la sua proporzione; un grafico che il file non
+  // ha («Intervallo non trovato»); la tabella col recinto Mermaid che
+  // «Grafico da questa tabella» le ha scritto sotto; il menu della tabella
+  // con la voce; la finestra minima.
+  ...[
+    ["grafici-01-scrittura", "Il grafico del foglio come scheda, alto quanto la sua proporzione", "top", false, null],
+    ["grafici-05-perso", "Il fondo del grafico del foglio e, sotto, un grafico che il file non ha", "lost", false, null],
+    ["grafici-02-tabella", "La tabella dei preventivi e la torta scritta dalla tabella", "table", false, null],
+    ["grafici-03-menu", "Il menu della tabella con «Rigenera il grafico dalla tabella»", "table", true, null],
+    ["grafici-04-stretta", "I grafici nella finestra minima, 800 px", "top", false, NOTE_NARROW],
+  ].map(([id, title, scroll, menu, viewport]) => ({
+    id,
+    title,
+    query: "live=grafici&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      if (scroll === "table") {
+        // La torta si disegna quando entra in vista.
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+        await page.waitForFunction(() => {
+          const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+          return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+        });
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+      }
+      if (scroll === "lost") {
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
+      }
+      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (menu) {
+        await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
+        await page.waitForSelector("#context-menu [role=menuitem]");
+      }
+    },
   })),
   // La scheda di documento (T44, il prototipo `.docw`, passo 17): il verbale
   // in ODT a riposo, in continuo e senza pagine; scelto coi Blocchi (attivo,
@@ -3239,6 +3313,33 @@ async function openExportSpace(page) {
   await page.mouse.move(0, 0);
 }
 
+/// Apre la sezione Diagrammi dello spazio «Esporta in PDF», apre la riga dei
+/// nodi e sceglie il blu della tavolozza (`#1f4f8f`); aspetta che la resa
+/// rimontata sia di nuovo impaginata, coi diagrammi disegnati.
+async function openExportDiagrams(page) {
+  await page.click('.export-section[data-section="diagrammi"] .export-section-head');
+  await page.waitForSelector(".export-dg-styles");
+  await page.click("#export-dg-color-diagramma-nodi");
+  await page.click("#export-dg-ink-diagramma-nodi-1f4f8f");
+  await page.waitForSelector("#export-dg-reset-diagramma-nodi");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    const host = document.querySelector(".export-measure");
+    const drawn = [...(host?.querySelectorAll(".mermaid-diagram") ?? [])];
+    return /^\d/.test(pages) && drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
+      && document.querySelector(".export-space .export-slot .export-fascia") !== null;
+  }, null, { timeout: 15_000 });
+  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
+  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
+  await page.evaluate(() => {
+    const found = globalThis.__fubCsp;
+    for (let i = found.length - 1; i >= 0; i--) {
+      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+    }
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /// Apre le sezioni Tema e Colori dello spazio «Esporta in PDF» e la riga
 /// dell'accento, poi porta il pannello in cima.
 async function openThemeSections(page) {
@@ -3265,6 +3366,40 @@ async function openFontSections(page) {
     await document.fonts.ready;
     const side = document.querySelector(".export-side");
     if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Porta lo spazio «Esporta in PDF» dove sta il passo 29 del prototipo (il
+/// profilo «Relazione per il Comune»): tema Relazione, frontespizio e indice,
+/// in testata la sezione a sinistra e il titolo a destra, nel piè la data a
+/// sinistra e «pagina di pagine» a destra; le sezioni Frontespizio e Testata
+/// aperte, due pagine affiancate (T73).
+async function openFrontSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-theme[data-theme="relazione"]');
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="fronte"] .export-section-head');
+  await page.click("#export-front-cover");
+  await page.click("#export-front-toc");
+  await page.click('.export-section[data-section="testata"] .export-section-head');
+  for (const [slot, label] of [["sopra-sinistra", "Sezione"], ["sotto-sinistra", "Data"], ["sotto-centro", "Niente"], ["sotto-destra", "Pagina di pagine"]]) {
+    await page.click(`#export-header-${slot}`);
+    await page.click(`#context-menu [role=menuitemradio]:has-text("${label}")`);
+    await page.waitForSelector("#context-menu", { state: "detached" });
+  }
+  // Sotto i 760 px le viste non ci sono (la finestra della conformità a 700).
+  if (await page.isVisible('.export-segment[data-view="due"]')) await page.click('.export-segment[data-view="due"]');
+  await page.waitForSelector(".export-space .export-cover-title");
+  await page.waitForSelector(".export-space .export-toc-row");
+  // L'indice ha i numeri veri quando l'impaginazione è finita.
+  await page.waitForFunction(() => [...document.querySelectorAll(".export-space .export-toc-page")].every((node) => /^\d+$/.test(node.textContent ?? "")), null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    const stage = document.querySelector(".export-stage");
+    if (stage) stage.scrollTop = 0;
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
   await page.mouse.move(0, 0);

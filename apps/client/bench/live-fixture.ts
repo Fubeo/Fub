@@ -184,6 +184,41 @@ const CELL_VALUES_NOTE = [
   "Da chiedere all'agenzia: chi paga la caldaia.",
 ].join("\n");
 
+/// I grafici (T54), sulla cartella del banco: il grafico «Vendite» del foglio
+/// come scheda (il finto lo disegna col disegno vero di GridCraft,
+/// `fake-ipc.ts`), un grafico che il file non ha, e una tabella Markdown col
+/// recinto che «Grafico da questa tabella» le ha scritto sotto.
+const CHARTS_NOTE = [
+  "# Le spese della casa",
+  "",
+  "Il grafico del foglio, che segue i conti:",
+  "",
+  "![[Conti.xlsx#Vendite]]",
+  "",
+  "Un grafico che il foglio non ha più:",
+  "",
+  "![[Conti.xlsx#Grafico spese]]",
+  "",
+  "I preventivi, e sotto il grafico scritto dalla tabella:",
+  "",
+  "| Voce | Importo |",
+  "| --- | --- |",
+  "| Caldaia | 1.240,50 € |",
+  "| Imbianchino | 860 |",
+  "| Trasloco | 420 |",
+  "",
+  "```mermaid",
+  "pie title Importo",
+  "  %% fub:table-chart",
+  "  %% Valori della tabella sopra al 19 nov 2026: il grafico non la segue. Si aggiorna dal menu della tabella, «Rigenera il grafico dalla tabella».",
+  '  "Caldaia" : 1240.5',
+  '  "Imbianchino" : 860',
+  '  "Trasloco" : 420',
+  "```",
+  "",
+  "Da chiedere all'agenzia: chi paga la caldaia.",
+].join("\n");
+
 /// La misura e il posto delle schede (T42): il contratto e i conti affiancati
 /// in un `[!columns]`, i conti a tutta pagina e bassi (`|900x260`), il
 /// contratto come riga (`|row`).
@@ -455,6 +490,31 @@ const DIAGRAM_CASES = [
   fence("%% stile: nebbia", "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])"),
   "",
   "Fine.",
+].join("\n");
+
+/// I diagrammi e le formule nell'esportazione in PDF (T75): un flusso col
+/// titolo, una formula più larga della colonna, un diagramma con un errore
+/// (sulla carta il riquadro «non disegnato» col problema) e uno in Aurora.
+const EXPORT_DIAGRAMS_NOTE = [
+  "# Il viaggio",
+  "",
+  "Come si decide la partenza:",
+  "",
+  fence("---", "title: La partenza", "---", ...FLOW),
+  "",
+  "Il costo del viaggio, tratta per tratta:",
+  "",
+  "```math",
+  String.raw`C_{\text{totale}} = \sum_{i=1}^{n} \left( p_i \cdot d_i + t_i \cdot \frac{h_i}{24} + s_i + \frac{a_i \cdot b_i}{c_i + d_i} + \frac{e_i \cdot f_i}{g_i + h_i} + q_i \right) + \frac{k}{m} + r + \frac{u_1 + u_2 + u_3}{v}`,
+  "```",
+  "",
+  "Il ritorno, ancora da scrivere:",
+  "",
+  fence("flowchart TD", "  A[Uno] --> --> B"),
+  "",
+  fence("%% stile: aurora", "flowchart LR", "  A[Prenota] --> B{Posti?}", "  B --> C([Parti])"),
+  "",
+  "Il resto del piano segue.",
 ].join("\n");
 
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
@@ -814,6 +874,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
     .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
   "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },
+  // Lo spazio «Esporta in PDF» con la sezione Diagrammi (T75).
+  "esporta-diagrammi": { text: EXPORT_DIAGRAMS_NOTE, cursor: null },
   // Il sorgente aperto (T58): il cursore nel recinto, dopo «Posti liberi?».
   "diagramma-sorgente": { text: DIAGRAM_NOTE, cursor: DIAGRAM_NOTE.indexOf("Posti liberi?") + "Posti liberi?".length },
   trasclusione: { text: TRANSCLUSION_NOTE, cursor: null, files: { [TRANSCLUSION_ORIGIN]: TRANSCLUSION_MEETING } },
@@ -842,6 +904,8 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   // con cento valori.
   "valori-cella": { text: CELL_VALUES_NOTE, cursor: null },
   "battuta-valori-100": typingValuesNote(50, 100),
+  // I grafici (T54): dal foglio e da una tabella.
+  grafici: { text: CHARTS_NOTE, cursor: null },
   "lunga-4000": longNote(4000),
 };
 

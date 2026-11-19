@@ -373,7 +373,7 @@ class Probe {
 }
 
 /// Le proprietà della pittura di un SVG che il CSS della pagina può dare.
-const SVG_PAINT = [
+export const SVG_PAINT = [
   "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-dasharray",
   "stroke-dashoffset", "stroke-linecap", "stroke-linejoin", "opacity", "display", "visibility",
 ] as const;
@@ -544,7 +544,7 @@ function unquote(value: string): string {
 
 /// I colori calcolati in RGBA: il browser li dice in molti modi (`rgb()`,
 /// `oklch()`, `color(srgb …)`), una tela li riporta tutti in sRGB.
-class ColorReader {
+export class ColorReader {
   private readonly cache = new Map<string, Color>();
   private readonly context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
 
@@ -553,8 +553,14 @@ class ColorReader {
     if (known) return known;
     let color: Color = [0, 0, 0, 1];
     const plain = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/u.exec(value);
+    // Un esadecimale (quello che un foglio di un SVG dichiara, e che non
+    // tutti i motori riscrivono in `rgb()`) si legge senza la tela.
+    const hex = /^#([0-9a-f]{6})([0-9a-f]{2})?$/iu.exec(value);
     if (value === "transparent") color = [0, 0, 0, 0];
-    else if (plain) {
+    else if (hex) {
+      const n = parseInt(hex[1]!, 16);
+      color = [(n >> 16) & 255, (n >> 8) & 255, n & 255, hex[2] === undefined ? 1 : round(parseInt(hex[2], 16) / 255)];
+    } else if (plain) {
       const alpha = plain[4] === undefined ? 1 : plain[4].endsWith("%") ? parseFloat(plain[4]) / 100 : Number(plain[4]);
       color = [Number(plain[1]), Number(plain[2]), Number(plain[3]), alpha];
     } else if (this.context) {

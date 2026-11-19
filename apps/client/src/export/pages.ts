@@ -16,8 +16,13 @@
 // Lo scorrimento dice all'impaginatore quali pagine si vedono
 // (`onVisible`), perché le prepari prima delle altre.
 //
+// I fogli sono quelli di `PageDecor` (T73): il frontespizio e le pagine
+// dell'indice vengono prima di quelle della nota, e su ogni foglio lo spazio
+// disegna ciò che non è la nota (frontespizio, indice, testata e piè). Senza,
+// i fogli sono le pagine della nota e basta.
+//
 // Ogni foglio porta anche ciò che la sezione «Pagina» decide sopra le
-// fasce (T72, `setDecor`): i margini a specchio, che sulle pagine pari
+// fasce (T72, `setMarks`): i margini a specchio, che sulle pagine pari
 // scambiano destra e sinistra, la filigrana in diagonale sotto il testo e,
 // sullo schermo, le quattro guide dei margini (`guides.ts`).
 
@@ -25,6 +30,7 @@ import { t } from "../i18n/strings";
 import { printBlocks } from "./paginate/measure";
 import type { Placement } from "./paginate/model";
 import { frameOf, type PrintLayout, type SlicedResult, type VisiblePages } from "./paginate/slices";
+import type { Sheet } from "./paginate/toc";
 import type { ExportView } from "./toolbar";
 
 /// Lo spazio fra due pagine, come `gap` di `.export-doc` (20 px).
@@ -63,22 +69,43 @@ export interface PagesOptions {
 }
 
 /// Ciò che sta sui fogli oltre alle fasce: non cambia l'impaginazione.
-export interface PageDecor {
+export interface PageMarks {
   /// I margini a specchio: sulle pagine pari destra e sinistra si scambiano.
   readonly mirror: boolean;
   /// La filigrana su ogni pagina; vuota, nessuna.
   readonly watermark: string;
 }
 
-const NO_DECOR: PageDecor = { mirror: false, watermark: "" };
+const NO_MARKS: PageMarks = { mirror: false, watermark: "" };
 
 /// I lati delle guide, coi nomi dei margini del profilo.
 const GUIDES = ["sopra", "destra", "sotto", "sinistra"] as const;
+
+/// I fogli e chi disegna su ciascuno ciò che non è la nota.
+export interface PageDecor {
+  readonly sheets: readonly Sheet[];
+  /// Quanti fogli vengono prima delle pagine della nota.
+  readonly front: number;
+  /// Disegna sul foglio numero `ordinal` (da 0, fra tutti) ciò che non è la
+  /// nota: `page` è il foglio, `body` lo spazio fra i margini.
+  draw(page: HTMLElement, body: HTMLElement, sheet: Sheet, ordinal: number): void;
+}
+
+/// I fogli senza niente intorno: le pagine della nota.
+function plainDecor(result: SlicedResult): PageDecor {
+  const count = result.pagination.pages.length;
+  return {
+    sheets: Array.from({ length: count }, (_, index) => ({ kind: "pagina", index, number: String(index + 1), total: String(count), header: false, footer: false })),
+    front: 0,
+    draw: () => {},
+  };
+}
 
 interface Drawn {
   readonly result: SlicedResult;
   readonly blocks: readonly HTMLElement[];
   readonly layout: PrintLayout;
+  readonly decor: PageDecor;
 }
 
 export class ExportPages {
@@ -88,7 +115,7 @@ export class ExportPages {
   private readonly filled = new Set<number>();
   private drawn: Drawn | null = null;
   private colors: Readonly<Record<string, string>> = {};
-  private decor: PageDecor = NO_DECOR;
+  private marks: PageMarks = NO_MARKS;
   private view: ExportView = "adatta";
   private free = 1;
   private zoomNow = 1;
@@ -138,25 +165,67 @@ export class ExportPages {
 
   /// Lo specchio e la filigrana: si ridisegnano i fogli pieni, senza
   /// rifare l'impaginazione.
-  setDecor(decor: PageDecor): void {
-    if (decor.mirror === this.decor.mirror && decor.watermark === this.decor.watermark) return;
-    this.decor = { mirror: decor.mirror, watermark: decor.watermark };
+  setMarks(marks: PageMarks): void {
+    if (marks.mirror === this.marks.mirror && marks.watermark === this.marks.watermark) return;
+    this.marks = { mirror: marks.mirror, watermark: marks.watermark };
     for (const index of this.filled) this.clear(index);
     this.lastVisible = "";
     this.refresh();
   }
 
   /// Le pagine di un'impaginazione: i fogli per tutte, pieni quelli vicini.
-  show(result: SlicedResult, source: HTMLElement, layout: PrintLayout): void {
+  show(result: SlicedResult, source: HTMLElement, layout: PrintLayout, decor?: PageDecor): void {
     const page = source.querySelector<HTMLElement>(".print-page");
-    this.drawn = { result, blocks: page ? printBlocks(page) : [], layout };
-    const count = result.pagination.pages.length;
+    this.drawn = { result, blocks: page ? printBlocks(page) : [], layout, decor: decor ?? plainDecor(result) };
+    this.redraw();
+  }
+
+  /// Gli stessi blocchi con altri fogli intorno (la testata cambiata, il
+  /// frontespizio acceso): niente da misurare, si ridisegnano i fogli.
+  decorate(decor: PageDecor): void {
+    if (!this.drawn) return;
+    this.drawn = { ...this.drawn, decor };
+    this.redraw();
+  }
+
+  /// Un foglio della pagina `geometry` fuori dalla vista, coi caratteri e i
+  /// colori delle pagine e senza zoom: `measure` riempie e legge lo spazio fra
+  /// i margini (l'indice, per sapere quante pagine prende), poi il foglio
+  /// sparisce.
+  measureSheet<T>(geometry: PrintLayout["page"], measure: (body: HTMLElement) => T): T {
+    const page = document.createElement("div");
+    page.className = "export-page";
+    page.setAttribute("aria-hidden", "true");
+    Object.assign(page.style, { width: `${geometry.width}px`, height: `${geometry.height}px`, visibility: "hidden", pointerEvents: "none" });
+    const body = document.createElement("div");
+    body.className = "export-page-body";
+    Object.assign(body.style, {
+      left: `${geometry.margin.left}px`,
+      top: `${geometry.margin.top}px`,
+      width: `${geometry.width - geometry.margin.left - geometry.margin.right}px`,
+      height: `${geometry.height - geometry.margin.top - geometry.margin.bottom}px`,
+    });
+    page.append(body);
+    this.element.append(page);
+    try {
+      return measure(body);
+    } finally {
+      page.remove();
+    }
+  }
+
+  /// I fogli dell'impaginazione di adesso, quelli vicini pieni.
+  private redraw(): void {
+    const drawn = this.drawn;
+    if (!drawn) return;
+    const count = drawn.decor.sheets.length;
     while (this.slots.length > count) this.slots.pop()?.remove();
     while (this.slots.length < count) {
       const slot = this.emptySlot(this.slots.length);
       this.element.append(slot);
       this.slots.push(slot);
     }
+    for (const [index, slot] of this.slots.entries()) this.markPickable(slot, index);
     for (const index of this.filled) this.clear(index);
     this.filled.clear();
     this.applyZoom();
@@ -208,7 +277,7 @@ export class ExportPages {
     const drawn = this.drawn;
     if (!drawn) return [];
     const pages: HTMLElement[] = [];
-    const count = Math.min(drawn.result.ready, drawn.result.pagination.pages.length);
+    const count = Math.min(drawn.decor.front + Math.min(drawn.result.ready, drawn.result.pagination.pages.length), drawn.decor.sheets.length);
     for (let index = 0; index < count; index++) {
       const page = this.pageElement(drawn, index, 1, true);
       for (const [name, value] of Object.entries(this.colors)) page.style.setProperty(name, value);
@@ -261,15 +330,25 @@ export class ExportPages {
   /// Nella vista «tutte» ogni miniatura è un pulsante che porta alla sua
   /// pagina; nelle altre è un foglio e basta.
   private markPickable(slot: HTMLElement, index: number): void {
+    const name = this.sheetName(index);
     if (this.view === "tutte") {
       slot.setAttribute("role", "button");
       slot.tabIndex = 0;
-      slot.setAttribute("aria-label", t("pdf_export.page.open", { n: index + 1 }));
+      slot.setAttribute("aria-label", t("pdf_export.page.open_named", { name }));
     } else {
       slot.removeAttribute("role");
       slot.removeAttribute("tabindex");
-      slot.setAttribute("aria-label", t("pdf_export.page.label", { n: index + 1 }));
+      slot.setAttribute("aria-label", name);
     }
+  }
+
+  /// Il nome di un foglio per chi ascolta: «Frontespizio», «Indice, pagina
+  /// ii», «Pagina 3», col numero che il foglio porta.
+  private sheetName(index: number): string {
+    const sheet = this.drawn?.decor.sheets[index];
+    if (sheet?.kind === "frontespizio") return t("pdf_export.page.cover");
+    if (sheet?.kind === "indice") return t("pdf_export.page.toc", { n: sheet.number || String(index + 1) });
+    return t("pdf_export.page.label", { n: sheet?.number || String(index + 1) });
   }
 
   private pick(event: Event): boolean {
@@ -292,12 +371,14 @@ export class ExportPages {
     if (!drawn) return;
     const visible = this.visible();
     const key = `${visible.first}:${visible.last}`;
+    const { front } = drawn.decor;
     if (key !== this.lastVisible) {
       this.lastVisible = key;
-      this.options.onVisible(visible);
+      // L'impaginatore conta solo le pagine della nota.
+      this.options.onVisible({ first: Math.max(0, visible.first - front), last: Math.max(0, visible.last - front) });
     }
     const from = Math.max(0, visible.first - FILL_MARGIN);
-    const to = Math.min(this.slots.length - 1, visible.last + FILL_MARGIN, drawn.result.ready - 1);
+    const to = Math.min(this.slots.length - 1, visible.last + FILL_MARGIN, front + drawn.result.ready - 1);
     for (const index of [...this.filled]) {
       if (index < visible.first - KEEP_MARGIN || index > visible.last + KEEP_MARGIN) this.clear(index);
     }
@@ -314,26 +395,27 @@ export class ExportPages {
     this.filled.delete(index);
   }
 
-  /// Il foglio della pagina `index`, scalato a `zoom`; `print`: quello che
-  /// va alla stampa, senza le guide.
+  /// Il foglio numero `index` (fra tutti), scalato a `zoom`; `print`: quello
+  /// che va alla stampa, senza le guide.
   private pageElement(drawn: Drawn, index: number, zoom: number, print = false): HTMLElement {
-    const { layout, result, blocks } = drawn;
+    const { layout, result, blocks, decor } = drawn;
+    const sheet = decor.sheets[index];
     const { page: geometry } = layout;
     const { width: columnWidth } = frameOf(layout);
     const gap = layout.columns === 2 ? layout.columnGap : 0;
     // Lo specchio sposta soltanto il testo: la colonna è larga uguale.
-    const mirrored = this.decor.mirror && index % 2 === 1;
+    const mirrored = this.marks.mirror && index % 2 === 1;
     const margin = mirrored ? { ...geometry.margin, left: geometry.margin.right, right: geometry.margin.left } : geometry.margin;
     const page = document.createElement("div");
     page.className = "export-page";
     page.style.width = `${geometry.width}px`;
     page.style.height = `${geometry.height}px`;
     page.style.transform = `scale(${zoom})`;
-    if (this.decor.watermark.trim()) {
+    if (this.marks.watermark.trim()) {
       const mark = document.createElement("div");
       mark.className = "export-watermark";
       mark.setAttribute("aria-hidden", "true");
-      mark.textContent = this.decor.watermark;
+      mark.textContent = this.marks.watermark;
       page.append(mark);
     }
     const body = document.createElement("div");
@@ -359,7 +441,7 @@ export class ExportPages {
         page.append(guide);
       }
     }
-    const placements = result.pagination.pages[index]?.placements ?? [];
+    const placements = sheet?.kind === "pagina" ? (result.pagination.pages[sheet.index]?.placements ?? []) : [];
     const bands: { band: HTMLElement; inner: HTMLElement; copy: HTMLElement; placement: Placement }[] = [];
     for (const placement of placements) {
       // Le note dei commenti in fondo e il loro titolo le disegna la sezione
@@ -390,6 +472,7 @@ export class ExportPages {
       }
       bands.push({ band, inner, copy: copy.block, placement });
     }
+    if (sheet) decor.draw(page, body, sheet, index);
     // Dove sta il blocco copiato dentro i suoi contenitori si legge dopo
     // averli messi tutti (una sola disposizione), e solo se la pagina è
     // nel documento; fuori (la stampa) la copia sta in cima.

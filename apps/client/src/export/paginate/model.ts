@@ -80,9 +80,10 @@ export interface SeparatorBox extends BoxBase {
   readonly height: number;
 }
 
-/// Perché comincia una pagina nuova: ogni Titolo 2, il separatore, o il punto
-/// scelto a mano sulla pagina (D17, `<!-- pagina -->`, T76).
-export type BreakReason = "titolo2" | "separatore" | "mano";
+/// Perché comincia una pagina nuova: ogni Titolo 2, il separatore, il punto
+/// scelto a mano sulla pagina (D17, `<!-- pagina -->`, T76), o una nota nuova
+/// di un PDF di più note (T78).
+export type BreakReason = "titolo2" | "separatore" | "mano" | "capitolo";
 
 /// Un'interruzione di pagina: una scatola senza altezza.
 export interface BreakBox {

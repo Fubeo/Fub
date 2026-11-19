@@ -11,11 +11,13 @@ import {
   FLOW_RANK_SPACING,
   fontFaceCss,
   mermaidStyleConfig,
+  ownColorRules,
   PAPER_MARGIN,
   themeCssFor,
   themeVariablesFor,
 } from "./mermaid-drawing";
 import {
+  changedPalette,
   contrast,
   type DiagramContrast,
   type DiagramLight,
@@ -340,5 +342,48 @@ describe("la tavola", () => {
       expect(contrast(color, p.series[i === 0 ? 0 : 3]!)).toBeGreaterThanOrEqual(4.5);
     });
     expect(labels[0]!.getAttribute("style")).toContain("text-anchor: middle");
+  });
+});
+
+describe("i colori dati a mano e il fondo (l'esportazione, T75)", () => {
+  it("senza niente da cambiare la tavolozza resta la stessa", () => {
+    const p = paletteFor("aurora", "light");
+    expect(changedPalette(p, {})).toBe(p);
+    expect(changedPalette(p, { colors: { nodes: "rosso" } })).toBe(p);
+    expect(ownColorRules(p)).toEqual([]);
+  });
+
+  it("le linee cambiano il tratto, gli altri tre vanno sulle loro forme", () => {
+    const p = changedPalette(paletteFor("acquerello", "light"), { colors: { nodes: "#1f4f8f", decisions: "#8d2d63", ends: "#006e46", lines: "#b3261e" } });
+    expect(p.line).toBe("#b3261e");
+    expect(p.own).toEqual({ nodes: "#1f4f8f", decisions: "#8d2d63", ends: "#006e46" });
+    const css = ownColorRules(p).join("");
+    expect(css).toContain(">rect.label-container");
+    expect(css).toContain(">polygon.label-container");
+    expect(css).toContain(">circle.label-container");
+    expect(css).toContain("fill:#1f4f8f;");
+    // Vengono dopo le tinte alternate, con lo stesso peso: vincono.
+    const theme = themeCssFor("acquerello", p);
+    expect(theme.lastIndexOf("fill:#8d2d63;")).toBeGreaterThan(theme.lastIndexOf(":nth-child(4n+1)"));
+  });
+
+  it("la scritta su un colore dato a mano si legge", () => {
+    const p = changedPalette(paletteFor("inchiostro", "light"), { colors: { nodes: "#000000", decisions: "#fbefba" } });
+    const css = ownColorRules(p).join("");
+    const labels = [...css.matchAll(/\.nodeLabel\{fill:(#[0-9a-f]{6});/gu)].map((match) => match[1]!);
+    expect(labels).toHaveLength(2);
+    expect(contrast("#000000", labels[0]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#fbefba", labels[1]!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("senza il fondo uno stile con la carta sta sulla pagina", () => {
+    const p = changedPalette(paletteFor("blueprint", "light"), { paper: false, ground: "#fffdf8" });
+    expect(p.paper).toBeNull();
+    expect(p.ground).toBe("#fffdf8");
+    expect(p.texture).toBe("none");
+    expect(p.texture2).toBeUndefined();
+    // Armonia non ha carta: niente da togliere.
+    const armonia = paletteFor("armonia", "light");
+    expect(changedPalette(armonia, { paper: false })).toBe(armonia);
   });
 });

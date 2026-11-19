@@ -86,14 +86,14 @@ import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
-import type { VaultFontList } from "../export/sections/fonts";
+import type { VaultFontList, VaultFontSource } from "../export/sections/fonts";
 import { emit, on, readState, state, writeState } from "./store";
 import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
 import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
 import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
-import { syntaxForms, unsavedDrafts } from "../host/query";
+import { noteProperties, syntaxForms, unsavedDrafts } from "../host/query";
 import type { CardEditorHub, CardNotices } from "../editors/core/cards/editor-port";
 import { lazyCardEditorHub } from "./card-writes";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
@@ -171,7 +171,7 @@ import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews
 import { openWithEntry } from "../panels/open-with";
 import { showContextMenu } from "../ui/menu";
 import { writeChrome } from "./machine-chrome";
-import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
+import { onLanguage, plural, resolvedLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 // Il pannello del «/», coi passi e l'anteprima, è un chunk suo: si chiede
@@ -4197,6 +4197,19 @@ let openExport: { pane: Pane; close: () => void } | null = null;
 /// Apre lo spazio «Esporta in PDF» sulla nota del riquadro (E28, T70): la
 /// salva prima, perché la resa per la stampa il core la legge dal disco, e
 /// la segue mentre cambia in un altro riquadro.
+/// I caratteri del vault per la stampa (T72), per una nota sola e per il
+/// libro: l'elenco dal core, i byte dalla stessa porta dei caratteri dei
+/// disegni.
+const printVaultFonts: VaultFontSource = {
+  list: async () => {
+    const outcome = await api.invokeCommand("pdf.vault_fonts", {}, "apply");
+    const effect = outcome.effect;
+    if (effect.kind !== "custom" || effect.ns !== "fub.pdf.vault_fonts") throw new Error(`pdf.vault_fonts answered ${effect.kind}`);
+    return effect.payload as VaultFontList;
+  },
+  read: (file, limit) => drawingFonts.read(file, limit),
+};
+
 export async function presentExport(r: Pane, doc: string): Promise<void> {
   try {
     await documentSessions.flush(doc);
@@ -4206,12 +4219,13 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
     );
     const { openExportSpace } = await exportSpacePart.load();
     if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+    openBook?.();
     openExport?.close();
     const space = openExportSpace({
       doc,
       title: pageName(doc),
       render: renderPrint,
-      mount: (container, rendered) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light" }),
+      mount: (container, rendered, look) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light", diagramLook: (index) => look.diagramLook(index) }),
       // Il disposer torna allo spazio, che lo chiude con la sua `Lifetime`.
       follow: (changed) => {
         const unsubscribe = documentSessions.subscribe((event) => {
@@ -4223,23 +4237,89 @@ export async function presentExport(r: Pane, doc: string): Promise<void> {
       save: async () => {
         await documentSessions.flush(doc);
       },
-      // I caratteri del vault per la stampa (T72): l'elenco dal core, i byte
-      // dalla stessa porta dei caratteri dei disegni.
-      vaultFonts: {
-        list: async () => {
-          const outcome = await api.invokeCommand("pdf.vault_fonts", {}, "apply");
-          const effect = outcome.effect;
-          if (effect.kind !== "custom" || effect.ns !== "fub.pdf.vault_fonts") throw new Error(`pdf.vault_fonts answered ${effect.kind}`);
-          return effect.payload as VaultFontList;
-        },
-        read: (file, limit) => drawingFonts.read(file, limit),
-      },
+      vaultFonts: printVaultFonts,
+      // Il frontmatter dall'indice: icona, autore e proprietà del frontespizio.
+      properties: () => noteProperties(doc),
       onClose: () => {
         if (openExport?.close === close) openExport = null;
       },
     });
     const close = () => space.close();
     openExport = { pane: r, close };
+  } catch (error) {
+    notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
+  }
+}
+
+const bookPart = lazyPart(() => import("../export/book"));
+let openBook: (() => void) | null = null;
+
+/// Apre lo spazio «Esporta in PDF» su più note (E28, T78): le note Markdown
+/// di una cartella o di una scelta, nell'ordine dato, ognuna un capitolo. Le
+/// salva prima, come per una nota sola, e le segue mentre cambiano. `name` è
+/// quello della cartella o della scelta, nella barra dello spazio.
+export async function presentBookExport(paths: readonly string[], name: string): Promise<void> {
+  try {
+    const [{ openExportSpace }, { BOOK_LIMIT, bookNotes, createBook }] = await Promise.all([exportSpacePart.load(), bookPart.load()]);
+    const { notes, others } = bookNotes(paths);
+    if (others.length > 0) notify(plural(others.length, "pdf_export.book.not_notes.one", "pdf_export.book.not_notes.other"), "info");
+    if (notes.length === 0) {
+      notify(t("pdf_export.book.empty"), "info");
+      return;
+    }
+    if (notes.length > BOOK_LIMIT) {
+      notify(t("pdf_export.book.too_many", { n: notes.length, max: BOOK_LIMIT }), "guasto");
+      return;
+    }
+    const saveAll = async () => {
+      await Promise.all(notes.map((doc) => documentSessions.flush(doc)));
+    };
+    await saveAll();
+    // Le note del libro sono tutte Markdown: le forme dichiarate sono quelle.
+    const declared = await syntaxForms(notes[0]!).then(
+      (forms) => new Set(declaredFences(forms).map((info) => info.toLowerCase())),
+      () => new Set<string>(),
+    );
+    const book = createBook({
+      docs: notes,
+      render: renderPrint,
+      title: pageName,
+      mount: (container, rendered, doc, diagramLook) => mountRenderedDocument(container, rendered, { documentId: doc, declaredFences: declared, diagramAppearance: "light", diagramLook: () => diagramLook() }),
+    });
+    openBook?.();
+    openExport?.close();
+    const members = new Set(notes);
+    let told = false;
+    const space = openExportSpace({
+      doc: notes[0]!,
+      title: plural(notes.length, "pdf_export.book.title.one", "pdf_export.book.title.other", { name }),
+      backLabel: t("pdf_export.back_notes"),
+      render: book.render,
+      mount: book.mount,
+      measure: book.measure,
+      // Caratteri e pagina sono del profilo, comuni a tutti i capitoli.
+      vaultFonts: printVaultFonts,
+      follow: (changed) => {
+        // Lo spazio lo chiude col suo `Lifetime` alla chiusura.
+        const unsubscribe = documentSessions.subscribe((event) => {
+          if (!members.has(event.id)) return;
+          if (event.kind === "changed" || event.kind === "saved") changed(event.kind);
+        });
+        return unsubscribe;
+      },
+      save: saveAll,
+      onReady: () => {
+        const skipped = book.skipped();
+        if (told || skipped.length === 0) return;
+        told = true;
+        notify(plural(skipped.length, "pdf_export.book.skipped.one", "pdf_export.book.skipped.other", { names: skipped.map(pageName).join(", ") }), "info");
+      },
+      onClose: () => {
+        if (openBook === close) openBook = null;
+      },
+    });
+    const close = () => space.close();
+    openBook = close;
   } catch (error) {
     notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
   }

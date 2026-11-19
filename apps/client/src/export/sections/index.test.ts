@@ -17,7 +17,7 @@ describe("le dieci sezioni del pannello", () => {
       colori: "Del tema",
       caratteri: "Newsreader · 11 pt",
       pagina: "A4 verticale",
-      testata: "Titolo, Numero di pagina",
+      testata: "Titolo, Pagina",
       fronte: "Nessuno",
       contenuto: "Tutta la nota",
       diagrammi: "Come nella nota",

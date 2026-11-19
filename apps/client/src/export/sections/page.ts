@@ -15,7 +15,7 @@
 
 import { t, type Key } from "../../i18n/strings";
 import { clampMargins, MARGIN_PRESETS, MARGIN_SIDES, marginPreset, MAX_MARGIN_MM, MIN_MARGIN_MM, MIN_ROOM_MM, SIDE_NAMES, type MarginSide } from "../guides";
-import type { PageDecor } from "../pages";
+import type { PageMarks } from "../pages";
 import { MAX_PAPER_MM, MIN_PAPER_MM, PAPER_MM, paperSize, validPaper, type ExportProfile, type Margins, type ProfilePage } from "../profile";
 import { textOf } from "../themes";
 import { decimal, row, segments, toggle, withText } from "./fonts";
@@ -45,7 +45,7 @@ const NOTE_KEY = "pagina.avviso";
 export const WATERMARK_MAX = 18;
 
 /// Ciò che la sezione mette sui fogli oltre alle fasce (`pages.ts`).
-export function pageDecorOf(profile: ExportProfile): PageDecor {
+export function pageMarksOf(profile: ExportProfile): PageMarks {
   return { mirror: profile.pagina.specchio, watermark: profile.pagina.filigrana.slice(0, WATERMARK_MAX) };
 }
 
