@@ -617,6 +617,96 @@ describe("la superficie Markdown", () => {
   });
 });
 
+describe("il «/» nell'editor di una scheda della lavagna", () => {
+  /// Monta la superficie come la porta delle schede (`editor-port.ts`): il
+  /// documento del riquadro è la lavagna, non quello della superficie.
+  function card(hosted: boolean, documentId: string) {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const panels: { scope: unknown; palette: boolean; dom: HTMLElement }[] = [];
+    const slash = {
+      currentDoc: () => "Lavagne/Statistica.canvas",
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+      menu: {
+        enabled: () => true,
+        panel: (events: { palette?: unknown }, _has: unknown, scope?: unknown) => {
+          const dom = document.createElement("div");
+          panels.push({ scope, palette: typeof events.palette === "function", dom });
+          return { dom, listId: "lista", update() {}, key: () => false, placed() {}, close() {} };
+        },
+        chosen: vi.fn(),
+        palette: vi.fn(),
+      },
+    } satisfies EditorSlashHost;
+    const ed = mountMarkdownSurface({ paneId: "card-editor:1", documentId, parent, compact: true, escapeLeaves: true, ...(hosted ? { hosted: true } : {}) }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+      slash,
+    });
+    const view = EditorView.findFromDOM(parent)!;
+    const type = (text: string) => {
+      for (const char of text) {
+        const at = view.state.selection.main.head;
+        view.dispatch({ changes: { from: at, insert: char }, selection: { anchor: at + 1 }, userEvent: "input.type" });
+      }
+    };
+    return { ed, parent, view, type, panels, slash };
+  }
+
+  for (const [kind, documentId] of [
+    ["scheda di testo", "Lavagne/Statistica.canvas#card-editor:1"],
+    ["scheda di una nota", "Benvenuto.md"],
+  ] as const) {
+    it(`apre il menu con le sole azioni dell'editor (${kind})`, () => {
+      const { ed, parent, view, type, panels, slash } = card(true, documentId);
+      try {
+        ed.buffer.setDoc("Perché il quadrato?\n");
+        view.dispatch({ selection: { anchor: ed.buffer.getDoc().length } });
+        type("/");
+        expect(panels).toHaveLength(1);
+        // Niente comandi del vault né palette: agirebbero sulla lavagna.
+        expect(panels[0]).toMatchObject({ scope: { commands: false }, palette: false });
+        // Il pannello galleggia sopra la finestra, fuori dalla scheda che lo
+        // zoom trasforma e che taglia ai bordi.
+        expect(panels[0]!.dom.parentElement).toBe(document.body);
+        expect(panels[0]!.dom.style.position).toBe("fixed");
+        expect(parent.contains(panels[0]!.dom)).toBe(false);
+        // Il tasto «/» non apre la palette dei comandi sulla lavagna.
+        view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+        expect(slash.menu.palette).not.toHaveBeenCalled();
+        // Il «/» cancellato chiude il pannello, che lascia la finestra.
+        const end = view.state.doc.length;
+        view.dispatch({ changes: { from: end - 1, to: end }, userEvent: "delete.backward" });
+        expect(panels[0]!.dom.isConnected).toBe(false);
+      } finally {
+        ed.destroy();
+        parent.remove();
+      }
+    });
+  }
+
+  it("in un riquadro su un altro documento il «/» resta testo, come prima", () => {
+    const { ed, parent, view, type, panels } = card(false, "Benvenuto.md");
+    try {
+      ed.buffer.setDoc("");
+      view.dispatch({ selection: { anchor: 0 } });
+      type("/");
+      expect(panels).toHaveLength(0);
+      expect(ed.buffer.getDoc()).toBe("/");
+    } finally {
+      ed.destroy();
+      parent.remove();
+    }
+  });
+});
+
 describe("il cursore letterale della palette slash", () => {
   it("è deciso dal profilo sui nodi Markdown che il motore gli dà", () => {
     const parent = document.createElement("div");

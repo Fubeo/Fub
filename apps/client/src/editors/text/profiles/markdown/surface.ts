@@ -415,16 +415,24 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // Il menu «/» nel testo: le voci le dà la shell, la superficie le esegue.
   // Spento (`editor.slash`), in lettura, in sola lettura o su un documento
   // che non è più quello del riquadro, non ha voci e il «/» resta testo.
+  // Nell'editor di una scheda della lavagna (`hosted`) il documento del
+  // riquadro è la lavagna: il «/» offre le azioni dell'editor, che scrivono
+  // nel testo della scheda, e né i comandi del vault né la palette, che
+  // agirebbero sulla lavagna.
+  const hosted = context.hosted === true;
   const slashHost = opts.slash?.menu;
   const slashMenu: SlashMenuSource | undefined = slashHost && {
+    // Nella scheda lo zoom della tela e il taglio della scheda non toccano
+    // il pannello: galleggia sopra la finestra.
+    ...(hosted ? { hosted: true } : {}),
     enabled: () =>
-      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === docId() && !tableGrid,
+      slashHost.enabled() && !readOnly && mode !== "reading" && (hosted || opts.slash?.currentDoc() === docId()) && !tableGrid,
     panel: (events, transform) => slashHost.panel({
       ...events,
       outline: () => engine.readState(outlineOf),
-      palette: (query) => slashHost.palette(query, parent, engine.anchorBox()),
+      ...(hosted ? {} : { palette: (query: string) => slashHost.palette(query, parent, engine.anchorBox()) }),
       ...(transform ? { transform: engine.readState(transformOf) } : {}),
-    }, (id) => editorActions.has(id) && editorActions.state(id).enabled),
+    }, (id) => editorActions.has(id) && editorActions.state(id).enabled, { commands: !hosted }),
     choose: (view, choice, from, to, transform) => {
       const { entry } = choice;
       const params = actionParams(entry.id, choice.params);
@@ -780,7 +788,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // suo tratto: il `/` è testo.
       event.target.closest(".tb-frame, [data-transclusion-editing]")
     ) return;
-    if (slash.currentDoc() !== docId()) return;
+    if (!hosted && slash.currentDoc() !== docId()) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
     // una selezione oppure a inizio parola, fuori da codice e link.
     const cursor = engine.cursorContext();
@@ -794,6 +802,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       event.stopPropagation();
       return;
     }
+    // La palette agirebbe sul documento del riquadro, non sulla scheda.
+    if (hosted) return;
     event.preventDefault();
     event.stopPropagation();
     const text = engine.getDoc();

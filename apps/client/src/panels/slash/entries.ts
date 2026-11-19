@@ -216,6 +216,9 @@ export interface SlashUse {
   /// L'ordine scelto delle sezioni (`editor.slash.sections`); quelle non
   /// dette seguono nel loro ordine, gli id sconosciuti non contano.
   readonly sections?: readonly string[];
+  /// Falso: solo le azioni dell'editor, senza i comandi del vault (l'editor
+  /// di una scheda della lavagna, `SlashScope`). Assente: anche i comandi.
+  readonly commands?: boolean;
 }
 
 /// I gruppi nell'ordine scelto (`editor.slash.sections`), poi gli altri nel
@@ -261,6 +264,9 @@ export function slashCatalog(specs: readonly CommandSpec[], has: (id: string) =>
     // Un'azione dell'editor che questa superficie non sa fare non c'è: il
     // registro la manderebbe a una superficie che non la conosce.
     if (!action && ACTION_LOOKS[spec.id]) continue;
+    // Dove il documento non è quello del riquadro, un comando del vault
+    // agirebbe sul documento sbagliato.
+    if (!action && use.commands === false) continue;
     const binding = action ? use.chord(spec.id) : spec.keybinding;
     listed.push(entry({
       id: spec.id,

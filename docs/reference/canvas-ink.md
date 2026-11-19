@@ -184,7 +184,12 @@ tratti:
   tratto (`aspect` di `move_strokes` e `restyle_strokes`); senza, il nucleo
   usa la regola senza proporzione.
 - **Con `fixed`** l'inchiostro resta alla misura in cui è stato scritto,
-  nell'angolo in alto a sinistra, qualunque sia la misura di adesso.
+  nell'angolo in alto a sinistra, qualunque sia la misura di adesso. Su una
+  scheda `text`, o `file` con un nome che finisce in `.md`, il testo invece
+  va a capo con la larghezza: quando la `width` dell'ultimo tratto con
+  l'ancora `card` è diversa da quella della scheda (di più di mezza unità)
+  Fub lo dice, senza cambiare il file
+  ([la lavagna](../product/lavagna.md#linchiostro)). L'altezza non conta.
 - **Immagine e PDF** si riconoscono dall'estensione del campo `file`, senza
   distinguere maiuscole: è l'ultima parte del nome dopo un punto, e un nome
   come `.png` non ne ha. Immagini: `png`, `jpg`, `jpeg`, `gif`, `webp`,

@@ -1568,8 +1568,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       publishContext,
       menu: {
         enabled: () => slashPanelReady() && document.getElementById("app")?.dataset["slash"] !== "off",
-        panel: (events, has) => {
-          const use = (): SlashUse => ({ recent: recentCommands(), favorites: favoriteCommands(), chord: () => null, today: new Date(), ...slashPrefs() });
+        panel: (events, has, scope) => {
+          const use = (): SlashUse => ({ recent: recentCommands(), favorites: favoriteCommands(), chord: () => null, today: new Date(), ...slashPrefs(), commands: scope?.commands ?? true });
           return slashPanelModule!.createSlashPanel(events, {
             entries: (query, place) => slashMenuEntries(state.commandSpecs, query, has, place, use()),
             favorite: (id) => favoriteCommands().includes(id),

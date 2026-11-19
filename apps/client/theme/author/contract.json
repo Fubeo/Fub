@@ -1521,6 +1521,8 @@
     "canvas-formula-text",
     "canvas-ink-label",
     "canvas-ink-frame",
+    "canvas-ink-reflow",
+    "canvas-ink-reflow-back",
     "canvas-lasso-path",
     "canvas-lasso-frame",
     "canvas-lasso-chosen",
@@ -3948,6 +3950,8 @@
     "canvas-formula-text": "cornice",
     "canvas-ink-label": "cornice",
     "canvas-ink-frame": "segno",
+    "canvas-ink-reflow": "segno",
+    "canvas-ink-reflow-back": "cornice",
     "canvas-lasso-path": "segno",
     "canvas-lasso-frame": "segno",
     "canvas-lasso-chosen": "segno",
@@ -8506,6 +8510,20 @@
       ]
     },
     {
+      "name": "canvas-ink-reflow",
+      "part": "editors",
+      "hooks": [
+        "canvas-ink-reflow",
+        "canvas-ink-reflow-back"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
       "name": "canvas-lasso",
       "part": "editors",
       "hooks": [
@@ -12585,10 +12603,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2425,
+    "hooks": 2427,
     "state_names": 7,
-    "assigned_states": 1083,
-    "components": 321,
+    "assigned_states": 1087,
+    "components": 322,
     "preference_tokens": 196
   }
 }

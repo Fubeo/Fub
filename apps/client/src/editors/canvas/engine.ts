@@ -138,6 +138,7 @@ import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type I
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
 import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
 import { cutInkStroke, fadeInkStroke, fadeInkStrokes, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { inkReflowWidth, syncInkReflow } from "./ink-reflow";
 import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
 // I colori delle schede e dei fili (T47).
 import {
@@ -1633,6 +1634,15 @@ export class CanvasEngine {
   #undo: CanvasStep[] = [];
   #redo: CanvasStep[] = [];
   /**
+   * I passi dei gesti d'inchiostro fatti col fuoco dentro una scheda che
+   * scrive (un campo, l'editor di una nota), dall'ultimo tasto premuto: i
+   * tasti sono del campo, ma Ctrl+Z subito dopo un tratto annulla il tratto,
+   * e Ctrl+Maiusc+Z (Ctrl+Y) lo rifà (`#inkUndoKey`). Un altro tasto li
+   * lascia: da lì Ctrl+Z torna al campo.
+   */
+  #inkOverField: CanvasStep[] = [];
+  #inkOverFieldRedo: CanvasStep[] = [];
+  /**
    * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
    * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
    * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
@@ -2521,6 +2531,9 @@ export class CanvasEngine {
       this.#keydown(event);
       this.#statusSettle();
     }, { signal });
+    // Prima delle schede che scrivono: Ctrl+Z subito dopo un tratto fatto
+    // sopra un campo aperto annulla il tratto, non il testo.
+    this.#viewport.addEventListener("keydown", (event) => this.#inkUndoKey(event), { signal, capture: true });
     // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
     // mouse torna a selezionare.
     this.#life.listen(window, "keyup", (event) => {
@@ -2590,6 +2603,14 @@ export class CanvasEngine {
     }, { signal, capture: true });
     this.#viewport.addEventListener("pointerleave", (event) => {
       if (event.pointerType === "pen") this.#setVeilPointer(false);
+    }, { signal });
+    // «Torna a N px» dell'avviso dei tratti sul testo (`ink-reflow.ts`).
+    this.#viewport.addEventListener("click", (event) => {
+      const back = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-ink-reflow]") : null;
+      const id = back?.closest<HTMLElement>(".canvas-node")?.dataset.node;
+      if (!back || id === undefined) return;
+      event.stopPropagation();
+      this.#restoreInkWidth(id, Number(back.dataset.inkReflow));
     }, { signal });
     // «×N» illumina le gemelle al passaggio e col fuoco (C14, T22); si
     // spengono quando li perde tutti e due.
@@ -2723,6 +2744,8 @@ export class CanvasEngine {
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    this.#inkOverField = [];
+    this.#inkOverFieldRedo = [];
     this.#statusSettle();
     this.#syncEmpty();
     if (!document) {
@@ -4009,7 +4032,82 @@ export class CanvasEngine {
     this.#inkChain = null;
     this.#paintInk();
     if (this.#intakeError) this.#showNotice("");
+    this.#inkGestureDone();
     return true;
+  }
+
+  /**
+   * Un gesto d'inchiostro è appena diventato l'ultimo passo d'annulla. La
+   * penna non prende il fuoco (un tratto non chiude il campo che si scrive):
+   * perché Ctrl+Z, subito dopo, tolga il tratto, il fuoco dentro una scheda
+   * che scrive ricorda il passo (`#inkUndoKey`); ogni altro fuoco (un
+   * pulsante della colonna o della riga, un'altra parte della finestra,
+   * nessuno) passa alla vista, come dopo un clic sulla lavagna.
+   */
+  #inkGestureDone(): void {
+    const step = this.#undo[this.#undo.length - 1];
+    if (!step || this.#destroyed) return;
+    const active = document.activeElement;
+    const inCard = active instanceof Element && active !== this.#viewport && this.#viewport.contains(active)
+      ? active.closest(".canvas-node") : null;
+    if (inCard && inCard !== active) {
+      this.#inkOverField.push(step);
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    this.#inkOverField = [];
+    this.#inkOverFieldRedo = [];
+    // Una scheda o la vista col fuoco: i tasti arrivano già alla tela.
+    if (active instanceof Element && this.#viewport.contains(active)) return;
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * Ctrl+Z (Ctrl+Maiusc+Z, Ctrl+Y) col fuoco in una scheda che scrive,
+   * subito dopo uno o più gesti d'inchiostro (`#inkOverField`): annulla (o
+   * rifà) il gesto, e il campo resta aperto col suo testo. Ogni altro tasto
+   * li lascia, e da lì i tasti sono del campo.
+   */
+  #inkUndoKey(event: KeyboardEvent): void {
+    if (event.key === "Control" || event.key === "Meta" || event.key === "Shift" || event.key === "Alt") return;
+    const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
+    const letter = event.key.toLowerCase();
+    const chord = mod && letter === "z" ? (event.shiftKey ? "redo" : "undo") : mod && letter === "y" && !event.shiftKey ? "redo" : null;
+    if (chord === null || event.isComposing) {
+      this.#inkOverField = [];
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    if (event.defaultPrevented || this.#penDown || this.#pending !== null || this.#readOnly) return;
+    const from = chord === "undo" ? this.#inkOverField : this.#inkOverFieldRedo;
+    const history = chord === "undo" ? this.#undo : this.#redo;
+    const step = from[from.length - 1];
+    if (!step) return;
+    if (history[history.length - 1] !== step) {
+      // La storia è cambiata sotto (un annulla dal menu, una modifica): i
+      // passi ricordati non sono più gli ultimi.
+      this.#inkOverField = [];
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    from.pop();
+    history.pop();
+    const done = chord === "undo"
+      ? this.#replay(step, "undo", (again) => {
+        this.#redo.push(again);
+        this.#inkOverFieldRedo.push(again);
+      })
+      : this.#replay(step, "redo", (again) => {
+        this.#pushUndo(again, false);
+        this.#inkOverField.push(again);
+      });
+    if (done !== true) {
+      history.push(step);
+      from.push(step);
+    }
+    this.#statusSettle();
   }
 
   /**
@@ -4311,7 +4409,10 @@ export class CanvasEngine {
     if (dry) this.#paintStroke(holder, dry);
     if (this.#intakeError) this.#showNotice("");
     // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
-    if (!stroke.split) this.#sayInkHolder(holder);
+    if (!stroke.split) {
+      this.#sayInkHolder(holder);
+      this.#inkGestureDone();
+    }
     if (shape !== null) this.#writeShape(stroke, shape, record, ref, holder, page ?? cell);
   }
 
@@ -4502,6 +4603,20 @@ export class CanvasEngine {
       ? (sheet: string, cell: string) => this.#cellRectOf(node.id, sheet, cell)
       : null;
     paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect, cells);
+    syncInkReflow(element, inkReflowWidth(node, drys), !this.#readOnly);
+  }
+
+  /**
+   * «Torna a N px» dell'avviso dei tratti sul testo (`ink-reflow.ts`): la
+   * scheda `id` riprende la larghezza `width` in cui i tratti sono stati
+   * scritti, col lato sinistro fermo e la sua altezza, in un passo d'annulla.
+   */
+  #restoreInkWidth(id: string, width: number): void {
+    const node = this.#doc?.nodes.find((entry) => entry.id === id);
+    if (!node || this.#readOnly || this.#isSceneOversized() || !(width > 0) || node.width === width) return;
+    // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
+    this.#sizedByHand.add(id);
+    this.#writeOps([{ op: "resize", id, width, height: node.height }]);
   }
 
   /**
@@ -9708,6 +9823,8 @@ export class CanvasEngine {
     if (event.button === 0 && modifier && this.#cardLinkAt(target) !== null) return;
     // ↗ di un estratto (T75) prende il suo clic, anche con Ctrl (Cmd).
     if (event.button === 0 && target instanceof Element && target.closest("[data-excerpt-open]")) return;
+    // Anche «Torna a N px» dell'avviso dei tratti sul testo.
+    if (event.button === 0 && target instanceof Element && target.closest("[data-ink-reflow]")) return;
     // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
     // strumento e sopra ogni cosa (T53).
     if (event.button === 0 && this.#spaceHeld) {
@@ -11807,6 +11924,8 @@ export class CanvasEngine {
         el.style.width = `${node.width}px`;
         el.style.height = `${this.#shownHeight(node)}px`;
         markHandles(el, node, this.#camera.zoom);
+        // L'avviso dei tratti sul testo si vede già mentre si tira il bordo.
+        syncInkReflow(el, inkReflowWidth(node, this.#inkCards.get(id) ?? []), !this.#readOnly);
       }
     }
     this.#drawEdges();
@@ -13511,7 +13630,9 @@ export class CanvasEngine {
       escapeForEditor = false;
       if (event.isComposing || editor.composing) return;
       if (event.key === "Escape") {
-        escapeForEditor = host.querySelector('[role="listbox"]') !== null;
+        // Il menu «/» galleggia fuori dalla scheda: lo dice l'editor stesso
+        // (`aria-haspopup`), finché è aperto.
+        escapeForEditor = host.querySelector('[role="listbox"], [aria-haspopup="listbox"]') !== null;
       } else if (isCommandSearchKey(event)) {
         event.preventDefault();
         event.stopPropagation();

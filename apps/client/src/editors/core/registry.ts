@@ -104,6 +104,14 @@ export interface SurfaceMountContext {
    * subpages — and shows the body alone. Absent means `false`.
    */
   readonly pageless?: boolean;
+  /**
+   * The surface lives inside a card of another document's pane (a board
+   * card): the shell's current document is the host's, not this surface's.
+   * The surface still answers its own editor gestures (the slash menu with
+   * the editor's actions), but never hands the shell a command that acts on
+   * "the current document": it would reach the host. Absent means `false`.
+   */
+  readonly hosted?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */

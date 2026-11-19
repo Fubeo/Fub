@@ -29,6 +29,7 @@ import { EditorView, keymap, showTooltip, ViewPlugin, type Tooltip, type Tooltip
 import type { SyntaxNode } from "@lezer/common";
 import type { SlashChoice, SlashPanel, SlashPanelEvents, SlashPlace } from "../../../core/editor-menu";
 import { errorText } from "../../../../host/errors";
+import { openLifetime } from "../../../../ui/lifetime";
 import { pageName } from "../../../../rules/mirrored";
 import { liveStrings } from "./strings";
 
@@ -78,6 +79,15 @@ export interface SlashMenuSource {
   /// Un pannello nuovo, per un'apertura; `transform` quando agisce sulla
   /// selezione.
   panel(events: SlashPanelCore, transform: boolean): SlashPanel;
+  /// L'editor sta in una scheda della lavagna: un contenitore trasformato
+  /// dallo zoom della tela e tagliato ai bordi della scheda, in un riquadro
+  /// che mostra un altro documento. Il pannello non è un tooltip di
+  /// CodeMirror, dentro l'editor, ma galleggia sopra la finestra
+  /// (`document.body`), alla sua misura, posato dal cursore con la regola di
+  /// `slashPlacement` e con la finestra come area; e non c'è la palette di
+  /// tutti i comandi (Ctrl+/), che agirebbe sul documento del riquadro.
+  /// Assente: il tooltip e la palette.
+  readonly hosted?: boolean;
   /// Esegue la scelta: `from..to` è il «/query» da togliere; `transform`
   /// quando agisce sulla selezione, che resta dov'è.
   choose(view: EditorView, choice: SlashChoice, from: number, to: number, transform: boolean): void;
@@ -244,7 +254,8 @@ const slashField = StateField.define<SlashValue>({
     return { open: { from: at.from, query: at.query, tooltip: tooltipAt(at.from), transform: false }, dismissed };
   },
   provide: (field) => [
-    showTooltip.from(field, (value) => value.open?.tooltip ?? null),
+    showTooltip.compute([field, slashMenu], (state) =>
+      state.facet(slashMenu)?.hosted ? null : state.field(field).open?.tooltip ?? null),
     // Finché il pannello è aperto l'editor dice che ha un elenco che completa,
     // come il completamento di CodeMirror: resta una casella di testo a più
     // righe (`aria-multiline`), che il ruolo combobox non ammette.
@@ -262,7 +273,21 @@ export function openSlashMenu(state: EditorState): { from: number; query: string
 /// I pannelli aperti, per editor: il keymap passa loro i tasti.
 const panels = new WeakMap<EditorView, SlashPanel>();
 
-function slashTooltip(view: EditorView): TooltipView {
+/// Dove il pannello si misura: dentro l'editor, come tooltip di CodeMirror
+/// (la scala dell'editor, l'area del documento), o sopra la finestra
+/// (`hosted`: niente scala, la finestra come area).
+interface SlashFrame {
+  readonly scale: () => number;
+  readonly area: () => { readonly top: number; readonly bottom: number };
+}
+
+function tooltipFrame(view: EditorView): SlashFrame {
+  return { scale: () => view.scaleY, area: () => view.scrollDOM.getBoundingClientRect() };
+}
+
+const WINDOW_FRAME: SlashFrame = { scale: () => 1, area: () => ({ top: 0, bottom: window.innerHeight }) };
+
+function slashTooltip(view: EditorView, frame: SlashFrame = tooltipFrame(view)): TooltipView {
   const menu = view.state.facet(slashMenu)!;
   // Il passo «Diagramma» mette un modello: che ci sia quando lo si sceglie.
   void loadDiagramTemplates();
@@ -338,7 +363,7 @@ function slashTooltip(view: EditorView): TooltipView {
           const dom = panel.dom;
           const caret = open ? view.coordsAtPos(open.from) : null;
           if (!caret || dom.classList.contains("is-sheet")) return { caret: null, caretX: 0, bounds: null };
-          const area = view.scrollDOM.getBoundingClientRect();
+          const area = frame.area();
           // L'altezza naturale è quella del CSS, letta solo quando nessuno
           // l'ha accorciata qui: un'altezza scritta da noi non è naturale.
           if (!dom.style.height) natural = parseFloat(getComputedStyle(dom).height) || natural;
@@ -359,8 +384,9 @@ function slashTooltip(view: EditorView): TooltipView {
             const place = slashPlacement(caret, natural, bounds);
             // Si parte dal `top` di CodeMirror, non da quello che c'è: se è
             // già il nostro, spostarlo di nuovo lo sposterebbe due volte.
-            if (Number.isFinite(cmTop)) dom.style.top = `${cmTop + (place.top - (caret.bottom + SLASH_GAP)) / view.scaleY}px`;
-            dom.style.height = place.height < natural ? `${place.height / view.scaleY}px` : "";
+            const scale = frame.scale();
+            if (Number.isFinite(cmTop)) dom.style.top = `${cmTop + (place.top - (caret.bottom + SLASH_GAP)) / scale}px`;
+            dom.style.height = place.height < natural ? `${place.height / scale}px` : "";
             dom.classList.toggle("cm-tooltip-above", place.above);
             dom.classList.toggle("cm-tooltip-below", !place.above);
             above = place.above;
@@ -383,6 +409,12 @@ function slashTooltip(view: EditorView): TooltipView {
 
 /// Apre il pannello su un «/» appena scritto in `pos` (il «+» della
 /// maniglia, che mette un blocco vuoto e ci scrive il «/»).
+/// Il pannello del «/» porta alla palette di tutti i comandi (Ctrl+/): non
+/// nell'editor di una scheda della lavagna (`hosted`).
+export function slashPaletteHere(state: EditorState): boolean {
+  return state.facet(slashMenu)?.hosted !== true;
+}
+
 /// Il «/» può aprire il pannello in questo editor, adesso.
 export function slashAvailable(state: EditorState): boolean {
   return state.facet(slashMenu)?.enabled() ?? false;
@@ -413,12 +445,101 @@ const closeBeforeRemoval = ViewPlugin.define((view) => ({
   },
 }));
 
+/// Lo stacco del pannello galleggiante dai bordi della finestra (px).
+const FLOAT_MARGIN = 8;
+
+/// Il pannello sopra la finestra (`hosted`): fa ciò che CodeMirror fa per
+/// un tooltip, ma fuori dall'editor, così né lo zoom né il taglio della
+/// scheda lo toccano. Nasce e se ne va col «/» aperto (lo stesso oggetto del
+/// tooltip), si riposa a ogni modifica, cambio di cursore o di misura
+/// dell'editor o del pannello, e quando la finestra cambia misura.
+const floatingPanel = ViewPlugin.define((view) => {
+  let shown: { readonly tooltip: Tooltip; readonly view: TooltipView } | null = null;
+  const place = (): void => {
+    const current = shown;
+    if (!current) return;
+    view.requestMeasure({
+      key: floatingPanel,
+      read: () => {
+        const open = view.state.field(slashField, false)?.open ?? null;
+        const caret = open && open.tooltip === current.tooltip ? view.coordsAtPos(open.from) : null;
+        return { caret, width: current.view.dom.getBoundingClientRect().width };
+      },
+      write: ({ caret, width }) => {
+        if (shown !== current) return;
+        const dom = current.view.dom;
+        if (!caret) {
+          // Il cursore non si vede: come CodeMirror, il pannello va fuori.
+          dom.style.top = "-10000px";
+          return;
+        }
+        const offset = current.view.offset ?? { x: 0, y: 0 };
+        const left = Math.max(FLOAT_MARGIN, Math.min(caret.left + offset.x, window.innerWidth - width - FLOAT_MARGIN));
+        dom.style.left = `${left}px`;
+        dom.style.top = `${caret.bottom + offset.y}px`;
+        current.view.positioned?.({ top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight });
+      },
+    });
+  };
+  // Il pannello che cambia misura (le voci arrivano, un passo si apre) si
+  // riposa, come fa CodeMirror coi suoi tooltip.
+  let resize: ResizeObserver | null = null;
+  if (typeof ResizeObserver === "function") resize = new ResizeObserver(() => place());
+  const hide = (): void => {
+    const current = shown;
+    if (!current) return;
+    shown = null;
+    resize?.disconnect();
+    current.view.destroy?.();
+    current.view.dom.remove();
+  };
+  const sync = (): void => {
+    const open = view.state.field(slashField, false)?.open ?? null;
+    if (shown && shown.tooltip !== open?.tooltip) hide();
+    if (!open || shown) return;
+    const tooltipView = slashTooltip(view, WINDOW_FRAME);
+    const dom = tooltipView.dom;
+    dom.classList.add("cm-tooltip", "cm-tooltip-below");
+    dom.style.position = "fixed";
+    dom.style.top = "-10000px";
+    dom.style.left = "0px";
+    document.body.append(dom);
+    shown = { tooltip: open.tooltip, view: tooltipView };
+    tooltipView.mount?.(view);
+    resize?.observe(dom);
+    place();
+  };
+  // La finestra che cambia misura lo riposa; la Vita la chiude con il plugin.
+  const lifetime = openLifetime();
+  lifetime.listen(window, "resize", () => place());
+  let destroyed = false;
+  // Il «/» già aperto quando il plugin nasce (una riconfigurazione).
+  queueMicrotask(() => {
+    if (!destroyed) sync();
+  });
+  return {
+    update(update) {
+      sync();
+      if (!shown) return;
+      shown.view.update?.(update);
+      if (update.docChanged || update.selectionSet || update.geometryChanged || update.viewportChanged) place();
+    },
+    destroy() {
+      destroyed = true;
+      lifetime.close();
+      hide();
+      resize?.disconnect();
+    },
+  };
+});
+
 /// Il «/» nel testo: il campo, il tooltip e i tasti del pannello.
 export function slashMenuExtension(menu: SlashMenuSource): Extension {
   return [
     slashMenu.of(menu),
     closeBeforeRemoval,
     slashField,
+    ...(menu.hosted ? [floatingPanel] : []),
     Prec.highest(keymap.of([{
       any: (view, event) => {
         const panel = panels.get(view);

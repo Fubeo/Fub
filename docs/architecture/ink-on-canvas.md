@@ -97,6 +97,26 @@ schede.
   alla volta e si fondono in un passo solo. Annulla e ripeti seguono le due
   vie della tela (il testo esatto o le toppe inverse); un passo fatto solo di
   tratti ridisegna soltanto l'inchiostro. Con una penna giù non fanno niente.
+- **I tratti sul testo che rifluisce.** `ink-reflow.ts` dice, dalla scheda
+  e dai suoi asciutti, se una scheda di testo o una nota Markdown è larga
+  diversamente dall'ultimo tratto con l'ancora `card` (`inkReflowWidth`), e
+  mette l'avviso sotto la scheda (`syncInkReflow`). Lo chiamano
+  `#paintCardInk`, a ogni ridisegno dell'inchiostro della scheda, e
+  `#renderLive`, a ogni passo del bordo tirato: l'avviso si vede prima di
+  lasciarlo. «Torna a N px» è un `resize` della sola larghezza, col lato
+  sinistro fermo, in un passo d'annulla (`#restoreInkWidth`). Il file non
+  cambia: la larghezza di allora è già nell'ancora.
+- **Ctrl+Z subito dopo il tratto.** La penna non prende il fuoco, quindi
+  dopo un tratto (o una gomma, una forma, uno spostamento del Lazo:
+  `#inkGestureDone`) il fuoco che non sta già sulla vista o su una scheda
+  passa alla vista, senza scorrere: il pulsante della Penna appena premuto,
+  la riga delle opzioni, un'altra parte della finestra. Col fuoco dentro una
+  scheda che scrive (il campo, l'editor di una nota) i tasti restano del
+  campo, ma il passo si ricorda: Ctrl+Z (Ctrl+Maiusc+Z, Ctrl+Y) preso in
+  cattura sulla vista prima del campo annulla (rifà) i gesti d'inchiostro
+  fatti dall'ultimo tasto, e il campo resta aperto col suo testo
+  (`#inkUndoKey`). Un altro tasto, o una storia cambiata sotto, li lascia:
+  da lì Ctrl+Z torna al campo.
 - **La modifica da fuori a penna giù.** `syncDoc` aggiorna subito modello,
   sorgente e nucleo; il ridisegno passa da `quiet.defer("render", …)` e
   aspetta che la penna si alzi. Anche il testo in sospeso aspetta, perché
@@ -161,7 +181,8 @@ schede.
 |---|---|
 | la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
-| un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
+| un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna; Ctrl+Z subito dopo lo toglie, col fuoco dove sia | `editors/canvas/engine-ink.test.ts` |
+| una scheda di testo o una nota larga diversamente dai suoi tratti lo dice, anche mentre si tira il bordo; «Torna a N px» è un passo | `editors/canvas/engine-ink.test.ts` |
 | la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
 | il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
 | Rust e client nominano, ordinano e danno gli stessi default alle tredici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |
