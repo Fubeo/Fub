@@ -15,7 +15,7 @@
 // (`change`) il pannello si ridisegna col fuoco dov'era.
 
 import { resolvedLanguage, t, type Key } from "../../i18n/strings";
-import { icon, iconEl, registerIcon } from "../../ui/icons";
+import { iconEl } from "../../ui/icons";
 import {
   COLOR_KIND,
   contrastOf,
@@ -47,10 +47,6 @@ export const COLOR_NAMES: Readonly<Record<PageColor, Key>> = {
 
 /// Quale riga è aperta, fra un disegno del pannello e l'altro.
 const OPEN_KEY = "colori.aperto";
-
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "export-pick": ["M4.5 19.5l3.6-.9 10.95-10.95-2.7-2.7L5.4 15.9z", "M3.75 21.75h16.5"],
-};
 
 function iconSpan(name: string): HTMLElement {
   const span = document.createElement("span");
@@ -106,7 +102,6 @@ function toggle(id: string, label: Key, hint: Key, on: boolean, flip: () => void
 }
 
 export function colorsBody(context: SectionContext): HTMLElement {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
   const body = document.createElement("div");
   body.className = "export-color-section";
   const initial = context.profile;

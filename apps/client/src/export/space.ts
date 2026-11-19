@@ -77,8 +77,11 @@ export interface ExportSpace {
   close(): void;
 }
 
+/// Le icone dello spazio e delle sue sezioni: si registrano all'apertura, una
+/// volta sola (il selettore libero dei Colori è `export-pick`).
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "export-open": ["M6.75 9.3L12 14.7l5.25-5.4"],
+  "export-pick": ["M4.5 19.5l3.6-.9 10.95-10.95-2.7-2.7L5.4 15.9z", "M3.75 21.75h16.5"],
 };
 
 /// Il conto dei segnalibri del PDF: i titoli della nota impaginata.
