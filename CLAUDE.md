@@ -153,6 +153,9 @@ The checks live in `.github/workflows/ci.yml` (and `npm-supply-chain.yml`;
   runs the full CI, Windows included. `main` always runs everything. macOS
   and iOS are paused (ADR 0245): no PR waits for them; `macos-in-pausa.yml`
   checks them weekly (Sunday, or by hand) and is not a required check.
+- A draft PR labelled `notte` (long integrations) also gets the full CI on
+  its head every night (`notte.yml`, once per head, not a required check):
+  read it the next morning before adding more work on top.
 - `gh pr edit` fails on this repository: update a PR body with
   `gh api -X PATCH repos/Fubeo/Fub/pulls/<n> -F body=@file`.
 - Ask for the deeper fuzz run (`fuzz_completo`) after larger changes to the

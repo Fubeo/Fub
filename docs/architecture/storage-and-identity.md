@@ -57,6 +57,24 @@ disco e anagrafe della riconciliazione d'apertura. Se il backend dichiara di
 aver perso eventi, per esempio per una coda di notifica piena, la
 riconciliazione copre l'intero vault.
 
+Su Linux inotify mette un osservatore per cartella, e il loro numero è un
+budget dell'utente condiviso con gli altri programmi. Il rilevatore quindi non
+guarda l'albero in modo ricorsivo: cammina lui il vault e guarda una per una le
+cartelle che la politica di esclusione ammette (`WatchScope` del kernel). Una
+cartella esclusa dalle regole che nessuna riga del `.gitignore` può negare
+(struttura, nascosti, `files.excluded-folders`, quindi `.git` e
+`node_modules` di serie) non prende osservatori, né lei né ciò che contiene;
+una esclusa soltanto dal `.gitignore` si guarda ancora, perché può contenere
+un file ripreso da una negazione. `.fub` si guarda da sola, senza scendere:
+lì cambia `settings.json`, e a ogni lotto il rilevatore confronta la politica
+con quella con cui sta guardando e, se è cambiata, aggiunge o lascia le
+cartelle. Una cartella nata o spostata dentro il vault prende l'osservatore
+prima che il lotto la cammini, così niente cade fra i due. Se il sistema
+rifiuta un osservatore per il limite, il rilevamento è morto e lo dice come
+ogni altro errore del backend (`VaultStatus.watching` a `false` e un guasto
+del vault). Windows e macOS guardano l'albero con un handle solo e restano
+ricorsivi.
+
 Un file del lotto che non si legge, perché non è UTF-8, supera il tetto o il
 parser lo rifiuta, è un avviso di quel path: il resto del lotto prosegue. Una
 rinomina che non si può convalidare, con la destinazione già spostata di nuovo
