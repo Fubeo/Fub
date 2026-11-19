@@ -1,4 +1,4 @@
-# 0247 — Fub porta l'orologio di GTK3 alla frequenza dello schermo nel modo GL
+# 0249 — Fub porta l'orologio di GTK3 alla frequenza dello schermo nel modo GL
 
 - **Stato:** accolta
 - **Data:** 2026-11-19

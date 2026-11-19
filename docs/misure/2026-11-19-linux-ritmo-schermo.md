@@ -2,7 +2,7 @@
 
 Perché la pagina di Fub non superava i 60 fotogrammi al secondo su uno
 schermo a 180 Hz anche col vblank emulato, e che cosa cambia con l'orologio
-di GTK allo schermo ([ADR 0247](../decisions/0247-orologio-gtk-allo-schermo.md)).
+di GTK allo schermo ([ADR 0249](../decisions/0249-orologio-gtk-allo-schermo.md)).
 
 > **Per chi:** chi lavora sulla fluidità su Linux.
 > **Risultato:** il tetto non era di WebKit né del compositore: è
