@@ -270,6 +270,12 @@ secondo le regole native dell'editor; composizione, incolla, cancellazione,
 sostituzione e modifiche multi-cursore conservano i propri confini osservabili. La
 history della selezione è distinta da quella del contenuto.
 
+La history del contenuto di ogni superficie tiene almeno 10 000 passi
+(`TEXT_HISTORY_DEPTH` in `editors/text/engine.ts`, come i documenti Word):
+battute separate da più di mezzo secondo sono passi distinti, e annullando
+tutto il testo torna com'era all'apertura anche dopo ore di scrittura lenta.
+Oltre il limite i passi più vecchi escono.
+
 Una modifica ricevuta da un altro riquadro aggiorna il testo ma non diventa una
 battuta nella history della superficie destinataria. Se il cambio esterno è
 disgiunto, i rami locali restano disponibili e seguono il nuovo testo. Se
