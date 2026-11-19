@@ -163,6 +163,11 @@ pub fn invoke(
     } else if command == EXPORT_RUN {
         let request: ExportRequest = serde_json::from_str(required(&args, "request_json")?)
             .map_err(|e| bad_args(format!("request_json is not an ExportRequest: {e}")))?;
+        // I due id del vecchio PDF di solo testo restano sinonimi del comando
+        // nuovo: chi li chiama ancora non si rompe (`export_pdf`).
+        if crate::export_pdf::is_legacy_target(&request.target) {
+            return crate::export_pdf::forward(&request, host);
+        }
         if !host
             .export_targets()?
             .iter()

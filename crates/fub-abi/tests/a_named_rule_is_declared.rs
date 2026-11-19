@@ -1315,16 +1315,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-importers/src/export_pdf.rs::block",
-            (
-                Family::ContextualCase,
-                "va **verso l'alto** come `log.rs::compose`: i titoli stampati si alzano di caso \
-                 per tipografia, e nessuno li riconverte. Diverge da lei perché qui la sorgente è \
-                 il modello del documento dell'utente e non un livello di log, ma la direzione \
-                 resta decorativa e non d'identità.",
-            ),
-        ),
-        (
             "crates/fub-wasm-host/src/catalog.rs::search",
             (
                 Family::ContextualCase,
