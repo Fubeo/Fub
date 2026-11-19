@@ -2759,7 +2759,7 @@ Fatto quando: i numeri e l'esito sono nella pagina; le guardie dei documenti
 verdi.
 Prova: scripts/check.sh --rapido; cd apps/client && node
 bench/interaction.mjs --only=battuta
-Stato: [~] in corso · coder · base 9f621744a
+Stato: `[~]` integrato in `integra/editor-2` (4a4ab8ee0, 2026-11-19), in attesa del gruppo; misure in docs/product/live-cards-measures.md; la prova con Obsidian aspetta l'utente (file in tests/fixtures/prova-obsidian-schede/); il cursore accanto alle schede è lento (10–18 ms), correzione affidata a un coder.
 
 ## T57 · Diagramma: via la barra, il menu del tasto destro, il gruppo, i tasti
 
@@ -3412,7 +3412,7 @@ Fatto quando: un test per voce; un test che `<!-- pagina -->` volta pagina e
 non si vede nell'editor né in Lettura.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/export
-Stato: [~] in corso · coder · base 219950782
+Stato: `[~]` integrato in `integra/editor-2` (ea7e853b5, 2026-11-19), in attesa del gruppo; «Lascia fuori» vale solo per la sessione (manca l'IPC della memoria della nota); nell'esportazione del libro il clic sulla pagina non c'è.
 
 ## T77a · Lo scrittore del PDF
 
