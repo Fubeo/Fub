@@ -2227,7 +2227,10 @@ mod tests {
                 .iter()
                 .map(|row| row["doc"].as_str().unwrap().to_owned())
                 .collect();
-            assert_eq!(docs, ["Progetti/.base", "Progetti/Sito.md", "Progetti/base.md"]);
+            assert_eq!(
+                docs,
+                ["Progetti/.base", "Progetti/Sito.md", "Progetti/base.md"]
+            );
         }
     }
 
