@@ -65,10 +65,11 @@ prima che in `/usr/lib`, WebKit avvia i suoi processi dal percorso con cui è
 compilato (`/app/libexec/webkit2gtk-4.1`), e la build di Fub trova prima
 `/app/lib/pkgconfig`.
 
-Perché: il runtime GNOME 51 porta WebKitGTK 2.54.1, che dopo un'animazione
-rimette sullo schermo per un istante pezzi di un fotogramma vecchio (la
-diagnosi è in
-[`docs/architecture/desktop-webview.md`](../../docs/architecture/desktop-webview.md)).
+Perché: il runtime GNOME 51 porta WebKitGTK 2.54.1, che alla fine di
+un'animazione rimette sullo schermo per un fotogramma lo strato com'era prima.
+La correzione a monte (WebKit bug 321993) è nella 2.54.2; la 2.54.3 del
+modulo la contiene senza patch nostre (la diagnosi e la misura sono in
+[`docs/architecture/desktop-webview.md`](../../docs/architecture/desktop-webview.md#i-fotogrammi-vecchi-dopo-unanimazione)).
 Con un modulo nostro la versione la sceglie il manifest, non il runtime.
 
 Le opzioni seguono quelle con cui gnome-build-meta costruisce il runtime
@@ -87,7 +88,7 @@ con gli avvisi WSA in <https://webkitgtk.org/security.html>):
    la sua voce in `sources`;
 4. si ricostruisce e si prova a occhio lo sfarfallio, poi si fa la release.
 
-Quando il runtime GNOME arriverà a una WebKitGTK senza il difetto, il modulo
+Quando il runtime GNOME arriverà almeno alla 2.54.2, il modulo
 si può togliere e la libreria torna a essere quella del runtime, aggiornata da
 Flathub.
 

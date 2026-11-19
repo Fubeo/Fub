@@ -222,8 +222,8 @@ stessa su ogni distribuzione. Non sostituisce `.deb`, `.rpm` e AppImage, e non
   il file con il suo `.sha256` e l'attestazione, come ogni altro installer. I
   comandi per una build a mano sono nel README di `packaging/flatpak/`.
 - **WebKitGTK** non è quella del runtime (la 2.54.1, con i fotogrammi vecchi
-  che ricompaiono dopo un'animazione: vedi
-  [`desktop-webview.md`](../architecture/desktop-webview.md)) ma il primo
+  che ricompaiono dopo un'animazione, corretti dalla 2.54.2: vedi
+  [`desktop-webview.md`](../architecture/desktop-webview.md#i-fotogrammi-vecchi-dopo-unanimazione)) ma il primo
   modulo del manifest, `webkit2gtk-4.1`: il tarball ufficiale di
   webkitgtk.org con la sua impronta, costruito col SDK GNOME 51 e installato
   in `/app`, che nella sandbox viene prima di `/usr`. Le opzioni sono quelle

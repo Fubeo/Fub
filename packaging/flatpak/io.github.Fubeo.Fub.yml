@@ -49,8 +49,9 @@ finish-args:
 
 modules:
   # WebKitGTK scelto da noi, non quello del runtime. Il runtime GNOME 51 ha la
-  # 2.54.1, che dopo un'animazione rimette sullo schermo per un istante pezzi
-  # di un fotogramma vecchio (docs/architecture/desktop-webview.md). Questo
+  # 2.54.1, che alla fine di un'animazione rimette sullo schermo per un
+  # fotogramma lo strato com'era prima; la correzione (WebKit bug 321993) è
+  # nella 2.54.2 (docs/architecture/desktop-webview.md). Questo
   # modulo installa libwebkit2gtk-4.1 e i suoi processi in /app: il linker di
   # Flatpak cerca in /app/lib prima che in /usr/lib, e WebKit avvia i processi
   # dal percorso con cui è compilato (/app/libexec/webkit2gtk-4.1), quindi Fub
