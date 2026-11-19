@@ -152,13 +152,29 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
   async function act(run: (paths: string[]) => Promise<unknown>): Promise<void> {
     const paths = [...picked];
     if (paths.length === 0) return;
+    const fromBar = bar.contains(document.activeElement);
     try {
       await run(paths);
     } finally {
       // Qualunque cosa sia successa, la scelta ha fatto il suo lavoro: le note
       // rimaste (un rifiuto, un guasto) si riscelgono guardandole.
-      if (!lifetime.closed) clear();
+      if (!lifetime.closed) {
+        clear();
+        if (fromBar) backToList();
+      }
     }
+  }
+
+  /// La barra si nasconde a scelta vuota: il pulsante premuto da tastiera
+  /// perderebbe il fuoco, che cadrebbe su `body` (IMP-154). Torna all'albero,
+  /// sulla voce che il tab vi troverebbe. Un fuoco già andato altrove (un
+  /// dialogo, il selettore della cartella) non si tocca.
+  function backToList(): void {
+    const now = document.activeElement;
+    if (now instanceof HTMLElement && now !== document.body && now.isConnected && !now.closest("[hidden]")) return;
+    const item = list.querySelector<HTMLElement>('li[role="treeitem"][tabindex="0"]')
+      ?? list.querySelector<HTMLElement>('li[role="treeitem"]');
+    item?.focus({ preventScroll: true });
   }
 
   const rowOf = (target: EventTarget | null): HTMLElement | null => {
