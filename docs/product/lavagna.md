@@ -150,6 +150,11 @@ disco ([scrivere dentro una scheda](../reference/canvas-cards.md#scrivere-dentro
   uscendo, anche con Esc, e non lascia niente da annullare. Mentre si scrive,
   Ctrl+W chiude la linguetta come fuori
   ([la scheda di testo](../reference/canvas-input.md#scrivere-in-una-scheda-di-testo)).
+- **Il «/»** in una scheda di testo o di nota apre il menu dei blocchi
+  dell'editor, lo stesso dei riquadri, sopra la lavagna alla sua misura
+  qualunque sia lo zoom. Offre solo ciò che scrive nel testo della scheda:
+  niente comandi del vault né «Cerca fra tutti i comandi», che agirebbero
+  sulla lavagna.
 - **Una nota** si scrive col doppio clic o con Invio: l'editor Live prende il
   posto della resa, la barra di formato va nella riga delle opzioni e la
   riga del titolo dice «Salvato», «Non salvato», «Cambiato su disco»… come la

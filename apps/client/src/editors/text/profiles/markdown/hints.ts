@@ -20,7 +20,7 @@ import { blockSelection, escapeLeaves, vimOn } from "./blocks/selection";
 import { mainElements } from "./cursor-elements";
 import { isTaskLine } from "./dates";
 import { frontmatterRange } from "./render";
-import { openSlashMenu } from "./slash";
+import { openSlashMenu, slashPaletteHere } from "./slash";
 import { liveStrings } from "./strings";
 import { markPresence } from "../../../core/presence";
 import { concentrating } from "../../../../state/concentration";
@@ -154,7 +154,7 @@ export function markdownHints(state: EditorState, focus: HintFocus, slash: boole
       keys(["Enter"], "live.keys.slash.enter"),
       keys(["Tab"], "live.keys.slash.tab"),
       keys(["Escape"], "live.keys.slash.escape"),
-      keys(["Mod-/"], "live.keys.slash.all"),
+      ...(slashPaletteHere(state) ? [keys(["Mod-/"], "live.keys.slash.all")] : []),
     ] };
   }
   if (state.field(blockSelection, false)) {

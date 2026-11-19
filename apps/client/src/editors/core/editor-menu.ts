@@ -239,8 +239,9 @@ export interface SlashPanelEvents {
   /// I titoli della pagina, per l'anteprima dell'Indice.
   outline(): readonly { readonly level: number; readonly text: string }[];
   /// Ctrl+/, o Invio senza risultati: la palette di tutti i comandi, con ciò
-  /// che si è scritto.
-  palette(query: string): void;
+  /// che si è scritto. Assente (l'editor di una scheda della lavagna): niente
+  /// palette, perché i comandi agirebbero sul documento del riquadro.
+  palette?(query: string): void;
   /// Presente quando il «/» agisce su una selezione.
   readonly transform?: SlashTransform;
 }
@@ -264,12 +265,21 @@ export interface SlashPanel {
 }
 
 /// Ciò che la shell dà alla superficie per il menu «/» nel testo.
+/// Che cosa il «/» di una superficie può offrire oltre alle sue azioni.
+export interface SlashScope {
+  /// I comandi del vault (la sezione «vault»): solo dove il documento della
+  /// superficie è quello del riquadro.
+  readonly commands: boolean;
+}
+
 export interface SlashMenuHost {
   /// L'impostazione `editor.slash`: spenta, il «/» è testo.
   enabled(): boolean;
   /// Un pannello nuovo. `has` dice quali azioni dell'editor la superficie sa
-  /// eseguire adesso.
-  panel(events: SlashPanelEvents, has: (id: string) => boolean): SlashPanel;
+  /// eseguire adesso; `scope.commands` falso (l'editor di una scheda della
+  /// lavagna) toglie i comandi del vault, che agirebbero sul documento del
+  /// riquadro e non sul testo della scheda.
+  panel(events: SlashPanelEvents, has: (id: string) => boolean, scope?: SlashScope): SlashPanel;
   /// Una voce è stata scelta, e il «/query» è già sparito: la shell la
   /// ricorda fra i recenti e, se è un comando, lo esegue accanto al cursore
   /// (`anchor`) dell'editor che sta in `owner`.

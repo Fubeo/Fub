@@ -13511,7 +13511,9 @@ export class CanvasEngine {
       escapeForEditor = false;
       if (event.isComposing || editor.composing) return;
       if (event.key === "Escape") {
-        escapeForEditor = host.querySelector('[role="listbox"]') !== null;
+        // Il menu «/» galleggia fuori dalla scheda: lo dice l'editor stesso
+        // (`aria-haspopup`), finché è aperto.
+        escapeForEditor = host.querySelector('[role="listbox"], [aria-haspopup="listbox"]') !== null;
       } else if (isCommandSearchKey(event)) {
         event.preventDefault();
         event.stopPropagation();
