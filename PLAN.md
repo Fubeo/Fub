@@ -3521,7 +3521,7 @@ Fatto quando: un test del comando ad app aperta e senza; un test del
 predefinito per tipo (con T33).
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features
 pdf_export; cd apps/client && npx vitest run src/export
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base d1a7af279
 
 ## T80 · Misure, banco, documentazione; le due voci di oggi
 
