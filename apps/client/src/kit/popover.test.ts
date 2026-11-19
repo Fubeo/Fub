@@ -476,6 +476,28 @@ describe("la posizione", () => {
     expect(popover.element.style.top).toBe("430px");
   });
 
+  it("si ricalcola quando un carattere finisce di arrivare, anche se niente scorre", () => {
+    // La formula in riga si allarga quando arrivano i caratteri di KaTeX: un
+    // ResizeObserver non osserva un'ancora in riga, lo dice il documento.
+    const fonts = new EventTarget();
+    Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
+    try {
+      const popover = openPopover({ anchor, content: content("uno"), align: "center", lifetime: life });
+      const before = Number.parseFloat(popover.element.style.left);
+      box = { ...box, width: box.width + 40 };
+      fonts.dispatchEvent(new Event("loadingdone"));
+      expect(Number.parseFloat(popover.element.style.left) - before).toBe(20);
+
+      // Chiuso, non ascolta più.
+      popover.close();
+      box = { ...box, width: box.width + 40 };
+      fonts.dispatchEvent(new Event("loadingdone"));
+      expect(Number.parseFloat(popover.element.style.left) - before).toBe(20);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
   it("non si ricalcola per lo scorrimento del suo contenuto", () => {
     const popover = openPopover({ anchor, content: content("uno"), lifetime: life });
     box = { ...box, top: 400 };
