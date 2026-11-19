@@ -1931,6 +1931,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-importers/src/notion_export.rs::has_extension",
+            (
+                Family::AsciiCase,
+                "confronta l'estensione di una voce di un export di Notion (`md`, `markdown`, \
+                 `csv`) per riconoscere pagine e database: token di formato, ASCII per \
+                 definizione. Diverge da `route_entry` perché qui la risposta decide come si \
+                 legge l'export intero (quali voci si uniscono), là la strada di una voce sola; \
+                 gli id e i titoli dell'export si confrontano come sono scritti.",
+            ),
+        ),
+        (
             "crates/fub-importers/src/common.rs::sanitize_component",
             (
                 Family::AsciiCase,

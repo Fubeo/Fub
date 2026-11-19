@@ -10,12 +10,16 @@
 //! retain their extension and exact UTF-8 contents for format owners; binary
 //! or invalid UTF-8 entries fail explicitly rather than being replaced.
 //!
+//! An export of Notion (pages and databases named with their Notion id) is
+//! the one archive read as a whole first: names lose the id, a database's
+//! CSV and its row pages join into one note per row (`notion_export`).
+//!
 //! Security: traversal (`..`, absolute, drive-letter, backslash escapes,
 //! symlink names are just names here), bombs (entry/total caps + ratio
 //! check in [`crate::zip`]), and interruption (cancel → `Err(Cancelled)`;
 //! dropping the source mid-entry → `Io`, never a silent truncation).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use fub_abi::traits::HostApi;
 use fub_abi::transfer::{
@@ -123,7 +127,49 @@ impl ArchiveImport {
         }
         let mut total: u64 = 0;
         let mut seen_names: HashSet<String> = HashSet::new();
-        for entry in &archive.entries {
+        // An export of Notion is read as a whole before its entries are
+        // written: names lose their id, a database's CSV and its row pages
+        // join (see `notion_export`).
+        let names: Vec<&str> = archive
+            .entries
+            .iter()
+            .filter(|e| !e.is_dir && !e.name.ends_with('/') && !is_noise(&e.name))
+            .filter(|e| !is_traversal(&e.name))
+            .map(|e| e.name.as_str())
+            .collect();
+        let mut notion = crate::notion_export::Layout::detect(&names);
+        let mut early: HashMap<usize, Vec<u8>> = HashMap::new();
+        if let Some(layout) = &mut notion {
+            for (index, entry) in archive.entries.iter().enumerate() {
+                if !names.contains(&entry.name.as_str()) || !layout.needs_content(&entry.name) {
+                    continue;
+                }
+                // A failure here is met again, and reported, in the main pass.
+                if let Ok(bytes) = zip::extract_entry(archive.data(), entry, &mut total) {
+                    early.insert(index, bytes);
+                }
+            }
+            let texts: HashMap<&str, &str> = archive
+                .entries
+                .iter()
+                .enumerate()
+                .filter_map(|(index, entry)| {
+                    let bytes = early.get(&index)?;
+                    Some((entry.name.as_str(), std::str::from_utf8(bytes).ok()?))
+                })
+                .collect();
+            layout.read(|name| texts.get(name).copied());
+            if layout.renamed() > 0 {
+                report.log.push(
+                    TransferNote::info(format!(
+                        "Notion export: {} names without their Notion id, links follow them",
+                        layout.renamed()
+                    ))
+                    .about(archive_name.to_string()),
+                );
+            }
+        }
+        for (index, entry) in archive.entries.iter().enumerate() {
             if report.documents.len() >= MAX_DOCS_PER_IMPORT {
                 report.log.push(
                     TransferNote::warning(format!(
@@ -137,8 +183,7 @@ impl ArchiveImport {
             if entry.is_dir || entry.name.ends_with('/') {
                 continue;
             }
-            let base = entry.name.rsplit('/').next().unwrap_or(&entry.name);
-            if base.starts_with("._") || base == ".DS_Store" || base == "Thumbs.db" {
+            if is_noise(&entry.name) {
                 continue;
             }
             // Traversal: any `..` / absolute / drive / empty component, or a
@@ -166,7 +211,11 @@ impl ArchiveImport {
                 );
                 continue;
             }
-            let bytes = match zip::extract_entry(archive.data(), entry, &mut total) {
+            let extracted = match early.remove(&index) {
+                Some(bytes) => Ok(bytes),
+                None => zip::extract_entry(archive.data(), entry, &mut total),
+            };
+            let bytes = match extracted {
                 Ok(b) => b,
                 Err(failure) => {
                     // Truncation / CRC: per-entry failure keeps the rest; a
@@ -205,16 +254,30 @@ impl ArchiveImport {
                 )));
             }
             let label = entry_label(archive_name, &entry.name, entry_prefix);
-            if let Err(e) = self.import_entry(
-                archive_name,
-                &entry.name,
-                &bytes,
-                request,
-                host,
-                report,
-                &label,
-                &mut seen_names,
-            ) {
+            let done = match &notion {
+                Some(layout) => self.import_notion_entry(
+                    layout,
+                    archive_name,
+                    &entry.name,
+                    &bytes,
+                    request,
+                    host,
+                    report,
+                    &label,
+                    &mut seen_names,
+                ),
+                None => self.import_entry(
+                    archive_name,
+                    &entry.name,
+                    &bytes,
+                    request,
+                    host,
+                    report,
+                    &label,
+                    &mut seen_names,
+                ),
+            };
+            if let Err(e) = done {
                 if is_cancelled(&e) {
                     return Err(e);
                 }
@@ -320,7 +383,7 @@ impl ArchiveImport {
                     }
                     let note = crate::csv::row_note(&table.headers, row, &source_file, idx);
                     let archive_title: String = note.title.chars().take(60).collect();
-                    let fstem = sanitize_component(&archive_title)
+                    let fstem = crate::common::title_file_stem(&archive_title)
                         .unwrap_or_else(|| format!("row_{}", idx + 1));
                     let doc_name = join_doc_path(&[], &format!("{}-{fstem}.md", f.join("-")))
                         .unwrap_or_else(|| format!("{stem}-row-{}.md", idx + 1));
@@ -348,7 +411,7 @@ impl ArchiveImport {
                     if report.documents.len() >= MAX_DOCS_PER_IMPORT {
                         break;
                     }
-                    let title = sanitize_component(&note.title)
+                    let title = crate::common::title_file_stem(&note.title)
                         .unwrap_or_else(|| format!("note-{}", index + 1));
                     let doc_name = join_doc_path(&destination, &format!("{title}.md"))
                         .unwrap_or_else(|| format!("{stem}-{}.md", index + 1));
@@ -442,6 +505,99 @@ impl ArchiveImport {
                 }
             }
         }
+    }
+
+    /// One entry of a Notion export: pages with clean names, rewritten links
+    /// and callouts, a database kept as its CSV plus one note per row.
+    #[allow(clippy::too_many_arguments)]
+    fn import_notion_entry(
+        &mut self,
+        layout: &crate::notion_export::Layout,
+        archive_name: &str,
+        name: &str,
+        bytes: &[u8],
+        request: &ImportRequest,
+        host: &mut dyn HostApi,
+        report: &mut ImportReport,
+        label: &str,
+        seen: &mut HashSet<String>,
+    ) -> Result<(), PluginError> {
+        let target = layout.target(name);
+        let doc_name = |path: &str| {
+            let parts: Vec<String> = path.split('/').map(str::to_string).collect();
+            let (file, folder) = parts.split_last().expect("split gives one part");
+            join_doc_path(folder, file)
+                .ok_or_else(|| bad_args(format!("entry `{name}` has no usable name")))
+        };
+        if layout.is_database(name) {
+            // The CSV stays a file of the vault, byte for byte: the links
+            // that call it open it in the sheet editor. It is not a note, so
+            // it goes in like an attachment.
+            self.write_binary(
+                doc_name(&target)?,
+                bytes,
+                label,
+                request,
+                host,
+                report,
+                seen,
+            )?;
+            let Some(database) = layout.database(name) else {
+                return Ok(());
+            };
+            for text in database.info {
+                report.log.push(TransferNote::info(text).about(label));
+            }
+            for text in database.warnings {
+                report.log.push(TransferNote::warning(text).about(label));
+            }
+            for note in database.notes {
+                if report.documents.len() >= MAX_DOCS_PER_IMPORT {
+                    break;
+                }
+                self.write_raw(
+                    doc_name(&note.path)?,
+                    &note.markdown,
+                    &format!("{label}:{}", note.line),
+                    request,
+                    host,
+                    report,
+                    seen,
+                )?;
+            }
+            return Ok(());
+        }
+        if crate::notion_export::has_extension(name, "md")
+            || crate::notion_export::has_extension(name, "markdown")
+        {
+            let text = std::str::from_utf8(bytes)
+                .map_err(|_| bad_args(format!("entry `{name}` is not UTF-8 text")))?;
+            let converted = layout.page(name, text);
+            for warning in converted.warnings {
+                report.log.push(TransferNote::warning(warning).about(label));
+            }
+            return self.write_raw(
+                doc_name(&target)?,
+                &converted.markdown,
+                label,
+                request,
+                host,
+                report,
+                seen,
+            );
+        }
+        // Everything else (images, files) enters as it would from any
+        // archive, under its clean name.
+        self.import_entry(
+            archive_name,
+            &target,
+            bytes,
+            request,
+            host,
+            report,
+            label,
+            seen,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -620,6 +776,12 @@ impl ArchiveImport {
         }
         Ok(())
     }
+}
+
+/// Resource forks and folder caches never become documents.
+fn is_noise(name: &str) -> bool {
+    let base = name.rsplit('/').next().unwrap_or(name);
+    base.starts_with("._") || base == ".DS_Store" || base == "Thumbs.db"
 }
 
 fn is_traversal(name: &str) -> bool {
