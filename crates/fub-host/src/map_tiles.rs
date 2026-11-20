@@ -288,7 +288,7 @@ impl Host {
                 vec![Arg::text("url", url)],
             ));
         };
-        if !allowed_hosts(self).iter().any(|entry| *entry == site) {
+        if !allowed_hosts(self).contains(&site) {
             return Err(refused(
                 "host.map.tile.not_allowed",
                 vec![Arg::text("site", &site)],
