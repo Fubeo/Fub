@@ -37,6 +37,16 @@ nella pagina non ce ne sia più nessuno, e dopo 5 s falliscono nominando
 l'elemento. Un componente con un timer che cambia ciò che si vede usa lo stesso
 attributo invece di chiedere al banco un'attesa a tempo.
 
+Una nota della Live scorsa in fondo non si fotografa subito dopo
+`scrollTop = scrollHeight`: CodeMirror conta le righe fuori dal suo viewport
+con altezze stimate, e quale viewport resta dipende da quando le schede vive
+finiscono di montarsi, così le righe in vista si spostavano di una frazione di
+pixel da un giro all'altro (#510). Le scene che fotografano il fondo di una
+nota con schede (`schede-vive-03-mancante`, `mobile-schede-mancante`) passano
+da `scrollLiveToEnd` in `bench/scene.mjs`: la finestra si allunga finché la
+nota è disegnata tutta e misurata, poi torna com'era e si scorre in fondo; la
+scena fallisce se in fondo restano vuoti stimati (`.cm-gap`).
+
 Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
 vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
 `avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa
