@@ -80,7 +80,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   [superficie dei fogli](architecture/grid-surface.md) e gli [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md),
   [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
-  [il disegno sul motore](architecture/disegno.md)
+  [il disegno sul motore](architecture/disegno.md), con [il completo](architecture/disegno-completo.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
 

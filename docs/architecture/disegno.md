@@ -37,9 +37,8 @@ sequenceDiagram
 ```
 
 Il motore non scrive mai il file: restituisce operazioni, e il file cambia
-solo quando il client le applica. Il giro finisce con il motore che rilegge
-il testo, così la copia segue il file anche quando lo cambia un'altra
-superficie.
+solo quando il client le applica. Il giro finisce con il motore che rilegge il
+testo, così la copia segue il file anche quando lo cambia un'altra superficie.
 
 I passi, uno per uno:
 
@@ -75,17 +74,16 @@ I passi, uno per uno:
 
 Un gesto a una revisione diversa da quella del testo tenuto dal motore è
 rifiutato come `Stale`: la sessione rimanda il testo intero e riprova una
-volta. Un gesto che arriva prima del reimport aspetta la revisione giusta
-(al più 30 secondi, poi `NotReady`). Le modifiche valgono solo su una
-revisione più nuova e solo se la lunghezza di prima e il testo cancellato
-tornano, altrimenti il `sync` è `BadArgs`: la copia non è più certa, e la
-sessione si ferma come ogni altro errore (il chip offre «Riprova», che apre
-un'istanza nuova col testo di quel momento). Il testo intero vale a
-qualunque revisione. Un reimport che fallisce (XML rotto)
-lascia la copia alla revisione vecchia, e i gesti sono `Stale` finché non
-arriva un testo buono; il risultato di un reimport superato da un testo più
-nuovo si butta. Le richieste della
-sessione vanno in fila, una alla volta, con un tempo limite per ciascuna.
+volta. Un gesto che arriva prima del reimport aspetta la revisione giusta (al
+più 30 secondi, poi `NotReady`). Le modifiche valgono solo su una revisione
+più nuova e solo se la lunghezza di prima e il testo cancellato tornano,
+altrimenti il `sync` è `BadArgs`: la copia non è più certa, e la sessione si
+ferma come ogni altro errore (il chip offre «Riprova», che apre un'istanza
+nuova col testo di quel momento). Il testo intero vale a qualunque revisione.
+Un reimport che fallisce (XML rotto) lascia la copia alla revisione vecchia, e
+i gesti sono `Stale` finché non arriva un testo buono; il risultato di un
+reimport superato da un testo più nuovo si butta. Le richieste della sessione
+vanno in fila, una alla volta, con un tempo limite per ciascuna.
 
 ## Chi possiede che cosa
 
@@ -207,22 +205,20 @@ motore. I vettori dei gesti sono l'oracolo delle due strade
 ### Quando il motore manca
 
 `motoreDa` (`motore/gesti.ts`) sa perché il motore manca: **spento** (la riga
-spenta, che la superficie sente da `onComponents` e chiude subito la
-sessione, o un `unserved` a metà sessione: spento in un vault, l'host chiude
-le sue istanze e libera il motore se non ne resta nessuna) o **fermo** (ogni
-altro errore, o 10 s senza risposta).
-**Riacceso**, o con «Riprova» del chip, `riapri()` apre un'istanza
-nuova col testo di quel momento, senza rimontare l'editor e una alla volta.
-Un gesto a metà quando il motore manca si annulla senza scrivere e lo si
-annuncia; il gesto dopo usa gli strumenti semplici. La sessione finisce col
-riquadro e con la `DocumentSession` (file cancellato, vault chiuso o
-cambiato); col file rinominato resta.
+spenta, che la superficie sente da `onComponents` e chiude subito la sessione,
+o un `unserved` a metà sessione: spento in un vault, l'host chiude le sue
+istanze e libera il motore se non ne resta nessuna) o **fermo** (ogni altro
+errore, o 10 s senza risposta). **Riacceso**, o con «Riprova» del chip,
+`riapri()` apre un'istanza nuova col testo di quel momento, senza rimontare
+l'editor e una alla volta. Un gesto a metà quando il motore manca si annulla
+senza scrivere e lo si annuncia; il gesto dopo usa gli strumenti semplici. La
+sessione finisce col riquadro e con la `DocumentSession` (file cancellato,
+vault chiuso o cambiato); col file rinominato resta.
 
 ## I comandi IPC
 
 Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
-`crates/fub-abi/src/drawing.rs` e i comandi in
-`crates/fub-app/src/lib.rs`:
+`crates/fub-abi/src/drawing.rs` e i comandi in `crates/fub-app/src/lib.rs`:
 
 | Comando | Fa |
 |---|---|
@@ -285,6 +281,10 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 `crates/fub-disegno/tests/corpus/perdite.tsv`: la prova
 `cargo test -p fub-disegno --test corpus` lo confronta, e
 `UPDATE_PERDITE=1` lo riscrive.
+
+## Il disegno completo
+
+Lo spazio Completo con tutte le funzioni del motore: [Il disegno completo](disegno-completo.md).
 
 ## Dove sta il codice
 

@@ -1177,7 +1177,7 @@ Fatto quando: `node .github/scripts/check-doc-links.mjs` e
 `node .github/scripts/check-doc-orphans.mjs` escono con 0; la sezione si
 raggiunge da `docs/README.md`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T2 · La mappa nel repo e la sua guardia
