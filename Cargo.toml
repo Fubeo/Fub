@@ -118,6 +118,11 @@ syn = { version = "2", default-features = false }
 quote = { version = "1", default-features = false }
 thiserror = "2"
 regex = "1"
+# Il parser di `regex`, preso per leggere l'albero di un'espressione (le parole
+# che una regex della ricerca vuole per forza: `fub-features`, ricerca). Già
+# nell'albero, 0.8.11, da `regex`, `tantivy-fst` e `syntect`: non aggiunge un
+# crate, e la versione è quella con cui `regex` compila la stessa espressione.
+regex-syntax = "0.8"
 camino = { version = "1", features = ["serde1"] }
 # La cartella usa-e-getta dei test. Non è una dipendenza della libreria — nei
 # crate compare quasi sempre fra i `[dev-dependencies]` — ma era dichiarata con

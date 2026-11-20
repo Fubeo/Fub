@@ -71,8 +71,10 @@
 //!
 //! La regex dell'utente cerca nei campi memorizzati in chiaro, con limiti su
 //! pattern, numero di documenti e byte letti; il testo case-sensitive usa la
-//! stessa scansione. Entrambi rifiutano la query prima di restituire un insieme
-//! parziale se superano il limite. `Task { Open | Done }` è indicizzato dai
+//! stessa verifica. I documenti da rileggere li sceglie prima l'indice
+//! invertito, con le parole intere che la domanda garantisce (`exact`); se non
+//! ne garantisce nessuna si rilegge tutto. Entrambi rifiutano la query prima di
+//! restituire un insieme parziale se superano il limite. `Task { Open | Done }` è indicizzato dai
 //! marker delle liste annidate nel modello, senza inferire uno stato dai nomi.
 //! `Path` e `File` spettano al valutatore del kernel, non a Tantivy.
 //!
@@ -106,7 +108,7 @@ use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 use tantivy::query::{
     AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RangeQuery,
-    RegexQuery, TermQuery,
+    TermQuery,
 };
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
@@ -313,6 +315,7 @@ impl FieldWeights {
 
 mod catalog;
 mod engine;
+mod exact;
 mod index;
 mod provider;
 mod schema;
@@ -321,13 +324,13 @@ mod words;
 pub use catalog::{catalog, settings};
 use catalog::{
     io_err, reason, COMMENT_QUERY_SHAPE, COUNT, DOC_READ, INDEX_CLOSE, INDEX_COMMIT, INDEX_CREATE,
-    INDEX_LOCKED, INDEX_READER, INDEX_RELOAD, MANIFEST_WRITE, PATH, REASON, SCOPE_TOO_LARGE,
-    SCOPE_TOO_MANY, SEARCH, SELECT_UNSUPPORTED, SNIPPET, TOKENIZER, UNSERVED_FAMILY, UNSERVED_LEAF,
-    WHAT,
+    INDEX_LOCKED, INDEX_READER, INDEX_RELOAD, MANIFEST_WRITE, PATH, REASON, SCAN_TOO_LARGE,
+    SCAN_TOO_MANY, SCOPE_TOO_LARGE, SCOPE_TOO_MANY, SEARCH, SELECT_UNSUPPORTED, SNIPPET, TOKENIZER,
+    UNSERVED_FAMILY, UNSERVED_LEAF, WHAT,
 };
 #[cfg(test)]
 use engine::head_of;
-use engine::item_due;
+use engine::{item_due, term_query};
 pub use index::SearchIndex;
 pub use provider::SearchSettings;
 #[cfg(test)]

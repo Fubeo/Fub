@@ -47,7 +47,7 @@ default = [
     "lavagna",
     "craft",
 ]
-search = ["dep:tantivy", "dep:regex"]
+search = ["dep:tantivy", "dep:regex", "dep:regex-syntax"]
 versioning = []
 backlinks = []
 outline = []
@@ -192,6 +192,7 @@ tantivy = { version = "0.26", optional = true, default-features = false, feature
     "stemmer",
 ] }
 regex = { workspace = true, optional = true }
+regex-syntax = { workspace = true, optional = true }
 # Dietro `draw`, e solo lì. `resvg` senza i default (lo dice la radice), che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
 # Restano il testo e la decodifica delle immagini raster, incorporate come
