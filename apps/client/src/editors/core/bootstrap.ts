@@ -399,6 +399,9 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
     ([{ default: workerUrl }, { makePdfJsLoader }]) => makePdfJsLoader(
       () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
       workerUrl,
+      // Le pagine si disegnano in questo worker, fuori dal thread principale
+      // (#525): lo si crea solo quando un PDF chiede la sua prima pagina.
+      () => new Worker(new URL("../media/pdf-render-worker.ts", import.meta.url), { type: "module" }),
     ),
     (error: unknown) => {
       pdfEngine = null;
