@@ -476,6 +476,14 @@ fn catalog_it() -> StringCatalog {
             D_ARCHIVE_PARTIAL,
             "Note archiviate in «{folder}»: {count} · Non spostate: {failed}",
         )
+        .with(
+            D_ARCHIVE_RELINK,
+            "Note archiviate in «{folder}»: {count} · Collegamenti nelle proprietà da guardare: {links}",
+        )
+        .with(
+            D_ARCHIVE_PARTIAL_RELINK,
+            "Note archiviate in «{folder}»: {count} · Non spostate: {failed} · Collegamenti nelle proprietà da guardare: {links}",
+        )
         .with(D_SETTINGS_SET, "`{key}` adesso vale {value}")
         .with(D_SETTINGS_RESET, "`{key}` è tornata al valore di prima")
         .with(D_SETTINGS_EXPORT, "Impostazioni da salvare: {count}")
@@ -1182,6 +1190,14 @@ fn catalog_en() -> StringCatalog {
         .with(
             D_ARCHIVE_PARTIAL,
             "Notes archived in «{folder}»: {count} · Not moved: {failed}",
+        )
+        .with(
+            D_ARCHIVE_RELINK,
+            "Notes archived in «{folder}»: {count} · Links in properties to check: {links}",
+        )
+        .with(
+            D_ARCHIVE_PARTIAL_RELINK,
+            "Notes archived in «{folder}»: {count} · Not moved: {failed} · Links in properties to check: {links}",
         )
         .with(D_SETTINGS_SET, "`{key}` is now {value}")
         .with(D_SETTINGS_RESET, "`{key}` is back to what it was before")
