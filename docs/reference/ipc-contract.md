@@ -56,8 +56,8 @@ I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
 `list_grid_surfaces` elenca i binding, e una superficie con
 `protocol_version` 2 si apre sui byte di un documento (`open_grid_bytes`,
 `grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
-`grid_bytes_command`, `close_grid_bytes`). Sessione, finestra, comandi e
-limiti: [le porte della griglia](grid-ipc.md).
+`grid_bytes_command`, `close_grid_bytes`), in una corsia sua. Sessione,
+finestra, comandi, corsia e limiti: [le porte della griglia](grid-ipc.md).
 
 
 ## Disegno

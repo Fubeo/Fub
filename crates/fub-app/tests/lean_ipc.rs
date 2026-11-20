@@ -1091,6 +1091,20 @@ fn grid_surface_uses_only_named_typed_ports() {
             .any(|line| line.contains("grid") && line.contains("invoke_command")),
         "Grid must not tunnel through the generic invoke_command bridge"
     );
+    // A synchronous Tauri command runs on the main thread, the one that
+    // presents the frames: the byte ports run in the grid lane instead, in
+    // arrival order (`grid_port`, `domande::CORSIA_GRIGLIA`).
+    for command in &GRID[1..] {
+        let start = app
+            .find(&format!("async fn {command}("))
+            .unwrap_or_else(|| panic!("`{command}` must be async, off the main thread"));
+        let body = &app[start..];
+        let body = &body[..body.find("\n}\n").expect("command body")];
+        assert!(
+            body.contains("grid_port("),
+            "`{command}` must run in the grid lane through `grid_port`"
+        );
+    }
 }
 
 #[test]

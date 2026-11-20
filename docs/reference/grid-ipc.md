@@ -22,6 +22,19 @@ negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
 o incompatibile non viene chiamato e la superficie dice che il foglio non si
 apre. `query_index` non applica patch e non possiede lifecycle.
 
+Le sei porte sui byte girano fuori dal thread principale, nella corsia del
+foglio (`crates/fub-app/src/domande.rs`), che c'è sempre e non conta fra le
+16 delle domande ([contratto IPC](ipc-contract.md)): scorrendo, la shell
+chiede una finestra a ogni blocco di righe nuove, e sul thread principale,
+quello che presenta i fotogrammi, ogni lettura li fermava. La corsia tiene
+l'ordine d'arrivo, come il thread principale: una finestra chiesta prima di
+una modifica si legge alla revisione da cui la modifica parte, e una
+chiusura arriva dopo le richieste partite prima. In parallelo non si
+guadagnerebbe niente, perché il provider di una superficie risponde a una
+chiamata per volta. `list_grid_surfaces`, che legge soltanto il registro,
+resta sul thread principale. La shell scarta comunque una finestra o un
+errore di una revisione superata.
+
 `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
 trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
 della sessione documento) e la revisione dei byte da cui parte. L'host legge
