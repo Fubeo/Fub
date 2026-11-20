@@ -83,9 +83,10 @@ Shared files, in the orchestrator's skill:
 4. **Haiku helpers.** At most **two per task** (`Agent` with
    `model: "haiku"`, `effort: "max"`), as in `coder.md`:
    - you do the quick things yourself and every hard part;
-   - the helper does the long, laborious but plain work: a wide search in
-     the repo, a large but simple piece of code on well-known ground (a
-     base, a scaffold, a repetitive change, tests for cases you listed),
+   - the helper does work of low to medium difficulty, however long:
+     length is not difficulty. A wide search in the repo, a large piece of
+     code on well-known ground (a base, a scaffold, a medium function whose
+     rule you wrote down, a repetitive change, tests for cases you listed),
      the mechanical parts;
    - you choose and design each piece, know exactly what it does, and check
      every line; never an endless session.

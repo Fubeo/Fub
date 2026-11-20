@@ -36,23 +36,30 @@ expected.
   - **You do yourself** whatever takes you a few seconds and no real effort,
     and every hard part: design, contracts, tricky logic, the final judgement.
     Briefing a helper for a quick look costs more than the look.
-  - **The helper does** the long, laborious work you can describe exactly
-    and that leaves little room for error:
+  - **The helper does** work of low to medium difficulty that you can
+    describe exactly, however long it is. Length is not difficulty: a long
+    job made of clear steps is a helper's job, not a reason to keep it.
+    For example:
     - a wide search through the repo ("how is X already done, where is every
       caller of Y"), when a glance is not enough;
-    - a large but plain piece of code on well-known ground: a solid base,
-      a scaffold, a repetitive change across files, a batch of tests for
-      cases you listed;
+    - a large piece of code on well-known ground: a solid base, a scaffold,
+      a function of medium difficulty whose rule you wrote down, a
+      repetitive change across files, a batch of tests for cases you
+      listed;
     - reading a long red log down to the errors, rerunning a test that
       timed out under load, a probe or screenshots of the real app or the
       bench, regenerating a generated file.
-  - You choose the piece and settle its design first (signature, owner,
-    rule, failing cases), so the helper invents nothing. You must know
+  - You choose the piece and settle the choices that matter first
+    (signature, owner, rule, failing cases); the helper makes only small
+    local choices, which you check. You must know
     exactly what it is doing, be sure it can finish, and be able to check
     every line. Never a contract, an on-disk format, security or
     concurrency.
   - Never an endless session: a long job is fine, but split one that would
     run on and on into pieces.
+  - When a piece of medium difficulty is long and well specified, give it
+    to a helper rather than write it yourself; work on the hard part while
+    it runs.
 
   They never start agents, never commit, push or touch git, and never edit a
   file outside the paths you give them. Brief each one like a peer: the absolute path of your

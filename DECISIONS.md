@@ -22,7 +22,8 @@ dubbio su una scelta tecnica si decide, non si chiede.
   due coder dal 2026-11-07 e uno dal 2026-11-04). Un task particolarmente
   semplice, e solo quello, può andare a un coder Haiku con ragionamento
   xhigh, mai in una sessione lunga. Dal 2026-11-20 gli aiutanti Haiku di un
-  coder Opus fanno il lavoro lungo e macchinoso ma semplice (ricerche
+  coder Opus fanno il lavoro di difficoltà bassa o media, anche lungo (la
+  lunghezza non è difficoltà) (ricerche
   larghe nel repo, pezzi di codice grandi ma su terreno noto e con poco
   margine d'errore), scelto e disegnato dal coder Opus, che lo tiene d'occhio
   riga per riga e fa da sé le cose rapide e quelle difficili (regola
