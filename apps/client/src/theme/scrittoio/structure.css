@@ -5809,6 +5809,11 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .draw-surface[data-nib] {
   cursor: none;
 }
+/* Sul foglio delle annotazioni, fuori dalla pagina non si scrive: gli
+   strumenti che scrivono lasciano la mira per il cursore normale. */
+.draw-surface[data-off-page]:is([data-tool="pen"], [data-tool="highlighter"], [data-tool="note"], [data-tool="rect"], [data-tool="ellipse"], [data-tool="line"], [data-tool="arrow"], [data-tool="cover"], [data-tool="text"]) {
+  cursor: default;
+}
 /* La Mano prende e trascina la vista; Spazio tenuto la presta a ogni
    strumento. La Lente ingrandisce. */
 .draw-surface[data-tool="hand"],
