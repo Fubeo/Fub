@@ -1151,11 +1151,12 @@ fn ports_that_can_work_run_off_the_main_thread_in_their_lane() {
         );
     }
     // A read with no order to keep goes off the main thread without a lane.
-    let components = body_of("async fn components_map(");
-    assert!(
-        components.contains("spawn_blocking("),
-        "`components_map` must run off the main thread"
-    );
+    for command in ["list_views", "list_commands", "components_map"] {
+        assert!(
+            body_of(&format!("async fn {command}(")).contains("host_read("),
+            "`{command}` must run off the main thread through `host_read`"
+        );
+    }
 }
 
 #[test]

@@ -842,6 +842,22 @@ where
         .await
 }
 
+/// Una lettura dell'host senza un ordine da tenere (gli elenchi di view e di
+/// comandi, la mappa dei componenti) fuori dal thread principale, senza
+/// corsia: prende il workspace in prestito condiviso, e sul thread
+/// principale aspetterebbe chi lo sta scrivendo. Chi la chiede la aspetta
+/// prima di usarla, e due letture uguali rispondono la stessa cosa in
+/// qualunque ordine escano.
+async fn host_read<T, F>(app: AppHandle, cosa: &'static str, work: F) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || work(&app.state::<Host>()))
+        .await
+        .map_err(|error| unfinished(cosa, error))?
+}
+
 /// Il lavoro di una porta del foglio sui byte, fuori dal thread principale,
 /// nella corsia del foglio (`domande::CORSIA_GRIGLIA`). Scorrendo, la shell
 /// chiede una finestra a ogni blocco di righe nuove: sul thread principale,
@@ -1256,9 +1272,10 @@ fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
 /// È la metà "discovery" del protocollo: la shell non cabla gli id — monta
 /// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
+/// Fuori dal thread principale (`host_read`).
 #[tauri::command]
-fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
-    host.views(vault.as_deref())
+async fn list_views(app: AppHandle, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
+    host_read(app, "view list", move |host| host.views(vault.as_deref())).await
 }
 
 /// Rende l'albero `UiNode` di **un'istanza** di view. Il render è una lettura:
@@ -1370,12 +1387,16 @@ fn view_instance(
 /// la spec dichiara e decide se chiedere conferma dal raggio dichiarato. Sono
 /// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
 /// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
+/// Fuori dal thread principale (`host_read`).
 #[tauri::command]
-fn list_commands(
-    host: State<Host>,
+async fn list_commands(
+    app: AppHandle,
     vault: Option<String>,
 ) -> Result<Vec<CommandSpec>, PluginError> {
-    host.commands(vault.as_deref())
+    host_read(app, "command list", move |host| {
+        host.commands(vault.as_deref())
+    })
+    .await
 }
 
 /// Esegue — o simula — un comando.
@@ -2532,21 +2553,18 @@ pub fn components_apply_for(
     for_the_shell(host, vault, result)
 }
 
-/// La mappa dei componenti di un vault, con lo stato e i profili (A7). È una
-/// lettura delle impostazioni del vault: fuori dal thread principale, come
-/// `components_apply`, perché lì aspetterebbe il prestito del workspace
-/// tenuto da chi lo sta scrivendo. Due letture non hanno un ordine da tenere,
-/// e la pagina rilegge la mappa dopo aver aspettato la scelta.
+/// La mappa dei componenti di un vault, con lo stato e i profili (A7). Fuori
+/// dal thread principale (`host_read`), come `components_apply`: la pagina
+/// rilegge la mappa dopo aver aspettato la scelta.
 #[tauri::command]
 async fn components_map(
     app: AppHandle,
     vault: Option<String>,
 ) -> Result<ComponentsMap, PluginError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        components_map_for(&app.state::<Host>(), vault.as_deref())
+    host_read(app, "component map", move |host| {
+        components_map_for(host, vault.as_deref())
     })
     .await
-    .map_err(|error| unfinished("component map", error))?
 }
 
 /// Applica una scelta sui componenti (A7). Senza `apply` è una prova: dice

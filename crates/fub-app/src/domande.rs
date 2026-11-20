@@ -64,6 +64,10 @@
 //!   (`CORSIA_STATO`): ogni scrittura rilegge e riscrive un file. In fila la
 //!   seconda scrittura della stessa chiave non è mai coperta dalla prima, e
 //!   una lettura chiesta dopo una scrittura la vede.
+//!
+//! Le letture senza un ordine da tenere (`list_views`, `list_commands`,
+//! `components_map`) escono dal thread principale senza corsia
+//! (`host_read` in `lib.rs`).
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};

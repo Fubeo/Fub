@@ -46,11 +46,10 @@ stesso istante possono entrare in un ordine qualsiasi.
 Anche `render_view`, `view_action`, `set_active_context`, `invoke_command`,
 `view_state` e `set_view_state` girano fuori dal thread principale, in corsie
 fisse fuori dalle 16 che tengono l'ordine d'arrivo: `viste` (un disegno chiesto
-dopo un'azione la vede), `contesto` (l'ultima pubblicazione resta l'ultima),
-`comandi` e `stato` (due comandi, o due scritture di una chiave, si applicano
-nell'ordine in cui partono). Sul thread principale i venti disegni dopo un
-salvataggio fermavano la finestra per 100 ms; la shell tiene l'ultima risposta
-di ogni pannello (`Race`). Presidio: `crates/fub-app/tests/lean_ipc.rs`.
+dopo un'azione la vede), `contesto` (vince l'ultima pubblicazione), `comandi` e
+`stato` (nell'ordine in cui partono). `list_views`, `list_commands` e
+`components_map`, letture senza ordine, escono senza corsia. La shell tiene
+l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
 
 ## La griglia
 
