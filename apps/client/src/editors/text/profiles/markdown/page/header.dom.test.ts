@@ -482,10 +482,69 @@ describe("la riga degli strumenti della testata", () => {
     };
   }
 
-  it("nasconde dalla fine ciò che non ci sta, e «⋯» lo offre e lo fa", () => {
+  /// L'osservatore delle misure come nel browser: chiama chi osserva un
+  /// elemento quando il layout gli ha dato una misura (`layout()`), mai per
+  /// un elemento fuori dal documento. Quello di happy-dom non chiama mai.
+  function fakeObserver(): { layout: () => void; restore: () => void } {
+    const original = globalThis.ResizeObserver;
+    const watched: Array<{ callback: ResizeObserverCallback; target: Element; observer: ResizeObserver }> = [];
+    class LayoutObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element): void {
+        watched.push({ callback: this.callback, target, observer: this as unknown as ResizeObserver });
+      }
+      unobserve(): void {}
+      disconnect(): void {
+        for (let i = watched.length - 1; i >= 0; i -= 1) if (watched[i]!.observer === (this as unknown as ResizeObserver)) watched.splice(i, 1);
+      }
+    }
+    globalThis.ResizeObserver = LayoutObserver as unknown as typeof ResizeObserver;
+    return {
+      layout: () => {
+        for (const { callback, target, observer } of [...watched]) {
+          if (target.isConnected) callback([{ target } as ResizeObserverEntry], observer);
+        }
+      },
+      restore: () => {
+        globalThis.ResizeObserver = original;
+      },
+    };
+  }
+
+  it("non misura la riga finché è fuori dal documento: la misura il primo layout", () => {
     const restore = fakeWidths(300);
+    const observer = fakeObserver();
+    // Ogni lettura di `scrollWidth` su una riga staccata: in WebKit rifà
+    // stile e layout di tutto il documento, per una misura che vale zero.
+    const proto = HTMLElement.prototype;
+    const faked = Object.getOwnPropertyDescriptor(proto, "scrollWidth")!;
+    let detachedReads = 0;
+    Object.defineProperty(proto, "scrollWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.classList.contains("cm-fub-page-tools") && !this.isConnected) detachedReads += 1;
+        return faked.get!.call(this) as number;
+      },
+    });
     try {
       const view = mount("---\nstato: aperto\n---\nTesto");
+      expect(detachedReads).toBe(0);
+      observer.layout();
+      const hidden = [...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].map((button) => button.hidden);
+      expect(hidden).toEqual([false, false, true, false]);
+    } finally {
+      Object.defineProperty(proto, "scrollWidth", faked);
+      observer.restore();
+      restore();
+    }
+  });
+
+  it("nasconde dalla fine ciò che non ci sta, e «⋯» lo offre e lo fa", () => {
+    const restore = fakeWidths(300);
+    const observer = fakeObserver();
+    try {
+      const view = mount("---\nstato: aperto\n---\nTesto");
+      observer.layout();
       const tools = [...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")];
       expect(tools.map((button) => [button.getAttribute("aria-label") ?? button.textContent, button.hidden])).toEqual([
         ["Aggiungi un'icona", false],
@@ -500,19 +559,23 @@ describe("la riga degli strumenti della testata", () => {
       items[0]!.click();
       expect(view.state.doc.toString()).toContain("description: \n---\nTesto");
     } finally {
+      observer.restore();
       restore();
     }
   });
 
   it("con posto per tutti non nasconde niente, e il menu ha solo le opzioni della pagina", () => {
     const restore = fakeWidths(600);
+    const observer = fakeObserver();
     try {
       const view = mount("---\nstato: aperto\n---\nTesto");
+      observer.layout();
       expect([...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].some((button) => button.hidden)).toBe(false);
       header(view).querySelector<HTMLButtonElement>(".cm-fub-page-more")!.click();
       expect(document.querySelectorAll("[role=menuitem]")).toHaveLength(0);
       expect(document.querySelectorAll("[role=menuitemcheckbox]").length).toBeGreaterThan(0);
     } finally {
+      observer.restore();
       restore();
     }
   });

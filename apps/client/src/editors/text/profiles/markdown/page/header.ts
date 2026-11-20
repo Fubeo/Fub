@@ -742,6 +742,12 @@ interface PageMenuAction {
 /// quando i pulsanti non ci stanno, si nascondono dalla fine (non «⋯», che
 /// resta l'ultimo) e il menu «⋯» li offre. Si rifà a ogni cambio di
 /// larghezza; un pulsante nascosto torna appena c'è posto.
+///
+/// La riga nasce fuori dal documento (la testata si costruisce prima che
+/// CodeMirror la monti): lì non ha larghezza, e la prima misura la fa
+/// l'osservatore, appena la riga ha un posto, prima del disegno. Misurarla
+/// staccata non serve e costa: WebKit, per `scrollWidth`, rifà prima lo stile e
+/// il layout di tutto il documento, a metà dell'aggiornamento dell'editor.
 export function fitTools(tools: HTMLElement, more: HTMLButtonElement, life: Lifetime): void {
   const fit = () => {
     const buttons = [...tools.querySelectorAll<HTMLButtonElement>(":scope > .cm-fub-page-tool")].filter((button) => button !== more);
@@ -750,8 +756,9 @@ export function fitTools(tools: HTMLElement, more: HTMLButtonElement, life: Life
       buttons[index]!.hidden = true;
     }
   };
-  fit();
-  if (typeof ResizeObserver !== "function") return;
+  const observable = typeof ResizeObserver === "function";
+  if (tools.isConnected || !observable) fit();
+  if (!observable) return;
   let width = -1;
   const observer = new ResizeObserver(() => {
     const next = tools.clientWidth;
