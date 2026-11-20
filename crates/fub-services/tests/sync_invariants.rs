@@ -444,6 +444,60 @@ fn concurrent_edit_delete_and_rename() {
     assert!(!conflicts.is_empty(), "routing mismatch must surface");
 }
 
+/// M2: un rinomina su un documento cancellato, che ha visto la
+/// cancellazione, lo fa rivivere e ne toglie la tombstone. Una scrittura
+/// concorrente di un'altra replica diventa una copia di conflitto, non una
+/// scrittura sepolta sotto la cancellazione di prima.
+#[test]
+fn a_rename_onto_a_deleted_document_clears_its_tombstone() {
+    let dir = temp_data_dir("rename-tombstone");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-tomb-user");
+    let mut a = Replica::new("a");
+    let mut b = Replica::new("b");
+    let created = a.op("notes/meta.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let seen = pull(&mut state, &auth, &b.id, &BTreeMap::new());
+    learn(&mut b, &seen.ops);
+
+    let deleted = a.op("notes/meta.md", OpKind::Delete, "");
+    let source = a.op("notes/fonte.md", OpKind::Create, "fonte");
+    let renamed = a.op(
+        "notes/fonte.md",
+        OpKind::Rename {
+            from: "notes/fonte.md".to_string(),
+            to: "notes/meta.md".to_string(),
+        },
+        "fonte",
+    );
+    let r = push(&mut state, &auth, &a.id, &[deleted, source, renamed]);
+    assert_eq!(r.ack.len(), 3, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/meta.md"),
+        "the destination lives again"
+    );
+    assert!(folded.tombstones.contains_key("notes/fonte.md"));
+
+    // B saw only the creation: its edit is concurrent with the rename.
+    let edit = b.op("notes/meta.md", OpKind::Update, "modifica di B");
+    let edit_id = edit.op_id.clone();
+    let r = push(&mut state, &auth, &b.id, &[edit]);
+    assert!(
+        r.ack.contains(&edit_id),
+        "kept as a version: {:?}",
+        r.conflicts
+    );
+    assert!(
+        r.conflicts
+            .iter()
+            .all(|conflict| !conflict.reason.contains("tombstone")),
+        "{:?}",
+        r.conflicts
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 4. Divergent clocks: ts_ms never decides; vv decides (settings LWW only).
 // ---------------------------------------------------------------------------
