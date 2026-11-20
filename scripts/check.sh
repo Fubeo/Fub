@@ -129,7 +129,7 @@ client_checks() { # client_checks completo|rapido
   else
     run "vitest dei file cambiati" bash -c "cd apps/client && npx vitest run --changed $BASE"
   fi
-  run "confine CodeMirror" node .github/scripts/check-codemirror-boundary.mjs
+  run "confine CodeMirror" bash -c 'node .github/scripts/check-codemirror-boundary.mjs --self-test && node .github/scripts/check-codemirror-boundary.mjs'
   run "confine ProseMirror" bash -c 'node .github/scripts/check-prosemirror-boundary.mjs --self-test && node .github/scripts/check-prosemirror-boundary.mjs'
   run "confine della Tabella" bash -c 'node .github/scripts/check-tabella-boundary.mjs --self-test && node .github/scripts/check-tabella-boundary.mjs'
   run "tema non scritto inline" bash -c 'node .github/scripts/check-inline-theme.mjs --self-test && node .github/scripts/check-inline-theme.mjs'

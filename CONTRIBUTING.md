@@ -69,7 +69,8 @@ npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
 ```
 
-Per la documentazione:
+Per la documentazione (il render dei Mermaid usa Mermaid e Playwright di
+`apps/client`, dopo il suo `npm ci`):
 
 ```bash
 node .github/scripts/check-doc-links.mjs
