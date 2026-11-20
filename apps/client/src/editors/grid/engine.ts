@@ -103,7 +103,7 @@ import {
 } from "./marks";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
-import { morphChildren, placeInOrder, syncAttributes } from "./dom-sync";
+import { morphChildren, placeInOrder, setAttributeIfChanged, syncAttributes } from "./dom-sync";
 import { currencyFormat, namedKey, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
   cellKey,
@@ -573,13 +573,18 @@ export class GridEngine {
   readonly #fixed: HTMLElement;
   /// La carta sotto le righe, coi suoi fili: dove una riga non è ancora
   /// disegnata si vede la griglia vuota, mai il bianco. È grande quanto il
-  /// riquadro e ci sta ferma; i fili delle colonne in `#paperRulesHost`. La
+  /// riquadro e ci sta ferma; i fili delle colonne in `#paperRulesHost`. Sta
+  /// nel riquadro prima del piano, non nel piano: vedi `structure.css`. La
   /// sua copia nelle fasce ferme: la testa, la colonna ferma e l'angolo.
   readonly #sheetPaper: HTMLElement;
   readonly #paperRulesHost: HTMLElement;
   readonly #paperTop: HTMLElement;
   readonly #paperLeft: HTMLElement;
   readonly #paperCorner: HTMLElement;
+  /// Le carte coi fili delle righe, che prendono la fase (`#placePaper`): la
+  /// carta del corpo e le due strisce della colonna ferma, non i fili delle
+  /// colonne che ci stanno accanto.
+  readonly #paperStrips: readonly HTMLElement[];
   /// Ciò che la carta ha scritto l'ultima volta (`#placePaper`): la misura,
   /// la fase dei fili delle righe e lo spostamento di quelli delle colonne.
   #paperPlaced = "";
@@ -888,7 +893,9 @@ export class GridEngine {
     this.#paperTop = part("grid-paper-top");
     this.#paperCorner = part("grid-paper-corner");
     this.#paperLeft = part("grid-paper-left");
-    this.#paperLeft.append(part("grid-paper-left-head", false), part("grid-paper-left-cells", false));
+    const leftStrips = [part("grid-paper-left-head", false), part("grid-paper-left-cells", false)];
+    this.#paperLeft.append(...leftStrips);
+    this.#paperStrips = [this.#sheetPaper, ...leftStrips];
     // La testa prima del corpo, per chi legge: `sticky` e `z-index` la tengono
     // sopra comunque. La sua carta sta sotto le sue righe, i suoi livelli
     // dopo.
@@ -903,8 +910,9 @@ export class GridEngine {
     this.#cellEditorFrame = part("grid-cell-editor-frame");
     this.#cellEditorField = part("grid-cell-editor-text", false);
     this.#cellEditorHost.append(this.#cellEditorFrame, this.#cellEditorField);
-    this.#plane.append(this.#sheetPaper, this.#head, this.#body, body, this.#paperLeft, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
-    this.#viewport.append(this.#plane);
+    this.#plane.append(this.#head, this.#body, body, this.#paperLeft, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
+    // La carta prima del piano, nel riquadro: `structure.css` dice perché.
+    this.#viewport.append(this.#sheetPaper, this.#plane);
     this.#objectsSummary = document.createElement("p");
     this.#objectsSummary.className = "grid-objects-summary sr-only";
     this.#objectsSummary.id = `grid-${options.surfaceId}-objects`;
@@ -2790,7 +2798,7 @@ export class GridEngine {
     // La carta: l'altezza di serie delle righe su cui ripete i fili, e la
     // misura delle intestazioni, per la sua copia nelle fasce ferme.
     this.#paperPeriod = commonSize(this.#rows, Math.round(DEFAULT_ROW_HEIGHT * zoom));
-    plane.setProperty("--grid-row", `${this.#paperPeriod}px`);
+    this.#viewport.style.setProperty("--grid-row", `${this.#paperPeriod}px`);
     this.#paperPlaced = "";
     plane.setProperty("--grid-head-h", `${this.#frame.columnHeader}px`);
     plane.setProperty("--grid-head-w", `${this.#frame.rowHeader}px`);
@@ -2916,13 +2924,14 @@ export class GridEngine {
     }
     const active = this.#active();
     if (this.#isVisiblePosition(active) && this.#findCell(active)) {
-      this.#viewport.setAttribute("aria-activedescendant", this.#cellId(active));
+      setAttributeIfChanged(this.#viewport, "aria-activedescendant", this.#cellId(active));
     } else {
       this.#viewport.removeAttribute("aria-activedescendant");
     }
     const name = this.#root.querySelector<HTMLElement>(".grid-cell-name");
     if (name) {
-      name.textContent = this.#isVisiblePosition(active) ? cellA1(active) : "";
+      const label = this.#isVisiblePosition(active) ? cellA1(active) : "";
+      if (name.textContent !== label) name.textContent = label;
     }
   }
 
@@ -3026,8 +3035,9 @@ export class GridEngine {
     placeInOrder(this.#head, head, this.#layers.top, (element) => element.classList.contains("grid-row"));
     placeInOrder(this.#body, bodyRows, null, (element) => element.classList.contains("grid-row"));
     // Un gruppo di righe vuoto non è un gruppo, per chi legge.
+    // Solo quando cambia: a ogni passo dello scorrimento conta ogni scrittura.
     for (const [group, rows] of [[this.#head, head], [this.#body, bodyRows]] as const) {
-      if (rows.length) group.setAttribute("role", "rowgroup");
+      if (rows.length) setAttributeIfChanged(group, "role", "rowgroup");
       else group.removeAttribute("role");
     }
     this.#placePaper(view);
@@ -3273,7 +3283,9 @@ export class GridEngine {
   /// dei fili delle righe dalla prima riga che si vede, i fili delle colonne
   /// spostati di quanto si è scorso di lato. Lo scrive il gestore dello
   /// scorrimento: fra lo scorrimento e lui, dove una riga non c'è ancora, i
-  /// fili sono quelli di un fotogramma prima.
+  /// fili sono quelli di un fotogramma prima. La carta sta nel flusso del
+  /// riquadro, prima del piano: il margine sotto, negativo quanto lei, non le
+  /// lascia occupare posto.
   #placePaper(view: PaperView): void {
     const frame = this.#frame;
     const { scrollTop, scrollLeft } = view;
@@ -3285,11 +3297,18 @@ export class GridEngine {
     const placed = `${width}|${height}|${phase}|${scrollLeft}|${this.#bands().left}`;
     if (placed === this.#paperPlaced) return;
     this.#paperPlaced = placed;
-    this.#sheetPaper.style.width = `${width}px`;
-    this.#paperLeft.style.width = `${Math.min(width, this.#bands().left)}px`;
-    for (const paper of [this.#sheetPaper, this.#paperLeft]) paper.style.height = `${height}px`;
-    for (const strip of [this.#sheetPaper, ...this.#paperLeft.children] as HTMLElement[]) strip.style.backgroundPositionY = `${phase}px`;
-    this.#paperRulesHost.style.transform = scrollLeft ? `translateX(${-scrollLeft}px)` : "";
+    const paper = this.#sheetPaper.style;
+    const write = (style: CSSStyleDeclaration, property: "width" | "height" | "marginBottom" | "backgroundPositionY", value: string) => {
+      if (style[property] !== value) style[property] = value;
+    };
+    write(paper, "width", `${width}px`);
+    write(paper, "height", `${height}px`);
+    write(paper, "marginBottom", `${-height}px`);
+    write(this.#paperLeft.style, "width", `${Math.min(width, this.#bands().left)}px`);
+    write(this.#paperLeft.style, "height", `${height}px`);
+    for (const strip of this.#paperStrips) write(strip.style, "backgroundPositionY", `${phase}px`);
+    const shift = scrollLeft ? `translateX(${-scrollLeft}px)` : "";
+    if (this.#paperRulesHost.style.transform !== shift) this.#paperRulesHost.style.transform = shift;
   }
 
   /// I fili delle colonne della carta, uno per colonna disegnata, sull'ultimo

@@ -9,7 +9,8 @@ import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
 import { fillTarget, openSpan, typingOpens, type GridHost } from "./engine";
 import { previewSizes, resizeLabelAt } from "./engine-geometry";
-import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, workbookHost, workbookMounted, written } from "./test-support";
+import structureCss from "../../theme/scrittoio/structure.css?raw";
+import { bytesHost, cellAt, frames, mounted, scrollWrites, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, workbookHost, workbookMounted, written } from "./test-support";
 
 vi.mock("../../platform/clipboard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../platform/clipboard")>()),
@@ -137,11 +138,11 @@ describe("GridEngine", () => {
   it("la carta sotto le righe ha un filo per ogni colonna disegnata, e la sua copia nelle fasce ferme", async () => {
     const { engine, host, viewport } = await mounted();
     const plane = host.querySelector<HTMLElement>(".grid-plane")!;
-    const paper = plane.querySelector<HTMLElement>(":scope > .grid-paper")!;
+    const paper = viewport.querySelector<HTMLElement>(":scope > .grid-paper")!;
     expect(paper.getAttribute("aria-hidden")).toBe("true");
     expect(plane.querySelector(".grid-head > .grid-paper-top")).not.toBeNull();
     expect(plane.querySelector<HTMLElement>(":scope > .grid-paper-left")!.hidden).toBe(false);
-    expect(plane.style.getPropertyValue("--grid-row")).toBe("28px");
+    expect(viewport.style.getPropertyValue("--grid-row")).toBe("28px");
     const rules = () => [...paper.querySelectorAll<HTMLElement>(".grid-rule-column")].map((rule) => rule.style.left);
     const columns = new Set([...host.querySelectorAll<HTMLElement>(".grid-cell")].map((cell) => cell.dataset.column));
     expect(rules()).toHaveLength(columns.size);
@@ -152,6 +153,80 @@ describe("GridEngine", () => {
     viewport.dispatchEvent(new Event("scroll"));
     expect(rules()).toContain(`${52 + 25 * 120 - 1}px`);
     expect(rules()).not.toContain(`${52 + 120 - 1}px`);
+    engine.destroy();
+  });
+
+  // IMP-6600: WebKitGTK dà un livello del compositore a un elemento
+  // `sticky` che scorre, e uno suo a ogni elemento posato che si dipinge dopo
+  // di lui nello stesso contesto e lo copre. La carta, `sticky`, sta sotto
+  // le celle: nel piano, ogni riga aggiunta o tolta ridipingeva migliaia di
+  // livelli a ogni passo. Sta nel riquadro, prima del piano, e non occupa
+  // posto né prende il puntatore.
+  it("la carta sta nel riquadro prima del piano, non dentro, senza occupare posto né prendere il puntatore", async () => {
+    const { engine, host, viewport } = await mounted();
+    const plane = host.querySelector<HTMLElement>(".grid-plane")!;
+    const paper = host.querySelector<HTMLElement>(".grid-paper")!;
+    expect(paper.parentElement).toBe(viewport);
+    expect(paper.nextElementSibling).toBe(plane);
+    expect(plane.querySelector(".grid-paper")).toBeNull();
+    expect(paper.style.height).toBe("300px");
+    expect(paper.style.marginBottom).toBe("-300px");
+    const rules = [...structureCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({
+      selectors: selectors!.replace(/\/\*[\s\S]*?\*\//g, "").split(",").map((selector) => selector.trim()),
+      body: body!,
+    }));
+    const of = (selector: string) => rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join("\n");
+    expect(of(".grid-paper")).toMatch(/position:\s*sticky/);
+    expect(of(".grid-paper")).toMatch(/pointer-events:\s*none/);
+    engine.destroy();
+  });
+
+  // IMP-6600: a ogni passo dello scorrimento la griglia riscriveva gli
+  // attributi dei gruppi di righe e del riquadro, anche uguali, e il nome
+  // della cella.
+  it("scorrendo in giù aggiunge e toglie solo le righe ai bordi, e su ciò che resta scrive solo la fase della carta", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells: { "0,0": "1", "29,1": "trenta", "45,2": "quarantasei" } }));
+    // Una cella scelta in fondo al riquadro, che resta sullo schermo: il suo
+    // segno e il suo nome restano mentre si scorre. Dalla tastiera, che
+    // porta il riquadro fin lì: un clic senza rilascio sarebbe un gesto in
+    // corso, che lo scorrimento allunga.
+    for (const key of [...Array<string>(29).fill("ArrowDown"), "ArrowRight"]) {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    }
+    await settle();
+    await frames();
+    const start = viewport.scrollTop;
+    expect(start).toBeGreaterThan(2 * 272);
+    const headerRow = host.querySelector(".grid-column-header-row");
+    expect(host.querySelector(".grid-cell-name")!.textContent).toBe("B30");
+    const drawn = () => [...host.querySelectorAll<HTMLElement>(".grid-rows > .grid-row")].map((row) => Number(row.dataset.row));
+    const first = drawn();
+
+    // Diciotto passi di mezza riga: nove righe entrano nel margine in fondo
+    // e nove escono da quello in cima. Della carta, ferma nel riquadro e
+    // fuori dal piano, cambia a ogni passo la fase dei fili; nient'altro si
+    // tocca.
+    const writes = await scrollWrites(host, viewport, 18, 14);
+    expect(viewport.scrollTop).toBe(start + 252);
+    const paperWrites = writes.kept.filter((write) => /^style \.grid-paper(-left-head|-left-cells)?$/.test(write));
+    expect(writes.kept.filter((write) => !paperWrites.includes(write))).toEqual([]);
+    expect(paperWrites.length).toBeLessThanOrEqual(3 * 18);
+    const last = drawn();
+    const entered = last.filter((row) => !first.includes(row)).sort((a, b) => a - b);
+    const left = first.filter((row) => !last.includes(row)).sort((a, b) => a - b);
+    expect(entered).toHaveLength(9);
+    expect(left).toHaveLength(9);
+    expect([...writes.added].sort((a, b) => a - b)).toEqual(entered);
+    expect([...writes.removed].sort((a, b) => a - b)).toEqual(left);
+
+    // Ciò che si vede è giusto: le celle, la carta, la scelta, le intestazioni.
+    expect(cellAt(host, 45, 2)!.textContent).toBe("quarantasei");
+    expect(cellAt(host, 29, 1)!.textContent).toBe("trenta");
+    expect(cellAt(host, 29, 1)!.classList.contains("active")).toBe(true);
+    expect(viewport.getAttribute("aria-activedescendant")).toBe(cellAt(host, 29, 1)!.id);
+    expect(host.querySelector(".grid-cell-name")!.textContent).toBe("B30");
+    expect(host.querySelector(".grid-column-header-row")).toBe(headerRow);
+    expect(host.querySelector(".grid-rows")!.getAttribute("role")).toBe("rowgroup");
     engine.destroy();
   });
 

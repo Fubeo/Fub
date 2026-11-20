@@ -248,6 +248,76 @@ export async function frames(count = 12): Promise<void> {
   for (let index = 0; index < count; index += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+/// Ciò che la griglia scrive nel documento mentre scorre (`scrollWrites`).
+export interface ScrollWrites {
+  /// Le scritture sui nodi che c'erano prima e restano, una per scrittura:
+  /// `attributo .classe` (o `testo`, o `figli` per i figli rifatti).
+  readonly kept: string[];
+  /// Le righe aggiunte e tolte, per indice.
+  readonly added: number[];
+  readonly removed: number[];
+}
+
+/// Scorre il riquadro in giù di `steps` passi da `px`, un passo per
+/// fotogramma come una rotella, e conta ciò che la griglia scrive in `host`.
+/// Un nodo che resta non riceve niente: la carta scorre con il foglio, le
+/// righe che restano non cambiano, e un attributo riscritto uguale è
+/// comunque un mutamento. Le righe si aggiungono e si tolgono ai bordi.
+export async function scrollWrites(host: HTMLElement, viewport: HTMLElement, steps: number, px: number): Promise<ScrollWrites> {
+  const before = new Set<Node>(host.querySelectorAll("*"));
+  const records: MutationRecord[] = [];
+  const observer = new MutationObserver((list) => records.push(...list));
+  observer.observe(host, { subtree: true, attributes: true, attributeOldValue: true, characterData: true, childList: true });
+  for (let step = 0; step < steps; step += 1) {
+    viewport.scrollTop += px;
+    viewport.dispatchEvent(new Event("scroll"));
+    await frames(1);
+  }
+  await settle();
+  await frames();
+  records.push(...observer.takeRecords());
+  observer.disconnect();
+  const owner = (node: Node): Element | null => (node instanceof Element ? node : node.parentElement);
+  const rowsOf = (nodes: NodeList) => [...nodes]
+    .filter((node): node is HTMLElement => node instanceof HTMLElement && node.classList.contains("grid-row"))
+    .map((row) => Number(row.dataset.row));
+  const name = (element: Element) => `.${String(element.className).split(" ")[0]}`;
+  // Il valore che ogni scrittura ha lasciato: il vecchio della scrittura
+  // dopo sullo stesso attributo, o quello di adesso.
+  const after = new Map<MutationRecord, string | null>();
+  const next = new Map<Node, Map<string, string | null>>();
+  for (const record of [...records].reverse()) {
+    if (record.type !== "attributes" || !record.attributeName) continue;
+    const values = next.get(record.target) ?? new Map<string, string | null>();
+    next.set(record.target, values);
+    const attribute = record.attributeName;
+    after.set(record, values.has(attribute) ? values.get(attribute)! : (record.target as Element).getAttribute(attribute));
+    values.set(attribute, record.oldValue);
+  }
+  const kept: string[] = [];
+  const added: number[] = [];
+  const removed: number[] = [];
+  for (const record of records) {
+    const target = owner(record.target);
+    if (record.type === "childList") {
+      added.push(...rowsOf(record.addedNodes));
+      removed.push(...rowsOf(record.removedNodes));
+      // I gruppi di righe cambiano figli ai bordi; un altro nodo che resta no.
+      const group = target?.classList.contains("grid-rows") || target?.classList.contains("grid-head");
+      if (target && !group && before.has(target) && target.isConnected) kept.push(`figli ${name(target)}`);
+      continue;
+    }
+    if (!target || !before.has(target) || !target.isConnected) continue;
+    // Uno stile o una classe riscritti uguali (CSSOM, `classList.toggle`):
+    // happy-dom li registra, Chromium e WebKit no. Un altro attributo
+    // riscritto uguale lo registrano tutti.
+    const attribute = record.attributeName;
+    if ((attribute === "style" || attribute === "class") && record.oldValue === after.get(record)) continue;
+    kept.push(`${attribute ?? "testo"} ${name(target)}`);
+  }
+  return { kept, added, removed };
+}
+
 /// I pezzi dei segni (`grid-motion.ts`) di un tipo che si vedono: quelli che
 /// non servono restano nascosti nel loro serbatoio.
 export const shownMarks = (host: HTMLElement, kind: string) =>

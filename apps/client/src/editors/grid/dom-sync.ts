@@ -19,6 +19,13 @@ export function syncAttributes(target: HTMLElement | SVGElement, source: HTMLEle
   if (target.style.cssText !== source.style.cssText) target.style.cssText = source.style.cssText;
 }
 
+/// Scrive l'attributo solo se cambia. Uno stesso valore riscritto è comunque
+/// un mutamento per il documento (lo vede un `MutationObserver`, e il motore
+/// può rifare lo stile di chi lo legge): a ogni passo dello scorrimento conta.
+export function setAttributeIfChanged(target: Element, name: string, value: string): void {
+  if (target.getAttribute(name) !== value) target.setAttribute(name, value);
+}
+
 /// Porta i figli di `target` a essere come quelli di `source`, tranne
 /// `keep` (che resta in fondo, dov'è). Se hanno la stessa forma (gli stessi
 /// nodi, con gli stessi tag) si aggiornano sul posto: attributi e testo,
