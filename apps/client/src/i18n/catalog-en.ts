@@ -2149,6 +2149,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "tabmenu.pinned": "Pinned",
 "tabmenu.stack": "Stack {stack}",
 "document.attachment_failed": "Attachment deposit failed: {reason}",
+"document.link_drop_failed": "The link to the note did not go into the document: {reason}",
 "document.anchor_none": "There is no heading or paragraph to link to here.",
 "document.anchor_copied": "Link copied: {link}",
 "document.viewer_unavailable": "Isolated viewer unavailable: {reason}",

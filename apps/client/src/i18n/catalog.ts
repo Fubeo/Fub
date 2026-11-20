@@ -2235,6 +2235,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "tabmenu.pinned": "Appuntata",
 "tabmenu.stack": "Pila {stack}",
 "document.attachment_failed": "Deposito dell'allegato non riuscito: {reason}",
+"document.link_drop_failed": "Il collegamento alla nota non è entrato nel documento: {reason}",
 "document.anchor_none": "Qui non c'è un titolo o un paragrafo a cui collegarsi.",
 "document.anchor_copied": "Link copiato: {link}",
 "document.viewer_unavailable": "Visualizzatore isolato non disponibile: {reason}",
