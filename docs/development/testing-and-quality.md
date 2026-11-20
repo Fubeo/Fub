@@ -379,16 +379,16 @@ appena qualcuno inserisce un item nel mezzo.
   contro il checkout); una cartella non dichiarata è rossa. Su una PR anche
   l'elenco delle copie da verificare viene dallo strumento della base, prima
   di eseguire codice della PR, e un job senza checkout lo unisce al suo.
-- Il gate di release è `.github/scripts/check-release-gate.mjs`: vuole verde
-  ogni job che un push su `main` fa girare, e aggiungere o rinominare un job
-  richiede di aggiornarlo.
+- Il gate di release (`.github/scripts/check-release-gate.mjs`) vuole verde ogni
+  job di un push su `main`: aggiungere o rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
   push più recente annulla la corsa precedente.
 - Un test noto come instabile ha un'issue aperta: rilancia una volta i job
   falliti; se un job resta rosso, indaga prima di dirlo instabile.
 - Una corsa: `gh run view <corsa> --json jobs`; il log di un job:
-  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto: `gh api
-  repos/Fubeo/Fub/actions/artifacts/<id>/zip` (`gh run download` ne rifiuta alcuni).
+  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto:
+  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip` (`gh run download` ne
+  rifiuta alcuni).
 
 ### Le baseline dal runner
 
