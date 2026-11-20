@@ -217,6 +217,44 @@ fn an_unauthenticated_commit_or_sync_is_always_401() {
     assert!(state.lock().vault_locks.is_empty(), "no vault lock taken");
 }
 
+/// A9: un client che tace più di `IO_SLICE` a metà testata o a metà corpo
+/// non riceve 400: la lettura si ritenta fino alla scadenza della fase.
+#[test]
+fn a_pause_longer_than_one_read_slice_is_not_a_bad_request() {
+    let dir = TempDir::new();
+    let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = {
+        let state = Arc::clone(&state);
+        let dir = dir.0.clone();
+        std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            serve(stream, Instant::now(), &state, &dir);
+        })
+    };
+    let pause = IO_SLICE + Duration::from_millis(400);
+    let mut client = TcpStream::connect(addr).unwrap();
+    client
+        .write_all(b"POST /v1/sync/invite HTTP/1.1\r\nHost: local")
+        .unwrap();
+    std::thread::sleep(pause);
+    client
+        .write_all(b"host\r\nContent-Length: 2\r\n\r\n{")
+        .unwrap();
+    std::thread::sleep(pause);
+    client.write_all(b"}").unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut bytes = Vec::new();
+    client.read_to_end(&mut bytes).unwrap();
+    server.join().unwrap();
+    let head = String::from_utf8_lossy(&bytes);
+    assert!(
+        head.starts_with("HTTP/1.1 401 "),
+        "the whole request was read and reached the route: {head}"
+    );
+}
+
 #[test]
 fn a_new_site_drops_an_orphan_isolation_sidecar() {
     use fub_services::publish::site;
