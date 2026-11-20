@@ -8,6 +8,9 @@
 // l'ora, una nei giorni di settembre in fondo al mese, una senza data; e
 // `note.property.set`, perché trascinare una nota ne riscrive la data.
 // `?base=tempo` (T34) apre la linea del tempo dalla richiesta alla consegna.
+// `?base=mappa` apre la vista Mappa sulle opere di otto musei del mondo, con
+// un fornitore di tessere di prova (`tiles.example.test`): le tessere le serve
+// il finto (`mapTile`) soltanto se la riga `map.tile-hosts` ammette il sito.
 //
 // Il finto non ha `fub-format-base`: questa scenografia ne fa le veci per le
 // quattro domande che la superficie fa (`parse`, `plan`, `derive`) e per i
@@ -40,6 +43,9 @@ interface Work {
   /// La richiesta, l'inizio della linea del tempo (`?base=tempo`); vuota o
   /// assente, la nota non ha la proprietà.
   richiesta?: string;
+  /// Le coordinate del museo, per la mappa (`?base=mappa`).
+  lat?: number;
+  lon?: number;
 }
 
 const WORKS: readonly Work[] = [
@@ -84,6 +90,26 @@ const TIMELINE_WORKS: readonly Work[] = [
   { name: "Madonna del cardellino", stato: "Prenotata", museo: "Uffizi", valore: 21000, richiesta: "", consegna: "" },
 ];
 
+/// Le opere della mappa: otto musei del mondo, coi loro gradi.
+const MAP_WORKS: readonly Work[] = [
+  { name: "Annunciazione", stato: "Arrivata", museo: "Uffizi", valore: 12000, consegna: "2026-03-02", lat: 43.768, lon: 11.255 },
+  { name: "La Gioconda", stato: "Prenotata", museo: "Louvre", valore: 90000, consegna: "2026-04-10", lat: 48.861, lon: 2.336 },
+  { name: "Las Meninas", stato: "In viaggio", museo: "Prado", valore: 64000, consegna: "2026-03-20", lat: 40.414, lon: -3.692 },
+  { name: "Notte stellata", stato: "Arrivata", museo: "MoMA", valore: 72000, consegna: "2026-02-28", lat: 40.761, lon: -73.978 },
+  { name: "Danae", stato: "In viaggio", museo: "Ermitage", valore: 38000, consegna: "2026-03-30", lat: 59.94, lon: 30.314 },
+  { name: "Paravento dei pini", stato: "Prenotata", museo: "Museo nazionale di Tokyo", valore: 25000, consegna: "2026-05-04", lat: 35.719, lon: 139.776 },
+  { name: "Il porto di Sydney", stato: "Arrivata", museo: "Art Gallery NSW", valore: 8800, consegna: "2026-02-20", lat: -33.869, lon: 151.217 },
+  { name: "Ritratto di Suzanne", stato: "In viaggio", museo: "MASP", valore: 14200, consegna: "2026-04-22", lat: -23.561, lon: -46.656 },
+];
+
+/// Il fornitore di tessere della mappa: il sito di prova che le scene
+/// ammettono o no con `?tessere=`.
+export const MAP_TILE_SITE = "tiles.example.test";
+const MAP_CONFIG: Json = {
+  lat_key: "lat", lon_key: "lon", label_key: "file.name", color_key: null,
+  provider: { kind: "raster", network: true, url_template: `https://${MAP_TILE_SITE}/{z}/{x}/{y}.png`, attribution: "Tessere di prova del banco" },
+};
+
 const docOf = (work: Work): string => `${FOLDER}${work.name}.md`;
 
 /// Le chiavi di una vista, nell'ordine in cui il file le scrive.
@@ -110,6 +136,12 @@ function initialViews(variant: BaseVariant): View[] {
     return [
       view([["name", "Linea del tempo"], ["type", "table"], ["fub", { view: "timeline", start: "richiesta", end: "consegna" }]]),
       view([["name", "Tabella"], ["type", "table"], ["order", ["file.name", "stato", "museo", "richiesta", "consegna"]]]),
+    ];
+  }
+  if (variant === "mappa") {
+    return [
+      view([["name", "Mappa"], ["type", "map"]]),
+      view([["name", "Tabella"], ["type", "table"], ["order", ["file.name", "stato", "museo", "valore", "consegna"]]]),
     ];
   }
   if (variant === "venti") {
@@ -358,13 +390,13 @@ export interface BaseFixtureHost {
 
 /// Quale Base: le tre viste delle scene (`1`), venti viste (`venti`), il
 /// calendario di agosto (`calendario`) o la linea del tempo (`tempo`).
-export type BaseVariant = "1" | "venti" | "calendario" | "tempo";
+export type BaseVariant = "1" | "venti" | "calendario" | "tempo" | "mappa";
 
 export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = "1"): BaseFixture {
   const views = initialViews(variant);
   const files: Record<string, string> = { [BASE_DOC]: serialize(views) };
   // Copie: il calendario e la linea del tempo spostano le date.
-  const list: Work[] = (variant === "calendario" ? CALENDAR_WORKS : variant === "tempo" ? TIMELINE_WORKS : WORKS).map((work) => ({ ...work }));
+  const list: Work[] = (variant === "calendario" ? CALENDAR_WORKS : variant === "tempo" ? TIMELINE_WORKS : variant === "mappa" ? MAP_WORKS : WORKS).map((work) => ({ ...work }));
   const noteText = (work: Work): string =>
     `---\nstato: ${work.stato}\nmuseo: ${work.museo}\nvalore: ${work.valore}\n${work.richiesta ? `richiesta: ${work.richiesta}\n` : ""}${work.consegna === "" ? "" : `consegna: ${work.consegna}\n`}---\n# ${work.name}\n`;
   for (const work of list) files[docOf(work)] = noteText(work);
@@ -397,7 +429,7 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
             view: entries.get("name"), view_type: type, columns, date_key: dateKeyOf(entries), start_key: spanKeyOf(entries, "start"), end_key: spanKeyOf(entries, "end"),
             column_labels: Object.fromEntries(columns.filter((key) => key in LABELS).map((key) => [key, LABELS[key]!])),
             required_props: ["stato", "museo", "valore", "consegna", ...(variant === "tempo" ? ["richiesta"] : [])], all_properties: false,
-            group: groupOf(entries), limit: null, map: null, create_defaults: {},
+            group: groupOf(entries), limit: null, map: type === "map" ? MAP_CONFIG : null, create_defaults: {},
             filters: entries.get("filters") ?? "all", sort: entries.get("sort") ?? [], order: entries.get("order") ?? [],
             summaries: summariesOf(entries).map((summary) => ({ key: summary.key, aggregate: summary.aggregate, expression: null, name: summary.name, label: summary.label })),
           };
@@ -407,7 +439,7 @@ export function baseFixture(host: () => BaseFixtureHost, variant: BaseVariant = 
           const asked = new Set((Array.isArray(query.rows) ? query.rows : []).map((row: { doc?: unknown }) => row.doc));
           const filter = entries.get("filters") ?? "all";
           const sort = (entries.get("sort") ?? []) as readonly { key: string; descending?: boolean }[];
-          const keys = ["file.name", "stato", "museo", "valore", "consegna"];
+          const keys = ["file.name", "stato", "museo", "valore", "consegna", ...(variant === "mappa" ? ["lat", "lon"] : [])];
           const chosen = list.filter((work) => asked.has(docOf(work)) && holds(filter, work));
           chosen.sort((a, b) => {
             for (const { key, descending } of sort) {

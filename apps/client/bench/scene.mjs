@@ -917,6 +917,46 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
     },
   },
+  // **La vista Mappa**, su `?base=mappa`: otto musei del mondo e un
+  // fornitore di tessere di prova. Con `tessere=0` la riga di macchina è
+  // vuota e la mappa dice «tessere non ammesse» col rimando alle
+  // Impostazioni; con `tessere=1` il sito è ammesso, «Attiva» è il consenso e
+  // le tessere arrivano dall'host finto.
+  {
+    id: "base-mappa-non-ammesse",
+    title: "Base: la Mappa offline, con le tessere non ammesse e il rimando alle Impostazioni",
+    query: "base=mappa&tessere=0",
+    prepare: openMap,
+  },
+  {
+    id: "base-mappa-consenso",
+    title: "Base: la Mappa offline con il sito ammesso, prima del consenso",
+    query: "base=mappa&tessere=1",
+    prepare: openMap,
+  },
+  {
+    id: "base-mappa-tessere",
+    title: "Base: la Mappa con le tessere arrivate dopo «Attiva»",
+    query: "base=mappa&tessere=1",
+    prepare: openMapTiles,
+  },
+  {
+    id: "base-mappa-tessere-stretta",
+    title: "Base: la Mappa con le tessere nella finestra minima, 800 px",
+    query: "base=mappa&tessere=1",
+    viewport: NOTE_NARROW,
+    prepare: openMapTiles,
+  },
+  {
+    id: "settings-tessere",
+    title: "Le preferenze: Privacy, i siti delle tessere delle mappe vuoti e OpenStreetMap con un clic",
+    query: "tessere=0",
+    prepare: async (page) => {
+      await page.click("#open-settings");
+      await page.waitForSelector('#settings-body .setting-row[data-setting-key="map.tile-hosts"] .setting-list-add');
+      await page.$eval('.setting-row[data-setting-key="map.tile-hosts"]', (row) => row.scrollIntoView({ block: "start" }));
+    },
+  },
   // **La linea del tempo** (T34), su `?base=tempo`: otto settimane dal 10
   // agosto 2026 (oggi il 19), le opere dalla richiesta alla consegna: una
   // tagliata a sinistra, una rovesciata, un punto, una con l'ora, una oltre i
@@ -5120,6 +5160,29 @@ async function openCalendar(page) {
 }
 
 /// Apre la linea del tempo di `?base=tempo` e aspetta le sue barre.
+/// Apre la Mappa di `?base=mappa`: i segnaposto disegnati e la riga sotto la
+/// mappa scritta (dopo la lettura degli host ammessi).
+async function openMap(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-map-marker").length ?? 0) > 0
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true"
+      && (pane?.querySelector(".base-map-enable") !== null || pane?.querySelector(".base-map-settings") !== null);
+  });
+}
+
+/// La Mappa con le tessere: «Attiva», poi le quattro tessere del livello 1.
+async function openMapTiles(page) {
+  await openMap(page);
+  await page.click(".pane.focus .base-map-enable");
+  await page.waitForFunction(() => document.querySelectorAll(".pane.focus .base-map-tiles image").length === 4);
+  await page.mouse.move(0, 0);
+}
+
 async function openTimeline(page) {
   await page.evaluate(async () => {
     const { openDocument } = await import("/src/state/document-controller.ts");

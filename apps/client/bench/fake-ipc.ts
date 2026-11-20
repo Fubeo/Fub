@@ -95,7 +95,7 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
-import { BASE_DOC, baseFixture } from "./base-fixture";
+import { BASE_DOC, baseFixture, MAP_TILE_SITE } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
@@ -372,7 +372,7 @@ const BASE_IN_NOTE = BASE_PARAM === "nota";
 /// `export.run` nel kernel, che il banco di solito non ha.
 const EXPORT_MENU = params.get("esporta-menu") === "1";
 const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
-const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
+const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo" || BASE_VARIANT === "mappa"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
       writeByCommand: async (doc, text) => {
@@ -1976,6 +1976,42 @@ const GRID_PREFERENCES: readonly SettingEntry[] = WORKBOOK_DOC === null && param
   source: GRID_SPEED_CHOSEN ? "machine" : "default",
 }];
 
+/// `?tessere=0|1`: la riga di macchina `map.tile-hosts` (Privacy), vuota o
+/// col sito di prova della mappa (`?base=mappa`). Senza il parametro la riga
+/// non c'è, e le altre scene restano com'erano.
+const TILES_PARAM = params.get("tessere");
+const MAP_TILE_SETTING: readonly SettingEntry[] = TILES_PARAM === null ? [] : [{
+  spec: {
+    key: "map.tile-hosts",
+    label: "Tessere delle mappe",
+    description: "I siti da cui la vista Mappa di una Base può scaricare le tessere, quando premi «Attiva». Vuota, le mappe restano offline e nessuna richiesta esce dal computer.",
+    group: "Privacy",
+    scope: "machine",
+    kind: { kind: "list", default: [] },
+    program_writable: false,
+  },
+  value: TILES_PARAM === "1" ? [MAP_TILE_SITE] : [],
+  source: TILES_PARAM === "1" ? "machine" : "default",
+}];
+
+/// Una tessera di prova, disegnata qui: un riquadro chiaro con la griglia e
+/// il suo indirizzo, come PNG. Le tessere sono immagini del fornitore e non
+/// seguono la luce dell'app.
+async function benchTile(url: string): Promise<ArrayBuffer> {
+  const [z, x, y] = new URL(url).pathname.split("/").slice(1).map((part) => Number.parseInt(part, 10));
+  const canvas = new OffscreenCanvas(256, 256);
+  const pen = canvas.getContext("2d")!;
+  pen.fillStyle = ((x ?? 0) + (y ?? 0)) % 2 === 0 ? "#dfeee2" : "#d6e6f2";
+  pen.fillRect(0, 0, 256, 256);
+  pen.strokeStyle = "#9bb5a3";
+  pen.lineWidth = 2;
+  pen.strokeRect(1, 1, 254, 254);
+  pen.fillStyle = "#4f6f5a";
+  pen.font = "28px sans-serif";
+  pen.fillText(`${z}/${x}/${y}`, 16, 44);
+  return (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer();
+}
+
 /// `?tipi=1`: il registro dei tipi del vault (`properties.types` di
 /// `crates/fub-kernel/src/properties.rs`), per le scene di Selezione e Stato
 /// (T9): la testata di `live=opzioni` e la Bacheca della Base per `stato`.
@@ -2683,7 +2719,10 @@ const options: Options = {
     // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
     ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
+  // Le tessere della mappa (`?base=mappa`): il finto le chiede solo dopo il
+  // controllo della riga `map.tile-hosts`, come l'host.
+  ...(TILES_PARAM === null ? {} : { mapTile: benchTile }),
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
