@@ -196,4 +196,4 @@ Le guardie trovano i file di `docs/` con `.github/scripts/doc-files.mjs`, che
 salta le cartelle nascoste: un vault aperto su `docs/` lascia i suoi dati in
 `docs/.fub/`, e quelli non sono documentazione. Per lo stesso motivo
 `check-doc-links.mjs` rifiuta un link che punta dentro una `.fub/`: il file
-c'è solo in quel vault locale (casi in `check-doc-links.mjs --self-test`).
+c'è solo in quel vault locale (casi nella sua autoprova, che gira a ogni lancio).

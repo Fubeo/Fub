@@ -188,13 +188,15 @@ function selfTest() {
   }
 }
 
+// L'autoprova gira a ogni lancio, come in `check-races` e `check-listeners`:
+// la CI e `scripts/check.sh` lanciano la guardia senza argomenti.
+try {
+  selfTest();
+} catch (error) {
+  console.error(`Autoprova di check-doc-links fallita: ${error.message}`);
+  process.exit(1);
+}
 if (process.argv.includes("--self-test")) {
-  try {
-    selfTest();
-  } catch (error) {
-    console.error(`Autoprova di check-doc-links fallita: ${error.message}`);
-    process.exit(1);
-  }
   console.log("Autoprova di check-doc-links riuscita.");
   process.exit(0);
 }
