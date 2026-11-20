@@ -496,10 +496,11 @@ export default defineConfig({
           // Il renderer delle viste dichiarative (`UiNode`) con il suo
           // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
           // importa: la specie di un file, i tipi dei trascinamenti, i tasti
-          // delle linguette, le icone delle pagine. Lo montano la shell, i
-          // pannelli e la resa delle note; cambia col protocollo delle viste,
-          // non con l'editor. Chiuso verso il basso come la resa.
-          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
+          // delle linguette, le icone delle pagine, il confronto dei payload
+          // (`kit/json-equal`, che usa anche l'editor ricco). Lo montano la
+          // shell, i pannelli e la resa delle note; cambia col protocollo delle
+          // viste, non con l'editor. Chiuso verso il basso come la resa.
+          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$|\/src\/kit\/json-equal\.ts$/.test(id)) return "ui-views";
           // L'ospite dei diagrammi Mermaid (`ui/mermaid.ts`): carica la
           // libreria con un `import()`, disegna, apre il menu e l'anteprima.
           // Lo montano la shell e la Live; cambia coi diagrammi, non con
