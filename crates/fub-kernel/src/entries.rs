@@ -164,7 +164,14 @@ const CEILING: usize = 10_000;
 /// `{"v":4,"op":"upsert","id":"a.md","entry":{…}}`. Generica sul solo campo
 /// che pesa, come lo era [`EntriesFile`]: la compattazione scrive
 /// `Snapshot { entries: &tabella }` senza copiare la tabella intera.
-#[derive(Clone, Serialize, Deserialize)]
+///
+/// È la forma di **scrittura**. Si legge con [`RecordRead`]: il tag interno,
+/// sotto il `flatten` di [`Record`], obbliga serde a costruire la riga due
+/// volte come albero generico (`Content`) prima del valore tipato, e su una
+/// fotografia di decine di megabyte era quasi tutto il costo dell'apertura
+/// (#523). La forma su disco è una sola; i tipi sono due.
+#[derive(Clone, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 #[serde(tag = "op", rename_all = "snake_case")]
 enum Mutation<E = BTreeMap<DocId, StoredEntry>> {
     /// Una voce nuova o cambiata: si mette al suo posto, coprendo ciò che c'era.
@@ -181,13 +188,48 @@ enum Mutation<E = BTreeMap<DocId, StoredEntry>> {
 
 /// Un record del file: la versione di schema e la mutazione.
 ///
-/// Generico come [`Mutazione`], per la stessa ragione: la compattazione
+/// Generico come [`Mutation`], per la stessa ragione: la compattazione
 /// serializza `Snapshot { entries: &tabella }` senza copiare la tabella.
-#[derive(Serialize, Deserialize)]
+///
+/// Solo per scrivere, come [`Mutation`]: in lettura il `flatten` raccoglie
+/// ogni chiave diversa da `v` in un albero `Content`, e la passa al tag
+/// interno, che ne fa un secondo. Si legge con [`RecordRead`]. Il
+/// `Deserialize` resta per i test, dove la lettura di prima è l'oracolo della
+/// parità.
+#[derive(Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
 struct Record<E = BTreeMap<DocId, StoredEntry>> {
     v: SchemaVersion,
     #[serde(flatten)]
     mutation: Mutation<E>,
+}
+
+/// La forma di **lettura** di un record: piatta, senza `flatten` né tag
+/// interno, perché serde la visiti in un colpo senza passare dal `Content`.
+///
+/// Legge gli stessi byte che [`Record`] scrive, chiavi in qualunque ordine.
+/// Come [`Record`], ignora le chiavi che non conosce. Quale campo serve lo
+/// decide `op`, in [`decode`]: un record a cui manca il suo campo si scarta,
+/// come prima si scartava per un errore di parse.
+#[derive(Deserialize)]
+struct RecordRead {
+    v: SchemaVersion,
+    op: Op,
+    #[serde(default)]
+    id: Option<DocId>,
+    #[serde(default)]
+    entry: Option<StoredEntry>,
+    #[serde(default)]
+    entries: Option<BTreeMap<DocId, StoredEntry>>,
+}
+
+/// Il nome di una [`Mutation`] su disco, cioè il valore di `op`.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Op {
+    Upsert,
+    Remove,
+    Snapshot,
 }
 
 /// I metadati di un documento che l'anagrafe si ricorda: ciò che il kernel
@@ -543,12 +585,16 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
 /// I byte di una coda, o niente. È la metà di [`load`] che non tocca il
 /// supporto, perché la fusione i byte ce li ha già in mano.
 ///
-/// `None` per tutto ciò che non è «una coda nostra, di questa versione»: un
-/// file che non comincia con `\n` (v3, o un JSON qualunque), una versione che
-/// non si conosce. Un file v4 con una riga rotta in coda o di domani **non** è
-/// `None`: quelle righe si scartano e il resto si applica — è la regola del
-/// §15.7, la verità non si rifiuta di aprire, si apre dicendo cosa non ha
-/// letto.
+/// `None` per un file che non è una coda nostra: non comincia con `\n` (v3, o
+/// un JSON qualunque). Una coda con una riga rotta in coda, o con record di
+/// un'altra versione, **non** è `None`: quelle righe si scartano e il resto si
+/// applica — è la regola del §15.7, la verità non si rifiuta di aprire, si
+/// apre dicendo cosa non ha letto. Una coda fatta *solo* di record di un'altra
+/// versione dà quindi una tabella vuota, che porta alla stessa rilettura del
+/// vault di un `None`.
+///
+/// Ogni riga si legge come [`RecordRead`], in un colpo, e non come
+/// [`Record`] (#523).
 fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
     // Conta anche la rilettura di `store` e della compattazione: la colonna
     // `n` del banco d'apertura le distingue dalla lettura di `open`.
@@ -566,7 +612,17 @@ fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
             // non è un record, e non si conta.
             continue;
         }
-        let Ok(record) = serde_json::from_slice::<Record>(line) else {
+        // Solo un oggetto. Il derive di una struct piatta accetta anche un
+        // array (`[5,"remove","a.md"]`, campi per posizione), che `Record`
+        // col suo `flatten` rifiutava: una riga così si scarta come prima.
+        let object = line
+            .iter()
+            .find(|b| !matches!(b, b' ' | b'\t' | b'\r'))
+            .is_some_and(|b| *b == b'{');
+        if !object {
+            continue;
+        }
+        let Ok(record) = serde_json::from_slice::<RecordRead>(line) else {
             // Una riga rotta — la coda troncata da un crash — o di una forma
             // che non si conosce: si scarta, e ciò che viene prima si è letto
             // tutto.
@@ -576,16 +632,19 @@ fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
             // Un record di domani: si salta come si salta una riga rotta.
             continue;
         }
-        match record.mutation {
-            Mutation::Upsert { id, entry } => {
-                table.insert(id, *entry);
+        match (record.op, record.id, record.entry, record.entries) {
+            (Op::Upsert, Some(id), Some(entry), _) => {
+                table.insert(id, entry);
             }
-            Mutation::Remove { id } => {
+            (Op::Remove, Some(id), ..) => {
                 table.remove(&id);
             }
-            Mutation::Snapshot { entries } => {
+            (Op::Snapshot, .., Some(entries)) => {
                 table = entries;
             }
+            // Un record a cui manca il campo del suo `op`: con `Record` era un
+            // errore di parse, e si scartava come una riga rotta.
+            _ => continue,
         }
     }
     Some(table)
@@ -1228,4 +1287,344 @@ mod tests {
     // fra l'una e l'altra ci sta una sessione intera —, e il banco è andato
     // dove la regola sta adesso: `anagrafe.rs`,
     // `una_data_che_puo_ancora_cambiare_non_finisce_in_anagrafe`.
+
+    /// L'oracolo della parità: la lettura **di prima**, record per record
+    /// attraverso `Record` (con `flatten` e il tag interno), tenuta qui perché
+    /// la lettura diretta di [`decode`] si possa confrontare con lei su ogni
+    /// ingresso.
+    fn decode_by_record(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
+        if !raw.starts_with(b"\n") {
+            return None;
+        }
+        let mut table = BTreeMap::new();
+        let mut rest = raw;
+        while let Some(end) = rest.iter().position(|b| *b == b'\n') {
+            let line = &rest[..end];
+            rest = &rest[end + 1..];
+            if line.is_empty() {
+                continue;
+            }
+            let Ok(record) = serde_json::from_slice::<Record>(line) else {
+                continue;
+            };
+            if record.v != SCHEMA_VERSION {
+                continue;
+            }
+            match record.mutation {
+                Mutation::Upsert { id, entry } => {
+                    table.insert(id, *entry);
+                }
+                Mutation::Remove { id } => {
+                    table.remove(&id);
+                }
+                Mutation::Snapshot { entries } => {
+                    table = entries;
+                }
+            }
+        }
+        Some(table)
+    }
+
+    /// Una voce ricca, diversa per ogni `the`: frontmatter con ogni specie di
+    /// valore JSON (e un ordine delle chiavi che non è quello alfabetico),
+    /// outline, link di ogni variante con e senza contesto, ancore, tag. Ogni
+    /// settima voce è un allegato: niente metadati, identità o timbro.
+    fn rich_entry(the: u64) -> StoredEntry {
+        if the.is_multiple_of(7) {
+            return entry(the * 3, 1_700_000_000_000 + the);
+        }
+        let mut frontmatter = serde_json::Map::new();
+        frontmatter.insert("zeta".into(), serde_json::Value::Null);
+        frontmatter.insert("bool".into(), serde_json::json!(the.is_multiple_of(2)));
+        frontmatter.insert("int".into(), serde_json::json!(the));
+        frontmatter.insert("neg".into(), serde_json::json!(-(the as i64) - 1));
+        frontmatter.insert("float".into(), serde_json::json!(the as f64 / 8.0 + 0.1));
+        frontmatter.insert(
+            "text".into(),
+            serde_json::json!(format!("virgolette \" a capo \n caffè ✓ 🦀 {the}")),
+        );
+        frontmatter.insert("list".into(), serde_json::json!([1, "due", null, [3.5]]));
+        frontmatter.insert(
+            "obj".into(),
+            serde_json::json!({"b": {"c": [true, false]}, "a": the}),
+        );
+        let span = |a: usize| fub_abi::model::Span::new(a, a + 5);
+        let target = match the % 3 {
+            0 => fub_abi::model::LinkTarget::Wiki {
+                page: format!("Nota {the}"),
+                heading: (the.is_multiple_of(2)).then(|| "Titolo".to_owned()),
+                block: (the % 4 == 1).then(|| "abc".to_owned()),
+            },
+            1 => fub_abi::model::LinkTarget::Url(format!("https://example.org/{the}")),
+            _ => fub_abi::model::LinkTarget::Path(format!("immagini/{the}.png")),
+        };
+        StoredEntry {
+            size: the * 11,
+            mtime: 1_700_000_000_000 + the,
+            change_stamp: (!the.is_multiple_of(3)).then_some(the * 13),
+            identity: (!the.is_multiple_of(5)).then_some(FileIdentity {
+                volume: 7,
+                file: the,
+            }),
+            fingerprint: (!the.is_multiple_of(4)).then(|| Revision::new(format!("{the:016x}"))),
+            metadata: Some(StoredMeta {
+                frontmatter: Frontmatter(frontmatter),
+                outline: vec![Heading {
+                    level: (the % 6 + 1) as u8,
+                    text: format!("Titolo «{the}»"),
+                    slug: format!("titolo-{the}"),
+                    span: span(0),
+                    explicit_anchor: (the % 2 == 1).then(|| "Mio-ID".to_owned()),
+                }],
+                links: vec![
+                    Link {
+                        target: target.clone(),
+                        embed: the.is_multiple_of(2),
+                        span: span(10),
+                        context: Some(format!("…vedi {the}…")),
+                    },
+                    Link {
+                        target,
+                        embed: false,
+                        span: span(20),
+                        context: None,
+                    },
+                ],
+                anchors: vec![Anchor {
+                    id: format!("blocco-{the}"),
+                    span: span(30),
+                    marker: span(33),
+                }],
+                tags: vec!["#Rust".to_owned(), format!("#tag/{the}")],
+            }),
+        }
+    }
+
+    /// Il file com'è scritto dal nostro writer: la fotografia (la forma di
+    /// [`compact`]) seguita da una coda di mutazioni (la forma di
+    /// [`serialize`]).
+    fn written(table: &BTreeMap<DocId, StoredEntry>, queue: &[Mutation]) -> Vec<u8> {
+        let mut raw = b"\n".to_vec();
+        raw.extend(
+            serde_json::to_vec(&Record {
+                v: SCHEMA_VERSION,
+                mutation: Mutation::Snapshot { entries: table },
+            })
+            .unwrap(),
+        );
+        raw.push(b'\n');
+        raw.extend(serialize(queue));
+        raw
+    }
+
+    /// Le due letture devono dare la stessa tabella, **ordine delle chiavi del
+    /// frontmatter compreso**: `==` sulla `Map` di `serde_json` non lo
+    /// guarda, la serializzazione sì.
+    fn assert_same_reading(raw: &[u8], case: &str) {
+        let direct = decode(raw);
+        let by_record = decode_by_record(raw);
+        assert_eq!(direct, by_record, "{case}: the two readings differ");
+        assert_eq!(
+            serde_json::to_string(&direct).unwrap(),
+            serde_json::to_string(&by_record).unwrap(),
+            "{case}: the two readings differ in the order of the keys"
+        );
+    }
+
+    /// **La lettura diretta legge come quella di prima** (#523), su tutto
+    /// ciò che il file può contenere: ciò che il nostro writer scrive, le
+    /// chiavi in un altro ordine, e ciò che il writer non scrive mai — una
+    /// riga troncata, record di un'altra versione, `op` che non si conosce,
+    /// campi che mancano, chiavi in più. L'oracolo è la lettura attraverso
+    /// `Record`, che è quella di prima; e per alcuni casi il valore atteso è
+    /// scritto, perché la verità non sia solo l'oracolo.
+    #[test]
+    fn the_direct_reading_decodes_like_the_record_one() {
+        // 1. La tabella generata: fotografia, poi upsert, remove e un nuovo
+        //    upsert di una voce tolta.
+        let table: BTreeMap<_, _> = (0..200)
+            .map(|the| {
+                (
+                    DocId::new(format!("cartella/nota {the:03}.md")),
+                    rich_entry(the),
+                )
+            })
+            .collect();
+        let queue = vec![
+            Mutation::Upsert {
+                id: DocId::new("cartella/nota 001.md"),
+                entry: Box::new(rich_entry(1_001)),
+            },
+            Mutation::Upsert {
+                id: DocId::new("nuova.md"),
+                entry: Box::new(rich_entry(5)),
+            },
+            Mutation::Remove {
+                id: DocId::new("cartella/nota 002.md"),
+            },
+            Mutation::Remove {
+                id: DocId::new("mai-esistita.md"),
+            },
+            Mutation::Upsert {
+                id: DocId::new("cartella/nota 002.md"),
+                entry: Box::new(rich_entry(2_002)),
+            },
+        ];
+        let raw = written(&table, &queue);
+        assert_same_reading(&raw, "the written file");
+        let mut expected = table.clone();
+        expected.insert(DocId::new("cartella/nota 001.md"), rich_entry(1_001));
+        expected.insert(DocId::new("nuova.md"), rich_entry(5));
+        expected.insert(DocId::new("cartella/nota 002.md"), rich_entry(2_002));
+        assert_eq!(decode(&raw), Some(expected), "the written file, read");
+
+        // 2. Le chiavi in un altro ordine, scritte a mano.
+        let reordered = concat!(
+            "\n",
+            r#"{"op":"snapshot","entries":{"b.md":{"mtime":2,"size":2}},"v":5}"#,
+            "\n",
+            r##"{"op":"upsert","entry":{"metadata":{"tags":["#x"],"frontmatter":{"z":1,"a":2}},"mtime":1,"size":1},"v":5,"id":"a.md"}"##,
+            "\n",
+            r#"{"id":"b.md","v":5,"op":"remove"}"#,
+            "\n",
+        );
+        assert_same_reading(reordered.as_bytes(), "keys in another order");
+        let only_a = decode(reordered.as_bytes()).expect("a queue of ours");
+        assert_eq!(only_a.keys().collect::<Vec<_>>(), [&DocId::new("a.md")]);
+        let meta = only_a[&DocId::new("a.md")].metadata.as_ref().unwrap();
+        assert_eq!(
+            meta.frontmatter.0.keys().collect::<Vec<_>>(),
+            ["z", "a"],
+            "the frontmatter keeps the order the file wrote"
+        );
+
+        // 3. I casi limite. Ognuno segue una fotografia buona, perché si veda
+        //    anche che la riga sbagliata non porta via le altre.
+        let good = concat!(
+            "\n",
+            r#"{"v":5,"op":"snapshot","entries":{"a.md":{"size":1,"mtime":1},"b.md":{"size":2,"mtime":2}}}"#,
+            "\n",
+        );
+        let edges: &[(&str, &str)] = &[
+            (
+                "a truncated line at the end",
+                r#"{"v":5,"op":"upsert","id":"c.md","entry":{"size":3,"mti"#,
+            ),
+            ("empty lines in between", "\n\n\n"),
+            (
+                "a record of version 4",
+                r#"{"v":4,"op":"upsert","id":"c.md","entry":{"size":3,"mtime":3}}"#,
+            ),
+            (
+                "a record of version 99",
+                r#"{"v":99,"op":"remove","id":"a.md"}"#,
+            ),
+            (
+                "a snapshot of version 99",
+                r#"{"v":99,"op":"snapshot","entries":{}}"#,
+            ),
+            (
+                "an unknown op",
+                r#"{"v":5,"op":"rename","id":"a.md","to":"z.md"}"#,
+            ),
+            (
+                "an upsert without entry",
+                r#"{"v":5,"op":"upsert","id":"a.md"}"#,
+            ),
+            (
+                "an upsert without id",
+                r#"{"v":5,"op":"upsert","entry":{"size":3,"mtime":3}}"#,
+            ),
+            ("a remove without id", r#"{"v":5,"op":"remove"}"#),
+            ("a snapshot without entries", r#"{"v":5,"op":"snapshot"}"#),
+            ("a record without op", r#"{"v":5,"id":"a.md"}"#),
+            ("a record without v", r#"{"op":"remove","id":"a.md"}"#),
+            (
+                "an op that is not a string",
+                r#"{"v":5,"op":3,"id":"a.md"}"#,
+            ),
+            ("a null id", r#"{"v":5,"op":"remove","id":null}"#),
+            (
+                "an entry of the wrong shape",
+                r#"{"v":5,"op":"upsert","id":"a.md","entry":{"size":"tre","mtime":3}}"#,
+            ),
+            (
+                "a duplicated field",
+                r#"{"v":5,"op":"remove","id":"a.md","id":"b.md"}"#,
+            ),
+            ("a line that is not JSON", "non è JSON"),
+            ("a JSON array", "[5,\"remove\",\"a.md\"]"),
+            ("a JSON array after spaces", " \t[5,\"remove\",\"a.md\"]"),
+            ("a JSON null", "null"),
+            ("a JSON string", "\"remove\""),
+            (
+                "an object after spaces",
+                " \t\r{\"v\":5,\"op\":\"remove\",\"id\":\"a.md\"} ",
+            ),
+            (
+                "an extra unknown key",
+                r#"{"v":5,"op":"upsert","id":"c.md","entry":{"size":3,"mtime":3,"extra":[1]},"extra":{"x":1}}"#,
+            ),
+            (
+                "a remove that also carries a well-formed entry",
+                r#"{"v":5,"op":"remove","id":"a.md","entry":{"size":3,"mtime":3}}"#,
+            ),
+            (
+                "a null entry on a remove",
+                r#"{"v":5,"op":"remove","id":"a.md","entry":null}"#,
+            ),
+        ];
+        for (case, line) in edges {
+            let raw = format!("{good}{line}\n");
+            assert_same_reading(raw.as_bytes(), case);
+            // La riga sbagliata in coda, senza `\n` finale: com'è dopo un crash.
+            let raw = format!("{good}{line}");
+            assert_same_reading(raw.as_bytes(), case);
+        }
+        // L'unica divergenza, dichiarata: una chiave in più che è di un altro
+        // `op` e ha la forma sbagliata. `Record` la ignorava; la lettura
+        // diretta la legge, fallisce e scarta la riga. Il nostro writer non la
+        // scrive mai, e il costo è una voce in meno, cioè una rilettura.
+        let foreign = format!(
+            "{good}{}\n",
+            r#"{"v":5,"op":"remove","id":"a.md","entries":5}"#
+        );
+        assert_eq!(
+            decode_by_record(foreign.as_bytes()).map(|t| t.len()),
+            Some(1),
+            "the record reading ignored the foreign key and removed a.md"
+        );
+        assert_eq!(
+            decode(foreign.as_bytes()).map(|t| t.len()),
+            Some(2),
+            "the direct reading discards the line, as it discards a broken one"
+        );
+
+        let truncated = format!("{good}{}", edges[0].1);
+        assert_eq!(
+            decode(truncated.as_bytes()).map(|t| t.into_keys().collect::<Vec<_>>()),
+            Some(vec![DocId::new("a.md"), DocId::new("b.md")]),
+            "the truncated line is discarded and the snapshot before it is kept"
+        );
+
+        // Un file che non comincia con `\n` non è una coda nostra; uno fatto
+        // solo di record di un'altra versione è una tabella vuota.
+        for raw in [
+            r#"{"v":5,"op":"snapshot","entries":{}}"#,
+            r#"{"version":99,"entries":{}}"#,
+            "",
+        ] {
+            let raw = raw.as_bytes();
+            assert_same_reading(raw, "no leading newline");
+            assert_eq!(decode(raw), None, "not a queue of ours");
+        }
+        let other_version =
+            "\n{\"v\":4,\"op\":\"snapshot\",\"entries\":{\"a.md\":{\"size\":1,\"mtime\":1}}}\n";
+        assert_same_reading(other_version.as_bytes(), "only another version");
+        assert_eq!(
+            decode(other_version.as_bytes()),
+            Some(BTreeMap::new()),
+            "a file made only of records of another version reads as an empty table"
+        );
+    }
 }
