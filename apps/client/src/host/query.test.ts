@@ -7,7 +7,7 @@ vi.mock("./ipc", () => ({
   api: { queryIndex },
 }));
 
-import { documentOutline, renderEmbed, renderPreview } from "./query";
+import { documentOutline, documentsByFileName, renderEmbed, renderPreview } from "./query";
 
 const rendered: RenderedDocument = { html: "<p>ciao</p>", parts: [] };
 const embedded: EmbedContent = { doc_id: "Nota.md", html: "<p>ritaglio</p>", parts: [] };
@@ -82,5 +82,47 @@ describe("i titoli di un documento", () => {
   it("rifiuta una risposta con discriminante diversa", async () => {
     queryIndex.mockResolvedValue({ kind: "render_embed", value: embedded });
     await expect(documentOutline("disegni/acqua.svg")).rejects.toThrow("atteso outline");
+  });
+});
+
+// IMP-2803: «Esami.base» cerca il file per nome intero, estensione compresa;
+// il campo dei nomi dell'indice è senza estensione e da solo non lo trova.
+describe("i documenti per nome di file", () => {
+  beforeEach(() => {
+    queryIndex.mockReset();
+  });
+
+  const answer = (...docs: string[]) => ({ kind: "documents", value: { items: docs.map((doc) => ({ doc })), offset: 0, total: docs.length } });
+
+  it("chiede il nome senza estensione e il predicato del file, e tiene solo il nome esatto", async () => {
+    queryIndex.mockResolvedValue(answer("Area/Esami/Esami.base", "Archivio/Esami vecchi.base"));
+    await expect(documentsByFileName("esami.BASE")).resolves.toEqual(["Area/Esami/Esami.base"]);
+    const [query] = queryIndex.mock.calls[0]!;
+    expect(query.kind).toBe("documents");
+    const literals = query.matching.any[0].all;
+    expect(literals[0].predicate).toMatchObject({ kind: "text", text: "esami", fields: ["name"], partial_last_term: false });
+    expect(literals[1]).toEqual({ negated: false, predicate: { kind: "file", extension: "BASE" } });
+  });
+
+  it("con una barra il testo è la coda del path", async () => {
+    queryIndex.mockResolvedValue(answer("Area/Esami/Esami.base", "Lavoro/Esami.base"));
+    await expect(documentsByFileName("Esami/Esami.base")).resolves.toEqual(["Area/Esami/Esami.base"]);
+    expect(queryIndex.mock.calls[0]![0].matching.any[0].all[0].predicate.text).toBe("Esami");
+  });
+
+  it("un nome con spazi e trattini resta intero davanti all'estensione", async () => {
+    queryIndex.mockResolvedValue(answer("Tesi/Capitolo 3 - Analisi.pdf.fubann"));
+    await expect(documentsByFileName("Capitolo 3 - Analisi.pdf.fubann")).resolves.toEqual(["Tesi/Capitolo 3 - Analisi.pdf.fubann"]);
+    const literals = queryIndex.mock.calls[0]![0].matching.any[0].all;
+    expect(literals[0].predicate.text).toBe("Capitolo 3 - Analisi.pdf");
+    expect(literals[1].predicate.extension).toBe("fubann");
+  });
+
+  it("un testo senza estensione non domanda niente", async () => {
+    await expect(documentsByFileName("Esami")).resolves.toEqual([]);
+    await expect(documentsByFileName("Esami.")).resolves.toEqual([]);
+    await expect(documentsByFileName(".base")).resolves.toEqual([]);
+    await expect(documentsByFileName("Report v1. 2")).resolves.toEqual([]);
+    expect(queryIndex).not.toHaveBeenCalled();
   });
 });

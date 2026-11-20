@@ -18,7 +18,7 @@ import { state } from "../../../state/store";
 import { createNote } from "../../../state/vault";
 import { notesByName } from "../../../host/query";
 import { t } from "../../../i18n/strings";
-import { pageName } from "../../../rules/mirrored";
+import { childName, pageName } from "../../../rules/mirrored";
 import { allCommands, displayBinding } from "../../../ui/commands";
 import { notify } from "../../../ui/notify";
 import { rememberCommand, startCommand } from "../../../ui/palette";
@@ -201,10 +201,26 @@ export async function runAction(action: ActionId, doc: string): Promise<void> {
   }
 }
 
+/// Se `doc` è la nota che il nome scritto nomina. Un nome semplice è il nome
+/// della pagina, in qualunque cartella; un path (`Aree/Eventi/Idea`) è quel
+/// path senza l'estensione, e una nota con lo stesso nome in un'altra cartella
+/// non è lei.
+function namesNote(doc: string, name: string): boolean {
+  const wanted = name.toLocaleLowerCase();
+  if (!name.includes("/")) return pageName(doc).toLocaleLowerCase() === wanted;
+  const base = childName(doc);
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  return `${doc.slice(0, doc.length - base.length)}${stem}`.toLocaleLowerCase() === wanted;
+}
+
 /// Maiusc-Invio su una ricerca senza risultati: crea la nota col nome scritto,
-/// nella cartella attiva. Un nome già preso apre la nota che c'è, e lo dice.
+/// nella cartella attiva; un path (`Aree/Eventi/Idea`) la crea lì, con le
+/// cartelle che mancano. Un nome già preso apre la nota che c'è, e lo dice.
 export async function createNamed(name: string): Promise<void> {
-  const taken = (await notesByName(name)).find((doc) => pageName(doc).toLowerCase() === name.toLowerCase());
+  // L'indice dei nomi conosce il nome della pagina, non il path: si chiede
+  // l'ultimo segmento e si confronta il path intero.
+  const taken = (await notesByName(childName(name))).find((doc) => namesNote(doc, name));
   if (taken) {
     await openNote(taken, "here");
     notify(t("launcher.create.taken", { name }), "info");

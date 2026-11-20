@@ -254,6 +254,41 @@ export async function notesByName(text: string, count = MAX_NAMES): Promise<stri
   return page.items.map((m) => m.doc);
 }
 
+/// L'estensione che un nome di file scritto porta in coda: `Esami.base` →
+/// `base`. Le stesse regole che il kernel chiede al predicato `file` (niente
+/// punti né barre, al più 32 caratteri), più niente spazi: `Report v1. 2` non
+/// è un'estensione.
+const WRITTEN_EXTENSION = /^(.+?)\.([^./\\\s]{1,32})$/u;
+
+/// **I documenti il cui file si chiama proprio così**, estensione compresa:
+/// `Esami.base`, `Spese e voti.xlsx`, `Archivio/Idea.md`. Con una barra il
+/// testo è la coda del path (`Esami/Esami.base`), senza è il nome del file in
+/// qualunque cartella; maiuscole e minuscole non contano.
+///
+/// [`notesByName`] non li trova: il campo `name` dell'indice è il nome della
+/// pagina, senza estensione, e il termine `base` non c'è. Qui la domanda al
+/// kernel è il nome senza estensione **e** il predicato `file` sull'estensione;
+/// il confronto esatto col testo si fa poi sugli id che tornano. Un testo senza
+/// estensione non domanda niente. I file che non sono documenti (un PDF,
+/// un'immagine) l'indice non li conosce: li dà l'anagrafe dei file.
+export async function documentsByFileName(text: string, count = MAX_NAMES): Promise<string[]> {
+  const written = text.trim().replace(/^\/+/, "");
+  const file = written.split("/").pop() ?? "";
+  const parts = WRITTEN_EXTENSION.exec(file);
+  const stem = parts?.[1]?.trim();
+  if (!parts || !stem) return [];
+  const query = nameQuery(stem, false);
+  query.any[0]!.all.push({ negated: false, predicate: { kind: "file", extension: parts[2]! } });
+  const page = await matchingDocuments(query, { offset: 0, limit: count }, "omit");
+  const wanted = written.toLocaleLowerCase();
+  return page.items
+    .map((m) => m.doc)
+    .filter((doc) => {
+      const id = doc.toLocaleLowerCase();
+      return id === wanted || id.endsWith(`/${wanted}`);
+    });
+}
+
 /// Le note dentro `folder` (e le sue sottocartelle) il cui nome combacia con
 /// `text`, dalla più pertinente; con `text` vuoto, le prime della cartella.
 /// È la domanda di `@` per le persone (K5): [`notesByName`] ristretta a una
