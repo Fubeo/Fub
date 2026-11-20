@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EditorSelection, EditorState, Prec, type ChangeSpec, type Extension } from "@codemirror/state";
 import { EditorView, type DecorationSet } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
 import { ensureSyntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import {
+  firstLineOf,
   freshBlocks,
+  headAfter,
   PREFIX_RENDER_FROM,
   renderMarkdown,
   renderMarkdownState,
@@ -420,5 +422,82 @@ describe("resa dell'inizio di un documento grande", () => {
     const { document, complete } = renderMarkdownStatePrefix(state, undefined, { document: partial.document, changes: state.changes() });
     expect(complete).toBe(true);
     expect(shape(document)).toEqual(shape(renderMarkdownState(stateOf(text))));
+  });
+});
+
+// Se una modifica può aprire un frontmatter dipende soltanto dalla prima riga:
+// la resa di una battuta più in basso non rilegge la sorgente dall'inizio, che
+// per la stringa incollata a pezzi di `sourceOf` vorrebbe dire ricomporla
+// tutta a ogni battuta.
+describe("la prima riga e il frontmatter a ogni battuta", () => {
+  /// La regola di prima, che rileggeva sempre la sorgente nuova.
+  function opensBefore(source: string): boolean {
+    const start = source.startsWith("﻿") ? 1 : 0;
+    const end = source.indexOf("\n", start);
+    return end !== -1 && source.slice(start, end).trim() === "---";
+  }
+
+  const CASES: readonly [string, string][] = [
+    ["senza frontmatter", "# Titolo\n\nTesto.\n"],
+    ["con frontmatter", "---\na: 1\n---\n\nTesto.\n"],
+    ["non chiuso", "---\na: 1\n\nTesto.\n"],
+    ["con BOM", "﻿---\na: 1\n---\nTesto.\n"],
+    ["BOM senza frontmatter", "﻿Testo\n---\n"],
+    ["CRLF", "---\r\na: 1\r\n---\r\nTesto.\r\n"],
+    ["spazi intorno", "  ---  \na: 1\n---\n"],
+    ["una riga sola", "---"],
+    ["vuoto", ""],
+    ["regola dopo il testo", "Testo\n---\n"],
+  ];
+  const EDITS: readonly ({ insert: string } | { remove: number })[] = [
+    { insert: "x" }, { insert: "\n" }, { insert: "-" }, { insert: "---\n" }, { insert: "﻿" }, { remove: 1 }, { remove: 3 },
+  ];
+
+  it("dà la risposta di prima per ogni modifica in ogni punto", () => {
+    for (const [name, text] of CASES) {
+      const was = firstLineOf(text);
+      expect(was.opens, name).toBe(opensBefore(text));
+      for (let at = 0; at <= text.length; at++) {
+        for (const edit of EDITS) {
+          const to = "remove" in edit ? Math.min(text.length, at + edit.remove) : at;
+          const next = text.slice(0, at) + ("insert" in edit ? edit.insert : "") + text.slice(to);
+          expect(headAfter(was, at, next).opens, `${name}, ${JSON.stringify(edit)} a ${at}`).toBe(opensBefore(next));
+        }
+      }
+    }
+  });
+
+  it("una battuta in un documento grande non rilegge la sorgente dall'inizio", () => {
+    const text = sectionsNote(400);
+    expect(text.length).toBeGreaterThan(30_000);
+    let state = stateOf(text);
+    let document = renderMarkdownState(state);
+    const at = text.indexOf("Testo **forte** 300") + "Testo".length;
+    const transaction = state.update({ changes: { from: at, insert: "a" } });
+    state = transaction.state;
+    // Le letture dall'inizio della sorgente intera: ognuna, su una stringa a
+    // pezzi, la ricompone tutta.
+    let fromStart = 0;
+    const length = state.doc.length;
+    const indexOf = String.prototype.indexOf;
+    const startsWith = String.prototype.startsWith;
+    const spies = [
+      vi.spyOn(String.prototype, "indexOf").mockImplementation(function (this: string, search: string, position?: number) {
+        if (this.length === length && (position ?? 0) <= 1) fromStart++;
+        return indexOf.call(this, search, position);
+      }),
+      vi.spyOn(String.prototype, "startsWith").mockImplementation(function (this: string, search: string, position?: number) {
+        if (this.length === length && (position ?? 0) <= 1) fromStart++;
+        return startsWith.call(this, search, position);
+      }),
+    ];
+    try {
+      document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(renderPatch(document)).not.toBeNull();
+    expect(fromStart).toBe(0);
+    expect(shape(document)).toEqual(shape(renderMarkdownState(state)));
   });
 });
