@@ -1,6 +1,6 @@
 ---
 name: progettista
-description: Designs the solution of one hard Fub task before anyone writes code, and writes it to a file. Read-only on the repository. Launched by /fub-orchestrator (before briefing a coder) or /fub-coder (before implementing) only when the plan or issue leaves a real gap (a complex part with many pitfalls it doesn't detail), or the task touches a contract, an on-disk format, concurrency or security, or its cause is unclear; never for a relatively simple task the plan already covers, nor for open-ended work.
+description: Designs the solution of one hard Fub task before anyone writes code, and writes it to a file. Read-only on the repository. Launched by /fub-orchestrator (before briefing a coder) or /fub-coder (before implementing) only when the plan or issue covers thinly a part that deserves more depth (a complex part with many pitfalls worked out in too little detail, even if nothing is strictly missing), or the task touches a contract, an on-disk format, concurrency or security, or its cause is unclear; never for a relatively simple task the plan already covers, nor for open-ended work.
 tools: Read, Grep, Glob, Bash, Write
 model: opus
 effort: high

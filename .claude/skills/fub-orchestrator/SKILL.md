@@ -93,13 +93,15 @@ Files of this skill:
      bench port and the machine block;
    - set the task's `Stato` to `[~] in corso · coder · base <sha>`.
 
-   **A hard task gets a design pass first, and only a hard one.** The plan or
-   the issue must leave a real gap: a complex part with many pitfalls
-   (interactions, failure modes, races) that it doesn't describe in enough
-   detail, a contract (ABI, WIT, IPC), an on-disk format, concurrency or
-   security, or a cause still unclear after a first look. When the work is
-   relatively simple and the plan or the issue already covers it well
-   enough, brief the coder directly: no design pass, no planner. Launch the
+   **A task that deserves more depth gets a design pass first, and only
+   then.** Call it when you notice that the plan or the issue covers thinly a
+   part that deserves more thought: a complex part with many pitfalls
+   (interactions, failure modes, races) worked out in too little detail, even
+   if nothing is strictly missing; or when the task touches a contract (ABI,
+   WIT, IPC), an on-disk format, concurrency or security, or its cause is
+   still unclear after a first look. When the work is relatively simple and
+   the plan or the issue already covers it well enough, brief the coder
+   directly: no design pass, no planner. Launch the
    [`progettista`](../../agents/progettista.md) agent
    (`subagent_type: "progettista"`, `run_in_background: true`,
    `effort: "xhigh"` for a contract, an on-disk format or security, its

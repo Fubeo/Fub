@@ -60,10 +60,11 @@ Shared files, in the orchestrator's skill:
    `Dipende da` is `[x]`; phases are not gates. Prefer the one that unblocks
    the most others. Set its `Stato` to `[~] in corso · base <sha>`, commit and
    push the plan branch.
-2. **Hard tasks get a design pass, and only those.** The session runs at
-   Opus effort medium. A task whose plan or issue leaves a real gap (a
-   complex part with many pitfalls it doesn't describe in enough detail), or
-   that touches a contract (ABI, WIT, IPC), an on-disk format, concurrency or
+2. **Tasks that deserve more depth get a design pass, and only those.** The
+   session runs at Opus effort medium. A task whose plan or issue covers
+   thinly a part that deserves more thought (a complex part with many
+   pitfalls worked out in too little detail, even if nothing is strictly
+   missing), or that touches a contract (ABI, WIT, IPC), an on-disk format, concurrency or
    security, or whose cause is still unclear after a first look, first goes
    to the [`progettista`](../../agents/progettista.md) agent
    (`subagent_type: "progettista"`, `run_in_background: true`,
