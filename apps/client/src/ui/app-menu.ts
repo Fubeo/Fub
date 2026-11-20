@@ -30,6 +30,7 @@ import { t } from "../i18n/strings";
 import type { ShellCommandId } from "./shell-keys.generated";
 import { openLifetime, type Teardown } from "./lifetime";
 import { openMenuSearch, type SearchableEntry } from "./app-menu-search";
+import { composingKey } from "../kit/ime";
 
 /// L'unica cosa che il menu chiede alla shell: esegui questo comando.
 ///
@@ -261,6 +262,7 @@ export function mountAppMenu(host: MenuHost): Teardown {
   }
 
   function onKey(e: KeyboardEvent): void {
+    if (composingKey(e)) return;
     if (e.key === "Escape") {
       if (menuOpen !== null) {
         e.preventDefault();

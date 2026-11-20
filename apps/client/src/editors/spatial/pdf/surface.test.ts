@@ -12,6 +12,7 @@ import structure from "../../../theme/scrittoio/structure.css?raw";
 import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { PDF_MODES } from "../modes";
 import { mountPdfSurface, type PdfPorts } from "./surface";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const bando = Object.values(
   import.meta.glob("../../../__fixtures__/annotations/bando.fubann", { query: "?raw", import: "default", eager: true }) as Record<string, string>,
@@ -271,6 +272,14 @@ describe("le pagine", () => {
     field().value = "3";
     key("0", {}, field());
     expect(parent.querySelector(".draw-zoom-level")!.textContent).toBe(zoom);
+    // Invio a metà di una composizione (le cifre larghe di un metodo
+    // d'immissione) conferma il candidato, non porta alla pagina; Esc non
+    // rimette il numero di prima.
+    key("Enter", WEBKIT_COMPOSING, field());
+    key("Escape", WEBKIT_COMPOSING, field());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sheet().getAttribute("aria-label")).toBe("Annotazioni di «Bando.pdf», pagina 1 di 3");
+    expect(field().value).toBe("3");
     key("Enter", {}, field());
     await vi.waitFor(() => expect(sheet().getAttribute("aria-label")).toBe("Annotazioni di «Bando.pdf», pagina 3 di 3"));
     expect(parent.querySelector<HTMLButtonElement>(".pdf-page-next")!.disabled).toBe(true);

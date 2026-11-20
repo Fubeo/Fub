@@ -11814,7 +11814,7 @@ export class CanvasEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented || this.#shellKeys.has(event)) return;
+    if (!this.#doc || event.defaultPrevented || composingKey(event) || this.#shellKeys.has(event)) return;
     // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
     if (this.#crop?.editor?.key(event)) {
       event.preventDefault();

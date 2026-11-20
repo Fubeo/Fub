@@ -15,6 +15,7 @@ import { animate, DURATION, type Motion } from "../../../moto";
 import { focusEditor } from "../../../state/document-controller";
 import type { Lifetime } from "../../../ui/lifetime";
 import { byId, follow } from "./dom";
+import { composingKey } from "../../../kit/ime";
 
 export type PeekSide = "sidebar" | "inspector";
 
@@ -237,7 +238,7 @@ export function mountDrawerPeek(lifetime: Lifetime): void {
       if (peeking === side && !hovered) leaveSoon();
     });
     lifetime.listen(panel, "keydown", (event) => {
-      if (peeking !== side || (event as KeyboardEvent).key !== "Escape" || event.defaultPrevented) return;
+      if (peeking !== side || (event as KeyboardEvent).key !== "Escape" || composingKey(event as KeyboardEvent) || event.defaultPrevented) return;
       event.preventDefault();
       close();
     });

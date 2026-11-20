@@ -16,6 +16,7 @@ import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
 import { createGroupLabel } from "../kit/group-label";
 import { createRow, markGlideHost, markLit, markPressed } from "../kit/row";
 import { createTile } from "../kit/tile";
+import { composingKey } from "../kit/ime";
 
 export interface MenuItem {
   label: string;
@@ -1254,6 +1255,9 @@ function renderMenu(
     // vanno alla voce dopo o prima di quella accesa (dalla prima, ↑ fa il giro
     // in fondo), Invio sceglie quella accesa.
     if (field !== null && e.target === field) {
+      // A metà di una composizione Invio e le frecce sono del metodo
+      // d'immissione: scelgono il candidato, non la voce.
+      if (composingKey(e)) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         if (buttons.length === 0) return;
@@ -1344,7 +1348,7 @@ function renderMenu(
       window,
       "keydown",
       (e) => {
-        if (e.key !== "Escape" || query === "" || !(e.target instanceof Node) || !menu.contains(e.target)) return;
+        if (e.key !== "Escape" || composingKey(e) || query === "" || !(e.target instanceof Node) || !menu.contains(e.target)) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         search("");
@@ -1842,6 +1846,7 @@ export function pickIcon(
   // ascolta non c'è mai stato.
   input.setAttribute("aria-label", t("icons.any"));
   input.addEventListener("keydown", (e) => {
+    if (composingKey(e)) return;
     if (e.key === "Enter" && input.value.trim()) apply(input.value.trim());
     else if (e.key === "Escape") close();
   });

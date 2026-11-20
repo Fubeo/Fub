@@ -21,6 +21,7 @@ import type { ActionRef, FieldValue, UiNode } from "../host/contract";
 import { pair, activeFields, LIST_PAGE, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 import { registerIcon } from "./icons";
+import { WEBKIT_COMPOSING } from "../kit/testing";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
 //
@@ -147,6 +148,14 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
     const { input, mandate } = reconciled(search("prima"), search("dopo"));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     expect(mandate).toEqual(["dopo"]);
+  });
+
+  it("l'Invio a metà di una composizione non manda l'azione: sceglie il candidato", () => {
+    const { input, mandate } = reconciled(search("prima"), search("dopo"));
+    for (const composing of [{ isComposing: true }, WEBKIT_COMPOSING]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, ...composing }));
+    }
+    expect(mandate).toEqual([]);
   });
 
   it("l'Invio manda l'azione nuova, non quella del primo disegno", () => {

@@ -217,7 +217,14 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   dialoghi, l'Esc delle modali (`trapFocus`) e dei riquadri, il lanciatore, il
   filtro dell'esplora, la testata della nota (titolo e proprietà), la
   tavolozza delle formule, le schede della lavagna, la Tabella, il foglio e la
-  Base, l'editor ricco e la sua barra di Trova, la concentrazione. La regola
+  Base, l'editor ricco e la sua barra di Trova, la concentrazione; e anche il
+  campo e la ricerca dei menu, la scelta dell'icona, i campi dei pannelli del
+  disegno (nome, descrizione, ricerca, proprietà, titolo), il numero di
+  pagina del PDF, la nota delle annotazioni, l'intestazione dell'editor
+  ricco, il testo di una forma del foglio, la ricerca e l'ispettore della
+  lavagna, i campi della Base, i colori e lo spazio «Esporta in PDF», la
+  barra a nastro, l'Esc dei cassetti, dello sguardo laterale, delle
+  diapositive, del menu dell'app e dell'anteprima dei link. La regola
   sta in un punto solo, `composingKey` del kit (`kit/ime.ts`): vale
   `isComposing` e anche il codice 229, perché WebKit chiude la composizione
   prima del keydown del tasto che la conferma. Un gestore di tasti non legge

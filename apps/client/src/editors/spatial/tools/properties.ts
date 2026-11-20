@@ -48,6 +48,7 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import { composingKey } from "../../../kit/ime";
 
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId =
@@ -1530,6 +1531,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   const writes = (line: Line): boolean => line.spec.kind === "number" || line.spec.kind === "paint" || line.spec.kind === "text";
 
   life.listen(element, "keydown", (event) => {
+    if (composingKey(event)) return;
     const line = lineOf(event.target);
     const plain = !event.ctrlKey && !event.metaKey && !event.altKey;
     if (event.key === "Escape" && plain && !event.shiftKey) {

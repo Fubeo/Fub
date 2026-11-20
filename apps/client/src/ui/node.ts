@@ -1974,7 +1974,7 @@ function actionsOfField(
   // per essere ascoltato. Solo dove Invio non vuol già dire altro — in un
   // `<textarea>` è un a capo, su una casella di spunta è la spunta.
   if (acceptEnter(control)) {
-    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter");
+    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter" && !composingKey(e as KeyboardEvent));
   }
 }
 

@@ -64,6 +64,7 @@ import { ensureDrawIcons } from "../icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { MAX_LAYER_NAME } from "./layers";
 import { cleanName, NAME_MAX } from "./naming";
+import { composingKey } from "../../../kit/ime";
 
 /// Oltre questo numero di righe l'albero disegna solo quelle che si vedono.
 export const VIRTUAL_AFTER = 500;
@@ -858,7 +859,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   };
 
   life.listen(field, "keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== "Escape") return;
+    if ((event.key !== "Enter" && event.key !== "Escape") || composingKey(event)) return;
     event.preventDefault();
     event.stopPropagation();
     finishRename(event.key === "Enter", true);
@@ -905,6 +906,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   life.listen(search, "input", scheduleFilter);
   life.listen(kindSelect, "change", applyFilter);
   life.listen(search, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "ArrowDown" || event.key === "Enter") {
       applyFilter();
       enterTree();

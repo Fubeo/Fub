@@ -11,6 +11,7 @@ import { blockId, printBlocks } from "./paginate/measure";
 import type { BlockSource, Scheduler } from "./paginate/slices";
 import { defaultProfile } from "./profile";
 import { FOLLOW_QUIET_MS, openExportSpace, type ExportSpaceOptions } from "./space";
+import { WEBKIT_COMPOSING } from "../kit/testing";
 
 /// Ogni fetta subito: lo spazio non aspetta i tempi morti.
 const NOW: Scheduler = {
@@ -118,6 +119,9 @@ describe("lo spazio «Esporta in PDF»", () => {
     second.click();
     expect(space.view).toBe("adatta");
 
+    // Esc a metà di una composizione (in un campo dello spazio) non lo chiude.
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, ...WEBKIT_COMPOSING }));
+    expect(root.isConnected).toBe(true);
     root.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(root.isConnected).toBe(false);
     expect(workspace.inert).toBe(false);

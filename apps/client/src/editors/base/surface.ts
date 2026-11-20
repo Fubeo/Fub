@@ -1570,7 +1570,7 @@ export function mountBaseSurface(
     viewport.addEventListener("focus", paint);
     viewport.addEventListener("blur", paint);
     viewport.addEventListener("keydown", (event) => {
-      if (!picked || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (!picked || event.altKey || event.ctrlKey || event.metaKey || composingKey(event)) return;
       const several = selectsSeveral(pickedRanges());
       const field = event.target instanceof HTMLInputElement && event.target.type === "text" ? event.target : null;
       if (event.key === "Escape" && field) {
@@ -1776,7 +1776,7 @@ export function mountBaseSurface(
               }
             })();
           };
-          input.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
+          input.addEventListener("keydown", (event) => { if (composingKey(event)) return; if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
           input.addEventListener("blur", () => { if (input.isConnected) commit(); });
         }));
       }

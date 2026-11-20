@@ -12,6 +12,7 @@ import { parseProjection, type Block, type Page, type Para, type RunningText } f
 import { mountRichRibbon } from "./ribbon";
 import { fillRunning, readRunning } from "./running";
 import { PX_PER_PT, SheetDesk, sheetPlan } from "./sheets";
+import { WEBKIT_COMPOSING } from "../../kit/testing";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -107,6 +108,9 @@ describe("sul foglio", () => {
     document.getSelection()!.addRange(range);
     button(t("rich.hf.page")).click();
     expect(area.querySelector(".rich-token")?.getAttribute("data-field")).toBe("page");
+    // Esc a metà di una composizione scarta il candidato: la riga resta aperta.
+    area.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, ...WEBKIT_COMPOSING }));
+    expect(document.querySelector(".rich-running")).not.toBeNull();
     // Esc chiude e scrive, con un passo solo.
     area.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(document.querySelector(".rich-running")).toBeNull();

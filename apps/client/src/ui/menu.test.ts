@@ -29,6 +29,7 @@ import { setMotionDriver, setMotionPreference } from "../moto";
 import { createManualDriver } from "../moto/driver";
 import { closeContextMenu, menuKeyFoot, menuKeys, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
 import { openLifetime } from "./lifetime";
+import { WEBKIT_COMPOSING } from "../kit/testing";
 import { mountFrameIcons } from "../shells/scrittoio/icons";
 import { channels, contrast } from "../theme/contrast";
 import sheetLight from "../theme/scrittoio/sheet-light.css?raw";
@@ -464,6 +465,22 @@ describe("il selettore di icona", () => {
     // della **prima** finestrella, che nessuno aveva mai sciolto — e mangiava
     // il linguetta di una superficie che non c'era più.
     expect(tab().defaultPrevented).toBe(false);
+  });
+
+  it("a metà di una composizione Invio ed Esc nel campo restano al metodo d'immissione", () => {
+    const choices: (string | null)[] = [];
+    pickIcon(clickEvent(), (i) => choices.push(i));
+    const input = document.querySelector<HTMLInputElement>("#icon-picker input")!;
+    input.value = "★";
+    for (const name of ["Enter", "Escape"]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...WEBKIT_COMPOSING }));
+    }
+    vi.runAllTimers();
+    expect(choices).toEqual([]);
+    expect(document.getElementById("icon-picker")).not.toBeNull();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    vi.runAllTimers();
+    expect(choices).toEqual(["★"]);
   });
 
   it("scegliere un'emoji chiude e riporta la scelta una volta sola", () => {
@@ -1602,6 +1619,23 @@ describe("il menu col campo, il titolo e il piede dei tasti", () => {
     // come nel prototipo, e Invio la sceglie.
     expect(labels()).toEqual(["Duplica", "Copia il link al blocco", "Elimina"]);
     expect([...menu.querySelectorAll(".menu-items .menu-lit")]).toEqual([rows()[0]]);
+    key(input, "Enter");
+    expect(runs).toEqual(["Duplica"]);
+  });
+
+  it("a metà di una composizione Invio ed Esc nel campo sono del metodo d'immissione", () => {
+    const input = open();
+    write(input, "dup");
+    for (const name of ["Enter", "Escape"]) {
+      for (const composing of [{ isComposing: true }, WEBKIT_COMPOSING]) {
+        const e = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...composing });
+        input.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(false);
+      }
+    }
+    expect(runs).toEqual([]);
+    expect(input.value).toBe("dup");
+    expect(document.getElementById("context-menu")).not.toBeNull();
     key(input, "Enter");
     expect(runs).toEqual(["Duplica"]);
   });

@@ -45,6 +45,7 @@ import { readingOrder, type ReadingEntry } from "../reading-order";
 import { boardSources, sourceBar, sourceNeeds, type BoardSource, type SourceFacts, type SourcePiece } from "../sources";
 import { rawFields, setRawField, type RawProblem } from "./raw-node";
 import { ensureCanvasIcons } from "./icons";
+import { composingKey } from "../../../kit/ime";
 
 /** L'id della linguetta «Schede»: l'ispettore lo ricorda. */
 export const CARDS_PANEL_ID = "canvas.cards";
@@ -1755,6 +1756,7 @@ function rawTable(dom: Document, life: Lifetime, edit: CanvasEditPort, node: Can
         const key = field.key;
         life.listen(input, "change", () => commit(key, input));
         life.listen(input, "keydown", (event) => {
+          if (composingKey(event)) return;
           if (event.key === "Enter") {
             event.preventDefault();
             commit(key, input);

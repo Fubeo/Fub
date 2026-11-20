@@ -52,6 +52,7 @@ import {
   type SplitControl,
   type Text,
 } from "./types";
+import { composingKey } from "../ime";
 
 /// La classe della forma comune: la radice porta `kit-ribbon`, ogni pezzo
 /// `kit-ribbon-<pezzo>` accanto alla classe col prefisso. La forma e la pelle
@@ -886,6 +887,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     };
     life.listen(input, "change", commit);
     life.listen(input, "keydown", (event) => {
+      if (composingKey(event)) return;
       if (event.key === "Enter") {
         event.preventDefault();
         commit();
@@ -1259,6 +1261,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     });
     lifetime.listen(container, "keydown", (event) => {
       const target = event.target as HTMLElement;
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
         if (container.classList.contains(own("popup-group"))) return;
         event.preventDefault();

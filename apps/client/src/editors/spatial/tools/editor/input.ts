@@ -23,6 +23,7 @@ import { rovingToolbar } from "../../../../kit/toolbar-keys";
 import { DRAW_SCALE_LIMITS, ZOOM_SETTLE_MS } from "./constants";
 import type { EditorContext } from "./context";
 import { sign, union } from "./helpers";
+import { composingKey } from "../../../../kit/ime";
 
 /// Quanto girano due dita prima che il foglio giri con loro, in gradi: un
 /// pizzico per lo zoom non gira il foglio per sbaglio.
@@ -450,6 +451,7 @@ export function installInput(ctx: EditorContext): void {
     commit("draw.action.title", { op: "meta", title: value === "" ? null : value });
   });
   life.listen(titleInput, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       titleInput.blur();
