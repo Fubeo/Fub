@@ -167,10 +167,7 @@ impl HttpResponse {
     /// Il valore del primo header con questo nome, confrontato **senza
     /// distinzione di maiuscole** come vuole HTTP.
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|h| h.name.eq_ignore_ascii_case(name))
-            .map(|h| h.value.as_str())
+        header(&self.headers, name)
     }
 
     /// Il `Content-Type`, se c'è. È il campo che **non** sta nel record: sta
@@ -190,6 +187,16 @@ impl HttpResponse {
             .then(|| self.header("location"))
             .flatten()
     }
+}
+
+/// Il valore del primo header di nome `name`, confrontato **senza distinzione
+/// di maiuscole** come vuole HTTP: la regola sta qui sola, per la risposta
+/// intera e per quella troppo grande.
+fn header<'a>(headers: &'a [HttpHeader], name: &str) -> Option<&'a str> {
+    headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(name))
+        .map(|h| h.value.as_str())
 }
 
 /// Perché [`fetch_limited`](crate::traits::HostNetwork::fetch_limited) non ha
@@ -231,10 +238,7 @@ impl LimitedFetchError {
     /// per [`Failed`](LimitedFetchError::Failed), che una risposta non l'ha.
     pub fn content_type(&self) -> Option<&str> {
         match self {
-            LimitedFetchError::TooLarge { headers, .. } => headers
-                .iter()
-                .find(|h| h.name.eq_ignore_ascii_case("content-type"))
-                .map(|h| h.value.as_str()),
+            LimitedFetchError::TooLarge { headers, .. } => header(headers, "content-type"),
             LimitedFetchError::Failed(_) => None,
         }
     }
