@@ -37,7 +37,9 @@ Lo stile passa da quattro strade, e nessun'altra:
   dei documenti ammette uno `style` soltanto sulle celle e soltanto per
   l'allineamento, e lo riscrive così (`element.style.textAlign`); lo stesso
   fanno le marche di Scrittura e della superficie ricca, che un `toDOM` di
-  ProseMirror scriverebbe con `setAttribute`;
+  ProseMirror scriverebbe con `setAttribute`, e il contenitore dove Mermaid
+  misura: `cssomStyleChildren()` di `ui/stylesheets.ts` fa diventare CSSOM lo
+  `style` che Mermaid scrive con `setAttribute` sul `<div>` che vi monta;
 - **il nonce della pagina**, per chi i suoi stili li mette in un `<style>` e un
   foglio costruito non lo sa usare: CodeMirror (`EditorView.cspNonce`) e
   Mermaid, che durante il disegno mette il foglio del diagramma in un
