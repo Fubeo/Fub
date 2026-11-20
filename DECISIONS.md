@@ -104,6 +104,61 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-21 · K6 · D9 (formati, script e plug-in del motore) resta aperta:
+  è una scelta di dipendenze e di porte verso codice di terzi, che
+  `CLAUDE.md` lascia al manutentore. Raccomandazione (a): «Formati del
+  disegno» come sottocomponente acceso di serie, lo script compilato dentro,
+  i plug-in WebAssembly fuori finché un'ADR non li ammette. T23 e T26 la
+  aspettano · nessuna decisione presa.
+- 2026-11-21 · K6 · D12 decisa dall'orchestratore il 2026-11-21: (a), perché
+  i caratteri aggiunti stanno nel vault, in
+  `.fub/plugins/fub.draw/librerie/caratteri/`, e si ritrovano su un altro
+  computer; il motore non scandisce mai le cartelle del sistema
+  (`fornisci_caratteri` c'è già, e il motore non tocca il disco, T28).
+- 2026-11-21 · K6 · D11 decisa dall'orchestratore il 2026-11-21: (a), perché
+  le librerie dell'utente stanno in `.fub/plugins/fub.draw/librerie/`, nella
+  cartella del plug-in che `docs/reference/on-disk-layout.md` prevede e che
+  `HostApi` (`data_*`) già serve; il vault resta intero e il motore non
+  tocca il disco.
+- 2026-11-21 · K6 · D10 decisa dall'orchestratore il 2026-11-21: (b), perché
+  la ricetta in `<metadata>` (spazio dei nomi del motore, con l'impronta
+  dell'elemento) lascia un solo file, un SVG che si vede ovunque, e un
+  elemento cambiato fuori da Fub perde solo la sua ricetta, dicendolo. La
+  scrive la patch 0009 `ricetta-per-elemento` (T27; nel piano del
+  2026-11-05 era la 0005, ma 0003–0007 sono già prese).
+- 2026-11-21 · K6 · D8 decisa dall'orchestratore il 2026-11-21: (a), perché
+  la parità chiede raster e 3D, e da famiglie pigre non occupano memoria
+  finché non si usano (il `Budget` di K3 li libera).
+- 2026-11-21 · K6 · D7 decisa dall'orchestratore il 2026-11-21: (a), perché
+  gli insiemi di tasti del motore da scegliere in Impostazioni › Scorciatoie
+  costano poco e chiudono una riga della mappa (`shortcutSet.read`).
+- 2026-11-21 · K6 · D6 decisa dall'orchestratore il 2026-11-21: (a), perché
+  le 12 righe escluse (5 link dell'Aiuto del motore, 2 voci della barra
+  contestuale mobile, 5 dell'aggancio libero dei pannelli) non portano
+  funzioni del disegno, e farle vorrebbe dire un'interfaccia che non è
+  quella di Fub; ognuna resta nella mappa col suo perché.
+- 2026-11-21 · K6 · D5 decisa dall'orchestratore il 2026-11-21: (a), perché
+  «Penna» è il nome che ogni editor vettoriale dà alla penna di Bézier; la
+  penna a mano libera di Fub (oggi `draw.tool.pen`, «Penna») diventa
+  «Inchiostro», nello stesso gruppo. «Penna e dita» (lo stilo) non cambia
+  nome.
+- 2026-11-21 · K6 · D4 decisa dall'orchestratore il 2026-11-21: (a), perché
+  lo spazio di lavoro nella banda, accanto a `#status-mode`, è lo stesso
+  gesto della modalità che Scrittoio 2 ha già messo lì
+  (`status-mode-name`, `status-mode-arrow`); resta anche in ≡.
+- 2026-11-21 · K6 · D3 decisa dall'orchestratore il 2026-11-21: (a), perché
+  uno spazio in più confonde: con il componente acceso il Completo è quello
+  del motore, con il componente spento resta il Completo nativo di oggi
+  (`draw.workspace` = `full`, di serie). La superficie compatta dentro una
+  nota (ADR 0248) resta nel Semplice e non carica il Completo.
+- 2026-11-21 · K6 · D2 decisa dall'orchestratore il 2026-11-21: (a), perché
+  i 43 pannelli diventano sezioni delle schede dell'ispettore, più
+  «Pannelli ›» in ≡: è il disegno di Scrittoio 2, e a 264 px
+  (`--inspector-w`) le schede non possono essere 43.
+- 2026-11-21 · K6 · D1 decisa dall'orchestratore il 2026-11-21: (a), perché
+  nel Completo chi viene dal motore ritrova i suoi tasti, e i tasti globali
+  di Fub (Ctrl+P, Ctrl+K, Ctrl+W, Ctrl+Tab) vincono sempre, così Fub non
+  perde i suoi tasti di finestra.
 - 2026-11-15 · manutenzione · La revisione del merge: `erase_along` su un
   tratto di pagina o di cella non taglia (la pagina che la scheda mostra e il
   riquadro della cella li sa solo la resa) e scrive la nota `ink_kept` con la

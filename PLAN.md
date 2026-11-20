@@ -1,6 +1,7 @@
 # Piano: K6 · Il disegno completo sul motore vettoriale
 
-Branch: piano/k6-disegno-completo
+Branch: piano/k6-aggiornato (nato da `piano/k6-disegno-completo`, PR bozza
+#313, con main a `eebe644b7` unito dentro)
 Obiettivo: nei disegni (`.svg`) lo spazio di lavoro Completo diventa
 l'editor vettoriale intero. Si raggiungono in Fub tutte le funzioni del
 motore del disegno (VectorCraft alla revisione `cfb30d81`):
@@ -42,18 +43,26 @@ Fuori scope:
 - il buco `#view-panel-stats`, che è di Scrittoio 2;
 - le 12 righe escluse, ognuna con il suo perché (D6).
 Assunzioni: A1–A16 qui sotto. Le ha scelte il pianificatore il 2026-11-05,
-senza il manutentore. D1–D12 aspettano le sue risposte e non bloccano le
-prime ondate.
-Ondate: T1 T2 T4 | T28 T6 | T3 | T5 T30 | T7 T27 | T8 | T9 | T10 | T11 | T12 T13 T14 T15 T16 T17 T18 T19 T20 T21 T22 T23 T26 | T24 T25 | T29
+senza il manutentore. D1–D8 e D10–D12 le ha decise l'orchestratore il
+2026-11-21 (`DECISIONS.md`); D9 resta al manutentore.
+Ondate: T1 T2 T4 | T28 | T3 T27 | T5 T30 | T6 | T7 | T8 | T9 | T10 | T11 | T12 T13 T14 T15 T16 T17 T18 T19 T20 T21 T22 T23 T26 | T24 T25 | T31 | T29
 
-Quando parte che cosa:
-- tutto parte con K5 fuso in main, che porta con sé K2 e K3;
-- T6 e i task grafici partono dopo il sì al prototipo e con Scrittoio 2 fuso;
-- T27 parte dopo la risposta a D10, T30 dopo D11, T23 e T26 dopo D9, T24
-  dopo D8 (vedi «Chi aspetta chi»). Se una risposta tarda, il task scivola
-  in un'ondata dopo, e chi lo aspetta con lui;
+Quando parte che cosa (aggiornato il 2026-11-21):
+- K5, K3, K2, Scrittoio 2 e N6 sono in main (`eebe644b7`): nessun task
+  aspetta più un piano, salvo P1 per T31;
+- prima i task che non sono grafici e non aspettano niente: T1, T2, T4,
+  T28, T3, T27, T5 e T30. Partono subito;
+- T6–T10 sono grafici e aspettano il sì al prototipo. T11 e tutti i task
+  di famiglia dipendono da T6–T10, quindi lo aspettano anche loro, senza
+  esserlo;
+- T23 e T26 aspettano anche D9; T31 aspetta P1; T29 viene per ultimo. Se
+  una di queste risposte tarda, il task scivola in un'ondata dopo, e chi lo
+  aspetta con lui;
+- la riga «Aspetta:» di ogni task, sotto il suo «Stato:», dice che cosa
+  aspetta oltre ai task di «Dipende da»: `prototipo`, `D9`, `P1` o
+  `niente`;
 - T7, T8, T9 e T10 vanno uno alla volta: toccano gli stessi file della
-  cornice (`editors/spatial/strings.ts`, `completo/index.ts`,
+  cornice (`editors/spatial/strings/completo.ts`, `completo/index.ts`,
   `apps/client/bench/fake-ipc.ts` e `scene.mjs`, e T7–T9 anche
   `crates/fub-features/src/draw.rs`);
 - T11 va da solo: le altre famiglie ne dipendono;
@@ -62,11 +71,142 @@ Quando parte che cosa:
   T15, T12 e T17, T22 e T23, T22 e T25, T23 e T26 (A13).
 
 Prototipo: `PLAN-ui/disegno-completo.html`; approvato: —. Lo mostra
-all'utente l'orchestratore, con D1–D12, e scrive qui la data del sì.
+all'utente l'orchestratore, con D9, e scrive qui la data del sì. La sua
+cornice è quella di Scrittoio 2 del 2026-11-05: prima del sì va rifatta
+sulla cornice di oggi (vedi «Aggiornamento del 2026-11-21», punto 14).
 
 ## Modifiche
 
-nessuna
+- 2026-11-21 · il piano riparte dal codice di `integra/editor-3`
+  (`eebe644b7`): percorsi, nomi, contratto, patch, scenario del banco,
+  regole dell'ambiente e ondate corretti; T31 scritto; D1–D8 e D10–D12
+  decise dall'orchestratore · K5, K3, Scrittoio 2 e N6 sono fusi, e il
+  codice è cambiato dal 2026-11-05 · T1, T3–T8, T27–T31, Regole, Cancello
+
+## Aggiornamento del 2026-11-21
+
+Il piano è stato scritto il 2026-11-05, prima che K5, K3, Scrittoio 2 e N6
+entrassero in main. Il 2026-11-21 è stato confrontato con il codice di
+`integra/editor-3` a `eebe644b7`, unito nel ramo del piano. Dove piano e
+codice non tornavano ha vinto il codice. Le correzioni sono già nei task;
+qui ognuna dice com'era, com'è e perché. Il resto del piano (le sezioni
+Fonti, Assunzioni e Differenze) racconta il 2026-11-05: dove contraddice
+questa sezione, vale questa.
+
+1. **La base.** Prima: K5, K3 e Scrittoio 2 da fondere, ramo
+   `piano/k6-disegno-completo`. Dopo: in main ci sono K5 (#300), K3
+   (#295), K2 (#290), Scrittoio 2 (#309) e N6 (#302); il ramo è
+   `piano/k6-aggiornato`, con main a `eebe644b7` dentro. Perché: nessun
+   task aspetta più un piano, salvo P1 per T31.
+2. **I numeri delle patch.** Prima: 0003 (T28), 0004 (T30), 0005 (T27).
+   Dopo: 0008 `nessuna-radice-e-tabelle` (T28), 0009 `ricetta-per-elemento`
+   (T27), 0010 `librerie-dai-byte` (T30). Perché: in
+   `vendor/vectorcraft/patches/` ci sono già 0001–0007 (0003–0007 sono
+   correzioni dei test del motore), e nelle ondate nuove T27 viene prima di
+   T30. Cambiano Regole, Differenze, D10, T3, T27, T28, T29, T30 e il
+   modello.
+3. **Il contratto di T4.** Prima: `DrawingError::NoMemory` e
+   `UnknownTool`; `enabled` da aggiungere; gli eventi `Key`, `Text` e
+   `Ime` «accanto ai puntatori»; `src/sessione.rs`. Dopo: un tipo
+   `DrawingError` non c'è. `NoMemory`, `NoPreview` e `UnknownTool` sono
+   varianti nuove di `DrawingRefusal`. `DrawingCommandInfo` ha già
+   `enabled`, e si aggiunge solo `disabled_reason`. Gli eventi vanno in un
+   campo nuovo con `serde(default)` di `DrawingGesture`, accanto a
+   `events`. Le sovrapposizioni vanno in `DrawingPreview`, accanto a
+   `marquee`. `DrawingPhase::Cancel` c'è già. `DrawingTool` è `Copy` e di
+   sole unità, quindi `Engine { id }` toglie `Copy` e cambia il mirror. I
+   file di K5 sono `src/sincronia.rs` e `src/motore.rs`, e i comandi IPC
+   stanno in `crates/fub-app/src/lib.rs`. Perché: è il contratto che K5 ha
+   fuso (`crates/fub-abi/src/drawing.rs`).
+4. **Il test dei gesti di T4.** Prima: `cargo test -p fub-disegno --test
+   gesti`. Dopo: `--test gesti_motore` (nuovo), più i `gesti_forme`,
+   `gesti_selezione` e `gesti_testo` di K5. Perché: un test `gesti` non
+   esiste; `tests/gesti/` è l'aiuto comune.
+5. **Lo scenario del banco WebView.** Prima: C1. Dopo: V1, con C1 che
+   resta verde. Perché: C1 c'è già (i componenti spenti, con le soglie
+   `C1.solo-note.spegnibili` e `C1.tutto.spegnibili`) ed è l'ultimo
+   dell'elenco `order` di `run.mjs`.
+6. **La regola «non all'avvio» di T5.** Prima: da scrivere. Dopo: c'è già
+   (`NOT_AT_STARTUP` in `apps/client/vite.config.ts` copre ogni chunk
+   `drawing-*` e ogni modulo di `editors/spatial/`, e scrive
+   `switchable-chunks.json`). T5 aggiunge solo le regole sulle importazioni
+   da `completo/` e fra famiglie. Perché: K2 l'ha portata. Questa parte di
+   T5 è fatta.
+7. **Le finestre di T6.** Prima: `kit/form.ts` «da `ui/form-dialog.ts`».
+   Dopo: `kit/form.ts` resta nuovo, ma compone `kit/field.ts`,
+   `number-field.ts`, `quantity.ts` e `row.ts`, che ci sono. Si sa anche
+   che `ui/form-dialog.ts` sta nel chunk `drawing-panels`. Perché:
+   Scrittoio 2 ha portato quei pezzi del kit, e il prototipo usa già
+   `kit-number-*`.
+8. **I testi della cornice.** Prima: `editors/spatial/strings.ts`. Dopo:
+   `editors/spatial/strings/completo.ts` (nuovo), che la radice
+   `strings.ts` ricompone come fa con gli altri otto moduli della cartella.
+   Perché: `strings.ts` oggi è solo la radice.
+9. **La banda di T7.** Prima: `draw.workspace` da estendere e il pulsante
+   del prototipo. Dopo: `draw.workspace` c'è (`full`, `simple`, di serie
+   `full`), e gli id nuovi si aggiungono. Il pulsante segue
+   `#status-mode` (`status-mode-name` e `-arrow`). La superficie compatta
+   dell'ADR 0248 non entra negli spazi. Perché: Scrittoio 2 ha messo la
+   modalità nella banda, e la 0248 ha portato il disegno dentro le note.
+10. **La colonna e le opzioni di T8.** Prima: `toolbar.ts` «che S2 T22
+    rifà». Dopo: `toolbar.ts` è già rifatto. La fila usa
+    `kit/options-bar.ts`, e `chrome/pen-options.ts` resta per la penna di
+    Fub. `chrome/drawer.ts` cade da solo nel chunk
+    `drawing-editor-parts`. Perché: sono i file di oggi in `chrome/`.
+11. **L'ADR di T1.** Prima: «il primo numero libero». Dopo: oggi è 0250;
+    la nuova cita anche la 0248. Perché: in `docs/decisions/` ci sono la
+    0248 e la 0249.
+12. **T31.** Prima: un task da scrivere in «Modifiche» se P1 tardava.
+    Dopo: «T31 · Le righe del PDF» è scritto in fondo al piano, aspetta P1,
+    e T29 lo aspetta. Perché: P1 non è in main.
+13. **L'ambiente, il cancello e la CI.** Prima: il blocco dell'ambiente
+    del server (`~/.local/opt`, `TMPDIR` di K6, `FONTCONFIG_FILE`), il
+    merge con il sì dell'utente, e la CI di macOS. Dopo: il «Coder brief»
+    di `CLAUDE_DEVICE.md`, con la coda dei controlli pesanti e la porta
+    del banco da 1451. Il merge lo fa l'orchestratore come dice
+    `CLAUDE.md`, e la CI completa è Linux e Windows. Perché: sono le regole
+    di oggi (ADR 0245 per macOS).
+14. **Il prototipo.** Prima: la cornice di Scrittoio 2 presa il
+    2026-11-05 (`fe4d84c4`). Dopo: il file `PLAN-ui/disegno-completo.html`
+    non è cambiato, ma la sua cornice non è più quella dell'app:
+    - la tavolozza è passata dal blu al verde: `--accent` `#2b56cc` →
+      `#006e46`, `--bg` `#e8edf5` → `#e7efe9`. Sono cambiati 83 token del
+      giorno e 79 della notte, e ce ne sono di nuovi (`--shadow-sheet`,
+      `--shadow-pop`, `--bar-tray`, …);
+    - i testi sono più grandi: `--text-reading` da 17 a 18 px,
+      `--content-width` da 68ch a 58ch, la banda e i suoi pulsanti da
+      `--text-xs` a `--text-sm`;
+    - la colonna è un vassoio: `kit-rail` con `--bar-tray` e
+      `--radius-sheet`, i gruppi in rilievo, e senza `kit-rail-rule`;
+    - le schede dell'ispettore sono a segmenti, piene e senza l'accento;
+    - i menu usano `kit/row.ts`, senza `menu-body`;
+    - in `skin.css` ci sono 2524 selettori che il prototipo non ha, e
+      435 del prototipo non ci sono più.
+
+    Il prototipo va rifatto sulla cornice di oggi prima di mostrarlo
+    per il sì. I pezzi nuovi di K6 restano quelli. Perché: il sì vale
+    per ciò che si vedrà, e la regola del prototipo vuole lo stesso
+    pixel.
+15. **Le ondate.** Prima: i grafici mescolati ai non grafici, e D1–D12
+    attese. Dopo: prima T1, T2, T4, T28, T3, T27, T5 e T30, che non
+    aspettano niente. Poi T6–T10 dopo il sì al prototipo, e T11 e le
+    famiglie dopo di loro. T23 e T26 aspettano anche D9, T31 aspetta P1, e
+    T29 chiude. Ogni task ha una riga «Aspetta:». Perché: lo chiede il
+    coordinatore il 2026-11-21, e D1–D8 e D10–D12 sono decise.
+16. **La mappa.** Non cambia. Il motore è ancora a `cfb30d81`, e la mappa
+    rigenerata è uguale: 1551 righe, 105 «fub», 12 escluse, e le righe di
+    ogni task sono quelle.
+
+Non cambiano, controllati nel codice:
+
+- i nomi di K3: `Pigro`, `Cache`, `Budget::svuota_tutto`,
+  `Lavori::in_sottofondo`, `SpecMotore`, `importa`, `Posto`, `Effetto`,
+  `Modulo::da_schema`;
+- l'API `Tool` e `Overlay` del motore;
+- `confine_process` e `fornisci_caratteri`;
+- `.fub/plugins/<id>/` con i `data_*` di `HostApi`;
+- `crates/fub-host/src/drawing.rs`, `crates/fub-features/src/componenti.rs`
+  e `crates/fub-disegno/src/comandi.rs`.
 
 ## Dal prototipo
 
@@ -88,7 +228,7 @@ percorsi sono sotto `apps/client/src/`, se non è scritto altro.
 | `colonna`, `colonna-gruppo`, `colonna-penna`: 6 gruppi, 15 caselle, «Tutti gli strumenti» in fondo | `kit/tool-rail.ts` e `editors/spatial/tools/editor/chrome/rail.ts` (ci sono); gruppi e caselle da `editors/spatial/completo/colonna.ts` (nuovo) | T8 |
 | `tendina-penna`: il gruppo che si apre dalla casella | `kit/tool-rail.ts`, `kit/popover.ts`, `kit/list.ts` (ci sono) | T8 |
 | `colonna-cassetto`, `cassetto`: «Tutti gli strumenti», con ricerca e gruppi | `editors/spatial/tools/editor/chrome/drawer.ts` (nuovo), `kit/popover.ts` | T8 |
-| `opzioni-punto`: la fila delle opzioni, dalle `options()` dello strumento | `editors/spatial/tools/editor/toolbar.ts` (Scrittoio 2 T22 lo rifà), `editors/spatial/completo/opzioni.ts` (nuovo) | T8 |
+| `opzioni-punto`: la fila delle opzioni, dalle `options()` dello strumento | `editors/spatial/tools/editor/toolbar.ts` (rifatto da Scrittoio 2), `kit/options-bar.ts` e `chrome/pen-options.ts` (ci sono), `editors/spatial/completo/opzioni.ts` (nuovo) | T8 |
 | `menu-disegno`, `menu-oggetto`, `menu-tracciato`: ≡ e i suoi sottomenu | `ui/menu.ts`, `editors/spatial/tools/editor/chrome/commands.ts` (ci sono) | T9 |
 | `dlg-comandi`: Ctrl+/ su tutti i comandi | `editors/spatial/tools/editor/chrome/command-search.ts` (c'è), `kit/dialog.ts` | T9 |
 | `menu-spazi`, `menu-spazi-spento` | `editors/spatial/tools/editor/chrome/workspace.ts` (c'è), `ui/menu.ts`, `editors/spatial/completo/spazi.ts` (nuovo) | T7 |
@@ -97,7 +237,7 @@ percorsi sono sotto `apps/client/src/`, se non è scritto altro.
 | `tab-risorse`, `tab-risorse-scelta`, `titolo-design`, `titolo-risorse` | la scheda `resources` in `editors/spatial/tools/editor/stage.ts` e `chrome/hosts.ts`; l'ispettore la mostra com'è (`shells/scrittoio/frame/document-panels.ts`, `ui/views.ts`, di Scrittoio 2 T9) | T10 |
 | `design-punto`, `design-vuoto`: Design, con la sezione Documento quando non c'è selezione | `editors/spatial/tools/properties.ts` (c'è), `registraSezione` in `editors/spatial/completo/sezioni.ts` (nuovo) | T10 |
 | `pannello-risorse`, `pannello-risorse-molti` | `editors/spatial/tools/resources-panel.ts` (nuovo), `chrome/hosts.ts` | T10; i contenuti: campioni T14, stili T15, pennelli T17, simboli T22 |
-| `dlg-sposta`, `dlg-ombra-caricamento`, `dlg-ombra-errore` | `kit/dialog.ts` (c'è), `kit/form.ts` (nuovo, da `ui/form-dialog.ts`), `editors/spatial/motore/finestre.ts` (nuovo) | T6 |
+| `dlg-sposta`, `dlg-ombra-caricamento`, `dlg-ombra-errore` | `kit/dialog.ts` (c'è), `kit/form.ts` (nuovo, sopra `kit/field.ts`, `kit/number-field.ts`, `kit/quantity.ts` e `kit/row.ts`, che ci sono), `editors/spatial/motore/finestre.ts` (nuovo) | T6 |
 | gli stati `caricamento` ed `errore` di una famiglia | `editors/spatial/completo/carica.ts` (nuovo), `motore/finestre.ts` | T5, T6 |
 | le classi nuove `kit-form`, `-row`, `-label`, `-choice`, `-option`, `-check`, `-checkbox`, `-note`, `-error` | `theme/scrittoio/anatomia/kit.ts`; il CSS in `theme/scrittoio/structure.css`, `kit/kit.css`, `theme/scrittoio/skin/kit.css` | T6 |
 | `status-workspace`, `-name`, `-arrow` | `theme/scrittoio/anatomia/frame.ts`, `theme/scrittoio/skin/frame.css` | T7 |
@@ -108,7 +248,7 @@ percorsi sono sotto `apps/client/src/`, se non è scritto altro.
 | `draw-appearance*` (10 classi) | gli stessi | T15 |
 | `draw-resources-swatches` | gli stessi | T14 |
 | le 52 icone nuove (strumenti, tracciatore, punti, Risorse, Documento, spazio di lavoro) | `editors/spatial/icons.ts`, tutte in T8, perché gli altri task le usano e basta | T8 |
-| i testi della cornice (colonna, cassetto, banda, menu, schede, finestre) | `editors/spatial/strings.ts`, in italiano e in inglese | T6–T10 |
+| i testi della cornice (colonna, cassetto, banda, menu, schede, finestre) | `editors/spatial/strings/completo.ts` (nuovo; la radice `editors/spatial/strings.ts` lo ricompone come fa con `chrome.ts` e gli altri), in italiano e in inglese | T6–T10 |
 | i testi delle funzioni | l'indice generato (T5) e `editors/spatial/completo/famiglie/<id>/testi.ts` | T5, ogni famiglia |
 | le scene del banco, una per stato, in giorno e notte, a 1280 e a 700 | `apps/client/bench/scene.mjs`, `apps/client/bench/fake-ipc.ts` | T6–T10, T29 |
 
@@ -268,7 +408,7 @@ e poi controllato con le foto.
 
     Nel processo, una famiglia occupa memoria solo da quando la si usa, ed
     entra nel `Budget` di K3, che la libera quando serve. Lo dicono il
-    banco WebView (scenario C1) e il test `famiglie_pigre`.
+    banco WebView (scenario V1) e il test `famiglie_pigre`.
 
 ## Assunzioni
 
@@ -391,10 +531,11 @@ differenza si scrive in DECISIONS.md e, se cambia un task, in «Modifiche».
 
 ## Domande per l'utente (raccolte, non bloccano)
 
-Ognuna ha la raccomandazione per prima, e il piano procede con quella. I
-task costosi da disfare stanno dopo le risposte: T7 e T8 aspettano D3, D4 e
-D5; T27 aspetta D10; T30 aspetta D11; T23 e T26 aspettano D9; T24 aspetta
-D8; le 4 righe dei caratteri da file di T16 aspettano D12.
+Il 2026-11-21 l'orchestratore ha deciso D1–D8 e D10–D12 con la
+raccomandazione (tutte (a), D10 (b)); le righe stanno in `DECISIONS.md`, e
+il codice di oggi non ne rende superata nessuna. Resta aperta D9, per il
+manutentore: T23 e T26 la aspettano. Il testo qui sotto è quello del
+2026-11-05, salvo il numero della patch di D10 (0009).
 
 - D1 · **I tasti.**
   (a) Nel Completo valgono i tasti del motore, nel Semplice quelli di Fub;
@@ -489,7 +630,7 @@ D8; le 4 righe dei caratteri da file di T16 aspettano D12.
   resta un SVG che si vede ovunque. Un elemento cambiato fuori da Fub perde
   la sua ricetta, e solo quella: si apre come grafica semplice e lo dice.
   Spostarlo, ruotarlo o scalarlo nel Semplice la tiene. Il Rust scrive le
-  ricette con la patch 0005 (togli e aggiungi, sul posto).
+  ricette con la patch 0009 (togli e aggiungi, sul posto).
   (c) Un file `.vectorcraft` accanto.
   (d) I comandi ricchi si rifiutano nei `.svg`.
 
@@ -563,7 +704,7 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
     effetti e 43 pannelli.
 11. **Le librerie del motore non si liberano.** K5 assume che le cache del
     motore si possano liberare, ma VectorCraft non ha un modo per le sue
-    tabelle e librerie globali. Lo aggiunge la patch 0003 (T28).
+    tabelle e librerie globali. Lo aggiunge la patch 0008 (T28).
 12. **La differenza non scrive i costrutti ricchi.** La differenza di K5 T11
     sa solo impostare, aggiungere, togliere, spostare e dare un id. Per ciò
     che l'SVG non sa dire serve la ricetta di D10 (T27).
@@ -593,7 +734,7 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
 18. **Le librerie di VectorCraft leggono e scrivono il disco da sole**
     (`library.rs`, `std::fs::read_dir` alla riga 481, `remove_file` alla
     498; `swatchlib.rs`). Senza una cartella non ci sono librerie
-    dell'utente. La patch 0004, «librerie dai byte», le fa passare dai
+    dell'utente. La patch 0010, «librerie dai byte», le fa passare dai
     byte, e il kernel scrive i file (T30, D11).
 19. **Il PDF, l'EPS e la stampa del motore** hanno bisogno di `craft-pdf`
     e delle sostituzioni `hayro-*` e `krilla`, che K5 ha lasciato fuori (K5
@@ -614,7 +755,7 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
     &[])` rende `None`, e senza radici `check_read` e `check_write` lasciano
     passare tutto; i comandi che leggono un percorso (`color.loadProfile`, i
     preset da importare, le librerie) lo aprirebbero da soli. K5 non lo
-    dice. La patch 0003 aggiunge `AutomationRoots::nessuna()`, e il ponte la
+    dice. La patch 0008 aggiunge `AutomationRoots::nessuna()`, e il ponte la
     mette in vigore per tutto il processo con `file_access::confine_process`
     (T28). I siti dentro `unconfined` (preferenze, recupero, librerie,
     caratteri) restano fuori dalle radici: ognuno ha la sua riga in
@@ -689,26 +830,26 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
     dell'utente. Da qui la colonna `come` di `disco.tsv` (T28), T30 e D12.
   - Le `static` globali con `OnceLock`, `LazyLock`, `Mutex` o `RwLock` dei
     crate che Fub compila sono 64 (con `grep`, fuori da `ui-egui`, `mcp`,
-    `testkit` e dai test): da qui la patch 0003.
+    `testkit` e dai test): da qui la patch 0008.
   - Lo spazio dati per plug-in del kernel c'è già (`data_read`,
     `data_list`, `data_write`, `data_remove` di `HostApi`, sotto
     `.fub/plugins/<id>/`): T30 non tocca il kernel.
   - Il bundle di main ha il plugin dei budget e la regola dei chunk
     `drawing-*`. Il banco WebView ha l'elenco degli scenari in `run.mjs`
-    (`["R1","I1","S1","S6","S2","S3","S4","S5","S7","T1","L1"]`), dove C1
-    entra.
+    (`["R1","I1","S1","S6","S2","S3","S4","S5","S7","T1","L1"]`; il
+    2026-11-21 è più lungo e finisce con C1), dove V1 entra.
 
 ## Chi aspetta chi
 
-- **K5 fuso in main** (e con lui K2 e K3): tutti i task. Prima di T1
-  l'orchestratore unisce main in `piano/k6-disegno-completo`.
+- **K5 fuso in main** (e con lui K2 e K3): fatto, e main (`eebe644b7`) è
+  già unito in `piano/k6-aggiornato`. Non blocca più niente.
 - **Il sì dell'utente al prototipo**, che l'orchestratore gli mostra con
-  D1–D12: T6 e tutti i task grafici (T7–T10 e la parte client dei task di
-  famiglia).
-- **Scrittoio 2 fuso in main**: T7 (la banda, S2 T3), T8 (la colonna e la
-  testa, S2 T16 e T22) e T10 (l'ispettore, S2 T9). T1–T6, T27, T28 e T30
-  non lo aspettano.
-- **Le risposte:**
+  D9: T6 e tutti i task grafici (T7–T10 e la parte client dei task di
+  famiglia). Prima del sì il prototipo si rifà sulla cornice di oggi
+  («Aggiornamento del 2026-11-21», punto 14).
+- **Scrittoio 2 fuso in main**: fatto (#309). Non blocca più niente.
+- **Le risposte** (D1–D8 e D10–D12 decise dall'orchestratore il
+  2026-11-21: non bloccano più; resta D9):
   - D3, D4 e D5: T7 e T8;
   - D1 e D7: T9;
   - D2: T10;
@@ -721,35 +862,47 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
   - D12: le 4 righe dei caratteri da file di T16, e la cartella
     `caratteri/` di T30.
 - **P1** (le librerie PDF in Fub): 32 righe, 16 di T23, 3 di T11 e le 13
-  della stampa di T25, che aspettano anche T23 (A16). Come si chiudono lo
-  dice «Le righe che aspettano», nel modello dei task di famiglia.
+  della stampa di T25, che aspettano anche T23 (A16). Il 2026-11-21 P1 non
+  è fuso: le chiude T31, scritto in fondo al piano, dopo P1.
 - **La CI:** i passi nuovi in `.github/workflows/` li aggiunge
   l'orchestratore quando integra il task che li chiede (T2, T5).
 - N6 (la lavagna) non serve e non si tocca.
 
 ## Regole che valgono per ogni task
 
-- **L'ambiente.**
+- **L'ambiente** è quello del blocco «Coder brief» di `CLAUDE_DEVICE.md`
+  della macchina dove si lavora, che l'orchestratore incolla nel brief di
+  ogni coder (i worktree non lo vedono). Sul PC fisso, il 2026-11-21:
 
   ```
-  mkdir -p /home/fubeo/.cache/fub-k6/tmp/k6
-  export PATH=$HOME/.cargo/bin:$HOME/.local/opt/cc/bin:$HOME/.local/opt/node/bin:$PATH \
-    RUSTUP_TOOLCHAIN=1.95 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
-    RUSTC_WRAPPER=sccache TMPDIR=/home/fubeo/.cache/fub-k6/tmp/k6 \
-    FONTCONFIG_FILE=$HOME/.local/opt/chrome-libs/fonts.conf
+  export PATH=$HOME/.cargo/bin:$PATH RUSTUP_TOOLCHAIN=1.95 \
+    CARGO_INCREMENTAL=0 RUSTC_WRAPPER=sccache \
+    CARGO_PROFILE_DEV_DEBUG=line-tables-only \
+    CARGO_PROFILE_TEST_DEBUG=line-tables-only SCCACHE_CACHE_SIZE=60G \
+    CHOKIDAR_USEPOLLING=1
   ```
 
-  Niente build in `/tmp`; niente build complete del workspace se non
-  servono; prima di una build grande, `df -h /`.
-- **Mai i file veri.** Mai il vault reale (`~/.cache/fub-live/`), mai
-  `~/Progetti/Fub`, mai `~/.cache/fub-k1/`. Le prove usano il corpus del
-  banco e cartelle temporanee.
+  I controlli pesanti (`scripts/check.sh` in ogni modo, `cargo nextest` o
+  `cargo test` su tutto il workspace, le build di release, `npm run
+  bench:*`) passano da `nice -n 19 ionice -c 3 ~/.cache/fub-coda/coda.sh
+  <comando>`, in sottofondo; quelli piccoli (un crate, un file di Vitest)
+  no. Ogni coder ha la sua porta del banco, da 1451 in su (mai 1431, 1447,
+  1448 o 45xx). Ci si ferma e lo si dice se `command df -BG --output=avail
+  ~` scende sotto 80 GB.
+- **Mai i file veri.** Mai `~/.config/fub`, `~/.cache/fub-live/*`,
+  `~/.var/app/io.github.Fubeo.Fub` o il vault di un tester in scrittura;
+  mai `fub` sullo schermo vero. Il repo del manutentore
+  (`~/Files/Progetti/Fub` sul PC, `~/Progetti/Fub` sul server) resta su
+  main e non si tocca. Le prove usano il corpus del banco e cartelle
+  temporanee.
 - **VectorCraft si cambia solo con una patch numerata** in
   `vendor/vectorcraft/patches/`, con la sua riga in `UPSTREAM.md`;
   `node tools/vendor-craft/vendor.mjs vectorcraft check` resta verde. Non
   si eseguono i suoi `xtask` né i suoi script, e un `build.rs` di terzi si
-  legge prima di compilare. Le patch di K6 sono, nell'ordine delle ondate,
-  0003 (T28), 0004 (T30) e 0005 (T27), e, se servono, quelle
+  legge prima di compilare. Le patch 0001–0007 ci sono già (0001 e 0002 di
+  K5; 0003–0007 sono correzioni dei test del motore). Le patch di K6 sono,
+  nell'ordine delle ondate, 0008 (T28), 0009 (T27) e 0010 (T30), e, se
+  servono, quelle
   d'esportazione di T23, al primo numero libero. Un task che si integra
   fuori da quest'ordine prende il primo numero libero, e l'orchestratore lo
   scrive in «Modifiche».
@@ -801,14 +954,14 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
 |---|---|---|
 | **Parità (1)**: ogni funzione di VectorCraft è mappata, e nessuna sparisce in silenzio | `node .github/scripts/check-disegno-mappa.mjs --finale`: l'insieme delle righe è uguale a quello estratto da `vendor/vectorcraft` a `cfb30d81`; ogni riga è «fatto», «fub» con il suo id o «escluso» con il perché e D6 (con D9 (a): le 11 righe dei plug-in sono «escluse» con il rimando all'ADR; con D12 (b): le 4 righe dei caratteri da file) | T2, T29 |
 | **Parità (1)**: ogni riga fatta funziona | `cargo test -p fub-disegno --test famiglie` (un caso per riga fatta: i 100 strumenti, i 130 effetti, i comandi); `cargo test -p fub-disegno --test copertura`; `npx vitest run src/editors/spatial/completo` (ogni riga fatta ha la sua voce, il suo posto e i suoi testi) | T5, T11–T26 |
-| **Pigro (2)**: il Completo non entra nel bundle d'avvio | la regola di `apps/client/vite.config.ts`: `npm run build` cade se un chunk `drawing-completo`, `drawing-indice` o `drawing-fam-*` è nel grafo statico di `index.html`, o se una famiglia ne importa un'altra | T5 |
-| **Pigro (2)**: si carica solo ciò che si usa | il banco WebView, scenario C1: all'avvio e nel Semplice nessun `drawing-completo`, `drawing-indice` o `drawing-fam-*`; con il Completo questi tre: `drawing-completo`, `drawing-indice` e il nucleo; con la penna i tracciati; con un effetto gli effetti, e nient'altro. Memoria e tempi di ogni passo in `docs/misure/k6-disegno-<data>-<macchina>.md`, con le soglie in `apps/client/bench/webview/budgets.json` scritte dopo la misura | T5, T29 |
+| **Pigro (2)**: il Completo non entra nel bundle d'avvio | le regole di `apps/client/vite.config.ts`: `npm run build` cade se un chunk `drawing-*` è nel grafo statico di una pagina (`NOT_AT_STARTUP`, c'è già), se un file fuori da `completo/` importa altro che `completo/index.ts`, o se una famiglia ne importa un'altra (T5) | T5 |
+| **Pigro (2)**: si carica solo ciò che si usa | il banco WebView, scenario V1 (e C1 di K2 ancora verde): all'avvio e nel Semplice nessun `drawing-completo`, `drawing-indice` o `drawing-fam-*`; con il Completo questi tre: `drawing-completo`, `drawing-indice` e il nucleo; con la penna i tracciati; con un effetto gli effetti, e nient'altro. Memoria e tempi di ogni passo in `docs/misure/k6-disegno-<data>-<macchina>.md`, con le soglie in `apps/client/bench/webview/budgets.json` scritte dopo la misura | T5, T29 |
 | **Pigro (2)**: nel processo una famiglia occupa memoria solo dopo il primo uso, e il `Budget` la libera | `cargo test -p fub-host --test famiglie_pigre`; la memoria di ogni famiglia (byte della sua cache e crescita del processo, prima e dopo `libera`) misurata con `crates/fub-disegno/tests/famiglie_memoria.rs` e scritta in `docs/misure/k6-disegno-<data>-<macchina>.md`; `node .github/scripts/check-motori.mjs` verde, con `librerie_doppie` di `docs/reference/budgets.json` che sale solo con il sì di D9 | T3, T28, T29 |
 | **L'interfaccia di Fub (3)** | le foto del banco dei 12 stati accanto al prototipo, in giorno e notte, a 1280 e a 700 px; `npm run bench:a11y` verde; la colonna non scorre (misura del banco); `check-engine-boundary.mjs`; il gergo e nessun nome Craft nei testi generati (test di T5) | T6–T10, T29 |
 | **Il motore non tocca il disco** | `cargo test -p fub-disegno --test disco`; `node tools/disegno-disco/elenco.mjs --check` (ogni sito del motore che tocca il disco ha la sua riga e il suo `come`); `cargo test -p fub-host --test librerie_disegno` (le librerie passano dal kernel); `cargo deny check` verde con le dipendenze di D9 e P1 | T28, T30, T23, T29 |
 | **Niente perdite di dati** | il cancello di K5 (`node tools/disegno-cancello/cancello.mjs`) ancora verde; l'andata e ritorno della ricetta (D10) su ogni costrutto ricco; un elemento cambiato fuori da Fub che perde solo la sua ricetta, si apre come grafica semplice e lo dice; una ricetta di una versione più nuova che si apre in sola lettura | T27, T29 |
 | **Le due strade vive** | con «Disegno completo» spento: il Completo nativo, i file si aprono e si salvano, `Unserved` per i comandi `disegno.*` oltre ai tre di K5 (`crates/fub-host/tests/famiglie_pigre.rs`); `tools/gesti-vettori.test.ts` verde | T3, T7, T29 |
-| **(per ogni piano) la CI completa, la revisione riga per riga, il merge solo con il sì dell'utente** | `gh pr ready`, poi `gh pr checks` tutto verde; la revisione scritta nella PR; il sì dell'utente | T29 |
+| **(per ogni piano) la CI completa, la revisione riga per riga, il merge** | `gh pr ready`, poi `gh pr checks` tutto verde con la CI completa (Linux e Windows: macOS e iOS sono in pausa, ADR 0245); la revisione scritta nella PR; il merge lo fa l'orchestratore (`gh pr merge --merge`, regola di `CLAUDE.md`) | T29 |
 
 ## Il modello dei task di famiglia
 
@@ -876,7 +1029,7 @@ awk -F'\t' '$7=="T12"' crates/fub-disegno/mappa.tsv
 
 1. **Il Rust.** `famiglie/<id>.rs` tiene lo stato della famiglia (le sue
    cache e tabelle), che nasce alla prima chiamata o con
-   `famiglia.prepara`. Il suo `byte()` somma i `*_bytes()` della patch 0003
+   `famiglia.prepara`. Il suo `byte()` somma i `*_bytes()` della patch 0008
    (T28) che le appartengono, e `libera()` chiama i `release_*()`. Il
    modulo adatta gli argomenti che il motore vuole in un'altra forma (un
    carattere da K5 T7, un colore del documento). Dà alle letture
@@ -969,9 +1122,8 @@ integrato (T23, T27, T30) o di P1 resta «da fare», con `aspetta T27` (o
 famiglia si integra senza di lei. La chiude il task che la sblocca: se la
 famiglia è già integrata, il suo `Tocca` comprende quelle righe e i file
 della famiglia che servono, e non corre con il task che possiede quei
-file. Le righe di P1 le chiudono T23 e T25, se P1 è già fuso; se no,
-l'orchestratore scrive in «Modifiche» il task «T31 · Le righe del PDF»,
-che le chiude dopo P1, e T29 lo aspetta.
+file. Le righe di P1 le chiude «T31 · Le righe del PDF», in fondo al
+piano, dopo P1 (il 2026-11-21 P1 non è fuso); T29 lo aspetta.
 
 Un task di famiglia può arrivare in più commit (una famiglia alla volta),
 ma si integra intero, salvo le righe che aspettano.
@@ -1000,7 +1152,11 @@ Cosa fare:
   - alternative scartate: il Completo del motore come terzo spazio, i
     pannelli del motore fluttuanti, il motore in WebAssembly nel client,
     un chunk unico per il Completo;
-  - D1–D12 come «Da decidere», con la raccomandazione.
+  - D1–D8 e D10–D12 come decise dall'orchestratore il 2026-11-21 (da
+    `DECISIONS.md`), D9 «Da decidere», con la raccomandazione;
+  - il disegno dentro una nota (ADR 0248, che aggiorna la 0203): la
+    superficie compatta resta nel Semplice e non carica il Completo; «A
+    tutta pagina» lo apre. La nuova ADR la cita senza cambiarla.
 - `docs/architecture/disegno.md`, una sezione «Il disegno completo»:
   - il percorso di un comando: voce di ≡ → indice → `carica.ts` → chunk
     della famiglia → `drawing_command` → `fub-disegno` (famiglia) → motore
@@ -1014,14 +1170,15 @@ Cosa fare:
 - Una riga in `docs/decisions/README.md` e in `docs/map/dove-sta-x.md` («il
   disegno completo» → la sezione).
 Dal prototipo: niente.
-Casi limite: il numero dell'ADR preso da un altro piano fuso prima (si
-rinumera alla fusione, con i link); un link a un file che non esiste ancora
+Casi limite: il numero dell'ADR preso da un altro piano fuso prima (il
+2026-11-21 il primo libero è 0250; si rinumera alla fusione, con i link); un link a un file che non esiste ancora
 (lo si scrive come percorso in codice).
 Fatto quando: `node .github/scripts/check-doc-links.mjs` e
 `node .github/scripts/check-doc-orphans.mjs` escono con 0; la sezione si
 raggiunge da `docs/README.md`.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T2 · La mappa nel repo e la sua guardia
 
@@ -1121,6 +1278,7 @@ Fatto quando:
   nomina `ui-egui`.
 Prova: scripts/check.sh --rapido; node .github/scripts/check-disegno-mappa.mjs; node --test tools/disegno-mappa/estrai.test.mjs
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T3 · Il componente e le famiglie pigre
 
@@ -1171,7 +1329,7 @@ Cosa fare:
     strumenti;
   - per ogni famiglia uno stato in un `Pigro` di K3, che nasce alla prima
     chiamata. Implementa il `trait Cache`: nome `disegno.<famiglia>`,
-    `byte()` dai `*_bytes()` della patch 0003 (T28), `libera()` dai
+    `byte()` dai `*_bytes()` della patch 0008 (T28), `libera()` dai
     `release_*()`, dopo la quale lo stato torna da nascere. Si iscrive nel
     `Budget` quando nasce, non prima;
   - `esegui(id, argomenti, sessione, filtro)`: i tre comandi di K5 come
@@ -1228,6 +1386,7 @@ Fatto quando:
 - la riga si vede in Componenti, sotto «Disegnare».
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test famiglie_pigre; cargo test -p fub-disegno --lib famiglie
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T4 · Il ponte degli strumenti e il contratto
 
@@ -1237,9 +1396,11 @@ hanno bisogno di letture, le finestre di un'anteprima, e le famiglie di
 (Differenze 1 e 8).
 Tocca: `crates/fub-abi/src/drawing.rs` (di K5 T4),
 `crates/fub-disegno/src/gesti/strumento.rs` (nuovo),
-`crates/fub-disegno/src/gesti/mod.rs` e `src/sessione.rs` (di K5),
-`crates/fub-host/src/drawing.rs`, il file dei comandi IPC del disegno in
-`crates/fub-app/src/` (di K5), i mirror e le fixture:
+`crates/fub-disegno/tests/gesti_motore.rs` (nuovo),
+`crates/fub-disegno/src/gesti/mod.rs`, `src/sincronia.rs` e
+`src/motore.rs` (di K5: `src/sessione.rs` non c'è),
+`crates/fub-host/src/drawing.rs`, i comandi IPC del disegno in
+`crates/fub-app/src/lib.rs` (di K5), i mirror e le fixture:
 `apps/client/src/host/enums.generated.ts`, `host/contract.ts`,
 `host/fake.ts`, `src/__fixtures__/mirror-samples*.json`, i test di
 conformità di K5, `docs/reference/ipc-contract.md`
@@ -1250,12 +1411,21 @@ Dipende da: K5 fuso in main
 Cosa fare:
 - In `fub-abi`, additivo, serde `snake_case` come K5:
   - `DrawingTool::Engine { id }`: `id` è l'id dello strumento in
-    `TOOL_GROUPS` (`pen`, `blobBrush`, …). Un id che il motore non ha è
-    l'errore tipato `UnknownTool`.
-  - Negli eventi del gesto, accanto ai puntatori di K5: `Key { key, code,
-    mods, pressed }`, `Text { text }` e `Ime { preedit, active }`. Servono
+    `TOOL_GROUPS` (`pen`, `blobBrush`, …). Un id che il motore non ha è il
+    rifiuto tipato `DrawingRefusal::UnknownTool`. Oggi `DrawingTool` è un
+    enum di sole unità e `Copy` (`select`, `rect`, `ellipse`, `line`,
+    `arrow`, `text`): la variante con un campo toglie `Copy` (i punti che lo
+    copiano passano a `clone()`) e cambia la forma del mirror in
+    `enums.generated.ts`; le sei unità restano scritte come oggi.
+  - Gli eventi nuovi `Key { key, code, mods, pressed }`, `Text { text }` e
+    `Ime { preedit, active }` vanno in un campo nuovo di `DrawingGesture`
+    con `#[serde(default)]` (per esempio `inputs: Vec<DrawingInput>`),
+    accanto a `events: Vec<DrawingPointer>` di K5, che resta com'è. Servono
     agli strumenti di testo e ai numeri scritti durante un gesto.
-  - `DrawingOverlay`, uno per ognuno dei 12 tipi di `Overlay` del motore:
+    `DrawingPhase::Cancel` c'è già: l'annullamento usa quello.
+  - `DrawingOverlay`, uno per ognuno dei 12 tipi di `Overlay` del motore,
+    in un campo nuovo `overlays` di `DrawingPreview` (che oggi ha `shape`,
+    `matrix` e `marquee`; `marquee` resta per i gesti di K5):
     `marquee`, `path`, `line`, `anchor`, `curve_point`, `handle`, `label`,
     `measure`, `distance`, `highlight`, `swatch`, `grid_line`. Il `match`
     del ponte è esaustivo, così un tipo nuovo del motore non compila senza
@@ -1271,10 +1441,14 @@ Cosa fare:
     rende le operazioni senza applicarle né entrare nella cronologia.
   - `DrawingOutcome.reading: Option<serde_json::Value>`: la lettura di un
     comando `Effetto::Legge` (K3), per i pannelli.
-  - `DrawingError::NoMemory`, quando il `Budget` non ha spazio per una
-    famiglia o un comando.
-  - Nella risposta di `drawing_commands`, per ogni comando: `enabled` e
-    `disabled_reason`, calcolati sulla selezione di adesso. Il perché è un
+  - Le varianti nuove di `DrawingRefusal` (additive, accanto a `Stale`,
+    `Unmapped`, `Empty`, `Unsupported`, `TooLarge`, `Closed`, `NotReady`,
+    `Locked`, `Hidden`): `NoMemory`, quando il `Budget` non ha spazio per
+    una famiglia o un comando; `NoPreview`; `UnknownTool`. Un tipo
+    `DrawingError` non c'è e non nasce.
+  - In `DrawingCommandInfo` (che ha già `id` ed `enabled`) il campo nuovo
+    `disabled_reason`, con `#[serde(default)]`; `enabled` si calcola già
+    sulla selezione di adesso, e resta. Il perché è un
     codice tipato (`no_selection`, `needs_path`, `needs_text`,
     `needs_group`, `needs_two`, `read_only`, `unmapped`, `other`), che il
     client dice con i suoi testi; `other` porta il testo del motore passato
@@ -1315,16 +1489,19 @@ Casi limite:
 - le coordinate in byte UTF-8 dell'IME, che nel client sono indici
   JavaScript: la conversione sta nel client (CLAUDE.md).
 Fatto quando:
-- `cargo test -p fub-abi`, `cargo test -p fub-disegno --test gesti` (un
-  gesto della penna del motore, uno del rettangolo e uno di testo con IME,
-  con le sovrapposizioni e le operazioni attese) e i test di conformità
-  passano;
+- `cargo test -p fub-abi`, `cargo test -p fub-disegno --test
+  gesti_motore` (nuovo, accanto a `gesti_forme`, `gesti_selezione` e
+  `gesti_testo` di K5, con l'aiuto comune di `tests/gesti/`: un gesto della
+  penna del motore, uno del rettangolo e uno di testo con IME, con le
+  sovrapposizioni e le operazioni attese), i `gesti_*` di K5 e i test di
+  conformità passano;
 - i mirror rigenerati sono uguali a quelli scritti;
 - `npm run typecheck` e `npx vitest run src/host` passano;
 - `cargo test -p fub-abi --test wit_additivity` passa, senza toccare la
   WIT.
-Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti; UPDATE_MIRROR=1 per i mirror e poi senza
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_motore; UPDATE_MIRROR=1 per i mirror e poi senza
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T5 · L'indice dei comandi, il banco di prova delle righe e i pezzi pigri del client
 
@@ -1345,13 +1522,15 @@ Tocca:
   `editors/spatial/tools/editor/chrome/workspace.ts` (solo la chiamata a
   `import()`), le 26 cartelle `completo/famiglie/<id>/` con `index.ts` e
   `testi.ts` vuoti, `apps/client/vite.config.ts`,
-  `apps/client/bench/webview/run.mjs` (lo scenario C1),
+  `apps/client/bench/webview/run.mjs` (lo scenario V1: C1 c'è già ed è
+  di K2, «i componenti spenti»),
   `apps/client/bench/fake-ipc.ts` (le risposte delle famiglie, lette da
   file), `apps/client/bench/disegno-famiglie/` (nuova, con un file JSON
   vuoto per famiglia),
   `docs/architecture/disegno.md` (la sezione «L'indice e i pezzi pigri»).
 Non toccare: la cornice (T7–T10); `bench/webview/budgets.json` (le soglie
-di C1 le scrive T29 dopo la misura); `.github/workflows/`.
+di V1 le scrive T29 dopo la misura); lo scenario C1 e le sue soglie
+(`C1.solo-note.spegnibili`, `C1.tutto.spegnibili`); `.github/workflows/`.
 Dipende da: T2, T3, T4
 Cosa fare (prima il commit del Rust, poi quello del client):
 - `catalogo.rs`: per ogni riga fatta, la `SpecMotore` di K3 (`id`,
@@ -1409,12 +1588,21 @@ Cosa fare (prima il commit del Rust, poi quello del client):
   - `manualChunks`: `drawing-completo` per `completo/` fuori dalle
     famiglie, `drawing-indice` per l'indice e `drawing-fam-<id>` per ogni
     cartella di famiglia;
-  - una regola nel plugin `bundle-size-budgets`: la build cade se uno di
-    questi chunk è nel grafo statico di `index.html`, se un file fuori da
-    `completo/` ne importa uno che non sia `completo/index.ts`, o se un
-    file di una famiglia importa quello di un'altra;
+  - la regola «non all'avvio» c'è già: `NOT_AT_STARTUP` in
+    `vite.config.ts` copre ogni chunk `drawing-*` e ogni modulo sotto
+    `editors/spatial/`, e il plugin `bundle-size-budgets` ferma la build se
+    uno è nel grafo statico di una pagina. I chunk nuovi si chiamano
+    `drawing-completo`, `drawing-indice` e `drawing-fam-<id>`, così ci
+    ricadono da soli e finiscono in `switchable-chunks.json`, che il banco
+    WebView legge. T5 aggiunge solo le due regole che mancano: la build
+    cade se un file fuori da `completo/` ne importa uno che non sia
+    `completo/index.ts`, o se un file di una famiglia importa quello di
+    un'altra;
   - ogni chunk nuovo sta sotto `CHUNK_BUDGET`.
-- Lo scenario C1 in `bench/webview/run.mjs`, accanto agli altri. Apre Fub,
+- Lo scenario V1 in `bench/webview/run.mjs`, accanto agli altri e
+  nell'elenco `order` (che oggi finisce con `C1`). Che all'avvio e con una
+  nota non arrivi niente del disegno lo prova già C1, con
+  `switchable-chunks.json`: V1 parte da lì. Apre Fub,
   apre un disegno nel Semplice, passa al Completo, sceglie la penna, apre
   un effetto. A ogni passo scrive i chunk caricati (dalle richieste della
   WebView), la memoria del processo e della WebView e il tempo.
@@ -1446,12 +1634,13 @@ Fatto quando:
 - `npm run build` passa, e cade con un'importazione statica di prova da
   `completo/` in `main.ts`;
 - `npx vitest run src/editors/spatial/completo` passa;
-- lo scenario C1 gira sul banco WebView (CLAUDE_DEVICE.md) e stampa i
+- lo scenario V1 gira sul banco WebView (CLAUDE_DEVICE.md) e stampa i
   chunk e la memoria di ogni passo: all'avvio e nel Semplice nessun
   `drawing-completo`, `drawing-indice` né `drawing-fam-*`; con il Completo
   `drawing-completo`, `drawing-indice` e `drawing-fam-nucleo`.
-Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npm run build; lo scenario C1 sul banco WebView
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npm run build; lo scenario V1 sul banco WebView (con C1 ancora verde)
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T6 · Le finestre del kit con l'anteprima
 
@@ -1459,14 +1648,18 @@ Perché: le 91 righe con il posto `finestra`, i 130 effetti e molte voci di
 ≡ chiedono dei parametri prima di agire. Con l'interfaccia di Fub (punto 3)
 sono finestre del kit: una sola finestra generica che legge lo schema, con
 l'anteprima sul foglio, e il caricamento e l'errore che si vedono.
-Tocca: `apps/client/src/kit/form.ts` (nuovo, da `ui/form-dialog.ts`),
-`apps/client/src/ui/form-dialog.ts` (che usa `kit/form.ts`),
+Tocca: `apps/client/src/kit/form.ts` (nuovo: compone `kit/field.ts`,
+`kit/number-field.ts`, `kit/quantity.ts` e `kit/row.ts`, che ci sono, e
+prende da `ui/form-dialog.ts` solo la forma della domanda a più campi),
+`apps/client/src/ui/form-dialog.ts` (che usa `kit/form.ts`; Vite lo mette
+nel chunk `drawing-panels`, e `kit/form.ts` non deve tirarlo nel bundle
+d'avvio),
 `apps/client/src/kit/dialog.ts` (`data-preview`),
 `apps/client/src/editors/spatial/motore/finestre.ts` (nuovo),
 `theme/scrittoio/anatomia/kit.ts`, `theme/scrittoio/structure.css`,
 `kit/kit.css`, `theme/scrittoio/skin/kit.css`, le righe in coda di
 `theme/scrittoio/anatomia/draw.ts` e `skin/draw.css`
-(`draw-effect-dialog`), `editors/spatial/strings.ts`,
+(`draw-effect-dialog`), `editors/spatial/strings/completo.ts`,
 `apps/client/bench/scene.mjs` e `fake-ipc.ts`, `docs/product/drawing.md`
 (un paragrafo sulle finestre)
 Non toccare: le finestre che ci sono (devono restare uguali: le loro foto
@@ -1521,6 +1714,7 @@ Fatto quando:
 - `npm run theme:generate && npm run theme:verify` passano.
 Prova: scripts/check.sh --rapido; npx vitest run src/kit src/editors/spatial/motore; npm run bench:a11y
 Stato: [ ] da fare
+Aspetta: prototipo
 
 ## T7 · Lo spazio di lavoro nella banda
 
@@ -1534,7 +1728,7 @@ Tocca: `apps/client/index.html` (`#status-workspace`),
 `editors/spatial/completo/spazi.ts` (nuovo), `completo/index.ts`,
 `crates/fub-features/src/draw.rs` (`draw.workspaces`) e il suo mirror,
 `theme/scrittoio/anatomia/frame.ts` e `skin/frame.css`,
-`editors/spatial/strings.ts` e i testi della banda, le 7 righe di T7 in
+`editors/spatial/strings/completo.ts` e i testi della banda, le 7 righe di T7 in
 `crates/fub-disegno/mappa.tsv`, `apps/client/bench/scene.mjs` e
 `fake-ipc.ts`, `docs/product/drawing-custom.md`
 Non toccare: la modalità di Scrittoio 2 (`#status-mode`); la colonna e le
@@ -1577,6 +1771,15 @@ Cosa fare:
   lavoro…» salva colonna, scheda, sezioni e righelli con un nome in
   `draw.workspaces`. «Gestisci…» è una finestra del kit che rinomina ed
   elimina.
+- Il pulsante segue la forma di `#status-mode` di oggi in `status-band.ts`
+  (`status-mode-name`, `status-mode-arrow`, `aria-expanded`), non quella del
+  prototipo, dove la modalità non era ancora nella banda.
+- `draw.workspace` c'è già (`DRAW_WORKSPACE_KEY`, valori `full` e `simple`,
+  di serie `full`, in `crates/fub-features/src/draw.rs`): gli id nuovi si
+  aggiungono a `DRAW_WORKSPACES` senza cambiare i due che ci sono.
+- La superficie compatta (il disegno dentro una nota, ADR 0248) non dice
+  `SurfaceWorkspace`: resta nel Semplice con la sua fila, non legge né
+  scrive `draw.workspace`, e «A tutta pagina» apre il Completo scelto.
 - `draw.workspaces` in `draw.rs`: un elenco con la sua versione (`v: 1`).
   Una versione più nuova si legge e non si scrive, e lo si dice; un valore
   rotto si ignora con un avviso, e non si sovrascrive. `draw.workspace`
@@ -1614,6 +1817,7 @@ Fatto quando:
 - con il componente spento, il file si apre e si salva come prima.
 Prova: scripts/check.sh --rapido; npx vitest run src/shells/scrittoio/frame src/editors/spatial; npm run bench:a11y
 Stato: [ ] da fare
+Aspetta: prototipo
 
 ## T8 · La colonna, il cassetto, la fila delle opzioni e le icone
 
@@ -1622,11 +1826,15 @@ una colonna del kit che non scorre, in un cassetto con la ricerca e in una
 fila delle opzioni fatta di controlli del kit, non nelle barre del motore.
 Tocca: `editors/spatial/completo/colonna.ts` e `completo/opzioni.ts`
 (nuovi), `completo/index.ts`, `editors/spatial/tools/editor/chrome/rail.ts`,
-`chrome/drawer.ts` (nuovo), `editors/spatial/tools/editor/toolbar.ts` (di
-Scrittoio 2 T22), `editors/spatial/motore/gesti.ts`,
+`chrome/drawer.ts` (nuovo: cade da solo nel chunk `drawing-editor-parts`
+con il resto di `chrome/`, quindi l'indice lo legge solo con `import()`
+da `completo/index.ts`), `editors/spatial/tools/editor/toolbar.ts` (rifatto
+da Scrittoio 2), la fila delle opzioni su `kit/options-bar.ts` (c'è) e
+accanto a `chrome/pen-options.ts` (c'è: le opzioni della penna di Fub, che
+restano per «Inchiostro»), `editors/spatial/motore/gesti.ts`,
 `editors/spatial/icons.ts`, le righe in coda di
 `theme/scrittoio/anatomia/draw.ts` e `skin/draw.css` (`draw-drawer*`,
-`draw-all-tools`), `editors/spatial/strings.ts`,
+`draw-all-tools`), `editors/spatial/strings/completo.ts`,
 `crates/fub-features/src/draw.rs` (`draw.toolbar`) e il suo mirror, le 10
 righe di T8 nella mappa, `apps/client/bench/scene.mjs` e `fake-ipc.ts`,
 `docs/product/drawing.md`, `docs/product/drawing-custom.md`
@@ -1701,6 +1909,7 @@ Fatto quando:
 - `cargo test -p fub-features --test ts_mirror` passa.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
 Stato: [ ] da fare
+Aspetta: prototipo
 
 ## T9 · Il menu ≡, Ctrl+/ e i tasti
 
@@ -1711,7 +1920,7 @@ Tocca: `editors/spatial/tools/editor/chrome/commands.ts`,
 `completo/index.ts`, `editors/spatial/tools/editor/keys.ts`,
 `apps/client/src/panels/settings.ts` (la sezione «Disegno completo» in
 Scorciatoie), `crates/fub-features/src/draw.rs` (`draw.keys`) e il suo
-mirror, `editors/spatial/strings.ts`, le 11 righe di T9 nella mappa,
+mirror, `editors/spatial/strings/completo.ts`, le 11 righe di T9 nella mappa,
 `apps/client/bench/scene.mjs` e `fake-ipc.ts`, `docs/product/drawing.md`,
 la pagina di `docs/product/` che descrive Impostazioni › Scorciatoie
 Non toccare: `ui/menu.ts` e `kit/dialog.ts`, se non per un difetto che il
@@ -1767,6 +1976,7 @@ Fatto quando:
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial src/panels; npm run bench:a11y
 Stato: [ ] da fare
+Aspetta: prototipo
 
 ## T10 · L'ispettore
 
@@ -1779,7 +1989,7 @@ Tocca: `editors/spatial/tools/editor/chrome/hosts.ts` (`"resources"`),
 `editors/spatial/tools/properties.ts` (la sezione Documento),
 `editors/spatial/completo/sezioni.ts` (nuovo), `completo/index.ts`, le
 righe in coda di `theme/scrittoio/anatomia/draw.ts` e `skin/draw.css`
-(`draw-resources`), `editors/spatial/strings.ts`, le 7 righe di T10 nella
+(`draw-resources`), `editors/spatial/strings/completo.ts`, le 7 righe di T10 nella
 mappa, `apps/client/bench/scene.mjs` e `fake-ipc.ts`,
 `docs/product/drawing-properties.md`, `docs/product/drawing-resources.md`
 Non toccare: l'ispettore di Scrittoio 2 (`document-panels.ts`,
@@ -1828,6 +2038,7 @@ Fatto quando:
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
 Stato: [ ] da fare
+Aspetta: prototipo
 
 
 ## T11 · Il nucleo, la vista e le preferenze del motore
@@ -1964,6 +2175,7 @@ Fatto quando:
 - `tools/gesti-vettori.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial src/panels
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T6–T10)
 
 ## T12 · I tracciati e la penna di Bézier
 
@@ -2030,6 +2242,7 @@ Fatto quando: il modello, e `tools/gesti-vettori.test.ts` passa
 (l'Inchiostro fa ancora `fub:ink`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/tracciati src/editors/spatial/tools/gesti-vettori.test.ts
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T13 · Le forme e le trasformazioni
 
@@ -2095,6 +2308,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/forme src/editors/spatial/completo/famiglie/trasforma
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T14 · Il colore
 
@@ -2160,6 +2374,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/colore
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T15 · L'aspetto e i livelli
 
@@ -2238,6 +2453,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/aspetto src/editors/spatial/completo/famiglie/livelli
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T16 · Il testo
 
@@ -2315,6 +2531,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/testo
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T17 · I pennelli, le deformazioni e la pulizia
 
@@ -2382,6 +2599,7 @@ Casi limite:
 Fatto quando: il modello, e `tools/gesti-vettori.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/pennelli src/editors/spatial/completo/famiglie/pulizia
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T18 · Gli effetti
 
@@ -2431,6 +2649,7 @@ Fatto quando: il modello, e un caso con l'oracolo per ognuno dei 63
 effetti.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/effetti
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T19 · Le tavole, i righelli e le misure
 
@@ -2480,6 +2699,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/tavole
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T20 · Le immagini, il ricalco e i collegamenti
 
@@ -2535,6 +2755,7 @@ Fatto quando: il modello, e il caso di `../fuori/del/vault.png` in
 `crates/fub-disegno/tests/disco.rs` (T28) passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test disco; npx vitest run src/editors/spatial/completo/famiglie/immagini
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T21 · Le trame e gli oggetti dinamici
 
@@ -2584,6 +2805,7 @@ costrutto della famiglia in `crates/fub-disegno/tests/ricetta.rs` (T27)
 passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test ricetta; npx vitest run src/editors/spatial/completo/famiglie/trame src/editors/spatial/completo/famiglie/dinamici
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T22 · I simboli e il web
 
@@ -2648,6 +2870,7 @@ Casi limite:
 Fatto quando: il modello, e il test dell'`onclick` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/simboli src/editors/spatial/completo/famiglie/web
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11)
 
 ## T23 · I formati: aprire, posizionare, esportare, stampare
 
@@ -2763,6 +2986,7 @@ Fatto quando:
   accesi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test disco; cargo deny check; npx vitest run src/editors/spatial/completo/famiglie/formati src/editors/spatial/templates
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11) e D9; le 16 righe di P1 le chiude T31
 
 ## T24 · Gli effetti raster e il 3D
 
@@ -2812,6 +3036,7 @@ Fatto quando: il modello, con un caso con l'oracolo per ognuno dei 66
 effetti.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/raster src/editors/spatial/completo/famiglie/tre-d
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T18)
 
 ## T25 · La stampa, la prospettiva e i grafici
 
@@ -2878,6 +3103,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/stampa src/editors/spatial/completo/famiglie/prospettiva src/editors/spatial/completo/famiglie/grafici
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11); le 13 righe di P1 le chiude T31
 
 ## T26 · I dati e l'automazione
 
@@ -2940,6 +3166,7 @@ Fatto quando: il modello, e il caso dello script che chiede un file in
 `crates/fub-disegno/tests/disco.rs` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test disco; npx vitest run src/editors/spatial/completo/famiglie/dati src/editors/spatial/completo/famiglie/automazione
 Stato: [ ] da fare
+Aspetta: prototipo (attraverso T11) e D9
 
 ## T27 · La ricetta e le forme della scena
 
@@ -2950,7 +3177,7 @@ che si vede ovunque. Dove il formato della scena ha già la stessa cosa, il
 motore deve poterla cambiare nella forma di Fub, così il Semplice,
 l'esportazione e le versioni vecchie di Fub la capiscono.
 Tocca:
-- `vendor/vectorcraft/patches/0005-ricetta-per-elemento.patch` (nuova) e
+- `vendor/vectorcraft/patches/0009-ricetta-per-elemento.patch` (nuova) e
   la sua riga in `vendor/vectorcraft/UPSTREAM.md`;
 - `crates/fub-disegno/src/ricetta.rs` (nuovo) e una riga `mod` in
   `src/lib.rs`;
@@ -2970,9 +3197,9 @@ ricetta sta in `<metadata>`, che la scena conserva già); il client (gli
 avvisi passano dalla via che K5 usa per le perdite); le famiglie, che
 leggono la tabella di `ricetta.rs` quando arrivano; il blocco
 `<vectorcraft:document>` che il motore scrive per sé.
-Dipende da: T28 (la patch 0003 si applica prima), D10
+Dipende da: T28 (la patch 0008 si applica prima), D10
 Cosa fare:
-- **La patch 0005**, nel motore:
+- **La patch 0009**, nel motore:
   - `node_recipe(doc, node) -> Option<Vec<u8>>`: la parte nativa di un
     elemento che il corpo SVG non porta (effetti dal vivo, aspetto in
     pila, parametri di una forma dal vivo, di una fusione, di un oggetto
@@ -3060,6 +3287,7 @@ Fatto quando:
 - `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test ricetta; node tools/disegno-cancello/cancello.mjs; node tools/vendor-craft/vendor.mjs vectorcraft check
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T28 · Il motore non tocca il disco, e le sue tabelle si contano
 
@@ -3069,7 +3297,7 @@ di contarle e di liberarle (Differenze 11). Prima che una famiglia nasca
 (T3), il motore deve rifiutare ogni file che non gli dà il kernel, e ogni
 tabella che cresce deve dire quanto pesa e potersi svuotare.
 Tocca:
-- `vendor/vectorcraft/patches/0003-nessuna-radice-e-tabelle.patch` (nuova)
+- `vendor/vectorcraft/patches/0008-nessuna-radice-e-tabelle.patch` (nuova)
   e la sua riga in `vendor/vectorcraft/UPSTREAM.md`;
 - di K5: `crates/fub-disegno/src/motore.rs`;
 - `crates/fub-disegno/src/disco.rs` (nuovo) e una riga `mod` in
@@ -3086,7 +3314,7 @@ Non toccare: `.github/workflows/` (l'orchestratore); le patch 0001 e 0002
 di K5; il kernel, che il motore non chiama (riceve byte); il client.
 Dipende da: T2 (l'elenco si controlla contro la mappa)
 Cosa fare:
-- **La patch 0003**, nel motore:
+- **La patch 0008**, nel motore:
   - `AutomationRoots::nessuna() -> Arc<AutomationRoots>`: radici vuote ma
     in vigore, con cui `check_read` e `check_write` rifiutano ogni percorso
     con il loro errore. A `cfb30d81`, `AutomationRoots::new(&[], &[])`
@@ -3203,6 +3431,7 @@ Fatto quando:
 - i test di `fub-disegno` di K5 passano ancora.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test disco; node tools/disegno-disco/elenco.mjs --check; node --test tools/disegno-disco/elenco.test.mjs; node tools/vendor-craft/vendor.mjs vectorcraft check
 Stato: [ ] da fare
+Aspetta: niente
 
 ## T29 · La chiusura: le misure, il cancello e la revisione
 
@@ -3213,7 +3442,7 @@ Tocca:
 - `docs/product/drawing-complete.md` (nuova) e la sua riga in
   `docs/README.md`;
 - `docs/misure/k6-disegno-<data>-<macchina>.md` (nuova);
-- `apps/client/bench/webview/budgets.json` (le soglie dello scenario C1,
+- `apps/client/bench/webview/budgets.json` (le soglie dello scenario V1,
   dopo la misura);
 - `crates/fub-disegno/tests/famiglie_memoria.rs` (il passo per famiglia);
 - l'ADR di T1 (lo stato e le risposte a D1–D12);
@@ -3222,26 +3451,25 @@ Tocca:
 - `PLAN.md` (gli `Stato:`) e `DECISIONS.md`.
 Non toccare: il codice delle famiglie, se non per un difetto che la
 revisione trova, con il suo test; `.github/workflows/`.
-Dipende da: tutti gli altri task (T1–T28 e T30), le risposte a D1–D12, P1
-fuso (o il task «Le righe del PDF», vedi «Le righe che aspettano» nel
-modello)
+Dipende da: tutti gli altri task (T1–T28, T30 e T31), la risposta a D9
+(D1–D8 e D10–D12 sono decise)
 Cosa fare (il coder):
-- **Le misure**, su questo computer (Linux, con lo Xvfb di
-  `CLAUDE_DEVICE.md`):
-  - il banco WebView, scenario C1 (T5): all'avvio, nel Semplice, con il
+- **Le misure**, sulla macchina dove gira il piano (Linux; il banco WebView
+  come dice il suo `CLAUDE_DEVICE.md`: sul PC fisso sullo schermo vero):
+  - il banco WebView, scenario V1 (T5): all'avvio, nel Semplice, con il
     Completo, con la penna e con un effetto, i chunk caricati, la memoria
     della WebView e il tempo di ogni passo, in cinque giri, con la mediana
     e il peggiore;
   - `famiglie_memoria.rs`, con il passo per famiglia: per ognuna delle 26,
     `famiglia.prepara`, un comando tipico, il `byte()` della famiglia e la
     crescita del processo, poi `libera()` e di nuovo le due misure; e le
-    tabelle della patch 0003 che restano piene;
+    tabelle della patch 0008 che restano piene;
   - i byte dei chunk `drawing-completo`, `drawing-indice` e
     `drawing-fam-*` dal rapporto di `npm run build`;
   - tutto in `docs/misure/k6-disegno-<data>-<macchina>.md`, con la
     revisione, la macchina, i comandi esatti e i numeri.
 - **Le soglie.** In `apps/client/bench/webview/budgets.json` le soglie di
-  C1 vengono dalla misura (il peggiore, più il margine che usano gli altri
+  V1 vengono dalla misura (il peggiore, più il margine che usano gli altri
   scenari del file). `docs/reference/budgets.json` cambia solo con il sì di
   D9.
 - **La pagina** `drawing-complete.md`: che cos'è il Completo con il motore,
@@ -3260,8 +3488,9 @@ Cosa fa l'orchestratore, dopo il coder:
 - la revisione del diff intero di K6, riga per riga (cose in più,
   doppioni, API premature, generati scritti a mano, disposer mancanti),
   scritta nella PR;
-- `gh pr ready`, la CI completa (Windows e macOS compresi) verde, e il
-  merge solo con il sì dell'utente.
+- `gh pr ready`, la CI completa verde (Linux e Windows: macOS e iOS sono
+  in pausa, ADR 0245), e il merge, che fa l'orchestratore come dice
+  `CLAUDE.md`.
 Dal prototipo: tutti gli stati, come confronto finale.
 Casi limite:
 - P1 non fuso: le righe che lo aspettano restano «da fare»,
@@ -3273,21 +3502,21 @@ Casi limite:
 - una famiglia la cui `libera()` non riporta i suoi byte a zero: lo si
   scrive nelle misure con la tabella che resta, e la riga di DECISIONS.md
   di T28 dice perché;
-- la CI di macOS o di Windows rossa su un test di K6: si guarda prima di
-  chiamarla instabile;
+- la CI di Windows rossa su un test di K6: si guarda prima di chiamarla
+  instabile;
 - una baseline del runner che cambia una scena fuori dal disegno: è una
   regressione, e si torna al task che l'ha portata.
 Fatto quando:
 - `node .github/scripts/check-disegno-mappa.mjs --finale` esce con 0;
 - ogni riga del cancello ha la sua prova verde, scritta nella PR;
-- le misure stanno in `docs/misure/`, e le soglie di C1 in `budgets.json`
+- le misure stanno in `docs/misure/`, e le soglie di V1 in `budgets.json`
   vengono da lì;
 - `node .github/scripts/check-doc-links.mjs` e
   `node .github/scripts/check-doc-orphans.mjs` escono con 0;
-- `gh pr checks` è tutto verde con la CI completa;
-- l'utente ha detto sì al merge.
+- `gh pr checks` è tutto verde con la CI completa, e la PR è unita.
 Prova: scripts/check.sh; node .github/scripts/check-disegno-mappa.mjs --finale; node tools/disegno-disco/elenco.mjs --check; cargo test -p fub-disegno; cargo test -p fub-host --test famiglie_pigre; npm run bench:a11y
 Stato: [ ] da fare
+Aspetta: D9 (e tutti gli altri task)
 
 ## T30 · Le librerie dell'utente
 
@@ -3299,7 +3528,7 @@ i byte non ci sono librerie dell'utente, e restano ferme le righe di
 libreria di T14, T15, T17, T22 e T26 e, con D12 (a), i caratteri da file
 di T16.
 Tocca:
-- `vendor/vectorcraft/patches/0004-librerie-dai-byte.patch` (nuova) e la
+- `vendor/vectorcraft/patches/0010-librerie-dai-byte.patch` (nuova) e la
   sua riga in `vendor/vectorcraft/UPSTREAM.md`;
 - `crates/fub-disegno/src/librerie.rs` (nuovo) e una riga `mod` in
   `src/lib.rs`;
@@ -3320,7 +3549,7 @@ librerie che il motore porta con sé, che restano in sola lettura dal
 binario; il client delle famiglie non ancora integrate.
 Dipende da: T3, T28, D11; D12 per la cartella `caratteri/`
 Cosa fare:
-- **La patch 0004**, «librerie dai byte», nel motore:
+- **La patch 0010**, «librerie dai byte», nel motore:
   - al posto della cartella (`set_dir` di `library.rs`, `set_user_dir` di
     `swatchlib.rs`), `fornisci_librerie(tipo, voci)`: le librerie
     dell'utente come coppie (nome del file, byte), date da chi ospita il
@@ -3396,3 +3625,52 @@ Fatto quando:
 - `node tools/vendor-craft/vendor.mjs vectorcraft check` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test librerie; cargo test -p fub-host --test librerie_disegno; cargo test -p fub-disegno --test disco; node tools/disegno-disco/elenco.mjs --check
 Stato: [ ] da fare
+Aspetta: niente
+
+## T31 · Le righe del PDF
+
+Perché: 32 righe della mappa aspettano P1 (le librerie PDF in Fub): 16 di
+T23, 3 di T11 e le 13 della stampa di T25 (A16). Il 2026-11-21 P1 non è in
+main, e T23, T25 e T11 si integrano senza di loro, con `aspetta P1` nella
+`nota`. Questo task le chiude dopo P1, così T29 non resta fermo.
+Tocca: le 32 righe con `aspetta P1` in `crates/fub-disegno/mappa.tsv`; i
+file delle famiglie che le servono, cioè `crates/fub-disegno/src/famiglie/`
+di T11, T23 e T25, `completo/famiglie/<id>/` delle stesse famiglie e i loro
+casi in `crates/fub-disegno/tests/famiglie/` e
+`apps/client/bench/disegno-famiglie/`; `crates/fub-disegno/Cargo.toml` e
+`crates/fub-host/Cargo.toml` (la feature `drawing-formats` con le librerie
+di P1, se T23 non l'ha già); le pagine `docs/product/` di quelle famiglie
+Non toccare: le librerie PDF di P1 (si usano come P1 le espone, senza
+cambiarle); `vendor/vectorcraft/` oltre alle patch d'esportazione di T23;
+le altre famiglie.
+Dipende da: P1 fuso in main, T11, T23, T25
+Cosa fare:
+- Unire main nel ramo del piano dopo P1, e leggere come P1 espone le
+  librerie (il suo piano e il codice: vince il codice).
+- Per ogni riga con `aspetta P1`: il caso nel banco di prova delle righe
+  (T5), la voce dove dice `posto`, i testi dall'indice; la riga passa a
+  «fatto».
+- Se P1 porta dipendenze nuove, `cargo deny check` e i tetti di K3
+  (`librerie_doppie`, `tools/motori-prova/budgets.json`) restano verdi; se
+  no, ci si ferma con il conto, e l'orchestratore chiede.
+- Le pagine di prodotto delle tre famiglie dicono che PDF, EPS e stampa ci
+  sono.
+Dal prototipo: niente di nuovo; le voci usano i posti che T11, T23 e T25
+hanno già disegnato.
+Casi limite:
+- una riga che P1 non rende possibile (una funzione che le sue librerie
+  non hanno): resta «da fare» con il perché, e l'orchestratore chiede se
+  diventa «escluso» (D6);
+- il componente «Formati del disegno» spento: le voci non ci sono, e i
+  comandi rendono `Unserved`;
+- un PDF grande o rotto: l'errore tipato, mai un panico, con il tetto di
+  memoria del `Budget`.
+Fatto quando:
+- nessuna riga di `mappa.tsv` dice più `aspetta P1`;
+- `cargo test -p fub-disegno --test famiglie` e
+  `npx vitest run src/editors/spatial/completo/famiglie` passano;
+- `node .github/scripts/check-disegno-mappa.mjs` esce con 0;
+- `cargo deny check` è verde.
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo deny check
+Stato: [ ] da fare
+Aspetta: P1
