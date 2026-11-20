@@ -5999,7 +5999,7 @@ impl Workspace {
         // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
         // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
         // che qualcuno rivendica quell'estensione, senza essere cambiato.
-        let entries: Vec<(VaultEntry, Option<StoredEntry>, Option<FileWitness>)> = scanned
+        let mut entries: Vec<(VaultEntry, Option<StoredEntry>, Option<FileWitness>)> = scanned
             .files
             .into_iter()
             .map(|file| {
@@ -6013,11 +6013,18 @@ impl Workspace {
                 // voce è nota. Chiederlo a tutti costava cinquemila aperture
                 // buttate su un vault da cinquemila file, la parte più lenta
                 // del montaggio su Windows (issue #493).
+                //
+                // **Si copia solo la riga che si può certificare** (#523): la
+                // domanda su misura, data e impronta si fa sulla riga dov'è, e
+                // una riga che non passa non si copia. Nella closure niente
+                // I/O: il testimone si chiede dopo, fuori dal lucchetto.
                 let candidate = self
                     .entry_store
-                    .known(&file.id)
-                    .filter(|known| known.describes(file.size, file.mtime))
-                    .filter(|known| known.fingerprint.is_some());
+                    .ask_known(&file.id, |known| {
+                        (known.describes(file.size, file.mtime) && known.fingerprint.is_some())
+                            .then(|| known.clone())
+                    })
+                    .flatten();
                 // Timbro **e identità**, con la regola unica e una domanda
                 // sola al supporto: un file messo al posto di un altro da una
                 // rinomina, dove il timbro è la data (FAT) o la rinomina non
@@ -6044,19 +6051,21 @@ impl Workspace {
             .collect();
 
         // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
-        // (che lo chiedono per valore), l'anagrafe per la riapertura.
+        // (che lo chiedono per valore), l'anagrafe per la riapertura. La riga
+        // dell'anagrafe si **sposta** e non si copia: la terna serve dopo solo
+        // per il `VaultEntry`.
         let mut documents = Vec::new();
         let mut known_entries = Vec::new();
         let mut assets = Vec::new();
         let mut read_on = Vec::new();
-        for (entry, known, witness) in &entries {
+        for (entry, known, witness) in &mut entries {
             if let Some(witness) = witness {
                 read_on.push((entry.id.clone(), *witness));
             }
             match entry.kind {
                 EntryKind::Document => {
                     documents.push(entry.clone());
-                    known_entries.push(known.clone());
+                    known_entries.push(known.take());
                 }
                 EntryKind::Asset => assets.push(entry.clone()),
                 _ => {}
@@ -6135,7 +6144,7 @@ impl Workspace {
             let metadata = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
                 known
                     .filter(|known| known.fingerprint == entry.fingerprint)
-                    .and_then(|known| known.metadata.clone())
+                    .and_then(|known| known.metadata)
             } else {
                 None
             };
@@ -14906,22 +14915,33 @@ impl Workspace {
         // cestino non è una voce del vault di oggi.
         let trashed = self.trashed_originals().unwrap_or_default();
         // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
-        let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
-            BTreeMap::new();
-        let snapshot = self.entry_store.snapshot();
-        for (id, entry) in &snapshot {
-            if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.may_hold(id)
-            {
-                continue;
+        //
+        // La domanda si fa sulla tabella dov'è, senza copiarla (#523): si
+        // leggono misura, identità e impronta, e si copia l'impronta delle
+        // sole righe sparite. Dentro solo lavoro in memoria, e nessuna
+        // domanda all'anagrafe: rientrare nel suo lucchetto di lettura con
+        // uno scrittore in attesa può bloccarsi.
+        let disappeared = self.entry_store.with_all_known(|known| {
+            let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
+                BTreeMap::new();
+            for (id, entry) in known {
+                if entry.size == 0
+                    || self.indexes.core.entries.contains_key(id)
+                    || trashed.may_hold(id)
+                {
+                    continue;
+                }
+                if let (Some(identity), Some(fingerprint)) =
+                    (entry.identity, entry.fingerprint.clone())
+                {
+                    disappeared
+                        .entry((identity, fingerprint))
+                        .or_default()
+                        .push(id.clone());
+                }
             }
-            if let (Some(identity), Some(fingerprint)) = (entry.identity, entry.fingerprint.clone())
-            {
-                disappeared
-                    .entry((identity, fingerprint))
-                    .or_default()
-                    .push(id.clone());
-            }
-        }
+            disappeared
+        });
         if disappeared.is_empty() {
             return (Vec::new(), BTreeSet::new());
         }
@@ -14933,7 +14953,9 @@ impl Workspace {
         let mut appeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
             BTreeMap::new();
         for entry in self.indexes.core.entries.values() {
-            if entry.size == 0 || self.entry_store.known(&entry.id).is_some() {
+            // Fuori da `with_all_known`, e senza copiare la riga: basta
+            // sapere se c'è.
+            if entry.size == 0 || self.entry_store.ask_known(&entry.id, |_| ()).is_some() {
                 continue;
             }
             let (Some(identity), Some(fingerprint)) = (

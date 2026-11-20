@@ -408,15 +408,30 @@ impl EntryStore {
         self.known.read().ok()?.get(id).map(ask)
     }
 
-    /// **Tutto** ciò che si sapeva, per chi ha una domanda sull'insieme e non su
-    /// un file.
+    /// Una domanda su **tutto** ciò che si sapeva, senza copiarlo: la tabella
+    /// resta dov'è, ed esce solo la risposta.
     ///
     /// Ce n'è uno solo, di cliente, ed è il ricongiungimento delle rinomine
     /// fatte ad app chiusa (§23.1): la sua domanda — *cosa c'era ieri e non c'è
     /// oggi?* — non si può fare un id alla volta, perché l'id di ciò che è
-    /// sparito non ce l'ha nessuno da nominare.
-    pub(crate) fn snapshot(&self) -> BTreeMap<DocId, StoredEntry> {
-        self.known.read().map(|k| (*k).clone()).unwrap_or_default()
+    /// sparito non ce l'ha nessuno da nominare. Prima riceveva una copia della
+    /// tabella intera, metadati compresi, per leggerne misura, identità e
+    /// impronta (#523).
+    ///
+    /// `ask` gira col lucchetto di lettura preso: solo lavoro in memoria,
+    /// niente I/O e **nessuna** chiamata a questo `EntryStore` (né
+    /// [`ask_known`](Self::ask_known) né altro). Rientrare in lettura su un
+    /// `RwLock` di `std` può bloccarsi se intanto uno scrittore aspetta. Con
+    /// il lucchetto avvelenato `ask` riceve una tabella vuota, come la copia
+    /// di prima.
+    pub(crate) fn with_all_known<R>(
+        &self,
+        ask: impl FnOnce(&BTreeMap<DocId, StoredEntry>) -> R,
+    ) -> R {
+        match self.known.read() {
+            Ok(known) => ask(&known),
+            Err(_) => ask(&BTreeMap::new()),
+        }
     }
 
     /// Scrive la tabella e la tiene come «ciò che si sa».
