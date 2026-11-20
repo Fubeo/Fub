@@ -2,7 +2,7 @@
 //! grande, e dove va il tempo.
 //!
 //! ```text
-//! cargo run --release -p fub-host --example apertura_30k
+//! cargo run --release -p fub-host --example open_30k
 //! ```
 //!
 //! Tre scenari sulla stessa cartella, e tre domande diverse:

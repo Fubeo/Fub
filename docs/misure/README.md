@@ -153,8 +153,10 @@ comune: versioni, librerie doppie e che cosa manca per allinearle.
 ## L'apertura del vault
 
 Quanto costa riaprire un vault già aperto, diviso per fasi, e quanto si
-risparmierebbe se i documenti non toccati non si rileggessero (issue #521).
+risparmierebbe se i documenti non toccati non si rileggessero (issue #521);
+quanto costa caricare l'anagrafe (issue #523).
 
 | Data | Vault | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-20 | 5000 e 30000 note, generati | Intel Core i5-13600KF, build di rilascio | [La riapertura tiepida che non scatta](2026-11-20-riapertura-tiepida.md) |
+| 2026-11-20 | 30000 note, generate | Intel Core i5-13600KF, build di rilascio, carica | [L'anagrafe letta in un colpo](2026-11-20-anagrafe-lettura.md) |
