@@ -31,6 +31,11 @@ pub(super) struct JobCursor {
     pub(super) applied: BTreeSet<String>,
     #[serde(default)]
     pub(super) synced: BTreeMap<String, Revision>,
+    /// Un pull ha cominciato ad applicare op e non ha ancora finito: sul
+    /// disco possono esserci file scaricati che `synced` non nomina. Assente
+    /// quando è falso, così il cursore di sempre resta quello.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(super) pulling: bool,
 }
 
 pub(super) fn read_cursor(root: &Path) -> Result<JobCursor, PluginError> {

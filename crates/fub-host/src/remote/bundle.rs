@@ -64,6 +64,8 @@ pub(crate) use actions::{mark_retry, pause_policy, request_restore};
 #[cfg(test)]
 use apply::conflict_copy_id;
 use apply::{apply_remote_op, read_conflicts, read_versions, report_conflicts, ApplyOutcome};
+#[doc(hidden)]
+pub use pass::crash_next_pull_after;
 pub(crate) use pass::run_pass_on;
 use state::{
     accepted_key_json, append_outbox, drain_outbox, ensure_job_vdk, prior_accepted_key_file,

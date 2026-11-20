@@ -250,6 +250,14 @@ impl Device {
         self.host = open_host(&self.network, &self.config, &self.vault);
     }
 
+    /// Il processo è morto senza chiudere niente: l'host vecchio si butta e
+    /// se ne apre uno nuovo sulla stessa configurazione e sullo stesso vault.
+    /// Il lucchetto di scrittura del vault cade con l'host, come col processo.
+    pub fn restart_after_crash(&mut self) {
+        drop(std::mem::replace(&mut self.host, Host::without_watcher()));
+        self.host = open_host(&self.network, &self.config, &self.vault);
+    }
+
     pub fn job(&self, payload: serde_json::Value) -> Result<serde_json::Value, PluginError> {
         self.host
             .invoke_job(Some(self.vault.as_str()), "fub.sync", "sync.pass", payload)

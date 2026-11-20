@@ -271,9 +271,11 @@ fn a_pass_costs_what_changed_and_an_interrupted_pass_converges() {
         files_of(&a.vault),
         "the second device holds the same vault, nothing lost, nothing doubled"
     );
+    // L'interrotto: il segno del pull in corso, un blocco di op, quelli prima
+    // dell'errore. Il ripreso: il segno, un blocco, la fine del pull.
     if let (Some(half), Some(resumed)) = (half, resumed_writes) {
         assert!(
-            half <= 2,
+            half <= 3,
             "the interrupted pass wrote the cursor {half} times"
         );
         assert!(resumed <= 4, "the pull wrote the cursor {resumed} times");

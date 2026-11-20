@@ -5,6 +5,32 @@ use super::*;
 /// Quanti op applicati al più fra una scrittura del cursore e la successiva.
 const APPLIED_PER_WRITE: usize = 512;
 
+/// Il crollo simulato del prossimo pull: dopo quanti op applicati, o `MAX`.
+static CRASH_AFTER_APPLIED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+/// **Per le prove**: il prossimo pull di questo processo va in panico dopo
+/// `applied` op applicati, prima di scrivere il cursore, come un processo che
+/// muore lì. Un panico, e non un errore, perché niente dopo di lui scrive:
+/// sul disco restano i file applicati e l'ultimo cursore scritto. Vale una
+/// volta sola.
+#[doc(hidden)]
+pub fn crash_next_pull_after(applied: usize) {
+    CRASH_AFTER_APPLIED.store(applied, std::sync::atomic::Ordering::SeqCst);
+}
+
+fn crash_point(applied: usize) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let at = CRASH_AFTER_APPLIED.load(SeqCst);
+    if applied >= at
+        && CRASH_AFTER_APPLIED
+            .compare_exchange(at, usize::MAX, SeqCst, SeqCst)
+            .is_ok()
+    {
+        panic!("crollo simulato del pull dopo {applied} op applicati");
+    }
+}
+
 /// Passo reale del job `sync.pass` su `&mut dyn HostApi` (JobHost fuori lock):
 /// outbox/cursori dallo state-dir TRUSTED, HTTP via `HostNetwork::fetch`,
 /// apply via porte locali con CAS raw (`write_document_bytes` per byte/BOM,
@@ -40,6 +66,19 @@ pub(crate) fn run_pass_on(
     }
     let do_push = mode.can_push() && direction != "pull";
     let do_pull = mode.can_pull() && direction != "push";
+    // Un pull morto a metà ha lasciato sul disco file scaricati che il
+    // cursore non nomina: spinti adesso sembrerebbero modifiche locali. Prima
+    // un pull da solo, che li riconosce e li nomina, poi il passaggio intero.
+    // Il segno si legge fuori dal lock: al peggio costa un pull in più.
+    if do_push && do_pull && read_cursor(root)?.pulling {
+        let recovered = run_pass_on(root, token, host, vault_scope, "pull")?;
+        let mut summary = run_pass_on(root, token, host, vault_scope, direction)?;
+        for key in ["pulled", "applied", "conflicts"] {
+            let total = summary[key].as_u64().unwrap_or(0) + recovered[key].as_u64().unwrap_or(0);
+            summary[key] = total.into();
+        }
+        return Ok(summary);
+    }
     let _lock = JobLock::acquire(root)?;
     let base = super::resolve_endpoint(host)?;
     super::check_endpoint_binding(root, &base).map_err(|e| e.to_plugin_error())?;
@@ -337,9 +376,10 @@ pub(crate) fn run_pass_on(
     // un errore. Un crollo fra due scritture lascia sul disco dei file già
     // applicati che il cursore non nomina: il pull dopo li riceve di nuovo e
     // `apply_remote_op` li riconosce (stessi byte, nome già spostato, file già
-    // tolto) senza riscriverli. Il blocco tiene corta la finestra in cui il
-    // push di un passaggio interrotto rimanderebbe al servizio, come modifica
-    // locale, un file appena scaricato.
+    // tolto) senza riscriverli. Perché nessun push li scambi prima per
+    // modifiche locali, il segno `pulling` va sul disco prima del primo op
+    // applicato e se ne va solo a pull finito: chi lo trova fa prima il pull
+    // (vedi l'inizio di questa funzione).
     let mut unsaved = 0usize;
     let pull_result = (|| -> Result<(), PluginError> {
         if !do_pull {
@@ -393,6 +433,11 @@ pub(crate) fn run_pass_on(
                 if cursor.applied.contains(id) {
                     applied.insert(id.to_string()); // crash after durable apply, before ack
                 } else {
+                    if !cursor.pulling {
+                        cursor.pulling = true;
+                        write_cursor(root, &cursor)?;
+                        unsaved = 0;
+                    }
                     match apply_remote_op(host, &state, &vdk, op, &mut cursor)? {
                         ApplyOutcome::Applied { op_id } => {
                             cursor.applied.insert(op_id.clone());
@@ -411,6 +456,7 @@ pub(crate) fn run_pass_on(
                         write_cursor(root, &cursor)?;
                         unsaved = 0;
                     }
+                    crash_point(applied.len());
                 }
                 if applied.contains(id) {
                     if let Some(doc) = op
@@ -424,7 +470,12 @@ pub(crate) fn run_pass_on(
                     }
                 }
             }
-            if unsaved > 0 {
+            // L'ultima pagina nomina tutto: il segno se ne va con lei.
+            let finished = !truncated && cursor.pulling;
+            if finished {
+                cursor.pulling = false;
+            }
+            if unsaved > 0 || finished {
                 write_cursor(root, &cursor)?;
                 unsaved = 0;
             }
