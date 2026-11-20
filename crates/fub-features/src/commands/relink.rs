@@ -99,6 +99,59 @@ pub(crate) fn property_links_to(
     Ok(found)
 }
 
+/// I link di proprietà che arrivavano a `from`, cercati **dopo** che la nota è
+/// già diventata `to`: la ripresa di un'archiviazione interrotta fra la
+/// rinomina e la riscrittura, quando il nome vecchio non porta più da nessuna
+/// parte e la via inversa del grafo non lo conosce.
+///
+/// Si guardano quindi le proprietà di tutte le note (succede solo dopo un
+/// crollo): conta un link che arriva a `from` per nome o per percorso, come in
+/// [`property_links_to`], e che oggi non porta da nessuna parte o porta già a
+/// `to`. Uno che porta a un'altra nota resta suo. La riscrittura poi è la
+/// stessa della rinomina, e un link già scritto col nome nuovo non cambia:
+/// riprendere due volte non riscrive due volte.
+///
+/// Le chiavi della risposta sono `from`, come quelle di
+/// [`property_links_to`], così [`rewrite_property_links`] la prende uguale.
+pub(crate) fn property_links_left_behind(
+    host: &dyn HostApi,
+    from: &DocId,
+    to: &DocId,
+) -> Result<BTreeMap<DocId, Vec<PropertyLink>>, PluginError> {
+    let mut found: BTreeMap<DocId, Vec<PropertyLink>> = BTreeMap::new();
+    let answer = match host.query_index(IndexQuery::Documents {
+        matching: QueryExpr::all(),
+        sort: None,
+        select: PropertySelect::All,
+        page: None,
+        excerpts: Excerpts::Omit,
+    }) {
+        Err(PluginError::Unserved(_)) => return Ok(found),
+        answer => answer?,
+    };
+    for row in answer.documents()?.items {
+        let mut pages = BTreeSet::new();
+        for property in &row.properties {
+            pages.extend(written_pages(&property.value));
+        }
+        for page in pages {
+            if !reaches_by_name_or_path(&page, from) {
+                continue;
+            }
+            match resolve(host, &page, &row.doc)? {
+                None => {}
+                Some(target) if target == *to => {}
+                Some(_) => continue,
+            }
+            found.entry(from.clone()).or_default().push(PropertyLink {
+                source: row.doc.clone(),
+                page,
+            });
+        }
+    }
+    Ok(found)
+}
+
 /// Riscrive, dopo le rinomine `moved` (da → a), i link raccolti prima da
 /// [`property_links_to`]. Torna le note che non si sono lasciate riscrivere,
 /// ognuna col suo motivo; le altre sono già scritte.

@@ -333,6 +333,14 @@ impl Shared {
                                 failure.error
                             );
                         }
+                        for failure in report.link_failures {
+                            tracing::warn!(
+                                target: "fub.host",
+                                subject = ?failure.subject,
+                                "link di proprietà da guardare dopo l'archiviazione: {}",
+                                failure.error
+                            );
+                        }
                     }
                     Err(error) => tracing::warn!(
                         target: "fub.host",

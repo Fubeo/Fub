@@ -14,7 +14,7 @@
 //!
 //! [`IndexQuery::VaultHealth`]: fub_abi::traits::IndexQuery::VaultHealth
 
-use fub_abi::model::{DateFormats, DocId, Frontmatter, Link, LinkTarget};
+use fub_abi::model::{DateFormats, DocId, Frontmatter, Link, LinkTarget, Span};
 use fub_abi::rules::health::{broken_target, unrecognized_dates, LinkResolver};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HealthCheck, HealthIssue};
@@ -171,7 +171,7 @@ fn broken_links<'a>(
     doc_extensions: &[String],
 ) -> Vec<HealthIssue> {
     let mut issues = Vec::new();
-    for (id, links, _) in docs {
+    for (id, links, frontmatter) in docs {
         for link in links {
             let Some(written) = broken_target(id, link, doc_extensions, graph) else {
                 continue;
@@ -181,6 +181,28 @@ fn broken_links<'a>(
                 check: HealthCheck::BrokenLinks,
                 detail: Some(written),
                 span: Some(link.span),
+            });
+        }
+        // Un link scritto in una proprietà (`progetto: "[[Sparita]]"`) si
+        // rompe come quello del corpo, con lo stesso giudizio e lo stesso
+        // dettaglio (la destinazione come era scritta, che il grafo e la
+        // scrivania leggono così). Il frontmatter non ha span nel modello:
+        // senza punto, dopo i link del corpo, nell'ordine del frontmatter.
+        for (_, target) in crate::graph::property_links_of(frontmatter) {
+            let link = Link {
+                target,
+                embed: false,
+                span: Span::new(0, 0),
+                context: None,
+            };
+            let Some(written) = broken_target(id, &link, doc_extensions, graph) else {
+                continue;
+            };
+            issues.push(HealthIssue {
+                doc: id.clone(),
+                check: HealthCheck::BrokenLinks,
+                detail: Some(written),
+                span: None,
             });
         }
     }
@@ -298,7 +320,7 @@ fn dates<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_abi::model::{DocumentModel, Span};
+    use fub_abi::model::DocumentModel;
 
     fn md() -> Vec<String> {
         vec!["md".to_string()]
@@ -559,6 +581,44 @@ mod tests {
             &entries_of(&["doc/manuale.pdf"])
         )
         .is_empty());
+    }
+
+    /// Un link rotto scritto in una proprietà compare fra i link rotti come
+    /// quello del corpo: la destinazione come era scritta, senza span (il
+    /// frontmatter non ne ha), dopo quelli del corpo. Uno che risolve, un
+    /// allegato che c'è e un `[[#titolo]]` della nota stessa non sono rotti.
+    #[test]
+    fn a_broken_link_in_a_property_is_reported_like_one_in_the_body() {
+        let mut indice = doc("indice.md", vec![wiki("Sparita nel corpo")]);
+        indice.frontmatter = Frontmatter(
+            serde_json::json!({
+                "progetto": "[[Sparita]]",
+                "fonti": ["[[Esiste]]", "[[manuale.pdf]]", "[[#Titolo]]", "[[Persa]]"],
+            })
+            .as_object()
+            .expect("un oggetto")
+            .clone(),
+        );
+        let docs = vec![indice, doc("Esiste.md", vec![])];
+        let graph = LinkGraph::build(docs.iter());
+        let found = issues_with(
+            HealthCheck::BrokenLinks,
+            &docs,
+            &graph,
+            &entries_of(&["doc/manuale.pdf"]),
+        );
+        let said: Vec<(&str, Option<&str>, bool)> = found
+            .iter()
+            .map(|the| (the.doc.as_str(), the.detail.as_deref(), the.span.is_some()))
+            .collect();
+        assert_eq!(
+            said,
+            vec![
+                ("indice.md", Some("Sparita nel corpo"), true),
+                ("indice.md", Some("Sparita"), false),
+                ("indice.md", Some("Persa"), false),
+            ]
+        );
     }
 
     #[test]

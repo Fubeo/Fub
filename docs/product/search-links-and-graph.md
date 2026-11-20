@@ -242,7 +242,7 @@ la nota; il testo di prima resta nella cronologia.
 I controlli di salute del vault (`vault_health` in `query_index`, `--health`
 nella CLI) trovano link rotti, note orfane, path che collidono, date non
 riconosciute, vicoli ciechi e allegati non usati; i link nelle proprietà contano
-come quelli del corpo, fuori dai rotti. Un vicolo cieco è una nota senza link
+come quelli del corpo, anche fra i rotti. Un vicolo cieco è una nota senza link
 verso il vault: un URL o un `[[#Sezione]]` non portano altrove, un link rotto
 invece conta come uscita. Un allegato non usato è un file di specie allegato che
 nessun link o embed raggiunge, risolto come per i link rotti.
@@ -270,8 +270,8 @@ Due altri filtri, spenti di default, aggiungono nodi che non sono file:
   Il nodo è in trasparenza, e il click crea la nota come farebbe il suo
   wikilink. Un allegato mancante segue il filtro degli allegati.
 
-Spento, il grafo mostra solo i file che esistono. Una nota collegata solo a un
-tag non conta come orfana, e tag e note mancanti non hanno gruppo di cartella.
+Spento, il grafo mostra solo i file che esistono. Non è orfana una nota legata
+solo a un tag o in una proprietà; tag e note mancanti non hanno gruppo di cartella.
 
 Il campo **Filtro** della barra accetta la sintassi della barra di ricerca:
 restano le note che la ricerca trova, gli allegati collegati a loro e il seme
