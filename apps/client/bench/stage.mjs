@@ -29,12 +29,13 @@
 //    è successo alla prima corsa di questo file.
 // 6. **La finestra è una.** Viewport fisso e `deviceScaleFactor: 1`: la
 //    baseline è per una misura, non per lo schermo di chi passa.
-// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso.
-//    CodeMirror lo usa nella ricerca di una posizione sotto un punto
-//    (`InlineCoordsScan.scan`), e la selezione la cerca ai due bordi della
-//    riga a capo: col caso vero, in una corsa su due i due bordi differivano
-//    di un carattere e tre lettere scelte si dipingevano come una riga intera
-//    (`riga-dei-suggerimenti`).
+// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso: chi
+//    lo usa (gli id di un diagramma, un pareggio da spezzare) dà la stessa
+//    foto a ogni corsa. Un difetto che dipende dal caso, però, il seme lo
+//    nasconde: CodeMirror fino alla 6.43.7 cercava col caso la posizione sotto
+//    un punto, e tre lettere vicino a un a capo si dipingevano a volte come
+//    una riga intera nell'app vera ma mai qui (#399, corretto a monte nella
+//    6.43.8 e tenuto da `src/editors/text/codemirror-upstream.test.ts`).
 // 8. **Ciò che cambierà da sé lo dice.** Un elemento che sta per riscriversi
 //    senza che nessuno lo tocchi (la riga dei suggerimenti durante la sua
 //    pausa) porta `data-pending`; prima dello scatto si aspetta che nella
