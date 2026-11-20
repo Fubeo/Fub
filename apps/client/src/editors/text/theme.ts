@@ -169,12 +169,19 @@ const visibleHighlighting: Extension = [
 /// per dichiarare in che luce si trova, e da cui dipendono la resa dei
 /// controlli nativi dentro l'editor e la variante dei suoi stili di base che
 /// la pelle copre. È l'unica ragione per cui questa è una funzione.
+///
+/// Un'estensione sola per luce, fatta una volta: ogni `EditorView.theme` è un
+/// foglio nuovo per CodeMirror, e un editor montato con un foglio che non
+/// conosceva gli fa riscrivere il suo `<style>` con un testo diverso (vedi
+/// `steady-styles.ts`). Uno per luce resta uguale da un montaggio all'altro.
 export function editorTheme(theme: Theme): Extension {
-  return [
-    // `EditorView.theme` accetta le opzioni solo insieme a delle regole: il
-    // flag va su un tema vuoto.
-    EditorView.theme({}, { dark: theme === "dark" }),
-    visibleHighlighting,
-  ];
+  return themes[theme];
 }
+
+const themes: Record<Theme, Extension> = {
+  // `EditorView.theme` accetta le opzioni solo insieme a delle regole: il
+  // flag va su un tema vuoto.
+  light: [EditorView.theme({}, { dark: false }), visibleHighlighting],
+  dark: [EditorView.theme({}, { dark: true }), visibleHighlighting],
+};
 

@@ -68,6 +68,7 @@ import { notify } from "../../ui/notify";
 import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
+import { keepEditorStylesSteady } from "./steady-styles";
 import { HistoryFootprints } from "./history-footprints";
 import { smartLists } from "./smart-lists";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "./properties-display";
@@ -332,6 +333,7 @@ export class TextEngine {
       parent,
       state: EditorState.create({ extensions: this.extensions() }),
     });
+    keepEditorStylesSteady(this.view);
     // Il solo controllo da raggiungere con Tab è lo scroller, mentre il
     // contenteditable interno resta la destinazione per il fuoco dell'editor.
     this.view.contentDOM.tabIndex = -1;
