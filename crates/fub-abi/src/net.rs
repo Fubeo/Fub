@@ -192,6 +192,51 @@ impl HttpResponse {
     }
 }
 
+/// Perché [`fetch_limited`](crate::traits::HostNetwork::fetch_limited) non ha
+/// dato una risposta.
+///
+/// È un tipo a sé, e non una variante nuova di
+/// [`PluginError`](crate::PluginError), perché il tetto di byte è un argomento
+/// **Rust** fra l'host e i suoi chiamanti: non attraversa WIT né IPC, e il filo
+/// resta quello di [`fetch`](crate::traits::HostNetwork::fetch). Chi lo riceve
+/// distingue *«la risposta era più grande di quanto ho chiesto»* da *«non ho
+/// potuto chiedere»* con un `match`, non cercando una frase nel messaggio.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LimitedFetchError {
+    /// Il corpo superava `limit` byte. Chi implementa davvero il tetto smette
+    /// di leggere appena lo supera: dal server arrivano al più `limit` byte più
+    /// un pezzo di lettura, mai la risposta intera.
+    TooLarge {
+        /// Il tetto che il chiamante aveva passato.
+        limit: u64,
+    },
+    /// Ogni altro esito: gli stessi errori di
+    /// [`fetch_cancelled`](crate::traits::HostNetwork::fetch_cancelled),
+    /// annullamento compreso.
+    Failed(crate::PluginError),
+}
+
+impl From<crate::PluginError> for LimitedFetchError {
+    fn from(error: crate::PluginError) -> Self {
+        LimitedFetchError::Failed(error)
+    }
+}
+
+/// La forma per il log, come il `Display` di `PluginError`: non è un contratto,
+/// chi decide guarda la variante.
+impl std::fmt::Display for LimitedFetchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LimitedFetchError::TooLarge { limit } => {
+                write!(f, "response body above the caller limit of {limit} bytes")
+            }
+            LimitedFetchError::Failed(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for LimitedFetchError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
