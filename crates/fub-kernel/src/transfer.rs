@@ -774,29 +774,13 @@ pub fn change_stamp_settled(change: Option<u64>, observed: Option<u64>) -> bool 
     }
 }
 
-/// **Quale file**, oltre a misura e data: il timbro di cambiamento e
-/// l'identità che il supporto dà per un path, letti senza aprire il file.
-///
-/// È la sola regola con cui il kernel decide che un file è ancora quello che
-/// conosce, insieme a misura e data uguali e, per chi ricorda qualcosa oltre
-/// la lettura, a [`change_stamp_settled`]: l'anagrafe che certifica una voce
-/// alla riapertura (`EntryStore`, `Workspace::prepare_scan_vault`), la fusione
-/// di due tabelle, l'impronta imparata da una domanda sul contenuto, la lease
-/// fra due pezzi e il cestino fra censimento e distruzione.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct FileWitness {
-    pub(crate) change_stamp: Option<u64>,
-    pub(crate) identity: Option<FileIdentity>,
-}
+pub(crate) use crate::storage::FileWitness;
 
 impl FileWitness {
     /// Il testimone di `id` adesso, come lo dà il supporto del vault. Un
     /// errore del supporto è un campo che non si conosce.
     pub(crate) fn of(vault: &Vault, id: &DocId) -> FileWitness {
-        FileWitness {
-            change_stamp: vault.change_stamp(id),
-            identity: vault.file_identity(id),
-        }
+        vault.witness(id)
     }
 
     /// Il testimone di `path` adesso; un errore del supporto risale.
@@ -804,10 +788,7 @@ impl FileWitness {
         storage: &dyn VaultStorage,
         path: &Utf8Path,
     ) -> std::io::Result<FileWitness> {
-        Ok(FileWitness {
-            change_stamp: storage.change_stamp(path)?,
-            identity: storage.file_identity(path)?,
-        })
+        storage.witness(path)
     }
 
     /// `self`, ciò che si sapeva, dice ancora il file `now`?

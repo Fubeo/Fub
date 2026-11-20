@@ -183,10 +183,7 @@ impl Observed {
         Some(Observed {
             size: stat.size,
             mtime: stat.mtime,
-            witness: FileWitness {
-                change_stamp: storage.change_stamp(path).ok()?,
-                identity: storage.file_identity(path).ok()?,
-            },
+            witness: storage.witness(path).ok()?,
         })
     }
 }

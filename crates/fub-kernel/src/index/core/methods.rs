@@ -405,21 +405,36 @@ impl CoreIndex {
         self.entries.insert(entry.id.clone(), entry);
     }
 
-    /// Il file su cui una domanda ha imparato l'impronta della voce `id`, se è
-    /// così che la voce l'ha avuta.
+    /// Il file su cui la voce `id` ha imparato la sua impronta, se lo si sa:
+    /// la lettura della seconda fase, la riga che l'anagrafe ha certificato
+    /// alla riapertura, una domanda sul contenuto.
     pub(crate) fn learned_on(&self, id: &DocId) -> Option<crate::same_content::FileWitness> {
         self.learned_on.get(id).copied()
     }
 
-    /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
-    /// la sua data non era nel passato quando la si è letta, quindi una
-    /// scrittura arrivata subito dopo sarebbe indistinguibile da nessuna
-    /// scrittura (difetto 0187). Chi scrive l'anagrafe la salta.
-    pub(crate) fn observed_at_the_same_instant(&self, id: &DocId) -> bool {
-        match (self.entries.get(id), self.observed_at(id)) {
-            (Some(entry), Some(observed_at)) => entry.mtime >= observed_at,
-            _ => true,
+    /// Ricorda che l'impronta che la voce `id` porta adesso viene dal file
+    /// `witness` (vedi [`learned_on`](Self::learned_on)). Si chiama subito
+    /// dopo aver installato la voce che porta quell'impronta: una voce che
+    /// cambia dopo lo dimentica da sé.
+    pub(crate) fn remember_read_on(
+        &mut self,
+        id: &DocId,
+        witness: crate::same_content::FileWitness,
+    ) {
+        if self.entries.contains_key(id) {
+            self.learned_on.insert(id.clone(), witness);
         }
+    }
+
+    /// Se di una voce con data `mtime`, guardata all'istante `observed_at`
+    /// (vedi [`observed_at`](Self::observed_at)), **non ci si può fidare
+    /// fino alla prossima apertura**: la sua data non era nel passato quando
+    /// la si è letta, quindi una scrittura arrivata subito dopo sarebbe
+    /// indistinguibile da nessuna scrittura (difetto 0187). Chi scrive
+    /// l'anagrafe la salta. Un istante che non si conosce è un'osservazione
+    /// di cui non ci si fida.
+    pub(crate) fn seen_in_its_own_instant(mtime: u64, observed_at: Option<u64>) -> bool {
+        observed_at.is_none_or(|observed_at| mtime >= observed_at)
     }
 
     /// L'orologio letto prima di guardare il file della voce `id`, se la voce
@@ -519,7 +534,10 @@ impl CoreIndex {
     /// misura e stessa data di quando lo si è osservato. Una voce cambiata nel
     /// frattempo (una scrittura, il rilevatore) vince, e l'impronta si butta.
     /// Accanto all'impronta resta `witness`, il file letto (vedi
-    /// [`learned_on`](Self::learned_on)). Ritorna `true` se l'ha tenuta.
+    /// [`learned_on`](Self::learned_on)). Una voce che ha già un'impronta
+    /// imparata su un altro file (timbro o identità diversi, con la stessa
+    /// misura e la stessa data) descrive quel file, non questo: l'impronta
+    /// nuova non le si attacca. Ritorna `true` se l'ha tenuta.
     ///
     /// Tocca solo l'impronta: i nomi e il segno *racily clean* di `entries`
     /// non dipendono da lei, quindi non serve passare da `install_entry`.
@@ -537,9 +555,11 @@ impl CoreIndex {
         if entry.size != size || entry.mtime != mtime {
             return false;
         }
-        if entry.fingerprint.as_ref() == Some(fingerprint)
-            && self.learned_on.get(id) == Some(&witness)
-        {
+        let known_on = self.learned_on.get(id);
+        if entry.fingerprint.is_some() && known_on.is_some_and(|known| !known.agrees(&witness)) {
+            return false;
+        }
+        if entry.fingerprint.as_ref() == Some(fingerprint) && known_on == Some(&witness) {
             return false;
         }
         entry.fingerprint = Some(fingerprint.clone());

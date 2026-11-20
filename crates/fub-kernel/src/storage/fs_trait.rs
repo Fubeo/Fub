@@ -373,6 +373,10 @@ impl VaultStorage for FsStorage {
         change_stamp_of_file(path)
     }
 
+    fn witness(&self, path: &Utf8Path) -> io::Result<FileWitness> {
+        witness_of_file(path)
+    }
+
     /// **Qui il default non basta**, ed è l'unico supporto per cui non basta:
     /// il filesystem è l'unico che decide da sé se due nomi siano un posto o
     /// due, e lo dice con [`identita_del_file`]. Due path uguali sono lo stesso

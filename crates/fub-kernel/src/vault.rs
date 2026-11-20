@@ -1233,6 +1233,17 @@ impl Vault {
         self.storage.file_identity(&path).ok().flatten()
     }
 
+    /// Timbro di cambiamento e identità della voce in una domanda sola
+    /// ([`VaultStorage::witness`]). Un errore, o un id fuori dal recinto, è
+    /// un testimone di cui non si conosce niente: chi lo confronta con uno
+    /// noto vede un file cambiato.
+    pub fn witness(&self, id: &DocId) -> crate::storage::FileWitness {
+        self.path_for(id)
+            .ok()
+            .and_then(|path| self.storage.witness(&path).ok())
+            .unwrap_or_default()
+    }
+
     /// Timbro opaco di cambiamento del file, se il backend lo conosce.
     ///
     /// Non identifica il file e non partecipa al rejoin: serve soltanto a

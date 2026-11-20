@@ -637,6 +637,70 @@ pub(crate) fn windows_change_stamp(handle: std::os::windows::io::RawHandle) -> i
     Ok(info.ChangeTime.max(0) as u64)
 }
 
+/// L'identità del file dietro `handle`: il numero di serie del volume e
+/// l'indice del file, come [`identity_of_the_file`], senza aprirlo di nuovo.
+#[cfg(windows)]
+pub(crate) fn windows_identity(
+    handle: std::os::windows::io::RawHandle,
+) -> io::Result<FileIdentity> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: l'handle resta vivo nel chiamante per tutta la syscall e `info`
+    // è una struttura del chiamante che la funzione riempie soltanto.
+    let outcome = unsafe { GetFileInformationByHandle(handle as _, &mut info) };
+    if outcome == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(FileIdentity {
+        volume: info.dwVolumeSerialNumber as u64,
+        file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+    })
+}
+
+/// Timbro di cambiamento e identità di `path` con **una** domanda al
+/// filesystem: un `stat` su unix, un handle solo su Windows (dove la
+/// risposta separata apriva il file due volte). Come le due domande prese
+/// una per una, un timbro che non si legge è un errore e un'identità che
+/// non si legge è `None`.
+pub(super) fn witness_of_file(path: &Utf8Path) -> io::Result<FileWitness> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::metadata(path)?;
+        Ok(FileWitness {
+            change_stamp: Some(unix_change_stamp(metadata.ctime(), metadata.ctime_nsec())),
+            identity: Some(FileIdentity {
+                volume: metadata.dev(),
+                file: metadata.ino(),
+            }),
+        })
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)?;
+        let handle = file.as_raw_handle();
+        Ok(FileWitness {
+            change_stamp: Some(windows_change_stamp(handle)?),
+            identity: windows_identity(handle).ok(),
+        })
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        Ok(FileWitness::default())
+    }
+}
+
 pub(super) fn change_stamp_of_file(path: &Utf8Path) -> io::Result<Option<u64>> {
     #[cfg(unix)]
     let stamp = {
