@@ -429,6 +429,11 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("viewer_open", Why::AppSurface),
     ("viewer_control", Why::AppSurface),
     ("viewer_save", Why::AppSurface),
+    // Le tessere della vista Mappa: byte di un'immagine, non dati del vault
+    // (`query_index` non porta byte) né un comando del registro, perché a
+    // chi chiedere lo decide un'impostazione di macchina che nessun vault
+    // può dare (`Host::map_tile`).
+    ("map_tile", Why::AppSurface),
     ("save_artifact", Why::AppSurface),
     ("print_artifact", Why::AppSurface),
     ("reveal_in_system", Why::AppSurface),

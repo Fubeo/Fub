@@ -757,6 +757,33 @@ async fn viewer_save(
     for_the_shell(&host, vault.as_deref(), saved)
 }
 
+/// Una tessera della vista Mappa di una Base, come corpo IPC binario: la
+/// scarica l'host, soltanto da un host che `map.tile-hosts` ammette su questa
+/// macchina (`Host::map_tile`, dove stanno tutte le regole). La webview non
+/// apre connessioni: la sua CSP non ammette `https:` in `connect-src`.
+/// Fuori dal thread principale: una tessera aspetta la rete.
+#[tauri::command]
+async fn map_tile(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    url: String,
+    kind: fub_host::map_tiles::TileKind,
+) -> Result<tauri::ipc::Response, PluginError> {
+    let origin = window
+        .url()
+        .map_err(|error| resources::viewer_failed("host.viewer.url_unavailable", error));
+    let label = window.label().to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let tile = origin
+            .and_then(|origin| resources::guard_trusted_local(&label, origin.as_str()))
+            .and_then(|()| host.map_tile(&url, kind));
+        for_the_shell(&host, None, tile).map(|tile| tauri::ipc::Response::new(tile.bytes.to_vec()))
+    })
+    .await
+    .map_err(|error| unfinished("map tile", error))?
+}
+
 /// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e
 /// versione prima di aprire una sessione.
 #[tauri::command]
@@ -3627,6 +3654,7 @@ pub fn run() {
             viewer_open,
             viewer_control,
             viewer_save,
+            map_tile,
             list_grid_surfaces,
             open_grid_bytes,
             grid_bytes_window,

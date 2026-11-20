@@ -57,6 +57,7 @@ commands.allow = [
   "viewer_open",
   "viewer_control",
   "viewer_save",
+  "map_tile",
   "save_artifact",
   "print_artifact",
   "reveal_in_system",
