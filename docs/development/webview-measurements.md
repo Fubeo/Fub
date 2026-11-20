@@ -61,6 +61,7 @@ Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
 | F1 | rAF a vuoto: 5 s di `requestAnimationFrame` sulla shell ferma, a indice pronto | mediana fra fotogrammi confrontata col periodo dello schermo; tetto del motore; percorso di disegno |
 | F2 | quiete: 20 s senza gesti | richieste di fotogramma della pagina; CPU dei processi della WebView, in % di un core |
 | F3 | thread principale per gesto: la barra laterale dal comando (Ctrl+Alt+B, sei volte), il cambio scheda fra la nota lunga e una corta (Ctrl+PagGiù, otto volte), una cartella di trenta note aperta e chiusa nell'albero (otto volte) | per gesto, la mediana delle ripetizioni del tempo di thread principale bloccato; fotogrammi persi e CPU nel referto |
+| F4 | il cambio scheda fra una nota e un foglio `.xlsx` (`F4/Bilancio.xlsx`, 1.000 righe × 12 colonne) nello stesso riquadro: un giro a vuoto, poi sei andate e ritorni col clic sulla scheda | per lato (`F4.foglio`, `F4.nota`), la mediana dal clic alla prima cella (o riga) dipinta, in ms, e del thread principale bloccato: buco più lungo (`mainBlocked`) e somma dei buchi (`mainTotal`) |
 
 S1 scrive i 200 caratteri in cinque giri (`S1_ROUNDS` in `typing.mjs`), ognuno
 su una riga nuova, e dà la mediana dei p95 dei giri, come L1
@@ -303,6 +304,14 @@ PyGObject), il renderer con la sua fonte, il vblank e le librerie GL che i
 processi della WebView hanno caricato (`render.libraries`). Ogni scenario ha
 nel referto il carico della macchina prima e dopo (`load`): con un carico
 alto la misura è rumorosa.
+
+**F4 e il foglio.** Il tempo parte dal `timeStamp` del primo `pointerdown`
+(o `mousedown`) sulla scheda e si ferma al fotogramma dopo quello in cui
+una cella visibile del foglio mostra `Riga 1` (o la nota il suo segno):
+il clic arriva da WebDriver, il resto è dell'app. Il thread principale si
+legge con l'anello di F3, diviso per ripetizione e per lato. F4 non ha
+ancora soglie: le cifre di partenza sono nel rapporto del lavoro che l'ha
+introdotto.
 
 **F3 e il thread principale.** WebKit non ha i long task. F3 tiene acceso
 un anello di `setTimeout(0)`: un buco fra due giri oltre 5 ms (il timer

@@ -21,6 +21,8 @@
 //   in un blocco di 5 × 4 a sinistra della prima riga (S9);
 // - `F3/Cartella/`: trenta note e una sottocartella di dieci, la cartella che
 //   F3 apre e chiude;
+// - `F4/Bilancio.xlsx`: un foglio Excel di 1.000 righe × 12 colonne, la
+//   cartella su cui F4 torna dalla nota e da cui riparte;
 // - `config/settings.json`: le impostazioni di macchina con la sonda accesa.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -45,6 +47,9 @@ export const LIVE_CARDS = 20;
 
 /// La cartella che F3 apre e chiude: trenta note e una sottocartella.
 export const GESTURE_FOLDER = "F3/Cartella";
+
+/// F4: il foglio Excel fra cui e una nota si cambia scheda, e la sua misura.
+export const SWITCH_SHEET = { file: "F4/Bilancio.xlsx", name: "Bilancio", rows: 1_000, columns: 12 };
 
 /// Il nome della nota `i` di S2, da 1 a `NOTES`.
 export const noteName = (i) => `Nota ${String(i).padStart(5, "0")}`;
@@ -307,6 +312,8 @@ export function writeFixtures(root) {
   mkdirSync(join(vault, GESTURE_FOLDER, "Dentro"), { recursive: true });
   for (let i = 1; i <= 30; i++) writeFileSync(join(vault, GESTURE_FOLDER, `Voce ${String(i).padStart(2, "0")}.md`), `# Voce ${i}\n\nUna nota della cartella di F3.\n`);
   for (let i = 1; i <= 10; i++) writeFileSync(join(vault, GESTURE_FOLDER, "Dentro", `Sotto ${i}.md`), `# Sotto ${i}\n`);
+  mkdirSync(join(vault, dirname(SWITCH_SHEET.file)), { recursive: true });
+  writeFileSync(join(vault, SWITCH_SHEET.file), workbook(SWITCH_SHEET.rows, SWITCH_SHEET.columns));
   // Il formato del livello macchina (`fub_kernel::settings`, schema 2).
   writeFileSync(join(config, "settings.json"), JSON.stringify({ version: 2, values: { "perf.probe": true } }, null, 2) + "\n");
   return { vault, config };
