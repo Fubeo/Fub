@@ -17,6 +17,7 @@
 
 import { iconEl } from "../ui/icons";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { swallowOpeningRelease } from "../ui/menu-release";
 import { attachTooltip, setTooltip } from "../ui/tooltip";
 import { createList } from "./list";
 import { openPopover, type PopoverHandle } from "./popover";
@@ -294,6 +295,10 @@ export function createToolRail(options: ToolRailOptions): ToolRail {
       if (view.slot.tools.length < 2) return;
       event.preventDefault();
       openFlyoutOf(view, false);
+      // Su Linux la tendina compare alla pressione del tasto destro: il clic
+      // del rilascio, che cadrebbe sulla casella, non sceglie lo strumento
+      // mostrato; trascinato fino a una voce della tendina, sceglie quella.
+      swallowOpeningRelease(event, (target) => target.closest<HTMLElement>(".kit-rail-flyout [role=menuitemradio]"));
     });
     slots.listen(button, "click", () => {
       // Il clic che chiude una pressione lunga non sceglie.

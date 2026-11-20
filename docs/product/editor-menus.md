@@ -132,6 +132,15 @@ barra e voci arrivano una dopo l'altra, il sottomenu entra da destra, e
 chiuso il menu sfuma senza muoversi. I menu a tendina entrano con una
 dissolvenza breve. Col moto ridotto niente si muove.
 
+Su Linux il menu compare alla pressione del tasto destro, non al rilascio come
+su Windows. Il rilascio che segue non lo chiude e non sceglie la voce che
+capita sotto il puntatore: il menu resta aperto e una voce si sceglie con un
+clic. Come nei menu di GTK, premere, scorrere fino a una voce e rilasciare la
+sceglie, se il puntatore si è mosso di più di 4 px dal punto della pressione.
+Vale per ogni menu che passa da `showContextMenu` e per la tendina degli
+strumenti dei disegni e della lavagna (`ui/menu-release.ts`). Il clic sinistro
+fuori, Esc e la scelta di una voce lo chiudono come sempre.
+
 Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
 nei campi di testo, sul testo scelto, sul lettore audio e video e con
 Maiusc+tasto destro, che dà sempre il menu del sistema.
@@ -399,6 +408,9 @@ griglia delle tabelle in Scrittura ha il suo
   `settings.components.*` delle impostazioni;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
+- `apps/client/src/ui/menu-release.ts`: il rilascio del tasto destro che ha
+  aperto il menu, che non lo chiude e non sceglie (provato in
+  `ui/menu-release.test.ts` con l'ordine degli eventi di Linux e di Windows);
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra, e
   `apps/client/src/panels/selection-bubble.ts` che la posa sul testo scelto;
   `apps/client/src/editors/text/profiles/markdown/mini-bar.dom.test.ts`
