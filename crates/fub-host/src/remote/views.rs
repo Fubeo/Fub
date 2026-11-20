@@ -238,6 +238,10 @@ pub struct SnapshotConflict {
 #[serde(deny_unknown_fields)]
 pub struct SnapshotVersion {
     pub doc_id: String,
+    /// L'op che ha prodotto la versione, come lo manda
+    /// `GET /v1/sync/versions`; i `versions.json` di prima non l'hanno.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op_id: Option<String>,
     #[serde(with = "super::u64_string")]
     pub version: u64,
     pub hash: String,
@@ -725,6 +729,7 @@ mod tests {
             root.join("versions.json"),
             serde_json::to_vec(&vec![SnapshotVersion {
                 doc_id: "Nota.md".into(),
+                op_id: None,
                 version: 3,
                 hash: "abcdef0123456789".into(),
                 ts_ms: 1_700_000_000_000,
@@ -787,6 +792,7 @@ mod tests {
             root.join("versions.json"),
             serde_json::to_vec(&vec![SnapshotVersion {
                 doc_id: "Nota.md".into(),
+                op_id: None,
                 version: 3,
                 hash: "abcdef0123456789".into(),
                 ts_ms: 1_700_000_000_000,

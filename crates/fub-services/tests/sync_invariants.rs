@@ -498,6 +498,145 @@ fn a_rename_onto_a_deleted_document_clears_its_tombstone() {
     );
 }
 
+/// The same rename under a new op id, as the server sees an op it no longer
+/// remembers (dedup set evicted, version chain pruned): vector, ends and
+/// payload unchanged, AAD recomputed for the new id.
+fn reissued(op: &SyncOp, op_id: &str) -> SyncOp {
+    let (from, to) = match &op.kind {
+        OpKind::Rename { from, to } => (Some(from.as_str()), Some(to.as_str())),
+        _ => (None, None),
+    };
+    let mut again = op.clone();
+    again.op_id = op_id.to_string();
+    again.aad = Replica::envelope_aad(
+        op_id,
+        &op.replica_id,
+        &op.doc_id,
+        op.kind.as_str(),
+        &op.vv,
+        op.ts_ms,
+        op.key_epoch,
+        (from, to),
+    );
+    again
+}
+
+fn rename_op(replica: &mut Replica, from: &str, to: &str, body: &str) -> SyncOp {
+    replica.op(
+        from,
+        OpKind::Rename {
+            from: from.to_string(),
+            to: to.to_string(),
+        },
+        body,
+    )
+}
+
+/// Audit 4: a rename that reaches the server after writes that saw it, on
+/// both ends, changes nothing: it neither buries the newer `from` nor
+/// overwrites the newer `to` with its old payload.
+#[test]
+fn a_dominated_rename_is_a_no_op() {
+    let dir = temp_data_dir("rename-dominated");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-dominated-user");
+    let mut a = Replica::new("a");
+    let created = a.op("notes/from.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    // A renames, then recreates `from` and edits `to`: the two later writes
+    // land first, the rename arrives late.
+    let late = rename_op(&mut a, "notes/from.md", "notes/to.md", "prima");
+    let recreated = a.op("notes/from.md", OpKind::Update, "ricreata dopo");
+    let edited = a.op("notes/to.md", OpKind::Update, "modificata dopo");
+    let r = push(&mut state, &auth, &a.id, &[recreated, edited]);
+    assert_eq!(r.ack.len(), 2, "{:?}", r.conflicts);
+    let late_id = late.op_id.clone();
+    let r = push(&mut state, &auth, &a.id, &[late]);
+    assert_eq!(r.ack, [late_id], "a covered op is acknowledged as done");
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/from.md"),
+        "the newer `from` is not buried"
+    );
+    assert!(!folded.trash.contains_key("notes/from.md"));
+    assert_eq!(
+        folded.versions["notes/from.md"]
+            .last()
+            .unwrap()
+            .ciphertext_b64,
+        "CT:ricreata dopo"
+    );
+    let to = &folded.versions["notes/to.md"];
+    assert_eq!(to.len(), 1, "the stale payload is not stacked on `to`");
+    assert_eq!(to[0].ciphertext_b64, "CT:modificata dopo");
+}
+
+/// Audit 4: a rename equal to what the server already folded (the same op
+/// under an id the server forgot) is idempotent, even after `from` was
+/// recreated: the second delivery must not delete it again.
+#[test]
+fn a_rename_delivered_again_is_idempotent() {
+    let dir = temp_data_dir("rename-equal");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-equal-user");
+    let mut a = Replica::new("a");
+    let created = a.op("notes/from.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let renamed = rename_op(&mut a, "notes/from.md", "notes/to.md", "prima");
+    assert_eq!(
+        push(&mut state, &auth, &a.id, std::slice::from_ref(&renamed))
+            .ack
+            .len(),
+        1
+    );
+
+    // Delivered again at once: both ends are exactly the rename.
+    let again = reissued(&renamed, "op-replica-a-again-1");
+    let r = push(&mut state, &auth, &a.id, &[again]);
+    assert_eq!(r.ack.len(), 1, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert_eq!(folded.versions["notes/to.md"].len(), 1, "no second version");
+    assert!(folded.tombstones.contains_key("notes/from.md"));
+
+    // `from` lives again, then the old rename comes back once more.
+    let recreated = a.op("notes/from.md", OpKind::Create, "nuova fonte");
+    assert_eq!(push(&mut state, &auth, &a.id, &[recreated]).ack.len(), 1);
+    let again = reissued(&renamed, "op-replica-a-again-2");
+    let r = push(&mut state, &auth, &a.id, &[again]);
+    assert_eq!(r.ack.len(), 1, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/from.md"),
+        "the recreated `from` is not deleted again"
+    );
+    assert_eq!(folded.versions["notes/to.md"].len(), 1);
+}
+
+/// Audit 4: a rename overtaken on one end only is held: applying it would
+/// bury the newer `from`, dropping it would lose `to`. Nothing changes.
+#[test]
+fn a_rename_overtaken_on_one_end_is_held() {
+    let dir = temp_data_dir("rename-half");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-half-user");
+    let mut a = Replica::new("a");
+    let created = a.op("notes/from.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let late = rename_op(&mut a, "notes/from.md", "notes/to.md", "prima");
+    let recreated = a.op("notes/from.md", OpKind::Update, "ricreata dopo");
+    assert_eq!(push(&mut state, &auth, &a.id, &[recreated]).ack.len(), 1);
+    let r = push(&mut state, &auth, &a.id, &[late]);
+    assert!(r.ack.is_empty(), "held, not acknowledged");
+    assert_eq!(r.conflicts.len(), 1, "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(!folded.tombstones.contains_key("notes/from.md"));
+    assert!(!folded.versions.contains_key("notes/to.md"));
+}
+
 // ---------------------------------------------------------------------------
 // 4. Divergent clocks: ts_ms never decides; vv decides (settings LWW only).
 // ---------------------------------------------------------------------------
@@ -1038,6 +1177,68 @@ fn vault_key_wrap_rotation_roundtrip() {
         b"",
     );
     assert_eq!(resp.status, 200);
+}
+
+/// Audit 1: one rule for the first key of a vault. It is epoch one, with or
+/// without an explicit `key_epoch`; the answer says so (the client stores
+/// that epoch before it seals anything), and an explicit zero is refused
+/// with the same rule in words.
+#[test]
+fn the_first_vault_key_is_epoch_one() {
+    use fub_services::crypto::{derive_kek, wrap_vdk_with_kek, KdfParams};
+    let params = KdfParams::fresh().unwrap();
+    let kek = derive_kek("first key passphrase", &params).unwrap();
+    let wrapped = wrap_vdk_with_kek(&[5u8; 32], &kek, params).unwrap();
+    let store = |state: &mut ServiceState, auth: &str, body: serde_json::Value| {
+        let resp = sync::handle(
+            state,
+            "POST",
+            "/v1/sync/vault-key",
+            Some(auth),
+            &serde_json::to_vec(&body).unwrap(),
+        );
+        let body: serde_json::Value = serde_json::from_slice(&resp.body).unwrap();
+        (resp.status, body)
+    };
+
+    let dir = temp_data_dir("first-epoch");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "first-epoch-owner");
+    let (status, body) = store(
+        &mut state,
+        &auth,
+        serde_json::json!({"vault_id": VAULT, "wrapped": wrapped, "key_epoch": 0}),
+    );
+    assert_eq!(status, 409, "{body}");
+    assert_eq!(body["error"], "initial vault key must start at epoch one");
+    let (status, body) = store(
+        &mut state,
+        &auth,
+        serde_json::json!({"vault_id": VAULT, "wrapped": wrapped}),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["key_epoch"], sync::INITIAL_KEY_EPOCH);
+    assert_eq!(sync::INITIAL_KEY_EPOCH, 1);
+
+    // Ops sealed at that epoch are accepted; at zero they are refused.
+    let mut a = Replica::new("a");
+    a.epoch = 0;
+    let stale = a.op("notes/first.md", OpKind::Create, "epoch zero");
+    assert_eq!(push_raw(&mut state, &auth, &a.id, &[stale]).status, 409);
+    a.epoch = sync::INITIAL_KEY_EPOCH;
+    let sealed = a.op("notes/first.md", OpKind::Create, "epoch one");
+    assert_eq!(push(&mut state, &auth, &a.id, &[sealed]).ack.len(), 1);
+
+    let dir = temp_data_dir("first-epoch-explicit");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "first-epoch-explicit-owner");
+    let (status, body) = store(
+        &mut state,
+        &auth,
+        serde_json::json!({"vault_id": VAULT, "wrapped": wrapped, "key_epoch": 1}),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["key_epoch"], 1);
 }
 
 #[test]

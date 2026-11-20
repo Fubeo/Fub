@@ -21,10 +21,9 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 I cinque diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
-dipendenze normali; quelle tratteggiate esistono soltanto in
-`[dev-dependencies]`. Un test confronta l'unione dei blocchi con
-`cargo metadata`, quindi un crate o un arco non può restare fuori senza far
-fallire la CI.
+dipendenze normali, le tratteggiate soltanto `[dev-dependencies]`. Un test
+confronta l'unione dei blocchi con `cargo metadata`, quindi un crate o un
+arco non può restare fuori senza far fallire la CI.
 
 ```mermaid
 flowchart TD
@@ -102,6 +101,7 @@ flowchart TD
     kernel -.-> testkit
     host -.-> sdk
     host -.-> testkit
+    host -.-> services
     wasmhost -.-> testkit
     wasmhost -.-> sdk
     importers -.-> markdown

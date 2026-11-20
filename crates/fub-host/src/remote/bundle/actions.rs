@@ -117,7 +117,7 @@ pub(super) fn run_share_action(
         }
         check_external_overlap(host)?;
     }
-    let (base, auth, state) = share_connection(root, token, host)?;
+    let (base, auth, mut state) = share_connection(root, token, host)?;
     match action {
         "invite" => {
             let role = payload
@@ -125,7 +125,7 @@ pub(super) fn run_share_action(
                 .and_then(|v| v.as_str())
                 .filter(|role| matches!(*role, "reader" | "writer" | "admin"))
                 .ok_or_else(|| PluginError::BadArgs("sync invite needs role".into()))?;
-            let vdk = ensure_job_vdk(&base, &auth, &state, host)?;
+            let vdk = ensure_job_vdk(&base, &auth, &mut state, host)?;
             let passphrase = match std::env::var("FUB_SYNC_INVITE_PASSPHRASE_FILE") {
                 Ok(_) => secret_from_file("FUB_SYNC_INVITE_PASSPHRASE_FILE")?,
                 Err(_) => super::load_vault_passphrase_from_env()?,
@@ -190,10 +190,11 @@ pub(super) fn run_share_action(
                 }
                 super::atomic_state_write(root, "vault-pairing", vault.as_bytes())?;
             }
+            // Legata alla sua epoca: dopo un rekey non è più la chiave servita.
             super::atomic_state_write(
                 root,
-                "accepted-key.json",
-                &serde_json::to_vec(wrapped)
+                ACCEPTED_KEY_FILE,
+                &serde_json::to_vec(&accepted_key_json(epoch, wrapped))
                     .map_err(|_| PluginError::Internal("sync invite key encode failed".into()))?,
             )?;
             super::atomic_state_write(root, "key-epoch", epoch.to_string().as_bytes())?;
@@ -286,9 +287,9 @@ pub(super) fn run_share_action(
                 .and_then(|n| u32::try_from(n).ok())
                 .ok_or_else(|| PluginError::Internal("sync current epoch missing".into()))?;
             if old_epoch != state.key_epoch {
-                return Err(PluginError::Conflict(
-                    "sync key epoch changed; refresh before rekey".into(),
-                ));
+                return Err(PluginError::Conflict(fub_abi::text::Text::key(
+                    "host.sync.rekey_epoch_changed",
+                )));
             }
             // Preserve the old wrapped envelope for owner-only historical
             // recovery; the service never sees the plaintext VDK.
@@ -323,6 +324,9 @@ pub(super) fn run_share_action(
             if result["key_epoch"].as_u64() != Some(u64::from(next)) {
                 return Err(PluginError::Internal("sync rekey epoch mismatch".into()));
             }
+            // La chiave accettata con un invito è quella dell'epoca vecchia:
+            // da qui il passaggio deve sigillare con la nuova.
+            retire_accepted_key(root, old_epoch)?;
             super::atomic_state_write(root, "key-epoch", next.to_string().as_bytes())?;
             Ok(
                 serde_json::json!({"key_epoch": next, "republish_required": true,
@@ -358,14 +362,14 @@ pub(crate) fn request_restore(
         .load()
         .ok_or_else(|| PluginError::PermissionDenied("missing credentials".into()))?;
     let auth = format!("Bearer {token}");
-    let state = JobState::open(root, None, host)?;
+    let mut state = JobState::open(root, None, host)?;
     let hello = http_get(host, &base, &auth, "/v1/hello")?;
     if hello.get("protocol").and_then(|v| v.as_str()) != Some(super::SYNC_PROTOCOL) {
         return Err(PluginError::Internal("sync protocol mismatch".into()));
     }
     super::store_endpoint_binding(root, &base)
         .map_err(|_| PluginError::Io("sync endpoint binding failed".into()))?;
-    let vdk = ensure_job_vdk(&base, &auth, &state, host)?;
+    let vdk = ensure_job_vdk(&base, &auth, &mut state, host)?;
     let response = http_post(
         host,
         &base,
@@ -405,14 +409,27 @@ pub(crate) fn request_restore(
     let historic_key = if op.key_epoch == state.key_epoch {
         vdk
     } else if op.key_epoch < state.key_epoch {
-        let old =
-            std::fs::read(root.join(format!("prior-key-{}.json", op.key_epoch))).map_err(|_| {
-                PluginError::Conflict("sync historical key not available on this device".into())
-            })?;
-        let wrapped: serde_json::Value = serde_json::from_slice(&old)
-            .map_err(|_| PluginError::Io("sync historical wrapped key corrupt".into()))?;
+        // La busta del server di quell'epoca, poi la chiave accettata con un
+        // invito e messa da parte al rekey: la prima che si apre qui.
         let passphrase = super::load_vault_passphrase_from_env()?;
-        super::unwrap_for_passphrase(&passphrase, &wrapped)?
+        let mut found = Err(PluginError::Conflict(
+            "sync historical key not available on this device".into(),
+        ));
+        for name in [
+            format!("prior-key-{}.json", op.key_epoch),
+            prior_accepted_key_file(op.key_epoch),
+        ] {
+            let Ok(old) = std::fs::read(root.join(name)) else {
+                continue;
+            };
+            let wrapped: serde_json::Value = serde_json::from_slice(&old)
+                .map_err(|_| PluginError::Io("sync historical wrapped key corrupt".into()))?;
+            found = super::unwrap_for_passphrase(&passphrase, &wrapped);
+            if found.is_ok() {
+                break;
+            }
+        }
+        found?
     } else {
         return Err(PluginError::Conflict(
             "sync historical key epoch is newer than local pairing".into(),

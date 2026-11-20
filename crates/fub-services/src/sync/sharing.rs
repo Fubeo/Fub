@@ -274,6 +274,13 @@ pub(super) fn handle_revoke(
     )
 }
 
+/// L'epoca della prima chiave di un vault. Zero resta «nessuna chiave»: il
+/// push non confronta l'epoca di un vault senza chiave, e il client che non
+/// ha ancora un file `key-epoch` parte da zero e adotta l'epoca che il
+/// server gli restituisce. Il client ne tiene una copia
+/// (`fub_host::remote::INITIAL_KEY_EPOCH`).
+pub const INITIAL_KEY_EPOCH: u32 = 1;
+
 /// Store the owner's wrapped-VDK envelope (opaque). Rotation = store a new
 /// envelope produced client-side with `crypto::wrap_vdk`; the old envelope
 /// is dropped, but copies already downloaded under it survive (documented,
@@ -353,15 +360,15 @@ pub(super) fn handle_vault_key_store(
         if shares.keys.contains_key(&req.vault_id) {
             old_epoch
         } else {
-            1
+            INITIAL_KEY_EPOCH
         }
     });
     if shares.keys.contains_key(&req.vault_id) {
         if old_epoch.checked_add(1) != Some(requested_epoch) {
             return HttpResponse::err(409, "key rotation requires the next explicit epoch");
         }
-    } else if requested_epoch != 0 && requested_epoch != 1 {
-        return HttpResponse::err(409, "initial vault key must start at epoch zero");
+    } else if requested_epoch != INITIAL_KEY_EPOCH {
+        return HttpResponse::err(409, "initial vault key must start at epoch one");
     }
     shares.keys.insert(req.vault_id.clone(), req.wrapped);
     shares
