@@ -442,8 +442,7 @@ secondo, su un iPad, un tablet Android e un PC con tavoletta:
 1. Apri un disegno in Fub e, accanto, l'app di disegno nativa del sistema.
 2. Riprendi da vicino la punta e il tratto, con la stessa luce, per dieci
    tratti veloci in ciascuna app.
-3. Conta i fotogrammi fra la punta e l'inchiostro: ogni fotogramma vale
-   4,17 ms.
+3. Conta i fotogrammi fra la punta e l'inchiostro (ognuno vale 4,17 ms).
 4. Scrivi mediana e massimo di Fub e dell'app nativa, col dispositivo, la
    versione del sistema e il commit.
 
