@@ -27,6 +27,14 @@ sha256 = "sha256:0957d0c1a32b8b503bf1c4ff4d204a1ba1fe48f54ac60461b08229b76f930b8
 path = "patches/0005-test-paralleli.patch"
 sha256 = "sha256:9453a6b51e165e3da7ddfc0389b7f32e679a223b4c773e49af3b689ebe4abbdc"
 
+[[patch]]
+path = "patches/0006-immagini-non-lette.patch"
+sha256 = "sha256:a8718683083ffc26bd98ca8bad4cf357baf6199823d06c591f8560e6cc781f3f"
+
+[[patch]]
+path = "patches/0007-attesa-dei-bitmap.patch"
+sha256 = "sha256:9fc38eaa31880c1136d5d367b2fde88d434b5de312f1b0dde5a7acd1037f4636"
+
 [[file]]
 path = "ASSETS.md"
 upstream = "sha256:2417b03b20596fb6d2b266c5acb2d31c1dd33a4922f1db49b4979f6d23975eaa"
@@ -3750,6 +3758,7 @@ upstream = "sha256:d610667b2a64a99bf4b2e7eafe4a58aa8faee45d8c4504ec81dc2777b40aa
 [[file]]
 path = "crates/render/src/tests.rs"
 upstream = "sha256:91aad5a7802539970a573fcfa3c3880831d17db7fa1be6abdfd4cb2a02081660"
+result = "sha256:06f70933854d67920349f97c8aa74ca86dcfeef0260b0d95ff7ec4fe6d6e8e79"
 
 [[file]]
 path = "crates/render/src/tests/adjust.rs"
@@ -3834,7 +3843,7 @@ upstream = "sha256:ae033f2f4589caaf5b495afc5178bd9bc78b652de5777d981d8aa5d5316bc
 [[file]]
 path = "crates/render/src/tests/placed_document.rs"
 upstream = "sha256:af7ce5ae0f2b2e6908f79d9de701ec6d83286949bc0cde8f2549791df57121e8"
-result = "sha256:925e51ec33b880888ae1b5ce841863b836b1d8dfb00d3d559062fa6f82080018"
+result = "sha256:3476c23c9d65fa18f8a4171905b89c05d14065bb55b317eff9504036c30ab655"
 
 [[file]]
 path = "crates/render/src/tests/rasterize.rs"

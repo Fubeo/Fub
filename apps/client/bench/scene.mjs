@@ -2018,9 +2018,10 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
-      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
-      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
-      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso. Se uno
+      // dei due non arriva, l'errore dice quale e com'erano le schede (#505).
+      await waitForCardPart(page, '.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img', "il disegno del grafico «Vendite»");
+      await waitForCardPart(page, '.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost', "l'avviso della scheda persa");
       if (scroll === "table") {
         // La torta si disegna quando entra in vista.
         await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
@@ -4158,6 +4159,26 @@ async function expectVeilOnCard(page, card) {
     return out.join("; ");
   }, `${card}[data-card-chosen="true"]`);
   if (wrong) throw new Error(`il velo non sta sulla scheda: ${wrong}`);
+}
+
+/// Aspetta un pezzo di una scheda della Live. Se non arriva, l'errore nomina
+/// il pezzo e il selettore, e dice com'era ogni scheda del riquadro: la specie,
+/// lo stato e il modo della scheda, lo stato della sua vista e il suo testo.
+/// Il rapporto del fotografo tiene la prima riga dell'errore, quindi tutto sta
+/// su una riga.
+async function waitForCardPart(page, selector, what) {
+  try {
+    await page.waitForSelector(selector);
+  } catch (error) {
+    const cards = await page.evaluate(() =>
+      [...document.querySelectorAll(".pane.focus .pane-editor .live-card")].map((card) => {
+        const view = card.querySelector("[data-card-state]:not(.live-card)");
+        const text = (card.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+        return `${card.dataset.cardKind ?? "?"} ${card.dataset.cardState ?? "?"}/${card.dataset.cardMode ?? "-"} vista ${view?.dataset.cardState ?? "-"} «${text}»`;
+      })).catch(() => ["la pagina non risponde"]);
+    const first = String(error?.message ?? error).split("\n")[0];
+    throw new Error(`${what} non è arrivato (${selector}): ${first}; schede: ${cards.length === 0 ? "nessuna" : cards.join(" · ")}`);
+  }
 }
 
 async function openLive(page, keys, scroll, mode = "live_preview") {

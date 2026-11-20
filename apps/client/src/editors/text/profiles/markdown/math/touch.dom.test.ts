@@ -10,11 +10,11 @@ import { liveReveal, mathClassic, type RevealPolicy } from "../../../live-reveal
 import { CORPUS, LONG_FORMULA } from "./corpus";
 import { MathEditor } from "./editor";
 import { openLifetime } from "../../../../../ui/lifetime";
-import { loadLazyParts } from "../../../../../ui/lazy-part";
+import { MATH_READY_MS, mathReady } from "./test-drawn";
 
-// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
-// come dopo il riscaldamento: i gesti si guardano col loro codice.
-beforeAll(loadLazyParts);
+// KaTeX e i pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci
+// sono già, come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(mathReady, MATH_READY_MS);
 
 // La formula che si modifica toccandola (T60, E27), dentro la nota: con KaTeX
 // vero, perché i segni del cursore sono suoi. La geometria (il clic su
@@ -60,7 +60,7 @@ function mount(doc: string, anchor: number, options: Mount = {}): EditorView {
 }
 
 const press = (view: EditorView, key: string) => runScopeHandlers(view, new KeyboardEvent("keydown", { key }), "editor");
-/// KaTeX si carica a parte e disegna al fotogramma dopo.
+/// Il disegno al fotogramma dopo (KaTeX è già caricato da `mathReady`).
 const settle = () => new Promise((done) => setTimeout(done, 40));
 const input = () => document.querySelector<HTMLTextAreaElement>(".cm-fub-mx-input");
 const status = () => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "";

@@ -31,5 +31,12 @@ const wait = waiter(2_000);
 /// codice già caricato basta un fotogramma, e una condizione che non arriva
 /// fallisce col suo nome invece di lasciar andare avanti la prova.
 export async function drawn(selector = ".cm-fub-mx-surface", root: ParentNode = document): Promise<void> {
-  await wait(`il riquadro «${selector}» disegnato`, () => root.querySelector(selector) !== null && root.querySelector(LOADING) === null);
+  await drawnWhen(`il riquadro «${selector}» disegnato`, () => root.querySelector(selector) !== null, root);
+}
+
+/// Finché `cond` è vera e in `root` nessun riquadro sta caricando: per le
+/// prove che dopo un gesto aspettano il disegno del fotogramma dopo (una
+/// scelta colorata, un cursore che torna), detto col suo nome in `thing`.
+export async function drawnWhen(thing: string, cond: () => boolean, root: ParentNode = document): Promise<void> {
+  await wait(thing, () => cond() && root.querySelector(LOADING) === null);
 }
